@@ -22,6 +22,7 @@ func (c *Cruncher) Run() {
 	c.SetupNetwork()
 	go c.Serve()
 	go c.HandleInbox()
+	go c.ServeHTTP()
 
 	sigterm, sighup := c.GetSignals()
 	for {
@@ -37,8 +38,8 @@ func (c *Cruncher) Run() {
 	}
 }
 
-func NewCruncher(location *core.Location) *Cruncher {
-	service := core.NewService(location)
+func NewCruncher(tcp, http *core.Location) *Cruncher {
+	service := core.NewService(tcp, http)
 	cruncher := Cruncher{*service}
 	return &cruncher
 }

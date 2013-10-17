@@ -15,8 +15,8 @@ import (
 	//"net"
 	//"flag"
 	//"encoding/gob"
-	//"net/http"
-	//"encoding/json"
+	"net/http"
+	"encoding/json"
 	//"io"
 )
 type Message struct {
@@ -77,6 +77,7 @@ type Service struct {
 	PortHttp string
 	Etcd *etcd.Client
 	Location *Location
+	HttpLocation *Location
 	NodeMap NodeMap
 	NodeMapMutex sync.RWMutex
 	Outbox chan *Envelope
@@ -87,9 +88,10 @@ type Service struct {
 	//Cluster query.Cluster
 }
 
-func NewService(location *Location) *Service {
+func NewService(tcp, http *Location) *Service {
 	service := new(Service)
-	service.Location = location
+	service.Location = tcp
+	service.HttpLocation = http
 	service.Outbox = make(chan *Envelope)
 	service.Inbox = make(chan *Message)
 	return service
@@ -393,21 +395,19 @@ func (service *Service) Serve() {
 	}
 }
 
-//func (app *Application) serveHTTP() {
-//	http.HandleFunc("/message", func(w http.ResponseWriter, r *http.Request) {
-//		if r.Method != "POST" {
-//			http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
-//			return
-//		}
-//		var message Message
-//		decoder := json.NewDecoder(r.Body)
-//		if decoder.Decode(&message) != nil {
-//			http.Error(w, "Invalid JSON", http.StatusBadRequest)
-//			return
-//		}
-//		app.Mailbox <- message
-//	})
-//	http.ListenAndServe(app.PortHttp, nil)
-//}
-//
-
+func (service *Service) ServeHTTP() {
+	http.HandleFunc("/message", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var message Message
+		decoder := json.NewDecoder(r.Body)
+		if decoder.Decode(&message) != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		service.Inbox <- &message
+	})
+	http.ListenAndServe(string(service.HttpLocation.Port), nil)
+}

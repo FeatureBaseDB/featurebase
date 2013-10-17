@@ -75,8 +75,8 @@ func (r *Router) HandleMessage(m *core.Message) {
 	log.Println(m)
 }
 
-func NewRouter(location *core.Location) *Router {
-	service := core.NewService(location)
+func NewRouter(tcp, http *core.Location) *Router {
+	service := core.NewService(tcp, http)
 	router := Router{*service}
 	return &router
 }
