@@ -2,7 +2,6 @@ package core
 
 import (
 	"github.com/coreos/go-etcd/etcd"
-	"github.com/coreos/etcd/store"
 	"log"
 	"os"
 	"os/signal"
@@ -283,7 +282,7 @@ func (service *Service) HandleConnections() {
 
 func (service *Service) SetupEtcd() {
 	gob.Register(Location{})
-	service.Etcd = etcd.NewClient()
+	service.Etcd = etcd.NewClient(nil)
 	service.NodeMapMutex.Lock()
 	defer service.NodeMapMutex.Unlock()
 	service.NodeMap = NodeMap{}
@@ -308,7 +307,7 @@ func (service *Service) SetupEtcd() {
 }
 
 func (service *Service) WatchEtcd() {
-	var receiver = make(chan *store.Response)
+	var receiver = make(chan *etcd.Response)
 	var stop chan bool
 	go func () {
 		_, err := service.Etcd.Watch("nodes/", 0, receiver, stop)
