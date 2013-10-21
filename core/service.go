@@ -7,15 +7,12 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"strings"
 	"sync"
 	"net"
 	"encoding/gob"
 	//"net"
 	//"flag"
 	//"encoding/gob"
-	"net/http"
-	"encoding/json"
 	//"io"
 )
 type Message struct {
@@ -33,38 +30,6 @@ type Connection struct {
 	Conn net.Conn
 	Encoder *gob.Encoder
 	Decoder *gob.Decoder
-}
-
-type Stopper struct {
-	TermChans []chan int
-	DoneChans []chan int
-	Mutex sync.RWMutex
-}
-
-func (stopper *Stopper) Stop() {
-	var i chan int
-	var o chan int
-	stopper.Mutex.RLock()
-	for _, i = range stopper.TermChans {
-		go func() {
-			i <- 1
-		}()
-	}
-	for _, o = range stopper.DoneChans {
-		<-o
-	}
-	stopper.Mutex.RUnlock()
-	return
-}
-
-func (stopper *Stopper) GetExitChannels() (chan int, chan int) {
-	termchan := make(chan int, 1)
-	donechan := make(chan int, 1)
-	stopper.Mutex.Lock()
-	stopper.TermChans = append(stopper.TermChans, termchan)
-	stopper.DoneChans = append(stopper.DoneChans, donechan)
-	stopper.Mutex.Unlock()
-	return termchan, donechan
 }
 
 type Service struct {
@@ -280,84 +245,6 @@ func (service *Service) HandleConnections() {
 	}
 }
 
-func (service *Service) SetupEtcd() {
-	gob.Register(Location{})
-	service.Etcd = etcd.NewClient(nil)
-	service.NodeMapMutex.Lock()
-	defer service.NodeMapMutex.Unlock()
-	service.NodeMap = NodeMap{}
-
-	nodes, err := service.Etcd.Get("nodes")
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, node := range nodes {
-		nodestring := strings.Split(node.Key, "/")[2]
-		location, err := NewLocation(nodestring)
-		if err != nil {
-			log.Fatal(err)
-		}
-		routerlocation, err := NewLocation(node.Value)
-		if err != nil {
-			log.Fatal(err)
-		}
-		service.NodeMap[*location] = *routerlocation
-	}
-	log.Println(service.NodeMap)
-}
-
-func (service *Service) WatchEtcd() {
-	var receiver = make(chan *etcd.Response)
-	var stop chan bool
-	go func () {
-		_, err := service.Etcd.Watch("nodes/", 0, receiver, stop)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	exit, done := service.GetExitChannels()
-
-	for {
-		select {
-			case response := <-receiver:
-				switch response.Action {
-				case "SET":
-					nodestring := strings.Split(response.Key, "/")[2]
-					node, err := NewLocation(nodestring)
-					if err != nil {
-						log.Fatal(err)
-					}
-					router, err := NewLocation(response.Value)
-					if err != nil {
-						log.Fatal(err)
-					}
-					service.NodeMapMutex.Lock()
-					service.NodeMap[*node] = *router
-					service.NodeMapMutex.Unlock()
-				case "DELETE":
-					nodestring := strings.Split(response.Key, "/")[2]
-					node, err := NewLocation(nodestring)
-					if err != nil {
-						log.Fatal(err)
-					}
-					service.NodeMapMutex.Lock()
-					delete(service.NodeMap, *node)
-					service.NodeMapMutex.Unlock()
-				default:
-					log.Println("unhandled etcd message", response)
-				}
-				//log.Println(response.Action, response.Key, response.Value)
-				log.Println(service.NodeMap)
-			case <-exit:
-				log.Println("cleaning up watchetcd service thing.")
-				time.Sleep(2*time.Second)
-				log.Println("done!")
-				done <- 1
-		}
-	}
-}
-
 func (service *Service) GetRouterLocation(node Location) Location {
 	service.NodeMapMutex.RLock()
 	defer service.NodeMapMutex.RUnlock()
@@ -392,21 +279,4 @@ func (service *Service) Serve() {
 		con.Decoder = gob.NewDecoder(*con.Connection)
 		go con.Manage()
 	}
-}
-
-func (service *Service) ServeHTTP() {
-	http.HandleFunc("/message", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		var message Message
-		decoder := json.NewDecoder(r.Body)
-		if decoder.Decode(&message) != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
-			return
-		}
-		service.Inbox <- &message
-	})
-	http.ListenAndServe(string(service.HttpLocation.Port), nil)
 }
