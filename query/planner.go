@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"fmt"
 	"math/rand"
-	"pilosa/core"
+	"pilosa/db"
 )
 
 // A single step in the query plan. 
@@ -33,12 +33,12 @@ type Query struct{
 type QueryPlan []QueryStep
 
 type QueryPlanner struct {
-	Cluster *core.Cluster
-	Database *core.Database
+	Cluster *db.Cluster
+	Database *db.Database
 }
 
 type QueryTree interface {
-	getLocation(d *core.Database) string
+	getLocation(d *db.Database) string
 }
 
 // QueryTree for UNION, INTER, and CAT queries
@@ -49,7 +49,7 @@ type CompositeQueryTree struct {
 }
 
 // Randomly select location from subqueries (so subqueries roll up into composite queries while minimizing inter-node data traffic)
-func (qt *CompositeQueryTree) getLocation(d *core.Database) string {
+func (qt *CompositeQueryTree) getLocation(d *db.Database) string {
 	if qt.location == "" {
 		subqueryLength := len(qt.subqueries)
 		if subqueryLength > 1 {
@@ -63,12 +63,12 @@ func (qt *CompositeQueryTree) getLocation(d *core.Database) string {
 
 // QueryTree for GET queries
 type GetQueryTree struct {
-	bitmap core.Bitmap
+	bitmap db.Bitmap
 	slice int
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
-func (qt *GetQueryTree) getLocation(d *core.Database) string {
+func (qt *GetQueryTree) getLocation(d *db.Database) string {
 	frame, err := d.GetFrame(qt.bitmap.FrameType)
 	if err != nil {
 		panic(err)
@@ -100,7 +100,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 		}
 	} else {
 		if query.Operation == "get" {
-			tree = &GetQueryTree{query.Inputs[0].(core.Bitmap), slice}
+			tree = &GetQueryTree{query.Inputs[0].(db.Bitmap), slice}
 			return tree
 		} else {
 			subqueries := make([]QueryTree, len(query.Inputs))

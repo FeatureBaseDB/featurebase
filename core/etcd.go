@@ -6,14 +6,15 @@ import (
 	"strings"
 	"time"
 	"encoding/gob"
+	"pilosa/db"
 )
 
 func (service *Service) SetupEtcd() {
-	gob.Register(Location{})
+	gob.Register(db.Location{})
 	service.Etcd = etcd.NewClient(nil)
 	service.NodeMapMutex.Lock()
 	defer service.NodeMapMutex.Unlock()
-	service.NodeMap = NodeMap{}
+	service.NodeMap = db.NodeMap{}
 
 	nodes, err := service.Etcd.Get("nodes")
 	if err != nil {
@@ -21,11 +22,11 @@ func (service *Service) SetupEtcd() {
 	}
 	for _, node := range nodes {
 		nodestring := strings.Split(node.Key, "/")[2]
-		location, err := NewLocation(nodestring)
+		location, err := db.NewLocation(nodestring)
 		if err != nil {
 			log.Fatal(err)
 		}
-		routerlocation, err := NewLocation(node.Value)
+		routerlocation, err := db.NewLocation(node.Value)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -52,11 +53,11 @@ func (service *Service) WatchEtcd() {
 				switch response.Action {
 				case "SET":
 					nodestring := strings.Split(response.Key, "/")[2]
-					node, err := NewLocation(nodestring)
+					node, err := db.NewLocation(nodestring)
 					if err != nil {
 						log.Fatal(err)
 					}
-					router, err := NewLocation(response.Value)
+					router, err := db.NewLocation(response.Value)
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -65,7 +66,7 @@ func (service *Service) WatchEtcd() {
 					service.NodeMapMutex.Unlock()
 				case "DELETE":
 					nodestring := strings.Split(response.Key, "/")[2]
-					node, err := NewLocation(nodestring)
+					node, err := db.NewLocation(nodestring)
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -79,7 +80,7 @@ func (service *Service) WatchEtcd() {
 				log.Println(service.NodeMap)
 			case <-exit:
 				log.Println("cleaning up watchetcd service thing.")
-				time.Sleep(2*time.Second)
+				time.Sleep(time.Second/2)
 				log.Println("done!")
 				done <- 1
 		}

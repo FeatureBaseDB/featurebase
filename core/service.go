@@ -10,20 +10,19 @@ import (
 	"sync"
 	"net"
 	"encoding/gob"
+	"pilosa/db"
 	//"net"
 	//"flag"
 	//"encoding/gob"
 	//"io"
 )
-type Message struct {
-	Key string `json:key`
-	Data interface{} `json:data`
-	Destination Location
-}
 
-type Envelope struct {
-	Message *Message
-	Location *Location
+type Stats struct {
+	MessageInCount int
+	MessageOutCount int
+	MessageProcessedCount int
+	Uptime int
+	MemoryUsed int
 }
 
 type Connection struct {
@@ -34,30 +33,32 @@ type Connection struct {
 
 type Service struct {
 	Stopper
-	Handler func(Message)
-	Mailbox chan Message
-	Inbox chan *Message
+	Handler func(db.Message)
+	Mailbox chan db.Message
+	Inbox chan *db.Message
 	Port string
 	PortHttp string
 	Etcd *etcd.Client
-	Location *Location
-	HttpLocation *Location
-	NodeMap NodeMap
+	Location *db.Location
+	HttpLocation *db.Location
+	NodeMap db.NodeMap
 	NodeMapMutex sync.RWMutex
-	Outbox chan *Envelope
-	ConnectionMap map[Location]*Connection
+	Outbox chan *db.Envelope
+	ConnectionMap map[db.Location]*Connection
 	ConnectionMapMutex sync.RWMutex
 	Listener net.Listener
 	ConnectionRegisterChannel chan *PersistentConnection
+	Stats *Stats
 	//Cluster query.Cluster
 }
 
-func NewService(tcp, http *Location) *Service {
+func NewService(tcp, http *db.Location) *Service {
 	service := new(Service)
 	service.Location = tcp
 	service.HttpLocation = http
-	service.Outbox = make(chan *Envelope)
-	service.Inbox = make(chan *Message)
+	service.Outbox = make(chan *db.Envelope)
+	service.Inbox = make(chan *db.Message)
+	service.Stats = new(Stats)
 	return service
 }
 
@@ -69,12 +70,12 @@ func (service *Service) GetSignals() (chan os.Signal, chan os.Signal) {
 	return termChan, hupChan
 }
 
-func (service *Service) SendMessage(message *Message) error {
+func (service *Service) SendMessage(message *db.Message) error {
 	if message.Destination == *service.Location {
 		return service.DeliverMessage(message)
 	}
 	router := service.GetRouterLocation(message.Destination)
-	var dest *Location
+	var dest *db.Location
 	if router == *service.Location {
 		dest = &message.Destination
 	} else {
@@ -83,43 +84,43 @@ func (service *Service) SendMessage(message *Message) error {
 	return service.DoSendMessage(message, dest)
 }
 
-func (service *Service) DeliverMessage(message *Message) error {
+func (service *Service) DeliverMessage(message *db.Message) error {
 	log.Println("do handle of", message)
 	switch message.Key {
 	case "ping":
-		location, ok := message.Data.(Location)
+		location, ok := message.Data.(db.Location)
 		if !ok {
 			log.Println("Invalid ping request!", message)
 			return nil
 		}
-		service.SendMessage(&Message{"pong", nil, location})
+		service.SendMessage(&db.Message{"pong", nil, location})
 	}
 	return nil
 }
 
-func (service *Service) DoSendMessage(message *Message, destination *Location) error {
+func (service *Service) DoSendMessage(message *db.Message, destination *db.Location) error {
 	log.Println("send message", message, "to", destination)
-	service.Outbox <- &Envelope{message, destination}
+	service.Outbox <- &db.Envelope{message, destination}
 	return nil
 }
 
 type PersistentConnection struct {
-	Outbox chan *Message
-	Inbox chan *Message
+	Outbox chan *db.Message
+	Inbox chan *db.Message
 	Encoder *gob.Encoder
 	Decoder *gob.Decoder
-	Location Location
+	Location db.Location
 	Service *Service
 	Connection *net.Conn
 	Identified bool
 }
 
-func NewPersistentConnection(service *Service, location *Location) *PersistentConnection {
+func NewPersistentConnection(service *Service, location *db.Location) *PersistentConnection {
 	conn := &PersistentConnection{}
 	conn.Service = service
 	conn.Identified = true
-	conn.Outbox = make(chan *Message)
-	conn.Inbox = make(chan *Message)
+	conn.Outbox = make(chan *db.Message)
+	conn.Inbox = make(chan *db.Message)
 	if location != nil {
 		conn.Location = *location
 	}
@@ -146,7 +147,7 @@ func (conn *PersistentConnection) Manage() {
 	var err error
 
 	go func() {
-		var message *Message
+		var message *db.Message
 		var err error
 		for {
 			err = conn.Decoder.Decode(&message)
@@ -158,7 +159,7 @@ func (conn *PersistentConnection) Manage() {
 		}
 	}()
 
-	var message *Message
+	var message *db.Message
 	for {
 		select {
 		case message = <-conn.Outbox:
@@ -181,7 +182,7 @@ func (conn *PersistentConnection) Manage() {
 			log.Println("receiving", message)
 			if message.Key == "identify" {
 				log.Println("Registering connection")
-				conn.Location = message.Data.(Location)
+				conn.Location = message.Data.(db.Location)
 				go conn.Service.RegisterConnection(conn)
 			} else {
 				conn.Service.Inbox <- message
@@ -208,13 +209,13 @@ func (conn *PersistentConnection) Connect() {
 		conn.Connect()
 	} else {
 		log.Println("Send identify message")
-		conn.Encoder.Encode(Message{"identify", *conn.Service.Location, conn.Location})
-		//go func() { conn.Outbox <- &Message{"identify", *conn.Service.Location, conn.Location} }()
+		conn.Encoder.Encode(db.Message{"identify", *conn.Service.Location, conn.Location})
+		//go func() { conn.Outbox <- &db.Message{"identify", *conn.Service.Location, conn.Location} }()
 	}
 	log.Println("Connect ending")
 }
 
-type ConnectionMapping map[Location]*PersistentConnection
+type ConnectionMapping map[db.Location]*PersistentConnection
 
 func (service *Service) RegisterConnection(conn *PersistentConnection) {
 	service.ConnectionRegisterChannel <- conn
@@ -245,7 +246,7 @@ func (service *Service) HandleConnections() {
 	}
 }
 
-func (service *Service) GetRouterLocation(node Location) Location {
+func (service *Service) GetRouterLocation(node db.Location) db.Location {
 	service.NodeMapMutex.RLock()
 	defer service.NodeMapMutex.RUnlock()
 	location, ok := service.NodeMap[node]
@@ -279,4 +280,13 @@ func (service *Service) Serve() {
 		con.Decoder = gob.NewDecoder(*con.Connection)
 		go con.Manage()
 	}
+}
+
+func (service *Service) GetStats() *Stats {
+	return service.Stats
+}
+
+func (service *Service) NewListener() chan *db.Message {
+	ch := make(chan *db.Message)
+	return ch
 }

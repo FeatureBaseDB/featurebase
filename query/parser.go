@@ -3,7 +3,7 @@ package query
 import (
 	"encoding/json"
 	"errors"
-	"pilosa/core"
+	"pilosa/db"
 )
 
 var InvalidQueryError = errors.New("Invalid query format.")
@@ -46,7 +46,7 @@ func (q *QueryParser) Walk(data interface{}) (*Query, error) {
 			return nil, InvalidQueryError
 		}
 		id_int := int(id)
-		query.Inputs = []QueryInput{core.Bitmap{frame, id_int}}
+		query.Inputs = []QueryInput{db.Bitmap{frame, id_int}}
 	}
 
 	return query, nil

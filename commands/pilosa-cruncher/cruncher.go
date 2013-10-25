@@ -2,7 +2,7 @@ package main
 
 import (
 	"pilosa/cruncher"
-	"pilosa/core"
+	"pilosa/db"
 	"flag"
 	"log"
 )
@@ -17,11 +17,11 @@ func init() {
 }
 
 func main() {
-	tcp, err := core.NewLocation(tcpLoc)
+	tcp, err := db.NewLocation(tcpLoc)
 	if err != nil {
 		log.Fatal("Location not valid:", tcpLoc)
 	}
-	http, err := core.NewLocation(httpLoc)
+	http, err := db.NewLocation(httpLoc)
 	if err != nil {
 		log.Fatal("Location not valid:", httpLoc)
 	}

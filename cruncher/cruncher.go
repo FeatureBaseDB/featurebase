@@ -2,6 +2,7 @@ package cruncher
 
 import (
 	"pilosa/core"
+	"pilosa/db"
 	"log"
 )
 
@@ -38,7 +39,7 @@ func (c *Cruncher) Run() {
 	}
 }
 
-func NewCruncher(tcp, http *core.Location) *Cruncher {
+func NewCruncher(tcp, http *db.Location) *Cruncher {
 	service := core.NewService(tcp, http)
 	cruncher := Cruncher{*service}
 	return &cruncher

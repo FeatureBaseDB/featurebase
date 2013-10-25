@@ -2,9 +2,10 @@ package router
 
 import (
 	"log"
-	"time"
+	//"time"
 	//"strings"
 	"pilosa/core"
+	"pilosa/db"
 )
 
 type Router struct {
@@ -21,14 +22,16 @@ func (r *Router) Run() {
 	//go r.SyncEtcd()
 	go r.WatchEtcd()
 	go r.HandleConnections()
+	go r.HandleInbox()
+	go r.ServeHTTP()
 
-	go func() {
-		for {
-			r.SendMessage(&core.Message{"ping", core.Location{"127.0.0.1", 1200}, core.Location{"127.0.0.1", 1300}})
-			time.Sleep(2*time.Second)
-			//log.Println(r.GetRouterLocation(core.Location{"127.0.0.1", 1200}))
-		}
-	}()
+	//go func() {
+	//	for {
+	//		r.SendMessage(&core.Message{"ping", core.Location{"127.0.0.1", 1200}, core.Location{"127.0.0.1", 1300}})
+	//		time.Sleep(2*time.Second)
+	//		//log.Println(r.GetRouterLocation(core.Location{"127.0.0.1", 1200}))
+	//	}
+	//}()
 
 	sigterm, sighup := r.GetSignals()
 	for {
@@ -40,6 +43,15 @@ func (r *Router) Run() {
 				log.Println("SIGTERM! Cleaning up...")
 				r.Stop()
 				return
+		}
+	}
+}
+
+func (r *Router) HandleInbox() {
+	for {
+		select {
+		case message := <-r.Inbox:
+			log.Println("process", message)
 		}
 	}
 }
@@ -71,11 +83,11 @@ func (r *Router) SetupEtcd() {
 	//}
 }
 
-func (r *Router) HandleMessage(m *core.Message) {
+func (r *Router) HandleMessage(m *db.Message) {
 	log.Println(m)
 }
 
-func NewRouter(tcp, http *core.Location) *Router {
+func NewRouter(tcp, http *db.Location) *Router {
 	service := core.NewService(tcp, http)
 	router := Router{*service}
 	return &router
