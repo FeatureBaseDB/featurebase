@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"lru"
-	"tux21b.org/v1/gocql"
 	"pilosa/index"
 )
 
@@ -60,16 +59,16 @@ type Shard struct {
 	done         chan bool
 	bitmap_cache *lru.Cache
 	shard_key    int32
-	db           *gocql.Session
+    storage      index.Storage
 }
 
-func NewShard(shard_key int32) *Shard {
+func NewShard(shard_key int32, s index.Storage) *Shard {
 	f := new(Shard)
 	f.inbound = make(chan Request, 512)
 	f.done = make(chan bool)
 	f.bitmap_cache = lru.New(10000)
 	f.shard_key = shard_key
-	f.db = index.GetDB()
+	f.storage = s
 	return f
 
 }
@@ -100,7 +99,7 @@ func (f *Shard) Get(bitmap_id uint64) index.IBitmap {
 		return bm.(*index.Bitmap)
 	}
 	//need to stick it in the cache
-	bm = index.FetchCass(f.db, bitmap_id, f.shard_key)
+	bm = f.storage.Fetch(bitmap_id, f.shard_key)
 	f.bitmap_cache.Add(bitmap_id, bm)
 	//return umbel.FetchCass(f.db,bitmap_id,f.shard_key)
 	return bm.(*index.Bitmap)
