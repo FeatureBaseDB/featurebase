@@ -10,116 +10,110 @@ import (
 	"time"
 )
 
-type Command struct {
-	property int
-	retchan chan int
-}
+const blocksize = 4
 
-type Property struct {
+type Req struct {
 	id int
-	current int
-	max int
+	ret chan int
 }
 
-func (p *Property) Increment() int {
-	p.current += 1
-	if p.current < p.max {
-		return p.current
-	} else {
-		p.Sync()
-		p.current += 1
-		return p.current
-	}
+type Nexter struct {
+	reqchan chan *Req
 }
 
-func (p *Property) Sync() {
-	path := "nexter/" + strconv.Itoa(p.id)
-	max := 0
-	key, err := client.Get(path)
-	if err != nil {
-		ee, ok := err.(etcd.EtcdError)
-		if ok {
-			if ee.ErrorCode == 100 {
-				client.Set(path, "0", 0)
-			}
-		} else {
-			log.Fatal(err)
-		}
-	} else {
-		max, err = strconv.Atoi(key[0].Value)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+func (self *Nexter) countloop(ch chan int, id int, client *etcd.Client) {
+	var start int
+	var end int
 	for {
-		newval, ok, err := client.TestAndSet(path, strconv.Itoa(max), strconv.Itoa(max+5), 0)
+		path := "nexter/" + strconv.Itoa(id)
+		node, err := client.Get(path)
 		if err != nil {
-			log.Fatal(err)
-		}
-		if ok {
-			break
-		} else {
-			time.Sleep(time.Second)
-			max, err = strconv.Atoi(newval.Value)
+			ee, ok := err.(etcd.EtcdError)
+			if ok && ee.ErrorCode == 100 { // node does not exist
+				start = 0
+				end = blocksize - 1
+				client.Set(path, "0", 0) // TODO: error check
+			} else {
+				log.Fatal(err)
+			}
+		} else { // No error, get start of series from etcd node
+			start, err = strconv.Atoi(node[0].Value)
+			end = start + blocksize
 			if err != nil {
 				log.Fatal(err)
 			}
 		}
-	}
-	p.max = max
-	p.current = max - 5
-}
-
-func NewProperty(id int) *Property {
-	prop := &Property{id:id}
-	prop.Sync()
-	return prop
-}
-
-var commandchan chan *Command
-var client *etcd.Client
-
-func Nextifier() {
-	prop_map := make(map[int]*Property)
-	for {
-		select {
-		case c := <-commandchan:
-			log.Println(prop_map)
-			prop, ok := prop_map[c.property]
-			if !ok {
-				prop = NewProperty(c.property)
-				prop_map[c.property] = prop
+		for {
+			newval, ok, err := client.TestAndSet(path, strconv.Itoa(start), strconv.Itoa(end), 0)
+			if err != nil {
+				log.Fatal(err)
 			}
-			c.retchan <- prop.Increment()
+			if ok {
+				break
+			} else {
+				log.Println("Error with TestAndSet! Trying again in 1 second...")
+				time.Sleep(time.Second)
+				start, err = strconv.Atoi(newval.Value)
+				if err != nil {
+					log.Fatal(err)
+				}
+				end = start + blocksize
+			}
+		}
+		for c := start; c < end; c += 1 {
+			ch <- c
 		}
 	}
 }
 
-func Nexter(w http.ResponseWriter, r *http.Request) {
-	url := r.URL.Path
-	splits := strings.Split(url, "/")
-	if len(splits) < 3 {
-		http.Error(w, "Missing property id", http.StatusBadRequest)
-		return
+func (self *Nexter) loop() {
+	counters := make(map[int]chan int)
+	client := etcd.NewClient(nil)
+	for {
+		select {
+		case countreq := <-self.reqchan:
+			counter, ok := counters[countreq.id]
+			if !ok {
+				counter = make(chan int)
+				counters[countreq.id] = counter
+				go self.countloop(counter, countreq.id, client)
+			}
+			go func() {countreq.ret <- <-counter}()
+		}
 	}
-	id_string := splits[2]
-	id, err := strconv.Atoi(id_string)
-	if err != nil {
-		http.Error(w, "Property id is not a number", http.StatusBadRequest)
-		return
-	}
-	retchan := make(chan int)
-	commandchan <- &Command{id, retchan}
-	num := <-retchan
-	dec := json.NewEncoder(w)
-	dec.Encode(num)
+}
+func (self *Nexter) GetCount(id int) int {
+	ret := make(chan int)
+	self.reqchan <- &Req{id, ret}
+	return <-ret
+}
+
+func NewNexter() *Nexter {
+	nexter := &Nexter{make(chan *Req)}
+	go nexter.loop()
+	return nexter
 }
 
 func main() {
-	client = etcd.NewClient(nil)
-	commandchan = make(chan *Command)
-	go Nextifier()
 	log.Println("Starting Nexter...")
-	http.HandleFunc("/nexter/", Nexter)
+	nexter := NewNexter()
+	http.HandleFunc("/nexter/", func(w http.ResponseWriter, r *http.Request) {
+		url := r.URL.Path
+		splits := strings.Split(url, "/")
+		if len(splits) < 3 {
+			http.Error(w, "Missing property id", http.StatusBadRequest)
+			return
+		}
+		id_string := splits[2]
+		id, err := strconv.Atoi(id_string)
+		if err != nil {
+			http.Error(w, "Property id is not a number", http.StatusBadRequest)
+			return
+		}
+
+		num := nexter.GetCount(id)
+		dec := json.NewEncoder(w)
+		dec.Encode(num)
+	})
 	http.ListenAndServe(":9000", nil)
 }
