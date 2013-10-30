@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const blocksize = 4
+const blocksize = 64
 
 type Req struct {
 	id int
