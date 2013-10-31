@@ -14,16 +14,16 @@ const blocksize = 64
 
 type Req struct {
 	id int
-	ret chan int
+	ret chan uint64
 }
 
 type Nexter struct {
 	reqchan chan *Req
 }
 
-func (self *Nexter) countloop(ch chan int, id int, client *etcd.Client) {
-	var start int
-	var end int
+func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
+	var start uint64
+	var end uint64
 	for {
 		path := "nexter/" + strconv.Itoa(id)
 		node, err := client.Get(path)
@@ -37,14 +37,14 @@ func (self *Nexter) countloop(ch chan int, id int, client *etcd.Client) {
 				log.Fatal(err)
 			}
 		} else { // No error, get start of series from etcd node
-			start, err = strconv.Atoi(node[0].Value)
+			start, err = strconv.ParseUint(node[0].Value, 10, 0)
 			end = start + blocksize
 			if err != nil {
 				log.Fatal(err)
 			}
 		}
 		for {
-			newval, ok, err := client.TestAndSet(path, strconv.Itoa(start), strconv.Itoa(end), 0)
+			newval, ok, err := client.TestAndSet(path, strconv.FormatUint(start, 10), strconv.FormatUint(end, 10), 0)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -53,7 +53,7 @@ func (self *Nexter) countloop(ch chan int, id int, client *etcd.Client) {
 			} else {
 				log.Println("Error with TestAndSet! Trying again in 1 second...")
 				time.Sleep(time.Second)
-				start, err = strconv.Atoi(newval.Value)
+				start, err = strconv.ParseUint(newval.Value, 10, 0)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -67,14 +67,14 @@ func (self *Nexter) countloop(ch chan int, id int, client *etcd.Client) {
 }
 
 func (self *Nexter) loop() {
-	counters := make(map[int]chan int)
+	counters := make(map[int]chan uint64)
 	client := etcd.NewClient(nil)
 	for {
 		select {
 		case countreq := <-self.reqchan:
 			counter, ok := counters[countreq.id]
 			if !ok {
-				counter = make(chan int)
+				counter = make(chan uint64)
 				counters[countreq.id] = counter
 				go self.countloop(counter, countreq.id, client)
 			}
@@ -82,8 +82,8 @@ func (self *Nexter) loop() {
 		}
 	}
 }
-func (self *Nexter) GetCount(id int) int {
-	ret := make(chan int)
+func (self *Nexter) GetCount(id int) uint64 {
+	ret := make(chan uint64)
 	self.reqchan <- &Req{id, ret}
 	return <-ret
 }
