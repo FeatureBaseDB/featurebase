@@ -26,7 +26,7 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 	var end uint64
 	for {
 		path := "nexter/" + strconv.Itoa(id)
-		node, err := client.Get(path)
+		node, err := client.Get(path, false)
 		if err != nil {
 			ee, ok := err.(etcd.EtcdError)
 			if ok && ee.ErrorCode == 100 { // node does not exist
@@ -37,21 +37,18 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 				log.Fatal(err)
 			}
 		} else { // No error, get start of series from etcd node
-			start, err = strconv.ParseUint(node[0].Value, 10, 0)
+			start, err = strconv.ParseUint(node.Kvs[0].Value, 10, 0)
 			end = start + blocksize
 			if err != nil {
 				log.Fatal(err)
 			}
 		}
 		for {
-			newval, ok, err := client.TestAndSet(path, strconv.FormatUint(start, 10), strconv.FormatUint(end, 10), 0)
+			newval, err := client.CompareAndSwap(path, strconv.FormatUint(end, 10), 0, strconv.FormatUint(start, 10), 0)
 			if err != nil {
-				log.Fatal(err)
-			}
-			if ok {
 				break
 			} else {
-				log.Println("Error with TestAndSet! Trying again in 1 second...")
+				log.Println("Error with CompareAndSet! Trying again in 1 second...")
 				time.Sleep(time.Second)
 				start, err = strconv.ParseUint(newval.Value, 10, 0)
 				if err != nil {

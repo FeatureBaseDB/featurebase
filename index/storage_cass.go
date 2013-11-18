@@ -17,8 +17,11 @@ func NewCassStorage() Storage{
 	cluster.Consistency = gocql.Quorum
 	//cluster.ProtoVersion = 1
 	// cluster.CQLVersion = "3.0.0"
-	session := cluster.CreateSession()
-	if err := session.Query("USE hotbox").Exec(); err != nil {
+	session, err := cluster.CreateSession()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err = session.Query("USE hotbox").Exec(); err != nil {
 	}
     obj.db = session
     return obj

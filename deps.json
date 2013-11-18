@@ -19,6 +19,11 @@
         "version": "87bcc4729f2c5a08d2513ad10684c6bbd256380f",
         "type": "git"
     },
+    "lru": {
+        "repo": "github.com/golang/groupcache/lru",
+        "version": "d781998583680cda80cf61e0b37dd0cd8da2eb52",
+        "type": "git"
+    },
     "rbtree": {
         "repo": "github.com/yasushi-saito/rbtree",
         "version": "571e2538414bf914c7e2909b61217b4e3e5508f4",
