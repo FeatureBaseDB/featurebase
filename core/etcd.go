@@ -16,11 +16,11 @@ func (service *Service) SetupEtcd() {
 	defer service.NodeMapMutex.Unlock()
 	service.NodeMap = db.NodeMap{}
 
-	nodes, err := service.Etcd.Get("nodes")
+	nodes, err := service.Etcd.Get("nodes", false)
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, node := range nodes {
+	for _, node := range nodes.Kvs {
 		nodestring := strings.Split(node.Key, "/")[2]
 		location, err := db.NewLocation(nodestring)
 		if err != nil {

@@ -3,7 +3,7 @@ package db
 import (
 	"fmt"
 	"log"
-	"lru"
+	"github.com/golang/groupcache/lru"
 	"pilosa/index"
 )
 

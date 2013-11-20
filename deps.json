@@ -1,0 +1,32 @@
+{
+    "consistent": {
+        "repo": "github.com/stathat/consistent",
+        "version": "0262985f12333852b6423025aa3ca315af473a4a",
+        "type": "git"
+    },
+    "etcd": {
+        "repo": "github.com/coreos/go-etcd/etcd",
+        "version": "8a44ce0c654efd505418bb2c341cb9b797020583",
+        "type": "git"
+    },
+    "gocql": {
+        "repo": "tux21b.org/v1/gocql",
+        "version": "44eda643c1ae69e866e491b1c935c5b22e42350e",
+        "type": "git"
+    },
+    "gouuid": {
+        "repo": "github.com/nu7hatch/gouuid",
+        "version": "87bcc4729f2c5a08d2513ad10684c6bbd256380f",
+        "type": "git"
+    },
+    "lru": {
+        "repo": "github.com/golang/groupcache/lru",
+        "version": "d781998583680cda80cf61e0b37dd0cd8da2eb52",
+        "type": "git"
+    },
+    "rbtree": {
+        "repo": "github.com/yasushi-saito/rbtree",
+        "version": "571e2538414bf914c7e2909b61217b4e3e5508f4",
+        "type": "git"
+    }
+}
