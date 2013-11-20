@@ -4,6 +4,8 @@ import (
 	"pilosa/core"
 	"pilosa/db"
 	"log"
+	"circuit/use/circuit"
+	"time"
 )
 
 type Cruncher struct {
@@ -52,4 +54,14 @@ func (c *Cruncher) HandleInbox() {
 			log.Println("process", message)
 		}
 	}
+}
+
+type App struct{}
+func (App) Main() {
+	log.Println("Starting cruncher!")
+	time.Sleep(60*time.Second)
+}
+
+func init() {
+	circuit.RegisterFunc(App{})
 }
