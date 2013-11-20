@@ -10,6 +10,13 @@ import (
 type CassandraStorage struct{
     db *gocql.Session
 }
+func BuildSchema(){
+    /*
+    "CREATE KEYSPACE IF NOT EXISTS hotbox WITH strategy_class = SimpleStrategy AND strategy_options:replication_factor = 1"
+    "CREATE TABLE IF NOT EXISTS bitmap ( bitmap_id bigint, shard_id int, ChunkKey bigint,   BlockIndex int,   block bigint,    PRIMARY KEY ((bitmap_id, shard_id),ChunkKey,BlockIndex) )"
+    */
+     
+}
 func NewCassStorage() Storage{
     obj := new(CassandraStorage)
 	cluster := gocql.NewCluster("127.0.0.1")
