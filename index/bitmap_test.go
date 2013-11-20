@@ -20,6 +20,25 @@ func TestCount(t *testing.T) {
     }
 
 }
+func TestANDNOT(t *testing.T){
+    bm1:= CreateRBBitmap()
+    bm2:= CreateRBBitmap()
+    SetBit(bm1,1)
+    //SetBit(bm2,2)
+    all:= AND_NOT(bm1,bm2)
+    res :=BitCount(all)
+    if res != 1{
+        t.Errorf("SHOULD BE 1 => %d",res)
+    }
+
+    SetBit(bm2,1)
+    all= AND_NOT(bm1,bm2)
+    res =BitCount(all)
+    if res != 0{
+        t.Errorf("SHOULD BE 0 => %d",res)
+    }
+
+}
 func TestUnion(t *testing.T) {
     even:= CreateRBBitmap()
     for i:=uint64(0); i<uint64(4096);i+=2{

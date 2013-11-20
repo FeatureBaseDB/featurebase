@@ -222,6 +222,59 @@ func Union(a_bm IBitmap, b_bm IBitmap) IBitmap {
 	return output
 }
 
+func AND_NOT(a_bm IBitmap, b_bm IBitmap) IBitmap {
+	var a = a_bm.Min()
+	var b = b_bm.Min()
+	defer a.Close()
+	defer b.Close()
+	output := CreateRBBitmap()
+    var o_last_Key = uint64(0)
+   
+   if o_last_Key != 0{
+        o_last_Key = uint64(0)
+    }
+
+    for {
+        if a.Limit() && b.Limit() {
+            break
+        } else if a.Limit() {
+            break
+        } else if b.Limit() {
+            var a_node = a.Item()
+            var o_node = &Chunk{a_node.Key, a_node.Value}
+            output.AddChunk(o_node)
+            o_last_Key = o_node.Key
+            a = a.Next()
+        } else if a.Item().Key < b.Item().Key {
+            var a_node = a.Item()
+            var o_node = &Chunk{a_node.Key, a_node.Value}
+            output.AddChunk(o_node)
+            o_last_Key = o_node.Key
+            a = a.Next()
+        } else if a.Item().Key > b.Item().Key {
+            var b_node = b.Item()
+            o_last_Key = b_node.Key
+            b = b.Next()
+        } else if a.Item().Key == b.Item().Key {
+            var a_node = a.Item()
+            var b_node = BlockArray_invert(&b.Item().Value) //probably need to copy this out
+            var o = BlockArray_intersection(&a_node.Value, &b_node)
+            var o_node = &Chunk{a_node.Key, o}
+            //could not add if all zero
+            if o_node.Value.bitcount()>0{
+                output.AddChunk(o_node)
+            }
+            o_last_Key = o_node.Key
+            a = a.Next()
+            b = b.Next()
+        } else {
+            log.Println("NEVER SHOULD BE HERE")
+            break
+        }
+    }
+	return output
+}
+
 type ChunkIterator interface {
 	Limit() bool
 	Item() *Chunk
