@@ -3,9 +3,12 @@ package index
 import (
     "testing"
     . "github.com/smartystreets/goconvey/convey"
+    "log"
+    "time"
     )
 
-    func TestSomething(t *testing.T) {
+    func TestBitmaps(t *testing.T) {
+        log.Println("HELLO")
         Convey("function BitCount should equal method bm.Count()", t, func() {
             bm:= CreateRBBitmap()
             for i:=uint64(0); i<uint64(4096);i++{
@@ -25,16 +28,7 @@ import (
 
             So(1, ShouldEqual, res)
         })
-/*
-            SetBit(bm2,1)
-            all= AND_NOT(bm1,bm2)
-            res =BitCount(all)
-            if res != 0{
-                t.Errorf("SHOULD BE 0 => %d",res)
-            }
-            */
 
-        //func TestUnion(t *testing.T) {
         Convey("UNION even + odd equal 4096 ", t, func() {
             even:= CreateRBBitmap()
             for i:=uint64(0); i<uint64(4096);i+=2{
@@ -67,4 +61,14 @@ import (
             So(total_bits, ShouldEqual, 0)
 
         })
-    }
+
+        Convey("Bitcount< 1s ", t, func() {
+            all:= CreateRBBitmap()
+            for i:=uint64(0); i< uint64(65536);i++{
+                SetBit(all,i)
+            }
+            start:= time.Now()
+            BitCount(all) 
+            So(start, ShouldHappenWithin, time.Duration(1) * time.Millisecond, time.Now())
+    })
+}
