@@ -38,5 +38,10 @@
         "repo": "github.com/yasushi-saito/rbtree",
         "version": "571e2538414bf914c7e2909b61217b4e3e5508f4",
         "type": "git"
+    },
+    "spew": {
+        "repo": "github.com/davecgh/go-spew/spew",
+        "version": "e762b3d1320b76030bd7f6cc2bfc3d9acce874c0",
+        "type": "git"
     }
 }
