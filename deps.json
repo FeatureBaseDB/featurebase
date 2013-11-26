@@ -9,6 +9,11 @@
         "version": "8a44ce0c654efd505418bb2c341cb9b797020583",
         "type": "git"
     },
+    "goconvey": {
+        "repo": "github.com/smartystreets/goconvey/convey",
+        "version": "master",
+        "type": "git"
+    },
     "gocql": {
         "repo": "tux21b.org/v1/gocql",
         "version": "44eda643c1ae69e866e491b1c935c5b22e42350e",
