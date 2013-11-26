@@ -9,6 +9,11 @@
         "version": "8a44ce0c654efd505418bb2c341cb9b797020583",
         "type": "git"
     },
+    "goconvey": {
+        "repo": "github.com/smartystreets/goconvey/convey",
+        "version": "master",
+        "type": "git"
+    },
     "gocql": {
         "repo": "tux21b.org/v1/gocql",
         "version": "44eda643c1ae69e866e491b1c935c5b22e42350e",
@@ -32,6 +37,11 @@
     "rbtree": {
         "repo": "github.com/yasushi-saito/rbtree",
         "version": "571e2538414bf914c7e2909b61217b4e3e5508f4",
+        "type": "git"
+    },
+    "spew": {
+        "repo": "github.com/davecgh/go-spew/spew",
+        "version": "e762b3d1320b76030bd7f6cc2bfc3d9acce874c0",
         "type": "git"
     }
 }
