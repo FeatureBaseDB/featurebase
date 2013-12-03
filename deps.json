@@ -6,7 +6,7 @@
     },
     "etcd": {
         "repo": "github.com/coreos/go-etcd/etcd",
-        "version": "8a44ce0c654efd505418bb2c341cb9b797020583",
+        "version": "8a4461a676eb65fb74f10da1f8198cc9f67da366",
         "type": "git"
     },
     "goconvey": {

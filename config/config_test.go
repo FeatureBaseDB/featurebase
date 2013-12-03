@@ -12,15 +12,15 @@ func TestConfig(t *testing.T) {
 		t.Fatal("Error setting PILOSA_CONFIG")
 	}
 	Convey("config.Get()", t, func() {
-		So(Get("port_tcp").(int), ShouldEqual, 12000)
-		So(Get("port_http").(int), ShouldEqual, 15000)
-		So(Get("temp").(string), ShouldEqual, "/tmp")
+		So(Get("port_tcp"), ShouldEqual, 12000)
+		So(Get("port_http"), ShouldEqual, 15000)
+		So(Get("temp"), ShouldEqual, "/tmp")
 		So(Get("notfound"), ShouldBeNil)
 	})
 	Convey("config.GetSafe()", t, func() {
 		val, ok := GetSafe("port_tcp")
 		So(ok, ShouldBeTrue)
-		So(val.(int), ShouldEqual, 12000)
+		So(val, ShouldEqual, 12000)
 		val, ok = GetSafe("derp")
 		So(ok, ShouldBeFalse)
 		So(val, ShouldBeNil)
