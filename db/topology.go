@@ -2,6 +2,7 @@ package db
 
 import (
 	"github.com/stathat/consistent"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/nu7hatch/gouuid"
 	"log"
 	"fmt"
@@ -219,8 +220,11 @@ func (d *Database) TestSetBit(bitmap Bitmap, profile_id int) {
     log.Println("slice:",slice)
     frame, _ := d.GetFrame(bitmap.FrameType)
     fsi, _ := d.GetFrameSliceIntersect(frame, slice)
-    fragment,erry := fsi.Hashring.Get(fmt.Sprintf("%d", bitmap.Id))
-
-    log.Println("fragment:",fragment)
-    log.Println("error:",erry)
+    frag_id_s,err := fsi.Hashring.Get(fmt.Sprintf("%d", bitmap.Id))
+	frag_id, err := strconv.Atoi(frag_id_s)
+	fragment, err := fsi.GetFragment(frag_id)
+	if err != nil {
+		log.Fatal(err)
+	}
+	spew.Dump(fragment)
 }

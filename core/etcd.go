@@ -148,7 +148,8 @@ func (service *Service) MetaWatcher() {
 		}
 	}
 	database, _ := cluster.GetDatabase("main")
-	database.TestSetBit(db.Bitmap{0, "general"}, 0)
+	spew.Dump(database)
+	database.TestSetBit(db.Bitmap{1200, "general"}, 1)
 
 	receiver := make(chan *etcd.Response)
 	stop := make(chan bool)
