@@ -12,6 +12,7 @@ import (
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")
 var SliceDoesNotExistError = errors.New("Slice does not exist.")
+var FragmentDoesNotExistError = errors.New("Fragment does not exist.")
 var FrameSliceIntersectDoesNotExistError = errors.New("FrameSliceIntersect does not exist.")
 
 type Location struct {
@@ -67,8 +68,17 @@ type Frame struct {
 type FrameSliceIntersect struct {
     slice *Slice
     frame *Frame
-	Fragments []Fragment
+	Fragments []*Fragment
 	Hashring *consistent.Consistent
+}
+
+func (fsi *FrameSliceIntersect) GetFragment(fragment_id int) (*Fragment, error) {
+	for _, fragment := range fsi.Fragments {
+		if fragment.id == fragment_id {
+			return fragment, nil
+		}
+	}
+	return nil, FragmentDoesNotExistError
 }
 
 // Add a slice to a database
@@ -143,7 +153,7 @@ func (d *Database) AddFragment(frame *Frame, slice *Slice, process *Process, fra
 
 	frameslice, _ := d.GetFrameSliceIntersect(frame, slice)
     fragment := Fragment{process: process, id: fragment_id}
-    frameslice.Fragments = append(frameslice.Fragments, fragment)
+    frameslice.Fragments = append(frameslice.Fragments, &fragment)
 
     frameslice.Hashring.Add(fmt.Sprintf("%d", fragment_id))
 

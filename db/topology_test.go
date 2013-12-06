@@ -25,8 +25,8 @@ func TestTopology(t *testing.T) {
         database := cluster.AddDatabase("property49")
         database.AddFrame("general")
         //database.AddFrame("brands")
-        database.AddSlice()
-        database.AddSlice()
+        database.AddSlice(0)
+        database.AddSlice(1)
         //database.AddSlice()
 
         log.Println(database)
@@ -41,7 +41,7 @@ func TestTopology(t *testing.T) {
         frame, _ := database.GetFrame("general")
         slice, _ := database.GetSlice(0)
 
-        loc1, _ := NewLocation("192.168.1.100:8001")
+        //loc1, _ := NewLocation("192.168.1.100:8001")
         /*
         loc2, _ := NewLocation("192.168.1.100:8002")
         loc3, _ := NewLocation("192.168.1.100:8003")
@@ -49,11 +49,13 @@ func TestTopology(t *testing.T) {
         loc5, _ := NewLocation("192.168.1.100:8005")
         */
 
+        /*
         database.AddFragment(frame, slice, loc1, 0)
         database.AddFragment(frame, slice, loc1, 1)
         database.AddFragment(frame, slice, loc1, 2)
         database.AddFragment(frame, slice, loc1, 3)
         database.AddFragment(frame, slice, loc1, 4)
+        */
 
 
         fsi, _ := database.GetFrameSliceIntersect(frame, slice)
