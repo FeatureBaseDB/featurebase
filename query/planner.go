@@ -2,7 +2,7 @@ package query
 
 import (
 	"github.com/nu7hatch/gouuid"
-	"strconv"
+	//"strconv"
 	"fmt"
 	"math/rand"
 	"pilosa/db"
@@ -69,6 +69,7 @@ type GetQueryTree struct {
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *GetQueryTree) getLocation(d *db.Database) string {
+    /*
 	frame, err := d.GetFrame(qt.bitmap.FrameType)
 	if err != nil {
 		panic(err)
@@ -82,6 +83,8 @@ func (qt *GetQueryTree) getLocation(d *db.Database) string {
 	fragment := slice.Fragments[fragIndex]
 
 	return fmt.Sprintf(fragment.Node)
+    */
+    return "Nothing yet"
 }
 
 // Builds QueryTree object from Query. Pass slice=-1 to perform operation on all slices
