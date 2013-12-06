@@ -21,7 +21,7 @@ func TestTopology(t *testing.T) {
         log.Println(frame)
         */
 
-        cluster := Cluster{Self:"192.168.1.100:1201"}
+        cluster := NewCluster()
         database := cluster.AddDatabase("property49")
         database.AddFrame("general")
         //database.AddFrame("brands")

@@ -51,7 +51,7 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 				log.Fatal(err)
 			}
 		} else { // No error, get start of series from etcd node
-			start, err = strconv.ParseUint(node.Value, 10, 0)
+			start, err = strconv.ParseUint(node.Node.Value, 10, 0)
 			end = start + blocksize
 			if err != nil {
 				log.Fatal(err)
@@ -64,7 +64,7 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 			} else {
 				log.Println("Error with CompareAndSet! Trying again in 1 second...")
 				time.Sleep(time.Second)
-				start, err = strconv.ParseUint(newval.Value, 10, 0)
+				start, err = strconv.ParseUint(newval.Node.Value, 10, 0)
 				if err != nil {
 					log.Fatal(err)
 				}

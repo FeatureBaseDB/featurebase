@@ -2,6 +2,7 @@ package db
 
 import (
 	"github.com/stathat/consistent"
+	"github.com/nu7hatch/gouuid"
 	"log"
 	"fmt"
 	"errors"
@@ -16,6 +17,14 @@ var FrameSliceIntersectDoesNotExistError = errors.New("FrameSliceIntersect does 
 type Location struct {
 	Ip string
 	Port int
+}
+
+type Process struct {
+	id *uuid.UUID
+}
+
+func NewProcess(id *uuid.UUID) *Process {
+	return &Process{id}
 }
 
 // Create a Location struct given a string in form "0.0.0.0:0"
@@ -41,7 +50,7 @@ type NodeMap map[Location]Location
 
 // A fragment is a collection of bitmaps within a slice. The fragment contains a reference to the responsible node for that fragment. The node is in the form ip:port
 type Fragment struct {
-    location *Location
+    process *Process
 	id int
 }
 
@@ -63,8 +72,7 @@ type FrameSliceIntersect struct {
 }
 
 // Add a slice to a database
-func (d *Database) AddSlice() *Slice {
-	slice_id := len(d.slices)
+func (d *Database) AddSlice(slice_id int) *Slice {
 	slice := Slice{id: slice_id}
 	d.slices = append(d.slices, &slice)
     // add intersections
@@ -77,7 +85,12 @@ func (d *Database) AddSlice() *Slice {
 // Represents the entire cluster, and a reference to the Node this instance is running on
 type Cluster struct {
 	Databases map[string]*Database
-	Self string
+}
+
+func NewCluster() *Cluster {
+	cluster := Cluster{}
+	cluster.Databases = make(map[string]*Database)
+	return &cluster
 }
 
 // Add a database to a cluster
@@ -88,6 +101,15 @@ func (c *Cluster) AddDatabase(name string) *Database {
 	}
 	c.Databases[name] = &database
 	return &database
+}
+
+func (c *Cluster) GetDatabase(name string) (*Database, error) {
+	value, ok := c.Databases[name]
+	if !ok {
+		return nil, errors.New("The database does not exist!!!!!!!!!!!!!!!!!!!!!!!! -HO")
+	} else {
+		return value, nil
+	}
 }
 
 // A database is a collection of all the frames within a given profile space
@@ -117,10 +139,10 @@ func (d *Database) AddFrame(name string) *Frame {
 	return &frame
 }
 
-func (d *Database) AddFragment(frame *Frame, slice *Slice, location *Location, fragment_id int) *Fragment {
+func (d *Database) AddFragment(frame *Frame, slice *Slice, process *Process, fragment_id int) *Fragment {
 
 	frameslice, _ := d.GetFrameSliceIntersect(frame, slice)
-    fragment := Fragment{location: location, id: fragment_id}
+    fragment := Fragment{process: process, id: fragment_id}
     frameslice.Fragments = append(frameslice.Fragments, fragment)
 
     frameslice.Hashring.Add(fmt.Sprintf("%d", fragment_id))
