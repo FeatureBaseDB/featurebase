@@ -31,7 +31,7 @@ func TestTopology(t *testing.T) {
 
         log.Println(database)
         log.Println("----------------------------------")
-        for _, fsi := range database.FrameSliceIntersects {
+        for _, fsi := range database.frame_slice_intersects {
             log.Println(fsi.frame,fsi.slice)
         }
         num_slices, _ := database.NumSlices()
@@ -40,6 +40,8 @@ func TestTopology(t *testing.T) {
 
         frame, _ := database.GetFrame("general")
         slice, _ := database.GetSlice(0)
+        log.Println(frame)
+        log.Println(slice)
 
         //loc1, _ := NewLocation("192.168.1.100:8001")
         /*
@@ -58,12 +60,9 @@ func TestTopology(t *testing.T) {
         */
 
 
-        fsi, _ := database.GetFrameSliceIntersect(frame, slice)
-        log.Println(fsi)
+        //fsi, _ := database.GetFrameSliceIntersect(frame, slice)
+        //log.Println(fsi)
         //log.Println(fsi.Hashring)
-
-        x,_ := fsi.Hashring.Get("able")
-        log.Println(x)
 
         /*
         slicer, errer := database.GetSliceForProfile(131072)
@@ -75,12 +74,10 @@ func TestTopology(t *testing.T) {
         log.Println(errer)
         */
 
+        //bitmap := Bitmap{Id: 555, FrameType: "general"}
+        //log.Println("bitmap:",bitmap)
 
-        bitmap := Bitmap{Id: 555, FrameType: "general"}
-        log.Println("bitmap:",bitmap)
-
-        database.TestSetBit(bitmap, 65535)
-
+        //database.TestSetBit(bitmap, 65535)
 
     })
 }

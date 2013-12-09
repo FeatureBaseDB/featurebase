@@ -63,18 +63,18 @@ type Slice struct {
 
 // A frame is a collection of slices in a given category (brands, demographics, etc), specific to a database
 type Frame struct {
-	Name string
+	name string
 }
 
 type FrameSliceIntersect struct {
     slice *Slice
     frame *Frame
-	Fragments []*Fragment
-	Hashring *consistent.Consistent
+	fragments []*Fragment
+	hashring *consistent.Consistent
 }
 
 func (fsi *FrameSliceIntersect) GetFragment(fragment_id int) (*Fragment, error) {
-	for _, fragment := range fsi.Fragments {
+	for _, fragment := range fsi.fragments {
 		if fragment.id == fragment_id {
 			return fragment, nil
 		}
@@ -95,29 +95,29 @@ func (d *Database) AddSlice(slice_id int) *Slice {
 
 // Represents the entire cluster, and a reference to the Node this instance is running on
 type Cluster struct {
-	Databases map[string]*Database
+	databases map[string]*Database
 }
 
 func NewCluster() *Cluster {
 	cluster := Cluster{}
-	cluster.Databases = make(map[string]*Database)
+	cluster.databases = make(map[string]*Database)
 	return &cluster
 }
 
 // Add a database to a cluster
 func (c *Cluster) AddDatabase(name string) *Database {
 	database := Database{Name: name}
-	if c.Databases == nil {
-		c.Databases = make(map[string]*Database)
+	if c.databases == nil {
+		c.databases = make(map[string]*Database)
 	}
-	c.Databases[name] = &database
+	c.databases[name] = &database
 	return &database
 }
 
 func (c *Cluster) GetDatabase(name string) (*Database, error) {
-	value, ok := c.Databases[name]
+	value, ok := c.databases[name]
 	if !ok {
-		return nil, errors.New("The database does not exist!!!!!!!!!!!!!!!!!!!!!!!! -HO")
+		return nil, errors.New("The database does not exist!")
 	} else {
 		return value, nil
 	}
@@ -128,7 +128,7 @@ type Database struct {
 	Name string
 	frames []*Frame
 	slices []*Slice
-    FrameSliceIntersects []*FrameSliceIntersect
+    frame_slice_intersects []*FrameSliceIntersect
 }
 
 // Count the number of slices in a database
@@ -141,7 +141,7 @@ func (d *Database) NumSlices() (int, error) {
 
 // Add a frame to a database
 func (d *Database) AddFrame(name string) *Frame {
-	frame := Frame{Name: name}
+	frame := Frame{name: name}
 	d.frames = append(d.frames, &frame)
     // add intersections
 	for _, slice := range d.slices {
@@ -154,25 +154,25 @@ func (d *Database) AddFragment(frame *Frame, slice *Slice, process *Process, fra
 
 	frameslice, _ := d.GetFrameSliceIntersect(frame, slice)
     fragment := Fragment{process: process, id: fragment_id}
-    frameslice.Fragments = append(frameslice.Fragments, &fragment)
+    frameslice.fragments = append(frameslice.fragments, &fragment)
 
-    frameslice.Hashring.Add(fmt.Sprintf("%d", fragment_id))
+    frameslice.hashring.Add(fmt.Sprintf("%d", fragment_id))
 
     return &fragment
 }
 
 func (d *Database) AddFrameSliceIntersect(frame *Frame, slice *Slice) *FrameSliceIntersect {
 	frameslice := FrameSliceIntersect{frame: frame, slice: slice}
-	d.FrameSliceIntersects = append(d.FrameSliceIntersects, &frameslice)
+	d.frame_slice_intersects = append(d.frame_slice_intersects, &frameslice)
 
-	frameslice.Hashring = consistent.New()
-	frameslice.Hashring.NumberOfReplicas = 16
+	frameslice.hashring = consistent.New()
+	frameslice.hashring.NumberOfReplicas = 16
 
 	return &frameslice
 }
 
 func (d *Database) GetFrameSliceIntersect(frame *Frame, slice *Slice) (*FrameSliceIntersect, error) {
-	for _, frameslice := range d.FrameSliceIntersects {
+	for _, frameslice := range d.frame_slice_intersects {
 		if frameslice.frame == frame && frameslice.slice == slice {
 			return frameslice, nil
 		}
@@ -183,7 +183,7 @@ func (d *Database) GetFrameSliceIntersect(frame *Frame, slice *Slice) (*FrameSli
 // Get a frame from a database
 func (d *Database) GetFrame(name string) (*Frame, error) {
 	for _, frame := range d.frames {
-		if frame.Name == name {
+		if frame.name == name {
 			return frame, nil
 		}
 	}
@@ -220,7 +220,7 @@ func (d *Database) TestSetBit(bitmap Bitmap, profile_id int) {
     log.Println("slice:",slice)
     frame, _ := d.GetFrame(bitmap.FrameType)
     fsi, _ := d.GetFrameSliceIntersect(frame, slice)
-    frag_id_s,err := fsi.Hashring.Get(fmt.Sprintf("%d", bitmap.Id))
+    frag_id_s,err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
 	frag_id, err := strconv.Atoi(frag_id_s)
 	fragment, err := fsi.GetFragment(frag_id)
 	if err != nil {
