@@ -1,7 +1,7 @@
 package main
 
 import (
-	"pilosa/cruncher"
+	"pilosa/core"
 	"pilosa/db"
 	"flag"
 	"log"
@@ -26,6 +26,6 @@ func main() {
 		log.Fatal("Location not valid:", httpLoc)
 	}
 
-	cruncher := cruncher.NewCruncher(tcp, http)
-	cruncher.Run()
+	service := core.NewService(tcp, http)
+	service.Run()
 }
