@@ -100,7 +100,7 @@ func (service *Service) MetaWatcher() {
 
 	for _, database_ref := range resp.Node.Nodes {
 		database_name := database_ref.Key[len(namespace)+4:]
-		database := cluster.AddDatabase(database_name)
+		database := cluster.GetOrCreateDatabase(database_name)
 		for _, database_attr_ref := range database_ref.Nodes {
 			key := database_attr_ref.Key[len(database_ref.Key)+1:]
 			if key == "frame" {
@@ -136,7 +136,7 @@ func (service *Service) MetaWatcher() {
 														log.Fatal(err)
 													}
 													process := uuid
-													database.AddFragment(frame, slice, process)
+													database.GetOrCreateFragment(frame, slice, process)
 												}
 											}
 										}
@@ -149,7 +149,7 @@ func (service *Service) MetaWatcher() {
 			}
 		}
 	}
-	database, _ := cluster.GetDatabase("main")
+	database := cluster.GetOrCreateDatabase("main")
 	spew.Dump(database)
 	database.OldGetFragment(db.Bitmap{1200, "general"}, 1)
 

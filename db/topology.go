@@ -81,9 +81,7 @@ type Database struct {
 }
 
 // Add a database to a cluster
-func (c *Cluster) AddDatabase(name string) *Database {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
+func (c *Cluster) addDatabase(name string) *Database {
 	database := Database{Name: name}
 	if c.databases == nil {
 		c.databases = make(map[string]*Database)
@@ -92,9 +90,7 @@ func (c *Cluster) AddDatabase(name string) *Database {
 	return &database
 }
 
-func (c *Cluster) GetDatabase(name string) (*Database, error) {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
+func (c *Cluster) getDatabase(name string) (*Database, error) {
 	value, ok := c.databases[name]
 	if !ok {
 		return nil, errors.New("The database does not exist!")
@@ -106,11 +102,11 @@ func (c *Cluster) GetDatabase(name string) (*Database, error) {
 func (c *Cluster) GetOrCreateDatabase(name string) *Database {
     c.mutex.Lock()
     defer c.mutex.Unlock()
-    database, err := c.GetDatabase(name)
+    database, err := c.getDatabase(name)
     if err == nil {
         return database
     }
-    return c.AddDatabase(name)
+    return c.addDatabase(name)
 }
 
 // Count the number of slices in a database
@@ -274,9 +270,7 @@ func (d *Database) OldGetFragment(bitmap Bitmap, profile_id int) (*Fragment, err
 func (d *Database) GetFragmentById(fragment_id *uuid.UUID) *Fragment {
 }
 */
-func (d *Database) GetFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) (*Fragment, error) {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
+func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) (*Fragment, error) {
     fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Fatal(err)
@@ -284,9 +278,7 @@ func (d *Database) GetFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUI
     return fsi.GetFragment(fragment_id)
 }
 
-func (d *Database) AddFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) *Fragment {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
+func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) *Fragment {
     fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Fatal(err)
@@ -331,11 +323,11 @@ func (d *Database) AddFragmentByProcess(frame *Frame, slice *Slice, process *Pro
 func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) *Fragment {
     d.mutex.Lock()
     defer d.mutex.Unlock()
-    fragment, err := d.GetFragment(frame, slice, fragment_id)
+    fragment, err := d.getFragment(frame, slice, fragment_id)
     if err == nil {
         return fragment
     }
-    return d.AddFragment(frame, slice, fragment_id)
+    return d.addFragment(frame, slice, fragment_id)
 }
 
 func (f *Fragment) SetProcess(process *Process) {
