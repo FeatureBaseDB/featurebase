@@ -106,7 +106,7 @@ func (service *Service) MetaWatcher() {
 			if key == "frame" {
 				for _, frame_ref := range database_attr_ref.Nodes {
 					frame_name := frame_ref.Key[len(database_attr_ref.Key)+1:]
-					frame := database.AddFrame(frame_name)
+					frame := database.GetOrCreateFrame(frame_name)
 					for _, frame_attr_ref := range frame_ref.Nodes {
 						key = frame_attr_ref.Key[len(frame_ref.Key)+1:]
 						if key == "slice" {
@@ -116,7 +116,7 @@ func (service *Service) MetaWatcher() {
 								if err != nil {
 									log.Fatal(err)
 								}
-								slice := database.AddSlice(slice_id)
+								slice := database.GetOrCreateSlice(slice_id)
 								for _, slice_attr_ref := range slice_ref.Nodes {
 									key = slice_attr_ref.Key[len(slice_ref.Key)+1:]
 									if key == "fragment" {

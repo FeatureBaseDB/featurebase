@@ -24,13 +24,18 @@ func TestTopology(t *testing.T) {
         */
 
         cluster := NewCluster()
-        database := cluster.AddDatabase("property49")
-        database.AddFrame("general")
-        //database.AddFrame("brands")
-        database.AddSlice(0)
-        database.AddSlice(1)
-        //database.AddSlice()
+        database := cluster.AddDatabase("main")
 
+        frame := database.GetOrCreateFrame("general")
+        slice := database.GetOrCreateSlice(0)
+
+        fragment_id, _ := uuid.ParseHex("6a9aea17-2915-4eb4-858f-a8d7d4dc0a1e")
+        spew.Dump(fragment_id)
+        database.AddFragment(frame, slice, fragment_id)
+
+
+        spew.Dump(database)
+        /*
         log.Println(database)
         log.Println("----------------------------------")
         for _, fsi := range database.frame_slice_intersects {
@@ -38,12 +43,10 @@ func TestTopology(t *testing.T) {
         }
         num_slices, _ := database.NumSlices()
         log.Println(num_slices)
+        */
 
-
-        frame, _ := database.GetFrame("general")
-        slice, _ := database.GetSlice(0)
-        log.Println(frame)
-        log.Println(slice)
+        //frame, _ := database.GetFrame("general")
+        //slice, _ := database.GetSlice(0)
 
         //loc1, _ := NewLocation("192.168.1.100:8001")
         /*
@@ -61,8 +64,9 @@ func TestTopology(t *testing.T) {
         database.AddFragment(frame, slice, loc1, 4)
         */
 
-        uuid, _ := uuid.ParseHex("6a9aea17-2915-4eb4-858f-a8d7d4dc0a1e")
-        database.AddFragment(frame, slice, uuid)
+        //uuid, _ := uuid.ParseHex("6a9aea17-2915-4eb4-858f-a8d7d4dc0a1e")
+        //spew.Dump(uuid)
+        ////database.AddFragment(frame, slice, uuid)
         /*
         database.AddFragment(frame, slice, process)
         database.AddFragment(frame, slice, process)
@@ -86,8 +90,8 @@ func TestTopology(t *testing.T) {
         log.Println(errer)
         */
 
-        bitmap := Bitmap{Id: 555, FrameType: "general"}
-        log.Println("bitmap:",bitmap)
+        ////bitmap := Bitmap{Id: 555, FrameType: "general"}
+        ////log.Println("bitmap:",bitmap)
 
         /*
         profile_id := 65535

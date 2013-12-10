@@ -2,7 +2,7 @@ package db
 
 import (
 	"github.com/stathat/consistent"
-	//"github.com/davecgh/go-spew/spew"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/nu7hatch/gouuid"
 	"log"
 	"fmt"
@@ -130,9 +130,7 @@ type Frame struct {
 }
 
 // Get a frame from a database
-func (d *Database) GetFrame(name string) (*Frame, error) {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
+func (d *Database) getFrame(name string) (*Frame, error) {
 	for _, frame := range d.frames {
 		if frame.name == name {
 			return frame, nil
@@ -142,9 +140,7 @@ func (d *Database) GetFrame(name string) (*Frame, error) {
 }
 
 // Add a frame to a database
-func (d *Database) AddFrame(name string) *Frame {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
+func (d *Database) addFrame(name string) *Frame {
 	frame := Frame{name: name}
 	d.frames = append(d.frames, &frame)
     // add intersections
@@ -157,11 +153,11 @@ func (d *Database) AddFrame(name string) *Frame {
 func (d *Database) GetOrCreateFrame(name string) *Frame {
     d.mutex.Lock()
     defer d.mutex.Unlock()
-    frame, err := d.GetFrame(name)
+    frame, err := d.getFrame(name)
     if err == nil {
         return frame
     }
-    return d.AddFrame(name)
+    return d.addFrame(name)
 }
 
 
@@ -173,9 +169,7 @@ type Slice struct {
 }
 
 // Get a slice from a database
-func (d *Database) GetSlice(slice_id int) (*Slice, error) {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
+func (d *Database) getSlice(slice_id int) (*Slice, error) {
 	for _, slice := range d.slices {
 		if slice.id == slice_id {
 			return slice, nil
@@ -185,9 +179,7 @@ func (d *Database) GetSlice(slice_id int) (*Slice, error) {
 }
 
 // Add a slice to a database
-func (d *Database) AddSlice(slice_id int) *Slice {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
+func (d *Database) addSlice(slice_id int) *Slice {
 	slice := Slice{id: slice_id}
 	d.slices = append(d.slices, &slice)
     // add intersections
@@ -200,11 +192,11 @@ func (d *Database) AddSlice(slice_id int) *Slice {
 func (d *Database) GetOrCreateSlice(slice_id int) *Slice {
     d.mutex.Lock()
     defer d.mutex.Unlock()
-    slice, err := d.GetSlice(slice_id)
+    slice, err := d.getSlice(slice_id)
     if err == nil {
         return slice
     }
-    return d.AddSlice(slice_id)
+    return d.addSlice(slice_id)
 }
 
 
@@ -246,6 +238,8 @@ func (fsi *FrameSliceIntersect) GetFragment(fragment_id *uuid.UUID) (*Fragment, 
 func (fsi *FrameSliceIntersect) AddFragment(fragment *Fragment) {
     fsi.fragments = append(fsi.fragments, fragment)
     fsi.hashring.Add(fragment.id.String())
+    spew.Dump("DUMPY")
+    spew.Dump(fragment.id.String())
 }
 
 
@@ -263,7 +257,7 @@ func (d *Database) OldGetFragment(bitmap Bitmap, profile_id int) (*Fragment, err
     d.mutex.Lock()
     defer d.mutex.Unlock()
     slice, _ := d.GetSliceForProfile(profile_id)
-    frame, _ := d.GetFrame(bitmap.FrameType)
+    frame, _ := d.getFrame(bitmap.FrameType)
     fsi, err := d.GetFrameSliceIntersect(frame, slice)
     frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
 	frag_id, err := uuid.ParseHex(frag_id_s)
@@ -277,7 +271,7 @@ func (d *Database) OldGetFragment(bitmap Bitmap, profile_id int) (*Fragment, err
 /*
 // NOT IMPLEMENTED
 // this would loop through all frame_slice_intersect[], then all fragmments to find a match
-func (d *Database) GetFragment(fragment_id *uuid.UUID) *Fragment {
+func (d *Database) GetFragmentById(fragment_id *uuid.UUID) *Fragment {
 }
 */
 func (d *Database) GetFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) (*Fragment, error) {
@@ -354,7 +348,7 @@ func (f *Fragment) SetProcess(process *Process) {
 // Get a slice from a database
 func (d *Database) GetSliceForProfile(profile_id int) (*Slice, error) {
     slice_id := profile_id / SLICE_WIDTH
-    return d.GetSlice(slice_id)
+    return d.getSlice(slice_id)
 }
 
 
