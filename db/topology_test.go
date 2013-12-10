@@ -3,6 +3,8 @@ package db
 import (
     "testing"
     "log"
+    "github.com/nu7hatch/gouuid"
+    "github.com/davecgh/go-spew/spew"
     . "github.com/smartystreets/goconvey/convey"
 )
 
@@ -59,6 +61,16 @@ func TestTopology(t *testing.T) {
         database.AddFragment(frame, slice, loc1, 4)
         */
 
+        uuid, _ := uuid.ParseHex("6a9aea17-2915-4eb4-858f-a8d7d4dc0a1e")
+        database.AddFragment(frame, slice, uuid)
+        /*
+        database.AddFragment(frame, slice, process)
+        database.AddFragment(frame, slice, process)
+        database.AddFragment(frame, slice, process)
+        database.AddFragment(frame, slice, process)
+        database.AddFragment(frame, slice, process)
+        */
+
 
         //fsi, _ := database.GetFrameSliceIntersect(frame, slice)
         //log.Println(fsi)
@@ -74,10 +86,17 @@ func TestTopology(t *testing.T) {
         log.Println(errer)
         */
 
-        //bitmap := Bitmap{Id: 555, FrameType: "general"}
-        //log.Println("bitmap:",bitmap)
+        bitmap := Bitmap{Id: 555, FrameType: "general"}
+        log.Println("bitmap:",bitmap)
 
-        //database.TestSetBit(bitmap, 65535)
+        /*
+        profile_id := 65535
+        fragment, _ := database.OldGetFragment(bitmap, profile_id)
+
+        spew.Dump("FRAGMENT")
+        spew.Dump(fragment)
+        */
+        spew.Dump("DONE")
 
     })
 }

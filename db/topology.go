@@ -2,13 +2,14 @@ package db
 
 import (
 	"github.com/stathat/consistent"
-	"github.com/davecgh/go-spew/spew"
+	//"github.com/davecgh/go-spew/spew"
 	"github.com/nu7hatch/gouuid"
 	"log"
 	"fmt"
 	"errors"
 	"strings"
 	"strconv"
+    "sync"
 )
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")
@@ -50,52 +51,15 @@ func (location *Location) ToString() string {
 // Map of node location to their router
 type NodeMap map[Location]Location
 
-// A fragment is a collection of bitmaps within a slice. The fragment contains a reference to the responsible node for that fragment. The node is in the form ip:port
-type Fragment struct {
-    process *Process
-	id int
-}
 
-// A slice is the vertical combination of every fragment. It contains the hashring used to delegate bitmaps to fragments
-type Slice struct {
-    id int
-}
 
-// A frame is a collection of slices in a given category (brands, demographics, etc), specific to a database
-type Frame struct {
-	name string
-}
 
-type FrameSliceIntersect struct {
-    slice *Slice
-    frame *Frame
-	fragments []*Fragment
-	hashring *consistent.Consistent
-}
-
-func (fsi *FrameSliceIntersect) GetFragment(fragment_id int) (*Fragment, error) {
-	for _, fragment := range fsi.fragments {
-		if fragment.id == fragment_id {
-			return fragment, nil
-		}
-	}
-	return nil, FragmentDoesNotExistError
-}
-
-// Add a slice to a database
-func (d *Database) AddSlice(slice_id int) *Slice {
-	slice := Slice{id: slice_id}
-	d.slices = append(d.slices, &slice)
-    // add intersections
-	for _, frame := range d.frames {
-        d.AddFrameSliceIntersect(frame, &slice)
-    }
-	return &slice
-}
+/////////// CLUSTERS ////////////////////////////////////////////////////////////////////
 
 // Represents the entire cluster, and a reference to the Node this instance is running on
 type Cluster struct {
 	databases map[string]*Database
+    mutex sync.Mutex
 }
 
 func NewCluster() *Cluster {
@@ -104,8 +68,22 @@ func NewCluster() *Cluster {
 	return &cluster
 }
 
+
+/////////// DATABASES ////////////////////////////////////////////////////////////////////
+
+// A database is a collection of all the frames within a given profile space
+type Database struct {
+	Name string
+	frames []*Frame
+	slices []*Slice
+    frame_slice_intersects []*FrameSliceIntersect
+    mutex sync.Mutex
+}
+
 // Add a database to a cluster
 func (c *Cluster) AddDatabase(name string) *Database {
+    c.mutex.Lock()
+    defer c.mutex.Unlock()
 	database := Database{Name: name}
 	if c.databases == nil {
 		c.databases = make(map[string]*Database)
@@ -115,6 +93,8 @@ func (c *Cluster) AddDatabase(name string) *Database {
 }
 
 func (c *Cluster) GetDatabase(name string) (*Database, error) {
+    c.mutex.Lock()
+    defer c.mutex.Unlock()
 	value, ok := c.databases[name]
 	if !ok {
 		return nil, errors.New("The database does not exist!")
@@ -123,12 +103,14 @@ func (c *Cluster) GetDatabase(name string) (*Database, error) {
 	}
 }
 
-// A database is a collection of all the frames within a given profile space
-type Database struct {
-	Name string
-	frames []*Frame
-	slices []*Slice
-    frame_slice_intersects []*FrameSliceIntersect
+func (c *Cluster) GetOrCreateDatabase(name string) *Database {
+    c.mutex.Lock()
+    defer c.mutex.Unlock()
+    database, err := c.GetDatabase(name)
+    if err == nil {
+        return database
+    }
+    return c.AddDatabase(name)
 }
 
 // Count the number of slices in a database
@@ -139,8 +121,30 @@ func (d *Database) NumSlices() (int, error) {
 	return len(d.slices), nil
 }
 
+///////// FRAMES ////////////////////////////////////////////////////////////////////
+
+// A frame is a collection of slices in a given category
+// (brands, demographics, etc), specific to a database
+type Frame struct {
+	name string
+}
+
+// Get a frame from a database
+func (d *Database) GetFrame(name string) (*Frame, error) {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+	for _, frame := range d.frames {
+		if frame.name == name {
+			return frame, nil
+		}
+	}
+	return nil, FrameDoesNotExistError
+}
+
 // Add a frame to a database
 func (d *Database) AddFrame(name string) *Frame {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
 	frame := Frame{name: name}
 	d.frames = append(d.frames, &frame)
     // add intersections
@@ -150,24 +154,74 @@ func (d *Database) AddFrame(name string) *Frame {
 	return &frame
 }
 
-func (d *Database) AddFragment(frame *Frame, slice *Slice, process *Process, fragment_id int) *Fragment {
+func (d *Database) GetOrCreateFrame(name string) *Frame {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+    frame, err := d.GetFrame(name)
+    if err == nil {
+        return frame
+    }
+    return d.AddFrame(name)
+}
 
-	frameslice, _ := d.GetFrameSliceIntersect(frame, slice)
-    fragment := Fragment{process: process, id: fragment_id}
-    frameslice.fragments = append(frameslice.fragments, &fragment)
 
-    frameslice.hashring.Add(fmt.Sprintf("%d", fragment_id))
+///////// SLICES /////////////////////////////////////////////////////////////////////////
 
-    return &fragment
+// A slice is the vertical combination of every fragment.
+type Slice struct {
+    id int
+}
+
+// Get a slice from a database
+func (d *Database) GetSlice(slice_id int) (*Slice, error) {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+	for _, slice := range d.slices {
+		if slice.id == slice_id {
+			return slice, nil
+		}
+	}
+	return nil, SliceDoesNotExistError
+}
+
+// Add a slice to a database
+func (d *Database) AddSlice(slice_id int) *Slice {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+	slice := Slice{id: slice_id}
+	d.slices = append(d.slices, &slice)
+    // add intersections
+	for _, frame := range d.frames {
+        d.AddFrameSliceIntersect(frame, &slice)
+    }
+	return &slice
+}
+
+func (d *Database) GetOrCreateSlice(slice_id int) *Slice {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+    slice, err := d.GetSlice(slice_id)
+    if err == nil {
+        return slice
+    }
+    return d.AddSlice(slice_id)
+}
+
+
+///////// FRAME-SLICE INTERSECT //////////////////////////////////////////////////////////////
+
+type FrameSliceIntersect struct {
+    frame *Frame
+    slice *Slice
+	fragments []*Fragment
+	hashring *consistent.Consistent
 }
 
 func (d *Database) AddFrameSliceIntersect(frame *Frame, slice *Slice) *FrameSliceIntersect {
 	frameslice := FrameSliceIntersect{frame: frame, slice: slice}
 	d.frame_slice_intersects = append(d.frame_slice_intersects, &frameslice)
-
 	frameslice.hashring = consistent.New()
 	frameslice.hashring.NumberOfReplicas = 16
-
 	return &frameslice
 }
 
@@ -180,30 +234,125 @@ func (d *Database) GetFrameSliceIntersect(frame *Frame, slice *Slice) (*FrameSli
 	return nil, FrameSliceIntersectDoesNotExistError
 }
 
-// Get a frame from a database
-func (d *Database) GetFrame(name string) (*Frame, error) {
-	for _, frame := range d.frames {
-		if frame.name == name {
-			return frame, nil
+func (fsi *FrameSliceIntersect) GetFragment(fragment_id *uuid.UUID) (*Fragment, error) {
+	for _, fragment := range fsi.fragments {
+		if fragment.id == fragment_id {
+			return fragment, nil
 		}
 	}
-	return nil, FrameDoesNotExistError
+	return nil, FragmentDoesNotExistError
 }
 
-// Get a slice from a database
-func (d *Database) GetSlice(id int) (*Slice, error) {
-	for _, slice := range d.slices {
-		if slice.id == id {
-			return slice, nil
-		}
-	}
-	return nil, SliceDoesNotExistError
+func (fsi *FrameSliceIntersect) AddFragment(fragment *Fragment) {
+    fsi.fragments = append(fsi.fragments, fragment)
+    fsi.hashring.Add(fragment.id.String())
 }
+
+
+
+///////// FRAGMENTS ////////////////////////////////////////////////////////////////////////
+
+// A fragment is a collection of bitmaps within a slice. The fragment contains a reference to the responsible node for that fragment. The node is in the form ip:port
+type Fragment struct {
+	id *uuid.UUID
+    process *Process
+}
+
+// rename this one
+func (d *Database) OldGetFragment(bitmap Bitmap, profile_id int) (*Fragment, error) {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+    slice, _ := d.GetSliceForProfile(profile_id)
+    frame, _ := d.GetFrame(bitmap.FrameType)
+    fsi, err := d.GetFrameSliceIntersect(frame, slice)
+    frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
+	frag_id, err := uuid.ParseHex(frag_id_s)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return fsi.GetFragment(frag_id)
+}
+
+
+/*
+// NOT IMPLEMENTED
+// this would loop through all frame_slice_intersect[], then all fragmments to find a match
+func (d *Database) GetFragment(fragment_id *uuid.UUID) *Fragment {
+}
+*/
+func (d *Database) GetFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) (*Fragment, error) {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+    fsi, err := d.GetFrameSliceIntersect(frame, slice)
+	if err != nil {
+		log.Fatal(err)
+	}
+    return fsi.GetFragment(fragment_id)
+}
+
+func (d *Database) AddFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) *Fragment {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+    fsi, err := d.GetFrameSliceIntersect(frame, slice)
+	if err != nil {
+		log.Fatal(err)
+	}
+    fragment := Fragment{id: fragment_id}
+    fsi.AddFragment(&fragment)
+    return &fragment
+}
+
+/*
+func (d *Database) AllocateFragment(frame *Frame, slice *Slice) *Fragment {
+    // from ETCD, randomly get a process that has available_fragments > 0
+    // atomically decrement available_fragments (as long as it's not 0)
+    // if it IS 0, try until we find a process with available capacity
+
+    *
+    process, err := GetAvailableProcess()
+	if err != nil {
+		log.Fatal(err)
+	}
+    *
+    process_id, _ := uuid.NewV4()
+    process := NewProcess(process_id)
+    return nil
+    //return d.AddFragment(&frame, &slice, process)
+}
+*/
+
+/*
+func (d *Database) AddFragmentByProcess(frame *Frame, slice *Slice, process *Process) *Fragment {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+	frameslice, _ := d.GetFrameSliceIntersect(frame, slice)
+    fragment_id, _ := uuid.NewV4()
+    fragment := Fragment{id: fragment_id, process: process}
+    frameslice.fragments = append(frameslice.fragments, &fragment)
+    frameslice.hashring.Add(fragment.id.String())
+    return &fragment
+}
+*/
+
+func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) *Fragment {
+    d.mutex.Lock()
+    defer d.mutex.Unlock()
+    fragment, err := d.GetFragment(frame, slice, fragment_id)
+    if err == nil {
+        return fragment
+    }
+    return d.AddFragment(frame, slice, fragment_id)
+}
+
+func (f *Fragment) SetProcess(process *Process) {
+    f.process = process
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 
 // Get a slice from a database
 func (d *Database) GetSliceForProfile(profile_id int) (*Slice, error) {
-    log.Println("GetSliceForProfile")
-    log.Println("profile_id:",profile_id)
     slice_id := profile_id / SLICE_WIDTH
     return d.GetSlice(slice_id)
 }
@@ -212,19 +361,4 @@ func (d *Database) GetSliceForProfile(profile_id int) (*Slice, error) {
 type Bitmap struct {
 	Id int
 	FrameType string
-}
-
-func (d *Database) TestSetBit(bitmap Bitmap, profile_id int) {
-    log.Println("TestSetBit")
-    slice, _ := d.GetSliceForProfile(profile_id)
-    log.Println("slice:",slice)
-    frame, _ := d.GetFrame(bitmap.FrameType)
-    fsi, _ := d.GetFrameSliceIntersect(frame, slice)
-    frag_id_s,err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
-	frag_id, err := strconv.Atoi(frag_id_s)
-	fragment, err := fsi.GetFragment(frag_id)
-	if err != nil {
-		log.Fatal(err)
-	}
-	spew.Dump(fragment)
 }

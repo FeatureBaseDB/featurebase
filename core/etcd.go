@@ -121,11 +121,13 @@ func (service *Service) MetaWatcher() {
 									key = slice_attr_ref.Key[len(slice_ref.Key)+1:]
 									if key == "fragment" {
 										for _, fragment_ref := range slice_attr_ref.Nodes {
+                                            /*
 											fragment_name := fragment_ref.Key[len(slice_attr_ref.Key)+1:]
 											fragment_id, err := strconv.Atoi(fragment_name)
 											if err != nil {
 												log.Fatal(err)
 											}
+                                            */
 											for _, fragment_attr_ref := range fragment_ref.Nodes {
 												key = fragment_attr_ref.Key[len(fragment_ref.Key)+1:]
 												if key == "node" {
@@ -133,8 +135,8 @@ func (service *Service) MetaWatcher() {
 													if err != nil {
 														log.Fatal(err)
 													}
-													process := db.NewProcess(uuid)
-													database.AddFragment(frame, slice, process, fragment_id)
+													process := uuid
+													database.AddFragment(frame, slice, process)
 												}
 											}
 										}
@@ -149,7 +151,7 @@ func (service *Service) MetaWatcher() {
 	}
 	database, _ := cluster.GetDatabase("main")
 	spew.Dump(database)
-	database.TestSetBit(db.Bitmap{1200, "general"}, 1)
+	database.OldGetFragment(db.Bitmap{1200, "general"}, 1)
 
 	receiver := make(chan *etcd.Response)
 	stop := make(chan bool)
