@@ -15,6 +15,7 @@ import (
 	//"flag"
 	//"encoding/gob"
 	//"io"
+    "pilosa/config"
 )
 
 type Stats struct {
@@ -308,7 +309,7 @@ func (service *Service) Run() {
     //go service.HandleInbox()
     //go service.ServeHTTP()
     go service.MetaWatcher()
-    go service.Cruncher.Run()
+    go service.Cruncher.Run(config.GetInt("port_tcp"))
 
     sigterm, sighup := service.GetSignals()
     for {
