@@ -8,6 +8,9 @@ import (
 type Cruncher struct {
 }
 
-func (cruncher *Cruncher) Run() {
+func (cruncher *Cruncher) Run(port int) {
+
     spew.Dump("Cruncher.Run")
+    spew.Dump(port)
+
 }
