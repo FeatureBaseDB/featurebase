@@ -50,6 +50,7 @@ type Service struct {
 	ConnectionRegisterChannel chan *PersistentConnection
 	Stats *Stats
 	//Cluster query.Cluster
+    Cruncher *Cruncher
 }
 
 func NewService(tcp, http *db.Location) *Service {
@@ -59,6 +60,7 @@ func NewService(tcp, http *db.Location) *Service {
 	service.Outbox = make(chan *db.Envelope)
 	service.Inbox = make(chan *db.Message)
 	service.Stats = new(Stats)
+	service.Cruncher = new(Cruncher)
 	return service
 }
 
@@ -289,4 +291,44 @@ func (service *Service) GetStats() *Stats {
 func (service *Service) NewListener() chan *db.Message {
 	ch := make(chan *db.Message)
 	return ch
+}
+
+
+////////////////////////////////////////////////
+
+
+func (service *Service) Run() {
+    log.Println("Running service...")
+    service.SetupEtcd()
+    //go r.SyncEtcd()
+    //go service.WatchEtcd()
+    //go service.HandleConnections()
+    //service.SetupNetwork()
+    //go service.Serve()
+    //go service.HandleInbox()
+    //go service.ServeHTTP()
+    go service.MetaWatcher()
+    go service.Cruncher.Run()
+
+    sigterm, sighup := service.GetSignals()
+    for {
+        select {
+            case <- sighup:
+                log.Println("SIGHUP! Reloading configuration...")
+                // TODO: reload configuration
+            case <- sigterm:
+                log.Println("SIGTERM! Cleaning up...")
+                service.Stop()
+                return
+        }
+    }
+}
+
+func (service *Service) HandleInbox() {
+    for {
+        select {
+        case message := <-service.Inbox:
+            log.Println("process", message)
+        }
+    }
 }
