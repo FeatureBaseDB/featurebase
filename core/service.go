@@ -50,6 +50,7 @@ type Service struct {
 	ConnectionRegisterChannel chan *PersistentConnection
 	Stats *Stats
 	//Cluster query.Cluster
+    Cruncher *Cruncher
 }
 
 func NewService(tcp, http *db.Location) *Service {
@@ -59,6 +60,7 @@ func NewService(tcp, http *db.Location) *Service {
 	service.Outbox = make(chan *db.Envelope)
 	service.Inbox = make(chan *db.Message)
 	service.Stats = new(Stats)
+	service.Cruncher = new(Cruncher)
 	return service
 }
 
@@ -306,6 +308,7 @@ func (service *Service) Run() {
     //go service.HandleInbox()
     //go service.ServeHTTP()
     go service.MetaWatcher()
+    go service.Cruncher.Run()
 
     sigterm, sighup := service.GetSignals()
     for {
