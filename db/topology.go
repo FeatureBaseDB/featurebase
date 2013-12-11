@@ -2,7 +2,7 @@ package db
 
 import (
 	"github.com/stathat/consistent"
-	"github.com/davecgh/go-spew/spew"
+	//"github.com/davecgh/go-spew/spew"
 	"github.com/nu7hatch/gouuid"
 	"log"
 	"fmt"
@@ -234,8 +234,6 @@ func (fsi *FrameSliceIntersect) GetFragment(fragment_id *uuid.UUID) (*Fragment, 
 func (fsi *FrameSliceIntersect) AddFragment(fragment *Fragment) {
     fsi.fragments = append(fsi.fragments, fragment)
     fsi.hashring.Add(fragment.id.String())
-    spew.Dump("DUMPY")
-    spew.Dump(fragment.id.String())
 }
 
 
