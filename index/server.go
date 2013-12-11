@@ -29,8 +29,9 @@ func (a *FragmentContainer) AddFragment(frame string, db string, slice int, frag
     go f.ServeFragment() 
 }
 
-func (a *FragmentContainer) RunServer(port string, closeChannel chan bool,started chan bool) {
+func (a *FragmentContainer) RunServer(porti int, closeChannel chan bool,started chan bool) {
 	http.Handle("/", a)
+    port := fmt.Sprintf(":%d",porti)
 
 	s := &http.Server{
 		Addr:           port,
