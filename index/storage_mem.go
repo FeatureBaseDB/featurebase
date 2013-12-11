@@ -18,8 +18,8 @@ func NewMemoryStorage() Storage{
     return obj
 }
 
-func (c *MemoryStorage)Fetch( bitmap_id uint64, shard_key int32) IBitmap {
-    key := fmt.Sprintf("%d:%d",bitmap_id,shard_key)
+func (c *MemoryStorage)Fetch( bitmap_id uint64, db string, slice int) IBitmap {
+    key := fmt.Sprintf("%d:%s:%d",bitmap_id,db,slice)
     bitmap,found := c.db[key]
     if !found{
 	    bitmap = CreateRBBitmap().(*Bitmap)
@@ -28,14 +28,14 @@ func (c *MemoryStorage)Fetch( bitmap_id uint64, shard_key int32) IBitmap {
 	return bitmap
 }
 
-func (c *MemoryStorage) Store( bitmap_id int64, shard_key int32, bitmap *Bitmap) error {
-    key := fmt.Sprintf("%d:%d",bitmap_id,shard_key)
+func (c *MemoryStorage) Store( bitmap_id int64, db string, slice int, bitmap *Bitmap) error {
+    key := fmt.Sprintf("%d:%s:%d",bitmap_id,db,slice)
     c.db[key]= bitmap
 	return nil
 }
 
-func (c *MemoryStorage)StoreBlock(bitmap_id int64, shard_key int32, chunk_key int64, block_index int32, block int64) error {
-    bm := c.Fetch(uint64(bitmap_id),shard_key)
+func (c *MemoryStorage)StoreBlock(bitmap_id int64, db string, slice int, chunk_key int64, block_index int32, block int64) error {
+    bm := c.Fetch(uint64(bitmap_id),db,slice)
     node := GetChunk(bm,uint64(chunk_key))
     if node == nil{
         	node = &Chunk{uint64(chunk_key), BlockArray{}}

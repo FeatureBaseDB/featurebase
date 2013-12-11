@@ -163,6 +163,9 @@ func Invert(a_bm IBitmap) IBitmap {
 	return output
 
 }
+func NewBitmap()IBitmap{
+    return CreateRBBitmap()
+}
 
 func Union(a_bm IBitmap, b_bm IBitmap) IBitmap {
 	var a = a_bm.Min()
