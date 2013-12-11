@@ -2,7 +2,6 @@ package index
 
 import (
 	"encoding/json"
-    "log"
     "fmt"
 )
 
@@ -26,7 +25,6 @@ type Command interface {
 
 
 func BuildCommandFactory(req *RequestJSON,decoder *json.Decoder)Command{
-    log.Println(req)
     var result Command
 
     switch req.Request{
@@ -36,6 +34,8 @@ func BuildCommandFactory(req *RequestJSON,decoder *json.Decoder)Command{
         result= NewUnion(decoder)
     case "IntersectCount":
         result= NewIntersect(decoder)
+    case "SetBit":
+        result= NewSetBit(decoder)
     }
     return result
  }
@@ -116,7 +116,13 @@ func (cmd *CmdIntersect) Response()string {
 func (cmd *CmdIntersect) ResponseChannel()chan string {
     return cmd.result
 }
-/*
+
+type BitArgs struct {
+    Bitmap_id uint64
+    Bit_pos uint64
+}
+
+
 type CmdSetBit struct{
     result chan string
     id uint64
@@ -124,19 +130,21 @@ type CmdSetBit struct{
 }
 
 func NewSetBit(decoder *json.Decoder) *CmdSetBit{
-    var f interface{}
+    var f BitArgs
     decoder.Decode(&f)
-    m := f.(map[string]interface{})
 
-
-    result:= &CmdSetBit{make(chan string),f["bitmap_id"].(uint64),f["bit_pos"].(uint64)}
+    result:= &CmdSetBit{make(chan string),f.Bitmap_id,f.Bit_pos}
     return result
 }
 func (cmd *CmdSetBit) Execute(f *Fragment)string {
-    bitmap := Get(f.impl,cmd.id)
-    SetBit(bitmap,cmd.bit_pos)
-    result := BitCount(bm)
-    return fmt.Sprintf(`{ "value":%d }`,result)
+    bitmap := f.impl.Get(cmd.id)
+    val:= SetBit(bitmap,cmd.bit_pos)
+    m:=0
+    if val{
+        m=1
+    }
+    result := BitCount(bitmap)
+    return fmt.Sprintf(`{ "value":%d , "changed":%d}`,result,m)
 }
 func (cmd *CmdSetBit) QueryType()string {
     return "SetBit"
@@ -147,4 +155,3 @@ func (cmd *CmdSetBit) Response()string {
 func (cmd *CmdSetBit) ResponseChannel()chan string {
     return cmd.result
 }
-*/

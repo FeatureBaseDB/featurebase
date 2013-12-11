@@ -3,12 +3,10 @@ package index
 import (
     "testing"
     . "github.com/smartystreets/goconvey/convey"
-    "log"
     "time"
     )
 
     func TestBitmaps(t *testing.T) {
-        log.Println("HELLO")
         Convey("function BitCount should equal method bm.Count()", t, func() {
             bm:= CreateRBBitmap()
             for i:=uint64(0); i<uint64(4096);i++{

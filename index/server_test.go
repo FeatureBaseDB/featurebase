@@ -4,32 +4,36 @@ import (
     "testing"
     . "github.com/smartystreets/goconvey/convey"
     "net/http"
-//	"encoding/json"
+	"encoding/json"
 "net/http/httptest"
 //	"io/ioutil"
  //   "time"
     "log"
+    "fmt"
     "strings"
     )
     
-    func simple(){
-        msg:=`
-        {
+    func simple(id1,id2 int)string {
+        return fmt.Sprintf(`{
             "Request": "UnionCount",
             "Fragment": "AAA-BBB-CCC",
             "Args": {  
-                "Bitmaps":[1,2,3,4]
+                "Bitmaps":[%d,%d]
             } 
-        }`
-        /*
-        log.Println("POSTING:",msg)
-        resp,err := http.Post("http://localhost:8089", "application/json", strings.NewReader(msg))
-        defer resp.Body.Close()
-        body, err := ioutil.ReadAll(resp.Body)
-        log.Println(string(body),err)
-        log.Println(">>>>DONE")
-        */
-    
+        }`,id1,id2)
+    }
+    func set_bit(id,pos int)string {
+        return fmt.Sprintf(`{
+            "Request": "SetBit",
+            "Fragment": "AAA-BBB-CCC",
+            "Args": {  
+                "Bitmap_id":%d,
+                "Bit_pos": %d
+            } 
+        }`,id,pos)
+    }
+
+    func sendRequest(msg string, dummy *FragmentContainer) (int,[]byte){
 
         r, err := http.NewRequest("POST", "http://api/foo", strings.NewReader(msg))
         if err != nil {
@@ -37,26 +41,53 @@ import (
         }
 
         w := httptest.NewRecorder()
-        dummy:=FragmentContainer{make(map[string]*Fragment)}
-        dummy.AddFragment("general", "25", 0, "AAA-BBB-CCC") 
  
         dummy.ServeHTTP(w , r ) 
-        log.Printf("%d - %s", w.Code, w.Body.String())
+        //return  w.Code, w.Body.String()
+        return  w.Code, []byte(w.Body.String())
 
 
     }
+	func getResult(key string ,s []byte )interface{}{
+            var f interface{}
+            err := json.Unmarshal(s, &f)
+            if err != nil{
+
+            log.Println(err)
+            return nil
+            }
+            m := f.(map[string]interface{})
+            x := m["results"]
+            o := x.(map[string]interface{})
+            return o[key]
+        }
 
     func TestServer(t *testing.T) {
-        Convey("Run Server", t, func() {
-          //  Stop := make(chan bool)
-          //  Start := make(chan bool)
-          //  go StartServer(":8089",Stop,Start)
-          //  select{
-          //  case <-Start:
-                simple()
-         //   case <-time.After(time.Duration(5) * time.Second):
-         //   }
-         //   Stop<- true
-            So(0, ShouldEqual, 0)
+        dummy:=&FragmentContainer{make(map[string]*Fragment)}
+        dummy.AddFragment("general", "25", 0, "AAA-BBB-CCC") 
+         var ( 
+            c int
+            s []byte
+        )
+
+        Convey("Set Bit 1 1", t, func() {
+            c,s=sendRequest(set_bit(1,1),dummy)
+            So(c, ShouldEqual, 200)
+            v:=getResult("value",s)
+            So(v, ShouldEqual, 1)
+        })
+
+        Convey("Set Bit 2 2", t, func() {
+            c,s=sendRequest(set_bit(2,2),dummy)
+            So(c, ShouldEqual, 200)
+            v:=getResult("value",s)
+            So(v, ShouldEqual, 1)
+        })
+
+        Convey("Union", t, func() {
+            c,s=sendRequest(simple(1,2),dummy)
+            So(c, ShouldEqual, 200)
+            v:=getResult("value",s)
+            So(v, ShouldEqual, 2)
         })
 }

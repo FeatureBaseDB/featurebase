@@ -60,7 +60,7 @@ func (a *FragmentContainer) RunServer(porti int, closeChannel chan bool,started 
 type Pilosa interface{
     Union([]uint64) IBitmap
     Intersect([] uint64) IBitmap
-  //  SetBit(id uint64, bit_pos int64)bool
+    Get(id uint64 )IBitmap
 }
 
 type RequestJSON struct {
@@ -91,7 +91,6 @@ func (f *Fragment) ServeFragment() {
 }
 
 func handler(w http.ResponseWriter, r *http.Request,fragments map[string]*Fragment) {
-    log.Println("GOT MESSAGE")
 	if r.Method == "POST" {
 		var f RequestJSON
 
@@ -110,7 +109,6 @@ func handler(w http.ResponseWriter, r *http.Request,fragments map[string]*Fragme
             output:=`{"Error":"Invalid Fragment"}`
             fc,found :=  fragments[f.Fragment] //f.FragmentIndex<len(fragments){
             if found{
-                log.Println("Sending Request")
              //   fc := fragments[f.FragmentGuid]
                 fc.requestChan <- request
                 output = request.Response()
