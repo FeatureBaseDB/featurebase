@@ -50,8 +50,9 @@ type Service struct {
 	Listener net.Listener
 	ConnectionRegisterChannel chan *PersistentConnection
 	Stats *Stats
-	//Cluster query.Cluster
+	Cluster *db.Cluster
     Cruncher *Cruncher
+	MetaWatcher *MetaWatcher
 }
 
 func NewService(tcp, http *db.Location) *Service {
@@ -62,6 +63,9 @@ func NewService(tcp, http *db.Location) *Service {
 	service.Inbox = make(chan *db.Message)
 	service.Stats = new(Stats)
 	service.Cruncher = new(Cruncher)
+	service.Etcd = etcd.NewClient(nil)
+	service.Cluster = db.NewCluster()
+	service.MetaWatcher = &MetaWatcher{service, "/pilosa/0"}
 	return service
 }
 
@@ -300,7 +304,6 @@ func (service *Service) NewListener() chan *db.Message {
 
 func (service *Service) Run() {
     log.Println("Running service...")
-    service.SetupEtcd()
     //go r.SyncEtcd()
     //go service.WatchEtcd()
     //go service.HandleConnections()
@@ -308,7 +311,7 @@ func (service *Service) Run() {
     //go service.Serve()
     //go service.HandleInbox()
     //go service.ServeHTTP()
-    go service.MetaWatcher()
+    go service.MetaWatcher.Run()
     go service.Cruncher.Run(config.GetInt("port_tcp"))
 
     sigterm, sighup := service.GetSignals()
