@@ -112,8 +112,11 @@ func (service *Service) MetaWatcher() {
 		_, _ = service.Etcd.Watch(namespace + "/db", 0, true, receiver, stop)
 	}()
 	go func() {
-		for x := range receiver {
-			spew.Dump(x)
+		for resp = range receiver {
+			switch resp.Action {
+			case "set":
+				handlenode(resp.Node, namespace, cluster)
+			}
 		}
 	}()
 }
