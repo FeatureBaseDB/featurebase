@@ -3,7 +3,6 @@ package core
 import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/coreos/go-etcd/etcd"
-	"encoding/gob"
 	"pilosa/db"
 	"log"
 	"strings"
@@ -12,22 +11,47 @@ import (
 	"errors"
 )
 
-func (service *Service) SetupEtcd() {
-	gob.Register(db.Location{})
-	service.Etcd = etcd.NewClient(nil)
+type MetaWatcher struct {
+	service *Service
+	namespace string
 }
 
-func flatten(node *etcd.Node) []*etcd.Node {
-	nodes := make([]*etcd.Node, 0)
-	nodes = append(nodes, node)
-	for _, node := range node.Nodes {
-		nodes = append(nodes, flatten(&node)...)
+func (self *MetaWatcher) Run() {
+	log.Println(self.namespace + "/db")
+	resp, err := self.service.Etcd.Get(self.namespace + "/db", false, true)
+	if err != nil {
+		log.Fatal(err)
 	}
-	return nodes
+	for _, node := range flatten(resp.Node) {
+		err := self.handlenode(node)
+		if err != nil {
+			spew.Dump(node)
+			log.Println(err)
+		}
+	}
+	receiver := make(chan *etcd.Response)
+	stop := make(chan bool)
+	go func() {
+		// TODO: error check and restart watcher
+		_, _ = self.service.Etcd.Watch(self.namespace + "/db", 0, true, receiver, stop)
+	}()
+	go func() {
+		for resp = range receiver {
+			switch resp.Action {
+			case "set":
+				self.handlenode(resp.Node)
+			}
+			// TODO: handle deletes
+		}
+	}()
 }
 
-func handlenode(node *etcd.Node, namespace string, cluster *db.Cluster) error {
-	key := node.Key[len(namespace)+1:]
+func NewMetaWatcher(service *Service, namespace string) *MetaWatcher {
+	return &MetaWatcher{service, namespace}
+}
+
+func (self *MetaWatcher) handlenode(node *etcd.Node) error {
+	key := node.Key[len(self.namespace)+1:]
 	bits := strings.Split(key, "/")
 	var database *db.Database
 	var frame *db.Frame
@@ -42,7 +66,7 @@ func handlenode(node *etcd.Node, namespace string, cluster *db.Cluster) error {
 		return nil
 	}
 	if len(bits) > 1 {
-		database = cluster.GetOrCreateDatabase(bits[1])
+		database = self.service.Cluster.GetOrCreateDatabase(bits[1])
 	}
 	if len(bits) > 2 {
 		if bits[2] != "frame" {
@@ -91,32 +115,11 @@ func handlenode(node *etcd.Node, namespace string, cluster *db.Cluster) error {
 	return err
 }
 
-func (service *Service) MetaWatcher() {
-	namespace := "/pilosa/0"
-	log.Println(namespace + "/db")
-	cluster := db.NewCluster()
-	resp, err := service.Etcd.Get(namespace + "/db", false, true)
-	if err != nil {
-		log.Fatal(err)
+func flatten(node *etcd.Node) []*etcd.Node {
+	nodes := make([]*etcd.Node, 0)
+	nodes = append(nodes, node)
+	for _, node := range node.Nodes {
+		nodes = append(nodes, flatten(&node)...)
 	}
-	for _, node := range flatten(resp.Node) {
-		err := handlenode(node, namespace, cluster)
-		if err != nil {
-			spew.Dump(node)
-			log.Println(err)
-		}
-	}
-	receiver := make(chan *etcd.Response)
-	stop := make(chan bool)
-	go func() {
-		_, _ = service.Etcd.Watch(namespace + "/db", 0, true, receiver, stop)
-	}()
-	go func() {
-		for resp = range receiver {
-			switch resp.Action {
-			case "set":
-				handlenode(resp.Node, namespace, cluster)
-			}
-		}
-	}()
+	return nodes
 }
