@@ -1,158 +1,111 @@
 package core
 
 import (
+	"github.com/davecgh/go-spew/spew"
 	"github.com/coreos/go-etcd/etcd"
 	"encoding/gob"
 	"pilosa/db"
-	"github.com/davecgh/go-spew/spew"
+	"log"
+	"strings"
 	"github.com/nu7hatch/gouuid"
 	"strconv"
-	"log"
+	"errors"
 )
 
 func (service *Service) SetupEtcd() {
 	gob.Register(db.Location{})
 	service.Etcd = etcd.NewClient(nil)
-	//service.NodeMapMutex.Lock()
-	//defer service.NodeMapMutex.Unlock()
-	//service.NodeMap = db.NodeMap{}
-
-	//nodes, err := service.Etcd.Get("nodes", false)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//for _, node := range nodes.Kvs {
-	//	nodestring := strings.Split(node.Key, "/")[2]
-	//	location, err := db.NewLocation(nodestring)
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//	routerlocation, err := db.NewLocation(node.Value)
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//	service.NodeMap[*location] = *routerlocation
-	//}
-	//log.Println(service.NodeMap)
 }
 
-//func (service *Service) WatchEtcd() {
-//	var receiver = make(chan *etcd.Response)
-//	var stop chan bool
-//	go func () {
-//		_, err := service.Etcd.Watch("nodes/", 0, receiver, stop)
-//		if err != nil {
-//			log.Fatal(err)
-//		}
-//	}()
-//
-//	exit, done := service.GetExitChannels()
-//
-//	for {
-//		select {
-//			case response := <-receiver:
-//				switch response.Action {
-//				case "SET":
-//					nodestring := strings.Split(response.Key, "/")[2]
-//					node, err := db.NewLocation(nodestring)
-//					if err != nil {
-//						log.Fatal(err)
-//					}
-//					router, err := db.NewLocation(response.Value)
-//					if err != nil {
-//						log.Fatal(err)
-//					}
-//					service.NodeMapMutex.Lock()
-//					service.NodeMap[*node] = *router
-//					service.NodeMapMutex.Unlock()
-//				case "DELETE":
-//					nodestring := strings.Split(response.Key, "/")[2]
-//					node, err := db.NewLocation(nodestring)
-//					if err != nil {
-//						log.Fatal(err)
-//					}
-//					service.NodeMapMutex.Lock()
-//					delete(service.NodeMap, *node)
-//					service.NodeMapMutex.Unlock()
-//				default:
-//					log.Println("unhandled etcd message", response)
-//				}
-//				//log.Println(response.Action, response.Key, response.Value)
-//				log.Println(service.NodeMap)
-//			case <-exit:
-//				log.Println("cleaning up watchetcd service thing.")
-//				time.Sleep(time.Second/2)
-//				log.Println("done!")
-//				done <- 1
-//		}
-//	}
-//}
+func flatten(node *etcd.Node) []*etcd.Node {
+	nodes := make([]*etcd.Node, 0)
+	nodes = append(nodes, node)
+	for _, node := range node.Nodes {
+		nodes = append(nodes, flatten(&node)...)
+	}
+	return nodes
+}
 
+func handlenode(node *etcd.Node, namespace string, cluster *db.Cluster) error {
+	key := node.Key[len(namespace)+1:]
+	bits := strings.Split(key, "/")
+	var database *db.Database
+	var frame *db.Frame
+	var fragment *db.Fragment
+	var fragment_uuid *uuid.UUID
+	var slice *db.Slice
+	var process_uuid *uuid.UUID
+	var process *db.Process
+	var err error
+
+	if len(bits) <= 1 || bits[0] != "db" {
+		return nil
+	}
+	if len(bits) > 1 {
+		database = cluster.GetOrCreateDatabase(bits[1])
+	}
+	if len(bits) > 2 {
+		if bits[2] != "frame" {
+			return errors.New("no frame")
+		}
+	}
+	if len(bits) > 3 {
+		frame = database.GetOrCreateFrame(bits[3])
+	}
+	if len(bits) > 4 {
+		if bits[4] != "slice" {
+			return errors.New("no slice")
+		}
+	}
+	if len(bits) > 5 {
+		slice_int, err := strconv.Atoi(bits[5])
+		if err != nil {
+			return err
+		}
+		slice = database.GetOrCreateSlice(slice_int)
+	}
+	if len(bits) > 6 {
+		if bits[6] != "fragment" {
+			return errors.New("no fragment")
+		}
+	}
+	if len(bits) > 7 {
+		fragment_uuid, err = uuid.ParseHex(bits[7])
+		if err != nil {
+			return err
+		}
+		fragment = database.GetOrCreateFragment(frame, slice, fragment_uuid)
+	}
+
+	if len(bits) > 8 {
+		if bits[8] != "process" {
+			return errors.New("no process")
+		}
+		process_uuid, err = uuid.ParseHex(node.Value)
+		if err != nil {
+			return err
+		}
+		process = db.NewProcess(process_uuid)
+		fragment.SetProcess(process)
+	}
+	return err
+}
 
 func (service *Service) MetaWatcher() {
 	namespace := "/pilosa/0"
 	log.Println(namespace + "/db")
+	cluster := db.NewCluster()
 	resp, err := service.Etcd.Get(namespace + "/db", false, true)
 	if err != nil {
 		log.Fatal(err)
 	}
-	cluster := db.NewCluster()
-
-	for _, database_ref := range resp.Node.Nodes {
-		database_name := database_ref.Key[len(namespace)+4:]
-		database := cluster.GetOrCreateDatabase(database_name)
-		for _, database_attr_ref := range database_ref.Nodes {
-			key := database_attr_ref.Key[len(database_ref.Key)+1:]
-			if key == "frame" {
-				for _, frame_ref := range database_attr_ref.Nodes {
-					frame_name := frame_ref.Key[len(database_attr_ref.Key)+1:]
-					frame := database.GetOrCreateFrame(frame_name)
-					for _, frame_attr_ref := range frame_ref.Nodes {
-						key = frame_attr_ref.Key[len(frame_ref.Key)+1:]
-						if key == "slice" {
-							for _, slice_ref := range frame_attr_ref.Nodes {
-								slice_name := slice_ref.Key[len(frame_attr_ref.Key)+1:]
-								slice_id, err := strconv.Atoi(slice_name)
-								if err != nil {
-									log.Fatal(err)
-								}
-								slice := database.GetOrCreateSlice(slice_id)
-								for _, slice_attr_ref := range slice_ref.Nodes {
-									key = slice_attr_ref.Key[len(slice_ref.Key)+1:]
-									if key == "fragment" {
-										for _, fragment_ref := range slice_attr_ref.Nodes {
-                                            /*
-											fragment_name := fragment_ref.Key[len(slice_attr_ref.Key)+1:]
-											fragment_id, err := strconv.Atoi(fragment_name)
-											if err != nil {
-												log.Fatal(err)
-											}
-                                            */
-											for _, fragment_attr_ref := range fragment_ref.Nodes {
-												key = fragment_attr_ref.Key[len(fragment_ref.Key)+1:]
-												if key == "node" {
-													uuid, err := uuid.ParseHex(fragment_attr_ref.Value)
-													if err != nil {
-														log.Fatal(err)
-													}
-													process := uuid
-													database.GetOrCreateFragment(frame, slice, process)
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
+	for _, node := range flatten(resp.Node) {
+		err := handlenode(node, namespace, cluster)
+		if err != nil {
+			spew.Dump(node)
+			log.Println(err)
 		}
 	}
-	database := cluster.GetOrCreateDatabase("main")
-	spew.Dump(database)
-	database.OldGetFragment(db.Bitmap{1200, "general"}, 1)
-
 	receiver := make(chan *etcd.Response)
 	stop := make(chan bool)
 	go func() {
