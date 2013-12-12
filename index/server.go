@@ -8,30 +8,31 @@ import (
 	"net"
 	"net/http"
 	//"sort"
+	"log"
 	"time"
-    "log"
 )
 
 type FragmentContainer struct {
-    fragments map[string] *Fragment
+	fragments map[string]*Fragment
 }
-func NewFragmentContainer() *FragmentContainer{
-    return &FragmentContainer{make( map[string]*Fragment)}
+
+func NewFragmentContainer() *FragmentContainer {
+	return &FragmentContainer{make(map[string]*Fragment)}
 }
- 
+
 func (a *FragmentContainer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-     handler(w , r,a.fragments) 
+	handler(w, r, a.fragments)
 }
 
 func (a *FragmentContainer) AddFragment(frame string, db string, slice int, frag_guid string) {
-    f :=&Fragment{make(chan Command),frag_guid, NewGeneral(db,slice,NewMemoryStorage())}
-    a.fragments[frag_guid] = f
-    go f.ServeFragment() 
+	f := &Fragment{make(chan Command), frag_guid, NewGeneral(db, slice, NewMemoryStorage())}
+	a.fragments[frag_guid] = f
+	go f.ServeFragment()
 }
 
-func (a *FragmentContainer) RunServer(porti int, closeChannel chan bool,started chan bool) {
+func (a *FragmentContainer) RunServer(porti int, closeChannel chan bool, started chan bool) {
 	http.Handle("/", a)
-    port := fmt.Sprintf(":%d",porti)
+	port := fmt.Sprintf(":%d", porti)
 
 	s := &http.Server{
 		Addr:           port,
@@ -46,32 +47,32 @@ func (a *FragmentContainer) RunServer(porti int, closeChannel chan bool,started 
 		log.Panicf(e.Error())
 	}
 	go s.Serve(l)
-    started<- true
+	started <- true
 	select {
 	case <-closeChannel:
 		log.Printf("Server thread exit")
 		l.Close()
-       // Shutdown()
+		// Shutdown()
 		return
 		break
 	}
 }
 
-type Pilosa interface{
-    Union([]uint64) IBitmap
-    Intersect([] uint64) IBitmap
-    Get(id uint64 )IBitmap
+type Pilosa interface {
+	Union([]uint64) IBitmap
+	Intersect([]uint64) IBitmap
+	Get(id uint64) IBitmap
 }
 
 type RequestJSON struct {
-	Request string
-    Fragment string
-	Args   json.RawMessage
+	Request  string
+	Fragment string
+	Args     json.RawMessage
 }
 type Fragment struct {
-	requestChan chan Command
-    FragmentGuid string 
-    impl Pilosa
+	requestChan  chan Command
+	FragmentGuid string
+	impl         Pilosa
 }
 
 func (f *Fragment) ServeFragment() {
@@ -79,18 +80,19 @@ func (f *Fragment) ServeFragment() {
 		req := <-f.requestChan
 		start := time.Now()
 		answer := `""`
+		responder := req.GetResponder()
 		answer = req.Execute(f)
 		delta := time.Since(start)
 		var buffer bytes.Buffer
 		buffer.WriteString(`{ "results":`)
 		buffer.WriteString(answer)
-		buffer.WriteString(fmt.Sprintf(`,"query type": "%s"`, req.QueryType()))
+		buffer.WriteString(fmt.Sprintf(`,"query type": "%s"`, responder.QueryType()))
 		buffer.WriteString(fmt.Sprintf(`, "elapsed": "%s"}`, delta))
-		req.ResponseChannel() <- buffer.String()
+		responder.ResponseChannel() <- buffer.String()
 	}
 }
 
-func handler(w http.ResponseWriter, r *http.Request,fragments map[string]*Fragment) {
+func handler(w http.ResponseWriter, r *http.Request, fragments map[string]*Fragment) {
 	if r.Method == "POST" {
 		var f RequestJSON
 
@@ -106,17 +108,16 @@ func handler(w http.ResponseWriter, r *http.Request,fragments map[string]*Fragme
 		request := BuildCommandFactory(&f, decoder)
 		w.Header().Set("Content-Type", "application/json")
 		if request != nil {
-            output:=`{"Error":"Invalid Fragment"}`
-            fc,found :=  fragments[f.Fragment] //f.FragmentIndex<len(fragments){
-            if found{
-             //   fc := fragments[f.FragmentGuid]
-                fc.requestChan <- request
-                output = request.Response()
-            }
+			output := `{"Error":"Invalid Fragment"}`
+			fc, found := fragments[f.Fragment] //f.FragmentIndex<len(fragments){
+			if found {
+				//   fc := fragments[f.FragmentGuid]
+				fc.requestChan <- request
+				output = request.GetResponder().Response()
+			}
 			fmt.Fprintf(w, output)
 		} else {
 			fmt.Fprintf(w, "NoOp")
 		}
 	}
 }
-
