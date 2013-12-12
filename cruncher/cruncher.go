@@ -1,4 +1,4 @@
-package core
+package cruncher
 
 import (
     "github.com/davecgh/go-spew/spew"
@@ -7,7 +7,7 @@ import (
 
 
 type Cruncher struct {
- close_chan chan bool
+    close_chan chan bool
 }
 
 func (cruncher *Cruncher) Run(port int) {
