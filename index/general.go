@@ -21,32 +21,6 @@ func NewGeneral(db string, slice int, s Storage) *General {
 
 }
 
-func (f *General) Union(bitmaps []uint64) IBitmap {
-	result := NewBitmap()
-	for i, id := range bitmaps {
-		bm := f.Get(id)
-		if i == 0 {
-			result = bm
-		} else {
-			result = Union(result, bm)
-		}
-	}
-	return result
-}
-
-func (f *General) Intersect(bitmaps []uint64) IBitmap {
-	result := NewBitmap()
-	for i, id := range bitmaps {
-		bm := f.Get(id)
-		if i == 0 {
-			result = bm
-		} else {
-			result = Intersection(result, bm)
-		}
-	}
-	return result
-}
-
 func (f *General) Get(bitmap_id uint64) IBitmap {
 	bm, ok := f.bitmap_cache.Get(bitmap_id)
 	if ok {

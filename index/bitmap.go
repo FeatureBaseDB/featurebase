@@ -5,8 +5,9 @@ package index
 import (
 	"bytes"
 	"encoding/gob"
-	"github.com/yasushi-saito/rbtree"
 	"log"
+
+	"github.com/yasushi-saito/rbtree"
 )
 
 const (
@@ -45,10 +46,6 @@ func (set *IntSet) Size() int {
 }
 
 //
-
-var (
-	errors map[error]int
-)
 
 /* ** native version turned out to be slower
 func popcount(i uint64)uint64{
@@ -95,6 +92,13 @@ func BlockArray_invert(a *BlockArray) BlockArray {
 	return o
 }
 
+func BlockArray_copy(a *BlockArray) BlockArray {
+	var o = BlockArray{}
+	for i, _ := range a.Block {
+		o.Block[i] = a.Block[i]
+	}
+	return o
+}
 func BlockArray_intersection(a *BlockArray, b *BlockArray) BlockArray {
 	var o = BlockArray{}
 	for i, _ := range a.Block {
@@ -126,6 +130,23 @@ func Compare(a uint64, b uint64) int {
 	}
 	return 0
 }
+func Clone(a_bm IBitmap) IBitmap {
+
+	var a = a_bm.Min()
+	output := CreateRBBitmap()
+	for {
+		if a.Limit() {
+			break
+		}
+		var a_node = a.Item()
+		var o = BlockArray_copy(&a_node.Value)
+		var o_node = &Chunk{a_node.Key, o}
+		output.AddChunk(o_node)
+		a = a.Next()
+	}
+	return output
+}
+
 func Intersection(a_bm IBitmap, b_bm IBitmap) IBitmap {
 	var a = a_bm.Min()
 	var b = b_bm.Min()

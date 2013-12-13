@@ -1,9 +1,6 @@
 package index
 
-import (
-	"encoding/json"
-	"fmt"
-)
+import "time"
 
 type Rank struct {
 	Key, Count uint64
@@ -15,76 +12,79 @@ func (p RankList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p RankList) Len() int           { return len(p) }
 func (p RankList) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
+type Result struct {
+	answer    Calculation
+	exec_time time.Duration
+}
+
 type Responder struct {
-	result     chan string
+	result     chan Result
 	query_type string
 }
 
 func NewResponder(query_type string) *Responder {
-	return &Responder{make(chan string), query_type}
+	return &Responder{make(chan Result), query_type}
 }
 func (cmd *Responder) QueryType() string {
 	return cmd.query_type
 }
-func (cmd *Responder) Response() string {
+func (cmd *Responder) Response() Result {
 	return <-cmd.result
 }
-func (cmd *Responder) ResponseChannel() chan string {
+func (cmd *Responder) ResponseChannel() chan Result {
 	return cmd.result
 }
 
+type Calculation interface{}
+
 type Command interface {
-	Execute(*Fragment) string
+	Execute(*Fragment) Calculation
 	GetResponder() *Responder
 }
-
-func BuildCommandFactory(req *RequestJSON, decoder *json.Decoder) Command {
-	var result Command
-
-	switch req.Request {
-	default:
-		result = &CmdUnknown{NewResponder("UnknownCommand"), req.Request}
-	case "UnionCount":
-		result = NewUnion(decoder)
-	case "IntersectCount":
-		result = NewIntersect(decoder)
-	case "SetBit":
-		result = NewSetBit(decoder)
-	}
-	return result
+type CmdGet struct {
+	meta      *Responder
+	bitmap_id uint64
 }
 
-type CmdUnknown struct {
-	meta     *Responder
-	response string
+func NewGet(bitmap_id uint64) *CmdGet {
+	return &CmdGet{NewResponder("Get"), bitmap_id}
 }
 
-func (cmd *CmdUnknown) Execute(f *Fragment) string {
-	return fmt.Sprintf(`{ "Unknown Command":"%s" }`, cmd.response)
-}
-
-func (cmd *CmdUnknown) GetResponder() *Responder {
+func (cmd *CmdGet) GetResponder() *Responder {
 	return cmd.meta
+}
+func (cmd *CmdGet) Execute(f *Fragment) Calculation {
+	return f.NewHandle(cmd.bitmap_id)
+}
+
+type CmdCount struct {
+	meta   *Responder
+	bitmap BitmapHandle
+}
+
+func NewCount(bitmap_handle BitmapHandle) *CmdCount {
+	return &CmdCount{NewResponder("Count"), bitmap_handle}
+}
+
+func (cmd *CmdCount) GetResponder() *Responder {
+	return cmd.meta
+}
+func (cmd *CmdCount) Execute(f *Fragment) Calculation {
+	bm, _ := f.getBitmap(cmd.bitmap)
+	return BitCount(bm)
 }
 
 type CmdUnion struct {
 	meta       *Responder
-	bitmap_ids []uint64
-}
-type Args struct {
-	Bitmaps []uint64
+	bitmap_ids []BitmapHandle
 }
 
-func NewUnion(decoder *json.Decoder) *CmdUnion {
-	var f Args
-	decoder.Decode(&f)
-	result := &CmdUnion{NewResponder("UnionCount"), f.Bitmaps}
+func NewUnion(bitmaps []BitmapHandle) *CmdUnion {
+	result := &CmdUnion{NewResponder("Union"), bitmaps}
 	return result
 }
-func (cmd *CmdUnion) Execute(f *Fragment) string {
-	bm := f.impl.Union(cmd.bitmap_ids)
-	result := BitCount(bm)
-	return fmt.Sprintf(`{ "value":%d }`, result)
+func (cmd *CmdUnion) Execute(f *Fragment) Calculation {
+	return f.union(cmd.bitmap_ids)
 }
 func (cmd *CmdUnion) GetResponder() *Responder {
 	return cmd.meta
@@ -92,20 +92,14 @@ func (cmd *CmdUnion) GetResponder() *Responder {
 
 type CmdIntersect struct {
 	meta    *Responder
-	bitmaps []uint64
+	bitmaps []BitmapHandle
 }
 
-func NewIntersect(decoder *json.Decoder) *CmdIntersect {
-	var f Args
-	decoder.Decode(&f)
-
-	result := &CmdIntersect{NewResponder("IntersectCount"), f.Bitmaps}
-	return result
+func NewIntersect(bh []BitmapHandle) *CmdIntersect {
+	return &CmdIntersect{NewResponder("Intersect"), bh}
 }
-func (cmd *CmdIntersect) Execute(f *Fragment) string {
-	bm := f.impl.Intersect(cmd.bitmaps)
-	result := BitCount(bm)
-	return fmt.Sprintf(`{ "value":%d }`, result)
+func (cmd *CmdIntersect) Execute(f *Fragment) Calculation {
+	return f.intersect(cmd.bitmaps)
 }
 func (cmd *CmdIntersect) GetResponder() *Responder {
 	return cmd.meta
@@ -115,29 +109,19 @@ type BitArgs struct {
 	Bitmap_id uint64
 	Bit_pos   uint64
 }
-
 type CmdSetBit struct {
-	meta *Responder
-
-	id      uint64
+	meta    *Responder
+	bitmap  BitmapHandle
 	bit_pos uint64
 }
 
-func NewSetBit(decoder *json.Decoder) *CmdSetBit {
-	var f BitArgs
-	decoder.Decode(&f)
-	result := &CmdSetBit{NewResponder("SetBit"), f.Bitmap_id, f.Bit_pos}
+func NewSetBit(bitmap BitmapHandle, bit_pos uint64) *CmdSetBit {
+	result := &CmdSetBit{NewResponder("SetBit"), bitmap, bit_pos}
 	return result
 }
-func (cmd *CmdSetBit) Execute(f *Fragment) string {
-	bitmap := f.impl.Get(cmd.id)
-	val := SetBit(bitmap, cmd.bit_pos)
-	m := 0
-	if val {
-		m = 1
-	}
-	result := BitCount(bitmap)
-	return fmt.Sprintf(`{ "value":%d , "changed":%d}`, result, m)
+func (cmd *CmdSetBit) Execute(f *Fragment) Calculation {
+	bitmap, _ := f.getBitmap(cmd.bitmap)
+	return SetBit(bitmap, cmd.bit_pos)
 }
 func (cmd *CmdSetBit) GetResponder() *Responder {
 	return cmd.meta

@@ -2,16 +2,14 @@ package index
 
 // #cgo  CFLAGS:-mpopcnt
 
-import (
-	//	"log"
-	"fmt"
-)
+import "fmt"
 
 type MemoryStorage struct {
 	db map[string]*Bitmap
 }
 
 func NewMemoryStorage() Storage {
+	//	log.Println("Hello")
 	obj := new(MemoryStorage)
 	obj.db = make(map[string]*Bitmap)
 
@@ -19,6 +17,8 @@ func NewMemoryStorage() Storage {
 }
 
 func (c *MemoryStorage) Fetch(bitmap_id uint64, db string, slice int) IBitmap {
+	//	log.Println("hello")
+
 	key := fmt.Sprintf("%d:%s:%d", bitmap_id, db, slice)
 	bitmap, found := c.db[key]
 	if !found {
