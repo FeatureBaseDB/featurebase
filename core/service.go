@@ -9,7 +9,6 @@ import (
 	"net"
 	"encoding/gob"
 	"pilosa/db"
-    "pilosa/config"
 )
 
 type Stats struct {
@@ -32,7 +31,6 @@ type Service struct {
 	PortHttp string
 	Etcd *etcd.Client
 	Cluster *db.Cluster
-    Cruncher *Cruncher
 	TopologyMapper *TopologyMapper
 	ProcessMapper *ProcessMapper
 	ProcessMap *ProcessMap
@@ -40,9 +38,8 @@ type Service struct {
 	Dispatcher *Dispatcher
 }
 
-func NewService(tcp, http *db.Location) *Service {
+func NewService() *Service {
 	service := new(Service)
-	service.Cruncher = new(Cruncher)
 	service.Etcd = etcd.NewClient(nil)
 	service.Cluster = db.NewCluster()
 	service.TopologyMapper = &TopologyMapper{service, "/pilosa/0"}
@@ -63,7 +60,6 @@ func (service *Service) GetSignals() (chan os.Signal, chan os.Signal) {
 func (service *Service) Run() {
     log.Println("Running service...")
     go service.TopologyMapper.Run()
-    go service.Cruncher.Run(config.GetInt("port_tcp"))
 
     sigterm, sighup := service.GetSignals()
     for {

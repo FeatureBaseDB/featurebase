@@ -3,24 +3,27 @@ package cruncher
 import (
     "github.com/davecgh/go-spew/spew"
     "pilosa/index"
+	"pilosa/core"
 )
 
 
 type Cruncher struct {
+	core.Service
     close_chan chan bool
 }
 
 func (cruncher *Cruncher) Run(port int) {
-    spew.Dump("Cruncher.Run")
-    spew.Dump(port)
-     web_api:= index.NewFragmentContainer()
-//        web_api.AddFragment("general", "25", 0, "AAA-BBB-CCC") 
-//        web_api.AddFragment("general", "25", 1, "AAA-BBB-CCC") 
-//        web_api.AddFragment("general", "25", 2, "AAA-BBB-CCC") 
+	spew.Dump("Cruncher.Run")
+	spew.Dump(port)
+	web_api:= index.NewFragmentContainer()
+	started:= make(chan bool)
+	go web_api.RunServer(port , cruncher.close_chan ,started ) 
+	cruncher.Service.Run()
+	<-started
+}
 
-started:= make(chan bool)
-go web_api.RunServer(port , cruncher.close_chan ,started ) 
-<-started
-//server is listening and going
-
+func NewCruncher() *Cruncher {
+	service := core.NewService()
+	cruncher := Cruncher{*service, make(chan bool)}
+	return &cruncher
 }
