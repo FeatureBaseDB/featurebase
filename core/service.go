@@ -6,36 +6,19 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"net"
-	"encoding/gob"
 	"pilosa/db"
+	"pilosa/interfaces"
 )
-
-type Stats struct {
-	MessageInCount int
-	MessageOutCount int
-	MessageProcessedCount int
-	Uptime int
-	MemoryUsed int
-}
-
-type Connection struct {
-	Conn net.Conn
-	Encoder *gob.Encoder
-	Decoder *gob.Decoder
-}
 
 type Service struct {
 	Stopper
-	Port string
-	PortHttp string
 	Etcd *etcd.Client
 	Cluster *db.Cluster
 	TopologyMapper *TopologyMapper
 	ProcessMapper *ProcessMapper
 	ProcessMap *ProcessMap
-	Transport *Transporter
-	Dispatcher *Dispatcher
+	Transport interfaces.Transporter
+	Dispatch interfaces.Dispatcher
 }
 
 func NewService() *Service {
@@ -54,12 +37,11 @@ func (service *Service) GetSignals() (chan os.Signal, chan os.Signal) {
 	signal.Notify(termChan, syscall.SIGINT, syscall.SIGTERM)
 	return termChan, hupChan
 }
-////////////////////////////////////////////////
-
 
 func (service *Service) Run() {
     log.Println("Running service...")
     go service.TopologyMapper.Run()
+    go service.ProcessMapper.Run()
 
     sigterm, sighup := service.GetSignals()
     for {

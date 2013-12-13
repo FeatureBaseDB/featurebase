@@ -1,4 +1,4 @@
-package core
+package interfaces
 
 import (
 	"pilosa/db"

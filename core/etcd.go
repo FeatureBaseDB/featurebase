@@ -161,6 +161,7 @@ func(self *ProcessMapper) getnode(u *uuid.UUID) *Node {
 }
 
 func (self *ProcessMapper) Run() {
+	return
 	var modindex uint64
 	response, err := self.etcd.Get("nodes", false, true)
 	if err != nil {

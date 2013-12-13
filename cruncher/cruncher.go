@@ -4,6 +4,8 @@ import (
     "github.com/davecgh/go-spew/spew"
     "pilosa/index"
 	"pilosa/core"
+	"pilosa/transport"
+	"pilosa/dispatch"
 )
 
 
@@ -25,5 +27,7 @@ func (cruncher *Cruncher) Run(port int) {
 func NewCruncher() *Cruncher {
 	service := core.NewService()
 	cruncher := Cruncher{*service, make(chan bool)}
+	cruncher.Transport = transport.NewTcpTransport(service)
+	cruncher.Dispatch = dispatch.NewCruncherDispatch(service)
 	return &cruncher
 }
