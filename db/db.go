@@ -5,9 +5,3 @@ type Message struct {
 	Data interface{} `json:data`
 	Destination Location
 }
-
-type Envelope struct {
-	Message *Message
-	Location *Location
-}
-
