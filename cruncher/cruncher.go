@@ -33,7 +33,8 @@ func (cruncher *Cruncher) Run(port int) {
 
 func NewCruncher() *Cruncher {
 	service := core.NewService()
-	cruncher := Cruncher{*service, make(chan bool)}
+    fragment_container := index.NewFragmentContainer()
+	cruncher := Cruncher{*service, make(chan bool), fragment_container}
 	cruncher.Transport = transport.NewTcpTransport(service)
 	cruncher.Dispatch = dispatch.NewCruncherDispatch(service)
 	return &cruncher
