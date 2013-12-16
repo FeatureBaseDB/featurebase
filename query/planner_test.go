@@ -1,13 +1,13 @@
 package query
 
 import (
-	"testing"
+	. "github.com/smartystreets/goconvey/convey"
 	"log"
-    . "github.com/smartystreets/goconvey/convey"
+	"testing"
 )
 
 func TestQueryPlanner(t *testing.T) {
-    Convey("Basic query plan", t, func() {
-        log.Println("query planner test")
-    })
+	Convey("Basic query plan", t, func() {
+		log.Println("query planner test")
+	})
 }

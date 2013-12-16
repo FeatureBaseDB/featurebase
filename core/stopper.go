@@ -7,7 +7,7 @@ import (
 type Stopper struct {
 	TermChans []chan int
 	DoneChans []chan int
-	Mutex sync.RWMutex
+	Mutex     sync.RWMutex
 }
 
 func (stopper *Stopper) Stop() {

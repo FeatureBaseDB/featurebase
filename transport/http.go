@@ -1,14 +1,14 @@
 package transport
 
 import (
-	"pilosa/db"
 	"log"
+	"pilosa/db"
 )
 
 type HttpTransport struct {
-	port int
+	port   int
 	outbox chan *db.Message
-	done chan int
+	done   chan int
 }
 
 func (trans *HttpTransport) Init() error {
@@ -22,10 +22,10 @@ func (trans *HttpTransport) Loop() {
 	var message *db.Message
 	for {
 		select {
-			case message = <-trans.outbox:
-				log.Println(message)
-			case <-trans.done:
-				return
+		case message = <-trans.outbox:
+			log.Println(message)
+		case <-trans.done:
+			return
 		}
 	}
 }

@@ -1,24 +1,24 @@
 package core
 
 import (
-	"github.com/davecgh/go-spew/spew"
-	"github.com/coreos/go-etcd/etcd"
-	"pilosa/db"
-	"log"
-	"strings"
-	"github.com/nu7hatch/gouuid"
-	"strconv"
 	"errors"
+	"github.com/coreos/go-etcd/etcd"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/nu7hatch/gouuid"
+	"log"
+	"pilosa/db"
+	"strconv"
+	"strings"
 )
 
 type TopologyMapper struct {
-	service *Service
+	service   *Service
 	namespace string
 }
 
 func (self *TopologyMapper) Run() {
 	log.Println(self.namespace + "/db")
-	resp, err := self.service.Etcd.Get(self.namespace + "/db", false, true)
+	resp, err := self.service.Etcd.Get(self.namespace+"/db", false, true)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func (self *TopologyMapper) Run() {
 	go func() {
 		// TODO: error check and restart watcher
 		// TODO: use modindex to make sure watch catches everything
-		_, _ = self.service.Etcd.Watch(self.namespace + "/db", 0, true, receiver, stop)
+		_, _ = self.service.Etcd.Watch(self.namespace+"/db", 0, true, receiver, stop)
 	}()
 	go func() {
 		for resp = range receiver {
@@ -126,9 +126,9 @@ func flatten(node *etcd.Node) []*etcd.Node {
 }
 
 type Node struct {
-	id *uuid.UUID
-	ip string
-	port_tcp int
+	id        *uuid.UUID
+	ip        string
+	port_tcp  int
 	port_http int
 }
 
@@ -137,8 +137,8 @@ type ProcessMap struct {
 }
 
 type ProcessMapper struct {
-	etcd *etcd.Client
-	nodes []Node
+	etcd     *etcd.Client
+	nodes    []Node
 	receiver chan *etcd.Response
 	commands chan *ProcessMapperCommand
 }
@@ -156,7 +156,7 @@ func getKey(input string) string {
 	return bits[len(bits)-1]
 }
 
-func(self *ProcessMapper) getnode(u *uuid.UUID) *Node {
+func (self *ProcessMapper) getnode(u *uuid.UUID) *Node {
 	return new(Node)
 }
 
@@ -191,7 +191,6 @@ func (self *ProcessMapper) Run() {
 		nodes = append(nodes, node)
 	}
 
-
 	self.nodes = nodes
 	spew.Dump(self.nodes)
 	go func() {
@@ -211,21 +210,21 @@ func (self *ProcessMapper) Run() {
 				case "set":
 					bits := strings.Split(response.Node.Key, "/")
 					if len(bits) != 4 {
-							log.Fatal("bug in etcd sync or etcd data")
+						log.Fatal("bug in etcd sync or etcd data")
 					}
 					//router, err := db.NewLocation(response.Node.Value)
 					u, err := uuid.ParseHex(bits[2])
 					node := self.getnode(u)
 					if err != nil {
-							log.Fatal(err)
+						log.Fatal(err)
 					}
 					switch bits[3] {
 					case "port_tcp":
-							node.port_tcp, _ = strconv.Atoi(response.Node.Value)
+						node.port_tcp, _ = strconv.Atoi(response.Node.Value)
 					case "port_http":
-							node.port_http, _ = strconv.Atoi(response.Node.Value)
+						node.port_http, _ = strconv.Atoi(response.Node.Value)
 					case "ip":
-							node.ip = response.Node.Value
+						node.ip = response.Node.Value
 					}
 					spew.Dump(node)
 				case "delete":

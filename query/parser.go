@@ -1,12 +1,11 @@
 package query
 
 import (
-    "encoding/json"
+	"encoding/json"
 	"errors"
 	"pilosa/db"
 	//"github.com/davecgh/go-spew/spew"
 )
-
 
 var InvalidQueryError = errors.New("Invalid query format.")
 

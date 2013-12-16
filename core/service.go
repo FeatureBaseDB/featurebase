@@ -5,20 +5,20 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"syscall"
 	"pilosa/db"
 	"pilosa/interfaces"
+	"syscall"
 )
 
 type Service struct {
 	Stopper
-	Etcd *etcd.Client
-	Cluster *db.Cluster
+	Etcd           *etcd.Client
+	Cluster        *db.Cluster
 	TopologyMapper *TopologyMapper
-	ProcessMapper *ProcessMapper
-	ProcessMap *ProcessMap
-	Transport interfaces.Transporter
-	Dispatch interfaces.Dispatcher
+	ProcessMapper  *ProcessMapper
+	ProcessMap     *ProcessMap
+	Transport      interfaces.Transporter
+	Dispatch       interfaces.Dispatcher
 }
 
 func NewService() *Service {
@@ -39,20 +39,20 @@ func (service *Service) GetSignals() (chan os.Signal, chan os.Signal) {
 }
 
 func (service *Service) Run() {
-    log.Println("Running service...")
-    go service.TopologyMapper.Run()
-    go service.ProcessMapper.Run()
+	log.Println("Running service...")
+	go service.TopologyMapper.Run()
+	go service.ProcessMapper.Run()
 
-    sigterm, sighup := service.GetSignals()
-    for {
-        select {
-            case <- sighup:
-                log.Println("SIGHUP! Reloading configuration...")
-                // TODO: reload configuration
-            case <- sigterm:
-                log.Println("SIGTERM! Cleaning up...")
-                service.Stop()
-                return
-        }
-    }
+	sigterm, sighup := service.GetSignals()
+	for {
+		select {
+		case <-sighup:
+			log.Println("SIGHUP! Reloading configuration...")
+			// TODO: reload configuration
+		case <-sigterm:
+			log.Println("SIGTERM! Cleaning up...")
+			service.Stop()
+			return
+		}
+	}
 }

@@ -8,12 +8,12 @@ import (
 	"pilosa/db"
 )
 
-// A single step in the query plan. 
+// A single step in the query plan.
 type QueryStep struct {
-	id uuid.UUID
-	operation string
-	inputs []QueryInput
-	location string
+	id          uuid.UUID
+	operation   string
+	inputs      []QueryInput
+	location    string
 	destination string
 }
 
@@ -21,19 +21,19 @@ func (q QueryStep) String() string {
 	return fmt.Sprintf("%s %s %s, LOC: %s, DEST: %s", q.operation, q.id.String(), q.inputs, q.location, q.destination)
 }
 
-type QueryInput interface {}
+type QueryInput interface{}
 
 // Represents a parsed query. Inputs can be Query or Bitmap objects
-type Query struct{
+type Query struct {
 	Operation string
-	Inputs []QueryInput // Maybe Bitmap and Query objects should have different fields to avoid using interface{}
+	Inputs    []QueryInput // Maybe Bitmap and Query objects should have different fields to avoid using interface{}
 }
 
 // This is the output of the query planner. Contains a list of steps which can be performed in parallel
 type QueryPlan []QueryStep
 
 type QueryPlanner struct {
-	Cluster *db.Cluster
+	Cluster  *db.Cluster
 	Database *db.Database
 }
 
@@ -43,9 +43,9 @@ type QueryTree interface {
 
 // QueryTree for UNION, INTER, and CAT queries
 type CompositeQueryTree struct {
-	operation string
+	operation  string
 	subqueries []QueryTree
-	location string
+	location   string
 }
 
 // Randomly select location from subqueries (so subqueries roll up into composite queries while minimizing inter-node data traffic)
@@ -64,34 +64,34 @@ func (qt *CompositeQueryTree) getLocation(d *db.Database) string {
 // QueryTree for GET queries
 type GetQueryTree struct {
 	bitmap db.Bitmap
-	slice int
+	slice  int
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *GetQueryTree) getLocation(d *db.Database) string {
-    /*
-	frame, err := d.GetFrame(qt.bitmap.FrameType)
-	if err != nil {
-		panic(err)
-	}
-	slice := frame.Slices[qt.slice]
-	hashString, err := slice.Hashring.Get(strconv.Itoa(qt.bitmap.Id))
+	/*
+		frame, err := d.GetFrame(qt.bitmap.FrameType)
+		if err != nil {
+			panic(err)
+		}
+		slice := frame.Slices[qt.slice]
+		hashString, err := slice.Hashring.Get(strconv.Itoa(qt.bitmap.Id))
 
-	var sliceIndex int
-	var fragIndex int
-	fmt.Sscan(hashString, &fragIndex, &sliceIndex)
-	fragment := slice.Fragments[fragIndex]
+		var sliceIndex int
+		var fragIndex int
+		fmt.Sscan(hashString, &fragIndex, &sliceIndex)
+		fragment := slice.Fragments[fragIndex]
 
-	return fmt.Sprintf(fragment.Node)
-    */
-    return "Nothing yet"
+		return fmt.Sprintf(fragment.Node)
+	*/
+	return "Nothing yet"
 }
 
 // Builds QueryTree object from Query. Pass slice=-1 to perform operation on all slices
 func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 	var tree QueryTree
 	if slice == -1 {
-		tree = &CompositeQueryTree{operation:"cat"}
+		tree = &CompositeQueryTree{operation: "cat"}
 		numSlices, err := qp.Database.NumSlices()
 		if err != nil {
 			panic(err)
@@ -110,7 +110,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 			for i, input := range query.Inputs {
 				subqueries[i] = qp.buildTree(input.(*Query), slice)
 			}
-			tree = &CompositeQueryTree{operation:query.Operation, subqueries:subqueries}
+			tree = &CompositeQueryTree{operation: query.Operation, subqueries: subqueries}
 		}
 	}
 	return tree

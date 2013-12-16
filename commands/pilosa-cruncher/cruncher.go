@@ -1,8 +1,8 @@
 package main
 
 import (
-	"pilosa/cruncher"
 	"pilosa/config"
+	"pilosa/cruncher"
 )
 
 func main() {

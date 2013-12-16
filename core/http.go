@@ -1,10 +1,10 @@
 package core
 
 import (
-	"net/http"
 	"encoding/json"
-	"log"
 	"io/ioutil"
+	"log"
+	"net/http"
 	"pilosa/db"
 	"pilosa/query"
 )

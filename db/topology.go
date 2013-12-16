@@ -3,13 +3,13 @@ package db
 import (
 	"github.com/stathat/consistent"
 	//"github.com/davecgh/go-spew/spew"
+	"errors"
+	"fmt"
 	"github.com/nu7hatch/gouuid"
 	"log"
-	"fmt"
-	"errors"
-	"strings"
 	"strconv"
-    "sync"
+	"strings"
+	"sync"
 )
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")
@@ -18,7 +18,7 @@ var FragmentDoesNotExistError = errors.New("Fragment does not exist.")
 var FrameSliceIntersectDoesNotExistError = errors.New("FrameSliceIntersect does not exist.")
 
 type Location struct {
-	Ip string
+	Ip   string
 	Port int
 }
 
@@ -38,7 +38,7 @@ func NewLocation(location_string string) (*Location, error) {
 	}
 	ip := splitstring[0]
 	port, err := strconv.Atoi(splitstring[1])
-	if err != nil{
+	if err != nil {
 		return nil, errors.New("Port is not a number!")
 	}
 	return &Location{ip, port}, nil
@@ -51,15 +51,12 @@ func (location *Location) ToString() string {
 // Map of node location to their router
 type NodeMap map[Location]Location
 
-
-
-
 /////////// CLUSTERS ////////////////////////////////////////////////////////////////////
 
 // Represents the entire cluster, and a reference to the Node this instance is running on
 type Cluster struct {
 	databases map[string]*Database
-    mutex sync.Mutex
+	mutex     sync.Mutex
 }
 
 func NewCluster() *Cluster {
@@ -68,16 +65,15 @@ func NewCluster() *Cluster {
 	return &cluster
 }
 
-
 /////////// DATABASES ////////////////////////////////////////////////////////////////////
 
 // A database is a collection of all the frames within a given profile space
 type Database struct {
-	Name string
-	frames []*Frame
-	slices []*Slice
-    frame_slice_intersects []*FrameSliceIntersect
-    mutex sync.Mutex
+	Name                   string
+	frames                 []*Frame
+	slices                 []*Slice
+	frame_slice_intersects []*FrameSliceIntersect
+	mutex                  sync.Mutex
 }
 
 // Add a database to a cluster
@@ -100,13 +96,13 @@ func (c *Cluster) getDatabase(name string) (*Database, error) {
 }
 
 func (c *Cluster) GetOrCreateDatabase(name string) *Database {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
-    database, err := c.getDatabase(name)
-    if err == nil {
-        return database
-    }
-    return c.addDatabase(name)
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	database, err := c.getDatabase(name)
+	if err == nil {
+		return database
+	}
+	return c.addDatabase(name)
 }
 
 // Count the number of slices in a database
@@ -139,29 +135,28 @@ func (d *Database) getFrame(name string) (*Frame, error) {
 func (d *Database) addFrame(name string) *Frame {
 	frame := Frame{name: name}
 	d.frames = append(d.frames, &frame)
-    // add intersections
+	// add intersections
 	for _, slice := range d.slices {
-        d.AddFrameSliceIntersect(&frame, slice)
-    }
+		d.AddFrameSliceIntersect(&frame, slice)
+	}
 	return &frame
 }
 
 func (d *Database) GetOrCreateFrame(name string) *Frame {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
-    frame, err := d.getFrame(name)
-    if err == nil {
-        return frame
-    }
-    return d.addFrame(name)
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	frame, err := d.getFrame(name)
+	if err == nil {
+		return frame
+	}
+	return d.addFrame(name)
 }
-
 
 ///////// SLICES /////////////////////////////////////////////////////////////////////////
 
 // A slice is the vertical combination of every fragment.
 type Slice struct {
-    id int
+	id int
 }
 
 // Get a slice from a database
@@ -178,31 +173,30 @@ func (d *Database) getSlice(slice_id int) (*Slice, error) {
 func (d *Database) addSlice(slice_id int) *Slice {
 	slice := Slice{id: slice_id}
 	d.slices = append(d.slices, &slice)
-    // add intersections
+	// add intersections
 	for _, frame := range d.frames {
-        d.AddFrameSliceIntersect(frame, &slice)
-    }
+		d.AddFrameSliceIntersect(frame, &slice)
+	}
 	return &slice
 }
 
 func (d *Database) GetOrCreateSlice(slice_id int) *Slice {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
-    slice, err := d.getSlice(slice_id)
-    if err == nil {
-        return slice
-    }
-    return d.addSlice(slice_id)
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	slice, err := d.getSlice(slice_id)
+	if err == nil {
+		return slice
+	}
+	return d.addSlice(slice_id)
 }
-
 
 ///////// FRAME-SLICE INTERSECT //////////////////////////////////////////////////////////////
 
 type FrameSliceIntersect struct {
-    frame *Frame
-    slice *Slice
+	frame     *Frame
+	slice     *Slice
 	fragments []*Fragment
-	hashring *consistent.Consistent
+	hashring  *consistent.Consistent
 }
 
 func (d *Database) AddFrameSliceIntersect(frame *Frame, slice *Slice) *FrameSliceIntersect {
@@ -232,35 +226,32 @@ func (fsi *FrameSliceIntersect) GetFragment(fragment_id *uuid.UUID) (*Fragment, 
 }
 
 func (fsi *FrameSliceIntersect) AddFragment(fragment *Fragment) {
-    fsi.fragments = append(fsi.fragments, fragment)
-    fsi.hashring.Add(fragment.id.String())
+	fsi.fragments = append(fsi.fragments, fragment)
+	fsi.hashring.Add(fragment.id.String())
 }
-
-
 
 ///////// FRAGMENTS ////////////////////////////////////////////////////////////////////////
 
 // A fragment is a collection of bitmaps within a slice. The fragment contains a reference to the responsible node for that fragment. The node is in the form ip:port
 type Fragment struct {
-	id *uuid.UUID
-    process *Process
+	id      *uuid.UUID
+	process *Process
 }
 
 // rename this one
 func (d *Database) OldGetFragment(bitmap Bitmap, profile_id int) (*Fragment, error) {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
-    slice, _ := d.GetSliceForProfile(profile_id)
-    frame, _ := d.getFrame(bitmap.FrameType)
-    fsi, err := d.GetFrameSliceIntersect(frame, slice)
-    frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	slice, _ := d.GetSliceForProfile(profile_id)
+	frame, _ := d.getFrame(bitmap.FrameType)
+	fsi, err := d.GetFrameSliceIntersect(frame, slice)
+	frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
 	frag_id, err := uuid.ParseHex(frag_id_s)
 	if err != nil {
 		log.Fatal(err)
 	}
 	return fsi.GetFragment(frag_id)
 }
-
 
 /*
 // NOT IMPLEMENTED
@@ -269,21 +260,21 @@ func (d *Database) GetFragmentById(fragment_id *uuid.UUID) *Fragment {
 }
 */
 func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) (*Fragment, error) {
-    fsi, err := d.GetFrameSliceIntersect(frame, slice)
+	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Fatal(err)
 	}
-    return fsi.GetFragment(fragment_id)
+	return fsi.GetFragment(fragment_id)
 }
 
 func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) *Fragment {
-    fsi, err := d.GetFrameSliceIntersect(frame, slice)
+	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Fatal(err)
 	}
-    fragment := Fragment{id: fragment_id}
-    fsi.AddFragment(&fragment)
-    return &fragment
+	fragment := Fragment{id: fragment_id}
+	fsi.AddFragment(&fragment)
+	return &fragment
 }
 
 /*
@@ -319,30 +310,28 @@ func (d *Database) AddFragmentByProcess(frame *Frame, slice *Slice, process *Pro
 */
 
 func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) *Fragment {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
-    fragment, err := d.getFragment(frame, slice, fragment_id)
-    if err == nil {
-        return fragment
-    }
-    return d.addFragment(frame, slice, fragment_id)
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	fragment, err := d.getFragment(frame, slice, fragment_id)
+	if err == nil {
+		return fragment
+	}
+	return d.addFragment(frame, slice, fragment_id)
 }
 
 func (f *Fragment) SetProcess(process *Process) {
-    f.process = process
+	f.process = process
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-
 // Get a slice from a database
 func (d *Database) GetSliceForProfile(profile_id int) (*Slice, error) {
-    slice_id := profile_id / SLICE_WIDTH
-    return d.getSlice(slice_id)
+	slice_id := profile_id / SLICE_WIDTH
+	return d.getSlice(slice_id)
 }
 
-
 type Bitmap struct {
-	Id int
+	Id        int
 	FrameType string
 }

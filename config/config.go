@@ -1,9 +1,9 @@
 package config
 
 import (
-	"log"
 	"io/ioutil"
 	"launchpad.net/goyaml"
+	"log"
 	"os"
 	"sync"
 )

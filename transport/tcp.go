@@ -1,13 +1,13 @@
 package transport
 
 import (
+	"log"
 	"pilosa/core"
 	"pilosa/db"
-	"log"
 )
 
 type TcpTransport struct {
-	port int
+	port  int
 	inbox chan *db.Message
 }
 

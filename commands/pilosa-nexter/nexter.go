@@ -34,7 +34,7 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 	path := "nexter/" + strconv.Itoa(id)
 
 	for {
-		node, err := client.Get(path, false,false)
+		node, err := client.Get(path, false, false)
 		if err != nil {
 			ee, ok := err.(etcd.EtcdError)
 			if ok && ee.ErrorCode == 100 { // node does not exist
@@ -85,7 +85,7 @@ func (self *Nexter) loop() {
 		case req := <-self.reqchan:
 			switch req.(type) {
 			case IncReq:
-                countreq := req.(*IncReq)
+				countreq := req.(*IncReq)
 				counter, ok := counters[countreq.id]
 				if !ok {
 					counter = make(chan uint64)
@@ -94,7 +94,7 @@ func (self *Nexter) loop() {
 				}
 				go func() { countreq.ret <- <-counter }()
 			case DelReq:
-                delreq := req.(*DelReq)
+				delreq := req.(*DelReq)
 				delete(counters, delreq.id)
 				path := "nexter/" + strconv.Itoa(delreq.id)
 				client.Delete(path, true)

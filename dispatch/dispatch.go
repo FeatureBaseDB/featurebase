@@ -1,8 +1,8 @@
 package dispatch
 
 import (
-	"pilosa/core"
 	"log"
+	"pilosa/core"
 )
 
 type CruncherDispatch struct {
