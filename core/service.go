@@ -1,17 +1,21 @@
 package core
 
 import (
-	"github.com/coreos/go-etcd/etcd"
 	"log"
 	"os"
 	"os/signal"
+	"pilosa/config"
 	"pilosa/db"
 	"pilosa/interfaces"
 	"syscall"
+	"github.com/nu7hatch/gouuid"
+
+	"github.com/coreos/go-etcd/etcd"
 )
 
 type Service struct {
 	Stopper
+	Id             *uuid.UUID
 	Etcd           *etcd.Client
 	Cluster        *db.Cluster
 	TopologyMapper *TopologyMapper
@@ -23,11 +27,31 @@ type Service struct {
 
 func NewService() *Service {
 	service := new(Service)
+	service.init_id()
 	service.Etcd = etcd.NewClient(nil)
 	service.Cluster = db.NewCluster()
 	service.TopologyMapper = &TopologyMapper{service, "/pilosa/0"}
 	service.ProcessMapper = NewProcessMapper(service)
 	return service
+}
+
+func (service *Service) init_id() {
+	var id *uuid.UUID
+	var err error
+	id_string := config.GetString("id")
+	if id_string == "" {
+		log.Println("Service id not configured, generating...")
+		id, err = uuid.NewV4()
+		if err != nil {
+			log.Fatal("problem generating uuid")
+		}
+	} else {
+		id, err = uuid.ParseHex(id_string)
+		if err != nil {
+			log.Fatalf("Service id '%s' not valid", id_string)
+		}
+	}
+	service.Id = id
 }
 
 func (service *Service) GetSignals() (chan os.Signal, chan os.Signal) {
