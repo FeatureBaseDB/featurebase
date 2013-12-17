@@ -5,13 +5,13 @@ import (
 
 	//	"io/ioutil"
 	//   "time"
-	"github.com/nu7hatch/gouuid"
+	"pilosa/util"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestServer(t *testing.T) {
 
-	id, _ := uuid.NewV4()
+	id := util.Id()
 	dummy := NewFragmentContainer()
 	dummy.AddFragment("general", "25", 0, id)
 

@@ -2,38 +2,38 @@ package index
 
 import (
 	"errors"
+	. "pilosa/util"
 	"time"
 
 	"github.com/golang/groupcache/lru"
-	"github.com/nu7hatch/gouuid"
 )
 
 type FragmentContainer struct {
-	fragments map[*uuid.UUID]*Fragment
+	fragments map[SUUID]*Fragment
 }
 
 func NewFragmentContainer() *FragmentContainer {
-	return &FragmentContainer{make(map[*uuid.UUID]*Fragment)}
+	return &FragmentContainer{make(map[SUUID]*Fragment)}
 }
 
 type BitmapHandle uint64
 
-func (a *FragmentContainer) GetFragment(frag_guid *uuid.UUID) (*Fragment, bool) {
+func (a *FragmentContainer) GetFragment(frag_id SUUID) (*Fragment, bool) {
 	//lock
-	c, v := a.fragments[frag_guid]
+	c, v := a.fragments[frag_id]
 	return c, v
 }
 
-func (a *FragmentContainer) Intersect(frag_guid *uuid.UUID, bh []BitmapHandle) (BitmapHandle, error) {
-	if fragment, found := a.GetFragment(frag_guid); found {
+func (a *FragmentContainer) Intersect(frag_id SUUID, bh []BitmapHandle) (BitmapHandle, error) {
+	if fragment, found := a.GetFragment(frag_id); found {
 		request := NewIntersect(bh)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
-func (a *FragmentContainer) Union(frag_guid *uuid.UUID, bh []BitmapHandle) (BitmapHandle, error) {
-	if fragment, found := a.GetFragment(frag_guid); found {
+func (a *FragmentContainer) Union(frag_id SUUID, bh []BitmapHandle) (BitmapHandle, error) {
+	if fragment, found := a.GetFragment(frag_id); found {
 		request := NewUnion(bh)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(BitmapHandle), nil
@@ -41,16 +41,16 @@ func (a *FragmentContainer) Union(frag_guid *uuid.UUID, bh []BitmapHandle) (Bitm
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (a *FragmentContainer) Get(frag_guid *uuid.UUID, bitmap_id uint64) (BitmapHandle, error) {
-	if fragment, found := a.GetFragment(frag_guid); found {
+func (a *FragmentContainer) Get(frag_id SUUID, bitmap_id uint64) (BitmapHandle, error) {
+	if fragment, found := a.GetFragment(frag_id); found {
 		request := NewGet(bitmap_id)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
-func (a *FragmentContainer) Count(frag_guid *uuid.UUID, bitmap BitmapHandle) (uint64, error) {
-	if fragment, found := a.GetFragment(frag_guid); found {
+func (a *FragmentContainer) Count(frag_id SUUID, bitmap BitmapHandle) (uint64, error) {
+	if fragment, found := a.GetFragment(frag_id); found {
 		request := NewCount(bitmap)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(uint64), nil
@@ -58,8 +58,8 @@ func (a *FragmentContainer) Count(frag_guid *uuid.UUID, bitmap BitmapHandle) (ui
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (a *FragmentContainer) SetBit(frag_guid *uuid.UUID, bitmap_id uint64, pos uint64) (bool, error) {
-	if fragment, found := a.GetFragment(frag_guid); found {
+func (a *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint64) (bool, error) {
+	if fragment, found := a.GetFragment(frag_id); found {
 		request := NewSetBit(bitmap_id, pos)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(bool), nil
@@ -67,9 +67,9 @@ func (a *FragmentContainer) SetBit(frag_guid *uuid.UUID, bitmap_id uint64, pos u
 	return false, errors.New("Invalid Bitmap Handle")
 }
 
-func (a *FragmentContainer) AddFragment(frame string, db string, slice int, guid *uuid.UUID) {
-	f := NewFragment(guid, db, slice, frame)
-	a.fragments[guid] = f
+func (a *FragmentContainer) AddFragment(frame string, db string, slice int, id SUUID) {
+	f := NewFragment(id, db, slice, frame)
+	a.fragments[id] = f
 	go f.ServeFragment()
 }
 
@@ -79,18 +79,18 @@ type Pilosa interface {
 }
 
 type Fragment struct {
-	requestChan   chan Command
-	fragment_uuid *uuid.UUID
-	impl          Pilosa
-	counter       uint64
-	slice         int
-	cache         *lru.Cache
+	requestChan chan Command
+	fragment_id SUUID
+	impl        Pilosa
+	counter     uint64
+	slice       int
+	cache       *lru.Cache
 }
 
-func NewFragment(guid *uuid.UUID, db string, slice int, frame string) *Fragment {
+func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
 	f := new(Fragment)
 	f.requestChan = make(chan Command, 64)
-	f.fragment_uuid = guid
+	f.fragment_id = frag_id
 	f.cache = lru.New(10000)
 	f.impl = NewGeneral(db, slice, NewMemoryStorage())
 	f.slice = slice
