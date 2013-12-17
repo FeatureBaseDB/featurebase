@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,9 @@ func init() {
 
 type SUUID uint64
 
+func leftPad(s string, padStr string, pLen int) string {
+	return strings.Repeat(padStr, pLen) + s
+}
 func Id() SUUID {
 	millis := uint64(time.Now().UTC().UnixNano())
 	id := millis << (64 - 41)
@@ -33,7 +37,15 @@ func SUUID_to_Hex(a SUUID) string {
 	return hex.EncodeToString(buf.Bytes())
 }
 func Hex_to_SUUID(str string) SUUID {
-	b, _ := hex.DecodeString(str)
+	l := len(str)
+	var m string
+	if l < 16 {
+		m = leftPad(str, "0", 16-l)
+	} else {
+		m = str
+	}
+
+	b, _ := hex.DecodeString(m)
 	num := binary.BigEndian.Uint64(b)
 	return SUUID(num)
 }

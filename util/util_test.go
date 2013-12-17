@@ -25,6 +25,13 @@ func init() {
 }
 */
 func TestId(t *testing.T) {
+	Convey("Test Small", t, func() {
+		s := "1"
+		//s := "0000000000000001"
+		//s := "000000000000001"
+		b2 := Hex_to_SUUID(s)
+		So(1, ShouldEqual, b2)
+	})
 	Convey("Basic Usage", t, func() {
 		bc1 := Id()
 		println(SUUID_to_Hex(bc1))
