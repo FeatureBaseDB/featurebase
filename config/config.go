@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 	"sync"
-
+    "github.com/nu7hatch/gouuid"
 	"launchpad.net/goyaml"
 )
 
@@ -104,4 +104,15 @@ func (self *Config) GetString(key string) string {
 		}
 	}
 	return ""
+}
+
+func GetUUID(key string) *uuid.UUID {
+	value, ok := GetSafe(key)
+	if ok {
+		value_uuid, err := uuid.ParseHex(value.(string))
+		if err == nil {
+			return value_uuid
+		}
+	}
+	return nil
 }

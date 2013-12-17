@@ -2,10 +2,10 @@ package db
 
 import (
 	"github.com/davecgh/go-spew/spew"
-	"github.com/nu7hatch/gouuid"
 	. "github.com/smartystreets/goconvey/convey"
 	"log"
 	"testing"
+    "pilosa/util"
 )
 
 func TestTopology(t *testing.T) {
@@ -18,7 +18,7 @@ func TestTopology(t *testing.T) {
 		frame := database.GetOrCreateFrame("general")
 		slice := database.GetOrCreateSlice(0)
 
-		fragment_id, _ := uuid.ParseHex("6a9aea17-2915-4eb4-858f-a8d7d4dc0a1e")
+		fragment_id := util.Id()
 		spew.Dump(fragment_id)
 		database.GetOrCreateFragment(frame, slice, fragment_id)
 

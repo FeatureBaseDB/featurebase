@@ -14,11 +14,8 @@ type Cruncher struct {
 	api        *index.FragmentContainer
 }
 
-func (cruncher *Cruncher) Run(port int) {
+func (cruncher *Cruncher) Run() {
 	spew.Dump("Cruncher.Run")
-	spew.Dump(port)
-
-	cruncher.api = index.NewFragmentContainer()
 	/*
 	   bh = api.Get(frag,tileid)
 	   api.SetBit(frag,bh,1)
@@ -26,7 +23,6 @@ func (cruncher *Cruncher) Run(port int) {
 	   api.Union(frag,[bh1,bh2])
 	   api.Intersect(frag,[bh1,bh2])
 	*/
-
 	cruncher.Service.Run()
 }
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"pilosa/util"
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/nu7hatch/gouuid"
@@ -60,7 +61,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 	var database *db.Database
 	var frame *db.Frame
 	var fragment *db.Fragment
-	var fragment_uuid *uuid.UUID
+	var fragment_id util.SUUID
 	var slice *db.Slice
 	var process_uuid *uuid.UUID
 	var process *db.Process
@@ -98,11 +99,11 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		}
 	}
 	if len(bits) > 7 {
-		fragment_uuid, err = uuid.ParseHex(bits[7])
+		fragment_id = util.Hex_to_SUUID(bits[7])
 		if err != nil {
 			return err
 		}
-		fragment = database.GetOrCreateFragment(frame, slice, fragment_uuid)
+		fragment = database.GetOrCreateFragment(frame, slice, fragment_id)
 	}
 
 	if len(bits) > 8 {
@@ -115,6 +116,10 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		}
 		process = db.NewProcess(process_uuid)
 		fragment.SetProcess(process)
+
+		//if service.process_id == process_uuid:
+		//    service.index.AddFragment(bits[3], bits[1], slice_int, fragment_uuid)
+
 	}
 	return err
 }

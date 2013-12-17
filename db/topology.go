@@ -1,15 +1,16 @@
 package db
 
 import (
-	"github.com/stathat/consistent"
-	//"github.com/davecgh/go-spew/spew"
 	"errors"
 	"fmt"
 	"log"
+	"pilosa/util"
 	"strconv"
 	"strings"
 	"sync"
+
 	"github.com/nu7hatch/gouuid"
+	"github.com/stathat/consistent"
 )
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")
@@ -268,7 +269,7 @@ func (d *Database) GetFrameSliceIntersect(frame *Frame, slice *Slice) (*FrameSli
 	return nil, FrameSliceIntersectDoesNotExistError
 }
 
-func (fsi *FrameSliceIntersect) GetFragment(fragment_id *uuid.UUID) (*Fragment, error) {
+func (fsi *FrameSliceIntersect) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
 	for _, fragment := range fsi.fragments {
 		if fragment.id == fragment_id {
 			return fragment, nil
@@ -279,14 +280,14 @@ func (fsi *FrameSliceIntersect) GetFragment(fragment_id *uuid.UUID) (*Fragment, 
 
 func (fsi *FrameSliceIntersect) AddFragment(fragment *Fragment) {
 	fsi.fragments = append(fsi.fragments, fragment)
-	fsi.hashring.Add(fragment.id.String())
+	fsi.hashring.Add(util.SUUID_to_Hex(fragment.id))
 }
 
 ///////// FRAGMENTS ////////////////////////////////////////////////////////////////////////
 
 // A fragment is a collection of bitmaps within a slice. The fragment contains a reference to the responsible node for that fragment. The node is in the form ip:port
 type Fragment struct {
-	id      *uuid.UUID
+	id      util.SUUID
 	process *Process
 }
 
@@ -298,10 +299,10 @@ func (d *Database) OldGetFragment(bitmap Bitmap, profile_id int) (*Fragment, err
 	frame, _ := d.getFrame(bitmap.FrameType)
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
-	frag_id, err := uuid.ParseHex(frag_id_s)
 	if err != nil {
 		log.Fatal(err)
 	}
+	frag_id := util.Hex_to_SUUID(frag_id_s)
 	return fsi.GetFragment(frag_id)
 }
 
@@ -311,7 +312,7 @@ func (d *Database) OldGetFragment(bitmap Bitmap, profile_id int) (*Fragment, err
 func (d *Database) GetFragmentById(fragment_id *uuid.UUID) *Fragment {
 }
 */
-func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) (*Fragment, error) {
+func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) (*Fragment, error) {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Fatal(err)
@@ -319,7 +320,7 @@ func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUI
 	return fsi.GetFragment(fragment_id)
 }
 
-func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) *Fragment {
+func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Fatal(err)
@@ -361,7 +362,7 @@ func (d *Database) AddFragmentByProcess(frame *Frame, slice *Slice, process *Pro
 }
 */
 
-func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id *uuid.UUID) *Fragment {
+func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	fragment, err := d.getFragment(frame, slice, fragment_id)

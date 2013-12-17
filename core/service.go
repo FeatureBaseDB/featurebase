@@ -8,9 +8,9 @@ import (
 	"pilosa/db"
 	"pilosa/interfaces"
 	"syscall"
-	"github.com/nu7hatch/gouuid"
 
 	"github.com/coreos/go-etcd/etcd"
+	"github.com/nu7hatch/gouuid"
 )
 
 type Service struct {
@@ -24,6 +24,7 @@ type Service struct {
 	Transport      interfaces.Transporter
 	Dispatch       interfaces.Dispatcher
 	WebService     *WebService
+	process_id     *uuid.UUID
 }
 
 func NewService() *Service {
@@ -35,6 +36,7 @@ func NewService() *Service {
 	service.ProcessMapper = NewProcessMapper(service, "/pilosa/0")
 	service.ProcessMap = NewProcessMap()
 	service.WebService = NewWebService(service)
+	service.process_id = config.GetUUID("process_id")
 	return service
 }
 
