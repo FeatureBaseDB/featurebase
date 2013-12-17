@@ -110,18 +110,17 @@ type BitArgs struct {
 	Bit_pos   uint64
 }
 type CmdSetBit struct {
-	meta    *Responder
-	bitmap  BitmapHandle
-	bit_pos uint64
+	meta      *Responder
+	bitmap_id uint64
+	bit_pos   uint64
 }
 
-func NewSetBit(bitmap BitmapHandle, bit_pos uint64) *CmdSetBit {
-	result := &CmdSetBit{NewResponder("SetBit"), bitmap, bit_pos}
+func NewSetBit(bitmap_id uint64, bit_pos uint64) *CmdSetBit {
+	result := &CmdSetBit{NewResponder("SetBit"), bitmap_id, bit_pos}
 	return result
 }
 func (cmd *CmdSetBit) Execute(f *Fragment) Calculation {
-	bitmap, _ := f.getBitmap(cmd.bitmap)
-	return SetBit(bitmap, cmd.bit_pos)
+	return f.impl.SetBit(cmd.bitmap_id, cmd.bit_pos)
 }
 func (cmd *CmdSetBit) GetResponder() *Responder {
 	return cmd.meta

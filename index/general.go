@@ -30,3 +30,7 @@ func (f *General) Get(bitmap_id uint64) IBitmap {
 	f.bitmap_cache.Add(bitmap_id, bm)
 	return bm.(*Bitmap)
 }
+func (f *General) SetBit(bitmap_id uint64, bit_pos uint64) bool {
+	bm := f.Get(bitmap_id)
+	return SetBit(bm, bit_pos)
+}

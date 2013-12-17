@@ -21,21 +21,25 @@ func TestServer(t *testing.T) {
 	})
 
 	Convey("SetBit/Count 1 1", t, func() {
-		bh, _ := dummy.Get(id, 1234)
-		changed, _ := dummy.SetBit(id, bh, 1)
+		//	bh, _ := dummy.Get(id, 1234)
+		bi1 := uint64(1234)
+		changed, _ := dummy.SetBit(id, bi1, 1)
 		So(changed, ShouldEqual, true)
-		changed, _ = dummy.SetBit(id, bh, 1)
+		changed, _ = dummy.SetBit(id, bi1, 1)
 		So(changed, ShouldEqual, false)
+		bh, _ := dummy.Get(id, bi1)
 		num, _ := dummy.Count(id, bh)
 		So(num, ShouldEqual, 1)
 	})
 
 	Convey("Union/Intersect", t, func() {
-		bh1, _ := dummy.Get(id, 1234)
-		//		dummy.SetBit(id, bh1, 1)
+		bi1 := uint64(1234)
+		bi2 := uint64(4321)
 
-		bh2, _ := dummy.Get(id, 4321)
-		dummy.SetBit(id, bh2, 2)
+		dummy.SetBit(id, bi2, 2) //set_bit creates the bitmap
+
+		bh1, _ := dummy.Get(id, bi1)
+		bh2, _ := dummy.Get(id, bi2)
 
 		handles := []BitmapHandle{bh1, bh2}
 		result, _ := dummy.Union(id, handles)

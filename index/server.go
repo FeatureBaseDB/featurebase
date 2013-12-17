@@ -58,9 +58,9 @@ func (a *FragmentContainer) Count(frag_guid *uuid.UUID, bitmap BitmapHandle) (ui
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (a *FragmentContainer) SetBit(frag_guid *uuid.UUID, bitmap BitmapHandle, pos uint64) (bool, error) {
+func (a *FragmentContainer) SetBit(frag_guid *uuid.UUID, bitmap_id uint64, pos uint64) (bool, error) {
 	if fragment, found := a.GetFragment(frag_guid); found {
-		request := NewSetBit(bitmap, pos)
+		request := NewSetBit(bitmap_id, pos)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(bool), nil
 	}
@@ -75,6 +75,7 @@ func (a *FragmentContainer) AddFragment(frame string, db string, slice int, guid
 
 type Pilosa interface {
 	Get(id uint64) IBitmap
+	SetBit(id uint64, bit_pos uint64) bool
 }
 
 type Fragment struct {
