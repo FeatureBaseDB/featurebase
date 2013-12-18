@@ -9,7 +9,7 @@ import (
 )
 
 type Cruncher struct {
-	core.Service
+	*core.Service
 	close_chan chan bool
 	api        *index.FragmentContainer
 }
@@ -33,7 +33,7 @@ func (cruncher *Cruncher) Run(port int) {
 func NewCruncher() *Cruncher {
 	service := core.NewService()
 	fragment_container := index.NewFragmentContainer()
-	cruncher := Cruncher{*service, make(chan bool), fragment_container}
+	cruncher := Cruncher{service, make(chan bool), fragment_container}
 	cruncher.Transport = transport.NewTcpTransport(service)
 	cruncher.Dispatch = dispatch.NewCruncherDispatch(service)
 	return &cruncher
