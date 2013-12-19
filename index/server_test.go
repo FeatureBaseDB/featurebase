@@ -52,4 +52,15 @@ func TestServer(t *testing.T) {
 		num, _ = dummy.Count(id, result)
 		So(num, ShouldEqual, 0)
 	})
+	Convey("Bytes", t, func() {
+		bi1 := uint64(1234)
+		bh1, _ := dummy.Get(id, bi1)
+		before, _ := dummy.Count(id, bh1)
+
+		bytes, _ := dummy.GetBytes(id, bh1)
+		bh2, _ := dummy.FromBytes(id, bytes)
+
+		after, _ := dummy.Count(id, bh2)
+		So(before, ShouldEqual, after)
+	})
 }

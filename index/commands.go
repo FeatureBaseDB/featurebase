@@ -41,6 +41,7 @@ type Command interface {
 	Execute(*Fragment) Calculation
 	GetResponder() *Responder
 }
+
 type CmdGet struct {
 	meta      *Responder
 	bitmap_id uint64
@@ -124,4 +125,39 @@ func (cmd *CmdSetBit) Execute(f *Fragment) Calculation {
 }
 func (cmd *CmdSetBit) GetResponder() *Responder {
 	return cmd.meta
+}
+
+type CmdGetBytes struct {
+	meta   *Responder
+	bitmap BitmapHandle
+}
+
+func NewGetBytes(bh BitmapHandle) *CmdGetBytes {
+	return &CmdGetBytes{NewResponder("GetBytes"), bh}
+}
+
+func (cmd *CmdGetBytes) GetResponder() *Responder {
+	return cmd.meta
+}
+func (cmd *CmdGetBytes) Execute(f *Fragment) Calculation {
+	bm, _ := f.getBitmap(cmd.bitmap)
+	return bm.ToBytes()
+}
+
+type CmdFromBytes struct {
+	meta  *Responder
+	bytes []byte
+}
+
+func NewFromBytes(bytes []byte) *CmdFromBytes {
+	return &CmdFromBytes{NewResponder("FromBytes"), bytes}
+}
+
+func (cmd *CmdFromBytes) GetResponder() *Responder {
+	return cmd.meta
+}
+func (cmd *CmdFromBytes) Execute(f *Fragment) Calculation {
+	result := NewBitmap()
+	result.FromBytes(cmd.bytes)
+	return f.AllocHandle(result)
 }
