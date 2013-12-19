@@ -11,23 +11,16 @@ import (
 )
 
 type Config struct {
-	config map[string]interface{}
-	lock   sync.RWMutex
-	loaded bool
+	config   map[string]interface{}
+	lock     sync.RWMutex
+	filename string
+	loaded   bool
 }
 
 var config *Config
 
 func init() {
-	config_file := os.Getenv("PILOSA_CONFIG")
-	if config_file == "" {
-		config_file = "pilosa.yaml"
-	}
-	var err error
-	config, err = NewConfig(config_file)
-	if err != nil {
-		log.Fatal(err)
-	}
+	config = NewConfig("")
 }
 
 func GetSafe(key string) (interface{}, bool) {
@@ -46,18 +39,38 @@ func GetString(key string) string {
 	return config.GetString(key)
 }
 
-func NewConfig(filename string) (*Config, error) {
+func NewConfig(filename string) *Config {
 	self := Config{}
 	self.config = make(map[string]interface{})
-	data, err := ioutil.ReadFile(filename)
+	self.filename = filename
+	return &self
+}
+
+func (self *Config) load() error {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+	if self.loaded {
+		return nil
+	}
+	config_file := self.filename
+	if config_file == "" {
+		config_file = os.Getenv("PILOSA_CONFIG")
+		if config_file == "" {
+			log.Println("PILOSA_CONFIG not set, defaulting to pilosa.yaml")
+			config_file = "pilosa.yaml"
+		}
+	}
+	data, err := ioutil.ReadFile(config_file)
 	if err != nil {
-		return nil, errors.New("Problem with config file: " + err.Error())
+		return errors.New("Problem with config file: " + err.Error())
 	}
 	goyaml.Unmarshal(data, self.config)
-	return &self, nil
+	self.loaded = true
+	return nil
 }
 
 func (self *Config) GetSafe(key string) (interface{}, bool) {
+	self.load()
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 	value, ok := self.config[key]
@@ -65,6 +78,7 @@ func (self *Config) GetSafe(key string) (interface{}, bool) {
 }
 
 func (self *Config) Get(key string) interface{} {
+	self.load()
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 	return self.config[key]
