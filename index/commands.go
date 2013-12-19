@@ -1,6 +1,11 @@
 package index
 
-import "time"
+import (
+	"bytes"
+	"compress/gzip"
+	"io/ioutil"
+	"time"
+)
 
 type Rank struct {
 	Key, Count uint64
@@ -125,12 +130,19 @@ func NewGetBytes(bh BitmapHandle) *CmdGetBytes {
 
 func (cmd *CmdGetBytes) Execute(f *Fragment) Calculation {
 	bm, _ := f.getBitmap(cmd.bitmap)
-	return bm.ToBytes()
+	//*Compress it
+	var b bytes.Buffer
+	w := gzip.NewWriter(&b)
+	w.Write(bm.ToBytes())
+	w.Flush()
+	w.Close()
+
+	return b.Bytes()
 }
 
 type CmdFromBytes struct {
 	*Responder
-	bytes []byte
+	compressed_bytes []byte
 }
 
 func NewFromBytes(bytes []byte) *CmdFromBytes {
@@ -138,7 +150,10 @@ func NewFromBytes(bytes []byte) *CmdFromBytes {
 }
 
 func (cmd *CmdFromBytes) Execute(f *Fragment) Calculation {
+	reader, _ := gzip.NewReader(bytes.NewReader(cmd.compressed_bytes))
+	b, _ := ioutil.ReadAll(reader)
+
 	result := NewBitmap()
-	result.FromBytes(cmd.bytes)
+	result.FromBytes(b)
 	return f.AllocHandle(result)
 }
