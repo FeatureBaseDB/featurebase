@@ -170,3 +170,21 @@ func (self *CmdEmpty) Execute(f *Fragment) Calculation {
 	result := NewBitmap()
 	return f.AllocHandle(result)
 }
+
+type CmdGetList struct {
+	*Responder
+	bitmap_ids []uint64
+}
+
+func NewGetList(bitmap_ids []uint64) *CmdGetList {
+	return &CmdGetList{NewResponder("GetList"), bitmap_ids}
+}
+
+func (self *CmdGetList) Execute(f *Fragment) Calculation {
+	ret := make([]BitmapHandle, len(self.bitmap_ids))
+	for i, v := range self.bitmap_ids {
+		ret[i] = f.NewHandle(v)
+	}
+
+	return ret
+}

@@ -58,6 +58,16 @@ func (self *FragmentContainer) Get(frag_id SUUID, bitmap_id uint64) (BitmapHandl
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
+
+func (self *FragmentContainer) GetList(frag_id SUUID, bitmap_id []uint64) ([]BitmapHandle, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
+		request := NewGetList(bitmap_id)
+		fragment.requestChan <- request
+		return request.Response().answer.([]BitmapHandle), nil
+	}
+	return nil, errors.New("Invalid Bitmap Handle")
+}
+
 func (self *FragmentContainer) Count(frag_id SUUID, bitmap BitmapHandle) (uint64, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewCount(bitmap)

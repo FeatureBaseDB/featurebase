@@ -68,4 +68,11 @@ func TestServer(t *testing.T) {
 		before, _ := dummy.Count(id, bh)
 		So(before, ShouldEqual, 0)
 	})
+
+	Convey("GetList ", t, func() {
+		bhs, _ := dummy.GetList(id, []uint64{1234, 4321, 789})
+		result, _ := dummy.Union(id, bhs)
+		num, _ := dummy.Count(id, result)
+		So(num, ShouldNotEqual, 2)
+	})
 }
