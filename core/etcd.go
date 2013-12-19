@@ -5,11 +5,11 @@ import (
 	"log"
 	"pilosa/config"
 	"pilosa/db"
+	"pilosa/util"
 	"strconv"
 	"strings"
 	"sync"
 
-	"pilosa/util"
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/nu7hatch/gouuid"
@@ -29,7 +29,6 @@ func (self *TopologyMapper) Run() {
 	for _, node := range flatten(resp.Node) {
 		err := self.handlenode(node)
 		if err != nil {
-			spew.Dump(node)
 			log.Println(err)
 		}
 	}
@@ -63,6 +62,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 	var fragment *db.Fragment
 	var fragment_id util.SUUID
 	var slice *db.Slice
+	var slice_int int
 	var process_uuid *uuid.UUID
 	var process *db.Process
 	var err error
@@ -87,7 +87,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		}
 	}
 	if len(bits) > 5 {
-		slice_int, err := strconv.Atoi(bits[5])
+		slice_int, err = strconv.Atoi(bits[5])
 		if err != nil {
 			return err
 		}
@@ -117,8 +117,9 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		process = db.NewProcess(process_uuid)
 		fragment.SetProcess(process)
 
-		//if service.process_id == process_uuid:
-		//    service.index.AddFragment(bits[3], bits[1], slice_int, fragment_uuid)
+		if self.service.process_id.String() == process_uuid.String() {
+			self.service.Process.AddFragment(bits[1], bits[3], slice_int, fragment_id)
+		}
 
 	}
 	return err

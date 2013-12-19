@@ -6,7 +6,8 @@ import (
 	"log"
 	"os"
 	"sync"
-    "github.com/nu7hatch/gouuid"
+
+	"github.com/nu7hatch/gouuid"
 	"launchpad.net/goyaml"
 )
 

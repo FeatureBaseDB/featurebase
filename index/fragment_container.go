@@ -115,7 +115,7 @@ func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint6
 	return false, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) AddFragment(frame string, db string, slice int, id SUUID) {
+func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id SUUID) {
 	f := NewFragment(id, db, slice, frame)
 	self.fragments[id] = f
 	go f.ServeFragment()

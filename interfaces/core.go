@@ -5,7 +5,7 @@ import (
 )
 
 type Transporter interface {
-	Init() error
+	Run()
 	Close()
 	Send(*db.Message)
 	Receive() *db.Message

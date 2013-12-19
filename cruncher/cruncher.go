@@ -1,11 +1,12 @@
 package cruncher
 
 import (
-	"github.com/davecgh/go-spew/spew"
 	"pilosa/core"
 	"pilosa/dispatch"
 	"pilosa/index"
 	"pilosa/transport"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 type Cruncher struct {

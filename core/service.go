@@ -6,10 +6,12 @@ import (
 	"os/signal"
 	"pilosa/config"
 	"pilosa/db"
+	"pilosa/index"
 	"pilosa/interfaces"
 	"syscall"
 
 	"github.com/coreos/go-etcd/etcd"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/nu7hatch/gouuid"
 )
 
@@ -25,9 +27,11 @@ type Service struct {
 	Dispatch       interfaces.Dispatcher
 	WebService     *WebService
 	process_id     *uuid.UUID
+	Process        *index.FragmentContainer
 }
 
 func NewService() *Service {
+	spew.Dump("NewService")
 	service := new(Service)
 	service.init_id()
 	service.Etcd = etcd.NewClient(nil)
@@ -37,6 +41,7 @@ func NewService() *Service {
 	service.ProcessMap = NewProcessMap()
 	service.WebService = NewWebService(service)
 	service.process_id = config.GetUUID("process_id")
+	service.Process = index.NewFragmentContainer()
 	return service
 }
 
@@ -72,6 +77,8 @@ func (service *Service) Run() {
 	go service.TopologyMapper.Run()
 	go service.ProcessMapper.Run()
 	go service.WebService.Run()
+	go service.Transport.Run()
+	go service.Dispatch.Run()
 
 	sigterm, sighup := service.GetSignals()
 	for {
