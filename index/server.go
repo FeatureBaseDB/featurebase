@@ -18,22 +18,22 @@ func NewFragmentContainer() *FragmentContainer {
 
 type BitmapHandle uint64
 
-func (a *FragmentContainer) GetFragment(frag_id SUUID) (*Fragment, bool) {
+func (self *FragmentContainer) GetFragment(frag_id SUUID) (*Fragment, bool) {
 	//lock
-	c, v := a.fragments[frag_id]
+	c, v := self.fragments[frag_id]
 	return c, v
 }
 
-func (a *FragmentContainer) Intersect(frag_id SUUID, bh []BitmapHandle) (BitmapHandle, error) {
-	if fragment, found := a.GetFragment(frag_id); found {
+func (self *FragmentContainer) Intersect(frag_id SUUID, bh []BitmapHandle) (BitmapHandle, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewIntersect(bh)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
-func (a *FragmentContainer) Union(frag_id SUUID, bh []BitmapHandle) (BitmapHandle, error) {
-	if fragment, found := a.GetFragment(frag_id); found {
+func (self *FragmentContainer) Union(frag_id SUUID, bh []BitmapHandle) (BitmapHandle, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewUnion(bh)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(BitmapHandle), nil
@@ -41,16 +41,16 @@ func (a *FragmentContainer) Union(frag_id SUUID, bh []BitmapHandle) (BitmapHandl
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (a *FragmentContainer) Get(frag_id SUUID, bitmap_id uint64) (BitmapHandle, error) {
-	if fragment, found := a.GetFragment(frag_id); found {
+func (self *FragmentContainer) Get(frag_id SUUID, bitmap_id uint64) (BitmapHandle, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGet(bitmap_id)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
-func (a *FragmentContainer) Count(frag_id SUUID, bitmap BitmapHandle) (uint64, error) {
-	if fragment, found := a.GetFragment(frag_id); found {
+func (self *FragmentContainer) Count(frag_id SUUID, bitmap BitmapHandle) (uint64, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewCount(bitmap)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(uint64), nil
@@ -58,8 +58,8 @@ func (a *FragmentContainer) Count(frag_id SUUID, bitmap BitmapHandle) (uint64, e
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (a *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint64) (bool, error) {
-	if fragment, found := a.GetFragment(frag_id); found {
+func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint64) (bool, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewSetBit(bitmap_id, pos)
 		fragment.requestChan <- request
 		return request.GetResponder().Response().answer.(bool), nil
@@ -67,9 +67,9 @@ func (a *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint64) 
 	return false, errors.New("Invalid Bitmap Handle")
 }
 
-func (a *FragmentContainer) AddFragment(frame string, db string, slice int, id SUUID) {
+func (self *FragmentContainer) AddFragment(frame string, db string, slice int, id SUUID) {
 	f := NewFragment(id, db, slice, frame)
-	a.fragments[id] = f
+	self.fragments[id] = f
 	go f.ServeFragment()
 }
 
@@ -97,62 +97,62 @@ func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
 	return f
 }
 
-func (f *Fragment) getBitmap(bitmap BitmapHandle) (IBitmap, bool) {
-	bm, ok := f.cache.Get(bitmap)
+func (self *Fragment) getBitmap(bitmap BitmapHandle) (IBitmap, bool) {
+	bm, ok := self.cache.Get(bitmap)
 	return bm.(IBitmap), ok
 }
 
-func (f *Fragment) NewHandle(bitmap_id uint64) BitmapHandle {
-	bm := f.impl.Get(bitmap_id)
-	return f.AllocHandle(bm)
+func (self *Fragment) NewHandle(bitmap_id uint64) BitmapHandle {
+	bm := self.impl.Get(bitmap_id)
+	return self.AllocHandle(bm)
 	//given a bitmap_id return a newly allocated  handle
 }
-func (f *Fragment) AllocHandle(bm IBitmap) BitmapHandle {
-	handle := f.nextHandle()
-	f.cache.Add(handle, bm)
+func (self *Fragment) AllocHandle(bm IBitmap) BitmapHandle {
+	handle := self.nextHandle()
+	self.cache.Add(handle, bm)
 	return handle
 }
 
-func (f *Fragment) nextHandle() BitmapHandle {
+func (self *Fragment) nextHandle() BitmapHandle {
 	millis := uint64(time.Now().UTC().UnixNano())
 	id := millis << (64 - 41)
-	id |= uint64(f.slice) << (64 - 41 - 13)
-	id |= f.counter % 1024
-	f.counter += 1
+	id |= uint64(self.slice) << (64 - 41 - 13)
+	id |= self.counter % 1024
+	self.counter += 1
 	return BitmapHandle(id)
 }
 
-func (f *Fragment) union(bitmaps []BitmapHandle) BitmapHandle {
+func (self *Fragment) union(bitmaps []BitmapHandle) BitmapHandle {
 	result := NewBitmap()
 	for i, id := range bitmaps {
-		bm, _ := f.getBitmap(id)
+		bm, _ := self.getBitmap(id)
 		if i == 0 {
 			result = bm
 		} else {
 			result = Union(result, bm)
 		}
 	}
-	return f.AllocHandle(result)
+	return self.AllocHandle(result)
 }
-func (f *Fragment) intersect(bitmaps []BitmapHandle) BitmapHandle {
+func (self *Fragment) intersect(bitmaps []BitmapHandle) BitmapHandle {
 	var result IBitmap
 	for i, id := range bitmaps {
-		bm, _ := f.getBitmap(id)
+		bm, _ := self.getBitmap(id)
 		if i == 0 {
 			result = Clone(bm)
 		} else {
 			result = Intersection(result, bm)
 		}
 	}
-	return f.AllocHandle(result)
+	return self.AllocHandle(result)
 }
 
-func (f *Fragment) ServeFragment() {
+func (self *Fragment) ServeFragment() {
 	for {
-		req := <-f.requestChan
+		req := <-self.requestChan
 		start := time.Now()
 		responder := req.GetResponder()
-		answer := req.Execute(f)
+		answer := req.Execute(self)
 		delta := time.Since(start)
 		/*
 			var buffer bytes.Buffer

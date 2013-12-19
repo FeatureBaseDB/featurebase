@@ -1,9 +1,9 @@
 package index
 
 import (
-	. "github.com/smartystreets/goconvey/convey"
 	"testing"
 	"time"
+	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestBitmaps(t *testing.T) {
@@ -15,6 +15,7 @@ func TestBitmaps(t *testing.T) {
 		bc1 := BitCount(bm)
 		bc2 := bm.Count()
 		So(bc1, ShouldEqual, bc2)
+		So(bc1, ShouldEqual, 4096)
 	})
 	Convey("function AND_NOT 1 and not 0 => true ", t, func() {
 		bm1 := CreateRBBitmap()

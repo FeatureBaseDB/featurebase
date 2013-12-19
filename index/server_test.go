@@ -11,7 +11,8 @@ import (
 
 func TestServer(t *testing.T) {
 
-	id := util.Id()
+	//id := util.Id()
+	id := util.Hex_to_SUUID("1")
 	dummy := NewFragmentContainer()
 	dummy.AddFragment("general", "25", 0, id)
 

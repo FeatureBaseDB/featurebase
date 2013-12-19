@@ -17,6 +17,15 @@ const (
 	COUNTERMASK  = uint64(0xffffffffffffffff)
 )
 
+var (
+	COUNTER_KEY int64
+)
+
+func init() {
+	var dumb = COUNTERMASK
+	COUNTER_KEY = int64(dumb)
+}
+
 //
 type IntSet struct {
 	set map[int]bool
@@ -451,7 +460,7 @@ func deref(pos uint64) Address {
 	return Address{ChunkKey, BlockIndex, bit_offset}
 }
 
-func SetBit(b IBitmap, position uint64) bool {
+func SetBit(b IBitmap, position uint64) (bool, *Chunk, Address) {
 	//Chunk,Chunk_index,bit_offset :=deref(position)
 	address := deref(position)
 
@@ -467,7 +476,7 @@ func SetBit(b IBitmap, position uint64) bool {
 	if data_changed {
 		b.Inc()
 	}
-	return data_changed
+	return data_changed, node, address
 }
 func BitCount(b IBitmap) uint64 {
 	var total uint64

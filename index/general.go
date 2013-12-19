@@ -1,8 +1,6 @@
 package index
 
-import (
-	"github.com/golang/groupcache/lru"
-)
+import "github.com/golang/groupcache/lru"
 
 type General struct {
 	bitmap_cache *lru.Cache
@@ -21,16 +19,23 @@ func NewGeneral(db string, slice int, s Storage) *General {
 
 }
 
-func (f *General) Get(bitmap_id uint64) IBitmap {
-	bm, ok := f.bitmap_cache.Get(bitmap_id)
+func (self *General) Get(bitmap_id uint64) IBitmap {
+	bm, ok := self.bitmap_cache.Get(bitmap_id)
 	if ok {
 		return bm.(*Bitmap)
 	}
-	bm = f.storage.Fetch(bitmap_id, f.db, f.slice)
-	f.bitmap_cache.Add(bitmap_id, bm)
+	bm = self.storage.Fetch(bitmap_id, self.db, self.slice)
+	self.bitmap_cache.Add(bitmap_id, bm)
 	return bm.(*Bitmap)
 }
-func (f *General) SetBit(bitmap_id uint64, bit_pos uint64) bool {
-	bm := f.Get(bitmap_id)
-	return SetBit(bm, bit_pos)
+func (self *General) SetBit(bitmap_id uint64, bit_pos uint64) bool {
+	bm := self.Get(bitmap_id)
+	change, chunk, address := SetBit(bm, bit_pos)
+	if change {
+		val := chunk.Value.Block[address.BlockIndex]
+		self.storage.StoreBlock(int64(bitmap_id), self.db, self.slice, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
+		self.storage.StoreBlock(int64(bitmap_id), self.db, self.slice, COUNTER_KEY, 0, int64(bm.Count()))
+
+	}
+	return change
 }

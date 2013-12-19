@@ -9,6 +9,11 @@
         "version": "8a4461a",
         "type": "git"
     },
+    "gkvlite": {
+        "repo": "github.com/steveyen/gkvlite",
+        "version": "master",
+        "type": "git"
+    },
     "goconvey": {
         "repo": "github.com/smartystreets/goconvey/convey",
         "version": "master",

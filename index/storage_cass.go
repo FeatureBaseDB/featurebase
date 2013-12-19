@@ -4,6 +4,7 @@ package index
 
 import (
 	"log"
+
 	"tux21b.org/v1/gocql"
 )
 
