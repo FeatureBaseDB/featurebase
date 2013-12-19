@@ -30,14 +30,14 @@ type Responder struct {
 func NewResponder(query_type string) *Responder {
 	return &Responder{make(chan Result), query_type}
 }
-func (cmd *Responder) QueryType() string {
-	return cmd.query_type
+func (self *Responder) QueryType() string {
+	return self.query_type
 }
-func (cmd *Responder) Response() Result {
-	return <-cmd.result
+func (self *Responder) Response() Result {
+	return <-self.result
 }
-func (cmd *Responder) ResponseChannel() chan Result {
-	return cmd.result
+func (self *Responder) ResponseChannel() chan Result {
+	return self.result
 }
 
 type Calculation interface{}
@@ -58,8 +58,8 @@ func NewGet(bitmap_id uint64) *CmdGet {
 	return &CmdGet{NewResponder("Get"), bitmap_id}
 }
 
-func (cmd *CmdGet) Execute(f *Fragment) Calculation {
-	return f.NewHandle(cmd.bitmap_id)
+func (self *CmdGet) Execute(f *Fragment) Calculation {
+	return f.NewHandle(self.bitmap_id)
 }
 
 type CmdCount struct {
@@ -71,8 +71,8 @@ func NewCount(bitmap_handle BitmapHandle) *CmdCount {
 	return &CmdCount{NewResponder("Count"), bitmap_handle}
 }
 
-func (cmd *CmdCount) Execute(f *Fragment) Calculation {
-	bm, _ := f.getBitmap(cmd.bitmap)
+func (self *CmdCount) Execute(f *Fragment) Calculation {
+	bm, _ := f.getBitmap(self.bitmap)
 	return BitCount(bm)
 }
 
@@ -85,8 +85,8 @@ func NewUnion(bitmaps []BitmapHandle) *CmdUnion {
 	result := &CmdUnion{NewResponder("Union"), bitmaps}
 	return result
 }
-func (cmd *CmdUnion) Execute(f *Fragment) Calculation {
-	return f.union(cmd.bitmap_ids)
+func (self *CmdUnion) Execute(f *Fragment) Calculation {
+	return f.union(self.bitmap_ids)
 }
 
 type CmdIntersect struct {
@@ -97,8 +97,8 @@ type CmdIntersect struct {
 func NewIntersect(bh []BitmapHandle) *CmdIntersect {
 	return &CmdIntersect{NewResponder("Intersect"), bh}
 }
-func (cmd *CmdIntersect) Execute(f *Fragment) Calculation {
-	return f.intersect(cmd.bitmaps)
+func (self *CmdIntersect) Execute(f *Fragment) Calculation {
+	return f.intersect(self.bitmaps)
 }
 
 type BitArgs struct {
@@ -115,8 +115,8 @@ func NewSetBit(bitmap_id uint64, bit_pos uint64) *CmdSetBit {
 	result := &CmdSetBit{NewResponder("SetBit"), bitmap_id, bit_pos}
 	return result
 }
-func (cmd *CmdSetBit) Execute(f *Fragment) Calculation {
-	return f.impl.SetBit(cmd.bitmap_id, cmd.bit_pos)
+func (self *CmdSetBit) Execute(f *Fragment) Calculation {
+	return f.impl.SetBit(self.bitmap_id, self.bit_pos)
 }
 
 type CmdGetBytes struct {
@@ -128,8 +128,8 @@ func NewGetBytes(bh BitmapHandle) *CmdGetBytes {
 	return &CmdGetBytes{NewResponder("GetBytes"), bh}
 }
 
-func (cmd *CmdGetBytes) Execute(f *Fragment) Calculation {
-	bm, _ := f.getBitmap(cmd.bitmap)
+func (self *CmdGetBytes) Execute(f *Fragment) Calculation {
+	bm, _ := f.getBitmap(self.bitmap)
 	//*Compress it
 	var b bytes.Buffer
 	w := gzip.NewWriter(&b)
@@ -149,11 +149,24 @@ func NewFromBytes(bytes []byte) *CmdFromBytes {
 	return &CmdFromBytes{NewResponder("FromBytes"), bytes}
 }
 
-func (cmd *CmdFromBytes) Execute(f *Fragment) Calculation {
-	reader, _ := gzip.NewReader(bytes.NewReader(cmd.compressed_bytes))
+func (self *CmdFromBytes) Execute(f *Fragment) Calculation {
+	reader, _ := gzip.NewReader(bytes.NewReader(self.compressed_bytes))
 	b, _ := ioutil.ReadAll(reader)
 
 	result := NewBitmap()
 	result.FromBytes(b)
+	return f.AllocHandle(result)
+}
+
+type CmdEmpty struct {
+	*Responder
+}
+
+func NewEmpty() *CmdEmpty {
+	return &CmdEmpty{NewResponder("Empty")}
+}
+
+func (self *CmdEmpty) Execute(f *Fragment) Calculation {
+	result := NewBitmap()
 	return f.AllocHandle(result)
 }

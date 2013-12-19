@@ -24,6 +24,15 @@ func (self *FragmentContainer) GetFragment(frag_id SUUID) (*Fragment, bool) {
 	return c, v
 }
 
+func (self *FragmentContainer) Empty(frag_id SUUID) (BitmapHandle, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
+		request := NewEmpty()
+		fragment.requestChan <- request
+		return request.Response().answer.(BitmapHandle), nil
+	}
+	return 0, errors.New("Invalid Bitmap Handle")
+}
+
 func (self *FragmentContainer) Intersect(frag_id SUUID, bh []BitmapHandle) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewIntersect(bh)
@@ -103,6 +112,8 @@ type Fragment struct {
 	counter     uint64
 	slice       int
 	cache       *lru.Cache
+	mesg_count  uint64
+	mesg_time   time.Duration
 }
 
 func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
@@ -168,9 +179,12 @@ func (self *Fragment) intersect(bitmaps []BitmapHandle) BitmapHandle {
 func (self *Fragment) ServeFragment() {
 	for {
 		req := <-self.requestChan
+		self.mesg_count++
 		start := time.Now()
 		answer := req.Execute(self)
 		delta := time.Since(start)
+		self.mesg_count += 1
+		self.mesg_time += delta
 		/*
 			var buffer bytes.Buffer
 			buffer.WriteString(`{ "results":`)

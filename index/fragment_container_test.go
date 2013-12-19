@@ -63,4 +63,9 @@ func TestServer(t *testing.T) {
 		after, _ := dummy.Count(id, bh2)
 		So(before, ShouldEqual, after)
 	})
+	Convey("Empty ", t, func() {
+		bh, _ := dummy.Empty(id)
+		before, _ := dummy.Count(id, bh)
+		So(before, ShouldEqual, 0)
+	})
 }
