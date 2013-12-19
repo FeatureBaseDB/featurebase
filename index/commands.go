@@ -39,11 +39,13 @@ type Calculation interface{}
 
 type Command interface {
 	Execute(*Fragment) Calculation
-	GetResponder() *Responder
+	QueryType() string
+	Response() Result
+	ResponseChannel() chan Result
 }
 
 type CmdGet struct {
-	meta      *Responder
+	*Responder
 	bitmap_id uint64
 }
 
@@ -51,15 +53,12 @@ func NewGet(bitmap_id uint64) *CmdGet {
 	return &CmdGet{NewResponder("Get"), bitmap_id}
 }
 
-func (cmd *CmdGet) GetResponder() *Responder {
-	return cmd.meta
-}
 func (cmd *CmdGet) Execute(f *Fragment) Calculation {
 	return f.NewHandle(cmd.bitmap_id)
 }
 
 type CmdCount struct {
-	meta   *Responder
+	*Responder
 	bitmap BitmapHandle
 }
 
@@ -67,16 +66,13 @@ func NewCount(bitmap_handle BitmapHandle) *CmdCount {
 	return &CmdCount{NewResponder("Count"), bitmap_handle}
 }
 
-func (cmd *CmdCount) GetResponder() *Responder {
-	return cmd.meta
-}
 func (cmd *CmdCount) Execute(f *Fragment) Calculation {
 	bm, _ := f.getBitmap(cmd.bitmap)
 	return BitCount(bm)
 }
 
 type CmdUnion struct {
-	meta       *Responder
+	*Responder
 	bitmap_ids []BitmapHandle
 }
 
@@ -87,12 +83,9 @@ func NewUnion(bitmaps []BitmapHandle) *CmdUnion {
 func (cmd *CmdUnion) Execute(f *Fragment) Calculation {
 	return f.union(cmd.bitmap_ids)
 }
-func (cmd *CmdUnion) GetResponder() *Responder {
-	return cmd.meta
-}
 
 type CmdIntersect struct {
-	meta    *Responder
+	*Responder
 	bitmaps []BitmapHandle
 }
 
@@ -102,16 +95,13 @@ func NewIntersect(bh []BitmapHandle) *CmdIntersect {
 func (cmd *CmdIntersect) Execute(f *Fragment) Calculation {
 	return f.intersect(cmd.bitmaps)
 }
-func (cmd *CmdIntersect) GetResponder() *Responder {
-	return cmd.meta
-}
 
 type BitArgs struct {
 	Bitmap_id uint64
 	Bit_pos   uint64
 }
 type CmdSetBit struct {
-	meta      *Responder
+	*Responder
 	bitmap_id uint64
 	bit_pos   uint64
 }
@@ -123,12 +113,9 @@ func NewSetBit(bitmap_id uint64, bit_pos uint64) *CmdSetBit {
 func (cmd *CmdSetBit) Execute(f *Fragment) Calculation {
 	return f.impl.SetBit(cmd.bitmap_id, cmd.bit_pos)
 }
-func (cmd *CmdSetBit) GetResponder() *Responder {
-	return cmd.meta
-}
 
 type CmdGetBytes struct {
-	meta   *Responder
+	*Responder
 	bitmap BitmapHandle
 }
 
@@ -136,16 +123,13 @@ func NewGetBytes(bh BitmapHandle) *CmdGetBytes {
 	return &CmdGetBytes{NewResponder("GetBytes"), bh}
 }
 
-func (cmd *CmdGetBytes) GetResponder() *Responder {
-	return cmd.meta
-}
 func (cmd *CmdGetBytes) Execute(f *Fragment) Calculation {
 	bm, _ := f.getBitmap(cmd.bitmap)
 	return bm.ToBytes()
 }
 
 type CmdFromBytes struct {
-	meta  *Responder
+	*Responder
 	bytes []byte
 }
 
@@ -153,9 +137,6 @@ func NewFromBytes(bytes []byte) *CmdFromBytes {
 	return &CmdFromBytes{NewResponder("FromBytes"), bytes}
 }
 
-func (cmd *CmdFromBytes) GetResponder() *Responder {
-	return cmd.meta
-}
 func (cmd *CmdFromBytes) Execute(f *Fragment) Calculation {
 	result := NewBitmap()
 	result.FromBytes(cmd.bytes)

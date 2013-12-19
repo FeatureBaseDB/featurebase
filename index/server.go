@@ -28,7 +28,7 @@ func (self *FragmentContainer) Intersect(frag_id SUUID, bh []BitmapHandle) (Bitm
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewIntersect(bh)
 		fragment.requestChan <- request
-		return request.GetResponder().Response().answer.(BitmapHandle), nil
+		return request.Response().answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
@@ -36,7 +36,7 @@ func (self *FragmentContainer) Union(frag_id SUUID, bh []BitmapHandle) (BitmapHa
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewUnion(bh)
 		fragment.requestChan <- request
-		return request.GetResponder().Response().answer.(BitmapHandle), nil
+		return request.Response().answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
@@ -45,7 +45,7 @@ func (self *FragmentContainer) Get(frag_id SUUID, bitmap_id uint64) (BitmapHandl
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGet(bitmap_id)
 		fragment.requestChan <- request
-		return request.GetResponder().Response().answer.(BitmapHandle), nil
+		return request.Response().answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
@@ -53,7 +53,7 @@ func (self *FragmentContainer) Count(frag_id SUUID, bitmap BitmapHandle) (uint64
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewCount(bitmap)
 		fragment.requestChan <- request
-		return request.GetResponder().Response().answer.(uint64), nil
+		return request.Response().answer.(uint64), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
@@ -62,7 +62,7 @@ func (self *FragmentContainer) GetBytes(frag_id SUUID, bh BitmapHandle) ([]byte,
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGetBytes(bh)
 		fragment.requestChan <- request
-		return request.GetResponder().Response().answer.([]byte), nil
+		return request.Response().answer.([]byte), nil
 	}
 	return nil, errors.New("Invalid Bitmap Handle")
 }
@@ -71,7 +71,7 @@ func (self *FragmentContainer) FromBytes(frag_id SUUID, bytes []byte) (BitmapHan
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewFromBytes(bytes)
 		fragment.requestChan <- request
-		return request.GetResponder().Response().answer.(BitmapHandle), nil
+		return request.Response().answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
@@ -80,7 +80,7 @@ func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint6
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewSetBit(bitmap_id, pos)
 		fragment.requestChan <- request
-		return request.GetResponder().Response().answer.(bool), nil
+		return request.Response().answer.(bool), nil
 	}
 	return false, errors.New("Invalid Bitmap Handle")
 }
@@ -169,7 +169,6 @@ func (self *Fragment) ServeFragment() {
 	for {
 		req := <-self.requestChan
 		start := time.Now()
-		responder := req.GetResponder()
 		answer := req.Execute(self)
 		delta := time.Since(start)
 		/*
@@ -179,7 +178,7 @@ func (self *Fragment) ServeFragment() {
 			buffer.WriteString(fmt.Sprintf(`,"query type": "%s"`, responder.QueryType()))
 			buffer.WriteString(fmt.Sprintf(`, "elapsed": "%s"}`, delta))
 		*/
-		responder.ResponseChannel() <- Result{answer, delta}
+		req.ResponseChannel() <- Result{answer, delta}
 	}
 }
 
