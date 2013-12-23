@@ -39,3 +39,7 @@ func (self *General) SetBit(bitmap_id uint64, bit_pos uint64) bool {
 	}
 	return change
 }
+func (self *General) TopN(b IBitmap, n int) []Pair {
+
+	return nil
+}

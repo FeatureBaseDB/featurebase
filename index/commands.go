@@ -7,16 +7,6 @@ import (
 	"time"
 )
 
-type Rank struct {
-	Key, Count uint64
-}
-
-type RankList []Rank
-
-func (p RankList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p RankList) Len() int           { return len(p) }
-func (p RankList) Less(i, j int) bool { return p[i].Count > p[j].Count }
-
 type Result struct {
 	answer    Calculation
 	exec_time time.Duration
@@ -187,4 +177,17 @@ func (self *CmdGetList) Execute(f *Fragment) Calculation {
 	}
 
 	return ret
+}
+
+type CmdTopN struct {
+	*Responder
+	bitmap BitmapHandle
+	n      int
+}
+
+func NewTopN(b BitmapHandle, n int) *CmdTopN {
+	return &CmdTopN{NewResponder("TopN"), b, n}
+}
+func (self *CmdTopN) Execute(f *Fragment) Calculation {
+	return f.TopN(self.bitmap, self.n)
 }

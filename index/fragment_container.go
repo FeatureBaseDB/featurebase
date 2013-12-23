@@ -2,6 +2,7 @@ package index
 
 import (
 	"errors"
+	"log"
 	. "pilosa/util"
 	"time"
 
@@ -41,6 +42,7 @@ func (self *FragmentContainer) Intersect(frag_id SUUID, bh []BitmapHandle) (Bitm
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
+
 func (self *FragmentContainer) Union(frag_id SUUID, bh []BitmapHandle) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewUnion(bh)
@@ -57,6 +59,15 @@ func (self *FragmentContainer) Get(frag_id SUUID, bitmap_id uint64) (BitmapHandl
 		return request.Response().answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
+}
+
+func (self *FragmentContainer) TopN(frag_id SUUID, bh BitmapHandle, n int) ([]Pair, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
+		request := NewTopN(bh, n)
+		fragment.requestChan <- request
+		return request.Response().answer.([]Pair), nil
+	}
+	return nil, nil
 }
 
 func (self *FragmentContainer) GetList(frag_id SUUID, bitmap_id []uint64) ([]BitmapHandle, error) {
@@ -113,6 +124,7 @@ func (self *FragmentContainer) AddFragment(frame string, db string, slice int, i
 type Pilosa interface {
 	Get(id uint64) IBitmap
 	SetBit(id uint64, bit_pos uint64) bool
+	TopN(b IBitmap, n int) []Pair
 }
 
 type Fragment struct {
@@ -127,11 +139,21 @@ type Fragment struct {
 }
 
 func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
+	var impl Pilosa
+	switch frame {
+	default:
+		log.Println("General")
+		impl = NewGeneral(db, slice, NewMemoryStorage())
+	case "Brand":
+		log.Println("Brand")
+		impl = NewBrand(db, slice, NewMemoryStorage())
+	}
+
 	f := new(Fragment)
 	f.requestChan = make(chan Command, 64)
 	f.fragment_id = frag_id
 	f.cache = lru.New(10000)
-	f.impl = NewGeneral(db, slice, NewMemoryStorage())
+	f.impl = impl //NewGeneral(db, slice, NewMemoryStorage())
 	f.slice = slice
 	return f
 }
@@ -139,6 +161,15 @@ func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
 func (self *Fragment) getBitmap(bitmap BitmapHandle) (IBitmap, bool) {
 	bm, ok := self.cache.Get(bitmap)
 	return bm.(IBitmap), ok
+}
+
+func (self *Fragment) TopN(bitmap BitmapHandle, n int) []Pair {
+
+	bm, ok := self.cache.Get(bitmap)
+	if ok {
+		return self.impl.TopN(bm.(*Bitmap), n)
+	}
+	return nil
 }
 
 func (self *Fragment) NewHandle(bitmap_id uint64) BitmapHandle {

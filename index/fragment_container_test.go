@@ -1,6 +1,7 @@
 package index
 
 import (
+	"log"
 	"testing"
 
 	//	"io/ioutil"
@@ -9,12 +10,14 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestServer(t *testing.T) {
+func TestFragment(t *testing.T) {
 
 	//id := util.Id()
 	id := util.Hex_to_SUUID("1")
+	id2 := util.Hex_to_SUUID("2")
 	dummy := NewFragmentContainer()
 	dummy.AddFragment("general", "25", 0, id)
+	dummy.AddFragment("Brand", "25", 0, id2)
 
 	Convey("Get ", t, func() {
 		bh, _ := dummy.Get(id, 1234)
@@ -74,5 +77,31 @@ func TestServer(t *testing.T) {
 		result, _ := dummy.Union(id, bhs)
 		num, _ := dummy.Count(id, result)
 		So(num, ShouldNotEqual, 2)
+	})
+
+	Convey("Brand SetBit", t, func() {
+		bi1 := uint64(1231)
+		bi2 := uint64(1232)
+		bi3 := uint64(1233)
+		bi4 := uint64(1234)
+		for x := uint64(0); x < 1000; x++ {
+			if x < 100 {
+				dummy.SetBit(id2, bi1, x)
+				dummy.SetBit(id2, bi4, x)
+			}
+			if x < 500 {
+				dummy.SetBit(id2, bi2, x)
+			}
+			if x%3 == 0 {
+				dummy.SetBit(id2, bi3, x)
+			}
+			if x > 700 {
+				dummy.SetBit(id2, bi4, x)
+			}
+		}
+		bh1, _ := dummy.Get(id2, bi1)
+		log.Println(dummy.TopN(id2, bh1, 4))
+		//		dummy.Rank()
+		So(1, ShouldEqual, 1)
 	})
 }
