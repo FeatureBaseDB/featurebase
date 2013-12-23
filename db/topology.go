@@ -5,11 +5,11 @@ import (
 	//"github.com/davecgh/go-spew/spew"
 	"errors"
 	"fmt"
-	"github.com/nu7hatch/gouuid"
 	"log"
 	"strconv"
 	"strings"
 	"sync"
+	"github.com/nu7hatch/gouuid"
 )
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")
@@ -23,11 +23,63 @@ type Location struct {
 }
 
 type Process struct {
-	id *uuid.UUID
+	id        *uuid.UUID
+	host      string
+	port_tcp  int
+	port_http int
+	mutex     sync.Mutex
 }
 
 func NewProcess(id *uuid.UUID) *Process {
-	return &Process{id}
+	return &Process{id: id}
+}
+
+func (self *Process) Id() uuid.UUID {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	return *self.id
+}
+
+func (self *Process) SetId(id uuid.UUID) {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	self.id = &id
+}
+
+func (self *Process) Host() string {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	return self.host
+}
+
+func (self *Process) SetHost(host string) {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	self.host = host
+}
+
+func (self *Process) PortTcp() int {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	return self.port_tcp
+}
+
+func (self *Process) SetPortTcp(port int) {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	self.port_tcp = port
+}
+
+func (self *Process) PortHttp() int {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	return self.port_http
+}
+
+func (self *Process) SetPortHttp(port int) {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	self.port_http = port
 }
 
 // Create a Location struct given a string in form "0.0.0.0:0"

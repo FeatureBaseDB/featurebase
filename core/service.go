@@ -30,8 +30,9 @@ func NewService() *Service {
 	service.init_id()
 	service.Etcd = etcd.NewClient(nil)
 	service.Cluster = db.NewCluster()
-	service.TopologyMapper = &TopologyMapper{service, "/pilosa/0"}
-	service.ProcessMapper = NewProcessMapper(service)
+	service.TopologyMapper = NewTopologyMapper(service, "/pilosa/0")
+	service.ProcessMapper = NewProcessMapper(service, "/pilosa/0")
+	service.ProcessMap = NewProcessMap()
 	return service
 }
 
