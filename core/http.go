@@ -29,6 +29,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/query", self.HandleQuery)
 	mux.HandleFunc("/stats", self.HandleStats)
 	mux.HandleFunc("/info", self.HandleInfo)
+	mux.HandleFunc("/processes", self.HandleProcesses)
 	mux.HandleFunc("/listen", self.HandleListen)
 	s := &http.Server{
 		Addr:    ":" + port_string,
@@ -86,6 +87,19 @@ func (self *WebService) HandleInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	spew.Fdump(w, self.service.Cluster)
+}
+
+func (self *WebService) HandleProcesses(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	encoder := json.NewEncoder(w)
+	processes := self.service.ProcessMap.GetMetadata()
+	err := encoder.Encode(processes)
+	if err != nil {
+		log.Fatal("Error encoding stats")
+	}
 }
 
 func (self *WebService) HandleListen(w http.ResponseWriter, r *http.Request) {

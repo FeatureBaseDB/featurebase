@@ -200,6 +200,20 @@ func (self *ProcessMap) GetPortHttp(id *uuid.UUID) (int, error) {
 	return process.PortHttp(), nil
 }
 
+func (self *ProcessMap) GetMetadata() map[string]map[string]interface{} {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	out := make(map[string]map[string]interface{})
+	for id, process := range self.nodes {
+		pdata := make(map[string]interface{})
+		pdata["host"] = process.Host()
+		pdata["port_tcp"] = process.PortTcp()
+		pdata["port_http"] = process.PortHttp()
+		out[id.String()] = pdata
+	}
+	return out
+}
+
 type ProcessMapper struct {
 	service   *Service
 	receiver  chan etcd.Response
