@@ -23,6 +23,7 @@ type Service struct {
 	ProcessMap     *ProcessMap
 	Transport      interfaces.Transporter
 	Dispatch       interfaces.Dispatcher
+	WebService     *WebService
 }
 
 func NewService() *Service {
@@ -33,6 +34,7 @@ func NewService() *Service {
 	service.TopologyMapper = NewTopologyMapper(service, "/pilosa/0")
 	service.ProcessMapper = NewProcessMapper(service, "/pilosa/0")
 	service.ProcessMap = NewProcessMap()
+	service.WebService = NewWebService(service)
 	return service
 }
 
@@ -67,6 +69,7 @@ func (service *Service) Run() {
 	log.Println("Running service...")
 	go service.TopologyMapper.Run()
 	go service.ProcessMapper.Run()
+	go service.WebService.Run()
 
 	sigterm, sighup := service.GetSignals()
 	for {

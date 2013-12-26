@@ -5,11 +5,39 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"pilosa/config"
 	"pilosa/db"
 	"pilosa/query"
+	"strconv"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
-func (service *Service) HandleMessage(w http.ResponseWriter, r *http.Request) {
+type WebService struct {
+	service *Service
+}
+
+func NewWebService(service *Service) *WebService {
+	return &WebService{service}
+}
+
+func (self *WebService) Run() {
+	port_string := strconv.Itoa(config.GetInt("port_http"))
+	log.Printf("Serving HTTP on port %s...\n", port_string)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/message", self.HandleMessage)
+	mux.HandleFunc("/query", self.HandleQuery)
+	mux.HandleFunc("/stats", self.HandleStats)
+	mux.HandleFunc("/info", self.HandleInfo)
+	mux.HandleFunc("/listen", self.HandleListen)
+	s := &http.Server{
+		Addr:    ":" + port_string,
+		Handler: mux,
+	}
+	s.ListenAndServe()
+}
+
+func (self *WebService) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
@@ -23,7 +51,7 @@ func (service *Service) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	//service.Inbox <- &message
 }
 
-func (service *Service) HandleQuery(w http.ResponseWriter, r *http.Request) {
+func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
@@ -38,7 +66,7 @@ func (service *Service) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	log.Println(q) // TODO: parse and perform
 }
 
-func (service *Service) HandleStats(w http.ResponseWriter, r *http.Request) {
+func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
 		return
@@ -52,7 +80,15 @@ func (service *Service) HandleStats(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (service *Service) HandleListen(w http.ResponseWriter, r *http.Request) {
+func (self *WebService) HandleInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	spew.Fdump(w, self.service.Cluster)
+}
+
+func (self *WebService) HandleListen(w http.ResponseWriter, r *http.Request) {
 	//listener := service.NewListener()
 	//encoder := json.NewEncoder(w)
 	//for {
@@ -65,13 +101,4 @@ func (service *Service) HandleListen(w http.ResponseWriter, r *http.Request) {
 	//		}
 	//	}
 	//}
-}
-
-func (service *Service) ServeHTTP() {
-	log.Println("Serving HTTP...")
-	http.HandleFunc("/message", service.HandleMessage)
-	http.HandleFunc("/query", service.HandleQuery)
-	http.HandleFunc("/stats", service.HandleStats)
-	http.HandleFunc("/listen", service.HandleListen)
-	//http.ListenAndServe(":" + strconv.Itoa(service.HttpLocation.Port), nil)
 }
