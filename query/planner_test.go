@@ -56,7 +56,7 @@ func TestQueryPlanner(t *testing.T) {
 		destination := db.Process{}
 
 		id, _ := uuid.NewV4()
-		qp := qplanner.Plan(&query, id, &destination, 0)
+		qp := qplanner.Plan(&query, id, &destination)
 
 		for i, qs := range *qp {
 			spew.Dump(i, qs, qs.inputs)

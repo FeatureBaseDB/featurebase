@@ -1,14 +1,10 @@
 package transport
 
 import (
-	"fmt"
 	"log"
-	"net"
-	"net/http"
 	"pilosa/config"
 	"pilosa/core"
 	"pilosa/db"
-	"time"
 )
 
 type TcpTransport struct {
@@ -17,6 +13,7 @@ type TcpTransport struct {
 	stop  chan bool
 }
 
+/*
 func (self *TcpTransport) RunServer(porti int) {
 	http.Handle("/", self)
 	port := fmt.Sprintf(":%d", porti)
@@ -54,11 +51,11 @@ func (self *TcpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	msg.Data = path
 	self.inbox <- msg
 }
+*/
 
 func (self *TcpTransport) Run() {
 	log.Println("Initializing TCP transport")
-
-	self.RunServer(self.port)
+	//self.RunServer(self.port)
 }
 
 func (self *TcpTransport) Close() {

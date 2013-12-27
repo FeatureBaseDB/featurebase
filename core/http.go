@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"pilosa/config"
 	"pilosa/db"
+	"pilosa/query"
 	"strconv"
 
 	"github.com/davecgh/go-spew/spew"
@@ -62,9 +63,12 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error reading POST data", http.StatusBadRequest)
 		return
 	}
-	log.Println(body)
-	//q := query.QueryParser{string(body)}
-	//log.Println(q) // TODO: parse and perform
+
+	cluster := self.service.Cluster
+	database := cluster.GetOrCreateDatabase("main")
+	pql := string(body)
+
+	query.Execute(database, pql)
 }
 
 func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {

@@ -17,13 +17,6 @@ type Cruncher struct {
 
 func (cruncher *Cruncher) Run() {
 	spew.Dump("Cruncher.Run")
-	/*
-	   bh = api.Get(frag,tileid)
-	   api.SetBit(frag,bh,1)
-	   api.Count(frag,bh)
-	   api.Union(frag,[bh1,bh2])
-	   api.Intersect(frag,[bh1,bh2])
-	*/
 	cruncher.Service.Run()
 }
 

@@ -1,12 +1,11 @@
 package query
 
 import (
-	"github.com/davecgh/go-spew/spew"
-	"github.com/nu7hatch/gouuid"
-	//"strconv"
 	"fmt"
 	"math/rand"
 	"pilosa/db"
+
+	"github.com/nu7hatch/gouuid"
 )
 
 // A single step in the query plan.
@@ -20,14 +19,6 @@ type QueryStep struct {
 
 func (q QueryStep) String() string {
 	return fmt.Sprintf("%s %s %s, LOC: %s, DEST: %s", q.operation, q.id.String(), q.inputs, q.location, q.return_process)
-}
-
-type QueryInput interface{}
-
-// Represents a parsed query. Inputs can be Query or Bitmap objects
-type Query struct {
-	Operation string
-	Inputs    []QueryInput // Maybe Bitmap and Query objects should have different fields to avoid using interface{}
 }
 
 // This is the output of the query planner. Contains a list of steps which can be performed in parallel
@@ -129,12 +120,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Proces
 }
 
 // Transforms Query into QueryTree and flattens to QueryPlan object
-func (qp *QueryPlanner) Plan(query *Query, id *uuid.UUID, destination *db.Process, slice int) *QueryPlan {
-
+func (qp *QueryPlanner) Plan(query *Query, id *uuid.UUID, destination *db.Process) *QueryPlan {
 	queryTree := qp.buildTree(query, -1)
-	spew.Dump("--------------------------------------------")
-	spew.Dump(queryTree)
-	spew.Dump("--------------------------------------------")
 	return qp.flatten(queryTree, id, destination)
-	//return &QueryPlan{}
 }
