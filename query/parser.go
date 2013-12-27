@@ -1,62 +1,88 @@
 package query
 
 import (
-	"encoding/json"
 	"errors"
 	"pilosa/db"
-	//"github.com/davecgh/go-spew/spew"
+	"strconv"
 )
 
 var InvalidQueryError = errors.New("Invalid query format.")
 
-type QueryParser struct {
-	QueryString string
-}
+type QueryParser struct{}
 
-func (q *QueryParser) Walk(data interface{}) (*Query, error) {
-	query := new(Query)
-
-	slice, ok := data.([]interface{})
-	if !ok {
-		return nil, InvalidQueryError
+func (qp *QueryParser) walkInputs(tokens []Token) []QueryInput {
+	// BITMAP
+	if tokens[0].Type == TYPE_ID {
+		// TODO: look for frame type in the tokens list
+		bitmap_id, err := strconv.Atoi(tokens[0].Text)
+		if err != nil {
+			panic(err)
+		}
+		// if the next 2 tokens are comma-frame, then we have a frame, else set to a default
+		frame_type := "general"
+		if len(tokens) == 3 && tokens[2].Type == TYPE_FRAME {
+			frame_type = tokens[2].Text
+		}
+		bm := db.Bitmap{bitmap_id, frame_type}
+		return []QueryInput{&bm}
 	}
-	operation, ok := slice[0].(string)
 
-	if !ok {
-		return nil, InvalidQueryError
-	}
-	if operation == "union" || operation == "intersect" {
-		query.Operation = operation
-		inputs := slice[1:]
-		query.Inputs = make([]QueryInput, len(inputs))
-		for idx, input := range inputs {
-			subquery, err := q.Walk(input)
-			if err != nil {
-				return nil, err
+	// LIST OF QUERIES
+	qi := []QueryInput{}
+	open_parens := -1 // >=0 means i'm inside the search for end paren
+	start := 0
+	for i := 0; i < len(tokens); i++ {
+		if tokens[i].Type == TYPE_FUNC && open_parens == -1 {
+			start = i
+		} else if tokens[i].Type == TYPE_LP {
+			open_parens++
+		} else if tokens[i].Type == TYPE_RP {
+			if open_parens == 0 {
+				q, err := qp.walk(tokens[start : i+1])
+				if err != nil {
+					panic(err)
+				}
+				qi = append(qi, q)
+				open_parens = -1
+			} else {
+				open_parens--
 			}
-			query.Inputs[idx] = subquery
 		}
-	} else if operation == "bitmap" {
-		query.Operation = "get"
-		frame, ok := slice[1].(string)
-		if !ok {
-			return nil, InvalidQueryError
-		}
-		id, ok := slice[2].(float64)
-		if !ok {
-			return nil, InvalidQueryError
-		}
-		id_int := int(id)
-		query.Inputs = []QueryInput{db.Bitmap{id_int, frame}}
 	}
-
-	return query, nil
+	return qi
 }
 
-func (q *QueryParser) Parse() (*Query, error) {
-	var data interface{}
-	if err := json.Unmarshal([]byte(q.QueryString), &data); err != nil {
-		return nil, err
+func (qp *QueryParser) walk(tokens []Token) (*Query, error) {
+
+	if tokens[0].Type != TYPE_FUNC {
+		panic("BAD!")
 	}
-	return q.Walk(data)
+	if tokens[1].Type != TYPE_LP {
+		panic("BAD!")
+	}
+
+	q := new(Query)
+	q.Operation = tokens[0].Text
+
+	// scan from open to close paren
+	open_parens := 0
+	for i := 2; i < len(tokens); i++ {
+		// 1 must be "("
+		if tokens[i].Type == TYPE_LP {
+			open_parens++
+		} else if tokens[i].Type == TYPE_RP {
+			if open_parens == 0 {
+				if i == len(tokens)-1 {
+					q.Inputs = qp.walkInputs(tokens[2:i])
+				}
+			} else {
+				open_parens--
+			}
+		}
+	}
+	return q, nil
+}
+
+func (qp *QueryParser) Parse(tokens []Token) (*Query, error) {
+	return qp.walk(tokens)
 }

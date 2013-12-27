@@ -291,11 +291,14 @@ type Fragment struct {
 	process *Process
 }
 
+func (f *Fragment) GetProcess() *Process {
+	return f.process
+}
+
 // rename this one
-func (d *Database) OldGetFragment(bitmap Bitmap, profile_id int) (*Fragment, error) {
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-	slice, _ := d.GetSliceForProfile(profile_id)
+func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment, error) {
+	//d.mutex.Lock()
+	//defer d.mutex.Unlock()
 	frame, _ := d.getFrame(bitmap.FrameType)
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-	//"github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -14,6 +13,7 @@ const (
 	TYPE_LP    = iota
 	TYPE_RP    = iota
 	TYPE_ID    = iota
+	TYPE_FRAME = iota
 	TYPE_COMMA = iota
 )
 
@@ -129,7 +129,7 @@ func stateID(lexer *Lexer) statefn {
 	// if next is comma
 	peeked := lexer.peek()
 	if peeked == rune(',') {
-		return stateComma
+		return stateFrameComma
 	} else if peeked == rune(')') {
 		return stateRP
 	} else {
@@ -149,6 +149,25 @@ func stateRP(lexer *Lexer) statefn {
 	} else {
 		return stateEOF
 	}
+}
+
+func stateFrameComma(lexer *Lexer) statefn {
+	lexer.pos += 1
+	lexer.emit(TYPE_COMMA)
+	return stateFrame
+}
+
+func stateFrame(lexer *Lexer) statefn {
+	lexer.peek()
+	digits := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_." // TODO: make this more flexible. accept anything up to a space or RP: ")"
+	lexer.acceptRun(digits)
+	lexer.emit(TYPE_FRAME)
+	peeked := lexer.peek()
+	if peeked == rune(')') {
+		return stateRP
+	}
+	// should never get here
+	return stateRP
 }
 
 func stateComma(lexer *Lexer) statefn {

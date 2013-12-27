@@ -100,9 +100,6 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 	}
 	if len(bits) > 7 {
 		fragment_id = util.Hex_to_SUUID(bits[7])
-		if err != nil {
-			return err
-		}
 		fragment = database.GetOrCreateFragment(frame, slice, fragment_id)
 	}
 
@@ -117,7 +114,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		process = db.NewProcess(process_uuid)
 		fragment.SetProcess(process)
 
-		if self.service.process_id.String() == process_uuid.String() {
+		if self.service.Id.String() == process_uuid.String() {
 			self.service.Process.AddFragment(bits[1], bits[3], slice_int, fragment_id)
 		}
 
@@ -294,6 +291,7 @@ func (self *ProcessMapper) Run() {
 	self_path := path + "/" + id_string
 
 	log.Println("Writing configuration to etcd...")
+	log.Println(self_path)
 
 	var err error
 	_, err = self.service.Etcd.Set(self_path+"/port_tcp", strconv.Itoa(config.GetInt("port_tcp")), 0)
