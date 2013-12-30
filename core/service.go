@@ -27,7 +27,7 @@ type Service struct {
 	Dispatch       interfaces.Dispatcher
 	WebService     *WebService
 	process_id     *uuid.UUID
-	Process        *index.FragmentContainer
+	Index          *index.FragmentContainer
 }
 
 func NewService() *Service {
@@ -41,7 +41,7 @@ func NewService() *Service {
 	service.ProcessMap = NewProcessMap()
 	service.WebService = NewWebService(service)
 	service.process_id = config.GetUUID("process_id")
-	service.Process = index.NewFragmentContainer()
+	service.Index = index.NewFragmentContainer()
 	return service
 }
 
