@@ -7,6 +7,7 @@ import (
 
 func TestLexer(t *testing.T) {
 	Convey("Basic lexical analysis", t, func() {
+
 		tokens := Lex("get(10)")
 		So(len(tokens), ShouldEqual, 4)
 		So(tokens[0].Text, ShouldEqual, "get")
@@ -126,5 +127,40 @@ func TestLexer(t *testing.T) {
 		So(tokens4[12].Type, ShouldEqual, TYPE_RP)
 		So(tokens4[13].Text, ShouldEqual, ")")
 		So(tokens4[13].Type, ShouldEqual, TYPE_RP)
+
+		tokens5 := Lex("set(1, 987)")
+		So(len(tokens5), ShouldEqual, 6)
+		So(tokens5[0].Text, ShouldEqual, "set")
+		So(tokens5[0].Type, ShouldEqual, TYPE_FUNC)
+		So(tokens5[1].Text, ShouldEqual, "(")
+		So(tokens5[1].Type, ShouldEqual, TYPE_LP)
+		So(tokens5[2].Text, ShouldEqual, "1")
+		So(tokens5[2].Type, ShouldEqual, TYPE_ID)
+		So(tokens5[3].Text, ShouldEqual, ",")
+		So(tokens5[3].Type, ShouldEqual, TYPE_COMMA)
+		So(tokens5[4].Text, ShouldEqual, "987")
+		So(tokens5[4].Type, ShouldEqual, TYPE_PROFILE)
+		So(tokens5[5].Text, ShouldEqual, ")")
+		So(tokens5[5].Type, ShouldEqual, TYPE_RP)
+
+		tokens6 := Lex("set(1, general, 987)")
+		So(len(tokens6), ShouldEqual, 8)
+		So(tokens6[0].Text, ShouldEqual, "set")
+		So(tokens6[0].Type, ShouldEqual, TYPE_FUNC)
+		So(tokens6[1].Text, ShouldEqual, "(")
+		So(tokens6[1].Type, ShouldEqual, TYPE_LP)
+		So(tokens6[2].Text, ShouldEqual, "1")
+		So(tokens6[2].Type, ShouldEqual, TYPE_ID)
+		So(tokens6[3].Text, ShouldEqual, ",")
+		So(tokens6[3].Type, ShouldEqual, TYPE_COMMA)
+		So(tokens6[4].Text, ShouldEqual, "general")
+		So(tokens6[4].Type, ShouldEqual, TYPE_FRAME)
+		So(tokens6[5].Text, ShouldEqual, ",")
+		So(tokens6[5].Type, ShouldEqual, TYPE_COMMA)
+		So(tokens6[6].Text, ShouldEqual, "987")
+		So(tokens6[6].Type, ShouldEqual, TYPE_PROFILE)
+		So(tokens6[7].Text, ShouldEqual, ")")
+		So(tokens6[7].Type, ShouldEqual, TYPE_RP)
+
 	})
 }

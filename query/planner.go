@@ -17,7 +17,7 @@ type QueryStep struct {
 	return_process *db.Process
 }
 
-func (q QueryStep) String() string {
+func (q QueryStep) StringHOLD() string {
 	return fmt.Sprintf("%s %s %s, LOC: %s, DEST: %s", q.operation, q.id.String(), q.inputs, q.location, q.return_process)
 }
 
@@ -43,7 +43,7 @@ type CompositeQueryTree struct {
 func (qt *CompositeQueryTree) getLocation(d *db.Database) *db.Process {
 	if qt.location == nil {
 		subqueryLength := len(qt.subqueries)
-		if subqueryLength > 1 {
+		if subqueryLength > 0 {
 			locationIndex := rand.Intn(subqueryLength)
 			subquery := qt.subqueries[locationIndex]
 			qt.location = subquery.getLocation(d)
@@ -58,6 +58,12 @@ type GetQueryTree struct {
 	slice  int
 }
 
+// QueryTree for SET queries
+type SetQueryTree struct {
+	bitmap     *db.Bitmap
+	profile_id int
+}
+
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *GetQueryTree) getLocation(d *db.Database) *db.Process {
 	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
@@ -68,9 +74,27 @@ func (qt *GetQueryTree) getLocation(d *db.Database) *db.Process {
 	return fragment.GetProcess()
 }
 
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *SetQueryTree) getLocation(d *db.Database) *db.Process {
+	slice, err := d.GetSliceForProfile(qt.profile_id)
+	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
+	if err != nil {
+		panic(err)
+	}
+	return fragment.GetProcess()
+}
+
 // Builds QueryTree object from Query. Pass slice=-1 to perform operation on all slices
 func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 	var tree QueryTree
+
+	// handle SET operation regardless of the slice
+	if query.Operation == "set" {
+		tree = &SetQueryTree{query.Inputs[0].(*db.Bitmap), query.Profile_id}
+		return tree
+	}
+
+	// handle the remaining operations, taking slice into consideration
 	if slice == -1 {
 		tree = &CompositeQueryTree{operation: "cat"}
 		numSlices, err := qp.Database.NumSlices()
@@ -113,6 +137,10 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Proces
 		plan = append(plan, step)
 	} else if get, ok := qt.(*GetQueryTree); ok {
 		step := QueryStep{*id, "get", []QueryInput{get.bitmap, get.slice}, get.getLocation(qp.Database), location}
+		plan := QueryPlan{step}
+		return &plan
+	} else if set, ok := qt.(*SetQueryTree); ok {
+		step := QueryStep{*id, "set", []QueryInput{set.bitmap, set.profile_id}, set.getLocation(qp.Database), location}
 		plan := QueryPlan{step}
 		return &plan
 	}

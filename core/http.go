@@ -63,11 +63,9 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error reading POST data", http.StatusBadRequest)
 		return
 	}
-
 	cluster := self.service.Cluster
 	database := cluster.GetOrCreateDatabase("main")
 	pql := string(body)
-
 	query.Execute(database, pql)
 }
 

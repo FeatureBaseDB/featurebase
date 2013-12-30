@@ -15,14 +15,14 @@ func TestQueryPlanner(t *testing.T) {
 
 		bm1 := db.Bitmap{10, "general"}
 		inputs1 := []QueryInput{&bm1}
-		query1 := Query{"get", inputs1}
+		query1 := Query{"get", inputs1, 0}
 
 		bm2 := db.Bitmap{20, "general"}
 		inputs2 := []QueryInput{&bm2}
-		query2 := Query{"get", inputs2}
+		query2 := Query{"get", inputs2, 0}
 
 		inputs := []QueryInput{&query1, &query2}
-		query := Query{"union", inputs}
+		query := Query{"union", inputs, 0}
 		/*
 
 			bm1 := db.Bitmap{10, "general"}

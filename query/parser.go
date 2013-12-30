@@ -10,7 +10,7 @@ var InvalidQueryError = errors.New("Invalid query format.")
 
 type QueryParser struct{}
 
-func (qp *QueryParser) walkInputs(tokens []Token) []QueryInput {
+func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, int) {
 	// BITMAP
 	if tokens[0].Type == TYPE_ID {
 		// TODO: look for frame type in the tokens list
@@ -20,11 +20,18 @@ func (qp *QueryParser) walkInputs(tokens []Token) []QueryInput {
 		}
 		// if the next 2 tokens are comma-frame, then we have a frame, else set to a default
 		frame_type := "general"
-		if len(tokens) == 3 && tokens[2].Type == TYPE_FRAME {
+		if len(tokens) > 2 && tokens[2].Type == TYPE_FRAME {
 			frame_type = tokens[2].Text
 		}
 		bm := db.Bitmap{bitmap_id, frame_type}
-		return []QueryInput{&bm}
+		profile_id := 0
+		if len(tokens) > 4 && tokens[4].Type == TYPE_PROFILE {
+			profile_id, err = strconv.Atoi(tokens[4].Text)
+			if err != nil {
+				panic(err)
+			}
+		}
+		return []QueryInput{&bm}, profile_id
 	}
 
 	// LIST OF QUERIES
@@ -49,7 +56,7 @@ func (qp *QueryParser) walkInputs(tokens []Token) []QueryInput {
 			}
 		}
 	}
-	return qi
+	return qi, 0
 }
 
 func (qp *QueryParser) walk(tokens []Token) (*Query, error) {
@@ -73,7 +80,7 @@ func (qp *QueryParser) walk(tokens []Token) (*Query, error) {
 		} else if tokens[i].Type == TYPE_RP {
 			if open_parens == 0 {
 				if i == len(tokens)-1 {
-					q.Inputs = qp.walkInputs(tokens[2:i])
+					q.Inputs, q.Profile_id = qp.walkInputs(tokens[2:i])
 				}
 			} else {
 				open_parens--

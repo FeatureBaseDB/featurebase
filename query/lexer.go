@@ -9,12 +9,13 @@ import (
 )
 
 const (
-	TYPE_FUNC  = iota
-	TYPE_LP    = iota
-	TYPE_RP    = iota
-	TYPE_ID    = iota
-	TYPE_FRAME = iota
-	TYPE_COMMA = iota
+	TYPE_FUNC    = iota
+	TYPE_LP      = iota
+	TYPE_RP      = iota
+	TYPE_ID      = iota
+	TYPE_FRAME   = iota
+	TYPE_PROFILE = iota
+	TYPE_COMMA   = iota
 )
 
 type Token struct {
@@ -55,6 +56,15 @@ func (lexer *Lexer) acceptRun(valid string) {
 	for strings.IndexRune(valid, lexer.next()) >= 0 {
 	}
 	lexer.backup()
+}
+
+func (lexer *Lexer) acceptNumber() {
+	digits := "0123456789"
+	lexer.acceptRun(digits)
+}
+func (lexer *Lexer) acceptText() {
+	digits := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_." // TODO: make this more flexible. accept anything up to a space or RP: ")"
+	lexer.acceptRun(digits)
 }
 
 // next returns the next rune in the input.
@@ -121,11 +131,8 @@ func stateArgs(lexer *Lexer) statefn {
 }
 
 func stateID(lexer *Lexer) statefn {
-
-	digits := "0123456789"
-	lexer.acceptRun(digits)
+	lexer.acceptNumber()
 	lexer.emit(TYPE_ID)
-
 	// if next is comma
 	peeked := lexer.peek()
 	if peeked == rune(',') {
@@ -135,6 +142,14 @@ func stateID(lexer *Lexer) statefn {
 	} else {
 		return stateID
 	}
+}
+
+func stateProfile(lexer *Lexer) statefn {
+	lexer.peek()
+	lexer.acceptNumber()
+	lexer.emit(TYPE_PROFILE)
+	lexer.peek()
+	return stateRP
 }
 
 func stateRP(lexer *Lexer) statefn {
@@ -154,19 +169,27 @@ func stateRP(lexer *Lexer) statefn {
 func stateFrameComma(lexer *Lexer) statefn {
 	lexer.pos += 1
 	lexer.emit(TYPE_COMMA)
-	return stateFrame
+	return stateFrameOrProfile
 }
 
-func stateFrame(lexer *Lexer) statefn {
-	lexer.peek()
-	digits := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_." // TODO: make this more flexible. accept anything up to a space or RP: ")"
-	lexer.acceptRun(digits)
-	lexer.emit(TYPE_FRAME)
-	peeked := lexer.peek()
-	if peeked == rune(')') {
-		return stateRP
+func stateProfileComma(lexer *Lexer) statefn {
+	lexer.pos += 1
+	lexer.emit(TYPE_COMMA)
+	return stateProfile
+}
+
+func stateFrameOrProfile(lexer *Lexer) statefn {
+	if unicode.IsNumber(lexer.peek()) {
+		lexer.acceptNumber()
+		lexer.emit(TYPE_PROFILE)
+		lexer.peek()
+	} else {
+		lexer.acceptText()
+		lexer.emit(TYPE_FRAME)
+		if lexer.peek() == rune(',') {
+			return stateProfileComma
+		}
 	}
-	// should never get here
 	return stateRP
 }
 
