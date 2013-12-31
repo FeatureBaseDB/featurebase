@@ -71,6 +71,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	results_ch := make(chan *query.QueryResults)
 	self.service.Executor.NewJob(query_plan, results_ch)
 	results := <-results_ch
+	spew.Dump("Results")
 	spew.Dump(results)
 	close(results_ch)
 }

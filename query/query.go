@@ -2,8 +2,6 @@ package query
 
 import (
 	"pilosa/db"
-
-	"github.com/davecgh/go-spew/spew"
 	"github.com/nu7hatch/gouuid"
 )
 
@@ -43,6 +41,5 @@ func QueryPlanForPQL(database *db.Database, pql string) *QueryPlan {
 	id, _ := uuid.NewV4()
 	destination := db.Process{}
 	query_plan := query_planner.Plan(query, id, &destination)
-	spew.Dump(query_plan)
 	return query_plan
 }
