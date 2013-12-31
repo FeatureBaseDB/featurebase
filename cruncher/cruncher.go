@@ -3,6 +3,7 @@ package cruncher
 import (
 	"pilosa/core"
 	"pilosa/dispatch"
+	"pilosa/executor"
 	"pilosa/index"
 	"pilosa/transport"
 
@@ -25,6 +26,7 @@ func NewCruncher() *Cruncher {
 	fragment_container := index.NewFragmentContainer()
 	cruncher := Cruncher{service, make(chan bool), fragment_container}
 	cruncher.Transport = transport.NewTcpTransport(service)
-	cruncher.Dispatch = dispatch.NewCruncherDispatch(service)
+	cruncher.Dispatch = dispatch.NewDispatch(service)
+	cruncher.Executor = executor.NewExecutor(service)
 	return &cruncher
 }

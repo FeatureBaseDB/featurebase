@@ -7,20 +7,20 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
-type CruncherDispatch struct {
+type Dispatch struct {
 	service *core.Service
 }
 
-func (self *CruncherDispatch) Init() error {
+func (self *Dispatch) Init() error {
 	log.Println("Starting Dispatcher")
 	return nil
 }
 
-func (self *CruncherDispatch) Close() {
+func (self *Dispatch) Close() {
 	log.Println("Shutting down Dispatcher")
 }
 
-func (self *CruncherDispatch) Run() {
+func (self *Dispatch) Run() {
 	log.Println("Dispatch Run...")
 	for {
 		message := self.service.Transport.Receive()
@@ -118,6 +118,6 @@ func (self *CruncherDispatch) Run() {
 	}
 }
 
-func NewCruncherDispatch(service *core.Service) *CruncherDispatch {
-	return &CruncherDispatch{service}
+func NewDispatch(service *core.Service) *Dispatch {
+	return &Dispatch{service}
 }

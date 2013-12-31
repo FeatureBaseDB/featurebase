@@ -25,6 +25,7 @@ type Service struct {
 	ProcessMap     *ProcessMap
 	Transport      interfaces.Transporter
 	Dispatch       interfaces.Dispatcher
+	Executor       interfaces.Executorer
 	WebService     *WebService
 	process_id     *uuid.UUID
 	Index          *index.FragmentContainer
@@ -79,6 +80,7 @@ func (service *Service) Run() {
 	go service.WebService.Run()
 	go service.Transport.Run()
 	go service.Dispatch.Run()
+	go service.Executor.Run()
 
 	sigterm, sighup := service.GetSignals()
 	for {

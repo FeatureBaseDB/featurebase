@@ -66,7 +66,13 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	cluster := self.service.Cluster
 	database := cluster.GetOrCreateDatabase("main")
 	pql := string(body)
-	query.Execute(database, pql)
+	query_plan := query.QueryPlanForPQL(database, pql)
+
+	results_ch := make(chan *query.QueryResults)
+	self.service.Executor.NewJob(query_plan, results_ch)
+	results := <-results_ch
+	spew.Dump(results)
+	close(results_ch)
 }
 
 func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {

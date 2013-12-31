@@ -9,6 +9,10 @@ import (
 
 type QueryInput interface{}
 
+type QueryResults struct {
+	Data interface{}
+}
+
 type Query struct {
 	Operation string
 	Inputs    []QueryInput //"strconv"
@@ -17,7 +21,7 @@ type Query struct {
 	Profile_id int
 }
 
-func Execute(database *db.Database, pql string) {
+func QueryPlanForPQL(database *db.Database, pql string) *QueryPlan {
 	//spew.Dump("EXECUTE")
 	//spew.Dump(pql)
 	tokens := Lex(pql)
@@ -40,4 +44,5 @@ func Execute(database *db.Database, pql string) {
 	destination := db.Process{}
 	query_plan := query_planner.Plan(query, id, &destination)
 	spew.Dump(query_plan)
+	return query_plan
 }

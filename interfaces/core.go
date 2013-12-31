@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"pilosa/db"
+	"pilosa/query"
 )
 
 type Transporter interface {
@@ -15,4 +16,11 @@ type Dispatcher interface {
 	Init() error
 	Close()
 	Run()
+}
+
+type Executorer interface {
+	Init() error
+	Close()
+	Run()
+	NewJob(*query.QueryPlan, chan *query.QueryResults)
 }
