@@ -23,7 +23,6 @@ type Executor struct {
 	service *core.Service
 	inbox   chan *db.Message
 	qs_chan chan *query.QueryStep
-	hold    map[*uuid.UUID]chan *query.QueryResults
 }
 
 func (self *Executor) Init() error {
@@ -36,11 +35,8 @@ func (self *Executor) Close() {
 }
 
 func (self *Executor) NewJob(job *db.Message) {
-	//j := Job{qp, results}
-	//self.inbox <- &j
 	spew.Dump("NewJob")
 	spew.Dump(job.Data)
-	// TODO: switch on job.Data type
 	switch job.Data.(type) {
 	case query.GetQueryStep:
 
@@ -65,8 +61,9 @@ func (self *Executor) NewJob(job *db.Message) {
 			spew.Dump(err)
 		}
 		spew.Dump(count)
+		spew.Dump(qs.Id)
 
-		//self.Set(job.Data.Id, query_results)
+		//self.Set(qs.Id, count)
 	case query.SetQueryStep:
 		fmt.Println("SET QUERYSTEP")
 		//self.Get()
@@ -75,13 +72,6 @@ func (self *Executor) NewJob(job *db.Message) {
 
 	}
 }
-
-/*
-func (self *Executor) NewJob(qp *query.QueryPlan, results chan *query.QueryResults) {
-	j := Job{qp, results}
-	self.inbox <- &j
-}
-*/
 
 func (self *Executor) NewQS(qs *query.QueryStep) {
 	self.qs_chan <- qs
@@ -168,5 +158,5 @@ func (self *Executor) Run() {
 }
 
 func NewExecutor(service *core.Service) *Executor {
-	return &Executor{service, make(chan *db.Message), make(chan *query.QueryStep), make(map[*uuid.UUID]chan *query.QueryResults)}
+	return &Executor{service, make(chan *db.Message), make(chan *query.QueryStep)}
 }

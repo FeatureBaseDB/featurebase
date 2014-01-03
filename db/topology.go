@@ -16,18 +16,10 @@ var SliceDoesNotExistError = errors.New("Slice does not exist.")
 var FragmentDoesNotExistError = errors.New("Fragment does not exist.")
 var FrameSliceIntersectDoesNotExistError = errors.New("FrameSliceIntersect does not exist.")
 
-/*
-type Location struct {
-	Ip   string
-	Port int
-}
-*/
 type Location struct {
 	ProcessId  *uuid.UUID
 	FragmentId util.SUUID
 }
-
-type ProcessId *uuid.UUID
 
 type Process struct {
 	id        *uuid.UUID

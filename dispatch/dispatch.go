@@ -32,7 +32,7 @@ func (self *Dispatch) Run() {
 		switch message.Data.(type) {
 		case query.GetQueryStep, query.SetQueryStep:
 			fmt.Println("GET/SET QUERYSTEP")
-			self.service.Executor.NewJob(message)
+			go self.service.Executor.NewJob(message)
 		default:
 			fmt.Println("unknown")
 		}
