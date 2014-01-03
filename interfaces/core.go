@@ -10,6 +10,7 @@ type Transporter interface {
 	Close()
 	Send(*db.Message)
 	Receive() *db.Message
+	Push(*db.Message)
 }
 
 type Dispatcher interface {
@@ -22,5 +23,8 @@ type Executorer interface {
 	Init() error
 	Close()
 	Run()
-	NewJob(*query.QueryPlan, chan *query.QueryResults)
+	//NewJob(*query.QueryPlan, chan *query.QueryResults)
+	NewJob(*db.Message)
+	NewQS(*query.QueryStep)
+	RunQuery(string, string)
 }

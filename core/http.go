@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"pilosa/config"
 	"pilosa/db"
-	"pilosa/query"
 	"strconv"
 
 	"github.com/davecgh/go-spew/spew"
@@ -31,6 +30,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/info", self.HandleInfo)
 	mux.HandleFunc("/processes", self.HandleProcesses)
 	mux.HandleFunc("/listen", self.HandleListen)
+	mux.HandleFunc("/test", self.HandleTest)
 	s := &http.Server{
 		Addr:    ":" + port_string,
 		Handler: mux,
@@ -63,17 +63,26 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error reading POST data", http.StatusBadRequest)
 		return
 	}
-	cluster := self.service.Cluster
-	database := cluster.GetOrCreateDatabase("main")
-	pql := string(body)
-	query_plan := query.QueryPlanForPQL(database, pql)
 
-	results_ch := make(chan *query.QueryResults)
-	self.service.Executor.NewJob(query_plan, results_ch)
-	results := <-results_ch
-	spew.Dump("Results")
-	spew.Dump(results)
-	close(results_ch)
+	// TODO: we need to get the database name from the query string (for now, hard-coded)
+	database_name := "main"
+	//cluster := self.service.Cluster
+	//database := cluster.GetOrCreateDatabase(database_name)
+
+	pql := string(body)
+	self.service.Executor.RunQuery(database_name, pql)
+
+	/*
+		query_plan := query.QueryPlanForPQL(database, pql)
+		spew.Dump(query_plan)
+
+		results_ch := make(chan *query.QueryResults)
+		self.service.Executor.NewJob(query_plan, results_ch)
+		results := <-results_ch
+		spew.Dump("Results")
+		spew.Dump(results)
+		close(results_ch)
+	*/
 }
 
 func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +105,22 @@ func (self *WebService) HandleInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	spew.Fdump(w, self.service.Cluster)
+}
+
+func (self *WebService) HandleTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	spew.Dump("TEST!")
+
+	msg := new(db.Message)
+	msg.Data = "mystring"
+	self.service.Transport.Push(msg)
+
+	msg2 := new(db.Message)
+	msg2.Data = 789
+	self.service.Transport.Push(msg2)
 }
 
 func (self *WebService) HandleProcesses(w http.ResponseWriter, r *http.Request) {

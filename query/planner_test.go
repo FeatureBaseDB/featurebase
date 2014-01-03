@@ -53,13 +53,14 @@ func TestQueryPlanner(t *testing.T) {
 		fragment2.SetProcess(process2)
 
 		qplanner := QueryPlanner{Database: database}
-		destination := db.Process{}
+		destination := fragment1.GetLocation()
 
 		id, _ := uuid.NewV4()
-		qp := qplanner.Plan(&query, id, &destination)
+		qp := qplanner.Plan(&query, id, destination)
 
 		for i, qs := range *qp {
-			spew.Dump(i, qs, qs.inputs)
+			//spew.Dump(i, qs, qs.inputs)
+			spew.Dump(i, qs)
 			spew.Dump("**************************************************************")
 		}
 	})

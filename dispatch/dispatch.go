@@ -1,8 +1,10 @@
 package dispatch
 
 import (
+	"fmt"
 	"log"
 	"pilosa/core"
+	"pilosa/query"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -25,8 +27,15 @@ func (self *Dispatch) Run() {
 	for {
 		message := self.service.Transport.Receive()
 		log.Println("Processing ", message)
-		spew.Dump(message.Key)
 		spew.Dump(message.Data)
+
+		switch message.Data.(type) {
+		case query.GetQueryStep, query.SetQueryStep:
+			fmt.Println("GET/SET QUERYSTEP")
+			self.service.Executor.NewJob(message)
+		default:
+			fmt.Println("unknown")
+		}
 
 		/*
 			path := message.Data.(string)

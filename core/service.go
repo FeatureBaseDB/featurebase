@@ -95,3 +95,7 @@ func (service *Service) Run() {
 		}
 	}
 }
+
+type Message interface {
+	Handle(*Service)
+}

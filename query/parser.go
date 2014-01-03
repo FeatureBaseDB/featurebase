@@ -14,23 +14,29 @@ func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, int) {
 	// BITMAP
 	if tokens[0].Type == TYPE_ID {
 		// TODO: look for frame type in the tokens list
-		bitmap_id, err := strconv.Atoi(tokens[0].Text)
+		b, err := strconv.Atoi(tokens[0].Text)
+		bitmap_id := uint64(b)
 		if err != nil {
 			panic(err)
 		}
 		// if the next 2 tokens are comma-frame, then we have a frame, else set to a default
 		frame_type := "general"
-		if len(tokens) > 2 && tokens[2].Type == TYPE_FRAME {
-			frame_type = tokens[2].Text
-		}
-		bm := db.Bitmap{bitmap_id, frame_type}
 		profile_id := 0
-		if len(tokens) > 4 && tokens[4].Type == TYPE_PROFILE {
+		if len(tokens) > 4 && tokens[2].Type == TYPE_FRAME && tokens[4].Type == TYPE_PROFILE {
+			frame_type = tokens[2].Text
 			profile_id, err = strconv.Atoi(tokens[4].Text)
 			if err != nil {
 				panic(err)
 			}
+		} else if len(tokens) > 2 && tokens[2].Type == TYPE_FRAME {
+			frame_type = tokens[2].Text
+		} else if len(tokens) > 2 && tokens[2].Type == TYPE_PROFILE {
+			profile_id, err = strconv.Atoi(tokens[2].Text)
+			if err != nil {
+				panic(err)
+			}
 		}
+		bm := db.Bitmap{bitmap_id, frame_type}
 		return []QueryInput{&bm}, profile_id
 	}
 

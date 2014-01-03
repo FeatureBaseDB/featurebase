@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log"
 	"pilosa/util"
-	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/nu7hatch/gouuid"
@@ -18,10 +16,18 @@ var SliceDoesNotExistError = errors.New("Slice does not exist.")
 var FragmentDoesNotExistError = errors.New("Fragment does not exist.")
 var FrameSliceIntersectDoesNotExistError = errors.New("FrameSliceIntersect does not exist.")
 
+/*
 type Location struct {
 	Ip   string
 	Port int
 }
+*/
+type Location struct {
+	ProcessId  *uuid.UUID
+	FragmentId util.SUUID
+}
+
+type ProcessId *uuid.UUID
 
 type Process struct {
 	id        *uuid.UUID
@@ -83,6 +89,7 @@ func (self *Process) SetPortHttp(port int) {
 	self.port_http = port
 }
 
+/*
 // Create a Location struct given a string in form "0.0.0.0:0"
 func NewLocation(location_string string) (*Location, error) {
 	splitstring := strings.Split(location_string, ":")
@@ -103,6 +110,7 @@ func (location *Location) ToString() string {
 
 // Map of node location to their router
 type NodeMap map[Location]Location
+*/
 
 /////////// CLUSTERS ////////////////////////////////////////////////////////////////////
 
@@ -291,8 +299,20 @@ type Fragment struct {
 	process *Process
 }
 
+func (f *Fragment) GetId() util.SUUID {
+	return f.id
+}
+
 func (f *Fragment) GetProcess() *Process {
 	return f.process
+}
+
+func (f *Fragment) GetProcessId() *uuid.UUID {
+	return f.process.id
+}
+
+func (f *Fragment) GetLocation() *Location {
+	return &Location{f.process.id, f.id}
 }
 
 // rename this one
@@ -388,6 +408,6 @@ func (d *Database) GetSliceForProfile(profile_id int) (*Slice, error) {
 }
 
 type Bitmap struct {
-	Id        int
+	Id        uint64
 	FrameType string
 }

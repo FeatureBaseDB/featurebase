@@ -29,6 +29,10 @@ func (self *TcpTransport) Receive() *db.Message {
 	return <-self.inbox
 }
 
+func (self *TcpTransport) Push(message *db.Message) {
+	self.inbox <- message
+}
+
 func NewTcpTransport(service *core.Service) *TcpTransport {
 	return &TcpTransport{config.GetInt("port_tcp"), make(chan *db.Message), nil}
 }

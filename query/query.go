@@ -2,6 +2,9 @@ package query
 
 import (
 	"pilosa/db"
+	"pilosa/util"
+
+	"github.com/davecgh/go-spew/spew"
 	"github.com/nu7hatch/gouuid"
 )
 
@@ -20,26 +23,20 @@ type Query struct {
 }
 
 func QueryPlanForPQL(database *db.Database, pql string) *QueryPlan {
-	//spew.Dump("EXECUTE")
-	//spew.Dump(pql)
 	tokens := Lex(pql)
-	//spew.Dump(tokens)
-
 	query_parser := QueryParser{}
 	query, err := query_parser.Parse(tokens)
+	spew.Dump("-------------------------------------")
+	spew.Dump(query)
+	spew.Dump("-------------------------------------")
 	if err != nil {
 		panic(err)
 	}
-	//spew.Dump(query)
-
-	// switch on different query types:
-	//if query.Operation == "set" {
-	//spew.Dump("SET!!")
-	//}
-
 	query_planner := QueryPlanner{Database: database}
 	id, _ := uuid.NewV4()
-	destination := db.Process{}
+	process_id, _ := uuid.NewV4()
+	fragment_id := util.SUUID(1)
+	destination := db.Location{process_id, fragment_id}
 	query_plan := query_planner.Plan(query, id, &destination)
 	return query_plan
 }

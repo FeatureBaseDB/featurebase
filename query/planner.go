@@ -10,37 +10,56 @@ import (
 
 // A single step in the query plan.
 type QueryStep struct {
-	id             uuid.UUID
-	operation      string
-	inputs         []QueryInput
-	location       *db.Process
-	return_process *db.Process
+	id          uuid.UUID
+	operation   string
+	inputs      []QueryInput
+	location    *db.Location
+	destination *db.Location
+}
+
+type GetQueryStep struct {
+	Id          uuid.UUID
+	Operation   string
+	Bitmap      *db.Bitmap
+	Slice       int
+	Location    *db.Location
+	Destination *db.Location
+}
+
+type SetQueryStep struct {
+	Id          uuid.UUID
+	Operation   string
+	Bitmap      *db.Bitmap
+	ProfileId   int
+	Location    *db.Location
+	Destination *db.Location
 }
 
 func (q QueryStep) StringHOLD() string {
-	return fmt.Sprintf("%s %s %s, LOC: %s, DEST: %s", q.operation, q.id.String(), q.inputs, q.location, q.return_process)
+	return fmt.Sprintf("%s %s %s, LOC: %s, DEST: %s", q.operation, q.id.String(), q.inputs, q.location, q.destination)
 }
 
 // This is the output of the query planner. Contains a list of steps which can be performed in parallel
-type QueryPlan []QueryStep
+//type QueryPlan []QueryStep
+type QueryPlan []interface{}
 
 type QueryPlanner struct {
 	Database *db.Database
 }
 
 type QueryTree interface {
-	getLocation(d *db.Database) *db.Process
+	getLocation(d *db.Database) *db.Location
 }
 
 // QueryTree for UNION, INTER, and CAT queries
 type CompositeQueryTree struct {
 	operation  string
 	subqueries []QueryTree
-	location   *db.Process
+	location   *db.Location
 }
 
 // Randomly select location from subqueries (so subqueries roll up into composite queries while minimizing inter-node data traffic)
-func (qt *CompositeQueryTree) getLocation(d *db.Database) *db.Process {
+func (qt *CompositeQueryTree) getLocation(d *db.Database) *db.Location {
 	if qt.location == nil {
 		subqueryLength := len(qt.subqueries)
 		if subqueryLength > 0 {
@@ -65,23 +84,23 @@ type SetQueryTree struct {
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
-func (qt *GetQueryTree) getLocation(d *db.Database) *db.Process {
+func (qt *GetQueryTree) getLocation(d *db.Database) *db.Location {
 	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
 		panic(err)
 	}
-	return fragment.GetProcess()
+	return fragment.GetLocation()
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
-func (qt *SetQueryTree) getLocation(d *db.Database) *db.Process {
+func (qt *SetQueryTree) getLocation(d *db.Database) *db.Location {
 	slice, err := d.GetSliceForProfile(qt.profile_id)
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
 		panic(err)
 	}
-	return fragment.GetProcess()
+	return fragment.GetLocation()
 }
 
 // Builds QueryTree object from Query. Pass slice=-1 to perform operation on all slices
@@ -122,7 +141,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 }
 
 // Produces flattened QueryPlan from QueryTree input
-func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Process) *QueryPlan {
+func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Location) *QueryPlan {
 	plan := QueryPlan{}
 	if composite, ok := qt.(*CompositeQueryTree); ok {
 		inputs := make([]QueryInput, len(composite.subqueries))
@@ -136,11 +155,11 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Proces
 		}
 		plan = append(plan, step)
 	} else if get, ok := qt.(*GetQueryTree); ok {
-		step := QueryStep{*id, "get", []QueryInput{get.bitmap, get.slice}, get.getLocation(qp.Database), location}
+		step := GetQueryStep{*id, "get", get.bitmap, get.slice, get.getLocation(qp.Database), location}
 		plan := QueryPlan{step}
 		return &plan
 	} else if set, ok := qt.(*SetQueryTree); ok {
-		step := QueryStep{*id, "set", []QueryInput{set.bitmap, set.profile_id}, set.getLocation(qp.Database), location}
+		step := SetQueryStep{*id, "set", set.bitmap, set.profile_id, set.getLocation(qp.Database), location}
 		plan := QueryPlan{step}
 		return &plan
 	}
@@ -148,7 +167,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Proces
 }
 
 // Transforms Query into QueryTree and flattens to QueryPlan object
-func (qp *QueryPlanner) Plan(query *Query, id *uuid.UUID, destination *db.Process) *QueryPlan {
+func (qp *QueryPlanner) Plan(query *Query, id *uuid.UUID, destination *db.Location) *QueryPlan {
 	queryTree := qp.buildTree(query, -1)
 	return qp.flatten(queryTree, id, destination)
 }
