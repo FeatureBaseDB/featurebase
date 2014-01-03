@@ -24,11 +24,6 @@
         "version": "44eda643c1ae69e866e491b1c935c5b22e42350e",
         "type": "git"
     },
-    "gouuid": {
-        "repo": "github.com/nu7hatch/gouuid",
-        "version": "87bcc4729f2c5a08d2513ad10684c6bbd256380f",
-        "type": "git"
-    },
     "goyaml": {
         "repo": "launchpad.net/goyaml",
         "version": "50",

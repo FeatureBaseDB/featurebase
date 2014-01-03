@@ -6,7 +6,6 @@ package query
 //	"pilosa/query"
 //	"pilosa/core"
 //	"math/rand"
-//	"github.com/nu7hatch/gouuid"
 //	"time"
 //	"log"
 //)

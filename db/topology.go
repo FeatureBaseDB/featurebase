@@ -7,8 +7,8 @@ import (
 	"pilosa/util"
 	"sync"
 
-	"github.com/nu7hatch/gouuid"
 	"github.com/stathat/consistent"
+	"tux21b.org/v1/gocql/uuid"
 )
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")

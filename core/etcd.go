@@ -12,7 +12,7 @@ import (
 
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/nu7hatch/gouuid"
+	"tux21b.org/v1/gocql/uuid"
 )
 
 type TopologyMapper struct {
@@ -63,7 +63,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 	var fragment_id util.SUUID
 	var slice *db.Slice
 	var slice_int int
-	var process_uuid *uuid.UUID
+	var process_uuid uuid.UUID
 	var process *db.Process
 	var err error
 
@@ -107,11 +107,11 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		if bits[8] != "process" {
 			return errors.New("no process")
 		}
-		process_uuid, err = uuid.ParseHex(node.Value)
+		process_uuid, err = uuid.ParseUUID(node.Value)
 		if err != nil {
 			return err
 		}
-		process = db.NewProcess(process_uuid)
+		process = db.NewProcess(&process_uuid)
 		fragment.SetProcess(process)
 
 		if self.service.Id.String() == process_uuid.String() {
@@ -262,11 +262,11 @@ func (self *ProcessMapper) handlenode(node *etcd.Node) error {
 	}
 	if len(bits) >= 2 {
 		id_string := bits[1]
-		id, err := uuid.ParseHex(id_string)
+		id, err := uuid.ParseUUID(id_string)
 		if err != nil {
 			return errors.New("Invalid UUID: " + id_string)
 		}
-		process = self.service.ProcessMap.GetOrAddProcess(id)
+		process = self.service.ProcessMap.GetOrAddProcess(&id)
 	}
 	if len(bits) >= 3 {
 		switch bits[2] {

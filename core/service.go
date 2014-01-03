@@ -12,7 +12,7 @@ import (
 
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/nu7hatch/gouuid"
+	"tux21b.org/v1/gocql/uuid"
 )
 
 type Service struct {
@@ -47,22 +47,22 @@ func NewService() *Service {
 }
 
 func (service *Service) init_id() {
-	var id *uuid.UUID
+	var id uuid.UUID
 	var err error
 	id_string := config.GetString("id")
 	if id_string == "" {
 		log.Println("Service id not configured, generating...")
-		id, err = uuid.NewV4()
+		id = uuid.RandomUUID()
 		if err != nil {
 			log.Fatal("problem generating uuid")
 		}
 	} else {
-		id, err = uuid.ParseHex(id_string)
+		id, err = uuid.ParseUUID(id_string)
 		if err != nil {
 			log.Fatalf("Service id '%s' not valid", id_string)
 		}
 	}
-	service.Id = id
+	service.Id = &id
 }
 
 func (service *Service) GetSignals() (chan os.Signal, chan os.Signal) {

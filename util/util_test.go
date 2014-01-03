@@ -3,8 +3,8 @@ package util
 import (
 	"testing"
 
-	"github.com/nu7hatch/gouuid"
 	. "github.com/smartystreets/goconvey/convey"
+	"tux21b.org/v1/gocql/uuid"
 )
 
 /*
@@ -18,8 +18,8 @@ var (
 func init() {
 	for i, _ := range array {
 		muid[Id()] = i
-		id, _ := uuid.NewV4()
-		muuid[id] = i
+		id := uuid.RandomUUID()
+		muuid[&id] = i
 	}
 
 }
@@ -59,7 +59,7 @@ func BenchmarkId(b *testing.B) {
 func BenchmarkUUID(b *testing.B) {
 	// run the Fib function b.N times
 	for n := 0; n < b.N; n++ {
-		uuid.NewV4()
+		uuid.RandomUUID()
 	}
 }
 
@@ -73,10 +73,10 @@ func BenchmarkLookupId(b *testing.B) {
 	}
 }
 func BenchmarkLookupUUID(b *testing.B) {
-	x, _ := uuid.NewV4()
+	x := uuid.RandomUUID()
 	for i := 0; i < b.N; i++ {
-		if a, found := muuid[x]; found {
-			muuid[x] = a + 1
+		if a, found := muuid[&x]; found {
+			muuid[&x] = a + 1
 		}
 	}
 }

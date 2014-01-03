@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/nu7hatch/gouuid"
 	. "github.com/smartystreets/goconvey/convey"
+	"tux21b.org/v1/gocql/uuid"
 )
 
 func TestQueryPlanner(t *testing.T) {
@@ -39,24 +39,24 @@ func TestQueryPlanner(t *testing.T) {
 		slice1 := database.GetOrCreateSlice(0)
 		fragment_id1 := util.Id()
 		fragment1 := database.GetOrCreateFragment(frame, slice1, fragment_id1)
-		process_id1, _ := uuid.NewV4()
-		process1 := db.NewProcess(process_id1)
+		process_id1 := uuid.RandomUUID()
+		process1 := db.NewProcess(&process_id1)
 		process1.SetHost("----192.1.1.0----")
 		fragment1.SetProcess(process1)
 
 		slice2 := database.GetOrCreateSlice(1)
 		fragment_id2 := util.Id()
 		fragment2 := database.GetOrCreateFragment(frame, slice2, fragment_id2)
-		process_id2, _ := uuid.NewV4()
-		process2 := db.NewProcess(process_id2)
+		process_id2 := uuid.RandomUUID()
+		process2 := db.NewProcess(&process_id2)
 		process2.SetHost("----192.1.1.1----")
 		fragment2.SetProcess(process2)
 
 		qplanner := QueryPlanner{Database: database}
 		destination := fragment1.GetLocation()
 
-		id, _ := uuid.NewV4()
-		qp := qplanner.Plan(&query, id, destination)
+		id := uuid.RandomUUID()
+		qp := qplanner.Plan(&query, &id, destination)
 
 		for i, qs := range *qp {
 			//spew.Dump(i, qs, qs.inputs)

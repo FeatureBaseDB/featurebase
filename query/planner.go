@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"pilosa/db"
 
-	"github.com/nu7hatch/gouuid"
+	"tux21b.org/v1/gocql/uuid"
 )
 
 // A single step in the query plan.
@@ -147,10 +147,10 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		inputs := make([]QueryInput, len(composite.subqueries))
 		step := QueryStep{*id, composite.operation, inputs, composite.getLocation(qp.Database), location}
 		for index, subq := range composite.subqueries {
-			sub_id, _ := uuid.NewV4()
+			sub_id := uuid.RandomUUID()
 			// this is the "wait" step
-			step.inputs[index] = sub_id
-			subq_steps := qp.flatten(subq, sub_id, composite.getLocation(qp.Database))
+			step.inputs[index] = &sub_id
+			subq_steps := qp.flatten(subq, &sub_id, composite.getLocation(qp.Database))
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)

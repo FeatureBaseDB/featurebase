@@ -1,6 +1,6 @@
 package hold
 
-import "github.com/nu7hatch/gouuid"
+import "tux21b.org/v1/gocql/uuid"
 
 type holdchan chan interface{}
 type gethold struct {

@@ -5,7 +5,7 @@ import (
 	"pilosa/util"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/nu7hatch/gouuid"
+	"tux21b.org/v1/gocql/uuid"
 )
 
 type QueryInput interface{}
@@ -33,10 +33,10 @@ func QueryPlanForPQL(database *db.Database, pql string) *QueryPlan {
 		panic(err)
 	}
 	query_planner := QueryPlanner{Database: database}
-	id, _ := uuid.NewV4()
-	process_id, _ := uuid.NewV4()
+	id := uuid.RandomUUID()
+	process_id := uuid.RandomUUID()
 	fragment_id := util.SUUID(1)
-	destination := db.Location{process_id, fragment_id}
-	query_plan := query_planner.Plan(query, id, &destination)
+	destination := db.Location{&process_id, fragment_id}
+	query_plan := query_planner.Plan(query, &id, &destination)
 	return query_plan
 }
