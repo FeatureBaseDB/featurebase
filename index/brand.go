@@ -17,19 +17,29 @@ func (p RankList) Len() int           { return len(p) }
 func (p RankList) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
 type Brand struct {
-	bitmap_cache map[uint64]*Rank
-	db           string
-	slice        int
-	storage      Storage
-	rankings     RankList
+	bitmap_cache     map[uint64]*Rank
+	db               string
+	slice            int
+	storage          Storage
+	rankings         RankList
+	rank_counter     int
+	threshold_value  uint64
+	threshold_length int
+	threshold_idx    int
+	skip             int
 }
 
-func NewBrand(db string, slice int, s Storage) *Brand {
+func NewBrand(db string, slice int, s Storage, threshold_len int, threshold int, skipp int) *Brand {
 	f := new(Brand)
 	f.bitmap_cache = make(map[uint64]*Rank)
 	f.storage = s
 	f.slice = slice
 	f.db = db
+	f.rank_counter = 0
+	f.threshold_value = 0
+	f.threshold_length = threshold_len
+	f.threshold_idx = threshold
+	f.skip = skipp
 	return f
 
 }
@@ -41,8 +51,29 @@ func (self *Brand) Get(bitmap_id uint64) IBitmap {
 	}
 	//I should fetch the category here..need to come up with a good source
 	b := self.storage.Fetch(bitmap_id, self.db, self.slice)
-	self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, b.Count()}, b}
+
+	//Need to figure out wether to cache or not...
+
+	self.cache_it(b, bitmap_id)
+
 	return b
+}
+
+func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64) {
+	if bm.Count() >= self.threshold_value {
+		self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm}
+		if len(self.bitmap_cache) > self.threshold_length {
+			self.trim()
+		}
+	}
+}
+func (self *Brand) trim() {
+	for k, item := range self.bitmap_cache {
+		if item.bitmap.Count() < self.threshold_value {
+			delete(self.bitmap_cache, k)
+		}
+	}
+
 }
 
 func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64) bool {
@@ -52,13 +83,21 @@ func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64) bool {
 		val := chunk.Value.Block[address.BlockIndex]
 		self.storage.StoreBlock(int64(bitmap_id), self.db, self.slice, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
 		self.storage.StoreBlock(int64(bitmap_id), self.db, self.slice, COUNTER_KEY, 0, int64(bm.Count()))
-
-		self.Rank() //need to optimize this
+		if bm.Count() >= self.threshold_value {
+			self.Rank() //need to optimize this
+		}
 	}
 	return change
 }
 
 func (self *Brand) Rank() {
+	if self.rank_counter <= 0 {
+		self.rank_counter = self.skip
+	} else {
+		self.rank_counter -= 1
+		return //skip
+	}
+
 	var list RankList
 	for k, item := range self.bitmap_cache {
 		if item.bitmap.Count() > 50 {
@@ -67,6 +106,12 @@ func (self *Brand) Rank() {
 	}
 	sort.Sort(list)
 	self.rankings = list
+	if len(list) > self.threshold_idx {
+		item := list[self.threshold_idx]
+		self.threshold_value = item.bitmap.Count()
+	} else {
+		self.threshold_value = 0
+	}
 }
 
 func packagePairs(r RankList) []Pair {

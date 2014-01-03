@@ -22,6 +22,8 @@ type BitmapHandle uint64
 func (self *FragmentContainer) GetFragment(frag_id SUUID) (*Fragment, bool) {
 	//lock
 	c, v := self.fragments[frag_id]
+	//log.Println(self.fragments)
+	//log.Println(c)
 	return c, v
 }
 
@@ -116,6 +118,7 @@ func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint6
 }
 
 func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id SUUID) {
+	log.Println("ADD FRAGMENT", frame)
 	f := NewFragment(id, db, slice, frame)
 	self.fragments[id] = f
 	go f.ServeFragment()
@@ -140,13 +143,14 @@ type Fragment struct {
 
 func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
 	var impl Pilosa
+	log.Println("XXXXXXXXXXXXXXXXXXXXXXXXXXXX", frame)
 	switch frame {
 	default:
 		log.Println("General")
 		impl = NewGeneral(db, slice, NewMemoryStorage())
 	case "Brand":
 		log.Println("Brand")
-		impl = NewBrand(db, slice, NewMemoryStorage())
+		impl = NewBrand(db, slice, NewMemoryStorage(), 50000, 45000, 100)
 	}
 
 	f := new(Fragment)
