@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"pilosa/config"
 	"pilosa/db"
+	"pilosa/hold"
 	"pilosa/query"
 	"strconv"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/nu7hatch/gouuid"
 )
 
 type WebService struct {
@@ -31,6 +33,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/info", self.HandleInfo)
 	mux.HandleFunc("/processes", self.HandleProcesses)
 	mux.HandleFunc("/listen", self.HandleListen)
+	mux.HandleFunc("/ping", self.HandlePing)
 	s := &http.Server{
 		Addr:    ":" + port_string,
 		Handler: mux,
@@ -109,6 +112,34 @@ func (self *WebService) HandleProcesses(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		log.Fatal("Error encoding stats")
 	}
+}
+
+func (self *WebService) HandlePing(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	process_string := r.Form.Get("process")
+	process_id, err := uuid.ParseHex(process_string)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	_, err = self.service.ProcessMap.GetProcess(process_id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	id, _ := uuid.NewV4()
+	ping := db.Message{Data: db.PingRequest{Id: id, Source: self.service.Id}}
+	self.service.Transport.Send(&ping, process_id)
+	data, err := hold.Hold.Get(id, 60)
+	spew.Fdump(w, data, err)
 }
 
 func (self *WebService) HandleListen(w http.ResponseWriter, r *http.Request) {

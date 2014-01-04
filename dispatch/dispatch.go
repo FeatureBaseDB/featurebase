@@ -3,8 +3,8 @@ package dispatch
 import (
 	"log"
 	"pilosa/core"
-
-	"github.com/davecgh/go-spew/spew"
+	"pilosa/db"
+	"pilosa/hold"
 )
 
 type Dispatch struct {
@@ -25,8 +25,13 @@ func (self *Dispatch) Run() {
 	for {
 		message := self.service.Transport.Receive()
 		log.Println("Processing ", message)
-		spew.Dump(message.Key)
-		spew.Dump(message.Data)
+		switch data := message.Data.(type) {
+		case db.PingRequest:
+			pong := db.Message{Data: db.PongRequest{Id: data.Id}}
+			self.service.Transport.Send(&pong, data.Source)
+		case db.PongRequest:
+			hold.Hold.Set(data.Id, 1, 10)
+		}
 
 		/*
 			path := message.Data.(string)

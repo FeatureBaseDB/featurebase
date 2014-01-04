@@ -3,12 +3,14 @@ package interfaces
 import (
 	"pilosa/db"
 	"pilosa/query"
+
+	"github.com/nu7hatch/gouuid"
 )
 
 type Transporter interface {
 	Run()
 	Close()
-	Send(*db.Message)
+	Send(*db.Message, *uuid.UUID)
 	Receive() *db.Message
 }
 
