@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"pilosa/config"
 	"pilosa/db"
-	"pilosa/hold"
 	"pilosa/query"
 	"strconv"
 
@@ -135,11 +134,13 @@ func (self *WebService) HandlePing(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	id, _ := uuid.NewV4()
-	ping := db.Message{Data: db.PingRequest{Id: id, Source: self.service.Id}}
-	self.service.Transport.Send(&ping, process_id)
-	data, err := hold.Hold.Get(id, 60)
-	spew.Fdump(w, data, err)
+	duration, err := self.service.Ping(process_id)
+	if err != nil {
+		spew.Fdump(w, err)
+		return
+	}
+	encoder := json.NewEncoder(w)
+	encoder.Encode(map[string]float64{"duration": duration.Seconds()})
 }
 
 func (self *WebService) HandleListen(w http.ResponseWriter, r *http.Request) {

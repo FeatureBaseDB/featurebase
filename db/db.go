@@ -12,17 +12,10 @@ type Message struct {
 	Destination Location
 }
 
-type PingRequest struct {
-	Id     *uuid.UUID
-	Source *uuid.UUID
-}
-
-type PongRequest struct {
-	Id *uuid.UUID
+type HoldResult interface {
+	ResultId() *uuid.UUID
 }
 
 func init() {
 	gob.Register(Message{})
-	gob.Register(PingRequest{})
-	gob.Register(PongRequest{})
 }

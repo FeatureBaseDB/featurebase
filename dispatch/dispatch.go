@@ -5,6 +5,8 @@ import (
 	"pilosa/core"
 	"pilosa/db"
 	"pilosa/hold"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 type Dispatch struct {
@@ -24,13 +26,15 @@ func (self *Dispatch) Run() {
 	log.Println("Dispatch Run...")
 	for {
 		message := self.service.Transport.Receive()
-		log.Println("Processing ", message)
+		spew.Dump("Processing ", message)
 		switch data := message.Data.(type) {
-		case db.PingRequest:
-			pong := db.Message{Data: db.PongRequest{Id: data.Id}}
+		case core.PingRequest:
+			pong := db.Message{Data: core.PongRequest{Id: data.Id}}
 			self.service.Transport.Send(&pong, data.Source)
-		case db.PongRequest:
-			hold.Hold.Set(data.Id, 1, 10)
+		case db.HoldResult:
+			hold.Hold.Set(data.ResultId(), data, 30)
+		default:
+			log.Println("Unprocessed message", data)
 		}
 
 		/*
