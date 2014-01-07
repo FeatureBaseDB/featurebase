@@ -8,7 +8,6 @@ import (
 	"pilosa/config"
 	"pilosa/core"
 	"pilosa/db"
-	"time"
 
 	"tux21b.org/v1/gocql/uuid"
 )
@@ -46,7 +45,7 @@ func (self *TcpTransport) Run() {
 				log.Println(err.Error())
 				return
 			}
-			time.Sleep(1 * time.Second)
+			//time.Sleep(1 * time.Second)
 		}
 	}
 }

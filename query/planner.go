@@ -34,6 +34,13 @@ type GetQueryStep struct {
 	Destination *db.Location
 }
 
+func (qs GetQueryStep) LocIsDest() bool {
+	if qs.Location.ProcessId == qs.Destination.ProcessId && qs.Location.FragmentId == qs.Destination.FragmentId {
+		return true
+	}
+	return false
+}
+
 type SetQueryStep struct {
 	Id          *uuid.UUID
 	Operation   string

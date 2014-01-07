@@ -34,17 +34,48 @@ func (self *Executor) NewJob(job *db.Message) {
 		qs := job.Data.(query.CatQueryStep)
 		fmt.Println("CAT QUERYSTEP")
 		spew.Dump(qs)
+		var bhs []index.BitmapHandle
+		use_sum := false
+		sum := 0
 		for _, input := range qs.Inputs {
 			spew.Dump(input)
-			bhi, err := self.service.Hold.Get(input, 10)
-			bh := bhi.(index.BitmapHandle)
-			// TODO: git rid of this count, need the cat to do a sum() or a true cat()
-			count, err := self.service.Index.Count(qs.Location.FragmentId, bh)
+			bhi, _ := self.service.Hold.Get(input, 10)
+			spew.Dump(bhi)
+			switch bhi.(type) {
+			case index.BitmapHandle:
+				spew.Dump("BH")
+				bhs = append(bhs, bhi.(index.BitmapHandle))
+			case []byte:
+				spew.Dump("RAW")
+				bh, _ := self.service.Index.FromBytes(qs.Location.FragmentId, bhi.([]byte))
+				bhs = append(bhs, bh)
+			case int:
+				use_sum = true
+				sum += bhi.(int)
+			}
+		}
+
+		if use_sum {
+			spew.Dump("SUM", sum)
+		} else {
+
+			spew.Dump("BHS", bhs)
+
+			unionbh, err := self.service.Index.Union(qs.Location.FragmentId, bhs)
 			if err != nil {
 				spew.Dump(err)
 			}
-			spew.Dump("COUNT", count)
+			spew.Dump("UNION BH", unionbh)
+
+			/*
+				count, err := self.service.Index.Count(qs.Location.FragmentId, unionbh)
+				if err != nil {
+					spew.Dump(err)
+				}
+				spew.Dump("FINAL COUNT", count)
+			*/
 		}
+
 	case query.GetQueryStep:
 
 		qs := job.Data.(query.GetQueryStep)
@@ -58,7 +89,16 @@ func (self *Executor) NewJob(job *db.Message) {
 		}
 		//spew.Dump("COUNT", count)
 		// push results to the map
-		self.service.Hold.Set(qs.Id, bh, 10)
+
+		if qs.LocIsDest() {
+			self.service.Hold.Set(qs.Id, bh, 10)
+		} else {
+			bm, err := self.service.Index.GetBytes(qs.Location.FragmentId, bh)
+			if err != nil {
+				spew.Dump(err)
+			}
+			self.service.Hold.Set(qs.Id, bm, 10)
+		}
 
 	case query.SetQueryStep:
 		qs := job.Data.(query.SetQueryStep)
