@@ -8,6 +8,7 @@ import (
 	"pilosa/index"
 	"pilosa/query"
 	"pilosa/util"
+	"tux21b.org/v1/gocql/uuid"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -27,20 +28,38 @@ func (self *Executor) Close() {
 }
 
 func (self *Executor) NewJob(job *db.Message) {
-	spew.Dump("NewJob")
-	spew.Dump(job.Data)
 	switch job.Data.(type) {
+	case query.CountQueryStep:
+		spew.Dump("COUNT QUERYSTEP")
+
+		qs := job.Data.(query.CountQueryStep)
+		input := qs.Input
+		bhi, _ := self.service.Hold.Get(input, 10)
+		var bh index.BitmapHandle
+		switch bhi.(type) {
+		case index.BitmapHandle:
+			bh = bhi.(index.BitmapHandle)
+		case []byte:
+			bh, _ = self.service.Index.FromBytes(qs.Location.FragmentId, bhi.([]byte))
+		}
+
+		count, err := self.service.Index.Count(qs.Location.FragmentId, bh)
+		if err != nil {
+			spew.Dump(err)
+		}
+		spew.Dump("SLICE COUNT", count)
+		// TODO: instead of adding to the local hold, we need to send result to transport (which may go to a remote process's hold)
+		self.service.Hold.Set(qs.Id, count, 10)
+
 	case query.CatQueryStep:
 		qs := job.Data.(query.CatQueryStep)
-		fmt.Println("CAT QUERYSTEP")
+		spew.Dump("CAT QUERYSTEP")
 		spew.Dump(qs)
 		var bhs []index.BitmapHandle
 		use_sum := false
-		sum := 0
+		var sum uint64
 		for _, input := range qs.Inputs {
-			spew.Dump(input)
 			bhi, _ := self.service.Hold.Get(input, 10)
-			spew.Dump(bhi)
 			switch bhi.(type) {
 			case index.BitmapHandle:
 				spew.Dump("BH")
@@ -49,47 +68,38 @@ func (self *Executor) NewJob(job *db.Message) {
 				spew.Dump("RAW")
 				bh, _ := self.service.Index.FromBytes(qs.Location.FragmentId, bhi.([]byte))
 				bhs = append(bhs, bh)
-			case int:
+			case uint64:
 				use_sum = true
-				sum += bhi.(int)
+				sum += bhi.(uint64)
 			}
 		}
 
 		if use_sum {
 			spew.Dump("SUM", sum)
+			// TODO: instead of adding to the local hold, we need to send result to transport (which may go to a remote process's hold)
+			self.service.Hold.Set(qs.Id, sum, 10)
 		} else {
-
-			spew.Dump("BHS", bhs)
-
 			unionbh, err := self.service.Index.Union(qs.Location.FragmentId, bhs)
 			if err != nil {
 				spew.Dump(err)
 			}
-			spew.Dump("UNION BH", unionbh)
-
-			/*
-				count, err := self.service.Index.Count(qs.Location.FragmentId, unionbh)
-				if err != nil {
-					spew.Dump(err)
-				}
-				spew.Dump("FINAL COUNT", count)
-			*/
+			unionbm, err := self.service.Index.GetBytes(qs.Location.FragmentId, unionbh)
+			if err != nil {
+				spew.Dump(err)
+			}
+			// TODO: instead of adding to the local hold, we need to send result to transport (which may go to a remote process's hold)
+			self.service.Hold.Set(qs.Id, unionbm, 10)
 		}
 
 	case query.GetQueryStep:
 
 		qs := job.Data.(query.GetQueryStep)
-		fmt.Println("GET QUERYSTEP")
+		spew.Dump("GET QUERYSTEP")
 
-		// perform get query with index
 		bh, err := self.service.Index.Get(qs.Location.FragmentId, qs.Bitmap.Id)
-		//count, err := self.service.Index.Count(qs.Location.FragmentId, bh)
 		if err != nil {
 			spew.Dump(err)
 		}
-		//spew.Dump("COUNT", count)
-		// push results to the map
-
 		if qs.LocIsDest() {
 			self.service.Hold.Set(qs.Id, bh, 10)
 		} else {
@@ -97,12 +107,13 @@ func (self *Executor) NewJob(job *db.Message) {
 			if err != nil {
 				spew.Dump(err)
 			}
+			// TODO: instead of adding to the local hold, we need to send result to transport (which may go to a remote process's hold)
 			self.service.Hold.Set(qs.Id, bm, 10)
 		}
 
 	case query.SetQueryStep:
 		qs := job.Data.(query.SetQueryStep)
-		fmt.Println("SET QUERYSTEP")
+		spew.Dump("SET QUERYSTEP")
 		self.service.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
 	default:
 		fmt.Println("unknown")
@@ -111,10 +122,7 @@ func (self *Executor) NewJob(job *db.Message) {
 }
 
 func (self *Executor) RunQuery(database_name string, pql string) {
-	log.Println("RunQuery: PQL")
-
 	database := self.service.Cluster.GetOrCreateDatabase(database_name)
-
 	process, err := self.service.GetProcess()
 	if err != nil {
 		spew.Dump(err)
@@ -124,18 +132,33 @@ func (self *Executor) RunQuery(database_name string, pql string) {
 	destination := db.Location{&process_id, fragment_id}
 
 	query_plan := query.QueryPlanForPQL(database, pql, &destination)
+	spew.Dump("--------query_plan-------------------")
 	spew.Dump(query_plan)
+	spew.Dump("-------------------------------------")
+	//return
 
 	// loop over the query steps and send to Transport
+	var last_id *uuid.UUID
 	for _, qs := range *query_plan {
 		msg := new(db.Message)
 		msg.Data = qs
+		spew.Dump("qs", qs)
+		switch step := qs.(type) {
+		case query.CatQueryStep:
+			last_id = step.Id
+		}
 		self.service.Transport.Push(msg)
 	}
 
-	// TODO: add an entry to my execute map[key] that is waiting for the final result
-	//self.service.Hold.Get(??)
-
+	// add an entry to my execute map[key] that is waiting for the final result
+	if last_id != nil {
+		final, err := self.service.Hold.Get(last_id, 10)
+		if err != nil {
+			spew.Dump(err)
+		}
+		spew.Dump("last_id", last_id)
+		spew.Dump("GRAND FINAL", final)
+	}
 }
 
 func (self *Executor) Run() {

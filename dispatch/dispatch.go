@@ -1,13 +1,10 @@
 package dispatch
 
 import (
-	"fmt"
 	"log"
 	"pilosa/core"
 	"pilosa/db"
 	"pilosa/query"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 type Dispatch struct {
@@ -27,18 +24,18 @@ func (self *Dispatch) Run() {
 	log.Println("Dispatch Run...")
 	for {
 		message := self.service.Transport.Receive()
-		spew.Dump("Processing ", message)
+		//spew.Dump("Processing ", message)
 		switch data := message.Data.(type) {
 		case core.PingRequest:
 			pong := db.Message{Data: core.PongRequest{Id: data.Id}}
 			self.service.Transport.Send(&pong, data.Source)
 		case db.HoldResult:
 			self.service.Hold.Set(data.ResultId(), data, 30)
-		case query.CatQueryStep, query.GetQueryStep, query.SetQueryStep:
-			fmt.Println("CAT/GET/SET QUERYSTEP")
+		case query.CatQueryStep, query.GetQueryStep, query.SetQueryStep, query.CountQueryStep:
+			//fmt.Println("CAT/GET/SET QUERYSTEP")
 			go self.service.Executor.NewJob(message)
 		default:
-			log.Println("Unprocessed message", data)
+			//log.Println("Unprocessed message", data)
 		}
 
 		/*

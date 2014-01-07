@@ -17,6 +17,15 @@ type QueryStep struct {
 	destination *db.Location
 }
 
+type CountQueryStep struct {
+	Id        *uuid.UUID
+	Operation string
+	//Input       QueryInput
+	Input       *uuid.UUID
+	Location    *db.Location
+	Destination *db.Location
+}
+
 type CatQueryStep struct {
 	Id          *uuid.UUID
 	Operation   string
@@ -66,11 +75,18 @@ type QueryTree interface {
 	getLocation(d *db.Database) *db.Location
 }
 
-// QueryTree for UNION, INTER, and CAT queries
+// QueryTree for UNION and INTERSECT queries
 type CompositeQueryTree struct {
 	operation  string
 	subqueries []QueryTree
 	location   *db.Location
+}
+
+// QueryTree for COUNT queries
+type CountQueryTree struct {
+	operation string
+	subquery  QueryTree
+	location  *db.Location
 }
 
 // Randomly select location from subqueries (so subqueries roll up into composite queries while minimizing inter-node data traffic)
@@ -130,6 +146,11 @@ func (qt *GetQueryTree) getLocation(d *db.Database) *db.Location {
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
+func (qt *CountQueryTree) getLocation(d *db.Database) *db.Location {
+	return qt.subquery.getLocation(d)
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
 func (qt *SetQueryTree) getLocation(d *db.Database) *db.Location {
 	slice, err := d.GetSliceForProfile(qt.profile_id)
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
@@ -165,6 +186,9 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 		if query.Operation == "get" {
 			tree = &GetQueryTree{query.Inputs[0].(*db.Bitmap), slice}
 			return tree
+		} else if query.Operation == "count" {
+			subquery := qp.buildTree(query.Inputs[0].(*Query), slice)
+			tree = &CountQueryTree{operation: query.Operation, subquery: subquery}
 		} else {
 			subqueries := make([]QueryTree, len(query.Inputs))
 			for i, input := range query.Inputs {
@@ -207,6 +231,13 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		step := SetQueryStep{id, "set", set.bitmap, set.profile_id, set.getLocation(qp.Database), location}
 		plan := QueryPlan{step}
 		return &plan
+	} else if cnt, ok := qt.(*CountQueryTree); ok {
+		sub_id := uuid.RandomUUID()
+		step := CountQueryStep{id, "count", &sub_id, cnt.getLocation(qp.Database), location}
+		step.Input = &sub_id
+		subq_steps := qp.flatten(cnt.subquery, &sub_id, cnt.getLocation(qp.Database))
+		plan = append(plan, *subq_steps...)
+		plan = append(plan, step)
 	}
 	return &plan
 }
