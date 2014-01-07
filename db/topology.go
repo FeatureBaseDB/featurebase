@@ -394,9 +394,9 @@ func (f *Fragment) SetProcess(process *Process) {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // Get a slice from a database
-func (d *Database) GetSliceForProfile(profile_id int) (*Slice, error) {
+func (d *Database) GetSliceForProfile(profile_id uint64) (*Slice, error) {
 	slice_id := profile_id / SLICE_WIDTH
-	return d.getSlice(slice_id)
+	return d.getSlice(int(slice_id))
 }
 
 type Bitmap struct {

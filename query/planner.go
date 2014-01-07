@@ -10,15 +10,23 @@ import (
 
 // A single step in the query plan.
 type QueryStep struct {
-	id          uuid.UUID
+	id          *uuid.UUID
 	operation   string
 	inputs      []QueryInput
 	location    *db.Location
 	destination *db.Location
 }
 
+type CatQueryStep struct {
+	Id          *uuid.UUID
+	Operation   string
+	Inputs      []*uuid.UUID
+	Location    *db.Location
+	Destination *db.Location
+}
+
 type GetQueryStep struct {
-	Id          uuid.UUID
+	Id          *uuid.UUID
 	Operation   string
 	Bitmap      *db.Bitmap
 	Slice       int
@@ -27,10 +35,10 @@ type GetQueryStep struct {
 }
 
 type SetQueryStep struct {
-	Id          uuid.UUID
+	Id          *uuid.UUID
 	Operation   string
 	Bitmap      *db.Bitmap
-	ProfileId   int
+	ProfileId   uint64
 	Location    *db.Location
 	Destination *db.Location
 }
@@ -71,6 +79,12 @@ func (qt *CompositeQueryTree) getLocation(d *db.Database) *db.Location {
 	return qt.location
 }
 
+// QueryTree for CAT queries
+type CatQueryTree struct {
+	subqueries []QueryTree
+	location   *db.Location
+}
+
 // QueryTree for GET queries
 type GetQueryTree struct {
 	bitmap *db.Bitmap
@@ -80,7 +94,22 @@ type GetQueryTree struct {
 // QueryTree for SET queries
 type SetQueryTree struct {
 	bitmap     *db.Bitmap
-	profile_id int
+	profile_id uint64
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *CatQueryTree) getLocation(d *db.Database) *db.Location {
+	//loc := new(db.Location)
+	//return loc
+	if qt.location == nil {
+		subqueryLength := len(qt.subqueries)
+		if subqueryLength > 0 {
+			locationIndex := rand.Intn(subqueryLength)
+			subquery := qt.subqueries[locationIndex]
+			qt.location = subquery.getLocation(d)
+		}
+	}
+	return qt.location
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
@@ -109,20 +138,20 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 
 	// handle SET operation regardless of the slice
 	if query.Operation == "set" {
-		tree = &SetQueryTree{query.Inputs[0].(*db.Bitmap), query.Profile_id}
+		tree = &SetQueryTree{query.Inputs[0].(*db.Bitmap), query.ProfileId}
 		return tree
 	}
 
 	// handle the remaining operations, taking slice into consideration
 	if slice == -1 {
-		tree = &CompositeQueryTree{operation: "cat"}
+		tree = &CatQueryTree{}
 		numSlices, err := qp.Database.NumSlices()
 		if err != nil {
 			panic(err)
 		}
 		for slice := 0; slice < numSlices; slice++ {
 			subtree := qp.buildTree(query, slice)
-			composite := tree.(*CompositeQueryTree)
+			composite := tree.(*CatQueryTree)
 			composite.subqueries = append(composite.subqueries, subtree)
 		}
 	} else {
@@ -145,21 +174,30 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 	plan := QueryPlan{}
 	if composite, ok := qt.(*CompositeQueryTree); ok {
 		inputs := make([]QueryInput, len(composite.subqueries))
-		step := QueryStep{*id, composite.operation, inputs, composite.getLocation(qp.Database), location}
+		step := QueryStep{id, composite.operation, inputs, composite.getLocation(qp.Database), location}
 		for index, subq := range composite.subqueries {
 			sub_id := uuid.RandomUUID()
-			// this is the "wait" step
 			step.inputs[index] = &sub_id
 			subq_steps := qp.flatten(subq, &sub_id, composite.getLocation(qp.Database))
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)
+	} else if cat, ok := qt.(*CatQueryTree); ok {
+		inputs := make([]*uuid.UUID, len(cat.subqueries))
+		step := CatQueryStep{id, "cat", inputs, cat.getLocation(qp.Database), location}
+		for index, subq := range cat.subqueries {
+			sub_id := uuid.RandomUUID()
+			step.Inputs[index] = &sub_id
+			subq_steps := qp.flatten(subq, &sub_id, cat.getLocation(qp.Database))
+			plan = append(plan, *subq_steps...)
+		}
+		plan = append(plan, step)
 	} else if get, ok := qt.(*GetQueryTree); ok {
-		step := GetQueryStep{*id, "get", get.bitmap, get.slice, get.getLocation(qp.Database), location}
+		step := GetQueryStep{id, "get", get.bitmap, get.slice, get.getLocation(qp.Database), location}
 		plan := QueryPlan{step}
 		return &plan
 	} else if set, ok := qt.(*SetQueryTree); ok {
-		step := SetQueryStep{*id, "set", set.bitmap, set.profile_id, set.getLocation(qp.Database), location}
+		step := SetQueryStep{id, "set", set.bitmap, set.profile_id, set.getLocation(qp.Database), location}
 		plan := QueryPlan{step}
 		return &plan
 	}

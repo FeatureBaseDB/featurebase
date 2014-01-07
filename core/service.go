@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"pilosa/config"
 	"pilosa/db"
+	"pilosa/hold"
 	"pilosa/index"
 	"pilosa/interfaces"
 	"syscall"
@@ -27,8 +28,8 @@ type Service struct {
 	Dispatch       interfaces.Dispatcher
 	Executor       interfaces.Executorer
 	WebService     *WebService
-	process_id     *uuid.UUID
 	Index          *index.FragmentContainer
+	Hold           *hold.Holder
 }
 
 func NewService() *Service {
@@ -41,8 +42,8 @@ func NewService() *Service {
 	service.ProcessMapper = NewProcessMapper(service, "/pilosa/0")
 	service.ProcessMap = NewProcessMap()
 	service.WebService = NewWebService(service)
-	service.process_id = config.GetUUID("process_id")
 	service.Index = index.NewFragmentContainer()
+	service.Hold = hold.NewHolder()
 	return service
 }
 
@@ -65,6 +66,10 @@ func (service *Service) init_id() {
 	service.Id = &id
 }
 
+func (self *Service) GetProcess() (*db.Process, error) {
+	return self.ProcessMap.GetProcess(self.Id)
+}
+
 func (service *Service) GetSignals() (chan os.Signal, chan os.Signal) {
 	hupChan := make(chan os.Signal, 1)
 	termChan := make(chan os.Signal, 1)
@@ -81,6 +86,7 @@ func (service *Service) Run() {
 	go service.Transport.Run()
 	go service.Dispatch.Run()
 	go service.Executor.Run()
+	go service.Hold.Run()
 
 	sigterm, sighup := service.GetSignals()
 	for {

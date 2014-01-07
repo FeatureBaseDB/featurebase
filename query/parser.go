@@ -10,7 +10,7 @@ var InvalidQueryError = errors.New("Invalid query format.")
 
 type QueryParser struct{}
 
-func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, int) {
+func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, uint64) {
 	// BITMAP
 	if tokens[0].Type == TYPE_ID {
 		// TODO: look for frame type in the tokens list
@@ -37,7 +37,7 @@ func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, int) {
 			}
 		}
 		bm := db.Bitmap{bitmap_id, frame_type}
-		return []QueryInput{&bm}, profile_id
+		return []QueryInput{&bm}, uint64(profile_id)
 	}
 
 	// LIST OF QUERIES
@@ -86,7 +86,7 @@ func (qp *QueryParser) walk(tokens []Token) (*Query, error) {
 		} else if tokens[i].Type == TYPE_RP {
 			if open_parens == 0 {
 				if i == len(tokens)-1 {
-					q.Inputs, q.Profile_id = qp.walkInputs(tokens[2:i])
+					q.Inputs, q.ProfileId = qp.walkInputs(tokens[2:i])
 				}
 			} else {
 				open_parens--

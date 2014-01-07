@@ -30,8 +30,8 @@ func (self *Dispatch) Run() {
 		spew.Dump(message.Data)
 
 		switch message.Data.(type) {
-		case query.GetQueryStep, query.SetQueryStep:
-			fmt.Println("GET/SET QUERYSTEP")
+		case query.CatQueryStep, query.GetQueryStep, query.SetQueryStep:
+			fmt.Println("CAT/GET/SET QUERYSTEP")
 			go self.service.Executor.NewJob(message)
 		default:
 			fmt.Println("unknown")

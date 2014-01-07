@@ -17,7 +17,7 @@ type Holder struct {
 	delchan chan delhold
 }
 
-var Hold Holder
+//var Hold Holder
 
 func (self *Holder) DelChan(id *uuid.UUID) {
 	req := delhold{id}
@@ -44,7 +44,7 @@ func (self *Holder) Set(id *uuid.UUID, value interface{}) {
 	}()
 }
 
-func (self *Holder) run() {
+func (self *Holder) Run() {
 	var greq gethold
 	var dreq delhold
 	for {
@@ -62,7 +62,14 @@ func (self *Holder) run() {
 	}
 }
 
+func NewHolder() *Holder {
+	h := Holder{make(map[uuid.UUID]holdchan), make(chan gethold), make(chan delhold)}
+	return &h
+}
+
+/*
 func init() {
 	Hold = Holder{make(map[uuid.UUID]holdchan), make(chan gethold), make(chan delhold)}
-	go Hold.run()
+	go Hold.Run()
 }
+*/

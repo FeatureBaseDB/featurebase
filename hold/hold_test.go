@@ -9,6 +9,10 @@ import (
 )
 
 func TestHoldChan(t *testing.T) {
+
+	Hold := Holder{make(map[uuid.UUID]holdchan), make(chan gethold), make(chan delhold)}
+	go Hold.Run()
+
 	Convey("set then get", t, func() {
 		id := uuid.RandomUUID()
 		Hold.Set(&id, "derp")

@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"launchpad.net/goyaml"
-	"tux21b.org/v1/gocql/uuid"
 )
 
 type Config struct {
@@ -105,15 +104,4 @@ func (self *Config) GetString(key string) string {
 		}
 	}
 	return ""
-}
-
-func GetUUID(key string) *uuid.UUID {
-	value, ok := GetSafe(key)
-	if ok {
-		value_uuid, err := uuid.ParseUUID(value.(string))
-		if err == nil {
-			return &value_uuid
-		}
-	}
-	return nil
 }

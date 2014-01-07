@@ -63,26 +63,10 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error reading POST data", http.StatusBadRequest)
 		return
 	}
-
 	// TODO: we need to get the database name from the query string (for now, hard-coded)
 	database_name := "main"
-	//cluster := self.service.Cluster
-	//database := cluster.GetOrCreateDatabase(database_name)
-
 	pql := string(body)
 	self.service.Executor.RunQuery(database_name, pql)
-
-	/*
-		query_plan := query.QueryPlanForPQL(database, pql)
-		spew.Dump(query_plan)
-
-		results_ch := make(chan *query.QueryResults)
-		self.service.Executor.NewJob(query_plan, results_ch)
-		results := <-results_ch
-		spew.Dump("Results")
-		spew.Dump(results)
-		close(results_ch)
-	*/
 }
 
 func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {
