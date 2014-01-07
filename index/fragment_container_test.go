@@ -55,6 +55,19 @@ func TestFragment(t *testing.T) {
 		num, _ = dummy.Count(general, result)
 		So(num, ShouldEqual, 0)
 	})
+	Convey("Union Empty", t, func() {
+
+		bi1 := uint64(1234)
+		bh1, _ := dummy.Get(general, bi1)
+		bh2, _ := dummy.Empty(general) //set_bit creates the bitmap
+
+		handles := []BitmapHandle{bh1, bh2}
+		result, _ := dummy.Union(general, handles)
+
+		num, _ := dummy.Count(general, result)
+
+		So(num, ShouldEqual, 1)
+	})
 	Convey("Bytes", t, func() {
 		bi1 := uint64(1234)
 		bh1, _ := dummy.Get(general, bi1)
@@ -76,7 +89,7 @@ func TestFragment(t *testing.T) {
 		bhs, _ := dummy.GetList(general, []uint64{1234, 4321, 789})
 		result, _ := dummy.Union(general, bhs)
 		num, _ := dummy.Count(general, result)
-		So(num, ShouldNotEqual, 2)
+		So(num, ShouldEqual, 2)
 	})
 
 	Convey("Brand SetBit", t, func() {

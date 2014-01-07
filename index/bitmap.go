@@ -203,7 +203,7 @@ func Union(a_bm IBitmap, b_bm IBitmap) IBitmap {
 	defer a.Close()
 	defer b.Close()
 	output := CreateRBBitmap()
-	var o_last_Key = uint64(0)
+	var o_last_Key = uint64(0xdeadbeef)
 
 	for {
 		if a.Limit() && b.Limit() {
