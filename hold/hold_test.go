@@ -15,17 +15,17 @@ func TestHoldChan(t *testing.T) {
 
 	Convey("set then get", t, func() {
 		id := uuid.RandomUUID()
-		Hold.Set(&id, "derp")
-		derp := Hold.Get(&id)
+		Hold.Set(&id, "derp", 10)
+		derp, _ := Hold.Get(&id, 10)
 		So(derp, ShouldEqual, "derp")
 	})
 	Convey("get then set", t, func() {
 		id := uuid.RandomUUID()
 		go func() {
 			time.Sleep(time.Second / 10)
-			Hold.Set(&id, "derpsy")
+			Hold.Set(&id, "derpsy", 10)
 		}()
-		derp := Hold.Get(&id)
+		derp, _ := Hold.Get(&id, 10)
 		So(derp, ShouldEqual, "derpsy")
 	})
 }

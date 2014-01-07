@@ -1,6 +1,11 @@
 package hold
 
-import "tux21b.org/v1/gocql/uuid"
+import (
+	"errors"
+	"time"
+
+	"tux21b.org/v1/gocql/uuid"
+)
 
 type holdchan chan interface{}
 type gethold struct {
@@ -31,15 +36,24 @@ func (self *Holder) GetChan(id *uuid.UUID) holdchan {
 	return <-reply
 }
 
-func (self *Holder) Get(id *uuid.UUID) interface{} {
+func (self *Holder) Get(id *uuid.UUID, timeout int) (interface{}, error) {
 	ch := self.GetChan(id)
-	return <-ch
+	select {
+	case val := <-ch:
+		return val, nil
+	case <-time.After(time.Duration(timeout) * time.Second):
+		self.DelChan(id)
+		return nil, errors.New("Timeout getting from holder")
+	}
 }
 
-func (self *Holder) Set(id *uuid.UUID, value interface{}) {
+func (self *Holder) Set(id *uuid.UUID, value interface{}, timeout int) {
 	ch := self.GetChan(id)
 	go func() {
-		ch <- value
+		select {
+		case ch <- value:
+		case <-time.After(time.Duration(timeout) * time.Second):
+		}
 		self.DelChan(id)
 	}()
 }

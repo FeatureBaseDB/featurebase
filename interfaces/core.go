@@ -1,11 +1,15 @@
 package interfaces
 
-import "pilosa/db"
+import (
+	"pilosa/db"
+
+	"tux21b.org/v1/gocql/uuid"
+)
 
 type Transporter interface {
 	Run()
 	Close()
-	Send(*db.Message)
+	Send(*db.Message, *uuid.UUID)
 	Receive() *db.Message
 	Push(*db.Message)
 }

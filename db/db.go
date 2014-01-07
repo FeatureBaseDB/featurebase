@@ -1,5 +1,11 @@
 package db
 
+import (
+	"encoding/gob"
+
+	"tux21b.org/v1/gocql/uuid"
+)
+
 type Message struct {
 	Data interface{} `json:data`
 }
@@ -18,3 +24,11 @@ type Message struct {
 	Destination Location
 }
 */
+
+type HoldResult interface {
+	ResultId() *uuid.UUID
+}
+
+func init() {
+	gob.Register(Message{})
+}

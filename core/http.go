@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/davecgh/go-spew/spew"
+	"tux21b.org/v1/gocql/uuid"
 )
 
 type WebService struct {
@@ -31,6 +32,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/processes", self.HandleProcesses)
 	mux.HandleFunc("/listen", self.HandleListen)
 	mux.HandleFunc("/test", self.HandleTest)
+	mux.HandleFunc("/ping", self.HandlePing)
 	s := &http.Server{
 		Addr:    ":" + port_string,
 		Handler: mux,
@@ -118,6 +120,36 @@ func (self *WebService) HandleProcesses(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		log.Fatal("Error encoding stats")
 	}
+}
+
+func (self *WebService) HandlePing(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	process_string := r.Form.Get("process")
+	process_id, err := uuid.ParseUUID(process_string)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	_, err = self.service.ProcessMap.GetProcess(&process_id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	duration, err := self.service.Ping(&process_id)
+	if err != nil {
+		spew.Fdump(w, err)
+		return
+	}
+	encoder := json.NewEncoder(w)
+	encoder.Encode(map[string]float64{"duration": duration.Seconds()})
 }
 
 func (self *WebService) HandleListen(w http.ResponseWriter, r *http.Request) {

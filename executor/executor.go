@@ -36,7 +36,8 @@ func (self *Executor) NewJob(job *db.Message) {
 		spew.Dump(qs)
 		for _, input := range qs.Inputs {
 			spew.Dump(input)
-			bh := self.service.Hold.Get(input).(index.BitmapHandle)
+			bhi, err := self.service.Hold.Get(input, 10)
+			bh := bhi.(index.BitmapHandle)
 			// TODO: git rid of this count, need the cat to do a sum() or a true cat()
 			count, err := self.service.Index.Count(qs.Location.FragmentId, bh)
 			if err != nil {
@@ -57,7 +58,7 @@ func (self *Executor) NewJob(job *db.Message) {
 		}
 		//spew.Dump("COUNT", count)
 		// push results to the map
-		self.service.Hold.Set(qs.Id, bh)
+		self.service.Hold.Set(qs.Id, bh, 10)
 
 	case query.SetQueryStep:
 		qs := job.Data.(query.SetQueryStep)
