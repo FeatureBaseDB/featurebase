@@ -22,6 +22,11 @@ func (q QueryStep) StringHOLD() string {
 	return fmt.Sprintf("%s %s %s, LOC: %s, DEST: %s", q.operation, q.id.String(), q.inputs, q.location, q.destination)
 }
 
+type PortableQueryStep interface {
+	GetId() *uuid.UUID
+	GetLocation() *db.Location
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // COUNT
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -31,6 +36,13 @@ type CountQueryStep struct {
 	Input       *uuid.UUID
 	Location    *db.Location
 	Destination *db.Location
+}
+
+func (self CountQueryStep) GetId() *uuid.UUID {
+	return self.Id
+}
+func (self CountQueryStep) GetLocation() *db.Location {
+	return self.Location
 }
 
 type CountQueryResult struct {
@@ -66,6 +78,13 @@ type UnionQueryStep struct {
 	Inputs      []*uuid.UUID
 	Location    *db.Location
 	Destination *db.Location
+}
+
+func (self UnionQueryStep) GetId() *uuid.UUID {
+	return self.Id
+}
+func (self UnionQueryStep) GetLocation() *db.Location {
+	return self.Location
 }
 
 func (qs UnionQueryStep) LocIsDest() bool {
@@ -118,6 +137,13 @@ type IntersectQueryStep struct {
 	Destination *db.Location
 }
 
+func (self IntersectQueryStep) GetId() *uuid.UUID {
+	return self.Id
+}
+func (self IntersectQueryStep) GetLocation() *db.Location {
+	return self.Location
+}
+
 func (qs IntersectQueryStep) LocIsDest() bool {
 	if qs.Location.ProcessId == qs.Destination.ProcessId && qs.Location.FragmentId == qs.Destination.FragmentId {
 		return true
@@ -168,6 +194,13 @@ type CatQueryStep struct {
 	Destination *db.Location
 }
 
+func (self CatQueryStep) GetId() *uuid.UUID {
+	return self.Id
+}
+func (self CatQueryStep) GetLocation() *db.Location {
+	return self.Location
+}
+
 type CatQueryResult struct {
 	Id   *uuid.UUID
 	Data interface{}
@@ -210,6 +243,13 @@ type GetQueryStep struct {
 	Slice       int
 	Location    *db.Location
 	Destination *db.Location
+}
+
+func (self GetQueryStep) GetId() *uuid.UUID {
+	return self.Id
+}
+func (self GetQueryStep) GetLocation() *db.Location {
+	return self.Location
 }
 
 func (qs GetQueryStep) LocIsDest() bool {
@@ -259,6 +299,13 @@ type SetQueryStep struct {
 	Destination *db.Location
 }
 
+func (self SetQueryStep) GetId() *uuid.UUID {
+	return self.Id
+}
+func (self SetQueryStep) GetLocation() *db.Location {
+	return self.Location
+}
+
 // QueryTree for SET queries
 type SetQueryTree struct {
 	bitmap     *db.Bitmap
@@ -278,11 +325,18 @@ func (qt *SetQueryTree) getLocation(d *db.Database) *db.Location {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 func init() {
+	gob.Register(GetQueryResult{})
 	gob.Register(CatQueryResult{})
 	gob.Register(UnionQueryResult{})
 	gob.Register(IntersectQueryResult{})
-	gob.Register(GetQueryResult{})
 	gob.Register(CountQueryResult{})
+
+	gob.Register(SetQueryStep{})
+	gob.Register(GetQueryStep{})
+	gob.Register(CatQueryStep{})
+	gob.Register(UnionQueryStep{})
+	gob.Register(IntersectQueryStep{})
+	gob.Register(CountQueryStep{})
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

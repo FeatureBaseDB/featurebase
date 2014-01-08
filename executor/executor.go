@@ -8,6 +8,7 @@ import (
 	"pilosa/index"
 	"pilosa/query"
 	"pilosa/util"
+	"reflect"
 	"tux21b.org/v1/gocql/uuid"
 
 	"github.com/davecgh/go-spew/spew"
@@ -31,7 +32,6 @@ func (self *Executor) NewJob(job *db.Message) {
 	switch job.Data.(type) {
 	case query.CountQueryStep:
 		spew.Dump("COUNT QUERYSTEP")
-
 		qs := job.Data.(query.CountQueryStep)
 		input := qs.Input
 		value, _ := self.service.Hold.Get(input, 10)
@@ -198,9 +198,9 @@ func (self *Executor) RunQuery(database_name string, pql string) {
 	destination := db.Location{&process_id, fragment_id}
 
 	query_plan := query.QueryPlanForPQL(database, pql, &destination)
-	spew.Dump("--------query_plan-------------------")
-	spew.Dump(query_plan)
-	spew.Dump("-------------------------------------")
+	//spew.Dump("--------query_plan-------------------")
+	//spew.Dump(query_plan)
+	//spew.Dump("-------------------------------------")
 	//return
 
 	// loop over the query steps and send to Transport
@@ -208,12 +208,13 @@ func (self *Executor) RunQuery(database_name string, pql string) {
 	for _, qs := range *query_plan {
 		msg := new(db.Message)
 		msg.Data = qs
-		spew.Dump("qs", qs)
 		switch step := qs.(type) {
-		case query.CatQueryStep:
-			last_id = step.Id
+		case query.PortableQueryStep:
+			self.service.Transport.Send(msg, step.GetLocation().ProcessId)
+			if reflect.TypeOf(step) != reflect.TypeOf(query.SetQueryStep{}) {
+				last_id = step.GetId()
+			}
 		}
-		self.service.Transport.Push(msg)
 	}
 
 	// add an entry to my execute map[key] that is waiting for the final result
@@ -222,9 +223,8 @@ func (self *Executor) RunQuery(database_name string, pql string) {
 		if err != nil {
 			spew.Dump(err)
 		}
-		spew.Dump("last_id", last_id)
 		spew.Dump("*******************************************************")
-		spew.Dump("GRAND FINAL", final)
+		spew.Dump("FINAL", final)
 		spew.Dump("*******************************************************")
 	}
 }

@@ -30,7 +30,7 @@ func (self *Dispatch) Run() {
 			self.service.Transport.Send(&pong, data.Source)
 		case db.HoldResult:
 			self.service.Hold.Set(data.ResultId(), data.ResultData(), 30)
-		case query.CatQueryStep, query.GetQueryStep, query.SetQueryStep, query.CountQueryStep, query.UnionQueryStep, query.IntersectQueryStep:
+		case query.PortableQueryStep:
 			go self.service.Executor.NewJob(message)
 		default:
 			log.Println("Unprocessed message", data)
