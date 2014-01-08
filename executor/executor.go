@@ -54,42 +54,36 @@ func (self *Executor) NewJob(job *db.Message) {
 	case query.CatQueryStep:
 		qs := job.Data.(query.CatQueryStep)
 		spew.Dump("CAT QUERYSTEP")
-		spew.Dump(qs)
-		var bhs []index.BitmapHandle
+		var handles []index.BitmapHandle
 		use_sum := false
 		var sum uint64
+		// either create a list of bitmap handles to cat (i.e. union), or sum the integer values
 		for _, input := range qs.Inputs {
-			bhi, _ := self.service.Hold.Get(input, 10)
-			switch bhi.(type) {
+			value, _ := self.service.Hold.Get(input, 10)
+			switch value.(type) {
 			case index.BitmapHandle:
-				spew.Dump("BH")
-				bhs = append(bhs, bhi.(index.BitmapHandle))
+				handles = append(handles, value.(index.BitmapHandle))
 			case []byte:
-				spew.Dump("RAW")
-				bh, _ := self.service.Index.FromBytes(qs.Location.FragmentId, bhi.([]byte))
-				bhs = append(bhs, bh)
+				bh, _ := self.service.Index.FromBytes(qs.Location.FragmentId, value.([]byte))
+				handles = append(handles, bh)
 			case uint64:
 				use_sum = true
-				sum += bhi.(uint64)
+				sum += value.(uint64)
 			}
 		}
-
+		// either return the sum, or return the compressed bitmap resulting from the cat (union)
+		var result interface{}
 		if use_sum {
-			spew.Dump("SUM", sum)
-			// TODO: instead of adding to the local hold, we need to send result to transport (which may go to a remote process's hold)
-			self.service.Hold.Set(qs.Id, sum, 10)
+			result = sum
 		} else {
-			unionbh, err := self.service.Index.Union(qs.Location.FragmentId, bhs)
+			bh, err := self.service.Index.Union(qs.Location.FragmentId, handles)
+			result, err = self.service.Index.GetBytes(qs.Location.FragmentId, bh)
 			if err != nil {
 				spew.Dump(err)
 			}
-			unionbm, err := self.service.Index.GetBytes(qs.Location.FragmentId, unionbh)
-			if err != nil {
-				spew.Dump(err)
-			}
-			// TODO: instead of adding to the local hold, we need to send result to transport (which may go to a remote process's hold)
-			self.service.Hold.Set(qs.Id, unionbm, 10)
 		}
+		result_message := db.Message{Data: query.CatQueryResult{Id: qs.Id, Data: result}}
+		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
 
 	case query.GetQueryStep:
 
@@ -157,7 +151,9 @@ func (self *Executor) RunQuery(database_name string, pql string) {
 			spew.Dump(err)
 		}
 		spew.Dump("last_id", last_id)
+		spew.Dump("*******************************************************")
 		spew.Dump("GRAND FINAL", final)
+		spew.Dump("*******************************************************")
 	}
 }
 

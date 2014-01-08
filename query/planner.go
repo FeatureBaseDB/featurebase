@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/gob"
 	"fmt"
 	"math/rand"
 	"pilosa/db"
@@ -32,6 +33,19 @@ type CatQueryStep struct {
 	Inputs      []*uuid.UUID
 	Location    *db.Location
 	Destination *db.Location
+}
+
+type CatQueryResult struct {
+	Id   *uuid.UUID
+	Data interface{}
+}
+
+func (self CatQueryResult) ResultId() *uuid.UUID {
+	return self.Id
+}
+
+func init() {
+	gob.Register(CatQueryResult{})
 }
 
 type GetQueryStep struct {
