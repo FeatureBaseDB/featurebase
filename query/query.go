@@ -2,8 +2,6 @@ package query
 
 import (
 	"pilosa/db"
-
-	"github.com/davecgh/go-spew/spew"
 	"tux21b.org/v1/gocql/uuid"
 )
 
@@ -25,9 +23,6 @@ func QueryPlanForPQL(database *db.Database, pql string, destination *db.Location
 	tokens := Lex(pql)
 	query_parser := QueryParser{}
 	query, err := query_parser.Parse(tokens)
-	spew.Dump("-------------------------------------")
-	spew.Dump(query)
-	spew.Dump("-------------------------------------")
 	if err != nil {
 		panic(err)
 	}
