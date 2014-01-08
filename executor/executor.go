@@ -52,6 +52,74 @@ func (self *Executor) NewJob(job *db.Message) {
 		result_message := db.Message{Data: query.CountQueryResult{Id: qs.Id, Data: count}}
 		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
 
+	case query.UnionQueryStep:
+		qs := job.Data.(query.UnionQueryStep)
+		spew.Dump("UNION QUERYSTEP")
+		var handles []index.BitmapHandle
+		// create a list of bitmap handles
+		for _, input := range qs.Inputs {
+			value, _ := self.service.Hold.Get(input, 10)
+			switch val := value.(type) {
+			case index.BitmapHandle:
+				handles = append(handles, val)
+			case []byte:
+				bh, _ := self.service.Index.FromBytes(qs.Location.FragmentId, val)
+				handles = append(handles, bh)
+			}
+		}
+
+		bh, err := self.service.Index.Union(qs.Location.FragmentId, handles)
+		if err != nil {
+			spew.Dump(err)
+		}
+
+		var result interface{}
+		if qs.LocIsDest() {
+			result = bh
+		} else {
+			bm, err := self.service.Index.GetBytes(qs.Location.FragmentId, bh)
+			if err != nil {
+				spew.Dump(err)
+			}
+			result = bm
+		}
+		result_message := db.Message{Data: query.UnionQueryResult{Id: qs.Id, Data: result}}
+		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
+
+	case query.IntersectQueryStep:
+		qs := job.Data.(query.IntersectQueryStep)
+		spew.Dump("INTERSECT QUERYSTEP")
+		var handles []index.BitmapHandle
+		// create a list of bitmap handles
+		for _, input := range qs.Inputs {
+			value, _ := self.service.Hold.Get(input, 10)
+			switch val := value.(type) {
+			case index.BitmapHandle:
+				handles = append(handles, val)
+			case []byte:
+				bh, _ := self.service.Index.FromBytes(qs.Location.FragmentId, val)
+				handles = append(handles, bh)
+			}
+		}
+
+		bh, err := self.service.Index.Intersect(qs.Location.FragmentId, handles)
+		if err != nil {
+			spew.Dump(err)
+		}
+
+		var result interface{}
+		if qs.LocIsDest() {
+			result = bh
+		} else {
+			bm, err := self.service.Index.GetBytes(qs.Location.FragmentId, bh)
+			if err != nil {
+				spew.Dump(err)
+			}
+			result = bm
+		}
+		result_message := db.Message{Data: query.IntersectQueryResult{Id: qs.Id, Data: result}}
+		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
+
 	case query.CatQueryStep:
 		qs := job.Data.(query.CatQueryStep)
 		spew.Dump("CAT QUERYSTEP")
