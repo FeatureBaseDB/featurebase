@@ -30,7 +30,7 @@ func (self *Dispatch) Run() {
 			pong := db.Message{Data: core.PongRequest{Id: data.Id}}
 			self.service.Transport.Send(&pong, data.Source)
 		case db.HoldResult:
-			self.service.Hold.Set(data.ResultId(), data, 30)
+			self.service.Hold.Set(data.ResultId(), data.ResultData(), 30)
 		case query.CatQueryStep, query.GetQueryStep, query.SetQueryStep, query.CountQueryStep:
 			//fmt.Println("CAT/GET/SET QUERYSTEP")
 			go self.service.Executor.NewJob(message)

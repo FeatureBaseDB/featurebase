@@ -27,6 +27,7 @@ type Message struct {
 
 type HoldResult interface {
 	ResultId() *uuid.UUID
+	ResultData() interface{}
 }
 
 func init() {

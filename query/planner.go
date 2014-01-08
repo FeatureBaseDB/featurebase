@@ -33,6 +33,19 @@ type CountQueryStep struct {
 	Destination *db.Location
 }
 
+type CountQueryResult struct {
+	Id   *uuid.UUID
+	Data interface{}
+}
+
+func (self CountQueryResult) ResultId() *uuid.UUID {
+	return self.Id
+}
+
+func (self CountQueryResult) ResultData() interface{} {
+	return self.Data
+}
+
 // QueryTree for COUNT queries
 type CountQueryTree struct {
 	operation string
@@ -63,6 +76,10 @@ type CatQueryResult struct {
 
 func (self CatQueryResult) ResultId() *uuid.UUID {
 	return self.Id
+}
+
+func (self CatQueryResult) ResultData() interface{} {
+	return self.Data
 }
 
 // QueryTree for CAT queries
@@ -101,6 +118,18 @@ func (qs GetQueryStep) LocIsDest() bool {
 		return true
 	}
 	return false
+}
+
+type GetQueryResult struct {
+	Id   *uuid.UUID
+	Data interface{}
+}
+
+func (self GetQueryResult) ResultId() *uuid.UUID {
+	return self.Id
+}
+func (self GetQueryResult) ResultData() interface{} {
+	return self.Data
 }
 
 // QueryTree for GET queries
@@ -151,6 +180,8 @@ func (qt *SetQueryTree) getLocation(d *db.Database) *db.Location {
 
 func init() {
 	gob.Register(CatQueryResult{})
+	gob.Register(GetQueryResult{})
+	gob.Register(CountQueryResult{})
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

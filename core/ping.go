@@ -20,6 +20,9 @@ type PongRequest struct {
 func (self PongRequest) ResultId() *uuid.UUID {
 	return self.Id
 }
+func (self PongRequest) ResultData() interface{} {
+	return self.Id
+}
 
 func init() {
 	gob.Register(PingRequest{})

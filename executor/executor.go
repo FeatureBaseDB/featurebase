@@ -34,13 +34,13 @@ func (self *Executor) NewJob(job *db.Message) {
 
 		qs := job.Data.(query.CountQueryStep)
 		input := qs.Input
-		bhi, _ := self.service.Hold.Get(input, 10)
+		value, _ := self.service.Hold.Get(input, 10)
 		var bh index.BitmapHandle
-		switch bhi.(type) {
+		switch val := value.(type) {
 		case index.BitmapHandle:
-			bh = bhi.(index.BitmapHandle)
+			bh = val
 		case []byte:
-			bh, _ = self.service.Index.FromBytes(qs.Location.FragmentId, bhi.([]byte))
+			bh, _ = self.service.Index.FromBytes(qs.Location.FragmentId, val)
 		}
 
 		count, err := self.service.Index.Count(qs.Location.FragmentId, bh)
@@ -48,8 +48,9 @@ func (self *Executor) NewJob(job *db.Message) {
 			spew.Dump(err)
 		}
 		spew.Dump("SLICE COUNT", count)
-		// TODO: instead of adding to the local hold, we need to send result to transport (which may go to a remote process's hold)
-		self.service.Hold.Set(qs.Id, count, 10)
+
+		result_message := db.Message{Data: query.CountQueryResult{Id: qs.Id, Data: count}}
+		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
 
 	case query.CatQueryStep:
 		qs := job.Data.(query.CatQueryStep)
@@ -60,11 +61,11 @@ func (self *Executor) NewJob(job *db.Message) {
 		// either create a list of bitmap handles to cat (i.e. union), or sum the integer values
 		for _, input := range qs.Inputs {
 			value, _ := self.service.Hold.Get(input, 10)
-			switch value.(type) {
+			switch val := value.(type) {
 			case index.BitmapHandle:
-				handles = append(handles, value.(index.BitmapHandle))
+				handles = append(handles, val)
 			case []byte:
-				bh, _ := self.service.Index.FromBytes(qs.Location.FragmentId, value.([]byte))
+				bh, _ := self.service.Index.FromBytes(qs.Location.FragmentId, val)
 				handles = append(handles, bh)
 			case uint64:
 				use_sum = true
@@ -94,16 +95,19 @@ func (self *Executor) NewJob(job *db.Message) {
 		if err != nil {
 			spew.Dump(err)
 		}
+
+		var result interface{}
 		if qs.LocIsDest() {
-			self.service.Hold.Set(qs.Id, bh, 10)
+			result = bh
 		} else {
 			bm, err := self.service.Index.GetBytes(qs.Location.FragmentId, bh)
 			if err != nil {
 				spew.Dump(err)
 			}
-			// TODO: instead of adding to the local hold, we need to send result to transport (which may go to a remote process's hold)
-			self.service.Hold.Set(qs.Id, bm, 10)
+			result = bm
 		}
+		result_message := db.Message{Data: query.GetQueryResult{Id: qs.Id, Data: result}}
+		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
 
 	case query.SetQueryStep:
 		qs := job.Data.(query.SetQueryStep)
