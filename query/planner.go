@@ -18,15 +18,36 @@ type QueryStep struct {
 	destination *db.Location
 }
 
+func (q QueryStep) StringHOLD() string {
+	return fmt.Sprintf("%s %s %s, LOC: %s, DEST: %s", q.operation, q.id.String(), q.inputs, q.location, q.destination)
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// COUNT
+///////////////////////////////////////////////////////////////////////////////////////////////////
 type CountQueryStep struct {
-	Id        *uuid.UUID
-	Operation string
-	//Input       QueryInput
+	Id          *uuid.UUID
+	Operation   string
 	Input       *uuid.UUID
 	Location    *db.Location
 	Destination *db.Location
 }
 
+// QueryTree for COUNT queries
+type CountQueryTree struct {
+	operation string
+	subquery  QueryTree
+	location  *db.Location
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *CountQueryTree) getLocation(d *db.Database) *db.Location {
+	return qt.subquery.getLocation(d)
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// CAT
+///////////////////////////////////////////////////////////////////////////////////////////////////
 type CatQueryStep struct {
 	Id          *uuid.UUID
 	Operation   string
@@ -44,10 +65,28 @@ func (self CatQueryResult) ResultId() *uuid.UUID {
 	return self.Id
 }
 
-func init() {
-	gob.Register(CatQueryResult{})
+// QueryTree for CAT queries
+type CatQueryTree struct {
+	subqueries []QueryTree
+	location   *db.Location
 }
 
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *CatQueryTree) getLocation(d *db.Database) *db.Location {
+	if qt.location == nil {
+		subqueryLength := len(qt.subqueries)
+		if subqueryLength > 0 {
+			locationIndex := rand.Intn(subqueryLength)
+			subquery := qt.subqueries[locationIndex]
+			qt.location = subquery.getLocation(d)
+		}
+	}
+	return qt.location
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// GET
+///////////////////////////////////////////////////////////////////////////////////////////////////
 type GetQueryStep struct {
 	Id          *uuid.UUID
 	Operation   string
@@ -64,6 +103,25 @@ func (qs GetQueryStep) LocIsDest() bool {
 	return false
 }
 
+// QueryTree for GET queries
+type GetQueryTree struct {
+	bitmap *db.Bitmap
+	slice  int
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *GetQueryTree) getLocation(d *db.Database) *db.Location {
+	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
+	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
+	if err != nil {
+		panic(err)
+	}
+	return fragment.GetLocation()
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// SET
+///////////////////////////////////////////////////////////////////////////////////////////////////
 type SetQueryStep struct {
 	Id          *uuid.UUID
 	Operation   string
@@ -73,9 +131,29 @@ type SetQueryStep struct {
 	Destination *db.Location
 }
 
-func (q QueryStep) StringHOLD() string {
-	return fmt.Sprintf("%s %s %s, LOC: %s, DEST: %s", q.operation, q.id.String(), q.inputs, q.location, q.destination)
+// QueryTree for SET queries
+type SetQueryTree struct {
+	bitmap     *db.Bitmap
+	profile_id uint64
 }
+
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *SetQueryTree) getLocation(d *db.Database) *db.Location {
+	slice, err := d.GetSliceForProfile(qt.profile_id)
+	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
+	if err != nil {
+		panic(err)
+	}
+	return fragment.GetLocation()
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+func init() {
+	gob.Register(CatQueryResult{})
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 // This is the output of the query planner. Contains a list of steps which can be performed in parallel
 //type QueryPlan []QueryStep
@@ -84,7 +162,6 @@ type QueryPlan []interface{}
 type QueryPlanner struct {
 	Database *db.Database
 }
-
 type QueryTree interface {
 	getLocation(d *db.Database) *db.Location
 }
@@ -94,13 +171,6 @@ type CompositeQueryTree struct {
 	operation  string
 	subqueries []QueryTree
 	location   *db.Location
-}
-
-// QueryTree for COUNT queries
-type CountQueryTree struct {
-	operation string
-	subquery  QueryTree
-	location  *db.Location
 }
 
 // Randomly select location from subqueries (so subqueries roll up into composite queries while minimizing inter-node data traffic)
@@ -114,64 +184,6 @@ func (qt *CompositeQueryTree) getLocation(d *db.Database) *db.Location {
 		}
 	}
 	return qt.location
-}
-
-// QueryTree for CAT queries
-type CatQueryTree struct {
-	subqueries []QueryTree
-	location   *db.Location
-}
-
-// QueryTree for GET queries
-type GetQueryTree struct {
-	bitmap *db.Bitmap
-	slice  int
-}
-
-// QueryTree for SET queries
-type SetQueryTree struct {
-	bitmap     *db.Bitmap
-	profile_id uint64
-}
-
-// Uses consistent hashing function to select node containing data for GET operation
-func (qt *CatQueryTree) getLocation(d *db.Database) *db.Location {
-	//loc := new(db.Location)
-	//return loc
-	if qt.location == nil {
-		subqueryLength := len(qt.subqueries)
-		if subqueryLength > 0 {
-			locationIndex := rand.Intn(subqueryLength)
-			subquery := qt.subqueries[locationIndex]
-			qt.location = subquery.getLocation(d)
-		}
-	}
-	return qt.location
-}
-
-// Uses consistent hashing function to select node containing data for GET operation
-func (qt *GetQueryTree) getLocation(d *db.Database) *db.Location {
-	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
-	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
-	if err != nil {
-		panic(err)
-	}
-	return fragment.GetLocation()
-}
-
-// Uses consistent hashing function to select node containing data for GET operation
-func (qt *CountQueryTree) getLocation(d *db.Database) *db.Location {
-	return qt.subquery.getLocation(d)
-}
-
-// Uses consistent hashing function to select node containing data for GET operation
-func (qt *SetQueryTree) getLocation(d *db.Database) *db.Location {
-	slice, err := d.GetSliceForProfile(qt.profile_id)
-	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
-	if err != nil {
-		panic(err)
-	}
-	return fragment.GetLocation()
 }
 
 // Builds QueryTree object from Query. Pass slice=-1 to perform operation on all slices
