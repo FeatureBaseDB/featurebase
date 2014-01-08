@@ -1,6 +1,7 @@
 package index
 
 import (
+	"encoding/gob"
 	"errors"
 	"log"
 	. "pilosa/util"
@@ -18,6 +19,11 @@ func NewFragmentContainer() *FragmentContainer {
 }
 
 type BitmapHandle uint64
+
+func init() {
+	var vh BitmapHandle
+	gob.Register(vh)
+}
 
 func (self *FragmentContainer) GetFragment(frag_id SUUID) (*Fragment, bool) {
 	//lock
