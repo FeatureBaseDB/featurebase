@@ -48,8 +48,7 @@ func (self *Executor) NewJob(job *db.Message) {
 			spew.Dump(err)
 		}
 		spew.Dump("SLICE COUNT", count)
-
-		result_message := db.Message{Data: query.CountQueryResult{Id: qs.Id, Data: count}}
+		result_message := db.Message{Data: query.CountQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: count}}}
 		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
 
 	case query.UnionQueryStep:
@@ -83,7 +82,7 @@ func (self *Executor) NewJob(job *db.Message) {
 			}
 			result = bm
 		}
-		result_message := db.Message{Data: query.UnionQueryResult{Id: qs.Id, Data: result}}
+		result_message := db.Message{Data: query.UnionQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
 		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
 
 	case query.IntersectQueryStep:
@@ -117,7 +116,7 @@ func (self *Executor) NewJob(job *db.Message) {
 			}
 			result = bm
 		}
-		result_message := db.Message{Data: query.IntersectQueryResult{Id: qs.Id, Data: result}}
+		result_message := db.Message{Data: query.IntersectQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
 		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
 
 	case query.CatQueryStep:
@@ -151,7 +150,7 @@ func (self *Executor) NewJob(job *db.Message) {
 				spew.Dump(err)
 			}
 		}
-		result_message := db.Message{Data: query.CatQueryResult{Id: qs.Id, Data: result}}
+		result_message := db.Message{Data: query.CatQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
 		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
 
 	case query.GetQueryStep:
@@ -174,7 +173,7 @@ func (self *Executor) NewJob(job *db.Message) {
 			}
 			result = bm
 		}
-		result_message := db.Message{Data: query.GetQueryResult{Id: qs.Id, Data: result}}
+		result_message := db.Message{Data: query.GetQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
 		self.service.Transport.Send(&result_message, qs.Destination.ProcessId)
 
 	case query.SetQueryStep:

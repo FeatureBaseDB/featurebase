@@ -28,34 +28,53 @@ type PortableQueryStep interface {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// COUNT
+// BASE
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-type CountQueryStep struct {
+
+type BaseQueryStep struct {
 	Id          *uuid.UUID
 	Operation   string
-	Input       *uuid.UUID
 	Location    *db.Location
 	Destination *db.Location
 }
 
-func (self CountQueryStep) GetId() *uuid.UUID {
+func (self *BaseQueryStep) GetId() *uuid.UUID {
 	return self.Id
 }
-func (self CountQueryStep) GetLocation() *db.Location {
+func (self *BaseQueryStep) GetLocation() *db.Location {
 	return self.Location
 }
 
-type CountQueryResult struct {
+func (self *BaseQueryStep) LocIsDest() bool {
+	if self.Location.ProcessId == self.Destination.ProcessId && self.Location.FragmentId == self.Destination.FragmentId {
+		return true
+	}
+	return false
+}
+
+type BaseQueryResult struct {
 	Id   *uuid.UUID
 	Data interface{}
 }
 
-func (self CountQueryResult) ResultId() *uuid.UUID {
+func (self *BaseQueryResult) ResultId() *uuid.UUID {
 	return self.Id
 }
 
-func (self CountQueryResult) ResultData() interface{} {
+func (self *BaseQueryResult) ResultData() interface{} {
 	return self.Data
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// COUNT
+///////////////////////////////////////////////////////////////////////////////////////////////////
+type CountQueryStep struct {
+	*BaseQueryStep
+	Input *uuid.UUID
+}
+
+type CountQueryResult struct {
+	*BaseQueryResult
 }
 
 // QueryTree for COUNT queries
@@ -73,38 +92,12 @@ func (qt *CountQueryTree) getLocation(d *db.Database) *db.Location {
 // UNION
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type UnionQueryStep struct {
-	Id          *uuid.UUID
-	Operation   string
-	Inputs      []*uuid.UUID
-	Location    *db.Location
-	Destination *db.Location
-}
-
-func (self UnionQueryStep) GetId() *uuid.UUID {
-	return self.Id
-}
-func (self UnionQueryStep) GetLocation() *db.Location {
-	return self.Location
-}
-
-func (qs UnionQueryStep) LocIsDest() bool {
-	if qs.Location.ProcessId == qs.Destination.ProcessId && qs.Location.FragmentId == qs.Destination.FragmentId {
-		return true
-	}
-	return false
+	*BaseQueryStep
+	Inputs []*uuid.UUID
 }
 
 type UnionQueryResult struct {
-	Id   *uuid.UUID
-	Data interface{}
-}
-
-func (self UnionQueryResult) ResultId() *uuid.UUID {
-	return self.Id
-}
-
-func (self UnionQueryResult) ResultData() interface{} {
-	return self.Data
+	*BaseQueryResult
 }
 
 // QueryTree for UNION queries
@@ -130,38 +123,12 @@ func (qt *UnionQueryTree) getLocation(d *db.Database) *db.Location {
 // INTERSECT
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type IntersectQueryStep struct {
-	Id          *uuid.UUID
-	Operation   string
-	Inputs      []*uuid.UUID
-	Location    *db.Location
-	Destination *db.Location
-}
-
-func (self IntersectQueryStep) GetId() *uuid.UUID {
-	return self.Id
-}
-func (self IntersectQueryStep) GetLocation() *db.Location {
-	return self.Location
-}
-
-func (qs IntersectQueryStep) LocIsDest() bool {
-	if qs.Location.ProcessId == qs.Destination.ProcessId && qs.Location.FragmentId == qs.Destination.FragmentId {
-		return true
-	}
-	return false
+	*BaseQueryStep
+	Inputs []*uuid.UUID
 }
 
 type IntersectQueryResult struct {
-	Id   *uuid.UUID
-	Data interface{}
-}
-
-func (self IntersectQueryResult) ResultId() *uuid.UUID {
-	return self.Id
-}
-
-func (self IntersectQueryResult) ResultData() interface{} {
-	return self.Data
+	*BaseQueryResult
 }
 
 // QueryTree for UNION queries
@@ -187,31 +154,12 @@ func (qt *IntersectQueryTree) getLocation(d *db.Database) *db.Location {
 // CAT
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type CatQueryStep struct {
-	Id          *uuid.UUID
-	Operation   string
-	Inputs      []*uuid.UUID
-	Location    *db.Location
-	Destination *db.Location
-}
-
-func (self CatQueryStep) GetId() *uuid.UUID {
-	return self.Id
-}
-func (self CatQueryStep) GetLocation() *db.Location {
-	return self.Location
+	*BaseQueryStep
+	Inputs []*uuid.UUID
 }
 
 type CatQueryResult struct {
-	Id   *uuid.UUID
-	Data interface{}
-}
-
-func (self CatQueryResult) ResultId() *uuid.UUID {
-	return self.Id
-}
-
-func (self CatQueryResult) ResultData() interface{} {
-	return self.Data
+	*BaseQueryResult
 }
 
 // QueryTree for CAT queries
@@ -237,38 +185,13 @@ func (qt *CatQueryTree) getLocation(d *db.Database) *db.Location {
 // GET
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type GetQueryStep struct {
-	Id          *uuid.UUID
-	Operation   string
-	Bitmap      *db.Bitmap
-	Slice       int
-	Location    *db.Location
-	Destination *db.Location
-}
-
-func (self GetQueryStep) GetId() *uuid.UUID {
-	return self.Id
-}
-func (self GetQueryStep) GetLocation() *db.Location {
-	return self.Location
-}
-
-func (qs GetQueryStep) LocIsDest() bool {
-	if qs.Location.ProcessId == qs.Destination.ProcessId && qs.Location.FragmentId == qs.Destination.FragmentId {
-		return true
-	}
-	return false
+	*BaseQueryStep
+	Bitmap *db.Bitmap
+	Slice  int
 }
 
 type GetQueryResult struct {
-	Id   *uuid.UUID
-	Data interface{}
-}
-
-func (self GetQueryResult) ResultId() *uuid.UUID {
-	return self.Id
-}
-func (self GetQueryResult) ResultData() interface{} {
-	return self.Data
+	*BaseQueryResult
 }
 
 // QueryTree for GET queries
@@ -291,19 +214,9 @@ func (qt *GetQueryTree) getLocation(d *db.Database) *db.Location {
 // SET
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type SetQueryStep struct {
-	Id          *uuid.UUID
-	Operation   string
-	Bitmap      *db.Bitmap
-	ProfileId   uint64
-	Location    *db.Location
-	Destination *db.Location
-}
-
-func (self SetQueryStep) GetId() *uuid.UUID {
-	return self.Id
-}
-func (self SetQueryStep) GetLocation() *db.Location {
-	return self.Location
+	*BaseQueryStep
+	Bitmap    *db.Bitmap
+	ProfileId uint64
 }
 
 // QueryTree for SET queries
@@ -439,7 +352,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		plan = append(plan, step)
 	} else if cat, ok := qt.(*CatQueryTree); ok {
 		inputs := make([]*uuid.UUID, len(cat.subqueries))
-		step := CatQueryStep{id, "cat", inputs, cat.getLocation(qp.Database), location}
+		step := CatQueryStep{&BaseQueryStep{id, "cat", cat.getLocation(qp.Database), location}, inputs}
 		for index, subq := range cat.subqueries {
 			sub_id := uuid.RandomUUID()
 			step.Inputs[index] = &sub_id
@@ -449,7 +362,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		plan = append(plan, step)
 	} else if union, ok := qt.(*UnionQueryTree); ok {
 		inputs := make([]*uuid.UUID, len(union.subqueries))
-		step := UnionQueryStep{id, "union", inputs, union.getLocation(qp.Database), location}
+		step := UnionQueryStep{&BaseQueryStep{id, "union", union.getLocation(qp.Database), location}, inputs}
 		for index, subq := range union.subqueries {
 			sub_id := uuid.RandomUUID()
 			step.Inputs[index] = &sub_id
@@ -459,7 +372,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		plan = append(plan, step)
 	} else if intersect, ok := qt.(*IntersectQueryTree); ok {
 		inputs := make([]*uuid.UUID, len(intersect.subqueries))
-		step := IntersectQueryStep{id, "intersect", inputs, intersect.getLocation(qp.Database), location}
+		step := IntersectQueryStep{&BaseQueryStep{id, "intersect", intersect.getLocation(qp.Database), location}, inputs}
 		for index, subq := range intersect.subqueries {
 			sub_id := uuid.RandomUUID()
 			step.Inputs[index] = &sub_id
@@ -468,17 +381,16 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		}
 		plan = append(plan, step)
 	} else if get, ok := qt.(*GetQueryTree); ok {
-		step := GetQueryStep{id, "get", get.bitmap, get.slice, get.getLocation(qp.Database), location}
+		step := GetQueryStep{&BaseQueryStep{id, "get", get.getLocation(qp.Database), location}, get.bitmap, get.slice}
 		plan := QueryPlan{step}
 		return &plan
 	} else if set, ok := qt.(*SetQueryTree); ok {
-		step := SetQueryStep{id, "set", set.bitmap, set.profile_id, set.getLocation(qp.Database), location}
+		step := SetQueryStep{&BaseQueryStep{id, "set", set.getLocation(qp.Database), location}, set.bitmap, set.profile_id}
 		plan := QueryPlan{step}
 		return &plan
 	} else if cnt, ok := qt.(*CountQueryTree); ok {
 		sub_id := uuid.RandomUUID()
-		step := CountQueryStep{id, "count", &sub_id, cnt.getLocation(qp.Database), location}
-		step.Input = &sub_id
+		step := &CountQueryStep{&BaseQueryStep{id, "count", cnt.getLocation(qp.Database), location}, &sub_id}
 		subq_steps := qp.flatten(cnt.subquery, &sub_id, cnt.getLocation(qp.Database))
 		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)
