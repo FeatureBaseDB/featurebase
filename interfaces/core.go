@@ -25,5 +25,5 @@ type Executorer interface {
 	Close()
 	Run()
 	NewJob(*db.Message)
-	RunQuery(string, string)
+	RunPQL(string, string) interface{}
 }

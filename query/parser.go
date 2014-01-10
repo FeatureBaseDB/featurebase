@@ -4,6 +4,8 @@ import (
 	"errors"
 	"pilosa/db"
 	"strconv"
+
+	"tux21b.org/v1/gocql/uuid"
 )
 
 var InvalidQueryError = errors.New("Invalid query format.")
@@ -75,6 +77,8 @@ func (qp *QueryParser) walk(tokens []Token) (*Query, error) {
 	}
 
 	q := new(Query)
+	id := uuid.RandomUUID()
+	q.Id = &id
 	q.Operation = tokens[0].Text
 
 	// scan from open to close paren

@@ -68,7 +68,14 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	// TODO: we need to get the database name from the query string (for now, hard-coded)
 	database_name := "main"
 	pql := string(body)
-	self.service.Executor.RunQuery(database_name, pql)
+	results := self.service.Executor.RunPQL(database_name, pql)
+
+	encoder := json.NewEncoder(w)
+	err = encoder.Encode(results)
+	if err != nil {
+		log.Fatal("Error encoding stats")
+	}
+
 }
 
 func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {

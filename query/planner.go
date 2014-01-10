@@ -219,6 +219,10 @@ type SetQueryStep struct {
 	ProfileId uint64
 }
 
+type SetQueryResult struct {
+	*BaseQueryResult
+}
+
 // QueryTree for SET queries
 type SetQueryTree struct {
 	bitmap     *db.Bitmap
@@ -238,6 +242,7 @@ func (qt *SetQueryTree) getLocation(d *db.Database) *db.Location {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 func init() {
+	gob.Register(SetQueryResult{})
 	gob.Register(GetQueryResult{})
 	gob.Register(CatQueryResult{})
 	gob.Register(UnionQueryResult{})
@@ -401,5 +406,6 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 // Transforms Query into QueryTree and flattens to QueryPlan object
 func (qp *QueryPlanner) Plan(query *Query, id *uuid.UUID, destination *db.Location) *QueryPlan {
 	queryTree := qp.buildTree(query, -1)
-	return qp.flatten(queryTree, id, destination)
+	//return qp.flatten(queryTree, id, destination) // TODO: remove the "id" parameter, since we are using the query.Id as the value
+	return qp.flatten(queryTree, query.Id, destination)
 }
