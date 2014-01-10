@@ -62,17 +62,10 @@ func (self *Executor) RunQueryTest(database_name string, pql string) string {
 	return pql
 }
 
-type queryItem struct {
-	label string
-	pql   string
-}
-type queryItemCopy struct {
+type queryListItem struct {
 	id    *uuid.UUID
 	label string
-}
-type QueryItemResult struct {
-	Label  string
-	Result interface{}
+	pql   string
 }
 
 func (self *Executor) runQuery(database *db.Database, qry *query.Query) {
@@ -127,30 +120,30 @@ func (self *Executor) RunPQL(database_name string, pql string) interface{} {
 		spew.Dump(file_data)
 
 		// CUSTOM QUERY LIST ///////////////
-		var query_list []queryItem
-		query_list = append(query_list, queryItem{"set1", "set(20, 1)"})
-		query_list = append(query_list, queryItem{"set2", "set(20, 1)"})
-		query_list = append(query_list, queryItem{"set3", "set(20, 2)"})
-		query_list = append(query_list, queryItem{"set4", "set(20, 3)"})
-		query_list = append(query_list, queryItem{"set5", "set(20, 4)"})
-		query_list = append(query_list, queryItem{"count", "count(get(20))"})
-		var query_list_copy []*queryItemCopy
+		var query_list []queryListItem
+		query_list = append(query_list, queryListItem{label: "set1", pql: "set(20, 1)"})
+		query_list = append(query_list, queryListItem{label: "set2", pql: "set(20, 1)"})
+		query_list = append(query_list, queryListItem{label: "set3", pql: "set(20, 2)"})
+		query_list = append(query_list, queryListItem{label: "set4", pql: "set(20, 3)"})
+		query_list = append(query_list, queryListItem{label: "set5", pql: "set(20, 4)"})
+		query_list = append(query_list, queryListItem{label: "count", pql: "count(get(20))"})
 		////////////////////////////////////
 
-		for _, qi := range query_list {
-			qry := query.QueryForPQL(qi.pql)
+		for i, _ := range query_list {
+			qry := query.QueryForPQL(query_list[i].pql)
 			go self.runQuery(database, qry)
-			query_list_copy = append(query_list_copy, &queryItemCopy{qry.Id, qi.label})
+			query_list[i].id = qry.Id
 		}
 
-		var final_result []*QueryItemResult
-		for _, qlc := range query_list_copy {
-			final, err := self.service.Hold.Get(qlc.id, 10)
+		// technically, this is blocking on the hold for each query, but it may be ok, since we need them all for the final anyway.
+		final_result := make(map[string]interface{})
+		for i, _ := range query_list {
+			final, err := self.service.Hold.Get(query_list[i].id, 10)
 			if err != nil {
 				spew.Dump(err)
 			}
 			spew.Dump(final)
-			final_result = append(final_result, &QueryItemResult{qlc.label, final})
+			final_result[query_list[i].label] = final
 		}
 
 		return final_result
