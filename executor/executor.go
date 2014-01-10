@@ -2,14 +2,12 @@ package executor
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"pilosa/config"
 	"pilosa/core"
 	"pilosa/db"
 	"pilosa/query"
 	"pilosa/util"
-	"tux21b.org/v1/gocql/uuid"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -62,12 +60,6 @@ func (self *Executor) RunQueryTest(database_name string, pql string) string {
 	return pql
 }
 
-type queryListItem struct {
-	id    *uuid.UUID
-	label string
-	pql   string
-}
-
 func (self *Executor) runQuery(database *db.Database, qry *query.Query) {
 	process, err := self.service.GetProcess()
 	if err != nil {
@@ -113,37 +105,24 @@ func (self *Executor) RunPQL(database_name string, pql string) interface{} {
 	} else {
 		macros_dir := config.Get("macros").(string)
 		macros_file := macros_dir + "/" + outer_token + ".js"
-		file_data, err := ioutil.ReadFile(macros_file)
-		if err != nil {
-			spew.Dump(err)
-		}
-		spew.Dump(file_data)
-
-		// CUSTOM QUERY LIST ///////////////
-		var query_list []queryListItem
-		query_list = append(query_list, queryListItem{label: "set1", pql: "set(20, 1)"})
-		query_list = append(query_list, queryListItem{label: "set2", pql: "set(20, 1)"})
-		query_list = append(query_list, queryListItem{label: "set3", pql: "set(20, 2)"})
-		query_list = append(query_list, queryListItem{label: "set4", pql: "set(20, 3)"})
-		query_list = append(query_list, queryListItem{label: "set5", pql: "set(20, 4)"})
-		query_list = append(query_list, queryListItem{label: "count", pql: "count(get(20))"})
-		////////////////////////////////////
+		filter := query.TokensToString(tokens)
+		query_list := GetMacro(macros_file, filter).(query.QueryList)
 
 		for i, _ := range query_list {
-			qry := query.QueryForPQL(query_list[i].pql)
+			qry := query.QueryForPQL(query_list[i].PQL)
 			go self.runQuery(database, qry)
-			query_list[i].id = qry.Id
+			query_list[i].Id = qry.Id
 		}
 
 		// technically, this is blocking on the hold for each query, but it may be ok, since we need them all for the final anyway.
 		final_result := make(map[string]interface{})
 		for i, _ := range query_list {
-			final, err := self.service.Hold.Get(query_list[i].id, 10)
+			final, err := self.service.Hold.Get(query_list[i].Id, 10)
 			if err != nil {
 				spew.Dump(err)
 			}
 			spew.Dump(final)
-			final_result[query_list[i].label] = final
+			final_result[query_list[i].Label] = final
 		}
 
 		return final_result
