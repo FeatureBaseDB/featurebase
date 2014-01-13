@@ -20,7 +20,10 @@ func NewKVStorage(path string, slice int, db string) (Storage, error) {
 	//	log.Println("Hello")
 	obj := new(KVStorage)
 
-	f, err := os.Create(fmt.Sprintf("%sKV.%s.%d", path, db, slice))
+	base_path := fmt.Sprintf("%s/%s", path, db)
+	os.MkdirAll(base_path, 0755)
+
+	f, err := os.Create(fmt.Sprintf("%s/%d.kvlite", base_path, slice))
 	s, err := gkvlite.NewStore(f)
 	obj.cc = s.SetCollection(db, nil)
 

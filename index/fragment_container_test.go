@@ -40,7 +40,7 @@ func TestFragment(t *testing.T) {
 		bi1 := uint64(1234)
 		bi2 := uint64(4321)
 
-		dummy.SetBit(general, bi2, 2) //set_bit creates the bitmap
+		dummy.SetBit(general, bi2, 65537) //set_bit creates the bitmap
 
 		bh1, _ := dummy.Get(general, bi1)
 		bh2, _ := dummy.Get(general, bi2)

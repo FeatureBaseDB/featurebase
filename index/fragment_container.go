@@ -147,16 +147,30 @@ type Fragment struct {
 	mesg_time   time.Duration
 }
 
+func getStorage(db string, slice int, frame string) Storage {
+	choice := 2
+	switch choice {
+	case 1:
+		return NewMemoryStorage()
+	case 2:
+		s, _ := NewKVStorage("/tmp/pilosa/", slice, db)
+		return s
+	case 3:
+		return NewCassStorage()
+	}
+	return nil
+}
+
 func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
 	var impl Pilosa
 	log.Println("XXXXXXXXXXXXXXXXXXXXXXXXXXXX", frame)
 	switch frame {
 	default:
 		log.Println("General")
-		impl = NewGeneral(db, slice, NewMemoryStorage())
+		impl = NewGeneral(db, slice, getStorage(db, slice, frame))
 	case "Brand":
 		log.Println("Brand")
-		impl = NewBrand(db, slice, NewMemoryStorage(), 50000, 45000, 100)
+		impl = NewBrand(db, slice, getStorage(db, slice, frame), 50000, 45000, 100)
 	}
 
 	f := new(Fragment)
