@@ -3,12 +3,11 @@ package executor
 import (
 	"fmt"
 	"log"
+	"pilosa/config"
 	"pilosa/core"
 	"pilosa/db"
 	"pilosa/query"
 	"pilosa/util"
-	"reflect"
-	"tux21b.org/v1/gocql/uuid"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -46,8 +45,22 @@ func (self *Executor) NewJob(job *db.Message) {
 	}
 }
 
-func (self *Executor) RunQuery(database_name string, pql string) {
-	database := self.service.Cluster.GetOrCreateDatabase(database_name)
+type stringSlice []string
+
+func (slice stringSlice) pos(value string) int {
+	for p, v := range slice {
+		if v == value {
+			return p
+		}
+	}
+	return -1
+}
+
+func (self *Executor) RunQueryTest(database_name string, pql string) string {
+	return pql
+}
+
+func (self *Executor) runQuery(database *db.Database, qry *query.Query) {
 	process, err := self.service.GetProcess()
 	if err != nil {
 		spew.Dump(err)
@@ -56,33 +69,65 @@ func (self *Executor) RunQuery(database_name string, pql string) {
 	fragment_id := util.SUUID(0)
 	destination := db.Location{&process_id, fragment_id}
 
-	query_plan := query.QueryPlanForPQL(database, pql, &destination)
-	//spew.Dump(query_plan)
-
+	spew.Dump("QUERY.ID:", qry.Id)
+	query_plan := query.QueryPlanForQuery(database, qry, &destination)
 	// loop over the query steps and send to Transport
-	var last_id *uuid.UUID
 	for _, qs := range *query_plan {
 		msg := new(db.Message)
 		msg.Data = qs
 		switch step := qs.(type) {
 		case query.PortableQueryStep:
 			self.service.Transport.Send(msg, step.GetLocation().ProcessId)
-			if reflect.TypeOf(step) != reflect.TypeOf(query.SetQueryStep{}) {
-				last_id = step.GetId()
-			}
 		}
 	}
+}
 
-	// add an entry to my execute map[key] that is waiting for the final result
-	if last_id != nil {
-		final, err := self.service.Hold.Get(last_id, 10)
+func (self *Executor) RunPQL(database_name string, pql string) interface{} {
+	database := self.service.Cluster.GetOrCreateDatabase(database_name)
+
+	// see if the outer query function is a custom query
+	reserved_functions := stringSlice{"get", "set", "union", "intersect", "count"}
+	tokens := query.Lex(pql)
+	outer_token := tokens[0].Text
+
+	if reserved_functions.pos(outer_token) != -1 {
+
+		qry := query.QueryForTokens(tokens)
+		go self.runQuery(database, qry)
+
+		var final interface{}
+		final, err := self.service.Hold.Get(qry.Id, 10)
 		if err != nil {
 			spew.Dump(err)
 		}
-		spew.Dump("*******************************************************")
-		spew.Dump("FINAL", final)
-		spew.Dump("*******************************************************")
+		return final
+
+	} else {
+		macros_dir := config.GetString("macros")
+		macros_file := macros_dir + "/" + outer_token + ".js"
+		filter := query.TokensToString(tokens)
+		query_list := GetMacro(macros_file, filter).(query.PqlList)
+
+		for i, _ := range query_list {
+			qry := query.QueryForPQL(query_list[i].PQL)
+			go self.runQuery(database, qry)
+			query_list[i].Id = qry.Id
+		}
+
+		// technically, this is blocking on the hold for each query, but it may be ok, since we need them all for the final anyway.
+		final_result := make(map[string]interface{})
+		for i, _ := range query_list {
+			final, err := self.service.Hold.Get(query_list[i].Id, 10)
+			if err != nil {
+				spew.Dump(err)
+			}
+			spew.Dump(final)
+			final_result[query_list[i].Label] = final
+		}
+
+		return final_result
 	}
+
 }
 
 func (self *Executor) Run() {
