@@ -27,7 +27,7 @@ func GetMacro(file_name string, filter string) interface{} {
 		spew.Dump(err)
 	}
 
-	var query_list query.QueryList
+	var query_list query.PqlList
 
 	// ql is []interface{}
 	switch ql := query_list_interface.(type) {
@@ -40,7 +40,7 @@ func GetMacro(file_name string, filter string) interface{} {
 			spew.Dump(q)
 			spew.Dump(q["label"].(string))
 			spew.Dump(q["pql"].(string))
-			query_list = append(query_list, query.QueryListItem{Label: q["label"].(string), PQL: q["pql"].(string)})
+			query_list = append(query_list, query.PqlListItem{Label: q["label"].(string), PQL: q["pql"].(string)})
 		}
 	default:
 		spew.Dump("DEFAULT")

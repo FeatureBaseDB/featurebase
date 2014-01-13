@@ -14,9 +14,9 @@ type QueryResults struct {
 	Data interface{}
 }
 
-type QueryList []QueryListItem
+type PqlList []PqlListItem
 
-type QueryListItem struct {
+type PqlListItem struct {
 	Id    *uuid.UUID
 	Label string
 	PQL   string

@@ -103,10 +103,10 @@ func (self *Executor) RunPQL(database_name string, pql string) interface{} {
 		return final
 
 	} else {
-		macros_dir := config.Get("macros").(string)
+		macros_dir := config.GetString("macros")
 		macros_file := macros_dir + "/" + outer_token + ".js"
 		filter := query.TokensToString(tokens)
-		query_list := GetMacro(macros_file, filter).(query.QueryList)
+		query_list := GetMacro(macros_file, filter).(query.PqlList)
 
 		for i, _ := range query_list {
 			qry := query.QueryForPQL(query_list[i].PQL)
