@@ -78,7 +78,6 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	defer r.Body.Close()
 	results := self.service.Executor.RunPQL(database_name, pql)
 
 	encoder := json.NewEncoder(w)
