@@ -65,17 +65,19 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	database_name := r.Form.Get("db")
-	pql := r.Form.Get("pql")
-
-	defer r.Body.Close()
-	if pql == "" {
-		http.Error(w, "Error reading POST data", http.StatusBadRequest)
+	if database_name == "" {
+		database_name = config.GetString("default_db")
+	}
+	if database_name == "" {
+		http.Error(w, "Provide a database (db)", http.StatusNotFound)
 		return
 	}
-	// TODO: we need to get the database name from the query string (for now, hard-coded)
-	if database_name == "" {
-		database_name = "main" //TODO pull this from config DEFAULT
+	pql := r.Form.Get("pql")
+	if pql == "" {
+		http.Error(w, "Provide a valid query string (pql)", http.StatusNotFound)
+		return
 	}
+
 	results := self.service.Executor.RunPQL(database_name, pql)
 
 	encoder := json.NewEncoder(w)

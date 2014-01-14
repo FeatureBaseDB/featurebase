@@ -16,7 +16,7 @@ func GetMacro(file_name string, filter string) interface{} {
 	}
 	s := string(file_data[:])
 
-	js := "query_list = (function (filter){" + s + "})('" + filter + "');"
+	js := "query_list = (" + s + ")('" + filter + "');"
 
 	Otto := otto.New()
 	Otto.Run(js)
