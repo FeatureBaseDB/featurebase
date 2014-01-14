@@ -2,7 +2,6 @@ package core
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"pilosa/config"
@@ -59,15 +58,24 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	body, err := ioutil.ReadAll(r.Body)
-	defer r.Body.Close()
+	err := r.ParseForm()
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	database_name := r.Form.Get("db")
+	pql := r.Form.Get("pql")
+
+	defer r.Body.Close()
+	if pql == "" {
 		http.Error(w, "Error reading POST data", http.StatusBadRequest)
 		return
 	}
 	// TODO: we need to get the database name from the query string (for now, hard-coded)
-	database_name := "main"
-	pql := string(body)
+	if database_name == "" {
+		database_name = "main" //TODO pull this from config DEFAULT
+	}
 	results := self.service.Executor.RunPQL(database_name, pql)
 
 	encoder := json.NewEncoder(w)
