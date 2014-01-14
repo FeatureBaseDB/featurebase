@@ -132,5 +132,9 @@ func TestFragment(t *testing.T) {
 			So(1, ShouldEqual, 1)
 		})
 	*/
+	Convey("Clear ", t, func() {
+		res, _ := dummy.Clear(general)
+		So(res, ShouldEqual, true)
+	})
 
 }

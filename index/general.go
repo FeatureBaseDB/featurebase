@@ -11,12 +11,17 @@ type General struct {
 
 func NewGeneral(db string, slice int, s Storage) *General {
 	f := new(General)
-	f.bitmap_cache = lru.New(10000)
 	f.storage = s
 	f.slice = slice
 	f.db = db
+	f.Clear()
+	//f.bitmap_cache = lru.New(10000)
 	return f
 
+}
+func (self *General) Clear() bool {
+	self.bitmap_cache = lru.New(10000)
+	return true
 }
 
 func (self *General) Get(bitmap_id uint64) IBitmap {

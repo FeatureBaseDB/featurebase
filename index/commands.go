@@ -191,3 +191,14 @@ func NewTopN(b BitmapHandle, n int) *CmdTopN {
 func (self *CmdTopN) Execute(f *Fragment) Calculation {
 	return f.TopN(self.bitmap, self.n)
 }
+
+type CmdClear struct {
+	*Responder
+}
+
+func NewClear() *CmdClear {
+	return &CmdClear{NewResponder("Clear")}
+}
+func (self *CmdClear) Execute(f *Fragment) Calculation {
+	return f.impl.Clear()
+}

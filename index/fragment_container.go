@@ -123,6 +123,15 @@ func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint6
 	return false, errors.New("Invalid Bitmap Handle")
 }
 
+func (self *FragmentContainer) Clear(frag_id SUUID) (bool, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
+		request := NewClear()
+		fragment.requestChan <- request
+		return request.Response().answer.(bool), nil
+	}
+	return false, errors.New("Invalid Fragment ID")
+}
+
 func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id SUUID) {
 	log.Println("ADD FRAGMENT", frame)
 	f := NewFragment(id, db, slice, frame)
@@ -134,6 +143,7 @@ type Pilosa interface {
 	Get(id uint64) IBitmap
 	SetBit(id uint64, bit_pos uint64) bool
 	TopN(b IBitmap, n int) []Pair
+	Clear() bool
 }
 
 type Fragment struct {

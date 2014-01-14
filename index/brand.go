@@ -31,7 +31,6 @@ type Brand struct {
 
 func NewBrand(db string, slice int, s Storage, threshold_len int, threshold int, skipp int) *Brand {
 	f := new(Brand)
-	f.bitmap_cache = make(map[uint64]*Rank)
 	f.storage = s
 	f.slice = slice
 	f.db = db
@@ -40,10 +39,14 @@ func NewBrand(db string, slice int, s Storage, threshold_len int, threshold int,
 	f.threshold_length = threshold_len
 	f.threshold_idx = threshold
 	f.skip = skipp
+	f.Clear() //alloc the cache
 	return f
 
 }
-
+func (self *Brand) Clear() bool {
+	self.bitmap_cache = make(map[uint64]*Rank)
+	return true
+}
 func (self *Brand) Get(bitmap_id uint64) IBitmap {
 	bm, ok := self.bitmap_cache[bitmap_id]
 	if ok {
