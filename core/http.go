@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"pilosa/config"
@@ -31,6 +32,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/processes", self.HandleProcesses)
 	mux.HandleFunc("/listen", self.HandleListen)
 	mux.HandleFunc("/test", self.HandleTest)
+	mux.HandleFunc("/version", self.HandleVersion)
 	mux.HandleFunc("/ping", self.HandlePing)
 	s := &http.Server{
 		Addr:    ":" + port_string,
@@ -108,6 +110,15 @@ func (self *WebService) HandleInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	spew.Fdump(w, self.service.Cluster)
+}
+
+func (self *WebService) HandleVersion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	fmt.Fprintf(w, "Pilosa v."+self.service.version+"\n")
 }
 
 func (self *WebService) HandleTest(w http.ResponseWriter, r *http.Request) {

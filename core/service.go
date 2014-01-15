@@ -30,6 +30,7 @@ type Service struct {
 	WebService     *WebService
 	Index          *index.FragmentContainer
 	Hold           *hold.Holder
+	version        string
 }
 
 func NewService() *Service {
@@ -44,6 +45,7 @@ func NewService() *Service {
 	service.WebService = NewWebService(service)
 	service.Index = index.NewFragmentContainer()
 	service.Hold = hold.NewHolder()
+	service.version = "0.0.1"
 	return service
 }
 
