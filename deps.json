@@ -6,7 +6,7 @@
     },
     "etcd": {
         "repo": "github.com/coreos/go-etcd/etcd",
-        "version": "8a4461a",
+        "version": "35c98e8c885757fab1824daa77cc0e24bf30e76b",
         "type": "git"
     },
     "gkvlite": {
