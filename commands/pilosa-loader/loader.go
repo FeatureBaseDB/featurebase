@@ -12,10 +12,11 @@ import (
 	"strings"
 )
 
-func post(database, base_url, id, pid string) {
+func post(database, base_url, id, pid, fragment_type string) {
+	println(id, pid)
 	values := make(url.Values)
 	values.Set("db", database)
-	values.Set("pql", fmt.Sprintf("set(%s,%s)", id, pid))
+	values.Set("pql", fmt.Sprintf("set(%s,%s,%s)", id, fragment_type, pid))
 	r, err := http.PostForm(base_url, values)
 	if err != nil {
 		log.Printf("error posting stat to stathat: %s", err)
@@ -26,29 +27,49 @@ func post(database, base_url, id, pid string) {
 	log.Println(body)
 }
 
-func Load(database, url, fullpath string) error {
-	file, _ := os.Open(fullpath)
-	reader := bufio.NewReader(file)
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		recs := strings.Split(scanner.Text(), "|")
-		//id, _ := strconv.ParseUint(recs[0], 10, 64) //brand
+func Load(database, url, fullpath string, fragment_type string) error {
+	log.Println(fullpath)
+	f, err := os.Open(fullpath)
+	if err != nil {
+		fmt.Printf("error opening file: %v\n", err)
+		os.Exit(1)
+	}
+	r := bufio.NewReader(f)
+	line, e := Readln(r)
+	for e == nil {
+		recs := strings.Split(line, "|")
 		id := recs[0]
 		for _, profile_id := range recs[1:] {
-			post(database, url, id, profile_id)
+			post(database, url, id, profile_id, fragment_type)
 
 		}
+		line, e = Readln(r)
 	}
 	return nil
 }
 
 // note, that variables are pointers
 var database = flag.String("database", "main", "Database Name")
-var host_port = flag.String("url", "127.0.0.1:8080", "pilosa point of entry host:port")
+var host_port = flag.String("url", "127.0.0.1:15001", "pilosa point of entry host:port")
 var file = flag.String("file", "input_file", "input file name")
+var fragment = flag.String("fragment", "brand", "Fragment Type")
+
+func Readln(r *bufio.Reader) (string, error) {
+	var (
+		isPrefix bool  = true
+		err      error = nil
+		line, ln []byte
+	)
+	for isPrefix && err == nil {
+		line, isPrefix, err = r.ReadLine()
+		ln = append(ln, line...)
+	}
+	return string(ln), err
+}
 
 func main() {
 	flag.Parse()
 	full_url := fmt.Sprintf("http://%s/query", *host_port)
-	Load(*database, full_url, *file)
+	//fun(*file)
+	Load(*database, full_url, *file, *fragment)
 }
