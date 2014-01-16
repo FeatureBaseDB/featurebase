@@ -13,7 +13,6 @@ import (
 )
 
 func post(database, base_url, id, pid, fragment_type string) {
-	println(id, pid)
 	values := make(url.Values)
 	values.Set("db", database)
 	values.Set("pql", fmt.Sprintf("set(%s,%s,%s)", id, fragment_type, pid))
@@ -22,13 +21,12 @@ func post(database, base_url, id, pid, fragment_type string) {
 		log.Printf("error posting stat to stathat: %s", err)
 		return
 	}
-	body, _ := ioutil.ReadAll(r.Body)
+	//body, _ := ioutil.ReadAll(r.Body)
+	ioutil.ReadAll(r.Body)
 	r.Body.Close()
-	log.Println(body)
 }
 
 func Load(database, url, fullpath string, fragment_type string) error {
-	log.Println(fullpath)
 	f, err := os.Open(fullpath)
 	if err != nil {
 		fmt.Printf("error opening file: %v\n", err)
@@ -39,6 +37,7 @@ func Load(database, url, fullpath string, fragment_type string) error {
 	for e == nil {
 		recs := strings.Split(line, "|")
 		id := recs[0]
+		log.Println(id)
 		for _, profile_id := range recs[1:] {
 			post(database, url, id, profile_id, fragment_type)
 
