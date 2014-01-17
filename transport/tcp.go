@@ -8,21 +8,108 @@ import (
 	"pilosa/config"
 	"pilosa/core"
 	"pilosa/db"
+	"github.com/davecgh/go-spew/spew"
 
+	"time"
 	"tux21b.org/v1/gocql/uuid"
 )
 
-type qmessage struct {
+type envelope struct {
 	message *db.Message
 	host    *uuid.UUID
 }
 
+type connection struct {
+	transport *TcpTransport
+	inbox     chan *db.Message
+	outbox    chan *db.Message
+	conn      *net.Conn
+	process   *uuid.UUID
+}
+
+type newconnection struct {
+	id         *uuid.UUID
+	connection *connection
+}
+
+func init() {
+	gob.Register(uuid.UUID{})
+}
+
+func (self *connection) manage() {
+BeginManageConnection:
+	for {
+		log.Println("manage", self)
+		if self.conn == nil {
+			process, err := self.transport.service.ProcessMap.GetProcess(self.process)
+			if err != nil {
+				log.Fatal("transport/tcp: ", err)
+				return
+			}
+			host_string := fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
+			conn, err := net.Dial("tcp", host_string)
+			if err != nil {
+				log.Println("transport/tcp: error dialing: ", host_string, " Retrying in 2 seconds...")
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			self.conn = &conn
+			go func() {
+				self.outbox <- &db.Message{self.transport.service.Id}
+			}()
+		}
+		encoder := gob.NewEncoder(*self.conn)
+		decoder := gob.NewDecoder(*self.conn)
+		var exit = make(chan int)
+		go func() {
+			for {
+				var mess *db.Message
+				err := decoder.Decode(&mess)
+				if err != nil {
+					exit <- 1
+					return
+				}
+				self.inbox <- mess
+			}
+		}()
+		for {
+			select {
+			case message := <-self.outbox:
+				err := encoder.Encode(message)
+				if err != nil {
+					log.Println(err.Error())
+					return
+				}
+			case message := <-self.inbox:
+				identifier, ok := message.Data.(uuid.UUID)
+				if ok {
+					spew.Dump("ok, sending to reg chan", identifier)
+					// message is connection registration; bypass inbox and register
+					self.process = &identifier
+					self.transport.reg <- &newconnection{&identifier, self}
+				} else {
+					self.transport.inbox <- message
+				}
+			case <-exit:
+				log.Println("decoder stopped!")
+				if self.process != nil {
+					self.conn = nil
+					continue BeginManageConnection
+				} else {
+					return
+				}
+			}
+		}
+	}
+}
+
 type TcpTransport struct {
-	service *core.Service
-	port    int
-	inbox   chan *db.Message
-	outbox  chan qmessage
-	stop    chan bool
+	service     *core.Service
+	port        int
+	inbox       chan *db.Message
+	outbox      chan envelope
+	connections map[uuid.UUID]*connection
+	reg         chan *newconnection
 }
 
 func (self *TcpTransport) Run() {
@@ -30,22 +117,16 @@ func (self *TcpTransport) Run() {
 	go self.listen()
 	for {
 		select {
-		case qmessage := <-self.outbox:
-			// todo: persistent connections
-			process, err := self.service.ProcessMap.GetProcess(qmessage.host)
-			if err != nil {
-				log.Println("transport/tcp", err)
-				return
+		case env := <-self.outbox:
+			con, ok := self.connections[*(env.host)]
+			if !ok {
+				con = &connection{self, make(chan *db.Message), make(chan *db.Message), nil, env.host}
+				go con.manage()
+				self.connections[*env.host] = con
 			}
-			host_string := fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
-			conn, err := net.Dial("tcp", host_string)
-			encoder := gob.NewEncoder(conn)
-			err = encoder.Encode(qmessage.message)
-			if err != nil {
-				log.Println(err.Error())
-				return
-			}
-			//time.Sleep(1 * time.Second)
+			con.outbox <- env.message
+		case nc := <-self.reg:
+			self.connections[*nc.id] = nc.connection
 		}
 	}
 }
@@ -66,14 +147,8 @@ func (self *TcpTransport) listen() {
 }
 
 func (self *TcpTransport) manage(conn *net.Conn) {
-	decoder := gob.NewDecoder(*conn)
-	var mess *db.Message
-	err := decoder.Decode(&mess)
-	if err != nil {
-		log.Println("tcp/transport", err.Error())
-		return
-	}
-	self.inbox <- mess
+	con := &connection{self, make(chan *db.Message), make(chan *db.Message), conn, nil}
+	con.manage()
 }
 
 func (self *TcpTransport) Close() {
@@ -81,7 +156,7 @@ func (self *TcpTransport) Close() {
 }
 
 func (self *TcpTransport) Send(message *db.Message, host *uuid.UUID) {
-	self.outbox <- qmessage{message, host}
+	self.outbox <- envelope{message, host}
 }
 
 func (self *TcpTransport) Receive() *db.Message {
@@ -93,5 +168,5 @@ func (self *TcpTransport) Push(message *db.Message) {
 }
 
 func NewTcpTransport(service *core.Service) *TcpTransport {
-	return &TcpTransport{service, config.GetInt("port_tcp"), make(chan *db.Message), make(chan qmessage), nil}
+	return &TcpTransport{service, config.GetInt("port_tcp"), make(chan *db.Message, 100), make(chan envelope, 100), make(map[uuid.UUID]*connection), make(chan *newconnection)}
 }
