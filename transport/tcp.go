@@ -119,7 +119,7 @@ func (self *TcpTransport) Run() {
 		case env := <-self.outbox:
 			con, ok := self.connections[*(env.host)]
 			if !ok {
-				con = &connection{self, make(chan *db.Message), make(chan *db.Message), nil, env.host}
+				con = &connection{self, make(chan *db.Message, 100), make(chan *db.Message, 100), nil, env.host}
 				go con.manage()
 				self.connections[*env.host] = con
 			}
@@ -148,7 +148,7 @@ func (self *TcpTransport) listen() {
 }
 
 func (self *TcpTransport) manage(conn *net.Conn) {
-	con := &connection{self, make(chan *db.Message), make(chan *db.Message), conn, nil}
+	con := &connection{self, make(chan *db.Message, 100), make(chan *db.Message, 100), conn, nil}
 	con.manage()
 }
 
