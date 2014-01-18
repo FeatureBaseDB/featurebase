@@ -27,8 +27,10 @@ func init() {
 
 func (self *FragmentContainer) LoadBitmap(frag_id SUUID, bitmap_id uint64, compressed_bitmap string) {
 	if fragment, found := self.GetFragment(frag_id); found {
-		loader := NewLoader(bitmap_id, compressed_bitmap)
-		fragment.requestChan <- loader
+		request := NewLoader(bitmap_id, compressed_bitmap)
+		fragment.requestChan <- request
+		request.Response()
+		return
 	}
 }
 

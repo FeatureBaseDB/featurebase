@@ -136,5 +136,13 @@ func TestFragment(t *testing.T) {
 		res, _ := dummy.Clear(general)
 		So(res, ShouldEqual, true)
 	})
+	Convey("store ", t, func() {
+		b := uint64(1029)
+		compressed := "H4sIAAAJbogA/2JmYRBQ+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdT/VqAIV7SxUWxpZl6JmQlImJGN0YGB4R+j+v8mJkaFH/8h4B+M8X+UgcwAhZTm/yZgMCLCarC4bbAxYGHFNBpWBBmwsGIeDSuCDFhYsYyGFUEGLKxYR8OKIAMWVmyjYUWQwcDwfyYwqNgHLKjk4Q7BBAAAAAD//wEAAP//QNipzzcJAAA="
+		dummy.LoadBitmap(brand, b, compressed)
+		bh1, _ := dummy.Get(brand, b)
+		before, _ := dummy.Count(brand, bh1)
+		So(15228, ShouldEqual, before)
+	})
 
 }

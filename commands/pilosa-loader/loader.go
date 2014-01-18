@@ -13,8 +13,6 @@ import (
 	"pilosa/index"
 	"strconv"
 	"strings"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 func post(database, base_url, id, compressed_string, fragment_type string, slice int) {
@@ -24,7 +22,6 @@ func post(database, base_url, id, compressed_string, fragment_type string, slice
 	values.Set("frame", fragment_type)
 	values.Set("slice", fmt.Sprintf("%d", slice))
 	values.Set("bitmap", compressed_string)
-	spew.Dump(values)
 	r, err := http.PostForm(base_url, values)
 	if err != nil {
 		log.Printf("error posting stat to stathat: %s", err)
