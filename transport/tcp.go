@@ -8,7 +8,6 @@ import (
 	"pilosa/config"
 	"pilosa/core"
 	"pilosa/db"
-	"github.com/davecgh/go-spew/spew"
 
 	"time"
 	"tux21b.org/v1/gocql/uuid"
@@ -43,8 +42,9 @@ BeginManageConnection:
 		if self.conn == nil {
 			process, err := self.transport.service.ProcessMap.GetProcess(self.process)
 			if err != nil {
-				log.Fatal("transport/tcp: ", err)
-				return
+				log.Println("transport/tcp: error getting process, retrying in 2 seconds... ", self.process, err)
+				time.Sleep(2 * time.Second)
+				continue
 			}
 			host_string := fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
 			conn, err := net.Dial("tcp", host_string)
@@ -66,6 +66,7 @@ BeginManageConnection:
 				var mess *db.Message
 				err := decoder.Decode(&mess)
 				if err != nil {
+					log.Println("transport/tcp: error decoding message: ", err.Error())
 					exit <- 1
 					return
 				}
@@ -83,7 +84,6 @@ BeginManageConnection:
 			case message := <-self.inbox:
 				identifier, ok := message.Data.(uuid.UUID)
 				if ok {
-					spew.Dump("ok, sending to reg chan", identifier)
 					// message is connection registration; bypass inbox and register
 					self.process = &identifier
 					self.transport.reg <- &newconnection{&identifier, self}
@@ -91,7 +91,6 @@ BeginManageConnection:
 					self.transport.inbox <- message
 				}
 			case <-exit:
-				log.Println("decoder stopped!")
 				if self.process != nil {
 					self.conn = nil
 					continue BeginManageConnection
@@ -135,12 +134,14 @@ func (self *TcpTransport) listen() {
 	port_string := fmt.Sprintf(":%d", self.port)
 	l, e := net.Listen("tcp", port_string)
 	if e != nil {
-		log.Fatal("Cannot bind to port!", self.port)
+		log.Fatal("Cannot bind to port! ", self.port)
 	}
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			log.Fatal("Cannot accept message!")
+			log.Println("Error accepting, trying again in 2 sec... ", err)
+			time.Sleep(2 * time.Second)
+			continue
 		}
 		go self.manage(&conn)
 	}
