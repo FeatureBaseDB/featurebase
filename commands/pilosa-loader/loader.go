@@ -17,11 +17,11 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
-func post(database, base_url, id, compressed_string, fragment_type string, slice int) {
+func post(database, base_url, id, compressed_string, frame_type string, slice int) {
 	values := make(url.Values)
 	values.Set("db", database)
 	values.Set("id", id)
-	values.Set("frame", fragment_type)
+	values.Set("frame", frame_type)
 	values.Set("slice", fmt.Sprintf("%d", slice))
 	values.Set("bitmap", compressed_string)
 	spew.Dump(values)
@@ -35,7 +35,7 @@ func post(database, base_url, id, compressed_string, fragment_type string, slice
 	r.Body.Close()
 }
 
-func Load(database, url, fullpath string, fragment_type string) error {
+func Load(database, url, fullpath string, frame_type string) error {
 	f, err := os.Open(fullpath)
 	if err != nil {
 		fmt.Printf("error opening file: %v\n", err)
@@ -60,7 +60,7 @@ func Load(database, url, fullpath string, fragment_type string) error {
 				slice = db.GetSlice(profile_id)
 			}
 			if last_slice != slice {
-				post(database, url, id, bm.ToCompressString(), fragment_type, last_slice)
+				post(database, url, id, bm.ToCompressString(), frame_type, last_slice)
 				bm = index.NewBitmap()
 				last_slice = slice
 			}
@@ -69,7 +69,7 @@ func Load(database, url, fullpath string, fragment_type string) error {
 
 		}
 		if slice != -1 {
-			post(database, url, id, bm.ToCompressString(), fragment_type, slice)
+			post(database, url, id, bm.ToCompressString(), frame_type, slice)
 		}
 
 		line, e = Readln(r)
@@ -81,7 +81,7 @@ func Load(database, url, fullpath string, fragment_type string) error {
 var database = flag.String("database", "main", "Database Name")
 var host_port = flag.String("url", "127.0.0.1:15001", "pilosa point of entry host:port")
 var file = flag.String("file", "input_file", "input file name")
-var fragment = flag.String("fragment", "brand", "Fragment Type")
+var frame = flag.String("frame", "brand", "Fragment Type")
 
 func Readln(r *bufio.Reader) (string, error) {
 	var (
@@ -98,7 +98,7 @@ func Readln(r *bufio.Reader) (string, error) {
 
 func main() {
 	flag.Parse()
-	full_url := fmt.Sprintf("http://%s/bulk", *host_port)
+	full_url := fmt.Sprintf("http://%s/batch", *host_port)
 	//fun(*file)
-	Load(*database, full_url, *file, *fragment)
+	Load(*database, full_url, *file, *frame)
 }
