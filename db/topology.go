@@ -390,13 +390,16 @@ func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id u
 func (f *Fragment) SetProcess(process *Process) {
 	f.process = process
 }
+func GetSlice(profile_id uint64) int {
+	return int(profile_id / SLICE_WIDTH)
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // Get a slice from a database
+
 func (d *Database) GetSliceForProfile(profile_id uint64) (*Slice, error) {
-	slice_id := profile_id / SLICE_WIDTH
-	return d.getSlice(int(slice_id))
+	return d.getSlice(GetSlice(profile_id))
 }
 
 type Bitmap struct {

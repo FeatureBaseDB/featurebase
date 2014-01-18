@@ -202,3 +202,19 @@ func NewClear() *CmdClear {
 func (self *CmdClear) Execute(f *Fragment) Calculation {
 	return f.impl.Clear()
 }
+
+type CmdLoader struct {
+	*Responder
+	bitmap_id         uint64
+	compressed_bitmap string
+}
+
+func NewLoader(bitmap_id uint64, compressed_bitmap string) *CmdLoader {
+	return &CmdLoader{NewResponder("Loader"), bitmap_id, compressed_bitmap}
+}
+func (self *CmdLoader) Execute(f *Fragment) Calculation {
+	nbm := NewBitmap()
+	nbm.FromCompressString(self.compressed_bitmap)
+	f.impl.Store(self.bitmap_id, nbm)
+	return "ok"
+}

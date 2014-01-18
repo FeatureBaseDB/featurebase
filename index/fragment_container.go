@@ -25,6 +25,13 @@ func init() {
 	gob.Register(vh)
 }
 
+func (self *FragmentContainer) LoadBitmap(frag_id SUUID, bitmap_id uint64, compressed_bitmap string) {
+	if fragment, found := self.GetFragment(frag_id); found {
+		loader := NewLoader(bitmap_id, compressed_bitmap)
+		fragment.requestChan <- loader
+	}
+}
+
 func (self *FragmentContainer) GetFragment(frag_id SUUID) (*Fragment, bool) {
 	//lock
 	c, v := self.fragments[frag_id]
@@ -144,6 +151,7 @@ type Pilosa interface {
 	SetBit(id uint64, bit_pos uint64) bool
 	TopN(b IBitmap, n int) []Pair
 	Clear() bool
+	Store(bitmap_id uint64, bm IBitmap)
 }
 
 type Fragment struct {

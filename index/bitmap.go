@@ -4,7 +4,10 @@ package index
 
 import (
 	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/gob"
+	"io/ioutil"
 	"log"
 
 	"github.com/yasushi-saito/rbtree"
@@ -354,6 +357,8 @@ type IBitmap interface {
 	BuildFromBits(bits []uint64)
 	ToBytes() []byte
 	FromBytes([]byte)
+	ToCompressString() string
+	FromCompressString(string)
 }
 
 func NewRB() *rbtree.Tree {
@@ -363,8 +368,29 @@ func NewRB() *rbtree.Tree {
 func CreateRBBitmap() IBitmap {
 	return &Bitmap{nodes: NewRB(), bcount: 0}
 }
-func (b *Bitmap) AddChunk(a *Chunk) {
-	b.nodes.Insert(a)
+
+func (self *Bitmap) FromCompressString(str string) {
+	compressed_data, err := base64.StdEncoding.DecodeString(str)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	reader, _ := gzip.NewReader(bytes.NewReader(compressed_data))
+	data, _ := ioutil.ReadAll(reader)
+	self.FromBytes(data)
+}
+
+func (self *Bitmap) ToCompressString() string {
+	var b bytes.Buffer
+	w := gzip.NewWriter(&b)
+	w.Write(self.ToBytes())
+	w.Flush()
+	w.Close()
+	return base64.StdEncoding.EncodeToString(b.Bytes())
+}
+
+func (self *Bitmap) AddChunk(a *Chunk) {
+	self.nodes.Insert(a)
 }
 func (b *Bitmap) Min() ChunkIterator {
 	return &RBNodeIterator{b.nodes.Min()}

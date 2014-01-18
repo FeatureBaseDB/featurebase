@@ -46,6 +46,13 @@ func TestId(t *testing.T) {
 		b2 := Hex_to_SUUID(s)
 		So(b1, ShouldEqual, b2)
 	})
+	Convey("Gen 10", t, func() {
+		for i := 0; i < 10; i++ {
+			bc1 := Id()
+			println(SUUID_to_Hex(bc1))
+		}
+		So(1, ShouldEqual, 1)
+	})
 
 }
 

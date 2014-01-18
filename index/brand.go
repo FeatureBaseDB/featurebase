@@ -125,6 +125,12 @@ func packagePairs(r RankList) []Pair {
 	}
 	return res
 }
+func (self *Brand) Store(bitmap_id uint64, bm IBitmap) {
+	//oldbm:=self.Get(bitmap_id)
+	//nbm = Union(oldbm, bm)
+	self.storage.Store(int64(bitmap_id), self.db, self.slice, bm.(*Bitmap))
+	self.cache_it(bm, bitmap_id)
+}
 
 func (self *Brand) TopN(src_bitmap IBitmap, n int) []Pair {
 	breakout := 500

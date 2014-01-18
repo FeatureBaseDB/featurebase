@@ -34,6 +34,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/test", self.HandleTest)
 	mux.HandleFunc("/version", self.HandleVersion)
 	mux.HandleFunc("/ping", self.HandlePing)
+	mux.HandleFunc("/batch", self.HandleBatch)
 	s := &http.Server{
 		Addr:    ":" + port_string,
 		Handler: mux,
@@ -53,6 +54,66 @@ func (self *WebService) HandleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//service.Inbox <- &message
+}
+
+func (self *WebService) HandleBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	/*   	values.Set("db", database)
+	values.Set("id", id)
+	values.Set("frame", fragment_type)
+	values.Set("slice", fmt.Sprintf("%d", slice))
+	values.Set("bitmap", compressed_string)
+	*/
+
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	database_name := r.Form.Get("db")
+	if database_name == "" {
+		http.Error(w, "Provide a database (db)", http.StatusNotFound)
+		return
+	}
+
+	bitmap_id_string := r.Form.Get("id")
+	if bitmap_id_string == "" {
+		http.Error(w, "Provide a bitmap id (id)", http.StatusNotFound)
+		return
+	}
+	bitmap_id, _ := strconv.ParseUint(bitmap_id_string, 10, 64)
+
+	slice_string := r.Form.Get("slice")
+	if bitmap_id_string == "" {
+		http.Error(w, "Provide a slice (slice)", http.StatusNotFound)
+		return
+	}
+	slice, _ := strconv.ParseInt(slice_string, 10, 32)
+
+	frame := r.Form.Get("frame")
+	if bitmap_id_string == "" {
+		http.Error(w, "Provide a frame (frame)", http.StatusNotFound)
+		return
+	}
+
+	compressed_bitmap := r.Form.Get("bitmap")
+	if bitmap_id_string == "" {
+		http.Error(w, "Provide a compressed base64 bitmap (bitmap)", http.StatusNotFound)
+		return
+	}
+
+	results := self.service.Batch(database_name, frame, compressed_bitmap, bitmap_id, int(slice))
+
+	encoder := json.NewEncoder(w)
+	err = encoder.Encode(results)
+	if err != nil {
+		log.Fatal("Error encoding results")
+	}
+
 }
 
 func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
