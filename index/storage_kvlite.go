@@ -125,6 +125,7 @@ func (self *KVStorage) StoreBlock(bitmap_id int64, db string, slice int, chunk_k
 	self.cc.Set(key, value)
 	self.evic_count += 1
 	if self.evic_count > 10000 {
+		self.db.Flush()
 		self.cc.EvictSomeItems()
 		self.evic_count = 0
 	}
