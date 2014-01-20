@@ -15,14 +15,15 @@ type CassandraStorage struct {
 func BuildSchema() {
 	/*
 	   "CREATE KEYSPACE IF NOT EXISTS hotbox WITH strategy_class = SimpleStrategy AND strategy_options:replication_factor = 1"
-	   "CREATE TABLE IF NOT EXISTS bitmap ( bitmap_id bigint, db varchar, slice int, ChunkKey bigint,   BlockIndex int,   block bigint,    PRIMARY KEY ((bitmap_id, db, slice),ChunkKey,BlockIndex) )
+	   CREATE TABLE IF NOT EXISTS bitmap ( bitmap_id bigint, db varchar, slice int, ChunkKey bigint,   BlockIndex int,   block bigint,    PRIMARY KEY ((bitmap_id, db, slice),ChunkKey,BlockIndex) )
 	   "
 	*/
 
 }
 func NewCassStorage() Storage {
 	obj := new(CassandraStorage)
-	cluster := gocql.NewCluster("127.0.0.1")
+	//cluster := gocql.NewCluster("127.0.0.1")
+	cluster := gocql.NewCluster("10.87.110.249")
 	cluster.Keyspace = "hotbox"
 	cluster.Consistency = gocql.Quorum
 	//cluster.ProtoVersion = 1
