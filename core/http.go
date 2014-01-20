@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"pilosa/config"
 	"pilosa/db"
+	"runtime"
 	"strconv"
 
 	"github.com/davecgh/go-spew/spew"
@@ -158,7 +159,11 @@ func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	encoder := json.NewEncoder(w)
 	//stats := service.GetStats()
-	stats := ""
+	//	stats := ""
+	m := &runtime.MemStats{}
+	runtime.ReadMemStats(m)
+	stats := map[string]interface{}{"num_goroutines": runtime.NumGoroutine(), "Memory Aquired": m.Sys, "Memory Used": m.Alloc}
+
 	err := encoder.Encode(stats)
 	if err != nil {
 		log.Fatal("Error encoding stats")
