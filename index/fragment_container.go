@@ -168,7 +168,7 @@ type Fragment struct {
 }
 
 func getStorage(db string, slice int, frame string) Storage {
-	choice := 3
+	choice := 1
 	switch choice {
 	case 1:
 		return NewMemoryStorage()
