@@ -12,8 +12,9 @@ import (
 )
 
 type KVStorage struct {
-	db *gkvlite.Store
-	cc *gkvlite.Collection
+	db         *gkvlite.Store
+	cc         *gkvlite.Collection
+	evic_count int
 }
 
 func NewKVStorage(path string, slice int, db string) (Storage, error) {
@@ -122,6 +123,10 @@ func (self *KVStorage) StoreBlock(bitmap_id int64, db string, slice int, chunk_k
 	value := Bytes(block)
 
 	self.cc.Set(key, value)
-
+	self.evic_count += 1
+	if self.evic_count > 10000 {
+		self.cc.EvictSomeItems()
+		self.evic_count = 0
+	}
 	return nil
 }
