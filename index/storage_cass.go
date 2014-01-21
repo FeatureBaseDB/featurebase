@@ -3,6 +3,7 @@ package index
 // #cgo  CFLAGS:-mpopcnt
 
 import (
+	"fmt"
 	"log"
 
 	"tux21b.org/v1/gocql"
@@ -20,11 +21,11 @@ func BuildSchema() {
 	*/
 
 }
-func NewCassStorage() Storage {
+func NewCassStorage(host, keyspace string) Storage {
 	obj := new(CassandraStorage)
 	//cluster := gocql.NewCluster("127.0.0.1")
-	cluster := gocql.NewCluster("10.87.110.249")
-	cluster.Keyspace = "hotbox"
+	cluster := gocql.NewCluster(host)
+	cluster.Keyspace = keyspace
 	cluster.Consistency = gocql.Quorum
 	//cluster.ProtoVersion = 1
 	// cluster.CQLVersion = "3.0.0"
@@ -33,7 +34,7 @@ func NewCassStorage() Storage {
 		log.Fatal(err)
 	}
 
-	err = session.Query("USE hotbox").Exec()
+	err = session.Query(fmt.Sprintf("USE %s", keyspace)).Exec()
 	if err != nil {
 	}
 	obj.db = session

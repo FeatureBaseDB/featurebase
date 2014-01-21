@@ -168,17 +168,33 @@ type Fragment struct {
 }
 
 func getStorage(db string, slice int, frame string) Storage {
-	choice := 1
-	switch choice {
-	case 1:
-		return NewMemoryStorage()
-	case 2:
-		s, _ := NewKVStorage("/tmp/pilosa/", slice, db)
-		return s
-	case 3:
-		return NewCassStorage()
-	}
-	return nil
+	return NewCassStorage("10.87.110.249", "hotbox")
+	/*
+		storage_method := config.GetInt("storage")
+
+		switch storage_method {
+	    default:
+			return NewMemoryStorage()
+		case 1:
+			storage_path := config.GetString("kv_base_path")
+			if storage_path == "" {
+				storage_path = "/tmp/pilosa"
+			}
+			s, _ := NewKVStorage(storage_path, slice, db)
+			return s
+		case 2:
+			host := config.GetString("cass_host")
+			if host == "" {
+				host = "localhost"
+			}
+			keyspace := config.GetString("cass_keyspace")
+			if keyspace == "" {
+				keyspace = "hotbox"
+			}
+			return NewCassStorage(host, keyspace)
+		}
+		return nil
+	*/
 }
 
 func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {

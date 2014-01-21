@@ -45,7 +45,7 @@ func NewService() *Service {
 	service.WebService = NewWebService(service)
 	service.Index = index.NewFragmentContainer()
 	service.Hold = hold.NewHolder()
-	service.version = "0.0.6"
+	service.version = "0.0.7"
 	return service
 }
 
