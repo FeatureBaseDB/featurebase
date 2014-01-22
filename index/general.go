@@ -54,3 +54,10 @@ func (self *General) Store(bitmap_id uint64, bm IBitmap) {
 	self.storage.Store(int64(bitmap_id), self.db, self.slice, bm.(*Bitmap))
 	self.bitmap_cache.Add(bitmap_id, bm)
 }
+
+func (self *General) Stats() interface{} {
+
+	stats := map[string]interface{}{
+		"total size of cache in items": self.bitmap_cache.Len()}
+	return stats
+}

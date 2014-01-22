@@ -1,7 +1,6 @@
 package index
 
 import (
-	"log"
 	"testing"
 
 	//	"io/ioutil"
@@ -92,50 +91,63 @@ func TestFragment(t *testing.T) {
 		So(num, ShouldEqual, 2)
 	})
 
-	Convey("Brand SetBit", t, func() {
-		bi1 := uint64(1231)
-		bi2 := uint64(1232)
-		bi3 := uint64(1233)
-		bi4 := uint64(1234)
+	Convey("Brand SetBit Small", t, func() {
+		bi1 := uint64(1029)
 		for x := uint64(0); x < 1000; x++ {
-			if x < 100 {
-				dummy.SetBit(brand, bi1, x)
-				dummy.SetBit(brand, bi4, x)
-			}
-			if x < 500 {
-				dummy.SetBit(brand, bi2, x)
-			}
-			if x%3 == 0 {
-				dummy.SetBit(brand, bi3, x)
-			}
-			if x > 700 {
-				dummy.SetBit(brand, bi4, x)
-			}
+			dummy.SetBit(brand, bi1, x)
 		}
-		bh1, _ := dummy.Get(brand, bi1)
-		//	dummy.Rank()
-		log.Println(dummy.TopN(brand, bh1, 4))
 		So(1, ShouldEqual, 1)
 	})
+
 	/*
-		Convey("Brand TopN", t, func() {
-			max_brands := uint64(5000)
-			for i := uint64(0); i < max_brands; i++ {
-				for x := uint64(0); x < i; x = x + 1 {
-					dummy.SetBit(brand, uint64(i), x)
+		Convey("Brand SetBit Big", t, func() {
+			bi1 := uint64(1231)
+			bi2 := uint64(1232)
+			bi3 := uint64(1233)
+			bi4 := uint64(1234)
+			for x := uint64(0); x < 60000; x++ {
+				if x < 100 {
+					dummy.SetBit(brand, bi1, x)
+					dummy.SetBit(brand, bi4, x)
 				}
-
+				if x < 500 {
+					dummy.SetBit(brand, bi2, x)
+				}
+				if x%3 == 0 && x < 1000 {
+					dummy.SetBit(brand, bi3, x)
+				}
+				if x > 700 && x < 1000 {
+					dummy.SetBit(brand, bi4, x)
+				}
+				if x > 1000 {
+					dummy.SetBit(brand, x, x)
+				}
 			}
-			bh1, _ := dummy.Get(brand, uint64(4999))
+			bh1, _ := dummy.Get(brand, bi1)
+			//	dummy.Rank()
 			log.Println(dummy.TopN(brand, bh1, 4))
-
+			log.Println(dummy.Stats(brand))
 			So(1, ShouldEqual, 1)
 		})
+			Convey("Brand TopN", t, func() {
+				max_brands := uint64(5000)
+				for i := uint64(0); i < max_brands; i++ {
+					for x := uint64(0); x < i; x = x + 1 {
+						dummy.SetBit(brand, uint64(i), x)
+					}
+
+				}
+				bh1, _ := dummy.Get(brand, uint64(4999))
+				log.Println(dummy.TopN(brand, bh1, 4))
+
+				So(1, ShouldEqual, 1)
+			})
 	*/
 	Convey("Clear ", t, func() {
 		res, _ := dummy.Clear(general)
 		So(res, ShouldEqual, true)
 	})
+
 	Convey("store ", t, func() {
 		b := uint64(1029)
 		compressed := "H4sIAAAJbogA/2JmYRBQ+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdT/VqAIV7SxUWxpZl6JmQlImJGN0YGB4R+j+v8mJkaFH/8h4B+M8X+UgcwAhZTm/yZgMCLCarC4bbAxYGHFNBpWBBmwsGIeDSuCDFhYsYyGFUEGLKxYR8OKIAMWVmyjYUWQwcDwfyYwqNgHLKjk4Q7BBAAAAAD//wEAAP//QNipzzcJAAA="
