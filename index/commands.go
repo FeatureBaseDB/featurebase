@@ -218,3 +218,14 @@ func (self *CmdLoader) Execute(f *Fragment) Calculation {
 	f.impl.Store(self.bitmap_id, nbm)
 	return "ok"
 }
+
+type CmdStats struct {
+	*Responder
+}
+
+func NewStats() *CmdStats {
+	return &CmdStats{NewResponder("Stats")}
+}
+func (self *CmdStats) Execute(f *Fragment) Calculation {
+	return f.impl.Stats()
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"log"
+	"pilosa/config"
 	. "pilosa/util"
 	"time"
 
@@ -42,6 +43,14 @@ func (self *FragmentContainer) GetFragment(frag_id SUUID) (*Fragment, bool) {
 	return c, v
 }
 
+func (self *FragmentContainer) Stats(frag_id SUUID) interface{} {
+	if fragment, found := self.GetFragment(frag_id); found {
+		request := NewStats()
+		fragment.requestChan <- request
+		return request.Response().answer
+	}
+	return nil
+}
 func (self *FragmentContainer) Empty(frag_id SUUID) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewEmpty()
@@ -154,6 +163,7 @@ type Pilosa interface {
 	TopN(b IBitmap, n int) []Pair
 	Clear() bool
 	Store(bitmap_id uint64, bm IBitmap)
+	Stats() interface{}
 }
 
 type Fragment struct {
@@ -168,33 +178,30 @@ type Fragment struct {
 }
 
 func getStorage(db string, slice int, frame string) Storage {
-	return NewCassStorage("10.87.110.249", "hotbox")
-	/*
-		storage_method := config.GetInt("storage")
+	storage_method := config.GetInt("storage")
 
-		switch storage_method {
-	    default:
-			return NewMemoryStorage()
-		case 1:
-			storage_path := config.GetString("kv_base_path")
-			if storage_path == "" {
-				storage_path = "/tmp/pilosa"
-			}
-			s, _ := NewKVStorage(storage_path, slice, db)
-			return s
-		case 2:
-			host := config.GetString("cass_host")
-			if host == "" {
-				host = "localhost"
-			}
-			keyspace := config.GetString("cass_keyspace")
-			if keyspace == "" {
-				keyspace = "hotbox"
-			}
-			return NewCassStorage(host, keyspace)
+	switch storage_method {
+	default:
+		return NewMemoryStorage()
+	case 1:
+		storage_path := config.GetString("kv_base_path")
+		if storage_path == "" {
+			storage_path = "/tmp/pilosa"
 		}
-		return nil
-	*/
+		s, _ := NewKVStorage(storage_path, slice, db)
+		return s
+	case 2:
+		host := config.GetString("cass_host")
+		if host == "" {
+			host = "localhost"
+		}
+		keyspace := config.GetString("cass_keyspace")
+		if keyspace == "" {
+			keyspace = "hotbox"
+		}
+		return NewCassStorage(host, keyspace)
+	}
+	return nil
 }
 
 func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {

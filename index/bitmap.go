@@ -418,18 +418,19 @@ func (b *Bitmap) ToBytes() []byte {
 	return buf.Bytes()
 }
 
-func (b *Bitmap) FromBytes(raw []byte) {
+func (self *Bitmap) FromBytes(raw []byte) {
 	buf := bytes.NewBuffer(raw)
 	dec := gob.NewDecoder(buf)
 
 	var size int
 	dec.Decode(&size)
-	b.nodes = NewRB()
+	self.nodes = NewRB()
 	for i := 0; i < size; i++ {
 		chunk := &Chunk{}
 		dec.Decode(&chunk)
-		b.AddChunk(chunk)
+		self.AddChunk(chunk)
 	}
+	self.SetCount(BitCount(self))
 }
 
 func (b *Bitmap) BuildFromBits(bits []uint64) {

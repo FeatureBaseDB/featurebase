@@ -87,6 +87,7 @@ func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64) bool {
 		self.storage.StoreBlock(int64(bitmap_id), self.db, self.slice, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
 		self.storage.StoreBlock(int64(bitmap_id), self.db, self.slice, COUNTER_KEY, 0, int64(bm.Count()))
 		if bm.Count() >= self.threshold_value {
+
 			self.Rank() //need to optimize this
 		}
 	}
@@ -124,6 +125,35 @@ func packagePairs(r RankList) []Pair {
 		res[i] = Pair{v.Key, v.Count}
 	}
 	return res
+}
+
+func (self *Brand) Stats() interface{} {
+	total := uint64(0)
+	i := uint64(0)
+	bit_total := uint64(0)
+	for _, v := range self.bitmap_cache {
+		total += uint64(v.bitmap.Len()) * uint64(256)
+		i += 1
+		bit_total += v.Count
+	}
+	avg_bytes := uint64(0)
+	avg_bits := uint64(0)
+	if i > 0 {
+		avg_bytes = total / i
+		avg_bits = bit_total / i
+	}
+
+	stats := map[string]interface{}{
+		"total size of cache in bytes":       total,
+		"number of bitmaps":                  len(self.bitmap_cache),
+		"avg size of bitmap in space(bytes)": avg_bytes,
+		"avg size of bitmap in bits":         avg_bits,
+		"rank counter":                       self.rank_counter,
+		"threshold_value":                    self.threshold_value,
+		"threshold_length":                   self.threshold_length,
+		"threshold_idx":                      self.threshold_idx,
+		"skip":                               self.skip}
+	return stats
 }
 func (self *Brand) Store(bitmap_id uint64, bm IBitmap) {
 	//oldbm:=self.Get(bitmap_id)
