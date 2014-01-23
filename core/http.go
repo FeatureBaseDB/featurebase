@@ -112,7 +112,8 @@ func (self *WebService) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		log.Fatal("Error encoding results")
+		log.Println("Error encoding results")
+		err = encoder.Encode("Bad Result")
 	}
 
 }
