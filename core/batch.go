@@ -38,13 +38,15 @@ func (self *Service) Batch(database_name, frame, compressed_bitmap string, bitma
 	oslice := database.GetOrCreateSlice(slice)
 	//need to find processid and fragment id for that slice
 
-	fragment, _ := database.GetFragmentForBitmap(oslice, &db.Bitmap{bitmap_id, frame})
-	id := uuid.RandomUUID()
-	batch := db.Message{Data: BatchRequest{Id: &id, Source: self.Id, Fragment_id: fragment.GetId(), Bitmap_id: bitmap_id, Compressed_bitmap: compressed_bitmap}}
-	dest_id := fragment.GetProcess().Id()
-	self.Transport.Send(&batch, &dest_id)
+	fragment, err := database.GetFragmentForBitmap(oslice, &db.Bitmap{bitmap_id, frame})
+	if err == nil {
+		id := uuid.RandomUUID()
+		batch := db.Message{Data: BatchRequest{Id: &id, Source: self.Id, Fragment_id: fragment.GetId(), Bitmap_id: bitmap_id, Compressed_bitmap: compressed_bitmap}}
+		dest_id := fragment.GetProcess().Id()
+		self.Transport.Send(&batch, &dest_id)
 
-	_, err := self.Hold.Get(&id, 60)
+		_, err := self.Hold.Get(&id, 60)
+	}
 	return err
 
 }

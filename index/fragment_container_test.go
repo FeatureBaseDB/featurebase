@@ -151,6 +151,8 @@ func TestFragment(t *testing.T) {
 	Convey("store ", t, func() {
 		b := uint64(1029)
 		compressed := "H4sIAAAJbogA/2JmYRBQ+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdT/VqAIV7SxUWxpZl6JmQlImJGN0YGB4R+j+v8mJkaFH/8h4B+M8X+UgcwAhZTm/yZgMCLCarC4bbAxYGHFNBpWBBmwsGIeDSuCDFhYsYyGFUEGLKxYR8OKIAMWVmyjYUWQwcDwfyYwqNgHLKjk4Q7BBAAAAAD//wEAAP//QNipzzcJAAA="
+		//		compressed := "H4sIAAAJbogA/2JmYWBS+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdT/VqAIV7SxUWxpZl6JmQlImJGN0YGBweN/E+M/RgdGRoUf/6EAk/GbGUQy4AUAAAAA//8BAAD//2vjG9ezAAAA"
+
 		dummy.LoadBitmap(brand, b, compressed)
 		bh1, _ := dummy.Get(brand, b)
 		before, _ := dummy.Count(brand, bh1)
