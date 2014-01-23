@@ -45,7 +45,7 @@ func (self *Service) Batch(database_name, frame, compressed_bitmap string, bitma
 		dest_id := fragment.GetProcess().Id()
 		self.Transport.Send(&batch, &dest_id)
 
-		_, err := self.Hold.Get(&id, 60)
+		_, err = self.Hold.Get(&id, 60)
 	}
 	return err
 

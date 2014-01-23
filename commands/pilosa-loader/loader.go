@@ -4,15 +4,14 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"pilosa/db"
 	"pilosa/index"
 	"strconv"
 	"strings"
+	"github.com/davecgh/go-spew/spew"
 )
 
 func post(database, base_url, id, compressed_string, frame_type string, slice int) {
@@ -22,14 +21,17 @@ func post(database, base_url, id, compressed_string, frame_type string, slice in
 	values.Set("frame", frame_type)
 	values.Set("slice", fmt.Sprintf("%d", slice))
 	values.Set("bitmap", compressed_string)
-	r, err := http.PostForm(base_url, values)
-	if err != nil {
-		log.Printf("error posting stat to stathat: %s", err)
-		return
-	}
-	//body, _ := ioutil.ReadAll(r.Body)
-	ioutil.ReadAll(r.Body)
-	r.Body.Close()
+	spew.Dump(values)
+	/*
+		r, err := http.PostForm(base_url, values)
+		if err != nil {
+			log.Printf("error posting stat to stathat: %s", err)
+			return
+		}
+		//body, _ := ioutil.ReadAll(r.Body)
+		ioutil.ReadAll(r.Body)
+		r.Body.Close()
+	*/
 }
 
 func Load(database, url, fullpath string, frame_type string) error {

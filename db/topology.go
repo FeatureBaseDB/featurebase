@@ -313,9 +313,14 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 	//defer d.mutex.Unlock()
 	frame, _ := d.getFrame(bitmap.FrameType)
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
 	frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
 	if err != nil {
 		log.Fatal(err)
+		return nil, err
 	}
 	frag_id := util.Hex_to_SUUID(frag_id_s)
 	return fsi.GetFragment(frag_id)
