@@ -314,12 +314,12 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 	frame, _ := d.getFrame(bitmap.FrameType)
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 		return nil, err
 	}
 	frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 		return nil, err
 	}
 	frag_id := util.Hex_to_SUUID(frag_id_s)
@@ -335,7 +335,8 @@ func (d *Database) GetFragmentById(fragment_id *uuid.UUID) *Fragment {
 func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) (*Fragment, error) {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return nil, err
 	}
 	return fsi.GetFragment(fragment_id)
 }
@@ -343,7 +344,8 @@ func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id util.SUUI
 func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return nil
 	}
 	fragment := Fragment{id: fragment_id}
 	fsi.AddFragment(&fragment)
