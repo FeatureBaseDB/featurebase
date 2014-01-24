@@ -112,8 +112,9 @@ func (self *WebService) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		log.Println("Error encoding results")
-		err = encoder.Encode("Bad Result")
+		log.Println("Error Batch results")
+	    log.Println(spew.Sdump(r.Form)
+		err = encoder.Encode("Bad Batch Request")
 	}
 
 }

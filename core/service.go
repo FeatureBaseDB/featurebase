@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -46,7 +47,21 @@ func NewService() *Service {
 	service.Index = index.NewFragmentContainer()
 	service.Hold = hold.NewHolder()
 	service.version = "0.0.8"
+	service.PrepareLogging()
 	return service
+}
+
+func (self *Service) PrepareLogging() {
+	base_path := config.GetString("log_path")
+	if base_path == "" {
+		base_path = "/tmp"
+	}
+	f, err := os.OpenFile(fmt.Sprintf("%s/cruncher.%s", base_path, self.Id), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Error("error opening file: %v", err)
+	}
+	//defer f.Close()
+	log.SetOutput(f)
 }
 
 func (service *Service) init_id() {
