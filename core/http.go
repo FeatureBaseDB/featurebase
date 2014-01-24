@@ -113,7 +113,7 @@ func (self *WebService) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	err = encoder.Encode(results)
 	if err != nil {
 		log.Println("Error Batch results")
-	    log.Println(spew.Sdump(r.Form)
+		log.Println(spew.Sdump(r.Form))
 		err = encoder.Encode("Bad Batch Request")
 	}
 
