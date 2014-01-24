@@ -32,10 +32,11 @@ type Service struct {
 	Index          *index.FragmentContainer
 	Hold           *hold.Holder
 	version        string
+    name           string
 }
 
 func NewService() *Service {
-	spew.Dump("NewService")
+	log.Println(spew.Sdump("NewService")
 	service := new(Service)
 	service.init_id()
 	service.Etcd = etcd.NewClient(nil)
@@ -47,6 +48,7 @@ func NewService() *Service {
 	service.Index = index.NewFragmentContainer()
 	service.Hold = hold.NewHolder()
 	service.version = "0.0.8"
+	service.name ="Cruncher" 
 	service.PrepareLogging()
 	return service
 }
@@ -56,9 +58,9 @@ func (self *Service) PrepareLogging() {
 	if base_path == "" {
 		base_path = "/tmp"
 	}
-	f, err := os.OpenFile(fmt.Sprintf("%s/cruncher.%s", base_path, self.Id), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(fmt.Sprintf("%s/%s.%s", base_path, self.name,self.Id), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		log.Error("error opening file: %v", err)
+		log.Println("error opening file: %v", err)
 	}
 	//defer f.Close()
 	log.SetOutput(f)
