@@ -3,9 +3,11 @@ package index
 import (
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"log"
 	"pilosa/config"
 	. "pilosa/util"
+	"sync"
 	"time"
 
 	"github.com/golang/groupcache/lru"
@@ -24,6 +26,18 @@ type BitmapHandle uint64
 func init() {
 	var vh BitmapHandle
 	gob.Register(vh)
+}
+
+func (self *FragmentContainer) Shutdown() {
+	log.Println("Container Shutdown Started")
+	var wg sync.WaitGroup
+	wg.Add(len(self.fragments))
+
+	for _, v := range self.fragments {
+		v.exit <- &wg
+	}
+	wg.Wait()
+	log.Println("Container Shutdown Complete")
 }
 
 func (self *FragmentContainer) LoadBitmap(frag_id SUUID, bitmap_id uint64, compressed_bitmap string) {
@@ -154,6 +168,7 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 	log.Println("ADD FRAGMENT", frame)
 	f := NewFragment(id, db, slice, frame)
 	self.fragments[id] = f
+	f.Load()
 	go f.ServeFragment()
 }
 
@@ -164,6 +179,8 @@ type Pilosa interface {
 	Clear() bool
 	Store(bitmap_id uint64, bm IBitmap)
 	Stats() interface{}
+	Persist() error
+	Load()
 }
 
 type Fragment struct {
@@ -175,6 +192,7 @@ type Fragment struct {
 	cache       *lru.Cache
 	mesg_count  uint64
 	mesg_time   time.Duration
+	exit        chan *sync.WaitGroup
 }
 
 func getStorage(db string, slice int, frame string) Storage {
@@ -206,14 +224,14 @@ func getStorage(db string, slice int, frame string) Storage {
 
 func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
 	var impl Pilosa
-	log.Println("XXXXXXXXXXXXXXXXXXXXXXXXXXXX", frame)
+	log.Println(fmt.Sprintf("XXXXXXXXXXXXXXXXXXXXXXXXXXX(%s)", frame))
 	switch frame {
+	case "brand":
+		log.Println("Brand")
+		impl = NewBrand(db, slice, getStorage(db, slice, frame), 50000, 45000, 100)
 	default:
 		log.Println("General")
 		impl = NewGeneral(db, slice, getStorage(db, slice, frame))
-	case "Brand":
-		log.Println("Brand")
-		impl = NewBrand(db, slice, getStorage(db, slice, frame), 50000, 45000, 100)
 	}
 
 	f := new(Fragment)
@@ -222,6 +240,7 @@ func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
 	f.cache = lru.New(10000)
 	f.impl = impl //NewGeneral(db, slice, NewMemoryStorage())
 	f.slice = slice
+	f.exit = make(chan *sync.WaitGroup)
 	return f
 }
 
@@ -283,24 +302,33 @@ func (self *Fragment) intersect(bitmaps []BitmapHandle) BitmapHandle {
 	}
 	return self.AllocHandle(result)
 }
+func (self *Fragment) Persist() {
+	err := self.impl.Persist()
+	if err != nil {
+		log.Println("Error saving:", err)
+	}
+}
+func (self *Fragment) Load() {
+	self.impl.Load()
+}
 
 func (self *Fragment) ServeFragment() {
 	for {
-		req := <-self.requestChan
-		self.mesg_count++
-		start := time.Now()
-		answer := req.Execute(self)
-		delta := time.Since(start)
-		self.mesg_count += 1
-		self.mesg_time += delta
-		/*
-			var buffer bytes.Buffer
-			buffer.WriteString(`{ "results":`)
-			buffer.WriteString(answer)
-			buffer.WriteString(fmt.Sprintf(`,"query type": "%s"`, responder.QueryType()))
-			buffer.WriteString(fmt.Sprintf(`, "elapsed": "%s"}`, delta))
-		*/
-		req.ResponseChannel() <- Result{answer, delta}
+		select {
+		case req := <-self.requestChan:
+			self.mesg_count++
+			start := time.Now()
+			answer := req.Execute(self)
+			delta := time.Since(start)
+			self.mesg_count += 1
+			self.mesg_time += delta
+			req.ResponseChannel() <- Result{answer, delta}
+
+		case wg := <-self.exit:
+			log.Println("Fragment Shutdown")
+			self.Persist()
+			wg.Done()
+		}
 	}
 }
 

@@ -1,9 +1,18 @@
 package index
 
-import "github.com/golang/groupcache/lru"
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"pilosa/config"
+
+	"github.com/golang/groupcache/lru"
+)
 
 type General struct {
 	bitmap_cache *lru.Cache
+	keys         map[uint64]interface{}
 	db           string
 	slice        int
 	storage      Storage
@@ -15,12 +24,14 @@ func NewGeneral(db string, slice int, s Storage) *General {
 	f.slice = slice
 	f.db = db
 	f.Clear()
+	f.keys = make(map[uint64]interface{})
 	//f.bitmap_cache = lru.New(10000)
 	return f
 
 }
 func (self *General) Clear() bool {
 	self.bitmap_cache = lru.New(10000)
+	self.bitmap_cache.OnEvicted = self.OnEvicted
 	return true
 }
 
@@ -31,6 +42,7 @@ func (self *General) Get(bitmap_id uint64) IBitmap {
 	}
 	bm = self.storage.Fetch(bitmap_id, self.db, self.slice)
 	self.bitmap_cache.Add(bitmap_id, bm)
+	self.keys[bitmap_id] = 0
 	return bm.(*Bitmap)
 }
 func (self *General) SetBit(bitmap_id uint64, bit_pos uint64) bool {
@@ -53,6 +65,10 @@ func (self *General) Store(bitmap_id uint64, bm IBitmap) {
 	//nbm = Union(oldbm, bm)
 	self.storage.Store(int64(bitmap_id), self.db, self.slice, bm.(*Bitmap))
 	self.bitmap_cache.Add(bitmap_id, bm)
+	self.keys[bitmap_id] = 0
+}
+func (self *General) OnEvicted(key lru.Key, value interface{}) {
+	delete(self.keys, key.(uint64))
 }
 
 func (self *General) Stats() interface{} {
@@ -60,4 +76,39 @@ func (self *General) Stats() interface{} {
 	stats := map[string]interface{}{
 		"total size of cache in items": self.bitmap_cache.Len()}
 	return stats
+}
+
+func (self *General) getFileName() string {
+	base := config.GetString("fragment_base")
+	if base == "" {
+		base = "."
+	}
+	return fmt.Sprintf("%s/General.%s.%d", base, self.db, self.slice)
+}
+
+func (self *General) Persist() error {
+	log.Println("General Persist")
+	w, _ := os.Create(self.getFileName())
+
+	encoder := json.NewEncoder(w)
+	return encoder.Encode(self.keys)
+}
+
+func (self *General) Load() {
+	log.Println("General Load")
+	r, err := os.Open(self.getFileName())
+	if err != nil {
+		log.Println("NO General Init File:", self.getFileName())
+		return
+	}
+
+	dec := json.NewDecoder(r)
+	var keys map[uint64]interface{}
+	if err := dec.Decode(&keys); err != nil {
+		return
+		//log.Println("Bad mojo")
+	}
+	for k := range keys {
+		self.Get(k)
+	}
 }

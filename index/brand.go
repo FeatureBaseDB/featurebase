@@ -1,6 +1,13 @@
 package index
 
-import "sort"
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"pilosa/config"
+	"pilosa/util"
+	"sort"
+)
 
 type Pair struct {
 	Key, Count uint64
@@ -237,4 +244,53 @@ func (self *Brand) TopN(src_bitmap IBitmap, n int) []Pair {
 		}
 	}
 	return packagePairs(results)
+}
+func (self *Brand) getFileName() string {
+	base := config.GetString("fragment_base")
+	if base == "" {
+		base = "."
+	}
+
+	return fmt.Sprintf("%s/Brand.%s.%d.json", base, self.db, self.slice)
+}
+
+func (self *Brand) Persist() error {
+	log.Println("Brand Persist:", self.getFileName())
+
+	w, err := util.Create(self.getFileName())
+	if err != nil {
+		log.Println("Error opening outfile %s", self.getFileName())
+		log.Println(err)
+		return err
+	}
+	defer w.Close()
+
+	encoder := json.NewEncoder(w)
+
+	asize := len(self.bitmap_cache)
+	results := make([]uint64, asize)
+	i := 0
+	for k := range self.bitmap_cache { //   map[uint64]*Rank
+		results[i] = k
+		i += 1
+	}
+	return encoder.Encode(results)
+}
+
+func (self *Brand) Load() {
+	log.Println("Brand Load")
+	r, err := util.Open(self.getFileName())
+	if err != nil {
+		log.Println("NO Brand Init File:", self.getFileName())
+		return
+	}
+	dec := json.NewDecoder(r)
+	var keys []uint64
+	if err := dec.Decode(&keys); err != nil {
+		return
+		//log.Println("Bad mojo")
+	}
+	for _, k := range keys {
+		self.Get(k)
+	}
 }
