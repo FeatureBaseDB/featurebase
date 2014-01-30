@@ -98,7 +98,7 @@ func (service *Service) GetSignals() (chan os.Signal, chan os.Signal) {
 }
 
 func (service *Service) Run() {
-	log.Println("Running service...")
+	log.Println("Running service...", service.version)
 	go service.TopologyMapper.Run()
 	go service.ProcessMapper.Run()
 	go service.WebService.Run()
