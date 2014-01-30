@@ -196,24 +196,24 @@ type Fragment struct {
 }
 
 func getStorage(db string, slice int, frame string) Storage {
-	storage_method := config.GetInt("storage")
+	storage_method := config.GetString("storage_backend")
 
 	switch storage_method {
 	default:
 		return NewMemoryStorage()
-	case 1:
+	case "localfile":
 		storage_path := config.GetString("kv_base_path")
 		if storage_path == "" {
 			storage_path = "/tmp/pilosa"
 		}
 		s, _ := NewKVStorage(storage_path, slice, db)
 		return s
-	case 2:
-		host := config.GetString("cass_host")
+	case "cassandra":
+		host := config.GetString("cassandra_host")
 		if host == "" {
 			host = "localhost"
 		}
-		keyspace := config.GetString("cass_keyspace")
+		keyspace := config.GetString("cassandra_keyspace")
 		if keyspace == "" {
 			keyspace = "hotbox"
 		}
