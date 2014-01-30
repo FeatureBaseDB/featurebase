@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"pilosa/config"
+	"pilosa/util"
 
 	"github.com/golang/groupcache/lru"
 )
@@ -88,7 +88,12 @@ func (self *General) getFileName() string {
 
 func (self *General) Persist() error {
 	log.Println("General Persist")
-	w, _ := os.Create(self.getFileName())
+	w, err := util.Create(self.getFileName())
+	if err != nil {
+		log.Println("Error saving:", err)
+		return err
+	}
+	defer w.Close()
 
 	encoder := json.NewEncoder(w)
 	return encoder.Encode(self.keys)
@@ -96,7 +101,7 @@ func (self *General) Persist() error {
 
 func (self *General) Load() {
 	log.Println("General Load")
-	r, err := os.Open(self.getFileName())
+	r, err := util.Open(self.getFileName())
 	if err != nil {
 		log.Println("NO General Init File:", self.getFileName())
 		return

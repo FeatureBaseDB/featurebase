@@ -14,7 +14,8 @@ type Pair struct {
 }
 type Rank struct {
 	*Pair
-	bitmap IBitmap
+	bitmap   IBitmap
+	category int
 }
 
 type RankList []*Rank
@@ -62,16 +63,17 @@ func (self *Brand) Get(bitmap_id uint64) IBitmap {
 	//I should fetch the category here..need to come up with a good source
 	b := self.storage.Fetch(bitmap_id, self.db, self.slice)
 
-	//Need to figure out wether to cache or not...
-
-	self.cache_it(b, bitmap_id)
+	self.cache_it(b, bitmap_id, GetCategory(bitmap_id))
 
 	return b
 }
+func GetCategory(bitmap_id uint64) int {
+	return 0
+}
 
-func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64) {
+func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category int) {
 	if bm.Count() >= self.threshold_value {
-		self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm}
+		self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm, category}
 		if len(self.bitmap_cache) > self.threshold_length {
 			self.trim()
 		}
@@ -112,7 +114,7 @@ func (self *Brand) Rank() {
 	var list RankList
 	for k, item := range self.bitmap_cache {
 		if item.bitmap.Count() > 50 {
-			list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap})
+			list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})
 		}
 	}
 	sort.Sort(list)
@@ -166,10 +168,14 @@ func (self *Brand) Store(bitmap_id uint64, bm IBitmap) {
 	//oldbm:=self.Get(bitmap_id)
 	//nbm = Union(oldbm, bm)
 	self.storage.Store(int64(bitmap_id), self.db, self.slice, bm.(*Bitmap))
-	self.cache_it(bm, bitmap_id)
+	self.cache_it(bm, bitmap_id, GetCategory(bitmap_id))
 }
 
 func (self *Brand) TopN(src_bitmap IBitmap, n int) []Pair {
+	is := new(IntSet)
+	return self.TopNCat(src_bitmap, n, is)
+}
+func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 	breakout := 500
 	var (
 		o       *Rank
@@ -178,22 +184,22 @@ func (self *Brand) TopN(src_bitmap IBitmap, n int) []Pair {
 	counter := 0
 	x := 0
 
-	//needCat := category.Size() > 0
+	needCat := category.Size() > 0
 	for i, pair := range self.rankings {
-		/*
-			        if needCat {
-					    if !category.Contains(pair.category) {
-					        continue
-					    }
-					}
-		*/
+
+		if needCat {
+			if !category.Contains(pair.category) {
+				continue
+			}
+		}
+
 		if counter > n {
 			break
 		}
 		bm := Intersection(src_bitmap, pair.bitmap)
 		bc := BitCount(bm)
 		if bc > 0 {
-			results = append(results, &Rank{&Pair{pair.Key, bc}, bm})
+			results = append(results, &Rank{&Pair{pair.Key, bc}, bm, pair.category})
 			counter = counter + 1
 		}
 		x = i
@@ -214,13 +220,13 @@ func (self *Brand) TopN(src_bitmap IBitmap, n int) []Pair {
 	for i := x; i < len(self.rankings); i++ {
 		counter = counter + 1
 		o = self.rankings[i]
-		/*
-		   if needCat {
-		       if !category.Contains(o.category) {
-		           continue
-		       }
-		   } else
-		*/
+
+		if needCat {
+			if !category.Contains(o.category) {
+				continue
+			}
+		}
+
 		if i > breakout {
 			break
 		}
@@ -235,9 +241,9 @@ func (self *Brand) TopN(src_bitmap IBitmap, n int) []Pair {
 
 		if bc > current_threshold {
 			if results[end].Count == current_threshold {
-				results[end] = &Rank{&Pair{o.Key, bc}, abitmap}
+				results[end] = &Rank{&Pair{o.Key, bc}, abitmap, o.category}
 			} else {
-				results[end+1] = &Rank{&Pair{o.Key, bc}, abitmap}
+				results[end+1] = &Rank{&Pair{o.Key, bc}, abitmap, o.category}
 				sort.Sort(results)
 			}
 			current_threshold = bc
