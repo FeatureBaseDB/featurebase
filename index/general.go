@@ -99,7 +99,7 @@ func (self *General) Persist() error {
 	return encoder.Encode(self.keys)
 }
 
-func (self *General) Load() {
+func (self *General) Load(requestChan chan Command, f *Fragment) {
 	log.Println("General Load")
 	r, err := util.Open(self.getFileName())
 	if err != nil {
@@ -113,7 +113,9 @@ func (self *General) Load() {
 		return
 		//log.Println("Bad mojo")
 	}
-	for k := range keys {
-		self.Get(k)
+	for k, _ := range keys {
+		request := NewLoadRequest(k)
+		requestChan <- request
+		request.Response()
 	}
 }

@@ -172,6 +172,8 @@ func (self *Brand) Store(bitmap_id uint64, bm IBitmap) {
 }
 
 func (self *Brand) TopN(src_bitmap IBitmap, n int) []Pair {
+	self.rank_counter = 0
+	self.Rank() //TERRIBLE REMOVE TIS ASAP
 	is := new(IntSet)
 	return self.TopNCat(src_bitmap, n, is)
 }
@@ -193,7 +195,7 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 			}
 		}
 
-		if counter > n {
+		if counter >= n {
 			break
 		}
 		bm := Intersection(src_bitmap, pair.bitmap)
@@ -211,10 +213,12 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 	}
 	end := len(results) - 1
 	o = results[end]
+
 	current_threshold := o.Count
 	if current_threshold <= 10 {
 		return packagePairs(results)
 	}
+
 	results = append(results, o)
 
 	for i := x; i < len(self.rankings); i++ {
@@ -249,7 +253,7 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 			current_threshold = bc
 		}
 	}
-	return packagePairs(results)
+	return packagePairs(results[:end])
 }
 func (self *Brand) getFileName() string {
 	base := config.GetString("fragment_base")
@@ -283,7 +287,7 @@ func (self *Brand) Persist() error {
 	return encoder.Encode(results)
 }
 
-func (self *Brand) Load() {
+func (self *Brand) Load(requestChan chan Command, f *Fragment) {
 	log.Println("Brand Load")
 	r, err := util.Open(self.getFileName())
 	if err != nil {
@@ -297,6 +301,9 @@ func (self *Brand) Load() {
 		//log.Println("Bad mojo")
 	}
 	for _, k := range keys {
-		self.Get(k)
+		request := NewLoadRequest(k)
+		requestChan <- request
+		request.Response()
+
 	}
 }

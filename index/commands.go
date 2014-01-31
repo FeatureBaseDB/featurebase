@@ -229,3 +229,17 @@ func NewStats() *CmdStats {
 func (self *CmdStats) Execute(f *Fragment) Calculation {
 	return f.impl.Stats()
 }
+
+type CmdLoadRequest struct {
+	*Responder
+	bitmap_id uint64
+}
+
+func NewLoadRequest(bitmap_id uint64) *CmdLoadRequest {
+	result := &CmdLoadRequest{NewResponder("LoadRequest"), bitmap_id}
+	return result
+}
+func (self *CmdLoadRequest) Execute(f *Fragment) Calculation {
+	f.impl.Get(self.bitmap_id)
+	return 0
+}

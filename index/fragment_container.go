@@ -168,8 +168,8 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 	log.Println("ADD FRAGMENT", frame)
 	f := NewFragment(id, db, slice, frame)
 	self.fragments[id] = f
-	f.Load()
 	go f.ServeFragment()
+	go f.Load()
 }
 
 type Pilosa interface {
@@ -180,7 +180,7 @@ type Pilosa interface {
 	Store(bitmap_id uint64, bm IBitmap)
 	Stats() interface{}
 	Persist() error
-	Load()
+	Load(requestChan chan Command, fragment *Fragment)
 }
 
 type Fragment struct {
@@ -309,7 +309,7 @@ func (self *Fragment) Persist() {
 	}
 }
 func (self *Fragment) Load() {
-	self.impl.Load()
+	self.impl.Load(self.requestChan, self)
 }
 
 func (self *Fragment) ServeFragment() {
