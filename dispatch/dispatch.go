@@ -5,8 +5,6 @@ import (
 	"pilosa/core"
 	"pilosa/db"
 	"pilosa/query"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 type Dispatch struct {
@@ -35,7 +33,6 @@ func (self *Dispatch) Run() {
 			pong := db.Message{Data: core.PongRequest{Id: data.Id}}
 			self.service.Transport.Send(&pong, data.Source)
 		case db.HoldResult:
-			spew.Dump("HOLD-SET", data.ResultId())
 			self.service.Hold.Set(data.ResultId(), data.ResultData(), 30)
 		case query.PortableQueryStep:
 			go self.service.Executor.NewJob(message)
