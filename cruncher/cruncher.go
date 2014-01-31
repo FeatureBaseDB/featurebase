@@ -5,8 +5,6 @@ import (
 	"pilosa/dispatch"
 	"pilosa/executor"
 	"pilosa/transport"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 type Cruncher struct {
@@ -16,7 +14,6 @@ type Cruncher struct {
 }
 
 func (cruncher *Cruncher) Run() {
-	spew.Dump("Cruncher.Run")
 	//	go cruncher.Cleanup()
 	cruncher.Service.Run()
 }

@@ -13,7 +13,6 @@ import (
 	"syscall"
 
 	"github.com/coreos/go-etcd/etcd"
-	"github.com/davecgh/go-spew/spew"
 	"tux21b.org/v1/gocql/uuid"
 )
 
@@ -36,7 +35,6 @@ type Service struct {
 }
 
 func NewService() *Service {
-	log.Println(spew.Sdump("NewService"))
 	service := new(Service)
 	service.init_id()
 	service.Etcd = etcd.NewClient(nil)
@@ -50,6 +48,7 @@ func NewService() *Service {
 	service.version = "0.0.9"
 	service.name = "Cruncher"
 	service.PrepareLogging()
+	fmt.Printf("Pilosa %s\n", service.version)
 	return service
 }
 
