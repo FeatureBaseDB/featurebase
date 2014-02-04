@@ -26,6 +26,8 @@ type BitmapHandle uint64
 func init() {
 	var vh BitmapHandle
 	gob.Register(vh)
+	var lp []Pair
+	gob.Register(lp)
 }
 
 func (self *FragmentContainer) Shutdown() {

@@ -3,7 +3,6 @@ package query
 import (
 	"pilosa/db"
 	"strings"
-	"github.com/davecgh/go-spew/spew"
 
 	"tux21b.org/v1/gocql/uuid"
 )
@@ -65,7 +64,6 @@ func QueryPlanForQuery(database *db.Database, query *Query, destination *db.Loca
 func TokensToString(tokens []Token) string {
 	var str []string
 	for i, _ := range tokens {
-		spew.Dump(tokens[i].Text)
 		str = append(str, tokens[i].Text)
 	}
 	// for now, we're just using this function to pull the filter out of the outer function "outerfunc(filter)"

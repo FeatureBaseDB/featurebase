@@ -89,6 +89,29 @@ func (qt *CountQueryTree) getLocation(d *db.Database) *db.Location {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// TOP-N
+///////////////////////////////////////////////////////////////////////////////////////////////////
+type TopNQueryStep struct {
+	*BaseQueryStep
+	Input *uuid.UUID
+}
+
+type TopNQueryResult struct {
+	*BaseQueryResult
+}
+
+// QueryTree for TOP-N queries
+type TopNQueryTree struct {
+	subquery QueryTree
+	location *db.Location
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *TopNQueryTree) getLocation(d *db.Database) *db.Location {
+	return qt.subquery.getLocation(d)
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // UNION
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type UnionQueryStep struct {
@@ -248,6 +271,7 @@ func init() {
 	gob.Register(UnionQueryResult{})
 	gob.Register(IntersectQueryResult{})
 	gob.Register(CountQueryResult{})
+	gob.Register(TopNQueryResult{})
 
 	gob.Register(SetQueryStep{})
 	gob.Register(GetQueryStep{})
@@ -255,6 +279,7 @@ func init() {
 	gob.Register(UnionQueryStep{})
 	gob.Register(IntersectQueryStep{})
 	gob.Register(CountQueryStep{})
+	gob.Register(TopNQueryStep{})
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -308,6 +333,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 			panic(err)
 		}
 		for slice := 0; slice < numSlices; slice++ {
+			//for slice := 0; slice < 3; slice++ {
 			subtree := qp.buildTree(query, slice)
 			composite := tree.(*CatQueryTree)
 			composite.subqueries = append(composite.subqueries, subtree)
@@ -319,6 +345,9 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 		} else if query.Operation == "count" {
 			subquery := qp.buildTree(query.Inputs[0].(*Query), slice)
 			tree = &CountQueryTree{subquery: subquery}
+		} else if query.Operation == "top-n" {
+			subquery := qp.buildTree(query.Inputs[0].(*Query), slice)
+			tree = &TopNQueryTree{subquery: subquery}
 		} else if query.Operation == "union" {
 			subqueries := make([]QueryTree, len(query.Inputs))
 			for i, input := range query.Inputs {
@@ -397,6 +426,12 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		sub_id := uuid.RandomUUID()
 		step := &CountQueryStep{&BaseQueryStep{id, "count", cnt.getLocation(qp.Database), location}, &sub_id}
 		subq_steps := qp.flatten(cnt.subquery, &sub_id, cnt.getLocation(qp.Database))
+		plan = append(plan, *subq_steps...)
+		plan = append(plan, step)
+	} else if topn, ok := qt.(*TopNQueryTree); ok {
+		sub_id := uuid.RandomUUID()
+		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", topn.getLocation(qp.Database), location}, &sub_id}
+		subq_steps := qp.flatten(topn.subquery, &sub_id, topn.getLocation(qp.Database))
 		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)
 	}

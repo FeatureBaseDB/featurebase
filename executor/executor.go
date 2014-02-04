@@ -30,6 +30,8 @@ func (self *Executor) NewJob(job *db.Message) {
 	switch job.Data.(type) {
 	case query.CountQueryStep:
 		self.service.CountQueryStepHandler(job)
+	case query.TopNQueryStep:
+		self.service.TopNQueryStepHandler(job)
 	case query.UnionQueryStep:
 		self.service.UnionQueryStepHandler(job)
 	case query.IntersectQueryStep:
@@ -69,7 +71,6 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) {
 	fragment_id := util.SUUID(0)
 	destination := db.Location{&process_id, fragment_id}
 
-	spew.Dump("QUERY.ID:", qry.Id)
 	query_plan := query.QueryPlanForQuery(database, qry, &destination)
 	// loop over the query steps and send to Transport
 	for _, qs := range *query_plan {
@@ -86,7 +87,7 @@ func (self *Executor) RunPQL(database_name string, pql string) interface{} {
 	database := self.service.Cluster.GetOrCreateDatabase(database_name)
 
 	// see if the outer query function is a custom query
-	reserved_functions := stringSlice{"get", "set", "union", "intersect", "count"}
+	reserved_functions := stringSlice{"get", "set", "union", "intersect", "count", "top-n"}
 	tokens := query.Lex(pql)
 	outer_token := tokens[0].Text
 

@@ -4,12 +4,13 @@ import (
 	"pilosa/db"
 	"pilosa/index"
 	"pilosa/query"
+	"sort"
 
 	"github.com/davecgh/go-spew/spew"
 )
 
 func (self *Service) CountQueryStepHandler(msg *db.Message) {
-	spew.Dump("COUNT QUERYSTEP")
+	//spew.Dump("COUNT QUERYSTEP")
 	qs := msg.Data.(query.CountQueryStep)
 	input := qs.Input
 	value, _ := self.Hold.Get(input, 10)
@@ -24,13 +25,33 @@ func (self *Service) CountQueryStepHandler(msg *db.Message) {
 	if err != nil {
 		spew.Dump(err)
 	}
-	spew.Dump("SLICE COUNT", count)
+	//spew.Dump("SLICE COUNT", count)
 	result_message := db.Message{Data: query.CountQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: count}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
+func (self *Service) TopNQueryStepHandler(msg *db.Message) {
+	//spew.Dump("TOP-N QUERYSTEP")
+	qs := msg.Data.(query.TopNQueryStep)
+	input := qs.Input
+	value, _ := self.Hold.Get(input, 10)
+	var bh index.BitmapHandle
+	switch val := value.(type) {
+	case index.BitmapHandle:
+		bh = val
+	case []byte:
+		bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
+	}
+	topn, err := self.Index.TopN(qs.Location.FragmentId, bh, 8) //TODO: get the N from the query (default is 8)
+	if err != nil {
+		spew.Dump(err)
+	}
+	result_message := db.Message{Data: query.TopNQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: topn}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
 func (self *Service) UnionQueryStepHandler(msg *db.Message) {
-	spew.Dump("UNION QUERYSTEP")
+	//spew.Dump("UNION QUERYSTEP")
 	qs := msg.Data.(query.UnionQueryStep)
 	var handles []index.BitmapHandle
 	// create a list of bitmap handles
@@ -65,7 +86,7 @@ func (self *Service) UnionQueryStepHandler(msg *db.Message) {
 }
 
 func (self *Service) IntersectQueryStepHandler(msg *db.Message) {
-	spew.Dump("INTERSECT QUERYSTEP")
+	//spew.Dump("INTERSECT QUERYSTEP")
 	qs := msg.Data.(query.IntersectQueryStep)
 	var handles []index.BitmapHandle
 	// create a list of bitmap handles
@@ -101,10 +122,11 @@ func (self *Service) IntersectQueryStepHandler(msg *db.Message) {
 
 func (self *Service) CatQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.CatQueryStep)
-	spew.Dump("CAT QUERYSTEP")
+	//spew.Dump("CAT QUERYSTEP")
 	var handles []index.BitmapHandle
-	use_sum := false
+	return_type := "bitmap-handles"
 	var sum uint64
+	merge_map := map[uint64]uint64{}
 	// either create a list of bitmap handles to cat (i.e. union), or sum the integer values
 	for _, input := range qs.Inputs {
 		value, _ := self.Hold.Get(input, 10)
@@ -115,20 +137,47 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
 			handles = append(handles, bh)
 		case uint64:
-			use_sum = true
-			sum += value.(uint64)
+			return_type = "sum"
+			sum += val
+		case []index.Pair:
+			spew.Dump(val)
+			return_type = "pair-list"
+			for _, pair := range val {
+				_, ok := merge_map[pair.Key]
+				if ok {
+					merge_map[pair.Key] += pair.Count
+				} else {
+					merge_map[pair.Key] = pair.Count
+				}
+			}
 		}
 	}
+
 	// either return the sum, or return the compressed bitmap resulting from the cat (union)
 	var result interface{}
-	if use_sum {
+	if return_type == "sum" {
 		result = sum
-	} else {
+	} else if return_type == "bitmap-handles" {
 		bh, err := self.Index.Union(qs.Location.FragmentId, handles)
 		result, err = self.Index.GetBytes(qs.Location.FragmentId, bh)
 		if err != nil {
 			spew.Dump(err)
 		}
+	} else if return_type == "pair-list" {
+		rank_list := make(index.RankList, 0, len(merge_map))
+		for k, v := range merge_map {
+			rank := new(index.Rank)
+			rank.Pair = &index.Pair{k, v}
+			rank_list = append(rank_list, rank)
+		}
+		sort.Sort(rank_list)
+		pair_list := make([]index.Pair, 0, len(merge_map))
+		for _, r := range rank_list {
+			pair_list = append(pair_list, *r.Pair)
+		}
+		result = pair_list[:8] //TODO: get the N from the query (default is 8)
+	} else {
+		result = "NONE"
 	}
 	result_message := db.Message{Data: query.CatQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
@@ -136,7 +185,7 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 
 func (self *Service) GetQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.GetQueryStep)
-	spew.Dump("GET QUERYSTEP")
+	//spew.Dump("GET QUERYSTEP")
 
 	bh, err := self.Index.Get(qs.Location.FragmentId, qs.Bitmap.Id)
 	if err != nil {
@@ -158,11 +207,12 @@ func (self *Service) GetQueryStepHandler(msg *db.Message) {
 }
 
 func (self *Service) SetQueryStepHandler(msg *db.Message) {
-	spew.Dump("SET QUERYSTEP")
+	//spew.Dump("SET QUERYSTEP")
 	qs := msg.Data.(query.SetQueryStep)
-	result, err := self.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
-	spew.Dump("result:", result)
-	spew.Dump("err:", err)
+	//result, err := self.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
+	result, _ := self.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
+	//spew.Dump("result:", result)
+	//spew.Dump("err:", err)
 
 	result_message := db.Message{Data: query.SetQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
