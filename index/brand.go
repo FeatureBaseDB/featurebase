@@ -175,9 +175,18 @@ func (self *Brand) Store(bitmap_id uint64, bm IBitmap) {
 
 func (self *Brand) TopN(src_bitmap IBitmap, n int) []Pair {
 	self.rank_counter = 0
+	println("RANK")
 	self.Rank() // TODO: TERRIBLE REMOVE THIS ASAP
 	is := new(IntSet)
 	return self.TopNCat(src_bitmap, n, is)
+}
+func dump(r RankList, n int) {
+	for i, v := range r {
+		println("DUMPING:", i, v.Key, v.Count)
+		if i > n {
+			return
+		}
+	}
 }
 func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 	breakout := 500
@@ -197,7 +206,7 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 			}
 		}
 
-		if counter >= n {
+		if counter > n {
 			break
 		}
 		bm := Intersection(src_bitmap, pair.bitmap)
@@ -215,8 +224,8 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 	}
 	end := len(results) - 1
 	o = results[end]
-
 	current_threshold := o.Count
+
 	if current_threshold <= 10 {
 		return packagePairs(results)
 	}
@@ -237,6 +246,8 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 			break
 		}
 
+		//if o.Count < current_threshold { //done
+		//need something to do with the size of initianl bitmap
 		if o.Count < current_threshold { //done
 			break
 
@@ -246,13 +257,15 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 		bc := BitCount(abitmap)
 
 		if bc > current_threshold {
-			if results[end].Count == current_threshold {
+			if results[end-1].Count > bc {
 				results[end] = &Rank{&Pair{o.Key, bc}, abitmap, o.category}
+				current_threshold = bc
 			} else {
 				results[end+1] = &Rank{&Pair{o.Key, bc}, abitmap, o.category}
 				sort.Sort(results)
+				o = results[end]
+				current_threshold = o.Count
 			}
-			current_threshold = bc
 		}
 	}
 	return packagePairs(results[:end])
@@ -277,15 +290,24 @@ func (self *Brand) Persist() error {
 	}
 	defer w.Close()
 
-	encoder := json.NewEncoder(w)
-
 	asize := len(self.bitmap_cache)
+	var list RankList
+	for k, item := range self.bitmap_cache {
+		list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})
+	}
+
+	log.Println("Sorting..")
+	sort.Sort(list)
+	log.Println("..Done")
+
 	results := make([]uint64, asize)
 	i := 0
-	for k := range self.bitmap_cache { //   map[uint64]*Rank
-		results[i] = k
+	for _, k := range list { //   map[uint64]*Rank
+		results[i] = k.Key
 		i += 1
 	}
+
+	encoder := json.NewEncoder(w)
 	return encoder.Encode(results)
 }
 
