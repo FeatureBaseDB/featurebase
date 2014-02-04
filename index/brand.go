@@ -232,7 +232,7 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 
 	results = append(results, o)
 
-	for i := x; i < len(self.rankings); i++ {
+	for i := x + 1; i < len(self.rankings); i++ {
 		counter = counter + 1
 		o = self.rankings[i]
 
