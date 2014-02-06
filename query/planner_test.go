@@ -16,16 +16,16 @@ func TestQueryPlanner(t *testing.T) {
 		id1 := uuid.RandomUUID()
 		bm1 := db.Bitmap{10, "general"}
 		inputs1 := []QueryInput{&bm1}
-		query1 := Query{&id1, "get", inputs1, 0}
+		query1 := Query{&id1, "get", inputs1, 0, 0}
 
 		id2 := uuid.RandomUUID()
 		bm2 := db.Bitmap{20, "general"}
 		inputs2 := []QueryInput{&bm2}
-		query2 := Query{&id2, "get", inputs2, 0}
+		query2 := Query{&id2, "get", inputs2, 0, 0}
 
 		id3 := uuid.RandomUUID()
 		inputs := []QueryInput{&query1, &query2}
-		query := Query{&id3, "union", inputs, 0}
+		query := Query{&id3, "union", inputs, 0, 0}
 		/*
 
 			bm1 := db.Bitmap{10, "general"}

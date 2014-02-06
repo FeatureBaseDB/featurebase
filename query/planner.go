@@ -94,6 +94,7 @@ func (qt *CountQueryTree) getLocation(d *db.Database) *db.Location {
 type TopNQueryStep struct {
 	*BaseQueryStep
 	Input *uuid.UUID
+	N     int
 }
 
 type TopNQueryResult struct {
@@ -179,6 +180,7 @@ func (qt *IntersectQueryTree) getLocation(d *db.Database) *db.Location {
 type CatQueryStep struct {
 	*BaseQueryStep
 	Inputs []*uuid.UUID
+	N      int
 }
 
 type CatQueryResult struct {
@@ -372,7 +374,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 }
 
 // Produces flattened QueryPlan from QueryTree input
-func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Location) *QueryPlan {
+func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Location, n int) *QueryPlan {
 	plan := QueryPlan{}
 	if composite, ok := qt.(*CompositeQueryTree); ok {
 		inputs := make([]QueryInput, len(composite.subqueries))
@@ -380,17 +382,17 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		for index, subq := range composite.subqueries {
 			sub_id := uuid.RandomUUID()
 			step.inputs[index] = &sub_id
-			subq_steps := qp.flatten(subq, &sub_id, composite.getLocation(qp.Database))
+			subq_steps := qp.flatten(subq, &sub_id, composite.getLocation(qp.Database), n)
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)
 	} else if cat, ok := qt.(*CatQueryTree); ok {
 		inputs := make([]*uuid.UUID, len(cat.subqueries))
-		step := CatQueryStep{&BaseQueryStep{id, "cat", cat.getLocation(qp.Database), location}, inputs}
+		step := CatQueryStep{&BaseQueryStep{id, "cat", cat.getLocation(qp.Database), location}, inputs, n}
 		for index, subq := range cat.subqueries {
 			sub_id := uuid.RandomUUID()
 			step.Inputs[index] = &sub_id
-			subq_steps := qp.flatten(subq, &sub_id, cat.getLocation(qp.Database))
+			subq_steps := qp.flatten(subq, &sub_id, cat.getLocation(qp.Database), n)
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)
@@ -400,7 +402,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		for index, subq := range union.subqueries {
 			sub_id := uuid.RandomUUID()
 			step.Inputs[index] = &sub_id
-			subq_steps := qp.flatten(subq, &sub_id, union.getLocation(qp.Database))
+			subq_steps := qp.flatten(subq, &sub_id, union.getLocation(qp.Database), n)
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)
@@ -410,7 +412,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		for index, subq := range intersect.subqueries {
 			sub_id := uuid.RandomUUID()
 			step.Inputs[index] = &sub_id
-			subq_steps := qp.flatten(subq, &sub_id, intersect.getLocation(qp.Database))
+			subq_steps := qp.flatten(subq, &sub_id, intersect.getLocation(qp.Database), n)
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)
@@ -425,13 +427,13 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 	} else if cnt, ok := qt.(*CountQueryTree); ok {
 		sub_id := uuid.RandomUUID()
 		step := &CountQueryStep{&BaseQueryStep{id, "count", cnt.getLocation(qp.Database), location}, &sub_id}
-		subq_steps := qp.flatten(cnt.subquery, &sub_id, cnt.getLocation(qp.Database))
+		subq_steps := qp.flatten(cnt.subquery, &sub_id, cnt.getLocation(qp.Database), n)
 		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)
 	} else if topn, ok := qt.(*TopNQueryTree); ok {
 		sub_id := uuid.RandomUUID()
-		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", topn.getLocation(qp.Database), location}, &sub_id}
-		subq_steps := qp.flatten(topn.subquery, &sub_id, topn.getLocation(qp.Database))
+		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", topn.getLocation(qp.Database), location}, &sub_id, n}
+		subq_steps := qp.flatten(topn.subquery, &sub_id, topn.getLocation(qp.Database), n)
 		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)
 	}
@@ -442,5 +444,5 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 func (qp *QueryPlanner) Plan(query *Query, id *uuid.UUID, destination *db.Location) *QueryPlan {
 	queryTree := qp.buildTree(query, -1)
 	//return qp.flatten(queryTree, id, destination) // TODO: remove the "id" parameter, since we are using the query.Id as the value
-	return qp.flatten(queryTree, query.Id, destination)
+	return qp.flatten(queryTree, query.Id, destination, query.N)
 }

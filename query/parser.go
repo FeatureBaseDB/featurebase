@@ -12,7 +12,7 @@ var InvalidQueryError = errors.New("Invalid query format.")
 
 type QueryParser struct{}
 
-func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, uint64) {
+func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, uint64, int) {
 	// BITMAP
 	if tokens[0].Type == TYPE_ID {
 		// TODO: look for frame type in the tokens list
@@ -40,10 +40,11 @@ func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, uint64) {
 			}
 		}
 		bm := db.Bitmap{bitmap_id, frame_type}
-		return []QueryInput{&bm}, uint64(profile_id)
+		return []QueryInput{&bm}, uint64(profile_id), 0
 	}
 
 	// LIST OF QUERIES
+	n := int(10) // default LIMIT to 10
 	qi := []QueryInput{}
 	open_parens := -1 // >=0 means i'm inside the search for end paren
 	start := 0
@@ -63,9 +64,12 @@ func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, uint64) {
 			} else {
 				open_parens--
 			}
+		} else if tokens[i].Type == TYPE_LIMIT {
+			x, _ := strconv.ParseInt(tokens[i].Text, 10, 32)
+			n = int(x)
 		}
 	}
-	return qi, 0
+	return qi, 0, n
 }
 
 func (qp *QueryParser) walk(tokens []Token) (*Query, error) {
@@ -91,7 +95,7 @@ func (qp *QueryParser) walk(tokens []Token) (*Query, error) {
 		} else if tokens[i].Type == TYPE_RP {
 			if open_parens == 0 {
 				if i == len(tokens)-1 {
-					q.Inputs, q.ProfileId = qp.walkInputs(tokens[2:i])
+					q.Inputs, q.ProfileId, q.N = qp.walkInputs(tokens[2:i])
 				}
 			} else {
 				open_parens--
