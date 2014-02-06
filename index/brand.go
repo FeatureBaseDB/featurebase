@@ -175,7 +175,6 @@ func (self *Brand) Store(bitmap_id uint64, bm IBitmap) {
 
 func (self *Brand) TopN(src_bitmap IBitmap, n int) []Pair {
 	self.rank_counter = 0
-	println("RANK")
 	self.Rank() // TODO: TERRIBLE REMOVE THIS ASAP
 	is := new(IntSet)
 	return self.TopNCat(src_bitmap, n, is)

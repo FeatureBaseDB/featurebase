@@ -122,7 +122,6 @@ func (self *Executor) RunPQL(database_name string, pql string) interface{} {
 			if err != nil {
 				spew.Dump(err)
 			}
-			spew.Dump(final)
 			final_result[query_list[i].Label] = final
 		}
 
