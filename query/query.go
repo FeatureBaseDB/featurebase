@@ -27,7 +27,8 @@ type Query struct {
 	Inputs    []QueryInput //"strconv"
 	// Represents a parsed query. Inputs can be Query or Bitmap objects
 	// Maybe Bitmap and Query objects should have different fields to avoid using interface{}
-	ProfileId uint64
+	ProfileId uint64 // used only for set() queries
+	N         int    // TODO: I think we should make this a generic map for any attributes related to the query
 }
 
 func QueryPlanForPQL(database *db.Database, pql string, destination *db.Location) *QueryPlan {

@@ -42,7 +42,7 @@ func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 	case []byte:
 		bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
 	}
-	topn, err := self.Index.TopN(qs.Location.FragmentId, bh, 8) //TODO: get the N from the query (default is 8)
+	topn, err := self.Index.TopN(qs.Location.FragmentId, bh, qs.N)
 	if err != nil {
 		spew.Dump(err)
 	}
@@ -137,10 +137,11 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
 			handles = append(handles, bh)
 		case uint64:
+			//spew.Dump(val)
 			return_type = "sum"
 			sum += val
 		case []index.Pair:
-			spew.Dump(val)
+			//spew.Dump(val)
 			return_type = "pair-list"
 			for _, pair := range val {
 				_, ok := merge_map[pair.Key]
@@ -175,7 +176,7 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 		for _, r := range rank_list {
 			pair_list = append(pair_list, *r.Pair)
 		}
-		result = pair_list[:8] //TODO: get the N from the query (default is 8)
+		result = pair_list[:qs.N]
 	} else {
 		result = "NONE"
 	}
@@ -209,10 +210,7 @@ func (self *Service) GetQueryStepHandler(msg *db.Message) {
 func (self *Service) SetQueryStepHandler(msg *db.Message) {
 	//spew.Dump("SET QUERYSTEP")
 	qs := msg.Data.(query.SetQueryStep)
-	//result, err := self.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
 	result, _ := self.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
-	//spew.Dump("result:", result)
-	//spew.Dump("err:", err)
 
 	result_message := db.Message{Data: query.SetQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)

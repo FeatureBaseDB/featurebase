@@ -16,6 +16,7 @@ const (
 	TYPE_FRAME   = iota
 	TYPE_PROFILE = iota
 	TYPE_COMMA   = iota
+	TYPE_LIMIT   = iota
 )
 
 type Token struct {
@@ -158,7 +159,7 @@ func stateRP(lexer *Lexer) statefn {
 
 	peeked := lexer.peek()
 	if peeked == rune(',') {
-		return stateComma
+		return stateRPComma
 	} else if peeked == rune(')') {
 		return stateRP
 	} else {
@@ -190,6 +191,24 @@ func stateFrameOrProfile(lexer *Lexer) statefn {
 			return stateProfileComma
 		}
 	}
+	return stateRP
+}
+
+func stateRPComma(lexer *Lexer) statefn {
+	lexer.pos += 1
+	lexer.emit(TYPE_COMMA)
+	if unicode.IsNumber(lexer.peek()) {
+		return stateLimit
+	} else {
+		return stateArgs
+	}
+}
+
+func stateLimit(lexer *Lexer) statefn {
+	lexer.acceptNumber()
+	lexer.emit(TYPE_LIMIT)
+	// if next is comma
+	lexer.peek()
 	return stateRP
 }
 
