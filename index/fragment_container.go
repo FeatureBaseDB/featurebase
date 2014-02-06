@@ -52,14 +52,21 @@ func (self *CategoryFinder) Start() {
 	connection := config.GetString("category_db_uri")
 	db, err := sql.Open("mysql", connection)
 	stmt, err := db.Prepare("select b.category_id from audience_brand b, accounts_tile t where b.id = t.object_id and t.id=?")
-	if err != nil {
-		panic(err.Error()) // proper error handling instead of panic in your app
-	}
+	cache := lru.New(1000)
 	defer stmt.Close()
+
 	for {
 		select {
 		case id := <-self.in:
-			category := lookup(stmt, id)
+			category := 0
+			if err == nil {
+				category, found := cache.Get(id)
+				if !found {
+					category = lookup(stmt, id)
+					cache.Add(id, category)
+
+				}
+			}
 			self.out <- category
 		}
 	}
