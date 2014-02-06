@@ -15,7 +15,7 @@
         "type": "git"
     },
     "goconvey": {
-        "repo": "github.com/smartystreets/goconvey/convey",
+        "repo": "github.com/smartystreets/goconvey",
         "version": "master",
         "type": "git"
     },
