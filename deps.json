@@ -9,11 +9,6 @@
         "version": "35c98e8c885757fab1824daa77cc0e24bf30e76b",
         "type": "git"
     },
-    "log": {
-        "repo": "github.com/coreos/go-log/log",
-        "version": "70d039bee4b0e389e5be560491d8291708506f59",
-        "type": "git"
-    },
     "gkvlite": {
         "repo": "github.com/steveyen/gkvlite",
         "version": "master",
@@ -34,9 +29,19 @@
         "version": "50",
         "type": "bzr"
     },
+    "log": {
+        "repo": "github.com/coreos/go-log/log",
+        "version": "70d039bee4b0e389e5be560491d8291708506f59",
+        "type": "git"
+    },
     "lru": {
         "repo": "github.com/golang/groupcache/lru",
         "version": "d781998583680cda80cf61e0b37dd0cd8da2eb52",
+        "type": "git"
+    },
+    "mysql": {
+        "repo": "github.com/go-sql-driver/mysql",
+        "version": "master",
         "type": "git"
     },
     "otto": {

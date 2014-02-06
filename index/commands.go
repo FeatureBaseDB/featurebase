@@ -181,15 +181,16 @@ func (self *CmdGetList) Execute(f *Fragment) Calculation {
 
 type CmdTopN struct {
 	*Responder
-	bitmap BitmapHandle
-	n      int
+	bitmap     BitmapHandle
+	n          int
+	categories []int
 }
 
-func NewTopN(b BitmapHandle, n int) *CmdTopN {
-	return &CmdTopN{NewResponder("TopN"), b, n}
+func NewTopN(b BitmapHandle, n int, categories []int) *CmdTopN {
+	return &CmdTopN{NewResponder("TopN"), b, n, categories}
 }
 func (self *CmdTopN) Execute(f *Fragment) Calculation {
-	return f.TopN(self.bitmap, self.n)
+	return f.TopN(self.bitmap, self.n, self.categories)
 }
 
 type CmdClear struct {

@@ -1,6 +1,8 @@
 package index
 
 import (
+	"database/sql"
+
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -10,15 +12,70 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/golang/groupcache/lru"
 )
 
 type FragmentContainer struct {
 	fragments map[SUUID]*Fragment
+	finder    *CategoryFinder
+}
+
+func lookup(stmt *sql.Stmt, tile_id uint64) int {
+	var category int
+	err := stmt.QueryRow(tile_id).Scan(&category) // WHERE number = 13
+	if err != nil {
+		log.Println(err.Error())
+		return 0
+	}
+	return category
+
+}
+
+type ICategoryFinder interface {
+	GetCategory(in uint64) int
+}
+
+type CategoryFinder struct {
+	in  chan uint64
+	out chan int
+}
+
+func NewCategoryFinder() *CategoryFinder {
+	ptr := new(CategoryFinder)
+	ptr.in = make(chan uint64)
+	ptr.out = make(chan int)
+	return ptr
+}
+
+func (self *CategoryFinder) Start() {
+	connection := config.GetString("category_db_uri")
+	db, err := sql.Open("mysql", connection)
+	stmt, err := db.Prepare("select b.category_id from audience_brand b, accounts_tile t where b.id = t.object_id and t.id=?")
+	if err != nil {
+		panic(err.Error()) // proper error handling instead of panic in your app
+	}
+	defer stmt.Close()
+	for {
+		select {
+		case id := <-self.in:
+			category := lookup(stmt, id)
+			self.out <- category
+		}
+	}
 }
 
 func NewFragmentContainer() *FragmentContainer {
-	return &FragmentContainer{make(map[SUUID]*Fragment)}
+	f := new(FragmentContainer)
+	f.fragments = make(map[SUUID]*Fragment)
+	f.finder = NewCategoryFinder()
+	go f.finder.Start()
+
+	return f
+}
+func (self *FragmentContainer) GetCategory(in uint64) int {
+	self.finder.in <- in
+	return <-self.finder.out
 }
 
 type BitmapHandle uint64
@@ -103,9 +160,9 @@ func (self *FragmentContainer) Get(frag_id SUUID, bitmap_id uint64) (BitmapHandl
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) TopN(frag_id SUUID, bh BitmapHandle, n int) ([]Pair, error) {
+func (self *FragmentContainer) TopN(frag_id SUUID, bh BitmapHandle, n int, categories []int) ([]Pair, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
-		request := NewTopN(bh, n)
+		request := NewTopN(bh, n, categories)
 		fragment.requestChan <- request
 		return request.Response().answer.([]Pair), nil
 	}
@@ -168,8 +225,9 @@ func (self *FragmentContainer) Clear(frag_id SUUID) (bool, error) {
 
 func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id SUUID) {
 	log.Println("ADD FRAGMENT", frame)
-	f := NewFragment(id, db, slice, frame)
+	f := NewFragment(id, db, slice, frame, self)
 	self.fragments[id] = f
+
 	go f.ServeFragment()
 	go f.Load()
 }
@@ -177,7 +235,7 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 type Pilosa interface {
 	Get(id uint64) IBitmap
 	SetBit(id uint64, bit_pos uint64) bool
-	TopN(b IBitmap, n int) []Pair
+	TopN(b IBitmap, n int, categories []int) []Pair
 	Clear() bool
 	Store(bitmap_id uint64, bm IBitmap)
 	Stats() interface{}
@@ -224,13 +282,13 @@ func getStorage(db string, slice int, frame string) Storage {
 	return nil
 }
 
-func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
+func NewFragment(frag_id SUUID, db string, slice int, frame string, p ICategoryFinder) *Fragment {
 	var impl Pilosa
 	log.Println(fmt.Sprintf("XXXXXXXXXXXXXXXXXXXXXXXXXXX(%s)", frame))
 	switch frame {
 	case "brand":
 		log.Println("Brand")
-		impl = NewBrand(db, slice, getStorage(db, slice, frame), 50000, 45000, 100)
+		impl = NewBrand(db, slice, getStorage(db, slice, frame), 50000, 45000, 100, p)
 	default:
 		log.Println("General")
 		impl = NewGeneral(db, slice, getStorage(db, slice, frame))
@@ -251,11 +309,11 @@ func (self *Fragment) getBitmap(bitmap BitmapHandle) (IBitmap, bool) {
 	return bm.(IBitmap), ok
 }
 
-func (self *Fragment) TopN(bitmap BitmapHandle, n int) []Pair {
+func (self *Fragment) TopN(bitmap BitmapHandle, n int, categories []int) []Pair {
 
 	bm, ok := self.cache.Get(bitmap)
 	if ok {
-		return self.impl.TopN(bm.(*Bitmap), n)
+		return self.impl.TopN(bm.(*Bitmap), n, categories)
 	}
 	return nil
 }

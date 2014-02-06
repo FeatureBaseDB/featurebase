@@ -1,5 +1,7 @@
 package index
 
+import _ "github.com/go-sql-driver/mysql"
+
 import (
 	"encoding/json"
 	"fmt"
@@ -35,9 +37,10 @@ type Brand struct {
 	threshold_length int
 	threshold_idx    int
 	skip             int
+	finder           ICategoryFinder
 }
 
-func NewBrand(db string, slice int, s Storage, threshold_len int, threshold int, skipp int) *Brand {
+func NewBrand(db string, slice int, s Storage, threshold_len int, threshold int, skipp int, c ICategoryFinder) *Brand {
 	f := new(Brand)
 	f.storage = s
 	f.slice = slice
@@ -47,6 +50,7 @@ func NewBrand(db string, slice int, s Storage, threshold_len int, threshold int,
 	f.threshold_length = threshold_len
 	f.threshold_idx = threshold
 	f.skip = skipp
+	f.finder = c
 	f.Clear() //alloc the cache
 	return f
 
@@ -63,12 +67,9 @@ func (self *Brand) Get(bitmap_id uint64) IBitmap {
 	//I should fetch the category here..need to come up with a good source
 	b := self.storage.Fetch(bitmap_id, self.db, self.slice)
 
-	self.cache_it(b, bitmap_id, GetCategory(bitmap_id))
+	self.cache_it(b, bitmap_id, self.finder.GetCategory(bitmap_id))
 
 	return b
-}
-func GetCategory(bitmap_id uint64) int {
-	return 0
 }
 
 func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category int) {
@@ -170,14 +171,17 @@ func (self *Brand) Store(bitmap_id uint64, bm IBitmap) {
 	//oldbm:=self.Get(bitmap_id)
 	//nbm = Union(oldbm, bm)
 	self.storage.Store(int64(bitmap_id), self.db, self.slice, bm.(*Bitmap))
-	self.cache_it(bm, bitmap_id, GetCategory(bitmap_id))
+	self.cache_it(bm, bitmap_id, self.finder.GetCategory(bitmap_id))
 }
 
-func (self *Brand) TopN(src_bitmap IBitmap, n int) []Pair {
+func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []int) []Pair {
 	self.rank_counter = 0
 	println("RANK")
 	self.Rank() // TODO: TERRIBLE REMOVE THIS ASAP
 	is := new(IntSet)
+	for _, v := range categories {
+		is.Add(v)
+	}
 	return self.TopNCat(src_bitmap, n, is)
 }
 func dump(r RankList, n int) {
