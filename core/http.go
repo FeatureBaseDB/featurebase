@@ -7,10 +7,13 @@ import (
 	"net/http"
 	"pilosa/config"
 	"pilosa/db"
+	"reflect"
 	"runtime"
 	"strconv"
 
+	notify "github.com/bitly/go-notify"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/gorilla/websocket"
 	"tux21b.org/v1/gocql/uuid"
 )
 
@@ -31,6 +34,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/stats", self.HandleStats)
 	mux.HandleFunc("/info", self.HandleInfo)
 	mux.HandleFunc("/processes", self.HandleProcesses)
+	mux.HandleFunc("/listen/ws", self.HandleListenWS)
 	mux.HandleFunc("/listen", self.HandleListen)
 	mux.HandleFunc("/test", self.HandleTest)
 	mux.HandleFunc("/version", self.HandleVersion)
@@ -249,16 +253,92 @@ func (self *WebService) HandlePing(w http.ResponseWriter, r *http.Request) {
 }
 
 func (self *WebService) HandleListen(w http.ResponseWriter, r *http.Request) {
-	//listener := service.NewListener()
-	//encoder := json.NewEncoder(w)
-	//for {
-	//	select {
-	//	case message := <-listener:
-	//		err := encoder.Encode(message)
-	//		if err != nil {
-	//			log.Println("Error sending message")
-	//			return
-	//		}
-	//	}
-	//}
+	w.Write([]byte(`
+	<html><head><title>Pilosa - streaming client</title></head><body>
+	<style type="text/css">
+		dt.inbox { background-color: #efe; }
+		dt.outbox { background-color: #eef; }
+	</style>
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+	<script type="text/javascript">
+		$dl = $("<dl/>")
+		$dl.on('click', 'dt', function(e) {
+			$(this).next().toggle()
+		})
+		$("body").append($dl)
+		ws = new WebSocket("ws://" + window.location.host + "/listen/ws")
+		ws.onmessage = function(mes) {
+			obj = JSON.parse(mes.data)
+			if (obj.host) {
+				$dl.append('<dt class="outbox">&rarr;' + obj.type + ' (to: ' + obj.host + ')</dt>')
+			} else {
+				$dl.append('<dt class="inbox">&larr;' + obj.type + '</dt>')
+			}
+			$dl.append('<dd style="display:none;"><pre>' + obj.dump + obj.host + '</pre></dd>')
+		}
+	</script>
+	</body></html>
+	`))
+}
+
+func (self *WebService) HandleListenWS(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		err := recover()
+		spew.Dump(err)
+	}()
+	ws, err := websocket.Upgrade(w, r, nil, 1024, 1024)
+	if _, ok := err.(websocket.HandshakeError); ok {
+		http.Error(w, "Not a websocket handshake", 400)
+		return
+	} else if err != nil {
+		log.Println(err)
+		return
+	}
+	inbox := make(chan interface{}, 10)
+	outbox := make(chan interface{}, 10)
+	notify.Start("inbox", inbox)
+	notify.Start("outbox", outbox)
+	var obj interface{}
+	var data interface{}
+	var inmessage *db.Message
+	var outmessage *db.Envelope
+	var host string
+	for {
+		select {
+		case obj = <-outbox:
+			outmessage = obj.(*db.Envelope)
+			data = outmessage.Message.Data
+			host = outmessage.Host.String()
+		case obj = <-inbox:
+			inmessage = obj.(*db.Message)
+			data = inmessage.Data
+			host = ""
+		}
+
+		typ := reflect.TypeOf(data)
+
+		err := ws.WriteJSON(map[string]interface{}{
+			"type": typ.String(),
+			"dump": spew.Sdump(data),
+			"host": host,
+		})
+		if err != nil {
+			log.Println("stopping")
+			notify.Stop("inbox", inbox)
+			notify.Stop("outbox", outbox)
+			drain(inbox)
+			drain(outbox)
+			return
+		}
+	}
+}
+
+func drain(ch chan interface{}) {
+	for {
+		switch {
+		case <-ch:
+		default:
+			return
+		}
+	}
 }

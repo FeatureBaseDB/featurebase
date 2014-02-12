@@ -10,13 +10,9 @@ import (
 	"pilosa/db"
 
 	"time"
+	notify "github.com/bitly/go-notify"
 	"tux21b.org/v1/gocql/uuid"
 )
-
-type envelope struct {
-	message *db.Message
-	host    *uuid.UUID
-}
 
 type connection struct {
 	transport *TcpTransport
@@ -106,7 +102,7 @@ type TcpTransport struct {
 	service     *core.Service
 	port        int
 	inbox       chan *db.Message
-	outbox      chan envelope
+	outbox      chan db.Envelope
 	connections map[uuid.UUID]*connection
 	reg         chan *newconnection
 }
@@ -117,13 +113,13 @@ func (self *TcpTransport) Run() {
 	for {
 		select {
 		case env := <-self.outbox:
-			con, ok := self.connections[*(env.host)]
+			con, ok := self.connections[*(env.Host)]
 			if !ok {
-				con = &connection{self, make(chan *db.Message, 100), make(chan *db.Message, 100), nil, env.host}
+				con = &connection{self, make(chan *db.Message, 100), make(chan *db.Message, 100), nil, env.Host}
 				go con.manage()
-				self.connections[*env.host] = con
+				self.connections[*env.Host] = con
 			}
-			con.outbox <- env.message
+			con.outbox <- env.Message
 		case nc := <-self.reg:
 			self.connections[*nc.id] = nc.connection
 		}
@@ -157,11 +153,15 @@ func (self *TcpTransport) Close() {
 }
 
 func (self *TcpTransport) Send(message *db.Message, host *uuid.UUID) {
-	self.outbox <- envelope{message, host}
+	envelope := db.Envelope{message, host}
+	notify.Post("outbox", &envelope)
+	self.outbox <- envelope
 }
 
 func (self *TcpTransport) Receive() *db.Message {
-	return <-self.inbox
+	message := <-self.inbox
+	notify.Post("inbox", message)
+	return message
 }
 
 func (self *TcpTransport) Push(message *db.Message) {
@@ -169,5 +169,5 @@ func (self *TcpTransport) Push(message *db.Message) {
 }
 
 func NewTcpTransport(service *core.Service) *TcpTransport {
-	return &TcpTransport{service, config.GetInt("port_tcp"), make(chan *db.Message, 100), make(chan envelope, 100), make(map[uuid.UUID]*connection), make(chan *newconnection)}
+	return &TcpTransport{service, config.GetInt("port_tcp"), make(chan *db.Message, 100), make(chan db.Envelope, 100), make(map[uuid.UUID]*connection), make(chan *newconnection)}
 }
