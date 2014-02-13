@@ -35,6 +35,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/info", self.HandleInfo)
 	mux.HandleFunc("/processes", self.HandleProcesses)
 	mux.HandleFunc("/listen/ws", self.HandleListenWS)
+	mux.HandleFunc("/listen/stream", self.HandleListenStream)
 	mux.HandleFunc("/listen", self.HandleListen)
 	mux.HandleFunc("/test", self.HandleTest)
 	mux.HandleFunc("/version", self.HandleVersion)
@@ -338,6 +339,52 @@ func drain(ch chan interface{}) {
 		switch {
 		case <-ch:
 		default:
+			return
+		}
+	}
+}
+
+func (self *WebService) HandleListenStream(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		err := recover()
+		spew.Dump(err)
+	}()
+	inbox := make(chan interface{}, 10)
+	outbox := make(chan interface{}, 10)
+	notify.Start("inbox", inbox)
+	notify.Start("outbox", outbox)
+	var obj interface{}
+	var data interface{}
+	var inmessage *db.Message
+	var outmessage *db.Envelope
+	var host string
+	for {
+		select {
+		case obj = <-outbox:
+			outmessage = obj.(*db.Envelope)
+			data = outmessage.Message.Data
+			host = outmessage.Host.String()
+		case obj = <-inbox:
+			inmessage = obj.(*db.Message)
+			data = inmessage.Data
+			host = ""
+		}
+
+		typ := reflect.TypeOf(data)
+
+		writer := json.NewEncoder(w)
+		err := writer.Encode(map[string]interface{}{
+			"type": typ.String(),
+			"dump": spew.Sdump(data),
+			"host": host,
+		})
+		w.(http.Flusher).Flush()
+		if err != nil {
+			log.Println("stopping")
+			notify.Stop("inbox", inbox)
+			notify.Stop("outbox", outbox)
+			drain(inbox)
+			drain(outbox)
 			return
 		}
 	}
