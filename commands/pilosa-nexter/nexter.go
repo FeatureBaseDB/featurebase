@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -12,12 +13,25 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 )
 
+type stringslice []string
+
+func (self *stringslice) String() string {
+	return fmt.Sprintf("%d", *self)
+}
+
+func (self *stringslice) Set(value string) error {
+	*self = append(*self, value)
+	return nil
+}
+
 var port uint
 var blocksize uint64
+var etcd_nodes stringslice
 
 func init() {
 	flag.UintVar(&port, "port", 9000, "Port to run HTTP server on")
 	flag.Uint64Var(&blocksize, "blocksize", 64, "Block size")
+	flag.Var(&etcd_nodes, "etcd", "Etcd server")
 	flag.Parse()
 }
 
@@ -90,7 +104,7 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 
 func (self *Nexter) loop() {
 	counters := make(map[int]chan uint64)
-	client := etcd.NewClient(nil)
+	client := etcd.NewClient(etcd_nodes)
 	for {
 		select {
 		case req := <-self.reqchan:
