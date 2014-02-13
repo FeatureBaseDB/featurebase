@@ -2,15 +2,24 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/coreos/go-etcd/etcd"
+	"flag"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/coreos/go-etcd/etcd"
 )
 
-const blocksize = 64
+var port uint
+var blocksize uint64
+
+func init() {
+	flag.UintVar(&port, "port", 9000, "Port to run HTTP server on")
+	flag.Uint64Var(&blocksize, "blocksize", 64, "Block size")
+	flag.Parse()
+}
 
 type Req interface{}
 
@@ -36,30 +45,32 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 	for {
 		node, err := client.Get(path, false, false)
 		if err != nil {
-			ee, ok := err.(etcd.EtcdError)
+			ee, ok := err.(*etcd.EtcdError)
 			if ok && ee.ErrorCode == 100 { // node does not exist
-				/*  start = 0
-				    end = blocksize - 1
-				    client.Set(path, "0", 0) // TODO: error check
-				    _ , err := client.CompareAndSwap(path, "0", 0, "0", 0)
-
-				*/
-				//_,_  := c.put(path, "0", 0, options)
-				client.RawCreate(path, "0", 0)
+				_, err := client.Create(path, "0", 0)
+				if err != nil {
+					ee, ok := err.(*etcd.EtcdError)
+					// Catch race condition where another node did the same client.Create()
+					if ok && ee.ErrorCode == 105 { // Node has been created
+						continue
+					} else {
+						log.Fatal(err)
+					}
+				}
 				continue
 			} else {
 				log.Fatal(err)
 			}
 		} else { // No error, get start of series from etcd node
 			start, err = strconv.ParseUint(node.Node.Value, 10, 0)
-			end = start + blocksize
 			if err != nil {
 				log.Fatal(err)
 			}
+			end = start + blocksize
 		}
 		for {
 			newval, err := client.CompareAndSwap(path, strconv.FormatUint(end, 10), 0, strconv.FormatUint(start, 10), 0)
-			if err != nil {
+			if err == nil {
 				break
 			} else {
 				log.Println("Error with CompareAndSet! Trying again in 1 second...")
@@ -84,7 +95,7 @@ func (self *Nexter) loop() {
 		select {
 		case req := <-self.reqchan:
 			switch req.(type) {
-			case IncReq:
+			case *IncReq:
 				countreq := req.(*IncReq)
 				counter, ok := counters[countreq.id]
 				if !ok {
@@ -93,12 +104,12 @@ func (self *Nexter) loop() {
 					go self.countloop(counter, countreq.id, client)
 				}
 				go func() { countreq.ret <- <-counter }()
-			case DelReq:
+			case *DelReq:
 				delreq := req.(*DelReq)
 				delete(counters, delreq.id)
 				path := "nexter/" + strconv.Itoa(delreq.id)
 				client.Delete(path, true)
-
+			default:
 			}
 		case <-self.done:
 			break
@@ -145,5 +156,6 @@ func main() {
 		dec := json.NewEncoder(w)
 		dec.Encode(num)
 	})
-	http.ListenAndServe(":9000", nil)
+	port_string := strconv.FormatUint(uint64(port), 10)
+	http.ListenAndServe(":"+port_string, nil)
 }
