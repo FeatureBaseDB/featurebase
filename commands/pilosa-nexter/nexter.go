@@ -82,19 +82,11 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 			}
 			end = start + blocksize
 		}
-		for {
-			newval, err := client.CompareAndSwap(path, strconv.FormatUint(end, 10), 0, strconv.FormatUint(start, 10), 0)
-			if err == nil {
-				break
-			} else {
-				log.Println("Error with CompareAndSet! Trying again in 1 second...")
-				time.Sleep(time.Second)
-				start, err = strconv.ParseUint(newval.Node.Value, 10, 0)
-				if err != nil {
-					log.Fatal(err)
-				}
-				end = start + blocksize
-			}
+		_, err = client.CompareAndSwap(path, strconv.FormatUint(end, 10), 0, strconv.FormatUint(start, 10), 0)
+		if err != nil {
+			log.Println("Error with CompareAndSet! Trying again in 1 second...")
+			time.Sleep(time.Second)
+			continue
 		}
 		for c := start; c < end; c += 1 {
 			ch <- c
