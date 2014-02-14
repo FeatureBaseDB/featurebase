@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/coreos/go-etcd/etcd"
 )
@@ -84,8 +83,6 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 		}
 		_, err = client.CompareAndSwap(path, strconv.FormatUint(end, 10), 0, strconv.FormatUint(start, 10), 0)
 		if err != nil {
-			log.Println("Error with CompareAndSet! Trying again in 1 second...")
-			time.Sleep(time.Second)
 			continue
 		}
 		for c := start; c < end; c += 1 {
