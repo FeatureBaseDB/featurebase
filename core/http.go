@@ -282,19 +282,7 @@ func (self *WebService) HandleListen(w http.ResponseWriter, r *http.Request) {
 	`))
 }
 
-func (self *WebService) HandleListenWS(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		err := recover()
-		spew.Dump(err)
-	}()
-	ws, err := websocket.Upgrade(w, r, nil, 1024, 1024)
-	if _, ok := err.(websocket.HandshakeError); ok {
-		http.Error(w, "Not a websocket handshake", 400)
-		return
-	} else if err != nil {
-		log.Println(err)
-		return
-	}
+func (self *WebService) streamer(writer func(map[string]interface{}) error) {
 	inbox := make(chan interface{}, 10)
 	outbox := make(chan interface{}, 10)
 	notify.Start("inbox", inbox)
@@ -318,7 +306,7 @@ func (self *WebService) HandleListenWS(w http.ResponseWriter, r *http.Request) {
 
 		typ := reflect.TypeOf(data)
 
-		err := ws.WriteJSON(map[string]interface{}{
+		err := writer(map[string]interface{}{
 			"type": typ.String(),
 			"dump": spew.Sdump(data),
 			"host": host,
@@ -332,6 +320,24 @@ func (self *WebService) HandleListenWS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+func (self *WebService) HandleListenWS(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		err := recover()
+		spew.Dump(err)
+	}()
+	ws, err := websocket.Upgrade(w, r, nil, 1024, 1024)
+	if _, ok := err.(websocket.HandshakeError); ok {
+		http.Error(w, "Not a websocket handshake", 400)
+		return
+	} else if err != nil {
+		log.Println(err)
+		return
+	}
+	self.streamer(func(data map[string]interface{}) error {
+		return ws.WriteJSON(data)
+	})
 }
 
 func drain(ch chan interface{}) {
@@ -349,43 +355,11 @@ func (self *WebService) HandleListenStream(w http.ResponseWriter, r *http.Reques
 		err := recover()
 		spew.Dump(err)
 	}()
-	inbox := make(chan interface{}, 10)
-	outbox := make(chan interface{}, 10)
-	notify.Start("inbox", inbox)
-	notify.Start("outbox", outbox)
-	var obj interface{}
-	var data interface{}
-	var inmessage *db.Message
-	var outmessage *db.Envelope
-	var host string
-	for {
-		select {
-		case obj = <-outbox:
-			outmessage = obj.(*db.Envelope)
-			data = outmessage.Message.Data
-			host = outmessage.Host.String()
-		case obj = <-inbox:
-			inmessage = obj.(*db.Message)
-			data = inmessage.Data
-			host = ""
-		}
-
-		typ := reflect.TypeOf(data)
-
-		writer := json.NewEncoder(w)
-		err := writer.Encode(map[string]interface{}{
-			"type": typ.String(),
-			"dump": spew.Sdump(data),
-			"host": host,
-		})
-		w.(http.Flusher).Flush()
-		if err != nil {
-			log.Println("stopping")
-			notify.Stop("inbox", inbox)
-			notify.Stop("outbox", outbox)
-			drain(inbox)
-			drain(outbox)
-			return
-		}
-	}
+	writer := json.NewEncoder(w)
+	flusher := w.(http.Flusher)
+	self.streamer(func(data map[string]interface{}) error {
+		err := writer.Encode(data)
+		flusher.Flush()
+		return err
+	})
 }
