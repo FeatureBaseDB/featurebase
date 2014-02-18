@@ -32,6 +32,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/message", self.HandleMessage)
 	mux.HandleFunc("/query", self.HandleQuery)
 	mux.HandleFunc("/stats", self.HandleStats)
+	mux.HandleFunc("/status", self.HandleStatus)
 	mux.HandleFunc("/info", self.HandleInfo)
 	mux.HandleFunc("/processes", self.HandleProcesses)
 	mux.HandleFunc("/listen/ws", self.HandleListenWS)
@@ -362,4 +363,41 @@ func (self *WebService) HandleListenStream(w http.ResponseWriter, r *http.Reques
 		flusher.Flush()
 		return err
 	})
+}
+
+func (self *WebService) HandleStatus(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(`
+	<html><head><title>Pilosa - status</title></head><body>
+	<style type="text/css">
+	td {
+		background: #eee;
+	}
+	</style>
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+	<script type="text/javascript">
+		$table = $("<table><tr><th>process id</th><th>host</th><th>tcp port</th><th>http port</th><th>latency</th></tr></table>")
+		$("body").append($table)
+		$.ajax('/processes', {
+			dataType: "json",
+			success: function(resp) {
+				$.each(resp, function(index, value) {
+					$table.append('<tr><td>' + index + '</td><td>' + value.host + '</td><td>' + value.port_tcp + '</td><td>' + value.port_http + '</td><td><button class="pinger"/></td></tr>')
+				})
+			}
+		})
+		$table.on('click', 'button.pinger', function(e) {
+			var $td = $(this).parent()
+			var $tr = $td.parent()
+			var id = $tr.children('td').eq(0).text()
+
+			$.ajax('/ping?process=' +  id, {
+				dataType: 'json',
+				success: function(resp) {
+					$td.html(resp.duration)
+				}
+			})
+		})
+	</script>
+	</body></html>
+	`))
 }
