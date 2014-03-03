@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"launchpad.net/goyaml"
-	"github.com/davecgh/go-spew/spew"
 
 )
 
@@ -42,10 +41,11 @@ func GetString(key string) string {
 }
 
 func GetStringArray(key string) []string {
-	return config.GetStringArray(key)
+	res,_:= config.GetStringArray(key)
+	return res
 }
 func GetStringArrayDefault(key string,def []string) []string {
-	res,ok = config.GetStringArray(key)
+	res,ok := config.GetStringArray(key)
 
 	if ! ok{
 		return def
@@ -168,7 +168,7 @@ func (self *Config) GetStringArray(key string) ([]string,bool){
 		for _,v:= range value.([]interface{}){
 			results=append(results,v.(string))
 		}
-			return results
+			return results,ok
 	}
 	return []string{},ok
 }
