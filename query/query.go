@@ -22,9 +22,13 @@ type PqlListItem struct {
 }
 
 type Query struct {
-	Id        *uuid.UUID
-	Operation string
-	Inputs    []QueryInput //"strconv"
+	Id         *uuid.UUID
+	Operation  string
+	Args       map[string]interface{}
+	Subqueries []Query
+
+	// deprecated:
+	Inputs []QueryInput //"strconv"
 	// Represents a parsed query. Inputs can be Query or Bitmap objects
 	// Maybe Bitmap and Query objects should have different fields to avoid using interface{}
 	ProfileId uint64 // used only for set() queries
@@ -32,18 +36,23 @@ type Query struct {
 }
 
 func QueryPlanForPQL(database *db.Database, pql string, destination *db.Location) *QueryPlan {
-	tokens := Lex(pql)
+	tokens, err := Lex(pql)
+	if err != nil {
+		panic(err)
+	}
 	return QueryPlanForTokens(database, tokens, destination)
 }
 
 func QueryForPQL(pql string) *Query {
-	tokens := Lex(pql)
+	tokens, err := Lex(pql)
+	if err != nil {
+		panic(err)
+	}
 	return QueryForTokens(tokens)
 }
 
 func QueryForTokens(tokens []Token) *Query {
-	query_parser := QueryParser{}
-	query, err := query_parser.Parse(tokens)
+	query, err := Parse(tokens)
 	if err != nil {
 		panic(err)
 	}

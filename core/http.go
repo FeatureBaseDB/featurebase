@@ -166,15 +166,33 @@ func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	encoder := json.NewEncoder(w)
-	//stats := service.GetStats()
-	//	stats := ""
 	m := &runtime.MemStats{}
 	runtime.ReadMemStats(m)
-	stats := map[string]interface{}{"num_goroutines": runtime.NumGoroutine(), "Memory Aquired": m.Sys, "Memory Used": m.Alloc}
 
-	err := encoder.Encode(stats)
+	//self.Report(fmt.Sprintf("%s.goroutines", prefix),
+	//	float64(runtime.NumGoroutine()), now, context, dimensions)
+	//self.Report(fmt.Sprintf("%s.memory.allocated", prefix),
+	//	float64(memStats.Alloc), now, context, dimensions)
+	//self.Report(fmt.Sprintf("%s.memory.mallocs", prefix),
+	//	float64(memStats.Mallocs), now, context, dimensions)
+	//self.Report(fmt.Sprintf("%s.memory.frees", prefix),
+	//	float64(memStats.Frees), now, context, dimensions)
+	//self.Report(fmt.Sprintf("%s.memory.gc.total_pause", prefix),
+	//	float64(memStats.PauseTotalNs)/nsInMs, now, context, dimensions)
+	//self.Report(fmt.Sprintf("%s.memory.heap", prefix),
+	//	float64(memStats.HeapAlloc), now, context, dimensions)
+	//self.Report(fmt.Sprintf("%s.memory.stack", prefix),
+	//	float64(memStats.StackInuse), now, context, dimensions)
+
+	//stats := map[string]interface{}{
+	//	"num_goroutines": runtime.NumGoroutine(),
+	//	"memory_allocated": m.Sys,
+	//	"memory_": m.Alloc
+	//}
+
+	err := encoder.Encode(m)
 	if err != nil {
-		log.Fatal("Error encoding stats")
+		panic("Error encoding stats")
 	}
 }
 
@@ -220,7 +238,7 @@ func (self *WebService) HandleProcesses(w http.ResponseWriter, r *http.Request) 
 	processes := self.service.ProcessMap.GetMetadata()
 	err := encoder.Encode(processes)
 	if err != nil {
-		log.Fatal("Error encoding stats")
+		panic("Error encoding stats")
 	}
 }
 
