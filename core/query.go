@@ -45,7 +45,7 @@ func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 	case []byte:
 		bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
 	}
-	topn, err := self.Index.TopN(qs.Location.FragmentId, bh, qs.N, categoryleaves)
+	topn, err := self.Index.TopN(qs.Location.FragmentId, bh, qs.N*2, categoryleaves)
 	if err != nil {
 		spew.Dump(err)
 	}

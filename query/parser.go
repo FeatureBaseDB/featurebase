@@ -111,6 +111,12 @@ ArgLoop:
 					return nil, fmt.Errorf("Unexpected argument! (%v)", token)
 				}
 
+			case "top-n":
+				i, err := strconv.Atoi(token.Text)
+				if err != nil {
+					return nil, fmt.Errorf("Expecting integer! (%v)", err)
+				}
+				query.Args["n"] = i
 			default:
 				spew.Dump("UNPROCESSED VALUE", token)
 			}
@@ -134,6 +140,11 @@ ArgLoop:
 				value, err = strconv.ParseUint(token.Text, 10, 64)
 				if err != nil {
 					return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+				}
+			} else if keyword == "n" {
+				value, err = strconv.Atoi(token.Text)
+				if err != nil {
+					return nil, fmt.Errorf("Expecting integer! (%v)", err)
 				}
 			} else {
 				value = token.Text

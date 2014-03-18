@@ -43,7 +43,9 @@ type Lexer struct {
 }
 
 func (lexer *Lexer) emit(typ int) {
-	lexer.ch <- Token{lexer.text[lexer.start:lexer.pos], typ}
+	if lexer.start < lexer.pos {
+		lexer.ch <- Token{lexer.text[lexer.start:lexer.pos], typ}
+	}
 	lexer.start = lexer.pos
 }
 

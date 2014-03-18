@@ -64,14 +64,14 @@ func TestQueryParser(t *testing.T) {
 		So(query.Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "brands"})
 	})
 	Convey("Lists", t, func() {
-		tokens, err := Lex("top-n(get(10, general), [1,2,3])")
+		tokens, err := Lex("top-n(get(10, general), [1,2,3], 50)")
 		So(err, ShouldBeNil)
 
 		query, err := Parse(tokens)
 		So(err, ShouldBeNil)
 
 		So(query.Operation, ShouldEqual, "top-n")
-		So(query.Args, ShouldResemble, map[string]interface{}{"ids": []uint64{1, 2, 3}})
+		So(query.Args, ShouldResemble, map[string]interface{}{"ids": []uint64{1, 2, 3}, "n": 50})
 
 		So(len(query.Subqueries), ShouldEqual, 1)
 		So(query.Subqueries[0].Operation, ShouldEqual, "get")
