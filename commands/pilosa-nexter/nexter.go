@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
+	"github.com/cactus/go-statsd-client/statsd"
 	"github.com/coreos/go-etcd/etcd"
 )
 
@@ -26,11 +28,15 @@ func (self *stringslice) Set(value string) error {
 var port uint
 var blocksize uint64
 var etcd_nodes stringslice
+var stats string
+var logfile string
 
 func init() {
 	flag.UintVar(&port, "port", 9000, "Port to run HTTP server on")
 	flag.Uint64Var(&blocksize, "blocksize", 64, "Block size")
 	flag.Var(&etcd_nodes, "etcd", "Etcd server")
+	flag.String(stats, "statsd", "Statsd server")
+	flag.String(logfile, "log", "Log file name")
 	flag.Parse()
 }
 
@@ -48,6 +54,7 @@ type DelReq struct {
 type Nexter struct {
 	reqchan chan Req
 	done    chan bool
+	stats   *statsd.Client
 }
 
 func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
@@ -85,6 +92,7 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 		if err != nil {
 			continue
 		}
+		self.stats.Gauge(path, int64(end), 1.0)
 		for c := start; c < end; c += 1 {
 			ch <- c
 		}
@@ -132,15 +140,27 @@ func (self *Nexter) Stop() {
 	self.done <- true
 }
 
-func NewNexter() *Nexter {
-	nexter := &Nexter{make(chan Req), make(chan bool)}
+func NewNexter() (*Nexter, error) {
+	stats, err := statsd.New(stats, "")
+	if err != nil {
+		return nil, err
+	}
+	nexter := &Nexter{make(chan Req), make(chan bool), stats}
 	go nexter.loop()
-	return nexter
+	return nexter, nil
 }
 
 func main() {
+	logf, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Println("Error opening file: %v", err)
+	}
+	log.SetOutput(logf)
 	log.Println("Starting Nexter...")
-	nexter := NewNexter()
+	nexter, err := NewNexter()
+	if err != nil {
+		log.Fatal(err)
+	}
 	http.HandleFunc("/nexter/", func(w http.ResponseWriter, r *http.Request) {
 		url := r.URL.Path
 		splits := strings.Split(url, "/")
