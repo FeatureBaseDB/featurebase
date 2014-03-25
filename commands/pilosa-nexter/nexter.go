@@ -92,7 +92,7 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 		if err != nil {
 			continue
 		}
-		self.stats.Gauge(path, int64(end), 1.0)
+		self.stats.Gauge("nexter."+strconv.Itoa(id), int64(end), 1.0)
 		for c := start; c < end; c += 1 {
 			ch <- c
 		}
