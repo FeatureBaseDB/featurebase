@@ -74,8 +74,8 @@
         "version": "92334662baa9cbebc2e6e68b8d56bc1233f85a4c",
         "type": "git"
     },
-    "github.com/cactus/go-statsd-client/statsd": {
-        "repo": "github.com/cactus/go-statsd-client",
+    "statsd": {
+        "repo": "github.com/cactus/go-statsd-client/statsd",
         "version": "912f30c35e9cdf51f50bae24f071e227cca152fb",
         "type": "git"
     }
