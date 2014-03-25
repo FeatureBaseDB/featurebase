@@ -35,8 +35,8 @@ func init() {
 	flag.UintVar(&port, "port", 9000, "Port to run HTTP server on")
 	flag.Uint64Var(&blocksize, "blocksize", 64, "Block size")
 	flag.Var(&etcd_nodes, "etcd", "Etcd server")
-	flag.String(stats, "statsd", "Statsd server")
-	flag.String(logfile, "log", "Log file name")
+	flag.StringVar(&stats, "statsd", "127.0.0.1:8125", "Statsd server")
+	flag.StringVar(&logfile, "log", "/tmp/nexter.log", "Log file name")
 	flag.Parse()
 }
 
