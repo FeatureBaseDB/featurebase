@@ -90,9 +90,11 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 		}
 		_, err = client.CompareAndSwap(path, strconv.FormatUint(end, 10), 0, strconv.FormatUint(start, 10), 0)
 		if err != nil {
+			log.Println("CAS failure", path, start, end)
 			continue
 		}
 		self.stats.Gauge("nexter."+strconv.Itoa(id), int64(end), 1.0)
+		log.Println("Allocated", id, start, end)
 		for c := start; c < end; c += 1 {
 			ch <- c
 		}
