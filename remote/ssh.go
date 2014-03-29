@@ -117,15 +117,14 @@ func (self *SSH) CopyTo(content io.Reader, dest_name string) error {
 	return err
 }
 
-func (self *SSH) CopyFrom(dest_name string) ([]byte, error) {
+func (self *SSH) CopyFrom(dest_name string, out io.Writer) error {
 
 	session, _ := self.client.NewSession()
 	defer session.Close()
-	var b bytes.Buffer
-	session.Stdout = &b
+	session.Stdout = out
 	session.Run(fmt.Sprintf("/bin/cat %s", dest_name))
 
-	return b.Bytes(), nil
+	return nil
 
 }
 

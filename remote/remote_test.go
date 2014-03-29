@@ -20,12 +20,37 @@ func TestRemote(t *testing.T) {
 			So(err, ShouldEqual, nil)
 			content, _ := ssh.Run("date", false)
 			ssh.CopyTo(strings.NewReader(content), "uploadfile")
-			results, _ := ssh.CopyFrom("uploadfile")
-			ok := bytes.Equal([]byte(content), results)
+			var out bytes.Buffer
+			ssh.CopyFrom("uploadfile", &out)
+
+			ok := bytes.Equal([]byte(content), out.Bytes())
 			So(ok, ShouldEqual, true)
 		} else {
 			fmt.Println("No credentials so SSH Test ignored")
 			So(true, ShouldEqual, true)
 		}
 	})
+	/*
+		Convey("BigFile", t, func() {
+			ssh, err := New("50.16.204.123:22", "todd", "id_dsa")
+
+			fo, err := os.Create("outbin")
+			if err != nil {
+				panic(err)
+			}
+			// close fo on exit and check for its returned error
+			defer func() {
+				if err := fo.Close(); err != nil {
+					panic(err)
+				}
+			}()
+			// make a write buffer
+			w := bufio.NewWriter(fo)
+			ssh.CopyFrom("pilosa-cruncher", w)
+			if err = w.Flush(); err != nil {
+				panic(err)
+			}
+
+		})
+	*/
 }
