@@ -24,6 +24,11 @@
         "version": "44eda643c1ae69e866e491b1c935c5b22e42350e",
         "type": "git"
     },
+    "google-crypto": {
+        "repo": "code.google.com/p/go.crypto/ssh",
+        "version": "7aa593ce8cea",
+        "type": "hg"
+    },
     "goyaml": {
         "repo": "launchpad.net/goyaml",
         "version": "50",
@@ -42,6 +47,11 @@
     "mysql": {
         "repo": "github.com/go-sql-driver/mysql",
         "version": "master",
+        "type": "git"
+    },
+    "notify": {
+        "repo": "github.com/bitly/go-notify",
+        "version": "0a148b8111d688ba7550fc7119fe0d5d8e650838",
         "type": "git"
     },
     "otto": {
@@ -64,20 +74,14 @@
         "version": "e762b3d1320b76030bd7f6cc2bfc3d9acce874c0",
         "type": "git"
     },
-    "notify": {
-        "repo": "github.com/bitly/go-notify",
-        "version": "0a148b8111d688ba7550fc7119fe0d5d8e650838",
+    "statsd": {
+        "repo": "github.com/cactus/go-statsd-client/statsd",
+        "version": "912f30c35e9cdf51f50bae24f071e227cca152fb",
         "type": "git"
     },
     "websocket": {
         "repo": "github.com/gorilla/websocket",
         "version": "92334662baa9cbebc2e6e68b8d56bc1233f85a4c",
         "type": "git"
-    },
-    "statsd": {
-        "repo": "github.com/cactus/go-statsd-client/statsd",
-        "version": "912f30c35e9cdf51f50bae24f071e227cca152fb",
-        "type": "git"
     }
-
 }

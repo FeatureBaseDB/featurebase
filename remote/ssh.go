@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"github.com/wsxiaoys/terminal/color"
 
 	"code.google.com/p/go.crypto/ssh"
 )
@@ -124,8 +123,6 @@ func New(host, user, pem_path string) (*SSH, error) {
 	}
 	client, err := ssh.Dial("tcp", host, config)
 	if err != nil {
-
-		color.Printf("@{!r}%s: Failed to connect: %s\n", host, err.Error())
 		return nil, err
 	}
 	ret.client = client
