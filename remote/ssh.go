@@ -1,10 +1,12 @@
 package remote
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 
 	"code.google.com/p/go.crypto/ssh"
 )
@@ -125,6 +127,49 @@ func (self *SSH) CopyFrom(dest_name string, out io.Writer) error {
 	session.Run(fmt.Sprintf("/bin/cat %s", dest_name))
 
 	return nil
+
+}
+
+func (self *SSH) SimpleFileCopyFrom(server_name, local_name string) error {
+	fo, err := os.Create(local_name)
+	if err != nil {
+		return err
+	}
+	// close fo on exit and check for its returned error
+	defer fo.Close()
+	/*
+		defer func() {
+			if err := fo.Close(); err != nil {
+				return err
+			}
+		}()
+	*/
+	// make a write buffer
+	w := bufio.NewWriter(fo)
+	self.CopyFrom(server_name, w)
+	if err = w.Flush(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (self *SSH) SimpleFileCopyTo(local_name, server_name string) error {
+	fi, err := os.Open(local_name)
+	if err != nil {
+		return err
+	}
+	// close fi on exit and check for its returned error
+	defer fi.Close()
+	/*
+		defer func() {
+			if err := fi.Close(); err != nil {
+				return err
+			}
+		}()
+	*/
+	// make a read buffer
+	r := bufio.NewReader(fi)
+	return self.CopyTo(r, server_name)
 
 }
 
