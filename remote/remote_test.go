@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -18,7 +19,7 @@ func TestRemote(t *testing.T) {
 			err = ssh.Launch("sleep 10 && date", "background")
 			So(err, ShouldEqual, nil)
 			content, _ := ssh.Run("date", false)
-			ssh.CopyTo([]byte(content), "uploadfile")
+			ssh.CopyTo(strings.NewReader(content), "uploadfile")
 			results, _ := ssh.CopyFrom("uploadfile")
 			ok := bytes.Equal([]byte(content), results)
 			So(ok, ShouldEqual, true)

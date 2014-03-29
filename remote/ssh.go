@@ -85,7 +85,7 @@ func (self *SSH) Run(command string, sudo bool) (string, error) {
 	return b.String(), nil
 }
 
-func (self *SSH) CopyTo(content []byte, dest_name string) error {
+func (self *SSH) CopyTo(content io.Reader, dest_name string) error {
 
 	session, err := self.client.NewSession()
 	defer session.Close()
@@ -93,7 +93,25 @@ func (self *SSH) CopyTo(content []byte, dest_name string) error {
 	go func() {
 		w, _ := session.StdinPipe()
 		defer w.Close()
-		w.Write(content)
+		//		w.Write(content)
+
+		buf := make([]byte, 4096)
+		for {
+			// read a chunk
+			n, err := content.Read(buf)
+			if err != nil && err != io.EOF {
+				panic(err)
+			}
+			if n == 0 {
+				break
+			}
+
+			// write a chunk
+			if _, err := w.Write(buf[:n]); err != nil {
+				panic(err)
+			}
+		}
+
 	}()
 	err = session.Run(fmt.Sprintf("/bin/cat >%s", dest_name))
 	return err
