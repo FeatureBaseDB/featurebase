@@ -97,6 +97,7 @@ func (self *Nexter) countloop(ch chan uint64, id int, client *etcd.Client) {
 		log.Println("Allocated", id, start, end)
 		for c := start; c < end; c += 1 {
 			ch <- c
+			log.Println("Send", id, c)
 		}
 	}
 }
