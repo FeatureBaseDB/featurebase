@@ -99,14 +99,15 @@ type CmdSetBit struct {
 	*Responder
 	bitmap_id uint64
 	bit_pos   uint64
+	filter    int
 }
 
-func NewSetBit(bitmap_id uint64, bit_pos uint64) *CmdSetBit {
-	result := &CmdSetBit{NewResponder("SetBit"), bitmap_id, bit_pos}
+func NewSetBit(bitmap_id uint64, bit_pos uint64, filter int) *CmdSetBit {
+	result := &CmdSetBit{NewResponder("SetBit"), bitmap_id, bit_pos, filter}
 	return result
 }
 func (self *CmdSetBit) Execute(f *Fragment) Calculation {
-	return f.impl.SetBit(self.bitmap_id, self.bit_pos)
+	return f.impl.SetBit(self.bitmap_id, self.bit_pos, self.filter)
 }
 
 type CmdGetBytes struct {
@@ -208,15 +209,16 @@ type CmdLoader struct {
 	*Responder
 	bitmap_id         uint64
 	compressed_bitmap string
+	filter            int
 }
 
-func NewLoader(bitmap_id uint64, compressed_bitmap string) *CmdLoader {
-	return &CmdLoader{NewResponder("Loader"), bitmap_id, compressed_bitmap}
+func NewLoader(bitmap_id uint64, compressed_bitmap string, filter int) *CmdLoader {
+	return &CmdLoader{NewResponder("Loader"), bitmap_id, compressed_bitmap, filter}
 }
 func (self *CmdLoader) Execute(f *Fragment) Calculation {
 	nbm := NewBitmap()
 	nbm.FromCompressString(self.compressed_bitmap)
-	f.impl.Store(self.bitmap_id, nbm)
+	f.impl.Store(self.bitmap_id, nbm, self.filter)
 	return "ok"
 }
 

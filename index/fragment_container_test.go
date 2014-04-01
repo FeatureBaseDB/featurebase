@@ -26,9 +26,9 @@ func TestFragment(t *testing.T) {
 	Convey("SetBit/Count 1 1", t, func() {
 		//	bh, _ := dummy.Get(id, 1234)
 		bi1 := uint64(1234)
-		changed, _ := dummy.SetBit(general, bi1, 1)
+		changed, _ := dummy.SetBit(general, bi1, 1, 0)
 		So(changed, ShouldEqual, true)
-		changed, _ = dummy.SetBit(general, bi1, 1)
+		changed, _ = dummy.SetBit(general, bi1, 1, 0)
 		So(changed, ShouldEqual, false)
 		bh, _ := dummy.Get(general, bi1)
 		num, _ := dummy.Count(general, bh)
@@ -39,7 +39,7 @@ func TestFragment(t *testing.T) {
 		bi1 := uint64(1234)
 		bi2 := uint64(4321)
 
-		dummy.SetBit(general, bi2, 65537) //set_bit creates the bitmap
+		dummy.SetBit(general, bi2, 65537, 0) //set_bit creates the bitmap
 
 		bh1, _ := dummy.Get(general, bi1)
 		bh2, _ := dummy.Get(general, bi2)
@@ -94,7 +94,7 @@ func TestFragment(t *testing.T) {
 	Convey("Brand SetBit Small", t, func() {
 		bi1 := uint64(1029)
 		for x := uint64(0); x < 1000; x++ {
-			dummy.SetBit(brand, bi1, x)
+			dummy.SetBit(brand, bi1, x, 0)
 		}
 		So(1, ShouldEqual, 1)
 	})
@@ -153,7 +153,7 @@ func TestFragment(t *testing.T) {
 		compressed := "H4sIAAAJbogA/2JmYRBQ+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdT/VqAIV7SxUWxpZl6JmQlImJGN0YGB4R+j+v8mJkaFH/8h4B+M8X+UgcwAhZTm/yZgMCLCarC4bbAxYGHFNBpWBBmwsGIeDSuCDFhYsYyGFUEGLKxYR8OKIAMWVmyjYUWQwcDwfyYwqNgHLKjk4Q7BBAAAAAD//wEAAP//QNipzzcJAAA="
 		//		compressed := "H4sIAAAJbogA/2JmYWBS+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdT/VqAIV7SxUWxpZl6JmQlImJGN0YGBweN/E+M/RgdGRoUf/6EAk/GbGUQy4AUAAAAA//8BAAD//2vjG9ezAAAA"
 
-		dummy.LoadBitmap(brand, b, compressed)
+		dummy.LoadBitmap(brand, b, compressed, 0)
 		bh1, _ := dummy.Get(brand, b)
 		before, _ := dummy.Count(brand, bh1)
 		So(15228, ShouldEqual, before)

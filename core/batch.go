@@ -14,6 +14,7 @@ type BatchRequest struct {
 	Fragment_id       SUUID
 	Bitmap_id         uint64
 	Compressed_bitmap string
+	Filter            int
 }
 
 type BatchResponse struct {
@@ -32,13 +33,13 @@ func init() {
 	gob.Register(BatchResponse{})
 }
 
-func (self *Service) Batch(database_name, frame, compressed_bitmap string, bitmap_id uint64, slice int) error {
+func (self *Service) Batch(database_name, frame, compressed_bitmap string, bitmap_id uint64, slice int, filter int) error {
 	//determine the fragment_id from database/frame/slice
 	database := self.Cluster.GetOrCreateDatabase(database_name)
 	oslice := database.GetOrCreateSlice(slice)
 	//need to find processid and fragment id for that slice
 
-	fragment, err := database.GetFragmentForBitmap(oslice, &db.Bitmap{bitmap_id, frame})
+	fragment, err := database.GetFragmentForBitmap(oslice, &db.Bitmap{bitmap_id, frame, filter})
 	if err == nil {
 		id := uuid.RandomUUID()
 		batch := db.Message{Data: BatchRequest{Id: &id, Source: self.Id, Fragment_id: fragment.GetId(), Bitmap_id: bitmap_id, Compressed_bitmap: compressed_bitmap}}

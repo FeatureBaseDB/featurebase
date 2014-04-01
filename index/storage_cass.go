@@ -16,7 +16,7 @@ type CassandraStorage struct {
 func BuildSchema() {
 	/*
 	   "CREATE KEYSPACE IF NOT EXISTS hotbox WITH strategy_class = SimpleStrategy AND strategy_options:replication_factor = 1"
-	   CREATE TABLE IF NOT EXISTS bitmap ( bitmap_id bigint, db varchar, slice int, ChunkKey bigint,   BlockIndex int,   block bigint,    PRIMARY KEY ((bitmap_id, db, slice),ChunkKey,BlockIndex) )
+	   CREATE TABLE IF NOT EXISTS bitmap ( bitmap_id bigint, db varchar, frame varchar, slice int, filter int, ChunkKey bigint,   BlockIndex int,   block bigint,    PRIMARY KEY ((bitmap_id, db, frame,slice),ChunkKey,BlockIndex) )
 	   "
 	*/
 
@@ -41,7 +41,7 @@ func NewCassStorage(host, keyspace string) Storage {
 	return obj
 }
 
-func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, slice int) IBitmap {
+func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slice int) (IBitmap, int) {
 	var dumb = COUNTERMASK
 	last_key := int64(dumb)
 	marker := int64(dumb)
@@ -52,13 +52,15 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, slice int) IBitmap
 		chunk_key, block int64
 		block_index      uint32
 		s8               uint8
+		filter           int
 	)
 	log.Println("FETCHING ", bitmap_id, db, slice)
 
 	bitmap := CreateRBBitmap()
-	iter := c.db.Query("SELECT Chunkkey,BlockIndex,block FROM bitmap WHERE bitmap_id=? AND db=? AND slice=? ", id, db, slice).Iter()
+	iter := c.db.Query("SELECT filter,Chunkkey,BlockIndex,block FROM bitmap WHERE bitmap_id=? AND db=? AND frame=? AND slice=? ", id, db, frame, slice).Iter()
 	count := int64(0)
-	for iter.Scan(&chunk_key, &block_index, &block) {
+
+	for iter.Scan(&filter, &chunk_key, &block_index, &block) {
 		s8 = uint8(block_index)
 		if chunk_key != marker {
 			if chunk_key != last_key {
@@ -74,17 +76,17 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, slice int) IBitmap
 
 	}
 	bitmap.SetCount(uint64(count))
-	return bitmap
+	return bitmap, filter
 }
 
-func (c *CassandraStorage) Store(id int64, db string, slice int, bitmap *Bitmap) error {
+func (c *CassandraStorage) Store(id int64, db string, frame string, slice int, filter int, bitmap *Bitmap) error {
 	for i := bitmap.Min(); !i.Limit(); i = i.Next() {
 		var chunk = i.Item()
 		for idx, block := range chunk.Value.Block {
 			block_index := int32(idx)
 			iblock := int64(block)
 			if iblock != 0 {
-				c.StoreBlock(id, db, slice, int64(chunk.Key), block_index, iblock)
+				c.StoreBlock(id, db, frame, slice, filter, int64(chunk.Key), block_index, iblock)
 			}
 		}
 	}
@@ -93,13 +95,14 @@ func (c *CassandraStorage) Store(id int64, db string, slice int, bitmap *Bitmap)
 	var dumb = COUNTERMASK
 	COUNTER_KEY := int64(dumb)
 
-	c.StoreBlock(id, db, slice, COUNTER_KEY, 0, cnt)
+	c.StoreBlock(id, db, frame, slice, filter, COUNTER_KEY, 0, cnt)
 	return nil
 }
 
-func (c *CassandraStorage) StoreBlock(id int64, db string, slice int, chunk int64, block_index int32, block int64) error {
+func (c *CassandraStorage) StoreBlock(id int64, db string, frame string, slice int, filter int, chunk int64, block_index int32, block int64) error {
 
-	if err := c.db.Query(`INSERT INTO bitmap (bitmap_id, db, slice , ChunkKey, BlockIndex,block) VALUES (?,?,?, ?,?,?);`, id, db, slice, chunk, block_index, block).Exec(); err != nil {
+	if err := c.db.Query(`
+        INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?);`, id, db, frame, slice, filter, chunk, block_index, block).Exec(); err != nil {
 		log.Println(err)
 		log.Println("INSERT ", id, chunk, block_index)
 		return err

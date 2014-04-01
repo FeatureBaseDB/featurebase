@@ -39,7 +39,9 @@ func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, uint64, int) {
 				panic(err)
 			}
 		}
-		bm := db.Bitmap{bitmap_id, frame_type}
+		var filter int //TRAVIS the is for the category
+		filter = 0
+		bm := db.Bitmap{bitmap_id, frame_type, filter}
 		return []QueryInput{&bm}, uint64(profile_id), 0
 	}
 

@@ -30,27 +30,11 @@ func TestRemote(t *testing.T) {
 			So(true, ShouldEqual, true)
 		}
 	})
-	/*
-		Convey("BigFile", t, func() {
-			ssh, err := New("50.16.204.123:22", "todd", "id_dsa")
+	Convey("BigFile", t, func() {
+		ssh, _ := New("50.16.204.123:22", "todd", "id_dsa")
 
-			fo, err := os.Create("outbin")
-			if err != nil {
-				panic(err)
-			}
-			// close fo on exit and check for its returned error
-			defer func() {
-				if err := fo.Close(); err != nil {
-					panic(err)
-				}
-			}()
-			// make a write buffer
-			w := bufio.NewWriter(fo)
-			ssh.CopyFrom("pilosa-cruncher", w)
-			if err = w.Flush(); err != nil {
-				panic(err)
-			}
+		ssh.SimpleFileCopyTo("outbin", "tb")
+		ssh.SimpleFileCopyFrom("tb", "outbin2")
 
-		})
-	*/
+	})
 }

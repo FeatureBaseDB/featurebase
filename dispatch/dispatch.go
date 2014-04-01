@@ -27,7 +27,7 @@ func (self *Dispatch) Run() {
 		switch data := message.Data.(type) {
 		case core.BatchRequest:
 			response := db.Message{Data: core.BatchResponse{Id: data.Id}}
-			self.service.Index.LoadBitmap(data.Fragment_id, data.Bitmap_id, data.Compressed_bitmap)
+			self.service.Index.LoadBitmap(data.Fragment_id, data.Bitmap_id, data.Compressed_bitmap, data.Filter)
 			self.service.Transport.Send(&response, data.Source)
 		case core.PingRequest:
 			pong := db.Message{Data: core.PongRequest{Id: data.Id}}

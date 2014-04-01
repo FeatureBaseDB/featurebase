@@ -9,6 +9,7 @@ import (
 	"log"
 	"pilosa/config"
 	. "pilosa/util"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 
 type FragmentContainer struct {
 	fragments map[SUUID]*Fragment
-	finder    *CategoryFinder
 }
 
 func lookup(stmt *sql.Stmt, tile_id uint64) int {
@@ -32,57 +32,10 @@ func lookup(stmt *sql.Stmt, tile_id uint64) int {
 
 }
 
-type ICategoryFinder interface {
-	GetCategory(in uint64) int
-}
-
-type CategoryFinder struct {
-	in  chan uint64
-	out chan int
-}
-
-func NewCategoryFinder() *CategoryFinder {
-	ptr := new(CategoryFinder)
-	ptr.in = make(chan uint64)
-	ptr.out = make(chan int)
-	return ptr
-}
-
-func (self *CategoryFinder) Start() {
-	connection := config.GetString("category_db_uri")
-	db, err := sql.Open("mysql", connection)
-	stmt, err := db.Prepare("select b.category_id from audience_brand b, accounts_tile t where b.id = t.object_id and t.id=?")
-	cache := lru.New(1000)
-	defer stmt.Close()
-
-	for {
-		select {
-		case id := <-self.in:
-			category := 0
-			if err == nil {
-				category, found := cache.Get(id)
-				if !found {
-					category = lookup(stmt, id)
-					cache.Add(id, category)
-
-				}
-			}
-			self.out <- category
-		}
-	}
-}
-
 func NewFragmentContainer() *FragmentContainer {
 	f := new(FragmentContainer)
 	f.fragments = make(map[SUUID]*Fragment)
-	f.finder = NewCategoryFinder()
-	go f.finder.Start()
-
 	return f
-}
-func (self *FragmentContainer) GetCategory(in uint64) int {
-	self.finder.in <- in
-	return <-self.finder.out
 }
 
 type BitmapHandle uint64
@@ -106,9 +59,9 @@ func (self *FragmentContainer) Shutdown() {
 	log.Println("Container Shutdown Complete")
 }
 
-func (self *FragmentContainer) LoadBitmap(frag_id SUUID, bitmap_id uint64, compressed_bitmap string) {
+func (self *FragmentContainer) LoadBitmap(frag_id SUUID, bitmap_id uint64, compressed_bitmap string, filter int) {
 	if fragment, found := self.GetFragment(frag_id); found {
-		request := NewLoader(bitmap_id, compressed_bitmap)
+		request := NewLoader(bitmap_id, compressed_bitmap, filter)
 		fragment.requestChan <- request
 		request.Response()
 		return
@@ -212,9 +165,9 @@ func (self *FragmentContainer) FromBytes(frag_id SUUID, bytes []byte) (BitmapHan
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint64) (bool, error) {
+func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint64, category int) (bool, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
-		request := NewSetBit(bitmap_id, pos)
+		request := NewSetBit(bitmap_id, pos, category)
 		fragment.requestChan <- request
 		return request.Response().answer.(bool), nil
 	}
@@ -232,7 +185,7 @@ func (self *FragmentContainer) Clear(frag_id SUUID) (bool, error) {
 
 func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id SUUID) {
 	log.Println("ADD FRAGMENT", frame)
-	f := NewFragment(id, db, slice, frame, self)
+	f := NewFragment(id, db, slice, frame)
 	self.fragments[id] = f
 
 	go f.ServeFragment()
@@ -241,10 +194,10 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 
 type Pilosa interface {
 	Get(id uint64) IBitmap
-	SetBit(id uint64, bit_pos uint64) bool
+	SetBit(id uint64, bit_pos uint64, filter int) bool
 	TopN(b IBitmap, n int, categories []int) []Pair
 	Clear() bool
-	Store(bitmap_id uint64, bm IBitmap)
+	Store(bitmap_id uint64, bm IBitmap, filter int)
 	Stats() interface{}
 	Persist() error
 	Load(requestChan chan Command, fragment *Fragment)
@@ -268,13 +221,6 @@ func getStorage(db string, slice int, frame string) Storage {
 	switch storage_method {
 	default:
 		return NewMemoryStorage()
-	case "localfile":
-		storage_path := config.GetString("kv_base_path")
-		if storage_path == "" {
-			storage_path = "/tmp/pilosa"
-		}
-		s, _ := NewKVStorage(storage_path, slice, db)
-		return s
 	case "cassandra":
 		host := config.GetString("cassandra_host")
 		if host == "" {
@@ -289,16 +235,15 @@ func getStorage(db string, slice int, frame string) Storage {
 	return nil
 }
 
-func NewFragment(frag_id SUUID, db string, slice int, frame string, p ICategoryFinder) *Fragment {
+func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
 	var impl Pilosa
 	log.Println(fmt.Sprintf("XXXXXXXXXXXXXXXXXXXXXXXXXXX(%s)", frame))
-	switch frame {
-	case "brand":
-		log.Println("Brand")
-		impl = NewBrand(db, slice, getStorage(db, slice, frame), 50000, 45000, 100, p)
-	default:
-		log.Println("General")
-		impl = NewGeneral(db, slice, getStorage(db, slice, frame))
+	if strings.HasSuffix(frame, ".") {
+		log.Println(frame + "TOP")
+		impl = NewBrand(db, frame, slice, getStorage(db, slice, frame), 50000, 45000, 100)
+	} else {
+		log.Println(frame)
+		impl = NewGeneral(db, frame, slice, getStorage(db, slice, frame))
 	}
 
 	f := new(Fragment)

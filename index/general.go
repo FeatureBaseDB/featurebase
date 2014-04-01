@@ -14,13 +14,15 @@ type General struct {
 	bitmap_cache *lru.Cache
 	keys         map[uint64]interface{}
 	db           string
+	frame        string
 	slice        int
 	storage      Storage
 }
 
-func NewGeneral(db string, slice int, s Storage) *General {
+func NewGeneral(db string, frame string, slice int, s Storage) *General {
 	f := new(General)
 	f.storage = s
+	f.frame = frame
 	f.slice = slice
 	f.db = db
 	f.Clear()
@@ -40,18 +42,18 @@ func (self *General) Get(bitmap_id uint64) IBitmap {
 	if ok {
 		return bm.(*Bitmap)
 	}
-	bm = self.storage.Fetch(bitmap_id, self.db, self.slice)
+	bm, _ = self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
 	self.bitmap_cache.Add(bitmap_id, bm)
 	self.keys[bitmap_id] = 0
 	return bm.(*Bitmap)
 }
-func (self *General) SetBit(bitmap_id uint64, bit_pos uint64) bool {
+func (self *General) SetBit(bitmap_id uint64, bit_pos uint64, filter int) bool {
 	bm := self.Get(bitmap_id)
 	change, chunk, address := SetBit(bm, bit_pos)
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
-		self.storage.StoreBlock(int64(bitmap_id), self.db, self.slice, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
-		self.storage.StoreBlock(int64(bitmap_id), self.db, self.slice, COUNTER_KEY, 0, int64(bm.Count()))
+		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
+		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, COUNTER_KEY, 0, int64(bm.Count()))
 
 	}
 	return change
@@ -60,10 +62,10 @@ func (self *General) TopN(b IBitmap, n int, categories []int) []Pair {
 
 	return nil
 }
-func (self *General) Store(bitmap_id uint64, bm IBitmap) {
+func (self *General) Store(bitmap_id uint64, bm IBitmap, filter int) {
 	//oldbm:=self.Get(bitmap_id)
 	//nbm = Union(oldbm, bm)
-	self.storage.Store(int64(bitmap_id), self.db, self.slice, bm.(*Bitmap))
+	self.storage.Store(int64(bitmap_id), self.db, self.frame, self.slice, filter, bm.(*Bitmap))
 	self.bitmap_cache.Add(bitmap_id, bm)
 	self.keys[bitmap_id] = 0
 }
@@ -83,7 +85,7 @@ func (self *General) getFileName() string {
 	if base == "" {
 		base = "."
 	}
-	return fmt.Sprintf("%s/General.%s.%d", base, self.db, self.slice)
+	return fmt.Sprintf("%s/%s.%s.%d", base, self.db, self.frame, self.slice)
 }
 
 func (self *General) Persist() error {

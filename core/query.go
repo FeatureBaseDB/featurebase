@@ -213,7 +213,7 @@ func (self *Service) GetQueryStepHandler(msg *db.Message) {
 func (self *Service) SetQueryStepHandler(msg *db.Message) {
 	//spew.Dump("SET QUERYSTEP")
 	qs := msg.Data.(query.SetQueryStep)
-	result, _ := self.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
+	result, _ := self.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId, qs.Bitmap.Filter)
 
 	result_message := db.Message{Data: query.SetQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)

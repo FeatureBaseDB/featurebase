@@ -29,6 +29,7 @@ func (p RankList) Less(i, j int) bool { return p[i].Count > p[j].Count }
 type Brand struct {
 	bitmap_cache     map[uint64]*Rank
 	db               string
+	frame            string
 	slice            int
 	storage          Storage
 	rankings         RankList
@@ -37,12 +38,12 @@ type Brand struct {
 	threshold_length int
 	threshold_idx    int
 	skip             int
-	finder           ICategoryFinder
 }
 
-func NewBrand(db string, slice int, s Storage, threshold_len int, threshold int, skipp int, c ICategoryFinder) *Brand {
+func NewBrand(db string, frame string, slice int, s Storage, threshold_len int, threshold int, skipp int) *Brand {
 	f := new(Brand)
 	f.storage = s
+	f.frame = frame
 	f.slice = slice
 	f.db = db
 	f.rank_counter = 0
@@ -50,7 +51,6 @@ func NewBrand(db string, slice int, s Storage, threshold_len int, threshold int,
 	f.threshold_length = threshold_len
 	f.threshold_idx = threshold
 	f.skip = skipp
-	f.finder = c
 	f.Clear() //alloc the cache
 	return f
 
@@ -65,9 +65,9 @@ func (self *Brand) Get(bitmap_id uint64) IBitmap {
 		return bm.bitmap
 	}
 	//I should fetch the category here..need to come up with a good source
-	b := self.storage.Fetch(bitmap_id, self.db, self.slice)
+	b, filter := self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
 
-	self.cache_it(b, bitmap_id, self.finder.GetCategory(bitmap_id))
+	self.cache_it(b, bitmap_id, filter)
 
 	return b
 }
@@ -89,13 +89,13 @@ func (self *Brand) trim() {
 
 }
 
-func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64) bool {
+func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter int) bool {
 	bm := self.Get(bitmap_id)
 	change, chunk, address := SetBit(bm, bit_pos)
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
-		self.storage.StoreBlock(int64(bitmap_id), self.db, self.slice, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
-		self.storage.StoreBlock(int64(bitmap_id), self.db, self.slice, COUNTER_KEY, 0, int64(bm.Count()))
+		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
+		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, COUNTER_KEY, 0, int64(bm.Count()))
 		if bm.Count() >= self.threshold_value {
 
 			self.Rank() //need to optimize this
@@ -114,10 +114,8 @@ func (self *Brand) Rank() {
 
 	var list RankList
 	for k, item := range self.bitmap_cache {
-		if k < 9223372036854775808 { //all demographics is greater than 2^63
-			if item.bitmap.Count() > 50 {
-				list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})
-			}
+		if item.bitmap.Count() > 50 {
+			list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})
 		}
 	}
 	sort.Sort(list)
@@ -167,11 +165,9 @@ func (self *Brand) Stats() interface{} {
 		"skip":                               self.skip}
 	return stats
 }
-func (self *Brand) Store(bitmap_id uint64, bm IBitmap) {
-	//oldbm:=self.Get(bitmap_id)
-	//nbm = Union(oldbm, bm)
-	self.storage.Store(int64(bitmap_id), self.db, self.slice, bm.(*Bitmap))
-	self.cache_it(bm, bitmap_id, self.finder.GetCategory(bitmap_id))
+func (self *Brand) Store(bitmap_id uint64, bm IBitmap, filter int) {
+	self.storage.Store(int64(bitmap_id), self.db, self.frame, self.slice, filter, bm.(*Bitmap))
+	self.cache_it(bm, bitmap_id, filter)
 }
 
 func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []int) []Pair {
@@ -279,7 +275,7 @@ func (self *Brand) getFileName() string {
 		base = "."
 	}
 
-	return fmt.Sprintf("%s/Brand.%s.%d.json", base, self.db, self.slice)
+	return fmt.Sprintf("%s/%s.%s.%d.json", base, self.db, self.frame, self.slice)
 }
 
 func (self *Brand) Persist() error {

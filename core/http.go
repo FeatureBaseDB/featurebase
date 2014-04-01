@@ -113,7 +113,14 @@ func (self *WebService) HandleBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := self.service.Batch(database_name, frame, compressed_bitmap, bitmap_id, int(slice))
+	filter_string := r.Form.Get("filter")
+	filter, _ := strconv.ParseInt(filter_string, 10, 32)
+	if bitmap_id_string == "" {
+		http.Error(w, "Provide a filter for categories", http.StatusNotFound)
+		return
+	}
+
+	results := self.service.Batch(database_name, frame, compressed_bitmap, bitmap_id, int(slice), int(filter))
 
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
