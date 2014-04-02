@@ -2,111 +2,210 @@ package query
 
 import (
 	"errors"
-	"pilosa/db"
+	"fmt"
 	"strconv"
-
 	"tux21b.org/v1/gocql/uuid"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 var InvalidQueryError = errors.New("Invalid query format.")
 
-type QueryParser struct{}
-
-func (qp *QueryParser) walkInputs(tokens []Token) ([]QueryInput, uint64, int) {
-	// BITMAP
-	if tokens[0].Type == TYPE_ID {
-		// TODO: look for frame type in the tokens list
-		b, err := strconv.ParseUint(tokens[0].Text, 10, 64)
-		bitmap_id := uint64(b)
-		if err != nil {
-			panic(err)
-		}
-		// if the next 2 tokens are comma-frame, then we have a frame, else set to a default
-		frame_type := "general"
-		profile_id := uint64(0)
-
-		if len(tokens) > 4 && tokens[2].Type == TYPE_FRAME && tokens[4].Type == TYPE_PROFILE {
-			frame_type = tokens[2].Text
-			profile_id, err = strconv.ParseUint(tokens[4].Text, 10, 64)
-			if err != nil {
-				panic(err)
-			}
-		} else if len(tokens) > 2 && tokens[2].Type == TYPE_FRAME {
-			frame_type = tokens[2].Text
-		} else if len(tokens) > 2 && tokens[2].Type == TYPE_PROFILE {
-			profile_id, err = strconv.ParseUint(tokens[2].Text, 10, 64)
-			if err != nil {
-				panic(err)
-			}
-		}
-		var filter int //TRAVIS the is for the category
-		filter = 0
-		bm := db.Bitmap{bitmap_id, frame_type, filter}
-		return []QueryInput{&bm}, uint64(profile_id), 0
-	}
-
-	// LIST OF QUERIES
-	n := int(10) // default LIMIT to 10
-	qi := []QueryInput{}
-	open_parens := -1 // >=0 means i'm inside the search for end paren
-	start := 0
-	for i := 0; i < len(tokens); i++ {
-		if tokens[i].Type == TYPE_FUNC && open_parens == -1 {
-			start = i
-		} else if tokens[i].Type == TYPE_LP {
-			open_parens++
-		} else if tokens[i].Type == TYPE_RP {
-			if open_parens == 0 {
-				q, err := qp.walk(tokens[start : i+1])
-				if err != nil {
-					panic(err)
-				}
-				qi = append(qi, q)
-				open_parens = -1
-			} else {
-				open_parens--
-			}
-		} else if tokens[i].Type == TYPE_LIMIT {
-			x, _ := strconv.ParseInt(tokens[i].Text, 10, 32)
-			n = int(x)
-		}
-	}
-	return qi, 0, n
+type QueryParser struct {
+	tokens []Token
+	pos    int
 }
 
-func (qp *QueryParser) walk(tokens []Token) (*Query, error) {
-
-	if tokens[0].Type != TYPE_FUNC {
-		panic("BAD!")
+/* MASTER
+if len(tokens) > 4 && tokens[2].Type == TYPE_FRAME && tokens[4].Type == TYPE_PROFILE {
+	frame_type = tokens[2].Text
+	profile_id, err = strconv.ParseUint(tokens[4].Text, 10, 64)
+	if err != nil {
+		panic(err)
 	}
-	if tokens[1].Type != TYPE_LP {
-		panic("BAD!")
+} else if len(tokens) > 2 && tokens[2].Type == TYPE_FRAME {
+	frame_type = tokens[2].Text
+} else if len(tokens) > 2 && tokens[2].Type == TYPE_PROFILE {
+	profile_id, err = strconv.ParseUint(tokens[2].Text, 10, 64)
+	if err != nil {
+		panic(err)
 	}
+}
+var filter int //TRAVIS the is for the category
+filter = 0
+bm := db.Bitmap{bitmap_id, frame_type, filter}
+return []QueryInput{&bm}, uint64(profile_id), 0
+*/
+func (self *QueryParser) next() *Token {
+	self.pos += 1
+	if self.pos > len(self.tokens) {
+		return nil
+	}
+	return &self.tokens[self.pos-1]
+}
 
-	q := new(Query)
+func (self *QueryParser) peek() *Token {
+	token := self.next()
+	self.backup()
+	return token
+}
+
+func (self *QueryParser) backup() {
+	self.pos -= 1
+}
+
+func (self *QueryParser) Parse() (query *Query, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			var ok bool
+			err, ok = r.(error)
+			if !ok {
+				err = fmt.Errorf("query: %v", r)
+			}
+		}
+	}()
+	var token *Token
+
 	id := uuid.RandomUUID()
-	q.Id = &id
-	q.Operation = tokens[0].Text
+	query = &Query{Id: &id, Subqueries: make([]Query, 0), Args: make(map[string]interface{})}
 
-	// scan from open to close paren
-	open_parens := 0
-	for i := 2; i < len(tokens); i++ {
-		// 1 must be "("
-		if tokens[i].Type == TYPE_LP {
-			open_parens++
-		} else if tokens[i].Type == TYPE_RP {
-			if open_parens == 0 {
-				if i == len(tokens)-1 {
-					q.Inputs, q.ProfileId, q.N = qp.walkInputs(tokens[2:i])
+	token = self.next()
+	if token.Type != TYPE_FUNC {
+		return nil, fmt.Errorf("Expected function, found token %v.", token)
+	}
+
+	query.Operation = token.Text
+
+	token = self.next()
+	if token.Type != TYPE_LP {
+		return nil, fmt.Errorf("Expected '(', found token %v.", token)
+	}
+
+ArgLoop:
+	for {
+		token = self.next()
+		if token == nil {
+			return nil, fmt.Errorf("Unclosed parentheses!")
+		}
+
+		switch token.Type {
+		case TYPE_FUNC:
+			self.backup()
+			subquery, err := self.Parse()
+			if err != nil {
+				return nil, err
+			}
+			query.Subqueries = append(query.Subqueries, *subquery)
+		case TYPE_VALUE:
+			switch query.Operation {
+			case "get":
+				switch len(query.Args) {
+				case 0:
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+					}
+					query.Args["id"] = i
+				case 1:
+					query.Args["frame"] = token.Text
+				default:
+					return nil, fmt.Errorf("Unexpected argument! (%v)", token)
+				}
+			case "set":
+				switch len(query.Args) {
+				case 0:
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+					}
+					query.Args["id"] = i
+				case 1:
+					query.Args["frame"] = token.Text
+				case 2:
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+					}
+					query.Args["profile_id"] = i
+				default:
+					return nil, fmt.Errorf("Unexpected argument! (%v)", token)
+				}
+
+			case "top-n":
+				i, err := strconv.Atoi(token.Text)
+				if err != nil {
+					return nil, fmt.Errorf("Expecting integer! (%v)", err)
+				}
+				query.Args["n"] = i
+			default:
+				spew.Dump("UNPROCESSED VALUE", token)
+			}
+			continue
+		case TYPE_COMMA:
+			continue
+		case TYPE_RP:
+			break ArgLoop
+		case TYPE_KEYWORD:
+			var value interface{}
+			keyword := token.Text
+			token = self.next()
+			if token == nil || token.Type != TYPE_EQUALS {
+				return nil, fmt.Errorf("Expecting equals sign!")
+			}
+			token = self.next()
+			if token == nil || token.Type != TYPE_VALUE {
+				return nil, fmt.Errorf("Expecting value!")
+			}
+			if keyword == "id" {
+				value, err = strconv.ParseUint(token.Text, 10, 64)
+				if err != nil {
+					return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+				}
+			} else if keyword == "n" {
+				value, err = strconv.Atoi(token.Text)
+				if err != nil {
+					return nil, fmt.Errorf("Expecting integer! (%v)", err)
 				}
 			} else {
-				open_parens--
+				value = token.Text
 			}
+			query.Args[keyword] = value
+		case TYPE_LB:
+			query.Args["ids"] = make([]uint64, 0)
+			for {
+				token = self.next()
+				if token == nil {
+					return nil, fmt.Errorf("Unclosed list!")
+				}
+				switch token.Type {
+				case TYPE_COMMA:
+					break
+				case TYPE_VALUE:
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+					}
+					query.Args["ids"] = append(query.Args["ids"].([]uint64), i)
+				case TYPE_RB:
+					continue ArgLoop
+				default:
+					return nil, fmt.Errorf("Unexpected token! (%v)", token)
+				}
+			}
+		default:
+			spew.Dump("unexpected", token)
+			panic(token)
 		}
 	}
-	return q, nil
+
+	if query.Operation == "get" && query.Args["frame"] == nil {
+		query.Args["frame"] = "general"
+	}
+
+	return query, nil
 }
 
-func (qp *QueryParser) Parse(tokens []Token) (*Query, error) {
-	return qp.walk(tokens)
+func Parse(tokens []Token) (*Query, error) {
+	parser := QueryParser{tokens, 0}
+	return parser.Parse()
 }
