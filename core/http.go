@@ -42,6 +42,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/version", self.HandleVersion)
 	mux.HandleFunc("/ping", self.HandlePing)
 	mux.HandleFunc("/batch", self.HandleBatch)
+	mux.HandleFunc("/set_bit", self.HandleSetBit)
 	s := &http.Server{
 		Addr:    ":" + port_string,
 		Handler: mux,
@@ -158,6 +159,46 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results := self.service.Executor.RunPQL(database_name, pql)
+
+	encoder := json.NewEncoder(w)
+	err = encoder.Encode(results)
+	if err != nil {
+		log.Fatal("Error encoding stats")
+	}
+
+}
+
+type JsonObject map[string]interface{}
+
+func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	args_string := r.Form.Get("args")
+
+	var args []JsonObject
+
+	//[{ "db": "3", "frame":"brand.","profile_id": 122,"filter":0, "bitmap_id":123},]
+	if args_string == "" {
+		http.Error(w, "Provide a args json string ", http.StatusNotFound)
+		return
+	}
+	err = json.Unmarshal([]byte(args_string), &args)
+	for _, obj := range args {
+		db := obj["db"]
+		frame := obj["frame"]
+		profile_id := obj["profile_id"]
+		bitmap_id := obj["bitmap_id"].(uint64)
+		filter := obj["bitmap_id"].(int)
+		results := self.service.Executor.RunPQL(db, pql)
+	}
 
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
