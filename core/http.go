@@ -42,7 +42,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/version", self.HandleVersion)
 	mux.HandleFunc("/ping", self.HandlePing)
 	mux.HandleFunc("/batch", self.HandleBatch)
-	mux.HandleFunc("/set_bit", self.HandleSetBit)
+	mux.HandleFunc("/set_bits", self.HandleSetBit)
 	s := &http.Server{
 		Addr:    ":" + port_string,
 		Handler: mux,
@@ -170,34 +170,35 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 
 type JsonObject map[string]interface{}
 
+// post this json to the body
+//[{ "db": "3", "frame":"brand.","profile_id": 122,"filter":0, "bitmap_id":123},
+//	{ "db": "3", "frame":"brand.","profile_id": 122,"filter":2, "bitmap_id":124}]'
+//
+
 func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	err := r.ParseForm()
+	decoder := json.NewDecoder(r.Body)
+	var args []JsonObject
+
+	err := decoder.Decode(&args)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	args_string := r.Form.Get("args")
-
-	var args []JsonObject
-
-	//[{ "db": "3", "frame":"brand.","profile_id": 122,"filter":0, "bitmap_id":123},]
-	if args_string == "" {
-		http.Error(w, "Provide a args json string ", http.StatusNotFound)
-		return
-	}
-	err = json.Unmarshal([]byte(args_string), &args)
+	//[{ "db": "3", "frame":"brand.","profile_id": 122,"filter":0, "bitmap_id":123}]
+	var results []interface{}
 	for _, obj := range args {
-		db := obj["db"]
-		frame := obj["frame"]
-		profile_id := obj["profile_id"]
-		bitmap_id := obj["bitmap_id"].(uint64)
-		filter := obj["bitmap_id"].(int)
-		results := self.service.Executor.RunPQL(db, pql)
+		db := obj["db"].(string)
+		frame := obj["frame"].(string)
+		profile_id := obj["profile_id"].(int)
+		bitmap_id := obj["bitmap_id"].(int64)
+		filter := obj["filter"].(int)
+		pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
+		results = append(results, self.service.Executor.RunPQL(db, pql))
+
 	}
 
 	encoder := json.NewEncoder(w)
