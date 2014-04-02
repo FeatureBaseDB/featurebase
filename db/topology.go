@@ -312,7 +312,7 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 	//d.mutex.Lock()
 	//defer d.mutex.Unlock()
 	frame, _ := d.getFrame(bitmap.FrameType)
-	log.Println(frame, slice)
+	//log.Println(frame, slice)
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Println(err)

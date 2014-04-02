@@ -2,25 +2,11 @@ package query
 
 import (
 	"encoding/gob"
-	"fmt"
 	"math/rand"
 	"pilosa/db"
 
 	"tux21b.org/v1/gocql/uuid"
 )
-
-// A single step in the query plan.
-type QueryStep struct {
-	id          *uuid.UUID
-	operation   string
-	inputs      []QueryInput
-	location    *db.Location
-	destination *db.Location
-}
-
-func (q QueryStep) StringHOLD() string {
-	return fmt.Sprintf("%s %s %s, LOC: %s, DEST: %s", q.operation, q.id.String(), q.inputs, q.location, q.destination)
-}
 
 type PortableQueryStep interface {
 	GetId() *uuid.UUID
@@ -105,6 +91,7 @@ type TopNQueryResult struct {
 type TopNQueryTree struct {
 	subquery QueryTree
 	location *db.Location
+	N        int
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
@@ -191,6 +178,7 @@ type CatQueryResult struct {
 type CatQueryTree struct {
 	subqueries []QueryTree
 	location   *db.Location
+	N          int
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
@@ -292,29 +280,10 @@ type QueryPlan []interface{}
 
 type QueryPlanner struct {
 	Database *db.Database
+	Query    *Query
 }
 type QueryTree interface {
 	getLocation(d *db.Database) *db.Location
-}
-
-// QueryTree for UNION and INTERSECT queries
-type CompositeQueryTree struct {
-	operation  string
-	subqueries []QueryTree
-	location   *db.Location
-}
-
-// Randomly select location from subqueries (so subqueries roll up into composite queries while minimizing inter-node data traffic)
-func (qt *CompositeQueryTree) getLocation(d *db.Database) *db.Location {
-	if qt.location == nil {
-		subqueryLength := len(qt.subqueries)
-		if subqueryLength > 0 {
-			locationIndex := rand.Intn(subqueryLength)
-			subquery := qt.subqueries[locationIndex]
-			qt.location = subquery.getLocation(d)
-		}
-	}
-	return qt.location
 }
 
 // Builds QueryTree object from Query. Pass slice=-1 to perform operation on all slices
@@ -323,13 +292,19 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 
 	// handle SET operation regardless of the slice
 	if query.Operation == "set" {
-		tree = &SetQueryTree{query.Inputs[0].(*db.Bitmap), query.ProfileId}
+
+		tree = &SetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), query.Args["filter"].(int)}, query.Args["profile_id"].(uint64)}
 		return tree
 	}
 
 	// handle the remaining operations, taking slice into consideration
 	if slice == -1 {
-		tree = &CatQueryTree{}
+		var n int
+		n_, ok := query.Args["n"]
+		if ok {
+			n = n_.(int)
+		}
+		tree = &CatQueryTree{N: n}
 		numSlices, err := qp.Database.NumSlices()
 		if err != nil {
 			panic(err)
@@ -342,57 +317,48 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 		}
 	} else {
 		if query.Operation == "get" {
-			tree = &GetQueryTree{query.Inputs[0].(*db.Bitmap), slice}
+			tree = &GetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), 0}, slice}
 			return tree
 		} else if query.Operation == "count" {
-			subquery := qp.buildTree(query.Inputs[0].(*Query), slice)
+			subquery := qp.buildTree(&query.Subqueries[0], slice)
 			tree = &CountQueryTree{subquery: subquery}
 		} else if query.Operation == "top-n" {
-			subquery := qp.buildTree(query.Inputs[0].(*Query), slice)
-			tree = &TopNQueryTree{subquery: subquery}
+			var n int
+			n_, ok := query.Args["n"]
+			if ok {
+				n = n_.(int)
+			}
+			subquery := qp.buildTree(&query.Subqueries[0], slice)
+			tree = &TopNQueryTree{subquery: subquery, N: n}
 		} else if query.Operation == "union" {
-			subqueries := make([]QueryTree, len(query.Inputs))
-			for i, input := range query.Inputs {
-				subqueries[i] = qp.buildTree(input.(*Query), slice)
+			subqueries := make([]QueryTree, len(query.Subqueries))
+			for i, query := range query.Subqueries {
+				subqueries[i] = qp.buildTree(&query, slice)
 			}
 			tree = &UnionQueryTree{subqueries: subqueries}
 		} else if query.Operation == "intersect" {
-			subqueries := make([]QueryTree, len(query.Inputs))
-			for i, input := range query.Inputs {
-				subqueries[i] = qp.buildTree(input.(*Query), slice)
+			subqueries := make([]QueryTree, len(query.Subqueries))
+			for i, query := range query.Subqueries {
+				subqueries[i] = qp.buildTree(&query, slice)
 			}
 			tree = &IntersectQueryTree{subqueries: subqueries}
 		} else {
-			subqueries := make([]QueryTree, len(query.Inputs))
-			for i, input := range query.Inputs {
-				subqueries[i] = qp.buildTree(input.(*Query), slice)
-			}
-			tree = &CompositeQueryTree{operation: query.Operation, subqueries: subqueries}
+			panic("invalid operation")
 		}
 	}
 	return tree
 }
 
 // Produces flattened QueryPlan from QueryTree input
-func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Location, n int) *QueryPlan {
+func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Location) *QueryPlan {
 	plan := QueryPlan{}
-	if composite, ok := qt.(*CompositeQueryTree); ok {
-		inputs := make([]QueryInput, len(composite.subqueries))
-		step := QueryStep{id, composite.operation, inputs, composite.getLocation(qp.Database), location}
-		for index, subq := range composite.subqueries {
-			sub_id := uuid.RandomUUID()
-			step.inputs[index] = &sub_id
-			subq_steps := qp.flatten(subq, &sub_id, composite.getLocation(qp.Database), n)
-			plan = append(plan, *subq_steps...)
-		}
-		plan = append(plan, step)
-	} else if cat, ok := qt.(*CatQueryTree); ok {
+	if cat, ok := qt.(*CatQueryTree); ok {
 		inputs := make([]*uuid.UUID, len(cat.subqueries))
-		step := CatQueryStep{&BaseQueryStep{id, "cat", cat.getLocation(qp.Database), location}, inputs, n}
+		step := CatQueryStep{&BaseQueryStep{id, "cat", cat.getLocation(qp.Database), location}, inputs, cat.N}
 		for index, subq := range cat.subqueries {
 			sub_id := uuid.RandomUUID()
 			step.Inputs[index] = &sub_id
-			subq_steps := qp.flatten(subq, &sub_id, cat.getLocation(qp.Database), n)
+			subq_steps := qp.flatten(subq, &sub_id, cat.getLocation(qp.Database))
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)
@@ -402,7 +368,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		for index, subq := range union.subqueries {
 			sub_id := uuid.RandomUUID()
 			step.Inputs[index] = &sub_id
-			subq_steps := qp.flatten(subq, &sub_id, union.getLocation(qp.Database), n)
+			subq_steps := qp.flatten(subq, &sub_id, union.getLocation(qp.Database))
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)
@@ -412,7 +378,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		for index, subq := range intersect.subqueries {
 			sub_id := uuid.RandomUUID()
 			step.Inputs[index] = &sub_id
-			subq_steps := qp.flatten(subq, &sub_id, intersect.getLocation(qp.Database), n)
+			subq_steps := qp.flatten(subq, &sub_id, intersect.getLocation(qp.Database))
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)
@@ -427,13 +393,13 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 	} else if cnt, ok := qt.(*CountQueryTree); ok {
 		sub_id := uuid.RandomUUID()
 		step := &CountQueryStep{&BaseQueryStep{id, "count", cnt.getLocation(qp.Database), location}, &sub_id}
-		subq_steps := qp.flatten(cnt.subquery, &sub_id, cnt.getLocation(qp.Database), n)
+		subq_steps := qp.flatten(cnt.subquery, &sub_id, cnt.getLocation(qp.Database))
 		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)
 	} else if topn, ok := qt.(*TopNQueryTree); ok {
 		sub_id := uuid.RandomUUID()
-		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", topn.getLocation(qp.Database), location}, &sub_id, n}
-		subq_steps := qp.flatten(topn.subquery, &sub_id, topn.getLocation(qp.Database), n)
+		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", topn.getLocation(qp.Database), location}, &sub_id, topn.N}
+		subq_steps := qp.flatten(topn.subquery, &sub_id, topn.getLocation(qp.Database))
 		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)
 	}
@@ -443,6 +409,5 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 // Transforms Query into QueryTree and flattens to QueryPlan object
 func (qp *QueryPlanner) Plan(query *Query, id *uuid.UUID, destination *db.Location) *QueryPlan {
 	queryTree := qp.buildTree(query, -1)
-	//return qp.flatten(queryTree, id, destination) // TODO: remove the "id" parameter, since we are using the query.Id as the value
-	return qp.flatten(queryTree, query.Id, destination, query.N)
+	return qp.flatten(queryTree, query.Id, destination)
 }

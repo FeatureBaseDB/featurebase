@@ -2,9 +2,8 @@ package query
 
 import (
 	"errors"
-	"log"
+	"fmt"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -12,10 +11,18 @@ const (
 	TYPE_FUNC    = iota
 	TYPE_LP      = iota
 	TYPE_RP      = iota
+	TYPE_LB      = iota
+	TYPE_RB      = iota
+	TYPE_VALUE   = iota
+	TYPE_KEYWORD = iota
+	TYPE_EQUALS  = iota
+	TYPE_COMMA   = iota
+	TYPE_ERROR   = iota
+
+	// Below types deprecated
 	TYPE_ID      = iota
 	TYPE_FRAME   = iota
 	TYPE_PROFILE = iota
-	TYPE_COMMA   = iota
 	TYPE_LIMIT   = iota
 )
 
@@ -36,19 +43,34 @@ type Lexer struct {
 }
 
 func (lexer *Lexer) emit(typ int) {
-	lexer.ch <- Token{lexer.text[lexer.start:lexer.pos], typ}
+	if lexer.start < lexer.pos {
+		lexer.ch <- Token{lexer.text[lexer.start:lexer.pos], typ}
+	}
 	lexer.start = lexer.pos
 }
 
-func (lexer *Lexer) acceptUntil(chars string) error {
+func (lexer *Lexer) acceptUntil(chars string, consume bool) (rune, error) {
+	start_pos := lexer.pos
+
 	for {
-		if strings.HasPrefix(lexer.text[lexer.pos:], chars) {
-			return nil
+		next := lexer.next()
+
+		if next == rune(' ') {
+			lexer.ignore()
 		}
-		// if we receive a reserved character that we are not expecting, throw a parse error
-		lexer.pos += 1
-		if lexer.pos > len(lexer.text) {
-			return errors.New("Parse error, expecting " + string(chars))
+
+		if next == 0 {
+			lexer.pos = start_pos
+			return 0, errors.New("Not found")
+		}
+		ch := strings.IndexRune(chars, next)
+		if ch >= 0 {
+			if consume {
+				lexer.backup()
+			} else {
+				lexer.pos = start_pos
+			}
+			return []rune(chars)[ch], nil
 		}
 	}
 }
@@ -57,15 +79,6 @@ func (lexer *Lexer) acceptRun(valid string) {
 	for strings.IndexRune(valid, lexer.next()) >= 0 {
 	}
 	lexer.backup()
-}
-
-func (lexer *Lexer) acceptNumber() {
-	digits := "0123456789"
-	lexer.acceptRun(digits)
-}
-func (lexer *Lexer) acceptText() {
-	digits := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_." // TODO: make this more flexible. accept anything up to a space or RP: ")"
-	lexer.acceptRun(digits)
 }
 
 // next returns the next rune in the input.
@@ -104,10 +117,18 @@ func (lexer *Lexer) peek() rune {
 	}
 }
 
+func stateError(err error) func(lexer *Lexer) statefn {
+	return func(lexer *Lexer) statefn {
+		lexer.ch <- Token{err.Error(), TYPE_ERROR}
+		close(lexer.ch)
+		return nil
+	}
+}
+
 func stateFunc(lexer *Lexer) statefn {
-	err := lexer.acceptUntil("(")
+	_, err := lexer.acceptUntil("(", true)
 	if err != nil {
-		log.Fatal(err)
+		return stateError(err)
 	}
 	lexer.emit(TYPE_FUNC)
 	return stateLP
@@ -123,34 +144,91 @@ func stateLP(lexer *Lexer) statefn {
 	return stateArgs
 }
 
+func stateLB(lexer *Lexer) statefn {
+	lexer.acceptUntil("[", true)
+	lexer.next()
+	lexer.emit(TYPE_LB)
+	for {
+		r, err := lexer.acceptUntil(",]", true)
+		if err != nil {
+			return stateError(errors.New("Unclosed bracket!"))
+		}
+		lexer.emit(TYPE_VALUE)
+		if r == ',' {
+			lexer.next()
+			lexer.emit(TYPE_COMMA)
+		} else {
+			lexer.next()
+			lexer.emit(TYPE_RB)
+			return stateArgs
+		}
+	}
+}
+
 func stateArgs(lexer *Lexer) statefn {
-	if unicode.IsNumber(lexer.peek()) {
-		return stateID
-	} else {
+	r, err := lexer.acceptUntil("(),=[", false)
+	if err != nil {
+		return stateError(err)
+	}
+	switch r {
+	case '(':
 		return stateFunc
+	case ')':
+		return stateValue
+	case ',':
+		return stateValue
+	case '=':
+		return stateKeyword
+	case '[':
+		return stateLB
+	default:
+		return stateError(errors.New("Expecting arguments!"))
 	}
+	return nil
 }
 
-func stateID(lexer *Lexer) statefn {
-	lexer.acceptNumber()
-	lexer.emit(TYPE_ID)
-	// if next is comma
-	peeked := lexer.peek()
-	if peeked == rune(',') {
-		return stateFrameComma
-	} else if peeked == rune(')') {
+func stateKeyword(lexer *Lexer) statefn {
+	_, err := lexer.acceptUntil("=", true)
+	if err != nil {
+		return stateError(err)
+	}
+	lexer.emit(TYPE_KEYWORD)
+	return stateEquals
+}
+
+func stateEquals(lexer *Lexer) statefn {
+	e := lexer.next()
+	if e != '=' {
+		return stateError(errors.New("Expecting '='!"))
+	}
+	lexer.emit(TYPE_EQUALS)
+	return stateValue
+}
+
+func stateValue(lexer *Lexer) statefn {
+	r, err := lexer.acceptUntil("(),[", false)
+	if err != nil {
+		return stateError(err)
+	}
+	switch r {
+	case '(':
+		return stateFunc
+	case ')':
+		lexer.acceptUntil(")", true)
+		if lexer.pos > lexer.start {
+			lexer.emit(TYPE_VALUE)
+		}
 		return stateRP
-	} else {
-		return stateID
+	case ',':
+		lexer.acceptUntil(",", true)
+		lexer.emit(TYPE_VALUE)
+		return stateComma
+	case '[':
+		return stateLB
+	default:
+		return stateError(errors.New("Unexpected character!"))
 	}
-}
-
-func stateProfile(lexer *Lexer) statefn {
-	lexer.peek()
-	lexer.acceptNumber()
-	lexer.emit(TYPE_PROFILE)
-	lexer.peek()
-	return stateRP
+	return nil
 }
 
 func stateRP(lexer *Lexer) statefn {
@@ -167,49 +245,10 @@ func stateRP(lexer *Lexer) statefn {
 	}
 }
 
-func stateFrameComma(lexer *Lexer) statefn {
-	lexer.pos += 1
-	lexer.emit(TYPE_COMMA)
-	return stateFrameOrProfile
-}
-
-func stateProfileComma(lexer *Lexer) statefn {
-	lexer.pos += 1
-	lexer.emit(TYPE_COMMA)
-	return stateProfile
-}
-
-func stateFrameOrProfile(lexer *Lexer) statefn {
-	if unicode.IsNumber(lexer.peek()) {
-		lexer.acceptNumber()
-		lexer.emit(TYPE_PROFILE)
-		lexer.peek()
-	} else {
-		lexer.acceptText()
-		lexer.emit(TYPE_FRAME)
-		if lexer.peek() == rune(',') {
-			return stateProfileComma
-		}
-	}
-	return stateRP
-}
-
 func stateRPComma(lexer *Lexer) statefn {
 	lexer.pos += 1
 	lexer.emit(TYPE_COMMA)
-	if unicode.IsNumber(lexer.peek()) {
-		return stateLimit
-	} else {
-		return stateArgs
-	}
-}
-
-func stateLimit(lexer *Lexer) statefn {
-	lexer.acceptNumber()
-	lexer.emit(TYPE_LIMIT)
-	// if next is comma
-	lexer.peek()
-	return stateRP
+	return stateValue
 }
 
 func stateComma(lexer *Lexer) statefn {
@@ -223,8 +262,17 @@ func stateEOF(lexer *Lexer) statefn {
 	return nil
 }
 
-func (lexer *Lexer) Lex() []Token {
-	tokens := make([]Token, 0)
+func (lexer *Lexer) Lex() (tokens []Token, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			var ok bool
+			err, ok = r.(error)
+			if !ok {
+				err = fmt.Errorf("query: %v", r)
+			}
+		}
+	}()
+	tokens = make([]Token, 0)
 	state := stateFunc
 	go func() {
 		for {
@@ -235,12 +283,15 @@ func (lexer *Lexer) Lex() []Token {
 		}
 	}()
 	for t := range lexer.ch {
+		if t.Type == TYPE_ERROR {
+			err = errors.New(t.Text)
+		}
 		tokens = append(tokens, t)
 	}
-	return tokens
+	return tokens, err
 }
 
-func Lex(input string) []Token {
+func Lex(input string) ([]Token, error) {
 	lexer := Lexer{input, 0, 0, 0, TYPE_FUNC, make(chan Token)}
 	return lexer.Lex()
 }

@@ -7,180 +7,184 @@ import (
 
 func TestLexer(t *testing.T) {
 	Convey("Basic lexical analysis", t, func() {
+		var tokens []Token
+		var err error
 
-		tokens := Lex("get(10)")
+		tokens, err = Lex("get(10)")
+		So(err, ShouldBeNil)
 		So(len(tokens), ShouldEqual, 4)
-		So(tokens[0].Text, ShouldEqual, "get")
-		So(tokens[0].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens[1].Text, ShouldEqual, "(")
-		So(tokens[1].Type, ShouldEqual, TYPE_LP)
-		So(tokens[2].Text, ShouldEqual, "10")
-		So(tokens[2].Type, ShouldEqual, TYPE_ID)
-		So(tokens[3].Text, ShouldEqual, ")")
-		So(tokens[3].Type, ShouldEqual, TYPE_RP)
+		So(tokens, ShouldResemble, []Token{
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"10", TYPE_VALUE},
+			{")", TYPE_RP},
+		})
 
-		tokens2 := Lex("intersect(get(10), get(11), get(12))")
-		So(len(tokens2), ShouldEqual, 17)
-		So(tokens2[0].Text, ShouldEqual, "intersect")
-		So(tokens2[0].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens2[1].Text, ShouldEqual, "(")
-		So(tokens2[1].Type, ShouldEqual, TYPE_LP)
-		So(tokens2[2].Text, ShouldEqual, "get")
-		So(tokens2[2].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens2[3].Text, ShouldEqual, "(")
-		So(tokens2[3].Type, ShouldEqual, TYPE_LP)
-		So(tokens2[4].Text, ShouldEqual, "10")
-		So(tokens2[4].Type, ShouldEqual, TYPE_ID)
-		So(tokens2[5].Text, ShouldEqual, ")")
-		So(tokens2[5].Type, ShouldEqual, TYPE_RP)
-		So(tokens2[6].Text, ShouldEqual, ",")
-		So(tokens2[6].Type, ShouldEqual, TYPE_COMMA)
-		So(tokens2[7].Text, ShouldEqual, "get")
-		So(tokens2[7].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens2[8].Text, ShouldEqual, "(")
-		So(tokens2[8].Type, ShouldEqual, TYPE_LP)
-		So(tokens2[9].Text, ShouldEqual, "11")
-		So(tokens2[9].Type, ShouldEqual, TYPE_ID)
-		So(tokens2[10].Text, ShouldEqual, ")")
-		So(tokens2[10].Type, ShouldEqual, TYPE_RP)
-		So(tokens2[11].Text, ShouldEqual, ",")
-		So(tokens2[11].Type, ShouldEqual, TYPE_COMMA)
-		So(tokens2[12].Text, ShouldEqual, "get")
-		So(tokens2[12].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens2[13].Text, ShouldEqual, "(")
-		So(tokens2[13].Type, ShouldEqual, TYPE_LP)
-		So(tokens2[14].Text, ShouldEqual, "12")
-		So(tokens2[14].Type, ShouldEqual, TYPE_ID)
-		So(tokens2[15].Text, ShouldEqual, ")")
-		So(tokens2[15].Type, ShouldEqual, TYPE_RP)
-		So(tokens2[16].Text, ShouldEqual, ")")
-		So(tokens2[16].Type, ShouldEqual, TYPE_RP)
+		tokens, err = Lex("get(id=10)")
+		So(err, ShouldBeNil)
+		So(tokens, ShouldResemble, []Token{
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"id", TYPE_KEYWORD},
+			{"=", TYPE_EQUALS},
+			{"10", TYPE_VALUE},
+			{")", TYPE_RP},
+		})
 
-		tokens3 := Lex("intersect(get(10), get(11), concat(get(12),get(14)))")
-		So(len(tokens3), ShouldEqual, 25)
-		So(tokens3[0].Text, ShouldEqual, "intersect")
-		So(tokens3[0].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens3[1].Text, ShouldEqual, "(")
-		So(tokens3[1].Type, ShouldEqual, TYPE_LP)
-		So(tokens3[2].Text, ShouldEqual, "get")
-		So(tokens3[2].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens3[3].Text, ShouldEqual, "(")
-		So(tokens3[3].Type, ShouldEqual, TYPE_LP)
-		So(tokens3[4].Text, ShouldEqual, "10")
-		So(tokens3[4].Type, ShouldEqual, TYPE_ID)
-		So(tokens3[5].Text, ShouldEqual, ")")
-		So(tokens3[5].Type, ShouldEqual, TYPE_RP)
-		So(tokens3[6].Text, ShouldEqual, ",")
-		So(tokens3[6].Type, ShouldEqual, TYPE_COMMA)
-		So(tokens3[7].Text, ShouldEqual, "get")
-		So(tokens3[7].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens3[8].Text, ShouldEqual, "(")
-		So(tokens3[8].Type, ShouldEqual, TYPE_LP)
-		So(tokens3[9].Text, ShouldEqual, "11")
-		So(tokens3[9].Type, ShouldEqual, TYPE_ID)
-		So(tokens3[10].Text, ShouldEqual, ")")
-		So(tokens3[10].Type, ShouldEqual, TYPE_RP)
-		So(tokens3[11].Text, ShouldEqual, ",")
-		So(tokens3[11].Type, ShouldEqual, TYPE_COMMA)
-		So(tokens3[12].Text, ShouldEqual, "concat")
-		So(tokens3[12].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens3[13].Text, ShouldEqual, "(")
-		So(tokens3[13].Type, ShouldEqual, TYPE_LP)
-		So(tokens3[14].Text, ShouldEqual, "get")
-		So(tokens3[14].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens3[15].Text, ShouldEqual, "(")
-		So(tokens3[15].Type, ShouldEqual, TYPE_LP)
-		So(tokens3[16].Text, ShouldEqual, "12")
-		So(tokens3[16].Type, ShouldEqual, TYPE_ID)
-		So(tokens3[17].Text, ShouldEqual, ")")
-		So(tokens3[17].Type, ShouldEqual, TYPE_RP)
-		So(tokens3[18].Text, ShouldEqual, ",")
-		So(tokens3[18].Type, ShouldEqual, TYPE_COMMA)
+		tokens, err = Lex("get(id=10, frame=brand)")
+		So(err, ShouldBeNil)
+		So(tokens, ShouldResemble, []Token{
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"id", TYPE_KEYWORD},
+			{"=", TYPE_EQUALS},
+			{"10", TYPE_VALUE},
+			{",", TYPE_COMMA},
+			{"frame", TYPE_KEYWORD},
+			{"=", TYPE_EQUALS},
+			{"brand", TYPE_VALUE},
+			{")", TYPE_RP},
+		})
 
-		tokens4 := Lex("concat(get(1, brand),get(2))")
-		So(len(tokens4), ShouldEqual, 14)
-		So(tokens4[0].Text, ShouldEqual, "concat")
-		So(tokens4[0].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens4[1].Text, ShouldEqual, "(")
-		So(tokens4[1].Type, ShouldEqual, TYPE_LP)
-		So(tokens4[2].Text, ShouldEqual, "get")
-		So(tokens4[2].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens4[3].Text, ShouldEqual, "(")
-		So(tokens4[3].Type, ShouldEqual, TYPE_LP)
-		So(tokens4[4].Text, ShouldEqual, "1")
-		So(tokens4[4].Type, ShouldEqual, TYPE_ID)
-		So(tokens4[5].Text, ShouldEqual, ",")
-		So(tokens4[5].Type, ShouldEqual, TYPE_COMMA)
-		So(tokens4[6].Text, ShouldEqual, "brand")
-		So(tokens4[6].Type, ShouldEqual, TYPE_FRAME)
-		So(tokens4[7].Text, ShouldEqual, ")")
-		So(tokens4[7].Type, ShouldEqual, TYPE_RP)
-		So(tokens4[8].Text, ShouldEqual, ",")
-		So(tokens4[8].Type, ShouldEqual, TYPE_COMMA)
-		So(tokens4[9].Text, ShouldEqual, "get")
-		So(tokens4[9].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens4[10].Text, ShouldEqual, "(")
-		So(tokens4[10].Type, ShouldEqual, TYPE_LP)
-		So(tokens4[11].Text, ShouldEqual, "2")
-		So(tokens4[11].Type, ShouldEqual, TYPE_ID)
-		So(tokens4[12].Text, ShouldEqual, ")")
-		So(tokens4[12].Type, ShouldEqual, TYPE_RP)
-		So(tokens4[13].Text, ShouldEqual, ")")
-		So(tokens4[13].Type, ShouldEqual, TYPE_RP)
+		tokens, err = Lex("union(get(10))")
+		So(err, ShouldBeNil)
+		So(tokens, ShouldResemble, []Token{
+			{"union", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"10", TYPE_VALUE},
+			{")", TYPE_RP},
+			{")", TYPE_RP},
+		})
 
-		tokens5 := Lex("set(1, 987)")
-		So(len(tokens5), ShouldEqual, 6)
-		So(tokens5[0].Text, ShouldEqual, "set")
-		So(tokens5[0].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens5[1].Text, ShouldEqual, "(")
-		So(tokens5[1].Type, ShouldEqual, TYPE_LP)
-		So(tokens5[2].Text, ShouldEqual, "1")
-		So(tokens5[2].Type, ShouldEqual, TYPE_ID)
-		So(tokens5[3].Text, ShouldEqual, ",")
-		So(tokens5[3].Type, ShouldEqual, TYPE_COMMA)
-		So(tokens5[4].Text, ShouldEqual, "987")
-		So(tokens5[4].Type, ShouldEqual, TYPE_PROFILE)
-		So(tokens5[5].Text, ShouldEqual, ")")
-		So(tokens5[5].Type, ShouldEqual, TYPE_RP)
+		tokens, err = Lex("intersect(get(10), get(11), get(12))")
+		So(err, ShouldBeNil)
+		So(tokens, ShouldResemble, []Token{
+			{"intersect", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"10", TYPE_VALUE},
+			{")", TYPE_RP},
+			{",", TYPE_COMMA},
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"11", TYPE_VALUE},
+			{")", TYPE_RP},
+			{",", TYPE_COMMA},
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"12", TYPE_VALUE},
+			{")", TYPE_RP},
+			{")", TYPE_RP},
+		})
 
-		tokens6 := Lex("set(1, general, 987)")
-		So(len(tokens6), ShouldEqual, 8)
-		So(tokens6[0].Text, ShouldEqual, "set")
-		So(tokens6[0].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens6[1].Text, ShouldEqual, "(")
-		So(tokens6[1].Type, ShouldEqual, TYPE_LP)
-		So(tokens6[2].Text, ShouldEqual, "1")
-		So(tokens6[2].Type, ShouldEqual, TYPE_ID)
-		So(tokens6[3].Text, ShouldEqual, ",")
-		So(tokens6[3].Type, ShouldEqual, TYPE_COMMA)
-		So(tokens6[4].Text, ShouldEqual, "general")
-		So(tokens6[4].Type, ShouldEqual, TYPE_FRAME)
-		So(tokens6[5].Text, ShouldEqual, ",")
-		So(tokens6[5].Type, ShouldEqual, TYPE_COMMA)
-		So(tokens6[6].Text, ShouldEqual, "987")
-		So(tokens6[6].Type, ShouldEqual, TYPE_PROFILE)
-		So(tokens6[7].Text, ShouldEqual, ")")
-		So(tokens6[7].Type, ShouldEqual, TYPE_RP)
+		tokens, err = Lex("intersect(get(10), get(11), concat(get(12),get(14)))")
+		So(err, ShouldBeNil)
+		So(tokens, ShouldResemble, []Token{
+			{"intersect", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"10", TYPE_VALUE},
+			{")", TYPE_RP},
+			{",", TYPE_COMMA},
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"11", TYPE_VALUE},
+			{")", TYPE_RP},
+			{",", TYPE_COMMA},
+			{"concat", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"12", TYPE_VALUE},
+			{")", TYPE_RP},
+			{",", TYPE_COMMA},
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"14", TYPE_VALUE},
+			{")", TYPE_RP},
+			{")", TYPE_RP},
+			{")", TYPE_RP},
+		})
 
-		tokens7 := Lex("top-n(get(10), 8)")
-		So(len(tokens6), ShouldEqual, 8)
-		So(tokens7[0].Text, ShouldEqual, "top-n")
-		So(tokens7[0].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens7[1].Text, ShouldEqual, "(")
-		So(tokens7[1].Type, ShouldEqual, TYPE_LP)
-		So(tokens7[2].Text, ShouldEqual, "get")
-		So(tokens7[2].Type, ShouldEqual, TYPE_FUNC)
-		So(tokens7[3].Text, ShouldEqual, "(")
-		So(tokens7[3].Type, ShouldEqual, TYPE_LP)
-		So(tokens7[4].Text, ShouldEqual, "10")
-		So(tokens7[4].Type, ShouldEqual, TYPE_ID)
-		So(tokens7[5].Text, ShouldEqual, ")")
-		So(tokens7[5].Type, ShouldEqual, TYPE_RP)
-		So(tokens7[6].Text, ShouldEqual, ",")
-		So(tokens7[6].Type, ShouldEqual, TYPE_COMMA)
-		So(tokens7[7].Text, ShouldEqual, "8")
-		So(tokens7[7].Type, ShouldEqual, TYPE_LIMIT)
-		So(tokens7[8].Text, ShouldEqual, ")")
-		So(tokens7[8].Type, ShouldEqual, TYPE_RP)
+		tokens, err = Lex("concat(get(1, brand),get(2))")
+		So(err, ShouldBeNil)
+		So(tokens, ShouldResemble, []Token{
+			{"concat", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"1", TYPE_VALUE},
+			{",", TYPE_COMMA},
+			{"brand", TYPE_VALUE},
+			{")", TYPE_RP},
+			{",", TYPE_COMMA},
+			{"get", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"2", TYPE_VALUE},
+			{")", TYPE_RP},
+			{")", TYPE_RP},
+		})
+
+		tokens, err = Lex("set(1, 987)")
+		So(err, ShouldBeNil)
+		So(tokens, ShouldResemble, []Token{
+			{"set", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"1", TYPE_VALUE},
+			{",", TYPE_COMMA},
+			{"987", TYPE_VALUE},
+			{")", TYPE_RP},
+		})
+
+		tokens, err = Lex("set(1, general, 987)")
+		So(err, ShouldBeNil)
+		So(tokens, ShouldResemble, []Token{
+			{"set", TYPE_FUNC},
+			{"(", TYPE_LP},
+			{"1", TYPE_VALUE},
+			{",", TYPE_COMMA},
+			{"general", TYPE_VALUE},
+			{",", TYPE_COMMA},
+			{"987", TYPE_VALUE},
+			{")", TYPE_RP},
+		})
+
+		tokens, err = Lex("top-n(get(10), 8)")
+		So(tokens, ShouldResemble, []Token{
+			Token{"top-n", TYPE_FUNC},
+			Token{"(", TYPE_LP},
+			Token{"get", TYPE_FUNC},
+			Token{"(", TYPE_LP},
+			Token{"10", TYPE_VALUE},
+			Token{")", TYPE_RP},
+			Token{",", TYPE_COMMA},
+			Token{"8", TYPE_VALUE},
+			Token{")", TYPE_RP},
+		})
+
+		tokens, err = Lex("top-n(get(10, general), [1,2,3])")
+		So(tokens, ShouldResemble, []Token{
+			Token{"top-n", TYPE_FUNC},
+			Token{"(", TYPE_LP},
+			Token{"get", TYPE_FUNC},
+			Token{"(", TYPE_LP},
+			Token{"10", TYPE_VALUE},
+			Token{",", TYPE_COMMA},
+			Token{"general", TYPE_VALUE},
+			Token{")", TYPE_RP},
+			Token{",", TYPE_COMMA},
+			Token{"[", TYPE_LB},
+			Token{"1", TYPE_VALUE},
+			Token{",", TYPE_COMMA},
+			Token{"2", TYPE_VALUE},
+			Token{",", TYPE_COMMA},
+			Token{"3", TYPE_VALUE},
+			Token{"]", TYPE_RB},
+			Token{")", TYPE_RP},
+		})
 	})
 }

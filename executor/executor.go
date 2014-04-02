@@ -88,7 +88,10 @@ func (self *Executor) RunPQL(database_name string, pql string) interface{} {
 
 	// see if the outer query function is a custom query
 	reserved_functions := stringSlice{"get", "set", "union", "intersect", "count", "top-n"}
-	tokens := query.Lex(pql)
+	tokens, err := query.Lex(pql)
+	if err != nil {
+		spew.Dump(err)
+	}
 	outer_token := tokens[0].Text
 
 	if reserved_functions.pos(outer_token) != -1 {

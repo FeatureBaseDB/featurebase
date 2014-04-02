@@ -22,28 +22,30 @@ type PqlListItem struct {
 }
 
 type Query struct {
-	Id        *uuid.UUID
-	Operation string
-	Inputs    []QueryInput //"strconv"
-	// Represents a parsed query. Inputs can be Query or Bitmap objects
-	// Maybe Bitmap and Query objects should have different fields to avoid using interface{}
-	ProfileId uint64 // used only for set() queries
-	N         int    // TODO: I think we should make this a generic map for any attributes related to the query
+	Id         *uuid.UUID
+	Operation  string
+	Args       map[string]interface{}
+	Subqueries []Query
 }
 
 func QueryPlanForPQL(database *db.Database, pql string, destination *db.Location) *QueryPlan {
-	tokens := Lex(pql)
+	tokens, err := Lex(pql)
+	if err != nil {
+		panic(err)
+	}
 	return QueryPlanForTokens(database, tokens, destination)
 }
 
 func QueryForPQL(pql string) *Query {
-	tokens := Lex(pql)
+	tokens, err := Lex(pql)
+	if err != nil {
+		panic(err)
+	}
 	return QueryForTokens(tokens)
 }
 
 func QueryForTokens(tokens []Token) *Query {
-	query_parser := QueryParser{}
-	query, err := query_parser.Parse(tokens)
+	query, err := Parse(tokens)
 	if err != nil {
 		panic(err)
 	}
@@ -56,7 +58,7 @@ func QueryPlanForTokens(database *db.Database, tokens []Token, destination *db.L
 }
 
 func QueryPlanForQuery(database *db.Database, query *Query, destination *db.Location) *QueryPlan {
-	query_planner := QueryPlanner{Database: database}
+	query_planner := QueryPlanner{Database: database, Query: query}
 	id := uuid.RandomUUID()
 	query_plan := query_planner.Plan(query, &id, destination)
 	return query_plan
