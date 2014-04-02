@@ -293,7 +293,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 	// handle SET operation regardless of the slice
 	if query.Operation == "set" {
 
-		tree = &SetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string)}, query.Args["profile_id"].(uint64)}
+		tree = &SetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), query.Args["filter"].(int)}, query.Args["profile_id"].(uint64)}
 		return tree
 	}
 
@@ -317,7 +317,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 		}
 	} else {
 		if query.Operation == "get" {
-			tree = &GetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string)}, slice}
+			tree = &GetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), 0}, slice}
 			return tree
 		} else if query.Operation == "count" {
 			subquery := qp.buildTree(&query.Subqueries[0], slice)

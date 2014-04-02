@@ -55,10 +55,10 @@ func TestQueryPlanner(t *testing.T) {
 		So(len(qp), ShouldEqual, 7)
 		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[0].(GetQueryStep).Slice, ShouldEqual, 0)
-		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general"})
+		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 		So(qp[1].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 0)
-		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general"})
+		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[2].(UnionQueryStep).Operation, ShouldEqual, "union")
 		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
 			qp[0].(GetQueryStep).Id,
@@ -66,10 +66,10 @@ func TestQueryPlanner(t *testing.T) {
 		})
 		So(qp[3].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[3].(GetQueryStep).Slice, ShouldEqual, 1)
-		So(*(qp[3].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general"})
+		So(*(qp[3].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 		So(qp[4].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[4].(GetQueryStep).Slice, ShouldEqual, 1)
-		So(*(qp[4].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general"})
+		So(*(qp[4].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[5].(UnionQueryStep).Operation, ShouldEqual, "union")
 		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
 			qp[3].(GetQueryStep).Id,
@@ -96,10 +96,10 @@ func TestQueryPlanner(t *testing.T) {
 		So(len(qp), ShouldEqual, 3)
 		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[0].(GetQueryStep).Slice, ShouldEqual, 0)
-		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general"})
+		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 		So(qp[1].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 1)
-		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general"})
+		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 		So(qp[2].(CatQueryStep).Operation, ShouldEqual, "cat")
 		So(qp[2].(CatQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
 			qp[0].(GetQueryStep).Id,
@@ -121,10 +121,10 @@ func TestQueryPlanner(t *testing.T) {
 		So(len(qp), ShouldEqual, 7)
 		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[0].(GetQueryStep).Slice, ShouldEqual, 0)
-		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general"})
+		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 		So(qp[1].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 0)
-		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general"})
+		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[2].(UnionQueryStep).Operation, ShouldEqual, "union")
 		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
 			qp[0].(GetQueryStep).Id,
@@ -132,10 +132,10 @@ func TestQueryPlanner(t *testing.T) {
 		})
 		So(qp[3].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[3].(GetQueryStep).Slice, ShouldEqual, 1)
-		So(*(qp[3].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general"})
+		So(*(qp[3].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 		So(qp[4].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[4].(GetQueryStep).Slice, ShouldEqual, 1)
-		So(*(qp[4].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general"})
+		So(*(qp[4].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[5].(UnionQueryStep).Operation, ShouldEqual, "union")
 		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
 			qp[3].(GetQueryStep).Id,
@@ -148,7 +148,7 @@ func TestQueryPlanner(t *testing.T) {
 		})
 	})
 	Convey("Set query plan - including parsing", t, func() {
-		query := QueryForPQL("set(10, general, 100)")
+		query := QueryForPQL("set(10, general, 0, 100)")
 
 		database, fragment1 := basic_database()
 
@@ -160,7 +160,7 @@ func TestQueryPlanner(t *testing.T) {
 		So(len(qp), ShouldEqual, 1)
 		So(qp[0].(SetQueryStep).Operation, ShouldEqual, "set")
 		So(qp[0].(SetQueryStep).ProfileId, ShouldEqual, 100)
-		So(*(qp[0].(SetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general"})
+		So(*(qp[0].(SetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 	})
 	Convey("Top-n query plan - including parsing", t, func() {
 		query := QueryForPQL("top-n(get(10, general), [1,2,3], 50)")
@@ -174,12 +174,12 @@ func TestQueryPlanner(t *testing.T) {
 		qp := *qplanner.Plan(query, &id, destination)
 		So(len(qp), ShouldEqual, 5)
 		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general"})
+		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 		So(qp[1].(*TopNQueryStep).Operation, ShouldEqual, "top-n")
 		So(qp[1].(*TopNQueryStep).Input, ShouldEqual, qp[0].(GetQueryStep).Id)
 		So(qp[1].(*TopNQueryStep).N, ShouldEqual, 50)
 		So(qp[2].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(*(qp[2].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general"})
+		So(*(qp[2].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 		So(qp[3].(*TopNQueryStep).Operation, ShouldEqual, "top-n")
 		So(qp[3].(*TopNQueryStep).Input, ShouldEqual, qp[2].(GetQueryStep).Id)
 		So(qp[3].(*TopNQueryStep).N, ShouldEqual, 50)
