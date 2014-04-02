@@ -14,12 +14,12 @@ func TestQueryPlanner(t *testing.T) {
 	Convey("Basic query plan", t, func() {
 
 		id1 := uuid.RandomUUID()
-		bm1 := db.Bitmap{10, "general"}
+		bm1 := db.Bitmap{10, "general", 0}
 		inputs1 := []QueryInput{&bm1}
 		query1 := Query{&id1, "get", inputs1, 0, 0}
 
 		id2 := uuid.RandomUUID()
-		bm2 := db.Bitmap{20, "general"}
+		bm2 := db.Bitmap{20, "general", 0}
 		inputs2 := []QueryInput{&bm2}
 		query2 := Query{&id2, "get", inputs2, 0, 0}
 

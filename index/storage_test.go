@@ -33,7 +33,7 @@ func TestStorage(t *testing.T) {
 	*/
 	c, err := net.DialTimeout("tcp", "127.0.0.1:9042", 100*time.Millisecond)
 	if err != nil {
-		fmt.Println("NO cassandra skipping test")
+		fmt.Println("NO cassandra. Skipping test.")
 	} else {
 		c.Close()
 		Convey("cassandra", t, func() {
