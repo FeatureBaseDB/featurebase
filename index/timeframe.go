@@ -12,13 +12,13 @@ const (
 )
 
 func GetTimeID(t TimeQuantum, year uint, month uint, day uint, hour uint, tile_id uint64) uint64 {
-	y := year - 2014 //config.startyear
-	time_stamp := uint64((uint(t) << 30) | (y << 24) | (month << 20) | (day << 15) | (hour << 10))
+	y := year - 1970 //config.startyear
+	time_stamp := uint64((uint(t) << 30) | (y << 23) | (month << 19) | (day << 14) | (hour << 9))
 	time_stamp = time_stamp << 32
 	return time_stamp | tile_id
 }
 
-func getTimeIds(tile_id uint64, atime time.Time, min_quantum TimeQuantum) []uint64 {
+func GetTimeIds(tile_id uint64, atime time.Time, min_quantum TimeQuantum) []uint64 {
 	results := make([]uint64, 0, 4)
 	year := uint(atime.Year())
 	month := atime.Month()

@@ -7,10 +7,13 @@ import (
 	"net/http"
 	"pilosa/config"
 	"pilosa/db"
+	"pilosa/index"
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
 
+	"time"
 	notify "github.com/bitly/go-notify"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/websocket"
@@ -171,15 +174,40 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 type JsonObject map[string]interface{}
 
 // post this json to the body
-//[{ "db": "3", "frame":"brand.","profile_id": 122,"filter":0, "bitmap_id":123},
-//	{ "db": "3", "frame":"brand.","profile_id": 122,"filter":2, "bitmap_id":124}]'
+//[{ "db": "3", "frame":"brand.n","profile_id": 122,"filter":0, "bitmap_id":123},
+//	{ "db": "3", "frame":"brand.n","profile_id": 122,"filter":2, "bitmap_id":124}]'
 //
+func bitmaps(frame string, obj JsonObject) chan uint64 {
+	c := make(chan uint64)
+	const shortForm = "2006-01-02 15:04:01"
+
+	go func() {
+		t := float64(obj["bitmap_id"].(float64))
+		base_id := uint64(t)
+
+		if strings.HasSuffix(frame, ".t") {
+			timestamp := obj["timestamp"].(string)
+			atime, _ := time.Parse(shortForm, timestamp)
+
+			for _, id := range index.GetTimeIds(base_id, atime, index.YMDH) {
+				c <- id
+			}
+		} else {
+			c <- base_id
+		}
+
+		close(c)
+	}()
+
+	return c
+}
 
 func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	decoder := json.NewDecoder(r.Body)
 	var args []JsonObject
 
@@ -191,13 +219,17 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 	//[{ "db": "3", "frame":"brand.","profile_id": 122,"filter":0, "bitmap_id":123}]
 	var results []interface{}
 	for _, obj := range args {
+		t := float64(obj["profile_id"].(float64))
+		profile_id := uint64(t)
 		db := obj["db"].(string)
 		frame := obj["frame"].(string)
-		profile_id := obj["profile_id"].(int)
-		bitmap_id := obj["bitmap_id"].(int64)
-		filter := obj["filter"].(int)
-		pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
-		results = append(results, self.service.Executor.RunPQL(db, pql))
+		t = float64(obj["filter"].(float64))
+		filter := int(t)
+		for bitmap_id := range bitmaps(frame, obj) {
+			pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
+			results = append(results, self.service.Executor.RunPQL(db, pql))
+			//	results = append(results, db+" "+pql)
+		}
 
 	}
 
