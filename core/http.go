@@ -174,8 +174,11 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 type JsonObject map[string]interface{}
 
 // post this json to the body
-//[{ "db": "3", "frame":"brand.n","profile_id": 122,"filter":0, "bitmap_id":123},
-//	{ "db": "3", "frame":"brand.n","profile_id": 122,"filter":2, "bitmap_id":124}]'
+//the frame type with extension ".t" are handled a bit differnt
+// it generats the timestamp based bitmap_ids
+//[{ "db": "3", "frame":"b.n","profile_id": 122,"filter":0, "bitmap_id":123},
+//	{ "db": "3", "frame":"b.n","profile_id": 122,"filter":2, "bitmap_id":124},
+//	{ "db": "3", "frame":"t.t","profile_id": 122,"filter":2, "bitmap_id":124, "timestamp":"2014-04-03 13:01:04"}]'
 //
 func bitmaps(frame string, obj JsonObject) chan uint64 {
 	c := make(chan uint64)
