@@ -37,7 +37,9 @@ type Service struct {
 func NewService() *Service {
 	service := new(Service)
 	service.init_id()
-	service.Etcd = etcd.NewClient(nil)
+	etc_hosts := config.GetStringArrayDefault("etcd_servers", []string{})
+
+	service.Etcd = etcd.NewClient(etc_hosts)
 	service.Cluster = db.NewCluster()
 	service.TopologyMapper = NewTopologyMapper(service, "/pilosa/0")
 	service.ProcessMapper = NewProcessMapper(service, "/pilosa/0")
