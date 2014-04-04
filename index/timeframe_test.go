@@ -16,7 +16,7 @@ func TestTimeFrame(t *testing.T) {
 		x, _ := time.Parse(shortForm, "2014-01-01 10:03")
 		fmt.Println(x)
 
-		m := getTimeIds(uint64(1), x, YMDH)
+		m := GetTimeIds(uint64(1), x, YMDH)
 		spew.Dump(m)
 		So(1, ShouldEqual, 1)
 	})
