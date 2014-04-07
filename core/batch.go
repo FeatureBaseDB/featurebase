@@ -14,7 +14,7 @@ type BatchRequest struct {
 	Fragment_id       SUUID
 	Bitmap_id         uint64
 	Compressed_bitmap string
-	Filter            int
+	Filter            uint64
 }
 
 type BatchResponse struct {
@@ -33,7 +33,7 @@ func init() {
 	gob.Register(BatchResponse{})
 }
 
-func (self *Service) Batch(database_name, frame, compressed_bitmap string, bitmap_id uint64, slice int, filter int) error {
+func (self *Service) Batch(database_name, frame, compressed_bitmap string, bitmap_id uint64, slice int, filter uint64) error {
 	//determine the fragment_id from database/frame/slice
 	database := self.Cluster.GetOrCreateDatabase(database_name)
 	oslice := database.GetOrCreateSlice(slice)

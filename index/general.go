@@ -47,7 +47,7 @@ func (self *General) Get(bitmap_id uint64) IBitmap {
 	self.keys[bitmap_id] = 0
 	return bm.(*Bitmap)
 }
-func (self *General) SetBit(bitmap_id uint64, bit_pos uint64, filter int) bool {
+func (self *General) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool {
 	bm := self.Get(bitmap_id)
 	change, chunk, address := SetBit(bm, bit_pos)
 	if change {
@@ -58,11 +58,11 @@ func (self *General) SetBit(bitmap_id uint64, bit_pos uint64, filter int) bool {
 	}
 	return change
 }
-func (self *General) TopN(b IBitmap, n int, categories []int) []Pair {
+func (self *General) TopN(b IBitmap, n int, categories []uint64) []Pair {
 
 	return nil
 }
-func (self *General) Store(bitmap_id uint64, bm IBitmap, filter int) {
+func (self *General) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
 	//oldbm:=self.Get(bitmap_id)
 	//nbm = Union(oldbm, bm)
 	self.storage.Store(int64(bitmap_id), self.db, self.frame, self.slice, filter, bm.(*Bitmap))

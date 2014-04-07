@@ -122,7 +122,7 @@ ArgLoop:
 				case 1:
 					query.Args["frame"] = token.Text
 				case 2:
-					i, err := strconv.Atoi(token.Text)
+					i, err := strconv.ParseUint(token.Text, 10, 64)
 					if err != nil {
 						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
 					}

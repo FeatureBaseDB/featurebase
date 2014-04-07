@@ -79,8 +79,9 @@ func (qt *CountQueryTree) getLocation(d *db.Database) *db.Location {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type TopNQueryStep struct {
 	*BaseQueryStep
-	Input *uuid.UUID
-	N     int
+	Input   *uuid.UUID
+	Filters []uint64
+	N       int
 }
 
 type TopNQueryResult struct {
@@ -91,6 +92,7 @@ type TopNQueryResult struct {
 type TopNQueryTree struct {
 	subquery QueryTree
 	location *db.Location
+	Filters  []uint64
 	N        int
 }
 
@@ -293,7 +295,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 	// handle SET operation regardless of the slice
 	if query.Operation == "set" {
 
-		tree = &SetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), query.Args["filter"].(int)}, query.Args["profile_id"].(uint64)}
+		tree = &SetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), query.Args["filter"].(uint64)}, query.Args["profile_id"].(uint64)}
 		return tree
 	}
 
@@ -324,12 +326,18 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) QueryTree {
 			tree = &CountQueryTree{subquery: subquery}
 		} else if query.Operation == "top-n" {
 			var n int
+			var filters []uint64
 			n_, ok := query.Args["n"]
 			if ok {
 				n = n_.(int)
 			}
+			filters_, ok := query.Args["ids"]
+			if ok {
+				filters = filters_.([]uint64)
+			}
+
 			subquery := qp.buildTree(&query.Subqueries[0], slice)
-			tree = &TopNQueryTree{subquery: subquery, N: n}
+			tree = &TopNQueryTree{subquery: subquery, Filters: filters, N: n}
 		} else if query.Operation == "union" {
 			subqueries := make([]QueryTree, len(query.Subqueries))
 			for i, query := range query.Subqueries {
@@ -398,7 +406,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		plan = append(plan, step)
 	} else if topn, ok := qt.(*TopNQueryTree); ok {
 		sub_id := uuid.RandomUUID()
-		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", topn.getLocation(qp.Database), location}, &sub_id, topn.N}
+		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", topn.getLocation(qp.Database), location}, &sub_id, topn.Filters, topn.N}
 		subq_steps := qp.flatten(topn.subquery, &sub_id, topn.getLocation(qp.Database))
 		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)

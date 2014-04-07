@@ -99,10 +99,10 @@ type CmdSetBit struct {
 	*Responder
 	bitmap_id uint64
 	bit_pos   uint64
-	filter    int
+	filter    uint64
 }
 
-func NewSetBit(bitmap_id uint64, bit_pos uint64, filter int) *CmdSetBit {
+func NewSetBit(bitmap_id uint64, bit_pos uint64, filter uint64) *CmdSetBit {
 	result := &CmdSetBit{NewResponder("SetBit"), bitmap_id, bit_pos, filter}
 	return result
 }
@@ -184,10 +184,10 @@ type CmdTopN struct {
 	*Responder
 	bitmap     BitmapHandle
 	n          int
-	categories []int
+	categories []uint64
 }
 
-func NewTopN(b BitmapHandle, n int, categories []int) *CmdTopN {
+func NewTopN(b BitmapHandle, n int, categories []uint64) *CmdTopN {
 	return &CmdTopN{NewResponder("TopN"), b, n, categories}
 }
 func (self *CmdTopN) Execute(f *Fragment) Calculation {
@@ -209,10 +209,10 @@ type CmdLoader struct {
 	*Responder
 	bitmap_id         uint64
 	compressed_bitmap string
-	filter            int
+	filter            uint64
 }
 
-func NewLoader(bitmap_id uint64, compressed_bitmap string, filter int) *CmdLoader {
+func NewLoader(bitmap_id uint64, compressed_bitmap string, filter uint64) *CmdLoader {
 	return &CmdLoader{NewResponder("Loader"), bitmap_id, compressed_bitmap, filter}
 }
 func (self *CmdLoader) Execute(f *Fragment) Calculation {

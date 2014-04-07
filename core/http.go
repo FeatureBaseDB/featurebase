@@ -124,7 +124,7 @@ func (self *WebService) HandleBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := self.service.Batch(database_name, frame, compressed_bitmap, bitmap_id, int(slice), int(filter))
+	results := self.service.Batch(database_name, frame, compressed_bitmap, bitmap_id, int(slice), uint64(filter))
 
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)

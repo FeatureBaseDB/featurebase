@@ -24,7 +24,7 @@ func TestQueryParser(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		So(query.Operation, ShouldEqual, "set")
-		So(query.Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general", "filter": int(0), "profile_id": uint64(20)})
+		So(query.Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general", "filter": uint64(0), "profile_id": uint64(20)})
 	})
 	Convey("Basic nested query parse", t, func() {
 		tokens, err := Lex("union(get(10,general), get(11,brand), get(12))")

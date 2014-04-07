@@ -59,7 +59,7 @@ func (self *FragmentContainer) Shutdown() {
 	log.Println("Container Shutdown Complete")
 }
 
-func (self *FragmentContainer) LoadBitmap(frag_id SUUID, bitmap_id uint64, compressed_bitmap string, filter int) {
+func (self *FragmentContainer) LoadBitmap(frag_id SUUID, bitmap_id uint64, compressed_bitmap string, filter uint64) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewLoader(bitmap_id, compressed_bitmap, filter)
 		fragment.requestChan <- request
@@ -120,7 +120,7 @@ func (self *FragmentContainer) Get(frag_id SUUID, bitmap_id uint64) (BitmapHandl
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) TopN(frag_id SUUID, bh BitmapHandle, n int, categories []int) ([]Pair, error) {
+func (self *FragmentContainer) TopN(frag_id SUUID, bh BitmapHandle, n int, categories []uint64) ([]Pair, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewTopN(bh, n, categories)
 		fragment.requestChan <- request
@@ -165,7 +165,7 @@ func (self *FragmentContainer) FromBytes(frag_id SUUID, bytes []byte) (BitmapHan
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint64, category int) (bool, error) {
+func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint64, category uint64) (bool, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewSetBit(bitmap_id, pos, category)
 		fragment.requestChan <- request
@@ -194,10 +194,10 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 
 type Pilosa interface {
 	Get(id uint64) IBitmap
-	SetBit(id uint64, bit_pos uint64, filter int) bool
-	TopN(b IBitmap, n int, categories []int) []Pair
+	SetBit(id uint64, bit_pos uint64, filter uint64) bool
+	TopN(b IBitmap, n int, categories []uint64) []Pair
 	Clear() bool
-	Store(bitmap_id uint64, bm IBitmap, filter int)
+	Store(bitmap_id uint64, bm IBitmap, filter uint64)
 	Stats() interface{}
 	Persist() error
 	Load(requestChan chan Command, fragment *Fragment)
@@ -261,7 +261,7 @@ func (self *Fragment) getBitmap(bitmap BitmapHandle) (IBitmap, bool) {
 	return bm.(IBitmap), ok
 }
 
-func (self *Fragment) TopN(bitmap BitmapHandle, n int, categories []int) []Pair {
+func (self *Fragment) TopN(bitmap BitmapHandle, n int, categories []uint64) []Pair {
 
 	bm, ok := self.cache.Get(bitmap)
 	if ok {

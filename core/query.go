@@ -33,9 +33,10 @@ func (self *Service) CountQueryStepHandler(msg *db.Message) {
 func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 	//spew.Dump("TOP-N QUERYSTEP")
 	qs := msg.Data.(query.TopNQueryStep)
+	spew.Dump(qs)
 	//TRAVIS SEE HERE
 	//need categories in qs I just added so it would compile
-	var categoryleaves []int
+	var categoryleaves []uint64
 	input := qs.Input
 	value, _ := self.Hold.Get(input, 10)
 	var bh index.BitmapHandle
@@ -45,12 +46,22 @@ func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 	case []byte:
 		bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
 	}
+
+	categoryleaves = qs.Filters
+
+	/*
+		spew.Dump(bh, qs.N*2, categoryleaves)
+		result_message := db.Message{Data: "foobar"}
+		self.Transport.Send(&result_message, qs.Destination.ProcessId)
+	*/
+
 	topn, err := self.Index.TopN(qs.Location.FragmentId, bh, qs.N*2, categoryleaves)
 	if err != nil {
 		spew.Dump(err)
 	}
 	result_message := db.Message{Data: query.TopNQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: topn}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+
 }
 
 func (self *Service) UnionQueryStepHandler(msg *db.Message) {

@@ -413,5 +413,5 @@ func (d *Database) GetSliceForProfile(profile_id uint64) (*Slice, error) {
 type Bitmap struct {
 	Id        uint64
 	FrameType string
-	Filter    int
+	Filter    uint64
 }

@@ -17,7 +17,7 @@ type Pair struct {
 type Rank struct {
 	*Pair
 	bitmap   IBitmap
-	category int
+	category uint64
 }
 
 type RankList []*Rank
@@ -72,7 +72,7 @@ func (self *Brand) Get(bitmap_id uint64) IBitmap {
 	return b
 }
 
-func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category int) {
+func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category uint64) {
 	if bm.Count() >= self.threshold_value {
 		self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm, category}
 		if len(self.bitmap_cache) > self.threshold_length {
@@ -89,7 +89,7 @@ func (self *Brand) trim() {
 
 }
 
-func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter int) bool {
+func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool {
 	bm := self.Get(bitmap_id)
 	change, chunk, address := SetBit(bm, bit_pos)
 	if change {
@@ -165,12 +165,12 @@ func (self *Brand) Stats() interface{} {
 		"skip":                               self.skip}
 	return stats
 }
-func (self *Brand) Store(bitmap_id uint64, bm IBitmap, filter int) {
+func (self *Brand) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
 	self.storage.Store(int64(bitmap_id), self.db, self.frame, self.slice, filter, bm.(*Bitmap))
 	self.cache_it(bm, bitmap_id, filter)
 }
 
-func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []int) []Pair {
+func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
 	self.rank_counter = 0
 	self.Rank() // TODO: TERRIBLE REMOVE THIS ASAP
 	is := new(IntSet)
