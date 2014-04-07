@@ -114,9 +114,9 @@ func (self *Brand) Rank() {
 
 	var list RankList
 	for k, item := range self.bitmap_cache {
-		if item.bitmap.Count() > 50 {
-			list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})
-		}
+		//		if item.bitmap.Count() > 50 {
+		list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})
+		//		}
 	}
 	sort.Sort(list)
 	self.rankings = list
