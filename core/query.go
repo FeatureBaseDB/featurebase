@@ -33,7 +33,7 @@ func (self *Service) CountQueryStepHandler(msg *db.Message) {
 func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 	//spew.Dump("TOP-N QUERYSTEP")
 	qs := msg.Data.(query.TopNQueryStep)
-	spew.Dump(qs)
+	//spew.Dump(qs)
 	//TRAVIS SEE HERE
 	//need categories in qs I just added so it would compile
 	var categoryleaves []uint64

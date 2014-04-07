@@ -105,6 +105,7 @@ func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool 
 }
 
 func (self *Brand) Rank() {
+	log.Println("RANK")
 	if self.rank_counter <= 0 {
 		self.rank_counter = self.skip
 	} else {
@@ -126,6 +127,7 @@ func (self *Brand) Rank() {
 	} else {
 		self.threshold_value = 0
 	}
+	log.Println("RANK DONE")
 }
 
 func packagePairs(r RankList) []Pair {
@@ -173,10 +175,16 @@ func (self *Brand) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
 func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
 	self.rank_counter = 0
 	self.Rank() // TODO: TERRIBLE REMOVE THIS ASAP
-	is := new(IntSet)
+	is := NewIntSet()
+	log.Println("ok")
+
 	for _, v := range categories {
+		log.Println(is)
+		log.Println(v)
 		is.Add(v)
+
 	}
+	log.Println("more")
 	return self.TopNCat(src_bitmap, n, is)
 }
 func dump(r RankList, n int) {

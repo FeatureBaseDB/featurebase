@@ -35,26 +35,30 @@ type IntSet struct {
 }
 
 func NewIntSet() *IntSet {
-	return &IntSet{make(map[uint64]bool)}
+	x := new(IntSet)
+	x.set = make(map[uint64]bool)
+	x.set[0] = true
+	log.Println(x.set)
+	return x
 }
 
-func (set *IntSet) Add(i uint64) bool {
-	_, found := set.set[i]
-	set.set[i] = true
+func (self *IntSet) Add(i uint64) bool {
+	_, found := self.set[i]
+	self.set[i] = true
 	return !found //False if it existed already
 }
 
-func (set *IntSet) Contains(i uint64) bool {
-	_, found := set.set[i]
+func (self *IntSet) Contains(i uint64) bool {
+	_, found := self.set[i]
 	return found //true if it existed already
 }
 
-func (set *IntSet) Remove(i uint64) {
-	delete(set.set, i)
+func (self *IntSet) Remove(i uint64) {
+	delete(self.set, i)
 }
 
-func (set *IntSet) Size() int {
-	return len(set.set)
+func (self *IntSet) Size() int {
+	return len(self.set)
 }
 
 //
