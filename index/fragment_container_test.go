@@ -16,7 +16,7 @@ func TestFragment(t *testing.T) {
 	brand := util.Hex_to_SUUID("2")
 	dummy := NewFragmentContainer()
 	dummy.AddFragment("25", "general", 0, general)
-	dummy.AddFragment("25", "Brand", 0, brand)
+	dummy.AddFragment("25", "b.n", 0, brand)
 
 	Convey("Get ", t, func() {
 		bh, _ := dummy.Get(general, 1234)
@@ -129,20 +129,21 @@ func TestFragment(t *testing.T) {
 			log.Println(dummy.Stats(brand))
 			So(1, ShouldEqual, 1)
 		})
-			Convey("Brand TopN", t, func() {
-				max_brands := uint64(5000)
-				for i := uint64(0); i < max_brands; i++ {
-					for x := uint64(0); x < i; x = x + 1 {
-						dummy.SetBit(brand, uint64(i), x)
-					}
-
-				}
-				bh1, _ := dummy.Get(brand, uint64(4999))
-				log.Println(dummy.TopN(brand, bh1, 4))
-
-				So(1, ShouldEqual, 1)
-			})
 	*/
+	Convey("Brand TopN", t, func() {
+		dummy.SetBit(brand, uint64(1), 1, 2)
+		dummy.SetBit(brand, uint64(1), 2, 2)
+		dummy.SetBit(brand, uint64(1), 3, 2)
+		dummy.SetBit(brand, uint64(2), 1, 2)
+		dummy.SetBit(brand, uint64(2), 2, 2)
+		dummy.SetBit(brand, uint64(3), 1, 2)
+		bh1, _ := dummy.Get(brand, uint64(1))
+		c := []uint64{2}
+		results, _ := dummy.TopN(brand, bh1, 4, c)
+		pair := results[0]
+		So(pair.Key, ShouldEqual, 1)
+		So(pair.Count, ShouldEqual, 3)
+	})
 	Convey("Clear ", t, func() {
 		res, _ := dummy.Clear(general)
 		So(res, ShouldEqual, true)

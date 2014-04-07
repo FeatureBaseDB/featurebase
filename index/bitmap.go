@@ -37,8 +37,6 @@ type IntSet struct {
 func NewIntSet() *IntSet {
 	x := new(IntSet)
 	x.set = make(map[uint64]bool)
-	x.set[0] = true
-	log.Println(x.set)
 	return x
 }
 

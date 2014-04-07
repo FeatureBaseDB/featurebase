@@ -66,9 +66,13 @@ func (self *Brand) Get(bitmap_id uint64) IBitmap {
 	}
 	//I should fetch the category here..need to come up with a good source
 	b, filter := self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
-
 	self.cache_it(b, bitmap_id, filter)
+	return b
+}
 
+func (self *Brand) GetFilter(bitmap_id, filter uint64) IBitmap {
+	b, _ := self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
+	self.cache_it(b, bitmap_id, filter)
 	return b
 }
 
@@ -90,7 +94,13 @@ func (self *Brand) trim() {
 }
 
 func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool {
-	bm := self.Get(bitmap_id)
+	bm1, ok := self.bitmap_cache[bitmap_id]
+	var bm IBitmap
+	if ok {
+		bm = bm1.bitmap
+	} else {
+		bm = self.GetFilter(bitmap_id, filter) //aways overwrites what is in cass filter type
+	}
 	change, chunk, address := SetBit(bm, bit_pos)
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
@@ -105,7 +115,6 @@ func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool 
 }
 
 func (self *Brand) Rank() {
-	log.Println("RANK")
 	if self.rank_counter <= 0 {
 		self.rank_counter = self.skip
 	} else {
@@ -127,7 +136,9 @@ func (self *Brand) Rank() {
 	} else {
 		self.threshold_value = 0
 	}
-	log.Println("RANK DONE")
+
+	//dump(self.rankings, 10)
+
 }
 
 func packagePairs(r RankList) []Pair {
@@ -176,20 +187,16 @@ func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
 	self.rank_counter = 0
 	self.Rank() // TODO: TERRIBLE REMOVE THIS ASAP
 	is := NewIntSet()
-	log.Println("ok")
-
 	for _, v := range categories {
-		log.Println(is)
-		log.Println(v)
 		is.Add(v)
 
 	}
-	log.Println("more")
+
 	return self.TopNCat(src_bitmap, n, is)
 }
 func dump(r RankList, n int) {
 	for i, v := range r {
-		println("DUMPING:", i, v.Key, v.Count)
+		log.Println(i, v)
 		if i > n {
 			return
 		}
@@ -303,9 +310,7 @@ func (self *Brand) Persist() error {
 		list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})
 	}
 
-	log.Println("Sorting..")
 	sort.Sort(list)
-	log.Println("..Done")
 
 	results := make([]uint64, asize)
 	i := 0
