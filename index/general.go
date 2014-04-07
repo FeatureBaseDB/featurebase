@@ -59,8 +59,9 @@ func (self *General) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) boo
 	return change
 }
 func (self *General) TopN(b IBitmap, n int, categories []uint64) []Pair {
+	var empty []Pair
 
-	return nil
+	return empty
 }
 func (self *General) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
 	//oldbm:=self.Get(bitmap_id)

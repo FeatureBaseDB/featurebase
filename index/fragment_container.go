@@ -238,7 +238,7 @@ func getStorage(db string, slice int, frame string) Storage {
 func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
 	var impl Pilosa
 	log.Println(fmt.Sprintf("XXXXXXXXXXXXXXXXXXXXXXXXXXX(%s)", frame))
-	if strings.HasSuffix(frame, ".") {
+	if strings.HasSuffix(frame, ".n") {
 		log.Println(frame + "TOP")
 		impl = NewBrand(db, frame, slice, getStorage(db, slice, frame), 50000, 45000, 100)
 	} else {
