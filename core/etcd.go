@@ -22,9 +22,18 @@ type TopologyMapper struct {
 
 func (self *TopologyMapper) Run() {
 	log.Println(self.namespace + "/db")
-	resp, err := self.service.Etcd.Get(self.namespace+"/db", false, true)
+	db_path := self.namespace + "/db"
+	resp, err := self.service.Etcd.Get(db_path, false, true)
 	if err != nil {
-		log.Fatal(err)
+		ee, ok := err.(*etcd.EtcdError)
+		if ok && ee.ErrorCode == 100 { // node does not exist
+			resp, err = self.service.Etcd.CreateDir(db_path, 0)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			log.Fatal(err)
+		}
 	}
 	for _, node := range flatten(resp.Node) {
 		err := self.handlenode(node)
