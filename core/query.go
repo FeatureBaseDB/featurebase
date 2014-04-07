@@ -190,7 +190,11 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 		for _, r := range rank_list {
 			pair_list = append(pair_list, *r.Pair)
 		}
-		result = pair_list[:qs.N]
+		if len(pair_list) > 0 && len(pair_list) > qs.N {
+			result = pair_list[:qs.N]
+		} else {
+			result = pair_list
+		}
 	} else {
 		result = "NONE"
 	}
