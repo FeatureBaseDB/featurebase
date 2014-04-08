@@ -83,7 +83,8 @@ func TestQueryPlanner(t *testing.T) {
 	})
 	Convey("Get query plan - including parsing", t, func() {
 
-		query := QueryForPQL("get(10,general)")
+		query, err := QueryForPQL("get(10,general)")
+		So(err, ShouldEqual, nil)
 
 		database, fragment1 := basic_database()
 
@@ -108,7 +109,8 @@ func TestQueryPlanner(t *testing.T) {
 	})
 	Convey("Union query plan - including parsing", t, func() {
 
-		query := QueryForPQL("union(get(10, general), get(20, general))")
+		query, err := QueryForPQL("union(get(10, general), get(20, general))")
+		So(err, ShouldEqual, nil)
 
 		database, fragment1 := basic_database()
 
@@ -148,7 +150,8 @@ func TestQueryPlanner(t *testing.T) {
 		})
 	})
 	Convey("Set query plan - including parsing", t, func() {
-		query := QueryForPQL("set(10, general, 0, 100)")
+		query, err := QueryForPQL("set(10, general, 0, 100)")
+		So(err, ShouldEqual, nil)
 
 		database, fragment1 := basic_database()
 
@@ -163,7 +166,8 @@ func TestQueryPlanner(t *testing.T) {
 		So(*(qp[0].(SetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 	})
 	Convey("Top-n query plan - including parsing", t, func() {
-		query := QueryForPQL("top-n(get(10, general), [1,2,3], 50)")
+		query, err := QueryForPQL("top-n(get(10, general), [1,2,3], 50)")
+		So(err, ShouldEqual, nil)
 
 		database, fragment1 := basic_database()
 

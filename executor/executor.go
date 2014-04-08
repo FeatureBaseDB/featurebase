@@ -62,16 +62,19 @@ func (self *Executor) RunQueryTest(database_name string, pql string) string {
 	return pql
 }
 
-func (self *Executor) runQuery(database *db.Database, qry *query.Query) {
+func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 	process, err := self.service.GetProcess()
 	if err != nil {
-		spew.Dump(err)
+		return err
 	}
 	process_id := process.Id()
 	fragment_id := util.SUUID(0)
 	destination := db.Location{&process_id, fragment_id}
 
-	query_plan := query.QueryPlanForQuery(database, qry, &destination)
+	query_plan, err := query.QueryPlanForQuery(database, qry, &destination)
+	if err != nil {
+		return err
+	}
 	// loop over the query steps and send to Transport
 	for _, qs := range *query_plan {
 		msg := new(db.Message)
@@ -81,30 +84,34 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) {
 			self.service.Transport.Send(msg, step.GetLocation().ProcessId)
 		}
 	}
+	return nil
 }
 
-func (self *Executor) RunPQL(database_name string, pql string) interface{} {
+func (self *Executor) RunPQL(database_name string, pql string) (interface{}, error) {
 	database := self.service.Cluster.GetOrCreateDatabase(database_name)
 
 	// see if the outer query function is a custom query
 	reserved_functions := stringSlice{"get", "set", "union", "intersect", "count", "top-n"}
 	tokens, err := query.Lex(pql)
 	if err != nil {
-		spew.Dump(err)
+		return nil, err
 	}
 	outer_token := tokens[0].Text
 
 	if reserved_functions.pos(outer_token) != -1 {
 
-		qry := query.QueryForTokens(tokens)
+		qry, err := query.QueryForTokens(tokens)
+		if err != nil {
+			return nil, err
+		}
 		go self.runQuery(database, qry)
 
 		var final interface{}
-		final, err := self.service.Hold.Get(qry.Id, 10)
+		final, err = self.service.Hold.Get(qry.Id, 10)
 		if err != nil {
-			spew.Dump(err)
+			return nil, err
 		}
-		return final
+		return final, nil
 
 	} else {
 		plugins_dir := config.GetString("plugins")
@@ -113,7 +120,10 @@ func (self *Executor) RunPQL(database_name string, pql string) interface{} {
 		query_list := GetMacro(plugins_file, filter).(query.PqlList)
 
 		for i, _ := range query_list {
-			qry := query.QueryForPQL(query_list[i].PQL)
+			qry, err := query.QueryForPQL(query_list[i].PQL)
+			if err != nil {
+				return nil, err
+			}
 			go self.runQuery(database, qry)
 			query_list[i].Id = qry.Id
 		}
@@ -128,7 +138,7 @@ func (self *Executor) RunPQL(database_name string, pql string) interface{} {
 			final_result[query_list[i].Label] = final
 		}
 
-		return final_result
+		return final_result, nil
 	}
 
 }

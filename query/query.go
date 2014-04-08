@@ -28,40 +28,43 @@ type Query struct {
 	Subqueries []Query
 }
 
-func QueryPlanForPQL(database *db.Database, pql string, destination *db.Location) *QueryPlan {
+func QueryPlanForPQL(database *db.Database, pql string, destination *db.Location) (*QueryPlan, error) {
 	tokens, err := Lex(pql)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	return QueryPlanForTokens(database, tokens, destination)
 }
 
-func QueryForPQL(pql string) *Query {
+func QueryForPQL(pql string) (*Query, error) {
 	tokens, err := Lex(pql)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	return QueryForTokens(tokens)
 }
 
-func QueryForTokens(tokens []Token) *Query {
+func QueryForTokens(tokens []Token) (*Query, error) {
 	query, err := Parse(tokens)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return query
+	return query, nil
 }
 
-func QueryPlanForTokens(database *db.Database, tokens []Token, destination *db.Location) *QueryPlan {
-	query := QueryForTokens(tokens)
+func QueryPlanForTokens(database *db.Database, tokens []Token, destination *db.Location) (*QueryPlan, error) {
+	query, err := QueryForTokens(tokens)
+	if err != nil {
+		return nil, err
+	}
 	return QueryPlanForQuery(database, query, destination)
 }
 
-func QueryPlanForQuery(database *db.Database, query *Query, destination *db.Location) *QueryPlan {
+func QueryPlanForQuery(database *db.Database, query *Query, destination *db.Location) (*QueryPlan, error) {
 	query_planner := QueryPlanner{Database: database, Query: query}
 	id := uuid.RandomUUID()
 	query_plan := query_planner.Plan(query, &id, destination)
-	return query_plan
+	return query_plan, nil
 }
 
 func TokensToString(tokens []Token) string {

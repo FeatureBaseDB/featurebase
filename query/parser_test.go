@@ -77,4 +77,9 @@ func TestQueryParser(t *testing.T) {
 		So(query.Subqueries[0].Operation, ShouldEqual, "get")
 		So(query.Subqueries[0].Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general"})
 	})
+	Convey("Lists", t, func() {
+		tokens, err := Lex("wat(50)")
+		_, err = Parse(tokens)
+		So(err, ShouldBeNil)
+	})
 }

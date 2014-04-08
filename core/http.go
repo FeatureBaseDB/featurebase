@@ -161,12 +161,15 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := self.service.Executor.RunPQL(database_name, pql)
+	results, err := self.service.Executor.RunPQL(database_name, pql)
+	if err != nil {
+		http.Error(w, "Error running query: "+err.Error(), http.StatusInternalServerError)
+	}
 
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		log.Fatal("Error encoding stats")
+		http.Error(w, "Error encoding: "+err.Error(), http.StatusInternalServerError)
 	}
 
 }
@@ -230,7 +233,12 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 		filter := int(t)
 		for bitmap_id := range bitmaps(frame, obj) {
 			pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
-			results = append(results, self.service.Executor.RunPQL(db, pql))
+			result, err := self.service.Executor.RunPQL(db, pql)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			results = append(results, result)
 			//	results = append(results, db+" "+pql)
 		}
 
