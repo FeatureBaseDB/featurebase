@@ -55,7 +55,6 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 		s8               uint8
 		filter           int
 	)
-	log.Println("FETCHING ", bitmap_id, db, slice)
 
 	bitmap := CreateRBBitmap()
 	iter := c.db.Query("SELECT filter,Chunkkey,BlockIndex,block FROM bitmap WHERE bitmap_id=? AND db=? AND frame=? AND slice=? ", id, db, frame, slice).Iter()
