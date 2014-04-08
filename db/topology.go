@@ -181,6 +181,7 @@ func (d *Database) getFrame(name string) (*Frame, error) {
 			return frame, nil
 		}
 	}
+	log.Println("Missing frame:", d.Name, name)
 	return nil, FrameDoesNotExistError
 }
 
@@ -312,7 +313,11 @@ func (f *Fragment) GetLocation() *Location {
 func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment, error) {
 	//d.mutex.Lock()
 	//defer d.mutex.Unlock()
-	frame, _ := d.getFrame(bitmap.FrameType)
+	frame, err := d.getFrame(bitmap.FrameType)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
 	//log.Println(frame, slice)
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
