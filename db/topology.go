@@ -266,6 +266,7 @@ func (d *Database) GetFrameSliceIntersect(frame *Frame, slice *Slice) (*FrameSli
 			return frameslice, nil
 		}
 	}
+	log.Println("Missing FrameSliceIntersect:", d.Name, frame, slice)
 	return nil, FrameSliceIntersectDoesNotExistError
 }
 
