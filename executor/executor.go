@@ -73,6 +73,7 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 
 	query_plan, err := query.QueryPlanForQuery(database, qry, &destination)
 	if err != nil {
+		self.service.Hold.Set(qry.Id, err, 30)
 		return err
 	}
 	// loop over the query steps and send to Transport
