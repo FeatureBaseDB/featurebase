@@ -97,7 +97,9 @@ func (self *FragmentContainer) Intersect(frag_id SUUID, bh []BitmapHandle) (Bitm
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewIntersect(bh)
 		fragment.requestChan <- request
-		return request.Response().answer.(BitmapHandle), nil
+		result := request.Response()
+		SendTimer("fragmant_container_Intersect", result.exec_time.Nanoseconds())
+		return result.answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
@@ -106,7 +108,9 @@ func (self *FragmentContainer) Union(frag_id SUUID, bh []BitmapHandle) (BitmapHa
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewUnion(bh)
 		fragment.requestChan <- request
-		return request.Response().answer.(BitmapHandle), nil
+		result := request.Response()
+		SendTimer("fragmant_container_Union", result.exec_time.Nanoseconds())
+		return result.answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
@@ -115,7 +119,9 @@ func (self *FragmentContainer) Get(frag_id SUUID, bitmap_id uint64) (BitmapHandl
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGet(bitmap_id)
 		fragment.requestChan <- request
-		return request.Response().answer.(BitmapHandle), nil
+		result := request.Response()
+		SendTimer("fragmant_container_Get", result.exec_time.Nanoseconds())
+		return result.answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
@@ -124,7 +130,9 @@ func (self *FragmentContainer) TopN(frag_id SUUID, bh BitmapHandle, n int, categ
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewTopN(bh, n, categories)
 		fragment.requestChan <- request
-		return request.Response().answer.([]Pair), nil
+		result := request.Response()
+		SendTimer("fragmant_container_TopN", result.exec_time.Nanoseconds())
+		return result.answer.([]Pair), nil
 	}
 	return nil, nil
 }
@@ -133,7 +141,9 @@ func (self *FragmentContainer) GetList(frag_id SUUID, bitmap_id []uint64) ([]Bit
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGetList(bitmap_id)
 		fragment.requestChan <- request
-		return request.Response().answer.([]BitmapHandle), nil
+		result := request.Response()
+		SendTimer("fragmant_container_GetList", result.exec_time.Nanoseconds())
+		return result.answer.([]BitmapHandle), nil
 	}
 	return nil, errors.New("Invalid Bitmap Handle")
 }
@@ -142,7 +152,9 @@ func (self *FragmentContainer) Count(frag_id SUUID, bitmap BitmapHandle) (uint64
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewCount(bitmap)
 		fragment.requestChan <- request
-		return request.Response().answer.(uint64), nil
+		result := request.Response()
+		SendTimer("fragmant_container_Count", result.exec_time.Nanoseconds())
+		return result.answer.(uint64), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
@@ -151,7 +163,9 @@ func (self *FragmentContainer) GetBytes(frag_id SUUID, bh BitmapHandle) ([]byte,
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGetBytes(bh)
 		fragment.requestChan <- request
-		return request.Response().answer.([]byte), nil
+		result := request.Response()
+		SendTimer("fragmant_container_GetBytes", result.exec_time.Nanoseconds())
+		return result.answer.([]byte), nil
 	}
 	return nil, errors.New("Invalid Bitmap Handle")
 }
@@ -160,7 +174,9 @@ func (self *FragmentContainer) FromBytes(frag_id SUUID, bytes []byte) (BitmapHan
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewFromBytes(bytes)
 		fragment.requestChan <- request
-		return request.Response().answer.(BitmapHandle), nil
+		result := request.Response()
+		SendTimer("fragmant_container_FromBytes", result.exec_time.Nanoseconds())
+		return result.answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
@@ -169,7 +185,9 @@ func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint6
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewSetBit(bitmap_id, pos, category)
 		fragment.requestChan <- request
-		return request.Response().answer.(bool), nil
+		result := request.Response()
+		SendTimer("fragmant_container_SetBit", result.exec_time.Nanoseconds())
+		return result.answer.(bool), nil
 	}
 	return false, errors.New("Invalid Bitmap Handle")
 }

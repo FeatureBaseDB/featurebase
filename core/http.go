@@ -8,6 +8,7 @@ import (
 	"pilosa/config"
 	"pilosa/db"
 	"pilosa/index"
+	"pilosa/util"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -255,7 +256,11 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 
 		for bitmap_id := range bitmaps(frame, obj) {
 			pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
+			start := time.Now()
 			result, err := self.service.Executor.RunPQL(db, pql)
+			delta := time.Since(start)
+			util.SendTimer("executor_setbit", delta.Nanoseconds())
+
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

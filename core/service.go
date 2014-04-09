@@ -10,6 +10,7 @@ import (
 	"pilosa/hold"
 	"pilosa/index"
 	"pilosa/interfaces"
+	"pilosa/util"
 	"syscall"
 
 	"github.com/coreos/go-etcd/etcd"
@@ -117,6 +118,7 @@ func (service *Service) Run() {
 		case <-sigterm:
 			log.Println("SIGTERM! Cleaning up...")
 			service.Index.Shutdown()
+			util.ShutdownStats()
 			service.Stop()
 			return
 		}

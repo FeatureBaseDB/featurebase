@@ -5,6 +5,9 @@ package index
 import (
 	"fmt"
 	"log"
+	"pilosa/util"
+
+	"time"
 
 	"tux21b.org/v1/gocql"
 )
@@ -27,7 +30,8 @@ func NewCassStorage(host, keyspace string) Storage {
 	//cluster := gocql.NewCluster("127.0.0.1")
 	cluster := gocql.NewCluster(host)
 	cluster.Keyspace = keyspace
-	cluster.Consistency = gocql.Quorum
+	//cluster.Consistency = gocql.Quorum
+	cluster.Consistency = gocql.One
 	//cluster.ProtoVersion = 1
 	// cluster.CQLVersion = "3.0.0"
 	session, err := cluster.CreateSession()
@@ -47,7 +51,7 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 	last_key := int64(dumb)
 	marker := int64(dumb)
 	var id = int64(bitmap_id)
-
+	start := time.Now()
 	var (
 		chunk            *Chunk
 		chunk_key, block int64
@@ -75,6 +79,8 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 		last_key = chunk_key
 
 	}
+	delta := time.Since(start)
+	util.SendTimer("cassandra_storage_Fetch", delta.Nanoseconds())
 	bitmap.SetCount(uint64(count))
 	return bitmap, uint64(filter)
 }
@@ -101,11 +107,14 @@ func (c *CassandraStorage) Store(id int64, db string, frame string, slice int, f
 
 func (c *CassandraStorage) StoreBlock(id int64, db string, frame string, slice int, filter uint64, chunk int64, block_index int32, block int64) error {
 
-	if err := c.db.Query(`
-        INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?);`, id, db, frame, slice, int(filter), chunk, block_index, block).Exec(); err != nil {
+	start := time.Now()
+	var err error
+	if err = c.db.Query(`
+        INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?);`, id, db, frame, slice, int(filter), chunk, block_index, block).Consistency(gocql.One).Exec(); err != nil {
 		log.Println(err)
 		log.Println("INSERT ", id, chunk, block_index)
-		return err
 	}
-	return nil
+	delta := time.Since(start)
+	util.SendTimer("cassandra_storage_StoreBlock", delta.Nanoseconds())
+	return err
 }

@@ -1,0 +1,48 @@
+package util
+
+import (
+	"log"
+	"pilosa/config"
+
+	"github.com/cactus/go-statsd-client/statsd"
+)
+
+type args struct {
+	stat  string
+	delta int64
+	rate  float32
+}
+
+var (
+	count chan args
+	end   chan bool
+)
+
+func init() {
+	count = make(chan args, 100)
+	end = make(chan bool)
+	stat_config := config.GetStringDefault("statsd_server", "127.0.0.1:8125")
+	stats, _ := statsd.New(stat_config, "")
+	go func() {
+		for {
+			select {
+			case ci := <-count:
+				stats.Timing(ci.stat, ci.delta, ci.rate)
+
+				break
+			case <-end:
+				log.Println("DONE Stats")
+				return
+
+			}
+		}
+	}()
+}
+
+func SendTimer(stat string, delta int64) {
+	count <- args{stat, delta, .5}
+}
+
+func ShutdownStats() {
+	end <- true
+}
