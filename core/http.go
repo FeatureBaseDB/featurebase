@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"time"
+
 	notify "github.com/bitly/go-notify"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/websocket"
@@ -225,12 +226,33 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 	//[{ "db": "3", "frame":"brand.","profile_id": 122,"filter":0, "bitmap_id":123}]
 	var results []interface{}
 	for _, obj := range args {
+		if obj["profile_id"] == nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		t := float64(obj["profile_id"].(float64))
 		profile_id := uint64(t)
+
+		if obj["db"] == nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		db := obj["db"].(string)
+
+		if obj["frame"] == nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+
+		}
 		frame := obj["frame"].(string)
+
+		if obj["filter"] == nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		t = float64(obj["filter"].(float64))
 		filter := int(t)
+
 		for bitmap_id := range bitmaps(frame, obj) {
 			pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
 			result, err := self.service.Executor.RunPQL(db, pql)
