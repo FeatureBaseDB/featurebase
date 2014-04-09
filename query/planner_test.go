@@ -50,8 +50,10 @@ func TestQueryPlanner(t *testing.T) {
 		destination := fragment1.GetLocation()
 
 		id := uuid.RandomUUID()
-		qp := *qplanner.Plan(&query, &id, destination)
+		qpp, err := qplanner.Plan(&query, &id, destination)
+		qp := *qpp
 
+		So(err, ShouldEqual, nil)
 		So(len(qp), ShouldEqual, 7)
 		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(qp[0].(GetQueryStep).Slice, ShouldEqual, 0)
@@ -92,7 +94,9 @@ func TestQueryPlanner(t *testing.T) {
 		destination := fragment1.GetLocation()
 
 		id := uuid.RandomUUID()
-		qp := *qplanner.Plan(query, &id, destination)
+		qpp, err := qplanner.Plan(query, &id, destination)
+		qp := *qpp
+		So(err, ShouldEqual, nil)
 
 		So(len(qp), ShouldEqual, 3)
 		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
@@ -118,7 +122,9 @@ func TestQueryPlanner(t *testing.T) {
 		destination := fragment1.GetLocation()
 
 		id := uuid.RandomUUID()
-		qp := *qplanner.Plan(query, &id, destination)
+		qpp, err := qplanner.Plan(query, &id, destination)
+		qp := *qpp
+		So(err, ShouldEqual, nil)
 
 		So(len(qp), ShouldEqual, 7)
 		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
@@ -159,7 +165,9 @@ func TestQueryPlanner(t *testing.T) {
 		destination := fragment1.GetLocation()
 
 		id := uuid.RandomUUID()
-		qp := *qplanner.Plan(query, &id, destination)
+		qpp, err := qplanner.Plan(query, &id, destination)
+		qp := *qpp
+		So(err, ShouldEqual, nil)
 		So(len(qp), ShouldEqual, 1)
 		So(qp[0].(SetQueryStep).Operation, ShouldEqual, "set")
 		So(qp[0].(SetQueryStep).ProfileId, ShouldEqual, 100)
@@ -175,7 +183,9 @@ func TestQueryPlanner(t *testing.T) {
 		destination := fragment1.GetLocation()
 
 		id := uuid.RandomUUID()
-		qp := *qplanner.Plan(query, &id, destination)
+		qpp, err := qplanner.Plan(query, &id, destination)
+		qp := *qpp
+		So(err, ShouldEqual, nil)
 		So(len(qp), ShouldEqual, 5)
 		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})

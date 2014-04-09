@@ -34,7 +34,6 @@ func init() {
 func (self *connection) manage() {
 BeginManageConnection:
 	for {
-		log.Println("manage", self)
 		if self.conn == nil {
 			process, err := self.transport.service.ProcessMap.GetProcess(self.process)
 			if err != nil {
