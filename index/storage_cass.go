@@ -123,6 +123,7 @@ func (self *CassandraStorage) EndBatch() {
 	} else {
 		log.Println("NIL BATCH")
 	}
+	start := time.Now()
 	delta := time.Since(start)
 	util.SendTimer("cassandra_storage_EndBatch", delta.Nanoseconds())
 

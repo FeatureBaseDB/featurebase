@@ -37,11 +37,12 @@ type Brand struct {
 	slice            int
 	storage          Storage
 	rankings         RankList
-	rank_counter     int
+	rank_count       int
 	threshold_value  uint64
 	threshold_length int
 	threshold_idx    int
 	skip             int
+	rank_time        time.Time
 }
 
 func NewBrand(db string, frame string, slice int, s Storage, threshold_len int, threshold int, skipp int) *Brand {
@@ -50,7 +51,7 @@ func NewBrand(db string, frame string, slice int, s Storage, threshold_len int, 
 	f.frame = frame
 	f.slice = slice
 	f.db = db
-	f.rank_counter = 0
+	f.rank_count = 0
 	f.threshold_value = 0
 	f.threshold_length = threshold_len
 	f.threshold_idx = threshold
@@ -112,21 +113,12 @@ func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool 
 		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
 		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, COUNTER_KEY, 0, int64(bm.Count()))
 		self.storage.EndBatch()
-		if bm.Count() >= self.threshold_value {
-
-			self.Rank() //need to optimize this
-		}
+		self.rank_count++
 	}
 	return change
 }
 
 func (self *Brand) Rank() {
-	if self.rank_counter <= 0 {
-		self.rank_counter = self.skip
-	} else {
-		self.rank_counter -= 1
-		return //skip
-	}
 	start := time.Now()
 	var list RankList
 	for k, item := range self.bitmap_cache {
@@ -146,6 +138,7 @@ func (self *Brand) Rank() {
 	//dump(self.rankings, 10)
 	delta := time.Since(start)
 	util.SendTimer("brand_Rank", delta.Nanoseconds())
+	self.rank_time = start
 
 }
 
@@ -179,7 +172,7 @@ func (self *Brand) Stats() interface{} {
 		"number of bitmaps":                  len(self.bitmap_cache),
 		"avg size of bitmap in space(bytes)": avg_bytes,
 		"avg size of bitmap in bits":         avg_bits,
-		"rank counter":                       self.rank_counter,
+		"rank counter":                       self.rank_count,
 		"threshold_value":                    self.threshold_value,
 		"threshold_length":                   self.threshold_length,
 		"threshold_idx":                      self.threshold_idx,
@@ -192,8 +185,13 @@ func (self *Brand) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
 }
 
 func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
-	self.rank_counter = 0
-	self.Rank() // TODO: TERRIBLE REMOVE THIS ASAP
+	if self.rank_count > 0 {
+		last := time.Since(self.rank_time) * time.Second
+		if last > 60 {
+			self.Rank()
+		}
+	}
+
 	is := NewIntSet()
 	for _, v := range categories {
 		is.Add(v)
