@@ -80,10 +80,9 @@ func (self *LevelDBStorage) Fetch(bitmap_id uint64, db string, frame string, sli
 	start_key := encodeKey(bitmap_id, 0, 0)
 	limit_key := encodeKey(bitmap_id+1, 0, 0)
 	iter := self.db.NewIterator(&Range{Start: start_key, Limit: limit_key}, nil)
-	log.Println("START")
 	last_key = COUNTERMASK
 	for iter.Next() {
-		id, chunk_key, block_index := decodeKey(iter.Key())
+		_, chunk_key, block_index := decodeKey(iter.Key())
 		block, filter = decodeValue(iter.Value())
 		if chunk_key != COUNTERMASK {
 			if chunk_key != last_key {
@@ -93,7 +92,6 @@ func (self *LevelDBStorage) Fetch(bitmap_id uint64, db string, frame string, sli
 			chunk.Value.Block[block_index] = block
 
 		} else {
-			log.Println("Setting COUNT:", block)
 			count = block
 		}
 		last_key = chunk_key
@@ -119,7 +117,6 @@ func (self *LevelDBStorage) runBatch(batch *leveldb.Batch) {
 	}
 }
 func (self *LevelDBStorage) FlushBatch() {
-	log.Println("FLUSHING")
 	start := time.Now()
 	self.runBatch(self.batch) //maybe this is crazy but i'll give it a whirl
 	self.batch = nil
@@ -171,7 +168,6 @@ func (self *LevelDBStorage) StoreBlock(id int64, db string, frame string, slice 
 	if self.batch == nil {
 		panic("NIL BATCH")
 	}
-	log.Println("BLOCK WRITE")
 	start := time.Now()
 	self.batch.Put(encodeKey(uint64(id), uint64(chunk), uint8(block_index)), encodeValue(uint64(block), filter))
 	delta := time.Since(start)
