@@ -99,6 +99,7 @@ func (self *General) Persist() error {
 		return err
 	}
 	defer w.Close()
+	defer self.storage.Close()
 
 	encoder := json.NewEncoder(w)
 	return encoder.Encode(self.keys)

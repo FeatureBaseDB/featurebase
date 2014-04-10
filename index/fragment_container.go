@@ -233,12 +233,16 @@ type Fragment struct {
 	exit        chan *sync.WaitGroup
 }
 
-func getStorage(db string, slice int, frame string) Storage {
+func getStorage(db string, slice int, frame string, fid SUUID) Storage {
 	storage_method := config.GetString("storage_backend")
 
 	switch storage_method {
 	default:
 		return NewMemoryStorage()
+	case "leveldb":
+		base_path := config.GetString("level_db_path")
+		full_dir := fmt.Sprintf("%s/%s/%d/%s/%s", base_path, db, slice, frame, SUUID_to_Hex(fid))
+		return NewLevelDBStorage(full_dir)
 	case "cassandra":
 		host := config.GetString("cassandra_host")
 		if host == "" {
@@ -258,10 +262,10 @@ func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
 	log.Println(fmt.Sprintf("XXXXXXXXXXXXXXXXXXXXXXXXXXX(%s)", frame))
 	if strings.HasSuffix(frame, ".n") {
 		log.Println(frame + "TOP")
-		impl = NewBrand(db, frame, slice, getStorage(db, slice, frame), 50000, 45000, 100)
+		impl = NewBrand(db, frame, slice, getStorage(db, slice, frame, frag_id), 50000, 45000, 100)
 	} else {
 		log.Println(frame)
-		impl = NewGeneral(db, frame, slice, getStorage(db, slice, frame))
+		impl = NewGeneral(db, frame, slice, getStorage(db, slice, frame, frag_id))
 	}
 
 	f := new(Fragment)

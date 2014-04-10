@@ -53,6 +53,8 @@ func NewCassStorage(host, keyspace string) Storage {
 	return obj
 }
 
+func (c *CassandraStorage) Close() {
+}
 func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slice int) (IBitmap, uint64) {
 	var dumb = COUNTERMASK
 	last_key := int64(dumb)

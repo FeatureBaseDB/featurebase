@@ -9,6 +9,11 @@
         "version": "35c98e8c885757fab1824daa77cc0e24bf30e76b",
         "type": "git"
     },
+    "github.com/cactus/go-statsd-client/statsd": {
+        "repo": "github.com/cactus/go-statsd-client",
+        "version": "912f30c35e9cdf51f50bae24f071e227cca152fb",
+        "type": "git"
+    },
     "gkvlite": {
         "repo": "github.com/steveyen/gkvlite",
         "version": "master",
@@ -22,6 +27,11 @@
     "gocql": {
         "repo": "tux21b.org/v1/gocql",
         "version": "44eda643c1ae69e866e491b1c935c5b22e42350e",
+        "type": "git"
+    },
+    "goleveldb": {
+        "repo": "github.com/syndtr/goleveldb/leveldb",
+        "version": "ff3719c6816e2cd194f05058452d660608e178ac",
         "type": "git"
     },
     "google-crypto": {
@@ -83,11 +93,5 @@
         "repo": "github.com/gorilla/websocket",
         "version": "92334662baa9cbebc2e6e68b8d56bc1233f85a4c",
         "type": "git"
-    },
-    "github.com/cactus/go-statsd-client/statsd": {
-        "repo": "github.com/cactus/go-statsd-client",
-        "version": "912f30c35e9cdf51f50bae24f071e227cca152fb",
-        "type": "git"
     }
-
 }

@@ -85,6 +85,7 @@ func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category uint64) {
 	if bm.Count() >= self.threshold_value {
 		self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm, category}
 		if len(self.bitmap_cache) > self.threshold_length {
+			self.Rank()
 			self.trim()
 		}
 	}
@@ -309,6 +310,7 @@ func (self *Brand) Persist() error {
 		return err
 	}
 	defer w.Close()
+	defer self.storage.Close()
 
 	asize := len(self.bitmap_cache)
 	var list RankList

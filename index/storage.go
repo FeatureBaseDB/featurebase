@@ -6,4 +6,5 @@ type Storage interface {
 	StoreBlock(id int64, db string, frame string, slice int, filter uint64, chunk int64, block_index int32, block int64) error
 	BeginBatch()
 	EndBatch()
+	Close()
 }
