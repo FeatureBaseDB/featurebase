@@ -83,9 +83,7 @@ func (self *LevelDBStorage) Fetch(bitmap_id uint64, db string, frame string, sli
 	log.Println("START")
 	last_key = COUNTERMASK
 	for iter.Next() {
-		log.Println("CHUNK")
 		id, chunk_key, block_index := decodeKey(iter.Key())
-		log.Println(id, chunk_key, block_index)
 		block, filter = decodeValue(iter.Value())
 		if chunk_key != COUNTERMASK {
 			if chunk_key != last_key {
