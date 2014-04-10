@@ -182,6 +182,7 @@ func (self *FragmentContainer) FromBytes(frag_id SUUID, bytes []byte) (BitmapHan
 }
 
 func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint64, category uint64) (bool, error) {
+	return false, nil
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewSetBit(bitmap_id, pos, category)
 		fragment.requestChan <- request
