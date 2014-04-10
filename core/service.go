@@ -48,7 +48,7 @@ func NewService() *Service {
 	service.WebService = NewWebService(service)
 	service.Index = index.NewFragmentContainer()
 	service.Hold = hold.NewHolder()
-	service.version = "0.0.15"
+	service.version = "0.0.16"
 	service.name = "Cruncher"
 	service.PrepareLogging()
 	fmt.Printf("Pilosa %s\n", service.version)
