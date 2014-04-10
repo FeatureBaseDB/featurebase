@@ -104,8 +104,10 @@ func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool 
 	change, chunk, address := SetBit(bm, bit_pos)
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
+		self.storage.BeginBatch()
 		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
 		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, COUNTER_KEY, 0, int64(bm.Count()))
+		self.storage.EndBatch()
 		if bm.Count() >= self.threshold_value {
 
 			self.Rank() //need to optimize this

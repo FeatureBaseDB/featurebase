@@ -13,7 +13,9 @@ import (
 )
 
 type CassandraStorage struct {
-	db *gocql.Session
+	db    *gocql.Session
+	batch *gocql.Batch
+	stmt  string
 }
 
 func BuildSchema() {
@@ -43,6 +45,8 @@ func NewCassStorage(host, keyspace string) Storage {
 	if err != nil {
 	}
 	obj.db = session
+	obj.stmt = `INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?);`
+	obj.batch = nil
 	return obj
 }
 
@@ -84,15 +88,31 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 	bitmap.SetCount(uint64(count))
 	return bitmap, uint64(filter)
 }
+func (self *CassandraStorage) BeginBatch() {
+	self.batch = gocql.NewBatch(gocql.LoggedBatch)
+}
+func (self *CassandraStorage) EndBatch() {
+	start := time.Now()
+	if self.batch != nil {
+		self.db.ExecuteBatch(self.batch)
+		self.batch = nil
+	} else {
+		log.Println("NIL BATCH")
+	}
+	delta := time.Since(start)
+	util.SendTimer("cassandra_storage_EndBatch", delta.Nanoseconds())
 
-func (c *CassandraStorage) Store(id int64, db string, frame string, slice int, filter uint64, bitmap *Bitmap) error {
+}
+
+func (self *CassandraStorage) Store(id int64, db string, frame string, slice int, filter uint64, bitmap *Bitmap) error {
+	self.BeginBatch()
 	for i := bitmap.Min(); !i.Limit(); i = i.Next() {
 		var chunk = i.Item()
 		for idx, block := range chunk.Value.Block {
 			block_index := int32(idx)
 			iblock := int64(block)
 			if iblock != 0 {
-				c.StoreBlock(id, db, frame, slice, filter, int64(chunk.Key), block_index, iblock)
+				self.StoreBlock(id, db, frame, slice, filter, int64(chunk.Key), block_index, iblock)
 			}
 		}
 	}
@@ -101,20 +121,18 @@ func (c *CassandraStorage) Store(id int64, db string, frame string, slice int, f
 	var dumb = COUNTERMASK
 	COUNTER_KEY := int64(dumb)
 
-	c.StoreBlock(id, db, frame, slice, filter, COUNTER_KEY, 0, cnt)
+	self.StoreBlock(id, db, frame, slice, filter, COUNTER_KEY, 0, cnt)
+	self.EndBatch()
 	return nil
 }
 
-func (c *CassandraStorage) StoreBlock(id int64, db string, frame string, slice int, filter uint64, chunk int64, block_index int32, block int64) error {
-
-	start := time.Now()
-	var err error
-	if err = c.db.Query(`
-        INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?);`, id, db, frame, slice, int(filter), chunk, block_index, block).Consistency(gocql.One).Exec(); err != nil {
-		log.Println(err)
-		log.Println("INSERT ", id, chunk, block_index)
+func (self *CassandraStorage) StoreBlock(id int64, db string, frame string, slice int, filter uint64, chunk int64, block_index int32, block int64) error {
+	if self.batch == nil {
+		panic("NIL BATCH")
 	}
+	start := time.Now()
+	self.batch.Query(self.stmt, id, db, frame, slice, int(filter), chunk, block_index, block)
 	delta := time.Since(start)
 	util.SendTimer("cassandra_storage_StoreBlock", delta.Nanoseconds())
-	return err
+	return nil
 }
