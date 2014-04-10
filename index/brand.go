@@ -1,6 +1,10 @@
 package index
 
-import _ "github.com/go-sql-driver/mysql"
+import (
+	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+)
 
 import (
 	"encoding/json"
@@ -123,7 +127,7 @@ func (self *Brand) Rank() {
 		self.rank_counter -= 1
 		return //skip
 	}
-
+	start := time.Now()
 	var list RankList
 	for k, item := range self.bitmap_cache {
 		//		if item.bitmap.Count() > 50 {
@@ -140,6 +144,8 @@ func (self *Brand) Rank() {
 	}
 
 	//dump(self.rankings, 10)
+	delta := time.Since(start)
+	util.SendTimer("brand_Rank", delta.Nanoseconds())
 
 }
 

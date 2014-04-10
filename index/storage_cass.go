@@ -13,9 +13,11 @@ import (
 )
 
 type CassandraStorage struct {
-	db    *gocql.Session
-	batch *gocql.Batch
-	stmt  string
+	db            *gocql.Session
+	batch         *gocql.Batch
+	stmt          string
+	batch_time    time.Time
+	batch_counter int
 }
 
 func BuildSchema() {
@@ -47,6 +49,7 @@ func NewCassStorage(host, keyspace string) Storage {
 	obj.db = session
 	obj.stmt = `INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?);`
 	obj.batch = nil
+	obj.batch_counter = 0
 	return obj
 }
 
@@ -89,13 +92,34 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 	return bitmap, uint64(filter)
 }
 func (self *CassandraStorage) BeginBatch() {
-	self.batch = gocql.NewBatch(gocql.LoggedBatch)
+	if self.batch == nil {
+		self.batch = gocql.NewBatch(gocql.LoggedBatch)
+	}
+	self.batch_counter++
+}
+func (self *CassandraStorage) runBatch(batch *gocql.Batch) {
+	if batch != nil {
+		self.db.ExecuteBatch(batch)
+	}
+}
+func (self *CassandraStorage) FlushBatch() {
+	start := time.Now()
+	go self.runBatch(self.batch) //maybe this is crazy but i'll give it a whirl
+	self.batch = nil
+	self.batch_time = time.Now()
+	self.batch_counter = 0
+	delta := time.Since(start)
+	util.SendTimer("cassandra_storage_FlushBatch", delta.Nanoseconds())
 }
 func (self *CassandraStorage) EndBatch() {
 	start := time.Now()
 	if self.batch != nil {
-		self.db.ExecuteBatch(self.batch)
-		self.batch = nil
+		last := time.Since(self.batch_time)
+		if last*time.Second > 15 {
+			self.FlushBatch()
+		} else if self.batch_counter > 300 {
+			self.FlushBatch()
+		}
 	} else {
 		log.Println("NIL BATCH")
 	}
