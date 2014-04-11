@@ -29,10 +29,10 @@ func BuildSchema() {
 	*/
 
 }
-func NewCassStorage(host, keyspace string) Storage {
+func NewCassStorage(hosts []string, keyspace string) Storage {
 	obj := new(CassandraStorage)
 	//cluster := gocql.NewCluster("127.0.0.1")
-	cluster := gocql.NewCluster(host)
+	cluster := gocql.NewCluster(hosts...)
 	cluster.Keyspace = keyspace
 	//cluster.Consistency = gocql.Quorum
 	cluster.Consistency = gocql.One

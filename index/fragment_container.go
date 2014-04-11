@@ -244,15 +244,13 @@ func getStorage(db string, slice int, frame string, fid SUUID) Storage {
 		full_dir := fmt.Sprintf("%s/%s/%d/%s/%s", base_path, db, slice, frame, SUUID_to_Hex(fid))
 		return NewLevelDBStorage(full_dir)
 	case "cassandra":
-		host := config.GetString("cassandra_host")
-		if host == "" {
-			host = "localhost"
-		}
+		//	host := config.GetString("cassandra_host")
+		hosts := config.GetStringArrayDefault("cassandra_servers", []string{"localhost"})
 		keyspace := config.GetString("cassandra_keyspace")
 		if keyspace == "" {
 			keyspace = "hotbox"
 		}
-		return NewCassStorage(host, keyspace)
+		return NewCassStorage(hosts, keyspace)
 	}
 	return nil
 }
