@@ -245,7 +245,7 @@ func getStorage(db string, slice int, frame string, fid SUUID) Storage {
 		return NewLevelDBStorage(full_dir)
 	case "cassandra":
 		//	host := config.GetString("cassandra_host")
-		hosts := config.GetStringArrayDefault("cassandra_servers", []string{"localhost"})
+		hosts := config.GetStringArrayDefault("cassandra_hosts", []string{"localhost"})
 		keyspace := config.GetString("cassandra_keyspace")
 		if keyspace == "" {
 			keyspace = "hotbox"
