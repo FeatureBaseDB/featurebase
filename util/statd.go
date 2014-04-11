@@ -29,8 +29,6 @@ func init() {
 			select {
 			case ci := <-count:
 				stats.Gauge(ci.stat, ci.delta, ci.rate)
-
-				break
 			case <-end:
 				log.Println("DONE Stats")
 				return
