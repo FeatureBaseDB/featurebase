@@ -28,7 +28,7 @@ func init() {
 		for {
 			select {
 			case ci := <-count:
-				stats.Timing(ci.stat, ci.delta, ci.rate)
+				stats.Gauge(ci.stat, ci.delta, ci.rate)
 
 				break
 			case <-end:
@@ -41,7 +41,7 @@ func init() {
 }
 
 func SendTimer(stat string, delta int64) {
-	count <- args{stat, delta, .5}
+	count <- args{stat, delta, 1.0}
 }
 
 func ShutdownStats() {

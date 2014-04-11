@@ -9,11 +9,6 @@
         "version": "35c98e8c885757fab1824daa77cc0e24bf30e76b",
         "type": "git"
     },
-    "github.com/cactus/go-statsd-client/statsd": {
-        "repo": "github.com/cactus/go-statsd-client",
-        "version": "912f30c35e9cdf51f50bae24f071e227cca152fb",
-        "type": "git"
-    },
     "gkvlite": {
         "repo": "github.com/steveyen/gkvlite",
         "version": "master",
@@ -86,7 +81,7 @@
     },
     "statsd": {
         "repo": "github.com/cactus/go-statsd-client/statsd",
-        "version": "912f30c35e9cdf51f50bae24f071e227cca152fb",
+        "version": "3999011ef0451eb805b0fa31f98cfb9261bd71be",
         "type": "git"
     },
     "websocket": {
