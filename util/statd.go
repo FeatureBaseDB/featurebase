@@ -41,7 +41,8 @@ func init() {
 }
 
 func SendTimer(stat string, delta int64) {
-	count <- args{stat, delta, 1.0}
+	pstat := "pilosa." + stat
+	count <- args{pstat, delta, 1.0}
 }
 
 func ShutdownStats() {
