@@ -106,7 +106,7 @@ func (self *CassandraStorage) runBatch(batch *gocql.Batch) {
 }
 func (self *CassandraStorage) FlushBatch() {
 	start := time.Now()
-	go self.runBatch(self.batch) //maybe this is crazy but i'll give it a whirl
+	self.runBatch(self.batch) //maybe this is crazy but i'll give it a whirl
 	self.batch = nil
 	self.batch_time = time.Now()
 	self.batch_counter = 0

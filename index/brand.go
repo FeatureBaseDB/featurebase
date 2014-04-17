@@ -85,6 +85,7 @@ func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category uint64) {
 	if bm.Count() >= self.threshold_value {
 		self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm, category}
 		if len(self.bitmap_cache) > self.threshold_length {
+			log.Printf("RANK: %d %d", len(self.bitmap_cache), self.threshold_length)
 			self.Rank()
 			self.trim()
 		}
@@ -302,7 +303,13 @@ func (self *Brand) getFileName() string {
 
 func (self *Brand) Persist() error {
 	log.Println("Brand Persist:", self.getFileName())
+	self.storage.FlushBatch()
+	asize := len(self.bitmap_cache)
 
+	if asize == 0 {
+		log.Println("Nothing to save %s", self.getFileName())
+		return nil
+	}
 	w, err := util.Create(self.getFileName())
 	if err != nil {
 		log.Println("Error opening outfile %s", self.getFileName())
@@ -312,7 +319,6 @@ func (self *Brand) Persist() error {
 	defer w.Close()
 	defer self.storage.Close()
 
-	asize := len(self.bitmap_cache)
 	var list RankList
 	for k, item := range self.bitmap_cache {
 		list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})

@@ -22,6 +22,8 @@ func (c *MemoryStorage) Close() {
 }
 func (c *MemoryStorage) EndBatch() {
 }
+func (c *MemoryStorage) FlushBatch() {
+}
 func (c *MemoryStorage) Fetch(bitmap_id uint64, db string, frame string, slice int) (IBitmap, uint64) {
 	//	log.Println("hello")
 
