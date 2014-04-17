@@ -85,7 +85,7 @@ func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category uint64) {
 	if bm.Count() >= self.threshold_value {
 		self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm, category}
 		if len(self.bitmap_cache) > self.threshold_length {
-			log.Printf("RANK: %d %d", len(self.bitmap_cache), self.threshold_length)
+			log.Printf("RANK: %d %d %d", len(self.bitmap_cache), self.threshold_length, self.threshold_value)
 			self.Rank()
 			self.trim()
 		}
@@ -93,10 +93,11 @@ func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category uint64) {
 }
 func (self *Brand) trim() {
 	for k, item := range self.bitmap_cache {
-		if item.bitmap.Count() < self.threshold_value {
+		if item.bitmap.Count() <= self.threshold_value {
 			delete(self.bitmap_cache, k)
 		}
 	}
+	log.Printf("TRIM: %d %d", len(self.bitmap_cache), self.threshold_length)
 
 }
 
@@ -134,7 +135,7 @@ func (self *Brand) Rank() {
 		item := list[self.threshold_idx]
 		self.threshold_value = item.bitmap.Count()
 	} else {
-		self.threshold_value = 0
+		self.threshold_value = 1
 	}
 
 	//dump(self.rankings, 10)
