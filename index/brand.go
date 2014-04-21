@@ -139,6 +139,7 @@ func (self *Brand) Rank() {
 	}
 
 	//dump(self.rankings, 10)
+	self.rank_count = 0
 	delta := time.Since(start)
 	util.SendTimer("brand_Rank", delta.Nanoseconds())
 	self.rank_time = start
@@ -188,7 +189,9 @@ func (self *Brand) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
 }
 
 func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
-	if self.rank_count > 0 {
+	if len(self.rankings) < 50 {
+		self.Rank()
+	} else if self.rank_count > 0 {
 		last := time.Since(self.rank_time) * time.Second
 		if last > 60 {
 			self.Rank()
@@ -202,7 +205,7 @@ func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
 	}
 
 	test := self.TopNCat(src_bitmap, n, is)
-	log.Println("TOPN:", test)
+	log.Println("TOPN:", test, len(self.rankings))
 	return test
 }
 func dump(r RankList, n int) {
