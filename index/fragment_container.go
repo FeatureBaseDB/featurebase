@@ -134,7 +134,7 @@ func (self *FragmentContainer) TopN(frag_id SUUID, bh BitmapHandle, n int, categ
 		SendTimer("fragmant_container_TopN", result.exec_time.Nanoseconds())
 		return result.answer.([]Pair), nil
 	}
-	return nil, nil
+	return nil, errors.New(fmt.Sprintf("Fragment not found:%s", SUUID_to_Hex(frag_id)))
 }
 
 func (self *FragmentContainer) GetList(frag_id SUUID, bitmap_id []uint64) ([]BitmapHandle, error) {

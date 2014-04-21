@@ -201,7 +201,9 @@ func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
 
 	}
 
-	return self.TopNCat(src_bitmap, n, is)
+	test := self.TopNCat(src_bitmap, n, is)
+	log.Println("TOPN:", test)
+	return test
 }
 func dump(r RankList, n int) {
 	for i, v := range r {
