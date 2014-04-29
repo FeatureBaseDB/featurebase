@@ -313,12 +313,12 @@ func (self *Brand) Persist() error {
 	asize := len(self.bitmap_cache)
 
 	if asize == 0 {
-		log.Println("Nothing to save %s", self.getFileName())
+		log.Println("Nothing to save ", self.getFileName())
 		return nil
 	}
 	w, err := util.Create(self.getFileName())
 	if err != nil {
-		log.Println("Error opening outfile %s", self.getFileName())
+		log.Println("Error opening outfile ", self.getFileName())
 		log.Println(err)
 		return err
 	}

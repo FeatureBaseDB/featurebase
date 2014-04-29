@@ -252,7 +252,6 @@ func getStorage(db string, slice int, frame string, fid SUUID) Storage {
 		}
 		return NewCassStorage(hosts, keyspace)
 	}
-	return nil
 }
 
 func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {

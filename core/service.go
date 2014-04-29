@@ -35,6 +35,8 @@ type Service struct {
 	name           string
 }
 
+var Build string
+
 func NewService() *Service {
 	service := new(Service)
 	service.init_id()
@@ -48,7 +50,7 @@ func NewService() *Service {
 	service.WebService = NewWebService(service)
 	service.Index = index.NewFragmentContainer()
 	service.Hold = hold.NewHolder()
-	service.version = "0.0.25"
+	service.version = Build
 	service.name = "Cruncher"
 	service.PrepareLogging()
 	fmt.Printf("Pilosa %s\n", service.version)

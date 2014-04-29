@@ -4,13 +4,19 @@ import (
 	"flag"
 	"log"
 	"os"
+	"pilosa/core"
 	"pilosa/cruncher"
 	"runtime/pprof"
 )
 
-var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+var (
+	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+	Build      string
+)
 
 func main() {
+	core.Build = Build
+
 	flag.Parse()
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
