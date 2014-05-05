@@ -352,7 +352,7 @@ func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id util.SUUI
 func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
-		log.Println(err)
+		log.Println("database.addFragment", err)
 		return nil
 	}
 	fragment := Fragment{id: fragment_id}
