@@ -1,10 +1,14 @@
 package core
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"pilosa/config"
 	"pilosa/db"
 	"pilosa/index"
@@ -30,9 +34,87 @@ func NewWebService(service *Service) *WebService {
 	return &WebService{service}
 }
 
+type RequestLogger struct {
+	handler http.HandlerFunc
+	logger  chan []byte
+}
+
+func NewRequestLogger(handler http.HandlerFunc, logger chan []byte) http.HandlerFunc {
+	r := RequestLogger{handler, logger}
+	return r.Handle
+}
+func (self *RequestLogger) Handle(w http.ResponseWriter, r *http.Request) {
+
+	// Grab a dump of the incoming request
+	dump, err := httputil.DumpRequest(r, true /*dump the body also*/)
+	if err != nil {
+		log.Println("Dump Failure", err)
+	}
+
+	self.handler(w, r)
+	self.logger <- dump
+}
+
+type LogRecord struct {
+	when     time.Time
+	data_x64 string
+}
+
+func NewLogRecord(t time.Time, data []byte) LogRecord {
+	var b bytes.Buffer
+	w := gzip.NewWriter(&b)
+	w.Write(data)
+	w.Flush()
+	w.Close()
+	e := base64.StdEncoding.EncodeToString(b.Bytes())
+	x := LogRecord{t, e}
+	return x
+}
+func genFileName(id string) string {
+	//bucket/YYYY/MM/DDHHMMSS.id.log
+	t := time.Now()
+	base := "http://pilosa.umbel.com.s3.amazonaws.com/bit_log"
+	return fmt.Sprintf("%s%s.%s.log", base, t.Format("/2006/01/02/15/04-05"), id)
+
+}
+func flush(requests []LogRecord, id string) {
+	dest := genFileName(id)
+	w, err := util.Create(dest)
+	if err != nil {
+		log.Println("Error opening outfile ", dest)
+		log.Println(err)
+	}
+	defer w.Close()
+
+	encoder := json.NewEncoder(w)
+	encoder.Encode(requests)
+
+}
+func Logger(in chan []byte, end chan bool, id string) {
+	var buffer = make([]LogRecord, 2048, 2048)
+	for {
+		select {
+		case raw := <-in:
+			log.Println(string(raw))
+			logRecord := NewLogRecord(time.Now(), raw)
+			buffer = append(buffer, logRecord)
+			if len(buffer) > 2047 {
+				flush(buffer, id)
+				buffer = make([]LogRecord, 2048, 2048)
+			}
+		case <-end:
+			flush(buffer, id)
+			log.Println("Shutdown Logger")
+			return
+		}
+
+	}
+}
 func (self *WebService) Run() {
 	port_string := strconv.Itoa(config.GetInt("port_http"))
 	log.Printf("Serving HTTP on port %s...\n", port_string)
+	logger_chan := make(chan []byte, 1024)
+	end := make(chan bool)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/message", self.HandleMessage)
 	mux.HandleFunc("/query", self.HandleQuery)
@@ -47,12 +129,15 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/version", self.HandleVersion)
 	mux.HandleFunc("/ping", self.HandlePing)
 	mux.HandleFunc("/batch", self.HandleBatch)
-	mux.HandleFunc("/set_bits", self.HandleSetBit)
+	mux.HandleFunc("/set_bits", NewRequestLogger(self.HandleSetBit, logger_chan))
 	s := &http.Server{
 		Addr:    ":" + port_string,
 		Handler: mux,
 	}
+	id := config.GetString("id")
+	go Logger(logger_chan, end, id)
 	s.ListenAndServe()
+	end <- true
 }
 
 func (self *WebService) HandleMessage(w http.ResponseWriter, r *http.Request) {
