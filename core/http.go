@@ -34,6 +34,19 @@ func NewWebService(service *Service) *WebService {
 	return &WebService{service}
 }
 
+type Flusher struct {
+	flusher chan bool
+}
+
+func (self *Flusher) Handle(w http.ResponseWriter, r *http.Request) {
+	self.flusher <- true
+}
+
+func NewFlusher(flusher chan bool) http.HandlerFunc {
+	f := Flusher{flusher}
+	return f.Handle
+}
+
 type RequestLogger struct {
 	handler http.HandlerFunc
 	logger  chan []byte
@@ -135,7 +148,9 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/version", self.HandleVersion)
 	mux.HandleFunc("/ping", self.HandlePing)
 	mux.HandleFunc("/batch", self.HandleBatch)
-	mux.HandleFunc("/set_bits", NewRequestLogger(self.HandleSetBit, logger_chan))
+	//mux.HandleFunc("/set_bits", NewRequestLogger(self.HandleSetBit, logger_chan))
+	mux.HandleFunc("/set_bits", self.HandleSetBit)
+	mux.HandleFunc("/flush", NewFlusher(flusher))
 	s := &http.Server{
 		Addr:    ":" + port_string,
 		Handler: mux,
