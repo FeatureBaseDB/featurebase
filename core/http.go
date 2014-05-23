@@ -90,8 +90,8 @@ func flush(requests []LogRecord, id string) {
 	encoder.Encode(requests)
 
 }
-func Logger(in chan []byte, end chan bool, id string) {
-	var buffer = make([]LogRecord, 2048, 2048)
+func Logger(in chan []byte, end chan bool, id string, flusher chan bool) {
+	var buffer = make([]LogRecord, 128, 256)
 	for {
 		select {
 		case raw := <-in:
@@ -100,7 +100,12 @@ func Logger(in chan []byte, end chan bool, id string) {
 			buffer = append(buffer, logRecord)
 			if len(buffer) > 2047 {
 				flush(buffer, id)
-				buffer = make([]LogRecord, 2048, 2048)
+				buffer = make([]LogRecord, 128, 256)
+			}
+		case <-flusher:
+			if len(buffer) > 0 {
+				flush(buffer, id)
+				buffer = make([]LogRecord, 128, 256)
 			}
 		case <-end:
 			flush(buffer, id)
@@ -115,6 +120,7 @@ func (self *WebService) Run() {
 	log.Printf("Serving HTTP on port %s...\n", port_string)
 	logger_chan := make(chan []byte, 1024)
 	end := make(chan bool)
+	flusher := make(chan bool)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/message", self.HandleMessage)
 	mux.HandleFunc("/query", self.HandleQuery)
@@ -135,7 +141,7 @@ func (self *WebService) Run() {
 		Handler: mux,
 	}
 	id := config.GetString("id")
-	go Logger(logger_chan, end, id)
+	go Logger(logger_chan, end, id, flusher)
 	s.ListenAndServe()
 	end <- true
 }
@@ -414,7 +420,7 @@ func (self *WebService) HandleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "Pilosa v."+self.service.version+"\n")
+	fmt.Fprintf(w, "Pilosa v.("+self.service.version+")\n")
 }
 
 func (self *WebService) HandleTest(w http.ResponseWriter, r *http.Request) {
