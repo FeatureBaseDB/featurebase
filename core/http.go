@@ -69,8 +69,8 @@ func (self *RequestLogger) Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 type LogRecord struct {
-	when     time.Time
-	data_x64 string
+	When     time.Time
+	Data_x64 string
 }
 
 func NewLogRecord(t time.Time, data []byte) LogRecord {
@@ -90,7 +90,7 @@ func genFileName(id string) string {
 	return fmt.Sprintf("%s%s.%s.log", base, t.Format("/2006/01/02/15/04-05"), id)
 
 }
-func flush(requests []LogRecord, id string) {
+func flush(requests []LogRecord, id string, records_to_dump int) {
 	dest := genFileName(id)
 	w, err := util.Create(dest)
 	if err != nil {
@@ -100,28 +100,32 @@ func flush(requests []LogRecord, id string) {
 	defer w.Close()
 
 	encoder := json.NewEncoder(w)
-	encoder.Encode(requests)
+	for i := 0; i < records_to_dump; i++ {
+		encoder.Encode(requests[i])
+	}
 
 }
 func Logger(in chan []byte, end chan bool, id string, flusher chan bool) {
-	var buffer = make([]LogRecord, 128, 256)
+	var buffer = make([]LogRecord, 2048, 2048)
+	i := 0
 	for {
 		select {
 		case raw := <-in:
-			log.Println(string(raw))
 			logRecord := NewLogRecord(time.Now(), raw)
-			buffer = append(buffer, logRecord)
-			if len(buffer) > 2047 {
-				flush(buffer, id)
-				buffer = make([]LogRecord, 128, 256)
+			buffer[i] = logRecord
+			i += 1
+			if i > 2047 {
+				flush(buffer, id, i)
+				i = 0
 			}
+
 		case <-flusher:
-			if len(buffer) > 0 {
-				flush(buffer, id)
-				buffer = make([]LogRecord, 128, 256)
+			if i > 0 {
+				flush(buffer, id, i)
+				i = 0
 			}
 		case <-end:
-			flush(buffer, id)
+			flush(buffer, id, i)
 			log.Println("Shutdown Logger")
 			return
 		}
@@ -148,8 +152,8 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/version", self.HandleVersion)
 	mux.HandleFunc("/ping", self.HandlePing)
 	mux.HandleFunc("/batch", self.HandleBatch)
-	//mux.HandleFunc("/set_bits", NewRequestLogger(self.HandleSetBit, logger_chan))
-	mux.HandleFunc("/set_bits", self.HandleSetBit)
+	mux.HandleFunc("/set_bits", NewRequestLogger(self.HandleSetBit, logger_chan))
+	//mux.HandleFunc("/set_bits", self.HandleSetBit)
 	mux.HandleFunc("/flush", NewFlusher(flusher))
 	s := &http.Server{
 		Addr:    ":" + port_string,
