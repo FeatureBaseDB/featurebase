@@ -36,6 +36,8 @@ func NewCassStorage(hosts []string, keyspace string) Storage {
 	cluster.Keyspace = keyspace
 	//cluster.Consistency = gocql.Quorum
 	cluster.Consistency = gocql.One
+	cluster.Consistency = gocql.One
+	cluster.Timeout = 3 * time.Second
 	//cluster.ProtoVersion = 1
 	// cluster.CQLVersion = "3.0.0"
 	session, err := cluster.CreateSession()
