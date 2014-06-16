@@ -39,12 +39,6 @@ func (self *Process) Id() uuid.UUID {
 	return *self.id
 }
 
-func (self *Process) SetId(id uuid.UUID) {
-	self.mutex.Lock()
-	defer self.mutex.Unlock()
-	self.id = &id
-}
-
 func (self *Process) Host() string {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
@@ -117,6 +111,10 @@ func NewCluster() *Cluster {
 	cluster.databases = make(map[string]*Database)
 	return &cluster
 }
+func (self *Cluster) GetDatabases() map[string]*Database {
+	return self.databases
+
+}
 
 /////////// DATABASES ////////////////////////////////////////////////////////////////////
 
@@ -127,6 +125,10 @@ type Database struct {
 	slices                 []*Slice
 	frame_slice_intersects []*FrameSliceIntersect
 	mutex                  sync.Mutex
+}
+
+func (self *Database) GetFramSliceIntersects() []*FrameSliceIntersect {
+	return self.frame_slice_intersects
 }
 
 // Add a database to a cluster
@@ -181,7 +183,6 @@ func (d *Database) getFrame(name string) (*Frame, error) {
 			return frame, nil
 		}
 	}
-	log.Println("Missing frame:", d.Name, name)
 	return nil, FrameDoesNotExistError
 }
 
@@ -271,8 +272,12 @@ func (d *Database) GetFrameSliceIntersect(frame *Frame, slice *Slice) (*FrameSli
 	return nil, FrameSliceIntersectDoesNotExistError
 }
 
-func (fsi *FrameSliceIntersect) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
-	for _, fragment := range fsi.fragments {
+func (self *FrameSliceIntersect) GetFragments() []*Fragment {
+	return self.fragments
+}
+
+func (self *FrameSliceIntersect) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
+	for _, fragment := range self.fragments {
 		if fragment.id == fragment_id {
 			return fragment, nil
 		}
@@ -280,9 +285,9 @@ func (fsi *FrameSliceIntersect) GetFragment(fragment_id util.SUUID) (*Fragment, 
 	return nil, FragmentDoesNotExistError
 }
 
-func (fsi *FrameSliceIntersect) AddFragment(fragment *Fragment) {
-	fsi.fragments = append(fsi.fragments, fragment)
-	fsi.hashring.Add(util.SUUID_to_Hex(fragment.id))
+func (self *FrameSliceIntersect) AddFragment(fragment *Fragment) {
+	self.fragments = append(self.fragments, fragment)
+	self.hashring.Add(util.SUUID_to_Hex(fragment.id))
 }
 
 ///////// FRAGMENTS ////////////////////////////////////////////////////////////////////////
@@ -293,20 +298,20 @@ type Fragment struct {
 	process *Process
 }
 
-func (f *Fragment) GetId() util.SUUID {
-	return f.id
+func (self *Fragment) GetId() util.SUUID {
+	return self.id
 }
 
-func (f *Fragment) GetProcess() *Process {
-	return f.process
+func (self *Fragment) GetProcess() *Process {
+	return self.process
 }
 
-func (f *Fragment) GetProcessId() *uuid.UUID {
-	return f.process.id
+func (self *Fragment) GetProcessId() *uuid.UUID {
+	return self.process.id
 }
 
-func (f *Fragment) GetLocation() *Location {
-	return &Location{f.process.id, f.id}
+func (self *Fragment) GetLocation() *Location {
+	return &Location{self.process.id, self.id}
 }
 
 // rename this one
@@ -340,6 +345,7 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 func (d *Database) GetFragmentById(fragment_id *uuid.UUID) *Fragment {
 }
 */
+
 func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) (*Fragment, error) {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
