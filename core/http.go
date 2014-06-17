@@ -131,7 +131,9 @@ func Logger(in chan []byte, end chan bool, id string, flusher chan bool) {
 		}
 
 	}
+
 }
+
 func (self *WebService) Run() {
 	port_string := strconv.Itoa(config.GetInt("port_http"))
 	log.Printf("Serving HTTP on port %s...\n", port_string)

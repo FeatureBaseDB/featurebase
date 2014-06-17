@@ -91,37 +91,45 @@ func getLightestProcess(m map[string]int) Pair {
 func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) error {
 	//get Lock to create the fragment
 	ttl := uint64(300) //secs to hold the lock
-	lock_key := fmt.Sprintf("%s-%s-%d", db, frame, slice_int)
-	_, err := self.service.Etcd.RawCompareAndSwap(lock_key, "0", ttl, "", 0)
+	lock_key := fmt.Sprintf("%s/lock/%s-%s-%d", self.namespace, db, frame, slice_int)
+	response, err := self.service.Etcd.RawCreate(lock_key, "0", ttl)
 
 	if err == nil {
-		//figure out least loaded process..possibly check max process
-		//to create the node, just write off the items to etcd and the watch should spawn
-		//be nice if something would notify perhaps queue
-		m := make(map[string]int)
-		for _, dbs := range self.service.Cluster.GetDatabases() {
-			for _, fsi := range dbs.GetFramSliceIntersects() {
-				for _, fragment := range fsi.GetFragments() {
-					process := fragment.GetProcess().Id().String()
-					i := m[process]
-					i++
-					m[process] = i
+		switch response.StatusCode {
+		case 201: //key created
+			//figure out least loaded process..possibly check max process
+			//to create the node, just write off the items to etcd and the watch should spawn
+			//be nice if something would notify perhaps queue
+			m := make(map[string]int)
+			for _, dbs := range self.service.Cluster.GetDatabases() {
+				for _, fsi := range dbs.GetFramSliceIntersects() {
+					for _, fragment := range fsi.GetFragments() {
+						process := fragment.GetProcess().Id().String()
+						i := m[process]
+						i++
+						m[process] = i
+
+					}
 
 				}
 
 			}
+			p := getLightestProcess(m)
+
+			// PUT -d "value=5cb315c3-6e1d-4218-89b7-943d1dba985b" http://etcd0:4001/v2/keys/pilosa/0/db/29/frame/d/slice/5/fragment/a2b632fc4001b817/proces
+			//so i need db, frame, slice , fragment_id
+			fuid := util.SUUID_to_Hex(util.Id())
+			fragment_key := fmt.Sprintf("%s/db/%d/frame/%s/slice/%d/fragment/%s/process", self.namespace, db, frame, slice_int, fuid)
+			process_guid := p.Key
+			// need to check value to see how many we have left
+			_, err = self.service.Etcd.Set(fragment_key, process_guid, 0)
+			log.Println("Fragment sent to etcd: %s(%s)", fragment_key, process_guid)
+		case 400: //key already present
+			return errors.New("Fragment creation already in process:" + lock_key)
+		default:
+			return errors.New(fmt.Sprintf("Unknown Etcd status:%d", response.StatusCode))
 
 		}
-		p := getLightestProcess(m)
-
-		// PUT -d "value=5cb315c3-6e1d-4218-89b7-943d1dba985b" http://etcd0:4001/v2/keys/pilosa/0/db/29/frame/d/slice/5/fragment/a2b632fc4001b817/proces
-		//so i need db, frame, slice , fragment_id
-		fuid := util.SUUID_to_Hex(util.Id())
-		fragment_key := fmt.Sprintf("%s/db/%d/frame/%s/slice/%d/fragment/%s/process", self.namespace, db, frame, slice_int, fuid)
-		process_guid := p.Key
-		// need to check value to see how many we have left
-		_, err = self.service.Etcd.Set(fragment_key, process_guid, 0)
-		log.Println("fragment created: %s(%s)", fragment_key, process_guid)
 
 	}
 	return err
