@@ -5,7 +5,7 @@ import (
 	"pilosa/db"
 	. "pilosa/util"
 
-	"tux21b.org/v1/gocql/uuid"
+	"github.com/gocql/gocql/uuid"
 )
 
 type BatchRequest struct {

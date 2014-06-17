@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"pilosa/db"
 
-	"tux21b.org/v1/gocql/uuid"
+	"github.com/gocql/gocql/uuid"
 )
 
 type PortableQueryStep interface {

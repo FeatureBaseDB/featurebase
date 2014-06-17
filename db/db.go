@@ -3,7 +3,7 @@ package db
 import (
 	"encoding/gob"
 
-	"tux21b.org/v1/gocql/uuid"
+	"github.com/gocql/gocql/uuid"
 )
 
 type Message struct {

@@ -3,7 +3,7 @@ package interfaces
 import (
 	"pilosa/db"
 
-	"tux21b.org/v1/gocql/uuid"
+	"github.com/gocql/gocql/uuid"
 )
 
 type Transporter interface {

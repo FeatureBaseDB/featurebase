@@ -14,7 +14,7 @@ import (
 	"syscall"
 
 	"github.com/coreos/go-etcd/etcd"
-	"tux21b.org/v1/gocql/uuid"
+	"github.com/gocql/gocql/uuid"
 )
 
 type Service struct {

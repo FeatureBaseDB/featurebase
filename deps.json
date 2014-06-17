@@ -6,7 +6,7 @@
     },
     "etcd": {
         "repo": "github.com/coreos/go-etcd/etcd",
-        "version": "35c98e8c885757fab1824daa77cc0e24bf30e76b",
+        "version": "7745cfd7f8e619cc9e6be450238e6253a57a227f",
         "type": "git"
     },
     "gkvlite": {
@@ -20,8 +20,8 @@
         "type": "git"
     },
     "gocql": {
-        "repo": "tux21b.org/v1/gocql",
-        "version": "44eda643c1ae69e866e491b1c935c5b22e42350e",
+        "repo": "github.com/gocql/gocql",
+        "version": "f2deeb64d238e3a470f4489d734fab820cb44b4b",
         "type": "git"
     },
     "goleveldb": {

@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"tux21b.org/v1/gocql/uuid"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/gocql/gocql/uuid"
 )
 
 var InvalidQueryError = errors.New("Invalid query format.")

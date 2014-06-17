@@ -9,7 +9,7 @@ import (
 
 	"time"
 
-	"tux21b.org/v1/gocql"
+	"github.com/gocql/gocql"
 )
 
 type CassandraStorage struct {

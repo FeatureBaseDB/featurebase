@@ -3,8 +3,8 @@ package util
 import (
 	"testing"
 
+	"github.com/gocql/gocql/uuid"
 	. "github.com/smartystreets/goconvey/convey"
-	"tux21b.org/v1/gocql/uuid"
 )
 
 /*

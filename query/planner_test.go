@@ -4,8 +4,9 @@ import (
 	"pilosa/db"
 	"pilosa/util"
 	"testing"
+
+	"github.com/gocql/gocql/uuid"
 	. "github.com/smartystreets/goconvey/convey"
-	"tux21b.org/v1/gocql/uuid"
 )
 
 func basic_database() (*db.Database, *db.Fragment) {

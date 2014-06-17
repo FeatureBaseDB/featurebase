@@ -22,8 +22,8 @@ import (
 
 	notify "github.com/bitly/go-notify"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/gocql/gocql/uuid"
 	"github.com/gorilla/websocket"
-	"tux21b.org/v1/gocql/uuid"
 )
 
 type WebService struct {

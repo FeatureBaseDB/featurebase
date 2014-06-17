@@ -4,7 +4,7 @@ import (
 	"pilosa/db"
 	"strings"
 
-	"tux21b.org/v1/gocql/uuid"
+	"github.com/gocql/gocql/uuid"
 )
 
 type QueryInput interface{}

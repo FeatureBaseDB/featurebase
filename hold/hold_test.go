@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gocql/gocql/uuid"
+
 	. "github.com/smartystreets/goconvey/convey"
-	"tux21b.org/v1/gocql/uuid"
 )
 
 func TestHoldChan(t *testing.T) {

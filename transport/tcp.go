@@ -10,8 +10,9 @@ import (
 	"pilosa/db"
 
 	"time"
+
 	notify "github.com/bitly/go-notify"
-	"tux21b.org/v1/gocql/uuid"
+	"github.com/gocql/gocql/uuid"
 )
 
 type connection struct {
