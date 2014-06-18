@@ -14,7 +14,6 @@ import (
 
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/gocql/gocql/uuid"
 )
 
 type TopologyMapper struct {
@@ -46,9 +45,14 @@ func (self *TopologyMapper) Run() {
 	receiver := make(chan *etcd.Response)
 	stop := make(chan bool)
 	go func() {
-		// TODO: error check and restart watcher
+		// TODO: add some terminating measure
 		// TODO: use modindex to make sure watch catches everything
-		_, _ = self.service.Etcd.Watch(self.namespace+"/db", 0, true, receiver, stop)
+		for {
+			ns := self.namespace + "/db"
+			log.Println(" ETCD watcher:", ns)
+			resp, err = self.service.Etcd.Watch(ns, 0, true, receiver, stop)
+			log.Println("TopologyMapper ETCD watcher", resp, err)
+		}
 	}()
 	go func() {
 		for resp = range receiver {
@@ -77,15 +81,32 @@ func (p PairList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p PairList) Len() int           { return len(p) }
 func (p PairList) Less(i, j int) bool { return p[i].Value < p[j].Value }
 
-func getLightestProcess(m map[string]int) Pair {
+func getLightestProcess(m map[string]int) (Pair, error) {
 
-	p := make(PairList, len(m))
+	l := len(m)
+	if l == 0 {
+		return Pair{}, errors.New("No Processes")
+	}
+	p := make(PairList, l)
 	i := 0
 	for k, v := range m {
 		p[i] = Pair{k, v}
 	}
 	sort.Sort(p)
-	return p[0]
+
+	return p[l-1], nil
+}
+
+func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
+	frames_to_create := config.GetStringArrayDefault("supported_frames", []string{"b.n", "l.n", "t.t", "d"})
+	for _, frame := range frames_to_create {
+		err := self.AllocateFragment(db, frame, slice_int)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+	return nil
+
 }
 
 func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) error {
@@ -114,16 +135,19 @@ func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) er
 				}
 
 			}
-			p := getLightestProcess(m)
+			p, err := getLightestProcess(m)
+			if err != nil {
+				return err
+			}
 
 			// PUT -d "value=5cb315c3-6e1d-4218-89b7-943d1dba985b" http://etcd0:4001/v2/keys/pilosa/0/db/29/frame/d/slice/5/fragment/a2b632fc4001b817/proces
 			//so i need db, frame, slice , fragment_id
 			fuid := util.SUUID_to_Hex(util.Id())
-			fragment_key := fmt.Sprintf("%s/db/%d/frame/%s/slice/%d/fragment/%s/process", self.namespace, db, frame, slice_int, fuid)
+			fragment_key := fmt.Sprintf("%s/db/%s/frame/%s/slice/%d/fragment/%s/process", self.namespace, db, frame, slice_int, fuid)
 			process_guid := p.Key
 			// need to check value to see how many we have left
 			_, err = self.service.Etcd.Set(fragment_key, process_guid, 0)
-			log.Println("Fragment sent to etcd: %s(%s)", fragment_key, process_guid)
+			log.Printf("Fragment sent to etcd: %s(%s)", fragment_key, process_guid)
 		case 400: //key already present
 			return errors.New("Fragment creation already in process:" + lock_key)
 		default:
@@ -145,7 +169,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 	var fragment_id util.SUUID
 	var slice *db.Slice
 	var slice_int int
-	var process_uuid uuid.UUID
+	var process_uuid util.GUID
 	var process *db.Process
 	var err error
 
@@ -189,7 +213,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		if bits[8] != "process" {
 			return errors.New("no process")
 		}
-		process_uuid, err = uuid.ParseUUID(node.Value)
+		process_uuid, err = util.ParseGUID(node.Value)
 		if err != nil {
 			return err
 		}
@@ -207,26 +231,26 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 func flatten(node *etcd.Node) []*etcd.Node {
 	nodes := []*etcd.Node{node}
 	for i := 0; i < len(node.Nodes); i++ {
-		nodes = append(nodes, flatten(&node.Nodes[i])...)
+		nodes = append(nodes, flatten(node.Nodes[i])...)
 	}
 	return nodes
 }
 
 type Node struct {
-	id        *uuid.UUID
+	id        *util.GUID
 	ip        string
 	port_tcp  int
 	port_http int
 }
 
 type ProcessMap struct {
-	nodes map[uuid.UUID]*db.Process
+	nodes map[util.GUID]*db.Process
 	mutex sync.Mutex
 }
 
 func NewProcessMap() *ProcessMap {
 	p := ProcessMap{}
-	p.nodes = make(map[uuid.UUID]*db.Process)
+	p.nodes = make(map[util.GUID]*db.Process)
 	return &p
 }
 
@@ -236,7 +260,7 @@ func (self *ProcessMap) AddProcess(process *db.Process) {
 	self.nodes[process.Id()] = process
 }
 
-func (self *ProcessMap) GetProcess(id *uuid.UUID) (*db.Process, error) {
+func (self *ProcessMap) GetProcess(id *util.GUID) (*db.Process, error) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 	process, ok := self.nodes[*id]
@@ -246,7 +270,7 @@ func (self *ProcessMap) GetProcess(id *uuid.UUID) (*db.Process, error) {
 	return process, nil
 }
 
-func (self *ProcessMap) GetOrAddProcess(id *uuid.UUID) *db.Process {
+func (self *ProcessMap) GetOrAddProcess(id *util.GUID) *db.Process {
 	process, err := self.GetProcess(id)
 	if err != nil {
 		process = db.NewProcess(id)
@@ -255,7 +279,7 @@ func (self *ProcessMap) GetOrAddProcess(id *uuid.UUID) *db.Process {
 	return process
 }
 
-func (self *ProcessMap) GetHost(id *uuid.UUID) (string, error) {
+func (self *ProcessMap) GetHost(id *util.GUID) (string, error) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 	process, ok := self.nodes[*id]
@@ -265,7 +289,7 @@ func (self *ProcessMap) GetHost(id *uuid.UUID) (string, error) {
 	return process.Host(), nil
 }
 
-func (self *ProcessMap) GetPortTcp(id *uuid.UUID) (int, error) {
+func (self *ProcessMap) GetPortTcp(id *util.GUID) (int, error) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 	process, ok := self.nodes[*id]
@@ -275,7 +299,7 @@ func (self *ProcessMap) GetPortTcp(id *uuid.UUID) (int, error) {
 	return process.PortTcp(), nil
 }
 
-func (self *ProcessMap) GetPortHttp(id *uuid.UUID) (int, error) {
+func (self *ProcessMap) GetPortHttp(id *util.GUID) (int, error) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 	process, ok := self.nodes[*id]
@@ -324,7 +348,7 @@ func getKey(input string) string {
 	return bits[len(bits)-1]
 }
 
-func (self *ProcessMapper) getnode(u *uuid.UUID) *Node {
+func (self *ProcessMapper) getnode(u *util.GUID) *Node {
 	return new(Node)
 }
 
@@ -344,9 +368,9 @@ func (self *ProcessMapper) handlenode(node *etcd.Node) error {
 	}
 	if len(bits) >= 2 {
 		id_string := bits[1]
-		id, err := uuid.ParseUUID(id_string)
+		id, err := util.ParseGUID(id_string)
 		if err != nil {
-			return errors.New("Invalid UUID: " + id_string)
+			return errors.New("Invalid GUID: " + id_string)
 		}
 		process = self.service.ProcessMap.GetOrAddProcess(&id)
 	}

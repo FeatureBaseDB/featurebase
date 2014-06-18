@@ -202,7 +202,7 @@ func (self *FragmentContainer) Clear(frag_id SUUID) (bool, error) {
 }
 
 func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id SUUID) {
-	log.Println("ADD FRAGMENT", frame)
+	log.Println("ADD FRAGMENT", frame, db, slice)
 	f := NewFragment(id, db, slice, frame)
 	self.fragments[id] = f
 

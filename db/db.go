@@ -2,8 +2,7 @@ package db
 
 import (
 	"encoding/gob"
-
-	"github.com/gocql/gocql/uuid"
+	. "pilosa/util"
 )
 
 type Message struct {
@@ -12,11 +11,11 @@ type Message struct {
 
 type Envelope struct {
 	Message *Message
-	Host    *uuid.UUID
+	Host    *GUID
 }
 
 type HoldResult interface {
-	ResultId() *uuid.UUID
+	ResultId() *GUID
 	ResultData() interface{}
 }
 

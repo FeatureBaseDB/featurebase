@@ -8,11 +8,11 @@ import (
 	"pilosa/config"
 	"pilosa/core"
 	"pilosa/db"
+	. "pilosa/util"
 
 	"time"
 
 	notify "github.com/bitly/go-notify"
-	"github.com/gocql/gocql/uuid"
 )
 
 type connection struct {
@@ -20,16 +20,16 @@ type connection struct {
 	inbox     chan *db.Message
 	outbox    chan *db.Message
 	conn      *net.Conn
-	process   *uuid.UUID
+	process   *GUID
 }
 
 type newconnection struct {
-	id         *uuid.UUID
+	id         *GUID
 	connection *connection
 }
 
 func init() {
-	gob.Register(uuid.UUID{})
+	gob.Register(GUID{})
 }
 
 func (self *connection) manage() {
@@ -78,7 +78,7 @@ BeginManageConnection:
 					return
 				}
 			case message := <-self.inbox:
-				identifier, ok := message.Data.(uuid.UUID)
+				identifier, ok := message.Data.(GUID)
 				if ok {
 					// message is connection registration; bypass inbox and register
 					self.process = &identifier
@@ -103,7 +103,7 @@ type TcpTransport struct {
 	port        int
 	inbox       chan *db.Message
 	outbox      chan db.Envelope
-	connections map[uuid.UUID]*connection
+	connections map[GUID]*connection
 	reg         chan *newconnection
 }
 
@@ -152,7 +152,7 @@ func (self *TcpTransport) Close() {
 	log.Println("Shutting down TCP transport")
 }
 
-func (self *TcpTransport) Send(message *db.Message, host *uuid.UUID) {
+func (self *TcpTransport) Send(message *db.Message, host *GUID) {
 	envelope := db.Envelope{message, host}
 	notify.Post("outbox", &envelope)
 	self.outbox <- envelope
@@ -169,5 +169,5 @@ func (self *TcpTransport) Push(message *db.Message) {
 }
 
 func NewTcpTransport(service *core.Service) *TcpTransport {
-	return &TcpTransport{service, config.GetInt("port_tcp"), make(chan *db.Message, 100), make(chan db.Envelope, 100), make(map[uuid.UUID]*connection), make(chan *newconnection)}
+	return &TcpTransport{service, config.GetInt("port_tcp"), make(chan *db.Message, 100), make(chan db.Envelope, 100), make(map[GUID]*connection), make(chan *newconnection)}
 }

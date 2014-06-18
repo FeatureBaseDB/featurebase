@@ -7,7 +7,6 @@ import (
 	"pilosa/util"
 	"sync"
 
-	"github.com/gocql/gocql/uuid"
 	"github.com/stathat/consistent"
 )
 
@@ -17,23 +16,23 @@ var FragmentDoesNotExistError = errors.New("Fragment does not exist.")
 var FrameSliceIntersectDoesNotExistError = errors.New("FrameSliceIntersect does not exist.")
 
 type Location struct {
-	ProcessId  *uuid.UUID
+	ProcessId  *util.GUID
 	FragmentId util.SUUID
 }
 
 type Process struct {
-	id        *uuid.UUID
+	id        *util.GUID
 	host      string
 	port_tcp  int
 	port_http int
 	mutex     sync.Mutex
 }
 
-func NewProcess(id *uuid.UUID) *Process {
+func NewProcess(id *util.GUID) *Process {
 	return &Process{id: id}
 }
 
-func (self *Process) Id() uuid.UUID {
+func (self *Process) Id() util.GUID {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 	return *self.id
@@ -214,6 +213,10 @@ type Slice struct {
 	id int
 }
 
+func (self *Slice) Id() int {
+	return self.id
+}
+
 // Get a slice from a database
 func (d *Database) getSlice(slice_id int) (*Slice, error) {
 	for _, slice := range d.slices {
@@ -306,7 +309,7 @@ func (self *Fragment) GetProcess() *Process {
 	return self.process
 }
 
-func (self *Fragment) GetProcessId() *uuid.UUID {
+func (self *Fragment) GetProcessId() *util.GUID {
 	return self.process.id
 }
 
@@ -342,7 +345,7 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 /*
 // NOT IMPLEMENTED
 // this would loop through all frame_slice_intersect[], then all fragmments to find a match
-func (d *Database) GetFragmentById(fragment_id *uuid.UUID) *Fragment {
+func (d *Database) GetFragmentById(fragment_id *GUID) *Fragment {
 }
 */
 

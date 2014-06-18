@@ -18,7 +18,7 @@ func basic_database() (*db.Database, *db.Fragment) {
 	slice1 := database.GetOrCreateSlice(0)
 	fragment_id1 := util.Id()
 	fragment1 := database.GetOrCreateFragment(frame, slice1, fragment_id1)
-	process_id1 := uuid.RandomUUID()
+	process_id1 := util.RandomUUID()
 	process1 := db.NewProcess(&process_id1)
 	process1.SetHost("----192.1.1.0----")
 	fragment1.SetProcess(process1)
@@ -26,7 +26,7 @@ func basic_database() (*db.Database, *db.Fragment) {
 	slice2 := database.GetOrCreateSlice(1)
 	fragment_id2 := util.Id()
 	fragment2 := database.GetOrCreateFragment(frame, slice2, fragment_id2)
-	process_id2 := uuid.RandomUUID()
+	process_id2 := util.RandomUUID()
 	process2 := db.NewProcess(&process_id2)
 	process2.SetHost("----192.1.1.1----")
 	fragment2.SetProcess(process2)
@@ -36,13 +36,13 @@ func basic_database() (*db.Database, *db.Fragment) {
 func TestQueryPlanner(t *testing.T) {
 	Convey("Union query plan", t, func() {
 
-		id1 := uuid.RandomUUID()
+		id1 := util.RandomUUID()
 		query1 := Query{Id: &id1, Operation: "get", Args: map[string]interface{}{"id": uint64(10), "frame": "general"}}
 
-		id2 := uuid.RandomUUID()
+		id2 := util.RandomUUID()
 		query2 := Query{Id: &id2, Operation: "get", Args: map[string]interface{}{"id": uint64(20), "frame": "general"}}
 
-		id3 := uuid.RandomUUID()
+		id3 := util.RandomUUID()
 		query := Query{Id: &id3, Operation: "union", Subqueries: []Query{query1, query2}}
 
 		database, fragment1 := basic_database()
@@ -50,7 +50,7 @@ func TestQueryPlanner(t *testing.T) {
 		qplanner := QueryPlanner{Database: database, Query: &query}
 		destination := fragment1.GetLocation()
 
-		id := uuid.RandomUUID()
+		id := util.RandomUUID()
 		qpp, err := qplanner.Plan(&query, &id, destination)
 		qp := *qpp
 
@@ -63,7 +63,7 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 0)
 		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[2].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
+		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*GUID{
 			qp[0].(GetQueryStep).Id,
 			qp[1].(GetQueryStep).Id,
 		})
@@ -74,12 +74,12 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[4].(GetQueryStep).Slice, ShouldEqual, 1)
 		So(*(qp[4].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[5].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
+		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*GUID{
 			qp[3].(GetQueryStep).Id,
 			qp[4].(GetQueryStep).Id,
 		})
 		So(qp[6].(CatQueryStep).Operation, ShouldEqual, "cat")
-		So(qp[6].(CatQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
+		So(qp[6].(CatQueryStep).Inputs, ShouldResemble, []*GUID{
 			qp[2].(UnionQueryStep).Id,
 			qp[5].(UnionQueryStep).Id,
 		})
@@ -94,7 +94,7 @@ func TestQueryPlanner(t *testing.T) {
 		qplanner := QueryPlanner{Database: database, Query: query}
 		destination := fragment1.GetLocation()
 
-		id := uuid.RandomUUID()
+		id := util.RandomUUID()
 		qpp, err := qplanner.Plan(query, &id, destination)
 		qp := *qpp
 		So(err, ShouldEqual, nil)
@@ -107,7 +107,7 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 1)
 		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 		So(qp[2].(CatQueryStep).Operation, ShouldEqual, "cat")
-		So(qp[2].(CatQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
+		So(qp[2].(CatQueryStep).Inputs, ShouldResemble, []*GUID{
 			qp[0].(GetQueryStep).Id,
 			qp[1].(GetQueryStep).Id,
 		})
@@ -122,7 +122,7 @@ func TestQueryPlanner(t *testing.T) {
 		qplanner := QueryPlanner{Database: database, Query: query}
 		destination := fragment1.GetLocation()
 
-		id := uuid.RandomUUID()
+		id := util.RandomUUID()
 		qpp, err := qplanner.Plan(query, &id, destination)
 		qp := *qpp
 		So(err, ShouldEqual, nil)
@@ -135,7 +135,7 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 0)
 		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[2].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
+		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*GUID{
 			qp[0].(GetQueryStep).Id,
 			qp[1].(GetQueryStep).Id,
 		})
@@ -146,12 +146,12 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[4].(GetQueryStep).Slice, ShouldEqual, 1)
 		So(*(qp[4].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[5].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
+		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*GUID{
 			qp[3].(GetQueryStep).Id,
 			qp[4].(GetQueryStep).Id,
 		})
 		So(qp[6].(CatQueryStep).Operation, ShouldEqual, "cat")
-		So(qp[6].(CatQueryStep).Inputs, ShouldResemble, []*uuid.UUID{
+		So(qp[6].(CatQueryStep).Inputs, ShouldResemble, []*GUID{
 			qp[2].(UnionQueryStep).Id,
 			qp[5].(UnionQueryStep).Id,
 		})
@@ -165,7 +165,7 @@ func TestQueryPlanner(t *testing.T) {
 		qplanner := QueryPlanner{Database: database, Query: query}
 		destination := fragment1.GetLocation()
 
-		id := uuid.RandomUUID()
+		id := util.RandomUUID()
 		qpp, err := qplanner.Plan(query, &id, destination)
 		qp := *qpp
 		So(err, ShouldEqual, nil)
@@ -183,7 +183,7 @@ func TestQueryPlanner(t *testing.T) {
 		qplanner := QueryPlanner{Database: database, Query: query}
 		destination := fragment1.GetLocation()
 
-		id := uuid.RandomUUID()
+		id := util.RandomUUID()
 		qpp, err := qplanner.Plan(query, &id, destination)
 		qp := *qpp
 		So(err, ShouldEqual, nil)

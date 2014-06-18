@@ -14,12 +14,11 @@ import (
 	"syscall"
 
 	"github.com/coreos/go-etcd/etcd"
-	"github.com/gocql/gocql/uuid"
 )
 
 type Service struct {
 	Stopper
-	Id             *uuid.UUID
+	Id             *util.GUID
 	Etcd           *etcd.Client
 	Cluster        *db.Cluster
 	TopologyMapper *TopologyMapper
@@ -71,17 +70,17 @@ func (self *Service) PrepareLogging() {
 }
 
 func (service *Service) init_id() {
-	var id uuid.UUID
+	var id util.GUID
 	var err error
 	id_string := config.GetString("id")
 	if id_string == "" {
 		log.Println("Service id not configured, generating...")
-		id = uuid.RandomUUID()
+		id = util.RandomUUID()
 		if err != nil {
 			log.Fatal("problem generating uuid")
 		}
 	} else {
-		id, err = uuid.ParseUUID(id_string)
+		id, err = util.ParseGUID(id_string)
 		if err != nil {
 			log.Fatalf("Service id '%s' not valid", id_string)
 		}

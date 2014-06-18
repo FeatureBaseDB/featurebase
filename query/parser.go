@@ -3,10 +3,10 @@ package query
 import (
 	"errors"
 	"fmt"
+	"pilosa/util"
 	"strconv"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/gocql/gocql/uuid"
 )
 
 var InvalidQueryError = errors.New("Invalid query format.")
@@ -66,7 +66,7 @@ func (self *QueryParser) Parse() (query *Query, err error) {
 	}()
 	var token *Token
 
-	id := uuid.RandomUUID()
+	id := util.RandomUUID()
 	query = &Query{Id: &id, Subqueries: make([]Query, 0), Args: make(map[string]interface{})}
 
 	token = self.next()

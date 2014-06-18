@@ -22,7 +22,6 @@ import (
 
 	notify "github.com/bitly/go-notify"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/gocql/gocql/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -484,7 +483,7 @@ func (self *WebService) HandlePing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	process_string := r.Form.Get("process")
-	process_id, err := uuid.ParseUUID(process_string)
+	process_id, err := util.ParseGUID(process_string)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

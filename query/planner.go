@@ -2,15 +2,30 @@ package query
 
 import (
 	"encoding/gob"
+	"fmt"
 	"math/rand"
 	"pilosa/db"
-
-	"github.com/gocql/gocql/uuid"
+	"pilosa/util"
 )
 
 type PortableQueryStep interface {
-	GetId() *uuid.UUID
+	GetId() *util.GUID
 	GetLocation() *db.Location
+}
+
+type FragmentNotFound struct {
+	Db    string
+	Frame string
+	Slice int
+	Retry bool
+}
+
+func NewFragmentNotFound(db, frame string, slice int) *FragmentNotFound {
+	return &FragmentNotFound{db, frame, slice, true}
+}
+
+func (self *FragmentNotFound) Error() string {
+	return fmt.Sprintf("Fragment Not Found: %s:%s:%d", self.Db, self.Frame, self.Slice)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -18,13 +33,13 @@ type PortableQueryStep interface {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 type BaseQueryStep struct {
-	Id          *uuid.UUID
+	Id          *util.GUID
 	Operation   string
 	Location    *db.Location
 	Destination *db.Location
 }
 
-func (self *BaseQueryStep) GetId() *uuid.UUID {
+func (self *BaseQueryStep) GetId() *util.GUID {
 	return self.Id
 }
 func (self *BaseQueryStep) GetLocation() *db.Location {
@@ -39,11 +54,11 @@ func (self *BaseQueryStep) LocIsDest() bool {
 }
 
 type BaseQueryResult struct {
-	Id   *uuid.UUID
+	Id   *util.GUID
 	Data interface{}
 }
 
-func (self *BaseQueryResult) ResultId() *uuid.UUID {
+func (self *BaseQueryResult) ResultId() *util.GUID {
 	return self.Id
 }
 
@@ -56,7 +71,7 @@ func (self *BaseQueryResult) ResultData() interface{} {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type CountQueryStep struct {
 	*BaseQueryStep
-	Input *uuid.UUID
+	Input *util.GUID
 }
 
 type CountQueryResult struct {
@@ -79,7 +94,7 @@ func (qt *CountQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type TopNQueryStep struct {
 	*BaseQueryStep
-	Input   *uuid.UUID
+	Input   *util.GUID
 	Filters []uint64
 	N       int
 }
@@ -106,7 +121,7 @@ func (qt *TopNQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type UnionQueryStep struct {
 	*BaseQueryStep
-	Inputs []*uuid.UUID
+	Inputs []*util.GUID
 }
 
 type UnionQueryResult struct {
@@ -138,7 +153,7 @@ func (qt *UnionQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type IntersectQueryStep struct {
 	*BaseQueryStep
-	Inputs []*uuid.UUID
+	Inputs []*util.GUID
 }
 
 type IntersectQueryResult struct {
@@ -170,7 +185,7 @@ func (qt *IntersectQueryTree) getLocation(d *db.Database) (*db.Location, error) 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type CatQueryStep struct {
 	*BaseQueryStep
-	Inputs []*uuid.UUID
+	Inputs []*util.GUID
 	N      int
 }
 
@@ -250,10 +265,11 @@ type SetQueryTree struct {
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *SetQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 	slice, err := d.GetSliceForProfile(qt.profile_id)
-	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
-		return nil, err
+		//I should check GetFragmentForBitmap for possible errors but for now i'll just hardcode
+		return nil, NewFragmentNotFound(d.Name, qt.bitmap.FrameType, db.GetSlice(qt.profile_id))
 	}
+	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	return fragment.GetLocation(), nil
 }
 
@@ -379,17 +395,17 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 }
 
 // Produces flattened QueryPlan from QueryTree input
-func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Location) (*QueryPlan, error) {
+func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Location) (*QueryPlan, error) {
 	plan := QueryPlan{}
 	if cat, ok := qt.(*CatQueryTree); ok {
-		inputs := make([]*uuid.UUID, len(cat.subqueries))
+		inputs := make([]*util.GUID, len(cat.subqueries))
 		loc, err := cat.getLocation(qp.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := CatQueryStep{&BaseQueryStep{id, "cat", loc, location}, inputs, cat.N}
 		for index, subq := range cat.subqueries {
-			sub_id := uuid.RandomUUID()
+			sub_id := util.RandomUUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := qp.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -399,14 +415,14 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		}
 		plan = append(plan, step)
 	} else if union, ok := qt.(*UnionQueryTree); ok {
-		inputs := make([]*uuid.UUID, len(union.subqueries))
+		inputs := make([]*util.GUID, len(union.subqueries))
 		loc, err := union.getLocation(qp.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := UnionQueryStep{&BaseQueryStep{id, "union", loc, location}, inputs}
 		for index, subq := range union.subqueries {
-			sub_id := uuid.RandomUUID()
+			sub_id := util.RandomUUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := qp.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -416,14 +432,14 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		}
 		plan = append(plan, step)
 	} else if intersect, ok := qt.(*IntersectQueryTree); ok {
-		inputs := make([]*uuid.UUID, len(intersect.subqueries))
+		inputs := make([]*util.GUID, len(intersect.subqueries))
 		loc, err := intersect.getLocation(qp.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := IntersectQueryStep{&BaseQueryStep{id, "intersect", loc, location}, inputs}
 		for index, subq := range intersect.subqueries {
-			sub_id := uuid.RandomUUID()
+			sub_id := util.RandomUUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := qp.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -449,7 +465,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		plan := QueryPlan{step}
 		return &plan, nil
 	} else if cnt, ok := qt.(*CountQueryTree); ok {
-		sub_id := uuid.RandomUUID()
+		sub_id := util.RandomUUID()
 		loc, err := cnt.getLocation(qp.Database)
 		if err != nil {
 			return nil, err
@@ -462,7 +478,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)
 	} else if topn, ok := qt.(*TopNQueryTree); ok {
-		sub_id := uuid.RandomUUID()
+		sub_id := util.RandomUUID()
 		loc, err := topn.getLocation(qp.Database)
 		if err != nil {
 			return nil, err
@@ -479,7 +495,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *uuid.UUID, location *db.Locati
 }
 
 // Transforms Query into QueryTree and flattens to QueryPlan object
-func (qp *QueryPlanner) Plan(query *Query, id *uuid.UUID, destination *db.Location) (*QueryPlan, error) {
+func (qp *QueryPlanner) Plan(query *Query, id *util.GUID, destination *db.Location) (*QueryPlan, error) {
 	queryTree, err := qp.buildTree(query, -1)
 	if err != nil {
 		return nil, err

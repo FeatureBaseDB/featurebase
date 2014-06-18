@@ -3,21 +3,20 @@ package core
 import (
 	"encoding/gob"
 	"pilosa/db"
+	"pilosa/util"
 	"time"
-
-	"github.com/gocql/gocql/uuid"
 )
 
 type PingRequest struct {
-	Id     *uuid.UUID
-	Source *uuid.UUID
+	Id     *util.GUID
+	Source *util.GUID
 }
 
 type PongRequest struct {
-	Id *uuid.UUID
+	Id *util.GUID
 }
 
-func (self PongRequest) ResultId() *uuid.UUID {
+func (self PongRequest) ResultId() *util.GUID {
 	return self.Id
 }
 func (self PongRequest) ResultData() interface{} {
@@ -29,8 +28,8 @@ func init() {
 	gob.Register(PongRequest{})
 }
 
-func (self *Service) Ping(process_id *uuid.UUID) (*time.Duration, error) {
-	id := uuid.RandomUUID()
+func (self *Service) Ping(process_id *util.GUID) (*time.Duration, error) {
+	id := util.RandomUUID()
 	ping := db.Message{Data: PingRequest{Id: &id, Source: self.Id}}
 	start := time.Now()
 	self.Transport.Send(&ping, process_id)

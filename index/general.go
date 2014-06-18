@@ -101,8 +101,15 @@ func (self *General) Persist() error {
 	defer w.Close()
 	defer self.storage.Close()
 
+	results := make([]uint64, len(self.keys))
+	i := 0
+	for k, _ := range self.keys { //   map[uint64]*Rank
+		results[i] = k
+		i += 1
+	}
+
 	encoder := json.NewEncoder(w)
-	return encoder.Encode(self.keys)
+	return encoder.Encode(results)
 }
 
 func (self *General) Load(requestChan chan Command, f *Fragment) {
@@ -114,12 +121,13 @@ func (self *General) Load(requestChan chan Command, f *Fragment) {
 	}
 
 	dec := json.NewDecoder(r)
-	var keys map[uint64]interface{}
+	var keys []uint64
+
 	if err := dec.Decode(&keys); err != nil {
 		return
 		//log.Println("Bad mojo")
 	}
-	for k, _ := range keys {
+	for _, k := range keys {
 		request := NewLoadRequest(k)
 		requestChan <- request
 		request.Response()

@@ -3,25 +3,23 @@ package core
 import (
 	"encoding/gob"
 	"pilosa/db"
-	. "pilosa/util"
-
-	"github.com/gocql/gocql/uuid"
+	"pilosa/util"
 )
 
 type BatchRequest struct {
-	Id                *uuid.UUID
-	Source            *uuid.UUID
-	Fragment_id       SUUID
+	Id                *util.GUID
+	Source            *util.GUID
+	Fragment_id       util.SUUID
 	Bitmap_id         uint64
 	Compressed_bitmap string
 	Filter            uint64
 }
 
 type BatchResponse struct {
-	Id *uuid.UUID
+	Id *util.GUID
 }
 
-func (self BatchResponse) ResultId() *uuid.UUID {
+func (self BatchResponse) ResultId() *util.GUID {
 	return self.Id
 }
 func (self BatchResponse) ResultData() interface{} {
@@ -41,7 +39,7 @@ func (self *Service) Batch(database_name, frame, compressed_bitmap string, bitma
 
 	fragment, err := database.GetFragmentForBitmap(oslice, &db.Bitmap{bitmap_id, frame, filter})
 	if err == nil {
-		id := uuid.RandomUUID()
+		id := util.RandomUUID()
 		batch := db.Message{Data: BatchRequest{Id: &id, Source: self.Id, Fragment_id: fragment.GetId(), Bitmap_id: bitmap_id, Compressed_bitmap: compressed_bitmap}}
 		dest_id := fragment.GetProcess().Id()
 		self.Transport.Send(&batch, &dest_id)

@@ -2,14 +2,13 @@ package interfaces
 
 import (
 	"pilosa/db"
-
-	"github.com/gocql/gocql/uuid"
+	"pilosa/util"
 )
 
 type Transporter interface {
 	Run()
 	Close()
-	Send(*db.Message, *uuid.UUID)
+	Send(*db.Message, *util.GUID)
 	Receive() *db.Message
 	Push(*db.Message)
 }

@@ -1,9 +1,10 @@
 package util
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/gocql/gocql/uuid"
+	"github.com/gocql/gocql"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -11,14 +12,14 @@ import (
 var (
 	array [1000000]int
 	muid  = make(map[SUUID]int)
-	muuid = make(map[*uuid.UUID]int)
+	muuid = make(map[*GUID]int)
 	r     int
 )
 
 func init() {
 	for i, _ := range array {
 		muid[Id()] = i
-		id := uuid.RandomUUID()
+		id := util.RandomUUID()
 		muuid[&id] = i
 	}
 
@@ -66,8 +67,12 @@ func BenchmarkId(b *testing.B) {
 func BenchmarkUUID(b *testing.B) {
 	// run the Fib function b.N times
 	for n := 0; n < b.N; n++ {
-		uuid.RandomUUID()
+		gocql.RandomUUID()
 	}
+}
+func TestGUID(t *testing.T) {
+	fmt.Println(RandomUUID().String())
+
 }
 
 /*
@@ -80,7 +85,7 @@ func BenchmarkLookupId(b *testing.B) {
 	}
 }
 func BenchmarkLookupUUID(b *testing.B) {
-	x := uuid.RandomUUID()
+	x := util.RandomUUID()
 	for i := 0; i < b.N; i++ {
 		if a, found := muuid[&x]; found {
 			muuid[&x] = a + 1

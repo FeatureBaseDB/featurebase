@@ -2,9 +2,8 @@ package query
 
 import (
 	"pilosa/db"
+	"pilosa/util"
 	"strings"
-
-	"github.com/gocql/gocql/uuid"
 )
 
 type QueryInput interface{}
@@ -16,13 +15,13 @@ type QueryResults struct {
 type PqlList []PqlListItem
 
 type PqlListItem struct {
-	Id    *uuid.UUID
+	Id    *util.GUID
 	Label string
 	PQL   string
 }
 
 type Query struct {
-	Id         *uuid.UUID
+	Id         *util.GUID
 	Operation  string
 	Args       map[string]interface{}
 	Subqueries []Query
@@ -62,7 +61,7 @@ func QueryPlanForTokens(database *db.Database, tokens []Token, destination *db.L
 
 func QueryPlanForQuery(database *db.Database, query *Query, destination *db.Location) (*QueryPlan, error) {
 	query_planner := QueryPlanner{Database: database, Query: query}
-	id := uuid.RandomUUID()
+	id := util.RandomUUID()
 	query_plan, err := query_planner.Plan(query, &id, destination)
 	if err != nil {
 		return nil, err

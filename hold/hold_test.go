@@ -11,17 +11,17 @@ import (
 
 func TestHoldChan(t *testing.T) {
 
-	Hold := Holder{make(map[uuid.UUID]holdchan), make(chan gethold), make(chan delhold)}
+	Hold := Holder{make(map[GUID]holdchan), make(chan gethold), make(chan delhold)}
 	go Hold.Run()
 
 	Convey("set then get", t, func() {
-		id := uuid.RandomUUID()
+		id := util.RandomUUID()
 		Hold.Set(&id, "derp", 10)
 		derp, _ := Hold.Get(&id, 10)
 		So(derp, ShouldEqual, "derp")
 	})
 	Convey("get then set", t, func() {
-		id := uuid.RandomUUID()
+		id := util.RandomUUID()
 		go func() {
 			Hold.Set(&id, "derpsy", 10)
 		}()

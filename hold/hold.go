@@ -2,41 +2,40 @@ package hold
 
 import (
 	"errors"
+	. "pilosa/util"
 	"time"
-
-	"github.com/gocql/gocql/uuid"
 )
 
 type holdchan chan interface{}
 type gethold struct {
-	id    *uuid.UUID
+	id    *GUID
 	reply chan holdchan
 }
 type delhold struct {
-	id *uuid.UUID
+	id *GUID
 }
 
 type Holder struct {
-	data    map[uuid.UUID]holdchan
+	data    map[GUID]holdchan
 	getchan chan gethold
 	delchan chan delhold
 }
 
 //var Hold Holder
 
-func (self *Holder) DelChan(id *uuid.UUID) {
+func (self *Holder) DelChan(id *GUID) {
 	req := delhold{id}
 	self.delchan <- req
 }
 
-func (self *Holder) GetChan(id *uuid.UUID) holdchan {
+func (self *Holder) GetChan(id *GUID) holdchan {
 	reply := make(chan holdchan)
 	req := gethold{id, reply}
 	self.getchan <- req
 	return <-reply
 }
 
-func (self *Holder) Get(id *uuid.UUID, timeout int) (interface{}, error) {
+func (self *Holder) Get(id *GUID, timeout int) (interface{}, error) {
 	ch := self.GetChan(id)
 	select {
 	case val := <-ch:
@@ -47,7 +46,7 @@ func (self *Holder) Get(id *uuid.UUID, timeout int) (interface{}, error) {
 	}
 }
 
-func (self *Holder) Set(id *uuid.UUID, value interface{}, timeout int) {
+func (self *Holder) Set(id *GUID, value interface{}, timeout int) {
 	ch := self.GetChan(id)
 	go func() {
 		select {
@@ -77,13 +76,13 @@ func (self *Holder) Run() {
 }
 
 func NewHolder() *Holder {
-	h := Holder{make(map[uuid.UUID]holdchan), make(chan gethold), make(chan delhold)}
+	h := Holder{make(map[GUID]holdchan), make(chan gethold), make(chan delhold)}
 	return &h
 }
 
 /*
 func init() {
-	Hold = Holder{make(map[uuid.UUID]holdchan), make(chan gethold), make(chan delhold)}
+	Hold = Holder{make(map[GUID]holdchan), make(chan gethold), make(chan delhold)}
 	go Hold.Run()
 }
 */
