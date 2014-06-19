@@ -100,13 +100,15 @@ func getLightestProcess(m map[string]int) (Pair, error) {
 }
 
 func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
-	frames_to_create := config.GetStringArrayDefault("supported_frames", []string{"b.n", "l.n", "t.t", "d"})
-	for _, frame := range frames_to_create {
-		err := self.AllocateFragment(db, frame, slice_int)
-		if err != nil {
-			log.Println(err)
+	/*
+		frames_to_create := config.GetStringArrayDefault("supported_frames", []string{"b.n", "l.n", "t.t", "d"})
+		for _, frame := range frames_to_create {
+			err := self.AllocateFragment(db, frame, slice_int)
+			if err != nil {
+				log.Println(err)
+			}
 		}
-	}
+	*/
 	return nil
 
 }
