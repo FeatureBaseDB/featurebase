@@ -87,14 +87,14 @@ func getLightestProcess(m map[string]int) (Pair, error) {
 	if l == 0 {
 		return Pair{}, errors.New("No Processes")
 	}
-	p := make(PairList, l)
+	processlist := make(PairList, l)
 	i := 0
 	for k, v := range m {
-		p[i] = Pair{k, v}
+		processlist[i] = Pair{k, v}
 	}
-	sort.Sort(p)
+	sort.Sort(processlist)
 
-	return p[0], nil
+	return processlist[0], nil
 }
 
 func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
