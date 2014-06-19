@@ -21,7 +21,7 @@ type TopologyMapper struct {
 	namespace string
 }
 
-func (self *TopologyMapper) Run() {
+func (self *TopologyMapper) Setup() {
 	log.Println(self.namespace + "/db")
 	db_path := self.namespace + "/db"
 	resp, err := self.service.Etcd.Get(db_path, false, true)
@@ -36,12 +36,17 @@ func (self *TopologyMapper) Run() {
 			log.Fatal(err)
 		}
 	}
+	//need to lock the world
 	for _, node := range flatten(resp.Node) {
 		err := self.handlenode(node)
 		if err != nil {
 			log.Println(err)
 		}
 	}
+
+}
+func (self *TopologyMapper) Run() {
+
 	receiver := make(chan *etcd.Response)
 	stop := make(chan bool)
 	go func() {
@@ -50,12 +55,12 @@ func (self *TopologyMapper) Run() {
 		for {
 			ns := self.namespace + "/db"
 			log.Println(" ETCD watcher:", ns)
-			resp, err = self.service.Etcd.Watch(ns, 0, true, receiver, stop)
+			resp, err := self.service.Etcd.Watch(ns, 0, true, receiver, stop)
 			log.Println("TopologyMapper ETCD watcher", resp, err)
 		}
 	}()
 	go func() {
-		for resp = range receiver {
+		for resp := range receiver {
 			switch resp.Action {
 			case "set":
 				self.handlenode(resp.Node)
@@ -100,32 +105,31 @@ func getLightestProcess(m map[string]int) (Pair, error) {
 }
 
 func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
-	/*
-		frames_to_create := config.GetStringArrayDefault("supported_frames", []string{"b.n", "l.n", "t.t", "d"})
-		for _, frame := range frames_to_create {
-			err := self.AllocateFragment(db, frame, slice_int)
-			if err != nil {
-				log.Println(err)
-			}
+	frames_to_create := config.GetStringArrayDefault("supported_frames", []string{"b.n", "l.n", "t.t", "d"})
+	for _, frame := range frames_to_create {
+		err := self.AllocateFragment(db, frame, slice_int)
+		if err != nil {
+			log.Println(err)
 		}
-	*/
+	}
 	return nil
 
 }
 
 func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) error {
 	//get Lock to create the fragment
-	ttl := uint64(300) //secs to hold the lock
+	ttl := uint64(config.GetIntDefault("fragment_alloc_lock_time_secs", 600))
 	lock_key := fmt.Sprintf("%s/lock/%s-%s-%d", self.namespace, db, frame, slice_int)
 	response, err := self.service.Etcd.RawCreate(lock_key, "0", ttl)
 
 	if err == nil {
-		switch response.StatusCode {
-		case 201: //key created
+		if response.StatusCode == 201 { //key created
 			//figure out least loaded process..possibly check max process
 			//to create the node, just write off the items to etcd and the watch should spawn
 			//be nice if something would notify perhaps queue
 			m := make(map[string]int)
+			id_string := self.service.Id.String()
+			m[id_string] = 0 //at least have one process if none created
 			for _, dbs := range self.service.Cluster.GetDatabases() {
 				for _, fsi := range dbs.GetFramSliceIntersects() {
 					for _, fragment := range fsi.GetFragments() {
@@ -152,12 +156,6 @@ func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) er
 			// need to check value to see how many we have left
 			_, err = self.service.Etcd.Set(fragment_key, process_guid, 0)
 			log.Printf("Fragment sent to etcd: %s(%s)", fragment_key, process_guid)
-		case 400: //key already present
-			return errors.New("Fragment creation already in process:" + lock_key)
-		default:
-			log.Println(spew.Sdump(response))
-			return errors.New(fmt.Sprintf("Unknown Etcd status:%d", response.StatusCode))
-
 		}
 
 	}

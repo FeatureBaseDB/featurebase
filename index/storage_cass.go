@@ -3,8 +3,8 @@ package index
 // #cgo  CFLAGS:-mpopcnt
 
 import (
-	"fmt"
 	"log"
+	"pilosa/config"
 	"pilosa/util"
 
 	"time"
@@ -20,6 +20,17 @@ type CassandraStorage struct {
 	batch_counter int
 }
 
+var cluster *gocql.ClusterConfig
+
+func init() {
+	hosts := config.GetStringArrayDefault("cassandra_hosts", []string{"localhost"})
+	keyspace := config.GetStringDefault("cassandra_keyspace", "hotbox")
+	cluster = gocql.NewCluster(hosts...)
+	cluster.Keyspace = keyspace
+	cluster.Consistency = gocql.One
+	cluster.Timeout = 3 * time.Second
+}
+
 func BuildSchema() {
 	/*
 			   "CREATE KEYSPACE IF NOT EXISTS hotbox WITH strategy_class = SimpleStrategy AND strategy_options:replication_factor = 1"
@@ -29,25 +40,14 @@ func BuildSchema() {
 	*/
 
 }
-func NewCassStorage(hosts []string, keyspace string) Storage {
+func NewCassStorage() Storage {
 	obj := new(CassandraStorage)
-	//cluster := gocql.NewCluster("127.0.0.1")
-	cluster := gocql.NewCluster(hosts...)
-	cluster.Keyspace = keyspace
-	//cluster.Consistency = gocql.Quorum
-	cluster.Consistency = gocql.One
-	cluster.Consistency = gocql.One
-	cluster.Timeout = 3 * time.Second
-	//cluster.ProtoVersion = 1
 	// cluster.CQLVersion = "3.0.0"
 	session, err := cluster.CreateSession()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = session.Query(fmt.Sprintf("USE %s", keyspace)).Exec()
-	if err != nil {
-	}
 	obj.db = session
 	obj.stmt = `INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?);`
 	obj.batch = nil
