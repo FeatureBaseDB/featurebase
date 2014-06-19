@@ -59,6 +59,8 @@ func (self *TopologyMapper) Run() {
 			switch resp.Action {
 			case "set":
 				self.handlenode(resp.Node)
+			case "delete":
+				self.remove_fragment(resp.Node)
 			}
 			// TODO: handle deletes
 		}
@@ -226,6 +228,19 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 
 	}
 	return err
+}
+func (self *TopologyMapper) remove_fragment(node *etcd.Node) error {
+	log.Println(" hot remove_fragment (Not Supported yet):", node)
+	/*
+		key := node.Key[len(self.namespace)+1:]
+		bits := strings.Split(key, "/")
+		process_uuid, err = util.ParseGUID(node.Value)
+		if self.service.Id.String() == process_uuid.String() {
+			fragment_id = util.Hex_to_SUUID(bits[7])
+			self.service.Index.RemoveFragment(fragment_id)
+		}
+	*/
+	return nil
 }
 
 func flatten(node *etcd.Node) []*etcd.Node {
