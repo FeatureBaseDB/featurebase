@@ -94,7 +94,7 @@ func getLightestProcess(m map[string]int) (Pair, error) {
 	}
 	sort.Sort(p)
 
-	return p[l-1], nil
+	return p[0], nil
 }
 
 func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
