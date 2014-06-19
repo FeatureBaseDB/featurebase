@@ -153,6 +153,7 @@ func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) er
 		case 400: //key already present
 			return errors.New("Fragment creation already in process:" + lock_key)
 		default:
+			log.Println(spew.Sdump(response))
 			return errors.New(fmt.Sprintf("Unknown Etcd status:%d", response.StatusCode))
 
 		}
