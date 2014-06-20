@@ -31,7 +31,8 @@ type WebService struct {
 }
 
 func NewWebService(service *Service) *WebService {
-	return &WebService{service}
+	e := make(chan bool)
+	return &WebService{service, e}
 }
 
 type Flusher struct {
@@ -138,7 +139,6 @@ func (self *WebService) Run() {
 	port_string := strconv.Itoa(config.GetInt("port_http"))
 	log.Printf("Serving HTTP on port %s...\n", port_string)
 	logger_chan := make(chan []byte, 1024)
-	self.end = make(chan bool)
 	flusher := make(chan bool)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/message", self.HandleMessage)
