@@ -121,6 +121,7 @@ func (service *Service) Run() {
 		case <-sigterm:
 			log.Println("SIGTERM! Cleaning up...")
 			service.Index.Shutdown()
+			service.WebService.Shutdown()
 			util.ShutdownStats()
 			service.Stop()
 			return

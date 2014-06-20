@@ -27,6 +27,7 @@ import (
 
 type WebService struct {
 	service *Service
+	end     chan bool
 }
 
 func NewWebService(service *Service) *WebService {
@@ -137,7 +138,7 @@ func (self *WebService) Run() {
 	port_string := strconv.Itoa(config.GetInt("port_http"))
 	log.Printf("Serving HTTP on port %s...\n", port_string)
 	logger_chan := make(chan []byte, 1024)
-	end := make(chan bool)
+	self.end = make(chan bool)
 	flusher := make(chan bool)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/message", self.HandleMessage)
@@ -161,9 +162,12 @@ func (self *WebService) Run() {
 		Handler: mux,
 	}
 	id := config.GetString("id")
-	go Logger(logger_chan, end, id, flusher)
+	go Logger(logger_chan, self.end, id, flusher)
 	s.ListenAndServe()
-	end <- true
+}
+func (self *WebService) Shutdown() {
+	self.end <- true
+
 }
 
 func (self *WebService) HandleMessage(w http.ResponseWriter, r *http.Request) {
