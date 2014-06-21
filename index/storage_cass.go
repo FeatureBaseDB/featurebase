@@ -51,6 +51,7 @@ func NewCassStorage() Storage {
 	obj.db = session
 	obj.stmt = `INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?);`
 	obj.batch = nil
+	obj.batch_time = time.Now()
 	obj.batch_counter = 0
 	return obj
 }
@@ -119,7 +120,7 @@ func (self *CassandraStorage) EndBatch() {
 	start := time.Now()
 	if self.batch != nil {
 		last := time.Since(self.batch_time)
-		if last*time.Second > 15 {
+		if last.Seconds() > 15 {
 			self.FlushBatch()
 		} else if self.batch_counter > 300 {
 			self.FlushBatch()
