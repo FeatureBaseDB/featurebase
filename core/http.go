@@ -279,6 +279,17 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results, err := self.service.Executor.RunPQL(database_name, pql)
+	switch r := results.(type) { //a hack to handle empty sets
+	case []index.Pair:
+		if len(r) == 0 {
+			results = []int{}
+
+		}
+	}
+
+	if results == nil {
+		log.Println("Empty results")
+	}
 	if err != nil {
 		http.Error(w, "Error running query: "+err.Error(), http.StatusInternalServerError)
 	}

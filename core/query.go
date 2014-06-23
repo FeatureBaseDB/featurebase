@@ -34,7 +34,6 @@ func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 	//spew.Dump("TOP-N QUERYSTEP")
 	qs := msg.Data.(query.TopNQueryStep)
 	//spew.Dump(qs)
-	//TRAVIS SEE HERE
 	//need categories in qs I just added so it would compile
 	var categoryleaves []uint64
 	input := qs.Input
@@ -180,9 +179,9 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 			rank.Pair = &index.Pair{k, v}
 			rank_list = append(rank_list, rank)
 		}
-		sort.Sort(rank_list)
+		sort.Sort(rank_list) // kinda seems like this copy is wasteful..i'll ponder
 		items_size := min(len(merge_map), qs.N)
-		pair_list := make([]index.Pair, 0, len(merge_map))
+		pair_list := make([]index.Pair, 0, items_size+1)
 		for i, r := range rank_list {
 			if i < items_size {
 				pair_list = append(pair_list, *r.Pair)
