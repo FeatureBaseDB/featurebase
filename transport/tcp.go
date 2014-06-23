@@ -144,7 +144,7 @@ func (self *TcpTransport) listen() {
 }
 
 func (self *TcpTransport) manage(conn *net.Conn) {
-	con := &connection{self, make(chan *db.Message, 100), make(chan *db.Message, 100), conn, nil}
+	con := &connection{self, make(chan *db.Message, 1024), make(chan *db.Message, 1024), conn, nil}
 	con.manage()
 }
 
