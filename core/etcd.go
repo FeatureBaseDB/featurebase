@@ -38,11 +38,6 @@ func (self *TopologyMapper) Setup() {
 	}
 	//need to lock the world
 	for _, node := range flatten(resp.Node) {
-		if len(node.Value) < 5 {
-			log.Println("No GUID skipping")
-			log.Println(spew.Sdump(node))
-			continue
-		}
 		err := self.handlenode(node)
 		if err != nil {
 			log.Println(err)
@@ -68,11 +63,6 @@ func (self *TopologyMapper) Run() {
 		for resp := range receiver {
 			switch resp.Action {
 			case "set":
-				if len(resp.Node.Value) < 5 {
-					log.Println("No GUID skipping set")
-					log.Println(spew.Sdump(resp))
-					continue
-				}
 				self.handlenode(resp.Node)
 			case "delete":
 				self.remove_fragment(resp.Node)
@@ -437,12 +427,6 @@ func (self *ProcessMapper) Run() {
 
 	response, err := self.service.Etcd.Get(path, false, true)
 	for _, node := range flatten(response.Node) {
-		if len(node.Value) < 5 {
-			log.Println("No GUID skipping run")
-			log.Println(spew.Sdump(node))
-			continue
-		}
-
 		err := self.handlenode(node)
 		if err != nil {
 			spew.Dump(node)
@@ -462,12 +446,7 @@ func (self *ProcessMapper) Run() {
 		for response = range receiver {
 			switch response.Action {
 			case "set":
-				if len(response.Node.Value) > 5 {
-					self.handlenode(response.Node)
-				} else {
-					log.Println("No GUID skipping")
-					log.Println(spew.Sdump(response))
-				}
+				self.handlenode(response.Node)
 			}
 			// TODO: handle deletes
 		}
