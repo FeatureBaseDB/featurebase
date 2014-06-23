@@ -28,4 +28,5 @@ func main() {
 	}
 	cruncher := cruncher.NewCruncher()
 	cruncher.Run()
+	log.Println("STOP")
 }

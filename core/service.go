@@ -127,6 +127,7 @@ func (service *Service) Run() {
 			return
 		}
 	}
+	log.Println("Service stopping")
 }
 
 type Message interface {
