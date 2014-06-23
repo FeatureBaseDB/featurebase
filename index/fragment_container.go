@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log"
 	"pilosa/config"
-	. "pilosa/util"
+	"pilosa/util"
 	"strings"
 	"sync"
 	"time"
@@ -18,7 +18,7 @@ import (
 )
 
 type FragmentContainer struct {
-	fragments map[SUUID]*Fragment
+	fragments map[util.SUUID]*Fragment
 }
 
 func lookup(stmt *sql.Stmt, tile_id uint64) int {
@@ -34,7 +34,7 @@ func lookup(stmt *sql.Stmt, tile_id uint64) int {
 
 func NewFragmentContainer() *FragmentContainer {
 	f := new(FragmentContainer)
-	f.fragments = make(map[SUUID]*Fragment)
+	f.fragments = make(map[util.SUUID]*Fragment)
 	return f
 }
 
@@ -59,7 +59,7 @@ func (self *FragmentContainer) Shutdown() {
 	log.Println("Container Shutdown Complete")
 }
 
-func (self *FragmentContainer) LoadBitmap(frag_id SUUID, bitmap_id uint64, compressed_bitmap string, filter uint64) {
+func (self *FragmentContainer) LoadBitmap(frag_id util.SUUID, bitmap_id uint64, compressed_bitmap string, filter uint64) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewLoader(bitmap_id, compressed_bitmap, filter)
 		fragment.requestChan <- request
@@ -68,7 +68,7 @@ func (self *FragmentContainer) LoadBitmap(frag_id SUUID, bitmap_id uint64, compr
 	}
 }
 
-func (self *FragmentContainer) GetFragment(frag_id SUUID) (*Fragment, bool) {
+func (self *FragmentContainer) GetFragment(frag_id util.SUUID) (*Fragment, bool) {
 	//lock
 	c, v := self.fragments[frag_id]
 	//log.Println(self.fragments)
@@ -76,7 +76,7 @@ func (self *FragmentContainer) GetFragment(frag_id SUUID) (*Fragment, bool) {
 	return c, v
 }
 
-func (self *FragmentContainer) Stats(frag_id SUUID) interface{} {
+func (self *FragmentContainer) Stats(frag_id util.SUUID) interface{} {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewStats()
 		fragment.requestChan <- request
@@ -84,7 +84,7 @@ func (self *FragmentContainer) Stats(frag_id SUUID) interface{} {
 	}
 	return nil
 }
-func (self *FragmentContainer) Empty(frag_id SUUID) (BitmapHandle, error) {
+func (self *FragmentContainer) Empty(frag_id util.SUUID) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewEmpty()
 		fragment.requestChan <- request
@@ -93,106 +93,106 @@ func (self *FragmentContainer) Empty(frag_id SUUID) (BitmapHandle, error) {
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) Intersect(frag_id SUUID, bh []BitmapHandle) (BitmapHandle, error) {
+func (self *FragmentContainer) Intersect(frag_id util.SUUID, bh []BitmapHandle) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewIntersect(bh)
 		fragment.requestChan <- request
 		result := request.Response()
-		SendTimer("fragmant_container_Intersect", result.exec_time.Nanoseconds())
+		util.SendTimer("fragmant_container_Intersect", result.exec_time.Nanoseconds())
 		return result.answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) Union(frag_id SUUID, bh []BitmapHandle) (BitmapHandle, error) {
+func (self *FragmentContainer) Union(frag_id util.SUUID, bh []BitmapHandle) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewUnion(bh)
 		fragment.requestChan <- request
 		result := request.Response()
-		SendTimer("fragmant_container_Union", result.exec_time.Nanoseconds())
+		util.SendTimer("fragmant_container_Union", result.exec_time.Nanoseconds())
 		return result.answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) Get(frag_id SUUID, bitmap_id uint64) (BitmapHandle, error) {
+func (self *FragmentContainer) Get(frag_id util.SUUID, bitmap_id uint64) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGet(bitmap_id)
 		fragment.requestChan <- request
 		result := request.Response()
-		SendTimer("fragmant_container_Get", result.exec_time.Nanoseconds())
+		util.SendTimer("fragmant_container_Get", result.exec_time.Nanoseconds())
 		return result.answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) TopN(frag_id SUUID, bh BitmapHandle, n int, categories []uint64) ([]Pair, error) {
+func (self *FragmentContainer) TopN(frag_id util.SUUID, bh BitmapHandle, n int, categories []uint64) ([]Pair, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewTopN(bh, n, categories)
 		fragment.requestChan <- request
 		result := request.Response()
-		SendTimer("fragmant_container_TopN", result.exec_time.Nanoseconds())
+		util.SendTimer("fragmant_container_TopN", result.exec_time.Nanoseconds())
 		return result.answer.([]Pair), nil
 	}
-	return nil, errors.New(fmt.Sprintf("Fragment not found:%s", SUUID_to_Hex(frag_id)))
+	return nil, errors.New(fmt.Sprintf("Fragment not found:%s", util.SUUID_to_Hex(frag_id)))
 }
 
-func (self *FragmentContainer) GetList(frag_id SUUID, bitmap_id []uint64) ([]BitmapHandle, error) {
+func (self *FragmentContainer) GetList(frag_id util.SUUID, bitmap_id []uint64) ([]BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGetList(bitmap_id)
 		fragment.requestChan <- request
 		result := request.Response()
-		SendTimer("fragmant_container_GetList", result.exec_time.Nanoseconds())
+		util.SendTimer("fragmant_container_GetList", result.exec_time.Nanoseconds())
 		return result.answer.([]BitmapHandle), nil
 	}
 	return nil, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) Count(frag_id SUUID, bitmap BitmapHandle) (uint64, error) {
+func (self *FragmentContainer) Count(frag_id util.SUUID, bitmap BitmapHandle) (uint64, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewCount(bitmap)
 		fragment.requestChan <- request
 		result := request.Response()
-		SendTimer("fragmant_container_Count", result.exec_time.Nanoseconds())
+		util.SendTimer("fragmant_container_Count", result.exec_time.Nanoseconds())
 		return result.answer.(uint64), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) GetBytes(frag_id SUUID, bh BitmapHandle) ([]byte, error) {
+func (self *FragmentContainer) GetBytes(frag_id util.SUUID, bh BitmapHandle) ([]byte, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGetBytes(bh)
 		fragment.requestChan <- request
 		result := request.Response()
-		SendTimer("fragmant_container_GetBytes", result.exec_time.Nanoseconds())
+		util.SendTimer("fragmant_container_GetBytes", result.exec_time.Nanoseconds())
 		return result.answer.([]byte), nil
 	}
 	return nil, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) FromBytes(frag_id SUUID, bytes []byte) (BitmapHandle, error) {
+func (self *FragmentContainer) FromBytes(frag_id util.SUUID, bytes []byte) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewFromBytes(bytes)
 		fragment.requestChan <- request
 		result := request.Response()
-		SendTimer("fragmant_container_FromBytes", result.exec_time.Nanoseconds())
+		util.SendTimer("fragmant_container_FromBytes", result.exec_time.Nanoseconds())
 		return result.answer.(BitmapHandle), nil
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) SetBit(frag_id SUUID, bitmap_id uint64, pos uint64, category uint64) (bool, error) {
+func (self *FragmentContainer) SetBit(frag_id util.SUUID, bitmap_id uint64, pos uint64, category uint64) (bool, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewSetBit(bitmap_id, pos, category)
 		fragment.requestChan <- request
 		result := request.Response()
-		SendTimer("fragmant_container_SetBit", result.exec_time.Nanoseconds())
+		util.SendTimer("fragmant_container_SetBit", result.exec_time.Nanoseconds())
 		return result.answer.(bool), nil
 	}
 	return false, errors.New("Invalid Bitmap Handle")
 }
 
-func (self *FragmentContainer) Clear(frag_id SUUID) (bool, error) {
+func (self *FragmentContainer) Clear(frag_id util.SUUID) (bool, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewClear()
 		fragment.requestChan <- request
@@ -201,8 +201,8 @@ func (self *FragmentContainer) Clear(frag_id SUUID) (bool, error) {
 	return false, errors.New("Invalid Fragment ID")
 }
 
-func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id SUUID) {
-	log.Println("ADD FRAGMENT", frame, db, slice)
+func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id util.SUUID) {
+	log.Println("ADD FRAGMENT", frame, db, slice, util.SUUID_to_Hex(id))
 	f := NewFragment(id, db, slice, frame)
 	self.fragments[id] = f
 
@@ -223,7 +223,7 @@ type Pilosa interface {
 
 type Fragment struct {
 	requestChan chan Command
-	fragment_id SUUID
+	fragment_id util.SUUID
 	impl        Pilosa
 	counter     uint64
 	slice       int
@@ -233,7 +233,7 @@ type Fragment struct {
 	exit        chan *sync.WaitGroup
 }
 
-func getStorage(db string, slice int, frame string, fid SUUID) Storage {
+func getStorage(db string, slice int, frame string, fid util.SUUID) Storage {
 	storage_method := config.GetString("storage_backend")
 
 	switch storage_method {
@@ -241,14 +241,14 @@ func getStorage(db string, slice int, frame string, fid SUUID) Storage {
 		return NewMemoryStorage()
 	case "leveldb":
 		base_path := config.GetString("level_db_path")
-		full_dir := fmt.Sprintf("%s/%s/%d/%s/%s", base_path, db, slice, frame, SUUID_to_Hex(fid))
+		full_dir := fmt.Sprintf("%s/%s/%d/%s/%s", base_path, db, slice, frame, util.SUUID_to_Hex(fid))
 		return NewLevelDBStorage(full_dir)
 	case "cassandra":
 		return NewCassStorage()
 	}
 }
 
-func NewFragment(frag_id SUUID, db string, slice int, frame string) *Fragment {
+func NewFragment(frag_id util.SUUID, db string, slice int, frame string) *Fragment {
 	var impl Pilosa
 	log.Println(fmt.Sprintf("XXXXXXXXXXXXXXXXXXXXXXXXXXX(%s)", frame))
 	if strings.HasSuffix(frame, ".n") {
