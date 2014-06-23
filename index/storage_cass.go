@@ -13,11 +13,13 @@ import (
 )
 
 type CassandraStorage struct {
-	db            *gocql.Session
-	batch         *gocql.Batch
-	stmt          string
-	batch_time    time.Time
-	batch_counter int
+	db                    *gocql.Session
+	batch                 *gocql.Batch
+	stmt                  string
+	batch_time            time.Time
+	batch_counter         int
+	cass_time_window_secs float64
+	cass_flush_size       int
 }
 
 var cluster *gocql.ClusterConfig
@@ -53,6 +55,8 @@ func NewCassStorage() Storage {
 	obj.batch = nil
 	obj.batch_time = time.Now()
 	obj.batch_counter = 0
+	obj.cass_time_window_secs = float64(config.GetIntDefault("cassandra_time_window_secs", 15))
+	obj.cass_flush_size = config.GetIntDefault("cassandra_max_size_batch", 300)
 	return obj
 }
 
@@ -120,9 +124,9 @@ func (self *CassandraStorage) EndBatch() {
 	start := time.Now()
 	if self.batch != nil {
 		last := time.Since(self.batch_time)
-		if last.Seconds() > 15 {
+		if last.Seconds() > self.cass_time_window_secs {
 			self.FlushBatch()
-		} else if self.batch_counter > 300 {
+		} else if self.batch_counter > self.cass_flush_size {
 			self.FlushBatch()
 		}
 	} else {
