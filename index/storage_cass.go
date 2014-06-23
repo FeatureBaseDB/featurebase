@@ -56,7 +56,7 @@ func NewCassStorage() Storage {
 	obj.batch_time = time.Now()
 	obj.batch_counter = 0
 	obj.cass_time_window_secs = float64(config.GetIntDefault("cassandra_time_window_secs", 5))
-	obj.cass_flush_size = config.GetIntDefault("cassandra_max_size_batch", 30)
+	obj.cass_flush_size = config.GetIntDefault("cassandra_max_size_batch", 15)
 	return obj
 }
 
