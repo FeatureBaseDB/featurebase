@@ -3,6 +3,7 @@ package query
 import (
 	"encoding/gob"
 	"fmt"
+	"log"
 	"math/rand"
 	"pilosa/db"
 	"pilosa/util"
@@ -238,6 +239,7 @@ func (qt *GetQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
+		log.Println("GetFragmenForBitmapFailed GetQueryTree", slice)
 		return nil, err
 	}
 	return fragment.GetLocation(), nil
