@@ -5,7 +5,6 @@ import (
 	"pilosa/util"
 	"testing"
 
-	"github.com/gocql/gocql/uuid"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -63,7 +62,7 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 0)
 		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[2].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*GUID{
+		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*util.GUID{
 			qp[0].(GetQueryStep).Id,
 			qp[1].(GetQueryStep).Id,
 		})
@@ -74,12 +73,12 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[4].(GetQueryStep).Slice, ShouldEqual, 1)
 		So(*(qp[4].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[5].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*GUID{
+		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*util.GUID{
 			qp[3].(GetQueryStep).Id,
 			qp[4].(GetQueryStep).Id,
 		})
 		So(qp[6].(CatQueryStep).Operation, ShouldEqual, "cat")
-		So(qp[6].(CatQueryStep).Inputs, ShouldResemble, []*GUID{
+		So(qp[6].(CatQueryStep).Inputs, ShouldResemble, []*util.GUID{
 			qp[2].(UnionQueryStep).Id,
 			qp[5].(UnionQueryStep).Id,
 		})
@@ -107,7 +106,7 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 1)
 		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "general", 0})
 		So(qp[2].(CatQueryStep).Operation, ShouldEqual, "cat")
-		So(qp[2].(CatQueryStep).Inputs, ShouldResemble, []*GUID{
+		So(qp[2].(CatQueryStep).Inputs, ShouldResemble, []*util.GUID{
 			qp[0].(GetQueryStep).Id,
 			qp[1].(GetQueryStep).Id,
 		})
@@ -135,7 +134,7 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 0)
 		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[2].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*GUID{
+		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*util.GUID{
 			qp[0].(GetQueryStep).Id,
 			qp[1].(GetQueryStep).Id,
 		})
@@ -146,12 +145,12 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[4].(GetQueryStep).Slice, ShouldEqual, 1)
 		So(*(qp[4].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "general", 0})
 		So(qp[5].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*GUID{
+		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*util.GUID{
 			qp[3].(GetQueryStep).Id,
 			qp[4].(GetQueryStep).Id,
 		})
 		So(qp[6].(CatQueryStep).Operation, ShouldEqual, "cat")
-		So(qp[6].(CatQueryStep).Inputs, ShouldResemble, []*GUID{
+		So(qp[6].(CatQueryStep).Inputs, ShouldResemble, []*util.GUID{
 			qp[2].(UnionQueryStep).Id,
 			qp[5].(UnionQueryStep).Id,
 		})

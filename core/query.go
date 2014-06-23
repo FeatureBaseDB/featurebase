@@ -158,12 +158,7 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 			//spew.Dump(val)
 			return_type = "pair-list"
 			for _, pair := range val {
-				_, ok := merge_map[pair.Key]
-				if ok {
-					merge_map[pair.Key] += pair.Count
-				} else {
-					merge_map[pair.Key] = pair.Count
-				}
+				merge_map[pair.Key] += pair.Count
 			}
 		}
 	}
@@ -186,15 +181,16 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 			rank_list = append(rank_list, rank)
 		}
 		sort.Sort(rank_list)
+		items_size := min(len(merge_map), qs.N)
 		pair_list := make([]index.Pair, 0, len(merge_map))
-		for _, r := range rank_list {
-			pair_list = append(pair_list, *r.Pair)
+		for i, r := range rank_list {
+			if i < items_size {
+				pair_list = append(pair_list, *r.Pair)
+			} else {
+				break
+			}
 		}
-		if len(pair_list) > 0 && len(pair_list) > qs.N {
-			result = pair_list[:qs.N]
-		} else {
-			result = pair_list
-		}
+		result = pair_list
 	} else {
 		result = "NONE"
 	}
@@ -202,6 +198,12 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 func (self *Service) GetQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.GetQueryStep)
 	//spew.Dump("GET QUERYSTEP")
