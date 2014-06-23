@@ -203,11 +203,14 @@ func (self *FragmentContainer) Clear(frag_id util.SUUID) (bool, error) {
 
 func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id util.SUUID) {
 	log.Println("ADD FRAGMENT", frame, db, slice, util.SUUID_to_Hex(id))
-	f := NewFragment(id, db, slice, frame)
-	self.fragments[id] = f
+	_, ok := self.fragments[id]
+	if !ok {
+		f := NewFragment(id, db, slice, frame)
+		self.fragments[id] = f
+		go f.ServeFragment()
+		go f.Load()
+	}
 
-	go f.ServeFragment()
-	go f.Load()
 }
 
 type Pilosa interface {
