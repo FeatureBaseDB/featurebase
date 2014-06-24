@@ -3,6 +3,7 @@ package query
 import (
 	"errors"
 	"fmt"
+	"log"
 	"pilosa/util"
 	"strconv"
 
@@ -199,8 +200,9 @@ ArgLoop:
 				}
 			}
 		default:
-			spew.Dump("unexpected", token)
-			panic(token)
+
+			log.Println(spew.Sdump("unexpected", token))
+			return nil, errors.New("BAD TOKEN")
 		}
 	}
 

@@ -437,7 +437,7 @@ func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {
 
 	err := encoder.Encode(m)
 	if err != nil {
-		panic("Error encoding stats")
+		log.Fatal("Error encoding stats")
 	}
 }
 
@@ -483,7 +483,7 @@ func (self *WebService) HandleProcesses(w http.ResponseWriter, r *http.Request) 
 	processes := self.service.ProcessMap.GetMetadata()
 	err := encoder.Encode(processes)
 	if err != nil {
-		panic("Error encoding stats")
+		http.Error(w, "Error Encoding", http.StatusBadRequest)
 	}
 }
 

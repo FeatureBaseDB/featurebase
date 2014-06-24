@@ -2,11 +2,14 @@ package query
 
 import (
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
 	"pilosa/db"
 	"pilosa/util"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 type PortableQueryStep interface {
@@ -390,7 +393,8 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 			tree = &IntersectQueryTree{subqueries: subqueries}
 		} else {
 			//TODO return error gracefully
-			panic("invalid operation")
+			log.Println(spew.Sdump(query))
+			return nil, errors.New("BuildTree Issues")
 		}
 	}
 	return tree, nil

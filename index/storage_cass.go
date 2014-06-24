@@ -123,12 +123,15 @@ func (self *CassandraStorage) FlushBatch() {
 func (self *CassandraStorage) EndBatch() {
 	start := time.Now()
 	if self.batch != nil {
-		last := time.Since(self.batch_time)
-		if last.Seconds() > self.cass_time_window_secs {
-			self.FlushBatch()
-		} else if self.batch_counter > self.cass_flush_size {
-			self.FlushBatch()
-		}
+		self.FlushBatch()
+		/*
+			last := time.Since(self.batch_time)
+			if last.Seconds() > self.cass_time_window_secs {
+				self.FlushBatch()
+			} else if self.batch_counter > self.cass_flush_size {
+				self.FlushBatch()
+			}
+		*/
 	} else {
 		log.Println("NIL BATCH")
 	}
@@ -161,7 +164,7 @@ func (self *CassandraStorage) Store(id int64, db string, frame string, slice int
 
 func (self *CassandraStorage) StoreBlock(id int64, db string, frame string, slice int, filter uint64, chunk int64, block_index int32, block int64) error {
 	if self.batch == nil {
-		panic("NIL BATCH")
+		self.BeginBatch()
 	}
 	start := time.Now()
 	self.batch.Query(self.stmt, id, db, frame, slice, int(filter), chunk, block_index, block)
