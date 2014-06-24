@@ -323,12 +323,14 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 	//defer d.mutex.Unlock()
 	frame, err := d.getFrame(bitmap.FrameType)
 	if err != nil {
+		log.Println("Missing FrameType", bitmap.FrameType, d.Name, slice)
 		log.Println(err)
 		return nil, err
 	}
 	//log.Println(frame, slice)
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
+		log.Println("Missing frame,slice", frame, slice)
 		log.Println(err)
 		return nil, err
 	}

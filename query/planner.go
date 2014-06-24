@@ -272,9 +272,13 @@ func (qt *SetQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 	slice, err := d.GetSliceForProfile(qt.profile_id)
 	if err != nil {
 		//I should check GetFragmentForBitmap for possible errors but for now i'll just hardcode
-		return nil, NewFragmentNotFound(d.Name, qt.bitmap.FrameType, db.GetSlice(qt.profile_id))
+		return nil, NewFragmentNotFound(d.Name, "b.n", db.GetSlice(qt.profile_id))
 	}
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
+	if err != nil {
+		log.Println("NOT FOUND:", slice, qt.bitmap)
+		return nil, err
+	}
 	return fragment.GetLocation(), nil
 }
 
