@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"pilosa/config"
 	"pilosa/util"
 	"sync"
-
 	"github.com/stathat/consistent"
 )
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")
+var InvalidFrameError = errors.New("Invalid frame.")
 var SliceDoesNotExistError = errors.New("Slice does not exist.")
 var FragmentDoesNotExistError = errors.New("Fragment does not exist.")
 var FrameSliceIntersectDoesNotExistError = errors.New("FrameSliceIntersect does not exist.")
@@ -159,6 +160,20 @@ func (c *Cluster) GetOrCreateDatabase(name string) *Database {
 	return c.addDatabase(name)
 }
 
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *Database) IsValidFrame(name string) bool {
+	supported_frames := config.GetStringArrayDefault("supported_frames", []string{"default"})
+	return stringInSlice(name, supported_frames)
+}
+
 // Count the number of slices in a database
 func (d *Database) NumSlices() (int, error) {
 	if len(d.slices) < 1 {
@@ -177,6 +192,10 @@ type Frame struct {
 
 // Get a frame from a database
 func (d *Database) getFrame(name string) (*Frame, error) {
+	// should we check here for supported frames?
+	if !d.IsValidFrame(name) {
+		return nil, InvalidFrameError
+	}
 	for _, frame := range d.frames {
 		if frame.name == name {
 			return frame, nil

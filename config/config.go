@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"launchpad.net/goyaml"
-
 )
 
 type Config struct {
@@ -41,13 +40,13 @@ func GetString(key string) string {
 }
 
 func GetStringArray(key string) []string {
-	res,_:= config.GetStringArray(key)
+	res, _ := config.GetStringArray(key)
 	return res
 }
-func GetStringArrayDefault(key string,def []string) []string {
-	res,ok := config.GetStringArray(key)
+func GetStringArrayDefault(key string, def []string) []string {
+	res, ok := config.GetStringArray(key)
 
-	if ! ok{
+	if !ok {
 		return def
 	}
 	return res
@@ -60,7 +59,6 @@ func GetStringDefault(key string, default_value string) string {
 func GetIntDefault(key string, default_value int) int {
 	return config.GetIntDefault(key, default_value)
 }
-
 
 func NewConfig(filename string) *Config {
 	self := Config{}
@@ -85,13 +83,11 @@ func (self *Config) load() error {
 	}
 	data, err := ioutil.ReadFile(config_file)
 	if err != nil {
-	
 		return errors.New("Problem with config file: " + err.Error())
 	}
-	
-	err=goyaml.Unmarshal(data, self.config)
-	if err != nil{
-	println(err.Error())
+	err = goyaml.Unmarshal(data, self.config)
+	if err != nil {
+		println(err.Error())
 
 	}
 	self.loaded = true
@@ -134,7 +130,6 @@ func (self *Config) GetIntDefault(key string, default_value int) int {
 	return default_value
 }
 
-
 func (self *Config) GetStringDefault(key string, default_value string) string {
 	value, ok := self.GetSafe(key)
 	if ok {
@@ -145,7 +140,6 @@ func (self *Config) GetStringDefault(key string, default_value string) string {
 	}
 	return default_value
 }
-
 
 func (self *Config) GetString(key string) string {
 	value, ok := self.GetSafe(key)
@@ -158,18 +152,14 @@ func (self *Config) GetString(key string) string {
 	return ""
 }
 
-
-
-func (self *Config) GetStringArray(key string) ([]string,bool){
+func (self *Config) GetStringArray(key string) ([]string, bool) {
 	value, ok := self.GetSafe(key)
-	
 	if ok {
 		var results []string
-		for _,v:= range value.([]interface{}){
-			results=append(results,v.(string))
+		for _, v := range value.([]interface{}) {
+			results = append(results, v.(string))
 		}
-			return results,ok
+		return results, ok
 	}
-	return []string{},ok
+	return []string{}, ok
 }
-

@@ -17,6 +17,26 @@ type PortableQueryStep interface {
 	GetLocation() *db.Location
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// ERRORS
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Invalid Frame
+type InvalidFrame struct {
+	Db    string
+	Frame string
+	Retry bool
+}
+
+func NewInvalidFrame(db string, frame string) *InvalidFrame {
+	return &InvalidFrame{db, frame, false}
+}
+
+func (self *InvalidFrame) Error() string {
+	return fmt.Sprintf("Invalid Frame: %s:%s", self.Db, self.Frame)
+}
+
+// Fragment Not Found
 type FragmentNotFound struct {
 	Db    string
 	Frame string
@@ -24,7 +44,7 @@ type FragmentNotFound struct {
 	Retry bool
 }
 
-func NewFragmentNotFound(db, frame string, slice int) *FragmentNotFound {
+func NewFragmentNotFound(db string, frame string, slice int) *FragmentNotFound {
 	return &FragmentNotFound{db, frame, slice, true}
 }
 
@@ -269,15 +289,18 @@ type SetQueryTree struct {
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *SetQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	// check here for supported frames
+	if !d.IsValidFrame(qt.bitmap.FrameType) {
+		return nil, NewInvalidFrame(d.Name, qt.bitmap.FrameType)
+	}
 	slice, err := d.GetSliceForProfile(qt.profile_id)
 	if err != nil {
-		//I should check GetFragmentForBitmap for possible errors but for now i'll just hardcode
-		return nil, NewFragmentNotFound(d.Name, "b.n", db.GetSlice(qt.profile_id))
+		return nil, NewFragmentNotFound(d.Name, qt.bitmap.FrameType, db.GetSlice(qt.profile_id))
 	}
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
 		log.Println("NOT FOUND:", slice, qt.bitmap)
-		return nil, err
+		return nil, NewFragmentNotFound(d.Name, qt.bitmap.FrameType, db.GetSlice(qt.profile_id))
 	}
 	return fragment.GetLocation(), nil
 }

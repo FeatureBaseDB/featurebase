@@ -73,8 +73,9 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 
 	query_plan, err := query.QueryPlanForQuery(database, qry, &destination)
 	if err != nil {
-		obj, found := err.(*query.FragmentNotFound)
-		if found {
+		switch obj := err.(type) {
+		//case *query.InvalidFrame:
+		case *query.FragmentNotFound:
 			self.service.TopologyMapper.MakeFragments(obj.Db, obj.Slice)
 		}
 		self.service.Hold.Set(qry.Id, err, 30)
