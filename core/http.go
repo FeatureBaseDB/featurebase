@@ -57,6 +57,7 @@ func NewRequestLogger(handler http.HandlerFunc, logger chan []byte) http.Handler
 	r := RequestLogger{handler, logger}
 	return r.Handle
 }
+
 func (self *RequestLogger) Handle(w http.ResponseWriter, r *http.Request) {
 
 	// Grab a dump of the incoming request
@@ -92,12 +93,14 @@ func genFileName(id string) string {
 	return fmt.Sprintf("%s%s.%s.log", base, t.Format("/2006/01/02/15/04-05"), id)
 
 }
+
 func flush(requests []LogRecord, id string, records_to_dump int) {
 	dest := genFileName(id)
 	w, err := util.Create(dest)
 	if err != nil {
 		log.Println("Error opening outfile ", dest)
 		log.Println(err)
+		return
 	}
 	defer w.Close()
 
@@ -107,6 +110,7 @@ func flush(requests []LogRecord, id string, records_to_dump int) {
 	}
 
 }
+
 func Logger(in chan []byte, end chan bool, id string, flusher chan bool) {
 	var buffer = make([]LogRecord, 2048, 2048)
 	i := 0
@@ -155,7 +159,12 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/version", self.HandleVersion)
 	mux.HandleFunc("/ping", self.HandlePing)
 	mux.HandleFunc("/batch", self.HandleBatch)
-	mux.HandleFunc("/set_bits", NewRequestLogger(self.HandleSetBit, logger_chan))
+	log_set_bit := config.GetIntDefault("log_set_bit_request", 0)
+	if log_set_bit == 1 {
+		mux.HandleFunc("/set_bits", NewRequestLogger(self.HandleSetBit, logger_chan))
+	} else {
+		mux.HandleFunc("/set_bits", self.HandleSetBit)
+	}
 	//mux.HandleFunc("/set_bits", self.HandleSetBit)
 	mux.HandleFunc("/flush", NewFlusher(flusher))
 	s := &http.Server{
