@@ -87,7 +87,8 @@ func NewLogRecord(t time.Time, data []byte) LogRecord {
 func genFileName(id string) string {
 	//bucket/YYYY/MM/DDHHMMSS.id.log
 	t := time.Now()
-	base := "http://pilosa.umbel.com.s3.amazonaws.com/bit_log"
+	//base := "http://pilosa.umbel.com.s3.amazonaws.com/bit_log"
+	base := config.GetStringDefault("pilosa_request_log", "/tmp/set_bit_log")
 	return fmt.Sprintf("%s%s.%s.log", base, t.Format("/2006/01/02/15/04-05"), id)
 
 }
