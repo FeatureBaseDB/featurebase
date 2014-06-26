@@ -138,12 +138,12 @@ func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) er
 						i := m[process]
 						i++
 						m[process] = i
-
 					}
 
 				}
 
 			}
+
 			p, err := getLightestProcess(m)
 			if err != nil {
 				return err
@@ -176,6 +176,11 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 	var process_uuid util.GUID
 	var process *db.Process
 	var err error
+	process_uuid, err = util.ParseGUID(node.Value)
+	if err != nil {
+		log.Println("Bad Process Guid", key)
+		return errors.New("No Process Id")
+	}
 
 	if len(bits) <= 1 || bits[0] != "db" {
 		return nil
@@ -218,9 +223,8 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 			return errors.New("no process")
 		}
 
-		process_uuid, err = util.ParseGUID(node.Value)
-
 		if err != nil {
+			log.Println("Bad UUID:", process_uuid, key)
 			return err
 		}
 		process = db.NewProcess(&process_uuid)
@@ -389,7 +393,7 @@ func (self *ProcessMapper) handlenode(node *etcd.Node) error {
 		id_string := bits[1]
 		id, err := util.ParseGUID(id_string)
 		if err != nil {
-			return errors.New("Invalid GUID: " + id_string)
+			return errors.New("Invalid GUID: " + id_string + " (" + key + ")")
 		}
 		process = self.service.ProcessMap.GetOrAddProcess(&id)
 	}
