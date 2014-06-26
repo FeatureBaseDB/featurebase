@@ -119,7 +119,8 @@ func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
 func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) error {
 	//get Lock to create the fragment
 	ttl := uint64(config.GetIntDefault("fragment_alloc_lock_time_secs", 600))
-	lock_key := fmt.Sprintf("%s/lock/%s-%s-%d", self.namespace, db, frame, slice_int)
+	//lock_key := fmt.Sprintf("%s/lock/%s-%s-%d", self.namespace, db, frame, slice_int)
+	lock_key := fmt.Sprintf("%s/lock/%s-%d", self.namespace, db, slice_int)
 	response, err := self.service.Etcd.RawCreate(lock_key, "0", ttl)
 
 	if err == nil {
