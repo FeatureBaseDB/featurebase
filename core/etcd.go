@@ -107,7 +107,6 @@ func getLightestProcess(m map[string]int) (Pair, error) {
 func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
 	frames_to_create := config.GetStringArrayDefault("supported_frames", []string{"default"})
 	for _, frame := range frames_to_create {
-		log.Println("AllocateFragment", db, frame, slice_int)
 		err := self.AllocateFragment(db, frame, slice_int)
 		if err != nil {
 			log.Println(err)
@@ -157,6 +156,7 @@ func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) er
 			fragment_key := fmt.Sprintf("%s/db/%s/frame/%s/slice/%d/fragment/%s/process", self.namespace, db, frame, slice_int, fuid)
 			process_guid := p.Key
 			// need to check value to see how many we have left
+			log.Println("ALLOC:", process_guid, len(process_guid))
 			if len(process_guid) > 1 {
 				_, err = self.service.Etcd.Set(fragment_key, process_guid, 0)
 				log.Printf("Fragment sent to etcd: %s(%s)", fragment_key, process_guid)
