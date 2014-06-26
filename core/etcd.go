@@ -135,9 +135,11 @@ func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) er
 				for _, fsi := range dbs.GetFramSliceIntersects() {
 					for _, fragment := range fsi.GetFragments() {
 						process := fragment.GetProcess().Id().String()
-						i := m[process]
-						i++
-						m[process] = i
+						if len(process) > 1 {
+							i := m[process]
+							i++
+							m[process] = i
+						}
 					}
 
 				}
@@ -155,8 +157,10 @@ func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) er
 			fragment_key := fmt.Sprintf("%s/db/%s/frame/%s/slice/%d/fragment/%s/process", self.namespace, db, frame, slice_int, fuid)
 			process_guid := p.Key
 			// need to check value to see how many we have left
-			_, err = self.service.Etcd.Set(fragment_key, process_guid, 0)
-			log.Printf("Fragment sent to etcd: %s(%s)", fragment_key, process_guid)
+			if len(process_guid) > 1 {
+				_, err = self.service.Etcd.Set(fragment_key, process_guid, 0)
+				log.Printf("Fragment sent to etcd: %s(%s)", fragment_key, process_guid)
+			}
 		}
 
 	}
