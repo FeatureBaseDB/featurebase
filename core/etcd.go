@@ -100,6 +100,7 @@ func getLightestProcess(m map[string]int) (Pair, error) {
 		processlist[i] = Pair{k, v}
 	}
 	sort.Sort(processlist)
+	log.Println(spew.Sdump(processlist))
 
 	return processlist[0], nil
 }
