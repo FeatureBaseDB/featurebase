@@ -176,10 +176,19 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 	var process_uuid util.GUID
 	var process *db.Process
 	var err error
-	process_uuid, err = util.ParseGUID(node.Value)
-	if err != nil {
-		log.Println("Bad Process Guid", key)
-		return errors.New("No Process Id")
+
+	if len(bits) > 8 {
+		if bits[8] != "process" {
+			return errors.New("no process")
+		}
+
+		process_uuid, err = util.ParseGUID(node.Value)
+		if err != nil {
+			log.Println("Bad Process Guid", key)
+			return errors.New("No Process Id")
+		}
+	} else {
+		return err
 	}
 
 	if len(bits) <= 1 || bits[0] != "db" {
