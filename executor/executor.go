@@ -134,14 +134,34 @@ func (self *Executor) RunPQL(database_name string, pql string) (interface{}, err
 			query_list[i].Id = qry.Id
 		}
 
-		// technically, this is blocking on the hold for each query, but it may be ok, since we need them all for the final anyway.
 		final_result := make(map[string]interface{})
+		result := make(chan struct {
+			final interface{}
+			label string
+			err   error
+		})
+		x := 0
 		for i, _ := range query_list {
-			final, err := self.service.Hold.Get(query_list[i].Id, 10)
+			x++
+			go func(q query.PqlListItem, reply chan struct {
+				final interface{}
+				label string
+				err   error
+			}) {
+				final, err := self.service.Hold.Get(q.Id, 10)
+				result <- struct {
+					final interface{}
+					label string
+					err   error
+				}{final, q.Label, err}
+			}(query_list[i], result)
 			if err != nil {
 				spew.Dump(err)
 			}
-			final_result[query_list[i].Label] = final
+		}
+		for z := 0; z < x; z++ {
+			ans := <-result
+			final_result[ans.label] = ans.final
 		}
 
 		return final_result, nil
