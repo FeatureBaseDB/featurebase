@@ -7,6 +7,7 @@ import (
 	"pilosa/config"
 	"pilosa/util"
 	"sync"
+
 	"github.com/stathat/consistent"
 )
 
@@ -356,6 +357,23 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 	frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
 	if err != nil {
 		log.Println("ERROR FSI.GET:", bitmap.Id, bitmap.FrameType, d.Name, frame, slice)
+		log.Println(err)
+		return nil, err
+	}
+	frag_id := util.Hex_to_SUUID(frag_id_s)
+	return fsi.GetFragment(frag_id)
+}
+
+func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragment, error) {
+	fsi, err := d.GetFrameSliceIntersect(frame, slice)
+	if err != nil {
+		log.Println("Missing frame,slice", frame, slice)
+		log.Println(err)
+		return nil, err
+	}
+	frag_id_s, err := fsi.hashring.Get("0") // we don't need a specific bitmap in here because we're assuming the hashring only has a single element
+	if err != nil {
+		log.Println("ERROR FSI.GET:", d.Name, frame, slice)
 		log.Println(err)
 		return nil, err
 	}
