@@ -176,7 +176,7 @@ func TestQueryPlanner(t *testing.T) {
 		So(*(qp[0].(SetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
 	})
 	Convey("Top-n query plan - including parsing", t, func() {
-		query, err := QueryForPQL("top-n(get(10, default), default, 50)")
+		query, err := QueryForPQL("top-n(get(10, default), default, 50,[1,2,3])")
 		So(err, ShouldEqual, nil)
 
 		database, fragment1 := basic_database()
@@ -195,6 +195,7 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[1].(*TopNQueryStep).Operation, ShouldEqual, "top-n")
 		So(qp[1].(*TopNQueryStep).Input, ShouldEqual, qp[0].(GetQueryStep).Id)
 		So(qp[1].(*TopNQueryStep).N, ShouldEqual, 50)
+		So(qp[1].(*TopNQueryStep).Filters, ShouldResemble, []uint64{1, 2, 3})
 		So(qp[2].(GetQueryStep).Operation, ShouldEqual, "get")
 		So(*(qp[2].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
 		So(qp[3].(*TopNQueryStep).Operation, ShouldEqual, "top-n")

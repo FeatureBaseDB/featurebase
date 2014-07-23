@@ -96,39 +96,24 @@ func getLightestProcess(m map[string]int) (Pair, error) {
 	}
 	processlist := make(PairList, l)
 	i := 0
+
 	for k, v := range m {
 		processlist[i] = Pair{k, v}
+		i++
 	}
 	sort.Sort(processlist)
-	log.Println(spew.Sdump(processlist))
 
 	return processlist[0], nil
 }
 
 func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
-	frames_to_create := config.GetStringArrayDefault("supported_frames", []string{"default"})
-	for _, frame := range frames_to_create {
-		err := self.AllocateFragment(db, frame, slice_int)
-		if err != nil {
-			log.Println(err)
-		}
-	}
-
-	return nil
-}
-
-func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) error {
-	//get Lock to create the fragment
-	ttl := uint64(config.GetIntDefault("fragment_alloc_lock_time_secs", 600))
+	ttl := uint64(config.GetIntDefault("fragment_alloc_lock_time_secs", 14400))
 	//lock_key := fmt.Sprintf("%s/lock/%s-%s-%d", self.namespace, db, frame, slice_int)
 	lock_key := fmt.Sprintf("%s/lock/%s-%d", self.namespace, db, slice_int)
 	response, err := self.service.Etcd.RawCreate(lock_key, "0", ttl)
 
 	if err == nil {
 		if response.StatusCode == 201 { //key created
-			//figure out least loaded process..possibly check max process
-			//to create the node, just write off the items to etcd and the watch should spawn
-			//be nice if something would notify perhaps queue
 			m := make(map[string]int)
 			id_string := self.service.Id.String()
 			m[id_string] = 0 //at least have one process if none created
@@ -146,27 +131,43 @@ func (self *TopologyMapper) AllocateFragment(db, frame string, slice_int int) er
 				}
 
 			}
-
 			p, err := getLightestProcess(m)
 			if err != nil {
 				return err
 			}
 
 			// PUT -d "value=5cb315c3-6e1d-4218-89b7-943d1dba985b" http://etcd0:4001/v2/keys/pilosa/0/db/29/frame/d/slice/5/fragment/a2b632fc4001b817/proces
-			//so i need db, frame, slice , fragment_id
-			fuid := util.SUUID_to_Hex(util.Id())
-			fragment_key := fmt.Sprintf("%s/db/%s/frame/%s/slice/%d/fragment/%s/process", self.namespace, db, frame, slice_int, fuid)
-			process_guid := p.Key
-			// need to check value to see how many we have left
-			log.Println("ALLOC:", process_guid, len(process_guid))
-			if len(process_guid) > 1 {
-				_, err = self.service.Etcd.Set(fragment_key, process_guid, 0)
-				log.Printf("Fragment sent to etcd: %s(%s)", fragment_key, process_guid)
+			frames_to_create := config.GetStringArrayDefault("supported_frames", []string{"default"})
+			for _, frame := range frames_to_create {
+				err := self.AllocateFragment(p.Key, db, frame, slice_int)
+				if err != nil {
+					log.Println(err)
+				}
 			}
 		}
-
 	}
-	return err
+	return nil
+}
+
+func (self *TopologyMapper) AllocateFragment(process_guid, db, frame string, slice_int int) error {
+	//get Lock to create the fragment
+	//figure out least loaded process..possibly check max process
+	//to create the node, just write off the items to etcd and the watch should spawn
+	//be nice if something would notify perhaps queue
+	//so i need db, frame, slice , fragment_id
+	fuid := util.SUUID_to_Hex(util.Id())
+	fragment_key := fmt.Sprintf("%s/db/%s/frame/%s/slice/%d/fragment/%s/process", self.namespace, db, frame, slice_int, fuid)
+	// need to check value to see how many we have left
+	log.Println("ALLOC:", process_guid, len(process_guid))
+	if len(process_guid) > 1 {
+		_, err := self.service.Etcd.Set(fragment_key, process_guid, 0)
+		if err != nil {
+			return err
+		}
+		log.Printf("Fragment sent to etcd: %s(%s)", fragment_key, process_guid)
+	}
+
+	return nil
 
 }
 
