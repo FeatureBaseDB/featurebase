@@ -139,11 +139,16 @@ ArgLoop:
 				}
 
 			case "top-n":
-				i, err := strconv.Atoi(token.Text)
-				if err != nil {
-					return nil, fmt.Errorf("Expecting integer! (%v)", err)
+				switch len(query.Args) {
+				case 0:
+					query.Args["frame"] = token.Text
+				case 1:
+					i, err := strconv.Atoi(token.Text)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer! (%v)", err)
+					}
+					query.Args["n"] = i
 				}
-				query.Args["n"] = i
 			default:
 				spew.Dump("UNPROCESSED VALUE", token)
 			}

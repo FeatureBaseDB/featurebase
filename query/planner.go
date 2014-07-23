@@ -121,6 +121,7 @@ type TopNQueryStep struct {
 	Input   *util.GUID
 	Filters []uint64
 	N       int
+	Frame   string
 }
 
 type TopNQueryResult struct {
@@ -133,11 +134,25 @@ type TopNQueryTree struct {
 	location *db.Location
 	Filters  []uint64
 	N        int
+	Frame    string
+	Slice    int
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *TopNQueryTree) getLocation(d *db.Database) (*db.Location, error) {
-	return qt.subquery.getLocation(d)
+	var err error
+	if qt.location == nil {
+		frame := d.GetOrCreateFrame(qt.Frame)
+		slice := d.GetOrCreateSlice(qt.Slice)
+		fragment, err := d.GetFragmentForFrameSlice(frame, slice)
+		if err != nil {
+			log.Println("GetFragmentForFrameSliceFailed GetQueryTree", frame, slice)
+			return nil, err
+		}
+		qt.location = fragment.GetLocation()
+		return qt.location, nil
+	}
+	return qt.location, err
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -382,8 +397,13 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 			}
 			tree = &CountQueryTree{subquery: subquery}
 		} else if query.Operation == "top-n" {
+			var frame string
 			var n int
 			var filters []uint64
+			frame_, ok := query.Args["frame"]
+			if ok {
+				frame = frame_.(string)
+			}
 			n_, ok := query.Args["n"]
 			if ok {
 				n = n_.(int)
@@ -397,7 +417,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 			if err != nil {
 				return nil, err
 			}
-			tree = &TopNQueryTree{subquery: subquery, Filters: filters, N: n}
+			tree = &TopNQueryTree{subquery: subquery, Filters: filters, N: n, Frame: frame, Slice: slice}
 		} else if query.Operation == "union" {
 			subqueries := make([]QueryTree, len(query.Subqueries))
 			var err error
@@ -516,7 +536,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		if err != nil {
 			return nil, err
 		}
-		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", loc, location}, &sub_id, topn.Filters, topn.N}
+		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", loc, location}, &sub_id, topn.Filters, topn.N, topn.Frame}
 		subq_steps, err := qp.flatten(topn.subquery, &sub_id, loc)
 		if err != nil {
 			return nil, err
