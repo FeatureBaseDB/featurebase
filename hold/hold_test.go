@@ -1,17 +1,16 @@
 package hold
 
 import (
+	"pilosa/util"
 	"testing"
 	"time"
-
-	"github.com/gocql/gocql/uuid"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestHoldChan(t *testing.T) {
 
-	Hold := Holder{make(map[GUID]holdchan), make(chan gethold), make(chan delhold)}
+	Hold := Holder{make(map[util.GUID]holdchan), make(chan gethold), make(chan delhold)}
 	go Hold.Run()
 
 	Convey("set then get", t, func() {
