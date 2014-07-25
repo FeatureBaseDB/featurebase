@@ -6,6 +6,7 @@ import (
 	//	"io/ioutil"
 	//   "time"
 	"pilosa/util"
+
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -35,7 +36,7 @@ func TestFragment(t *testing.T) {
 		So(num, ShouldEqual, 1)
 	})
 
-	Convey("Union/Intersect", t, func() {
+	Convey("Union/Intersect/Difference", t, func() {
 		bi1 := uint64(1234)
 		bi2 := uint64(4321)
 
@@ -53,6 +54,11 @@ func TestFragment(t *testing.T) {
 
 		num, _ = dummy.Count(general, result)
 		So(num, ShouldEqual, 0)
+
+		result, _ = dummy.Difference(general, handles)
+		num, _ = dummy.Count(general, result)
+		So(num, ShouldEqual, 1)
+
 	})
 	Convey("Union Empty", t, func() {
 

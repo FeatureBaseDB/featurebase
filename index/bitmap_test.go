@@ -3,6 +3,7 @@ package index
 import (
 	"testing"
 	"time"
+
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -17,15 +18,30 @@ func TestBitmaps(t *testing.T) {
 		So(bc1, ShouldEqual, bc2)
 		So(bc1, ShouldEqual, 4096)
 	})
-	Convey("function AND_NOT 1 and not 0 => true ", t, func() {
+	Convey("function Difference 1 and not 0 => true ", t, func() {
 		bm1 := CreateRBBitmap()
 		bm2 := CreateRBBitmap()
 		SetBit(bm1, 1)
 		//SetBit(bm2,2)
-		all := AND_NOT(bm1, bm2)
+		all := Difference(bm1, bm2)
 		res := BitCount(all)
 
 		So(1, ShouldEqual, res)
+	})
+
+	Convey("function Difference 1 and not 0 => true ", t, func() {
+		bm1 := CreateRBBitmap()
+		bm2 := CreateRBBitmap()
+		SetBit(bm1, 1)
+		SetBit(bm1, 2)
+		SetBit(bm1, 3)
+		SetBit(bm1, 4)
+		SetBit(bm2, 3)
+		//SetBit(bm2,2)
+		all := Difference(bm1, bm2)
+		res := BitCount(all)
+
+		So(3, ShouldEqual, res)
 	})
 
 	Convey("UNION even + odd equal 4096 ", t, func() {

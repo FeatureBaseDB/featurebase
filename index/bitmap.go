@@ -260,7 +260,7 @@ func Union(a_bm IBitmap, b_bm IBitmap) IBitmap {
 	return output
 }
 
-func AND_NOT(a_bm IBitmap, b_bm IBitmap) IBitmap {
+func Difference(a_bm IBitmap, b_bm IBitmap) IBitmap {
 	var a = a_bm.Min()
 	var b = b_bm.Min()
 	defer a.Close()

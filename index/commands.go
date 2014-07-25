@@ -79,6 +79,19 @@ func (self *CmdUnion) Execute(f *Fragment) Calculation {
 	return f.union(self.bitmap_ids)
 }
 
+type CmdDifference struct {
+	*Responder
+	bitmap_ids []BitmapHandle
+}
+
+func NewDifference(bitmaps []BitmapHandle) *CmdDifference {
+	result := &CmdDifference{NewResponder("Difference"), bitmaps}
+	return result
+}
+func (self *CmdDifference) Execute(f *Fragment) Calculation {
+	return f.difference(self.bitmap_ids)
+}
+
 type CmdIntersect struct {
 	*Responder
 	bitmaps []BitmapHandle

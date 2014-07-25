@@ -115,6 +115,17 @@ func (self *FragmentContainer) Union(frag_id util.SUUID, bh []BitmapHandle) (Bit
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
+func (self *FragmentContainer) Difference(frag_id util.SUUID, bh []BitmapHandle) (BitmapHandle, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
+		request := NewDifference(bh)
+		fragment.requestChan <- request
+		result := request.Response()
+		util.SendTimer("fragmant_container_Difference", result.exec_time.Nanoseconds())
+		return result.answer.(BitmapHandle), nil
+	}
+	return 0, errors.New("Invalid Bitmap Handle")
+}
+
 func (self *FragmentContainer) Get(frag_id util.SUUID, bitmap_id uint64) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGet(bitmap_id)
@@ -316,6 +327,7 @@ func (self *Fragment) union(bitmaps []BitmapHandle) BitmapHandle {
 	}
 	return self.AllocHandle(result)
 }
+
 func (self *Fragment) intersect(bitmaps []BitmapHandle) BitmapHandle {
 	var result IBitmap
 	for i, id := range bitmaps {
@@ -328,6 +340,20 @@ func (self *Fragment) intersect(bitmaps []BitmapHandle) BitmapHandle {
 	}
 	return self.AllocHandle(result)
 }
+
+func (self *Fragment) difference(bitmaps []BitmapHandle) BitmapHandle {
+	result := NewBitmap()
+	for i, id := range bitmaps {
+		bm, _ := self.getBitmap(id)
+		if i == 0 {
+			result = bm
+		} else {
+			result = Difference(result, bm)
+		}
+	}
+	return self.AllocHandle(result)
+}
+
 func (self *Fragment) Persist() {
 	err := self.impl.Persist()
 	if err != nil {
