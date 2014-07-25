@@ -220,6 +220,38 @@ func (qt *IntersectQueryTree) getLocation(d *db.Database) (*db.Location, error) 
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// DIFFERENCE
+///////////////////////////////////////////////////////////////////////////////////////////////////
+type DifferenceQueryStep struct {
+	*BaseQueryStep
+	Inputs []*util.GUID
+}
+
+type DifferenceQueryResult struct {
+	*BaseQueryResult
+}
+
+// QueryTree for UNION queries
+type DifferenceQueryTree struct {
+	subqueries []QueryTree
+	location   *db.Location
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *DifferenceQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	var err error
+	if qt.location == nil {
+		subqueryLength := len(qt.subqueries)
+		if subqueryLength > 0 {
+			locationIndex := rand.Intn(subqueryLength)
+			subquery := qt.subqueries[locationIndex]
+			qt.location, err = subquery.getLocation(d)
+		}
+	}
+	return qt.location, err
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // CAT
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type CatQueryStep struct {
@@ -328,6 +360,7 @@ func init() {
 	gob.Register(CatQueryResult{})
 	gob.Register(UnionQueryResult{})
 	gob.Register(IntersectQueryResult{})
+	gob.Register(DifferenceQueryResult{})
 	gob.Register(CountQueryResult{})
 	gob.Register(TopNQueryResult{})
 
@@ -336,6 +369,7 @@ func init() {
 	gob.Register(CatQueryStep{})
 	gob.Register(UnionQueryStep{})
 	gob.Register(IntersectQueryStep{})
+	gob.Register(DifferenceQueryStep{})
 	gob.Register(CountQueryStep{})
 	gob.Register(TopNQueryStep{})
 }
@@ -438,6 +472,16 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 				}
 			}
 			tree = &IntersectQueryTree{subqueries: subqueries}
+		} else if query.Operation == "difference" {
+			subqueries := make([]QueryTree, len(query.Subqueries))
+			var err error
+			for i, query := range query.Subqueries {
+				subqueries[i], err = qp.buildTree(&query, slice)
+				if err != nil {
+					return nil, err
+				}
+			}
+			tree = &DifferenceQueryTree{subqueries: subqueries}
 		} else {
 			//TODO return error gracefully
 			log.Println(spew.Sdump(query))
@@ -492,6 +536,23 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		}
 		step := IntersectQueryStep{&BaseQueryStep{id, "intersect", loc, location}, inputs}
 		for index, subq := range intersect.subqueries {
+			sub_id := util.RandomUUID()
+			step.Inputs[index] = &sub_id
+			subq_steps, err := qp.flatten(subq, &sub_id, loc)
+			if err != nil {
+				return nil, err
+			}
+			plan = append(plan, *subq_steps...)
+		}
+		plan = append(plan, step)
+	} else if difference, ok := qt.(*DifferenceQueryTree); ok {
+		inputs := make([]*util.GUID, len(difference.subqueries))
+		loc, err := difference.getLocation(qp.Database)
+		if err != nil {
+			return nil, err
+		}
+		step := DifferenceQueryStep{&BaseQueryStep{id, "difference", loc, location}, inputs}
+		for index, subq := range difference.subqueries {
 			sub_id := util.RandomUUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := qp.flatten(subq, &sub_id, loc)

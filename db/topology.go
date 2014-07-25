@@ -128,7 +128,7 @@ type Database struct {
 	mutex                  sync.Mutex
 }
 
-func (self *Database) GetFramSliceIntersects() []*FrameSliceIntersect {
+func (self *Database) GetFrameSliceIntersects() []*FrameSliceIntersect {
 	return self.frame_slice_intersects
 }
 

@@ -133,6 +133,41 @@ func (self *Service) IntersectQueryStepHandler(msg *db.Message) {
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
+func (self *Service) DifferenceQueryStepHandler(msg *db.Message) {
+	//spew.Dump("DIFFERENCE QUERYSTEP")
+	qs := msg.Data.(query.DifferenceQueryStep)
+	var handles []index.BitmapHandle
+	// create a list of bitmap handles
+	for _, input := range qs.Inputs {
+		value, _ := self.Hold.Get(input, 10)
+		switch val := value.(type) {
+		case index.BitmapHandle:
+			handles = append(handles, val)
+		case []byte:
+			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
+			handles = append(handles, bh)
+		}
+	}
+
+	bh, err := self.Index.Difference(qs.Location.FragmentId, handles)
+	if err != nil {
+		spew.Dump(err)
+	}
+
+	var result interface{}
+	if qs.LocIsDest() {
+		result = bh
+	} else {
+		bm, err := self.Index.GetBytes(qs.Location.FragmentId, bh)
+		if err != nil {
+			spew.Dump(err)
+		}
+		result = bm
+	}
+	result_message := db.Message{Data: query.DifferenceQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
 func (self *Service) CatQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.CatQueryStep)
 	//spew.Dump("CAT QUERYSTEP")

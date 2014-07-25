@@ -118,7 +118,7 @@ func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
 			id_string := self.service.Id.String()
 			m[id_string] = 0 //at least have one process if none created
 			for _, dbs := range self.service.Cluster.GetDatabases() {
-				for _, fsi := range dbs.GetFramSliceIntersects() {
+				for _, fsi := range dbs.GetFrameSliceIntersects() {
 					for _, fragment := range fsi.GetFragments() {
 						process := fragment.GetProcess().Id().String()
 						if len(process) > 1 {
