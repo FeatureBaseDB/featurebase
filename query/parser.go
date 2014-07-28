@@ -214,7 +214,20 @@ ArgLoop:
 	if query.Operation == "get" && query.Args["frame"] == nil {
 		query.Args["frame"] = "general"
 	}
-
+	if len(query.Args) == 0 && len(query.Subqueries) == 0 {
+		if query.Operation == "count" {
+			return nil, fmt.Errorf("No Args Given")
+		}
+		if query.Operation == "intersect" {
+			return nil, fmt.Errorf("No Args Given")
+		}
+		if query.Operation == "union" {
+			return nil, fmt.Errorf("No Args Given")
+		}
+		if query.Operation == "difference" {
+			return nil, fmt.Errorf("No Args Given")
+		}
+	}
 	return query, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"pilosa/db"
 	"pilosa/util"
 	"testing"
+
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -202,4 +203,16 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[3].(*TopNQueryStep).Input, ShouldEqual, qp[2].(GetQueryStep).Id)
 		So(qp[3].(*TopNQueryStep).N, ShouldEqual, 50)
 	})
+	Convey("Get query plan - including parsing", t, func() {
+
+		_, err := QueryForPQL("count()")
+		So(err, ShouldNotEqual, nil)
+		_, err = QueryForPQL("count(intersect())")
+		So(err, ShouldNotEqual, nil)
+		_, err = QueryForPQL("count(get(10, default))")
+		So(err, ShouldEqual, nil)
+		_, err = QueryForPQL("count(union())")
+		So(err, ShouldNotEqual, nil)
+	})
+
 }
