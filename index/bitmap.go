@@ -121,6 +121,14 @@ func BlockArray_intersection(a *BlockArray, b *BlockArray) BlockArray {
 	return o
 }
 
+func BlockArray_difference(a *BlockArray, b *BlockArray) BlockArray {
+	var o = BlockArray{}
+	for i, _ := range a.Block {
+		o.Block[i] = a.Block[i] &^ b.Block[i]
+	}
+	return o
+}
+
 func (s *BlockArray) set_bit(BlockIndex uint8, bit uint8) bool {
 	val := s.Block[BlockIndex] & (1 << bit)
 	s.Block[BlockIndex] |= 1 << bit
@@ -295,9 +303,14 @@ func Difference(a_bm IBitmap, b_bm IBitmap) IBitmap {
 			b = b.Next()
 		} else if a.Item().Key == b.Item().Key {
 			var a_node = a.Item()
-			var b_node = BlockArray_invert(&b.Item().Value) //probably need to copy this out
-			var o = BlockArray_intersection(&a_node.Value, &b_node)
+			//var b_node = BlockArray_invert(&b.Item().Value) //probably need to copy this out
+			//var o = BlockArray_intersection(&a_node.Value, &b_node)
+
+			var b_node = b.Item().Value
+			var o = BlockArray_difference(&a_node.Value, &b_node)
+
 			var o_node = &Chunk{a_node.Key, o}
+
 			//could not add if all zero
 			if o_node.Value.bitcount() > 0 {
 				output.AddChunk(o_node)

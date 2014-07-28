@@ -6,7 +6,7 @@ import (
 
 	//	"io/ioutil"
 	//   "time"
-	"github.com/davecgh/go-spew/spew"
+
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -58,7 +58,7 @@ func TestStorage(t *testing.T) {
 
 		fmt.Println("FETCH")
 		bm, _ := storage.Fetch(bitmap_id, db, frame, slice)
-		spew.Dump(bm)
+		//spew.Dump(bm)
 		SetBit(bm, 0)
 		SetBit(bm, 1)
 		SetBit(bm, 2)
