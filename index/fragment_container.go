@@ -137,6 +137,17 @@ func (self *FragmentContainer) Get(frag_id util.SUUID, bitmap_id uint64) (Bitmap
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
+func (self *FragmentContainer) Mask(frag_id util.SUUID, start, end uint64) (BitmapHandle, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
+		request := NewMask(start, end)
+		fragment.requestChan <- request
+		result := request.Response()
+		util.SendTimer("fragmant_container_Mask", result.exec_time.Nanoseconds())
+		return result.answer.(BitmapHandle), nil
+	}
+	return 0, errors.New("Invalid Bitmap Handle")
+}
+
 func (self *FragmentContainer) Range(frag_id util.SUUID, bitmap_id uint64, start, end time.Time) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewRange(bitmap_id, start, end)

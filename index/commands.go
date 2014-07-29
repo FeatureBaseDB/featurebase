@@ -274,3 +274,20 @@ func NewRange(bitmap_id uint64, start, end time.Time) *CmdRange {
 func (self *CmdRange) Execute(f *Fragment) Calculation {
 	return f.build_time_range_bitmap(self.bitmap_id, self.start_time, self.end_time)
 }
+
+type CmdMask struct {
+	*Responder
+	start, end uint64
+}
+
+func NewMask(start, end uint64) *CmdMask {
+	return &CmdMask{NewResponder("Mask"), start, end}
+}
+
+func (self *CmdMask) Execute(f *Fragment) Calculation {
+	result := NewBitmap()
+	for i := self.start; i < self.end; i++ {
+		SetBit(result, i)
+	}
+	return f.AllocHandle(result)
+}
