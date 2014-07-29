@@ -259,3 +259,18 @@ func (self *CmdLoadRequest) Execute(f *Fragment) Calculation {
 	f.impl.Get(self.bitmap_id)
 	return 0
 }
+
+type CmdRange struct {
+	*Responder
+	bitmap_id  uint64
+	start_time time.Time
+	end_time   time.Time
+}
+
+func NewRange(bitmap_id uint64, start, end time.Time) *CmdRange {
+	return &CmdRange{NewResponder("Range"), bitmap_id, start, end}
+}
+
+func (self *CmdRange) Execute(f *Fragment) Calculation {
+	return f.build_time_range_bitmap(self.bitmap_id, self.start_time, self.end_time)
+}

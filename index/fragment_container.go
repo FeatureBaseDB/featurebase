@@ -137,6 +137,17 @@ func (self *FragmentContainer) Get(frag_id util.SUUID, bitmap_id uint64) (Bitmap
 	return 0, errors.New("Invalid Bitmap Handle")
 }
 
+func (self *FragmentContainer) Range(frag_id util.SUUID, bitmap_id uint64, start, end time.Time) (BitmapHandle, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
+		request := NewRange(bitmap_id, start, end)
+		fragment.requestChan <- request
+		result := request.Response()
+		util.SendTimer("fragmant_container_Range", result.exec_time.Nanoseconds())
+		return result.answer.(BitmapHandle), nil
+	}
+	return 0, errors.New("Invalid Bitmap Handle")
+}
+
 func (self *FragmentContainer) TopN(frag_id util.SUUID, bh BitmapHandle, n int, categories []uint64) ([]Pair, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewTopN(bh, n, categories)
@@ -319,6 +330,18 @@ func (self *Fragment) union(bitmaps []BitmapHandle) BitmapHandle {
 	result := NewBitmap()
 	for i, id := range bitmaps {
 		bm, _ := self.getBitmap(id)
+		if i == 0 {
+			result = bm
+		} else {
+			result = Union(result, bm)
+		}
+	}
+	return self.AllocHandle(result)
+}
+func (self *Fragment) build_time_range_bitmap(bitmap_id uint64, start, end time.Time) BitmapHandle {
+	result := NewBitmap()
+	for i, bid := range GetRange(start, end, bitmap_id) {
+		bm := self.impl.Get(bid)
 		if i == 0 {
 			result = bm
 		} else {
