@@ -260,16 +260,18 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 	results = append(results, o)
 
 	for i := x + 1; i < len(self.rankings); i++ {
-		counter = counter + 1
 		o = self.rankings[i]
 
 		if needCat {
 			if !category.Contains(o.category) {
 				continue
 			}
+			counter = counter + 1
+		} else {
+			counter = counter + 1
 		}
 
-		if i > breakout {
+		if counter > breakout {
 			break
 		}
 
