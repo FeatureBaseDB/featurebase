@@ -67,7 +67,6 @@ func popcount(i uint64)uint64{
 	//x:= uint64(val)
 	return uint64(val)
 }
-*/
 func popcount(x uint64) (n uint64) {
 	// bit population count, see
 	// http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
@@ -78,6 +77,7 @@ func popcount(x uint64) (n uint64) {
 	x *= 0x0101010101010101
 	return uint64(x >> 56)
 }
+*/
 
 type BlockArray struct {
 	Block [32]uint64
@@ -89,6 +89,7 @@ func (s *BlockArray) bitcount() uint64 {
 		sum += popcount(b)
 	}
 	return sum
+	//	return popcntSlice(s.Block)
 }
 func BlockArray_union(a *BlockArray, b *BlockArray) BlockArray {
 	var o = BlockArray{}

@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"pilosa/db"
 	"pilosa/util"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -146,7 +147,7 @@ func (qt *TopNQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 		slice := d.GetOrCreateSlice(qt.Slice)
 		fragment, err := d.GetFragmentForFrameSlice(frame, slice)
 		if err != nil {
-			log.Println("GetFragmentForFrameSliceFailed GetQueryTree", frame, slice)
+			log.Println("GetFragmentForFrameSliceFailed TopNQueryTree", frame, slice)
 			return nil, err
 		}
 		qt.location = fragment.GetLocation()
@@ -389,7 +390,7 @@ type QueryTree interface {
 }
 
 // Builds QueryTree object from Query. Pass slice=-1 to perform operation on all slices
-func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
+func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 	var tree QueryTree
 
 	// handle SET operation regardless of the slice
@@ -407,13 +408,13 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 			n = n_.(int)
 		}
 		tree = &CatQueryTree{N: n}
-		numSlices, err := qp.Database.NumSlices()
+		numSlices, err := self.Database.NumSlices()
 		if err != nil {
 			return nil, err
 		}
 		for slice := 0; slice < numSlices; slice++ {
 			//for slice := 0; slice < 3; slice++ {
-			subtree, err := qp.buildTree(query, slice)
+			subtree, err := self.buildTree(query, slice)
 			if err != nil {
 				return nil, err
 			}
@@ -425,7 +426,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 			tree = &GetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), 0}, slice}
 			return tree, nil
 		} else if query.Operation == "count" {
-			subquery, err := qp.buildTree(&query.Subqueries[0], slice)
+			subquery, err := self.buildTree(&query.Subqueries[0], slice)
 			if err != nil {
 				return nil, err
 			}
@@ -447,7 +448,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 				filters = filters_.([]uint64)
 			}
 
-			subquery, err := qp.buildTree(&query.Subqueries[0], slice)
+			subquery, err := self.buildTree(&query.Subqueries[0], slice)
 			if err != nil {
 				return nil, err
 			}
@@ -456,7 +457,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 			subqueries := make([]QueryTree, len(query.Subqueries))
 			var err error
 			for i, query := range query.Subqueries {
-				subqueries[i], err = qp.buildTree(&query, slice)
+				subqueries[i], err = self.buildTree(&query, slice)
 				if err != nil {
 					return nil, err
 				}
@@ -466,7 +467,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 			subqueries := make([]QueryTree, len(query.Subqueries))
 			var err error
 			for i, query := range query.Subqueries {
-				subqueries[i], err = qp.buildTree(&query, slice)
+				subqueries[i], err = self.buildTree(&query, slice)
 				if err != nil {
 					return nil, err
 				}
@@ -476,7 +477,7 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 			subqueries := make([]QueryTree, len(query.Subqueries))
 			var err error
 			for i, query := range query.Subqueries {
-				subqueries[i], err = qp.buildTree(&query, slice)
+				subqueries[i], err = self.buildTree(&query, slice)
 				if err != nil {
 					return nil, err
 				}
@@ -492,11 +493,11 @@ func (qp *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 }
 
 // Produces flattened QueryPlan from QueryTree input
-func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Location) (*QueryPlan, error) {
+func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Location) (*QueryPlan, error) {
 	plan := QueryPlan{}
 	if cat, ok := qt.(*CatQueryTree); ok {
 		inputs := make([]*util.GUID, len(cat.subqueries))
-		loc, err := cat.getLocation(qp.Database)
+		loc, err := cat.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
@@ -504,7 +505,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		for index, subq := range cat.subqueries {
 			sub_id := util.RandomUUID()
 			step.Inputs[index] = &sub_id
-			subq_steps, err := qp.flatten(subq, &sub_id, loc)
+			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
 				return nil, err
 			}
@@ -513,7 +514,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		plan = append(plan, step)
 	} else if union, ok := qt.(*UnionQueryTree); ok {
 		inputs := make([]*util.GUID, len(union.subqueries))
-		loc, err := union.getLocation(qp.Database)
+		loc, err := union.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
@@ -521,7 +522,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		for index, subq := range union.subqueries {
 			sub_id := util.RandomUUID()
 			step.Inputs[index] = &sub_id
-			subq_steps, err := qp.flatten(subq, &sub_id, loc)
+			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
 				return nil, err
 			}
@@ -530,7 +531,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		plan = append(plan, step)
 	} else if intersect, ok := qt.(*IntersectQueryTree); ok {
 		inputs := make([]*util.GUID, len(intersect.subqueries))
-		loc, err := intersect.getLocation(qp.Database)
+		loc, err := intersect.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
@@ -538,7 +539,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		for index, subq := range intersect.subqueries {
 			sub_id := util.RandomUUID()
 			step.Inputs[index] = &sub_id
-			subq_steps, err := qp.flatten(subq, &sub_id, loc)
+			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
 				return nil, err
 			}
@@ -547,7 +548,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		plan = append(plan, step)
 	} else if difference, ok := qt.(*DifferenceQueryTree); ok {
 		inputs := make([]*util.GUID, len(difference.subqueries))
-		loc, err := difference.getLocation(qp.Database)
+		loc, err := difference.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
@@ -555,7 +556,7 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		for index, subq := range difference.subqueries {
 			sub_id := util.RandomUUID()
 			step.Inputs[index] = &sub_id
-			subq_steps, err := qp.flatten(subq, &sub_id, loc)
+			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
 				return nil, err
 			}
@@ -563,15 +564,33 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		}
 		plan = append(plan, step)
 	} else if get, ok := qt.(*GetQueryTree); ok {
-		loc, err := get.getLocation(qp.Database)
+		loc, err := get.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := GetQueryStep{&BaseQueryStep{id, "get", loc, location}, get.bitmap, get.slice}
 		plan := QueryPlan{step}
 		return &plan, nil
+		/*
+			} else if mask, ok := qt.(*MaskQueryTree); ok {
+				loc, err := mask.getLocation(self.Database)
+				if err != nil {
+					return nil, err
+				}
+				step := MaskQueryStep{&BaseQueryStep{id, "mask", loc, location}, mask.start, mask.end}
+				plan := QueryPlan{step}
+				return &plan, nil
+			} else if rang, ok := qt.(*RangeQueryTree); ok {
+				loc, err := rang.getLocation(self.Database)
+				if err != nil {
+					return nil, err
+				}
+				step := RangeQueryStep{&BaseQueryStep{id, "range", loc, location}, rang.bitmap, rang.start, rang.end}
+				plan := QueryPlan{step}
+				return &plan, nil
+		*/
 	} else if set, ok := qt.(*SetQueryTree); ok {
-		loc, err := set.getLocation(qp.Database)
+		loc, err := set.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
@@ -580,12 +599,12 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		return &plan, nil
 	} else if cnt, ok := qt.(*CountQueryTree); ok {
 		sub_id := util.RandomUUID()
-		loc, err := cnt.getLocation(qp.Database)
+		loc, err := cnt.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := &CountQueryStep{&BaseQueryStep{id, "count", loc, location}, &sub_id}
-		subq_steps, err := qp.flatten(cnt.subquery, &sub_id, loc)
+		subq_steps, err := self.flatten(cnt.subquery, &sub_id, loc)
 		if err != nil {
 			return nil, err
 		}
@@ -593,12 +612,12 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 		plan = append(plan, step)
 	} else if topn, ok := qt.(*TopNQueryTree); ok {
 		sub_id := util.RandomUUID()
-		loc, err := topn.getLocation(qp.Database)
+		loc, err := topn.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", loc, location}, &sub_id, topn.Filters, topn.N, topn.Frame}
-		subq_steps, err := qp.flatten(topn.subquery, &sub_id, loc)
+		subq_steps, err := self.flatten(topn.subquery, &sub_id, loc)
 		if err != nil {
 			return nil, err
 		}
@@ -609,10 +628,71 @@ func (qp *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Locati
 }
 
 // Transforms Query into QueryTree and flattens to QueryPlan object
-func (qp *QueryPlanner) Plan(query *Query, id *util.GUID, destination *db.Location) (*QueryPlan, error) {
-	queryTree, err := qp.buildTree(query, -1)
+func (self *QueryPlanner) Plan(query *Query, id *util.GUID, destination *db.Location) (*QueryPlan, error) {
+	queryTree, err := self.buildTree(query, -1)
 	if err != nil {
 		return nil, err
 	}
-	return qp.flatten(queryTree, query.Id, destination)
+	return self.flatten(queryTree, query.Id, destination)
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//MASK
+///////////////////////////////////////////////////////////////////////////////////////////////////
+type MaskQueryStep struct {
+	*BaseQueryStep
+	start, end uint64
+}
+
+type MaskQueryResult struct {
+	*BaseQueryResult
+}
+
+// QueryTree for Mask queries
+type MaskQueryTree struct {
+	start, end uint64
+	bitmap     *db.Bitmap
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
+/*
+func (qt *MaskQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
+	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
+	if err != nil {
+		log.Println("GetFragmenForBitmapFailed GetQueryTree", slice)
+		return nil, err
+	}
+	return fragment.GetLocation(), nil
+}
+*/
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//Range
+///////////////////////////////////////////////////////////////////////////////////////////////////
+type RangeQueryStep struct {
+	*BaseQueryStep
+	bitmap     *db.Bitmap
+	start, end time.Time
+}
+
+type RangeQueryResult struct {
+	*BaseQueryResult
+}
+
+// QueryTree for Mask queries
+type RangeQueryTree struct {
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
+/*
+func (self *RangeQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
+	fragment, err := d.GetFragmentForBitmap(slice, self.bitmap)
+	if err != nil {
+		log.Println("GetFragmenForBitmapFailed GetQueryTree", slice)
+		return nil, err
+	}
+	return fragment.GetLocation(), nil
+}
+*/

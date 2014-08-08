@@ -39,6 +39,11 @@ func NewFragmentContainer() *FragmentContainer {
 }
 
 type BitmapHandle uint64
+type FillArgs struct {
+	Frag_id util.SUUID
+	Handle  BitmapHandle
+	Bitmaps []uint64
+}
 
 func init() {
 	var vh BitmapHandle
@@ -103,7 +108,6 @@ func (self *FragmentContainer) Intersect(frag_id util.SUUID, bh []BitmapHandle) 
 	}
 	return 0, errors.New("Invalid Bitmap Handle")
 }
-
 func (self *FragmentContainer) Union(frag_id util.SUUID, bh []BitmapHandle) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewUnion(bh)
@@ -168,6 +172,35 @@ func (self *FragmentContainer) TopN(frag_id util.SUUID, bh BitmapHandle, n int, 
 		return result.answer.([]Pair), nil
 	}
 	return nil, errors.New(fmt.Sprintf("Fragment not found:%s", util.SUUID_to_Hex(frag_id)))
+}
+func (self *FragmentContainer) TopFillBatch(args []FillArgs) ([]Pair, error) {
+	//should probaly make this concurrent but then all hell breaks lose
+	results := make(map[uint64]uint64)
+	for _, v := range args {
+		items, _ := self.TopFillFragment(v)
+		if len(args) == 1 {
+			return items, nil
+		}
+		for _, pair := range items {
+			results[pair.Key] += pair.Count
+		}
+	}
+	ret_val := make([]Pair, len(results))
+	for k, v := range results {
+		ret_val = append(ret_val, Pair{k, v})
+	}
+	return ret_val, nil
+
+}
+func (self *FragmentContainer) TopFillFragment(arg FillArgs) ([]Pair, error) {
+	if fragment, found := self.GetFragment(arg.Frag_id); found {
+		request := NewTopFill(arg)
+		fragment.requestChan <- request
+		result := request.Response()
+		util.SendTimer("fragmant_container_TopFillFragment", result.exec_time.Nanoseconds())
+		return result.answer.([]Pair), nil
+	}
+	return nil, errors.New("Invalid Bitmap Handle")
 }
 
 func (self *FragmentContainer) GetList(frag_id util.SUUID, bitmap_id []uint64) ([]BitmapHandle, error) {

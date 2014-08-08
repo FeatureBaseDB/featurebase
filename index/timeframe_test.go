@@ -2,6 +2,7 @@ package index
 
 import (
 	"fmt"
+	"log"
 	"testing"
 	"time"
 
@@ -9,6 +10,30 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
+func getTime(id uint64, s string) {
+	const shortForm = "2006-01-02 15:04"
+	t1, _ := time.Parse(shortForm, s)
+
+	for i, v := range GetTimeIds(uint64(id), t1, YMDH) {
+		log.Println(i, v, s)
+	}
+	log.Println()
+}
+func TestDemo(t *testing.T) {
+	Convey("Test ID", t, func() {
+		getTime(uint64(666), "2014-01-01 00:00")
+		getTime(uint64(666), "2014-02-01 00:00")
+		getTime(uint64(666), "2014-03-01 00:00")
+		getTime(uint64(666), "2014-04-01 00:00")
+		getTime(uint64(666), "2014-04-02 00:00")
+		getTime(uint64(666), "2014-04-03 00:00")
+		getTime(uint64(666), "2014-04-04 00:00")
+		getTime(uint64(666), "2014-04-05 00:00")
+		getTime(uint64(666), "2014-05-01 00:00")
+		getTime(uint64(666), "2014-06-01 00:00")
+		So(1, ShouldEqual, 1)
+	})
+}
 func TestTimeFrame(t *testing.T) {
 
 	//print get_YMD_id(2014,3,28,1234)

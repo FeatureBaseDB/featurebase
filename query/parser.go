@@ -6,6 +6,7 @@ import (
 	"log"
 	"pilosa/util"
 	"strconv"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -81,6 +82,7 @@ func (self *QueryParser) Parse() (query *Query, err error) {
 	if token.Type != TYPE_LP {
 		return nil, fmt.Errorf("Expected '(', found token %v.", token)
 	}
+	const shortForm = "2006-01-02 15:04"
 
 ArgLoop:
 	for {
@@ -99,6 +101,46 @@ ArgLoop:
 			query.Subqueries = append(query.Subqueries, *subquery)
 		case TYPE_VALUE:
 			switch query.Operation {
+			case "range":
+				switch len(query.Args) {
+				case 0:
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+					}
+					query.Args["id"] = i
+				case 1:
+					query.Args["frame"] = token.Text
+				case 2:
+					t, err := time.Parse(shortForm, token.Text)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer DateTime (%v)", err)
+					}
+					query.Args["start"] = t
+				case 3:
+					t, err := time.Parse(shortForm, token.Text)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer DateTime (%v)", err)
+					}
+					query.Args["end"] = t
+				}
+			case "mask":
+				switch len(query.Args) {
+				case 0:
+					query.Args["frame"] = token.Text
+				case 1:
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+					}
+					query.Args["start"] = i
+				case 2:
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+					}
+					query.Args["end"] = i
+				}
 			case "get":
 				switch len(query.Args) {
 				case 0:
@@ -225,6 +267,12 @@ ArgLoop:
 			return nil, fmt.Errorf("No Args Given")
 		}
 		if query.Operation == "difference" {
+			return nil, fmt.Errorf("No Args Given")
+		}
+		if query.Operation == "range" {
+			return nil, fmt.Errorf("No Args Given")
+		}
+		if query.Operation == "mask" {
 			return nil, fmt.Errorf("No Args Given")
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"pilosa/db"
 	"pilosa/index"
 	"pilosa/query"
+	"pilosa/util"
 	"sort"
 
 	"github.com/davecgh/go-spew/spew"
@@ -28,39 +29,6 @@ func (self *Service) CountQueryStepHandler(msg *db.Message) {
 	//spew.Dump("SLICE COUNT", count)
 	result_message := db.Message{Data: query.CountQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: count}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
-}
-
-func (self *Service) TopNQueryStepHandler(msg *db.Message) {
-	//spew.Dump("TOP-N QUERYSTEP")
-	qs := msg.Data.(query.TopNQueryStep)
-	//spew.Dump(qs)
-	//need categories in qs I just added so it would compile
-	var categoryleaves []uint64
-	input := qs.Input
-	value, _ := self.Hold.Get(input, 10)
-	var bh index.BitmapHandle
-	switch val := value.(type) {
-	case index.BitmapHandle:
-		bh = val
-	case []byte:
-		bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
-	}
-
-	categoryleaves = qs.Filters
-
-	/*
-		spew.Dump(bh, qs.N*2, categoryleaves)
-		result_message := db.Message{Data: "foobar"}
-		self.Transport.Send(&result_message, qs.Destination.ProcessId)
-	*/
-
-	topn, err := self.Index.TopN(qs.Location.FragmentId, bh, qs.N*2, categoryleaves)
-	if err != nil {
-		spew.Dump(err)
-	}
-	result_message := db.Message{Data: query.TopNQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: topn}}}
-	self.Transport.Send(&result_message, qs.Destination.ProcessId)
-
 }
 
 func (self *Service) UnionQueryStepHandler(msg *db.Message) {
@@ -174,10 +142,28 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 	var handles []index.BitmapHandle
 	return_type := "bitmap-handles"
 	var sum uint64
-	merge_map := map[uint64]uint64{}
+	merge_map := make(map[uint64]uint64)
+	slice_map := make(map[uint64]map[util.SUUID]struct{})
+	all_slice := make(map[util.SUUID]struct {
+		process util.GUID
+		handle  index.BitmapHandle
+	})
+
 	// either create a list of bitmap handles to cat (i.e. union), or sum the integer values
+	part := make(chan interface{})
+	num_parts := len(qs.Inputs)
+
 	for _, input := range qs.Inputs {
-		value, _ := self.Hold.Get(input, 10)
+		go func(id *util.GUID, part chan interface{}) {
+			value, _ := self.Hold.Get(id, 10)
+			part <- value
+		}(input, part)
+	}
+
+	//for _, input := range qs.Inputs {
+	for i := 0; i < num_parts; i++ {
+		value := <-part
+
 		switch val := value.(type) {
 		case index.BitmapHandle:
 			handles = append(handles, val)
@@ -188,13 +174,30 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 			//spew.Dump(val)
 			return_type = "sum"
 			sum += val
-		case []index.Pair:
-			//spew.Dump(val)
+		case TopNPackage:
 			return_type = "pair-list"
-			for _, pair := range val {
+			var e struct{}
+			for _, pair := range val.Pairs {
+				//merge_map[pair.Key] += pair.Count
 				merge_map[pair.Key] += pair.Count
+				mm, ok := slice_map[pair.Key]
+				if !ok {
+					mm = make(map[util.SUUID]struct{})
+					slice_map[pair.Key] = mm
+				}
+				mm[val.FragmentId] = e
 			}
+			all_slice[val.FragmentId] = struct {
+				process util.GUID
+				handle  index.BitmapHandle
+			}{val.ProcessId, val.HBitmap}
 		}
+	}
+
+	tasks := BuildTask(merge_map, slice_map, all_slice)
+	FetchMissing(tasks, self)
+	for k, v := range GatherResults(tasks, self) {
+		merge_map[k] += v
 	}
 
 	// either return the sum, or return the compressed bitmap resulting from the cat (union)

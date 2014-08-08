@@ -108,3 +108,23 @@ func ParseGUID(input string) (GUID, error) {
 	}
 	return u, nil
 }
+
+func In(val int, list []int) bool {
+	for _, v := range list {
+		if val == v {
+			return true
+		}
+	}
+	return false
+}
+
+func Difference(a, b []int) []int {
+	results := make([]int, 0, len(a))
+	for _, v := range a {
+		if !In(v, b) {
+			results = append(results, v)
+		}
+
+	}
+	return results
+}

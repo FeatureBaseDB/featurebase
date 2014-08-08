@@ -23,8 +23,8 @@ func TestTopology(t *testing.T) {
 		spew.Dump(fragment_id)
 		database.GetOrCreateFragment(frame, slice, fragment_id)
 
-		spew.Dump(database)
-		spew.Dump("DONE")
+		//	spew.Dump(database)
+		//	spew.Dump("DONE")
 
 	})
 }

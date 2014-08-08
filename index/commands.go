@@ -291,3 +291,23 @@ func (self *CmdMask) Execute(f *Fragment) Calculation {
 	}
 	return f.AllocHandle(result)
 }
+
+type CmdTopFill struct {
+	*Responder
+	args FillArgs
+}
+
+func NewTopFill(a FillArgs) *CmdTopFill {
+	return &CmdTopFill{NewResponder("TopFill"), a}
+}
+
+func (self *CmdTopFill) Execute(f *Fragment) Calculation {
+	result := make([]Pair, len(self.args.Bitmaps))
+	for _, v := range self.args.Bitmaps {
+		a := f.NewHandle(v)
+		res := f.intersect([]BitmapHandle{self.args.Handle, a})
+		bm, _ := f.getBitmap(res)
+		result = append(result, Pair{v, BitCount(bm)})
+	}
+	return result
+}
