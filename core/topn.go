@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/gob"
 	"log"
 	"pilosa/db"
 	"pilosa/index"
@@ -47,7 +48,7 @@ func missing(fids map[util.SUUID]struct{}, all map[util.SUUID]struct {
 
 	for k, v := range all {
 		_, ok := fids[k]
-		if ok {
+		if !ok {
 			results = append(results, hole{v.process, v.handle, k})
 		}
 	}
@@ -63,8 +64,9 @@ func newtask(p util.GUID) *Task {
 }
 
 func (t *Task) Add(frag util.SUUID, bitmap_id uint64, handle index.BitmapHandle) {
+	spew.Dump(t)
 	fa, ok := t.f[frag]
-	if ok {
+	if !ok {
 		fa = index.FillArgs{frag, handle, make([]uint64, 0, 0)}
 	}
 	fa.Bitmaps = append(fa.Bitmaps, bitmap_id)
@@ -85,7 +87,7 @@ func BuildTask(merge_map map[uint64]uint64,
 		//id slice ==> SUUID,BitmapHandle
 		for _, p := range missing(reporting_fragments, total_fragments) {
 			task, ok := tasks[p.process]
-			if ok {
+			if !ok {
 				task = newtask(p.process)
 				tasks[p.process] = task
 			}
@@ -149,6 +151,10 @@ type TopNPackage struct {
 	FragmentId util.SUUID
 	Pairs      []index.Pair
 	HBitmap    index.BitmapHandle
+}
+
+func init() {
+	gob.Register(TopNPackage{})
 }
 
 func (self *Service) TopNQueryStepHandler(msg *db.Message) {
