@@ -44,10 +44,10 @@ func (self *Executor) NewJob(job *db.Message) {
 		self.service.GetQueryStepHandler(job)
 	case query.SetQueryStep:
 		self.service.SetQueryStepHandler(job)
+	case query.RangeQueryStep:
+		self.service.RangeQueryStepHandler(job)
 		//	case query.MaskQueryStep:
 		//		self.service.MaskQueryStepHandler(job)
-		//	case query.RangeQueryStep:
-		//		self.service.RangeQueryStepHandler(job)
 	default:
 		fmt.Println("unknown")
 	}

@@ -272,3 +272,26 @@ func (self *Service) SetQueryStepHandler(msg *db.Message) {
 	result_message := db.Message{Data: query.SetQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
+
+func (self *Service) RangeQueryStepHandler(msg *db.Message) {
+	qs := msg.Data.(query.RangeQueryStep)
+	//spew.Dump("RANDE QUERYSTEP")
+
+	bh, err := self.Index.Range(qs.Location.FragmentId, qs.Bitmap.Id, qs.Start, qs.End)
+	if err != nil {
+		spew.Dump(err)
+	}
+
+	var result interface{}
+	if qs.LocIsDest() {
+		result = bh
+	} else {
+		bm, err := self.Index.GetBytes(qs.Location.FragmentId, bh)
+		if err != nil {
+			spew.Dump(err)
+		}
+		result = bm
+	}
+	result_message := db.Message{Data: query.RangeQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}

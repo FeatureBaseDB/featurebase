@@ -390,6 +390,26 @@ type QueryTree interface {
 	getLocation(d *db.Database) (*db.Location, error)
 }
 
+func validateRange(Args map[string]interface{}) error {
+	_, ok := Args["id"]
+	if !ok {
+		return errors.New("missing bitmap id")
+	}
+	_, ok = Args["frame"]
+	if !ok {
+		return errors.New("missing frame ")
+	}
+	_, ok = Args["start"]
+	if !ok {
+		return errors.New("missing start time")
+	}
+	_, ok = Args["end"]
+	if !ok {
+		return errors.New("missing end time")
+	}
+	return nil
+}
+
 // Builds QueryTree object from Query. Pass slice=-1 to perform operation on all slices
 func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 	var tree QueryTree
@@ -425,6 +445,19 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 	} else {
 		if query.Operation == "get" {
 			tree = &GetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), 0}, slice}
+			return tree, nil
+		} else if query.Operation == "range" {
+			err := validateRange(query.Args)
+			if err != nil {
+				return nil, err
+			}
+			tree = &RangeQueryTree{
+				&db.Bitmap{
+					query.Args["id"].(uint64),
+					query.Args["frame"].(string), 0},
+				slice,
+				query.Args["start"].(time.Time),
+				query.Args["end"].(time.Time)}
 			return tree, nil
 		} else if query.Operation == "count" {
 			subquery, err := self.buildTree(&query.Subqueries[0], slice)
@@ -581,15 +614,15 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 				step := MaskQueryStep{&BaseQueryStep{id, "mask", loc, location}, mask.start, mask.end}
 				plan := QueryPlan{step}
 				return &plan, nil
-			} else if rang, ok := qt.(*RangeQueryTree); ok {
-				loc, err := rang.getLocation(self.Database)
-				if err != nil {
-					return nil, err
-				}
-				step := RangeQueryStep{&BaseQueryStep{id, "range", loc, location}, rang.bitmap, rang.start, rang.end}
-				plan := QueryPlan{step}
-				return &plan, nil
 		*/
+	} else if rang, ok := qt.(*RangeQueryTree); ok {
+		loc, err := rang.getLocation(self.Database)
+		if err != nil {
+			return nil, err
+		}
+		step := RangeQueryStep{&BaseQueryStep{id, "range", loc, location}, rang.bitmap, rang.start, rang.end}
+		plan := QueryPlan{step}
+		return &plan, nil
 	} else if set, ok := qt.(*SetQueryTree); ok {
 		loc, err := set.getLocation(self.Database)
 		if err != nil {
@@ -673,8 +706,8 @@ func (qt *MaskQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type RangeQueryStep struct {
 	*BaseQueryStep
-	bitmap     *db.Bitmap
-	start, end time.Time
+	Bitmap     *db.Bitmap
+	Start, End time.Time
 }
 
 type RangeQueryResult struct {
@@ -683,17 +716,17 @@ type RangeQueryResult struct {
 
 // QueryTree for Mask queries
 type RangeQueryTree struct {
+	bitmap     *db.Bitmap
+	slice      int
+	start, end time.Time
 }
 
-// Uses consistent hashing function to select node containing data for GET operation
-/*
-func (self *RangeQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+func (qt *RangeQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
-	fragment, err := d.GetFragmentForBitmap(slice, self.bitmap)
+	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
 		log.Println("GetFragmenForBitmapFailed GetQueryTree", slice)
 		return nil, err
 	}
 	return fragment.GetLocation(), nil
 }
-*/
