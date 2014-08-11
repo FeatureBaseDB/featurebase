@@ -37,6 +37,11 @@ func (self *General) Clear() bool {
 	return true
 }
 
+func (self *General) Exists(bitmap_id uint64) bool {
+	_, ok := self.bitmap_cache.Get(bitmap_id)
+	return ok
+
+}
 func (self *General) Get(bitmap_id uint64) IBitmap {
 	bm, ok := self.bitmap_cache.Get(bitmap_id)
 	if ok {

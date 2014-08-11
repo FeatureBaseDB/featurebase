@@ -64,6 +64,10 @@ func (self *Brand) Clear() bool {
 	self.bitmap_cache = make(map[uint64]*Rank)
 	return true
 }
+func (self *Brand) Exists(bitmap_id uint64) bool {
+	_, ok := self.bitmap_cache[bitmap_id]
+	return ok
+}
 func (self *Brand) Get(bitmap_id uint64) IBitmap {
 	bm, ok := self.bitmap_cache[bitmap_id]
 	if ok {

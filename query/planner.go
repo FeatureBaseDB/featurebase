@@ -356,6 +356,7 @@ func (qt *SetQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 func init() {
+	gob.Register(BaseQueryResult{})
 	gob.Register(SetQueryResult{})
 	gob.Register(GetQueryResult{})
 	gob.Register(CatQueryResult{})

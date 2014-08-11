@@ -187,7 +187,9 @@ func (self *FragmentContainer) TopFillBatch(args []FillArgs) ([]Pair, error) {
 	}
 	ret_val := make([]Pair, len(results))
 	for k, v := range results {
-		ret_val = append(ret_val, Pair{k, v})
+		if v > 0 { //don't include 0 size items
+			ret_val = append(ret_val, Pair{k, v})
+		}
 	}
 	return ret_val, nil
 
@@ -288,6 +290,7 @@ type Pilosa interface {
 	Stats() interface{}
 	Persist() error
 	Load(requestChan chan Command, fragment *Fragment)
+	Exists(id uint64) bool
 }
 
 type Fragment struct {
@@ -339,6 +342,10 @@ func NewFragment(frag_id util.SUUID, db string, slice int, frame string) *Fragme
 func (self *Fragment) getBitmap(bitmap BitmapHandle) (IBitmap, bool) {
 	bm, ok := self.cache.Get(bitmap)
 	return bm.(IBitmap), ok
+}
+
+func (self *Fragment) exists(bitmap_id uint64) bool {
+	return self.impl.Exists(bitmap_id)
 }
 
 func (self *Fragment) TopN(bitmap BitmapHandle, n int, categories []uint64) []Pair {

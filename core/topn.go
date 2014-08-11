@@ -64,7 +64,6 @@ func newtask(p util.GUID) *Task {
 }
 
 func (t *Task) Add(frag util.SUUID, bitmap_id uint64, handle index.BitmapHandle) {
-	spew.Dump(t)
 	fa, ok := t.f[frag]
 	if !ok {
 		fa = index.FillArgs{frag, handle, make([]uint64, 0, 0)}
@@ -105,9 +104,11 @@ func (self *Service) TopFillHandler(msg *db.Message) { //in order for this to ge
 	if err != nil {
 		log.Println("TopFileHandler:", err)
 	}
-	sendmsg := new(db.Message)
-	sendmsg.Data = query.BaseQueryResult{Id: &topfill.QueryId, Data: topn}
-	self.Transport.Send(sendmsg, &topfill.ReturnProcessId)
+	//	sendmsg := new(db.Message)
+	//	sendmsg.Data = query.BaseQueryResult{Id: &topfill.QueryId, Data: topn}
+	//sendmsg := db.Message{Data: &query.BaseQueryResult{Id: &topfill.QueryId, Data: topn}}
+	//self.Transport.Send(&sendmsg, &topfill.ReturnProcessId)
+	self.Hold.Set(&topfill.QueryId, topn, 30)
 }
 
 func SendRequest(process_id util.GUID, t *Task, service *Service) {
@@ -132,8 +133,15 @@ func GatherResults(tasks map[util.GUID]*Task, service *Service) map[uint64]uint6
 	answers := make(chan []index.Pair)
 	for _, task := range tasks {
 		go func(id util.GUID) {
-			value, _ := service.Hold.Get(&id, 10) //eiher need to be the frame process or the handler process?
-			answers <- value.([]index.Pair)
+			value, err := service.Hold.Get(&id, 10) //eiher need to be the frame process or the handler process?
+			if value == nil {
+				log.Println("Bad TopN Result:", err)
+				empty := make([]index.Pair, 0, 0)
+				answers <- empty
+
+			} else {
+				answers <- value.([]index.Pair)
+			}
 		}(task.hold_id)
 	}
 	for i := 0; i < len(tasks); i++ {
@@ -155,13 +163,11 @@ type TopNPackage struct {
 
 func init() {
 	gob.Register(TopNPackage{})
+	gob.Register(TopFill{})
 }
 
 func (self *Service) TopNQueryStepHandler(msg *db.Message) {
-	//spew.Dump("TOP-N QUERYSTEP")
 	qs := msg.Data.(query.TopNQueryStep)
-	//spew.Dump(qs)
-	//need categories in qs I just added so it would compile
 	var categoryleaves []uint64
 	input := qs.Input
 	value, _ := self.Hold.Get(input, 10)
@@ -185,7 +191,8 @@ func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 	topnPackage := TopNPackage{*qs.Location.ProcessId, qs.Location.FragmentId, topn, bh}
 
 	if err != nil {
-		spew.Dump(err)
+		log.Println(spew.Sdump(err))
+
 	}
 	result_message := db.Message{Data: query.TopNQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: topnPackage}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)

@@ -302,12 +302,17 @@ func NewTopFill(a FillArgs) *CmdTopFill {
 }
 
 func (self *CmdTopFill) Execute(f *Fragment) Calculation {
-	result := make([]Pair, len(self.args.Bitmaps))
+	result := make([]Pair, 0)
 	for _, v := range self.args.Bitmaps {
-		a := f.NewHandle(v)
-		res := f.intersect([]BitmapHandle{self.args.Handle, a})
-		bm, _ := f.getBitmap(res)
-		result = append(result, Pair{v, BitCount(bm)})
+		if f.exists(v) {
+			a := f.NewHandle(v)
+			res := f.intersect([]BitmapHandle{self.args.Handle, a})
+			bm, _ := f.getBitmap(res)
+			bc := BitCount(bm)
+			if bc > 0 {
+				result = append(result, Pair{v, bc})
+			}
+		}
 	}
 	return result
 }

@@ -5,6 +5,8 @@ import (
 	"pilosa/core"
 	"pilosa/db"
 	"pilosa/query"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 type Dispatch struct {
@@ -36,7 +38,10 @@ func (self *Dispatch) Run() {
 			self.service.Hold.Set(data.ResultId(), data.ResultData(), 30)
 		case query.PortableQueryStep:
 			go self.service.Executor.NewJob(message)
+		case core.TopFill:
+			go self.service.TopFillHandler(message)
 		default:
+			spew.Dump(data)
 			log.Println("Unprocessed message", data)
 		}
 	}
