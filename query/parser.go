@@ -82,7 +82,7 @@ func (self *QueryParser) Parse() (query *Query, err error) {
 	if token.Type != TYPE_LP {
 		return nil, fmt.Errorf("Expected '(', found token %v.", token)
 	}
-	const shortForm = "2006-01-02 15:04"
+	const shortForm = "2006-01-02T15:04"
 
 ArgLoop:
 	for {

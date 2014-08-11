@@ -359,6 +359,7 @@ func init() {
 	gob.Register(BaseQueryResult{})
 	gob.Register(SetQueryResult{})
 	gob.Register(GetQueryResult{})
+	gob.Register(RangeQueryResult{})
 	gob.Register(CatQueryResult{})
 	gob.Register(UnionQueryResult{})
 	gob.Register(IntersectQueryResult{})
@@ -368,6 +369,7 @@ func init() {
 
 	gob.Register(SetQueryStep{})
 	gob.Register(GetQueryStep{})
+	gob.Register(RangeQueryStep{})
 	gob.Register(CatQueryStep{})
 	gob.Register(UnionQueryStep{})
 	gob.Register(IntersectQueryStep{})
