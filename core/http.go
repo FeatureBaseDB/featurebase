@@ -323,17 +323,23 @@ type JsonObject map[string]interface{}
 //
 func bitmaps(frame string, obj JsonObject) chan uint64 {
 	c := make(chan uint64)
-	const shortForm = "2006-01-02 15:04:01"
 
 	go func() {
+		const shortFormT = "2006-01-02T15:04:05"
+		const shortFormS = "2006-01-02 15:04:05"
 		t := float64(obj["bitmap_id"].(float64))
 		base_id := uint64(t)
 
 		if strings.HasSuffix(frame, ".t") {
 			timestamp := obj["timestamp"].(string)
+			shortForm := shortFormS
+			if strings.Contains(timestamp, "T") {
+				shortForm = shortFormT
+			}
 			atime, _ := time.Parse(shortForm, timestamp)
 
 			for _, id := range index.GetTimeIds(base_id, atime, index.YMDH) {
+				log.Println(id)
 				c <- id
 			}
 		} else {

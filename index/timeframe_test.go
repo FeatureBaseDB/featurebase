@@ -21,20 +21,24 @@ func getTime(id uint64, s string) {
 }
 func TestDemo(t *testing.T) {
 	Convey("Test ID", t, func() {
-		getTime(uint64(666), "2014-01-01 00:00")
-		getTime(uint64(666), "2014-02-01 00:00")
-		getTime(uint64(666), "2014-03-01 00:00")
-		getTime(uint64(666), "2014-04-01 00:00")
-		getTime(uint64(666), "2014-04-02 00:00")
-		getTime(uint64(666), "2014-04-03 00:00")
-		getTime(uint64(666), "2014-04-04 00:00")
-		getTime(uint64(666), "2014-04-05 00:00")
-		getTime(uint64(666), "2014-05-01 00:00")
-		getTime(uint64(666), "2014-06-01 00:00")
+		getTime(uint64(1), "2014-08-11 14:00")
 		So(1, ShouldEqual, 1)
 	})
 }
 func TestTimeFrame(t *testing.T) {
+	Convey("Test 1H", t, func() {
+		const shortForm = "2006-01-02 15:04"
+		t1, _ := time.Parse(shortForm, "2014-08-11 14:00")
+		t2, _ := time.Parse(shortForm, "2014-08-11 16:00")
+		m := GetRange(t1, t2, uint64(1))
+		getTime(uint64(1), "2014-08-11 14:00")
+		spew.Dump(m)
+
+		So(len(m), ShouldEqual, 1)
+	})
+	if true {
+		return
+	}
 
 	//print get_YMD_id(2014,3,28,1234)
 	Convey("Test ID", t, func() {
