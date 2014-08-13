@@ -366,6 +366,7 @@ func init() {
 	gob.Register(DifferenceQueryResult{})
 	gob.Register(CountQueryResult{})
 	gob.Register(TopNQueryResult{})
+	gob.Register(FillResult{})
 
 	gob.Register(SetQueryStep{})
 	gob.Register(GetQueryStep{})
@@ -731,4 +732,8 @@ func (qt *RangeQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 		return nil, err
 	}
 	return fragment.GetLocation(), nil
+}
+
+type FillResult struct {
+	*BaseQueryResult
 }

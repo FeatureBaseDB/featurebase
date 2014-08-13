@@ -104,11 +104,9 @@ func (self *Service) TopFillHandler(msg *db.Message) { //in order for this to ge
 	if err != nil {
 		log.Println("TopFileHandler:", err)
 	}
-	//	sendmsg := new(db.Message)
-	//	sendmsg.Data = query.BaseQueryResult{Id: &topfill.QueryId, Data: topn}
-	//sendmsg := db.Message{Data: &query.BaseQueryResult{Id: &topfill.QueryId, Data: topn}}
-	//self.Transport.Send(&sendmsg, &topfill.ReturnProcessId)
-	self.Hold.Set(&topfill.QueryId, topn, 30)
+
+	result_message := db.Message{Data: query.FillResult{&query.BaseQueryResult{Id: &topfill.QueryId, Data: topn}}}
+	self.Transport.Send(&result_message, &topfill.ReturnProcessId)
 }
 
 func SendRequest(process_id util.GUID, t *Task, service *Service) {
