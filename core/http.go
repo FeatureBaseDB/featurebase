@@ -339,7 +339,6 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 			atime, _ := time.Parse(shortForm, timestamp)
 
 			for _, id := range index.GetTimeIds(base_id, atime, index.YMDH) {
-				log.Println(id)
 				c <- id
 			}
 		} else {
