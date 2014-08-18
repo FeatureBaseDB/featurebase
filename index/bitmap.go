@@ -425,11 +425,9 @@ func (b *Bitmap) ToBytes() []byte {
 	)
 	enc := gob.NewEncoder(&buf)
 	enc.Encode(b.nodes.Len())
-	c := 0
 	for i := b.nodes.Min(); !i.Limit(); i = i.Next() {
 		obj := i.Item().(*Chunk)
 		enc.Encode(obj)
-		c += 1
 	}
 	return buf.Bytes()
 }
@@ -442,9 +440,10 @@ func (self *Bitmap) FromBytes(raw []byte) {
 	dec.Decode(&size)
 	self.nodes = NewRB()
 	for i := 0; i < size; i++ {
-		chunk := &Chunk{}
+		//chunk := &Chunk{}
+		var chunk Chunk
 		dec.Decode(&chunk)
-		self.AddChunk(chunk)
+		self.AddChunk(&chunk)
 	}
 	self.SetCount(BitCount(self))
 }
