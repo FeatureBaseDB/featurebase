@@ -116,6 +116,11 @@ func BlockArray_copy(a *BlockArray) BlockArray {
 	}
 	return o
 }
+
+func BlockArray_andcount(a *BlockArray, b *BlockArray) uint64 {
+	return popcntAndSliceAsm(a.Block, b.Block)
+}
+
 func BlockArray_intersection(a *BlockArray, b *BlockArray) BlockArray {
 	var o = BlockArray{make([]uint64, 32, 32)}
 	for i, _ := range a.Block {
@@ -170,6 +175,31 @@ func Clone(a_bm IBitmap) IBitmap {
 		a = a.Next()
 	}
 	return output
+}
+
+func IntersectionCount(a_bm IBitmap, b_bm IBitmap) uint64 {
+	var a = a_bm.Min()
+	var b = b_bm.Min()
+	defer a.Close()
+	defer b.Close()
+	results := uint64(0)
+
+	for {
+		if b.Limit() || a.Limit() {
+			break
+		} else if a.Item().Key < b.Item().Key {
+			a = a.Next()
+		} else if a.Item().Key > b.Item().Key {
+			b = b.Next()
+		} else if a.Item().Key == b.Item().Key {
+			var a_node = a.Item()
+			var b_node = b.Item().Value
+			results += BlockArray_andcount(&a_node.Value, &b_node)
+			a = a.Next()
+			b = b.Next()
+		}
+	}
+	return results
 }
 
 func Intersection(a_bm IBitmap, b_bm IBitmap) IBitmap {
@@ -429,7 +459,7 @@ func (b *Bitmap) ToBytes() []byte {
 	enc.Encode(b.nodes.Len())
 	for i := b.nodes.Min(); !i.Limit(); i = i.Next() {
 		obj := i.Item().(*Chunk)
-		err := enc.Encode(&obj)
+		err := enc.Encode(obj)
 		if err != nil {
 			log.Println(err)
 		}
@@ -447,7 +477,7 @@ func (self *Bitmap) FromBytes(raw []byte) {
 	for i := 0; i < size; i++ {
 		//chunk := &Chunk{0, BlockArray{make([]uint64, 32, 32)}}
 		var chunk Chunk
-		dec.Decode(chunk)
+		dec.Decode(&chunk)
 		self.AddChunk(&chunk)
 	}
 	self.SetCount(BitCount(self))

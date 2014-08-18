@@ -34,7 +34,7 @@ func TestTimeFrame(t *testing.T) {
 		getTime(uint64(1), "2014-08-11 14:00")
 		spew.Dump(m)
 
-		So(len(m), ShouldEqual, 1)
+		So(len(m), ShouldEqual, 2)
 	})
 	if true {
 		return
