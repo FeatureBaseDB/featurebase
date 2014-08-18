@@ -86,7 +86,7 @@ func (self *LevelDBStorage) Fetch(bitmap_id uint64, db string, frame string, sli
 		block, filter = decodeValue(iter.Value())
 		if chunk_key != COUNTERMASK {
 			if chunk_key != last_key {
-				chunk = &Chunk{chunk_key, BlockArray{}}
+				chunk = &Chunk{chunk_key, BlockArray{make([]uint64, 32, 32)}}
 				bitmap.AddChunk(chunk)
 			}
 			chunk.Value.Block[block_index] = block
