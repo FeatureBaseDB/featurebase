@@ -84,7 +84,7 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 		s8 = uint8(block_index)
 		if chunk_key != marker {
 			if chunk_key != last_key {
-				chunk = &Chunk{uint64(chunk_key), BlockArray{}}
+				chunk = &Chunk{uint64(chunk_key), BlockArray{make([]uint64, 32, 32)}}
 				bitmap.AddChunk(chunk)
 			}
 			chunk.Value.Block[s8] = uint64(block)
