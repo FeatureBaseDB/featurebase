@@ -27,6 +27,7 @@ var (
 func init() {
 	var dumb = COUNTERMASK
 	COUNTER_KEY = int64(dumb)
+
 }
 
 //
@@ -80,19 +81,20 @@ func popcount(x uint64) (n uint64) {
 */
 
 type BlockArray struct {
-	Block [32]uint64
+	Block []uint64
 }
 
 func (s *BlockArray) bitcount() uint64 {
-	var sum uint64
+	/*var sum uint64
 	for _, b := range (*s).Block {
 		sum += popcount(b)
 	}
 	return sum
-	//	return popcntSlice(s.Block)
+	*/
+	return popcntSlice(s.Block)
 }
 func BlockArray_union(a *BlockArray, b *BlockArray) BlockArray {
-	var o = BlockArray{}
+	var o = BlockArray{make([]uint64, 32, 32)}
 	for i, _ := range a.Block {
 		o.Block[i] = a.Block[i] | b.Block[i]
 	}
@@ -100,7 +102,7 @@ func BlockArray_union(a *BlockArray, b *BlockArray) BlockArray {
 }
 
 func BlockArray_invert(a *BlockArray) BlockArray {
-	var o = BlockArray{}
+	var o = BlockArray{make([]uint64, 32, 32)}
 	for i, _ := range a.Block {
 		o.Block[i] = ^a.Block[i]
 	}
@@ -108,14 +110,19 @@ func BlockArray_invert(a *BlockArray) BlockArray {
 }
 
 func BlockArray_copy(a *BlockArray) BlockArray {
-	var o = BlockArray{}
+	var o = BlockArray{make([]uint64, 32, 32)}
 	for i, _ := range a.Block {
 		o.Block[i] = a.Block[i]
 	}
 	return o
 }
+
+func BlockArray_andcount(a *BlockArray, b *BlockArray) uint64 {
+	return popcntAndSliceAsm(a.Block, b.Block)
+}
+
 func BlockArray_intersection(a *BlockArray, b *BlockArray) BlockArray {
-	var o = BlockArray{}
+	var o = BlockArray{make([]uint64, 32, 32)}
 	for i, _ := range a.Block {
 		o.Block[i] = a.Block[i] & b.Block[i]
 	}
@@ -123,7 +130,7 @@ func BlockArray_intersection(a *BlockArray, b *BlockArray) BlockArray {
 }
 
 func BlockArray_difference(a *BlockArray, b *BlockArray) BlockArray {
-	var o = BlockArray{}
+	var o = BlockArray{make([]uint64, 32, 32)}
 	for i, _ := range a.Block {
 		o.Block[i] = a.Block[i] &^ b.Block[i]
 	}
@@ -168,6 +175,31 @@ func Clone(a_bm IBitmap) IBitmap {
 		a = a.Next()
 	}
 	return output
+}
+
+func IntersectionCount(a_bm IBitmap, b_bm IBitmap) uint64 {
+	var a = a_bm.Min()
+	var b = b_bm.Min()
+	defer a.Close()
+	defer b.Close()
+	results := uint64(0)
+
+	for {
+		if b.Limit() || a.Limit() {
+			break
+		} else if a.Item().Key < b.Item().Key {
+			a = a.Next()
+		} else if a.Item().Key > b.Item().Key {
+			b = b.Next()
+		} else if a.Item().Key == b.Item().Key {
+			var a_node = a.Item()
+			var b_node = b.Item().Value
+			results += BlockArray_andcount(&a_node.Value, &b_node)
+			a = a.Next()
+			b = b.Next()
+		}
+	}
+	return results
 }
 
 func Intersection(a_bm IBitmap, b_bm IBitmap) IBitmap {
@@ -357,7 +389,7 @@ func (r *RBNodeIterator) Item() *Chunk {
 	return nil
 }
 func GetChunk(bm IBitmap, ChunkKey uint64) *Chunk {
-	look := &Chunk{ChunkKey, BlockArray{}}
+	look := &Chunk{ChunkKey, BlockArray{make([]uint64, 32, 32)}}
 	return bm.Get(look)
 }
 
@@ -427,7 +459,10 @@ func (b *Bitmap) ToBytes() []byte {
 	enc.Encode(b.nodes.Len())
 	for i := b.nodes.Min(); !i.Limit(); i = i.Next() {
 		obj := i.Item().(*Chunk)
-		enc.Encode(obj)
+		err := enc.Encode(obj)
+		if err != nil {
+			log.Println(err)
+		}
 	}
 	return buf.Bytes()
 }
@@ -440,7 +475,6 @@ func (self *Bitmap) FromBytes(raw []byte) {
 	dec.Decode(&size)
 	self.nodes = NewRB()
 	for i := 0; i < size; i++ {
-		//chunk := &Chunk{}
 		var chunk Chunk
 		dec.Decode(&chunk)
 		self.AddChunk(&chunk)
@@ -509,7 +543,7 @@ func SetBit(b IBitmap, position uint64) (bool, *Chunk, Address) {
 	item := GetChunk(b, address.ChunkKey)
 	var node *Chunk
 	if item == nil {
-		node = &Chunk{address.ChunkKey, BlockArray{}}
+		node = &Chunk{address.ChunkKey, BlockArray{make([]uint64, 32, 32)}}
 		b.AddChunk(node)
 	} else {
 		node = item

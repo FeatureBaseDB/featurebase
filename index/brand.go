@@ -240,10 +240,10 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 		if counter > n {
 			break
 		}
-		bm := Intersection(src_bitmap, pair.bitmap)
-		bc := BitCount(bm)
+		bc := IntersectionCount(src_bitmap, pair.bitmap)
+		//bc := BitCount(bm)
 		if bc > 0 {
-			results = append(results, &Rank{&Pair{pair.Key, bc}, bm, pair.category})
+			results = append(results, &Rank{&Pair{pair.Key, bc}, nil, pair.category})
 			counter = counter + 1
 		}
 		x = i
@@ -286,15 +286,15 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 
 		}
 
-		abitmap := Intersection(src_bitmap, o.bitmap)
-		bc := BitCount(abitmap)
+		bc := IntersectionCount(src_bitmap, o.bitmap)
+		//bc := BitCount(abitmap)
 
 		if bc > current_threshold {
 			if results[end-1].Count > bc {
-				results[end] = &Rank{&Pair{o.Key, bc}, abitmap, o.category}
+				results[end] = &Rank{&Pair{o.Key, bc}, nil, o.category}
 				current_threshold = bc
 			} else {
-				results[end+1] = &Rank{&Pair{o.Key, bc}, abitmap, o.category}
+				results[end+1] = &Rank{&Pair{o.Key, bc}, nil, o.category}
 				sort.Sort(results)
 				o = results[end]
 				current_threshold = o.Count

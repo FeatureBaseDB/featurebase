@@ -1,6 +1,7 @@
 package index
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -86,4 +87,31 @@ func TestBitmaps(t *testing.T) {
 		BitCount(all)
 		So(start, ShouldHappenWithin, time.Duration(1)*time.Millisecond, time.Now())
 	})
+
+	Convey("Compressed ", t, func() {
+		all := CreateRBBitmap()
+		for i := uint64(0); i < uint64(4096); i++ {
+			SetBit(all, i)
+		}
+		cs := all.ToCompressString()
+		fmt.Println(cs)
+		bm := CreateRBBitmap()
+		bm.FromCompressString(cs)
+		So(BitCount(all), ShouldEqual, BitCount(bm))
+	})
+
+	Convey("AndCount ", t, func() {
+		a := CreateRBBitmap()
+		for i := uint64(0); i < uint64(4096); i++ {
+			SetBit(a, i)
+		}
+		b := CreateRBBitmap()
+		for i := uint64(0); i < uint64(8192); i++ {
+			SetBit(b, i)
+		}
+		c1 := IntersectionCount(a, b)
+		c := Intersection(a, b)
+		So(c1, ShouldEqual, BitCount(c))
+	})
+
 }
