@@ -275,6 +275,12 @@ ArgLoop:
 		if query.Operation == "mask" {
 			return nil, fmt.Errorf("No Args Given")
 		}
+		if query.Operation == "stash" {
+			return nil, fmt.Errorf("No Args Given")
+		}
+		if query.Operation == "recall" {
+			return nil, fmt.Errorf("No Args Given")
+		}
 	}
 	return query, nil
 }

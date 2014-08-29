@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"pilosa/db"
+	"pilosa/index"
 	"pilosa/util"
 	"time"
 
@@ -260,6 +261,9 @@ type CatQueryStep struct {
 	Inputs []*util.GUID
 	N      int
 }
+type Appendable interface {
+	Append(subq QueryTree)
+}
 
 type CatQueryResult struct {
 	*BaseQueryResult
@@ -270,6 +274,10 @@ type CatQueryTree struct {
 	subqueries []QueryTree
 	location   *db.Location
 	N          int
+}
+
+func (qt *CatQueryTree) Append(subtree QueryTree) {
+	qt.subqueries = append(qt.subqueries, subtree)
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
@@ -367,6 +375,9 @@ func init() {
 	gob.Register(CountQueryResult{})
 	gob.Register(TopNQueryResult{})
 	gob.Register(FillResult{})
+	gob.Register(StashQueryResult{})
+	gob.Register(CacheItem{})
+	gob.Register(Stash{})
 
 	gob.Register(SetQueryStep{})
 	gob.Register(GetQueryStep{})
@@ -377,6 +388,7 @@ func init() {
 	gob.Register(DifferenceQueryStep{})
 	gob.Register(CountQueryStep{})
 	gob.Register(TopNQueryStep{})
+	gob.Register(StashQueryStep{})
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -425,13 +437,22 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 	}
 
 	// handle the remaining operations, taking slice into consideration
+	//I'm kinda thinking for stash it needs a differnt handler..i guess for now I'll see if i can use the cathandler
 	if slice == -1 {
 		var n int
 		n_, ok := query.Args["n"]
 		if ok {
 			n = n_.(int)
 		}
-		tree = &CatQueryTree{N: n}
+		var p Appendable
+
+		if query.Operation == "stash" {
+			//			log.Println("STASH:", n)
+			tree = &StashQueryTree{N: n}
+		} else {
+			tree = &CatQueryTree{N: n}
+		}
+		p = tree.(Appendable)
 		numSlices, err := self.Database.NumSlices()
 		if err != nil {
 			return nil, err
@@ -442,8 +463,8 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 			if err != nil {
 				return nil, err
 			}
-			composite := tree.(*CatQueryTree)
-			composite.subqueries = append(composite.subqueries, subtree)
+
+			p.Append(subtree)
 		}
 	} else {
 		if query.Operation == "get" {
@@ -520,6 +541,17 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 				}
 			}
 			tree = &DifferenceQueryTree{subqueries: subqueries}
+		} else if query.Operation == "stash" {
+
+			subqueries := make([]QueryTree, len(query.Subqueries))
+			var err error
+			for i, query := range query.Subqueries {
+				subqueries[i], err = self.buildTree(&query, slice)
+				if err != nil {
+					return nil, err
+				}
+			}
+			tree = &StashQueryTree{subqueries: subqueries}
 		} else {
 			//TODO return error gracefully
 			log.Println(spew.Sdump(query))
@@ -540,6 +572,23 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 		}
 		step := CatQueryStep{&BaseQueryStep{id, "cat", loc, location}, inputs, cat.N}
 		for index, subq := range cat.subqueries {
+			sub_id := util.RandomUUID()
+			step.Inputs[index] = &sub_id
+			subq_steps, err := self.flatten(subq, &sub_id, loc)
+			if err != nil {
+				return nil, err
+			}
+			plan = append(plan, *subq_steps...)
+		}
+		plan = append(plan, step)
+	} else if stash, ok := qt.(*StashQueryTree); ok {
+		inputs := make([]*util.GUID, len(stash.subqueries))
+		loc, err := stash.getLocation(self.Database)
+		if err != nil {
+			return nil, err
+		}
+		step := StashQueryStep{&BaseQueryStep{id, "stash", loc, location}, inputs, stash.N}
+		for index, subq := range stash.subqueries {
 			sub_id := util.RandomUUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
@@ -736,4 +785,51 @@ func (qt *RangeQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 
 type FillResult struct {
 	*BaseQueryResult
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//Stash
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+type CacheItem struct {
+	FragmentId util.SUUID
+	Handle     index.BitmapHandle
+}
+
+type Stash struct {
+	Stash []CacheItem //index.BitmapHandle //probably need to make the a struct with fragment_id and handle
+}
+type StashQueryStep struct {
+	*BaseQueryStep
+	Inputs []*util.GUID
+	N      int
+}
+
+type StashQueryResult struct {
+	*BaseQueryResult
+}
+
+// QueryTree for UNION queries
+type StashQueryTree struct {
+	subqueries []QueryTree
+	location   *db.Location
+	N          int
+}
+
+func (qt *StashQueryTree) Append(subtree QueryTree) {
+	qt.subqueries = append(qt.subqueries, subtree)
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *StashQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	var err error
+	if qt.location == nil {
+		subqueryLength := len(qt.subqueries)
+		if subqueryLength > 0 {
+			locationIndex := rand.Intn(subqueryLength)
+			subquery := qt.subqueries[locationIndex]
+			qt.location, err = subquery.getLocation(d)
+		}
+	}
+	return qt.location, err
 }

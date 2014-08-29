@@ -6,6 +6,7 @@ import (
 	"pilosa/util"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -181,12 +182,11 @@ func TestQueryPlanner(t *testing.T) {
 		So(err, ShouldEqual, nil)
 
 		database, fragment1 := basic_database()
-
 		qplanner := QueryPlanner{Database: database, Query: query}
 		destination := fragment1.GetLocation()
-
 		id := util.RandomUUID()
 		qpp, err := qplanner.Plan(query, &id, destination)
+
 		So(err, ShouldEqual, nil)
 		qp := *qpp
 		So(err, ShouldEqual, nil)
@@ -213,6 +213,23 @@ func TestQueryPlanner(t *testing.T) {
 		So(err, ShouldEqual, nil)
 		_, err = QueryForPQL("count(union())")
 		So(err, ShouldNotEqual, nil)
+	})
+
+	Convey("Stash including parsing", t, func() {
+		qp, err := QueryForPQL("stash(union(get(10,default),get(20,default)))")
+		So(err, ShouldEqual, nil)
+
+		database, fragment1 := basic_database()
+		qplanner := QueryPlanner{Database: database, Query: qp}
+		destination := fragment1.GetLocation()
+		id := util.RandomUUID()
+		qpp, _ := qplanner.Plan(qp, &id, destination)
+		p := *qpp
+
+		So(len(p), ShouldNotEqual, 0)
+		log.Println(len(p))
+		spew.Dump(p[0])
+		//So(p[0].(StashQueryStep).Operation, ShouldEqual, "stash")
 	})
 
 }

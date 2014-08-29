@@ -1,6 +1,7 @@
 package core
 
 import (
+	"log"
 	"pilosa/db"
 	"pilosa/index"
 	"pilosa/query"
@@ -136,9 +137,46 @@ func (self *Service) DifferenceQueryStepHandler(msg *db.Message) {
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
+func (self *Service) StashQueryStepHandler(msg *db.Message) {
+	qs := msg.Data.(query.StashQueryStep)
+
+	part := make(chan interface{})
+	num_parts := len(qs.Inputs)
+
+	for _, input := range qs.Inputs {
+		go func(id *util.GUID, part chan interface{}) {
+			value, _ := self.Hold.Get(id, 10)
+			part <- value
+		}(input, part)
+	}
+	//just collect all the handles and return them
+	result := query.Stash{make([]query.CacheItem, 0)}
+	for i := 0; i < num_parts; i++ {
+		value := <-part
+
+		switch val := value.(type) {
+		case index.BitmapHandle:
+			log.Println("STASH ADDING HANDLE", val)
+			//not sure what to do here....
+			//result.Handles = append(result.Handles, val)
+		case []byte:
+			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
+			item := query.CacheItem{qs.Location.FragmentId, bh}
+			result.Stash = append(result.Stash, item)
+		case query.Stash:
+			result.Stash = append(result.Stash, val.Stash...)
+		default:
+			log.Println("UNEXCPECTED MESSAG", value)
+		}
+	}
+	result_message := db.Message{Data: query.StashQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+
+}
+
 func (self *Service) CatQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.CatQueryStep)
-	//spew.Dump("CAT QUERYSTEP")
+	spew.Dump("CAT QUERYSTEP")
 	var handles []index.BitmapHandle
 	return_type := "bitmap-handles"
 	var sum uint64
@@ -161,6 +199,7 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 	}
 
 	//for _, input := range qs.Inputs {
+	check_pair := false
 	for i := 0; i < num_parts; i++ {
 		value := <-part
 
@@ -191,13 +230,15 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 				process util.GUID
 				handle  index.BitmapHandle
 			}{val.ProcessId, val.HBitmap}
+			check_pair = true
 		}
 	}
-
-	tasks := BuildTask(merge_map, slice_map, all_slice)
-	FetchMissing(tasks, self)
-	for k, v := range GatherResults(tasks, self) {
-		merge_map[k] += v
+	if check_pair { //no point in doing this for non top-n handling
+		tasks := BuildTask(merge_map, slice_map, all_slice)
+		FetchMissing(tasks, self)
+		for k, v := range GatherResults(tasks, self) {
+			merge_map[k] += v
+		}
 	}
 
 	// either return the sum, or return the compressed bitmap resulting from the cat (union)
