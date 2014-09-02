@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"pilosa/index"
 	"pilosa/util"
 	"strconv"
 	"time"
@@ -190,6 +191,27 @@ ArgLoop:
 						return nil, fmt.Errorf("Expecting integer! (%v)", err)
 					}
 					query.Args["n"] = i
+				}
+			case "recall": //need pair based list of frag_id,handle
+				arg, ok := query.Args["stash"]
+				if !ok {
+					arg = &Stash{make([]CacheItem, 0), false}
+					query.Args["stash"] = arg
+				}
+
+				recallArgs := arg.(*Stash)
+				if !recallArgs.incomplete {
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting fragment id! (%v)", err)
+					}
+					recallArgs.Add(util.SUUID(i)) //constructs a new arg
+				} else {
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting handle! (%v)", err)
+					}
+					recallArgs.Assign(index.BitmapHandle(i)) //sets the value of the last created arg
 				}
 			default:
 				spew.Dump("UNPROCESSED VALUE", token)

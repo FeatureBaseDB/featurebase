@@ -2,6 +2,8 @@ package query
 
 import (
 	"testing"
+
+	"github.com/davecgh/go-spew/spew"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -80,6 +82,12 @@ func TestQueryParser(t *testing.T) {
 	Convey("Lists", t, func() {
 		tokens, err := Lex("wat(50)")
 		_, err = Parse(tokens)
+		So(err, ShouldBeNil)
+	})
+	Convey("Recall", t, func() {
+		tokens, err := Lex("recall(12345,1,12345,2,12345,3)")
+		q, err := Parse(tokens)
+		spew.Dump(q)
 		So(err, ShouldBeNil)
 	})
 }

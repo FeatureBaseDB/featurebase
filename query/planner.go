@@ -797,8 +797,21 @@ type CacheItem struct {
 }
 
 type Stash struct {
-	Stash []CacheItem //index.BitmapHandle //probably need to make the a struct with fragment_id and handle
+	Stash      []CacheItem //index.BitmapHandle //probably need to make the a struct with fragment_id and handle
+	incomplete bool
 }
+
+func (st *Stash) Add(i util.SUUID) {
+	item := CacheItem{i, 0}
+	st.Stash = append(st.Stash, item)
+	st.incomplete = true
+}
+
+func (st *Stash) Assign(i index.BitmapHandle) {
+	st.Stash[len(st.Stash)-1].Handle = i //big assumption that item already exists
+	st.incomplete = false
+}
+
 type StashQueryStep struct {
 	*BaseQueryStep
 	Inputs []*util.GUID
