@@ -48,8 +48,10 @@ func (self *Executor) NewJob(job *db.Message) {
 		self.service.RangeQueryStepHandler(job)
 	case query.StashQueryStep:
 		self.service.StashQueryStepHandler(job)
-		//	case query.MaskQueryStep:
-		//		self.service.MaskQueryStepHandler(job)
+	//case query.RecallQueryStep:
+	//	self.service.RecallQueryStepHandler(job)
+	//	case query.MaskQueryStep:
+	//		self.service.MaskQueryStepHandler(job)
 	default:
 		fmt.Println("unknown")
 	}
@@ -127,7 +129,7 @@ func (self *Executor) RunPQL(database_name string, pql string) (interface{}, err
 		}
 		return final, nil
 
-	} else {
+	} else { //want to refactor this down to just RunPlugin(tokens)
 		plugins_dir := config.GetString("plugins")
 		plugins_file := plugins_dir + "/" + outer_token + ".js"
 		filter := query.TokensToString(tokens)

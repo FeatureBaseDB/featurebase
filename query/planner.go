@@ -436,6 +436,12 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 		return tree, nil
 	}
 
+	if query.Operation == "recall" {
+
+		tree = &RecallQueryTree{query.Args["stash"].(Stash)}
+		return tree, nil
+	}
+
 	// handle the remaining operations, taking slice into consideration
 	//I'm kinda thinking for stash it needs a differnt handler..i guess for now I'll see if i can use the cathandler
 	if slice == -1 {
@@ -581,6 +587,15 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)
+		/*} else if recall, ok := qt.(*RecallQueryTree); ok {
+		//need to go through the stash and fetch
+		//from self.Database i can fetch the locations
+		step := RecallQueryStep{&BaseQueryStep{id, "recall", loc, location}, recall.Stash}
+
+		plan := QueryPlan{step}
+		return &plan, nil
+		*/
+
 	} else if stash, ok := qt.(*StashQueryTree); ok {
 		inputs := make([]*util.GUID, len(stash.subqueries))
 		loc, err := stash.getLocation(self.Database)
@@ -801,6 +816,10 @@ type Stash struct {
 	incomplete bool
 }
 
+func NewStash() Stash {
+	return Stash{make([]CacheItem, 0), false}
+}
+
 func (st *Stash) Add(i util.SUUID) {
 	item := CacheItem{i, 0}
 	st.Stash = append(st.Stash, item)
@@ -845,4 +864,20 @@ func (qt *StashQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 		}
 	}
 	return qt.location, err
+}
+
+type RecallQueryStep struct {
+	*BaseQueryStep
+	Stash Stash
+}
+type RecallQueryTree struct {
+	Stash Stash
+}
+
+func (rqt *RecallQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	return nil, nil
+}
+
+type RecallQueryResult struct {
+	*BaseQueryResult
 }

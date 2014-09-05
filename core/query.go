@@ -11,6 +11,14 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
+/*
+func (self *Service) RecallQueryStepHandler(msg *db.Message) {
+	qs := msg.Data.(query.RecallQueryStep)
+
+	result_message := db.Message{Data: query.RecallQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: count}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+*/
 func (self *Service) CountQueryStepHandler(msg *db.Message) {
 	//spew.Dump("COUNT QUERYSTEP")
 	qs := msg.Data.(query.CountQueryStep)
@@ -150,7 +158,7 @@ func (self *Service) StashQueryStepHandler(msg *db.Message) {
 		}(input, part)
 	}
 	//just collect all the handles and return them
-	result := query.Stash{make([]query.CacheItem, 0)}
+	result := query.NewStash() //query.Stash{make([]query.CacheItem, 0), false}
 	for i := 0; i < num_parts; i++ {
 		value := <-part
 
@@ -176,7 +184,6 @@ func (self *Service) StashQueryStepHandler(msg *db.Message) {
 
 func (self *Service) CatQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.CatQueryStep)
-	spew.Dump("CAT QUERYSTEP")
 	var handles []index.BitmapHandle
 	return_type := "bitmap-handles"
 	var sum uint64

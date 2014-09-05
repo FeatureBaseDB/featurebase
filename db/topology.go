@@ -299,6 +299,15 @@ func (self *FrameSliceIntersect) GetFragments() []*Fragment {
 	return self.fragments
 }
 
+func (d *Database) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
+	for _, fsi := range d.frame_slice_intersects {
+		f, err := fsi.GetFragment(fragment_id)
+		if err == nil {
+			return f, nil
+		}
+	}
+	return nil, FragmentDoesNotExistError
+}
 func (self *FrameSliceIntersect) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
 	for _, fragment := range self.fragments {
 		if fragment.id == fragment_id {

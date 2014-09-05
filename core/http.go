@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -287,6 +288,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Provide a valid query string (pql)", http.StatusNotFound)
 		return
 	}
+	_, bits := r.Form["bits"]
 
 	results, err := self.service.Executor.RunPQL(database_name, pql)
 	switch r := results.(type) { //a hack to handle empty sets
@@ -295,6 +297,15 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 			results = []int{}
 
 		}
+	case []byte: //can i figure out the type of the compressed string here?
+		if bits {
+			reader, _ := gzip.NewReader(bytes.NewReader(r))
+			b, _ := ioutil.ReadAll(reader)
+			result := index.NewBitmap()
+			result.FromBytes(b)
+			results = result.Bits()
+		}
+
 	}
 
 	if results == nil {
