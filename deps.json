@@ -21,7 +21,7 @@
     },
     "gocql": {
         "repo": "github.com/gocql/gocql",
-        "version": "7bd964ec83ae675586ba314806c02341c015c45b",
+        "version": "f09085c7ba26b10decf01d8aaa5a7022720642ca",
         "type": "git"
     },
     "goleveldb": {
