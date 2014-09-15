@@ -459,17 +459,15 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 			tree = &CatQueryTree{N: n}
 		}
 		p = tree.(Appendable)
-		numSlices, err := self.Database.NumSlices()
+		slice_ids, err := self.Database.SliceIds()
 		if err != nil {
 			return nil, err
 		}
-		for slice := 0; slice < numSlices; slice++ {
-			//for slice := 0; slice < 3; slice++ {
-			subtree, err := self.buildTree(query, slice)
+		for i := range slice_ids {
+			subtree, err := self.buildTree(query, slice_ids[i])
 			if err != nil {
 				return nil, err
 			}
-
 			p.Append(subtree)
 		}
 	} else {

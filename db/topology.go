@@ -183,6 +183,15 @@ func (d *Database) NumSlices() (int, error) {
 	return len(d.slices), nil
 }
 
+// return the slice_ids that are in a database
+func (d *Database) SliceIds() ([]int, error) {
+	var rtn []int
+	for _, slice := range d.slices {
+		rtn = append(rtn, slice.id)
+	}
+	return rtn, nil
+}
+
 ///////// FRAMES ////////////////////////////////////////////////////////////////////
 
 // A frame is a collection of slices in a given category
