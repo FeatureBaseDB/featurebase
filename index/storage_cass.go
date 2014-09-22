@@ -26,7 +26,7 @@ var cluster *gocql.ClusterConfig
 
 func init() {
 	hosts := config.GetStringArrayDefault("cassandra_hosts", []string{"localhost"})
-	keyspace := config.GetStringDefault("cassandra_keyspace", "hotbox")
+	keyspace := config.GetStringDefault("cassandra_keyspace", "pilosa")
 	cluster = gocql.NewCluster(hosts...)
 	cluster.Keyspace = keyspace
 	cluster.Consistency = gocql.One
@@ -35,9 +35,9 @@ func init() {
 
 func BuildSchema() {
 	/*
-			   "CREATE KEYSPACE IF NOT EXISTS hotbox WITH strategy_class = SimpleStrategy AND strategy_options:replication_factor = 1"
-		       create keyspace if not exists hotbox with replication = { 'class': 'SimpleStrategy', 'replication_factor' : 1} and durable_writes = true;
-			   CREATE TABLE IF NOT EXISTS bitmap ( bitmap_id bigint, db varchar, frame varchar, slice int, filter int, ChunkKey bigint,   BlockIndex int,   block bigint,    PRIMARY KEY ((bitmap_id, db, frame,slice),ChunkKey,BlockIndex) )
+			   "CREATE KEYSPACE IF NOT EXISTS pilosa WITH strategy_class = SimpleStrategy AND strategy_options:replication_factor = 1"
+		       create keyspace if not exists pilosa with replication = {'class': 'SimpleStrategy', 'replication_factor' : 1} and durable_writes = true;
+			   CREATE TABLE IF NOT EXISTS bitmap (bitmap_id bigint, db varchar, frame varchar, slice int, filter int, chunkkey bigint, blockindex int, block bigint, PRIMARY KEY ((bitmap_id, db, frame, slice), chunkkey, blockindex) )
 			   "
 	*/
 
