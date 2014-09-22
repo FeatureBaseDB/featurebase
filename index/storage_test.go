@@ -39,7 +39,7 @@ func TestStorage(t *testing.T) {
 		c.Close()
 		Convey("cassandra", t, func() {
 			fmt.Println("GO")
-			//storage := NewCassStorage("127.0.0.1", "hotbox")
+			//storage := NewCassStorage("127.0.0.1", "pilosa")
 			storage := NewCassStorage()
 
 			fmt.Println("FETCH")
