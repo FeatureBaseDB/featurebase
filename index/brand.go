@@ -191,8 +191,7 @@ func (self *Brand) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
 	self.storage.Store(int64(bitmap_id), self.db, self.frame, self.slice, filter, bm.(*Bitmap))
 	self.cache_it(bm, bitmap_id, filter)
 }
-
-func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
+func (self *Brand) checkRank() {
 	if len(self.rankings) < 50 {
 		self.Rank()
 	} else if self.rank_count > 0 {
@@ -201,7 +200,9 @@ func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
 			self.Rank()
 		}
 	}
-
+}
+func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
+	self.checkRank()
 	is := NewIntSet()
 	for _, v := range categories {
 		is.Add(v)
@@ -219,6 +220,36 @@ func dump(r RankList, n int) {
 		}
 	}
 }
+
+func (self *Brand) TopNAll(n int, categories []uint64) []Pair {
+
+	self.checkRank()
+	results := make([]Pair, n)
+
+	category := NewIntSet()
+	needCat := false
+	for _, v := range categories {
+		category.Add(v)
+		needCat = true
+
+	}
+	count := 0
+	for _, pair := range self.rankings {
+		if needCat {
+			if !category.Contains(pair.category) {
+				continue
+			}
+		}
+
+		if count > n {
+			break
+		}
+		results[count] = Pair{pair.Key, pair.Count}
+		count++
+	}
+	return results[:count]
+}
+
 func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 	breakout := 500
 	var (

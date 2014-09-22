@@ -138,3 +138,20 @@ func (self *General) Load(requestChan chan Command, f *Fragment) {
 		request.Response()
 	}
 }
+
+func (self *General) TopNAll(n int, categories []uint64) []Pair {
+
+	results := make([]Pair, n)
+
+	count := 0
+	for k, _ := range self.keys {
+
+		if count > n {
+			break
+		}
+		bm := self.Get(k)
+		results[count] = Pair{k, bm.Count()}
+		count++
+	}
+	return results[:count]
+}

@@ -173,6 +173,18 @@ func (self *FragmentContainer) TopN(frag_id util.SUUID, bh BitmapHandle, n int, 
 	}
 	return nil, errors.New(fmt.Sprintf("Fragment not found:%s", util.SUUID_to_Hex(frag_id)))
 }
+
+func (self *FragmentContainer) TopNAll(frag_id util.SUUID, n int, categories []uint64) ([]Pair, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
+		request := NewTopNAll(n, categories)
+		fragment.requestChan <- request
+		result := request.Response()
+		util.SendTimer("fragmant_container_TopNAll", result.exec_time.Nanoseconds())
+		return result.answer.([]Pair), nil
+	}
+	return nil, errors.New(fmt.Sprintf("Fragment not found:%s", util.SUUID_to_Hex(frag_id)))
+}
+
 func (self *FragmentContainer) TopFillBatch(args []FillArgs) ([]Pair, error) {
 	//should probaly make this concurrent but then all hell breaks lose
 	results := make(map[uint64]uint64)
@@ -285,6 +297,7 @@ type Pilosa interface {
 	Get(id uint64) IBitmap
 	SetBit(id uint64, bit_pos uint64, filter uint64) bool
 	TopN(b IBitmap, n int, categories []uint64) []Pair
+	TopNAll(n int, categories []uint64) []Pair
 	Clear() bool
 	Store(bitmap_id uint64, bm IBitmap, filter uint64)
 	Stats() interface{}
@@ -346,6 +359,9 @@ func (self *Fragment) getBitmap(bitmap BitmapHandle) (IBitmap, bool) {
 
 func (self *Fragment) exists(bitmap_id uint64) bool {
 	return self.impl.Exists(bitmap_id)
+}
+func (self *Fragment) TopNAll(n int, categories []uint64) []Pair {
+	return self.impl.TopNAll(n, categories)
 }
 
 func (self *Fragment) TopN(bitmap BitmapHandle, n int, categories []uint64) []Pair {

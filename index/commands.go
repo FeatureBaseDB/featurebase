@@ -316,3 +316,17 @@ func (self *CmdTopFill) Execute(f *Fragment) Calculation {
 	}
 	return result
 }
+
+type CmdTopNAll struct {
+	*Responder
+	n          int
+	categories []uint64
+}
+
+func NewTopNAll(n int, categories []uint64) *CmdTopNAll {
+	return &CmdTopNAll{NewResponder("TopNAll"), n, categories}
+}
+
+func (self *CmdTopNAll) Execute(f *Fragment) Calculation {
+	return f.TopNAll(self.n, self.categories)
+}
