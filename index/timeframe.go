@@ -1,21 +1,25 @@
 package index
 
-import "time"
+import (
+	"time"
+)
 
 type TimeQuantum uint
 
 const (
-	Y TimeQuantum = 0
-	YM
-	YMD
-	YMDH
+	Y    TimeQuantum = 3
+	YM   TimeQuantum = 2
+	YMD  TimeQuantum = 1
+	YMDH TimeQuantum = 0
 )
 
 func GetTimeID(t TimeQuantum, year uint, month uint, day uint, hour uint, tile_id uint64) uint64 {
 	y := year - 1970 //config.startyear
 	time_stamp := uint64((uint(t) << 30) | (y << 23) | (month << 19) | (day << 14) | (hour << 9))
 	time_stamp = time_stamp << 32
-	return time_stamp | tile_id
+	result := time_stamp | tile_id
+
+	return result
 }
 
 func GetTimeIds(tile_id uint64, atime time.Time, min_quantum TimeQuantum) []uint64 {
@@ -41,7 +45,7 @@ func GetTimeIds(tile_id uint64, atime time.Time, min_quantum TimeQuantum) []uint
 	}
 
 	if min_quantum <= YMDH {
-		id := GetTimeID(Y, year, uint(month), uint(day), uint(hour), tile_id)
+		id := GetTimeID(YMDH, year, uint(month), uint(day), uint(hour), tile_id)
 		results = append(results, id)
 	}
 
