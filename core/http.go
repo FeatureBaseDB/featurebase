@@ -346,13 +346,24 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 			if timestamp == "2014-01-01 00:00:00" { //skip the default timestamp
 				c <- base_id
 			} else {
+				quantum := index.YMDH
+				if val, ok := obj["time_granulatrity"]; ok {
+					switch val {
+					case "Y":
+						quantum = index.Y
+					case "M":
+						quantum = index.YM
+					case "D":
+						quantum = index.YMD
+					}
+				}
 				shortForm := shortFormS
 				if strings.Contains(timestamp, "T") {
 					shortForm = shortFormT
 				}
 				atime, _ := time.Parse(shortForm, timestamp)
 
-				for _, id := range index.GetTimeIds(base_id, atime, index.YMDH) {
+				for _, id := range index.GetTimeIds(base_id, atime, quantum) {
 					c <- id
 				}
 			}
