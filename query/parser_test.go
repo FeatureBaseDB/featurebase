@@ -90,4 +90,17 @@ func TestQueryParser(t *testing.T) {
 		spew.Dump(q)
 		So(err, ShouldBeNil)
 	})
+	Convey("all() query parse", t, func() {
+		tokens, err := Lex("top-n(all(), general, 30)")
+		So(err, ShouldBeNil)
+
+		query, err := Parse(tokens)
+		So(err, ShouldBeNil)
+
+		So(query.Operation, ShouldEqual, "top-n")
+		So(len(query.Subqueries), ShouldEqual, 1)
+
+		So(query.Subqueries[0].Operation, ShouldEqual, "all")
+		So(query.Subqueries[0].Args, ShouldResemble, map[string]interface{}{})
+	})
 }

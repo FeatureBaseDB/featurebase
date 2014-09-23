@@ -166,35 +166,36 @@ func init() {
 
 func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.TopNQueryStep)
-	var categoryleaves []uint64
-	input := qs.Input
-	value, _ := self.Hold.Get(input, 10)
 	var bh index.BitmapHandle
-	switch val := value.(type) {
-	case index.BitmapHandle:
-		bh = val
-	case []byte:
-		bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
+	var topnPackage TopNPackage
+
+	// if we have an input, hold for it. if we don't, we assume an all() query
+	if qs.Input == nil {
+		topn, err := self.Index.TopNAll(qs.Location.FragmentId, qs.N*2, qs.Filters)
+		if err != nil {
+			log.Println(spew.Sdump(err))
+		}
+		topnPackage = TopNPackage{*qs.Location.ProcessId, qs.Location.FragmentId, topn, bh}
+	} else {
+		input := qs.Input
+		value, _ := self.Hold.Get(input, 10)
+		//var bh index.BitmapHandle
+		switch val := value.(type) {
+		case index.BitmapHandle:
+			bh = val
+		case []byte:
+			bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
+		}
+
+		topn, err := self.Index.TopN(qs.Location.FragmentId, bh, qs.N*2, qs.Filters)
+		if err != nil {
+			log.Println(spew.Sdump(err))
+		}
+		topnPackage = TopNPackage{*qs.Location.ProcessId, qs.Location.FragmentId, topn, bh}
 	}
 
-	categoryleaves = qs.Filters
-
-	/*
-	   spew.Dump(bh, qs.N*2, categoryleaves)
-	   result_message := db.Message{Data: "foobar"}
-	   self.Transport.Send(&result_message, qs.Destination.ProcessId)
-	*/
-
-	topn, err := self.Index.TopN(qs.Location.FragmentId, bh, qs.N*2, categoryleaves)
-	topnPackage := TopNPackage{*qs.Location.ProcessId, qs.Location.FragmentId, topn, bh}
-
-	if err != nil {
-		log.Println(spew.Sdump(err))
-
-	}
 	result_message := db.Message{Data: query.TopNQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: topnPackage}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
-
 }
 
 func canCompile() bool {

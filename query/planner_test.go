@@ -203,6 +203,25 @@ func TestQueryPlanner(t *testing.T) {
 		So(qp[3].(*TopNQueryStep).Input, ShouldEqual, qp[2].(GetQueryStep).Id)
 		So(qp[3].(*TopNQueryStep).N, ShouldEqual, 50)
 	})
+	Convey("All query plan - including parsing", t, func() {
+		query, err := QueryForPQL("top-n(all(), default, 50, [1,2,3])")
+		So(err, ShouldEqual, nil)
+
+		database, fragment1 := basic_database()
+		qplanner := QueryPlanner{Database: database, Query: query}
+		destination := fragment1.GetLocation()
+		id := util.RandomUUID()
+		qpp, err := qplanner.Plan(query, &id, destination)
+
+		So(err, ShouldEqual, nil)
+		qp := *qpp
+		So(err, ShouldEqual, nil)
+		So(len(qp), ShouldEqual, 3)
+		So(qp[0].(*TopNQueryStep).Operation, ShouldEqual, "top-n")
+		So(qp[0].(*TopNQueryStep).Input, ShouldEqual, nil)
+		So(qp[0].(*TopNQueryStep).N, ShouldEqual, 50)
+		So(qp[0].(*TopNQueryStep).Filters, ShouldResemble, []uint64{1, 2, 3})
+	})
 	Convey("Get query plan - including parsing", t, func() {
 
 		_, err := QueryForPQL("count()")

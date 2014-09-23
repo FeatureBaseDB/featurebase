@@ -192,6 +192,8 @@ ArgLoop:
 					}
 					query.Args["n"] = i
 				}
+			case "all":
+				// do nothing
 			case "recall": //need pair based list of frag_id,handle
 				arg, ok := query.Args["stash"]
 				if !ok {

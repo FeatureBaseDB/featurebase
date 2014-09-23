@@ -295,6 +295,19 @@ func (qt *CatQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// ALL
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+// QueryTree for GET queries
+type AllQueryTree struct {
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *AllQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	return nil, nil
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // GET
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type GetQueryStep struct {
@@ -493,6 +506,8 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 				return nil, err
 			}
 			tree = &CountQueryTree{subquery: subquery}
+		} else if query.Operation == "all" {
+			tree = &AllQueryTree{}
 		} else if query.Operation == "top-n" {
 			var frame string
 			var n int
@@ -715,12 +730,18 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 		if err != nil {
 			return nil, err
 		}
-		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", loc, location}, &sub_id, topn.Filters, topn.N, topn.Frame}
-		subq_steps, err := self.flatten(topn.subquery, &sub_id, loc)
-		if err != nil {
-			return nil, err
+		step := &TopNQueryStep{&BaseQueryStep{id, "top-n", loc, location}, nil, topn.Filters, topn.N, topn.Frame}
+		switch topn.subquery.(type) {
+		case *AllQueryTree:
+			// do nothing
+		default:
+			step.Input = &sub_id
+			subq_steps, err := self.flatten(topn.subquery, &sub_id, loc)
+			if err != nil {
+				return nil, err
+			}
+			plan = append(plan, *subq_steps...)
 		}
-		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)
 	}
 	return &plan, nil
