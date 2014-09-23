@@ -343,14 +343,18 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 
 		if strings.HasSuffix(frame, ".t") {
 			timestamp := obj["timestamp"].(string)
-			shortForm := shortFormS
-			if strings.Contains(timestamp, "T") {
-				shortForm = shortFormT
-			}
-			atime, _ := time.Parse(shortForm, timestamp)
+			if timestamp == "2014-01-01 00:00:00" {
+				c <- base_id
+			} else {
+				shortForm := shortFormS
+				if strings.Contains(timestamp, "T") {
+					shortForm = shortFormT
+				}
+				atime, _ := time.Parse(shortForm, timestamp)
 
-			for _, id := range index.GetTimeIds(base_id, atime, index.YMDH) {
-				c <- id
+				for _, id := range index.GetTimeIds(base_id, atime, index.YMDH) {
+					c <- id
+				}
 			}
 		} else {
 			c <- base_id
