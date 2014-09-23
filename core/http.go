@@ -343,7 +343,7 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 
 		if strings.HasSuffix(frame, ".t") {
 			timestamp := obj["timestamp"].(string)
-			if timestamp == "2014-01-01 00:00:00" {
+			if timestamp == "2014-01-01 00:00:00" { //skip the default timestamp
 				c <- base_id
 			} else {
 				shortForm := shortFormS
