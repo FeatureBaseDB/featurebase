@@ -224,7 +224,7 @@ func dump(r RankList, n int) {
 func (self *Brand) TopNAll(n int, categories []uint64) []Pair {
 
 	self.checkRank()
-	results := make([]Pair, n)
+	results := make([]Pair, n+1)
 
 	category := NewIntSet()
 	needCat := false
@@ -241,7 +241,7 @@ func (self *Brand) TopNAll(n int, categories []uint64) []Pair {
 			}
 		}
 
-		if count > n {
+		if count >= n {
 			break
 		}
 		results[count] = Pair{pair.Key, pair.Count}
