@@ -74,10 +74,10 @@ func (self *FragmentContainer) LoadBitmap(frag_id util.SUUID, bitmap_id uint64, 
 }
 
 func (self *FragmentContainer) GetFragment(frag_id util.SUUID) (*Fragment, bool) {
-	//lock
 	c, v := self.fragments[frag_id]
-	//log.Println(self.fragments)
-	//log.Println(c)
+	if v {
+		c.inc()
+	}
 	return c, v
 }
 
@@ -316,6 +316,7 @@ type Fragment struct {
 	mesg_count  uint64
 	mesg_time   time.Duration
 	exit        chan *sync.WaitGroup
+	queue_size  int
 }
 
 func getStorage(db string, slice int, frame string, fid util.SUUID) Storage {
@@ -349,6 +350,7 @@ func NewFragment(frag_id util.SUUID, db string, slice int, frame string) *Fragme
 	f.impl = impl //NewGeneral(db, slice, NewMemoryStorage())
 	f.slice = slice
 	f.exit = make(chan *sync.WaitGroup)
+	f.queue_size = 0
 	return f
 }
 
@@ -454,6 +456,15 @@ func (self *Fragment) Load() {
 	self.impl.Load(self.requestChan, self)
 }
 
+func (self *Fragment) inc() {
+	self.queue_size++
+}
+func (self *Fragment) dec() {
+	self.queue_size--
+	if self.queue_size < 0 {
+		self.queue_size = 0
+	}
+}
 func (self *Fragment) ServeFragment() {
 	for {
 		select {
@@ -461,6 +472,10 @@ func (self *Fragment) ServeFragment() {
 			self.mesg_count++
 			start := time.Now()
 			answer := req.Execute(self)
+
+			if req.QueryType() != "LoadRequest" {
+				self.dec()
+			}
 			delta := time.Since(start)
 			self.mesg_count += 1
 			self.mesg_time += delta

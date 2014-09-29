@@ -1,6 +1,7 @@
 package index
 
 import (
+	"math/rand"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -392,10 +393,21 @@ func (self *Brand) Load(requestChan chan Command, f *Fragment) {
 		return
 		//log.Println("Bad mojo")
 	}
+	time.Sleep(time.Duration(rand.Intn(15)) * time.Second) //trying to avoid mass cassandra hit
+	batch_count := 0
 	for _, k := range keys {
 		request := NewLoadRequest(k)
+		if f.queue_size > 0 {
+			time.Sleep(1 * time.Second)
+		}
+		if batch_count > 200 {
+			time.Sleep(1 * time.Second)
+			batch_count = 0
+		}
 		requestChan <- request
 		request.Response()
+		batch_count++
+		//so execute will decrement...GetFragment Increments..since this doesn't call GetFragment it doesn't increment
 
 	}
 }

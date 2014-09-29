@@ -30,7 +30,8 @@ func init() {
 	cluster = gocql.NewCluster(hosts...)
 	cluster.Keyspace = keyspace
 	cluster.Consistency = gocql.One
-	cluster.Timeout = 3 * time.Second
+	cluster.Timeout = 5 * time.Second
+	cluster.RetryPolicy = gocql.RetryPolicy{NumRetries: 10}
 }
 
 func BuildSchema() {
