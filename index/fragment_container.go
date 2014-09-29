@@ -186,7 +186,7 @@ func (self *FragmentContainer) TopNAll(frag_id util.SUUID, n int, categories []u
 }
 
 func (self *FragmentContainer) TopFillBatch(args []FillArgs) ([]Pair, error) {
-	//should probaly make this concurrent but then all hell breaks lose
+	//should probaly make this concurrent but then all hell breaks loose
 	results := make(map[uint64]uint64)
 	for _, v := range args {
 		items, _ := self.TopFillFragment(v)

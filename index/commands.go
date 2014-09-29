@@ -306,11 +306,19 @@ func (self *CmdTopFill) Execute(f *Fragment) Calculation {
 	for _, v := range self.args.Bitmaps {
 		if f.exists(v) {
 			a := f.NewHandle(v)
-			res := f.intersect([]BitmapHandle{self.args.Handle, a})
-			bm, _ := f.getBitmap(res)
-			bc := BitCount(bm)
-			if bc > 0 {
-				result = append(result, Pair{v, bc})
+			if self.args.Handle == 0 {
+				// return just the count
+				bm, _ := f.getBitmap(a)
+				if bm.Count() > 0 {
+					result = append(result, Pair{v, bm.Count()})
+				}
+			} else {
+				res := f.intersect([]BitmapHandle{self.args.Handle, a})
+				bm, _ := f.getBitmap(res)
+				bc := BitCount(bm)
+				if bc > 0 {
+					result = append(result, Pair{v, bc})
+				}
 			}
 		}
 	}

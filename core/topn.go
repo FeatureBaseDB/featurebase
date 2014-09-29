@@ -102,7 +102,7 @@ func (self *Service) TopFillHandler(msg *db.Message) { //in order for this to ge
 	topfill := msg.Data.(TopFill)
 	topn, err := self.Index.TopFillBatch(topfill.Args)
 	if err != nil {
-		log.Println("TopFileHandler:", err)
+		log.Println("TopFillHandler:", err)
 	}
 
 	result_message := db.Message{Data: query.FillResult{&query.BaseQueryResult{Id: &topfill.QueryId, Data: topn}}}
