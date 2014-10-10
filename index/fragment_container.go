@@ -267,6 +267,7 @@ func (self *FragmentContainer) SetBit(frag_id util.SUUID, bitmap_id uint64, pos 
 		fragment.requestChan <- request
 		result := request.Response()
 		util.SendTimer("fragmant_container_SetBit", result.exec_time.Nanoseconds())
+		util.SendInc("fragmant_container_SetBit")
 		return result.answer.(bool), nil
 	}
 	return false, errors.New("Invalid Bitmap Handle")
