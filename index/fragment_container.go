@@ -467,19 +467,19 @@ func (self *Fragment) processCommand(req Command) {
 func (self *Fragment) ServeFragment(loadChan chan Command) {
 	for {
 		select {
+		//	case req := <-self.requestChan:
+		//		self.processCommand(req)
+		//	default:
+		//		select {
 		case req := <-self.requestChan:
 			self.processCommand(req)
-		default:
-			select {
-			case req := <-self.requestChan:
-				self.processCommand(req)
-			case req := <-loadChan:
-				self.processCommand(req)
-			case wg := <-self.exit:
-				log.Println("Fragment Shutdown")
-				self.Persist()
-				wg.Done()
-			}
+		case req := <-loadChan:
+			self.processCommand(req)
+		case wg := <-self.exit:
+			log.Println("Fragment Shutdown")
+			self.Persist()
+			wg.Done()
+			//		}
 		}
 	}
 }
