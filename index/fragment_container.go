@@ -75,9 +75,6 @@ func (self *FragmentContainer) LoadBitmap(frag_id util.SUUID, bitmap_id uint64, 
 
 func (self *FragmentContainer) GetFragment(frag_id util.SUUID) (*Fragment, bool) {
 	c, v := self.fragments[frag_id]
-	if v {
-		c.inc()
-	}
 	return c, v
 }
 
@@ -287,9 +284,10 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 	if !ok {
 		log.Println("ADD FRAGMENT", frame, db, slice, util.SUUID_to_Hex(id))
 		f := NewFragment(id, db, slice, frame)
+		loader := make(chan Command)
 		self.fragments[id] = f
-		go f.ServeFragment()
-		go f.Load()
+		go f.ServeFragment(loader)
+		go f.Load(loader)
 	}
 
 }
@@ -453,108 +451,35 @@ func (self *Fragment) Persist() {
 		log.Println("Error saving:", err)
 	}
 }
-func (self *Fragment) Load() {
-	self.impl.Load(self.requestChan, self)
+func (self *Fragment) Load(loadChan chan Command) {
+	self.impl.Load(loadChan, self)
 }
 
-func (self *Fragment) inc() {
-	self.queue_size++
+func (self *Fragment) processCommand(req Command) {
+	self.mesg_count++
+	start := time.Now()
+	answer := req.Execute(self)
+	delta := time.Since(start)
+	self.mesg_count += 1
+	self.mesg_time += delta
+	req.ResponseChannel() <- Result{answer, delta}
 }
-func (self *Fragment) dec() {
-	self.queue_size--
-	if self.queue_size < 0 {
-		self.queue_size = 0
-	}
-}
-func (self *Fragment) ServeFragment() {
+func (self *Fragment) ServeFragment(loadChan chan Command) {
 	for {
 		select {
 		case req := <-self.requestChan:
-			self.mesg_count++
-			start := time.Now()
-			answer := req.Execute(self)
-
-			if req.QueryType() != "LoadRequest" {
-				self.dec()
+			self.processCommand(req)
+		default:
+			select {
+			case req := <-self.requestChan:
+				self.processCommand(req)
+			case req := <-loadChan:
+				self.processCommand(req)
+			case wg := <-self.exit:
+				log.Println("Fragment Shutdown")
+				self.Persist()
+				wg.Done()
 			}
-			delta := time.Since(start)
-			self.mesg_count += 1
-			self.mesg_time += delta
-			req.ResponseChannel() <- Result{answer, delta}
-
-		case wg := <-self.exit:
-			log.Println("Fragment Shutdown")
-			self.Persist()
-			wg.Done()
 		}
 	}
 }
-
-/*
-type RequestJSON struct {
-	Request  string
-	Fragment string
-	Args     json.RawMessage
-}
-func (a *FragmentContainer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	handler(w, r, a.fragments)
-}
-
-func (a *FragmentContainer) RunServer(porti int, closeChannel chan bool, started chan bool) {
-	http.Handle("/", a)
-	port := fmt.Sprintf(":%d", porti)
-
-	s := &http.Server{
-		Addr:           port,
-		Handler:        nil,
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20,
-	}
-
-	l, e := net.Listen("tcp", port)
-	if e != nil {
-		log.Panicf(e.Error())
-	}
-	go s.Serve(l)
-	started <- true
-	select {
-	case <-closeChannel:
-		log.Printf("Server thread exit")
-		l.Close()
-		// Shutdown()
-		return
-		break
-	}
-}
-
-func handler(w http.ResponseWriter, r *http.Request, fragments map[string]*Fragment) {
-	if r.Method == "POST" {
-		var f RequestJSON
-
-		bin, _ := ioutil.ReadAll(r.Body)
-		err := json.Unmarshal(bin, &f)
-
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, fmt.Sprintf(`{ "error":"%s"}`, err))
-
-		}
-		decoder := json.NewDecoder(bytes.NewReader(f.Args))
-		request := BuildCommandFactory(&f, decoder)
-		w.Header().Set("Content-Type", "application/json")
-		if request != nil {
-			output := `{"Error":"Invalid Fragment"}`
-			fc, found := fragments[f.Fragment] //f.FragmentIndex<len(fragments){
-			if found {
-				//   fc := fragments[f.FragmentGuid]
-				fc.requestChan <- request
-				output = request.GetResponder().Response()
-			}
-			fmt.Fprintf(w, output)
-		} else {
-			fmt.Fprintf(w, "NoOp")
-		}
-	}
-}
-*/

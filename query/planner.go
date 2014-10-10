@@ -73,7 +73,8 @@ func (self *BaseQueryStep) GetLocation() *db.Location {
 }
 
 func (self *BaseQueryStep) LocIsDest() bool {
-	if self.Location.ProcessId == self.Destination.ProcessId && self.Location.FragmentId == self.Destination.FragmentId {
+	if self.Location.ProcessId == self.Destination.ProcessId &&
+		self.Location.FragmentId == self.Destination.FragmentId {
 		return true
 	}
 	return false
