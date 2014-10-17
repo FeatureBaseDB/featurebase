@@ -17,7 +17,7 @@ func TestStorage(t *testing.T) {
 	frame := "main"
 	slice := 0
 	filter := 10
-	bitmap_id := uint64(1234)
+	bitmap_id := uint64(999999)
 	/*	Convey("KV ", t, func() {
 			storage, _ := NewKVStorage("/tmp/", 0, db)
 			bm := storage.Fetch(bitmap_id, db, slice)
@@ -44,38 +44,40 @@ func TestStorage(t *testing.T) {
 
 			fmt.Println("FETCH")
 			bm, _ := storage.Fetch(bitmap_id, db, frame, slice)
-			SetBit(bm, 0)
-			SetBit(bm, 1)
-			SetBit(bm, 2)
+			for i := uint64(0); i < 256; i++ {
+				SetBit(bm, i)
+			}
 			fmt.Println("STORE")
 			storage.Store(int64(bitmap_id), db, frame, slice, uint64(filter), bm.(*Bitmap))
 			fmt.Println("FETCH")
 			bm2, _ := storage.Fetch(bitmap_id, db, frame, slice)
 			So(BitCount(bm), ShouldEqual, BitCount(bm2))
 			So(BitCount(bm), ShouldEqual, bm.Count())
-			So(BitCount(bm), ShouldEqual, 3)
+			So(BitCount(bm), ShouldEqual, 256)
 
 		})
 	}
-	Convey("leveldb", t, func() {
-		storage := NewLevelDBStorage("./basic/one")
+	/*
+		Convey("leveldb", t, func() {
+			storage := NewLevelDBStorage("./basic/one")
 
-		fmt.Println("FETCH")
-		bm, _ := storage.Fetch(bitmap_id, db, frame, slice)
-		//spew.Dump(bm)
-		SetBit(bm, 0)
-		SetBit(bm, 1)
-		SetBit(bm, 2)
-		fmt.Println("STORE")
-		storage.Store(int64(bitmap_id), db, frame, slice, uint64(filter), bm.(*Bitmap))
-		//storage.FlushBatch()
-		fmt.Println("FETCH")
-		bm2, _ := storage.Fetch(bitmap_id, db, frame, slice)
-		So(BitCount(bm), ShouldEqual, BitCount(bm2))
-		So(BitCount(bm), ShouldEqual, bm.Count())
-		So(BitCount(bm), ShouldEqual, 3)
-		storage.Close()
+			fmt.Println("FETCH")
+			bm, _ := storage.Fetch(bitmap_id, db, frame, slice)
+			//spew.Dump(bm)
+			SetBit(bm, 0)
+			SetBit(bm, 1)
+			SetBit(bm, 2)
+			fmt.Println("STORE")
+			storage.Store(int64(bitmap_id), db, frame, slice, uint64(filter), bm.(*Bitmap))
+			//storage.FlushBatch()
+			fmt.Println("FETCH")
+			bm2, _ := storage.Fetch(bitmap_id, db, frame, slice)
+			So(BitCount(bm), ShouldEqual, BitCount(bm2))
+			So(BitCount(bm), ShouldEqual, bm.Count())
+			So(BitCount(bm), ShouldEqual, 3)
+			storage.Close()
 
-	})
+		})
+	*/
 
 }

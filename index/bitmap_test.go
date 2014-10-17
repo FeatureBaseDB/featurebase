@@ -1,13 +1,14 @@
 package index
 
 import (
-	"fmt"
+	//	"fmt"
 	"testing"
-	"time"
+	//	"time"
 
-	. "github.com/smartystreets/goconvey/convey"
+	//	. "github.com/smartystreets/goconvey/convey"
 )
 
+/*
 func TestBitmaps(t *testing.T) {
 	Convey("function BitCount should equal method bm.Count()", t, func() {
 		bm := CreateRBBitmap()
@@ -114,4 +115,12 @@ func TestBitmaps(t *testing.T) {
 		So(c1, ShouldEqual, BitCount(c))
 	})
 
+}
+*/
+func BenchmarkSetBit(b *testing.B) {
+	// run the Fib function b.N times
+	a := CreateRBBitmap()
+	for n := 0; n < b.N; n++ {
+		SetBit(a, uint64(n))
+	}
 }

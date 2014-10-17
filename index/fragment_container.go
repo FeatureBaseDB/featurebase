@@ -287,7 +287,7 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 		loader := make(chan Command)
 		self.fragments[id] = f
 		go f.ServeFragment(loader)
-		//go f.Load(loader)
+		go f.Load(loader)
 	}
 
 }
@@ -467,19 +467,19 @@ func (self *Fragment) processCommand(req Command) {
 func (self *Fragment) ServeFragment(loadChan chan Command) {
 	for {
 		select {
-		//	case req := <-self.requestChan:
-		//		self.processCommand(req)
-		//	default:
-		//		select {
 		case req := <-self.requestChan:
 			self.processCommand(req)
-		case req := <-loadChan:
-			self.processCommand(req)
-		case wg := <-self.exit:
-			log.Println("Fragment Shutdown")
-			self.Persist()
-			wg.Done()
-			//		}
+		default:
+			select {
+			case req := <-self.requestChan:
+				self.processCommand(req)
+			case req := <-loadChan:
+				self.processCommand(req)
+			case wg := <-self.exit:
+				log.Println("Fragment Shutdown")
+				self.Persist()
+				wg.Done()
+			}
 		}
 	}
 }

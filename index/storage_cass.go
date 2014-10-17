@@ -52,7 +52,7 @@ func NewCassStorage() Storage {
 	}
 
 	obj.db = session
-	obj.stmt = `INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?);`
+	obj.stmt = `INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?)  USING timestamp ?;`
 	obj.batch = nil
 	obj.batch_time = time.Now()
 	obj.batch_counter = 0
@@ -168,7 +168,7 @@ func (self *CassandraStorage) StoreBlock(id int64, db string, frame string, slic
 		self.BeginBatch()
 	}
 	start := time.Now()
-	self.batch.Query(self.stmt, id, db, frame, slice, int(filter), chunk, block_index, block)
+	self.batch.Query(self.stmt, id, db, frame, slice, int(filter), chunk, block_index, block, start.UnixNano())
 	delta := time.Since(start)
 	util.SendTimer("cassandra_storage_StoreBlock", delta.Nanoseconds())
 	return nil

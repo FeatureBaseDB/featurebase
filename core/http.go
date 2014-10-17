@@ -441,7 +441,9 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		log.Fatal("Error encoding stats")
+		log.Println("Error encoding stats")
+		http.Error(w, "Error econding stats", http.StatusMethodNotAllowed)
+		return
 	}
 
 }
@@ -478,7 +480,8 @@ func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {
 
 	err := encoder.Encode(m)
 	if err != nil {
-		log.Fatal("Error encoding stats")
+		log.Println("Error encoding stats")
+		http.Error(w, "Error econding stats", http.StatusMethodNotAllowed)
 	}
 }
 
