@@ -347,7 +347,7 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 				c <- base_id
 			} else {
 				quantum := index.YMDH
-				if val, ok := obj["time_granulatrity"]; ok {
+				if val, ok := obj["time_granularity"]; ok {
 					switch val {
 					case "Y":
 						quantum = index.Y
