@@ -394,17 +394,11 @@ func (self *Brand) Load(requestChan chan Command, f *Fragment) {
 		//log.Println("Bad mojo")
 	}
 	time.Sleep(time.Duration(rand.Intn(15)) * time.Second) //trying to avoid mass cassandra hit
-	counter := 0
 	for _, k := range keys {
 		request := NewLoadRequest(k)
 		requestChan <- request
 		request.Response()
-		counter++
-		if counter > 100 {
-			backoff := (counter / 100) * 100
-
-			time.Sleep(time.Duration(backoff) * time.Millisecond) //trying to avoid mass cassandra hit
-		}
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) //trying to avoid mass cassandra hit
 
 	}
 }

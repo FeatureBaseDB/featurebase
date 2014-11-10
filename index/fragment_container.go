@@ -287,7 +287,7 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 		loader := make(chan Command)
 		self.fragments[id] = f
 		go f.ServeFragment(loader)
-		//go f.Load(loader)
+		go f.Load(loader)
 	}
 
 }
