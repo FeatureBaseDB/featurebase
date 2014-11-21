@@ -2,6 +2,7 @@ package index
 
 import (
 	"math/rand"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -15,6 +16,12 @@ import (
 	"pilosa/util"
 	"sort"
 )
+
+var globalLock *sync.Mutex
+
+func init() {
+	globalLock = new(sync.Mutex)
+}
 
 type Pair struct {
 	Key, Count uint64
@@ -382,6 +389,7 @@ func (self *Brand) Persist() error {
 
 func (self *Brand) Load(requestChan chan Command, f *Fragment) {
 	log.Println("Brand Load")
+	time.Sleep(time.Duration(rand.Intn(32)) * time.Second) //trying to avoid mass cassandra hit
 	r, err := util.Open(self.getFileName())
 	if err != nil {
 		log.Println("NO Brand Init File:", self.getFileName())
@@ -393,7 +401,9 @@ func (self *Brand) Load(requestChan chan Command, f *Fragment) {
 		return
 		//log.Println("Bad mojo")
 	}
-	time.Sleep(time.Duration(rand.Intn(15)) * time.Second) //trying to avoid mass cassandra hit
+	globalLock.Lock()
+	defer globalLock.Unlock()
+	// probaly need to get a etcd lock too someday
 	for _, k := range keys {
 		request := NewLoadRequest(k)
 		requestChan <- request
