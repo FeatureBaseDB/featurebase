@@ -309,10 +309,13 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if results == nil {
-		log.Println("Empty results")
+		log.Println("Empty results:", pql)
+		http.Error(w, "Error encoding: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 	if err != nil {
 		http.Error(w, "Error running query: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	encoder := json.NewEncoder(w)
