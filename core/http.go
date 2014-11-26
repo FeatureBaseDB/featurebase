@@ -309,7 +309,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if results == nil {
-		log.Println("Empty results:", pql)
+		log.Println("Empty results:", database_name, pql)
 		http.Error(w, "Error encoding: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -636,7 +636,8 @@ func (self *WebService) streamer(writer func(map[string]interface{}) error) {
 func (self *WebService) HandleListenWS(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		err := recover()
-		spew.Dump(err)
+		out := spew.Sdump(err)
+		log.Println(out)
 	}()
 	ws, err := websocket.Upgrade(w, r, nil, 1024, 1024)
 	if _, ok := err.(websocket.HandshakeError); ok {

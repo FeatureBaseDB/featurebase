@@ -450,8 +450,8 @@ func (self *ProcessMapper) Run() {
 	for _, node := range flatten(response.Node) {
 		err := self.handlenode(node)
 		if err != nil {
-			spew.Dump(node)
-			log.Println(err)
+			out := spew.Sdump(node)
+			log.Println(err, out)
 		}
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"github.com/mitchellh/panicwrap"
 	"log"
 	"os"
 	"pilosa/core"
@@ -15,6 +16,16 @@ var (
 )
 
 func main() {
+	exitStatus, err := panicwrap.BasicWrap(panicHandler)
+	if err != nil {
+		// Something went wrong setting up the panic wrapper. Unlikely,
+		// but possible.
+		panic(err)
+	}
+
+	if exitStatus >= 0 {
+		os.Exit(exitStatus)
+	}
 	core.Build = Build
 
 	flag.Parse()
@@ -29,4 +40,11 @@ func main() {
 	cruncher := cruncher.NewCruncher()
 	cruncher.Run()
 	log.Println("STOP")
+}
+
+func panicHandler(output string) {
+	// output contains the full output (including stack traces) of the
+	// panic. Put it in a file or something.
+	log.Printf("The child panicked:\n\n%s\n", output)
+	os.Exit(1)
 }

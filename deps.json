@@ -64,6 +64,11 @@
         "version": "f9e07770bd9b5142de517b05a85ffbb42d1895da",
         "type": "git"
     },
+    "panicwrapper": {
+        "repo": "github.com/mitchellh/panicwrap",
+        "version": "master",
+        "type": "git"
+    },
     "rbtree": {
         "repo": "github.com/yasushi-saito/rbtree",
         "version": "571e2538414bf914c7e2909b61217b4e3e5508f4",

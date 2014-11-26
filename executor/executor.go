@@ -166,7 +166,8 @@ func (self *Executor) RunPQL(database_name string, pql string) (interface{}, err
 				}{final, q.Label, err}
 			}(query_list[i], result)
 			if err != nil {
-				spew.Dump(err)
+				out := spew.Sdump(err)
+				log.Println(out)
 			}
 		}
 		for z := 0; z < x; z++ {
