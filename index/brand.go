@@ -204,7 +204,7 @@ func (self *Brand) checkRank() {
 		self.Rank()
 	} else if self.rank_count > 0 {
 		last := time.Since(self.rank_time) * time.Second
-		if last > 60 {
+		if last > 60*5 {
 			self.Rank()
 		}
 	}
