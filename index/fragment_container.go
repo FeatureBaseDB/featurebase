@@ -345,7 +345,7 @@ func NewFragment(frag_id util.SUUID, db string, slice int, frame string) *Fragme
 	f := new(Fragment)
 	f.requestChan = make(chan Command, 64)
 	f.fragment_id = frag_id
-	f.cache = lru.New(20000)
+	f.cache = lru.New(50000)
 	f.impl = impl //NewGeneral(db, slice, NewMemoryStorage())
 	f.slice = slice
 	f.exit = make(chan *sync.WaitGroup)

@@ -32,7 +32,7 @@ func NewGeneral(db string, frame string, slice int, s Storage) *General {
 
 }
 func (self *General) Clear() bool {
-	self.bitmap_cache = lru.New(10000)
+	self.bitmap_cache = lru.New(50000)
 	self.bitmap_cache.OnEvicted = self.OnEvicted
 	return true
 }
@@ -44,7 +44,7 @@ func (self *General) Exists(bitmap_id uint64) bool {
 }
 func (self *General) Get(bitmap_id uint64) IBitmap {
 	bm, ok := self.bitmap_cache.Get(bitmap_id)
-	if ok {
+	if ok && bm != nil {
 		return bm.(*Bitmap)
 	}
 	bm, _ = self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
