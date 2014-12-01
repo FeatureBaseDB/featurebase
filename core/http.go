@@ -291,6 +291,11 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	_, bits := r.Form["bits"]
 
 	results, err := self.service.Executor.RunPQL(database_name, pql)
+	if err != nil {
+		log.Println("PQL Exec Error:", err.Error(), database_name, pql)
+		http.Error(w, "Error encoding: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	switch r := results.(type) { //a hack to handle empty sets
 	case []index.Pair:
 		if len(r) == 0 {
@@ -322,6 +327,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	err = encoder.Encode(results)
 	if err != nil {
 		http.Error(w, "Error encoding: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 }
@@ -432,6 +438,7 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 			util.SendTimer("executor_setbit", delta.Nanoseconds())
 
 			if err != nil {
+				log.Println("Error running set_bit", pql)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -444,8 +451,8 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		log.Println("Error encoding stats")
-		http.Error(w, "Error econding stats", http.StatusMethodNotAllowed)
+		log.Println("Error encoding set_bit", spew.Sdump(results))
+		http.Error(w, "Error econding set_bit", http.StatusMethodNotAllowed)
 		return
 	}
 
