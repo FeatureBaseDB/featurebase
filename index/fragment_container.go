@@ -345,7 +345,7 @@ func NewFragment(frag_id util.SUUID, db string, slice int, frame string) *Fragme
 	f := new(Fragment)
 	f.requestChan = make(chan Command, 64)
 	f.fragment_id = frag_id
-	f.cache = lru.New(10000)
+	f.cache = lru.New(20000)
 	f.impl = impl //NewGeneral(db, slice, NewMemoryStorage())
 	f.slice = slice
 	f.exit = make(chan *sync.WaitGroup)
@@ -355,7 +355,10 @@ func NewFragment(frag_id util.SUUID, db string, slice int, frame string) *Fragme
 
 func (self *Fragment) getBitmap(bitmap BitmapHandle) (IBitmap, bool) {
 	bm, ok := self.cache.Get(bitmap)
-	return bm.(IBitmap), ok
+	if ok && bm != nil {
+		return bm.(IBitmap), ok
+	}
+	return NewBitmap(), false //cache fail but return ting em
 }
 
 func (self *Fragment) exists(bitmap_id uint64) bool {

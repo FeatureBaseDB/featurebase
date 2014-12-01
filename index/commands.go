@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io/ioutil"
+	"log"
 	"time"
 )
 
@@ -62,7 +63,10 @@ func NewCount(bitmap_handle BitmapHandle) *CmdCount {
 }
 
 func (self *CmdCount) Execute(f *Fragment) Calculation {
-	bm, _ := f.getBitmap(self.bitmap)
+	bm, ok := f.getBitmap(self.bitmap)
+	if ok == false {
+		return 0
+	}
 	return BitCount(bm)
 }
 
@@ -133,8 +137,12 @@ func NewGetBytes(bh BitmapHandle) *CmdGetBytes {
 }
 
 func (self *CmdGetBytes) Execute(f *Fragment) Calculation {
-	bm, _ := f.getBitmap(self.bitmap)
+	bm, ok := f.getBitmap(self.bitmap)
 	//*Compress it
+	if !ok {
+		bm = NewBitmap()
+		log.Println("cache miss")
+	}
 	var b bytes.Buffer
 	w := gzip.NewWriter(&b)
 	w.Write(bm.ToBytes())
@@ -308,16 +316,18 @@ func (self *CmdTopFill) Execute(f *Fragment) Calculation {
 			a := f.NewHandle(v)
 			if self.args.Handle == 0 {
 				// return just the count
-				bm, _ := f.getBitmap(a)
-				if bm.Count() > 0 {
+				bm, ok := f.getBitmap(a)
+				if ok && bm.Count() > 0 {
 					result = append(result, Pair{v, bm.Count()})
 				}
 			} else {
 				res := f.intersect([]BitmapHandle{self.args.Handle, a})
-				bm, _ := f.getBitmap(res)
-				bc := BitCount(bm)
-				if bc > 0 {
-					result = append(result, Pair{v, bc})
+				bm, ok := f.getBitmap(res)
+				if ok {
+					bc := BitCount(bm)
+					if bc > 0 {
+						result = append(result, Pair{v, bc})
+					}
 				}
 			}
 		}
