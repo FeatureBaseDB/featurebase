@@ -372,8 +372,12 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 				}
 				atime, _ := time.Parse(shortForm, timestamp)
 
-				for _, id := range index.GetTimeIds(base_id, atime, quantum) {
+				for i, id := range index.GetTimeIds(base_id, atime, quantum) {
 					c <- id
+					if i > 10 {
+						log.Println("TO MANY TIMEIDS", base_id, atime, quantum)
+						break
+					}
 				}
 			}
 		} else {
@@ -384,6 +388,14 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 	}()
 
 	return c
+}
+
+type SBResult struct {
+	Bitmap_id  uint64
+	Frame      string
+	Filter     int
+	Profile_id uint64
+	Result     interface{}
 }
 
 func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
@@ -401,7 +413,12 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//[{ "db": "3", "frame":"brand.","profile_id": 122,"filter":0, "bitmap_id":123}]
-	var results []interface{}
+	var results []SBResult
+	if len(args) > 4096 {
+		log.Println("Request too large:", len(args))
+		http.Error(w, "Request To large", http.StatusBadRequest)
+		return
+	}
 	for _, obj := range args {
 		if obj["profile_id"] == nil {
 			http.Error(w, "Missing Profile", http.StatusBadRequest)
@@ -442,7 +459,8 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			results = append(results, result)
+			bundle := SBResult{bitmap_id, frame, filter, profile_id, result}
+			results = append(results, bundle)
 			//	results = append(results, db+" "+pql)
 		}
 
@@ -452,7 +470,7 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 	err = encoder.Encode(results)
 	if err != nil {
 		log.Println("Error encoding set_bit", spew.Sdump(results))
-		http.Error(w, "Error econding set_bit", http.StatusMethodNotAllowed)
+		http.Error(w, "Error econding set_bit", http.StatusInternalServerError)
 		return
 	}
 
