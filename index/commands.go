@@ -65,7 +65,7 @@ func NewCount(bitmap_handle BitmapHandle) *CmdCount {
 func (self *CmdCount) Execute(f *Fragment) Calculation {
 	bm, ok := f.getBitmap(self.bitmap)
 	if ok == false {
-		return 0
+		return uint64(0)
 	}
 	return BitCount(bm)
 }
