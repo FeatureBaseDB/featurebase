@@ -468,6 +468,15 @@ func (self *Fragment) processCommand(req Command) {
 	req.ResponseChannel() <- Result{answer, delta}
 }
 func (self *Fragment) ServeFragment(loadChan chan Command) {
+	ispanic := true
+	defer func() {
+		if r := recover(); r != nil {
+			if ispanic {
+				self.Persist()
+			}
+		}
+
+	}()
 	for {
 		select {
 		case req := <-self.requestChan:
@@ -481,6 +490,7 @@ func (self *Fragment) ServeFragment(loadChan chan Command) {
 			case wg := <-self.exit:
 				log.Println("Fragment Shutdown")
 				self.Persist()
+				ispanic = false
 				wg.Done()
 			}
 		}
