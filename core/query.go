@@ -23,7 +23,7 @@ func (self *Service) CountQueryStepHandler(msg *db.Message) {
 	//spew.Dump("COUNT QUERYSTEP")
 	qs := msg.Data.(query.CountQueryStep)
 	input := qs.Input
-	value, _ := self.Hold.Get(input, 10)
+	value, _ := self.Hold.Get(input, util.TimeOut)
 	var bh index.BitmapHandle
 	switch val := value.(type) {
 	case index.BitmapHandle:
@@ -46,7 +46,7 @@ func (self *Service) UnionQueryStepHandler(msg *db.Message) {
 	var handles []index.BitmapHandle
 	// create a list of bitmap handles
 	for _, input := range qs.Inputs {
-		value, _ := self.Hold.Get(input, 10)
+		value, _ := self.Hold.Get(input, util.TimeOut)
 		switch val := value.(type) {
 		case index.BitmapHandle:
 			handles = append(handles, val)
@@ -81,7 +81,7 @@ func (self *Service) IntersectQueryStepHandler(msg *db.Message) {
 	var handles []index.BitmapHandle
 	// create a list of bitmap handles
 	for _, input := range qs.Inputs {
-		value, _ := self.Hold.Get(input, 10)
+		value, _ := self.Hold.Get(input, util.TimeOut)
 		switch val := value.(type) {
 		case index.BitmapHandle:
 			handles = append(handles, val)
@@ -116,7 +116,7 @@ func (self *Service) DifferenceQueryStepHandler(msg *db.Message) {
 	var handles []index.BitmapHandle
 	// create a list of bitmap handles
 	for _, input := range qs.Inputs {
-		value, _ := self.Hold.Get(input, 10)
+		value, _ := self.Hold.Get(input, util.TimeOut)
 		switch val := value.(type) {
 		case index.BitmapHandle:
 			handles = append(handles, val)
@@ -153,7 +153,7 @@ func (self *Service) StashQueryStepHandler(msg *db.Message) {
 
 	for _, input := range qs.Inputs {
 		go func(id *util.GUID, part chan interface{}) {
-			value, _ := self.Hold.Get(id, 10)
+			value, _ := self.Hold.Get(id, util.TimeOut)
 			part <- value
 		}(input, part)
 	}
@@ -200,7 +200,7 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 
 	for _, input := range qs.Inputs {
 		go func(id *util.GUID, part chan interface{}) {
-			value, _ := self.Hold.Get(id, 10)
+			value, _ := self.Hold.Get(id, util.TimeOut)
 			part <- value
 		}(input, part)
 	}

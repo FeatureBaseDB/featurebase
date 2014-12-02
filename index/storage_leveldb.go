@@ -142,34 +142,30 @@ func (self *LevelDBStorage) EndBatch() {
 
 }
 
-func (self *LevelDBStorage) Store(id int64, db string, frame string, slice int, filter uint64, bitmap *Bitmap) error {
+func (self *LevelDBStorage) Store(id uint64, db string, frame string, slice int, filter uint64, bitmap *Bitmap) error {
 	self.BeginBatch()
 	for i := bitmap.Min(); !i.Limit(); i = i.Next() {
 		var chunk = i.Item()
 		for idx, block := range chunk.Value.Block {
 			block_index := int32(idx)
-			iblock := int64(block)
-			if iblock != 0 {
-				self.StoreBlock(id, db, frame, slice, filter, int64(chunk.Key), block_index, iblock)
+			if block != 0 {
+				self.StoreBlock(id, db, frame, slice, filter, chunk.Key, block_index, block)
 			}
 		}
 	}
-	cnt := int64(BitCount(bitmap))
+	cnt := BitCount(bitmap)
 
-	var dumb = COUNTERMASK
-	COUNTER_KEY := int64(dumb)
-
-	self.StoreBlock(id, db, frame, slice, filter, COUNTER_KEY, 0, cnt)
+	self.StoreBlock(id, db, frame, slice, filter, COUNTERMASK, 0, cnt)
 	self.EndBatch()
 	return nil
 }
 
-func (self *LevelDBStorage) StoreBlock(id int64, db string, frame string, slice int, filter uint64, chunk int64, block_index int32, block int64) error {
+func (self *LevelDBStorage) StoreBlock(id uint64, db string, frame string, slice int, filter uint64, chunk uint64, block_index int32, block uint64) error {
 	if self.batch == nil {
 		panic("NIL BATCH")
 	}
 	start := time.Now()
-	self.batch.Put(encodeKey(uint64(id), uint64(chunk), uint8(block_index)), encodeValue(uint64(block), filter))
+	self.batch.Put(encodeKey(id, chunk, uint8(block_index)), encodeValue(block, filter))
 	delta := time.Since(start)
 	util.SendTimer("leveldb_storage_StoreBlock", delta.Nanoseconds())
 	return nil

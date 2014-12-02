@@ -67,7 +67,7 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 	var dumb = COUNTERMASK
 	last_key := int64(dumb)
 	marker := int64(dumb)
-	var id = int64(bitmap_id)
+	var id = util.Uint64ToInt64(bitmap_id)
 	start := time.Now()
 	var (
 		chunk            *Chunk
@@ -141,29 +141,28 @@ func (self *CassandraStorage) EndBatch() {
 
 }
 
-func (self *CassandraStorage) Store(id int64, db string, frame string, slice int, filter uint64, bitmap *Bitmap) error {
+func (self *CassandraStorage) Store(id uint64, db string, frame string, slice int, filter uint64, bitmap *Bitmap) error {
 	self.BeginBatch()
 	for i := bitmap.Min(); !i.Limit(); i = i.Next() {
 		var chunk = i.Item()
 		for idx, block := range chunk.Value.Block {
 			block_index := int32(idx)
-			iblock := int64(block)
-			if iblock != 0 {
-				self.StoreBlock(id, db, frame, slice, filter, int64(chunk.Key), block_index, iblock)
+			if block != 0 {
+				self.StoreBlock(id, db, frame, slice, filter, chunk.Key, block_index, block)
 			}
 		}
 	}
-	cnt := int64(BitCount(bitmap))
-
-	var dumb = COUNTERMASK
-	COUNTER_KEY := int64(dumb)
-
-	self.StoreBlock(id, db, frame, slice, filter, COUNTER_KEY, 0, cnt)
+	cnt := BitCount(bitmap)
+	self.StoreBlock(id, db, frame, slice, filter, COUNTERMASK, 0, cnt)
 	self.EndBatch()
 	return nil
 }
 
-func (self *CassandraStorage) StoreBlock(id int64, db string, frame string, slice int, filter uint64, chunk int64, block_index int32, block int64) error {
+func (self *CassandraStorage) StoreBlock(bid uint64, db string, frame string, slice int, filter uint64, bchunk uint64, block_index int32, bblock uint64) error {
+	id := util.Uint64ToInt64(bid) //these fucntions ignore overflow
+	block := util.Uint64ToInt64(bblock)
+	chunk := util.Uint64ToInt64(bchunk)
+
 	if self.batch == nil {
 		self.BeginBatch()
 	}

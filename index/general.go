@@ -58,8 +58,8 @@ func (self *General) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) boo
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
 		self.storage.BeginBatch()
-		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
-		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, COUNTER_KEY, 0, int64(bm.Count()))
+		self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val)
+		self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, COUNTERMASK, 0, bm.Count())
 		self.storage.EndBatch()
 
 	}
@@ -73,7 +73,7 @@ func (self *General) TopN(b IBitmap, n int, categories []uint64) []Pair {
 func (self *General) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
 	//oldbm:=self.Get(bitmap_id)
 	//nbm = Union(oldbm, bm)
-	self.storage.Store(int64(bitmap_id), self.db, self.frame, self.slice, filter, bm.(*Bitmap))
+	self.storage.Store(bitmap_id, self.db, self.frame, self.slice, filter, bm.(*Bitmap))
 	self.bitmap_cache.Add(bitmap_id, bm)
 	self.keys[bitmap_id] = 0
 }

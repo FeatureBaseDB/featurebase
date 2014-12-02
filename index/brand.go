@@ -125,8 +125,8 @@ func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool 
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
 		self.storage.BeginBatch()
-		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, int64(address.ChunkKey), int32(address.BlockIndex), int64(val))
-		self.storage.StoreBlock(int64(bitmap_id), self.db, self.frame, self.slice, filter, COUNTER_KEY, 0, int64(bm.Count()))
+		self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val)
+		self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, COUNTERMASK, 0, bm.Count())
 		self.storage.EndBatch()
 		self.rank_count++
 	}
@@ -196,7 +196,7 @@ func (self *Brand) Stats() interface{} {
 	return stats
 }
 func (self *Brand) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
-	self.storage.Store(int64(bitmap_id), self.db, self.frame, self.slice, filter, bm.(*Bitmap))
+	self.storage.Store(bitmap_id, self.db, self.frame, self.slice, filter, bm.(*Bitmap))
 	self.cache_it(bm, bitmap_id, filter)
 }
 func (self *Brand) checkRank() {
