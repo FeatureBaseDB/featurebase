@@ -117,6 +117,16 @@ func (self *Cluster) GetDatabases() map[string]*Database {
 
 }
 
+func (self *Cluster) IsValidDatabase(dbname string) bool {
+	for name, _ := range self.GetDatabases() {
+		if name == dbname {
+			return true
+		}
+
+	}
+	return false
+}
+
 /////////// DATABASES ////////////////////////////////////////////////////////////////////
 
 // A database is a collection of all the frames within a given profile space

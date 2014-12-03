@@ -97,7 +97,12 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 		msg.Data = qs
 		switch step := qs.(type) {
 		case query.PortableQueryStep:
-			self.service.Transport.Send(msg, step.GetLocation().ProcessId)
+			loc := step.GetLocation()
+			if loc != nil {
+				self.service.Transport.Send(msg, loc.ProcessId)
+			} else {
+				log.Println("Problem with querystep(nil location)", spew.Sdump(step))
+			}
 		}
 	}
 	return nil

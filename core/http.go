@@ -283,6 +283,10 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Provide a database (db)", http.StatusNotFound)
 		return
 	}
+	if !self.service.Cluster.IsValidDatabase(database_name) {
+		http.Error(w, "Unknown Database:"+database_name, http.StatusNotFound)
+		return
+	}
 	pql := r.Form.Get("pql")
 	if pql == "" {
 		http.Error(w, "Provide a valid query string (pql)", http.StatusNotFound)
