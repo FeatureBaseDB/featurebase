@@ -473,8 +473,9 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		log.Println("Error encoding set_bit", spew.Sdump(results))
-		http.Error(w, "Error econding set_bit", http.StatusInternalServerError)
+		log.Println("JSON SetBit ERROR:", err)
+		//log.Println("Error encoding set_bit", spew.Sdump(results))
+		//http.Error(w, "Error econding set_bit", http.StatusInternalServerError)
 		return
 	}
 
