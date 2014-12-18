@@ -31,7 +31,7 @@ func init() {
 	cluster.Keyspace = keyspace
 	cluster.Consistency = gocql.One
 	cluster.Timeout = 5 * time.Second
-	cluster.RetryPolicy = gocql.RetryPolicy{NumRetries: 10}
+	cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: 10}
 }
 
 func BuildSchema() {

@@ -21,12 +21,12 @@
     },
     "gocql": {
         "repo": "github.com/gocql/gocql",
-        "version": "f09085c7ba26b10decf01d8aaa5a7022720642ca",
+        "version": "fbad3bab5a1044b1eeb586d79e5f06df39861e2a",
         "type": "git"
     },
     "goleveldb": {
         "repo": "github.com/syndtr/goleveldb/leveldb",
-        "version": "ff3719c6816e2cd194f05058452d660608e178ac",
+        "version": "63c9e642efad852f49e20a6f90194cae112fd2ac",
         "type": "git"
     },
     "google-crypto": {
