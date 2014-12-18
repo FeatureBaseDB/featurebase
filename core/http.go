@@ -330,7 +330,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		http.Error(w, "Error encoding: "+err.Error(), http.StatusInternalServerError)
+		log.Println("Encode Error :", database_name, pql, err.Error())
 		return
 	}
 
@@ -459,7 +459,7 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 			util.SendTimer("executor_setbit", delta.Nanoseconds())
 
 			if err != nil {
-				log.Println("Error running set_bit", pql)
+				log.Println("Error running set_bit", db, pql)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}

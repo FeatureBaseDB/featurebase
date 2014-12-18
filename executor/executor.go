@@ -1,7 +1,6 @@
 package executor
 
 import (
-	"fmt"
 	"log"
 	"pilosa/config"
 	"pilosa/core"
@@ -53,7 +52,8 @@ func (self *Executor) NewJob(job *db.Message) {
 	//	case query.MaskQueryStep:
 	//		self.service.MaskQueryStepHandler(job)
 	default:
-		fmt.Println("unknown")
+		log.Println("unknown")
+		log.Println(spew.Sdump(job.Data))
 	}
 }
 
