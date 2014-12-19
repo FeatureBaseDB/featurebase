@@ -71,13 +71,15 @@ func (self *connection) Shutdown() {
 
 }
 func (self *connection) serviceConnection() {
+	var host_string string
 	if self.conn == nil {
 		process, err := self.transport.service.ProcessMap.GetProcess(self.process)
 		if err != nil {
 			log.Println("transport/tcp: error getting process, retrying in 2 seconds... ", self.process, err)
 			return
 		}
-		host_string := fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
+		host_string = fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
+		log.Println("Connecting:", host_string)
 		conn, err := net.Dial("tcp", host_string)
 		if err != nil {
 			log.Println("transport/tcp: error dialing: ", host_string, " Retrying in 2 seconds...")
@@ -98,7 +100,7 @@ func (self *connection) serviceConnection() {
 			var mess *db.Message
 			err := decoder.Decode(&mess)
 			if err != nil {
-				log.Println("transport/tcp: error decoding message: ", err.Error())
+				log.Println("transport/tcp: error decoding message: ", host_string, err.Error())
 				self.exit <- 1
 				wg.Done()
 				return
@@ -106,13 +108,14 @@ func (self *connection) serviceConnection() {
 			self.inbox <- mess
 		}
 	}()
-	for {
+	breakout := true
+	for breakout {
 		select {
 		case message := <-self.outbox:
 			err := encoder.Encode(message)
 			if err != nil {
-				log.Println("Connection Outbox", err.Error())
-				break
+				log.Println("Sending to ", host_string, err.Error())
+				breakout = false
 			}
 		case message := <-self.inbox:
 			identifier, ok := message.Data.(GUID)
@@ -124,7 +127,7 @@ func (self *connection) serviceConnection() {
 				self.transport.inbox <- message
 			}
 		case <-self.exit:
-			break
+			breakout = false
 		}
 	}
 	self.conn.Close()
