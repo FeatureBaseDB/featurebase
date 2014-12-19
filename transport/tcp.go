@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"bytes"
 	"encoding/gob"
 	"fmt"
 	"log"
@@ -10,23 +9,18 @@ import (
 	"pilosa/core"
 	"pilosa/db"
 	. "pilosa/util"
-	"sync"
 
 	"time"
 
 	notify "github.com/bitly/go-notify"
-	"github.com/davecgh/go-spew/spew"
 )
 
 type connection struct {
 	transport *TcpTransport
 	inbox     chan *db.Message
 	outbox    chan *db.Message
-	conn      net.Conn
+	conn      *net.Conn
 	process   *GUID
-	id        int
-	terminate bool
-	exit      chan int
 }
 
 type newconnection struct {
@@ -38,100 +32,70 @@ func init() {
 	gob.Register(GUID{})
 }
 
-func newConnection(transport *TcpTransport, conn net.Conn, proc *GUID) *connection {
-	p := new(connection)
-	p.transport = transport
-	p.outbox = make(chan *db.Message, 100)
-	p.inbox = make(chan *db.Message, 100)
-	p.conn = conn
-	p.process = proc
-	p.exit = make(chan int)
-	return p
-}
-
 func (self *connection) manage() {
+BeginManageConnection:
 	for {
-		self.exit = make(chan int)
-		self.serviceConnection()
-		close(self.exit)
-		time.Sleep(2 * time.Second)
-		self.conn = nil
-		if self.terminate {
-			break
+		if self.conn == nil {
+			process, err := self.transport.service.ProcessMap.GetProcess(self.process)
+			if err != nil {
+				log.Println("transport/tcp: error getting process, retrying in 2 seconds... ", self.process, err)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			host_string := fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
+			conn, err := net.Dial("tcp", host_string)
+			if err != nil {
+				log.Println("transport/tcp: error dialing: ", host_string, " Retrying in 2 seconds...")
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			self.conn = &conn
+			go func() {
+				self.outbox <- &db.Message{self.transport.service.Id}
+			}()
 		}
-
-	}
-}
-
-func (self *connection) Shutdown() {
-	self.terminate = true
-	if self.conn != nil {
-		self.conn.Close()
-	}
-
-}
-func (self *connection) serviceConnection() {
-	var host_string string
-	if self.conn == nil {
-		process, err := self.transport.service.ProcessMap.GetProcess(self.process)
-		if err != nil {
-			log.Println("transport/tcp: error getting process, retrying in 2 seconds... ", self.process, err)
-			return
-		}
-		host_string = fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
-		log.Println("Connecting:", host_string)
-		conn, err := net.Dial("tcp", host_string)
-		if err != nil {
-			log.Println("transport/tcp: error dialing: ", host_string, " Retrying in 2 seconds...")
-			return
-		}
-		self.conn = conn
+		encoder := gob.NewEncoder(*self.conn)
+		decoder := gob.NewDecoder(*self.conn)
+		var exit = make(chan int)
 		go func() {
-			//register on server
-			self.outbox <- &db.Message{self.transport.service.Id}
+			for {
+				var mess *db.Message
+				err := decoder.Decode(&mess)
+				if err != nil {
+					log.Println("transport/tcp: error decoding message: ", err.Error())
+					exit <- 1
+					return
+				}
+				self.inbox <- mess
+			}
 		}()
-	}
-	encoder := gob.NewEncoder(self.conn)
-	decoder := gob.NewDecoder(self.conn)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
 		for {
-			var mess *db.Message
-			err := decoder.Decode(&mess)
-			if err != nil {
-				log.Println("transport/tcp: error decoding message: ", host_string, err.Error())
-				self.exit <- 1
-				wg.Done()
-				return
+			select {
+			case message := <-self.outbox:
+				err := encoder.Encode(message)
+				if err != nil {
+					log.Println(err.Error())
+					return
+				}
+			case message := <-self.inbox:
+				identifier, ok := message.Data.(GUID)
+				if ok {
+					// message is connection registration; bypass inbox and register
+					self.process = &identifier
+					self.transport.reg <- &newconnection{&identifier, self}
+				} else {
+					self.transport.inbox <- message
+				}
+			case <-exit:
+				if self.process != nil {
+					self.conn = nil
+					continue BeginManageConnection
+				} else {
+					return
+				}
 			}
-			self.inbox <- mess
-		}
-	}()
-	breakout := true
-	for breakout {
-		select {
-		case message := <-self.outbox:
-			err := encoder.Encode(message)
-			if err != nil {
-				log.Println("Sending to ", host_string, err.Error())
-				breakout = false
-			}
-		case message := <-self.inbox:
-			identifier, ok := message.Data.(GUID)
-			if ok {
-				// message is connection registration; bypass inbox and register
-				self.process = &identifier
-				self.transport.reg <- &newconnection{&identifier, self}
-			} else {
-				self.transport.inbox <- message
-			}
-		case <-self.exit:
-			breakout = false
 		}
 	}
-	self.conn.Close()
-	wg.Wait()
 }
 
 type TcpTransport struct {
@@ -148,19 +112,15 @@ func (self *TcpTransport) Run() {
 	go self.listen()
 	for {
 		select {
-		case env := <-self.outbox: //transport outbox
+		case env := <-self.outbox:
 			con, ok := self.connections[*(env.Host)]
 			if !ok {
-				con = newConnection(self, nil, env.Host)
+				con = &connection{self, make(chan *db.Message, 100), make(chan *db.Message, 100), nil, env.Host}
 				go con.manage()
 				self.connections[*env.Host] = con
 			}
 			con.outbox <- env.Message
 		case nc := <-self.reg:
-			before, present := self.connections[*nc.id]
-			if present {
-				before.Shutdown()
-			}
 			self.connections[*nc.id] = nc.connection
 		}
 	}
@@ -179,42 +139,23 @@ func (self *TcpTransport) listen() {
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		go self.manage(conn)
+		go self.manage(&conn)
 	}
 }
 
-func (self *TcpTransport) manage(c net.Conn) {
-	con := newConnection(self, c, nil)
+func (self *TcpTransport) manage(conn *net.Conn) {
+	con := &connection{self, make(chan *db.Message, 1024), make(chan *db.Message, 1024), conn, nil}
 	con.manage()
 }
 
 func (self *TcpTransport) Close() {
 	log.Println("Shutting down TCP transport")
 }
-func adjust(in *db.Message) *db.Message {
-	log.Println(spew.Sdump(in))
-	var network bytes.Buffer        // Stand-in for a network connection
-	enc := gob.NewEncoder(&network) // Will write to network.
-	dec := gob.NewDecoder(&network) // Will read from network.
-	err := enc.Encode(in)
-	var out db.Message
-	err = dec.Decode(&out)
-	if err != nil {
-		log.Println(err)
-	}
-	return &out
-
-}
 
 func (self *TcpTransport) Send(message *db.Message, host *GUID) {
-	//I think I can avoid the outbox and go directly to the inbox if the transport process_id == GUID
-	if !Equal(host, self.service.Id) {
-		envelope := db.Envelope{message, host}
-		notify.Post("outbox", &envelope)
-		self.outbox <- envelope
-	} else {
-		self.inbox <- adjust(message)
-	}
+	envelope := db.Envelope{message, host}
+	notify.Post("outbox", &envelope)
+	self.outbox <- envelope
 }
 
 func (self *TcpTransport) Receive() *db.Message {
