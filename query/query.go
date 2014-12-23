@@ -69,12 +69,35 @@ func QueryPlanForQuery(database *db.Database, query *Query, destination *db.Loca
 	return query_plan, nil
 }
 
-func TokensToString(tokens []Token) string {
-	var str []string
+func TokensToFilterStrings(tokens []Token) (string, []string) {
+	var whole []string
+	var filter string
+	var filters []string
+	var open_parens int
+	var in_square_brackets bool
+	var last_slice = 0
+
+	open_parens = -1
+	in_square_brackets = false
 	for i, _ := range tokens {
-		str = append(str, tokens[i].Text)
+		whole = append(whole, tokens[i].Text)
+		if tokens[i].Type == TYPE_FUNC {
+			last_slice = i
+		} else if tokens[i].Type == TYPE_LP {
+			open_parens += 1
+		} else if tokens[i].Type == TYPE_RP {
+			open_parens -= 1
+			if open_parens == 0 {
+				if !in_square_brackets {
+					filter = strings.Join(whole[2:], "")
+				} else {
+					filters = append(filters, strings.Join(whole[last_slice:], ""))
+				}
+				last_slice = i
+			}
+		} else if open_parens == 0 && tokens[i].Type == TYPE_LB {
+			in_square_brackets = true
+		}
 	}
-	// for now, we're just using this function to pull the filter out of the outer function "outerfunc(filter)"
-	str = str[2 : len(str)-1]
-	return strings.Join(str, "")
+	return filter, filters
 }

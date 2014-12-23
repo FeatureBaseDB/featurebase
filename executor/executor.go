@@ -137,8 +137,8 @@ func (self *Executor) RunPQL(database_name string, pql string) (interface{}, err
 	} else { //want to refactor this down to just RunPlugin(tokens)
 		plugins_dir := config.GetString("plugins")
 		plugins_file := plugins_dir + "/" + outer_token + ".js"
-		filter := query.TokensToString(tokens)
-		query_list := GetMacro(plugins_file, filter).(query.PqlList)
+		filter, filters := query.TokensToFilterStrings(tokens)
+		query_list := GetPlugin(plugins_file, filter, filters).(query.PqlList)
 
 		for i, _ := range query_list {
 			qry, err := query.QueryForPQL(query_list[i].PQL)

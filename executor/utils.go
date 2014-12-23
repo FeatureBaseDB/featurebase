@@ -1,14 +1,16 @@
 package executor
 
 import (
+	"bytes"
 	"io/ioutil"
 	"pilosa/query"
+	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/robertkrimen/otto"
 )
 
-func GetMacro(file_name string, filter string) interface{} {
+func GetPlugin(file_name string, filter string, filters []string) interface{} {
 
 	file_data, err := ioutil.ReadFile(file_name)
 	if err != nil {
@@ -16,7 +18,17 @@ func GetMacro(file_name string, filter string) interface{} {
 	}
 	s := string(file_data[:])
 
-	js := "query_list = (" + s + ")('" + filter + "');"
+	// convert the list of filters in to a string array
+	var buffer bytes.Buffer
+	if len(filters) > 0 {
+		buffer.WriteString("['")
+		buffer.WriteString(strings.Join(filters, "','"))
+		buffer.WriteString("']")
+	} else {
+		buffer.WriteString("[]")
+	}
+
+	js := "query_list = (" + s + ")('" + filter + "', " + buffer.String() + ");"
 
 	Otto := otto.New()
 	Otto.Run(js)
