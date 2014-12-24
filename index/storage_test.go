@@ -48,7 +48,7 @@ func TestStorage(t *testing.T) {
 				SetBit(bm, i)
 			}
 			fmt.Println("STORE")
-			storage.Store(int64(bitmap_id), db, frame, slice, uint64(filter), bm.(*Bitmap))
+			storage.Store(uint64(bitmap_id), db, frame, slice, uint64(filter), bm.(*Bitmap))
 			fmt.Println("FETCH")
 			bm2, _ := storage.Fetch(bitmap_id, db, frame, slice)
 			So(BitCount(bm), ShouldEqual, BitCount(bm2))
