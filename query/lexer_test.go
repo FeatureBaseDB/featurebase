@@ -186,5 +186,27 @@ func TestLexer(t *testing.T) {
 			Token{"]", TYPE_RB},
 			Token{")", TYPE_RP},
 		})
+
+		tokens, err = Lex("plugin(get(10, general), [get(11, general)])")
+		So(tokens, ShouldResemble, []Token{
+			Token{"plugin", TYPE_FUNC},
+			Token{"(", TYPE_LP},
+			Token{"get", TYPE_FUNC},
+			Token{"(", TYPE_LP},
+			Token{"10", TYPE_VALUE},
+			Token{",", TYPE_COMMA},
+			Token{"general", TYPE_VALUE},
+			Token{")", TYPE_RP},
+			Token{",", TYPE_COMMA},
+			Token{"[", TYPE_LB},
+			Token{"get", TYPE_FUNC},
+			Token{"(", TYPE_LP},
+			Token{"11", TYPE_VALUE},
+			Token{",", TYPE_COMMA},
+			Token{"general", TYPE_VALUE},
+			Token{")", TYPE_RP},
+			Token{"]", TYPE_RB},
+			Token{")", TYPE_RP},
+		})
 	})
 }

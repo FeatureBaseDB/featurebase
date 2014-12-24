@@ -249,29 +249,60 @@ ArgLoop:
 			}
 			query.Args[keyword] = value
 		case TYPE_LB:
-			query.Args["ids"] = make([]uint64, 0)
-			for {
-				token = self.next()
-				if token == nil {
-					return nil, fmt.Errorf("Unclosed list!")
-				}
-				switch token.Type {
-				case TYPE_COMMA:
-					break
-				case TYPE_VALUE:
-					i, err := strconv.ParseUint(token.Text, 10, 64)
-					if err != nil {
-						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+			peeked := self.peek()
+			// we currently support 2 types of values in square brackets:
+			//    ids      <- list of integers (TYPE_VALUE)
+			//    filters  <- list of queries (TYPE_FUNC)
+			switch peeked.Type {
+			case TYPE_VALUE:
+				query.Args["ids"] = make([]uint64, 0)
+				for {
+					token = self.next()
+					if token == nil {
+						return nil, fmt.Errorf("Unclosed list!")
 					}
-					query.Args["ids"] = append(query.Args["ids"].([]uint64), i)
-				case TYPE_RB:
-					continue ArgLoop
-				default:
-					return nil, fmt.Errorf("Unexpected token! (%v)", token)
+					switch token.Type {
+					case TYPE_COMMA:
+						break
+					case TYPE_VALUE:
+						i, err := strconv.ParseUint(token.Text, 10, 64)
+						if err != nil {
+							return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+						}
+						query.Args["ids"] = append(query.Args["ids"].([]uint64), i)
+					case TYPE_RB:
+						continue ArgLoop
+					default:
+						return nil, fmt.Errorf("Unexpected token! (%v)", token)
+					}
+				}
+			case TYPE_FUNC:
+				query.Args["filters"] = make([]Query, 0)
+				for {
+					token = self.next()
+					if token == nil {
+						return nil, fmt.Errorf("Unclosed list!")
+					}
+					switch token.Type {
+					case TYPE_COMMA:
+						break
+					case TYPE_FUNC:
+						self.backup()
+						filterquery, err := self.Parse()
+						if err != nil {
+							return nil, err
+						}
+						query.Args["filters"] = append(query.Args["filters"].([]Query), *filterquery)
+					case TYPE_RB:
+						continue ArgLoop
+					default:
+						return nil, fmt.Errorf("Unexpected token! (%v)", token)
+					}
 				}
 			}
+		case TYPE_RB:
+			//
 		default:
-
 			log.Println(spew.Sdump("unexpected", token))
 			return nil, errors.New("BAD TOKEN")
 		}

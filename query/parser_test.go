@@ -79,6 +79,18 @@ func TestQueryParser(t *testing.T) {
 		So(query.Subqueries[0].Operation, ShouldEqual, "get")
 		So(query.Subqueries[0].Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general"})
 	})
+	Convey("Bracketed Lists", t, func() {
+		tokens, err := Lex("plugin(get(99), [get(10), get(11)])")
+		//tokens, err := Lex("plugin(get(99), [1,3])")
+		So(err, ShouldBeNil)
+
+		query, err := Parse(tokens)
+		So(err, ShouldBeNil)
+
+		spew.Dump("*********************************************")
+		spew.Dump(query)
+		spew.Dump("*********************************************")
+	})
 	Convey("Lists", t, func() {
 		tokens, err := Lex("wat(50)")
 		_, err = Parse(tokens)

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -148,25 +149,49 @@ func stateLB(lexer *Lexer) statefn {
 	lexer.acceptUntil("[", true)
 	lexer.next()
 	lexer.emit(TYPE_LB)
-	for {
-		r, err := lexer.acceptUntil(",]", true)
-		if err != nil {
-			return stateError(errors.New("Unclosed bracket!"))
+
+	peeked := lexer.peek()
+	if peeked == rune(']') {
+		lexer.next()
+		lexer.emit(TYPE_RB)
+		return stateArgs
+	} else if unicode.IsDigit(peeked) {
+		for {
+			r, err := lexer.acceptUntil(",]", true)
+			if err != nil {
+				return stateError(errors.New("Unclosed bracket!"))
+			}
+			lexer.emit(TYPE_VALUE)
+			if r == ',' {
+				lexer.next()
+				lexer.emit(TYPE_COMMA)
+			} else {
+				lexer.next()
+				lexer.emit(TYPE_RB)
+				return stateArgs
+			}
 		}
-		lexer.emit(TYPE_VALUE)
-		if r == ',' {
-			lexer.next()
-			lexer.emit(TYPE_COMMA)
-		} else {
-			lexer.next()
-			lexer.emit(TYPE_RB)
-			return stateArgs
-		}
+	} else {
+		return stateArgs
+	}
+}
+
+func stateRB(lexer *Lexer) statefn {
+	lexer.pos += 1
+	lexer.emit(TYPE_RB)
+
+	peeked := lexer.peek()
+	if peeked == rune(',') {
+		return stateRPComma
+	} else if peeked == rune(')') {
+		return stateRP
+	} else {
+		return stateEOF
 	}
 }
 
 func stateArgs(lexer *Lexer) statefn {
-	r, err := lexer.acceptUntil("(),=[", false)
+	r, err := lexer.acceptUntil("(),=[]", false)
 	if err != nil {
 		return stateError(err)
 	}
@@ -181,6 +206,8 @@ func stateArgs(lexer *Lexer) statefn {
 		return stateKeyword
 	case '[':
 		return stateLB
+	case ']':
+		return stateRB
 	default:
 		return stateError(errors.New("Expecting arguments!"))
 	}
@@ -240,6 +267,8 @@ func stateRP(lexer *Lexer) statefn {
 		return stateRPComma
 	} else if peeked == rune(')') {
 		return stateRP
+	} else if peeked == rune(']') {
+		return stateRB
 	} else {
 		return stateEOF
 	}
