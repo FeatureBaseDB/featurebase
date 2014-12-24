@@ -40,8 +40,8 @@ func init() {
 func newConnection(transport *TcpTransport, conn net.Conn, proc *GUID) *connection {
 	p := new(connection)
 	p.transport = transport
-	p.outbox = make(chan *db.Message, 100)
-	p.inbox = make(chan *db.Message, 100)
+	p.outbox = make(chan *db.Message, 2048)
+	p.inbox = make(chan *db.Message, 2048)
 	p.conn = conn
 	p.process = proc
 	p.exit = make(chan int)
