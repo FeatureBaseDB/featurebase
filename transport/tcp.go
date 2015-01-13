@@ -149,8 +149,8 @@ func NewTcpTransport(service *core.Service) *TcpTransport {
 	var network bytes.Buffer // Stand-in for a network connection
 	p.service = service
 	p.port = config.GetInt("port_tcp")
-	p.inbox = make(chan *db.Message, 100)
-	p.outbox = make(chan db.Envelope, 100)
+	p.inbox = make(chan *db.Message, 2048)
+	p.outbox = make(chan db.Envelope, 2048)
 	p.connections = make(map[GUID]*connection)
 	p.reg = make(chan *newconnection)
 	p.enc = gob.NewEncoder(&network) // Will write to network.
