@@ -57,10 +57,11 @@ func (self *General) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) boo
 	change, chunk, address := SetBit(bm, bit_pos)
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
-		self.storage.BeginBatch()
-		self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val)
-		self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, COUNTERMASK, 0, bm.Count())
-		self.storage.EndBatch()
+		//self.storage.BeginBatch()
+		//self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val)
+		//self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, COUNTERMASK, 0, bm.Count())
+		//self.storage.EndBatch()
+		self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
 
 	}
 	return change

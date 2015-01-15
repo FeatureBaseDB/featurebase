@@ -9,6 +9,26 @@ import (
 	//	. "github.com/smartystreets/goconvey/convey"
 )
 
+var (
+	size      int
+	membrand  *Brand
+	cassbrand *Brand
+)
+
+func init() {
+	println("GO")
+	size = 1000
+
+	membrand = NewBrand("db", "frame", 0, NewMemoryStorage(), size, size, 0)
+	for i := uint64(0); i < uint64(size); i++ {
+		membrand.SetBit(i, 0, 1)
+	}
+	cassbrand = NewBrand("db", "frame", 0, NewCassStorage(), size, size, 0)
+	for i := uint64(0); i < uint64(size); i++ {
+		cassbrand.SetBit(i, 0, 1)
+	}
+}
+
 /*
 func TestBitmaps(t *testing.T) {
 	Convey("function BitCount should equal method bm.Count()", t, func() {
@@ -118,18 +138,20 @@ func TestBitmaps(t *testing.T) {
 
 }
 */
-func benchmark(b *testing.B, size int, fill int) {
-	x := make(map[uint64]IBitmap)
-	for i := uint64(0); i < uint64(size); i++ {
-		x[i] = CreateRBBitmap()
-	}
+func benchmark_(b *testing.B, size int, fill int, brand *Brand) {
+
+	println(b.N)
 	for i := 0; i < b.N; i++ {
 		bid := rand.Int() % size
-		SetBit(x[uint64(bid)], uint64(i%fill))
+		profile := uint64(i % fill)
+		brand.SetBit(uint64(bid), profile, 1)
 	}
 }
-func BenchmarkSetBitL2(b *testing.B) {
-	benchmark(b, 50000, 1024*64)
+func BenchmarkBrandMemSetBitL2(b *testing.B) {
+	benchmark_(b, size, 1024*64, membrand)
+}
+func BenchmarkBrandCasSetBitL2(b *testing.B) {
+	benchmark_(b, size, 1024*64, cassbrand)
 }
 
 /*

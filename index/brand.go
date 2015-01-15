@@ -88,7 +88,10 @@ func (self *Brand) Get(bitmap_id uint64) IBitmap {
 }
 
 func (self *Brand) GetFilter(bitmap_id, filter uint64) IBitmap {
-	b, _ := self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
+	b, old_filter := self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
+	if filter == 0 {
+		filter = old_filter
+	}
 	self.cache_it(b, bitmap_id, filter)
 	return b
 }
@@ -124,10 +127,12 @@ func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool 
 	change, chunk, address := SetBit(bm, bit_pos)
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
-		self.storage.BeginBatch()
+		/*self.storage.BeginBatch()
 		self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val)
 		self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, COUNTERMASK, 0, bm.Count())
 		self.storage.EndBatch()
+		*/
+		self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
 		self.rank_count++
 	}
 	return change

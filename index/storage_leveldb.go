@@ -175,3 +175,11 @@ func (self *LevelDBStorage) Close() {
 	self.FlushBatch()
 	self.db.Close()
 }
+
+func (self *LevelDBStorage) StoreBit(bid uint64, db string, frame string, slice int, filter uint64, bchunk uint64, block_index int32, bblock, count uint64) {
+	self.BeginBatch()
+	self.StoreBlock(bid, db, frame, slice, filter, bchunk, block_index, bblock)
+	self.StoreBlock(bid, db, frame, slice, filter, COUNTERMASK, 0, count)
+	self.EndBatch()
+
+}

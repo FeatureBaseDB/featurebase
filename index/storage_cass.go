@@ -7,6 +7,7 @@ import (
 	"pilosa/config"
 	"pilosa/util"
 
+	//"sync/atomic"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -20,6 +21,7 @@ type CassandraStorage struct {
 	batch_counter         int
 	cass_time_window_secs float64
 	cass_flush_size       int
+	cass_queue            CassQueue
 }
 
 var cluster *gocql.ClusterConfig
@@ -58,6 +60,8 @@ func NewCassStorage() Storage {
 	obj.batch_counter = 0
 	obj.cass_time_window_secs = float64(config.GetIntDefault("cassandra_time_window_secs", 5))
 	obj.cass_flush_size = config.GetIntDefault("cassandra_max_size_batch", 15)
+	obj.cass_queue = NewCassQueue()
+	go obj.asyncStore()
 	return obj
 }
 
@@ -109,7 +113,7 @@ func (self *CassandraStorage) BeginBatch() {
 }
 func (self *CassandraStorage) runBatch(batch *gocql.Batch) {
 	if batch != nil {
-		self.db.ExecuteBatch(batch)
+		go self.db.ExecuteBatch(batch)
 	}
 }
 func (self *CassandraStorage) FlushBatch() {
@@ -171,4 +175,53 @@ func (self *CassandraStorage) StoreBlock(bid uint64, db string, frame string, sl
 	delta := time.Since(start)
 	util.SendTimer("cassandra_storage_StoreBlock", delta.Nanoseconds())
 	return nil
+}
+
+type CassRecord struct {
+	bitmap_id   uint64
+	db          string
+	frame       string
+	slice       int
+	filter      uint64
+	chunk       uint64
+	block_index int32
+	val         uint64
+	count       uint64
+}
+
+func (self *CassandraStorage) asyncStore() {
+	for {
+		rec, term := self.cass_queue.Pop()
+		if term {
+			break
+		}
+		self.BeginBatch()
+		self.StoreBlock(rec.bitmap_id, rec.db, rec.frame, rec.slice, rec.filter, rec.chunk, rec.block_index, rec.val)
+		self.StoreBlock(rec.bitmap_id, rec.db, rec.frame, rec.slice, rec.filter, COUNTERMASK, 0, rec.count)
+		self.EndBatch()
+	}
+}
+
+func (self *CassandraStorage) StoreBit(bid uint64, db string, frame string, slice int, filter uint64, bchunk uint64, block_index int32, bblock, count uint64) {
+	rec := CassRecord{bid, db, frame, slice, filter, bchunk, block_index, bblock, count}
+	self.cass_queue.Push(rec)
+}
+
+type CassQueue struct {
+	size   int64
+	buffer chan CassRecord
+}
+
+func NewCassQueue() CassQueue {
+	return CassQueue{0, make(chan CassRecord, 2048)}
+}
+
+func (self *CassQueue) Push(rec CassRecord) {
+	//	atomic.AddInt64(&self.size, 1)
+	self.buffer <- rec
+}
+func (self *CassQueue) Pop() (CassRecord, bool) {
+	ret := <-self.buffer
+	//	atomic.AddInt64(&self.size, -1)
+	return ret, false
 }
