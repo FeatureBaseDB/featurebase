@@ -2,13 +2,10 @@ package db
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"pilosa/config"
 	"pilosa/util"
 	"sync"
-
-	"github.com/stathat/consistent"
 )
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")
@@ -290,17 +287,14 @@ func (d *Database) GetOrCreateSlice(slice_id int) *Slice {
 ///////// FRAME-SLICE INTERSECT //////////////////////////////////////////////////////////////
 
 type FrameSliceIntersect struct {
-	frame     *Frame
-	slice     *Slice
-	fragments []*Fragment
-	hashring  *consistent.Consistent
+	frame    *Frame
+	slice    *Slice
+	fragment *Fragment
 }
 
 func (d *Database) AddFrameSliceIntersect(frame *Frame, slice *Slice) *FrameSliceIntersect {
 	frameslice := FrameSliceIntersect{frame: frame, slice: slice}
 	d.frame_slice_intersects = append(d.frame_slice_intersects, &frameslice)
-	frameslice.hashring = consistent.New()
-	frameslice.hashring.NumberOfReplicas = 16
 	return &frameslice
 }
 
@@ -314,31 +308,22 @@ func (d *Database) GetFrameSliceIntersect(frame *Frame, slice *Slice) (*FrameSli
 	return nil, FrameSliceIntersectDoesNotExistError
 }
 
-func (self *FrameSliceIntersect) GetFragments() []*Fragment {
-	return self.fragments
+func (self *FrameSliceIntersect) GetFragment() *Fragment {
+	return self.fragment
 }
 
 func (d *Database) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
 	for _, fsi := range d.frame_slice_intersects {
-		f, err := fsi.GetFragment(fragment_id)
-		if err == nil {
+		f := fsi.GetFragment()
+		if f.id == fragment_id {
 			return f, nil
-		}
-	}
-	return nil, FragmentDoesNotExistError
-}
-func (self *FrameSliceIntersect) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
-	for _, fragment := range self.fragments {
-		if fragment.id == fragment_id {
-			return fragment, nil
 		}
 	}
 	return nil, FragmentDoesNotExistError
 }
 
 func (self *FrameSliceIntersect) AddFragment(fragment *Fragment) {
-	self.fragments = append(self.fragments, fragment)
-	self.hashring.Add(util.SUUID_to_Hex(fragment.id))
+	self.fragment = fragment
 }
 
 ///////// FRAGMENTS ////////////////////////////////////////////////////////////////////////
@@ -382,14 +367,7 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 		log.Println(err)
 		return nil, err
 	}
-	frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
-	if err != nil {
-		log.Println("ERROR FSI.GET:", bitmap.Id, bitmap.FrameType, d.Name, frame, slice)
-		log.Println(err)
-		return nil, err
-	}
-	frag_id := util.Hex_to_SUUID(frag_id_s)
-	return fsi.GetFragment(frag_id)
+	return fsi.GetFragment(), nil
 }
 
 func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragment, error) {
@@ -399,14 +377,7 @@ func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragme
 		log.Println(err)
 		return nil, err
 	}
-	frag_id_s, err := fsi.hashring.Get("0") // we don't need a specific bitmap in here because we're assuming the hashring only has a single element
-	if err != nil {
-		log.Println("ERROR FSI.GET:", d.Name, frame, slice)
-		log.Println(err)
-		return nil, err
-	}
-	frag_id := util.Hex_to_SUUID(frag_id_s)
-	return fsi.GetFragment(frag_id)
+	return fsi.GetFragment(), nil
 }
 
 /*
@@ -416,13 +387,13 @@ func (d *Database) GetFragmentById(fragment_id *GUID) *Fragment {
 }
 */
 
-func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) (*Fragment, error) {
+func (d *Database) getFragment(frame *Frame, slice *Slice) (*Fragment, error) {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
-	return fsi.GetFragment(fragment_id)
+	return fsi.GetFragment(), nil
 }
 
 func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
@@ -471,8 +442,8 @@ func (d *Database) AddFragmentByProcess(frame *Frame, slice *Slice, process *Pro
 func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
-	fragment, err := d.getFragment(frame, slice, fragment_id)
-	if err == nil {
+	fragment, err := d.getFragment(frame, slice)
+	if err == nil && fragment != nil {
 		return fragment
 	}
 	return d.addFragment(frame, slice, fragment_id)
