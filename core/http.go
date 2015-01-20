@@ -436,7 +436,7 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Missing db", http.StatusBadRequest)
 			return
 		}
-		db := obj["db"].(string)
+		dbs := obj["db"].(string)
 
 		if obj["frame"] == nil {
 			http.Error(w, "Missing Frame", http.StatusBadRequest)
@@ -451,16 +451,33 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 		}
 		t = float64(obj["filter"].(float64))
 		filter := int(t)
-
+		result := false
 		for bitmap_id := range bitmaps(frame, obj) {
-			pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
 			start := time.Now()
-			result, err := self.service.Executor.RunPQL(db, pql)
+
+			database := self.service.Cluster.GetOrCreateDatabase(dbs)
+			frag, err := database.GetFragmentFromProfile(frame, profile_id)
+			if err != nil {
+				//no fragment
+				self.service.TopologyMapper.MakeFragments(dbs, db.GetSlice(profile_id))
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			if util.Equal(frag.GetProcessId(), self.service.Id) {
+				// The Local Route
+				result, _ = self.service.Index.SetBit(frag.GetId(), bitmap_id, profile_id, uint64(filter))
+			} else {
+				println("remote")
+				// The Remote Route
+			}
+
+			//result, err := self.service.Executor.RunPQL(db, pql)
+			//pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
 			delta := time.Since(start)
 			util.SendTimer("executor_setbit", delta.Nanoseconds())
 
 			if err != nil {
-				log.Println("Error running set_bit", db, pql)
+				log.Println("Error running set_bit", dbs, frame, profile_id)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -470,7 +487,6 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {

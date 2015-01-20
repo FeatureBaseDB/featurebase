@@ -213,7 +213,8 @@ type CassQueue struct {
 }
 
 func NewCassQueue() CassQueue {
-	return CassQueue{0, make(chan CassRecord, 2048)}
+	//return CassQueue{0, make(chan CassRecord, 4096)}
+	return CassQueue{0, make(chan CassRecord)}
 }
 
 func (self *CassQueue) Push(rec CassRecord) {

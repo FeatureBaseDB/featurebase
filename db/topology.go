@@ -387,6 +387,16 @@ func (d *Database) GetFragmentById(fragment_id *GUID) *Fragment {
 }
 */
 
+func (d *Database) GetFragmentFromProfile(frame string, profile_id uint64) (*Fragment, error) {
+	slice := GetSlice(profile_id)
+	for _, frameslice := range d.frame_slice_intersects {
+		if frameslice.frame.name == frame && frameslice.slice.id == slice {
+			return frameslice.fragment, nil
+		}
+	}
+	return nil, errors.New("FragmentDoes does not exist.")
+}
+
 func (d *Database) getFragment(frame *Frame, slice *Slice) (*Fragment, error) {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
