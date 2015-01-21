@@ -7,6 +7,7 @@ import (
 	"pilosa/config"
 	"pilosa/db"
 	"pilosa/util"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -299,6 +300,10 @@ func (self *ProcessMap) AddProcess(process *db.Process) {
 func (self *ProcessMap) GetProcess(id *util.GUID) (*db.Process, error) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
+	if id == nil {
+		debug.PrintStack()
+		return nil, errors.New("Nil process")
+	}
 	process, ok := self.nodes[*id]
 	if !ok {
 		return nil, errors.New("No such process")

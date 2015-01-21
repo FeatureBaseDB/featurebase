@@ -31,6 +31,17 @@ func (self *Dispatch) Run() {
 			response := db.Message{Data: core.BatchResponse{Id: data.Id}}
 			self.service.Index.LoadBitmap(data.Fragment_id, data.Bitmap_id, data.Compressed_bitmap, data.Filter)
 			self.service.Transport.Send(&response, data.Source)
+		case core.BitsRequest:
+			var results []core.SBResult
+			for _, v := range data.Bits {
+				result, _ := self.service.Index.SetBit(v.Fragment_id, v.Bitmap_id, v.Profile_id, uint64(v.Filter))
+				//jbundle := core.SBResult{v.Bitmap_id, ''v.Frame, v.Filter, v.Profile_id, result}
+				bundle := core.SBResult{v.Bitmap_id, v.Frame, v.Filter, v.Profile_id, result}
+				results = append(results, bundle)
+
+			}
+			response := db.Message{Data: core.BitsResponse{Id: &data.QueryId, Items: results}}
+			self.service.Transport.Send(&response, &data.ReturnProcessId)
 		case core.PingRequest:
 			pong := db.Message{Data: core.PongRequest{Id: data.Id}}
 			self.service.Transport.Send(&pong, data.Source)

@@ -10,6 +10,7 @@ import (
 	"pilosa/core"
 	"pilosa/db"
 	. "pilosa/util"
+	"runtime/debug"
 	"sync"
 
 	"time"
@@ -38,6 +39,7 @@ func init() {
 }
 
 func newConnection(transport *TcpTransport, conn net.Conn, proc *GUID) *connection {
+	println("New Connection", proc)
 	p := new(connection)
 	p.transport = transport
 	p.outbox = make(chan *db.Message, 2048)
@@ -72,6 +74,7 @@ func (self *connection) Shutdown() {
 func (self *connection) serviceConnection() {
 	var host_string string
 	if self.conn == nil {
+		println("Service Connection", self.process)
 		process, err := self.transport.service.ProcessMap.GetProcess(self.process)
 		if err != nil {
 			log.Println("transport/tcp: error getting process, retrying in 2 seconds... ", self.process, err)

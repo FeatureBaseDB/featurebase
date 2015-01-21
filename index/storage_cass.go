@@ -107,7 +107,7 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 }
 func (self *CassandraStorage) BeginBatch() {
 	if self.batch == nil {
-		self.batch = gocql.NewBatch(gocql.LoggedBatch)
+		self.batch = gocql.NewBatch(gocql.UnloggedBatch)
 	}
 	self.batch_counter++
 }

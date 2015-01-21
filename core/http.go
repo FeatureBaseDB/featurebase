@@ -398,7 +398,7 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 type SBResult struct {
 	Bitmap_id  uint64
 	Frame      string
-	Filter     int
+	Filter     uint64
 	Profile_id uint64
 	Result     interface{}
 }
@@ -450,8 +450,9 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		t = float64(obj["filter"].(float64))
-		filter := int(t)
+		filter := uint64(t)
 		result := false
+		remoteSetBit := NewRemoteSetBit(self.service)
 		for bitmap_id := range bitmaps(frame, obj) {
 			start := time.Now()
 
@@ -461,14 +462,14 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 				//no fragment
 				self.service.TopologyMapper.MakeFragments(dbs, db.GetSlice(profile_id))
 				time.Sleep(2 * time.Second)
-				continue
+				break
 			}
 			if util.Equal(frag.GetProcessId(), self.service.Id) {
 				// The Local Route
-				result, _ = self.service.Index.SetBit(frag.GetId(), bitmap_id, profile_id, uint64(filter))
+				result, _ = self.service.Index.SetBit(frag.GetId(), bitmap_id, profile_id, filter)
 			} else {
-				println("remote")
-				// The Remote Route
+
+				remoteSetBit.Add(frag, bitmap_id, profile_id, filter, frame)
 			}
 
 			//result, err := self.service.Executor.RunPQL(db, pql)
@@ -483,8 +484,10 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 			}
 			bundle := SBResult{bitmap_id, frame, filter, profile_id, result}
 			results = append(results, bundle)
-			//	results = append(results, db+" "+pql)
 		}
+
+		remoteSetBit.Request()
+		remoteSetBit.MergeResults(results)
 
 	}
 	encoder := json.NewEncoder(w)
