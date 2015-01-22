@@ -51,7 +51,10 @@ func (self *Dispatch) Run() {
 			go self.service.Executor.NewJob(message)
 		case core.TopFill:
 			go self.service.TopFillHandler(message)
+		case core.BitsResponse:
+			self.service.Hold.Set(data.ResultId(), data.ResultData(), 30)
 		default:
+			println("Dispatch Unhandled")
 			spew.Dump(data)
 			log.Println("Unprocessed message", data)
 		}

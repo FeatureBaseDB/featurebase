@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -403,6 +404,10 @@ type SBResult struct {
 	Result     interface{}
 }
 
+func init() {
+	gob.Register(SBResult{})
+}
+
 func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
@@ -424,6 +429,8 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Request To large", http.StatusBadRequest)
 		return
 	}
+	result := false
+	remoteSetBit := NewRemoteSetBit(self.service)
 	for _, obj := range args {
 		if obj["profile_id"] == nil {
 			http.Error(w, "Missing Profile", http.StatusBadRequest)
@@ -451,8 +458,6 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 		}
 		t = float64(obj["filter"].(float64))
 		filter := uint64(t)
-		result := false
-		remoteSetBit := NewRemoteSetBit(self.service)
 		for bitmap_id := range bitmaps(frame, obj) {
 			start := time.Now()
 
@@ -467,6 +472,8 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 			if util.Equal(frag.GetProcessId(), self.service.Id) {
 				// The Local Route
 				result, _ = self.service.Index.SetBit(frag.GetId(), bitmap_id, profile_id, filter)
+				bundle := SBResult{bitmap_id, frame, filter, profile_id, result}
+				results = append(results, bundle)
 			} else {
 
 				remoteSetBit.Add(frag, bitmap_id, profile_id, filter, frame)
@@ -482,14 +489,11 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			bundle := SBResult{bitmap_id, frame, filter, profile_id, result}
-			results = append(results, bundle)
 		}
 
-		remoteSetBit.Request()
-		remoteSetBit.MergeResults(results)
-
 	}
+	remoteSetBit.Request()
+	results = remoteSetBit.MergeResults(results)
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {

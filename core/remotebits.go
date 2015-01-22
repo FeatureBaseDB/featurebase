@@ -1,6 +1,8 @@
 package core
 
 import (
+	//	"github.com/davecgh/go-spew/spew"
+	"encoding/gob"
 	"log"
 	"pilosa/db"
 	"pilosa/util"
@@ -10,6 +12,12 @@ type RemoteSetBit struct {
 	requests []util.GUID
 	cluster  map[*util.GUID][]BitmapRequestItem
 	service  *Service
+}
+
+func init() {
+	gob.Register(BitmapRequestItem{})
+	gob.Register(BitsRequest{})
+	gob.Register(BitsResponse{})
 }
 
 type BitsRequest struct {
@@ -34,7 +42,7 @@ func NewRemoteSetBit(s *Service) *RemoteSetBit {
 }
 
 func (self *RemoteSetBit) Request() {
-	self.requests = make([]util.GUID, len(self.cluster), len(self.cluster))
+	self.requests = make([]util.GUID, 0)
 	source_process, _ := self.service.GetProcess()
 	for process, request := range self.cluster {
 		random_id := util.RandomUUID()
@@ -79,7 +87,7 @@ func (self *RemoteSetBit) MergeResults(local_results []SBResult) []SBResult {
 func (self *RemoteSetBit) Add(frag *db.Fragment, bitmap_id, profile_id, filter uint64, frame string) {
 	x, found := self.cluster[frag.GetProcessId()]
 	if !found {
-		x = make([]BitmapRequestItem, 8)
+		x = make([]BitmapRequestItem, 0)
 	}
 	x = append(x, BitmapRequestItem{frag.GetId(), bitmap_id, profile_id, filter, frame})
 	self.cluster[frag.GetProcessId()] = x
