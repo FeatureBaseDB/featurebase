@@ -459,7 +459,6 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 		t = float64(obj["filter"].(float64))
 		filter := uint64(t)
 		for bitmap_id := range bitmaps(frame, obj) {
-			start := time.Now()
 
 			database := self.service.Cluster.GetOrCreateDatabase(dbs)
 			frag, err := database.GetFragmentFromProfile(frame, profile_id)
@@ -481,8 +480,6 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 
 			//result, err := self.service.Executor.RunPQL(db, pql)
 			//pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
-			delta := time.Since(start)
-			util.SendTimer("executor_setbit", delta.Nanoseconds())
 
 			if err != nil {
 				log.Println("Error running set_bit", dbs, frame, profile_id)

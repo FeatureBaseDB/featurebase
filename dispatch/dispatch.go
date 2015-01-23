@@ -22,6 +22,8 @@ func (self *Dispatch) Close() {
 	log.Println("Shutting down Dispatcher")
 }
 
+// The Local Route
+
 func (self *Dispatch) Run() {
 	log.Println("Dispatch Run...")
 	for {
@@ -38,7 +40,6 @@ func (self *Dispatch) Run() {
 				//jbundle := core.SBResult{v.Bitmap_id, ''v.Frame, v.Filter, v.Profile_id, result}
 				bundle := core.SBResult{v.Bitmap_id, v.Frame, v.Filter, v.Profile_id, result}
 				results = append(results, bundle)
-
 			}
 			response := db.Message{Data: core.BitsResponse{Id: &data.QueryId, Items: results}}
 			self.service.Transport.Send(&response, &data.ReturnProcessId)
