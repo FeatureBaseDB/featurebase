@@ -458,17 +458,18 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 		}
 		t = float64(obj["filter"].(float64))
 		filter := uint64(t)
+		database := self.service.Cluster.GetOrCreateDatabase(dbs)
+		frag, err := database.GetFragmentFromProfile(frame, profile_id)
+		if err != nil {
+			//no fragment
+			self.service.TopologyMapper.MakeFragments(dbs, db.GetSlice(profile_id))
+			time.Sleep(2 * time.Second)
+			break
+		}
+		isLocal := util.Equal(frag.GetProcessId(), self.service.Id)
 		for bitmap_id := range bitmaps(frame, obj) {
 
-			database := self.service.Cluster.GetOrCreateDatabase(dbs)
-			frag, err := database.GetFragmentFromProfile(frame, profile_id)
-			if err != nil {
-				//no fragment
-				self.service.TopologyMapper.MakeFragments(dbs, db.GetSlice(profile_id))
-				time.Sleep(2 * time.Second)
-				break
-			}
-			if util.Equal(frag.GetProcessId(), self.service.Id) {
+			if isLocal {
 				// The Local Route
 				result, _ = self.service.Index.SetBit(frag.GetId(), bitmap_id, profile_id, filter)
 				bundle := SBResult{bitmap_id, frame, filter, profile_id, result}
