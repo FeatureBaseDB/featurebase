@@ -431,6 +431,8 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 	}
 	result := false
 	remoteSetBit := NewRemoteSetBit(self.service)
+	var database *db.Database
+	olddbs := ""
 	for _, obj := range args {
 		if obj["profile_id"] == nil {
 			http.Error(w, "Missing Profile", http.StatusBadRequest)
@@ -458,7 +460,10 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 		}
 		t = float64(obj["filter"].(float64))
 		filter := uint64(t)
-		database := self.service.Cluster.GetOrCreateDatabase(dbs)
+		if dbs != olddbs {
+			database = self.service.Cluster.GetOrCreateDatabase(dbs)
+			olddbs = dbs
+		}
 		frag, err := database.GetFragmentFromProfile(frame, profile_id)
 		if err != nil {
 			//no fragment

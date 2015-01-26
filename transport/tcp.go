@@ -33,9 +33,10 @@ func init() {
 }
 
 func newConnection(conn net.Conn, enc *gob.Encoder, dec *gob.Decoder, t *TcpTransport, g *GUID) *connection {
+	log.Println("NewConnection")
 	p := new(connection)
-	p.outbox = make(chan *db.Message, 2048)
-	p.inbox = make(chan *db.Message, 2048)
+	p.outbox = make(chan *db.Message, 64)
+	p.inbox = make(chan *db.Message, 64)
 	p.conn = conn
 	p.encoder = enc
 	p.decoder = dec
@@ -93,7 +94,7 @@ type TcpTransport struct {
 	port        int
 	inbox       chan *db.Message
 	outbox      chan db.Envelope
-	connections map[*GUID]*connection
+	connections map[GUID]*connection
 	mutex       sync.Mutex
 	enc         *gob.Encoder
 	dec         *gob.Decoder
@@ -103,9 +104,9 @@ func NewTcpTransport(service *core.Service) *TcpTransport {
 	p := new(TcpTransport)
 	p.service = service
 	p.port = config.GetInt("port_tcp")
-	p.inbox = make(chan *db.Message, 2048)
-	p.outbox = make(chan db.Envelope, 2048)
-	p.connections = make(map[*GUID]*connection)
+	p.inbox = make(chan *db.Message, 64)
+	p.outbox = make(chan db.Envelope, 64)
+	p.connections = make(map[GUID]*connection)
 	var network bytes.Buffer         // Stand-in for a network connection
 	p.enc = gob.NewEncoder(&network) // Will write to network.
 	p.dec = gob.NewDecoder(&network) // Will read from network.
@@ -146,11 +147,13 @@ func (self *TcpTransport) listen() {
 	}
 }
 func (self *TcpTransport) connectRemotePeer(remoteProcessId *GUID) *connection {
+
 	process, err := self.service.ProcessMap.GetProcess(remoteProcessId)
 	host_string := fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
 	conn, err := net.Dial("tcp", host_string)
 	if err != nil {
 		log.Println("transport/tcp: error dialing: ", host_string, " Retrying in 2 seconds...")
+		time.Sleep(2 * time.Second)
 		return nil
 	}
 	encoder := gob.NewEncoder(conn)
@@ -180,20 +183,20 @@ func (self *TcpTransport) addPeer(conn net.Conn) {
 func (self *TcpTransport) getConnection(guid *GUID) (*connection, bool) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
-	con, ok := self.connections[guid]
+	con, ok := self.connections[*guid]
 	return con, !ok
 }
 
 func (self *TcpTransport) addConnection(c *connection) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
-	self.connections[c.process_id] = c
+	self.connections[*c.process_id] = c
 	go c.run()
 }
 func (self *TcpTransport) removeConnection(c *connection) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
-	delete(self.connections, c.process_id)
+	delete(self.connections, *c.process_id)
 	c.Close()
 
 }

@@ -80,6 +80,7 @@ func (self *RemoteSetBit) MergeResults(local_results []SBResult) []SBResult {
 			local_results = append(local_results, item)
 		}
 	}
+	close(answers)
 	return local_results
 
 }
