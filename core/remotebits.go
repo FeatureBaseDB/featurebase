@@ -65,7 +65,7 @@ func (self *RemoteSetBit) MergeResults(local_results []SBResult) []SBResult {
 		go func(id util.GUID) {
 			value, err := self.service.Hold.Get(&id, 10) //eiher need to be the frame process or the handler process?
 			if value == nil {
-				log.Println("Bad RemoteSetBi Result:", err)
+				log.Println("Bad RemoteSetBit Result:", err)
 				empty := make([]SBResult, 0, 0)
 				answers <- empty
 
