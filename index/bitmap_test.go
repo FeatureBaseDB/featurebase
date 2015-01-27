@@ -2,12 +2,21 @@ package index
 
 import (
 	//	"fmt"
-	"math/rand"
+	//	"math/rand"
 	"testing"
 	//	"time"
 
 	//	. "github.com/smartystreets/goconvey/convey"
 )
+
+func TestBitmaps(t *testing.T) {
+	bm := CreateRBBitmap()
+	SetBit(bm, 0)
+	ClearBit(bm, 0)
+	if BitCount(bm) != 0 {
+		t.Error("Should be 0")
+	}
+}
 
 /*
 func TestBitmaps(t *testing.T) {
@@ -117,7 +126,6 @@ func TestBitmaps(t *testing.T) {
 	})
 
 }
-*/
 func benchmark(b *testing.B, size int, fill int) {
 	x := make(map[uint64]IBitmap)
 	for i := uint64(0); i < uint64(size); i++ {
