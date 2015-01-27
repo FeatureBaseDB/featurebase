@@ -348,3 +348,17 @@ func NewTopNAll(n int, categories []uint64) *CmdTopNAll {
 func (self *CmdTopNAll) Execute(f *Fragment) Calculation {
 	return f.TopNAll(self.n, self.categories)
 }
+
+type CmdClearBit struct {
+	*Responder
+	bitmap_id uint64
+	bit_pos   uint64
+}
+
+func NewClearBit(bitmap_id uint64, bit_pos uint64) *CmdClearBit {
+	result := &CmdClearBit{NewResponder("ClearBit"), bitmap_id, bit_pos}
+	return result
+}
+func (self *CmdClearBit) Execute(f *Fragment) Calculation {
+	return f.impl.ClearBit(self.bitmap_id, self.bit_pos)
+}

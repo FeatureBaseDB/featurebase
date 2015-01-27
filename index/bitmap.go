@@ -142,11 +142,17 @@ func (s *BlockArray) set_bit(BlockIndex uint8, bit uint8) bool {
 	s.Block[BlockIndex] |= 1 << bit
 	return val == 0
 }
+func (s *BlockArray) clear_bit(BlockIndex uint8, bit uint8) bool {
+	val := s.Block[BlockIndex] & (1 << bit)
+	s.Block[BlockIndex] &= ^(1 << bit)
+	return val != 0
+}
 
 type Chunk struct {
 	Key   uint64
 	Value BlockArray
 }
+
 type Bitmap struct {
 	nodes  *rbtree.Tree
 	bcount uint64
@@ -399,6 +405,7 @@ type IBitmap interface {
 	Get(*Chunk) *Chunk
 	Len() int
 	Inc()
+	Dec()
 	Count() uint64
 	SetCount(uint64)
 	Bits() []uint64
@@ -514,6 +521,11 @@ func (b *Bitmap) Len() int {
 func (b *Bitmap) Inc() {
 	b.bcount += 1
 }
+func (b *Bitmap) Dec() {
+	if b.bcount > 0 {
+		b.bcount -= 1
+	}
+}
 func (b *Bitmap) SetCount(c uint64) {
 	b.bcount = c
 }
@@ -554,6 +566,25 @@ func SetBit(b IBitmap, position uint64) (bool, *Chunk, Address) {
 	}
 	return data_changed, node, address
 }
+
+func ClearBit(b IBitmap, position uint64) (bool, *Chunk, Address) {
+	//Chunk,Chunk_index,bit_offset :=deref(position)
+	address := deref(position)
+
+	item := GetChunk(b, address.ChunkKey)
+	var node *Chunk
+	if item == nil {
+		return false, nil, address
+	} else {
+		node = item
+	}
+	data_changed := node.Value.clear_bit(address.BlockIndex, address.Bit)
+	if data_changed {
+		b.Dec()
+	}
+	return data_changed, node, address
+}
+
 func BitCount(b IBitmap) uint64 {
 	var total uint64
 	total = 0

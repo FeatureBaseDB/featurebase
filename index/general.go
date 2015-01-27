@@ -156,3 +156,29 @@ func (self *General) TopNAll(n int, categories []uint64) []Pair {
 	}
 	return results
 }
+
+func (self *General) ClearBit(bitmap_id uint64, bit_pos uint64) bool {
+	bm := self.Get_nocache(bitmap_id)
+	if bm.Count() == 0 {
+		return false
+	}
+	change, chunk, address := ClearBit(bm, bit_pos)
+	if change {
+		val := chunk.Value.Block[address.BlockIndex]
+		if val == 0 {
+			self.storage.RemoveBlock(bitmap_id, self.db, self.frame, self.slice, uint64(0), address.ChunkKey, int32(address.BlockIndex))
+		} else {
+			self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, uint64(0), address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
+		}
+	}
+	return change
+}
+
+func (self *General) Get_nocache(bitmap_id uint64) IBitmap {
+	bm, ok := self.bitmap_cache.Get(bitmap_id)
+	if ok && bm != nil {
+		return bm.(*Bitmap)
+	}
+	bm, _ = self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
+	return bm.(*Bitmap)
+}

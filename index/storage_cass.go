@@ -17,6 +17,7 @@ type CassandraStorage struct {
 	db                    *gocql.Session
 	batch                 *gocql.Batch
 	stmt                  string
+	dstmt                 string
 	batch_time            time.Time
 	batch_counter         int
 	cass_time_window_secs float64
@@ -55,6 +56,7 @@ func NewCassStorage() Storage {
 
 	obj.db = session
 	obj.stmt = `INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?)  USING timestamp ?;`
+	obj.dstmt = `DELETE BlockIndex,block FROM bitmap WHERE bitmap_id=? AND db=? AND frame=? AND slice=? AND filter=? AND ChunkKey=? AND BlockIndex=?;`
 	obj.batch = nil
 	obj.batch_time = time.Now()
 	obj.batch_counter = 0
@@ -205,6 +207,10 @@ func (self *CassandraStorage) asyncStore() {
 func (self *CassandraStorage) StoreBit(bid uint64, db string, frame string, slice int, filter uint64, bchunk uint64, block_index int32, bblock, count uint64) {
 	rec := CassRecord{bid, db, frame, slice, filter, bchunk, block_index, bblock, count}
 	self.cass_queue.Push(rec)
+}
+
+func (self *CassandraStorage) RemoveBlock(id uint64, db string, frame string, slice int, filter uint64, chunk uint64, block_index int32) error {
+	return nil
 }
 
 type CassQueue struct {

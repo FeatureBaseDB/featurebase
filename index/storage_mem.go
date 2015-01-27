@@ -48,3 +48,6 @@ func (c *MemoryStorage) StoreBlock(bitmap_id uint64, db string, frame string, sl
 }
 func (self *MemoryStorage) StoreBit(bid uint64, db string, frame string, slice int, filter uint64, bchunk uint64, block_index int32, bblock, count uint64) {
 }
+func (self *MemoryStorage) RemoveBlock(id uint64, db string, frame string, slice int, filter uint64, chunk uint64, block_index int32) error {
+	return nil
+}

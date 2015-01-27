@@ -270,6 +270,18 @@ func (self *FragmentContainer) SetBit(frag_id util.SUUID, bitmap_id uint64, pos 
 	return false, errors.New("Invalid Bitmap Handle")
 }
 
+func (self *FragmentContainer) ClearBit(frag_id util.SUUID, bitmap_id uint64, pos uint64) (bool, error) {
+	if fragment, found := self.GetFragment(frag_id); found {
+		request := NewClearBit(bitmap_id, pos)
+		fragment.requestChan <- request
+		result := request.Response()
+		util.SendTimer("fragmant_container_ClearBit", result.exec_time.Nanoseconds())
+		util.SendInc("fragmant_container_ClearBit")
+		return result.answer.(bool), nil
+	}
+	return false, errors.New("Invalid Bitmap Handle")
+}
+
 func (self *FragmentContainer) Clear(frag_id util.SUUID) (bool, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewClear()
@@ -295,6 +307,7 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 type Pilosa interface {
 	Get(id uint64) IBitmap
 	SetBit(id uint64, bit_pos uint64, filter uint64) bool
+	ClearBit(id uint64, bit_pos uint64) bool
 	TopN(b IBitmap, n int, categories []uint64) []Pair
 	TopNAll(n int, categories []uint64) []Pair
 	Clear() bool

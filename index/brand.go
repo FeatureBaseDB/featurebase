@@ -87,6 +87,15 @@ func (self *Brand) Get(bitmap_id uint64) IBitmap {
 	return b
 }
 
+func (self *Brand) Get_nocache(bitmap_id uint64) (IBitmap, uint64) {
+	bm, ok := self.bitmap_cache[bitmap_id]
+	if ok {
+		return bm.bitmap, bm.category
+	}
+	//I should fetch the category here..need to come up with a good source
+	return self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
+}
+
 func (self *Brand) GetFilter(bitmap_id, filter uint64) IBitmap {
 	b, old_filter := self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
 	if filter == 0 {
@@ -416,4 +425,36 @@ func (self *Brand) Load(requestChan chan Command, f *Fragment) {
 		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) //trying to avoid mass cassandra hit
 
 	}
+}
+
+func (self *Brand) ClearBit(bitmap_id uint64, bit_pos uint64) bool {
+	bm1, ok := self.bitmap_cache[bitmap_id]
+	var bm IBitmap
+	filter := uint64(0)
+	if ok {
+		bm = bm1.bitmap
+		filter = bm1.category
+	} else {
+		bm, filter = self.Get_nocache(bitmap_id)
+		if bm.Count() == 0 {
+			return false //nothing to unset
+		}
+	}
+
+	change, chunk, address := ClearBit(bm, bit_pos)
+	if change {
+		val := chunk.Value.Block[address.BlockIndex]
+		/*		self.storage.BeginBatch()
+				self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val)
+				self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, COUNTERMASK, 0, bm.Count())
+				self.storage.EndBatch()
+		*/
+		if val == 0 {
+			self.storage.RemoveBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex))
+		} else {
+			self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
+		}
+		self.rank_count++
+	}
+	return change
 }
