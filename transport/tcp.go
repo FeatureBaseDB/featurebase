@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"bytes"
 	"encoding/gob"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"pilosa/core"
 	"pilosa/db"
 	. "pilosa/util"
+	"sync"
 
 	"time"
 
@@ -16,86 +18,75 @@ import (
 )
 
 type connection struct {
-	transport *TcpTransport
-	inbox     chan *db.Message
-	outbox    chan *db.Message
-	conn      *net.Conn
-	process   *GUID
-}
-
-type newconnection struct {
-	id         *GUID
-	connection *connection
+	inbox      chan *db.Message
+	outbox     chan *db.Message
+	conn       net.Conn
+	encoder    *gob.Encoder
+	decoder    *gob.Decoder
+	transport  *TcpTransport
+	process_id *GUID
+	exit       chan int
 }
 
 func init() {
 	gob.Register(GUID{})
 }
 
-func (self *connection) manage() {
-BeginManageConnection:
-	for {
-		if self.conn == nil {
-			process, err := self.transport.service.ProcessMap.GetProcess(self.process)
+func newConnection(conn net.Conn, enc *gob.Encoder, dec *gob.Decoder, t *TcpTransport, g *GUID) *connection {
+	log.Println("NewConnection")
+	p := new(connection)
+	p.outbox = make(chan *db.Message, 64)
+	p.inbox = make(chan *db.Message, 64)
+	p.conn = conn
+	p.encoder = enc
+	p.decoder = dec
+	p.transport = t
+	p.process_id = g
+	p.exit = make(chan int)
+	return p
+}
+
+func (self *connection) Close() {
+	close(self.outbox)
+	close(self.inbox)
+}
+
+func (self *connection) run() {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		for {
+			var mess *db.Message
+			err := self.decoder.Decode(&mess)
 			if err != nil {
-				log.Println("transport/tcp: error getting process, retrying in 2 seconds... ", self.process, err)
+				log.Println("transport/tcp: error decoding message: ", err.Error())
 				time.Sleep(2 * time.Second)
-				continue
-			}
-			host_string := fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
-			conn, err := net.Dial("tcp", host_string)
-			if err != nil {
-				log.Println("transport/tcp: error dialing: ", host_string, " Retrying in 2 seconds...")
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			self.conn = &conn
-			go func() {
-				self.outbox <- &db.Message{self.transport.service.Id}
-			}()
-		}
-		encoder := gob.NewEncoder(*self.conn)
-		decoder := gob.NewDecoder(*self.conn)
-		var exit = make(chan int)
-		go func() {
-			for {
-				var mess *db.Message
-				err := decoder.Decode(&mess)
-				if err != nil {
-					log.Println("transport/tcp: error decoding message: ", err.Error())
-					exit <- 1
-					return
-				}
+				self.exit <- 1
+				wg.Done()
+				return
+			} else {
 				self.inbox <- mess
 			}
-		}()
-		for {
-			select {
-			case message := <-self.outbox:
-				err := encoder.Encode(message)
-				if err != nil {
-					log.Println(err.Error())
-					return
-				}
-			case message := <-self.inbox:
-				identifier, ok := message.Data.(GUID)
-				if ok {
-					// message is connection registration; bypass inbox and register
-					self.process = &identifier
-					self.transport.reg <- &newconnection{&identifier, self}
-				} else {
-					self.transport.inbox <- message
-				}
-			case <-exit:
-				if self.process != nil {
-					self.conn = nil
-					continue BeginManageConnection
-				} else {
-					return
-				}
+		}
+	}()
+	breakout := true
+	for breakout {
+		select {
+		case message := <-self.outbox:
+			err := self.encoder.Encode(message)
+			if err != nil {
+				log.Println("Failed to Send on Socket Transport")
+				breakout = false
 			}
+		case message := <-self.inbox:
+			self.transport.inbox <- message
+		case <-self.exit:
+			breakout = false
 		}
 	}
+	self.conn.Close()
+	wg.Wait()
+	self.transport.removeConnection(self)
 }
 
 type TcpTransport struct {
@@ -104,7 +95,22 @@ type TcpTransport struct {
 	inbox       chan *db.Message
 	outbox      chan db.Envelope
 	connections map[GUID]*connection
-	reg         chan *newconnection
+	mutex       sync.Mutex
+	enc         *gob.Encoder
+	dec         *gob.Decoder
+}
+
+func NewTcpTransport(service *core.Service) *TcpTransport {
+	p := new(TcpTransport)
+	p.service = service
+	p.port = config.GetInt("port_tcp")
+	p.inbox = make(chan *db.Message, 64)
+	p.outbox = make(chan db.Envelope, 64)
+	p.connections = make(map[GUID]*connection)
+	var network bytes.Buffer         // Stand-in for a network connection
+	p.enc = gob.NewEncoder(&network) // Will write to network.
+	p.dec = gob.NewDecoder(&network) // Will read from network.
+	return p
 }
 
 func (self *TcpTransport) Run() {
@@ -112,16 +118,14 @@ func (self *TcpTransport) Run() {
 	go self.listen()
 	for {
 		select {
-		case env := <-self.outbox:
-			con, ok := self.connections[*(env.Host)]
-			if !ok {
-				con = &connection{self, make(chan *db.Message, 100), make(chan *db.Message, 100), nil, env.Host}
-				go con.manage()
-				self.connections[*env.Host] = con
+		case env := <-self.outbox: //transport outbox
+			con, need := self.getConnection(env.Host)
+			if need {
+				con = self.connectRemotePeer(env.Host)
 			}
-			con.outbox <- env.Message
-		case nc := <-self.reg:
-			self.connections[*nc.id] = nc.connection
+			if con != nil {
+				con.outbox <- env.Message
+			}
 		}
 	}
 }
@@ -139,26 +143,90 @@ func (self *TcpTransport) listen() {
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		go self.manage(&conn)
+		self.addPeer(conn)
 	}
 }
+func (self *TcpTransport) connectRemotePeer(remoteProcessId *GUID) *connection {
 
-func (self *TcpTransport) manage(conn *net.Conn) {
-	con := &connection{self, make(chan *db.Message, 1024), make(chan *db.Message, 1024), conn, nil}
-	con.manage()
+	process, err := self.service.ProcessMap.GetProcess(remoteProcessId)
+	host_string := fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
+	conn, err := net.Dial("tcp", host_string)
+	if err != nil {
+		log.Println("transport/tcp: error dialing: ", host_string, " Retrying in 2 seconds...")
+		time.Sleep(2 * time.Second)
+		return nil
+	}
+	encoder := gob.NewEncoder(conn)
+	decoder := gob.NewDecoder(conn)
+	err = encoder.Encode(self.service.Id) //send registration
+	if err != nil {
+		log.Println("Error sending processid:", host_string)
+	}
+	acon := newConnection(conn, encoder, decoder, self, remoteProcessId)
+	self.addConnection(acon)
+	return acon
+
+}
+
+func (self *TcpTransport) addPeer(conn net.Conn) {
+	decoder := gob.NewDecoder(conn)
+	encoder := gob.NewEncoder(conn)
+	var processid GUID
+	err := decoder.Decode(&processid)
+	if err != nil {
+		log.Println("Failed to recieve remote processid")
+		return
+	}
+	acon := newConnection(conn, encoder, decoder, self, &processid)
+	self.addConnection(acon)
+}
+func (self *TcpTransport) getConnection(guid *GUID) (*connection, bool) {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	con, ok := self.connections[*guid]
+	return con, !ok
+}
+
+func (self *TcpTransport) addConnection(c *connection) {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	self.connections[*c.process_id] = c
+	go c.run()
+}
+func (self *TcpTransport) removeConnection(c *connection) {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	delete(self.connections, *c.process_id)
+	c.Close()
+
 }
 
 func (self *TcpTransport) Close() {
 	log.Println("Shutting down TCP transport")
 }
+func (self *TcpTransport) adjust(in *db.Message) *db.Message {
+	err := self.enc.Encode(in)
+	var out db.Message
+	err = self.dec.Decode(&out)
+	if err != nil {
+		log.Println(err)
+	}
+	return &out
+
+}
 
 func (self *TcpTransport) Send(message *db.Message, host *GUID) {
-	envelope := db.Envelope{message, host}
-	notify.Post("outbox", &envelope)
-	self.outbox <- envelope
+	if Equal(host, self.service.Id) {
+		self.inbox <- self.adjust(message)
+	} else {
+		envelope := db.Envelope{message, host}
+		notify.Post("outbox", &envelope)
+		self.outbox <- envelope
+	}
 }
 
 func (self *TcpTransport) Receive() *db.Message {
+
 	message := <-self.inbox
 	notify.Post("inbox", message)
 	return message
@@ -166,8 +234,4 @@ func (self *TcpTransport) Receive() *db.Message {
 
 func (self *TcpTransport) Push(message *db.Message) {
 	self.inbox <- message
-}
-
-func NewTcpTransport(service *core.Service) *TcpTransport {
-	return &TcpTransport{service, config.GetInt("port_tcp"), make(chan *db.Message, 100), make(chan db.Envelope, 100), make(map[GUID]*connection), make(chan *newconnection)}
 }

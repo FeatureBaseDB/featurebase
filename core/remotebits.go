@@ -9,7 +9,7 @@ import (
 )
 
 type RemoteSetBit struct {
-	requests []util.GUID
+	requests []remote_task
 	cluster  map[*util.GUID][]BitmapRequestItem
 	service  *Service
 }
@@ -42,7 +42,7 @@ func NewRemoteSetBit(s *Service) *RemoteSetBit {
 }
 
 func (self *RemoteSetBit) Request() {
-	self.requests = make([]util.GUID, 0)
+	self.requests = make([]remote_task, 0)
 	source_process, _ := self.service.GetProcess()
 	for process, request := range self.cluster {
 		random_id := util.RandomUUID()
@@ -53,17 +53,26 @@ func (self *RemoteSetBit) Request() {
 			QueryId:         random_id,
 			DestProcessId:   *process,
 		}
-		self.requests = append(self.requests, random_id)
+		wait := len(request) / 100
+		if wait < 10 {
+			wait = 10
+		}
+		self.requests = append(self.requests, remote_task{random_id, wait})
 		self.service.Transport.Send(msg, process)
 	}
 
 }
 
+type remote_task struct {
+	id        util.GUID
+	wait_time int
+}
+
 func (self *RemoteSetBit) MergeResults(local_results []SBResult) []SBResult {
 	answers := make(chan []SBResult)
 	for _, task := range self.requests {
-		go func(id util.GUID) {
-			value, err := self.service.Hold.Get(&id, 10) //eiher need to be the frame process or the handler process?
+		go func(task remote_task) {
+			value, err := self.service.Hold.Get(&task.id, task.wait_time) //eiher need to be the frame process or the handler process?
 			if value == nil {
 				log.Println("Bad RemoteSetBit Result:", err)
 				empty := make([]SBResult, 0, 0)
