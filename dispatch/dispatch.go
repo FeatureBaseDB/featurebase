@@ -35,8 +35,14 @@ func (self *Dispatch) Run() {
 			self.service.Transport.Send(&response, data.Source)
 		case core.BitsRequest:
 			var results []core.SBResult
+			result := false
+
 			for _, v := range data.Bits {
-				result, _ := self.service.Index.SetBit(v.Fragment_id, v.Bitmap_id, v.Profile_id, uint64(v.Filter))
+				if v.SetUnset {
+					result, _ = self.service.Index.SetBit(v.Fragment_id, v.Bitmap_id, v.Profile_id, uint64(v.Filter))
+				} else {
+					result, _ = self.service.Index.ClearBit(v.Fragment_id, v.Bitmap_id, v.Profile_id)
+				}
 				//jbundle := core.SBResult{v.Bitmap_id, ''v.Frame, v.Filter, v.Profile_id, result}
 				bundle := core.SBResult{v.Bitmap_id, v.Frame, v.Filter, v.Profile_id, result}
 				results = append(results, bundle)

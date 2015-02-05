@@ -13,11 +13,12 @@ import (
 func getTime(id uint64, s string) {
 	const shortForm = "2006-01-02 15:04"
 	t1, _ := time.Parse(shortForm, s)
+	log.Println("BEFORE")
 
 	for i, v := range GetTimeIds(uint64(id), t1, YMDH) {
 		log.Println(i, v, s)
 	}
-	log.Println()
+	log.Println("AFTER")
 }
 func TestDemo(t *testing.T) {
 	Convey("Test ID", t, func() {

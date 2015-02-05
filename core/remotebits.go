@@ -32,6 +32,7 @@ type BitmapRequestItem struct {
 	Profile_id  uint64
 	Filter      uint64
 	Frame       string
+	SetUnset    bool
 }
 
 func NewRemoteSetBit(s *Service) *RemoteSetBit {
@@ -94,12 +95,12 @@ func (self *RemoteSetBit) MergeResults(local_results []SBResult) []SBResult {
 
 }
 
-func (self *RemoteSetBit) Add(frag *db.Fragment, bitmap_id, profile_id, filter uint64, frame string) {
+func (self *RemoteSetBit) Add(frag *db.Fragment, bitmap_id, profile_id, filter uint64, frame string, SetUnset bool) {
 	x, found := self.cluster[frag.GetProcessId()]
 	if !found {
 		x = make([]BitmapRequestItem, 0)
 	}
-	x = append(x, BitmapRequestItem{frag.GetId(), bitmap_id, profile_id, filter, frame})
+	x = append(x, BitmapRequestItem{frag.GetId(), bitmap_id, profile_id, filter, frame, SetUnset})
 	self.cluster[frag.GetProcessId()] = x
 
 }

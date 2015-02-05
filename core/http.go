@@ -167,6 +167,7 @@ func (self *WebService) Run() {
 	} else {
 		mux.HandleFunc("/set_bits", self.HandleSetBit)
 	}
+	mux.HandleFunc("/clear_bits", self.HandleClearBit)
 	//mux.HandleFunc("/set_bits", self.HandleSetBit)
 	mux.HandleFunc("/flush", NewFlusher(flusher))
 	s := &http.Server{
@@ -408,7 +409,14 @@ func init() {
 	gob.Register(SBResult{})
 }
 
+func (self *WebService) HandleClearBit(w http.ResponseWriter, r *http.Request) {
+	self.HandleBit(w, r, false)
+}
 func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
+	self.HandleBit(w, r, true)
+}
+
+func (self *WebService) HandleBit(w http.ResponseWriter, r *http.Request, ToSet bool) {
 	if r.Method != "POST" {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
@@ -467,8 +475,10 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 		frag, err := database.GetFragmentFromProfile(frame, profile_id)
 		if err != nil {
 			//no fragment
-			self.service.TopologyMapper.MakeFragments(dbs, db.GetSlice(profile_id))
-			time.Sleep(2 * time.Second)
+			if ToSet {
+				self.service.TopologyMapper.MakeFragments(dbs, db.GetSlice(profile_id))
+				time.Sleep(2 * time.Second)
+			}
 			break
 		}
 		isLocal := util.Equal(frag.GetProcessId(), self.service.Id)
@@ -476,31 +486,35 @@ func (self *WebService) HandleSetBit(w http.ResponseWriter, r *http.Request) {
 
 			if isLocal {
 				// The Local Route
-				result, _ = self.service.Index.SetBit(frag.GetId(), bitmap_id, profile_id, filter)
+				if ToSet {
+					result, _ = self.service.Index.SetBit(frag.GetId(), bitmap_id, profile_id, filter)
+				} else {
+					result, _ = self.service.Index.ClearBit(frag.GetId(), bitmap_id, profile_id)
+				}
 				bundle := SBResult{bitmap_id, frame, filter, profile_id, result}
 				results = append(results, bundle)
 			} else {
 
-				remoteSetBit.Add(frag, bitmap_id, profile_id, filter, frame)
+				remoteSetBit.Add(frag, bitmap_id, profile_id, filter, frame, ToSet)
 			}
 
 			//result, err := self.service.Executor.RunPQL(db, pql)
 			//pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
 
 			if err != nil {
-				log.Println("Error running set_bit", dbs, frame, profile_id)
+				log.Println("Error running set_bit", dbs, frame, profile_id, ToSet)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-		}
 
+		}
 	}
 	remoteSetBit.Request()
 	results = remoteSetBit.MergeResults(results)
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		log.Println("JSON SetBit ERROR:", err)
+		log.Println("JSON SetBit ERROR:", err, ToSet)
 		//log.Println("Error encoding set_bit", spew.Sdump(results))
 		//http.Error(w, "Error econding set_bit", http.StatusInternalServerError)
 		return
