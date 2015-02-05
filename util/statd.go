@@ -1,7 +1,7 @@
 package util
 
 import (
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/config"
 
 	"github.com/cactus/go-statsd-client/statsd"
@@ -24,7 +24,7 @@ func init() {
 	count = make(chan string, 100)
 	end = make(chan bool)
 	stat_config := config.GetStringDefault("statsd_server", "127.0.0.1:8125")
-	log.Println("New Stats", stat_config)
+	log.Warn("New Stats", stat_config)
 	stats, _ := statsd.New(stat_config, "")
 	go func() {
 		for {
@@ -34,7 +34,7 @@ func init() {
 			case stat := <-count:
 				stats.Inc(stat, 1, 1.0)
 			case <-end:
-				log.Println("DONE Stats")
+				log.Warn("DONE Stats")
 				return
 
 			}
@@ -52,6 +52,6 @@ func SendInc(stat string) {
 }
 
 func ShutdownStats() {
-	log.Println("Shutdown Stats")
+	log.Warn("Shutdown Stats")
 	end <- true
 }

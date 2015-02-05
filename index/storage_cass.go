@@ -3,7 +3,7 @@ package index
 // #cgo  CFLAGS:-mpopcnt
 
 import (
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/config"
 	"pilosa/util"
 
@@ -51,7 +51,7 @@ func NewCassStorage() Storage {
 	// cluster.CQLVersion = "3.0.0"
 	session, err := cluster.CreateSession()
 	if err != nil {
-		log.Fatal(err)
+		log.Warn(err)
 	}
 
 	obj.db = session
@@ -140,7 +140,7 @@ func (self *CassandraStorage) EndBatch() {
 			}
 		*/
 	} else {
-		log.Println("NIL BATCH")
+		log.Warn("NIL BATCH")
 	}
 	delta := time.Since(start)
 	util.SendTimer("cassandra_storage_EndBatch", delta.Nanoseconds())

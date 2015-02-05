@@ -1,7 +1,7 @@
 package dispatch
 
 import (
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/core"
 	"pilosa/db"
 	"pilosa/query"
@@ -14,18 +14,18 @@ type Dispatch struct {
 }
 
 func (self *Dispatch) Init() error {
-	log.Println("Starting Dispatcher")
+	log.Warn("Starting Dispatcher")
 	return nil
 }
 
 func (self *Dispatch) Close() {
-	log.Println("Shutting down Dispatcher")
+	log.Warn("Shutting down Dispatcher")
 }
 
 // The Local Route
 
 func (self *Dispatch) Run() {
-	log.Println("Dispatch Run...")
+	log.Warn("Dispatch Run...")
 	for {
 		message := self.service.Transport.Receive()
 		switch data := message.Data.(type) {
@@ -61,9 +61,8 @@ func (self *Dispatch) Run() {
 		case core.BitsResponse:
 			self.service.Hold.Set(data.ResultId(), data.ResultData(), 30)
 		default:
-			println("Dispatch Unhandled")
 			spew.Dump(data)
-			log.Println("Unprocessed message", data)
+			log.Warn("Unprocessed message", data)
 		}
 	}
 }

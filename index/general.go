@@ -3,7 +3,7 @@ package index
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/config"
 	"pilosa/util"
 
@@ -98,10 +98,10 @@ func (self *General) getFileName() string {
 }
 
 func (self *General) Persist() error {
-	log.Println("General Persist")
+	log.Warn("General Persist")
 	w, err := util.Create(self.getFileName())
 	if err != nil {
-		log.Println("Error saving:", err)
+		log.Warn("Error saving:", err)
 		return err
 	}
 	defer w.Close()
@@ -119,10 +119,10 @@ func (self *General) Persist() error {
 }
 
 func (self *General) Load(requestChan chan Command, f *Fragment) {
-	log.Println("General Load")
+	log.Warn("General Load")
 	r, err := util.Open(self.getFileName())
 	if err != nil {
-		log.Println("NO General Init File:", self.getFileName())
+		log.Warn("NO General Init File:", self.getFileName())
 		return
 	}
 
@@ -131,7 +131,6 @@ func (self *General) Load(requestChan chan Command, f *Fragment) {
 
 	if err := dec.Decode(&keys); err != nil {
 		return
-		//log.Println("Bad mojo")
 	}
 	for _, k := range keys {
 		request := NewLoadRequest(k)

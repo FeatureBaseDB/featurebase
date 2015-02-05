@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"log"
+	log "github.com/cihub/seelog"
 	"math/rand"
 	"os"
 	"strings"
@@ -23,7 +23,7 @@ func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
 	f, err := os.Open("/dev/urandom")
 	if err != nil {
-		log.Fatal(err)
+		log.Warn(err)
 	}
 	Random = f
 }

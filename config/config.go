@@ -2,8 +2,8 @@ package config
 
 import (
 	"errors"
+	log "github.com/cihub/seelog"
 	"io/ioutil"
-	"log"
 	"os"
 	"sync"
 
@@ -77,7 +77,7 @@ func (self *Config) load() error {
 	if config_file == "" {
 		config_file = os.Getenv("PILOSA_CONFIG")
 		if config_file == "" {
-			log.Println("PILOSA_CONFIG not set, defaulting to pilosa.yaml")
+			log.Warn("PILOSA_CONFIG not set, defaulting to pilosa.yaml")
 			config_file = "pilosa.yaml"
 		}
 	}

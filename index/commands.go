@@ -3,8 +3,8 @@ package index
 import (
 	"bytes"
 	"compress/gzip"
+	log "github.com/cihub/seelog"
 	"io/ioutil"
-	"log"
 	"time"
 )
 
@@ -141,7 +141,7 @@ func (self *CmdGetBytes) Execute(f *Fragment) Calculation {
 	//*Compress it
 	if !ok {
 		bm = NewBitmap()
-		log.Println("cache miss")
+		log.Warn("cache miss")
 	}
 	var b bytes.Buffer
 	w := gzip.NewWriter(&b)

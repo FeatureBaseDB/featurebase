@@ -2,7 +2,8 @@ package core
 
 import (
 	"fmt"
-	"log"
+	//"log"
+	log "github.com/cihub/seelog"
 	"os"
 	"os/signal"
 	"pilosa/config"
@@ -61,12 +62,24 @@ func (self *Service) PrepareLogging() {
 	if base_path == "" {
 		base_path = "/tmp"
 	}
-	f, err := os.OpenFile(fmt.Sprintf("%s/%s.%s", base_path, self.name, self.Id), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.Println("error opening file: %v", err)
-	}
-	//defer f.Close()
-	log.SetOutput(f)
+	/*
+		f, err := os.OpenFile(fmt.Sprintf("%s/%s.%s", base_path, self.name, self.Id), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			log.Warn("error opening file: %v", err)
+		}
+		//defer f.Close()
+		log.SetOutput(f)
+	*/
+	fname := fmt.Sprintf("%s/%s.%s", base_path, self.name, self.Id)
+	prod_config := fmt.Sprintf(`
+	<seelog>
+	<outputs>
+	<rollingfile type="size" filename="%s" maxsize="524288000" maxrolls="4" />
+	</outputs>
+	</seelog>
+	`, fname)
+	logger, _ := log.LoggerFromConfigAsBytes([]byte(prod_config))
+	log.ReplaceLogger(logger)
 }
 
 func (service *Service) init_id() {
@@ -74,15 +87,15 @@ func (service *Service) init_id() {
 	var err error
 	id_string := config.GetString("id")
 	if id_string == "" {
-		log.Println("Service id not configured, generating...")
+		log.Info("Service id not configured, generating...")
 		id = util.RandomUUID()
 		if err != nil {
-			log.Fatal("problem generating uuid")
+			log.Critical("problem generating uuid")
 		}
 	} else {
 		id, err = util.ParseGUID(id_string)
 		if err != nil {
-			log.Fatalf("Service id '%s' not valid", id_string)
+			log.Critical("Service id not valid:", id_string)
 		}
 	}
 	service.Id = &id
@@ -101,9 +114,9 @@ func (service *Service) GetSignals() (chan os.Signal, chan os.Signal) {
 }
 
 func (service *Service) Run() {
-	log.Println("Setup service...", service.version)
+	log.Info("Setup service...", service.version)
 	service.TopologyMapper.Setup()
-	log.Println("Running service...", service.version)
+	log.Info("Running service...", service.version)
 	go service.TopologyMapper.Run()
 	go service.ProcessMapper.Run()
 	go service.WebService.Run()
@@ -116,10 +129,10 @@ func (service *Service) Run() {
 	for {
 		select {
 		case <-sighup:
-			log.Println("SIGHUP! Reloading configuration...")
+			log.Info("SIGHUP! Reloading configuration...")
 			// TODO: reload configuration
 		case <-sigterm:
-			log.Println("SIGTERM! Cleaning up...")
+			log.Info("SIGTERM! Cleaning up...")
 			service.Index.Shutdown()
 			service.WebService.Shutdown()
 			util.ShutdownStats()
@@ -127,7 +140,7 @@ func (service *Service) Run() {
 			return
 		}
 	}
-	log.Println("Service stopping")
+	log.Info("Service stopping")
 }
 
 type Message interface {

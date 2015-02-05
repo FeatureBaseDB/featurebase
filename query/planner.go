@@ -4,7 +4,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"log"
+	log "github.com/cihub/seelog"
 	"math/rand"
 	"pilosa/db"
 	"pilosa/index"
@@ -149,7 +149,7 @@ func (qt *TopNQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 		slice := d.GetOrCreateSlice(qt.Slice)
 		fragment, err := d.GetFragmentForFrameSlice(frame, slice)
 		if err != nil {
-			log.Println("GetFragmentForFrameSliceFailed TopNQueryTree", frame, slice)
+			log.Warn("GetFragmentForFrameSliceFailed TopNQueryTree", frame, slice)
 			return nil, err
 		}
 		qt.location = fragment.GetLocation()
@@ -332,7 +332,7 @@ func (qt *GetQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
-		log.Println("GetFragmenForBitmapFailed GetQueryTree", slice)
+		log.Warn("GetFragmenForBitmapFailed GetQueryTree", slice)
 		return nil, err
 	}
 	return fragment.GetLocation(), nil
@@ -369,7 +369,7 @@ func (qt *SetQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 	}
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
-		log.Println("NOT FOUND:", slice, qt.bitmap)
+		log.Warn("NOT FOUND:", slice, qt.bitmap)
 		return nil, NewFragmentNotFound(d.Name, qt.bitmap.FrameType, db.GetSlice(qt.profile_id))
 	}
 	return fragment.GetLocation(), nil
@@ -467,7 +467,7 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 		var p Appendable
 
 		if query.Operation == "stash" {
-			//			log.Println("STASH:", n)
+			//			log.Warn("STASH:", n)
 			tree = &StashQueryTree{N: n}
 		} else {
 			tree = &CatQueryTree{N: n}
@@ -574,7 +574,7 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 			tree = &StashQueryTree{subqueries: subqueries}
 		} else {
 			//TODO return error gracefully
-			log.Println(spew.Sdump(query))
+			log.Warn(spew.Sdump(query))
 			return nil, errors.New("BuildTree Issues")
 		}
 	}
@@ -781,7 +781,7 @@ func (qt *MaskQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
-		log.Println("GetFragmenForBitmapFailed GetQueryTree", slice)
+		log.Warn("GetFragmenForBitmapFailed GetQueryTree", slice)
 		return nil, err
 	}
 	return fragment.GetLocation(), nil
@@ -812,7 +812,7 @@ func (qt *RangeQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
-		log.Println("GetFragmenForBitmapFailed GetQueryTree", slice)
+		log.Warn("GetFragmenForBitmapFailed GetQueryTree", slice)
 		return nil, err
 	}
 	return fragment.GetLocation(), nil

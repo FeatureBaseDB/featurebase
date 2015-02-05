@@ -8,7 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
+	//"log"
+	log "github.com/cihub/seelog"
 	"net/http"
 	"net/http/httputil"
 	"pilosa/config"
@@ -65,7 +66,7 @@ func (self *RequestLogger) Handle(w http.ResponseWriter, r *http.Request) {
 	// Grab a dump of the incoming request
 	dump, err := httputil.DumpRequest(r, true /*dump the body also*/)
 	if err != nil {
-		log.Println("Dump Failure", err)
+		log.Warn("Dump Failure", err)
 	}
 
 	self.handler(w, r)
@@ -100,8 +101,8 @@ func flush(requests []LogRecord, id string, records_to_dump int) {
 	dest := genFileName(id)
 	w, err := util.Create(dest)
 	if err != nil {
-		log.Println("Error opening outfile ", dest)
-		log.Println(err)
+		log.Warn("Error opening outfile ", dest)
+		log.Warn(err)
 		return
 	}
 	defer w.Close()
@@ -134,7 +135,7 @@ func Logger(in chan []byte, end chan bool, id string, flusher chan bool) {
 			}
 		case <-end:
 			flush(buffer, id, i)
-			log.Println("Shutdown Logger")
+			log.Info("Shutdown Logger")
 			return
 		}
 
@@ -144,7 +145,7 @@ func Logger(in chan []byte, end chan bool, id string, flusher chan bool) {
 
 func (self *WebService) Run() {
 	port_string := strconv.Itoa(config.GetInt("port_http"))
-	log.Printf("Serving HTTP on port %s...\n", port_string)
+	log.Info("Serving HTTP on port:", port_string)
 	logger_chan := make(chan []byte, 1024)
 	flusher := make(chan bool)
 	mux := http.NewServeMux()
@@ -259,8 +260,8 @@ func (self *WebService) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		log.Println("Error Batch results")
-		log.Println(spew.Sdump(r.Form))
+		log.Warn("Error Batch results")
+		log.Warn(spew.Sdump(r.Form))
 		err = encoder.Encode("Bad Batch Request")
 	}
 
@@ -299,7 +300,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 
 	results, err := self.service.Executor.RunPQL(database_name, pql)
 	if err != nil {
-		log.Println("PQL Exec Error:", err.Error(), database_name, pql)
+		log.Warn("PQL Exec Error:", err.Error(), database_name, pql)
 		http.Error(w, "Error encoding: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -321,7 +322,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if results == nil {
-		log.Println("Empty results:", database_name, pql)
+		log.Warn("Empty results:", database_name, pql)
 		http.Error(w, "Error encoding: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -333,7 +334,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		log.Println("Encode Error :", database_name, pql, err.Error())
+		log.Warn("Encode Error :", database_name, pql, err.Error())
 		return
 	}
 
@@ -382,7 +383,7 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 				for i, id := range index.GetTimeIds(base_id, atime, quantum) {
 					c <- id
 					if i > 10 {
-						log.Println("TO MANY TIMEIDS", base_id, atime, quantum)
+						log.Warn("TO MANY TIMEIDS", base_id, atime, quantum)
 						break
 					}
 				}
@@ -433,7 +434,7 @@ func (self *WebService) HandleBit(w http.ResponseWriter, r *http.Request, ToSet 
 	//[{ "db": "3", "frame":"brand.","profile_id": 122,"filter":0, "bitmap_id":123}]
 	var results []SBResult
 	if len(args) > 4096 {
-		log.Println("Request too large:", len(args))
+		log.Warn("Request too large:", len(args))
 		http.Error(w, "Request To large", http.StatusBadRequest)
 		return
 	}
@@ -502,7 +503,7 @@ func (self *WebService) HandleBit(w http.ResponseWriter, r *http.Request, ToSet 
 			//pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
 
 			if err != nil {
-				log.Println("Error running set_bit", dbs, frame, profile_id, ToSet)
+				log.Warn("Error running set_bit", dbs, frame, profile_id, ToSet)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -514,8 +515,7 @@ func (self *WebService) HandleBit(w http.ResponseWriter, r *http.Request, ToSet 
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
-		log.Println("JSON SetBit ERROR:", err, ToSet)
-		//log.Println("Error encoding set_bit", spew.Sdump(results))
+		log.Warn("JSON SetBit ERROR:", err, ToSet)
 		//http.Error(w, "Error econding set_bit", http.StatusInternalServerError)
 		return
 	}
@@ -554,7 +554,7 @@ func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {
 
 	err := encoder.Encode(m)
 	if err != nil {
-		log.Println("Error encoding stats")
+		log.Warn("Error encoding stats")
 		http.Error(w, "Error econding stats", http.StatusMethodNotAllowed)
 	}
 }
@@ -694,7 +694,7 @@ func (self *WebService) streamer(writer func(map[string]interface{}) error) {
 			"host": host,
 		})
 		if err != nil {
-			log.Println("stopping")
+			log.Info("stopping")
 			notify.Stop("inbox", inbox)
 			notify.Stop("outbox", outbox)
 			drain(inbox)
@@ -708,14 +708,14 @@ func (self *WebService) HandleListenWS(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		err := recover()
 		out := spew.Sdump(err)
-		log.Println(out)
+		log.Info(out)
 	}()
 	ws, err := websocket.Upgrade(w, r, nil, 1024, 1024)
 	if _, ok := err.(websocket.HandshakeError); ok {
 		http.Error(w, "Not a websocket handshake", 400)
 		return
 	} else if err != nil {
-		log.Println(err)
+		log.Warn(err)
 		return
 	}
 	self.streamer(func(data map[string]interface{}) error {

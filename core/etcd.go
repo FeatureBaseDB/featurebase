@@ -3,7 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/config"
 	"pilosa/db"
 	"pilosa/util"
@@ -23,7 +23,7 @@ type TopologyMapper struct {
 }
 
 func (self *TopologyMapper) Setup() {
-	log.Println(self.namespace + "/db")
+	log.Warn(self.namespace + "/db")
 	db_path := self.namespace + "/db"
 	resp, err := self.service.Etcd.Get(db_path, false, true)
 	if err != nil {
@@ -31,17 +31,17 @@ func (self *TopologyMapper) Setup() {
 		if ok && ee.ErrorCode == 100 { // node does not exist
 			resp, err = self.service.Etcd.CreateDir(db_path, 0)
 			if err != nil {
-				log.Fatal(err)
+				log.Warn(err)
 			}
 		} else {
-			log.Fatal(err)
+			log.Warn(err)
 		}
 	}
 	//need to lock the world
 	for _, node := range flatten(resp.Node) {
 		err := self.handlenode(node)
 		if err != nil {
-			log.Println(err)
+			log.Warn(err)
 		}
 	}
 
@@ -55,9 +55,9 @@ func (self *TopologyMapper) Run() {
 		// TODO: use modindex to make sure watch catches everything
 		for {
 			ns := self.namespace + "/db"
-			log.Println(" ETCD watcher:", ns)
+			log.Warn(" ETCD watcher:", ns)
 			resp, err := self.service.Etcd.Watch(ns, 0, true, receiver, stop)
-			log.Println("TopologyMapper ETCD watcher", resp, err)
+			log.Warn("TopologyMapper ETCD watcher", resp, err)
 		}
 	}()
 	go func() {
@@ -139,7 +139,7 @@ func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
 			for _, frame := range frames_to_create {
 				err := self.AllocateFragment(p.Key, db, frame, slice_int)
 				if err != nil {
-					log.Println(err)
+					log.Warn(err)
 				}
 			}
 		}
@@ -156,13 +156,13 @@ func (self *TopologyMapper) AllocateFragment(process_guid, db, frame string, sli
 	fuid := util.SUUID_to_Hex(util.Id())
 	fragment_key := fmt.Sprintf("%s/db/%s/frame/%s/slice/%d/fragment/%s/process", self.namespace, db, frame, slice_int, fuid)
 	// need to check value to see how many we have left
-	log.Println("ALLOC:", process_guid, len(process_guid))
+	log.Warn("ALLOC:", process_guid, len(process_guid))
 	if len(process_guid) > 1 {
 		_, err := self.service.Etcd.Set(fragment_key, process_guid, 0)
 		if err != nil {
 			return err
 		}
-		log.Printf("Fragment sent to etcd: %s(%s)", fragment_key, process_guid)
+		log.Warn("Fragment sent to etcd:", fragment_key, process_guid)
 	}
 
 	return nil
@@ -189,7 +189,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 
 		process_uuid, err = util.ParseGUID(node.Value)
 		if err != nil {
-			log.Println("Bad Process Guid", key)
+			log.Warn("Bad Process Guid", key)
 			return errors.New("No Process Id")
 		}
 	} else {
@@ -238,7 +238,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		}
 
 		if err != nil {
-			log.Println("Bad UUID:", process_uuid, key)
+			log.Warn("Bad UUID:", process_uuid, key)
 			return err
 		}
 		process = db.NewProcess(&process_uuid)
@@ -252,7 +252,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 	return err
 }
 func (self *TopologyMapper) remove_fragment(node *etcd.Node) error {
-	log.Println(" hot remove_fragment (Not Supported yet):", node)
+	log.Warn(" hot remove_fragment (Not Supported yet):", node)
 	/*
 		key := node.Key[len(self.namespace)+1:]
 		bits := strings.Split(key, "/")
@@ -395,7 +395,7 @@ func (self *ProcessMapper) getnode(u *util.GUID) *Node {
 
 func crash_on_error(err error) {
 	if err != nil {
-		log.Fatal(err)
+		log.Warn(err)
 	}
 }
 
@@ -437,8 +437,8 @@ func (self *ProcessMapper) Run() {
 	path := self.namespace + "/process"
 	self_path := path + "/" + id_string
 
-	log.Println("Writing configuration to etcd...")
-	log.Println(self_path)
+	log.Warn("Writing configuration to etcd...")
+	log.Warn(self_path)
 
 	var err error
 	_, err = self.service.Etcd.Set(self_path+"/port_tcp", strconv.Itoa(config.GetInt("port_tcp")), 0)
@@ -453,7 +453,7 @@ func (self *ProcessMapper) Run() {
 		err := self.handlenode(node)
 		if err != nil {
 			out := spew.Sdump(node)
-			log.Println(err, out)
+			log.Warn(err, out)
 		}
 	}
 

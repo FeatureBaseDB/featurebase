@@ -3,7 +3,7 @@ package core
 import (
 	//	"github.com/davecgh/go-spew/spew"
 	"encoding/gob"
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/db"
 	"pilosa/util"
 )
@@ -54,7 +54,7 @@ func (self *RemoteSetBit) Request() {
 			QueryId:         random_id,
 			DestProcessId:   *process,
 		}
-		wait := len(request) / 100
+		wait := len(request)
 		if wait < 10 {
 			wait = 10
 		}
@@ -75,7 +75,7 @@ func (self *RemoteSetBit) MergeResults(local_results []SBResult) []SBResult {
 		go func(task remote_task) {
 			value, err := self.service.Hold.Get(&task.id, task.wait_time) //eiher need to be the frame process or the handler process?
 			if value == nil {
-				log.Println("Bad RemoteSetBit Result:", err)
+				log.Warn("Bad RemoteSetBit Result:", err)
 				empty := make([]SBResult, 0, 0)
 				answers <- empty
 

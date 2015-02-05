@@ -6,7 +6,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/config"
 	"pilosa/util"
 	"strings"
@@ -25,7 +25,7 @@ func lookup(stmt *sql.Stmt, tile_id uint64) int {
 	var category int
 	err := stmt.QueryRow(tile_id).Scan(&category) // WHERE number = 13
 	if err != nil {
-		log.Println(err.Error())
+		log.Warn(err.Error())
 		return 0
 	}
 	return category
@@ -53,7 +53,7 @@ func init() {
 }
 
 func (self *FragmentContainer) Shutdown() {
-	log.Println("Container Shutdown Started")
+	log.Warn("Container Shutdown Started")
 	var wg sync.WaitGroup
 	wg.Add(len(self.fragments))
 
@@ -61,7 +61,7 @@ func (self *FragmentContainer) Shutdown() {
 		v.exit <- &wg
 	}
 	wg.Wait()
-	log.Println("Container Shutdown Complete")
+	log.Warn("Container Shutdown Complete")
 }
 
 func (self *FragmentContainer) LoadBitmap(frag_id util.SUUID, bitmap_id uint64, compressed_bitmap string, filter uint64) {
@@ -294,7 +294,7 @@ func (self *FragmentContainer) Clear(frag_id util.SUUID) (bool, error) {
 func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id util.SUUID) {
 	_, ok := self.fragments[id]
 	if !ok {
-		log.Println("ADD FRAGMENT", frame, db, slice, util.SUUID_to_Hex(id))
+		log.Warn("ADD FRAGMENT", frame, db, slice, util.SUUID_to_Hex(id))
 		f := NewFragment(id, db, slice, frame)
 		loader := make(chan Command)
 		self.fragments[id] = f
@@ -348,7 +348,7 @@ func getStorage(db string, slice int, frame string, fid util.SUUID) Storage {
 
 func NewFragment(frag_id util.SUUID, db string, slice int, frame string) *Fragment {
 	var impl Pilosa
-	log.Println(fmt.Sprintf("XXXXXXXXXXXXXXXXXXXXXXXXXXX(%s)", frame))
+	log.Warn(fmt.Sprintf("XXXXXXXXXXXXXXXXXXXXXXXXXXX(%s)", frame))
 	if strings.HasSuffix(frame, ".n") {
 		impl = NewBrand(db, frame, slice, getStorage(db, slice, frame, frag_id), 50000, 45000, 100)
 	} else {
@@ -464,7 +464,7 @@ func (self *Fragment) difference(bitmaps []BitmapHandle) BitmapHandle {
 func (self *Fragment) Persist() {
 	err := self.impl.Persist()
 	if err != nil {
-		log.Println("Error saving:", err)
+		log.Warn("Error saving:", err)
 	}
 }
 func (self *Fragment) Load(loadChan chan Command) {
@@ -492,7 +492,7 @@ func (self *Fragment) ServeFragment(loadChan chan Command) {
 			case req := <-loadChan:
 				self.processCommand(req)
 			case wg := <-self.exit:
-				log.Println("Fragment Shutdown")
+				log.Warn("Fragment Shutdown")
 				self.Persist()
 				wg.Done()
 			}

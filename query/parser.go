@@ -3,7 +3,7 @@ package query
 import (
 	"errors"
 	"fmt"
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/index"
 	"pilosa/util"
 	"strconv"
@@ -303,7 +303,7 @@ ArgLoop:
 		case TYPE_RB:
 			//
 		default:
-			log.Println(spew.Sdump("unexpected", token))
+			log.Warn(spew.Sdump("unexpected", token))
 			return nil, errors.New("BAD TOKEN")
 		}
 	}

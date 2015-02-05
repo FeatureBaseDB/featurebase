@@ -79,6 +79,11 @@
         "version": "master",
         "type": "git"
     },
+    "seelog": {
+        "repo": "github.com/cihub/seelog",
+        "version": "master",
+        "type": "git"
+    },
     "spew": {
         "repo": "github.com/davecgh/go-spew/spew",
         "version": "e762b3d1320b76030bd7f6cc2bfc3d9acce874c0",

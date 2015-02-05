@@ -1,7 +1,7 @@
 package core
 
 import (
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/db"
 	"pilosa/index"
 	"pilosa/query"
@@ -164,7 +164,7 @@ func (self *Service) StashQueryStepHandler(msg *db.Message) {
 
 		switch val := value.(type) {
 		case index.BitmapHandle:
-			log.Println("STASH ADDING HANDLE", val)
+			log.Info("STASH ADDING HANDLE", val)
 			//not sure what to do here....
 			//result.Handles = append(result.Handles, val)
 		case []byte:
@@ -174,7 +174,7 @@ func (self *Service) StashQueryStepHandler(msg *db.Message) {
 		case query.Stash:
 			result.Stash = append(result.Stash, val.Stash...)
 		default:
-			log.Println("UNEXCPECTED MESSAG", value)
+			log.Warn("UNEXCPECTED MESSAG", value)
 		}
 	}
 	result_message := db.Message{Data: query.StashQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}

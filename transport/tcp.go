@@ -3,7 +3,7 @@ package transport
 import (
 	"encoding/gob"
 	"fmt"
-	"log"
+	log "github.com/cihub/seelog"
 	"net"
 	"pilosa/config"
 	"pilosa/core"
@@ -38,14 +38,14 @@ BeginManageConnection:
 		if self.conn == nil {
 			process, err := self.transport.service.ProcessMap.GetProcess(self.process)
 			if err != nil {
-				log.Println("transport/tcp: error getting process, retrying in 2 seconds... ", self.process, err)
+				log.Warn("transport/tcp: error getting process, retrying in 2 seconds... ", self.process, err)
 				time.Sleep(2 * time.Second)
 				continue
 			}
 			host_string := fmt.Sprintf("%s:%d", process.Host(), process.PortTcp())
 			conn, err := net.Dial("tcp", host_string)
 			if err != nil {
-				log.Println("transport/tcp: error dialing: ", host_string, " Retrying in 2 seconds...")
+				log.Warn("transport/tcp: error dialing: ", host_string, " Retrying in 2 seconds...")
 				time.Sleep(2 * time.Second)
 				continue
 			}
@@ -62,7 +62,7 @@ BeginManageConnection:
 				var mess *db.Message
 				err := decoder.Decode(&mess)
 				if err != nil {
-					log.Println("transport/tcp: error decoding message: ", err.Error())
+					log.Warn("transport/tcp: error decoding message: ", err.Error())
 					exit <- 1
 					return
 				}
@@ -74,7 +74,7 @@ BeginManageConnection:
 			case message := <-self.outbox:
 				err := encoder.Encode(message)
 				if err != nil {
-					log.Println(err.Error())
+					log.Warn(err.Error())
 					return
 				}
 			case message := <-self.inbox:
@@ -108,7 +108,7 @@ type TcpTransport struct {
 }
 
 func (self *TcpTransport) Run() {
-	log.Println("Initializing TCP transport")
+	log.Warn("Initializing TCP transport")
 	go self.listen()
 	for {
 		select {
@@ -130,12 +130,12 @@ func (self *TcpTransport) listen() {
 	port_string := fmt.Sprintf(":%d", self.port)
 	l, e := net.Listen("tcp", port_string)
 	if e != nil {
-		log.Fatal("Cannot bind to port! ", self.port)
+		log.Warn("Cannot bind to port! ", self.port)
 	}
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			log.Println("Error accepting, trying again in 2 sec... ", err)
+			log.Warn("Error accepting, trying again in 2 sec... ", err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -149,7 +149,7 @@ func (self *TcpTransport) manage(conn *net.Conn) {
 }
 
 func (self *TcpTransport) Close() {
-	log.Println("Shutting down TCP transport")
+	log.Warn("Shutting down TCP transport")
 }
 
 func (self *TcpTransport) Send(message *db.Message, host *GUID) {

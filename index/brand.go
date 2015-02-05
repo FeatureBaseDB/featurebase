@@ -11,7 +11,7 @@ import (
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/config"
 	"pilosa/util"
 	"sort"
@@ -109,7 +109,7 @@ func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category uint64) {
 	if bm.Count() >= self.threshold_value {
 		self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm, category}
 		if len(self.bitmap_cache) > self.threshold_length {
-			log.Printf("RANK: %d %d %d", len(self.bitmap_cache), self.threshold_length, self.threshold_value)
+			log.Info("RANK: %d %d %d", len(self.bitmap_cache), self.threshold_length, self.threshold_value)
 			self.Rank()
 			self.trim()
 		}
@@ -121,7 +121,7 @@ func (self *Brand) trim() {
 			delete(self.bitmap_cache, k)
 		}
 	}
-	log.Printf("TRIM: %d %d", len(self.bitmap_cache), self.threshold_length)
+	log.Info("TRIM:", len(self.bitmap_cache), self.threshold_length)
 
 }
 
@@ -236,7 +236,7 @@ func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
 }
 func dump(r RankList, n int) {
 	for i, v := range r {
-		log.Println(i, v)
+		log.Info(i, v)
 		if i > n {
 			return
 		}
@@ -366,18 +366,18 @@ func (self *Brand) getFileName() string {
 }
 
 func (self *Brand) Persist() error {
-	log.Println("Brand Persist:", self.getFileName())
+	log.Info("Brand Persist:", self.getFileName())
 	self.storage.FlushBatch()
 	asize := len(self.bitmap_cache)
 
 	if asize == 0 {
-		log.Println("Nothing to save ", self.getFileName())
+		log.Warn("Nothing to save ", self.getFileName())
 		return nil
 	}
 	w, err := util.Create(self.getFileName())
 	if err != nil {
-		log.Println("Error opening outfile ", self.getFileName())
-		log.Println(err)
+		log.Warn("Error opening outfile ", self.getFileName())
+		log.Warn(err)
 		return err
 	}
 	defer w.Close()
@@ -402,11 +402,11 @@ func (self *Brand) Persist() error {
 }
 
 func (self *Brand) Load(requestChan chan Command, f *Fragment) {
-	log.Println("Brand Load")
+	log.Warn("Brand Load")
 	time.Sleep(time.Duration(rand.Intn(32)) * time.Second) //trying to avoid mass cassandra hit
 	r, err := util.Open(self.getFileName())
 	if err != nil {
-		log.Println("NO Brand Init File:", self.getFileName())
+		log.Warn("NO Brand Init File:", self.getFileName())
 		return
 	}
 	dec := json.NewDecoder(r)

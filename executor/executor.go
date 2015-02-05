@@ -1,7 +1,7 @@
 package executor
 
 import (
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/config"
 	"pilosa/core"
 	"pilosa/db"
@@ -17,12 +17,12 @@ type Executor struct {
 }
 
 func (self *Executor) Init() error {
-	log.Println("Starting Executor")
+	log.Warn("Starting Executor")
 	return nil
 }
 
 func (self *Executor) Close() {
-	log.Println("Shutting down Executor")
+	log.Warn("Shutting down Executor")
 }
 
 func (self *Executor) NewJob(job *db.Message) {
@@ -52,8 +52,8 @@ func (self *Executor) NewJob(job *db.Message) {
 	//	case query.MaskQueryStep:
 	//		self.service.MaskQueryStepHandler(job)
 	default:
-		log.Println("unknown")
-		log.Println(spew.Sdump(job.Data))
+		log.Warn("unknown")
+		log.Warn(spew.Sdump(job.Data))
 	}
 }
 
@@ -101,7 +101,7 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 			if loc != nil {
 				self.service.Transport.Send(msg, loc.ProcessId)
 			} else {
-				log.Println("Problem with querystep(nil location)", spew.Sdump(step))
+				log.Warn("Problem with querystep(nil location)", spew.Sdump(step))
 			}
 		}
 	}
@@ -172,7 +172,7 @@ func (self *Executor) RunPQL(database_name string, pql string) (interface{}, err
 			}(query_list[i], result)
 			if err != nil {
 				out := spew.Sdump(err)
-				log.Println(out)
+				log.Warn(out)
 			}
 		}
 		for z := 0; z < x; z++ {
@@ -186,7 +186,7 @@ func (self *Executor) RunPQL(database_name string, pql string) (interface{}, err
 }
 
 func (self *Executor) Run() {
-	log.Println("Executor Run...")
+	log.Warn("Executor Run...")
 }
 
 func NewExecutor(service *core.Service) *Executor {

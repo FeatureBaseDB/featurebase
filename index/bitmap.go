@@ -7,8 +7,8 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/gob"
+	log "github.com/cihub/seelog"
 	"io/ioutil"
-	"log"
 
 	"github.com/yasushi-saito/rbtree"
 )
@@ -300,7 +300,7 @@ func Union(a_bm IBitmap, b_bm IBitmap) IBitmap {
 			a = a.Next()
 			b = b.Next()
 		} else {
-			log.Println("NEVER SHOULD BE HERE")
+			log.Warn("NEVER SHOULD BE HERE")
 			break
 		}
 	}
@@ -358,7 +358,7 @@ func Difference(a_bm IBitmap, b_bm IBitmap) IBitmap {
 			a = a.Next()
 			b = b.Next()
 		} else {
-			log.Println("NEVER SHOULD BE HERE")
+			log.Warn("NEVER SHOULD BE HERE")
 			break
 		}
 	}
@@ -427,7 +427,7 @@ func CreateRBBitmap() IBitmap {
 func (self *Bitmap) FromCompressString(str string) {
 	compressed_data, err := base64.StdEncoding.DecodeString(str)
 	if err != nil {
-		log.Println(err)
+		log.Warn(err)
 		return
 	}
 	reader, _ := gzip.NewReader(bytes.NewReader(compressed_data))
@@ -468,7 +468,7 @@ func (b *Bitmap) ToBytes() []byte {
 		obj := i.Item().(*Chunk)
 		err := enc.Encode(obj)
 		if err != nil {
-			log.Println(err)
+			log.Warn(err)
 		}
 	}
 	return buf.Bytes()

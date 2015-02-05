@@ -2,7 +2,7 @@ package db
 
 import (
 	"errors"
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/config"
 	"pilosa/util"
 	"sync"
@@ -304,7 +304,7 @@ func (d *Database) GetFrameSliceIntersect(frame *Frame, slice *Slice) (*FrameSli
 			return frameslice, nil
 		}
 	}
-	log.Println("Missing FrameSliceIntersect:", d.Name, frame, slice)
+	log.Warn("Missing FrameSliceIntersect:", d.Name, frame, slice)
 	return nil, FrameSliceIntersectDoesNotExistError
 }
 
@@ -356,15 +356,14 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 	//defer d.mutex.Unlock()
 	frame, err := d.getFrame(bitmap.FrameType)
 	if err != nil {
-		log.Println("Missing FrameType", bitmap.FrameType, d.Name, slice)
-		log.Println(err)
+		log.Warn("Missing FrameType", bitmap.FrameType, d.Name, slice)
+		log.Warn(err)
 		return nil, err
 	}
-	//log.Println(frame, slice)
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
-		log.Println("Missing frame,slice", frame, slice)
-		log.Println(err)
+		log.Warn("Missing frame,slice", frame, slice)
+		log.Warn(err)
 		return nil, err
 	}
 	return fsi.GetFragment(), nil
@@ -373,8 +372,8 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragment, error) {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
-		log.Println("Missing frame,slice", frame, slice)
-		log.Println(err)
+		log.Warn("Missing frame,slice", frame, slice)
+		log.Warn(err)
 		return nil, err
 	}
 	return fsi.GetFragment(), nil
@@ -400,7 +399,7 @@ func (d *Database) GetFragmentFromProfile(frame string, profile_id uint64) (*Fra
 func (d *Database) getFragment(frame *Frame, slice *Slice) (*Fragment, error) {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
-		log.Println(err)
+		log.Warn(err)
 		return nil, err
 	}
 	return fsi.GetFragment(), nil
@@ -409,7 +408,7 @@ func (d *Database) getFragment(frame *Frame, slice *Slice) (*Fragment, error) {
 func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
-		log.Println("database.addFragment", err)
+		log.Warn("database.addFragment", err)
 		return nil
 	}
 	fragment := Fragment{id: fragment_id}

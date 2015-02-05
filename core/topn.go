@@ -2,7 +2,7 @@ package core
 
 import (
 	"encoding/gob"
-	"log"
+	log "github.com/cihub/seelog"
 	"pilosa/db"
 	"pilosa/index"
 	"pilosa/query"
@@ -102,7 +102,7 @@ func (self *Service) TopFillHandler(msg *db.Message) { //in order for this to ge
 	topfill := msg.Data.(TopFill)
 	topn, err := self.Index.TopFillBatch(topfill.Args)
 	if err != nil {
-		log.Println("TopFillHandler:", err)
+		log.Warn("TopFillHandler:", err)
 	}
 
 	result_message := db.Message{Data: query.FillResult{&query.BaseQueryResult{Id: &topfill.QueryId, Data: topn}}}
@@ -133,7 +133,7 @@ func GatherResults(tasks map[util.GUID]*Task, service *Service) map[uint64]uint6
 		go func(id util.GUID) {
 			value, err := service.Hold.Get(&id, 10) //eiher need to be the frame process or the handler process?
 			if value == nil {
-				log.Println("Bad TopN Result:", err)
+				log.Warn("Bad TopN Result:", err)
 				empty := make([]index.Pair, 0, 0)
 				answers <- empty
 
@@ -173,7 +173,7 @@ func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 	if qs.Input == nil {
 		topn, err := self.Index.TopNAll(qs.Location.FragmentId, qs.N*2, qs.Filters)
 		if err != nil {
-			log.Println(spew.Sdump(err))
+			log.Warn(spew.Sdump(err))
 		}
 		topnPackage = TopNPackage{*qs.Location.ProcessId, qs.Location.FragmentId, topn, bh}
 	} else {
@@ -189,7 +189,7 @@ func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 
 		topn, err := self.Index.TopN(qs.Location.FragmentId, bh, qs.N*2, qs.Filters)
 		if err != nil {
-			log.Println(spew.Sdump(err))
+			log.Warn(spew.Sdump(err))
 		}
 		topnPackage = TopNPackage{*qs.Location.ProcessId, qs.Location.FragmentId, topn, bh}
 	}

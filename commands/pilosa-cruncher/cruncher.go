@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
+	log "github.com/cihub/seelog"
 	"github.com/mitchellh/panicwrap"
-	"log"
 	"os"
 	"pilosa/core"
 	"pilosa/cruncher"
@@ -32,19 +32,20 @@ func main() {
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
 		if err != nil {
-			log.Fatal(err)
+			log.Warn(err)
+			os.Exit(1)
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
 	cruncher := cruncher.NewCruncher()
 	cruncher.Run()
-	log.Println("STOP")
+	log.Warn("STOP")
 }
 
 func panicHandler(output string) {
 	// output contains the full output (including stack traces) of the
 	// panic. Put it in a file or something.
-	log.Printf("The child panicked:\n\n%s\n", output)
+	log.Warn("The child panicked:\n\n", output)
 	os.Exit(1)
 }
