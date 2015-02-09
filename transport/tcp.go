@@ -153,12 +153,14 @@ func (self *TcpTransport) Close() {
 }
 
 func (self *TcpTransport) Send(message *db.Message, host *GUID) {
+	log.Trace("TcpTransport.Send", message, host)
 	envelope := db.Envelope{message, host}
 	notify.Post("outbox", &envelope)
 	self.outbox <- envelope
 }
 
 func (self *TcpTransport) Receive() *db.Message {
+	log.Trace("TcpTransport.Receive")
 	message := <-self.inbox
 	notify.Post("inbox", message)
 	return message

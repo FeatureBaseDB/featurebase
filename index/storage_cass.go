@@ -104,6 +104,7 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 	}
 	delta := time.Since(start)
 	util.SendTimer("cassandra_storage_Fetch", delta.Nanoseconds())
+	util.SendInc("cassandra_storage_Read")
 	bitmap.SetCount(uint64(count))
 	return bitmap, uint64(filter)
 }
@@ -144,6 +145,7 @@ func (self *CassandraStorage) EndBatch() {
 	}
 	delta := time.Since(start)
 	util.SendTimer("cassandra_storage_EndBatch", delta.Nanoseconds())
+	util.SendInc("cassandra_storage_Write")
 
 }
 

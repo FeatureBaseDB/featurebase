@@ -30,10 +30,12 @@ func (self *Dispatch) Run() {
 		message := self.service.Transport.Receive()
 		switch data := message.Data.(type) {
 		case core.BatchRequest:
+			log.Trace("Dispatch.Run BatchRequest")
 			response := db.Message{Data: core.BatchResponse{Id: data.Id}}
 			self.service.Index.LoadBitmap(data.Fragment_id, data.Bitmap_id, data.Compressed_bitmap, data.Filter)
 			self.service.Transport.Send(&response, data.Source)
 		case core.BitsRequest:
+			log.Trace("Dispatch.Run BitsRequest")
 			var results []core.SBResult
 			result := false
 
@@ -50,13 +52,17 @@ func (self *Dispatch) Run() {
 			response := db.Message{Data: core.BitsResponse{Id: &data.QueryId, Items: results}}
 			self.service.Transport.Send(&response, &data.ReturnProcessId)
 		case core.PingRequest:
+			log.Trace("Dispatch.Run Ping")
 			pong := db.Message{Data: core.PongRequest{Id: data.Id}}
 			self.service.Transport.Send(&pong, data.Source)
 		case db.HoldResult:
+			log.Trace("Dispatch.Run HoldResult")
 			self.service.Hold.Set(data.ResultId(), data.ResultData(), 30)
 		case query.PortableQueryStep:
+			log.Trace("Dispatch.Run PortableQueryStep")
 			go self.service.Executor.NewJob(message)
 		case core.TopFill:
+			log.Trace("Dispatch.Run TopFill")
 			go self.service.TopFillHandler(message)
 		case core.BitsResponse:
 			self.service.Hold.Set(data.ResultId(), data.ResultData(), 30)

@@ -71,13 +71,15 @@ func (self *Service) PrepareLogging() {
 		log.SetOutput(f)
 	*/
 	fname := fmt.Sprintf("%s/%s.%s", base_path, self.name, self.Id)
+	//<seelog minlevel="debug" maxlevel="error">
+	log_level := config.GetStringDefault("log_level", "info")
 	prod_config := fmt.Sprintf(`
-	<seelog>
+	<seelog minlevel="%s">
 	<outputs>
 	<rollingfile type="size" filename="%s" maxsize="524288000" maxrolls="4" />
 	</outputs>
 	</seelog>
-	`, fname)
+	`, log_level, fname)
 	logger, _ := log.LoggerFromConfigAsBytes([]byte(prod_config))
 	log.ReplaceLogger(logger)
 }

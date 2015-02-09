@@ -298,6 +298,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	_, bits := r.Form["bits"]
 
+	log.Info("PQL:", database_name, pql)
 	results, err := self.service.Executor.RunPQL(database_name, pql)
 	if err != nil {
 		log.Warn("PQL Exec Error:", err.Error(), database_name, pql)

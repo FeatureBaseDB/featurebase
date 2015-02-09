@@ -2,6 +2,7 @@ package hold
 
 import (
 	"errors"
+	log "github.com/cihub/seelog"
 	. "pilosa/util"
 	"time"
 )
@@ -24,11 +25,13 @@ type Holder struct {
 //var Hold Holder
 
 func (self *Holder) DelChan(id *GUID) {
+	log.Trace("Holder.DelChan", id)
 	req := delhold{id}
 	self.delchan <- req
 }
 
 func (self *Holder) GetChan(id *GUID) holdchan {
+	log.Trace("Holder.GetChan", id)
 	reply := make(chan holdchan)
 	req := gethold{id, reply}
 	self.getchan <- req
@@ -36,6 +39,7 @@ func (self *Holder) GetChan(id *GUID) holdchan {
 }
 
 func (self *Holder) Get(id *GUID, timeout int) (interface{}, error) {
+	log.Trace("Holder.Get", id, timeout)
 	ch := self.GetChan(id)
 	select {
 	case val := <-ch:
@@ -47,6 +51,7 @@ func (self *Holder) Get(id *GUID, timeout int) (interface{}, error) {
 }
 
 func (self *Holder) Set(id *GUID, value interface{}, timeout int) {
+	log.Trace("Holder.Set", id, value, timeout)
 	ch := self.GetChan(id)
 	go func() {
 		select {

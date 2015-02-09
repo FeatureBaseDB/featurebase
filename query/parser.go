@@ -40,6 +40,7 @@ bm := db.Bitmap{bitmap_id, frame_type, filter}
 return []QueryInput{&bm}, uint64(profile_id), 0
 */
 func (self *QueryParser) next() *Token {
+	log.Trace("QueryParser.next")
 	self.pos += 1
 	if self.pos > len(self.tokens) {
 		return nil
@@ -48,16 +49,19 @@ func (self *QueryParser) next() *Token {
 }
 
 func (self *QueryParser) peek() *Token {
+	log.Trace("QueryParser.peek")
 	token := self.next()
 	self.backup()
 	return token
 }
 
 func (self *QueryParser) backup() {
+	log.Trace("QueryParser.backup")
 	self.pos -= 1
 }
 
 func (self *QueryParser) Parse() (query *Query, err error) {
+	log.Trace("QueryParser.Parse", query, err)
 	defer func() {
 		if r := recover(); r != nil {
 			var ok bool
@@ -341,6 +345,7 @@ ArgLoop:
 }
 
 func Parse(tokens []Token) (*Query, error) {
+	log.Trace("Parse", tokens)
 	parser := QueryParser{tokens, 0}
 	return parser.Parse()
 }

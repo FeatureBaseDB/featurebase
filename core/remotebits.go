@@ -54,7 +54,7 @@ func (self *RemoteSetBit) Request() {
 			QueryId:         random_id,
 			DestProcessId:   *process,
 		}
-		wait := len(request)
+		wait := len(request) * 10
 		if wait < 10 {
 			wait = 10
 		}

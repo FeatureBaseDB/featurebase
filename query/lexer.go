@@ -3,6 +3,7 @@ package query
 import (
 	"errors"
 	"fmt"
+	log "github.com/cihub/seelog"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -44,6 +45,7 @@ type Lexer struct {
 }
 
 func (lexer *Lexer) emit(typ int) {
+	log.Trace("Lexer.emit", typ)
 	if lexer.start < lexer.pos {
 		lexer.ch <- Token{lexer.text[lexer.start:lexer.pos], typ}
 	}
@@ -51,6 +53,7 @@ func (lexer *Lexer) emit(typ int) {
 }
 
 func (lexer *Lexer) acceptUntil(chars string, consume bool) (rune, error) {
+	log.Trace("Lexer.acceptUntil", chars, consume)
 	start_pos := lexer.pos
 
 	for {
@@ -77,6 +80,7 @@ func (lexer *Lexer) acceptUntil(chars string, consume bool) (rune, error) {
 }
 
 func (lexer *Lexer) acceptRun(valid string) {
+	log.Trace("Lexer.acceptRun", valid)
 	for strings.IndexRune(valid, lexer.next()) >= 0 {
 	}
 	lexer.backup()
@@ -84,6 +88,7 @@ func (lexer *Lexer) acceptRun(valid string) {
 
 // next returns the next rune in the input.
 func (lexer *Lexer) next() (runey rune) {
+	log.Trace("Lexer.next", runey)
 	if lexer.pos >= len(lexer.text) {
 		lexer.width = 0
 		return 0
@@ -95,18 +100,21 @@ func (lexer *Lexer) next() (runey rune) {
 
 // ignore skips over the pending input before this point.
 func (lexer *Lexer) ignore() {
+	log.Trace("Lexer.ignore")
 	lexer.start = lexer.pos
 }
 
 // backup steps back one rune.
 // Can be called only once per call of next.
 func (lexer *Lexer) backup() {
+	log.Trace("Lexer.backup")
 	lexer.pos -= lexer.width
 }
 
 // peek returns but does not consume
 // the next rune in the input.
 func (lexer *Lexer) peek() rune {
+	log.Trace("Lexer.peek")
 	for {
 		next_rune := lexer.next()
 		// ignore spaces
@@ -119,6 +127,7 @@ func (lexer *Lexer) peek() rune {
 }
 
 func stateError(err error) func(lexer *Lexer) statefn {
+	log.Trace("stateError", err)
 	return func(lexer *Lexer) statefn {
 		lexer.ch <- Token{err.Error(), TYPE_ERROR}
 		close(lexer.ch)
@@ -127,6 +136,7 @@ func stateError(err error) func(lexer *Lexer) statefn {
 }
 
 func stateFunc(lexer *Lexer) statefn {
+	log.Trace("stateFunc", lexer)
 	_, err := lexer.acceptUntil("(", true)
 	if err != nil {
 		return stateError(err)
@@ -136,6 +146,7 @@ func stateFunc(lexer *Lexer) statefn {
 }
 
 func stateLP(lexer *Lexer) statefn {
+	log.Trace("stateLP", lexer)
 	lexer.pos += 1
 	lexer.emit(TYPE_LP)
 	// handle multiple LPs
@@ -146,6 +157,7 @@ func stateLP(lexer *Lexer) statefn {
 }
 
 func stateLB(lexer *Lexer) statefn {
+	log.Trace("stateLB", lexer)
 	lexer.acceptUntil("[", true)
 	lexer.next()
 	lexer.emit(TYPE_LB)
@@ -177,6 +189,7 @@ func stateLB(lexer *Lexer) statefn {
 }
 
 func stateRB(lexer *Lexer) statefn {
+	log.Trace("stateRB", lexer)
 	lexer.pos += 1
 	lexer.emit(TYPE_RB)
 
@@ -191,6 +204,7 @@ func stateRB(lexer *Lexer) statefn {
 }
 
 func stateArgs(lexer *Lexer) statefn {
+	log.Trace("stateArgs", lexer)
 	r, err := lexer.acceptUntil("(),=[]", false)
 	if err != nil {
 		return stateError(err)
@@ -215,6 +229,7 @@ func stateArgs(lexer *Lexer) statefn {
 }
 
 func stateKeyword(lexer *Lexer) statefn {
+	log.Trace("stateKeyword", lexer)
 	_, err := lexer.acceptUntil("=", true)
 	if err != nil {
 		return stateError(err)
@@ -224,6 +239,7 @@ func stateKeyword(lexer *Lexer) statefn {
 }
 
 func stateEquals(lexer *Lexer) statefn {
+	log.Trace("stateEquals", lexer)
 	e := lexer.next()
 	if e != '=' {
 		return stateError(errors.New("Expecting '='!"))
@@ -233,6 +249,7 @@ func stateEquals(lexer *Lexer) statefn {
 }
 
 func stateValue(lexer *Lexer) statefn {
+	log.Trace("stateValue", lexer)
 	r, err := lexer.acceptUntil("(),[", false)
 	if err != nil {
 		return stateError(err)
@@ -259,6 +276,7 @@ func stateValue(lexer *Lexer) statefn {
 }
 
 func stateRP(lexer *Lexer) statefn {
+	log.Trace("stateRP", lexer)
 	lexer.pos += 1
 	lexer.emit(TYPE_RP)
 
@@ -275,23 +293,27 @@ func stateRP(lexer *Lexer) statefn {
 }
 
 func stateRPComma(lexer *Lexer) statefn {
+	log.Trace("stateRPComma", lexer)
 	lexer.pos += 1
 	lexer.emit(TYPE_COMMA)
 	return stateValue
 }
 
 func stateComma(lexer *Lexer) statefn {
+	log.Trace("stateComma", lexer)
 	lexer.pos += 1
 	lexer.emit(TYPE_COMMA)
 	return stateArgs
 }
 
 func stateEOF(lexer *Lexer) statefn {
+	log.Trace("stateEOF", lexer)
 	close(lexer.ch)
 	return nil
 }
 
 func (lexer *Lexer) Lex() (tokens []Token, err error) {
+	log.Trace("Lexer.Lex", tokens, err)
 	defer func() {
 		if r := recover(); r != nil {
 			var ok bool
@@ -321,6 +343,7 @@ func (lexer *Lexer) Lex() (tokens []Token, err error) {
 }
 
 func Lex(input string) ([]Token, error) {
+	log.Trace("Lex", input)
 	lexer := Lexer{input, 0, 0, 0, TYPE_FUNC, make(chan Token)}
 	return lexer.Lex()
 }

@@ -66,17 +66,22 @@ type BaseQueryStep struct {
 }
 
 func (self *BaseQueryStep) GetId() *util.GUID {
+	log.Trace("BaseQueryStep", *self.Id)
 	return self.Id
 }
 func (self *BaseQueryStep) GetLocation() *db.Location {
+	log.Trace("BaseQueryStep.GetLocation", *self.Location)
 	return self.Location
 }
 
 func (self *BaseQueryStep) LocIsDest() bool {
+	log.Trace("BaseQueryStep.LocIsDest")
 	if self.Location.ProcessId == self.Destination.ProcessId &&
 		self.Location.FragmentId == self.Destination.FragmentId {
+		log.Trace("BaseQueryStep.LocIsDest Return true")
 		return true
 	}
+	log.Trace("BaseQueryStep.LocIsDest Return false")
 	return false
 }
 
@@ -86,10 +91,13 @@ type BaseQueryResult struct {
 }
 
 func (self *BaseQueryResult) ResultId() *util.GUID {
+	log.Trace("BaseQueryStep.ResultId", self)
+
 	return self.Id
 }
 
 func (self *BaseQueryResult) ResultData() interface{} {
+	log.Trace("BaseQueryStep.ResultData", self)
 	return self.Data
 }
 
@@ -113,6 +121,7 @@ type CountQueryTree struct {
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *CountQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("CountQueryTree.getLocation", d, qt)
 	return qt.subquery.getLocation(d)
 }
 
@@ -143,6 +152,7 @@ type TopNQueryTree struct {
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *TopNQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("TopNQueryTree.getLocation", d, qt)
 	var err error
 	if qt.location == nil {
 		frame := d.GetOrCreateFrame(qt.Frame)
@@ -178,6 +188,7 @@ type UnionQueryTree struct {
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *UnionQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("UnionQueryTree.getLocation", d, qt)
 	var err error
 	if qt.location == nil {
 		subqueryLength := len(qt.subqueries)
@@ -210,6 +221,7 @@ type IntersectQueryTree struct {
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *IntersectQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("IntersectQueryTree.getLocation", d, qt)
 	var err error
 	if qt.location == nil {
 		subqueryLength := len(qt.subqueries)
@@ -242,6 +254,7 @@ type DifferenceQueryTree struct {
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *DifferenceQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("DifferenceQueryTree.getLocation", d, qt)
 	var err error
 	if qt.location == nil {
 		subqueryLength := len(qt.subqueries)
@@ -278,11 +291,13 @@ type CatQueryTree struct {
 }
 
 func (qt *CatQueryTree) Append(subtree QueryTree) {
+	log.Trace("CatQueryTree.Append", qt, subtree)
 	qt.subqueries = append(qt.subqueries, subtree)
 }
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *CatQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("CatQueryTree.getLocation", d)
 	var err error
 	if qt.location == nil {
 		subqueryLength := len(qt.subqueries)
@@ -305,6 +320,7 @@ type AllQueryTree struct {
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *AllQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("AllQueryTree.getLocation", d)
 	return nil, nil
 }
 
@@ -329,6 +345,7 @@ type GetQueryTree struct {
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *GetQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("GetQueryTree.getLocation", d)
 	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {
@@ -359,6 +376,7 @@ type SetQueryTree struct {
 
 // Uses consistent hashing function to select node containing data for GET operation
 func (qt *SetQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("SetQueryTree.getLocation", d)
 	// check here for supported frames
 	if !d.IsValidFrame(qt.bitmap.FrameType) {
 		return nil, NewInvalidFrame(d.Name, qt.bitmap.FrameType)
@@ -420,6 +438,7 @@ type QueryTree interface {
 }
 
 func validateRange(Args map[string]interface{}) error {
+	log.Trace("validateRange", Args)
 	_, ok := Args["id"]
 	if !ok {
 		return errors.New("missing bitmap id")
@@ -441,6 +460,7 @@ func validateRange(Args map[string]interface{}) error {
 
 // Builds QueryTree object from Query. Pass slice=-1 to perform operation on all slices
 func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
+	log.Trace("QueryPlanner.buildTree", query, slice)
 	var tree QueryTree
 
 	// handle SET operation regardless of the slice
@@ -583,6 +603,7 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 
 // Produces flattened QueryPlan from QueryTree input
 func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Location) (*QueryPlan, error) {
+	log.Trace("QueryPlanner.flatten", self, qt, id, location)
 	plan := QueryPlan{}
 	if cat, ok := qt.(*CatQueryTree); ok {
 		inputs := make([]*util.GUID, len(cat.subqueries))
@@ -750,6 +771,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 
 // Transforms Query into QueryTree and flattens to QueryPlan object
 func (self *QueryPlanner) Plan(query *Query, id *util.GUID, destination *db.Location) (*QueryPlan, error) {
+	log.Trace("QueryPlanner.Plan", self, query, id, destination)
 	queryTree, err := self.buildTree(query, -1)
 	if err != nil {
 		return nil, err
@@ -809,6 +831,7 @@ type RangeQueryTree struct {
 }
 
 func (qt *RangeQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("RangeQueryTree", qt, d)
 	slice := d.GetOrCreateSlice(qt.slice) // TODO: this should probably be just GetSlice (no create)
 	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
 	if err != nil {

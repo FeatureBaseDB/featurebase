@@ -17,15 +17,16 @@ type Executor struct {
 }
 
 func (self *Executor) Init() error {
-	log.Warn("Starting Executor")
+	log.Trace("Executor.Init()")
 	return nil
 }
 
 func (self *Executor) Close() {
-	log.Warn("Shutting down Executor")
+	log.Trace("Executor.Close()")
 }
 
 func (self *Executor) NewJob(job *db.Message) {
+	log.Trace("NewJob", job)
 	switch job.Data.(type) {
 	case query.CountQueryStep:
 		self.service.CountQueryStepHandler(job)
@@ -73,6 +74,7 @@ func (self *Executor) RunQueryTest(database_name string, pql string) string {
 }
 
 func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
+	log.Trace("Executor.runQuery", database, qry)
 	process, err := self.service.GetProcess()
 	if err != nil {
 		return err
@@ -109,6 +111,7 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 }
 
 func (self *Executor) RunPQL(database_name string, pql string) (interface{}, error) {
+	log.Trace("Executor.RunPQL", database_name, pql)
 	database := self.service.Cluster.GetOrCreateDatabase(database_name)
 
 	// see if the outer query function is a custom query
@@ -190,5 +193,6 @@ func (self *Executor) Run() {
 }
 
 func NewExecutor(service *core.Service) *Executor {
+	log.Trace("NewExector")
 	return &Executor{service, make(chan *db.Message)}
 }

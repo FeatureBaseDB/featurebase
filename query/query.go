@@ -1,6 +1,7 @@
 package query
 
 import (
+	log "github.com/cihub/seelog"
 	"pilosa/db"
 	"pilosa/util"
 	"strings"
@@ -28,6 +29,7 @@ type Query struct {
 }
 
 func QueryPlanForPQL(database *db.Database, pql string, destination *db.Location) (*QueryPlan, error) {
+	log.Trace("QueryPlanFOrPQL", database, pql, destination)
 	tokens, err := Lex(pql)
 	if err != nil {
 		return nil, err
@@ -36,6 +38,7 @@ func QueryPlanForPQL(database *db.Database, pql string, destination *db.Location
 }
 
 func QueryForPQL(pql string) (*Query, error) {
+	log.Trace("QueryForPQL", pql)
 	tokens, err := Lex(pql)
 	if err != nil {
 		return nil, err
@@ -44,6 +47,7 @@ func QueryForPQL(pql string) (*Query, error) {
 }
 
 func QueryForTokens(tokens []Token) (*Query, error) {
+	log.Trace("QueryForTokens", tokens)
 	query, err := Parse(tokens)
 	if err != nil {
 		return nil, err
@@ -52,6 +56,7 @@ func QueryForTokens(tokens []Token) (*Query, error) {
 }
 
 func QueryPlanForTokens(database *db.Database, tokens []Token, destination *db.Location) (*QueryPlan, error) {
+	log.Trace("QueryPlanForTokens", database, tokens, destination)
 	query, err := QueryForTokens(tokens)
 	if err != nil {
 		return nil, err
@@ -60,6 +65,7 @@ func QueryPlanForTokens(database *db.Database, tokens []Token, destination *db.L
 }
 
 func QueryPlanForQuery(database *db.Database, query *Query, destination *db.Location) (*QueryPlan, error) {
+	log.Trace("QueryPlanForQuery", database, query, destination)
 	query_planner := QueryPlanner{Database: database, Query: query}
 	id := util.RandomUUID()
 	query_plan, err := query_planner.Plan(query, &id, destination)
@@ -70,6 +76,7 @@ func QueryPlanForQuery(database *db.Database, query *Query, destination *db.Loca
 }
 
 func TokensToFilterStrings(tokens []Token) (string, []string) {
+	log.Trace("TokensToFilterStrings", tokens)
 	var whole []string
 	var filter string
 	var filters []string
