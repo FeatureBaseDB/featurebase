@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "github.com/cihub/seelog"
 	"net"
+	"os"
 	"pilosa/config"
 	"pilosa/core"
 	"pilosa/db"
@@ -130,7 +131,8 @@ func (self *TcpTransport) listen() {
 	port_string := fmt.Sprintf(":%d", self.port)
 	l, e := net.Listen("tcp", port_string)
 	if e != nil {
-		log.Warn("Cannot bind to port! ", self.port)
+		log.Critical("Cannot bind to port! ", self.port)
+		os.Exit(-1)
 	}
 	for {
 		conn, err := l.Accept()

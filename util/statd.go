@@ -20,8 +20,8 @@ var (
 )
 
 func init() {
-	timer = make(chan args, 100)
-	count = make(chan string, 100)
+	timer = make(chan args, 32768)
+	count = make(chan string, 32768)
 	end = make(chan bool)
 	stat_config := config.GetStringDefault("statsd_server", "127.0.0.1:8125")
 	log.Warn("New Stats", stat_config)
@@ -31,6 +31,7 @@ func init() {
 			select {
 			case ci := <-timer:
 				stats.Gauge(ci.stat, ci.delta, ci.rate)
+				stats.Timing(ci.stat, ci.delta, ci.rate)
 			case stat := <-count:
 				stats.Inc(stat, 1, 1.0)
 			case <-end:
@@ -44,7 +45,8 @@ func init() {
 
 func SendTimer(stat string, delta int64) {
 	pstat := "pilosa." + stat
-	timer <- args{pstat, delta, 1.0}
+	milli := delta / time.Millisecond
+	timer <- args{pstat, milli, 1.0}
 }
 func SendInc(stat string) {
 	pstat := "pilosa." + stat

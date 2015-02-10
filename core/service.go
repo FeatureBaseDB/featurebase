@@ -93,11 +93,14 @@ func (service *Service) init_id() {
 		id = util.RandomUUID()
 		if err != nil {
 			log.Critical("problem generating uuid")
+			os.Exit(-1)
+
 		}
 	} else {
 		id, err = util.ParseGUID(id_string)
 		if err != nil {
 			log.Critical("Service id not valid:", id_string)
+			os.Exit(-1)
 		}
 	}
 	service.Id = &id

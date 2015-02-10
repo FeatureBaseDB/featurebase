@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/cihub/seelog"
+	"os"
 	"pilosa/config"
 	"pilosa/db"
 	"pilosa/util"
@@ -31,10 +32,12 @@ func (self *TopologyMapper) Setup() {
 		if ok && ee.ErrorCode == 100 { // node does not exist
 			resp, err = self.service.Etcd.CreateDir(db_path, 0)
 			if err != nil {
-				log.Warn(err)
+				log.Critical(err)
+				os.Exit(-1)
 			}
 		} else {
-			log.Warn(err)
+			log.Critical(err)
+			os.Exit(-1)
 		}
 	}
 	//need to lock the world
@@ -395,7 +398,8 @@ func (self *ProcessMapper) getnode(u *util.GUID) *Node {
 
 func crash_on_error(err error) {
 	if err != nil {
-		log.Warn(err)
+		log.Critical(err)
+		os.Exit(-1)
 	}
 }
 

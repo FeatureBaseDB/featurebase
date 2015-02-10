@@ -16,6 +16,7 @@ var (
 )
 
 func main() {
+	defer log.Flush()
 	exitStatus, err := panicwrap.BasicWrap(panicHandler)
 	if err != nil {
 		// Something went wrong setting up the panic wrapper. Unlikely,
@@ -46,6 +47,6 @@ func main() {
 func panicHandler(output string) {
 	// output contains the full output (including stack traces) of the
 	// panic. Put it in a file or something.
-	log.Warn("The child panicked:\n\n", output)
+	log.Critical("The child panicked:\n\n", output)
 	os.Exit(1)
 }
