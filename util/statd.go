@@ -3,6 +3,7 @@ package util
 import (
 	log "github.com/cihub/seelog"
 	"pilosa/config"
+	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
 )
@@ -45,8 +46,8 @@ func init() {
 
 func SendTimer(stat string, delta int64) {
 	pstat := "pilosa." + stat
-	milli := delta / time.Millisecond
-	timer <- args{pstat, milli, 1.0}
+	milli := time.Duration(delta) / time.Millisecond
+	timer <- args{pstat, int64(milli), 1.0}
 }
 func SendInc(stat string) {
 	pstat := "pilosa." + stat
