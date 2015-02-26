@@ -162,6 +162,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/version", self.HandleVersion)
 	mux.HandleFunc("/ping", self.HandlePing)
 	mux.HandleFunc("/batch", self.HandleBatch)
+	mux.HandleFunc("/load", self.HandleLoad)
 	log_set_bit := config.GetIntDefault("log_set_bit_request", 0)
 	if log_set_bit == 1 {
 		mux.HandleFunc("/set_bits", NewRequestLogger(self.HandleSetBit, logger_chan))
@@ -198,6 +199,64 @@ func (self *WebService) HandleMessage(w http.ResponseWriter, r *http.Request) {
 	//service.Inbox <- &message
 }
 
+func (self *WebService) HandleLoad(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	var obj JsonObject
+
+	err := decoder.Decode(&obj)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	database_name, ok := obj["db"]
+	if !ok {
+		http.Error(w, "Provide a database (db)", http.StatusNotFound)
+		return
+	}
+
+	_, ok = obj["id"]
+	if !ok {
+		http.Error(w, "Provide a bitmap id (id)", http.StatusNotFound)
+		return
+	}
+	t := float64(obj["id"].(float64))
+	bitmap_id := uint64(t)
+
+	frame, ok := obj["frame"]
+	if !ok {
+		http.Error(w, "Provide a frame (frame)", http.StatusNotFound)
+		return
+	}
+	api_string, ok := obj["bitmap"]
+	if !ok {
+		http.Error(w, "Provide a compressed base64 bitmap (bitmap)", http.StatusNotFound)
+		return
+	}
+
+	_, ok = obj["filter"]
+	if !ok {
+		http.Error(w, "Provide a filter for categories", http.StatusNotFound)
+		return
+	}
+	t = float64(obj["filter"].(float64))
+	filter := uint64(t)
+
+	results := FromApiString(self.service, database_name.(string), frame.(string), api_string.(string), bitmap_id, filter)
+
+	encoder := json.NewEncoder(w)
+	err = encoder.Encode(results)
+	if err != nil {
+		log.Warn("Error Load results")
+		log.Warn(spew.Sdump(r.Form))
+		err = encoder.Encode("Bad Batch Request")
+	}
+
+}
 func (self *WebService) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
@@ -360,8 +419,9 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 		base_id := uint64(t)
 
 		if strings.HasSuffix(frame, ".t") {
-			timestamp := obj["timestamp"].(string)
-			if timestamp == "2014-01-01 00:00:00" { //skip the default timestamp
+			timestamp, present := obj["timestamp"].(string)
+
+			if !present || timestamp == "2014-01-01 00:00:00" { //skip the default timestamp
 				c <- base_id
 			} else {
 				quantum := index.YMDH
