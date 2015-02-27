@@ -218,6 +218,22 @@ func (self *WebService) HandleLoad(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Provide a database (db)", http.StatusNotFound)
 		return
 	}
+	db := database_name.(string)
+
+	ms_, ok := obj["max_slice"]
+	if ok {
+		ms := int(ms_.(float64))
+		database := self.service.Cluster.GetOrCreateDatabase(db)
+		ns, _ := database.NumSlices()
+		if ns <= ms {
+			for i := ns; i <= ms; i++ {
+				self.service.TopologyMapper.MakeFragments(db, i)
+			}
+			http.Error(w, "Needed Slices", http.StatusNotFound)
+			return
+		}
+
+	}
 
 	_, ok = obj["id"]
 	if !ok {
