@@ -165,7 +165,7 @@ func (self *General) ClearBit(bitmap_id uint64, bit_pos uint64) bool {
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
 		if val == 0 {
-			self.storage.RemoveBlock(bitmap_id, self.db, self.frame, self.slice, uint64(0), address.ChunkKey, int32(address.BlockIndex))
+			self.storage.RemoveBit(bitmap_id, self.db, self.frame, self.slice, uint64(0), address.ChunkKey, int32(address.BlockIndex), bm.Count())
 		} else {
 			self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, uint64(0), address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
 		}

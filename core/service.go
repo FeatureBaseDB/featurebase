@@ -57,19 +57,11 @@ func NewService() *Service {
 	return service
 }
 
-func (self *Service) PrepareLogging() {
+func (self *Service) getProduction() string {
 	base_path := config.GetString("log_path")
 	if base_path == "" {
 		base_path = "/tmp"
 	}
-	/*
-		f, err := os.OpenFile(fmt.Sprintf("%s/%s.%s", base_path, self.name, self.Id), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			log.Warn("error opening file: %v", err)
-		}
-		//defer f.Close()
-		log.SetOutput(f)
-	*/
 	fname := fmt.Sprintf("%s/%s.%s", base_path, self.name, self.Id)
 	//<seelog minlevel="debug" maxlevel="error">
 	log_level := config.GetStringDefault("log_level", "info")
@@ -80,7 +72,20 @@ func (self *Service) PrepareLogging() {
 	</outputs>
 	</seelog>
 	`, log_level, fname)
-	logger, _ := log.LoggerFromConfigAsBytes([]byte(prod_config))
+	return prod_config
+}
+
+func (self *Service) getDev() string {
+	return `<seelog>
+	<outputs>
+	<console />
+	</outputs>
+	</seelog>
+	`
+}
+func (self *Service) PrepareLogging() {
+	logger, _ := log.LoggerFromConfigAsBytes([]byte(self.getProduction()))
+	//	logger, _ := log.LoggerFromConfigAsBytes([]byte(self.getDev()))
 	log.ReplaceLogger(logger)
 }
 

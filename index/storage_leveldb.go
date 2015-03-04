@@ -170,8 +170,11 @@ func (self *LevelDBStorage) StoreBlock(id uint64, db string, frame string, slice
 	util.SendTimer("leveldb_storage_StoreBlock", delta.Nanoseconds())
 	return nil
 }
-func (self *LevelDBStorage) RemoveBlock(id uint64, db string, frame string, slice int, filter uint64, chunk uint64, block_index int32) error {
-	return nil
+
+func (self *LevelDBStorage) RemoveBlock(id uint64, db string, frame string, slice int, chunk uint64, block_index int32) {
+}
+
+func (self *LevelDBStorage) RemoveBit(bid uint64, db string, frame string, slice int, filter uint64, bchunk uint64, block_index int32, count uint64) {
 }
 
 func (self *LevelDBStorage) Close() {

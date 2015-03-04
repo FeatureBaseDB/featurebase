@@ -428,6 +428,7 @@ func (self *Brand) Load(requestChan chan Command, f *Fragment) {
 }
 
 func (self *Brand) ClearBit(bitmap_id uint64, bit_pos uint64) bool {
+	log.Trace("ClearBit", bitmap_id, bit_pos)
 	bm1, ok := self.bitmap_cache[bitmap_id]
 	var bm IBitmap
 	filter := uint64(0)
@@ -450,7 +451,7 @@ func (self *Brand) ClearBit(bitmap_id uint64, bit_pos uint64) bool {
 				self.storage.EndBatch()
 		*/
 		if val == 0 {
-			self.storage.RemoveBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex))
+			self.storage.RemoveBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), bm.Count())
 		} else {
 			self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
 		}

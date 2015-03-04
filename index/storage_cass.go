@@ -22,7 +22,6 @@ type CassandraStorage struct {
 	batch_counter         int
 	cass_time_window_secs float64
 	cass_flush_size       int
-	cass_queue            CassQueue
 }
 
 var cluster *gocql.ClusterConfig
@@ -46,6 +45,7 @@ func BuildSchema() {
 	*/
 
 }
+
 func NewCassStorage() Storage {
 	obj := new(CassandraStorage)
 	// cluster.CQLVersion = "3.0.0"
@@ -56,14 +56,12 @@ func NewCassStorage() Storage {
 
 	obj.db = session
 	obj.stmt = `INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?)  USING timestamp ?;`
-	obj.dstmt = `DELETE BlockIndex,block FROM bitmap WHERE bitmap_id=? AND db=? AND frame=? AND slice=? AND filter=? AND ChunkKey=? AND BlockIndex=?;`
+	obj.dstmt = `DELETE FROM bitmap USING TIMESTAMP ? WHERE bitmap_id=? AND db=? AND frame=? AND slice=? AND chunkkey=? AND blockindex=?`
 	obj.batch = nil
 	obj.batch_time = time.Now()
 	obj.batch_counter = 0
 	obj.cass_time_window_secs = float64(config.GetIntDefault("cassandra_time_window_secs", 5))
 	obj.cass_flush_size = config.GetIntDefault("cassandra_max_size_batch", 15)
-	obj.cass_queue = NewCassQueue()
-	go obj.asyncStore()
 	return obj
 }
 
@@ -116,7 +114,10 @@ func (self *CassandraStorage) BeginBatch() {
 }
 func (self *CassandraStorage) runBatch(batch *gocql.Batch) {
 	if batch != nil {
-		go self.db.ExecuteBatch(batch)
+		err := self.db.ExecuteBatch(batch)
+		if err != nil {
+			log.Warn("Batch ERROR", err)
+		}
 	}
 }
 func (self *CassandraStorage) FlushBatch() {
@@ -181,56 +182,32 @@ func (self *CassandraStorage) StoreBlock(bid uint64, db string, frame string, sl
 	return nil
 }
 
-type CassRecord struct {
-	bitmap_id   uint64
-	db          string
-	frame       string
-	slice       int
-	filter      uint64
-	chunk       uint64
-	block_index int32
-	val         uint64
-	count       uint64
+func (self *CassandraStorage) StoreBit(bid uint64, db string, frame string, slice int, filter uint64, chunk uint64, block_index int32, val, count uint64) {
+	self.BeginBatch()
+	self.StoreBlock(bid, db, frame, slice, filter, chunk, block_index, val)
+	self.StoreBlock(bid, db, frame, slice, filter, COUNTERMASK, 0, count)
+	self.EndBatch()
 }
 
-func (self *CassandraStorage) asyncStore() {
-	for {
-		rec, term := self.cass_queue.Pop()
-		if term {
-			break
-		}
+func (self *CassandraStorage) RemoveBit(id uint64, db string, frame string, slice int, filter uint64, chunk uint64, block_index int32, count uint64) {
+	log.Trace("RemoveBit", id, db, frame, slice, chunk, block_index)
+	self.BeginBatch()
+	self.RemoveBlock(id, db, frame, slice, chunk, block_index)
+	self.StoreBlock(id, db, frame, slice, filter, COUNTERMASK, 0, count)
+	self.EndBatch()
+}
+
+func (self *CassandraStorage) RemoveBlock(bid uint64, db string, frame string, slice int, bchunk uint64, block_index int32) {
+	log.Trace("RemoveBBlock", bid, db, frame, slice, bchunk, block_index)
+	id := util.Uint64ToInt64(bid) //these fucntions ignore overflow
+	chunk := util.Uint64ToInt64(bchunk)
+
+	if self.batch == nil {
 		self.BeginBatch()
-		self.StoreBlock(rec.bitmap_id, rec.db, rec.frame, rec.slice, rec.filter, rec.chunk, rec.block_index, rec.val)
-		self.StoreBlock(rec.bitmap_id, rec.db, rec.frame, rec.slice, rec.filter, COUNTERMASK, 0, rec.count)
-		self.EndBatch()
 	}
-}
+	start := time.Now()
 
-func (self *CassandraStorage) StoreBit(bid uint64, db string, frame string, slice int, filter uint64, bchunk uint64, block_index int32, bblock, count uint64) {
-	rec := CassRecord{bid, db, frame, slice, filter, bchunk, block_index, bblock, count}
-	self.cass_queue.Push(rec)
-}
-
-func (self *CassandraStorage) RemoveBlock(id uint64, db string, frame string, slice int, filter uint64, chunk uint64, block_index int32) error {
-	return nil
-}
-
-type CassQueue struct {
-	size   int64
-	buffer chan CassRecord
-}
-
-func NewCassQueue() CassQueue {
-	//return CassQueue{0, make(chan CassRecord, 4096)}
-	return CassQueue{0, make(chan CassRecord)}
-}
-
-func (self *CassQueue) Push(rec CassRecord) {
-	//	atomic.AddInt64(&self.size, 1)
-	self.buffer <- rec
-}
-func (self *CassQueue) Pop() (CassRecord, bool) {
-	ret := <-self.buffer
-	//	atomic.AddInt64(&self.size, -1)
-	return ret, false
+	self.batch.Query(self.dstmt, start.UnixNano(), id, db, frame, slice, chunk, block_index)
+	delta := time.Since(start)
+	util.SendTimer("cassandra_storage_DeleteBlock", delta.Nanoseconds())
 }

@@ -464,26 +464,18 @@ func validateRange(Args map[string]interface{}) error {
 func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 	log.Trace("QueryPlanner.buildTree", query, slice)
 	var tree QueryTree
-	spew.Dump(query)
 	// handle SET operation regardless of the slice
 	if query.Operation == "set" {
-		println("SET")
-		log.Warn("SET")
-
 		tree = &SetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), query.Args["filter"].(uint64)}, query.Args["profile_id"].(uint64)}
 		return tree, nil
 	}
 
 	if query.Operation == "clear" {
-
-		println("CLEAR")
-		log.Warn("CLEAR")
 		tree = &ClearQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), query.Args["filter"].(uint64)}, query.Args["profile_id"].(uint64)}
 		return tree, nil
 	}
 
 	if query.Operation == "recall" {
-
 		tree = &RecallQueryTree{query.Args["stash"].(Stash)}
 		return tree, nil
 	}
