@@ -18,6 +18,16 @@ func TestQueryParser(t *testing.T) {
 		So(query.Operation, ShouldEqual, "get")
 		So(query.Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general"})
 	})
+	Convey("Basic parse - clear()", t, func() {
+		tokens, err := Lex("clear(10, general, 0, 20)")
+		So(err, ShouldBeNil)
+
+		query, err := Parse(tokens)
+		So(err, ShouldBeNil)
+		spew.Dump(query)
+		So(query.Operation, ShouldEqual, "clear")
+		So(query.Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general", "filter": uint64(0), "profile_id": uint64(20)})
+	})
 	Convey("Basic parse - set()", t, func() {
 		tokens, err := Lex("set(10, general, 0, 20)")
 		So(err, ShouldBeNil)

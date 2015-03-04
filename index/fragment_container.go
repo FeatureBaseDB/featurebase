@@ -259,6 +259,7 @@ func (self *FragmentContainer) FromBytes(frag_id util.SUUID, bytes []byte) (Bitm
 }
 
 func (self *FragmentContainer) SetBit(frag_id util.SUUID, bitmap_id uint64, pos uint64, category uint64) (bool, error) {
+	log.Trace("SetBit", frag_id, bitmap_id, pos, category)
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewSetBit(bitmap_id, pos, category)
 		fragment.requestChan <- request
@@ -271,6 +272,7 @@ func (self *FragmentContainer) SetBit(frag_id util.SUUID, bitmap_id uint64, pos 
 }
 
 func (self *FragmentContainer) ClearBit(frag_id util.SUUID, bitmap_id uint64, pos uint64) (bool, error) {
+	log.Trace("ClearBit", frag_id, bitmap_id, pos)
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewClearBit(bitmap_id, pos)
 		fragment.requestChan <- request

@@ -515,10 +515,7 @@ func (self *WebService) HandleBit(w http.ResponseWriter, r *http.Request, ToSet 
 		http.Error(w, "Request To large", http.StatusBadRequest)
 		return
 	}
-	result := false
-	remoteSetBit := NewRemoteSetBit(self.service)
-	var database *db.Database
-	olddbs := ""
+	//remoteSetBit := NewRemoteSetBit(self.service)
 	for _, obj := range args {
 		if obj["profile_id"] == nil {
 			http.Error(w, "Missing Profile", http.StatusBadRequest)
@@ -546,38 +543,17 @@ func (self *WebService) HandleBit(w http.ResponseWriter, r *http.Request, ToSet 
 		}
 		t = float64(obj["filter"].(float64))
 		filter := uint64(t)
-		if dbs != olddbs {
-			database = self.service.Cluster.GetOrCreateDatabase(dbs)
-			olddbs = dbs
-		}
-		frag, err := database.GetFragmentFromProfile(frame, profile_id)
-		if err != nil {
-			//no fragment
-			if ToSet {
-				self.service.TopologyMapper.MakeFragments(dbs, db.GetSlice(profile_id))
-				time.Sleep(2 * time.Second)
-			}
-			break
-		}
-		isLocal := util.Equal(frag.GetProcessId(), self.service.Id)
 		for bitmap_id := range bitmaps(frame, obj) {
 
-			if isLocal {
-				// The Local Route
-				if ToSet {
-					result, _ = self.service.Index.SetBit(frag.GetId(), bitmap_id, profile_id, filter)
-				} else {
-					result, _ = self.service.Index.ClearBit(frag.GetId(), bitmap_id, profile_id)
-				}
-				bundle := SBResult{bitmap_id, frame, filter, profile_id, result}
-				results = append(results, bundle)
+			var pql string
+			if ToSet {
+				pql = fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
 			} else {
-
-				remoteSetBit.Add(frag, bitmap_id, profile_id, filter, frame, ToSet)
+				pql = fmt.Sprintf("clear(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
 			}
-
-			//result, err := self.service.Executor.RunPQL(db, pql)
-			//pql := fmt.Sprintf("set(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
+			result, err := self.service.Executor.RunPQL(dbs, pql)
+			bundle := SBResult{bitmap_id, frame, filter, profile_id, result}
+			results = append(results, bundle)
 
 			if err != nil {
 				log.Warn("Error running set_bit", dbs, frame, profile_id, ToSet)
@@ -587,8 +563,8 @@ func (self *WebService) HandleBit(w http.ResponseWriter, r *http.Request, ToSet 
 
 		}
 	}
-	remoteSetBit.Request()
-	results = remoteSetBit.MergeResults(results)
+	//	remoteSetBit.Request()
+	//	results = remoteSetBit.MergeResults(results)
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {

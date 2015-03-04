@@ -398,6 +398,7 @@ func (qt *SetQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 func init() {
 	gob.Register(BaseQueryResult{})
 	gob.Register(SetQueryResult{})
+	gob.Register(ClearQueryResult{})
 	gob.Register(GetQueryResult{})
 	gob.Register(RangeQueryResult{})
 	gob.Register(CatQueryResult{})
@@ -412,6 +413,7 @@ func init() {
 	gob.Register(Stash{})
 
 	gob.Register(SetQueryStep{})
+	gob.Register(ClearQueryStep{})
 	gob.Register(GetQueryStep{})
 	gob.Register(RangeQueryStep{})
 	gob.Register(CatQueryStep{})
@@ -462,11 +464,21 @@ func validateRange(Args map[string]interface{}) error {
 func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) {
 	log.Trace("QueryPlanner.buildTree", query, slice)
 	var tree QueryTree
-
+	spew.Dump(query)
 	// handle SET operation regardless of the slice
 	if query.Operation == "set" {
+		println("SET")
+		log.Warn("SET")
 
 		tree = &SetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), query.Args["filter"].(uint64)}, query.Args["profile_id"].(uint64)}
+		return tree, nil
+	}
+
+	if query.Operation == "clear" {
+
+		println("CLEAR")
+		log.Warn("CLEAR")
+		tree = &ClearQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), query.Args["filter"].(uint64)}, query.Args["profile_id"].(uint64)}
 		return tree, nil
 	}
 
@@ -733,6 +745,14 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 		step := SetQueryStep{&BaseQueryStep{id, "set", loc, location}, set.bitmap, set.profile_id}
 		plan := QueryPlan{step}
 		return &plan, nil
+	} else if clear, ok := qt.(*ClearQueryTree); ok {
+		loc, err := clear.getLocation(self.Database)
+		if err != nil {
+			return nil, err
+		}
+		step := ClearQueryStep{&BaseQueryStep{id, "clear", loc, location}, clear.bitmap, clear.profile_id}
+		plan := QueryPlan{step}
+		return &plan, nil
 	} else if cnt, ok := qt.(*CountQueryTree); ok {
 		sub_id := util.RandomUUID()
 		loc, err := cnt.getLocation(self.Database)
@@ -923,4 +943,38 @@ func (rqt *RecallQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 
 type RecallQueryResult struct {
 	*BaseQueryResult
+}
+
+type ClearQueryStep struct {
+	*BaseQueryStep
+	Bitmap    *db.Bitmap
+	ProfileId uint64
+}
+
+type ClearQueryResult struct {
+	*BaseQueryResult
+}
+
+type ClearQueryTree struct {
+	bitmap     *db.Bitmap
+	profile_id uint64
+}
+
+// Uses consistent hashing function to select node containing data for GET operation
+func (qt *ClearQueryTree) getLocation(d *db.Database) (*db.Location, error) {
+	log.Trace("ClearQueryTree.getLocation", d)
+	// check here for supported frames
+	if !d.IsValidFrame(qt.bitmap.FrameType) {
+		return nil, NewInvalidFrame(d.Name, qt.bitmap.FrameType)
+	}
+	slice, err := d.GetSliceForProfile(qt.profile_id)
+	if err != nil {
+		return nil, NewFragmentNotFound(d.Name, qt.bitmap.FrameType, db.GetSlice(qt.profile_id))
+	}
+	fragment, err := d.GetFragmentForBitmap(slice, qt.bitmap)
+	if err != nil {
+		log.Warn("NOT FOUND:", slice, qt.bitmap)
+		return nil, NewFragmentNotFound(d.Name, qt.bitmap.FrameType, db.GetSlice(qt.profile_id))
+	}
+	return fragment.GetLocation(), nil
 }

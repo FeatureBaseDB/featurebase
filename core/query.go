@@ -321,6 +321,15 @@ func (self *Service) SetQueryStepHandler(msg *db.Message) {
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
+func (self *Service) ClearQueryStepHandler(msg *db.Message) {
+	//spew.Dump("SET QUERYSTEP")
+	qs := msg.Data.(query.ClearQueryStep)
+	result, _ := self.Index.ClearBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
+
+	result_message := db.Message{Data: query.ClearQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
 func (self *Service) RangeQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.RangeQueryStep)
 	//spew.Dump("RANDE QUERYSTEP")

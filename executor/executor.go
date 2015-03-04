@@ -44,6 +44,8 @@ func (self *Executor) NewJob(job *db.Message) {
 		self.service.GetQueryStepHandler(job)
 	case query.SetQueryStep:
 		self.service.SetQueryStepHandler(job)
+	case query.ClearQueryStep:
+		self.service.ClearQueryStepHandler(job)
 	case query.RangeQueryStep:
 		self.service.RangeQueryStepHandler(job)
 	case query.StashQueryStep:
@@ -115,7 +117,7 @@ func (self *Executor) RunPQL(database_name string, pql string) (interface{}, err
 	database := self.service.Cluster.GetOrCreateDatabase(database_name)
 
 	// see if the outer query function is a custom query
-	reserved_functions := stringSlice{"get", "set", "union", "intersect", "difference", "count", "top-n", "mask", "range", "stash", "recall"}
+	reserved_functions := stringSlice{"get", "set", "clear", "union", "intersect", "difference", "count", "top-n", "mask", "range", "stash", "recall"}
 	tokens, err := query.Lex(pql)
 	if err != nil {
 		return nil, err

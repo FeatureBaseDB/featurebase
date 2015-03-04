@@ -159,6 +159,31 @@ ArgLoop:
 				default:
 					return nil, fmt.Errorf("Unexpected argument! (%v)", token)
 				}
+			case "clear":
+				switch len(query.Args) {
+				case 0:
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+					}
+					query.Args["id"] = i
+				case 1:
+					query.Args["frame"] = token.Text
+				case 2:
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+					}
+					query.Args["filter"] = i
+				case 3:
+					i, err := strconv.ParseUint(token.Text, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("Expecting integer id! (%v)", err)
+					}
+					query.Args["profile_id"] = i
+				default:
+					return nil, fmt.Errorf("Unexpected argument! (%v)", token)
+				}
 			case "set":
 				switch len(query.Args) {
 				case 0:
@@ -184,7 +209,6 @@ ArgLoop:
 				default:
 					return nil, fmt.Errorf("Unexpected argument! (%v)", token)
 				}
-
 			case "top-n":
 				switch len(query.Args) {
 				case 0:
