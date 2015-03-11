@@ -110,6 +110,29 @@ func getLightestProcess(m map[string]int) (Pair, error) {
 	return processlist[0], nil
 }
 
+func (self *TopologyMapper) GetProcessFragmentCounts() map[string]int {
+	m := make(map[string]int)
+	id_string := self.service.Id.String()
+	m[id_string] = 0 //at least have one process if none created
+	for _, dbs := range self.service.Cluster.GetDatabases() {
+		for _, fsi := range dbs.GetFrameSliceIntersects() {
+			fragment := fsi.GetFragment()
+			if fragment != nil {
+				p := fragment.GetProcess()
+				if p != nil {
+					process := p.Id().String()
+					if len(process) > 1 {
+						i := m[process]
+						i++
+						m[process] = i
+					}
+				}
+			}
+		}
+	}
+	return m
+}
+
 func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
 	ttl := uint64(config.GetIntDefault("fragment_alloc_lock_time_secs", 14400))
 	//lock_key := fmt.Sprintf("%s/lock/%s-%s-%d", self.namespace, db, frame, slice_int)
@@ -118,23 +141,7 @@ func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
 
 	if err == nil {
 		if response.StatusCode == 201 { //key created
-			m := make(map[string]int)
-			id_string := self.service.Id.String()
-			m[id_string] = 0 //at least have one process if none created
-			for _, dbs := range self.service.Cluster.GetDatabases() {
-				for _, fsi := range dbs.GetFrameSliceIntersects() {
-					fragment := fsi.GetFragment()
-					p := fragment.GetProcess()
-					if p != nil {
-						process := p.Id().String()
-						if len(process) > 1 {
-							i := m[process]
-							i++
-							m[process] = i
-						}
-					}
-				}
-			}
+			m := self.GetProcessFragmentCounts()
 			p, err := getLightestProcess(m)
 			if err != nil {
 				return err
