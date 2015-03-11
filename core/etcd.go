@@ -124,11 +124,14 @@ func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
 			for _, dbs := range self.service.Cluster.GetDatabases() {
 				for _, fsi := range dbs.GetFrameSliceIntersects() {
 					fragment := fsi.GetFragment()
-					process := fragment.GetProcess().Id().String()
-					if len(process) > 1 {
-						i := m[process]
-						i++
-						m[process] = i
+					p := fragment.GetProcess()
+					if p != nil {
+						process := p.Id().String()
+						if len(process) > 1 {
+							i := m[process]
+							i++
+							m[process] = i
+						}
 					}
 				}
 			}
