@@ -109,7 +109,7 @@ func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category uint64) {
 	if bm.Count() >= self.threshold_value {
 		self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm, category}
 		if len(self.bitmap_cache) > self.threshold_length {
-			log.Info("RANK: %d %d %d", len(self.bitmap_cache), self.threshold_length, self.threshold_value)
+			log.Info("RANK:", len(self.bitmap_cache), self.threshold_length, self.threshold_value)
 			self.Rank()
 			self.trim()
 		}
