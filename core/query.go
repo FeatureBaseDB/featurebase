@@ -296,6 +296,8 @@ func (self *Service) GetQueryStepHandler(msg *db.Message) {
 	bh, err := self.Index.Get(qs.Location.FragmentId, qs.Bitmap.Id)
 	if err != nil {
 		spew.Dump(err)
+		log.Error("GetQueryStepHandler1", qs.Location.FragmentId, qs.Bitmap.Id)
+		log.Error("GetQueryStepHandler2", err)
 	}
 
 	var result interface{}
@@ -305,6 +307,8 @@ func (self *Service) GetQueryStepHandler(msg *db.Message) {
 		bm, err := self.Index.GetBytes(qs.Location.FragmentId, bh)
 		if err != nil {
 			spew.Dump(err)
+			log.Error("GetQueryStepHandlerr3", qs.Location.FragmentId, qs.Bitmap.Id)
+			log.Error("GetQueryStepHandler4", err)
 		}
 		result = bm
 	}

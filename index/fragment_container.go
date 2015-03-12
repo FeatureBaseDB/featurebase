@@ -19,6 +19,7 @@ import (
 
 type FragmentContainer struct {
 	fragments map[util.SUUID]*Fragment
+	mutex     *sync.Mutex
 }
 
 func lookup(stmt *sql.Stmt, tile_id uint64) int {
@@ -35,6 +36,7 @@ func lookup(stmt *sql.Stmt, tile_id uint64) int {
 func NewFragmentContainer() *FragmentContainer {
 	f := new(FragmentContainer)
 	f.fragments = make(map[util.SUUID]*Fragment)
+	f.mutex = &sync.Mutex{}
 	return f
 }
 
@@ -74,7 +76,9 @@ func (self *FragmentContainer) LoadBitmap(frag_id util.SUUID, bitmap_id uint64, 
 }
 
 func (self *FragmentContainer) GetFragment(frag_id util.SUUID) (*Fragment, bool) {
+	self.mutex.Lock()
 	c, v := self.fragments[frag_id]
+	self.mutex.Unlock()
 	return c, v
 }
 
@@ -92,7 +96,7 @@ func (self *FragmentContainer) Empty(frag_id util.SUUID) (BitmapHandle, error) {
 		fragment.requestChan <- request
 		return request.Response().answer.(BitmapHandle), nil
 	}
-	return 0, errors.New("Invalid Bitmap Handle")
+	return 0, errors.New("Invalid Bitmap Handle Empty")
 }
 
 func (self *FragmentContainer) Intersect(frag_id util.SUUID, bh []BitmapHandle) (BitmapHandle, error) {
@@ -103,7 +107,7 @@ func (self *FragmentContainer) Intersect(frag_id util.SUUID, bh []BitmapHandle) 
 		util.SendTimer("fragmant_container_Intersect", result.exec_time.Nanoseconds())
 		return result.answer.(BitmapHandle), nil
 	}
-	return 0, errors.New("Invalid Bitmap Handle")
+	return 0, errors.New("Invalid Bitmap Handle Intersect")
 }
 func (self *FragmentContainer) Union(frag_id util.SUUID, bh []BitmapHandle) (BitmapHandle, error) {
 	if fragment, found := self.GetFragment(frag_id); found {
@@ -113,7 +117,7 @@ func (self *FragmentContainer) Union(frag_id util.SUUID, bh []BitmapHandle) (Bit
 		util.SendTimer("fragmant_container_Union", result.exec_time.Nanoseconds())
 		return result.answer.(BitmapHandle), nil
 	}
-	return 0, errors.New("Invalid Bitmap Handle")
+	return 0, errors.New("Invalid Bitmap Handle Union")
 }
 
 func (self *FragmentContainer) Difference(frag_id util.SUUID, bh []BitmapHandle) (BitmapHandle, error) {
@@ -124,7 +128,7 @@ func (self *FragmentContainer) Difference(frag_id util.SUUID, bh []BitmapHandle)
 		util.SendTimer("fragmant_container_Difference", result.exec_time.Nanoseconds())
 		return result.answer.(BitmapHandle), nil
 	}
-	return 0, errors.New("Invalid Bitmap Handle")
+	return 0, errors.New("Invalid Bitmap Handle Diff")
 }
 
 func (self *FragmentContainer) Get(frag_id util.SUUID, bitmap_id uint64) (BitmapHandle, error) {
@@ -135,7 +139,7 @@ func (self *FragmentContainer) Get(frag_id util.SUUID, bitmap_id uint64) (Bitmap
 		util.SendTimer("fragmant_container_Get", result.exec_time.Nanoseconds())
 		return result.answer.(BitmapHandle), nil
 	}
-	return 0, errors.New("Invalid Bitmap Handle")
+	return 0, errors.New("Invalid Bitmap Handle Get")
 }
 
 func (self *FragmentContainer) Mask(frag_id util.SUUID, start, end uint64) (BitmapHandle, error) {
@@ -222,7 +226,7 @@ func (self *FragmentContainer) GetList(frag_id util.SUUID, bitmap_id []uint64) (
 		util.SendTimer("fragmant_container_GetList", result.exec_time.Nanoseconds())
 		return result.answer.([]BitmapHandle), nil
 	}
-	return nil, errors.New("Invalid Bitmap Handle")
+	return nil, errors.New("Invalid Bitmap Handle GetList")
 }
 
 func (self *FragmentContainer) Count(frag_id util.SUUID, bitmap BitmapHandle) (uint64, error) {
@@ -233,7 +237,7 @@ func (self *FragmentContainer) Count(frag_id util.SUUID, bitmap BitmapHandle) (u
 		util.SendTimer("fragmant_container_Count", result.exec_time.Nanoseconds())
 		return result.answer.(uint64), nil
 	}
-	return 0, errors.New("Invalid Bitmap Handle")
+	return 0, errors.New("Invalid Bitmap Handle Count")
 }
 
 func (self *FragmentContainer) GetBytes(frag_id util.SUUID, bh BitmapHandle) ([]byte, error) {
@@ -244,7 +248,7 @@ func (self *FragmentContainer) GetBytes(frag_id util.SUUID, bh BitmapHandle) ([]
 		util.SendTimer("fragmant_container_GetBytes", result.exec_time.Nanoseconds())
 		return result.answer.([]byte), nil
 	}
-	return nil, errors.New("Invalid Bitmap Handle")
+	return nil, errors.New("Invalid Bitmap Handle GetBytes")
 }
 
 func (self *FragmentContainer) FromBytes(frag_id util.SUUID, bytes []byte) (BitmapHandle, error) {
@@ -255,7 +259,7 @@ func (self *FragmentContainer) FromBytes(frag_id util.SUUID, bytes []byte) (Bitm
 		util.SendTimer("fragmant_container_FromBytes", result.exec_time.Nanoseconds())
 		return result.answer.(BitmapHandle), nil
 	}
-	return 0, errors.New("Invalid Bitmap Handle")
+	return 0, errors.New("Invalid Bitmap Handle FromBytes")
 }
 
 func (self *FragmentContainer) SetBit(frag_id util.SUUID, bitmap_id uint64, pos uint64, category uint64) (bool, error) {
@@ -268,7 +272,7 @@ func (self *FragmentContainer) SetBit(frag_id util.SUUID, bitmap_id uint64, pos 
 		util.SendInc("fragmant_container_SetBit")
 		return result.answer.(bool), nil
 	}
-	return false, errors.New("Invalid Bitmap Handle")
+	return false, errors.New("Invalid Bitmap Handle SetBit")
 }
 
 func (self *FragmentContainer) ClearBit(frag_id util.SUUID, bitmap_id uint64, pos uint64) (bool, error) {
@@ -281,7 +285,7 @@ func (self *FragmentContainer) ClearBit(frag_id util.SUUID, bitmap_id uint64, po
 		util.SendInc("fragmant_container_ClearBit")
 		return result.answer.(bool), nil
 	}
-	return false, errors.New("Invalid Bitmap Handle")
+	return false, errors.New("Invalid Bitmap Handle ClearBit")
 }
 
 func (self *FragmentContainer) Clear(frag_id util.SUUID) (bool, error) {
@@ -294,6 +298,8 @@ func (self *FragmentContainer) Clear(frag_id util.SUUID) (bool, error) {
 }
 
 func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id util.SUUID) {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
 	_, ok := self.fragments[id]
 	if !ok {
 		log.Warn("ADD FRAGMENT", frame, db, slice, util.SUUID_to_Hex(id))
