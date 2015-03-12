@@ -266,14 +266,16 @@ func (self *Brand) TopNAll(n int, categories []uint64) []Pair {
 		if count >= n {
 			break
 		}
-		results = append(results, Pair{pair.Key, pair.Count})
+		if pair.Count > 0 {
+			results = append(results, Pair{pair.Key, pair.Count})
+		}
 		count++
 	}
 	return results
 }
 
 func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
-	breakout := 500
+	breakout := 1000
 	var (
 		o       *Rank
 		results RankList
