@@ -308,14 +308,20 @@ func (d *Database) GetFrameSliceIntersect(frame *Frame, slice *Slice) (*FrameSli
 	return nil, FrameSliceIntersectDoesNotExistError
 }
 
-func (self *FrameSliceIntersect) GetFragment() *Fragment {
-	return self.fragment
+func (self *FrameSliceIntersect) GetFragment() (*Fragment, error) {
+	if self.fragment == nil {
+		return nil, FragmentDoesNotExistError
+	}
+	if self.fragment.process == nil {
+		return nil, FragmentDoesNotExistError
+	}
+	return self.fragment, nil
 }
 
 func (d *Database) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
 	for _, fsi := range d.frame_slice_intersects {
-		f := fsi.GetFragment()
-		if f.id == fragment_id {
+		f, err := fsi.GetFragment()
+		if err == nil && f.id == fragment_id {
 			return f, nil
 		}
 	}
@@ -366,7 +372,8 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 		log.Warn(err)
 		return nil, err
 	}
-	return fsi.GetFragment(), nil
+
+	return fsi.GetFragment()
 }
 
 func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragment, error) {
@@ -376,7 +383,7 @@ func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragme
 		log.Warn(err)
 		return nil, err
 	}
-	return fsi.GetFragment(), nil
+	return fsi.GetFragment()
 }
 
 /*
@@ -402,7 +409,7 @@ func (d *Database) getFragment(frame *Frame, slice *Slice) (*Fragment, error) {
 		log.Warn(err)
 		return nil, err
 	}
-	return fsi.GetFragment(), nil
+	return fsi.GetFragment()
 }
 
 func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {

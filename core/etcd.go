@@ -117,8 +117,8 @@ func (self *TopologyMapper) GetProcessFragmentCounts() map[string]int {
 	for _, dbs := range self.service.Cluster.GetDatabases() {
 		for _, fsi := range dbs.GetFrameSliceIntersects() {
 			if fsi != nil {
-				fragment := fsi.GetFragment()
-				if fragment != nil {
+				fragment, err := fsi.GetFragment()
+				if err == nil {
 					p := fragment.GetProcess()
 					if p != nil {
 						process := p.Id().String()
