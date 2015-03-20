@@ -2,10 +2,13 @@ package db
 
 import (
 	"errors"
+	"fmt"
 	log "github.com/cihub/seelog"
 	"pilosa/config"
 	"pilosa/util"
 	"sync"
+
+	"github.com/stathat/consistent"
 )
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")
@@ -78,7 +81,8 @@ func (self *Process) SetPortHttp(port int) {
 func NewLocation(location_string string) (*Location, error) {
 	splitstring := strings.Split(location_string, ":")
 	if len(splitstring) != 2 {
-		return nil, errors.New("Location string must be in form 0.0.0.0:0")
+		return nil, errors.New("Location string must be in form
+0.0.0.0:0")
 	}
 	ip := splitstring[0]
 	port, err := strconv.Atoi(splitstring[1])
@@ -96,9 +100,11 @@ func (location *Location) ToString() string {
 type NodeMap map[Location]Location
 */
 
-/////////// CLUSTERS ////////////////////////////////////////////////////////////////////
+/////////// CLUSTERS
+//////////////////////////////////////////////////////////////////////
 
-// Represents the entire cluster, and a reference to the Node this instance is running on
+// Represents the entire cluster, and a reference to the Node this instance is
+// running on
 type Cluster struct {
 	databases map[string]*Database
 	mutex     sync.Mutex
@@ -124,7 +130,8 @@ func (self *Cluster) IsValidDatabase(dbname string) bool {
 	return false
 }
 
-/////////// DATABASES ////////////////////////////////////////////////////////////////////
+/////////// DATABASES
+//////////////////////////////////////////////////////////////////////
 
 // A database is a collection of all the frames within a given profile space
 type Database struct {
@@ -178,7 +185,8 @@ func stringInSlice(a string, list []string) bool {
 }
 
 func (d *Database) IsValidFrame(name string) bool {
-	supported_frames := config.GetStringArrayDefault("supported_frames", []string{"default"})
+	supported_frames := config.GetStringArrayDefault("supported_frames",
+		[]string{"default"})
 	return stringInSlice(name, supported_frames)
 }
 
@@ -199,7 +207,8 @@ func (d *Database) SliceIds() ([]int, error) {
 	return rtn, nil
 }
 
-///////// FRAMES ////////////////////////////////////////////////////////////////////
+///////// FRAMES
+//////////////////////////////////////////////////////////////////////
 
 // A frame is a collection of slices in a given category
 // (brands, demographics, etc), specific to a database
@@ -242,7 +251,8 @@ func (d *Database) GetOrCreateFrame(name string) *Frame {
 	return d.addFrame(name)
 }
 
-///////// SLICES /////////////////////////////////////////////////////////////////////////
+///////// SLICES
+///////////////////////////////////////////////////////////////////////////
 
 // A slice is the vertical combination of every fragment.
 type Slice struct {
@@ -284,17 +294,21 @@ func (d *Database) GetOrCreateSlice(slice_id int) *Slice {
 	return d.addSlice(slice_id)
 }
 
-///////// FRAME-SLICE INTERSECT //////////////////////////////////////////////////////////////
+///////// FRAME-SLICE INTERSECT
+////////////////////////////////////////////////////////////////
 
 type FrameSliceIntersect struct {
-	frame    *Frame
-	slice    *Slice
-	fragment *Fragment
+	frame     *Frame
+	slice     *Slice
+	fragments []*Fragment
+	hashring  *consistent.Consistent
 }
 
 func (d *Database) AddFrameSliceIntersect(frame *Frame, slice *Slice) *FrameSliceIntersect {
 	frameslice := FrameSliceIntersect{frame: frame, slice: slice}
 	d.frame_slice_intersects = append(d.frame_slice_intersects, &frameslice)
+	frameslice.hashring = consistent.New()
+	frameslice.hashring.NumberOfReplicas = 16
 	return &frameslice
 }
 
@@ -308,33 +322,40 @@ func (d *Database) GetFrameSliceIntersect(frame *Frame, slice *Slice) (*FrameSli
 	return nil, FrameSliceIntersectDoesNotExistError
 }
 
-func (self *FrameSliceIntersect) GetFragment() (*Fragment, error) {
-	if self.fragment == nil {
-		return nil, FragmentDoesNotExistError
-	}
-	if self.fragment.process == nil {
-		return nil, FragmentDoesNotExistError
-	}
-	return self.fragment, nil
+func (self *FrameSliceIntersect) GetFragments() []*Fragment {
+	return self.fragments
 }
 
 func (d *Database) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
 	for _, fsi := range d.frame_slice_intersects {
-		f, err := fsi.GetFragment()
-		if err == nil && f.id == fragment_id {
+		f, err := fsi.GetFragment(fragment_id)
+		if err == nil {
 			return f, nil
+		}
+	}
+	return nil, FragmentDoesNotExistError
+}
+func (self *FrameSliceIntersect) GetFragment(fragment_id util.SUUID) (*Fragment,
+	error) {
+	for _, fragment := range self.fragments {
+		if fragment.id == fragment_id {
+			return fragment, nil
 		}
 	}
 	return nil, FragmentDoesNotExistError
 }
 
 func (self *FrameSliceIntersect) AddFragment(fragment *Fragment) {
-	self.fragment = fragment
+	self.fragments = append(self.fragments, fragment)
+	self.hashring.Add(util.SUUID_to_Hex(fragment.id))
 }
 
-///////// FRAGMENTS ////////////////////////////////////////////////////////////////////////
+///////// FRAGMENTS
+//////////////////////////////////////////////////////////////////////////
 
-// A fragment is a collection of bitmaps within a slice. The fragment contains a reference to the responsible node for that fragment. The node is in the form ip:port
+// A fragment is a collection of bitmaps within a slice. The fragment contains a
+// reference to the responsible node for that fragment. The node is in the form
+// ip:port
 type Fragment struct {
 	id      util.SUUID
 	process *Process
@@ -366,14 +387,21 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 		log.Warn(err)
 		return nil, err
 	}
+	//log.Println(frame, slice)
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Warn("Missing frame,slice", frame, slice)
 		log.Warn(err)
 		return nil, err
 	}
-
-	return fsi.GetFragment()
+	frag_id_s, err := fsi.hashring.Get(fmt.Sprintf("%d", bitmap.Id))
+	if err != nil {
+		log.Warn("ERROR FSI.GET:", bitmap.Id, bitmap.FrameType, d.Name, frame, slice)
+		log.Warn(err)
+		return nil, err
+	}
+	frag_id := util.Hex_to_SUUID(frag_id_s)
+	return fsi.GetFragment(frag_id)
 }
 
 func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragment, error) {
@@ -383,33 +411,32 @@ func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragme
 		log.Warn(err)
 		return nil, err
 	}
-	return fsi.GetFragment()
+	frag_id_s, err := fsi.hashring.Get("0")
+	// we don't need a specific bitmap in here because we're assuming the hashring only has a single element
+	if err != nil {
+		log.Warn("ERROR FSI.GET:", d.Name, frame, slice)
+		log.Warn(err)
+		return nil, err
+	}
+	frag_id := util.Hex_to_SUUID(frag_id_s)
+	return fsi.GetFragment(frag_id)
 }
 
 /*
 // NOT IMPLEMENTED
-// this would loop through all frame_slice_intersect[], then all fragmments to find a match
+// this would loop through all frame_slice_intersect[], then all fragmments to
+// find a match
 func (d *Database) GetFragmentById(fragment_id *GUID) *Fragment {
 }
 */
 
-func (d *Database) GetFragmentFromProfile(frame string, profile_id uint64) (*Fragment, error) {
-	slice := GetSlice(profile_id)
-	for _, frameslice := range d.frame_slice_intersects {
-		if frameslice.frame.name == frame && frameslice.slice.id == slice {
-			return frameslice.fragment, nil
-		}
-	}
-	return nil, errors.New("FragmentDoes does not exist.")
-}
-
-func (d *Database) getFragment(frame *Frame, slice *Slice) (*Fragment, error) {
+func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) (*Fragment, error) {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Warn(err)
 		return nil, err
 	}
-	return fsi.GetFragment()
+	return fsi.GetFragment(fragment_id)
 }
 
 func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
@@ -443,7 +470,8 @@ func (d *Database) AllocateFragment(frame *Frame, slice *Slice) *Fragment {
 */
 
 /*
-func (d *Database) AddFragmentByProcess(frame *Frame, slice *Slice, process *Process) *Fragment {
+func (d *Database) AddFragmentByProcess(frame *Frame, slice *Slice, process
+*Process) *Fragment {
     d.mutex.Lock()
     defer d.mutex.Unlock()
 	frameslice, _ := d.GetFrameSliceIntersect(frame, slice)
@@ -458,8 +486,8 @@ func (d *Database) AddFragmentByProcess(frame *Frame, slice *Slice, process *Pro
 func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
-	fragment, err := d.getFragment(frame, slice)
-	if err == nil && fragment != nil {
+	fragment, err := d.getFragment(frame, slice, fragment_id)
+	if err == nil {
 		return fragment
 	}
 	return d.addFragment(frame, slice, fragment_id)

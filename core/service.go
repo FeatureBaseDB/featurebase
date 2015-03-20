@@ -68,8 +68,11 @@ func (self *Service) getProduction() string {
 	prod_config := fmt.Sprintf(`
 	<seelog minlevel="%s">
 	<outputs>
-	<rollingfile type="size" filename="%s" maxsize="524288000" maxrolls="4" />
+	<rollingfile formatid="simpleformat" type="size" filename="%s" maxsize="524288000" maxrolls="4" />
 	</outputs>
+	    <formats>
+	  <format id="simpleformat" format="%Date/%Time [%LEV] %Msg%n"/>
+	      <formats>
 	</seelog>
 	`, log_level, fname)
 	return prod_config
