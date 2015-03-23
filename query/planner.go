@@ -76,7 +76,8 @@ func (self *BaseQueryStep) GetLocation() *db.Location {
 
 func (self *BaseQueryStep) LocIsDest() bool {
 	log.Trace("BaseQueryStep.LocIsDest")
-	if self.Location.ProcessId == self.Destination.ProcessId &&
+	//	if self.Location.ProcessId == self.Destination.ProcessId &&
+	if util.Equal(self.Location.ProcessId, self.Destination.ProcessId) &&
 		self.Location.FragmentId == self.Destination.FragmentId {
 		log.Trace("BaseQueryStep.LocIsDest Return true")
 		return true

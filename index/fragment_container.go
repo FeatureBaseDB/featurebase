@@ -67,6 +67,7 @@ func (self *FragmentContainer) Shutdown() {
 }
 
 func (self *FragmentContainer) LoadBitmap(frag_id util.SUUID, bitmap_id uint64, compressed_bitmap string, filter uint64) {
+	log.Trace("LoadBitmap")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewLoader(bitmap_id, compressed_bitmap, filter)
 		fragment.requestChan <- request
@@ -76,6 +77,7 @@ func (self *FragmentContainer) LoadBitmap(frag_id util.SUUID, bitmap_id uint64, 
 }
 
 func (self *FragmentContainer) GetFragment(frag_id util.SUUID) (*Fragment, bool) {
+	log.Trace("index.GetFragment")
 	self.mutex.Lock()
 	c, v := self.fragments[frag_id]
 	self.mutex.Unlock()
@@ -91,6 +93,7 @@ func (self *FragmentContainer) Stats(frag_id util.SUUID) interface{} {
 	return nil
 }
 func (self *FragmentContainer) Empty(frag_id util.SUUID) (BitmapHandle, error) {
+	log.Trace("index.Empty")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewEmpty()
 		fragment.requestChan <- request
@@ -100,6 +103,7 @@ func (self *FragmentContainer) Empty(frag_id util.SUUID) (BitmapHandle, error) {
 }
 
 func (self *FragmentContainer) Intersect(frag_id util.SUUID, bh []BitmapHandle) (BitmapHandle, error) {
+	log.Trace("index.Intersect")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewIntersect(bh)
 		fragment.requestChan <- request
@@ -110,6 +114,7 @@ func (self *FragmentContainer) Intersect(frag_id util.SUUID, bh []BitmapHandle) 
 	return 0, errors.New("Invalid Bitmap Handle Intersect")
 }
 func (self *FragmentContainer) Union(frag_id util.SUUID, bh []BitmapHandle) (BitmapHandle, error) {
+	log.Trace("index.Union")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewUnion(bh)
 		fragment.requestChan <- request
@@ -121,6 +126,7 @@ func (self *FragmentContainer) Union(frag_id util.SUUID, bh []BitmapHandle) (Bit
 }
 
 func (self *FragmentContainer) Difference(frag_id util.SUUID, bh []BitmapHandle) (BitmapHandle, error) {
+	log.Trace("index.Difference")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewDifference(bh)
 		fragment.requestChan <- request
@@ -132,6 +138,7 @@ func (self *FragmentContainer) Difference(frag_id util.SUUID, bh []BitmapHandle)
 }
 
 func (self *FragmentContainer) Get(frag_id util.SUUID, bitmap_id uint64) (BitmapHandle, error) {
+	log.Trace("index.Get")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGet(bitmap_id)
 		fragment.requestChan <- request
@@ -165,6 +172,7 @@ func (self *FragmentContainer) Range(frag_id util.SUUID, bitmap_id uint64, start
 }
 
 func (self *FragmentContainer) TopN(frag_id util.SUUID, bh BitmapHandle, n int, categories []uint64) ([]Pair, error) {
+	log.Trace("index.TopN")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewTopN(bh, n, categories)
 		fragment.requestChan <- request
@@ -176,6 +184,7 @@ func (self *FragmentContainer) TopN(frag_id util.SUUID, bh BitmapHandle, n int, 
 }
 
 func (self *FragmentContainer) TopNAll(frag_id util.SUUID, n int, categories []uint64) ([]Pair, error) {
+	log.Trace("index.TopNAll")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewTopNAll(n, categories)
 		fragment.requestChan <- request
@@ -187,6 +196,7 @@ func (self *FragmentContainer) TopNAll(frag_id util.SUUID, n int, categories []u
 }
 
 func (self *FragmentContainer) TopFillBatch(args []FillArgs) ([]Pair, error) {
+	log.Trace("index.TopFillBatch")
 	//should probaly make this concurrent but then all hell breaks loose
 	results := make(map[uint64]uint64)
 	for _, v := range args {
@@ -208,6 +218,7 @@ func (self *FragmentContainer) TopFillBatch(args []FillArgs) ([]Pair, error) {
 
 }
 func (self *FragmentContainer) TopFillFragment(arg FillArgs) ([]Pair, error) {
+	log.Trace("index.TopFillFragment")
 	if fragment, found := self.GetFragment(arg.Frag_id); found {
 		request := NewTopFill(arg)
 		fragment.requestChan <- request
@@ -219,6 +230,7 @@ func (self *FragmentContainer) TopFillFragment(arg FillArgs) ([]Pair, error) {
 }
 
 func (self *FragmentContainer) GetList(frag_id util.SUUID, bitmap_id []uint64) ([]BitmapHandle, error) {
+	log.Trace("index.GetList")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGetList(bitmap_id)
 		fragment.requestChan <- request
@@ -230,6 +242,7 @@ func (self *FragmentContainer) GetList(frag_id util.SUUID, bitmap_id []uint64) (
 }
 
 func (self *FragmentContainer) Count(frag_id util.SUUID, bitmap BitmapHandle) (uint64, error) {
+	log.Trace("index.Count")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewCount(bitmap)
 		fragment.requestChan <- request
@@ -241,6 +254,7 @@ func (self *FragmentContainer) Count(frag_id util.SUUID, bitmap BitmapHandle) (u
 }
 
 func (self *FragmentContainer) GetBytes(frag_id util.SUUID, bh BitmapHandle) ([]byte, error) {
+	log.Trace("index.GetBytes")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewGetBytes(bh)
 		fragment.requestChan <- request
@@ -252,6 +266,7 @@ func (self *FragmentContainer) GetBytes(frag_id util.SUUID, bh BitmapHandle) ([]
 }
 
 func (self *FragmentContainer) FromBytes(frag_id util.SUUID, bytes []byte) (BitmapHandle, error) {
+	log.Trace("index.FromBytes")
 	if fragment, found := self.GetFragment(frag_id); found {
 		request := NewFromBytes(bytes)
 		fragment.requestChan <- request

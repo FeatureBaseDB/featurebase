@@ -20,6 +20,7 @@ func (self *Service) RecallQueryStepHandler(msg *db.Message) {
 }
 */
 func (self *Service) CountQueryStepHandler(msg *db.Message) {
+	log.Trace("CountQueryStepHandler")
 	//spew.Dump("COUNT QUERYSTEP")
 	qs := msg.Data.(query.CountQueryStep)
 	input := qs.Input
@@ -174,7 +175,7 @@ func (self *Service) StashQueryStepHandler(msg *db.Message) {
 		case query.Stash:
 			result.Stash = append(result.Stash, val.Stash...)
 		default:
-			log.Warn("UNEXCPECTED MESSAG", value)
+			log.Warn("UNEXCPECTED MESSAGE", value)
 		}
 	}
 	result_message := db.Message{Data: query.StashQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
@@ -183,6 +184,7 @@ func (self *Service) StashQueryStepHandler(msg *db.Message) {
 }
 
 func (self *Service) CatQueryStepHandler(msg *db.Message) {
+	log.Trace("CatQueryStepHandler")
 	qs := msg.Data.(query.CatQueryStep)
 	var handles []index.BitmapHandle
 	return_type := "bitmap-handles"
