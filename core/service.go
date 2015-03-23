@@ -67,9 +67,12 @@ func (self *Service) getProduction() string {
 	log_level := config.GetStringDefault("log_level", "info")
 	prod_config := fmt.Sprintf(`<seelog minlevel="%s">
 	<outputs>
-		<rollingfile type="size" filename="%s" maxsize="524288000" maxrolls="4" />
-	</outputs> 
-	</seelog>`, log_level, fname)
+		<rollingfile type="size" filename="%s" maxsize="524288000" maxrolls="4" formatid="format1" />
+	</outputs> `, log_level, fname)
+	prod_config += `<formats>
+	    <format id="format1" format="%Date/%Time [%LEV] %Msg%n"/>
+	 </formats>
+	</seelog>`
 	fmt.Println(prod_config)
 	return prod_config
 }
