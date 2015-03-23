@@ -73,7 +73,7 @@ func (self *Service) getProduction() string {
 	    <format id="format1" format="%Date/%Time [%LEV] %Msg%n"/>
 	 </formats>
 	</seelog>`
-	fmt.Println(prod_config)
+	//fmt.Println(prod_config)
 	return prod_config
 }
 

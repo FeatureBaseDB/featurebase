@@ -42,6 +42,7 @@ func (self *Service) CountQueryStepHandler(msg *db.Message) {
 }
 
 func (self *Service) UnionQueryStepHandler(msg *db.Message) {
+	log.Trace("UnionQueryStepHandler")
 	//spew.Dump("UNION QUERYSTEP")
 	qs := msg.Data.(query.UnionQueryStep)
 	var handles []index.BitmapHandle
@@ -77,6 +78,7 @@ func (self *Service) UnionQueryStepHandler(msg *db.Message) {
 }
 
 func (self *Service) IntersectQueryStepHandler(msg *db.Message) {
+	log.Trace("IntersectQueryStepHandler")
 	//spew.Dump("INTERSECT QUERYSTEP")
 	qs := msg.Data.(query.IntersectQueryStep)
 	var handles []index.BitmapHandle
@@ -112,6 +114,7 @@ func (self *Service) IntersectQueryStepHandler(msg *db.Message) {
 }
 
 func (self *Service) DifferenceQueryStepHandler(msg *db.Message) {
+	log.Trace("DifferenceQueryStepHandler")
 	//spew.Dump("DIFFERENCE QUERYSTEP")
 	qs := msg.Data.(query.DifferenceQueryStep)
 	var handles []index.BitmapHandle
@@ -147,6 +150,7 @@ func (self *Service) DifferenceQueryStepHandler(msg *db.Message) {
 }
 
 func (self *Service) StashQueryStepHandler(msg *db.Message) {
+	log.Trace("StashQueryStepHandler")
 	qs := msg.Data.(query.StashQueryStep)
 
 	part := make(chan interface{})
