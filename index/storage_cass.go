@@ -25,8 +25,10 @@ type CassandraStorage struct {
 }
 
 var cluster *gocql.ClusterConfig
+var session *gocql.Session
 
 func init() {
+	var err error
 	hosts := config.GetStringArrayDefault("cassandra_hosts", []string{"localhost"})
 	keyspace := config.GetStringDefault("cassandra_keyspace", "pilosa")
 	cluster = gocql.NewCluster(hosts...)
@@ -34,6 +36,10 @@ func init() {
 	cluster.Consistency = gocql.One
 	cluster.Timeout = 5 * time.Second
 	cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: 10}
+	session, err = cluster.CreateSession()
+	if err != nil {
+		log.Warn(err)
+	}
 }
 
 func BuildSchema() {
@@ -49,10 +55,11 @@ func BuildSchema() {
 func NewCassStorage() Storage {
 	obj := new(CassandraStorage)
 	// cluster.CQLVersion = "3.0.0"
-	session, err := cluster.CreateSession()
+	/*session, err := cluster.CreateSession()
 	if err != nil {
 		log.Warn(err)
 	}
+	*/
 
 	obj.db = session
 	obj.stmt = `INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?)  USING timestamp ?;`
