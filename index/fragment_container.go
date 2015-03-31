@@ -11,6 +11,7 @@ import (
 	"pilosa/util"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -311,12 +312,21 @@ func (self *FragmentContainer) Clear(frag_id util.SUUID) (bool, error) {
 	}
 	return false, errors.New("Invalid Fragment ID")
 }
+func dumpHandlesToLog() {
+	var limit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &limit); err != nil {
+		log.Warn("Getrlimit:" + err.Error())
+	}
+	mesg := fmt.Sprintf("%v file descriptors out of a maximum of %v available\n", limit.Cur, limit.Max)
+	log.Warn(mesg)
+}
 
 func (self *FragmentContainer) AddFragment(db string, frame string, slice int, id util.SUUID) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 	_, ok := self.fragments[id]
 	if !ok {
+		//		dumpHandlesToLog()
 		log.Warn("ADD FRAGMENT", frame, db, slice, util.SUUID_to_Hex(id))
 		f := NewFragment(id, db, slice, frame)
 		loader := make(chan Command)
