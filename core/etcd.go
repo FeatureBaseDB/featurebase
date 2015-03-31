@@ -52,13 +52,13 @@ func (self *TopologyMapper) Setup() {
 func (self *TopologyMapper) Run() {
 
 	receiver := make(chan *etcd.Response)
-	stop := make(chan bool)
 	go func() {
 		// TODO: add some terminating measure
 		// TODO: use modindex to make sure watch catches everything
 		for {
 			ns := self.namespace + "/db"
 			log.Warn(" ETCD watcher:", ns)
+			stop := make(chan bool)
 			resp, err := self.service.Etcd.Watch(ns, 0, true, receiver, stop)
 			log.Warn("TopologyMapper ETCD watcher", resp, err)
 		}
