@@ -231,6 +231,9 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 			var e struct{}
 			for _, pair := range val.Pairs {
 				//merge_map[pair.Key] += pair.Count
+				if pair.Key == 0 {
+					continue //skip
+				}
 				merge_map[pair.Key] += pair.Count
 				mm, ok := slice_map[pair.Key]
 				if !ok {
@@ -267,6 +270,9 @@ func (self *Service) CatQueryStepHandler(msg *db.Message) {
 	} else if return_type == "pair-list" {
 		rank_list := make(index.RankList, 0, len(merge_map))
 		for k, v := range merge_map {
+			if k == 0 || v == 0 {
+				continue //shouldn't be getting 0 keys or values anyway
+			}
 			rank := new(index.Rank)
 			rank.Pair = &index.Pair{k, v}
 			rank_list = append(rank_list, rank)

@@ -67,7 +67,6 @@ func FromApiString(service *Service, db string, frame string, api_string string,
 		}
 		o := copy_raw(raw.Block)
 		chunk := &index.Chunk{raw.Key, o}
-		println("KEY", raw.Key)
 		bitmap.AddChunk(chunk)
 
 	}

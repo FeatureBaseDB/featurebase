@@ -257,7 +257,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		process = db.NewProcess(&process_uuid)
 		fragment.SetProcess(process)
 
-		if self.service.Id.String() == process_uuid.String() {
+		if util.Equal(self.service.Id, &process_uuid) {
 			self.service.Index.AddFragment(bits[1], bits[3], slice_int, fragment_id)
 		}
 

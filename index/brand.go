@@ -244,6 +244,7 @@ func dump(r RankList, n int) {
 }
 
 func (self *Brand) TopNAll(n int, categories []uint64) []Pair {
+	log.Trace("TopNAll")
 
 	self.checkRank()
 	results := make([]Pair, 0, 0)

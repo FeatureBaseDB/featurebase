@@ -26,6 +26,7 @@ import (
 	notify "github.com/bitly/go-notify"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/websocket"
+	//	_ "net/http/pprof"
 )
 
 type WebService struct {
