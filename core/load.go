@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	log "github.com/cihub/seelog"
 	"pilosa/index"
 )
@@ -19,6 +20,11 @@ func copy_raw(src [32]uint64) index.BlockArray {
 	return index.BlockArray{o}
 }
 func sendBitmap(service *Service, bitmap index.IBitmap, db string, frame string, bitmap_id, filter uint64, slice int, finish chan error) {
+	if slice < 0 {
+		log.Warn("Bad split", db, frame, slice, bitmap_id)
+		finish <- errors.New("BadSplit")
+		return
+	}
 	compressed_bitmap := bitmap.ToCompressString()
 	results := service.Batch(db, frame, compressed_bitmap, bitmap_id, slice, filter)
 	finish <- results
@@ -36,7 +42,7 @@ func FromApiString(service *Service, db string, frame string, api_string string,
 		return "Bad"
 	}
 	var numChunks uint64
-	err = binary.Read(reader, binary.BigEndian, &numChunks)
+	err = binary.Read(reader, binary.LittleEndian, &numChunks)
 	if err != nil {
 		log.Warn(err)
 		return "Bad"
@@ -52,7 +58,7 @@ func FromApiString(service *Service, db string, frame string, api_string string,
 			Key   uint64
 			Block [32]uint64
 		}
-		binary.Read(reader, binary.BigEndian, &raw)
+		binary.Read(reader, binary.LittleEndian, &raw)
 		slice := raw.Key >> 5
 		if slice != last_slice {
 			if first {

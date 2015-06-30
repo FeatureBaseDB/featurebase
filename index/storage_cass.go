@@ -27,7 +27,7 @@ type CassandraStorage struct {
 var cluster *gocql.ClusterConfig
 var session *gocql.Session
 
-func init() {
+func SetupCassandra() {
 	var err error
 	hosts := config.GetStringArrayDefault("cassandra_hosts", []string{"localhost"})
 	keyspace := config.GetStringDefault("cassandra_keyspace", "pilosa")
@@ -44,12 +44,12 @@ func init() {
 
 func BuildSchema() {
 	/*
-				   "CREATE KEYSPACE IF NOT EXISTS pilosa WITH strategy_class = SimpleStrategy AND strategy_options:replication_factor = 1"
-			       create keyspace if not exists pilosa with replication = {'class': 'SimpleStrategy', 'replication_factor' : 1} and durable_writes = true;
-			       CREATE KEYSPACE pilosa WITH replication = {'class': 'NetworkTopologyStrategy', 'pilpang': '2'}  AND durable_writes = true;
+					   "CREATE KEYSPACE IF NOT EXISTS pilosa WITH strategy_class = SimpleStrategy AND strategy_options:replication_factor = 1"
+				       create keyspace if not exists pilosa with replication = {'class': 'SimpleStrategy', 'replication_factor' : 1} and durable_writes = true;
+				       CREATE KEYSPACE pilosa WITH replication = {'class': 'NetworkTopologyStrategy', 'pilpang': '2'}  AND durable_writes = true;
 
-	  CREATE TABLE IF NOT EXISTS bitmap (bitmap_id bigint, db varchar, frame varchar, slice int, filter int, chunkkey bigint, blockindex int, block bigint, PRIMARY KEY ((bitmap_id, db, frame, slice), chunkkey, blockindex) )
-				   "
+		  CREATE TABLE IF NOT EXISTS bitmap (bitmap_id bigint, db varchar, frame varchar, slice int, filter int, chunkkey bigint, blockindex int, block bigint, PRIMARY KEY ((bitmap_id, db, frame, slice), chunkkey, blockindex) )
+					   "
 	*/
 
 }

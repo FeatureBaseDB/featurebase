@@ -20,7 +20,8 @@ var (
 	end   chan bool
 )
 
-func init() {
+func SetupUtil() {
+	setup_storage()
 	timer = make(chan args, 32768)
 	count = make(chan string, 32768)
 	end = make(chan bool)

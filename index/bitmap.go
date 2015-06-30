@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/gob"
 	log "github.com/cihub/seelog"
 	"io/ioutil"
@@ -413,6 +414,7 @@ type IBitmap interface {
 	ToBytes() []byte
 	FromBytes([]byte)
 	ToCompressString() string
+	ToRawCompressString() (string, int)
 	FromCompressString(string)
 }
 
@@ -456,6 +458,24 @@ func (b *Bitmap) Get(a *Chunk) *Chunk {
 		return n.(*Chunk)
 	}
 	return nil
+}
+func (b *Bitmap) ToRawCompressString() (string, int) {
+	var bt bytes.Buffer
+	buf := gzip.NewWriter(&bt)
+	binary.Write(buf, binary.LittleEndian, uint64(b.nodes.Len()))
+	max_slice := 0
+	for i := b.nodes.Min(); !i.Limit(); i = i.Next() {
+		obj := i.Item().(*Chunk)
+		max_slice = int(obj.Key)
+		binary.Write(buf, binary.LittleEndian, obj.Key)
+		for _, v := range obj.Value.Block {
+			binary.Write(buf, binary.LittleEndian, v)
+		}
+	}
+	buf.Flush()
+	//buf.Close()
+	max_slice = max_slice / 32
+	return base64.StdEncoding.EncodeToString(bt.Bytes()), max_slice
 }
 
 func (b *Bitmap) ToBytes() []byte {

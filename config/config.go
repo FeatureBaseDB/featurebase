@@ -19,7 +19,7 @@ type Config struct {
 
 var config *Config
 
-func init() {
+func SetupConfig() {
 	config = NewConfig("")
 }
 

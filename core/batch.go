@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/gob"
+	log "github.com/cihub/seelog"
 	"pilosa/db"
 	"pilosa/util"
 )
@@ -32,6 +33,7 @@ func init() {
 }
 
 func (self *Service) Batch(database_name, frame, compressed_bitmap string, bitmap_id uint64, slice int, filter uint64) error {
+	log.Trace("Batch:", "db:", database_name, " frame:", frame, " slice:", slice, " cb:", compressed_bitmap, " bid:", bitmap_id, "f:", filter)
 	//determine the fragment_id from database/frame/slice
 	database := self.Cluster.GetOrCreateDatabase(database_name)
 	oslice := database.GetOrCreateSlice(slice)

@@ -5,8 +5,11 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/mitchellh/panicwrap"
 	"os"
+	"pilosa/config"
 	"pilosa/core"
 	"pilosa/cruncher"
+	"pilosa/index"
+	"pilosa/util"
 	"runtime/pprof"
 )
 
@@ -39,6 +42,10 @@ func main() {
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
+	config.SetupConfig()
+	util.SetupUtil()
+	index.SetupCassandra()
+
 	cruncher := cruncher.NewCruncher()
 	cruncher.Run()
 	log.Warn("STOP")
