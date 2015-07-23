@@ -228,6 +228,7 @@ func (self *WebService) HandleLoad(w http.ResponseWriter, r *http.Request) {
 		ns, _ := database.NumSlices()
 		if ns <= ms {
 			for i := ns; i <= ms; i++ {
+				log.Info("Load Create Slice ", i)
 				self.service.TopologyMapper.MakeFragments(db, i)
 			}
 			http.Error(w, "Needed Slices", http.StatusNotFound)

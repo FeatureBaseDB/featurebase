@@ -114,6 +114,11 @@ func (self *TopologyMapper) GetProcessFragmentCounts() map[string]int {
 	m := make(map[string]int)
 	id_string := self.service.Id.String()
 	m[id_string] = 0 //at least have one process if none created
+	for k, _ := range self.service.ProcessMap.nodes {
+		p := k.String()
+		m[p] = 0 //at least have one process if none created
+
+	}
 	for _, dbs := range self.service.Cluster.GetDatabases() {
 		for _, fsi := range dbs.GetFrameSliceIntersects() {
 			for _, fragment := range fsi.GetFragments() {
