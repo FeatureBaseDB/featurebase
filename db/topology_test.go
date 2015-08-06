@@ -2,11 +2,11 @@ package db
 
 import (
 	"log"
-	"pilosa/util"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/umbel/pilosa/util"
 )
 
 func TestTopology(t *testing.T) {

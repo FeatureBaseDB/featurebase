@@ -1,11 +1,11 @@
 package util
 
 import (
-	log "github.com/cihub/seelog"
-	"pilosa/config"
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
+	log "github.com/cihub/seelog"
+	"github.com/umbel/pilosa/config"
 )
 
 type args struct {

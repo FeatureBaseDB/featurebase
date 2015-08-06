@@ -2,7 +2,8 @@ package transport
 
 import (
 	"log"
-	"pilosa/db"
+
+	"github.com/umbel/pilosa/db"
 )
 
 type HttpTransport struct {

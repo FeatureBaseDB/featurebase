@@ -3,10 +3,10 @@ package util
 import (
 	"io"
 	"os"
-	"pilosa/config"
 	"strings"
 
 	"github.com/kr/s3/s3util"
+	"github.com/umbel/pilosa/config"
 )
 
 func setup_storage() {

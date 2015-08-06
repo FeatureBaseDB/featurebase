@@ -2,9 +2,10 @@ package core
 
 import (
 	"encoding/gob"
-	"pilosa/db"
-	"pilosa/util"
 	"time"
+
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/util"
 )
 
 type PingRequest struct {

@@ -3,14 +3,12 @@ package index
 // #cgo  CFLAGS:-mpopcnt
 
 import (
-	log "github.com/cihub/seelog"
-	"pilosa/config"
-	"pilosa/util"
-
-	//"sync/atomic"
 	"time"
 
+	log "github.com/cihub/seelog"
 	"github.com/gocql/gocql"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/util"
 )
 
 type CassandraStorage struct {

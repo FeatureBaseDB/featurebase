@@ -1,10 +1,10 @@
 package cruncher
 
 import (
-	"pilosa/core"
-	"pilosa/dispatch"
-	"pilosa/executor"
-	"pilosa/transport"
+	"github.com/umbel/pilosa/core"
+	"github.com/umbel/pilosa/dispatch"
+	"github.com/umbel/pilosa/executor"
+	"github.com/umbel/pilosa/transport"
 )
 
 type Cruncher struct {

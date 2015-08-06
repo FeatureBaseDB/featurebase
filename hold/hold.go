@@ -2,9 +2,10 @@ package hold
 
 import (
 	"errors"
-	log "github.com/cihub/seelog"
-	. "pilosa/util"
 	"time"
+
+	log "github.com/cihub/seelog"
+	. "github.com/umbel/pilosa/util"
 )
 
 type holdchan chan interface{}

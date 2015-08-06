@@ -4,14 +4,14 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	log "github.com/cihub/seelog"
 	"math/rand"
-	"pilosa/db"
-	"pilosa/index"
-	"pilosa/util"
 	"time"
 
+	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa/util"
 )
 
 type PortableQueryStep interface {

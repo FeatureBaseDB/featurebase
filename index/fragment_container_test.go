@@ -3,11 +3,8 @@ package index
 import (
 	"testing"
 
-	//	"io/ioutil"
-	//   "time"
-	"pilosa/util"
-
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/umbel/pilosa/util"
 )
 
 func TestFragment(t *testing.T) {

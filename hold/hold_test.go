@@ -1,11 +1,11 @@
 package hold
 
 import (
-	"pilosa/util"
 	"testing"
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/umbel/pilosa/util"
 )
 
 func TestHoldChan(t *testing.T) {

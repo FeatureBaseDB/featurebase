@@ -1,20 +1,17 @@
 package index
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/rand"
+	"sort"
 	"sync"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
-)
-
-import (
-	"encoding/json"
-	"fmt"
 	log "github.com/cihub/seelog"
-	"pilosa/config"
-	"pilosa/util"
-	"sort"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/util"
 )
 
 var globalLock *sync.Mutex

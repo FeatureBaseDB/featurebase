@@ -8,8 +8,9 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+
 	log "github.com/cihub/seelog"
-	"pilosa/index"
+	"github.com/umbel/pilosa/index"
 )
 
 func copy_raw(src [32]uint64) index.BlockArray {

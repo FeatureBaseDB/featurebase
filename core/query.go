@@ -1,14 +1,14 @@
 package core
 
 import (
-	log "github.com/cihub/seelog"
-	"pilosa/db"
-	"pilosa/index"
-	"pilosa/query"
-	"pilosa/util"
 	"sort"
 
+	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa/query"
+	"github.com/umbel/pilosa/util"
 )
 
 /*

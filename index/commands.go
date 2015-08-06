@@ -3,9 +3,10 @@ package index
 import (
 	"bytes"
 	"compress/gzip"
-	log "github.com/cihub/seelog"
 	"io/ioutil"
 	"time"
+
+	log "github.com/cihub/seelog"
 )
 
 type Result struct {

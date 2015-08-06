@@ -3,10 +3,11 @@ package query
 import (
 	"errors"
 	"fmt"
-	log "github.com/cihub/seelog"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	log "github.com/cihub/seelog"
 )
 
 const (

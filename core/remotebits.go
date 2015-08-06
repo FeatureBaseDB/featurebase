@@ -1,11 +1,11 @@
 package core
 
 import (
-	//	"github.com/davecgh/go-spew/spew"
 	"encoding/gob"
+
 	log "github.com/cihub/seelog"
-	"pilosa/db"
-	"pilosa/util"
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/util"
 )
 
 type RemoteSetBit struct {

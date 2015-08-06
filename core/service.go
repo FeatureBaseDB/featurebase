@@ -2,19 +2,18 @@ package core
 
 import (
 	"fmt"
-	//"log"
-	log "github.com/cihub/seelog"
 	"os"
 	"os/signal"
-	"pilosa/config"
-	"pilosa/db"
-	"pilosa/hold"
-	"pilosa/index"
-	"pilosa/interfaces"
-	"pilosa/util"
 	"syscall"
 
+	log "github.com/cihub/seelog"
 	"github.com/coreos/go-etcd/etcd"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/hold"
+	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa/interfaces"
+	"github.com/umbel/pilosa/util"
 )
 
 type Service struct {

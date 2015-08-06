@@ -6,9 +6,6 @@ import (
 	"testing"
 	"time"
 
-	//	"io/ioutil"
-	//   "time"
-
 	. "github.com/smartystreets/goconvey/convey"
 )
 

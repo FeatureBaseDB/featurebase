@@ -8,25 +8,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	//"log"
-	log "github.com/cihub/seelog"
 	"net/http"
 	"net/http/httputil"
-	"pilosa/config"
-	"pilosa/db"
-	"pilosa/index"
-	"pilosa/util"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
-
 	"time"
 
 	notify "github.com/bitly/go-notify"
+	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/websocket"
-	//	_ "net/http/pprof"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa/util"
 )
 
 type WebService struct {

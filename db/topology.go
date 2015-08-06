@@ -3,12 +3,12 @@ package db
 import (
 	"errors"
 	"fmt"
-	log "github.com/cihub/seelog"
-	"pilosa/config"
-	"pilosa/util"
 	"sync"
 
+	log "github.com/cihub/seelog"
 	"github.com/stathat/consistent"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/util"
 )
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")

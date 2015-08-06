@@ -2,13 +2,12 @@ package executor
 
 import (
 	log "github.com/cihub/seelog"
-	"pilosa/config"
-	"pilosa/core"
-	"pilosa/db"
-	"pilosa/query"
-	"pilosa/util"
-
 	"github.com/davecgh/go-spew/spew"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/core"
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/query"
+	"github.com/umbel/pilosa/util"
 )
 
 type Executor struct {
