@@ -2,11 +2,11 @@ package config
 
 import (
 	"errors"
-	log "github.com/cihub/seelog"
 	"io/ioutil"
 	"os"
 	"sync"
 
+	log "github.com/cihub/seelog"
 	"launchpad.net/goyaml"
 )
 

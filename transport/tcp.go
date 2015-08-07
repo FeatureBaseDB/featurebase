@@ -3,17 +3,16 @@ package transport
 import (
 	"encoding/gob"
 	"fmt"
-	log "github.com/cihub/seelog"
 	"net"
 	"os"
-	"pilosa/config"
-	"pilosa/core"
-	"pilosa/db"
-	. "pilosa/util"
-
 	"time"
 
 	notify "github.com/bitly/go-notify"
+	log "github.com/cihub/seelog"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/core"
+	"github.com/umbel/pilosa/db"
+	. "github.com/umbel/pilosa/util"
 )
 
 type connection struct {

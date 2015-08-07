@@ -2,11 +2,10 @@ package dispatch
 
 import (
 	log "github.com/cihub/seelog"
-	"pilosa/core"
-	"pilosa/db"
-	"pilosa/query"
-
 	"github.com/davecgh/go-spew/spew"
+	"github.com/umbel/pilosa/core"
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/query"
 )
 
 type Dispatch struct {

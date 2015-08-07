@@ -8,9 +8,9 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/gob"
-	log "github.com/cihub/seelog"
 	"io/ioutil"
 
+	log "github.com/cihub/seelog"
 	"github.com/yasushi-saito/rbtree"
 )
 

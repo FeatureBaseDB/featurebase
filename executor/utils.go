@@ -3,11 +3,11 @@ package executor
 import (
 	"bytes"
 	"io/ioutil"
-	"pilosa/query"
 	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/robertkrimen/otto"
+	"github.com/umbel/pilosa/query"
 )
 
 func GetPlugin(file_name string, filter string, filters []string) interface{} {

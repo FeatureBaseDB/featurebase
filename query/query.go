@@ -1,10 +1,11 @@
 package query
 
 import (
-	log "github.com/cihub/seelog"
-	"pilosa/db"
-	"pilosa/util"
 	"strings"
+
+	log "github.com/cihub/seelog"
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/util"
 )
 
 type QueryInput interface{}

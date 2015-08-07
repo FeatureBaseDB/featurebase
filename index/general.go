@@ -3,11 +3,11 @@ package index
 import (
 	"encoding/json"
 	"fmt"
-	log "github.com/cihub/seelog"
-	"pilosa/config"
-	"pilosa/util"
 
+	log "github.com/cihub/seelog"
 	"github.com/golang/groupcache/lru"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/util"
 )
 
 type General struct {

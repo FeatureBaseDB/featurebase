@@ -6,7 +6,7 @@
     },
     "etcd": {
         "repo": "github.com/coreos/go-etcd/etcd",
-        "version": "2af7a9525b09fb715b215a1fb852dd4814ef52b5",
+        "version": "9847b93751a5fbaf227b893d172cee0104ac6427",
         "type": "git"
     },
     "gkvlite": {
@@ -21,12 +21,12 @@
     },
     "gocql": {
         "repo": "github.com/gocql/gocql",
-        "version": "730396a4f658d3266f8b8be4fdaea06b6de92a82",
+        "version": "f8fb76bb772442ea938e4be46ab1666e542411a5",
         "type": "git"
     },
     "goleveldb": {
         "repo": "github.com/syndtr/goleveldb/leveldb",
-        "version": "63c9e642efad852f49e20a6f90194cae112fd2ac",
+        "version": "183614d6b32571e867df4cf086f5480ceefbdfac",
         "type": "git"
     },
     "google-crypto": {

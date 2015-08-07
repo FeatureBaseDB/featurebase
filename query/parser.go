@@ -3,13 +3,13 @@ package query
 import (
 	"errors"
 	"fmt"
-	log "github.com/cihub/seelog"
-	"pilosa/index"
-	"pilosa/util"
 	"strconv"
 	"time"
 
+	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa/util"
 )
 
 var InvalidQueryError = errors.New("Invalid query format.")

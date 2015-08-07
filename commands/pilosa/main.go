@@ -2,15 +2,16 @@ package main
 
 import (
 	"flag"
+	"os"
+	"runtime/pprof"
+
 	log "github.com/cihub/seelog"
 	"github.com/mitchellh/panicwrap"
-	"os"
-	"pilosa/config"
-	"pilosa/core"
-	"pilosa/cruncher"
-	"pilosa/index"
-	"pilosa/util"
-	"runtime/pprof"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/core"
+	"github.com/umbel/pilosa/cruncher"
+	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa/util"
 )
 
 var (

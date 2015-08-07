@@ -2,7 +2,8 @@ package db
 
 import (
 	"encoding/gob"
-	. "pilosa/util"
+
+	. "github.com/umbel/pilosa/util"
 )
 
 type Message struct {

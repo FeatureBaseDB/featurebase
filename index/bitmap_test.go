@@ -1,12 +1,7 @@
 package index
 
 import (
-	//	"fmt"
-	//	"math/rand"
 	"testing"
-	//	"time"
-
-	//	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestBitmaps(t *testing.T) {

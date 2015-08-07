@@ -2,12 +2,12 @@ package query
 
 import (
 	"log"
-	"pilosa/db"
-	"pilosa/util"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/util"
 )
 
 func basic_database() (*db.Database, *db.Fragment) {

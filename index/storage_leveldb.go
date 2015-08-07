@@ -6,12 +6,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"log"
-	"pilosa/util"
+	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	. "github.com/syndtr/goleveldb/leveldb/util"
-
-	"time"
+	"github.com/umbel/pilosa/util"
 )
 
 type LevelDBStorage struct {

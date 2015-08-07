@@ -3,19 +3,19 @@ package core
 import (
 	"errors"
 	"fmt"
-	log "github.com/cihub/seelog"
 	"os"
-	"pilosa/config"
-	"pilosa/db"
-	"pilosa/util"
 	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
+	log "github.com/cihub/seelog"
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/util"
 )
 
 type TopologyMapper struct {

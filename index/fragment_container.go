@@ -2,20 +2,19 @@ package index
 
 import (
 	"database/sql"
-
 	"encoding/gob"
 	"errors"
 	"fmt"
-	log "github.com/cihub/seelog"
-	"pilosa/config"
-	"pilosa/util"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	log "github.com/cihub/seelog"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/golang/groupcache/lru"
+	"github.com/umbel/pilosa/config"
+	"github.com/umbel/pilosa/util"
 )
 
 type FragmentContainer struct {

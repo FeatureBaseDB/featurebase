@@ -5,12 +5,12 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	log "github.com/cihub/seelog"
 	"math/rand"
 	"os"
 	"strings"
 	"time"
 
+	log "github.com/cihub/seelog"
 	"github.com/gocql/gocql"
 )
 
