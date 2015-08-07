@@ -86,7 +86,6 @@ func (self *Service) getDev() string {
 }
 func (self *Service) PrepareLogging() {
 	logger, _ := log.LoggerFromConfigAsBytes([]byte(self.getProduction()))
-	//	logger, _ := log.LoggerFromConfigAsBytes([]byte(self.getDev()))
 	log.ReplaceLogger(logger)
 }
 

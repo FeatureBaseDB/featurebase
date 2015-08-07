@@ -91,7 +91,6 @@ func TestQueryParser(t *testing.T) {
 	})
 	Convey("Bracketed Lists", t, func() {
 		tokens, err := Lex("plugin(get(99), [get(10), get(11)])")
-		//tokens, err := Lex("plugin(get(99), [1,3])")
 		So(err, ShouldBeNil)
 
 		query, err := Parse(tokens)

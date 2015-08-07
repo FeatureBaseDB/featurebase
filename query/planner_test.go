@@ -248,7 +248,6 @@ func TestQueryPlanner(t *testing.T) {
 		So(len(p), ShouldNotEqual, 0)
 		log.Println(len(p))
 		spew.Dump(p[0])
-		//So(p[0].(StashQueryStep).Operation, ShouldEqual, "stash")
 	})
 
 }

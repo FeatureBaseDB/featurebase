@@ -23,8 +23,6 @@ type Holder struct {
 	delchan chan delhold
 }
 
-//var Hold Holder
-
 func (self *Holder) DelChan(id *GUID) {
 	log.Trace("Holder.DelChan", id)
 	req := delhold{id}
@@ -85,10 +83,3 @@ func NewHolder() *Holder {
 	h := Holder{make(map[GUID]holdchan), make(chan gethold), make(chan delhold)}
 	return &h
 }
-
-/*
-func init() {
-	Hold = Holder{make(map[GUID]holdchan), make(chan gethold), make(chan delhold)}
-	go Hold.Run()
-}
-*/

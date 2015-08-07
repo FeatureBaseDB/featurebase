@@ -81,9 +81,7 @@ func BuildTask(merge_map map[uint64]uint64,
 
 	tasks := make(map[util.GUID]*Task)
 	for bitmap_id, _ := range merge_map { //for all brands
-		//for fragment_id, reported_fragments := range slice_map[bitmap_id] { //find missing fragments
 		reporting_fragments := slice_map[bitmap_id]
-		//id slice ==> SUUID,BitmapHandle
 		for _, p := range missing(reporting_fragments, total_fragments) {
 			task, ok := tasks[p.process]
 			if !ok {
@@ -93,7 +91,6 @@ func BuildTask(merge_map map[uint64]uint64,
 			task.Add(p.fragment, bitmap_id, p.handle)
 
 		}
-		//}
 	}
 
 	return tasks
@@ -179,7 +176,6 @@ func (self *Service) TopNQueryStepHandler(msg *db.Message) {
 	} else {
 		input := qs.Input
 		value, _ := self.Hold.Get(input, 10)
-		//var bh index.BitmapHandle
 		switch val := value.(type) {
 		case index.BitmapHandle:
 			bh = val

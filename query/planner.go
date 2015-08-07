@@ -76,7 +76,6 @@ func (self *BaseQueryStep) GetLocation() *db.Location {
 
 func (self *BaseQueryStep) LocIsDest() bool {
 	log.Trace("BaseQueryStep.LocIsDest")
-	//	if self.Location.ProcessId == self.Destination.ProcessId &&
 	if util.Equal(self.Location.ProcessId, self.Destination.ProcessId) &&
 		self.Location.FragmentId == self.Destination.FragmentId {
 		log.Trace("BaseQueryStep.LocIsDest Return true")
@@ -492,7 +491,6 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 		var p Appendable
 
 		if query.Operation == "stash" {
-			//			log.Warn("STASH:", n)
 			tree = &StashQueryTree{N: n}
 		} else {
 			tree = &CatQueryTree{N: n}
@@ -627,14 +625,6 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 			plan = append(plan, *subq_steps...)
 		}
 		plan = append(plan, step)
-		/*} else if recall, ok := qt.(*RecallQueryTree); ok {
-		//need to go through the stash and fetch
-		//from self.Database i can fetch the locations
-		step := RecallQueryStep{&BaseQueryStep{id, "recall", loc, location}, recall.Stash}
-
-		plan := QueryPlan{step}
-		return &plan, nil
-		*/
 
 	} else if stash, ok := qt.(*StashQueryTree); ok {
 		inputs := make([]*util.GUID, len(stash.subqueries))
@@ -712,16 +702,6 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 		step := GetQueryStep{&BaseQueryStep{id, "get", loc, location}, get.bitmap, get.slice}
 		plan := QueryPlan{step}
 		return &plan, nil
-		/*
-			} else if mask, ok := qt.(*MaskQueryTree); ok {
-				loc, err := mask.getLocation(self.Database)
-				if err != nil {
-					return nil, err
-				}
-				step := MaskQueryStep{&BaseQueryStep{id, "mask", loc, location}, mask.start, mask.end}
-				plan := QueryPlan{step}
-				return &plan, nil
-		*/
 	} else if rang, ok := qt.(*RangeQueryTree); ok {
 		loc, err := rang.getLocation(self.Database)
 		if err != nil {

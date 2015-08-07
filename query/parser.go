@@ -19,26 +19,6 @@ type QueryParser struct {
 	pos    int
 }
 
-/* MASTER
-if len(tokens) > 4 && tokens[2].Type == TYPE_FRAME && tokens[4].Type == TYPE_PROFILE {
-	frame_type = tokens[2].Text
-	profile_id, err = strconv.ParseUint(tokens[4].Text, 10, 64)
-	if err != nil {
-		panic(err)
-	}
-} else if len(tokens) > 2 && tokens[2].Type == TYPE_FRAME {
-	frame_type = tokens[2].Text
-} else if len(tokens) > 2 && tokens[2].Type == TYPE_PROFILE {
-	profile_id, err = strconv.ParseUint(tokens[2].Text, 10, 64)
-	if err != nil {
-		panic(err)
-	}
-}
-var filter int //TRAVIS the is for the category
-filter = 0
-bm := db.Bitmap{bitmap_id, frame_type, filter}
-return []QueryInput{&bm}, uint64(profile_id), 0
-*/
 func (self *QueryParser) next() *Token {
 	log.Trace("QueryParser.next")
 	self.pos += 1

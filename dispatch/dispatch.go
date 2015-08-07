@@ -44,7 +44,6 @@ func (self *Dispatch) Run() {
 				} else {
 					result, _ = self.service.Index.ClearBit(v.Fragment_id, v.Bitmap_id, v.Profile_id)
 				}
-				//jbundle := core.SBResult{v.Bitmap_id, ''v.Frame, v.Filter, v.Profile_id, result}
 				bundle := core.SBResult{v.Bitmap_id, v.Frame, v.Filter, v.Profile_id, result}
 				results = append(results, bundle)
 			}

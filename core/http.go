@@ -277,12 +277,6 @@ func (self *WebService) HandleBatch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	/*   	values.Set("db", database)
-	values.Set("id", id)
-	values.Set("frame", fragment_type)
-	values.Set("slice", fmt.Sprintf("%d", slice))
-	values.Set("bitmap", compressed_string)
-	*/
 
 	err := r.ParseForm()
 	if err != nil {
@@ -562,13 +556,10 @@ func (self *WebService) HandleBit(w http.ResponseWriter, r *http.Request, ToSet 
 
 		}
 	}
-	//	remoteSetBit.Request()
-	//	results = remoteSetBit.MergeResults(results)
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
 	if err != nil {
 		log.Warn("JSON SetBit ERROR:", err, ToSet)
-		//http.Error(w, "Error econding set_bit", http.StatusInternalServerError)
 		return
 	}
 
@@ -582,27 +573,6 @@ func (self *WebService) HandleStats(w http.ResponseWriter, r *http.Request) {
 	encoder := json.NewEncoder(w)
 	m := &runtime.MemStats{}
 	runtime.ReadMemStats(m)
-
-	//self.Report(fmt.Sprintf("%s.goroutines", prefix),
-	//	float64(runtime.NumGoroutine()), now, context, dimensions)
-	//self.Report(fmt.Sprintf("%s.memory.allocated", prefix),
-	//	float64(memStats.Alloc), now, context, dimensions)
-	//self.Report(fmt.Sprintf("%s.memory.mallocs", prefix),
-	//	float64(memStats.Mallocs), now, context, dimensions)
-	//self.Report(fmt.Sprintf("%s.memory.frees", prefix),
-	//	float64(memStats.Frees), now, context, dimensions)
-	//self.Report(fmt.Sprintf("%s.memory.gc.total_pause", prefix),
-	//	float64(memStats.PauseTotalNs)/nsInMs, now, context, dimensions)
-	//self.Report(fmt.Sprintf("%s.memory.heap", prefix),
-	//	float64(memStats.HeapAlloc), now, context, dimensions)
-	//self.Report(fmt.Sprintf("%s.memory.stack", prefix),
-	//	float64(memStats.StackInuse), now, context, dimensions)
-
-	//stats := map[string]interface{}{
-	//	"num_goroutines": runtime.NumGoroutine(),
-	//	"memory_allocated": m.Sys,
-	//	"memory_": m.Alloc
-	//}
 
 	err := encoder.Encode(m)
 	if err != nil {

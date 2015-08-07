@@ -13,12 +13,6 @@ func TestQuery(t *testing.T) {
 		filter, filters := TokensToFilterStrings(tokens)
 		So(filter, ShouldEqual, "get(88,general)")
 		So(filters, ShouldResemble, []string{"get(12,general)", "get(13,general)"})
-		/*
-			spew.Dump("*********************************************")
-			spew.Dump(filter)
-			spew.Dump(filters)
-			spew.Dump("*********************************************")
-		*/
 	})
 	Convey("Bracketed Lists 2", t, func() {
 		tokens, err := Lex("plugin(intersect(get(88, general, [0]), get(77, b.n)), [get(12, general), get(13, general)])")

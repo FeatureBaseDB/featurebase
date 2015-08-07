@@ -65,7 +65,7 @@ func FromApiString(service *Service, db string, frame string, api_string string,
 			if first {
 				first = false
 			} else {
-				//make async latter
+				//make async later
 				sent_count += 1
 				go sendBitmap(service, bitmap, db, frame, bitmap_id, filter, int(last_slice), finish)
 				bitmap = index.NewBitmap()

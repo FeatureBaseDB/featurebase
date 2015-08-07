@@ -133,11 +133,6 @@ func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool 
 	change, chunk, address := SetBit(bm, bit_pos)
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
-		/*		self.storage.BeginBatch()
-				self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val)
-				self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, COUNTERMASK, 0, bm.Count())
-				self.storage.EndBatch()
-		*/
 		self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
 		self.rank_count++
 	}
@@ -148,9 +143,7 @@ func (self *Brand) Rank() {
 	start := time.Now()
 	var list RankList
 	for k, item := range self.bitmap_cache {
-		//		if item.bitmap.Count() > 50 {
 		list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})
-		//		}
 	}
 	sort.Sort(list)
 	self.rankings = list
@@ -161,7 +154,6 @@ func (self *Brand) Rank() {
 		self.threshold_value = 1
 	}
 
-	//dump(self.rankings, 10)
 	self.rank_count = 0
 	delta := time.Since(start)
 	util.SendTimer("brand_Rank", delta.Nanoseconds())
@@ -171,7 +163,6 @@ func (self *Brand) Rank() {
 
 func packagePairs(r RankList) []Pair {
 	res := make([]Pair, r.Len())
-	//for i := 0; i < r.Len(); i++ {
 	for i, v := range r {
 		res[i] = Pair{v.Key, v.Count}
 	}
@@ -294,7 +285,6 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 			break
 		}
 		bc := IntersectionCount(src_bitmap, pair.bitmap)
-		//bc := BitCount(bm)
 		if bc > 0 {
 			results = append(results, &Rank{&Pair{pair.Key, bc}, nil, pair.category})
 			counter = counter + 1
@@ -340,7 +330,6 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 		}
 
 		bc := IntersectionCount(src_bitmap, o.bitmap)
-		//bc := BitCount(abitmap)
 
 		if bc > current_threshold {
 			if results[end-1].Count > bc {
@@ -413,7 +402,6 @@ func (self *Brand) Load(requestChan chan Command, f *Fragment) {
 	var keys []uint64
 	if err := dec.Decode(&keys); err != nil {
 		return
-		//log.Println("Bad mojo")
 	}
 	globalLock.Lock()
 	defer globalLock.Unlock()
@@ -445,11 +433,6 @@ func (self *Brand) ClearBit(bitmap_id uint64, bit_pos uint64) bool {
 	change, chunk, address := ClearBit(bm, bit_pos)
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
-		/*		self.storage.BeginBatch()
-				self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val)
-				self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, COUNTERMASK, 0, bm.Count())
-				self.storage.EndBatch()
-		*/
 		if val == 0 {
 			self.storage.RemoveBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), bm.Count())
 		} else {
