@@ -11,17 +11,8 @@ import (
 	"github.com/umbel/pilosa/util"
 )
 
-/*
-func (self *Service) RecallQueryStepHandler(msg *db.Message) {
-	qs := msg.Data.(query.RecallQueryStep)
-
-	result_message := db.Message{Data: query.RecallQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: count}}}
-	self.Transport.Send(&result_message, qs.Destination.ProcessId)
-}
-*/
 func (self *Service) CountQueryStepHandler(msg *db.Message) {
 	log.Trace("CountQueryStepHandler")
-	//spew.Dump("COUNT QUERYSTEP")
 	qs := msg.Data.(query.CountQueryStep)
 	input := qs.Input
 	value, _ := self.Hold.Get(input, util.TimeOut)
@@ -36,14 +27,12 @@ func (self *Service) CountQueryStepHandler(msg *db.Message) {
 	if err != nil {
 		spew.Dump(err)
 	}
-	//spew.Dump("SLICE COUNT", count)
 	result_message := db.Message{Data: query.CountQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: count}}}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
 func (self *Service) UnionQueryStepHandler(msg *db.Message) {
 	log.Trace("UnionQueryStepHandler")
-	//spew.Dump("UNION QUERYSTEP")
 	qs := msg.Data.(query.UnionQueryStep)
 	var handles []index.BitmapHandle
 	// create a list of bitmap handles
@@ -79,7 +68,6 @@ func (self *Service) UnionQueryStepHandler(msg *db.Message) {
 
 func (self *Service) IntersectQueryStepHandler(msg *db.Message) {
 	log.Trace("IntersectQueryStepHandler")
-	//spew.Dump("INTERSECT QUERYSTEP")
 	qs := msg.Data.(query.IntersectQueryStep)
 	var handles []index.BitmapHandle
 	// create a list of bitmap handles
@@ -115,7 +103,6 @@ func (self *Service) IntersectQueryStepHandler(msg *db.Message) {
 
 func (self *Service) DifferenceQueryStepHandler(msg *db.Message) {
 	log.Trace("DifferenceQueryStepHandler")
-	//spew.Dump("DIFFERENCE QUERYSTEP")
 	qs := msg.Data.(query.DifferenceQueryStep)
 	var handles []index.BitmapHandle
 	// create a list of bitmap handles
@@ -303,7 +290,6 @@ func min(a, b int) int {
 }
 func (self *Service) GetQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.GetQueryStep)
-	//spew.Dump("GET QUERYSTEP")
 
 	bh, err := self.Index.Get(qs.Location.FragmentId, qs.Bitmap.Id)
 	if err != nil {
@@ -329,7 +315,6 @@ func (self *Service) GetQueryStepHandler(msg *db.Message) {
 }
 
 func (self *Service) SetQueryStepHandler(msg *db.Message) {
-	//spew.Dump("SET QUERYSTEP")
 	qs := msg.Data.(query.SetQueryStep)
 	result, _ := self.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId, qs.Bitmap.Filter)
 
@@ -338,7 +323,6 @@ func (self *Service) SetQueryStepHandler(msg *db.Message) {
 }
 
 func (self *Service) ClearQueryStepHandler(msg *db.Message) {
-	//spew.Dump("SET QUERYSTEP")
 	qs := msg.Data.(query.ClearQueryStep)
 	result, _ := self.Index.ClearBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
 
@@ -348,7 +332,6 @@ func (self *Service) ClearQueryStepHandler(msg *db.Message) {
 
 func (self *Service) RangeQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.RangeQueryStep)
-	//spew.Dump("RANDE QUERYSTEP")
 
 	bh, err := self.Index.Range(qs.Location.FragmentId, qs.Bitmap.Id, qs.Start, qs.End)
 	if err != nil {

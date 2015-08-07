@@ -27,7 +27,6 @@ func NewGeneral(db string, frame string, slice int, s Storage) *General {
 	f.db = db
 	f.Clear()
 	f.keys = make(map[uint64]interface{})
-	//f.bitmap_cache = lru.New(10000)
 	return f
 
 }
@@ -57,12 +56,7 @@ func (self *General) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) boo
 	change, chunk, address := SetBit(bm, bit_pos)
 	if change {
 		val := chunk.Value.Block[address.BlockIndex]
-		//self.storage.BeginBatch()
-		//self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val)
-		//self.storage.StoreBlock(bitmap_id, self.db, self.frame, self.slice, filter, COUNTERMASK, 0, bm.Count())
-		//self.storage.EndBatch()
 		self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
-
 	}
 	return change
 }
@@ -72,8 +66,6 @@ func (self *General) TopN(b IBitmap, n int, categories []uint64) []Pair {
 	return empty
 }
 func (self *General) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
-	//oldbm:=self.Get(bitmap_id)
-	//nbm = Union(oldbm, bm)
 	self.storage.Store(bitmap_id, self.db, self.frame, self.slice, filter, bm.(*Bitmap))
 	self.bitmap_cache.Add(bitmap_id, bm)
 	self.keys[bitmap_id] = 0

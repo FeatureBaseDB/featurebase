@@ -9,7 +9,6 @@ import (
 
 func TestFragment(t *testing.T) {
 
-	//id := util.Id()
 	general := util.Hex_to_SUUID("1")
 	brand := util.Hex_to_SUUID("2")
 	dummy := NewFragmentContainer()
@@ -22,7 +21,6 @@ func TestFragment(t *testing.T) {
 	})
 
 	Convey("SetBit/Count 1 1", t, func() {
-		//	bh, _ := dummy.Get(id, 1234)
 		bi1 := uint64(1234)
 		changed, _ := dummy.SetBit(general, bi1, 1, 0)
 		So(changed, ShouldEqual, true)
@@ -153,8 +151,6 @@ func TestFragment(t *testing.T) {
 	})
 	Convey("store ", t, func() {
 		b := uint64(1029)
-		//	compressed := "H4sIAAAJbogA/2JmYRBQ+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdT/VqAIV7SxUWxpZl6JmQlImJGN0YGB4R+j+v8mJkaFH/8h4B+M8X+UgcwAhZTm/yZgMCLCarC4bbAxYGHFNBpWBBmwsGIeDSuCDFhYsYyGFUEGLKxYR8OKIAMWVmyjYUWQwcDwfyYwqNgHLKjk4Q7BBAAAAAD//wEAAP//QNipzzcJAAA="
-		//		compressed := "H4sIAAAJbogA/2JmYWBS+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdT/VqAIV7SxUWxpZl6JmQlImJGN0YGBweN/E+M/RgdGRoUf/6EAk/GbGUQy4AUAAAAA//8BAAD//2vjG9ezAAAA"
 		compressed := "H4sIAAAJbogA/2JmYWBR+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdj/ViZGRo7o2NLMvBIzE5Ag0BiGf4zq/5uYGBV+/IeCUQZWBiikNP83AQN1NKwIMRgYAAAAAP//AQAA//9U05AivAIAAA=="
 		dummy.LoadBitmap(brand, b, compressed, 0)
 		bh1, _ := dummy.Get(brand, b)

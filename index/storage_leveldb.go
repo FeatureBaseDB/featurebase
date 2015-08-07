@@ -96,7 +96,6 @@ func (self *LevelDBStorage) Fetch(bitmap_id uint64, db string, frame string, sli
 		last_key = chunk_key
 	}
 	iter.Release()
-	//err = iter.Error()
 
 	delta := time.Since(start)
 	util.SendTimer("leveldb_storage_Fetch", delta.Nanoseconds())

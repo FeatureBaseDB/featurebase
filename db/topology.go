@@ -76,30 +76,6 @@ func (self *Process) SetPortHttp(port int) {
 	self.port_http = port
 }
 
-/*
-// Create a Location struct given a string in form "0.0.0.0:0"
-func NewLocation(location_string string) (*Location, error) {
-	splitstring := strings.Split(location_string, ":")
-	if len(splitstring) != 2 {
-		return nil, errors.New("Location string must be in form
-0.0.0.0:0")
-	}
-	ip := splitstring[0]
-	port, err := strconv.Atoi(splitstring[1])
-	if err != nil {
-		return nil, errors.New("Port is not a number!")
-	}
-	return &Location{ip, port}, nil
-}
-
-func (location *Location) ToString() string {
-	return fmt.Sprintf("%s:%d", location.Ip, location.Port)
-}
-
-// Map of node location to their router
-type NodeMap map[Location]Location
-*/
-
 /////////// CLUSTERS
 //////////////////////////////////////////////////////////////////////
 
@@ -379,15 +355,12 @@ func (self *Fragment) GetLocation() *Location {
 
 // rename this one
 func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment, error) {
-	//d.mutex.Lock()
-	//defer d.mutex.Unlock()
 	frame, err := d.getFrame(bitmap.FrameType)
 	if err != nil {
 		log.Warn("Missing FrameType", bitmap.FrameType, d.Name, slice)
 		log.Warn(err)
 		return nil, err
 	}
-	//log.Println(frame, slice)
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Warn("Missing frame,slice", frame, slice)
@@ -422,14 +395,6 @@ func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragme
 	return fsi.GetFragment(frag_id)
 }
 
-/*
-// NOT IMPLEMENTED
-// this would loop through all frame_slice_intersect[], then all fragmments to
-// find a match
-func (d *Database) GetFragmentById(fragment_id *GUID) *Fragment {
-}
-*/
-
 func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) (*Fragment, error) {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
@@ -450,39 +415,6 @@ func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id util.SUUI
 	return &fragment
 }
 
-/*
-func (d *Database) AllocateFragment(frame *Frame, slice *Slice) *Fragment {
-    // from ETCD, randomly get a process that has available_fragments > 0
-    // atomically decrement available_fragments (as long as it's not 0)
-    // if it IS 0, try until we find a process with available capacity
-
-    *
-    process, err := GetAvailableProcess()
-	if err != nil {
-		log.Fatal(err)
-	}
-    *
-    process_id, _ := uuid.NewV4()
-    process := NewProcess(process_id)
-    return nil
-    //return d.AddFragment(&frame, &slice, process)
-}
-*/
-
-/*
-func (d *Database) AddFragmentByProcess(frame *Frame, slice *Slice, process
-*Process) *Fragment {
-    d.mutex.Lock()
-    defer d.mutex.Unlock()
-	frameslice, _ := d.GetFrameSliceIntersect(frame, slice)
-    fragment_id, _ := uuid.NewV4()
-    fragment := Fragment{id: fragment_id, process: process}
-    frameslice.fragments = append(frameslice.fragments, &fragment)
-    frameslice.hashring.Add(fragment.id.String())
-    return &fragment
-}
-*/
-
 func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
@@ -501,7 +433,6 @@ func GetSlice(profile_id uint64) int {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-
 // Get a slice from a database
 
 func (d *Database) GetSliceForProfile(profile_id uint64) (*Slice, error) {

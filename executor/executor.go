@@ -49,10 +49,6 @@ func (self *Executor) NewJob(job *db.Message) {
 		self.service.RangeQueryStepHandler(job)
 	case query.StashQueryStep:
 		self.service.StashQueryStepHandler(job)
-	//case query.RecallQueryStep:
-	//	self.service.RecallQueryStepHandler(job)
-	//	case query.MaskQueryStep:
-	//		self.service.MaskQueryStepHandler(job)
 	default:
 		log.Warn("unknown")
 		log.Warn(spew.Sdump(job.Data))
@@ -87,7 +83,6 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 	query_plan, err := query.QueryPlanForQuery(database, qry, &destination)
 	if err != nil {
 		switch obj := err.(type) {
-		//case *query.InvalidFrame:
 		case *query.FragmentNotFound:
 			self.service.TopologyMapper.MakeFragments(obj.Db, obj.Slice)
 		}

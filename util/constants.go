@@ -31,11 +31,7 @@ func ByteToInt64(data []byte) int64 {
 }
 func Uint64ToInt64(before uint64) int64 {
 	return int64(before)
-	//buf := Uint64ToByte(before)
-	//return ByteToInt64(buf)
 }
 func Int64ToUint64(before int64) uint64 {
 	return uint64(before)
-	//buf := Int64ToByte(before)
-	//return ByteToUint64(buf)
 }

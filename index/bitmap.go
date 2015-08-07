@@ -61,37 +61,11 @@ func (self *IntSet) Size() int {
 	return len(self.set)
 }
 
-//
-
-/* ** native version turned out to be slower
-func popcount(i uint64)uint64{
-	val:= C.__builtin_popcountll(C.ulonglong(i))
-	//x:= uint64(val)
-	return uint64(val)
-}
-func popcount(x uint64) (n uint64) {
-	// bit population count, see
-	// http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
-	x -= (x >> 1) & 0x5555555555555555
-	x = (x>>2)&0x3333333333333333 + x&0x3333333333333333
-	x += x >> 4
-	x &= 0x0f0f0f0f0f0f0f0f
-	x *= 0x0101010101010101
-	return uint64(x >> 56)
-}
-*/
-
 type BlockArray struct {
 	Block []uint64
 }
 
 func (s *BlockArray) bitcount() uint64 {
-	/*var sum uint64
-	for _, b := range (*s).Block {
-		sum += popcount(b)
-	}
-	return sum
-	*/
 	return popcntSlice(s.Block)
 }
 func BlockArray_union(a *BlockArray, b *BlockArray) BlockArray {
@@ -343,8 +317,6 @@ func Difference(a_bm IBitmap, b_bm IBitmap) IBitmap {
 			b = b.Next()
 		} else if a.Item().Key == b.Item().Key {
 			var a_node = a.Item()
-			//var b_node = BlockArray_invert(&b.Item().Value) //probably need to copy this out
-			//var o = BlockArray_intersection(&a_node.Value, &b_node)
 
 			var b_node = b.Item().Value
 			var o = BlockArray_difference(&a_node.Value, &b_node)

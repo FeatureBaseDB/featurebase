@@ -140,14 +140,6 @@ func (self *CassandraStorage) EndBatch() {
 	start := time.Now()
 	if self.batch != nil {
 		self.FlushBatch()
-		/*
-			last := time.Since(self.batch_time)
-			if last.Seconds() > self.cass_time_window_secs {
-				self.FlushBatch()
-			} else if self.batch_counter > self.cass_flush_size {
-				self.FlushBatch()
-			}
-		*/
 	} else {
 		log.Warn("NIL BATCH")
 	}
