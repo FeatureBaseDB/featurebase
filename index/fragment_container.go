@@ -13,9 +13,15 @@ import (
 	log "github.com/cihub/seelog"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/golang/groupcache/lru"
-	"github.com/umbel/pilosa/config"
 	"github.com/umbel/pilosa/util"
 )
+
+// DefaultBackend is the default data storage layer.
+const DefaultBackend = "cassandra"
+
+var Backend = DefaultBackend
+
+var LevelDBPath string
 
 type FragmentContainer struct {
 	fragments map[util.SUUID]*Fragment
@@ -364,14 +370,11 @@ type Fragment struct {
 }
 
 func getStorage(db string, slice int, frame string, fid util.SUUID) Storage {
-	storage_method := config.GetString("storage_backend")
-
-	switch storage_method {
+	switch Backend {
 	default:
 		return NewMemoryStorage()
 	case "leveldb":
-		base_path := config.GetString("level_db_path")
-		full_dir := fmt.Sprintf("%s/%s/%d/%s/%s", base_path, db, slice, frame, util.SUUID_to_Hex(fid))
+		full_dir := fmt.Sprintf("%s/%s/%d/%s/%s", LevelDBPath, db, slice, frame, util.SUUID_to_Hex(fid))
 		return NewLevelDBStorage(full_dir)
 	case "cassandra":
 		return NewCassStorage()

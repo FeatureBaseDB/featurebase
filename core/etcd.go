@@ -9,28 +9,57 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	log "github.com/cihub/seelog"
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/umbel/pilosa/config"
 	"github.com/umbel/pilosa/db"
 	"github.com/umbel/pilosa/util"
 )
 
+const (
+	DefaultFragmentAllocLockTTL = 14400 * time.Second
+)
+
 type TopologyMapper struct {
-	service   *Service
 	namespace string
+
+	ID         util.GUID
+	Cluster    *db.Cluster
+	ProcessMap *ProcessMap
+
+	SupportedFrames      []string
+	FragmentAllocLockTTL time.Duration
+
+	EtcdClient interface {
+		CreateDir(key string, ttl uint64) (*etcd.Response, error)
+		Get(key string, sort, recursive bool) (*etcd.Response, error)
+		RawCreate(key string, value string, ttl uint64) (*etcd.RawResponse, error)
+		Set(key string, value string, ttl uint64) (*etcd.Response, error)
+		Watch(prefix string, waitIndex uint64, recursive bool, receiver chan *etcd.Response, stop chan bool) (*etcd.Response, error)
+	}
+
+	Index interface {
+		AddFragment(db string, frame string, slice int, id util.SUUID)
+	}
+}
+
+func NewTopologyMapper(namespace string) *TopologyMapper {
+	return &TopologyMapper{
+		namespace:            namespace,
+		FragmentAllocLockTTL: DefaultFragmentAllocLockTTL,
+	}
 }
 
 func (self *TopologyMapper) Setup() {
 	log.Warn(self.namespace + "/db")
 	db_path := self.namespace + "/db"
-	resp, err := self.service.Etcd.Get(db_path, false, true)
+	resp, err := self.EtcdClient.Get(db_path, false, true)
 	if err != nil {
 		ee, ok := err.(*etcd.EtcdError)
 		if ok && ee.ErrorCode == 100 { // node does not exist
-			resp, err = self.service.Etcd.CreateDir(db_path, 0)
+			resp, err = self.EtcdClient.CreateDir(db_path, 0)
 			if err != nil {
 				log.Critical(err)
 				os.Exit(-1)
@@ -40,6 +69,7 @@ func (self *TopologyMapper) Setup() {
 			os.Exit(-1)
 		}
 	}
+
 	//need to lock the world
 	for _, node := range flatten(resp.Node) {
 		err := self.handlenode(node)
@@ -59,7 +89,7 @@ func (self *TopologyMapper) Run() {
 			ns := self.namespace + "/db"
 			log.Warn(" ETCD watcher:", ns)
 			stop := make(chan bool)
-			resp, err := self.service.Etcd.Watch(ns, 0, true, receiver, stop)
+			resp, err := self.EtcdClient.Watch(ns, 0, true, receiver, stop)
 			log.Warn("TopologyMapper ETCD watcher", resp, err)
 		}
 	}()
@@ -74,10 +104,6 @@ func (self *TopologyMapper) Run() {
 			// TODO: handle deletes
 		}
 	}()
-}
-
-func NewTopologyMapper(service *Service, namespace string) *TopologyMapper {
-	return &TopologyMapper{service, namespace}
 }
 
 type Pair struct {
@@ -112,14 +138,13 @@ func getLightestProcess(m map[string]int) (Pair, error) {
 
 func (self *TopologyMapper) GetProcessFragmentCounts() map[string]int {
 	m := make(map[string]int)
-	id_string := self.service.Id.String()
-	m[id_string] = 0 //at least have one process if none created
-	for k, _ := range self.service.ProcessMap.nodes {
+	m[self.ID.String()] = 0 //at least have one process if none created
+	for k, _ := range self.ProcessMap.nodes {
 		p := k.String()
 		m[p] = 0 //at least have one process if none created
-
 	}
-	for _, dbs := range self.service.Cluster.GetDatabases() {
+
+	for _, dbs := range self.Cluster.GetDatabases() {
 		for _, fsi := range dbs.GetFrameSliceIntersects() {
 			for _, fragment := range fsi.GetFragments() {
 				process := fragment.GetProcess().Id().String()
@@ -137,10 +162,8 @@ func (self *TopologyMapper) GetProcessFragmentCounts() map[string]int {
 }
 
 func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
-	ttl := uint64(config.GetIntDefault("fragment_alloc_lock_time_secs", 14400))
-	//lock_key := fmt.Sprintf("%s/lock/%s-%s-%d", self.namespace, db, frame, slice_int)
 	lock_key := fmt.Sprintf("%s/lock/%s-%d", self.namespace, db, slice_int)
-	response, err := self.service.Etcd.RawCreate(lock_key, "0", ttl)
+	response, err := self.EtcdClient.RawCreate(lock_key, "0", uint64(self.FragmentAllocLockTTL.Seconds()))
 
 	if err == nil {
 		if response.StatusCode == 201 { //key created
@@ -153,8 +176,7 @@ func (self *TopologyMapper) MakeFragments(db string, slice_int int) error {
 			}
 
 			// PUT -d "value=5cb315c3-6e1d-4218-89b7-943d1dba985b" http://etcd0:4001/v2/keys/pilosa/0/db/29/frame/d/slice/5/fragment/a2b632fc4001b817/proces
-			frames_to_create := config.GetStringArrayDefault("supported_frames", []string{"default"})
-			for _, frame := range frames_to_create {
+			for _, frame := range self.SupportedFrames {
 				err := self.AllocateFragment(p.Key, db, frame, slice_int)
 				if err != nil {
 					log.Warn(err)
@@ -176,7 +198,7 @@ func (self *TopologyMapper) AllocateFragment(process_guid, db, frame string, sli
 	// need to check value to see how many we have left
 	log.Warn("ALLOC:", process_guid, len(process_guid))
 	if len(process_guid) > 1 {
-		_, err := self.service.Etcd.Set(fragment_key, process_guid, 0)
+		_, err := self.EtcdClient.Set(fragment_key, process_guid, 0)
 		if err != nil {
 			return err
 		}
@@ -218,7 +240,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		return nil
 	}
 	if len(bits) > 1 {
-		database = self.service.Cluster.GetOrCreateDatabase(bits[1])
+		database = self.Cluster.GetOrCreateDatabase(bits[1])
 	}
 	if len(bits) > 2 {
 		if bits[2] != "frame" {
@@ -262,8 +284,8 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		process = db.NewProcess(&process_uuid)
 		fragment.SetProcess(process)
 
-		if util.Equal(self.service.Id, &process_uuid) {
-			self.service.Index.AddFragment(bits[1], bits[3], slice_int, fragment_id)
+		if util.Equal(&self.ID, &process_uuid) {
+			self.Index.AddFragment(bits[1], bits[3], slice_int, fragment_id)
 		}
 
 	}
@@ -277,7 +299,7 @@ func (self *TopologyMapper) remove_fragment(node *etcd.Node) error {
 func flatten(node *etcd.Node) []*etcd.Node {
 	nodes := []*etcd.Node{node}
 	for i := 0; i < len(node.Nodes); i++ {
-		nodes = append(nodes, flatten(node.Nodes[i])...)
+		nodes = append(nodes, flatten(&node.Nodes[i])...)
 	}
 	return nodes
 }
@@ -374,15 +396,26 @@ func (self *ProcessMap) GetMetadata() map[string]map[string]interface{} {
 }
 
 type ProcessMapper struct {
-	service   *Service
 	receiver  chan etcd.Response
 	commands  chan ProcessMapperCommand
 	namespace string
+
+	ID         util.GUID
+	ProcessMap *ProcessMap
+
+	TCPPort  int
+	HTTPPort int
+	Host     string
+
+	EtcdClient interface {
+		Get(key string, sort, recursive bool) (*etcd.Response, error)
+		Set(key string, value string, ttl uint64) (*etcd.Response, error)
+		Watch(prefix string, waitIndex uint64, recursive bool, receiver chan *etcd.Response, stop chan bool) (*etcd.Response, error)
+	}
 }
 
-func NewProcessMapper(service *Service, namespace string) *ProcessMapper {
+func NewProcessMapper(namespace string) *ProcessMapper {
 	return &ProcessMapper{
-		service:   service,
 		receiver:  make(chan etcd.Response),
 		commands:  make(chan ProcessMapperCommand),
 		namespace: namespace,
@@ -423,7 +456,7 @@ func (self *ProcessMapper) handlenode(node *etcd.Node) error {
 		if err != nil {
 			return errors.New("Invalid GUID: " + id_string + " (" + key + ")")
 		}
-		process = self.service.ProcessMap.GetOrAddProcess(&id)
+		process = self.ProcessMap.GetOrAddProcess(&id)
 	}
 	if len(bits) >= 3 {
 		switch bits[2] {
@@ -443,22 +476,21 @@ func (self *ProcessMapper) handlenode(node *etcd.Node) error {
 }
 
 func (self *ProcessMapper) Run() {
-	id_string := self.service.Id.String()
 	path := self.namespace + "/process"
-	self_path := path + "/" + id_string
+	self_path := path + "/" + self.ID.String()
 
 	log.Warn("Writing configuration to etcd...")
 	log.Warn(self_path)
 
 	var err error
-	_, err = self.service.Etcd.Set(self_path+"/port_tcp", strconv.Itoa(config.GetInt("port_tcp")), 0)
+	_, err = self.EtcdClient.Set(self_path+"/port_tcp", strconv.Itoa(self.TCPPort), 0)
 	crash_on_error(err)
-	_, err = self.service.Etcd.Set(self_path+"/port_http", strconv.Itoa(config.GetInt("port_http")), 0)
+	_, err = self.EtcdClient.Set(self_path+"/port_http", strconv.Itoa(self.HTTPPort), 0)
 	crash_on_error(err)
-	_, err = self.service.Etcd.Set(self_path+"/host", config.GetString("host"), 0)
+	_, err = self.EtcdClient.Set(self_path+"/host", self.Host, 0)
 	crash_on_error(err)
 
-	response, err := self.service.Etcd.Get(path, false, true)
+	response, err := self.EtcdClient.Get(path, false, true)
 	for _, node := range flatten(response.Node) {
 		err := self.handlenode(node)
 		if err != nil {
@@ -472,7 +504,7 @@ func (self *ProcessMapper) Run() {
 	go func() {
 		// TODO: error check and restart watcher
 		// TODO: use modindex to make sure watch catches everything
-		_, _ = self.service.Etcd.Watch(path, 0, true, receiver, stop)
+		_, _ = self.EtcdClient.Watch(path, 0, true, receiver, stop)
 	}()
 
 	go func() {

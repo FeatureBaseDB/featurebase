@@ -94,6 +94,11 @@
         "version": "3999011ef0451eb805b0fa31f98cfb9261bd71be",
         "type": "git"
     },
+    "toml": {
+        "repo": "github.com/BurntSushi/toml",
+        "version": "056c9bc7be7190eaa7715723883caffa5f8fa3e4",
+        "type": "git"
+    },
     "websocket": {
         "repo": "github.com/gorilla/websocket",
         "version": "92334662baa9cbebc2e6e68b8d56bc1233f85a4c",

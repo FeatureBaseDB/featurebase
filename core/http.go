@@ -20,20 +20,50 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/websocket"
-	"github.com/umbel/pilosa/config"
 	"github.com/umbel/pilosa/db"
 	"github.com/umbel/pilosa/index"
 	"github.com/umbel/pilosa/util"
 )
 
+const DefaultRequestLogPath = "/tmp/set_bit_log"
+
+var RequestLogPath = DefaultRequestLogPath
+
 type WebService struct {
-	service *Service
-	end     chan bool
+	end chan bool
+
+	ID               util.GUID
+	Version          string
+	Port             int
+	DefaultDB        string
+	SetBitLogEnabled bool
+
+	Cluster    *db.Cluster
+	ProcessMap *ProcessMap
+
+	Batcher *Batcher
+
+	Executor interface {
+		RunPQL(database_name string, pql string) (interface{}, error)
+	}
+
+	Pinger interface {
+		Ping(process_id *util.GUID) (*time.Duration, error)
+	}
+
+	TopologyMapper interface {
+		MakeFragments(db string, slice_int int) error
+	}
+
+	Transport interface {
+		Push(message *db.Message)
+	}
 }
 
-func NewWebService(service *Service) *WebService {
-	e := make(chan bool)
-	return &WebService{service, e}
+func NewWebService() *WebService {
+	return &WebService{
+		end: make(chan bool),
+	}
 }
 
 type Flusher struct {
@@ -86,13 +116,13 @@ func NewLogRecord(t time.Time, data []byte) LogRecord {
 	x := LogRecord{t, e}
 	return x
 }
+
 func genFileName(id string) string {
 	//bucket/YYYY/MM/DDHHMMSS.id.log
 	t := time.Now()
 	//base := "http://pilosa.umbel.com.s3.amazonaws.com/bit_log"
-	base := config.GetStringDefault("pilosa_request_log", "/tmp/set_bit_log")
-	return fmt.Sprintf("%s%s.%s.log", base, t.Format("/2006/01/02/15/04-05"), id)
 
+	return fmt.Sprintf("%s%s.%s.log", RequestLogPath, t.Format("/2006/01/02/15/04-05"), id)
 }
 
 func flush(requests []LogRecord, id string, records_to_dump int) {
@@ -142,7 +172,7 @@ func Logger(in chan []byte, end chan bool, id string, flusher chan bool) {
 }
 
 func (self *WebService) Run() {
-	port_string := strconv.Itoa(config.GetInt("port_http"))
+	port_string := strconv.Itoa(self.Port)
 	log.Info("Serving HTTP on port:", port_string)
 	logger_chan := make(chan []byte, 1024)
 	flusher := make(chan bool)
@@ -161,8 +191,7 @@ func (self *WebService) Run() {
 	mux.HandleFunc("/ping", self.HandlePing)
 	mux.HandleFunc("/batch", self.HandleBatch)
 	mux.HandleFunc("/load", self.HandleLoad)
-	log_set_bit := config.GetIntDefault("log_set_bit_request", 0)
-	if log_set_bit == 1 {
+	if self.SetBitLogEnabled {
 		mux.HandleFunc("/set_bits", NewRequestLogger(self.HandleSetBit, logger_chan))
 	} else {
 		mux.HandleFunc("/set_bits", self.HandleSetBit)
@@ -174,8 +203,7 @@ func (self *WebService) Run() {
 		Addr:    ":" + port_string,
 		Handler: mux,
 	}
-	id := config.GetString("id")
-	go Logger(logger_chan, self.end, id, flusher)
+	go Logger(logger_chan, self.end, self.ID.String(), flusher)
 	s.ListenAndServe()
 }
 func (self *WebService) Shutdown() {
@@ -194,7 +222,6 @@ func (self *WebService) HandleMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	//service.Inbox <- &message
 }
 
 func (self *WebService) HandleLoad(w http.ResponseWriter, r *http.Request) {
@@ -221,12 +248,12 @@ func (self *WebService) HandleLoad(w http.ResponseWriter, r *http.Request) {
 	ms_, ok := obj["max_slice"]
 	if ok {
 		ms := int(ms_.(float64))
-		database := self.service.Cluster.GetOrCreateDatabase(db)
+		database := self.Cluster.GetOrCreateDatabase(db)
 		ns, _ := database.NumSlices()
 		if ns <= ms {
 			for i := ns; i <= ms; i++ {
 				log.Info("Load Create Slice ", i)
-				self.service.TopologyMapper.MakeFragments(db, i)
+				self.TopologyMapper.MakeFragments(db, i)
 			}
 			http.Error(w, "Needed Slices", http.StatusNotFound)
 			return
@@ -261,7 +288,7 @@ func (self *WebService) HandleLoad(w http.ResponseWriter, r *http.Request) {
 	t = float64(obj["filter"].(float64))
 	filter := uint64(t)
 
-	results := FromApiString(self.service, database_name.(string), frame.(string), api_string.(string), bitmap_id, filter)
+	results := FromApiString(self.Batcher, database_name.(string), frame.(string), api_string.(string), bitmap_id, filter)
 
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
@@ -323,7 +350,7 @@ func (self *WebService) HandleBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := self.service.Batch(database_name, frame, compressed_bitmap, bitmap_id, int(slice), uint64(filter))
+	results := self.Batcher.Batch(database_name, frame, compressed_bitmap, bitmap_id, int(slice), uint64(filter))
 
 	encoder := json.NewEncoder(w)
 	err = encoder.Encode(results)
@@ -349,13 +376,13 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 
 	database_name := r.Form.Get("db")
 	if database_name == "" {
-		database_name = config.GetString("default_db")
+		database_name = self.DefaultDB
 	}
 	if database_name == "" {
 		http.Error(w, "Provide a database (db)", http.StatusNotFound)
 		return
 	}
-	if !self.service.Cluster.IsValidDatabase(database_name) {
+	if !self.Cluster.IsValidDatabase(database_name) {
 		http.Error(w, "Unknown Database:"+database_name, http.StatusNotFound)
 		return
 	}
@@ -367,7 +394,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	_, bits := r.Form["bits"]
 
 	log.Debug("PQL:", database_name, pql)
-	results, err := self.service.Executor.RunPQL(database_name, pql)
+	results, err := self.Executor.RunPQL(database_name, pql)
 	if err != nil {
 		log.Warn("PQL Exec Error:", err.Error(), database_name, pql)
 		http.Error(w, "Error encoding: "+err.Error(), http.StatusInternalServerError)
@@ -508,7 +535,13 @@ func (self *WebService) HandleBit(w http.ResponseWriter, r *http.Request, ToSet 
 		http.Error(w, "Request To large", http.StatusBadRequest)
 		return
 	}
-	//remoteSetBit := NewRemoteSetBit(self.service)
+
+	//remoteSetBit := NewRemoteSetBit()
+	//remoteSetBit.ID = self.ID
+	//remoteSetBit.ProcessMap = self.ProcessMap
+	//remoteSetBit.Hold = self.Hold
+	//remoteSetBit.Transport = self.Transport
+
 	for _, obj := range args {
 		if obj["profile_id"] == nil {
 			http.Error(w, "Missing Profile", http.StatusBadRequest)
@@ -544,7 +577,7 @@ func (self *WebService) HandleBit(w http.ResponseWriter, r *http.Request, ToSet 
 			} else {
 				pql = fmt.Sprintf("clear(%d, %s, %d, %d)", bitmap_id, frame, filter, profile_id)
 			}
-			result, err := self.service.Executor.RunPQL(dbs, pql)
+			result, err := self.Executor.RunPQL(dbs, pql)
 			bundle := SBResult{bitmap_id, frame, filter, profile_id, result}
 			results = append(results, bundle)
 
@@ -586,7 +619,7 @@ func (self *WebService) HandleInfo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	spew.Fdump(w, self.service.Cluster)
+	spew.Fdump(w, self.Cluster)
 }
 
 func (self *WebService) HandleVersion(w http.ResponseWriter, r *http.Request) {
@@ -595,7 +628,7 @@ func (self *WebService) HandleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "Pilosa v.("+self.service.version+")\n")
+	fmt.Fprintf(w, "Pilosa v.("+self.Version+")\n")
 }
 
 func (self *WebService) HandleTest(w http.ResponseWriter, r *http.Request) {
@@ -607,11 +640,11 @@ func (self *WebService) HandleTest(w http.ResponseWriter, r *http.Request) {
 
 	msg := new(db.Message)
 	msg.Data = "mystring"
-	self.service.Transport.Push(msg)
+	self.Transport.Push(msg)
 
 	msg2 := new(db.Message)
 	msg2.Data = 789
-	self.service.Transport.Push(msg2)
+	self.Transport.Push(msg2)
 }
 
 func (self *WebService) HandleProcesses(w http.ResponseWriter, r *http.Request) {
@@ -620,7 +653,7 @@ func (self *WebService) HandleProcesses(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	encoder := json.NewEncoder(w)
-	processes := self.service.ProcessMap.GetMetadata()
+	processes := self.ProcessMap.GetMetadata()
 	err := encoder.Encode(processes)
 	if err != nil {
 		http.Error(w, "Error Encoding", http.StatusBadRequest)
@@ -643,12 +676,12 @@ func (self *WebService) HandlePing(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	_, err = self.service.ProcessMap.GetProcess(&process_id)
+	_, err = self.ProcessMap.GetProcess(&process_id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	duration, err := self.service.Ping(&process_id)
+	duration, err := self.Pinger.Ping(&process_id)
 	if err != nil {
 		spew.Fdump(w, err)
 		return

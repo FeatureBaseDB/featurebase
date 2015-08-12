@@ -6,6 +6,8 @@ import (
 	"github.com/umbel/pilosa/db"
 )
 
+const DefaultHTTPPort = 15001
+
 type HttpTransport struct {
 	port   int
 	outbox chan *db.Message

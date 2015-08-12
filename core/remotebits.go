@@ -11,7 +11,17 @@ import (
 type RemoteSetBit struct {
 	requests []remote_task
 	cluster  map[*util.GUID][]BitmapRequestItem
-	service  *Service
+
+	ID         util.GUID
+	ProcessMap *ProcessMap
+
+	Hold interface {
+		Get(id *util.GUID, timeout int) (interface{}, error)
+	}
+
+	Transport interface {
+		Send(message *db.Message, host *util.GUID)
+	}
 }
 
 func init() {
@@ -35,16 +45,15 @@ type BitmapRequestItem struct {
 	SetUnset    bool
 }
 
-func NewRemoteSetBit(s *Service) *RemoteSetBit {
+func NewRemoteSetBit() *RemoteSetBit {
 	obj := new(RemoteSetBit)
 	obj.cluster = make(map[*util.GUID][]BitmapRequestItem)
-	obj.service = s
 	return obj
 }
 
 func (self *RemoteSetBit) Request() {
 	self.requests = make([]remote_task, 0)
-	source_process, _ := self.service.GetProcess()
+	source_process, _ := self.ProcessMap.GetProcess(&self.ID)
 	for process, request := range self.cluster {
 		random_id := util.RandomUUID()
 		msg := new(db.Message)
@@ -59,7 +68,7 @@ func (self *RemoteSetBit) Request() {
 			wait = 10
 		}
 		self.requests = append(self.requests, remote_task{random_id, wait})
-		self.service.Transport.Send(msg, process)
+		self.Transport.Send(msg, process)
 	}
 
 }
@@ -73,7 +82,7 @@ func (self *RemoteSetBit) MergeResults(local_results []SBResult) []SBResult {
 	answers := make(chan []SBResult)
 	for _, task := range self.requests {
 		go func(task remote_task) {
-			value, err := self.service.Hold.Get(&task.id, task.wait_time) //eiher need to be the frame process or the handler process?
+			value, err := self.Hold.Get(&task.id, task.wait_time) //eiher need to be the frame process or the handler process?
 			if value == nil {
 				log.Warn("Bad RemoteSetBit Result:", err)
 				empty := make([]SBResult, 0, 0)

@@ -1,14 +1,11 @@
 package index
 
+/*
 import (
 	"testing"
-
-	. "github.com/smartystreets/goconvey/convey"
-	"github.com/umbel/pilosa/util"
 )
 
 func TestFragment(t *testing.T) {
-
 	general := util.Hex_to_SUUID("1")
 	brand := util.Hex_to_SUUID("2")
 	dummy := NewFragmentContainer()
@@ -100,37 +97,36 @@ func TestFragment(t *testing.T) {
 		So(1, ShouldEqual, 1)
 	})
 
-	/*
-		Convey("Brand SetBit Big", t, func() {
-			bi1 := uint64(1231)
-			bi2 := uint64(1232)
-			bi3 := uint64(1233)
-			bi4 := uint64(1234)
-			for x := uint64(0); x < 60000; x++ {
-				if x < 100 {
-					dummy.SetBit(brand, bi1, x)
-					dummy.SetBit(brand, bi4, x)
-				}
-				if x < 500 {
-					dummy.SetBit(brand, bi2, x)
-				}
-				if x%3 == 0 && x < 1000 {
-					dummy.SetBit(brand, bi3, x)
-				}
-				if x > 700 && x < 1000 {
-					dummy.SetBit(brand, bi4, x)
-				}
-				if x > 1000 {
-					dummy.SetBit(brand, x, x)
-				}
-			}
-			bh1, _ := dummy.Get(brand, bi1)
-			//	dummy.Rank()
-			log.Println(dummy.TopN(brand, bh1, 4))
-			log.Println(dummy.Stats(brand))
-			So(1, ShouldEqual, 1)
-		})
-	*/
+	// Convey("Brand SetBit Big", t, func() {
+	// 	bi1 := uint64(1231)
+	// 	bi2 := uint64(1232)
+	// 	bi3 := uint64(1233)
+	// 	bi4 := uint64(1234)
+	// 	for x := uint64(0); x < 60000; x++ {
+	// 		if x < 100 {
+	// 			dummy.SetBit(brand, bi1, x)
+	// 			dummy.SetBit(brand, bi4, x)
+	// 		}
+	// 		if x < 500 {
+	// 			dummy.SetBit(brand, bi2, x)
+	// 		}
+	// 		if x%3 == 0 && x < 1000 {
+	// 			dummy.SetBit(brand, bi3, x)
+	// 		}
+	// 		if x > 700 && x < 1000 {
+	// 			dummy.SetBit(brand, bi4, x)
+	// 		}
+	// 		if x > 1000 {
+	// 			dummy.SetBit(brand, x, x)
+	// 		}
+	// 	}
+	// 	bh1, _ := dummy.Get(brand, bi1)
+	// 	//	dummy.Rank()
+	// 	log.Println(dummy.TopN(brand, bh1, 4))
+	// 	log.Println(dummy.Stats(brand))
+	// 	So(1, ShouldEqual, 1)
+	// })
+
 	Convey("Brand TopN", t, func() {
 		dummy.SetBit(brand, uint64(1), 1, 2)
 		dummy.SetBit(brand, uint64(1), 2, 2)
@@ -159,3 +155,4 @@ func TestFragment(t *testing.T) {
 	})
 
 }
+*/

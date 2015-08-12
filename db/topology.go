@@ -7,9 +7,11 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/stathat/consistent"
-	"github.com/umbel/pilosa/config"
 	"github.com/umbel/pilosa/util"
 )
+
+// SupportedFrames is a list of frame types that are supported.
+var SupportedFrames = []string{"default"}
 
 var FrameDoesNotExistError = errors.New("Frame does not exist.")
 var InvalidFrameError = errors.New("Invalid frame.")
@@ -161,9 +163,7 @@ func stringInSlice(a string, list []string) bool {
 }
 
 func (d *Database) IsValidFrame(name string) bool {
-	supported_frames := config.GetStringArrayDefault("supported_frames",
-		[]string{"default"})
-	return stringInSlice(name, supported_frames)
+	return stringInSlice(name, SupportedFrames)
 }
 
 // Count the number of slices in a database

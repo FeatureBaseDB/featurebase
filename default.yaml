@@ -14,4 +14,4 @@ supported_frames:
  - d
  - p.n
 etcd_servers:
-         - http://127.0.0.1:4001
+ - http://127.0.0.1:4001

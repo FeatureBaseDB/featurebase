@@ -6,7 +6,6 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/golang/groupcache/lru"
-	"github.com/umbel/pilosa/config"
 	"github.com/umbel/pilosa/util"
 )
 
@@ -82,7 +81,7 @@ func (self *General) Stats() interface{} {
 }
 
 func (self *General) getFileName() string {
-	base := config.GetString("fragment_base")
+	base := FragmentBase
 	if base == "" {
 		base = "."
 	}
