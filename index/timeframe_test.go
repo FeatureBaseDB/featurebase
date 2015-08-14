@@ -1,5 +1,6 @@
 package index
 
+/*
 import (
 	"fmt"
 	"log"
@@ -129,3 +130,4 @@ func TestTimeFrame(t *testing.T) {
 	})
 
 }
+*/

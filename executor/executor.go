@@ -1,18 +1,59 @@
 package executor
 
 import (
+	"encoding/gob"
+	"sort"
+	"time"
+
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/umbel/pilosa/config"
 	"github.com/umbel/pilosa/core"
 	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/index"
 	"github.com/umbel/pilosa/query"
 	"github.com/umbel/pilosa/util"
 )
 
 type Executor struct {
-	service *core.Service
-	inbox   chan *db.Message
+	inbox chan *db.Message
+
+	ID          util.GUID
+	Cluster     *db.Cluster
+	ProcessMap  *core.ProcessMap
+	PluginsPath string
+
+	Hold interface {
+		Get(id *util.GUID, timeout int) (interface{}, error)
+		Set(id *util.GUID, value interface{}, timeout int)
+	}
+
+	Index interface {
+		ClearBit(frag_id util.SUUID, bitmap_id uint64, pos uint64) (bool, error)
+		Count(frag_id util.SUUID, bitmap index.BitmapHandle) (uint64, error)
+		Difference(frag_id util.SUUID, bh []index.BitmapHandle) (index.BitmapHandle, error)
+		FromBytes(frag_id util.SUUID, bytes []byte) (index.BitmapHandle, error)
+		Get(frag_id util.SUUID, bitmap_id uint64) (index.BitmapHandle, error)
+		GetBytes(frag_id util.SUUID, bh index.BitmapHandle) ([]byte, error)
+		Intersect(frag_id util.SUUID, bh []index.BitmapHandle) (index.BitmapHandle, error)
+		Range(frag_id util.SUUID, bitmap_id uint64, start, end time.Time) (index.BitmapHandle, error)
+		SetBit(frag_id util.SUUID, bitmap_id uint64, pos uint64, category uint64) (bool, error)
+		TopN(frag_id util.SUUID, bh index.BitmapHandle, n int, categories []uint64) ([]index.Pair, error)
+		TopNAll(frag_id util.SUUID, n int, categories []uint64) ([]index.Pair, error)
+		Union(frag_id util.SUUID, bh []index.BitmapHandle) (index.BitmapHandle, error)
+	}
+
+	TopologyMapper interface {
+		MakeFragments(db string, slice_int int) error
+	}
+
+	Transport interface {
+		Send(*db.Message, *util.GUID)
+	}
+}
+
+func NewExecutor(id util.GUID) *Executor {
+	log.Trace("NewExector")
+	return &Executor{inbox: make(chan *db.Message)}
 }
 
 func (self *Executor) Init() error {
@@ -28,42 +69,453 @@ func (self *Executor) NewJob(job *db.Message) {
 	log.Trace("NewJob", job)
 	switch job.Data.(type) {
 	case query.CountQueryStep:
-		self.service.CountQueryStepHandler(job)
+		self.CountQueryStepHandler(job)
 	case query.TopNQueryStep:
-		self.service.TopNQueryStepHandler(job)
+		self.TopNQueryStepHandler(job)
 	case query.UnionQueryStep:
-		self.service.UnionQueryStepHandler(job)
+		self.UnionQueryStepHandler(job)
 	case query.IntersectQueryStep:
-		self.service.IntersectQueryStepHandler(job)
+		self.IntersectQueryStepHandler(job)
 	case query.DifferenceQueryStep:
-		self.service.DifferenceQueryStepHandler(job)
+		self.DifferenceQueryStepHandler(job)
 	case query.CatQueryStep:
-		self.service.CatQueryStepHandler(job)
+		self.CatQueryStepHandler(job)
 	case query.GetQueryStep:
-		self.service.GetQueryStepHandler(job)
+		self.GetQueryStepHandler(job)
 	case query.SetQueryStep:
-		self.service.SetQueryStepHandler(job)
+		self.SetQueryStepHandler(job)
 	case query.ClearQueryStep:
-		self.service.ClearQueryStepHandler(job)
+		self.ClearQueryStepHandler(job)
 	case query.RangeQueryStep:
-		self.service.RangeQueryStepHandler(job)
+		self.RangeQueryStepHandler(job)
 	case query.StashQueryStep:
-		self.service.StashQueryStepHandler(job)
+		self.StashQueryStepHandler(job)
 	default:
 		log.Warn("unknown")
 		log.Warn(spew.Sdump(job.Data))
 	}
 }
 
-type stringSlice []string
+func (self *Executor) CountQueryStepHandler(msg *db.Message) {
+	log.Trace("CountQueryStepHandler")
+	//spew.Dump("COUNT QUERYSTEP")
+	qs := msg.Data.(query.CountQueryStep)
+	input := qs.Input
+	value, _ := self.Hold.Get(input, util.TimeOut)
+	var bh index.BitmapHandle
+	switch val := value.(type) {
+	case index.BitmapHandle:
+		bh = val
+	case []byte:
+		bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
+	}
+	count, err := self.Index.Count(qs.Location.FragmentId, bh)
+	if err != nil {
+		spew.Dump(err)
+	}
+	//spew.Dump("SLICE COUNT", count)
+	result_message := db.Message{Data: query.CountQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: count}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
 
-func (slice stringSlice) pos(value string) int {
-	for p, v := range slice {
-		if v == value {
-			return p
+func (self *Executor) TopNQueryStepHandler(msg *db.Message) {
+	qs := msg.Data.(query.TopNQueryStep)
+	var bh index.BitmapHandle
+	var topnPackage TopNPackage
+
+	// if we have an input, hold for it. if we don't, we assume an all() query
+	if qs.Input == nil {
+		topn, err := self.Index.TopNAll(qs.Location.FragmentId, qs.N*2, qs.Filters)
+		if err != nil {
+			log.Warn(spew.Sdump(err))
+		}
+		topnPackage = TopNPackage{*qs.Location.ProcessId, qs.Location.FragmentId, topn, bh}
+	} else {
+		input := qs.Input
+		value, _ := self.Hold.Get(input, 10)
+		//var bh index.BitmapHandle
+		switch val := value.(type) {
+		case index.BitmapHandle:
+			bh = val
+		case []byte:
+			bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
+		}
+
+		topn, err := self.Index.TopN(qs.Location.FragmentId, bh, qs.N*2, qs.Filters)
+		if err != nil {
+			log.Warn(spew.Sdump(err))
+		}
+		topnPackage = TopNPackage{*qs.Location.ProcessId, qs.Location.FragmentId, topn, bh}
+	}
+
+	result_message := db.Message{Data: query.TopNQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: topnPackage}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
+func (self *Executor) UnionQueryStepHandler(msg *db.Message) {
+	log.Trace("UnionQueryStepHandler")
+	//spew.Dump("UNION QUERYSTEP")
+
+	qs := msg.Data.(query.UnionQueryStep)
+	var handles []index.BitmapHandle
+	// create a list of bitmap handles
+	for _, input := range qs.Inputs {
+		value, _ := self.Hold.Get(input, util.TimeOut)
+		switch val := value.(type) {
+		case index.BitmapHandle:
+			handles = append(handles, val)
+		case []byte:
+			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
+			handles = append(handles, bh)
 		}
 	}
-	return -1
+
+	bh, err := self.Index.Union(qs.Location.FragmentId, handles)
+	if err != nil {
+		spew.Dump(err)
+	}
+
+	var result interface{}
+	if qs.LocIsDest() {
+		result = bh
+	} else {
+		bm, err := self.Index.GetBytes(qs.Location.FragmentId, bh)
+		if err != nil {
+			spew.Dump(err)
+		}
+		result = bm
+	}
+	result_message := db.Message{Data: query.UnionQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
+func (self *Executor) IntersectQueryStepHandler(msg *db.Message) {
+	log.Trace("IntersectQueryStepHandler")
+	//spew.Dump("INTERSECT QUERYSTEP")
+	qs := msg.Data.(query.IntersectQueryStep)
+	var handles []index.BitmapHandle
+	// create a list of bitmap handles
+	for _, input := range qs.Inputs {
+		value, _ := self.Hold.Get(input, util.TimeOut)
+		switch val := value.(type) {
+		case index.BitmapHandle:
+			handles = append(handles, val)
+		case []byte:
+			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
+			handles = append(handles, bh)
+		}
+	}
+
+	bh, err := self.Index.Intersect(qs.Location.FragmentId, handles)
+	if err != nil {
+		spew.Dump(err)
+	}
+
+	var result interface{}
+	if qs.LocIsDest() {
+		result = bh
+	} else {
+		bm, err := self.Index.GetBytes(qs.Location.FragmentId, bh)
+		if err != nil {
+			spew.Dump(err)
+		}
+		result = bm
+	}
+	result_message := db.Message{Data: query.IntersectQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
+func (self *Executor) DifferenceQueryStepHandler(msg *db.Message) {
+	log.Trace("DifferenceQueryStepHandler")
+	//spew.Dump("DIFFERENCE QUERYSTEP")
+	qs := msg.Data.(query.DifferenceQueryStep)
+	var handles []index.BitmapHandle
+	// create a list of bitmap handles
+	for _, input := range qs.Inputs {
+		value, _ := self.Hold.Get(input, util.TimeOut)
+		switch val := value.(type) {
+		case index.BitmapHandle:
+			handles = append(handles, val)
+		case []byte:
+			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
+			handles = append(handles, bh)
+		}
+	}
+
+	bh, err := self.Index.Difference(qs.Location.FragmentId, handles)
+	if err != nil {
+		spew.Dump(err)
+	}
+
+	var result interface{}
+	if qs.LocIsDest() {
+		result = bh
+	} else {
+		bm, err := self.Index.GetBytes(qs.Location.FragmentId, bh)
+		if err != nil {
+			spew.Dump(err)
+		}
+		result = bm
+	}
+	result_message := db.Message{Data: query.DifferenceQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
+func (self *Executor) CatQueryStepHandler(msg *db.Message) {
+	log.Trace("CatQueryStepHandler")
+	qs := msg.Data.(query.CatQueryStep)
+	var handles []index.BitmapHandle
+	return_type := "bitmap-handles"
+	var sum uint64
+	merge_map := make(map[uint64]uint64)
+	slice_map := make(map[uint64]map[util.SUUID]struct{})
+	all_slice := make(map[util.SUUID]struct {
+		process util.GUID
+		handle  index.BitmapHandle
+	})
+
+	// either create a list of bitmap handles to cat (i.e. union), or sum the integer values
+	part := make(chan interface{})
+	num_parts := len(qs.Inputs)
+
+	for _, input := range qs.Inputs {
+		go func(id *util.GUID, part chan interface{}) {
+			value, _ := self.Hold.Get(id, util.TimeOut)
+			part <- value
+		}(input, part)
+	}
+
+	//for _, input := range qs.Inputs {
+	check_pair := false
+	for i := 0; i < num_parts; i++ {
+		value := <-part
+
+		switch val := value.(type) {
+		case index.BitmapHandle:
+			handles = append(handles, val)
+		case []byte:
+			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
+			handles = append(handles, bh)
+		case uint64:
+			//spew.Dump(val)
+			return_type = "sum"
+			sum += val
+		case TopNPackage:
+			return_type = "pair-list"
+			var e struct{}
+			for _, pair := range val.Pairs {
+				//merge_map[pair.Key] += pair.Count
+				if pair.Key == 0 {
+					continue //skip
+				}
+				merge_map[pair.Key] += pair.Count
+				mm, ok := slice_map[pair.Key]
+				if !ok {
+					mm = make(map[util.SUUID]struct{})
+					slice_map[pair.Key] = mm
+				}
+				mm[val.FragmentId] = e
+			}
+			all_slice[val.FragmentId] = struct {
+				process util.GUID
+				handle  index.BitmapHandle
+			}{val.ProcessId, val.HBitmap}
+			check_pair = true
+		}
+	}
+	if check_pair { //no point in doing this for non top-n handling
+		tasks := BuildTask(merge_map, slice_map, all_slice)
+		self.FetchMissing(tasks)
+		for k, v := range self.GatherResults(tasks) {
+			merge_map[k] += v
+		}
+	}
+
+	// either return the sum, or return the compressed bitmap resulting from the cat (union)
+	var result interface{}
+	if return_type == "sum" {
+		result = sum
+	} else if return_type == "bitmap-handles" {
+		bh, err := self.Index.Union(qs.Location.FragmentId, handles)
+		result, err = self.Index.GetBytes(qs.Location.FragmentId, bh)
+		if err != nil {
+			spew.Dump(err)
+		}
+	} else if return_type == "pair-list" {
+		rank_list := make(index.RankList, 0, len(merge_map))
+		for k, v := range merge_map {
+			if k == 0 || v == 0 {
+				continue //shouldn't be getting 0 keys or values anyway
+			}
+			rank := new(index.Rank)
+			rank.Pair = &index.Pair{k, v}
+			rank_list = append(rank_list, rank)
+		}
+		sort.Sort(rank_list) // kinda seems like this copy is wasteful..i'll ponder
+		items_size := min(len(merge_map), qs.N)
+		pair_list := make([]index.Pair, 0, items_size+1)
+		for i, r := range rank_list {
+			if i < items_size {
+				pair_list = append(pair_list, *r.Pair)
+			} else {
+				break
+			}
+		}
+		result = pair_list
+	} else {
+		result = "NONE"
+	}
+	result_message := db.Message{Data: query.CatQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
+func (self *Executor) SendRequest(process_id util.GUID, t *Task) {
+	args := make([]index.FillArgs, len(t.f), len(t.f))
+	for _, v := range t.f {
+		args = append(args, v)
+	}
+	msg := new(db.Message)
+	p, _ := self.ProcessMap.GetProcess(&self.ID)
+	msg.Data = TopFill{args, p.Id(), t.hold_id, process_id}
+	self.Transport.Send(msg, &process_id)
+}
+
+func (self *Executor) FetchMissing(tasks map[util.GUID]*Task) {
+	for k, v := range tasks {
+		go self.SendRequest(k, v)
+	}
+}
+
+func (self *Executor) GatherResults(tasks map[util.GUID]*Task) map[uint64]uint64 {
+	results := make(map[uint64]uint64)
+	answers := make(chan []index.Pair)
+	for _, task := range tasks {
+		go func(id util.GUID) {
+			value, err := self.Hold.Get(&id, 10) //eiher need to be the frame process or the handler process?
+			if value == nil {
+				log.Warn("Bad TopN Result:", err)
+				empty := make([]index.Pair, 0, 0)
+				answers <- empty
+
+			} else {
+				answers <- value.([]index.Pair)
+			}
+		}(task.hold_id)
+	}
+	for i := 0; i < len(tasks); i++ {
+		batch := <-answers
+		for _, pair := range batch {
+			results[pair.Key] += pair.Count
+		}
+	}
+	close(answers)
+	return results
+}
+
+func (self *Executor) GetQueryStepHandler(msg *db.Message) {
+	qs := msg.Data.(query.GetQueryStep)
+	//spew.Dump("GET QUERYSTEP")
+
+	bh, err := self.Index.Get(qs.Location.FragmentId, qs.Bitmap.Id)
+	if err != nil {
+		spew.Dump(err)
+		log.Error("GetQueryStepHandler1", util.SUUID_to_Hex(qs.Location.FragmentId), qs.Bitmap.Id)
+		log.Error("GetQueryStepHandler2", err)
+	}
+
+	var result interface{}
+	if qs.LocIsDest() {
+		result = bh
+	} else {
+		bm, err := self.Index.GetBytes(qs.Location.FragmentId, bh)
+		if err != nil {
+			spew.Dump(err)
+			log.Error("GetQueryStepHandlerr3", util.SUUID_to_Hex(qs.Location.FragmentId), qs.Bitmap.Id)
+			log.Error("GetQueryStepHandler4", err)
+		}
+		result = bm
+	}
+	result_message := db.Message{Data: query.GetQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
+func (self *Executor) SetQueryStepHandler(msg *db.Message) {
+	//spew.Dump("SET QUERYSTEP")
+	qs := msg.Data.(query.SetQueryStep)
+	result, _ := self.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId, qs.Bitmap.Filter)
+
+	result_message := db.Message{Data: query.SetQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
+func (self *Executor) ClearQueryStepHandler(msg *db.Message) {
+	//spew.Dump("SET QUERYSTEP")
+	qs := msg.Data.(query.ClearQueryStep)
+	result, _ := self.Index.ClearBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
+
+	result_message := db.Message{Data: query.ClearQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
+func (self *Executor) RangeQueryStepHandler(msg *db.Message) {
+	qs := msg.Data.(query.RangeQueryStep)
+	//spew.Dump("RANDE QUERYSTEP")
+
+	bh, err := self.Index.Range(qs.Location.FragmentId, qs.Bitmap.Id, qs.Start, qs.End)
+	if err != nil {
+		spew.Dump(err)
+	}
+
+	var result interface{}
+	if qs.LocIsDest() {
+		result = bh
+	} else {
+		bm, err := self.Index.GetBytes(qs.Location.FragmentId, bh)
+		if err != nil {
+			spew.Dump(err)
+		}
+		result = bm
+	}
+	result_message := db.Message{Data: query.RangeQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+}
+
+func (self *Executor) StashQueryStepHandler(msg *db.Message) {
+	log.Trace("StashQueryStepHandler")
+	qs := msg.Data.(query.StashQueryStep)
+
+	part := make(chan interface{})
+	num_parts := len(qs.Inputs)
+
+	for _, input := range qs.Inputs {
+		go func(id *util.GUID, part chan interface{}) {
+			value, _ := self.Hold.Get(id, util.TimeOut)
+			part <- value
+		}(input, part)
+	}
+	//just collect all the handles and return them
+	result := query.NewStash() //query.Stash{make([]query.CacheItem, 0), false}
+	for i := 0; i < num_parts; i++ {
+		value := <-part
+
+		switch val := value.(type) {
+		case index.BitmapHandle:
+			log.Info("STASH ADDING HANDLE", val)
+			//not sure what to do here....
+			//result.Handles = append(result.Handles, val)
+		case []byte:
+			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
+			item := query.CacheItem{qs.Location.FragmentId, bh}
+			result.Stash = append(result.Stash, item)
+		case query.Stash:
+			result.Stash = append(result.Stash, val.Stash...)
+		default:
+			log.Warn("UNEXCPECTED MESSAGE", value)
+		}
+	}
+	result_message := db.Message{Data: query.StashQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	self.Transport.Send(&result_message, qs.Destination.ProcessId)
+
 }
 
 func (self *Executor) RunQueryTest(database_name string, pql string) string {
@@ -72,7 +524,7 @@ func (self *Executor) RunQueryTest(database_name string, pql string) string {
 
 func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 	log.Trace("Executor.runQuery", database, qry)
-	process, err := self.service.GetProcess()
+	process, err := self.ProcessMap.GetProcess(&self.ID)
 	if err != nil {
 		return err
 	}
@@ -84,9 +536,9 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 	if err != nil {
 		switch obj := err.(type) {
 		case *query.FragmentNotFound:
-			self.service.TopologyMapper.MakeFragments(obj.Db, obj.Slice)
+			self.TopologyMapper.MakeFragments(obj.Db, obj.Slice)
 		}
-		self.service.Hold.Set(qry.Id, err, 30)
+		self.Hold.Set(qry.Id, err, 30)
 		return err
 	}
 	// loop over the query steps and send to Transport
@@ -97,7 +549,7 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 		case query.PortableQueryStep:
 			loc := step.GetLocation()
 			if loc != nil {
-				self.service.Transport.Send(msg, loc.ProcessId)
+				self.Transport.Send(msg, loc.ProcessId)
 			} else {
 				log.Warn("Problem with querystep(nil location)", spew.Sdump(step))
 			}
@@ -108,7 +560,7 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 
 func (self *Executor) RunPQL(database_name string, pql string) (interface{}, error) {
 	log.Trace("Executor.RunPQL", database_name, pql)
-	database := self.service.Cluster.GetOrCreateDatabase(database_name)
+	database := self.Cluster.GetOrCreateDatabase(database_name)
 
 	// see if the outer query function is a custom query
 	reserved_functions := stringSlice{"get", "set", "clear", "union", "intersect", "difference", "count", "top-n", "mask", "range", "stash", "recall"}
@@ -127,15 +579,14 @@ func (self *Executor) RunPQL(database_name string, pql string) (interface{}, err
 		go self.runQuery(database, qry)
 
 		var final interface{}
-		final, err = self.service.Hold.Get(qry.Id, 10)
+		final, err = self.Hold.Get(qry.Id, 10)
 		if err != nil {
 			return nil, err
 		}
 		return final, nil
 
 	} else { //want to refactor this down to just RunPlugin(tokens)
-		plugins_dir := config.GetString("plugins")
-		plugins_file := plugins_dir + "/" + outer_token + ".js"
+		plugins_file := self.PluginsPath + "/" + outer_token + ".js"
 		filter, filters := query.TokensToFilterStrings(tokens)
 		query_list := GetPlugin(plugins_file, filter, filters).(query.PqlList)
 
@@ -162,7 +613,7 @@ func (self *Executor) RunPQL(database_name string, pql string) (interface{}, err
 				label string
 				err   error
 			}) {
-				final, err := self.service.Hold.Get(q.Id, 10)
+				final, err := self.Hold.Get(q.Id, 10)
 				result <- struct {
 					final interface{}
 					label string
@@ -184,11 +635,121 @@ func (self *Executor) RunPQL(database_name string, pql string) (interface{}, err
 
 }
 
+func init() {
+	gob.Register(TopNPackage{})
+	gob.Register(TopFill{})
+}
+
+type TopNPackage struct {
+	ProcessId  util.GUID
+	FragmentId util.SUUID
+	Pairs      []index.Pair
+	HBitmap    index.BitmapHandle
+}
+
+type TopFill struct {
+	Args            []index.FillArgs
+	ReturnProcessId util.GUID
+	QueryId         util.GUID
+	DestProcessId   util.GUID
+}
+
+type Task struct {
+	processid util.GUID
+	f         map[util.SUUID]index.FillArgs
+	hold_id   util.GUID
+}
+
+func newtask(p util.GUID) *Task {
+	result := new(Task)
+	result.processid = p
+	result.f = make(map[util.SUUID]index.FillArgs)
+	result.hold_id = util.RandomUUID()
+	return result
+}
+
+func (t *Task) Add(frag util.SUUID, bitmap_id uint64, handle index.BitmapHandle) {
+	fa, ok := t.f[frag]
+	if !ok {
+		fa = index.FillArgs{frag, handle, make([]uint64, 0, 0)}
+	}
+	fa.Bitmaps = append(fa.Bitmaps, bitmap_id)
+	t.f[frag] = fa
+}
+
+func BuildTask(merge_map map[uint64]uint64,
+	slice_map map[uint64]map[util.SUUID]struct{},
+	total_fragments map[util.SUUID]struct {
+		process util.GUID
+		handle  index.BitmapHandle
+	}) map[util.GUID]*Task {
+
+	tasks := make(map[util.GUID]*Task)
+	for bitmap_id, _ := range merge_map { //for all brands
+		//for fragment_id, reported_fragments := range slice_map[bitmap_id] { //find missing fragments
+		reporting_fragments := slice_map[bitmap_id]
+		//id slice ==> SUUID,BitmapHandle
+		for _, p := range missing(reporting_fragments, total_fragments) {
+			task, ok := tasks[p.process]
+			if !ok {
+				task = newtask(p.process)
+				tasks[p.process] = task
+			}
+			task.Add(p.fragment, bitmap_id, p.handle)
+
+		}
+		//}
+	}
+
+	return tasks
+}
+
+type hole struct {
+	process  util.GUID
+	handle   index.BitmapHandle
+	fragment util.SUUID
+}
+
+func missing(fids map[util.SUUID]struct{}, all map[util.SUUID]struct {
+	process util.GUID
+	handle  index.BitmapHandle
+}) []hole {
+	results := make([]hole, 0, 0)
+
+	for k, v := range all {
+		_, ok := fids[k]
+		if !ok {
+			results = append(results, hole{v.process, v.handle, k})
+		}
+	}
+	return results
+}
+
+func (self *TopFill) GetId() *util.GUID {
+	return &self.QueryId
+}
+func (self *TopFill) GetLocation() *db.Location {
+	return &db.Location{&self.DestProcessId, 0} //this message is a broadcast to many fragments so i'm choosing fragmentzero
+}
+
 func (self *Executor) Run() {
 	log.Warn("Executor Run...")
 }
 
-func NewExecutor(service *core.Service) *Executor {
-	log.Trace("NewExector")
-	return &Executor{service, make(chan *db.Message)}
+type stringSlice []string
+
+func (slice stringSlice) pos(value string) int {
+	for p, v := range slice {
+		if v == value {
+			return p
+		}
+	}
+	return -1
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

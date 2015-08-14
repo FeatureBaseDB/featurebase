@@ -63,14 +63,18 @@ func Hex_to_SUUID(str string) SUUID {
 
 type GUID [16]byte
 
-func Equal(a, b *GUID) bool {
-	for i, v := range a {
-		if v != b[i] {
-			return false
-		}
+// UnmarshalText parses a text value into a GUID.
+// This is used by the TOML parser.
+func (id *GUID) UnmarshalText(text []byte) error {
+	v, err := ParseGUID(string(text))
+	if err != nil {
+		return err
 	}
-	return true
+
+	*id = v
+	return nil
 }
+
 func (self GUID) String() string {
 	var offsets = [...]int{0, 2, 4, 6, 9, 11, 14, 16, 19, 21, 24, 26, 28, 30, 32, 34}
 	const hexString = "0123456789abcdef"
@@ -87,12 +91,22 @@ func (self GUID) String() string {
 
 }
 
+func Equal(a, b *GUID) bool {
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func RandomUUID() GUID {
 	uid, _ := gocql.RandomUUID()
 	var r GUID
 	copy(r[:], uid[:])
 	return r
 }
+
 func ParseGUID(input string) (GUID, error) {
 	var u GUID
 	j := 0

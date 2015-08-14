@@ -29,9 +29,27 @@ func init() {
 	gob.Register(PongRequest{})
 }
 
-func (self *Service) Ping(process_id *util.GUID) (*time.Duration, error) {
+type Pinger struct {
+	ID util.GUID
+
+	Hold interface {
+		Get(id *util.GUID, timeout int) (interface{}, error)
+	}
+
+	Transport interface {
+		Send(message *db.Message, host *util.GUID)
+	}
+}
+
+func NewPinger(id util.GUID) *Pinger {
+	return &Pinger{
+		ID: id,
+	}
+}
+
+func (self *Pinger) Ping(process_id *util.GUID) (*time.Duration, error) {
 	id := util.RandomUUID()
-	ping := db.Message{Data: PingRequest{Id: &id, Source: self.Id}}
+	ping := db.Message{Data: PingRequest{Id: &id, Source: &self.ID}}
 	start := time.Now()
 	self.Transport.Send(&ping, process_id)
 	_, err := self.Hold.Get(&id, 60)

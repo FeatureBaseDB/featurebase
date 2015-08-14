@@ -7,9 +7,22 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/gocql/gocql"
-	"github.com/umbel/pilosa/config"
 	"github.com/umbel/pilosa/util"
 )
+
+// DefaultStorageHosts are the hosts that stores the data.
+var DefaultStorageHosts = [...]string{"localhost"}
+
+// DefaultStorageKeyspace is the default keyspace used for storage.
+const DefaultStorageKeyspace = "pilosa"
+
+const DefaultCassandraTimeWindow = 5 * time.Second
+const DefaultCassandraMaxSizeBatch = 15
+
+var StorageHosts = DefaultStorageHosts[:]
+var StorageKeyspace = DefaultStorageKeyspace
+var CassandraTimeWindow = DefaultCassandraTimeWindow
+var CassandraMaxSizeBatch = DefaultCassandraMaxSizeBatch
 
 type CassandraStorage struct {
 	db                    *gocql.Session
@@ -27,8 +40,8 @@ var session *gocql.Session
 
 func SetupCassandra() {
 	var err error
-	hosts := config.GetStringArrayDefault("cassandra_hosts", []string{"localhost"})
-	keyspace := config.GetStringDefault("cassandra_keyspace", "pilosa")
+	hosts := StorageHosts
+	keyspace := StorageKeyspace
 	cluster = gocql.NewCluster(hosts...)
 	cluster.Keyspace = keyspace
 	cluster.Consistency = gocql.One
@@ -67,8 +80,8 @@ func NewCassStorage() Storage {
 	obj.batch = nil
 	obj.batch_time = time.Now()
 	obj.batch_counter = 0
-	obj.cass_time_window_secs = float64(config.GetIntDefault("cassandra_time_window_secs", 5))
-	obj.cass_flush_size = config.GetIntDefault("cassandra_max_size_batch", 15)
+	obj.cass_time_window_secs = float64(CassandraTimeWindow.Seconds())
+	obj.cass_flush_size = CassandraMaxSizeBatch
 	return obj
 }
 

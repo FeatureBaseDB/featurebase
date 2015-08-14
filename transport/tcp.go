@@ -9,34 +9,35 @@ import (
 
 	notify "github.com/bitly/go-notify"
 	log "github.com/cihub/seelog"
-	"github.com/umbel/pilosa/config"
 	"github.com/umbel/pilosa/core"
 	"github.com/umbel/pilosa/db"
-	. "github.com/umbel/pilosa/util"
+	"github.com/umbel/pilosa/util"
 )
+
+const DefaultTCPPort = 12001
 
 type connection struct {
 	transport *TcpTransport
 	inbox     chan *db.Message
 	outbox    chan *db.Message
 	conn      *net.Conn
-	process   *GUID
+	process   *util.GUID
 }
 
 type newconnection struct {
-	id         *GUID
+	id         *util.GUID
 	connection *connection
 }
 
 func init() {
-	gob.Register(GUID{})
+	gob.Register(util.GUID{})
 }
 
 func (self *connection) manage() {
 BeginManageConnection:
 	for {
 		if self.conn == nil {
-			process, err := self.transport.service.ProcessMap.GetProcess(self.process)
+			process, err := self.transport.ProcessMap.GetProcess(self.process)
 			if err != nil {
 				log.Warn("transport/tcp: error getting process, retrying in 2 seconds... ", self.process, err)
 				time.Sleep(2 * time.Second)
@@ -51,7 +52,7 @@ BeginManageConnection:
 			}
 			self.conn = &conn
 			go func() {
-				self.outbox <- &db.Message{self.transport.service.Id}
+				self.outbox <- &db.Message{self.transport.ID.String()}
 			}()
 		}
 		encoder := gob.NewEncoder(*self.conn)
@@ -78,7 +79,7 @@ BeginManageConnection:
 					return
 				}
 			case message := <-self.inbox:
-				identifier, ok := message.Data.(GUID)
+				identifier, ok := message.Data.(util.GUID)
 				if ok {
 					// message is connection registration; bypass inbox and register
 					self.process = &identifier
@@ -99,12 +100,26 @@ BeginManageConnection:
 }
 
 type TcpTransport struct {
-	service     *core.Service
-	port        int
 	inbox       chan *db.Message
 	outbox      chan db.Envelope
-	connections map[GUID]*connection
+	connections map[util.GUID]*connection
 	reg         chan *newconnection
+
+	ID         util.GUID
+	Port       int
+	ProcessMap *core.ProcessMap
+}
+
+func NewTcpTransport(id util.GUID) *TcpTransport {
+	return &TcpTransport{
+		inbox:       make(chan *db.Message, 100),
+		outbox:      make(chan db.Envelope, 100),
+		connections: make(map[util.GUID]*connection),
+		reg:         make(chan *newconnection),
+
+		ID:   id,
+		Port: DefaultTCPPort,
+	}
 }
 
 func (self *TcpTransport) Run() {
@@ -127,10 +142,10 @@ func (self *TcpTransport) Run() {
 }
 
 func (self *TcpTransport) listen() {
-	port_string := fmt.Sprintf(":%d", self.port)
+	port_string := fmt.Sprintf(":%d", self.Port)
 	l, e := net.Listen("tcp", port_string)
 	if e != nil {
-		log.Critical("Cannot bind to port! ", self.port)
+		log.Critical("Cannot bind to port! ", self.Port)
 		os.Exit(-1)
 	}
 	for {
@@ -153,7 +168,7 @@ func (self *TcpTransport) Close() {
 	log.Warn("Shutting down TCP transport")
 }
 
-func (self *TcpTransport) Send(message *db.Message, host *GUID) {
+func (self *TcpTransport) Send(message *db.Message, host *util.GUID) {
 	log.Trace("TcpTransport.Send", message, host)
 	envelope := db.Envelope{message, host}
 	notify.Post("outbox", &envelope)
@@ -169,8 +184,4 @@ func (self *TcpTransport) Receive() *db.Message {
 
 func (self *TcpTransport) Push(message *db.Message) {
 	self.inbox <- message
-}
-
-func NewTcpTransport(service *core.Service) *TcpTransport {
-	return &TcpTransport{service, config.GetInt("port_tcp"), make(chan *db.Message, 100), make(chan db.Envelope, 100), make(map[GUID]*connection), make(chan *newconnection)}
 }

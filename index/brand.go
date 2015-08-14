@@ -10,9 +10,10 @@ import (
 
 	log "github.com/cihub/seelog"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/umbel/pilosa/config"
 	"github.com/umbel/pilosa/util"
 )
+
+var FragmentBase string
 
 var globalLock *sync.Mutex
 
@@ -346,7 +347,7 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 	return packagePairs(results[:end])
 }
 func (self *Brand) getFileName() string {
-	base := config.GetString("fragment_base")
+	base := FragmentBase
 	if base == "" {
 		base = "."
 	}

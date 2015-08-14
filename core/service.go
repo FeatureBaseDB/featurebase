@@ -1,14 +1,12 @@
 package core
 
 import (
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	log "github.com/cihub/seelog"
 	"github.com/coreos/go-etcd/etcd"
-	"github.com/umbel/pilosa/config"
 	"github.com/umbel/pilosa/db"
 	"github.com/umbel/pilosa/hold"
 	"github.com/umbel/pilosa/index"
@@ -24,8 +22,6 @@ type Service struct {
 	TopologyMapper *TopologyMapper
 	ProcessMapper  *ProcessMapper
 	ProcessMap     *ProcessMap
-	Transport      interfaces.Transporter
-	Dispatch       interfaces.Dispatcher
 	Executor       interfaces.Executorer
 	WebService     *WebService
 	Index          *index.FragmentContainer
@@ -35,85 +31,6 @@ type Service struct {
 }
 
 var Build string
-
-func NewService() *Service {
-	service := new(Service)
-	service.init_id()
-	etc_hosts := config.GetStringArrayDefault("etcd_servers", []string{})
-
-	service.Etcd = etcd.NewClient(etc_hosts)
-	service.Cluster = db.NewCluster()
-	service.TopologyMapper = NewTopologyMapper(service, "/pilosa/0")
-	service.ProcessMapper = NewProcessMapper(service, "/pilosa/0")
-	service.ProcessMap = NewProcessMap()
-	service.WebService = NewWebService(service)
-	service.Index = index.NewFragmentContainer()
-	service.Hold = hold.NewHolder()
-	service.version = Build
-	service.name = "Cruncher"
-	service.PrepareLogging()
-	fmt.Printf("Pilosa %s\n", service.version)
-	return service
-}
-
-func (self *Service) getProduction() string {
-	base_path := config.GetString("log_path")
-	if base_path == "" {
-		base_path = "/tmp"
-	}
-	fname := fmt.Sprintf("%s/%s.%s", base_path, self.name, self.Id)
-	//<seelog minlevel="debug" maxlevel="error">
-	log_level := config.GetStringDefault("log_level", "info")
-	prod_config := fmt.Sprintf(`<seelog minlevel="%s">
-	<outputs>
-		<rollingfile type="size" filename="%s" maxsize="524288000" maxrolls="4" formatid="format1" />
-	</outputs> `, log_level, fname)
-	prod_config += `<formats>
-	    <format id="format1" format="%Date/%Time [%LEV] %Msg%n"/>
-	 </formats>
-	</seelog>`
-	//fmt.Println(prod_config)
-	return prod_config
-}
-
-func (self *Service) getDev() string {
-	return `<seelog>
-	<outputs>
-	<console />
-	</outputs>
-	</seelog>
-	`
-}
-func (self *Service) PrepareLogging() {
-	logger, _ := log.LoggerFromConfigAsBytes([]byte(self.getProduction()))
-	log.ReplaceLogger(logger)
-}
-
-func (service *Service) init_id() {
-	var id util.GUID
-	var err error
-	id_string := config.GetString("id")
-	if id_string == "" {
-		log.Info("Service id not configured, generating...")
-		id = util.RandomUUID()
-		if err != nil {
-			log.Critical("problem generating uuid")
-			os.Exit(-1)
-
-		}
-	} else {
-		id, err = util.ParseGUID(id_string)
-		if err != nil {
-			log.Critical("Service id not valid:", id_string)
-			os.Exit(-1)
-		}
-	}
-	service.Id = &id
-}
-
-func (self *Service) GetProcess() (*db.Process, error) {
-	return self.ProcessMap.GetProcess(self.Id)
-}
 
 func (service *Service) GetSignals() (chan os.Signal, chan os.Signal) {
 	hupChan := make(chan os.Signal, 1)
@@ -130,8 +47,6 @@ func (service *Service) Run() {
 	go service.TopologyMapper.Run()
 	go service.ProcessMapper.Run()
 	go service.WebService.Run()
-	go service.Transport.Run()
-	go service.Dispatch.Run()
 	go service.Executor.Run()
 	go service.Hold.Run()
 

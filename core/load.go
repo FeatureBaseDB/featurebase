@@ -20,18 +20,18 @@ func copy_raw(src [32]uint64) index.BlockArray {
 	}
 	return index.BlockArray{o}
 }
-func sendBitmap(service *Service, bitmap index.IBitmap, db string, frame string, bitmap_id, filter uint64, slice int, finish chan error) {
+func sendBitmap(batcher *Batcher, bitmap index.IBitmap, db string, frame string, bitmap_id, filter uint64, slice int, finish chan error) {
 	if slice < 0 {
 		log.Warn("Bad split", db, frame, slice, bitmap_id)
 		finish <- errors.New("BadSplit")
 		return
 	}
 	compressed_bitmap := bitmap.ToCompressString()
-	results := service.Batch(db, frame, compressed_bitmap, bitmap_id, slice, filter)
+	results := batcher.Batch(db, frame, compressed_bitmap, bitmap_id, slice, filter)
 	finish <- results
 }
 
-func FromApiString(service *Service, db string, frame string, api_string string, bitmap_id, filter uint64) string {
+func FromApiString(batcher *Batcher, db string, frame string, api_string string, bitmap_id, filter uint64) string {
 	compressed_data, err := base64.StdEncoding.DecodeString(api_string)
 	if err != nil {
 		log.Warn(err)
@@ -67,7 +67,7 @@ func FromApiString(service *Service, db string, frame string, api_string string,
 			} else {
 				//make async later
 				sent_count += 1
-				go sendBitmap(service, bitmap, db, frame, bitmap_id, filter, int(last_slice), finish)
+				go sendBitmap(batcher, bitmap, db, frame, bitmap_id, filter, int(last_slice), finish)
 				bitmap = index.NewBitmap()
 			}
 			last_slice = slice
@@ -78,7 +78,7 @@ func FromApiString(service *Service, db string, frame string, api_string string,
 
 	}
 	sent_count += 1
-	go sendBitmap(service, bitmap, db, frame, bitmap_id, filter, int(last_slice), finish)
+	go sendBitmap(batcher, bitmap, db, frame, bitmap_id, filter, int(last_slice), finish)
 	for i := 0; i < sent_count; i++ {
 		<-finish
 	}

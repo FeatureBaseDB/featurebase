@@ -5,8 +5,13 @@ import (
 
 	"github.com/cactus/go-statsd-client/statsd"
 	log "github.com/cihub/seelog"
-	"github.com/umbel/pilosa/config"
 )
+
+// DefaultStatsdHost is the default host to send statsd data to.
+const DefaultStatsdHost = "127.0.0.1:8125"
+
+// StatsdHost is the host to send statsd data to.
+var StatsdHost = DefaultStatsdHost
 
 type args struct {
 	stat  string
@@ -20,14 +25,14 @@ var (
 	end   chan bool
 )
 
-func SetupUtil() {
-	setup_storage()
+func SetupStatsd() {
 	timer = make(chan args, 32768)
 	count = make(chan string, 32768)
 	end = make(chan bool)
-	stat_config := config.GetStringDefault("statsd_server", "127.0.0.1:8125")
-	log.Warn("New Stats", stat_config)
-	stats, _ := statsd.New(stat_config, "")
+
+	log.Warn("New Stats", StatsdHost)
+	stats, _ := statsd.New(StatsdHost, "")
+
 	go func() {
 		for {
 			select {
@@ -50,6 +55,7 @@ func SendTimer(stat string, delta int64) {
 	milli := time.Duration(delta) / time.Millisecond
 	timer <- args{pstat, int64(milli), 1.0}
 }
+
 func SendInc(stat string) {
 	pstat := "pilosa." + stat
 	count <- pstat
