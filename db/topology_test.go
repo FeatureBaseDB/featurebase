@@ -1,26 +1,17 @@
-package db
+package db_test
 
 import (
-	"log"
 	"testing"
 
-	"github.com/davecgh/go-spew/spew"
-	. "github.com/smartystreets/goconvey/convey"
+	"github.com/umbel/pilosa/db"
 	"github.com/umbel/pilosa/util"
 )
 
-func TestTopology(t *testing.T) {
-	Convey("Basic DB structures", t, func() {
-		log.Println("topology test")
+func TestCluster(t *testing.T) {
+	c := db.NewCluster()
+	d := c.GetOrCreateDatabase("main")
 
-		cluster := NewCluster()
-		database := cluster.GetOrCreateDatabase("main")
-
-		frame := database.GetOrCreateFrame("general")
-		slice := database.GetOrCreateSlice(0)
-
-		fragment_id := util.Id()
-		spew.Dump(fragment_id)
-		database.GetOrCreateFragment(frame, slice, fragment_id)
-	})
+	f := d.GetOrCreateFrame("general")
+	sl := d.GetOrCreateSlice(0)
+	d.GetOrCreateFragment(f, sl, util.Id())
 }
