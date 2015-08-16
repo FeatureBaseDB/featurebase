@@ -1,158 +1,295 @@
-package index
+package index_test
 
-/*
 import (
 	"testing"
+
+	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa/util"
 )
 
-func TestFragment(t *testing.T) {
-	general := util.Hex_to_SUUID("1")
-	brand := util.Hex_to_SUUID("2")
-	dummy := NewFragmentContainer()
-	dummy.AddFragment("25", "general", 0, general)
-	dummy.AddFragment("25", "b.n", 0, brand)
-
-	Convey("Get ", t, func() {
-		bh, _ := dummy.Get(general, 1234)
-		So(bh, ShouldNotEqual, 0)
-	})
-
-	Convey("SetBit/Count 1 1", t, func() {
-		bi1 := uint64(1234)
-		changed, _ := dummy.SetBit(general, bi1, 1, 0)
-		So(changed, ShouldEqual, true)
-		changed, _ = dummy.SetBit(general, bi1, 1, 0)
-		So(changed, ShouldEqual, false)
-		bh, _ := dummy.Get(general, bi1)
-		num, _ := dummy.Count(general, bh)
-		So(num, ShouldEqual, 1)
-	})
-
-	Convey("Union/Intersect/Difference", t, func() {
-		bi1 := uint64(1234)
-		bi2 := uint64(4321)
-
-		dummy.SetBit(general, bi2, 65537, 0) //set_bit creates the bitmap
-
-		bh1, _ := dummy.Get(general, bi1)
-		bh2, _ := dummy.Get(general, bi2)
-
-		handles := []BitmapHandle{bh1, bh2}
-		result, _ := dummy.Union(general, handles)
-
-		num, _ := dummy.Count(general, result)
-		So(num, ShouldEqual, 2)
-		result, _ = dummy.Intersect(general, handles)
-
-		num, _ = dummy.Count(general, result)
-		So(num, ShouldEqual, 0)
-
-		result, _ = dummy.Difference(general, handles)
-		num, _ = dummy.Count(general, result)
-		So(num, ShouldEqual, 1)
-
-	})
-	Convey("Union Empty", t, func() {
-
-		bi1 := uint64(1234)
-		bh1, _ := dummy.Get(general, bi1)
-		bh2, _ := dummy.Empty(general) //set_bit creates the bitmap
-
-		handles := []BitmapHandle{bh1, bh2}
-		result, _ := dummy.Union(general, handles)
-
-		num, _ := dummy.Count(general, result)
-
-		So(num, ShouldEqual, 1)
-	})
-	Convey("Bytes", t, func() {
-		bi1 := uint64(1234)
-		bh1, _ := dummy.Get(general, bi1)
-		before, _ := dummy.Count(general, bh1)
-
-		bytes, _ := dummy.GetBytes(general, bh1)
-		bh2, _ := dummy.FromBytes(general, bytes)
-
-		after, _ := dummy.Count(general, bh2)
-		So(before, ShouldEqual, after)
-	})
-	Convey("Empty ", t, func() {
-		bh, _ := dummy.Empty(general)
-		before, _ := dummy.Count(general, bh)
-		So(before, ShouldEqual, 0)
-	})
-
-	Convey("GetList ", t, func() {
-		bhs, _ := dummy.GetList(general, []uint64{1234, 4321, 789})
-		result, _ := dummy.Union(general, bhs)
-		num, _ := dummy.Count(general, result)
-		So(num, ShouldEqual, 2)
-	})
-
-	Convey("Brand SetBit Small", t, func() {
-		bi1 := uint64(1029)
-		for x := uint64(0); x < 1000; x++ {
-			dummy.SetBit(brand, bi1, x, 0)
-		}
-		So(1, ShouldEqual, 1)
-	})
-
-	// Convey("Brand SetBit Big", t, func() {
-	// 	bi1 := uint64(1231)
-	// 	bi2 := uint64(1232)
-	// 	bi3 := uint64(1233)
-	// 	bi4 := uint64(1234)
-	// 	for x := uint64(0); x < 60000; x++ {
-	// 		if x < 100 {
-	// 			dummy.SetBit(brand, bi1, x)
-	// 			dummy.SetBit(brand, bi4, x)
-	// 		}
-	// 		if x < 500 {
-	// 			dummy.SetBit(brand, bi2, x)
-	// 		}
-	// 		if x%3 == 0 && x < 1000 {
-	// 			dummy.SetBit(brand, bi3, x)
-	// 		}
-	// 		if x > 700 && x < 1000 {
-	// 			dummy.SetBit(brand, bi4, x)
-	// 		}
-	// 		if x > 1000 {
-	// 			dummy.SetBit(brand, x, x)
-	// 		}
-	// 	}
-	// 	bh1, _ := dummy.Get(brand, bi1)
-	// 	//	dummy.Rank()
-	// 	log.Println(dummy.TopN(brand, bh1, 4))
-	// 	log.Println(dummy.Stats(brand))
-	// 	So(1, ShouldEqual, 1)
-	// })
-
-	Convey("Brand TopN", t, func() {
-		dummy.SetBit(brand, uint64(1), 1, 2)
-		dummy.SetBit(brand, uint64(1), 2, 2)
-		dummy.SetBit(brand, uint64(1), 3, 2)
-		dummy.SetBit(brand, uint64(2), 1, 2)
-		dummy.SetBit(brand, uint64(2), 2, 2)
-		dummy.SetBit(brand, uint64(3), 1, 2)
-		bh1, _ := dummy.Get(brand, uint64(1))
-		c := []uint64{2}
-		results, _ := dummy.TopN(brand, bh1, 4, c)
-		pair := results[0]
-		So(pair.Key, ShouldEqual, 1)
-		So(pair.Count, ShouldEqual, 3)
-	})
-	Convey("Clear ", t, func() {
-		res, _ := dummy.Clear(general)
-		So(res, ShouldEqual, true)
-	})
-	Convey("store ", t, func() {
-		b := uint64(1029)
-		compressed := "H4sIAAAJbogA/2JmYWBR+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdj/ViZGRo7o2NLMvBIzE5Ag0BiGf4zq/5uYGBV+/IeCUQZWBiikNP83AQN1NKwIMRgYAAAAAP//AQAA//9U05AivAIAAA=="
-		dummy.LoadBitmap(brand, b, compressed, 0)
-		bh1, _ := dummy.Get(brand, b)
-		before, _ := dummy.Count(brand, bh1)
-		So(4096, ShouldEqual, before)
-	})
-
+func init() {
+	index.Backend = "memory"
 }
-*/
+
+// Ensure a fragment can be retrieved from the container.
+func TestFragmentContainer_Get(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, 1)
+	fc.MustClear(1)
+
+	if bh, err := fc.Get(util.SUUID(1), 1234); err != nil {
+		t.Fatal(err)
+	} else if bh == 0 {
+		t.Fatal("expected non-zero bitmap handle")
+	}
+}
+
+// Ensure a bit can be set on a bitmap.
+func TestFragmentContainer_SetBit(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, 1)
+	fc.MustClear(1)
+
+	// Set a bit on the bitmap.
+	if changed, err := fc.SetBit(1, uint64(1234), 1, 0); err != nil {
+		t.Fatal(err)
+	} else if changed == false {
+		t.Fatal("expected change")
+	}
+
+	// Set the same bit on the bitmap. No change should be indicated.
+	if changed, err := fc.SetBit(1, uint64(1234), 1, 0); err != nil {
+		t.Fatal(err)
+	} else if changed == true {
+		t.Fatal("expected no change")
+	}
+}
+
+// Ensure the number of bits on a bitmap can be counted.
+func TestFragmentContainer_Count(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, util.SUUID(1))
+
+	// Set a bit on the bitmap.
+	bi1 := uint64(1234)
+	if changed, err := fc.SetBit(util.SUUID(1), bi1, 1, 0); err != nil {
+		t.Fatal(err)
+	} else if changed == false {
+		t.Fatal("expected change")
+	}
+
+	// Verify that one bit is set.
+	if bh, err := fc.Get(util.SUUID(1), bi1); err != nil {
+		t.Fatal(err)
+	} else if n, err := fc.Count(util.SUUID(1), bh); err != nil {
+		t.Fatal(err)
+	} else if n != 1 {
+		t.Fatal("unexpected count: %d", n)
+	}
+}
+
+// Ensure the bits in two bitmaps can be unioned.
+func TestFragmentContainer_Union(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, 1)
+	fc.MustSetBit(1, 1234, 1, 0)
+	fc.MustSetBit(1, 4321, 65537, 0)
+
+	// Union the handles together.
+	if result, err := fc.Union(1, []index.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
+		t.Fatal(err)
+	} else if n := fc.MustCount(1, result); n != 2 {
+		t.Fatalf("unexpected union bit count: %d", n)
+	}
+}
+
+// Ensure unioning a bitmap with an empty bitmap returns a single bit count.
+func TestFragmentContainer_Union_Empty(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, 1)
+	fc.MustSetBit(1, 1234, 1, 0)
+
+	// Union the handles together.
+	if result, err := fc.Union(1, []index.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
+		t.Fatal(err)
+	} else if n := fc.MustCount(1, result); n != 1 {
+		t.Fatalf("unexpected empty union bit count: %d", n)
+	}
+}
+
+// Ensure the bits in two bitmaps can be intersected.
+func TestFragmentContainer_Intersect(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, 1)
+	fc.MustSetBit(1, 1234, 1, 0)
+	fc.MustSetBit(1, 4321, 65537, 0)
+
+	// Intersect the handles together.
+	if result, err := fc.Intersect(1, []index.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
+		t.Fatal(err)
+	} else if n := fc.MustCount(1, result); n != 0 {
+		t.Fatal("unexpected intersect bit count: %d", n)
+	}
+}
+
+// Ensure the bits in two bitmaps can be diffed.
+func TestFragmentContainer_Difference(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, 1)
+	fc.MustSetBit(1, 1234, 1, 0)
+	fc.MustSetBit(1, 4321, 65537, 0)
+
+	// Compute the difference between the handles.
+	if result, err := fc.Difference(1, []index.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
+		t.Fatal(err)
+	} else if n := fc.MustCount(1, result); n != 1 {
+		t.Fatalf("unexpected difference bit count: %d", err)
+	}
+}
+
+// Ensure bitmaps can be marshaled and unmarshaled to bytes.
+func TestFragmentContainer_Bytes(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, 1)
+	fc.MustSetBit(1, 1234, 1, 0)
+
+	// Count bits and marshal to bytes.
+	beforeN := fc.MustCount(1, 1234)
+	buf, err := fc.GetBytes(1, 1234)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Marshal bytes back to a bitmap and re-count.
+	bh2, err := fc.FromBytes(1, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterN := fc.MustCount(1, bh2)
+
+	// Ensure the original bit count matches the new bitmap's bit count.
+	if beforeN != afterN {
+		t.Fatalf("unexpected bit count: before=%d, after=%d", beforeN, afterN)
+	}
+}
+
+// Ensure an empty bitmap can be returned.
+func TestFragmentContainer_Empty(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, 1)
+	bh, err := fc.Empty(1)
+	if err != nil {
+		t.Fatal(err)
+	} else if n := fc.MustCount(1, bh); n != 0 {
+		t.Fatalf("unexpected bit count: %d", n)
+	}
+}
+
+// Ensure a list of bitmap handles can be returned.
+func TestFragmentContainer_GetList(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, 1)
+	fc.MustSetBit(1, 1234, 1, 0)
+	fc.MustSetBit(1, 4321, 65537, 0)
+
+	a, err := fc.GetList(1, []uint64{1234, 4321, 789})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Compute the union to ensure they're the correct bitmaps.
+	if res, err := fc.Union(1, a); err != nil {
+		t.Fatal(err)
+	} else if n := fc.MustCount(1, res); n != 2 {
+		t.Fatalf("unexpected bit count: %d", n)
+	}
+}
+
+// Ensure brand bitmaps can perform a small number of set bits.
+func TestFragmentContainer_SetBit_Brand_Small(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "b.n", 0, 2)
+	for i := uint64(0); i < 1000; i++ {
+		fc.SetBit(2, 1029, i, 0)
+	}
+}
+
+// Ensure the top n can be computed for a brand.
+func TestFragmentContainer_TopN_Brand(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "b.n", 0, 2)
+
+	// Set bits on the bitmap.
+	fc.MustSetBit(2, uint64(1), 1, 2)
+	fc.MustSetBit(2, uint64(1), 2, 2)
+	fc.MustSetBit(2, uint64(1), 3, 2)
+	fc.MustSetBit(2, uint64(2), 1, 2)
+	fc.MustSetBit(2, uint64(2), 2, 2)
+	fc.MustSetBit(2, uint64(3), 1, 2)
+
+	// Retrieve the bitmap handle for bitmap 1.
+	bh := fc.MustGet(2, uint64(1))
+
+	// Compute the top-n.
+	if results, err := fc.TopN(2, bh, 4, []uint64{2}); err != nil {
+		t.Fatal(err)
+	} else if results[0].Key != 1 {
+		t.Fatalf("unexpected key: %d", results[0].Key)
+	} else if results[0].Count != 3 {
+		t.Fatalf("unexpected value: %d", results[0].Count)
+	}
+}
+
+// Ensure a fragment can be cleared.
+func TestFragmentContainer_Clear(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "general", 0, 1)
+
+	// Compute the top-n.
+	if res, err := fc.Clear(1); err != nil {
+		t.Fatal(err)
+	} else if res != true {
+		t.Fatalf("unexpected result: %v", res)
+	}
+}
+
+// Ensure a fragment can be loaded from a compressed form.
+func TestFragmentContainer_LoadBitmap(t *testing.T) {
+	fc := NewFragmentContainer()
+	fc.AddFragment("25", "b.n", 0, 2)
+
+	// Load a bitmap from compressed data.
+	buf := "H4sIAAAJbogA/2JmYWBR+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdj/ViZGRo7o2NLMvBIzE5Ag0BiGf4zq/5uYGBV+/IeCUQZWBiikNP83AQN1NKwIMRgYAAAAAP//AQAA//9U05AivAIAAA=="
+	fc.LoadBitmap(2, 1029, buf, 0)
+
+	// Load and count bits.
+	if n := fc.MustCount(2, fc.MustGet(2, 1029)); n != 4096 {
+		t.Fatalf("unexpected bit count: %d", n)
+	}
+}
+
+// FragementContainer is a test wrapper for index.FragmentContainer.
+type FragmentContainer struct {
+	*index.FragmentContainer
+}
+
+// NewFragmentContainer returns a new instance of FragmentContainer.
+func NewFragmentContainer() *FragmentContainer {
+	return &FragmentContainer{index.NewFragmentContainer()}
+}
+
+// MustGet retrieves a bitmap by id. Panic on error.
+func (fc *FragmentContainer) MustGet(frag_id util.SUUID, bitmap_id uint64) index.BitmapHandle {
+	bh, err := fc.Get(frag_id, bitmap_id)
+	if err != nil {
+		panic(err)
+	}
+	return bh
+}
+
+// MustSetBit sets a bit in a bitmap. Panic on error.
+func (fc *FragmentContainer) MustSetBit(frag_id util.SUUID, bitmap_id uint64, pos uint64, category uint64) bool {
+	changed, err := fc.SetBit(frag_id, bitmap_id, pos, category)
+	if err != nil {
+		panic(err)
+	}
+	return changed
+}
+
+// MustClear clears a fragment. Panic on error.
+func (fc *FragmentContainer) MustClear(fragmentID util.SUUID) bool {
+	v, err := fc.Clear(fragmentID)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+// MustCount returns the number of set bits in a bitmap. Panic on error.
+func (fc *FragmentContainer) MustCount(frag_id util.SUUID, bitmap index.BitmapHandle) uint64 {
+	v, err := fc.Count(frag_id, bitmap)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}

@@ -3,6 +3,8 @@ package index
 import (
 	"math/rand"
 	"testing"
+
+	"github.com/umbel/pilosa/util"
 )
 
 var (
@@ -12,17 +14,19 @@ var (
 )
 
 func init() {
-	println("GO")
 	size = 1000
+
+	util.SetupStatsd()
+	// SetupCassandra()
 
 	membrand = NewBrand("db", "frame", 0, NewMemoryStorage(), size, size, 0)
 	for i := uint64(0); i < uint64(size); i++ {
 		membrand.SetBit(i, 0, 1)
 	}
-	cassbrand = NewBrand("db", "frame", 0, NewCassStorage(), size, size, 0)
-	for i := uint64(0); i < uint64(size); i++ {
-		cassbrand.SetBit(i, 0, 1)
-	}
+	// cassbrand = NewBrand("db", "frame", 0, NewCassStorage(), size, size, 0)
+	// for i := uint64(0); i < uint64(size); i++ {
+	// 	cassbrand.SetBit(i, 0, 1)
+	// }
 }
 
 func benchmarkBrand(b *testing.B, size int, fill int, brand *Brand) {

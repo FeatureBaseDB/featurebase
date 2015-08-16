@@ -1,31 +1,41 @@
-package hold
+package hold_test
 
 import (
 	"testing"
 	"time"
 
-	. "github.com/smartystreets/goconvey/convey"
+	"github.com/umbel/pilosa/hold"
 	"github.com/umbel/pilosa/util"
 )
 
-func TestHoldChan(t *testing.T) {
+// Ensure hold can get a value that has been set.
+func TestHold_Get(t *testing.T) {
+	h := hold.NewHolder()
+	go h.Run()
 
-	Hold := Holder{make(map[util.GUID]holdchan), make(chan gethold), make(chan delhold)}
-	go Hold.Run()
+	id := util.RandomUUID()
+	h.Set(&id, "derp", 10)
+	if v, err := h.Get(&id, 10); err != nil {
+		t.Fatal(err)
+	} else if v != "derp" {
+		t.Fatalf("unexpected value: %v", v)
+	}
+}
 
-	Convey("set then get", t, func() {
-		id := util.RandomUUID()
-		Hold.Set(&id, "derp", 10)
-		derp, _ := Hold.Get(&id, 10)
-		So(derp, ShouldEqual, "derp")
-	})
-	Convey("get then set", t, func() {
-		id := util.RandomUUID()
-		go func() {
-			Hold.Set(&id, "derpsy", 10)
-		}()
-		time.Sleep(time.Second / 10)
-		derp, _ := Hold.Get(&id, 10)
-		So(derp, ShouldEqual, "derpsy")
-	})
+// Ensure hold can wait for a value that has not been set yet.
+func TestHold_Get_Delay(t *testing.T) {
+	h := hold.NewHolder()
+	go h.Run()
+
+	id := util.RandomUUID()
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		h.Set(&id, "derpsy", 10)
+	}()
+
+	if v, err := h.Get(&id, 10); err != nil {
+		t.Fatal(err)
+	} else if v != "derpsy" {
+		t.Fatalf("unexpected value: %v", v)
+	}
 }
