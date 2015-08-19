@@ -14,11 +14,6 @@
         "version": "master",
         "type": "git"
     },
-    "goconvey": {
-        "repo": "github.com/smartystreets/goconvey",
-        "version": "master",
-        "type": "git"
-    },
     "gocql": {
         "repo": "github.com/gocql/gocql",
         "version": "f8fb76bb772442ea938e4be46ab1666e542411a5",

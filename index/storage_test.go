@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestStorage(t *testing.T) {

@@ -1,127 +1,157 @@
-package query
+package query_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	. "github.com/smartystreets/goconvey/convey"
+	"github.com/umbel/pilosa/query"
 )
 
-func TestQueryParser(t *testing.T) {
-	Convey("Basic parse - get()", t, func() {
-		tokens, err := Lex("get(10)")
-		So(err, ShouldBeNil)
+// Ensure the parser can parse a get() query.
+func TestParser_Parse_Get(t *testing.T) {
+	if q, err := query.Parse(MustLex("get(10)")); err != nil {
+		t.Fatal(err)
+	} else if q.Operation != "get" {
+		t.Fatalf("unexpected operation: %q", q.Operation)
+	} else if !reflect.DeepEqual(q.Args, map[string]interface{}{
+		"id":    uint64(10),
+		"frame": "general",
+	}) {
+		t.Fatalf("unexpected args:\n\n%s", spew.Sprint(q.Args))
+	}
+}
 
-		query, err := Parse(tokens)
-		So(err, ShouldBeNil)
+// Ensure the parser can parse a get() query with a keyword.
+func TestParser_Parse_Get_Keyword(t *testing.T) {
+	if q, err := query.Parse(MustLex("get(id=10)")); err != nil {
+		t.Fatal(err)
+	} else if q.Operation != "get" {
+		t.Fatalf("unexpected operation: %q", q.Operation)
+	} else if !reflect.DeepEqual(q.Args, map[string]interface{}{"id": uint64(10), "frame": "general"}) {
+		t.Fatalf("unexpected args:\n\n%s", spew.Sprint(q.Args))
+	}
+}
 
-		So(query.Operation, ShouldEqual, "get")
-		So(query.Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general"})
-	})
-	Convey("Basic parse - clear()", t, func() {
-		tokens, err := Lex("clear(10, general, 0, 20)")
-		So(err, ShouldBeNil)
+// Ensure the parser can parse a get() query with a keyword.
+func TestParser_Parse_Get_MultiKeyword(t *testing.T) {
+	if q, err := query.Parse(MustLex("get(id=10, frame=brands)")); err != nil {
+		t.Fatal(err)
+	} else if q.Operation != "get" {
+		t.Fatalf("unexpected operation: %q", q.Operation)
+	} else if !reflect.DeepEqual(q.Args, map[string]interface{}{"id": uint64(10), "frame": "brands"}) {
+		t.Fatalf("unexpected args:\n\n%s", spew.Sprint(q.Args))
+	}
+}
 
-		query, err := Parse(tokens)
-		So(err, ShouldBeNil)
-		spew.Dump(query)
-		So(query.Operation, ShouldEqual, "clear")
-		So(query.Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general", "filter": uint64(0), "profile_id": uint64(20)})
-	})
-	Convey("Basic parse - set()", t, func() {
-		tokens, err := Lex("set(10, general, 0, 20)")
-		So(err, ShouldBeNil)
+// Ensure the parser can parse a clear() query.
+func TestParser_Parse_Clear(t *testing.T) {
+	if q, err := query.Parse(MustLex("clear(10, general, 0, 20)")); err != nil {
+		t.Fatal(err)
+	} else if q.Operation != "clear" {
+		t.Fatalf("unexpected operation: %q", q.Operation)
+	} else if !reflect.DeepEqual(q.Args, map[string]interface{}{
+		"id":         uint64(10),
+		"frame":      "general",
+		"filter":     uint64(0),
+		"profile_id": uint64(20),
+	}) {
+		t.Fatalf("unexpected args:\n\n%s", spew.Sprint(q.Args))
+	}
+}
 
-		query, err := Parse(tokens)
-		So(err, ShouldBeNil)
+// Ensure the parser can parse a set() query.
+func TestParser_Parse_Set(t *testing.T) {
+	if q, err := query.Parse(MustLex("set(10, general, 0, 20)")); err != nil {
+		t.Fatal(err)
+	} else if q.Operation != "set" {
+		t.Fatalf("unexpected operation: %q", q.Operation)
+	} else if !reflect.DeepEqual(q.Args, map[string]interface{}{
+		"id":         uint64(10),
+		"frame":      "general",
+		"filter":     uint64(0),
+		"profile_id": uint64(20),
+	}) {
+		t.Fatalf("unexpected args:\n\n%s", spew.Sprint(q.Args))
+	}
+}
 
-		So(query.Operation, ShouldEqual, "set")
-		So(query.Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general", "filter": uint64(0), "profile_id": uint64(20)})
-	})
-	Convey("Basic nested query parse", t, func() {
-		tokens, err := Lex("union(get(10,general), get(11,brand), get(12))")
-		So(err, ShouldBeNil)
+// Ensure the parser can parse a nested query.
+func TestParser_Parse_Nested(t *testing.T) {
+	q, err := query.Parse(MustLex("union(get(10,general), get(11,brand), get(12))"))
+	if err != nil {
+		t.Fatal(err)
+	} else if q.Operation != "union" {
+		t.Fatalf("unexpected operation: %q", q.Operation)
+	} else if len(q.Subqueries) != 3 {
+		t.Fatalf("unexpected subquery count: %d", len(q.Subqueries))
+	}
 
-		query, err := Parse(tokens)
-		So(err, ShouldBeNil)
+	if sq := q.Subqueries[0]; sq.Operation != "get" {
+		t.Fatalf("unexpected subquery(0) operation: %q", sq.Operation)
+	} else if !reflect.DeepEqual(sq.Args, map[string]interface{}{"id": uint64(10), "frame": "general"}) {
+		t.Fatalf("unexpected subquery(0) args:\n\n%s", spew.Sprint(q.Args))
+	}
 
-		So(query.Operation, ShouldEqual, "union")
-		So(len(query.Subqueries), ShouldEqual, 3)
+	if sq := q.Subqueries[1]; sq.Operation != "get" {
+		t.Fatalf("unexpected subquery(1) operation: %q", sq.Operation)
+	} else if !reflect.DeepEqual(sq.Args, map[string]interface{}{"id": uint64(11), "frame": "brand"}) {
+		t.Fatalf("unexpected subquery(1) args:\n\n%s", spew.Sprint(sq.Args))
+	}
 
-		So(query.Subqueries[0].Operation, ShouldEqual, "get")
-		So(query.Subqueries[0].Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general"})
-		So(query.Subqueries[1].Operation, ShouldEqual, "get")
-		So(query.Subqueries[1].Args, ShouldResemble, map[string]interface{}{"id": uint64(11), "frame": "brand"})
-		So(query.Subqueries[2].Operation, ShouldEqual, "get")
-		So(query.Subqueries[2].Args, ShouldResemble, map[string]interface{}{"id": uint64(12), "frame": "general"})
-	})
-	Convey("Keyword args", t, func() {
-		tokens, err := Lex("get(id=10)")
-		So(err, ShouldBeNil)
+	if sq := q.Subqueries[2]; sq.Operation != "get" {
+		t.Fatalf("unexpected subquery(2) operation: %q", sq.Operation)
+	} else if !reflect.DeepEqual(sq.Args, map[string]interface{}{"id": uint64(12), "frame": "general"}) {
+		t.Fatalf("unexpected subquery(2) args:\n\n%s", spew.Sprint(sq.Args))
+	}
+}
 
-		query, err := Parse(tokens)
-		So(err, ShouldBeNil)
+// Ensure the parser can parse a query with lists.
+func TestParser_Parse_Lists(t *testing.T) {
+	q, err := query.Parse(MustLex("top-n(get(10, general), [1,2,3], 50)"))
+	if err != nil {
+		t.Fatal(err)
+	} else if q.Operation != "top-n" {
+		t.Fatalf("unexpected operation: %q", q.Operation)
+	} else if !reflect.DeepEqual(q.Args, map[string]interface{}{"ids": []uint64{1, 2, 3}, "n": 50}) {
+		t.Fatalf("unexpected args:\n\n%s", spew.Sprint(q.Args))
+	}
 
-		So(query.Operation, ShouldEqual, "get")
-		So(query.Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general"})
-	})
-	Convey("Keyword args - multiple", t, func() {
-		tokens, err := Lex("get(id=10, frame=brands)")
-		So(err, ShouldBeNil)
+	if sq := q.Subqueries[0]; sq.Operation != "get" {
+		t.Fatalf("unexpected subquery(0) operation: %q", sq.Operation)
+	} else if !reflect.DeepEqual(sq.Args, map[string]interface{}{"id": uint64(10), "frame": "general"}) {
+		t.Fatalf("unexpected subquery(0) args:\n\n%s", spew.Sprint(q.Args))
+	}
+}
 
-		query, err := Parse(tokens)
-		So(err, ShouldBeNil)
+// Ensure the parser can parse "all()".
+func TestParser_Parse_All(t *testing.T) {
+	q, err := query.Parse(MustLex("top-n(all(), general, 30)"))
+	if err != nil {
+		t.Fatal(err)
+	} else if q.Operation != "top-n" {
+		t.Fatalf("unexpected operation: %q", q.Operation)
+	}
 
-		So(query.Operation, ShouldEqual, "get")
-		So(query.Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "brands"})
-	})
-	Convey("Lists", t, func() {
-		tokens, err := Lex("top-n(get(10, general), [1,2,3], 50)")
-		So(err, ShouldBeNil)
+	if sq := q.Subqueries[0]; sq.Operation != "all" {
+		t.Fatalf("unexpected subquery(0) operation: %q", sq.Operation)
+	}
+}
 
-		query, err := Parse(tokens)
-		So(err, ShouldBeNil)
+// Ensure the parser can parse bracketed lists.
+func TestParser_Parse_Lists_Bracketed(t *testing.T) {
+	q, err := query.Parse(MustLex("plugin(get(99), [get(10), get(11)])"))
+	if err != nil {
+		t.Fatalf("expected error")
+	}
+	spew.Dump(q)
+}
 
-		So(query.Operation, ShouldEqual, "top-n")
-		So(query.Args, ShouldResemble, map[string]interface{}{"ids": []uint64{1, 2, 3}, "n": 50})
-
-		So(len(query.Subqueries), ShouldEqual, 1)
-		So(query.Subqueries[0].Operation, ShouldEqual, "get")
-		So(query.Subqueries[0].Args, ShouldResemble, map[string]interface{}{"id": uint64(10), "frame": "general"})
-	})
-	Convey("Bracketed Lists", t, func() {
-		tokens, err := Lex("plugin(get(99), [get(10), get(11)])")
-		So(err, ShouldBeNil)
-
-		query, err := Parse(tokens)
-		So(err, ShouldBeNil)
-
-		spew.Dump("*********************************************")
-		spew.Dump(query)
-		spew.Dump("*********************************************")
-	})
-	Convey("Lists", t, func() {
-		tokens, err := Lex("wat(50)")
-		_, err = Parse(tokens)
-		So(err, ShouldBeNil)
-	})
-	Convey("Recall", t, func() {
-		tokens, err := Lex("recall(12345,1,12345,2,12345,3)")
-		q, err := Parse(tokens)
-		spew.Dump(q)
-		So(err, ShouldBeNil)
-	})
-	Convey("all() query parse", t, func() {
-		tokens, err := Lex("top-n(all(), general, 30)")
-		So(err, ShouldBeNil)
-
-		query, err := Parse(tokens)
-		So(err, ShouldBeNil)
-
-		So(query.Operation, ShouldEqual, "top-n")
-		So(len(query.Subqueries), ShouldEqual, 1)
-
-		So(query.Subqueries[0].Operation, ShouldEqual, "all")
-		So(query.Subqueries[0].Args, ShouldResemble, map[string]interface{}{})
-	})
+// Ensure the parser can parse a recall query.
+func TestParser_Parse_Recall(t *testing.T) {
+	q, err := query.Parse(MustLex("recall(12345,1,12345,2,12345,3)"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spew.Dump(q)
 }

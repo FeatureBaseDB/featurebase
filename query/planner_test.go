@@ -1,253 +1,283 @@
-package query
+package query_test
 
 import (
-	"log"
+	"reflect"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	. "github.com/smartystreets/goconvey/convey"
 	"github.com/umbel/pilosa/db"
+	"github.com/umbel/pilosa/query"
 	"github.com/umbel/pilosa/util"
 )
 
-func basic_database() (*db.Database, *db.Fragment) {
-	// create an empty database
-	cluster := db.NewCluster()
-	database := cluster.GetOrCreateDatabase("main")
-	frame := database.GetOrCreateFrame("default")
+// Ensure the query planner can plan a "get" query.
+func TestQueryPlanner_Plan_Get(t *testing.T) {
+	q, err := query.QueryForPQL("get(10,default)")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	slice1 := database.GetOrCreateSlice(0)
-	fragment_id1 := util.Id()
-	fragment1 := database.GetOrCreateFragment(frame, slice1, fragment_id1)
-	process_id1 := util.RandomUUID()
-	process1 := db.NewProcess(&process_id1)
-	process1.SetHost("----192.1.1.0----")
-	fragment1.SetProcess(process1)
+	d, frag1 := NewDefaultDB()
+	planner := query.QueryPlanner{Database: d, Query: q}
 
-	slice2 := database.GetOrCreateSlice(1)
-	fragment_id2 := util.Id()
-	fragment2 := database.GetOrCreateFragment(frame, slice2, fragment_id2)
-	process_id2 := util.RandomUUID()
-	process2 := db.NewProcess(&process_id2)
-	process2.SetHost("----192.1.1.1----")
-	fragment2.SetProcess(process2)
-	return database, fragment1
+	id := util.RandomUUID()
+	plan, err := planner.Plan(q, &id, frag1.GetLocation())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if n := len(*plan); n != 3 {
+		t.Fatalf("unexpected plan length: %d", n)
+	}
+
+	if step := (*plan)[0].(query.GetQueryStep); step.Operation != "get" {
+		t.Fatalf("unexpected step(0) operation: %s", step.Operation)
+	} else if step.Slice != 0 {
+		t.Fatalf("unexpected step(0) slice: %d", step.Slice)
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+		t.Fatalf("unexpected step(0) bitmap: %s", spew.Sprint(step.Bitmap))
+	}
+
+	if step := (*plan)[1].(query.GetQueryStep); step.Operation != "get" {
+		t.Fatalf("unexpected step(1) operation: %s", step.Operation)
+	} else if step.Slice != 1 {
+		t.Fatalf("unexpected step(1) slice: %d", step.Slice)
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+		t.Fatalf("unexpected step(1) bitmap: %s", spew.Sprint(step.Bitmap))
+	}
+
+	if step := (*plan)[2].(query.CatQueryStep); step.Operation != "cat" {
+		t.Fatalf("unexpected step(2) operation: %s", step.Operation)
+	} else if !reflect.DeepEqual(step.Inputs, []*util.GUID{
+		(*plan)[0].(query.GetQueryStep).Id,
+		(*plan)[1].(query.GetQueryStep).Id,
+	}) {
+		t.Fatalf("unexpected step(2) inputs: %s", spew.Sprint(step.Inputs))
+	}
 }
 
-func TestQueryPlanner(t *testing.T) {
-	Convey("Union query plan", t, func() {
+// Ensure the query planner can plan a "set" query.
+func TestQueryPlanner_Plan_Set(t *testing.T) {
+	q, err := query.QueryForPQL("set(10, default, 0, 100)")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		id1 := util.RandomUUID()
-		query1 := Query{Id: &id1, Operation: "get", Args: map[string]interface{}{"id": uint64(10), "frame": "default"}}
+	d, frag1 := NewDefaultDB()
+	planner := query.QueryPlanner{Database: d, Query: q}
 
-		id2 := util.RandomUUID()
-		query2 := Query{Id: &id2, Operation: "get", Args: map[string]interface{}{"id": uint64(20), "frame": "default"}}
+	id := util.RandomUUID()
+	plan, err := planner.Plan(q, &id, frag1.GetLocation())
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		id3 := util.RandomUUID()
-		query := Query{Id: &id3, Operation: "union", Subqueries: []Query{query1, query2}}
+	if n := len(*plan); n != 1 {
+		t.Fatalf("unexpected plan length: %d", n)
+	}
 
-		database, fragment1 := basic_database()
+	if step := (*plan)[0].(query.SetQueryStep); step.Operation != "set" {
+		t.Fatalf("unexpected step(0) operation: %s", step.Operation)
+	} else if step.ProfileId != 100 {
+		t.Fatalf("unexpected step(0) profile id: %d", step.ProfileId)
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+		t.Fatalf("unexpected step(0) bitmap: %s", spew.Sprint(step.Bitmap))
+	}
+}
 
-		qplanner := QueryPlanner{Database: database, Query: &query}
-		destination := fragment1.GetLocation()
+// Ensure the query planner can plan a "top-n" query.
+func TestQueryPlanner_Plan_TopN(t *testing.T) {
+	q, err := query.QueryForPQL("top-n(get(10, default), default, 50,[1,2,3])")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		id := util.RandomUUID()
-		log.Println(id)
-		qpp, err := qplanner.Plan(&query, &id, destination)
-		So(err, ShouldEqual, nil)
+	d, frag1 := NewDefaultDB()
+	planner := query.QueryPlanner{Database: d, Query: q}
 
-		qp := *qpp
+	id := util.RandomUUID()
+	plan, err := planner.Plan(q, &id, frag1.GetLocation())
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		So(len(qp), ShouldEqual, 7)
-		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(qp[0].(GetQueryStep).Slice, ShouldEqual, 0)
-		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
-		So(qp[1].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 0)
-		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "default", 0})
-		So(qp[2].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*util.GUID{
-			qp[0].(GetQueryStep).Id,
-			qp[1].(GetQueryStep).Id,
-		})
-		So(qp[3].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(qp[3].(GetQueryStep).Slice, ShouldEqual, 1)
-		So(*(qp[3].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
-		So(qp[4].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(qp[4].(GetQueryStep).Slice, ShouldEqual, 1)
-		So(*(qp[4].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "default", 0})
-		So(qp[5].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*util.GUID{
-			qp[3].(GetQueryStep).Id,
-			qp[4].(GetQueryStep).Id,
-		})
-		So(qp[6].(CatQueryStep).Operation, ShouldEqual, "cat")
-		So(qp[6].(CatQueryStep).Inputs, ShouldResemble, []*util.GUID{
-			qp[2].(UnionQueryStep).Id,
-			qp[5].(UnionQueryStep).Id,
-		})
-	})
-	Convey("Get query plan - including parsing", t, func() {
+	if n := len(*plan); n != 5 {
+		t.Fatalf("unexpected plan length: %d", n)
+	}
 
-		query, err := QueryForPQL("get(10,default)")
-		So(err, ShouldEqual, nil)
+	if step := (*plan)[0].(query.GetQueryStep); step.Operation != "get" {
+		t.Fatalf("unexpected step(0) operation: %s", step.Operation)
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+		t.Fatalf("unexpected step(0) bitmap: %s", spew.Sprint(step.Bitmap))
+	}
 
-		database, fragment1 := basic_database()
+	if step := (*plan)[1].(*query.TopNQueryStep); step.Operation != "top-n" {
+		t.Fatalf("unexpected step(1) operation: %s", step.Operation)
+	} else if step.Input != (*plan)[0].(query.GetQueryStep).Id {
+		t.Fatalf("unexpected step(1) input: %d", step.Input)
+	} else if step.N != 50 {
+		t.Fatalf("unexpected step(1) n: %d", step.N)
+	} else if !reflect.DeepEqual(step.Filters, []uint64{1, 2, 3}) {
+		t.Fatalf("unexpected step(1) filters: %s", spew.Sprint(step.Filters))
+	}
 
-		qplanner := QueryPlanner{Database: database, Query: query}
-		destination := fragment1.GetLocation()
+	if step := (*plan)[2].(query.GetQueryStep); step.Operation != "get" {
+		t.Fatalf("unexpected step(2) operation: %s", step.Operation)
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+		t.Fatalf("unexpected step(2) bitmap: %s", spew.Sprint(step.Bitmap))
+	}
 
-		id := util.RandomUUID()
-		qpp, err := qplanner.Plan(query, &id, destination)
-		So(err, ShouldEqual, nil)
-		qp := *qpp
+	if step := (*plan)[3].(*query.TopNQueryStep); step.Operation != "top-n" {
+		t.Fatalf("unexpected step(3) operation: %s", step.Operation)
+	} else if step.Input != (*plan)[2].(query.GetQueryStep).Id {
+		t.Fatalf("unexpected step(3) input: %d", step.Input)
+	} else if step.N != 50 {
+		t.Fatalf("unexpected step(3) n: %d", step.N)
+	}
+}
 
-		So(len(qp), ShouldEqual, 3)
-		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(qp[0].(GetQueryStep).Slice, ShouldEqual, 0)
-		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
-		So(qp[1].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 1)
-		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
-		So(qp[2].(CatQueryStep).Operation, ShouldEqual, "cat")
-		So(qp[2].(CatQueryStep).Inputs, ShouldResemble, []*util.GUID{
-			qp[0].(GetQueryStep).Id,
-			qp[1].(GetQueryStep).Id,
-		})
-	})
-	Convey("Union query plan - including parsing", t, func() {
+// Ensure the query planner can plan a "top-n" all() query.
+func TestQueryPlanner_Plan_TopN_All(t *testing.T) {
+	q, err := query.QueryForPQL("top-n(all(), default, 50, [1,2,3])")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		query, err := QueryForPQL("union(get(10, default), get(20, default))")
-		So(err, ShouldEqual, nil)
+	d, frag1 := NewDefaultDB()
+	planner := query.QueryPlanner{Database: d, Query: q}
 
-		database, fragment1 := basic_database()
+	id := util.RandomUUID()
+	plan, err := planner.Plan(q, &id, frag1.GetLocation())
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		qplanner := QueryPlanner{Database: database, Query: query}
-		destination := fragment1.GetLocation()
+	if n := len(*plan); n != 3 {
+		t.Fatalf("unexpected plan length: %d", n)
+	}
 
-		id := util.RandomUUID()
-		qpp, err := qplanner.Plan(query, &id, destination)
-		So(err, ShouldEqual, nil)
-		qp := *qpp
+	if step := (*plan)[0].(*query.TopNQueryStep); step.Operation != "top-n" {
+		t.Fatalf("unexpected step(0) operation: %s", step.Operation)
+	} else if step.Input != nil {
+		t.Fatalf("unexpected step(0) input: %v", step.Input)
+	} else if step.N != 50 {
+		t.Fatalf("unexpected step(0) n: %d", step.N)
+	} else if !reflect.DeepEqual(step.Filters, []uint64{1, 2, 3}) {
+		t.Fatalf("unexpected step(0) filters: %s", spew.Sprint(step.Filters))
+	}
+}
 
-		So(len(qp), ShouldEqual, 7)
-		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(qp[0].(GetQueryStep).Slice, ShouldEqual, 0)
-		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
-		So(qp[1].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(qp[1].(GetQueryStep).Slice, ShouldEqual, 0)
-		So(*(qp[1].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "default", 0})
-		So(qp[2].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[2].(UnionQueryStep).Inputs, ShouldResemble, []*util.GUID{
-			qp[0].(GetQueryStep).Id,
-			qp[1].(GetQueryStep).Id,
-		})
-		So(qp[3].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(qp[3].(GetQueryStep).Slice, ShouldEqual, 1)
-		So(*(qp[3].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
-		So(qp[4].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(qp[4].(GetQueryStep).Slice, ShouldEqual, 1)
-		So(*(qp[4].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{20, "default", 0})
-		So(qp[5].(UnionQueryStep).Operation, ShouldEqual, "union")
-		So(qp[5].(UnionQueryStep).Inputs, ShouldResemble, []*util.GUID{
-			qp[3].(GetQueryStep).Id,
-			qp[4].(GetQueryStep).Id,
-		})
-		So(qp[6].(CatQueryStep).Operation, ShouldEqual, "cat")
-		So(qp[6].(CatQueryStep).Inputs, ShouldResemble, []*util.GUID{
-			qp[2].(UnionQueryStep).Id,
-			qp[5].(UnionQueryStep).Id,
-		})
-	})
-	Convey("Set query plan - including parsing", t, func() {
-		query, err := QueryForPQL("set(10, default, 0, 100)")
-		So(err, ShouldEqual, nil)
+// Ensure the query planner can plan a "union" query.
+func TestQueryPlanner_Plan_Union(t *testing.T) {
+	id1 := util.RandomUUID()
+	q1 := query.Query{Id: &id1, Operation: "get", Args: map[string]interface{}{"id": uint64(10), "frame": "default"}}
 
-		database, fragment1 := basic_database()
+	id2 := util.RandomUUID()
+	q2 := query.Query{Id: &id2, Operation: "get", Args: map[string]interface{}{"id": uint64(20), "frame": "default"}}
 
-		qplanner := QueryPlanner{Database: database, Query: query}
-		destination := fragment1.GetLocation()
+	id3 := util.RandomUUID()
+	q := query.Query{Id: &id3, Operation: "union", Subqueries: []query.Query{q1, q2}}
 
-		id := util.RandomUUID()
-		qpp, err := qplanner.Plan(query, &id, destination)
-		So(err, ShouldEqual, nil)
-		qp := *qpp
-		So(len(qp), ShouldEqual, 1)
-		So(qp[0].(SetQueryStep).Operation, ShouldEqual, "set")
-		So(qp[0].(SetQueryStep).ProfileId, ShouldEqual, 100)
-		So(*(qp[0].(SetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
-	})
-	Convey("Top-n query plan - including parsing", t, func() {
-		query, err := QueryForPQL("top-n(get(10, default), default, 50,[1,2,3])")
-		So(err, ShouldEqual, nil)
+	d, frag1 := NewDefaultDB()
+	planner := query.QueryPlanner{Database: d, Query: &q}
 
-		database, fragment1 := basic_database()
-		qplanner := QueryPlanner{Database: database, Query: query}
-		destination := fragment1.GetLocation()
-		id := util.RandomUUID()
-		qpp, err := qplanner.Plan(query, &id, destination)
+	id := util.RandomUUID()
+	plan, err := planner.Plan(&q, &id, frag1.GetLocation())
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		So(err, ShouldEqual, nil)
-		qp := *qpp
-		So(err, ShouldEqual, nil)
-		So(len(qp), ShouldEqual, 5)
-		So(qp[0].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(*(qp[0].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
-		So(qp[1].(*TopNQueryStep).Operation, ShouldEqual, "top-n")
-		So(qp[1].(*TopNQueryStep).Input, ShouldEqual, qp[0].(GetQueryStep).Id)
-		So(qp[1].(*TopNQueryStep).N, ShouldEqual, 50)
-		So(qp[1].(*TopNQueryStep).Filters, ShouldResemble, []uint64{1, 2, 3})
-		So(qp[2].(GetQueryStep).Operation, ShouldEqual, "get")
-		So(*(qp[2].(GetQueryStep).Bitmap), ShouldResemble, db.Bitmap{10, "default", 0})
-		So(qp[3].(*TopNQueryStep).Operation, ShouldEqual, "top-n")
-		So(qp[3].(*TopNQueryStep).Input, ShouldEqual, qp[2].(GetQueryStep).Id)
-		So(qp[3].(*TopNQueryStep).N, ShouldEqual, 50)
-	})
-	Convey("All query plan - including parsing", t, func() {
-		query, err := QueryForPQL("top-n(all(), default, 50, [1,2,3])")
-		So(err, ShouldEqual, nil)
+	if n := len(*plan); n != 7 {
+		t.Fatalf("unexpected plan size: %d", n)
+	}
 
-		database, fragment1 := basic_database()
-		qplanner := QueryPlanner{Database: database, Query: query}
-		destination := fragment1.GetLocation()
-		id := util.RandomUUID()
-		qpp, err := qplanner.Plan(query, &id, destination)
+	// First step should be a "get" step.
+	if step := (*plan)[0].(query.GetQueryStep); step.Operation != "get" {
+		t.Fatalf("unexpected step(0) operation: %s", step.Operation)
+	} else if step.Slice != 0 {
+		t.Fatalf("unexpected step(0) slice: %d", step.Slice)
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+		t.Fatalf("unexpected step(0) bitmap: %s", spew.Sprint(step.Bitmap))
+	}
 
-		So(err, ShouldEqual, nil)
-		qp := *qpp
-		So(err, ShouldEqual, nil)
-		So(len(qp), ShouldEqual, 3)
-		So(qp[0].(*TopNQueryStep).Operation, ShouldEqual, "top-n")
-		So(qp[0].(*TopNQueryStep).Input, ShouldEqual, nil)
-		So(qp[0].(*TopNQueryStep).N, ShouldEqual, 50)
-		So(qp[0].(*TopNQueryStep).Filters, ShouldResemble, []uint64{1, 2, 3})
-	})
-	Convey("Get query plan - including parsing", t, func() {
+	// Second step should also be a "get" step.
+	if step := (*plan)[1].(query.GetQueryStep); step.Operation != "get" {
+		t.Fatalf("unexpected step(1) operation: %s", step.Operation)
+	} else if step.Slice != 0 {
+		t.Fatalf("unexpected step(1) slice: %d", step.Slice)
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{20, "default", 0}) {
+		t.Fatalf("unexpected step(1) bitmap: %s", spew.Sprint(step.Bitmap))
+	}
 
-		_, err := QueryForPQL("count()")
-		So(err, ShouldNotEqual, nil)
-		_, err = QueryForPQL("count(intersect())")
-		So(err, ShouldNotEqual, nil)
-		_, err = QueryForPQL("count(get(10, default))")
-		So(err, ShouldEqual, nil)
-		_, err = QueryForPQL("count(union())")
-		So(err, ShouldNotEqual, nil)
-	})
+	// Third step should union the first two steps.
+	if step := (*plan)[2].(query.UnionQueryStep); step.Operation != "union" {
+		t.Fatalf("unexpected step(2) operation: %s", step.Operation)
+	} else if !reflect.DeepEqual(step.Inputs, []*util.GUID{
+		(*plan)[0].(query.GetQueryStep).Id,
+		(*plan)[1].(query.GetQueryStep).Id,
+	}) {
+		t.Fatalf("unexpected step(2) inputs: %s", spew.Sprint(step.Inputs))
+	}
 
-	Convey("Stash including parsing", t, func() {
-		qp, err := QueryForPQL("stash(union(get(10,default),get(20,default)))")
-		So(err, ShouldEqual, nil)
+	// Fourth step should be a "get" step.
+	if step := (*plan)[3].(query.GetQueryStep); step.Operation != "get" {
+		t.Fatalf("unexpected step(3) operation: %s", step.Operation)
+	} else if step.Slice != 1 {
+		t.Fatalf("unexpected step(3) slice: %d", step.Slice)
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+		t.Fatalf("unexpected step(3) bitmap: %s", spew.Sprint(step.Bitmap))
+	}
 
-		database, fragment1 := basic_database()
-		qplanner := QueryPlanner{Database: database, Query: qp}
-		destination := fragment1.GetLocation()
-		id := util.RandomUUID()
-		qpp, _ := qplanner.Plan(qp, &id, destination)
-		p := *qpp
+	// Fifth step should also be a "get" step.
+	if step := (*plan)[4].(query.GetQueryStep); step.Operation != "get" {
+		t.Fatalf("unexpected step(4) operation: %s", step.Operation)
+	} else if step.Slice != 1 {
+		t.Fatalf("unexpected step(4) slice: %d", step.Slice)
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{20, "default", 0}) {
+		t.Fatalf("unexpected step(4) bitmap: %s", spew.Sprint(step.Bitmap))
+	}
 
-		So(len(p), ShouldNotEqual, 0)
-		log.Println(len(p))
-		spew.Dump(p[0])
-	})
+	// Sixth step should union the previous two steps.
+	if step := (*plan)[5].(query.UnionQueryStep); step.Operation != "union" {
+		t.Fatalf("unexpected step(5) operation: %s", step.Operation)
+	} else if !reflect.DeepEqual(step.Inputs, []*util.GUID{
+		(*plan)[3].(query.GetQueryStep).Id,
+		(*plan)[4].(query.GetQueryStep).Id,
+	}) {
+		t.Fatalf("unexpected step(5) inputs: %s", spew.Sprint(step.Inputs))
+	}
 
+	// Final step should concatenate the two union steps.
+	if step := (*plan)[6].(query.CatQueryStep); step.Operation != "cat" {
+		t.Fatalf("unexpected step(6) operation: %s", step.Operation)
+	} else if !reflect.DeepEqual(step.Inputs, []*util.GUID{
+		(*plan)[2].(query.UnionQueryStep).Id,
+		(*plan)[5].(query.UnionQueryStep).Id,
+	}) {
+		t.Fatalf("unexpected step(6) inputs: %s", spew.Sprint(step.Inputs))
+	}
+}
+
+// NewDefaultDB returns a simple, initialized database and fragment.
+func NewDefaultDB() (*db.Database, *db.Fragment) {
+	// Create an empty database
+	c := db.NewCluster()
+	d := c.GetOrCreateDatabase("main")
+	f := d.GetOrCreateFrame("default")
+
+	s1 := d.GetOrCreateSlice(0)
+	frag1 := d.GetOrCreateFragment(f, s1, util.Id())
+	pid := util.RandomUUID()
+	p1 := db.NewProcess(&pid)
+	p1.SetHost("----192.1.1.0----")
+	frag1.SetProcess(p1)
+
+	s2 := d.GetOrCreateSlice(1)
+	frag2 := d.GetOrCreateFragment(f, s2, util.Id())
+	pid = util.RandomUUID()
+	p2 := db.NewProcess(&pid)
+	p2.SetHost("----192.1.1.1----")
+	frag2.SetProcess(p2)
+
+	return d, frag1
 }
