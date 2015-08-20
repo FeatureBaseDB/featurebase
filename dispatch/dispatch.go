@@ -31,8 +31,6 @@ type Dispatch struct {
 		Receive() *db.Message
 		Send(message *db.Message, host *util.GUID)
 	}
-
-	service *core.Service
 }
 
 func NewDispatch() *Dispatch {
@@ -73,7 +71,7 @@ func (d *Dispatch) Run() {
 				} else {
 					result, _ = d.Index.ClearBit(v.Fragment_id, v.Bitmap_id, v.Profile_id)
 				}
-				bundle := core.SBResult{v.Bitmap_id, v.Frame, v.Filter, v.Profile_id, result}
+				bundle := core.SBResult{Bitmap_id: v.Bitmap_id, Frame: v.Frame, Filter: v.Filter, Profile_id: v.Profile_id, Result: result}
 				results = append(results, bundle)
 			}
 			response := db.Message{Data: core.BitsResponse{Id: &data.QueryId, Items: results}}
@@ -115,7 +113,7 @@ func (d *Dispatch) topFillHandler(m *db.Message) {
 
 	d.Transport.Send(&db.Message{
 		Data: query.FillResult{
-			&query.BaseQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{
 				Id:   &topfill.QueryId,
 				Data: topn,
 			},

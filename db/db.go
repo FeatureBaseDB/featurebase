@@ -7,7 +7,7 @@ import (
 )
 
 type Message struct {
-	Data interface{} `json:data`
+	Data interface{} `json:"data"`
 }
 
 type Envelope struct {

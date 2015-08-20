@@ -226,7 +226,6 @@ func stateArgs(lexer *Lexer) statefn {
 	default:
 		return stateError(errors.New("Expecting arguments!"))
 	}
-	return nil
 }
 
 func stateKeyword(lexer *Lexer) statefn {
@@ -273,7 +272,6 @@ func stateValue(lexer *Lexer) statefn {
 	default:
 		return stateError(errors.New("Unexpected character!"))
 	}
-	return nil
 }
 
 func stateRP(lexer *Lexer) statefn {

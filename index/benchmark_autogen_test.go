@@ -43,7 +43,7 @@ func benchmarkDifferentCombinations(b *testing.B, op string, b1, b2 int, s1, s2 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if f(m1, m2) == nil {
-			b.Fatal("Problem with %s benchmark at i =", op, i)
+			b.Fatalf("Problem with %s benchmark at i = %d", op, i)
 		}
 	}
 }

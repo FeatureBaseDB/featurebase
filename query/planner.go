@@ -466,12 +466,12 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 	var tree QueryTree
 	// handle SET operation regardless of the slice
 	if query.Operation == "set" {
-		tree = &SetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), query.Args["filter"].(uint64)}, query.Args["profile_id"].(uint64)}
+		tree = &SetQueryTree{&db.Bitmap{Id: query.Args["id"].(uint64), FrameType: query.Args["frame"].(string), Filter: query.Args["filter"].(uint64)}, query.Args["profile_id"].(uint64)}
 		return tree, nil
 	}
 
 	if query.Operation == "clear" {
-		tree = &ClearQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), query.Args["filter"].(uint64)}, query.Args["profile_id"].(uint64)}
+		tree = &ClearQueryTree{&db.Bitmap{Id: query.Args["id"].(uint64), FrameType: query.Args["frame"].(string), Filter: query.Args["filter"].(uint64)}, query.Args["profile_id"].(uint64)}
 		return tree, nil
 	}
 
@@ -509,7 +509,7 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 		}
 	} else {
 		if query.Operation == "get" {
-			tree = &GetQueryTree{&db.Bitmap{query.Args["id"].(uint64), query.Args["frame"].(string), 0}, slice}
+			tree = &GetQueryTree{&db.Bitmap{Id: query.Args["id"].(uint64), FrameType: query.Args["frame"].(string), Filter: 0}, slice}
 			return tree, nil
 		} else if query.Operation == "range" {
 			err := validateRange(query.Args)
@@ -518,8 +518,9 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 			}
 			tree = &RangeQueryTree{
 				&db.Bitmap{
-					query.Args["id"].(uint64),
-					query.Args["frame"].(string), 0},
+					Id:        query.Args["id"].(uint64),
+					FrameType: query.Args["frame"].(string),
+					Filter:    0},
 				slice,
 				query.Args["start"].(time.Time),
 				query.Args["end"].(time.Time)}

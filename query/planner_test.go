@@ -34,7 +34,7 @@ func TestQueryPlanner_Plan_Get(t *testing.T) {
 		t.Fatalf("unexpected step(0) operation: %s", step.Operation)
 	} else if step.Slice != 0 {
 		t.Fatalf("unexpected step(0) slice: %d", step.Slice)
-	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{Id: 10, FrameType: "default", Filter: 0}) {
 		t.Fatalf("unexpected step(0) bitmap: %s", spew.Sprint(step.Bitmap))
 	}
 
@@ -42,7 +42,7 @@ func TestQueryPlanner_Plan_Get(t *testing.T) {
 		t.Fatalf("unexpected step(1) operation: %s", step.Operation)
 	} else if step.Slice != 1 {
 		t.Fatalf("unexpected step(1) slice: %d", step.Slice)
-	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{Id: 10, FrameType: "default", Filter: 0}) {
 		t.Fatalf("unexpected step(1) bitmap: %s", spew.Sprint(step.Bitmap))
 	}
 
@@ -80,7 +80,7 @@ func TestQueryPlanner_Plan_Set(t *testing.T) {
 		t.Fatalf("unexpected step(0) operation: %s", step.Operation)
 	} else if step.ProfileId != 100 {
 		t.Fatalf("unexpected step(0) profile id: %d", step.ProfileId)
-	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{Id: 10, FrameType: "default", Filter: 0}) {
 		t.Fatalf("unexpected step(0) bitmap: %s", spew.Sprint(step.Bitmap))
 	}
 }
@@ -107,7 +107,7 @@ func TestQueryPlanner_Plan_TopN(t *testing.T) {
 
 	if step := (*plan)[0].(query.GetQueryStep); step.Operation != "get" {
 		t.Fatalf("unexpected step(0) operation: %s", step.Operation)
-	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{Id: 10, FrameType: "default", Filter: 0}) {
 		t.Fatalf("unexpected step(0) bitmap: %s", spew.Sprint(step.Bitmap))
 	}
 
@@ -123,7 +123,7 @@ func TestQueryPlanner_Plan_TopN(t *testing.T) {
 
 	if step := (*plan)[2].(query.GetQueryStep); step.Operation != "get" {
 		t.Fatalf("unexpected step(2) operation: %s", step.Operation)
-	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{Id: 10, FrameType: "default", Filter: 0}) {
 		t.Fatalf("unexpected step(2) bitmap: %s", spew.Sprint(step.Bitmap))
 	}
 
@@ -196,7 +196,7 @@ func TestQueryPlanner_Plan_Union(t *testing.T) {
 		t.Fatalf("unexpected step(0) operation: %s", step.Operation)
 	} else if step.Slice != 0 {
 		t.Fatalf("unexpected step(0) slice: %d", step.Slice)
-	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{Id: 10, FrameType: "default", Filter: 0}) {
 		t.Fatalf("unexpected step(0) bitmap: %s", spew.Sprint(step.Bitmap))
 	}
 
@@ -205,7 +205,7 @@ func TestQueryPlanner_Plan_Union(t *testing.T) {
 		t.Fatalf("unexpected step(1) operation: %s", step.Operation)
 	} else if step.Slice != 0 {
 		t.Fatalf("unexpected step(1) slice: %d", step.Slice)
-	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{20, "default", 0}) {
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{Id: 20, FrameType: "default", Filter: 0}) {
 		t.Fatalf("unexpected step(1) bitmap: %s", spew.Sprint(step.Bitmap))
 	}
 
@@ -224,7 +224,7 @@ func TestQueryPlanner_Plan_Union(t *testing.T) {
 		t.Fatalf("unexpected step(3) operation: %s", step.Operation)
 	} else if step.Slice != 1 {
 		t.Fatalf("unexpected step(3) slice: %d", step.Slice)
-	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{10, "default", 0}) {
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{Id: 10, FrameType: "default", Filter: 0}) {
 		t.Fatalf("unexpected step(3) bitmap: %s", spew.Sprint(step.Bitmap))
 	}
 
@@ -233,7 +233,7 @@ func TestQueryPlanner_Plan_Union(t *testing.T) {
 		t.Fatalf("unexpected step(4) operation: %s", step.Operation)
 	} else if step.Slice != 1 {
 		t.Fatalf("unexpected step(4) slice: %d", step.Slice)
-	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{20, "default", 0}) {
+	} else if !reflect.DeepEqual(step.Bitmap, &db.Bitmap{Id: 20, FrameType: "default", Filter: 0}) {
 		t.Fatalf("unexpected step(4) bitmap: %s", spew.Sprint(step.Bitmap))
 	}
 
