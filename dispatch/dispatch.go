@@ -31,8 +31,6 @@ type Dispatch struct {
 		Receive() *db.Message
 		Send(message *db.Message, host *util.GUID)
 	}
-
-	service *core.Service
 }
 
 func NewDispatch() *Dispatch {
