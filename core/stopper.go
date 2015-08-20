@@ -15,9 +15,9 @@ func (stopper *Stopper) Stop() {
 	var o chan int
 	stopper.Mutex.RLock()
 	for _, i = range stopper.TermChans {
-		go func() {
+		go func(i chan int) {
 			i <- 1
-		}()
+		}(i)
 	}
 	for _, o = range stopper.DoneChans {
 		<-o

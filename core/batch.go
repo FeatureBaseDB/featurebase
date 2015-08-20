@@ -56,7 +56,7 @@ func (b *Batcher) Batch(database_name, frame, compressed_bitmap string, bitmap_i
 	oslice := database.GetOrCreateSlice(slice)
 	//need to find processid and fragment id for that slice
 
-	fragment, err := database.GetFragmentForBitmap(oslice, &db.Bitmap{bitmap_id, frame, filter})
+	fragment, err := database.GetFragmentForBitmap(oslice, &db.Bitmap{Id: bitmap_id, FrameType: frame, Filter: filter})
 	if err == nil {
 		id := util.RandomUUID()
 		batch := db.Message{Data: BatchRequest{Id: &id, Source: &b.ID, Fragment_id: fragment.GetId(), Bitmap_id: bitmap_id, Compressed_bitmap: compressed_bitmap}}

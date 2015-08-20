@@ -114,7 +114,11 @@ func (self *Executor) CountQueryStepHandler(msg *db.Message) {
 		spew.Dump(err)
 	}
 	//spew.Dump("SLICE COUNT", count)
-	result_message := db.Message{Data: query.CountQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: count}}}
+	result_message := db.Message{
+		Data: query.CountQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: count},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
@@ -148,7 +152,11 @@ func (self *Executor) TopNQueryStepHandler(msg *db.Message) {
 		topnPackage = TopNPackage{*qs.Location.ProcessId, qs.Location.FragmentId, topn, bh}
 	}
 
-	result_message := db.Message{Data: query.TopNQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: topnPackage}}}
+	result_message := db.Message{
+		Data: query.TopNQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: topnPackage},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
@@ -185,7 +193,11 @@ func (self *Executor) UnionQueryStepHandler(msg *db.Message) {
 		}
 		result = bm
 	}
-	result_message := db.Message{Data: query.UnionQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	result_message := db.Message{
+		Data: query.UnionQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: result},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
@@ -221,7 +233,11 @@ func (self *Executor) IntersectQueryStepHandler(msg *db.Message) {
 		}
 		result = bm
 	}
-	result_message := db.Message{Data: query.IntersectQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	result_message := db.Message{
+		Data: query.IntersectQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: result},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
@@ -257,7 +273,11 @@ func (self *Executor) DifferenceQueryStepHandler(msg *db.Message) {
 		}
 		result = bm
 	}
-	result_message := db.Message{Data: query.DifferenceQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	result_message := db.Message{
+		Data: query.DifferenceQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: result},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
@@ -348,7 +368,7 @@ func (self *Executor) CatQueryStepHandler(msg *db.Message) {
 				continue //shouldn't be getting 0 keys or values anyway
 			}
 			rank := new(index.Rank)
-			rank.Pair = &index.Pair{k, v}
+			rank.Pair = &index.Pair{Key: k, Count: v}
 			rank_list = append(rank_list, rank)
 		}
 		sort.Sort(rank_list) // kinda seems like this copy is wasteful..i'll ponder
@@ -365,7 +385,11 @@ func (self *Executor) CatQueryStepHandler(msg *db.Message) {
 	} else {
 		result = "NONE"
 	}
-	result_message := db.Message{Data: query.CatQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	result_message := db.Message{
+		Data: query.CatQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: result},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
@@ -435,7 +459,11 @@ func (self *Executor) GetQueryStepHandler(msg *db.Message) {
 		}
 		result = bm
 	}
-	result_message := db.Message{Data: query.GetQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	result_message := db.Message{
+		Data: query.GetQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: result},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
@@ -444,7 +472,11 @@ func (self *Executor) SetQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.SetQueryStep)
 	result, _ := self.Index.SetBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId, qs.Bitmap.Filter)
 
-	result_message := db.Message{Data: query.SetQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	result_message := db.Message{
+		Data: query.SetQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: result},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
@@ -453,7 +485,11 @@ func (self *Executor) ClearQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.ClearQueryStep)
 	result, _ := self.Index.ClearBit(qs.Location.FragmentId, qs.Bitmap.Id, qs.ProfileId)
 
-	result_message := db.Message{Data: query.ClearQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	result_message := db.Message{
+		Data: query.ClearQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: result},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
@@ -476,7 +512,11 @@ func (self *Executor) RangeQueryStepHandler(msg *db.Message) {
 		}
 		result = bm
 	}
-	result_message := db.Message{Data: query.RangeQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	result_message := db.Message{
+		Data: query.RangeQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: result},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 }
 
@@ -505,7 +545,7 @@ func (self *Executor) StashQueryStepHandler(msg *db.Message) {
 			//result.Handles = append(result.Handles, val)
 		case []byte:
 			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
-			item := query.CacheItem{qs.Location.FragmentId, bh}
+			item := query.CacheItem{FragmentId: qs.Location.FragmentId, Handle: bh}
 			result.Stash = append(result.Stash, item)
 		case query.Stash:
 			result.Stash = append(result.Stash, val.Stash...)
@@ -513,7 +553,11 @@ func (self *Executor) StashQueryStepHandler(msg *db.Message) {
 			log.Warn("UNEXCPECTED MESSAGE", value)
 		}
 	}
-	result_message := db.Message{Data: query.StashQueryResult{&query.BaseQueryResult{Id: qs.Id, Data: result}}}
+	result_message := db.Message{
+		Data: query.StashQueryResult{
+			BaseQueryResult: &query.BaseQueryResult{Id: qs.Id, Data: result},
+		},
+	}
 	self.Transport.Send(&result_message, qs.Destination.ProcessId)
 
 }
@@ -530,7 +574,7 @@ func (self *Executor) runQuery(database *db.Database, qry *query.Query) error {
 	}
 	process_id := process.Id()
 	fragment_id := util.SUUID(0)
-	destination := db.Location{&process_id, fragment_id}
+	destination := db.Location{ProcessId: &process_id, FragmentId: fragment_id}
 
 	query_plan, err := query.QueryPlanForQuery(database, qry, &destination)
 	if err != nil {
@@ -671,7 +715,7 @@ func newtask(p util.GUID) *Task {
 func (t *Task) Add(frag util.SUUID, bitmap_id uint64, handle index.BitmapHandle) {
 	fa, ok := t.f[frag]
 	if !ok {
-		fa = index.FillArgs{frag, handle, make([]uint64, 0, 0)}
+		fa = index.FillArgs{Frag_id: frag, Handle: handle, Bitmaps: make([]uint64, 0, 0)}
 	}
 	fa.Bitmaps = append(fa.Bitmaps, bitmap_id)
 	t.f[frag] = fa
@@ -729,7 +773,7 @@ func (self *TopFill) GetId() *util.GUID {
 	return &self.QueryId
 }
 func (self *TopFill) GetLocation() *db.Location {
-	return &db.Location{&self.DestProcessId, 0} //this message is a broadcast to many fragments so i'm choosing fragmentzero
+	return &db.Location{ProcessId: &self.DestProcessId, FragmentId: 0} //this message is a broadcast to many fragments so i'm choosing fragmentzero
 }
 
 func (self *Executor) Run() {

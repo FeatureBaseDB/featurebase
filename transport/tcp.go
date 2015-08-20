@@ -52,7 +52,7 @@ BeginManageConnection:
 			}
 			self.conn = &conn
 			go func() {
-				self.outbox <- &db.Message{self.transport.ID.String()}
+				self.outbox <- &db.Message{Data: self.transport.ID.String()}
 			}()
 		}
 		encoder := gob.NewEncoder(*self.conn)
@@ -170,7 +170,7 @@ func (self *TcpTransport) Close() {
 
 func (self *TcpTransport) Send(message *db.Message, host *util.GUID) {
 	log.Trace("TcpTransport.Send", message, host)
-	envelope := db.Envelope{message, host}
+	envelope := db.Envelope{Message: message, Host: host}
 	notify.Post("outbox", &envelope)
 	self.outbox <- envelope
 }

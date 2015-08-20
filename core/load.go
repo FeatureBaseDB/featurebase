@@ -18,7 +18,7 @@ func copy_raw(src [32]uint64) index.BlockArray {
 	for k, v := range src {
 		o[k] = v
 	}
-	return index.BlockArray{o}
+	return index.BlockArray{Block: o}
 }
 func sendBitmap(batcher *Batcher, bitmap index.IBitmap, db string, frame string, bitmap_id, filter uint64, slice int, finish chan error) {
 	if slice < 0 {
@@ -73,7 +73,7 @@ func FromApiString(batcher *Batcher, db string, frame string, api_string string,
 			last_slice = slice
 		}
 		o := copy_raw(raw.Block)
-		chunk := &index.Chunk{raw.Key, o}
+		chunk := &index.Chunk{Key: raw.Key, Value: o}
 		bitmap.AddChunk(chunk)
 
 	}

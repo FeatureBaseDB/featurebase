@@ -64,7 +64,7 @@ func TestFragmentContainer_Count(t *testing.T) {
 	} else if n, err := fc.Count(util.SUUID(1), bh); err != nil {
 		t.Fatal(err)
 	} else if n != 1 {
-		t.Fatal("unexpected count: %d", n)
+		t.Fatalf("unexpected count: %d", n)
 	}
 }
 
@@ -108,7 +108,7 @@ func TestFragmentContainer_Intersect(t *testing.T) {
 	if result, err := fc.Intersect(1, []index.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
 		t.Fatal(err)
 	} else if n := fc.MustCount(1, result); n != 0 {
-		t.Fatal("unexpected intersect bit count: %d", n)
+		t.Fatalf("unexpected intersect bit count: %d", n)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestFragmentContainer_Difference(t *testing.T) {
 	if result, err := fc.Difference(1, []index.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
 		t.Fatal(err)
 	} else if n := fc.MustCount(1, result); n != 1 {
-		t.Fatalf("unexpected difference bit count: %d", err)
+		t.Fatalf("unexpected difference bit count: %s", err)
 	}
 }
 
