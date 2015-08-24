@@ -233,17 +233,30 @@ func TestFragmentContainer_Clear(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can be loaded from a compressed form.
-func TestFragmentContainer_LoadBitmap(t *testing.T) {
+// Ensure a fragment can be marshaled and unmarshaled to and from bytes.
+func TestFragmentContainer_FromBytes(t *testing.T) {
 	fc := NewFragmentContainer()
 	fc.AddFragment("25", "b.n", 0, 2)
 
+	// Set bits for a bitmap.
+	for i := 0; i < 4096; i++ {
+		fc.MustSetBit(2, 1, uint64(i), 0)
+	}
+
+	// Marshal to bytes.
+	buf, err := fc.GetBytes(2, fc.MustGet(2, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Load a bitmap from compressed data.
-	buf := "H4sIAAAJbogA/2JmYWBR+9/IzMjI6pxRmpfN+L+JgZGJkdk7tZKRjYGRNSwxpzSV8X8LAwOD8v9moDIup5z85GzHoqLESpAwI1AjWITxfxtQjdj/ViZGRo7o2NLMvBIzE5Ag0BiGf4zq/5uYGBV+/IeCUQZWBiikNP83AQN1NKwIMRgYAAAAAP//AQAA//9U05AivAIAAA=="
-	fc.LoadBitmap(2, 1029, buf, 0)
+	bh, err := fc.FromBytes(2, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Load and count bits.
-	if n := fc.MustCount(2, fc.MustGet(2, 1029)); n != 4096 {
+	if n := fc.MustCount(2, bh); n != 4096 {
 		t.Fatalf("unexpected bit count: %d", n)
 	}
 }

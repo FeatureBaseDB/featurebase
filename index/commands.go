@@ -3,6 +3,7 @@ package index
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/base64"
 	"io/ioutil"
 	"time"
 
@@ -15,22 +16,20 @@ type Result struct {
 }
 
 type Responder struct {
-	result     chan Result
-	query_type string
+	result    chan Result
+	queryType string
 }
 
-func NewResponder(query_type string) *Responder {
-	return &Responder{make(chan Result), query_type}
+func NewResponder(queryType string) *Responder {
+	return &Responder{
+		result:    make(chan Result),
+		queryType: queryType,
+	}
 }
-func (self *Responder) QueryType() string {
-	return self.query_type
-}
-func (self *Responder) Response() Result {
-	return <-self.result
-}
-func (self *Responder) ResponseChannel() chan Result {
-	return self.result
-}
+
+func (r *Responder) QueryType() string            { return r.queryType }
+func (r *Responder) Response() Result             { return <-r.result }
+func (r *Responder) ResponseChannel() chan Result { return r.result }
 
 type Calculation interface{}
 
@@ -68,7 +67,7 @@ func (self *CmdCount) Execute(f *Fragment) Calculation {
 	if ok == false {
 		return uint64(0)
 	}
-	return BitCount(bm)
+	return bm.BitCount()
 }
 
 type CmdUnion struct {
@@ -238,9 +237,17 @@ func NewLoader(bitmap_id uint64, compressed_bitmap string, filter uint64) *CmdLo
 	return &CmdLoader{NewResponder("Loader"), bitmap_id, compressed_bitmap, filter}
 }
 func (self *CmdLoader) Execute(f *Fragment) Calculation {
-	nbm := NewBitmap()
-	nbm.FromCompressString(self.compressed_bitmap)
-	f.impl.Store(self.bitmap_id, nbm, self.filter)
+	buf, err := base64.StdEncoding.DecodeString(self.compressed_bitmap)
+	if err != nil {
+		log.Warn(err)
+		return "ok"
+	}
+	reader, _ := gzip.NewReader(bytes.NewReader(buf))
+	data, _ := ioutil.ReadAll(reader)
+
+	bm := NewBitmap()
+	bm.FromBytes(data)
+	f.impl.Store(self.bitmap_id, bm, self.filter)
 	return "ok"
 }
 
@@ -296,7 +303,7 @@ func NewMask(start, end uint64) *CmdMask {
 func (self *CmdMask) Execute(f *Fragment) Calculation {
 	result := NewBitmap()
 	for i := self.start; i < self.end; i++ {
-		SetBit(result, i)
+		result.SetBit(i)
 	}
 	return f.AllocHandle(result)
 }
@@ -325,7 +332,7 @@ func (self *CmdTopFill) Execute(f *Fragment) Calculation {
 				res := f.intersect([]BitmapHandle{self.args.Handle, a})
 				bm, ok := f.getBitmap(res)
 				if ok {
-					bc := BitCount(bm)
+					bc := bm.BitCount()
 					if bc > 0 {
 						result = append(result, Pair{v, bc})
 					}

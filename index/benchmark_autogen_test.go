@@ -18,31 +18,31 @@ func benchmarkDifferentCombinations(b *testing.B, op string, b1, b2 int, s1, s2 
 	rand.Seed(int64(c1))
 	for i := 0; i < b1; i++ {
 		bit += uint64(rand.Intn(s1) + 1)
-		SetBit(m1, bit)
+		m1.SetBit(bit)
 	}
 
 	bit = 0
 	rand.Seed(int64(c2))
 	for i := 0; i < b2; i++ {
 		bit += uint64(rand.Intn(s1) + 1)
-		SetBit(m2, bit)
+		m2.SetBit(bit)
 	}
 
-	var f func(a_bm IBitmap, b_bm IBitmap) IBitmap
+	var f func(b_bm *Bitmap) *Bitmap
 	switch op {
 	case "and":
-		f = Intersection
+		f = m1.Intersection
 	case "or":
-		f = Union
+		f = m1.Union
 	case "diff":
-		f = Difference
+		f = m1.Difference
 	default:
 		return
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if f(m1, m2) == nil {
+		if f(m2) == nil {
 			b.Fatalf("Problem with %s benchmark at i = %d", op, i)
 		}
 	}

@@ -8,439 +8,225 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/gob"
-	"io/ioutil"
 
 	log "github.com/cihub/seelog"
 	"github.com/yasushi-saito/rbtree"
 )
 
-const (
-	MAX_HOT_SIZE = 50000
-	BLOCK_SIZE   = 5000
-	START_IDX    = MAX_HOT_SIZE - BLOCK_SIZE
-	COUNTERMASK  = uint64(0xffffffffffffffff)
-)
+const CounterMask = uint64(0xffffffffffffffff)
 
-var (
-	COUNTER_KEY int64
-)
+var CounterKey = int64(-1)
 
-func init() {
-	var dumb = COUNTERMASK
-	COUNTER_KEY = int64(dumb)
-
-}
-
-//
-type IntSet struct {
-	set map[uint64]bool
-}
-
-func NewIntSet() *IntSet {
-	x := new(IntSet)
-	x.set = make(map[uint64]bool)
-	return x
-}
-
-func (self *IntSet) Add(i uint64) bool {
-	_, found := self.set[i]
-	self.set[i] = true
-	return !found //False if it existed already
-}
-
-func (self *IntSet) Contains(i uint64) bool {
-	_, found := self.set[i]
-	return found //true if it existed already
-}
-
-func (self *IntSet) Remove(i uint64) {
-	delete(self.set, i)
-}
-
-func (self *IntSet) Size() int {
-	return len(self.set)
-}
-
-type BlockArray struct {
-	Block []uint64
-}
-
-func (s *BlockArray) bitcount() uint64 {
-	return popcntSlice(s.Block)
-}
-func BlockArray_union(a *BlockArray, b *BlockArray) BlockArray {
-	var o = BlockArray{make([]uint64, 32, 32)}
-	for i, _ := range a.Block {
-		o.Block[i] = a.Block[i] | b.Block[i]
-	}
-	return o
-}
-
-func BlockArray_invert(a *BlockArray) BlockArray {
-	var o = BlockArray{make([]uint64, 32, 32)}
-	for i, _ := range a.Block {
-		o.Block[i] = ^a.Block[i]
-	}
-	return o
-}
-
-func BlockArray_copy(a *BlockArray) BlockArray {
-	var o = BlockArray{make([]uint64, 32, 32)}
-	for i, _ := range a.Block {
-		o.Block[i] = a.Block[i]
-	}
-	return o
-}
-
-func BlockArray_andcount(a *BlockArray, b *BlockArray) uint64 {
-	return popcntAndSliceAsm(a.Block, b.Block)
-}
-
-func BlockArray_intersection(a *BlockArray, b *BlockArray) BlockArray {
-	var o = BlockArray{make([]uint64, 32, 32)}
-	for i, _ := range a.Block {
-		o.Block[i] = a.Block[i] & b.Block[i]
-	}
-	return o
-}
-
-func BlockArray_difference(a *BlockArray, b *BlockArray) BlockArray {
-	var o = BlockArray{make([]uint64, 32, 32)}
-	for i, _ := range a.Block {
-		o.Block[i] = a.Block[i] &^ b.Block[i]
-	}
-	return o
-}
-
-func (s *BlockArray) set_bit(BlockIndex uint8, bit uint8) bool {
-	val := s.Block[BlockIndex] & (1 << bit)
-	s.Block[BlockIndex] |= 1 << bit
-	return val == 0
-}
-func (s *BlockArray) clear_bit(BlockIndex uint8, bit uint8) bool {
-	val := s.Block[BlockIndex] & (1 << bit)
-	s.Block[BlockIndex] &= ^(1 << bit)
-	return val != 0
-}
-
-type Chunk struct {
-	Key   uint64
-	Value BlockArray
-}
-
+// Bitmap represents a bitmap broken up into Chunks.
+// Internally it is represented as a red-black tree of chunks.
 type Bitmap struct {
-	nodes  *rbtree.Tree
+	tree   *rbtree.Tree
 	bcount uint64
 }
 
-func Compare(a uint64, b uint64) int {
-	if a < b {
-		return -1
-	} else if a > b {
-		return 1
+// NewBitmap returns a new instance of Bitmap.
+func NewBitmap() *Bitmap {
+	return &Bitmap{
+		tree: rbtree.NewTree(rbtreeItemCompare),
 	}
-	return 0
 }
-func Clone(a_bm IBitmap) IBitmap {
 
-	var a = a_bm.Min()
-	output := CreateRBBitmap()
+// Chunk returns the chunk within the bitmap.
+// Returns nil if the chunk key does not exist.
+func (b *Bitmap) Chunk(c *Chunk) *Chunk {
+	if n := b.tree.Get(c); n != nil {
+		return n.(*Chunk)
+	}
+	return nil
+}
+
+// AddChunk adds c to the bitmap.
+func (b *Bitmap) AddChunk(c *Chunk) { b.tree.Insert(c) }
+
+// ChunkIterator returns an iterator for looping over the bitmap's chunks.
+func (b *Bitmap) ChunkIterator() *ChunkIterator {
+	return &ChunkIterator{b.tree.Min()}
+}
+
+// Clone returns a copy of b.
+func (b *Bitmap) Clone() *Bitmap {
+	itr := b.ChunkIterator()
+	other := NewBitmap()
+
 	for {
-		if a.Limit() {
+		if itr.Limit() {
 			break
 		}
-		var a_node = a.Item()
-		var o = BlockArray_copy(&a_node.Value)
-		var o_node = &Chunk{a_node.Key, o}
-		output.AddChunk(o_node)
-		a = a.Next()
+
+		node := itr.Item()
+		other.AddChunk(&Chunk{
+			Key:   node.Key,
+			Value: node.Value.copy(),
+		})
+
+		itr = itr.Next()
 	}
-	return output
+	return other
 }
 
-func IntersectionCount(a_bm IBitmap, b_bm IBitmap) uint64 {
-	var a = a_bm.Min()
-	var b = b_bm.Min()
-	defer a.Close()
-	defer b.Close()
-	results := uint64(0)
+// IntersectionCount returns the number of itersections between b and other.
+func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
+	itr0 := b.ChunkIterator()
+	itr1 := other.ChunkIterator()
 
+	results := uint64(0)
 	for {
-		if b.Limit() || a.Limit() {
+		if itr1.Limit() || itr0.Limit() {
 			break
-		} else if a.Item().Key < b.Item().Key {
-			a = a.Next()
-		} else if a.Item().Key > b.Item().Key {
-			b = b.Next()
-		} else if a.Item().Key == b.Item().Key {
-			var a_node = a.Item()
-			var b_node = b.Item().Value
-			results += BlockArray_andcount(&a_node.Value, &b_node)
-			a = a.Next()
-			b = b.Next()
+		} else if itr0.Item().Key < itr1.Item().Key {
+			itr0 = itr0.Next()
+		} else if itr0.Item().Key > itr1.Item().Key {
+			itr1 = itr1.Next()
+		} else if itr0.Item().Key == itr1.Item().Key {
+			results += itr0.Item().Value.andcount(itr1.Item().Value)
+			itr0 = itr0.Next()
+			itr1 = itr1.Next()
 		}
 	}
 	return results
 }
 
-func Intersection(a_bm IBitmap, b_bm IBitmap) IBitmap {
-	var a = a_bm.Min()
-	var b = b_bm.Min()
-	defer a.Close()
-	defer b.Close()
-	output := CreateRBBitmap()
+// Intersection returns the itersection of b and other.
+func (b *Bitmap) Intersection(other *Bitmap) *Bitmap {
+	itr0 := b.ChunkIterator()
+	itr1 := other.ChunkIterator()
 
+	output := NewBitmap()
 	for {
-		if b.Limit() || a.Limit() {
+		if itr1.Limit() || itr0.Limit() {
 			break
-		} else if a.Item().Key < b.Item().Key {
-			a = a.Next()
-		} else if a.Item().Key > b.Item().Key {
-			b = b.Next()
-		} else if a.Item().Key == b.Item().Key {
-			var a_node = a.Item()
-			var b_node = b.Item().Value
-			var o = BlockArray_intersection(&a_node.Value, &b_node)
-			var o_node = &Chunk{a_node.Key, o}
-			output.AddChunk(o_node)
-			a = a.Next()
-			b = b.Next()
+		} else if itr0.Item().Key < itr1.Item().Key {
+			itr0 = itr0.Next()
+		} else if itr0.Item().Key > itr1.Item().Key {
+			itr1 = itr1.Next()
+		} else if itr0.Item().Key == itr1.Item().Key {
+			output.AddChunk(&Chunk{
+				Key:   itr0.Item().Key,
+				Value: itr0.Item().Value.intersection(itr1.Item().Value),
+			})
+			itr0 = itr0.Next()
+			itr1 = itr1.Next()
 		}
 	}
 	return output
 }
-func Invert(a_bm IBitmap) IBitmap {
-	output := CreateRBBitmap()
-	for i := a_bm.Min(); !i.Limit(); i = i.Next() {
-		var node = i.Item()
-		var o = BlockArray_invert(&node.Value)
-		var o_node = &Chunk{node.Key, o}
-		output.AddChunk(o_node)
+
+// Invert returns a bitwise inversion of b.
+func (b *Bitmap) Invert() *Bitmap {
+	other := NewBitmap()
+	for i := b.ChunkIterator(); !i.Limit(); i = i.Next() {
+		other.AddChunk(&Chunk{
+			Key:   i.Item().Key,
+			Value: i.Item().Value.invert(),
+		})
 	}
-	return output
+	return other
 
 }
-func NewBitmap() IBitmap {
-	return CreateRBBitmap()
-}
 
-func Union(a_bm IBitmap, b_bm IBitmap) IBitmap {
-	var a = a_bm.Min()
-	var b = b_bm.Min()
-	defer a.Close()
-	defer b.Close()
-	output := CreateRBBitmap()
-	var o_last_Key = uint64(0xdeadbeef)
+// Union returns the bitwise union of b and other.
+func (b *Bitmap) Union(other *Bitmap) *Bitmap {
+	itr0 := b.ChunkIterator()
+	itr1 := other.ChunkIterator()
+
+	output := NewBitmap()
+	eof := uint64(0xdeadbeef)
 
 	for {
-		if a.Limit() && b.Limit() {
+		if itr0.Limit() && itr1.Limit() {
 			break
-		} else if a.Limit() {
-			if o_last_Key == b.Item().Key {
+		} else if itr0.Limit() {
+			if eof == itr1.Item().Key {
 				break
 			}
-			var b_node = b.Item()
-			var o_node = &Chunk{b_node.Key, b_node.Value}
-			output.AddChunk(o_node)
-			o_last_Key = o_node.Key
-			b = b.Next()
-		} else if b.Limit() {
-			if o_last_Key == a.Item().Key {
+			output.AddChunk(&Chunk{itr1.Item().Key, itr1.Item().Value})
+			eof = itr1.Item().Key
+			itr1 = itr1.Next()
+		} else if itr1.Limit() {
+			if eof == itr0.Item().Key {
 				break
 			}
-			var a_node = a.Item()
-			var o_node = &Chunk{a_node.Key, a_node.Value}
-			output.AddChunk(o_node)
-			o_last_Key = o_node.Key
-			a = a.Next()
-		} else if a.Item().Key < b.Item().Key {
-			var a_node = a.Item()
-			var o_node = &Chunk{a_node.Key, a_node.Value}
-			output.AddChunk(o_node)
-			o_last_Key = o_node.Key
-			a = a.Next()
-		} else if a.Item().Key > b.Item().Key {
-			var b_node = b.Item()
-			var o_node = &Chunk{b_node.Key, b_node.Value}
-			output.AddChunk(o_node)
-			o_last_Key = o_node.Key
-			b = b.Next()
-		} else if a.Item().Key == b.Item().Key {
-			var a_node = a.Item()
-			var b_node = b.Item().Value
-			var o = BlockArray_union(&a_node.Value, &b_node)
-			var o_node = &Chunk{a_node.Key, o}
-			output.AddChunk(o_node)
-			o_last_Key = o_node.Key
-			a = a.Next()
-			b = b.Next()
+			output.AddChunk(&Chunk{itr0.Item().Key, itr0.Item().Value})
+			eof = itr0.Item().Key
+			itr0 = itr0.Next()
+		} else if itr0.Item().Key < itr1.Item().Key {
+			output.AddChunk(&Chunk{itr0.Item().Key, itr0.Item().Value})
+			eof = itr0.Item().Key
+			itr0 = itr0.Next()
+		} else if itr0.Item().Key > itr1.Item().Key {
+			output.AddChunk(&Chunk{itr1.Item().Key, itr1.Item().Value})
+			eof = itr1.Item().Key
+			itr1 = itr1.Next()
+		} else if itr0.Item().Key == itr1.Item().Key {
+			output.AddChunk(&Chunk{
+				Key:   itr0.Item().Key,
+				Value: itr0.Item().Value.union(itr1.Item().Value),
+			})
+			eof = itr0.Item().Key
+			itr0 = itr0.Next()
+			itr1 = itr1.Next()
 		} else {
-			log.Warn("NEVER SHOULD BE HERE")
-			break
+			panic("unreachable")
 		}
 	}
 	return output
 }
 
-func Difference(a_bm IBitmap, b_bm IBitmap) IBitmap {
-	var a = a_bm.Min()
-	var b = b_bm.Min()
-	defer a.Close()
-	defer b.Close()
-	output := CreateRBBitmap()
-	var o_last_Key = uint64(0)
+// Difference returns the diff of b and other.
+func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
+	itr0 := b.ChunkIterator()
+	itr1 := other.ChunkIterator()
 
-	if o_last_Key != 0 {
-		o_last_Key = uint64(0)
-	}
-
+	output := NewBitmap()
 	for {
-		if a.Limit() && b.Limit() {
+		if itr0.Limit() && itr1.Limit() {
 			break
-		} else if a.Limit() {
+		} else if itr0.Limit() {
 			break
-		} else if b.Limit() {
-			var a_node = a.Item()
-			var o_node = &Chunk{a_node.Key, a_node.Value}
-			output.AddChunk(o_node)
-			o_last_Key = o_node.Key
-			a = a.Next()
-		} else if a.Item().Key < b.Item().Key {
-			var a_node = a.Item()
-			var o_node = &Chunk{a_node.Key, a_node.Value}
-			output.AddChunk(o_node)
-			o_last_Key = o_node.Key
-			a = a.Next()
-		} else if a.Item().Key > b.Item().Key {
-			var b_node = b.Item()
-			o_last_Key = b_node.Key
-			b = b.Next()
-		} else if a.Item().Key == b.Item().Key {
-			var a_node = a.Item()
-
-			var b_node = b.Item().Value
-			var o = BlockArray_difference(&a_node.Value, &b_node)
-
-			var o_node = &Chunk{a_node.Key, o}
-
-			//could not add if all zero
-			if o_node.Value.bitcount() > 0 {
-				output.AddChunk(o_node)
+		} else if itr1.Limit() {
+			output.AddChunk(&Chunk{itr0.Item().Key, itr0.Item().Value})
+			itr0 = itr0.Next()
+		} else if itr0.Item().Key < itr1.Item().Key {
+			output.AddChunk(&Chunk{itr0.Item().Key, itr0.Item().Value})
+			itr0 = itr0.Next()
+		} else if itr0.Item().Key > itr1.Item().Key {
+			itr1 = itr1.Next()
+		} else if itr0.Item().Key == itr1.Item().Key {
+			chunk := &Chunk{
+				Key:   itr0.Item().Key,
+				Value: itr0.Item().Value.difference(itr1.Item().Value),
 			}
-			o_last_Key = o_node.Key
-			a = a.Next()
-			b = b.Next()
+
+			// Could not add if all zero
+			if chunk.Value.bitcount() > 0 {
+				output.AddChunk(chunk)
+			}
+
+			itr0 = itr0.Next()
+			itr1 = itr1.Next()
 		} else {
-			log.Warn("NEVER SHOULD BE HERE")
-			break
+			panic("unreachable")
 		}
 	}
 	return output
 }
 
-type ChunkIterator interface {
-	Limit() bool
-	Item() *Chunk
-	Next() ChunkIterator
-	Dump()
-	Close()
-}
-type RBNodeIterator struct {
-	rbiterator rbtree.Iterator
-}
-
-func (r *RBNodeIterator) Limit() bool {
-	return r.rbiterator.Limit()
-}
-func (r *RBNodeIterator) Next() ChunkIterator {
-	r.rbiterator = r.rbiterator.Next()
-	return r
-}
-func (r *RBNodeIterator) Dump() {
-}
-
-func (r *RBNodeIterator) Close() {
-}
-func (r *RBNodeIterator) Item() *Chunk {
-	if r.rbiterator.Item() != nil {
-		return r.rbiterator.Item().(*Chunk)
-	}
-	return nil
-}
-func GetChunk(bm IBitmap, ChunkKey uint64) *Chunk {
-	look := &Chunk{ChunkKey, BlockArray{make([]uint64, 32, 32)}}
-	return bm.Get(look)
-}
-
-type IBitmap interface {
-	AddChunk(*Chunk)
-	Min() ChunkIterator
-	Get(*Chunk) *Chunk
-	Len() int
-	Inc()
-	Dec()
-	Count() uint64
-	SetCount(uint64)
-	Bits() []uint64
-	BuildFromBits(bits []uint64)
-	ToBytes() []byte
-	FromBytes([]byte)
-	ToCompressString() string
-	ToRawCompressString() (string, int)
-	FromCompressString(string)
-}
-
-func NewRB() *rbtree.Tree {
-	return rbtree.NewTree(func(a, b rbtree.Item) int { return Compare(a.(*Chunk).Key, b.(*Chunk).Key) })
-}
-
-func CreateRBBitmap() IBitmap {
-	return &Bitmap{nodes: NewRB(), bcount: 0}
-}
-
-func (self *Bitmap) FromCompressString(str string) {
-	compressed_data, err := base64.StdEncoding.DecodeString(str)
-	if err != nil {
-		log.Warn(err)
-		return
-	}
-	reader, _ := gzip.NewReader(bytes.NewReader(compressed_data))
-	data, _ := ioutil.ReadAll(reader)
-	self.FromBytes(data)
-}
-
-func (self *Bitmap) ToCompressString() string {
-	var b bytes.Buffer
-	w := gzip.NewWriter(&b)
-	w.Write(self.ToBytes())
-	w.Flush()
-	w.Close()
-	return base64.StdEncoding.EncodeToString(b.Bytes())
-}
-
-func (self *Bitmap) AddChunk(a *Chunk) {
-	self.nodes.Insert(a)
-}
-func (b *Bitmap) Min() ChunkIterator {
-	return &RBNodeIterator{b.nodes.Min()}
-}
-func (b *Bitmap) Get(a *Chunk) *Chunk {
-	n := b.nodes.Get(a)
-	if n != nil {
-		return n.(*Chunk)
-	}
-	return nil
-}
+// ToRawCompressString returns a compressed, hex-encoded string of b.
 func (b *Bitmap) ToRawCompressString() (string, int) {
 	var bt bytes.Buffer
 	buf := gzip.NewWriter(&bt)
-	binary.Write(buf, binary.LittleEndian, uint64(b.nodes.Len()))
+	binary.Write(buf, binary.LittleEndian, uint64(b.tree.Len()))
 	max_slice := 0
-	for i := b.nodes.Min(); !i.Limit(); i = i.Next() {
+	for i := b.tree.Min(); !i.Limit(); i = i.Next() {
 		obj := i.Item().(*Chunk)
 		max_slice = int(obj.Key)
 		binary.Write(buf, binary.LittleEndian, obj.Key)
-		for _, v := range obj.Value.Block {
+		for _, v := range obj.Value {
 			binary.Write(buf, binary.LittleEndian, v)
 		}
 	}
@@ -450,13 +236,12 @@ func (b *Bitmap) ToRawCompressString() (string, int) {
 	return base64.StdEncoding.EncodeToString(bt.Bytes()), max_slice
 }
 
+// ToBytes returns a gob-encoded byte slice of b.
 func (b *Bitmap) ToBytes() []byte {
-	var (
-		buf bytes.Buffer
-	)
+	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
-	enc.Encode(b.nodes.Len())
-	for i := b.nodes.Min(); !i.Limit(); i = i.Next() {
+	enc.Encode(b.tree.Len())
+	for i := b.tree.Min(); !i.Limit(); i = i.Next() {
 		obj := i.Item().(*Chunk)
 		err := enc.Encode(obj)
 		if err != nil {
@@ -466,34 +251,31 @@ func (b *Bitmap) ToBytes() []byte {
 	return buf.Bytes()
 }
 
-func (self *Bitmap) FromBytes(raw []byte) {
+// FromBytes decodes a gob-encoded byte slice into b.
+func (b *Bitmap) FromBytes(raw []byte) {
 	buf := bytes.NewBuffer(raw)
 	dec := gob.NewDecoder(buf)
 
 	var size int
 	dec.Decode(&size)
-	self.nodes = NewRB()
+	b.tree = rbtree.NewTree(rbtreeItemCompare)
 	for i := 0; i < size; i++ {
 		var chunk Chunk
 		dec.Decode(&chunk)
-		self.AddChunk(&chunk)
+		b.AddChunk(&chunk)
 	}
-	self.SetCount(BitCount(self))
+	b.SetCount(b.BitCount())
 }
 
-func (b *Bitmap) BuildFromBits(bits []uint64) {
-	for _, v := range bits {
-		SetBit(b, v)
-	}
-}
+// Bits returns the bits in b as a slice of ints.
 func (b *Bitmap) Bits() []uint64 {
 	result := make([]uint64, b.Count())
 
 	x := 0
-	for i := b.Min(); !i.Limit(); i = i.Next() {
+	for i := b.ChunkIterator(); !i.Limit(); i = i.Next() {
 		item := i.Item()
 		chunk := item.Key
-		for bi, block := range item.Value.Block {
+		for bi, block := range item.Value {
 			for bit := uint(0); bit < 64; bit++ {
 				if (block & (1 << bit)) != 0 {
 					idx := chunk << 11
@@ -507,25 +289,101 @@ func (b *Bitmap) Bits() []uint64 {
 	}
 	return result
 }
-func (b *Bitmap) Len() int {
-	return b.nodes.Len()
-}
-func (b *Bitmap) Inc() {
-	b.bcount += 1
-}
-func (b *Bitmap) Dec() {
-	if b.bcount > 0 {
-		b.bcount -= 1
+
+// SetBit sets the i-th bit of the bitmap.
+func (b *Bitmap) SetBit(i uint64) (bool, *Chunk, Address) {
+	address := deref(i)
+
+	chunk := b.Chunk(&Chunk{address.ChunkKey, make(Blocks, 32)})
+	if chunk == nil {
+		chunk = &Chunk{address.ChunkKey, make(Blocks, 32)}
+		b.AddChunk(chunk)
 	}
-}
-func (b *Bitmap) SetCount(c uint64) {
-	b.bcount = c
+
+	changed := chunk.Value.setBit(address.BlockIndex, address.Bit)
+	if changed {
+		b.bcount++
+	}
+
+	return changed, chunk, address
 }
 
-func (b *Bitmap) Count() uint64 {
-	return b.bcount
+// ClearBit clears the i-th bit of the bitmap.
+func (b *Bitmap) ClearBit(i uint64) (bool, *Chunk, Address) {
+	address := deref(i)
+
+	chunk := b.Chunk(&Chunk{address.ChunkKey, make(Blocks, 32)})
+	if chunk == nil {
+		return false, nil, address
+	}
+
+	changed := chunk.Value.clearBit(address.BlockIndex, address.Bit)
+	if changed && b.bcount > 0 {
+		b.bcount--
+	}
+
+	return changed, chunk, address
 }
 
+// Len returns the number of chunks in b.
+func (b *Bitmap) Len() int { return b.tree.Len() }
+
+// SetCount sets the number of set bits in the bitmap.
+func (b *Bitmap) SetCount(c uint64) { b.bcount = c }
+
+// Count returns the number of set bits in the bitmap.
+func (b *Bitmap) Count() uint64 { return b.bcount }
+
+// BitCount calculates the number of set bits in the bitmap from raw chunk data.
+func (b *Bitmap) BitCount() uint64 {
+	var n uint64
+	for i := b.ChunkIterator(); !i.Limit(); i = i.Next() {
+		n += i.Item().Value.bitcount()
+	}
+	return n
+}
+
+// Chunk represents a set of blocks in a Bitmap.
+type Chunk struct {
+	Key   uint64
+	Value Blocks
+}
+
+// ChunkIterator represents an object for iterating over chunks in a bitmap.
+type ChunkIterator struct {
+	itr rbtree.Iterator
+}
+
+// Limit return true when the iterator is at the end of iteration.
+func (r *ChunkIterator) Limit() bool {
+	return r.itr.Limit()
+}
+
+// Next moves the iterator to the next chunk.
+func (r *ChunkIterator) Next() *ChunkIterator {
+	r.itr = r.itr.Next()
+	return r
+}
+
+// Item returns the current item that the iterator is pointing at.
+func (r *ChunkIterator) Item() *Chunk {
+	if r.itr.Item() != nil {
+		return r.itr.Item().(*Chunk)
+	}
+	return nil
+}
+
+func rbtreeItemCompare(a, b rbtree.Item) int {
+	aKey, bKey := a.(*Chunk).Key, b.(*Chunk).Key
+	if aKey < bKey {
+		return -1
+	} else if aKey > bKey {
+		return 1
+	}
+	return 0
+}
+
+// Address represents a location for a given chunk/block/bit.
 type Address struct {
 	ChunkKey   uint64
 	BlockIndex uint8
@@ -533,58 +391,9 @@ type Address struct {
 }
 
 func deref(pos uint64) Address {
-	ChunkKey := pos >> 11                     // div by 2048
-	var bucket_offset = pos & 0x7FF           // mod by 2048
-	BlockIndex := uint8(bucket_offset >> 6)   // div by 64
-	bit_offset := uint8(bucket_offset & 0x3F) // mod by 64
-	return Address{ChunkKey, BlockIndex, bit_offset}
-}
-
-func SetBit(b IBitmap, position uint64) (bool, *Chunk, Address) {
-	//Chunk,Chunk_index,bit_offset :=deref(position)
-	address := deref(position)
-
-	item := GetChunk(b, address.ChunkKey)
-	var node *Chunk
-	if item == nil {
-		node = &Chunk{address.ChunkKey, BlockArray{make([]uint64, 32, 32)}}
-		b.AddChunk(node)
-	} else {
-		node = item
-	}
-	data_changed := node.Value.set_bit(address.BlockIndex, address.Bit)
-	if data_changed {
-		b.Inc()
-	}
-	return data_changed, node, address
-}
-
-func ClearBit(b IBitmap, position uint64) (bool, *Chunk, Address) {
-	//Chunk,Chunk_index,bit_offset :=deref(position)
-	address := deref(position)
-
-	item := GetChunk(b, address.ChunkKey)
-	var node *Chunk
-	if item == nil {
-		return false, nil, address
-	} else {
-		node = item
-	}
-	data_changed := node.Value.clear_bit(address.BlockIndex, address.Bit)
-	if data_changed {
-		b.Dec()
-	}
-	return data_changed, node, address
-}
-
-func BitCount(b IBitmap) uint64 {
-	var total uint64
-	total = 0
-	i := b.Min()
-	defer i.Close()
-	for ; !i.Limit(); i = i.Next() {
-		var item = i.Item()
-		total += item.Value.bitcount()
-	}
-	return total
+	chunkKey := pos >> 11              // div by 2048
+	offset := pos & 0x7FF              // mod by 2048
+	blockIndex := uint8(offset >> 6)   // div by 64
+	bit_offset := uint8(offset & 0x3F) // mod by 64
+	return Address{chunkKey, blockIndex, bit_offset}
 }

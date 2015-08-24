@@ -87,10 +87,9 @@ func NewCassStorage() Storage {
 
 func (c *CassandraStorage) Close() {
 }
-func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slice int) (IBitmap, uint64) {
-	var dumb = COUNTERMASK
-	last_key := int64(dumb)
-	marker := int64(dumb)
+
+func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slice int) (*Bitmap, uint64) {
+	last_key, marker := int64(-1), int64(-1)
 	var id = util.Uint64ToInt64(bitmap_id)
 	start := time.Now()
 	var (
@@ -101,7 +100,7 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 		filter           int
 	)
 
-	bitmap := CreateRBBitmap()
+	bitmap := NewBitmap()
 	iter := c.db.Query("SELECT filter,Chunkkey,BlockIndex,block FROM bitmap WHERE bitmap_id=? AND db=? AND frame=? AND slice=? ", id, db, frame, slice).Iter()
 	count := int64(0)
 
@@ -109,10 +108,10 @@ func (c *CassandraStorage) Fetch(bitmap_id uint64, db string, frame string, slic
 		s8 = uint8(block_index)
 		if chunk_key != marker {
 			if chunk_key != last_key {
-				chunk = &Chunk{uint64(chunk_key), BlockArray{make([]uint64, 32, 32)}}
+				chunk = &Chunk{uint64(chunk_key), make(Blocks, 32)}
 				bitmap.AddChunk(chunk)
 			}
-			chunk.Value.Block[s8] = uint64(block)
+			chunk.Value[s8] = uint64(block)
 
 		} else {
 			count = block
@@ -164,17 +163,17 @@ func (self *CassandraStorage) EndBatch() {
 
 func (self *CassandraStorage) Store(id uint64, db string, frame string, slice int, filter uint64, bitmap *Bitmap) error {
 	self.BeginBatch()
-	for i := bitmap.Min(); !i.Limit(); i = i.Next() {
+	for i := bitmap.ChunkIterator(); !i.Limit(); i = i.Next() {
 		var chunk = i.Item()
-		for idx, block := range chunk.Value.Block {
+		for idx, block := range chunk.Value {
 			block_index := int32(idx)
 			if block != 0 {
 				self.StoreBlock(id, db, frame, slice, filter, chunk.Key, block_index, block)
 			}
 		}
 	}
-	cnt := BitCount(bitmap)
-	self.StoreBlock(id, db, frame, slice, filter, COUNTERMASK, 0, cnt)
+	cnt := bitmap.BitCount()
+	self.StoreBlock(id, db, frame, slice, filter, CounterMask, 0, cnt)
 	self.EndBatch()
 	return nil
 }
@@ -197,7 +196,7 @@ func (self *CassandraStorage) StoreBlock(bid uint64, db string, frame string, sl
 func (self *CassandraStorage) StoreBit(bid uint64, db string, frame string, slice int, filter uint64, chunk uint64, block_index int32, val, count uint64) {
 	self.BeginBatch()
 	self.StoreBlock(bid, db, frame, slice, filter, chunk, block_index, val)
-	self.StoreBlock(bid, db, frame, slice, filter, COUNTERMASK, 0, count)
+	self.StoreBlock(bid, db, frame, slice, filter, CounterMask, 0, count)
 	self.EndBatch()
 }
 
@@ -205,7 +204,7 @@ func (self *CassandraStorage) RemoveBit(id uint64, db string, frame string, slic
 	log.Trace("RemoveBit", id, db, frame, slice, chunk, block_index)
 	self.BeginBatch()
 	self.RemoveBlock(id, db, frame, slice, chunk, block_index)
-	self.StoreBlock(id, db, frame, slice, filter, COUNTERMASK, 0, count)
+	self.StoreBlock(id, db, frame, slice, filter, CounterMask, 0, count)
 	self.EndBatch()
 }
 
