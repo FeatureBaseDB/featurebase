@@ -40,7 +40,7 @@ func (self *General) Exists(bitmap_id uint64) bool {
 	return ok
 
 }
-func (self *General) Get(bitmap_id uint64) IBitmap {
+func (self *General) Get(bitmap_id uint64) *Bitmap {
 	bm, ok := self.bitmap_cache.Get(bitmap_id)
 	if ok && bm != nil {
 		return bm.(*Bitmap)
@@ -52,20 +52,20 @@ func (self *General) Get(bitmap_id uint64) IBitmap {
 }
 func (self *General) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool {
 	bm := self.Get(bitmap_id)
-	change, chunk, address := SetBit(bm, bit_pos)
+	change, chunk, address := bm.SetBit(bit_pos)
 	if change {
-		val := chunk.Value.Block[address.BlockIndex]
+		val := chunk.Value[address.BlockIndex]
 		self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
 	}
 	return change
 }
-func (self *General) TopN(b IBitmap, n int, categories []uint64) []Pair {
+func (self *General) TopN(b *Bitmap, n int, categories []uint64) []Pair {
 	var empty []Pair
 
 	return empty
 }
-func (self *General) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
-	self.storage.Store(bitmap_id, self.db, self.frame, self.slice, filter, bm.(*Bitmap))
+func (self *General) Store(bitmap_id uint64, bm *Bitmap, filter uint64) {
+	self.storage.Store(bitmap_id, self.db, self.frame, self.slice, filter, bm)
 	self.bitmap_cache.Add(bitmap_id, bm)
 	self.keys[bitmap_id] = 0
 }
@@ -152,9 +152,9 @@ func (self *General) ClearBit(bitmap_id uint64, bit_pos uint64) bool {
 	if bm.Count() == 0 {
 		return false
 	}
-	change, chunk, address := ClearBit(bm, bit_pos)
+	change, chunk, address := bm.ClearBit(bit_pos)
 	if change {
-		val := chunk.Value.Block[address.BlockIndex]
+		val := chunk.Value[address.BlockIndex]
 		if val == 0 {
 			self.storage.RemoveBit(bitmap_id, self.db, self.frame, self.slice, uint64(0), address.ChunkKey, int32(address.BlockIndex), bm.Count())
 		} else {
@@ -164,7 +164,7 @@ func (self *General) ClearBit(bitmap_id uint64, bit_pos uint64) bool {
 	return change
 }
 
-func (self *General) Get_nocache(bitmap_id uint64) IBitmap {
+func (self *General) Get_nocache(bitmap_id uint64) *Bitmap {
 	bm, ok := self.bitmap_cache.Get(bitmap_id)
 	if ok && bm != nil {
 		return bm.(*Bitmap)

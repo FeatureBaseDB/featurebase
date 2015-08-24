@@ -26,7 +26,7 @@ type Pair struct {
 }
 type Rank struct {
 	*Pair
-	bitmap   IBitmap
+	bitmap   *Bitmap
 	category uint64
 }
 
@@ -66,100 +66,102 @@ func NewBrand(db string, frame string, slice int, s Storage, threshold_len int, 
 	return f
 
 }
-func (self *Brand) Clear() bool {
-	self.bitmap_cache = make(map[uint64]*Rank)
+
+func (b *Brand) Clear() bool {
+	b.bitmap_cache = make(map[uint64]*Rank)
 	return true
 }
-func (self *Brand) Exists(bitmap_id uint64) bool {
-	_, ok := self.bitmap_cache[bitmap_id]
+
+func (b *Brand) Exists(bitmap_id uint64) bool {
+	_, ok := b.bitmap_cache[bitmap_id]
 	return ok
 }
-func (self *Brand) Get(bitmap_id uint64) IBitmap {
-	bm, ok := self.bitmap_cache[bitmap_id]
-	if ok {
+
+func (b *Brand) Get(bitmap_id uint64) *Bitmap {
+	if bm, ok := b.bitmap_cache[bitmap_id]; ok {
 		return bm.bitmap
 	}
-	//I should fetch the category here..need to come up with a good source
-	b, filter := self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
-	self.cache_it(b, bitmap_id, filter)
-	return b
+
+	// I should fetch the category here..need to come up with a good source
+	bm, filter := b.storage.Fetch(bitmap_id, b.db, b.frame, b.slice)
+	b.cache_it(bm, bitmap_id, filter)
+	return bm
 }
 
-func (self *Brand) Get_nocache(bitmap_id uint64) (IBitmap, uint64) {
-	bm, ok := self.bitmap_cache[bitmap_id]
-	if ok {
+func (b *Brand) Get_nocache(bitmap_id uint64) (*Bitmap, uint64) {
+	if bm, ok := b.bitmap_cache[bitmap_id]; ok {
 		return bm.bitmap, bm.category
 	}
+
 	//I should fetch the category here..need to come up with a good source
-	return self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
+	return b.storage.Fetch(bitmap_id, b.db, b.frame, b.slice)
 }
 
-func (self *Brand) GetFilter(bitmap_id, filter uint64) IBitmap {
-	b, old_filter := self.storage.Fetch(bitmap_id, self.db, self.frame, self.slice)
+func (b *Brand) GetFilter(bitmap_id, filter uint64) *Bitmap {
+	bm, old_filter := b.storage.Fetch(bitmap_id, b.db, b.frame, b.slice)
 	if filter == 0 {
 		filter = old_filter
 	}
-	self.cache_it(b, bitmap_id, filter)
-	return b
+	b.cache_it(bm, bitmap_id, filter)
+	return bm
 }
 
-func (self *Brand) cache_it(bm IBitmap, bitmap_id uint64, category uint64) {
-	if bm.Count() >= self.threshold_value {
-		self.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm, category}
-		if len(self.bitmap_cache) > self.threshold_length {
-			log.Info("RANK:", len(self.bitmap_cache), self.threshold_length, self.threshold_value)
-			self.Rank()
-			self.trim()
+func (b *Brand) cache_it(bm *Bitmap, bitmap_id uint64, category uint64) {
+	if bm.Count() >= b.threshold_value {
+		b.bitmap_cache[bitmap_id] = &Rank{&Pair{bitmap_id, bm.Count()}, bm, category}
+		if len(b.bitmap_cache) > b.threshold_length {
+			log.Info("RANK:", len(b.bitmap_cache), b.threshold_length, b.threshold_value)
+			b.Rank()
+			b.trim()
 		}
 	}
 }
-func (self *Brand) trim() {
-	for k, item := range self.bitmap_cache {
-		if item.bitmap.Count() <= self.threshold_value {
-			delete(self.bitmap_cache, k)
+
+func (b *Brand) trim() {
+	for k, item := range b.bitmap_cache {
+		if item.bitmap.Count() <= b.threshold_value {
+			delete(b.bitmap_cache, k)
 		}
 	}
-	log.Info("TRIM:", len(self.bitmap_cache), self.threshold_length)
-
+	log.Info("TRIM:", len(b.bitmap_cache), b.threshold_length)
 }
 
-func (self *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool {
-	bm1, ok := self.bitmap_cache[bitmap_id]
-	var bm IBitmap
+func (b *Brand) SetBit(bitmap_id uint64, bit_pos uint64, filter uint64) bool {
+	bm1, ok := b.bitmap_cache[bitmap_id]
+	var bm *Bitmap
 	if ok {
 		bm = bm1.bitmap
 	} else {
-		bm = self.GetFilter(bitmap_id, filter) //aways overwrites what is in cass filter type
+		bm = b.GetFilter(bitmap_id, filter) //aways overwrites what is in cass filter type
 	}
-	change, chunk, address := SetBit(bm, bit_pos)
+	change, chunk, address := bm.SetBit(bit_pos)
 	if change {
-		val := chunk.Value.Block[address.BlockIndex]
-		self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
-		self.rank_count++
+		val := chunk.Value[address.BlockIndex]
+		b.storage.StoreBit(bitmap_id, b.db, b.frame, b.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
+		b.rank_count++
 	}
 	return change
 }
 
-func (self *Brand) Rank() {
+func (b *Brand) Rank() {
 	start := time.Now()
 	var list RankList
-	for k, item := range self.bitmap_cache {
+	for k, item := range b.bitmap_cache {
 		list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})
 	}
 	sort.Sort(list)
-	self.rankings = list
-	if len(list) > self.threshold_idx {
-		item := list[self.threshold_idx]
-		self.threshold_value = item.bitmap.Count()
+	b.rankings = list
+	if len(list) > b.threshold_idx {
+		item := list[b.threshold_idx]
+		b.threshold_value = item.bitmap.Count()
 	} else {
-		self.threshold_value = 1
+		b.threshold_value = 1
 	}
 
-	self.rank_count = 0
+	b.rank_count = 0
 	delta := time.Since(start)
 	util.SendTimer("brand_Rank", delta.Nanoseconds())
-	self.rank_time = start
-
+	b.rank_time = start
 }
 
 func packagePairs(r RankList) []Pair {
@@ -170,11 +172,11 @@ func packagePairs(r RankList) []Pair {
 	return res
 }
 
-func (self *Brand) Stats() interface{} {
+func (b *Brand) Stats() interface{} {
 	total := uint64(0)
 	i := uint64(0)
 	bit_total := uint64(0)
-	for _, v := range self.bitmap_cache {
+	for _, v := range b.bitmap_cache {
 		total += uint64(v.bitmap.Len()) * uint64(256)
 		i += 1
 		bit_total += v.Count
@@ -188,41 +190,43 @@ func (self *Brand) Stats() interface{} {
 
 	stats := map[string]interface{}{
 		"total size of cache in bytes":       total,
-		"number of bitmaps":                  len(self.bitmap_cache),
+		"number of bitmaps":                  len(b.bitmap_cache),
 		"avg size of bitmap in space(bytes)": avg_bytes,
 		"avg size of bitmap in bits":         avg_bits,
-		"rank counter":                       self.rank_count,
-		"threshold_value":                    self.threshold_value,
-		"threshold_length":                   self.threshold_length,
-		"threshold_idx":                      self.threshold_idx,
-		"skip":                               self.skip}
+		"rank counter":                       b.rank_count,
+		"threshold_value":                    b.threshold_value,
+		"threshold_length":                   b.threshold_length,
+		"threshold_idx":                      b.threshold_idx,
+		"skip":                               b.skip}
 	return stats
 }
-func (self *Brand) Store(bitmap_id uint64, bm IBitmap, filter uint64) {
-	self.storage.Store(bitmap_id, self.db, self.frame, self.slice, filter, bm.(*Bitmap))
-	self.cache_it(bm, bitmap_id, filter)
+func (b *Brand) Store(bitmap_id uint64, bm *Bitmap, filter uint64) {
+	b.storage.Store(bitmap_id, b.db, b.frame, b.slice, filter, bm)
+	b.cache_it(bm, bitmap_id, filter)
 }
-func (self *Brand) checkRank() {
-	if len(self.rankings) < 50 {
-		self.Rank()
-	} else if self.rank_count > 0 {
-		last := time.Since(self.rank_time) * time.Second
+func (b *Brand) checkRank() {
+	if len(b.rankings) < 50 {
+		b.Rank()
+		return
+	}
+
+	if b.rank_count > 0 {
+		last := time.Since(b.rank_time) * time.Second
 		if last > 60*5 {
-			self.Rank()
+			b.Rank()
 		}
 	}
 }
-func (self *Brand) TopN(src_bitmap IBitmap, n int, categories []uint64) []Pair {
-	self.checkRank()
-	is := NewIntSet()
+func (b *Brand) TopN(src_bitmap *Bitmap, n int, categories []uint64) []Pair {
+	b.checkRank()
+	set := make(map[uint64]struct{})
 	for _, v := range categories {
-		is.Add(v)
-
+		set[v] = struct{}{}
 	}
 
-	test := self.TopNCat(src_bitmap, n, is)
-	return test
+	return b.TopNCat(src_bitmap, n, set)
 }
+
 func dump(r RankList, n int) {
 	for i, v := range r {
 		log.Info(i, v)
@@ -232,23 +236,23 @@ func dump(r RankList, n int) {
 	}
 }
 
-func (self *Brand) TopNAll(n int, categories []uint64) []Pair {
+func (b *Brand) TopNAll(n int, categories []uint64) []Pair {
 	log.Trace("TopNAll")
 
-	self.checkRank()
+	b.checkRank()
 	results := make([]Pair, 0, 0)
 
-	category := NewIntSet()
+	set := make(map[uint64]struct{})
 	needCat := false
 	for _, v := range categories {
-		category.Add(v)
+		set[v] = struct{}{}
 		needCat = true
-
 	}
+
 	count := 0
-	for _, pair := range self.rankings {
+	for _, pair := range b.rankings {
 		if needCat {
-			if !category.Contains(pair.category) {
+			if _, ok := set[pair.category]; !ok {
 				continue
 			}
 		}
@@ -264,7 +268,7 @@ func (self *Brand) TopNAll(n int, categories []uint64) []Pair {
 	return results
 }
 
-func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
+func (b *Brand) TopNCat(src_bitmap *Bitmap, n int, set map[uint64]struct{}) []Pair {
 	breakout := 1000
 	var (
 		o       *Rank
@@ -273,11 +277,10 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 	counter := 0
 	x := 0
 
-	needCat := category.Size() > 0
-	for i, pair := range self.rankings {
-
+	needCat := (len(set) > 0)
+	for i, pair := range b.rankings {
 		if needCat {
-			if !category.Contains(pair.category) {
+			if _, ok := set[pair.category]; !ok {
 				continue
 			}
 		}
@@ -285,7 +288,7 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 		if counter > n {
 			break
 		}
-		bc := IntersectionCount(src_bitmap, pair.bitmap)
+		bc := src_bitmap.IntersectionCount(pair.bitmap)
 		if bc > 0 {
 			results = append(results, &Rank{&Pair{pair.Key, bc}, nil, pair.category})
 			counter = counter + 1
@@ -307,11 +310,11 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 
 	results = append(results, o)
 
-	for i := x + 1; i < len(self.rankings); i++ {
-		o = self.rankings[i]
+	for i := x + 1; i < len(b.rankings); i++ {
+		o = b.rankings[i]
 
 		if needCat {
-			if !category.Contains(o.category) {
+			if _, ok := set[o.category]; !ok {
 				continue
 			}
 			counter = counter + 1
@@ -330,7 +333,7 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 
 		}
 
-		bc := IntersectionCount(src_bitmap, o.bitmap)
+		bc := src_bitmap.IntersectionCount(o.bitmap)
 
 		if bc > current_threshold {
 			if results[end-1].Count > bc {
@@ -346,35 +349,35 @@ func (self *Brand) TopNCat(src_bitmap IBitmap, n int, category *IntSet) []Pair {
 	}
 	return packagePairs(results[:end])
 }
-func (self *Brand) getFileName() string {
+func (b *Brand) getFileName() string {
 	base := FragmentBase
 	if base == "" {
 		base = "."
 	}
 
-	return fmt.Sprintf("%s/%s.%s.%d.json", base, self.db, self.frame, self.slice)
+	return fmt.Sprintf("%s/%s.%s.%d.json", base, b.db, b.frame, b.slice)
 }
 
-func (self *Brand) Persist() error {
-	log.Info("Brand Persist:", self.getFileName())
-	self.storage.FlushBatch()
-	asize := len(self.bitmap_cache)
+func (b *Brand) Persist() error {
+	log.Info("Brand Persist:", b.getFileName())
+	b.storage.FlushBatch()
+	asize := len(b.bitmap_cache)
 
 	if asize == 0 {
-		log.Warn("Nothing to save ", self.getFileName())
+		log.Warn("Nothing to save ", b.getFileName())
 		return nil
 	}
-	w, err := util.Create(self.getFileName())
+	w, err := util.Create(b.getFileName())
 	if err != nil {
-		log.Warn("Error opening outfile ", self.getFileName())
+		log.Warn("Error opening outfile ", b.getFileName())
 		log.Warn(err)
 		return err
 	}
 	defer w.Close()
-	defer self.storage.Close()
+	defer b.storage.Close()
 
 	var list RankList
-	for k, item := range self.bitmap_cache {
+	for k, item := range b.bitmap_cache {
 		list = append(list, &Rank{&Pair{k, item.bitmap.Count()}, item.bitmap, item.category})
 	}
 
@@ -391,12 +394,12 @@ func (self *Brand) Persist() error {
 	return encoder.Encode(results)
 }
 
-func (self *Brand) Load(requestChan chan Command, f *Fragment) {
+func (b *Brand) Load(requestChan chan Command, f *Fragment) {
 	log.Warn("Brand Load")
 	time.Sleep(time.Duration(rand.Intn(32)) * time.Second) //trying to avoid mass cassandra hit
-	r, err := util.Open(self.getFileName())
+	r, err := util.Open(b.getFileName())
 	if err != nil {
-		log.Warn("NO Brand Init File:", self.getFileName())
+		log.Warn("NO Brand Init File:", b.getFileName())
 		return
 	}
 	dec := json.NewDecoder(r)
@@ -416,30 +419,31 @@ func (self *Brand) Load(requestChan chan Command, f *Fragment) {
 	}
 }
 
-func (self *Brand) ClearBit(bitmap_id uint64, bit_pos uint64) bool {
+func (b *Brand) ClearBit(bitmap_id uint64, bit_pos uint64) bool {
 	log.Trace("ClearBit", bitmap_id, bit_pos)
-	bm1, ok := self.bitmap_cache[bitmap_id]
-	var bm IBitmap
+	bm1, ok := b.bitmap_cache[bitmap_id]
+	var bm *Bitmap
 	filter := uint64(0)
 	if ok {
 		bm = bm1.bitmap
 		filter = bm1.category
 	} else {
-		bm, filter = self.Get_nocache(bitmap_id)
+		bm, filter = b.Get_nocache(bitmap_id)
 		if bm.Count() == 0 {
 			return false //nothing to unset
 		}
 	}
 
-	change, chunk, address := ClearBit(bm, bit_pos)
-	if change {
-		val := chunk.Value.Block[address.BlockIndex]
+	changed, chunk, address := bm.ClearBit(bit_pos)
+	if changed {
+		val := chunk.Value[address.BlockIndex]
 		if val == 0 {
-			self.storage.RemoveBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), bm.Count())
+			b.storage.RemoveBit(bitmap_id, b.db, b.frame, b.slice, filter, address.ChunkKey, int32(address.BlockIndex), bm.Count())
 		} else {
-			self.storage.StoreBit(bitmap_id, self.db, self.frame, self.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
+			b.storage.StoreBit(bitmap_id, b.db, b.frame, b.slice, filter, address.ChunkKey, int32(address.BlockIndex), val, bm.Count())
 		}
-		self.rank_count++
+		b.rank_count++
 	}
-	return change
+
+	return changed
 }

@@ -23,11 +23,11 @@ func (c *MemoryStorage) EndBatch() {}
 
 func (c *MemoryStorage) FlushBatch() {}
 
-func (c *MemoryStorage) Fetch(bitmap_id uint64, db string, frame string, slice int) (IBitmap, uint64) {
+func (c *MemoryStorage) Fetch(bitmap_id uint64, db string, frame string, slice int) (*Bitmap, uint64) {
 	key := fmt.Sprintf("%d:%s:%s:%d", bitmap_id, db, frame, slice)
 	bitmap, found := c.db[key]
 	if !found {
-		bitmap = CreateRBBitmap().(*Bitmap)
+		bitmap = NewBitmap()
 		c.db[key] = bitmap
 	}
 	return bitmap, 0

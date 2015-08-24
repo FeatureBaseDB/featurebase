@@ -67,28 +67,28 @@ func decodeValue(value []byte) (uint64, uint64) {
 	return block, filter
 }
 
-func (self *LevelDBStorage) Fetch(bitmap_id uint64, db string, frame string, slice int) (IBitmap, uint64) {
+func (self *LevelDBStorage) Fetch(bitmap_id uint64, db string, frame string, slice int) (*Bitmap, uint64) {
 	start := time.Now()
 	var (
 		chunk                   *Chunk
 		filter, block, last_key uint64
 	)
 
-	bitmap := CreateRBBitmap()
+	bitmap := NewBitmap()
 	count := uint64(0)
 	start_key := encodeKey(bitmap_id, 0, 0)
 	limit_key := encodeKey(bitmap_id+1, 0, 0)
 	iter := self.db.NewIterator(&Range{Start: start_key, Limit: limit_key}, nil)
-	last_key = COUNTERMASK
+	last_key = CounterMask
 	for iter.Next() {
 		_, chunk_key, block_index := decodeKey(iter.Key())
 		block, filter = decodeValue(iter.Value())
-		if chunk_key != COUNTERMASK {
+		if chunk_key != CounterMask {
 			if chunk_key != last_key {
-				chunk = &Chunk{chunk_key, BlockArray{make([]uint64, 32, 32)}}
+				chunk = &Chunk{chunk_key, make(Blocks, 32)}
 				bitmap.AddChunk(chunk)
 			}
-			chunk.Value.Block[block_index] = block
+			chunk.Value[block_index] = block
 
 		} else {
 			count = block
@@ -142,18 +142,17 @@ func (self *LevelDBStorage) EndBatch() {
 
 func (self *LevelDBStorage) Store(id uint64, db string, frame string, slice int, filter uint64, bitmap *Bitmap) error {
 	self.BeginBatch()
-	for i := bitmap.Min(); !i.Limit(); i = i.Next() {
+	for i := bitmap.ChunkIterator(); !i.Limit(); i = i.Next() {
 		var chunk = i.Item()
-		for idx, block := range chunk.Value.Block {
+		for idx, block := range chunk.Value {
 			block_index := int32(idx)
 			if block != 0 {
 				self.StoreBlock(id, db, frame, slice, filter, chunk.Key, block_index, block)
 			}
 		}
 	}
-	cnt := BitCount(bitmap)
 
-	self.StoreBlock(id, db, frame, slice, filter, COUNTERMASK, 0, cnt)
+	self.StoreBlock(id, db, frame, slice, filter, CounterMask, 0, bitmap.BitCount())
 	self.EndBatch()
 	return nil
 }
@@ -183,7 +182,7 @@ func (self *LevelDBStorage) Close() {
 func (self *LevelDBStorage) StoreBit(bid uint64, db string, frame string, slice int, filter uint64, bchunk uint64, block_index int32, bblock, count uint64) {
 	self.BeginBatch()
 	self.StoreBlock(bid, db, frame, slice, filter, bchunk, block_index, bblock)
-	self.StoreBlock(bid, db, frame, slice, filter, COUNTERMASK, 0, count)
+	self.StoreBlock(bid, db, frame, slice, filter, CounterMask, 0, count)
 	self.EndBatch()
 
 }

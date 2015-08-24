@@ -343,13 +343,13 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 }
 
 type Pilosa interface {
-	Get(id uint64) IBitmap
+	Get(id uint64) *Bitmap
 	SetBit(id uint64, bit_pos uint64, filter uint64) bool
 	ClearBit(id uint64, bit_pos uint64) bool
-	TopN(b IBitmap, n int, categories []uint64) []Pair
+	TopN(b *Bitmap, n int, categories []uint64) []Pair
 	TopNAll(n int, categories []uint64) []Pair
 	Clear() bool
-	Store(bitmap_id uint64, bm IBitmap, filter uint64)
+	Store(bitmap_id uint64, bm *Bitmap, filter uint64)
 	Stats() interface{}
 	Persist() error
 	Load(requestChan chan Command, fragment *Fragment)
@@ -401,10 +401,10 @@ func NewFragment(frag_id util.SUUID, db string, slice int, frame string) *Fragme
 	return f
 }
 
-func (self *Fragment) getBitmap(bitmap BitmapHandle) (IBitmap, bool) {
+func (self *Fragment) getBitmap(bitmap BitmapHandle) (*Bitmap, bool) {
 	bm, ok := self.cache.Get(bitmap)
 	if ok && bm != nil {
-		return bm.(IBitmap), ok
+		return bm.(*Bitmap), ok
 	}
 	return NewBitmap(), false //cache fail but return ting em
 }
@@ -430,7 +430,7 @@ func (self *Fragment) NewHandle(bitmap_id uint64) BitmapHandle {
 	return self.AllocHandle(bm)
 	//given a bitmap_id return a newly allocated  handle
 }
-func (self *Fragment) AllocHandle(bm IBitmap) BitmapHandle {
+func (self *Fragment) AllocHandle(bm *Bitmap) BitmapHandle {
 	handle := self.nextHandle()
 	self.cache.Add(handle, bm)
 	return handle
@@ -452,7 +452,7 @@ func (self *Fragment) union(bitmaps []BitmapHandle) BitmapHandle {
 		if i == 0 {
 			result = bm
 		} else {
-			result = Union(result, bm)
+			result = result.Union(bm)
 		}
 	}
 	return self.AllocHandle(result)
@@ -464,20 +464,20 @@ func (self *Fragment) build_time_range_bitmap(bitmap_id uint64, start, end time.
 		if i == 0 {
 			result = bm
 		} else {
-			result = Union(result, bm)
+			result = result.Union(bm)
 		}
 	}
 	return self.AllocHandle(result)
 }
 
 func (self *Fragment) intersect(bitmaps []BitmapHandle) BitmapHandle {
-	var result IBitmap
+	var result *Bitmap
 	for i, id := range bitmaps {
 		bm, _ := self.getBitmap(id)
 		if i == 0 {
-			result = Clone(bm)
+			result = bm.Clone()
 		} else {
-			result = Intersection(result, bm)
+			result = result.Intersection(bm)
 		}
 	}
 	return self.AllocHandle(result)
@@ -490,7 +490,7 @@ func (self *Fragment) difference(bitmaps []BitmapHandle) BitmapHandle {
 		if i == 0 {
 			result = bm
 		} else {
-			result = Difference(result, bm)
+			result = result.Difference(bm)
 		}
 	}
 	return self.AllocHandle(result)

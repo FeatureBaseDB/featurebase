@@ -13,21 +13,29 @@ import (
 	"github.com/umbel/pilosa/index"
 )
 
-func copy_raw(src [32]uint64) index.BlockArray {
-	var o = make([]uint64, 32, 32)
+func copy_raw(src [32]uint64) index.Blocks {
+	o := make(index.Blocks, 32)
 	for k, v := range src {
 		o[k] = v
 	}
-	return index.BlockArray{Block: o}
+	return o
 }
-func sendBitmap(batcher *Batcher, bitmap index.IBitmap, db string, frame string, bitmap_id, filter uint64, slice int, finish chan error) {
+func sendBitmap(batcher *Batcher, bitmap *index.Bitmap, db string, frame string, bitmap_id, filter uint64, slice int, finish chan error) {
 	if slice < 0 {
 		log.Warn("Bad split", db, frame, slice, bitmap_id)
 		finish <- errors.New("BadSplit")
 		return
 	}
-	compressed_bitmap := bitmap.ToCompressString()
-	results := batcher.Batch(db, frame, compressed_bitmap, bitmap_id, slice, filter)
+
+	// Compress bitmap.
+	var b bytes.Buffer
+	w := gzip.NewWriter(&b)
+	w.Write(bitmap.ToBytes())
+	w.Flush()
+	w.Close()
+	buf := base64.StdEncoding.EncodeToString(b.Bytes())
+
+	results := batcher.Batch(db, frame, buf, bitmap_id, slice, filter)
 	finish <- results
 }
 
@@ -50,7 +58,7 @@ func FromApiString(batcher *Batcher, db string, frame string, api_string string,
 	}
 	first := true
 	bitmap := index.NewBitmap()
-	last_slice := index.COUNTERMASK
+	last_slice := index.CounterMask
 	sent_count := 0
 	finish := make(chan error)
 
