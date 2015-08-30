@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/umbel/pilosa/index"
+	_ "github.com/umbel/pilosa/index/storage"
+	"github.com/umbel/pilosa/index/storage/cassandra"
 	"github.com/umbel/pilosa/transport"
 	"github.com/umbel/pilosa/util"
 )
@@ -91,12 +93,12 @@ func NewConfig() Config {
 	c.HTTP.Port = transport.DefaultHTTPPort
 	c.Log.Path = DefaultLogPath
 	c.Storage.Backend = index.DefaultBackend
-	c.Storage.Hosts = index.DefaultStorageHosts[:]
-	c.Storage.Keyspace = index.DefaultStorageKeyspace
+	c.Storage.Hosts = cassandra.DefaultHosts
+	c.Storage.Keyspace = cassandra.DefaultKeyspace
 	c.Storage.FragmentBase = DefaultFragmentBase
 	c.Storage.SupportedFrames = DefaultSupportedFrames[:]
-	c.Storage.CassandraTimeWindow = Duration(index.DefaultCassandraTimeWindow)
-	c.Storage.CassandraMaxSizeBatch = index.DefaultCassandraMaxSizeBatch
+	c.Storage.CassandraTimeWindow = Duration(cassandra.DefaultFlushInterval)
+	c.Storage.CassandraMaxSizeBatch = cassandra.DefaultFlushThreshold
 	c.Statsd.Host = util.DefaultStatsdHost
 	c.ETCD.Hosts = DefaultETCDHosts[:]
 	return c

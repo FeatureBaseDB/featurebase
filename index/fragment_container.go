@@ -369,25 +369,22 @@ type Fragment struct {
 	queue_size  int
 }
 
-func getStorage(db string, slice int, frame string, fid util.SUUID) Storage {
-	switch Backend {
-	default:
-		return NewMemoryStorage()
-	case "leveldb":
-		full_dir := fmt.Sprintf("%s/%s/%d/%s/%s", LevelDBPath, db, slice, frame, util.SUUID_to_Hex(fid))
-		return NewLevelDBStorage(full_dir)
-	case "cassandra":
-		return NewCassStorage()
-	}
-}
-
 func NewFragment(frag_id util.SUUID, db string, slice int, frame string) *Fragment {
 	var impl Pilosa
 	log.Warn(fmt.Sprintf("XXXXXXXXXXXXXXXXXXXXXXXXXXX(%s)", frame))
+
+	storage := NewStorage(Backend, StorageOptions{
+		DB:          db,
+		Slice:       slice,
+		Frame:       frame,
+		FragmentID:  frag_id,
+		LevelDBPath: LevelDBPath,
+	})
+
 	if strings.HasSuffix(frame, ".n") {
-		impl = NewBrand(db, frame, slice, getStorage(db, slice, frame, frag_id), 50000, 45000, 100)
+		impl = NewBrand(db, frame, slice, storage, 50000, 45000, 100)
 	} else {
-		impl = NewGeneral(db, frame, slice, getStorage(db, slice, frame, frag_id))
+		impl = NewGeneral(db, frame, slice, storage)
 	}
 
 	f := new(Fragment)

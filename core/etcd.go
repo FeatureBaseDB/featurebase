@@ -299,7 +299,7 @@ func (self *TopologyMapper) remove_fragment(node *etcd.Node) error {
 func flatten(node *etcd.Node) []*etcd.Node {
 	nodes := []*etcd.Node{node}
 	for i := 0; i < len(node.Nodes); i++ {
-		nodes = append(nodes, flatten(&node.Nodes[i])...)
+		nodes = append(nodes, flatten(node.Nodes[i])...)
 	}
 	return nodes
 }
