@@ -108,9 +108,6 @@ func (m *Main) Run(args ...string) error {
 	util.StatsdHost = config.Statsd.Host
 	util.SetupStatsd()
 
-	// REMOVED(benbjohnson): config.SetupConfig()
-	index.SetupCassandra()
-
 	// Initialize logging.
 	logger, _ := log.LoggerFromConfigAsBytes([]byte(SeelogProductionConfig(config.Log.Path, *id, config.Log.Level)))
 	log.ReplaceLogger(logger)

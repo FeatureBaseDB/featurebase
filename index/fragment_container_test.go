@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/umbel/pilosa/index"
+	_ "github.com/umbel/pilosa/index/storage"
 	"github.com/umbel/pilosa/util"
 )
 

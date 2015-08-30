@@ -360,7 +360,7 @@ func (b *Brand) getFileName() string {
 
 func (b *Brand) Persist() error {
 	log.Info("Brand Persist:", b.getFileName())
-	b.storage.FlushBatch()
+	b.storage.Flush()
 	asize := len(b.bitmap_cache)
 
 	if asize == 0 {

@@ -6,13 +6,18 @@ import (
 
 type Blocks []uint64
 
+// NewBlocks returns a 32-length Block.
+func NewBlocks() Blocks {
+	return make(Blocks, 32)
+}
+
 func (a Blocks) bitcount() uint64 {
 	fmt.Println("bitcount:", a)
 	return popcntSlice(a)
 }
 
 func (a Blocks) union(other Blocks) Blocks {
-	ret := make(Blocks, 32)
+	ret := NewBlocks()
 	for i, _ := range a {
 		ret[i] = a[i] | other[i]
 	}
@@ -20,7 +25,7 @@ func (a Blocks) union(other Blocks) Blocks {
 }
 
 func (a Blocks) invert() Blocks {
-	other := make(Blocks, 32)
+	other := NewBlocks()
 	for i, _ := range a {
 		other[i] = ^a[i]
 	}
@@ -28,7 +33,7 @@ func (a Blocks) invert() Blocks {
 }
 
 func (a Blocks) copy() Blocks {
-	other := make(Blocks, 32)
+	other := NewBlocks()
 	for i, _ := range a {
 		other[i] = a[i]
 	}
@@ -41,7 +46,7 @@ func (a Blocks) andcount(other Blocks) uint64 {
 }
 
 func (a Blocks) intersection(other Blocks) Blocks {
-	ret := make(Blocks, 32)
+	ret := NewBlocks()
 	for i, _ := range a {
 		ret[i] = a[i] & other[i]
 	}
@@ -49,7 +54,7 @@ func (a Blocks) intersection(other Blocks) Blocks {
 }
 
 func (a Blocks) difference(other Blocks) Blocks {
-	ret := make(Blocks, 32)
+	ret := NewBlocks()
 	for i, _ := range a {
 		ret[i] = a[i] &^ other[i]
 	}
