@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/umbel/pilosa/index"
-	"github.com/umbel/pilosa/index/storage/leveldb"
+	"github.com/umbel/pilosa"
+	"github.com/umbel/pilosa/storage/leveldb"
 	"github.com/umbel/pilosa/util"
 )
 
@@ -34,7 +34,7 @@ func NewStorage() *Storage {
 	f.Close()
 	os.Remove(f.Name())
 
-	return &Storage{leveldb.NewStorage(index.StorageOptions{
+	return &Storage{leveldb.NewStorage(pilosa.StorageOptions{
 		LevelDBPath: f.Name(),
 	})}
 }

@@ -8,7 +8,7 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/util"
 )
 
@@ -221,7 +221,7 @@ ArgLoop:
 					if err != nil {
 						return nil, fmt.Errorf("Expecting handle! (%v)", err)
 					}
-					recallArgs.Assign(index.BitmapHandle(i)) //sets the value of the last created arg
+					recallArgs.Assign(pilosa.BitmapHandle(i)) //sets the value of the last created arg
 				}
 			default:
 				spew.Dump("UNPROCESSED VALUE", token)

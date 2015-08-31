@@ -1,6 +1,6 @@
 // +build amd64
 
-package index
+package pilosa
 
 //go:noescape
 

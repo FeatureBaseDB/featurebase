@@ -10,17 +10,17 @@ import (
 	"errors"
 
 	log "github.com/cihub/seelog"
-	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa"
 )
 
-func copy_raw(src [32]uint64) index.Blocks {
-	o := make(index.Blocks, 32)
+func copy_raw(src [32]uint64) pilosa.Blocks {
+	o := make(pilosa.Blocks, 32)
 	for k, v := range src {
 		o[k] = v
 	}
 	return o
 }
-func sendBitmap(batcher *Batcher, bitmap *index.Bitmap, db string, frame string, bitmap_id, filter uint64, slice int, finish chan error) {
+func sendBitmap(batcher *Batcher, bitmap *pilosa.Bitmap, db string, frame string, bitmap_id, filter uint64, slice int, finish chan error) {
 	if slice < 0 {
 		log.Warn("Bad split", db, frame, slice, bitmap_id)
 		finish <- errors.New("BadSplit")
@@ -57,8 +57,8 @@ func FromApiString(batcher *Batcher, db string, frame string, api_string string,
 		return "Bad"
 	}
 	first := true
-	bitmap := index.NewBitmap()
-	last_slice := index.CounterMask
+	bitmap := pilosa.NewBitmap()
+	last_slice := pilosa.CounterMask
 	sent_count := 0
 	finish := make(chan error)
 
@@ -76,12 +76,12 @@ func FromApiString(batcher *Batcher, db string, frame string, api_string string,
 				//make async later
 				sent_count += 1
 				go sendBitmap(batcher, bitmap, db, frame, bitmap_id, filter, int(last_slice), finish)
-				bitmap = index.NewBitmap()
+				bitmap = pilosa.NewBitmap()
 			}
 			last_slice = slice
 		}
 		o := copy_raw(raw.Block)
-		chunk := &index.Chunk{Key: raw.Key, Value: o}
+		chunk := &pilosa.Chunk{Key: raw.Key, Value: o}
 		bitmap.AddChunk(chunk)
 
 	}

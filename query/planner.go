@@ -9,8 +9,8 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/db"
-	"github.com/umbel/pilosa/index"
 	"github.com/umbel/pilosa/util"
 )
 
@@ -845,11 +845,11 @@ type FillResult struct {
 
 type CacheItem struct {
 	FragmentId util.SUUID
-	Handle     index.BitmapHandle
+	Handle     pilosa.BitmapHandle
 }
 
 type Stash struct {
-	Stash      []CacheItem //index.BitmapHandle //probably need to make the a struct with fragment_id and handle
+	Stash      []CacheItem //pilosa.BitmapHandle //probably need to make the a struct with fragment_id and handle
 	incomplete bool
 }
 
@@ -863,7 +863,7 @@ func (st *Stash) Add(i util.SUUID) {
 	st.incomplete = true
 }
 
-func (st *Stash) Assign(i index.BitmapHandle) {
+func (st *Stash) Assign(i pilosa.BitmapHandle) {
 	st.Stash[len(st.Stash)-1].Handle = i //big assumption that item already exists
 	st.incomplete = false
 }

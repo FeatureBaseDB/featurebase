@@ -3,9 +3,9 @@ package main
 import (
 	"time"
 
-	"github.com/umbel/pilosa/index"
-	_ "github.com/umbel/pilosa/index/storage"
-	"github.com/umbel/pilosa/index/storage/cassandra"
+	"github.com/umbel/pilosa"
+	_ "github.com/umbel/pilosa/storage"
+	"github.com/umbel/pilosa/storage/cassandra"
 	"github.com/umbel/pilosa/transport"
 	"github.com/umbel/pilosa/util"
 )
@@ -92,7 +92,7 @@ func NewConfig() Config {
 	c.TCP.Port = transport.DefaultTCPPort
 	c.HTTP.Port = transport.DefaultHTTPPort
 	c.Log.Path = DefaultLogPath
-	c.Storage.Backend = index.DefaultBackend
+	c.Storage.Backend = pilosa.DefaultBackend
 	c.Storage.Hosts = cassandra.DefaultHosts
 	c.Storage.Keyspace = cassandra.DefaultKeyspace
 	c.Storage.FragmentBase = DefaultFragmentBase

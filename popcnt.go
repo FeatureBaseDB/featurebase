@@ -1,4 +1,4 @@
-package index
+package pilosa
 
 // bit population count, take from
 // https://code.google.com/p/go/issues/detail?id=4988#c11

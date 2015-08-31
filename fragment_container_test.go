@@ -1,15 +1,15 @@
-package index_test
+package pilosa_test
 
 import (
 	"testing"
 
-	"github.com/umbel/pilosa/index"
-	_ "github.com/umbel/pilosa/index/storage"
+	"github.com/umbel/pilosa"
+	_ "github.com/umbel/pilosa/storage"
 	"github.com/umbel/pilosa/util"
 )
 
 func init() {
-	index.Backend = "memory"
+	pilosa.Backend = "memory"
 }
 
 // Ensure a fragment can be retrieved from the container.
@@ -77,7 +77,7 @@ func TestFragmentContainer_Union(t *testing.T) {
 	fc.MustSetBit(1, 4321, 65537, 0)
 
 	// Union the handles together.
-	if result, err := fc.Union(1, []index.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
+	if result, err := fc.Union(1, []pilosa.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
 		t.Fatal(err)
 	} else if n := fc.MustCount(1, result); n != 2 {
 		t.Fatalf("unexpected union bit count: %d", n)
@@ -91,7 +91,7 @@ func TestFragmentContainer_Union_Empty(t *testing.T) {
 	fc.MustSetBit(1, 1234, 1, 0)
 
 	// Union the handles together.
-	if result, err := fc.Union(1, []index.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
+	if result, err := fc.Union(1, []pilosa.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
 		t.Fatal(err)
 	} else if n := fc.MustCount(1, result); n != 1 {
 		t.Fatalf("unexpected empty union bit count: %d", n)
@@ -106,7 +106,7 @@ func TestFragmentContainer_Intersect(t *testing.T) {
 	fc.MustSetBit(1, 4321, 65537, 0)
 
 	// Intersect the handles together.
-	if result, err := fc.Intersect(1, []index.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
+	if result, err := fc.Intersect(1, []pilosa.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
 		t.Fatal(err)
 	} else if n := fc.MustCount(1, result); n != 0 {
 		t.Fatalf("unexpected intersect bit count: %d", n)
@@ -121,7 +121,7 @@ func TestFragmentContainer_Difference(t *testing.T) {
 	fc.MustSetBit(1, 4321, 65537, 0)
 
 	// Compute the difference between the handles.
-	if result, err := fc.Difference(1, []index.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
+	if result, err := fc.Difference(1, []pilosa.BitmapHandle{fc.MustGet(1, 1234), fc.MustGet(1, 4321)}); err != nil {
 		t.Fatal(err)
 	} else if n := fc.MustCount(1, result); n != 1 {
 		t.Fatalf("unexpected difference bit count: %s", err)
@@ -262,18 +262,18 @@ func TestFragmentContainer_FromBytes(t *testing.T) {
 	}
 }
 
-// FragementContainer is a test wrapper for index.FragmentContainer.
+// FragementContainer is a test wrapper for pilosa.FragmentContainer.
 type FragmentContainer struct {
-	*index.FragmentContainer
+	*pilosa.FragmentContainer
 }
 
 // NewFragmentContainer returns a new instance of FragmentContainer.
 func NewFragmentContainer() *FragmentContainer {
-	return &FragmentContainer{index.NewFragmentContainer()}
+	return &FragmentContainer{pilosa.NewFragmentContainer()}
 }
 
 // MustGet retrieves a bitmap by id. Panic on error.
-func (fc *FragmentContainer) MustGet(frag_id util.SUUID, bitmap_id uint64) index.BitmapHandle {
+func (fc *FragmentContainer) MustGet(frag_id util.SUUID, bitmap_id uint64) pilosa.BitmapHandle {
 	bh, err := fc.Get(frag_id, bitmap_id)
 	if err != nil {
 		panic(err)
@@ -300,7 +300,7 @@ func (fc *FragmentContainer) MustClear(fragmentID util.SUUID) bool {
 }
 
 // MustCount returns the number of set bits in a bitmap. Panic on error.
-func (fc *FragmentContainer) MustCount(frag_id util.SUUID, bitmap index.BitmapHandle) uint64 {
+func (fc *FragmentContainer) MustCount(frag_id util.SUUID, bitmap pilosa.BitmapHandle) uint64 {
 	v, err := fc.Count(frag_id, bitmap)
 	if err != nil {
 		panic(err)

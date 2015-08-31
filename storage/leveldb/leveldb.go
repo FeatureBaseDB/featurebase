@@ -9,13 +9,13 @@ import (
 
 	"github.com/syndtr/goleveldb/leveldb"
 	. "github.com/syndtr/goleveldb/leveldb/util"
-	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/util"
 )
 
 func init() {
-	index.RegisterStorage("leveldb",
-		func(opt index.StorageOptions) index.Storage {
+	pilosa.RegisterStorage("leveldb",
+		func(opt pilosa.StorageOptions) pilosa.Storage {
 			return NewStorage(opt)
 		},
 	)
@@ -34,7 +34,7 @@ type Storage struct {
 }
 
 // NewStorage returns a new instance of Storage.
-func NewStorage(opt index.StorageOptions) *Storage {
+func NewStorage(opt pilosa.StorageOptions) *Storage {
 	path := filepath.Join(
 		opt.LevelDBPath,
 		opt.DB,
@@ -67,8 +67,8 @@ func (s *Storage) Close() error {
 	return s.db.Close()
 }
 
-func (s *Storage) Fetch(bitmapID uint64, db string, frame string, slice int) (*index.Bitmap, uint64) {
-	bm := index.NewBitmap()
+func (s *Storage) Fetch(bitmapID uint64, db string, frame string, slice int) (*pilosa.Bitmap, uint64) {
+	bm := pilosa.NewBitmap()
 
 	// Begin benchmark.
 	start := time.Now()
@@ -81,16 +81,16 @@ func (s *Storage) Fetch(bitmapID uint64, db string, frame string, slice int) (*i
 	defer iter.Release()
 
 	// Iterate over blocks in database and create bitmap.
-	var chunk *index.Chunk
+	var chunk *pilosa.Chunk
 	var filter, block, count uint64
-	lastKey := uint64(index.CounterMask)
+	lastKey := uint64(pilosa.CounterMask)
 
 	for iter.Next() {
 		_, key, idx := unmarshalKey(iter.Key())
 		block, filter = unmarshalValue(iter.Value())
-		if key != index.CounterMask {
+		if key != pilosa.CounterMask {
 			if key != lastKey {
-				chunk = &index.Chunk{key, index.NewBlocks()}
+				chunk = &pilosa.Chunk{key, pilosa.NewBlocks()}
 				bm.AddChunk(chunk)
 			}
 			chunk.Value[idx] = block
@@ -146,7 +146,7 @@ func (s *Storage) Flush() {
 }
 
 // Store saves a bitmap to storage.
-func (s *Storage) Store(bitmapID uint64, db string, frame string, slice int, filter uint64, bm *index.Bitmap) error {
+func (s *Storage) Store(bitmapID uint64, db string, frame string, slice int, filter uint64, bm *pilosa.Bitmap) error {
 	s.beginBatch()
 
 	for itr := bm.ChunkIterator(); !itr.Limit(); itr = itr.Next() {
@@ -157,7 +157,7 @@ func (s *Storage) Store(bitmapID uint64, db string, frame string, slice int, fil
 		}
 	}
 
-	s.StoreBlock(bitmapID, db, frame, slice, filter, index.CounterMask, 0, bm.BitCount())
+	s.StoreBlock(bitmapID, db, frame, slice, filter, pilosa.CounterMask, 0, bm.BitCount())
 
 	s.endBatch()
 	return nil
@@ -179,7 +179,7 @@ func (s *Storage) RemoveBlock(bitmapID uint64, db string, frame string, slice in
 func (s *Storage) StoreBit(bitmapID uint64, db string, frame string, slice int, filter uint64, bchunk uint64, blockIndex int32, bblock, count uint64) {
 	s.beginBatch()
 	s.StoreBlock(bitmapID, db, frame, slice, filter, bchunk, blockIndex, bblock)
-	s.StoreBlock(bitmapID, db, frame, slice, filter, index.CounterMask, 0, count)
+	s.StoreBlock(bitmapID, db, frame, slice, filter, pilosa.CounterMask, 0, count)
 	s.endBatch()
 }
 
