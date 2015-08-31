@@ -1,6 +1,6 @@
 // +build !amd64
 
-package index
+package pilosa
 
 func popcntSlice(s []uint64) uint64 {
 	return popcntSliceGo(s)

@@ -1,18 +1,18 @@
-package index_test
+package pilosa_test
 
 import (
 	"math/rand"
 	"testing"
 
-	"github.com/umbel/pilosa/index"
-	"github.com/umbel/pilosa/index/storage/mem"
+	"github.com/umbel/pilosa"
+	"github.com/umbel/pilosa/storage/mem"
 	"github.com/umbel/pilosa/util"
 )
 
 var (
 	size      int
-	membrand  *index.Brand
-	cassbrand *index.Brand
+	membrand  *pilosa.Brand
+	cassbrand *pilosa.Brand
 )
 
 func init() {
@@ -21,7 +21,7 @@ func init() {
 	util.SetupStatsd()
 	// SetupCassandra()
 
-	membrand = index.NewBrand("db", "frame", 0, mem.NewStorage(), size, size, 0)
+	membrand = pilosa.NewBrand("db", "frame", 0, mem.NewStorage(), size, size, 0)
 	for i := uint64(0); i < uint64(size); i++ {
 		membrand.SetBit(i, 0, 1)
 	}
@@ -31,7 +31,7 @@ func init() {
 	// }
 }
 
-func benchmarkBrand(b *testing.B, size int, fill int, brand *index.Brand) {
+func benchmarkBrand(b *testing.B, size int, fill int, brand *pilosa.Brand) {
 	println(b.N)
 	for i := 0; i < b.N; i++ {
 		bid := rand.Int() % size

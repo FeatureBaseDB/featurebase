@@ -13,12 +13,12 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/kr/s3/s3util"
 	"github.com/mitchellh/panicwrap"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/core"
 	"github.com/umbel/pilosa/db"
 	"github.com/umbel/pilosa/dispatch"
 	"github.com/umbel/pilosa/executor"
 	"github.com/umbel/pilosa/hold"
-	"github.com/umbel/pilosa/index"
 	"github.com/umbel/pilosa/transport"
 	"github.com/umbel/pilosa/util"
 )
@@ -96,9 +96,9 @@ func (m *Main) Run(args ...string) error {
 	// Pass configuration to packages.
 	// NOTE: This is temporary. These config options should be encapsulated in the types.
 	db.SupportedFrames = config.Storage.SupportedFrames
-	index.FragmentBase = config.Storage.FragmentBase
-	index.Backend = config.Storage.Backend
-	index.LevelDBPath = config.LevelDB.Path
+	pilosa.FragmentBase = config.Storage.FragmentBase
+	pilosa.Backend = config.Storage.Backend
+	pilosa.LevelDBPath = config.LevelDB.Path
 
 	// Initialize AWS storage.
 	s3util.DefaultConfig.AccessKey = config.AWS.AccessKeyID
@@ -119,7 +119,7 @@ func (m *Main) Run(args ...string) error {
 	cluster := db.NewCluster()
 
 	// Create index.
-	idx := index.NewFragmentContainer()
+	idx := pilosa.NewFragmentContainer()
 
 	// Initialize the holder.
 	hold := hold.NewHolder()

@@ -3,12 +3,12 @@ package mem
 import (
 	"fmt"
 
-	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa"
 )
 
 func init() {
-	index.RegisterStorage("memory",
-		func(opt index.StorageOptions) index.Storage {
+	pilosa.RegisterStorage("memory",
+		func(opt pilosa.StorageOptions) pilosa.Storage {
 			return NewStorage()
 		},
 	)
@@ -16,13 +16,13 @@ func init() {
 
 // Storage represents in-memory bitmap storage.
 type Storage struct {
-	db map[string]*index.Bitmap
+	db map[string]*pilosa.Bitmap
 }
 
 // NewStorage returns a new instance of Storage.
 func NewStorage() *Storage {
 	return &Storage{
-		db: make(map[string]*index.Bitmap),
+		db: make(map[string]*pilosa.Bitmap),
 	}
 }
 
@@ -36,7 +36,7 @@ func (c *Storage) Close() error { return nil }
 func (c *Storage) Flush() {}
 
 // Fetch retrieves a bitmap by id.
-func (c *Storage) Fetch(id uint64, db, frame string, slice int) (*index.Bitmap, uint64) {
+func (c *Storage) Fetch(id uint64, db, frame string, slice int) (*pilosa.Bitmap, uint64) {
 	key := fmt.Sprintf("%d:%s:%s:%d", id, db, frame, slice)
 
 	// Find bitmap by key.
@@ -46,14 +46,14 @@ func (c *Storage) Fetch(id uint64, db, frame string, slice int) (*index.Bitmap, 
 	}
 
 	// If the bitmap doesn't exist then create a new one.
-	b = index.NewBitmap()
+	b = pilosa.NewBitmap()
 	c.db[key] = b
 	return b, 0
 }
 
 // Store saves a bitmap to storage.
 // This is a no-op for in-memory storage because changes are stored in the cache.
-func (c *Storage) Store(id uint64, db, frame string, slice int, filter uint64, b *index.Bitmap) error {
+func (c *Storage) Store(id uint64, db, frame string, slice int, filter uint64, b *pilosa.Bitmap) error {
 	return nil
 }
 

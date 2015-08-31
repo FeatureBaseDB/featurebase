@@ -1,14 +1,14 @@
-package index_test
+package pilosa_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa"
 )
 
 func TestGetRange_1h_0(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-08-11 14:00"),
 		MustParseTime("2014-08-11 16:00"),
 		uint64(1),
@@ -18,7 +18,7 @@ func TestGetRange_1h_0(t *testing.T) {
 }
 
 func TestGetRange_1h_1(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-01-02 10:03"),
 		MustParseTime("2014-01-02 11:03"),
 		uint64(1),
@@ -28,7 +28,7 @@ func TestGetRange_1h_1(t *testing.T) {
 }
 
 func TestGetRange_2h(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-01-02 10:03"),
 		MustParseTime("2014-01-02 12:03"),
 		uint64(1),
@@ -38,7 +38,7 @@ func TestGetRange_2h(t *testing.T) {
 }
 
 func TestGetRange_24h(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-01-02 12:03"),
 		MustParseTime("2014-01-03 12:03"),
 		uint64(1),
@@ -48,7 +48,7 @@ func TestGetRange_24h(t *testing.T) {
 }
 
 func TestGetRange_1d(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-01-02 00:00"),
 		MustParseTime("2014-01-03 00:00"),
 		uint64(1),
@@ -58,7 +58,7 @@ func TestGetRange_1d(t *testing.T) {
 }
 
 func TestGetRange_1d1h(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-01-02 00:00"),
 		MustParseTime("2014-01-03 01:00"),
 		uint64(1),
@@ -68,7 +68,7 @@ func TestGetRange_1d1h(t *testing.T) {
 }
 
 func TestGetRange_1h1d(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-01-02 23:00"),
 		MustParseTime("2014-01-04 00:00"),
 		uint64(1),
@@ -78,7 +78,7 @@ func TestGetRange_1h1d(t *testing.T) {
 }
 
 func TestGetRange_1h1d1h(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-01-02 23:00"),
 		MustParseTime("2014-01-04 01:00"),
 		uint64(1),
@@ -88,7 +88,7 @@ func TestGetRange_1h1d1h(t *testing.T) {
 }
 
 func TestGetRange_1y(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-01-01 00:00"),
 		MustParseTime("2015-01-01 00:00"),
 		uint64(1),
@@ -98,7 +98,7 @@ func TestGetRange_1y(t *testing.T) {
 }
 
 func TestGetRange_1h1d1m(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-01-30 23:00"),
 		MustParseTime("2014-03-01 00:00"),
 		uint64(1),
@@ -108,7 +108,7 @@ func TestGetRange_1h1d1m(t *testing.T) {
 }
 
 func TestGetRange_1h1d1m1d1h(t *testing.T) {
-	if m := index.GetRange(
+	if m := pilosa.GetRange(
 		MustParseTime("2014-01-30 23:00"),
 		MustParseTime("2014-03-02 01:00"),
 		uint64(1),
@@ -118,7 +118,7 @@ func TestGetRange_1h1d1m1d1h(t *testing.T) {
 }
 
 func TestGetTimeIds(t *testing.T) {
-	_ = index.GetTimeIds(uint64(15027), MustParseTime("1970-01-01 00:00"), index.YMD)
+	_ = pilosa.GetTimeIds(uint64(15027), MustParseTime("1970-01-01 00:00"), pilosa.YMD)
 }
 
 // DefaultTimeLayout is the time layout used by the tests.

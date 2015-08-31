@@ -3,7 +3,7 @@ package mem_test
 import (
 	"testing"
 
-	"github.com/umbel/pilosa/index/storage/mem"
+	"github.com/umbel/pilosa/storage/mem"
 )
 
 // Ensure a bitmap can be retrieved from storage.

@@ -20,8 +20,8 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/websocket"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/db"
-	"github.com/umbel/pilosa/index"
 	"github.com/umbel/pilosa/util"
 )
 
@@ -401,7 +401,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch r := results.(type) { //a hack to handle empty sets
-	case []index.Pair:
+	case []pilosa.Pair:
 		if len(r) == 0 {
 			results = []int{}
 
@@ -410,7 +410,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		if bits {
 			reader, _ := gzip.NewReader(bytes.NewReader(r))
 			b, _ := ioutil.ReadAll(reader)
-			result := index.NewBitmap()
+			result := pilosa.NewBitmap()
 			result.FromBytes(b)
 			results = result.Bits()
 		}
@@ -460,15 +460,15 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 			if !present || timestamp == "2014-01-01 00:00:00" { //skip the default timestamp
 				c <- base_id
 			} else {
-				quantum := index.YMDH
+				quantum := pilosa.YMDH
 				if val, ok := obj["time_granularity"]; ok {
 					switch val {
 					case "Y":
-						quantum = index.Y
+						quantum = pilosa.Y
 					case "M":
-						quantum = index.YM
+						quantum = pilosa.YM
 					case "D":
-						quantum = index.YMD
+						quantum = pilosa.YMD
 					}
 				}
 				shortForm := shortFormS
@@ -477,7 +477,7 @@ func bitmaps(frame string, obj JsonObject) chan uint64 {
 				}
 				atime, _ := time.Parse(shortForm, timestamp)
 
-				for i, id := range index.GetTimeIds(base_id, atime, quantum) {
+				for i, id := range pilosa.GetTimeIds(base_id, atime, quantum) {
 					c <- id
 					if i > 10 {
 						log.Warn("TO MANY TIMEIDS", base_id, atime, quantum)

@@ -3,10 +3,10 @@ package dispatch
 import (
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/core"
 	"github.com/umbel/pilosa/db"
 	"github.com/umbel/pilosa/executor"
-	"github.com/umbel/pilosa/index"
 	"github.com/umbel/pilosa/query"
 	"github.com/umbel/pilosa/util"
 )
@@ -24,7 +24,7 @@ type Dispatch struct {
 		ClearBit(fragID util.SUUID, bitmapID uint64, pos uint64) (bool, error)
 		LoadBitmap(fragID util.SUUID, bitmapID uint64, compressedBitmap string, filter uint64)
 		SetBit(fragID util.SUUID, bitmapID uint64, pos uint64, category uint64) (bool, error)
-		TopFillBatch(args []index.FillArgs) ([]index.Pair, error)
+		TopFillBatch(args []pilosa.FillArgs) ([]pilosa.Pair, error)
 	}
 
 	Transport interface {

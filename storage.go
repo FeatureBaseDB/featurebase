@@ -1,4 +1,4 @@
-package index
+package pilosa
 
 import (
 	"github.com/umbel/pilosa/util"

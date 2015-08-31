@@ -7,9 +7,9 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/core"
 	"github.com/umbel/pilosa/db"
-	"github.com/umbel/pilosa/index"
 	"github.com/umbel/pilosa/query"
 	"github.com/umbel/pilosa/util"
 )
@@ -29,17 +29,17 @@ type Executor struct {
 
 	Index interface {
 		ClearBit(frag_id util.SUUID, bitmap_id uint64, pos uint64) (bool, error)
-		Count(frag_id util.SUUID, bitmap index.BitmapHandle) (uint64, error)
-		Difference(frag_id util.SUUID, bh []index.BitmapHandle) (index.BitmapHandle, error)
-		FromBytes(frag_id util.SUUID, bytes []byte) (index.BitmapHandle, error)
-		Get(frag_id util.SUUID, bitmap_id uint64) (index.BitmapHandle, error)
-		GetBytes(frag_id util.SUUID, bh index.BitmapHandle) ([]byte, error)
-		Intersect(frag_id util.SUUID, bh []index.BitmapHandle) (index.BitmapHandle, error)
-		Range(frag_id util.SUUID, bitmap_id uint64, start, end time.Time) (index.BitmapHandle, error)
+		Count(frag_id util.SUUID, bitmap pilosa.BitmapHandle) (uint64, error)
+		Difference(frag_id util.SUUID, bh []pilosa.BitmapHandle) (pilosa.BitmapHandle, error)
+		FromBytes(frag_id util.SUUID, bytes []byte) (pilosa.BitmapHandle, error)
+		Get(frag_id util.SUUID, bitmap_id uint64) (pilosa.BitmapHandle, error)
+		GetBytes(frag_id util.SUUID, bh pilosa.BitmapHandle) ([]byte, error)
+		Intersect(frag_id util.SUUID, bh []pilosa.BitmapHandle) (pilosa.BitmapHandle, error)
+		Range(frag_id util.SUUID, bitmap_id uint64, start, end time.Time) (pilosa.BitmapHandle, error)
 		SetBit(frag_id util.SUUID, bitmap_id uint64, pos uint64, category uint64) (bool, error)
-		TopN(frag_id util.SUUID, bh index.BitmapHandle, n int, categories []uint64) ([]index.Pair, error)
-		TopNAll(frag_id util.SUUID, n int, categories []uint64) ([]index.Pair, error)
-		Union(frag_id util.SUUID, bh []index.BitmapHandle) (index.BitmapHandle, error)
+		TopN(frag_id util.SUUID, bh pilosa.BitmapHandle, n int, categories []uint64) ([]pilosa.Pair, error)
+		TopNAll(frag_id util.SUUID, n int, categories []uint64) ([]pilosa.Pair, error)
+		Union(frag_id util.SUUID, bh []pilosa.BitmapHandle) (pilosa.BitmapHandle, error)
 	}
 
 	TopologyMapper interface {
@@ -102,9 +102,9 @@ func (self *Executor) CountQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.CountQueryStep)
 	input := qs.Input
 	value, _ := self.Hold.Get(input, util.TimeOut)
-	var bh index.BitmapHandle
+	var bh pilosa.BitmapHandle
 	switch val := value.(type) {
-	case index.BitmapHandle:
+	case pilosa.BitmapHandle:
 		bh = val
 	case []byte:
 		bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
@@ -124,7 +124,7 @@ func (self *Executor) CountQueryStepHandler(msg *db.Message) {
 
 func (self *Executor) TopNQueryStepHandler(msg *db.Message) {
 	qs := msg.Data.(query.TopNQueryStep)
-	var bh index.BitmapHandle
+	var bh pilosa.BitmapHandle
 	var topnPackage TopNPackage
 
 	// if we have an input, hold for it. if we don't, we assume an all() query
@@ -137,9 +137,9 @@ func (self *Executor) TopNQueryStepHandler(msg *db.Message) {
 	} else {
 		input := qs.Input
 		value, _ := self.Hold.Get(input, 10)
-		//var bh index.BitmapHandle
+		//var bh pilosa.BitmapHandle
 		switch val := value.(type) {
-		case index.BitmapHandle:
+		case pilosa.BitmapHandle:
 			bh = val
 		case []byte:
 			bh, _ = self.Index.FromBytes(qs.Location.FragmentId, val)
@@ -165,12 +165,12 @@ func (self *Executor) UnionQueryStepHandler(msg *db.Message) {
 	//spew.Dump("UNION QUERYSTEP")
 
 	qs := msg.Data.(query.UnionQueryStep)
-	var handles []index.BitmapHandle
+	var handles []pilosa.BitmapHandle
 	// create a list of bitmap handles
 	for _, input := range qs.Inputs {
 		value, _ := self.Hold.Get(input, util.TimeOut)
 		switch val := value.(type) {
-		case index.BitmapHandle:
+		case pilosa.BitmapHandle:
 			handles = append(handles, val)
 		case []byte:
 			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
@@ -205,12 +205,12 @@ func (self *Executor) IntersectQueryStepHandler(msg *db.Message) {
 	log.Trace("IntersectQueryStepHandler")
 	//spew.Dump("INTERSECT QUERYSTEP")
 	qs := msg.Data.(query.IntersectQueryStep)
-	var handles []index.BitmapHandle
+	var handles []pilosa.BitmapHandle
 	// create a list of bitmap handles
 	for _, input := range qs.Inputs {
 		value, _ := self.Hold.Get(input, util.TimeOut)
 		switch val := value.(type) {
-		case index.BitmapHandle:
+		case pilosa.BitmapHandle:
 			handles = append(handles, val)
 		case []byte:
 			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
@@ -245,12 +245,12 @@ func (self *Executor) DifferenceQueryStepHandler(msg *db.Message) {
 	log.Trace("DifferenceQueryStepHandler")
 	//spew.Dump("DIFFERENCE QUERYSTEP")
 	qs := msg.Data.(query.DifferenceQueryStep)
-	var handles []index.BitmapHandle
+	var handles []pilosa.BitmapHandle
 	// create a list of bitmap handles
 	for _, input := range qs.Inputs {
 		value, _ := self.Hold.Get(input, util.TimeOut)
 		switch val := value.(type) {
-		case index.BitmapHandle:
+		case pilosa.BitmapHandle:
 			handles = append(handles, val)
 		case []byte:
 			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
@@ -284,14 +284,14 @@ func (self *Executor) DifferenceQueryStepHandler(msg *db.Message) {
 func (self *Executor) CatQueryStepHandler(msg *db.Message) {
 	log.Trace("CatQueryStepHandler")
 	qs := msg.Data.(query.CatQueryStep)
-	var handles []index.BitmapHandle
+	var handles []pilosa.BitmapHandle
 	return_type := "bitmap-handles"
 	var sum uint64
 	merge_map := make(map[uint64]uint64)
 	slice_map := make(map[uint64]map[util.SUUID]struct{})
 	all_slice := make(map[util.SUUID]struct {
 		process util.GUID
-		handle  index.BitmapHandle
+		handle  pilosa.BitmapHandle
 	})
 
 	// either create a list of bitmap handles to cat (i.e. union), or sum the integer values
@@ -311,7 +311,7 @@ func (self *Executor) CatQueryStepHandler(msg *db.Message) {
 		value := <-part
 
 		switch val := value.(type) {
-		case index.BitmapHandle:
+		case pilosa.BitmapHandle:
 			handles = append(handles, val)
 		case []byte:
 			bh, _ := self.Index.FromBytes(qs.Location.FragmentId, val)
@@ -338,7 +338,7 @@ func (self *Executor) CatQueryStepHandler(msg *db.Message) {
 			}
 			all_slice[val.FragmentId] = struct {
 				process util.GUID
-				handle  index.BitmapHandle
+				handle  pilosa.BitmapHandle
 			}{val.ProcessId, val.HBitmap}
 			check_pair = true
 		}
@@ -362,18 +362,18 @@ func (self *Executor) CatQueryStepHandler(msg *db.Message) {
 			spew.Dump(err)
 		}
 	} else if return_type == "pair-list" {
-		rank_list := make(index.RankList, 0, len(merge_map))
+		rank_list := make(pilosa.RankList, 0, len(merge_map))
 		for k, v := range merge_map {
 			if k == 0 || v == 0 {
 				continue //shouldn't be getting 0 keys or values anyway
 			}
-			rank := new(index.Rank)
-			rank.Pair = &index.Pair{Key: k, Count: v}
+			rank := new(pilosa.Rank)
+			rank.Pair = &pilosa.Pair{Key: k, Count: v}
 			rank_list = append(rank_list, rank)
 		}
 		sort.Sort(rank_list) // kinda seems like this copy is wasteful..i'll ponder
 		items_size := min(len(merge_map), qs.N)
-		pair_list := make([]index.Pair, 0, items_size+1)
+		pair_list := make([]pilosa.Pair, 0, items_size+1)
 		for i, r := range rank_list {
 			if i < items_size {
 				pair_list = append(pair_list, *r.Pair)
@@ -394,7 +394,7 @@ func (self *Executor) CatQueryStepHandler(msg *db.Message) {
 }
 
 func (self *Executor) SendRequest(process_id util.GUID, t *Task) {
-	args := make([]index.FillArgs, len(t.f), len(t.f))
+	args := make([]pilosa.FillArgs, len(t.f), len(t.f))
 	for _, v := range t.f {
 		args = append(args, v)
 	}
@@ -412,17 +412,17 @@ func (self *Executor) FetchMissing(tasks map[util.GUID]*Task) {
 
 func (self *Executor) GatherResults(tasks map[util.GUID]*Task) map[uint64]uint64 {
 	results := make(map[uint64]uint64)
-	answers := make(chan []index.Pair)
+	answers := make(chan []pilosa.Pair)
 	for _, task := range tasks {
 		go func(id util.GUID) {
 			value, err := self.Hold.Get(&id, 10) //eiher need to be the frame process or the handler process?
 			if value == nil {
 				log.Warn("Bad TopN Result:", err)
-				empty := make([]index.Pair, 0, 0)
+				empty := make([]pilosa.Pair, 0, 0)
 				answers <- empty
 
 			} else {
-				answers <- value.([]index.Pair)
+				answers <- value.([]pilosa.Pair)
 			}
 		}(task.hold_id)
 	}
@@ -539,7 +539,7 @@ func (self *Executor) StashQueryStepHandler(msg *db.Message) {
 		value := <-part
 
 		switch val := value.(type) {
-		case index.BitmapHandle:
+		case pilosa.BitmapHandle:
 			log.Info("STASH ADDING HANDLE", val)
 			//not sure what to do here....
 			//result.Handles = append(result.Handles, val)
@@ -687,12 +687,12 @@ func init() {
 type TopNPackage struct {
 	ProcessId  util.GUID
 	FragmentId util.SUUID
-	Pairs      []index.Pair
-	HBitmap    index.BitmapHandle
+	Pairs      []pilosa.Pair
+	HBitmap    pilosa.BitmapHandle
 }
 
 type TopFill struct {
-	Args            []index.FillArgs
+	Args            []pilosa.FillArgs
 	ReturnProcessId util.GUID
 	QueryId         util.GUID
 	DestProcessId   util.GUID
@@ -700,22 +700,22 @@ type TopFill struct {
 
 type Task struct {
 	processid util.GUID
-	f         map[util.SUUID]index.FillArgs
+	f         map[util.SUUID]pilosa.FillArgs
 	hold_id   util.GUID
 }
 
 func newtask(p util.GUID) *Task {
 	result := new(Task)
 	result.processid = p
-	result.f = make(map[util.SUUID]index.FillArgs)
+	result.f = make(map[util.SUUID]pilosa.FillArgs)
 	result.hold_id = util.RandomUUID()
 	return result
 }
 
-func (t *Task) Add(frag util.SUUID, bitmap_id uint64, handle index.BitmapHandle) {
+func (t *Task) Add(frag util.SUUID, bitmap_id uint64, handle pilosa.BitmapHandle) {
 	fa, ok := t.f[frag]
 	if !ok {
-		fa = index.FillArgs{Frag_id: frag, Handle: handle, Bitmaps: make([]uint64, 0, 0)}
+		fa = pilosa.FillArgs{Frag_id: frag, Handle: handle, Bitmaps: make([]uint64, 0, 0)}
 	}
 	fa.Bitmaps = append(fa.Bitmaps, bitmap_id)
 	t.f[frag] = fa
@@ -725,7 +725,7 @@ func BuildTask(merge_map map[uint64]uint64,
 	slice_map map[uint64]map[util.SUUID]struct{},
 	total_fragments map[util.SUUID]struct {
 		process util.GUID
-		handle  index.BitmapHandle
+		handle  pilosa.BitmapHandle
 	}) map[util.GUID]*Task {
 
 	tasks := make(map[util.GUID]*Task)
@@ -750,13 +750,13 @@ func BuildTask(merge_map map[uint64]uint64,
 
 type hole struct {
 	process  util.GUID
-	handle   index.BitmapHandle
+	handle   pilosa.BitmapHandle
 	fragment util.SUUID
 }
 
 func missing(fids map[util.SUUID]struct{}, all map[util.SUUID]struct {
 	process util.GUID
-	handle  index.BitmapHandle
+	handle  pilosa.BitmapHandle
 }) []hole {
 	results := make([]hole, 0, 0)
 

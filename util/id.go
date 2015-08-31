@@ -30,9 +30,6 @@ func init() {
 
 type SUUID uint64
 
-func leftPad(s string, padStr string, pLen int) string {
-	return strings.Repeat(padStr, pLen) + s
-}
 func Id() SUUID {
 	millis := uint64(time.Now().UTC().UnixNano())
 	id := millis << (64 - 41)
@@ -51,7 +48,7 @@ func Hex_to_SUUID(str string) SUUID {
 	l := len(str)
 	var m string
 	if l < 16 {
-		m = leftPad(str, "0", 16-l)
+		m = strings.Repeat("0", 16-l) + str
 	} else {
 		m = str
 	}
@@ -129,24 +126,4 @@ func ParseGUID(input string) (GUID, error) {
 		return GUID{}, fmt.Errorf("invalid GUID %q", input)
 	}
 	return u, nil
-}
-
-func In(val int, list []int) bool {
-	for _, v := range list {
-		if val == v {
-			return true
-		}
-	}
-	return false
-}
-
-func Difference(a, b []int) []int {
-	results := make([]int, 0, len(a))
-	for _, v := range a {
-		if !In(v, b) {
-			results = append(results, v)
-		}
-
-	}
-	return results
 }

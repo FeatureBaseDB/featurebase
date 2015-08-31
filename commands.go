@@ -1,4 +1,4 @@
-package index
+package pilosa
 
 import (
 	"bytes"

@@ -5,13 +5,13 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/gocql/gocql"
-	"github.com/umbel/pilosa/index"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/util"
 )
 
 func init() {
-	index.RegisterStorage("cassandra",
-		func(opt index.StorageOptions) index.Storage {
+	pilosa.RegisterStorage("cassandra",
+		func(opt pilosa.StorageOptions) pilosa.Storage {
 			return NewStorage(opt)
 		},
 	)
@@ -52,7 +52,7 @@ type Storage struct {
 }
 
 // NewStorage returns a new, uninitialized instance of Storage.
-func NewStorage(opt index.StorageOptions) *Storage {
+func NewStorage(opt pilosa.StorageOptions) *Storage {
 	return &Storage{
 		batchTime: time.Now(),
 
@@ -94,8 +94,8 @@ func (s *Storage) Close() error {
 }
 
 // Fetch returns a bitmap by ID.
-func (s *Storage) Fetch(bitmapID uint64, db string, frame string, slice int) (*index.Bitmap, uint64) {
-	bm := index.NewBitmap()
+func (s *Storage) Fetch(bitmapID uint64, db string, frame string, slice int) (*pilosa.Bitmap, uint64) {
+	bm := pilosa.NewBitmap()
 
 	// Start benchmark.
 	start := time.Now()
@@ -105,7 +105,7 @@ func (s *Storage) Fetch(bitmapID uint64, db string, frame string, slice int) (*i
 		u64toi64(bitmapID), db, frame, slice).Iter()
 
 	// Iterate over chunks and materialize bitmap object.
-	var chunk *index.Chunk
+	var chunk *pilosa.Chunk
 	var chunkKey, block, count int64
 	var blockIndex uint32
 	var filter int
@@ -114,7 +114,7 @@ func (s *Storage) Fetch(bitmapID uint64, db string, frame string, slice int) (*i
 	for itr.Scan(&filter, &chunkKey, &blockIndex, &block) {
 		if chunkKey != int64(-1) {
 			if chunkKey != lastKey {
-				chunk = &index.Chunk{uint64(chunkKey), index.NewBlocks()}
+				chunk = &pilosa.Chunk{uint64(chunkKey), pilosa.NewBlocks()}
 				bm.AddChunk(chunk)
 			}
 			chunk.Value[uint8(blockIndex)] = uint64(block)
@@ -172,7 +172,7 @@ func (s *Storage) Flush() {
 }
 
 // Store saves a bitmap to storage.
-func (s *Storage) Store(id uint64, db string, frame string, slice int, filter uint64, bm *index.Bitmap) error {
+func (s *Storage) Store(id uint64, db string, frame string, slice int, filter uint64, bm *pilosa.Bitmap) error {
 	s.beginBatch()
 
 	for i := bm.ChunkIterator(); !i.Limit(); i = i.Next() {
@@ -184,7 +184,7 @@ func (s *Storage) Store(id uint64, db string, frame string, slice int, filter ui
 		}
 	}
 
-	s.StoreBlock(id, db, frame, slice, filter, index.CounterMask, 0, bm.BitCount())
+	s.StoreBlock(id, db, frame, slice, filter, pilosa.CounterMask, 0, bm.BitCount())
 	s.endBatch()
 	return nil
 }
@@ -229,7 +229,7 @@ func (s *Storage) RemoveBlock(bid uint64, db string, frame string, slice int, bc
 func (s *Storage) StoreBit(bid uint64, db string, frame string, slice int, filter uint64, chunk uint64, blockIndex int32, val, count uint64) {
 	s.beginBatch()
 	s.StoreBlock(bid, db, frame, slice, filter, chunk, blockIndex, val)
-	s.StoreBlock(bid, db, frame, slice, filter, index.CounterMask, 0, count)
+	s.StoreBlock(bid, db, frame, slice, filter, pilosa.CounterMask, 0, count)
 	s.endBatch()
 }
 
@@ -237,7 +237,7 @@ func (s *Storage) RemoveBit(id uint64, db string, frame string, slice int, filte
 	log.Trace("RemoveBit", id, db, frame, slice, chunk, blockIndex)
 	s.beginBatch()
 	s.RemoveBlock(id, db, frame, slice, chunk, blockIndex)
-	s.StoreBlock(id, db, frame, slice, filter, index.CounterMask, 0, count)
+	s.StoreBlock(id, db, frame, slice, filter, pilosa.CounterMask, 0, count)
 	s.endBatch()
 }
 

@@ -1,7 +1,6 @@
-package index
+package pilosa
 
 import (
-	"database/sql"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	log "github.com/cihub/seelog"
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/golang/groupcache/lru"
 	"github.com/umbel/pilosa/util"
 )
@@ -26,17 +24,6 @@ var LevelDBPath string
 type FragmentContainer struct {
 	fragments map[util.SUUID]*Fragment
 	mutex     *sync.Mutex
-}
-
-func lookup(stmt *sql.Stmt, tile_id uint64) int {
-	var category int
-	err := stmt.QueryRow(tile_id).Scan(&category) // WHERE number = 13
-	if err != nil {
-		log.Warn(err.Error())
-		return 0
-	}
-	return category
-
 }
 
 func NewFragmentContainer() *FragmentContainer {
