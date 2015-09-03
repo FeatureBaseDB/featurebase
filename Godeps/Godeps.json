@@ -1,0 +1,76 @@
+{
+	"ImportPath": "github.com/umbel/pilosa",
+	"GoVersion": "go1.5",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/BurntSushi/toml",
+			"Comment": "v0.1.0-21-g056c9bc",
+			"Rev": "056c9bc7be7190eaa7715723883caffa5f8fa3e4"
+		},
+		{
+			"ImportPath": "github.com/bitly/go-notify",
+			"Rev": "0a148b8111d688ba7550fc7119fe0d5d8e650838"
+		},
+		{
+			"ImportPath": "github.com/cactus/go-statsd-client/statsd",
+			"Rev": "3999011ef0451eb805b0fa31f98cfb9261bd71be"
+		},
+		{
+			"ImportPath": "github.com/cihub/seelog",
+			"Comment": "go1.1-81-gc510775",
+			"Rev": "c510775bb50d98213cfafca75a4bc5e3fddc8d8f"
+		},
+		{
+			"ImportPath": "github.com/coreos/go-etcd/etcd",
+			"Rev": "1e26d8ee84cf9b1000d2af8acfb45b2521f49be5"
+		},
+		{
+			"ImportPath": "github.com/davecgh/go-spew/spew",
+			"Rev": "e762b3d1320b76030bd7f6cc2bfc3d9acce874c0"
+		},
+		{
+			"ImportPath": "github.com/gocql/gocql",
+			"Comment": "1st_gen_framing-221-gf8fb76b",
+			"Rev": "f8fb76bb772442ea938e4be46ab1666e542411a5"
+		},
+		{
+			"ImportPath": "github.com/golang/groupcache/lru",
+			"Rev": "d781998583680cda80cf61e0b37dd0cd8da2eb52"
+		},
+		{
+			"ImportPath": "github.com/golang/snappy",
+			"Rev": "723cc1e459b8eea2dea4583200fd60757d40097a"
+		},
+		{
+			"ImportPath": "github.com/gorilla/websocket",
+			"Rev": "92334662baa9cbebc2e6e68b8d56bc1233f85a4c"
+		},
+		{
+			"ImportPath": "github.com/kr/s3",
+			"Rev": "c070c8f9a8f0032d48f0d2a77d4e382788bd8a1d"
+		},
+		{
+			"ImportPath": "github.com/robertkrimen/otto",
+			"Rev": "f9e07770bd9b5142de517b05a85ffbb42d1895da"
+		},
+		{
+			"ImportPath": "github.com/stathat/consistent",
+			"Rev": "0262985f12333852b6423025aa3ca315af473a4a"
+		},
+		{
+			"ImportPath": "github.com/syndtr/goleveldb/leveldb",
+			"Rev": "183614d6b32571e867df4cf086f5480ceefbdfac"
+		},
+		{
+			"ImportPath": "github.com/yasushi-saito/rbtree",
+			"Rev": "571e2538414bf914c7e2909b61217b4e3e5508f4"
+		},
+		{
+			"ImportPath": "gopkg.in/inf.v0",
+			"Rev": "c85f1217d51339c0fa3a498cc8b2075de695dae6"
+		}
+	]
+}
