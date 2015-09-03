@@ -7,9 +7,11 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -20,9 +22,10 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/websocket"
+	"github.com/kr/s3/s3util"
 	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/db"
-	"github.com/umbel/pilosa/util"
+	"github.com/umbel/pilosa/statsd"
 )
 
 const DefaultRequestLogPath = "/tmp/set_bit_log"
@@ -32,7 +35,7 @@ var RequestLogPath = DefaultRequestLogPath
 type WebService struct {
 	end chan bool
 
-	ID               util.GUID
+	ID               pilosa.GUID
 	Version          string
 	Port             int
 	DefaultDB        string
@@ -48,7 +51,7 @@ type WebService struct {
 	}
 
 	Pinger interface {
-		Ping(process_id *util.GUID) (*time.Duration, error)
+		Ping(process_id *pilosa.GUID) (*time.Duration, error)
 	}
 
 	TopologyMapper interface {
@@ -127,7 +130,7 @@ func genFileName(id string) string {
 
 func flush(requests []LogRecord, id string, records_to_dump int) {
 	dest := genFileName(id)
-	w, err := util.Create(dest)
+	w, err := createFile(dest)
 	if err != nil {
 		log.Warn("Error opening outfile ", dest)
 		log.Warn(err)
@@ -367,7 +370,7 @@ func (self *WebService) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	util.SendInc("webservice_Query")
+	statsd.SendInc("webservice_Query")
 	err := r.ParseForm()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -671,7 +674,7 @@ func (self *WebService) HandlePing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	process_string := r.Form.Get("process")
-	process_id, err := util.ParseGUID(process_string)
+	process_id, err := pilosa.ParseGUID(process_string)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -837,4 +840,15 @@ func (self *WebService) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	</script>
 	</body></html>
 	`))
+}
+
+func createFile(s string) (io.WriteCloser, error) {
+	if isURL(s) {
+		return s3util.Create(s, nil, nil)
+	}
+	return os.Create(s)
+}
+
+func isURL(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }

@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	log "github.com/cihub/seelog"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/db"
-	"github.com/umbel/pilosa/util"
 )
 
 type QueryInput interface{}
@@ -17,13 +17,13 @@ type QueryResults struct {
 type PqlList []PqlListItem
 
 type PqlListItem struct {
-	Id    *util.GUID
+	Id    *pilosa.GUID
 	Label string
 	PQL   string
 }
 
 type Query struct {
-	Id         *util.GUID
+	Id         *pilosa.GUID
 	Operation  string
 	Args       map[string]interface{}
 	Subqueries []Query
@@ -68,7 +68,7 @@ func QueryPlanForTokens(database *db.Database, tokens []Token, destination *db.L
 func QueryPlanForQuery(database *db.Database, query *Query, destination *db.Location) (*QueryPlan, error) {
 	log.Trace("QueryPlanForQuery", database, query, destination)
 	query_planner := QueryPlanner{Database: database, Query: query}
-	id := util.RandomUUID()
+	id := pilosa.RandomUUID()
 	query_plan, err := query_planner.Plan(query, &id, destination)
 	if err != nil {
 		return nil, err

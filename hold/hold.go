@@ -5,39 +5,39 @@ import (
 	"time"
 
 	log "github.com/cihub/seelog"
-	. "github.com/umbel/pilosa/util"
+	"github.com/umbel/pilosa"
 )
 
 type holdchan chan interface{}
 type gethold struct {
-	id    *GUID
+	id    *pilosa.GUID
 	reply chan holdchan
 }
 type delhold struct {
-	id *GUID
+	id *pilosa.GUID
 }
 
 type Holder struct {
-	data    map[GUID]holdchan
+	data    map[pilosa.GUID]holdchan
 	getchan chan gethold
 	delchan chan delhold
 }
 
 func NewHolder() *Holder {
 	return &Holder{
-		data:    make(map[GUID]holdchan),
+		data:    make(map[pilosa.GUID]holdchan),
 		getchan: make(chan gethold),
 		delchan: make(chan delhold),
 	}
 }
 
-func (self *Holder) DelChan(id *GUID) {
+func (self *Holder) DelChan(id *pilosa.GUID) {
 	log.Trace("Holder.DelChan", id)
 	req := delhold{id}
 	self.delchan <- req
 }
 
-func (self *Holder) GetChan(id *GUID) holdchan {
+func (self *Holder) GetChan(id *pilosa.GUID) holdchan {
 	log.Trace("Holder.GetChan", id)
 	reply := make(chan holdchan)
 	req := gethold{id, reply}
@@ -45,25 +45,25 @@ func (self *Holder) GetChan(id *GUID) holdchan {
 	return <-reply
 }
 
-func (self *Holder) Get(id *GUID, timeout int) (interface{}, error) {
-	log.Trace("Holder.Get", id, timeout)
+func (self *Holder) Get(id *pilosa.GUID, timeout time.Duration) (interface{}, error) {
+	log.Trace("Holder.Get", id, timeout.String())
 	ch := self.GetChan(id)
 	select {
 	case val := <-ch:
 		return val, nil
-	case <-time.After(time.Duration(timeout) * time.Second):
+	case <-time.After(timeout):
 		self.DelChan(id)
 		return nil, errors.New("Timeout getting from holder")
 	}
 }
 
-func (self *Holder) Set(id *GUID, value interface{}, timeout int) {
-	log.Trace("Holder.Set", id, value, timeout)
+func (self *Holder) Set(id *pilosa.GUID, value interface{}, timeout time.Duration) {
+	log.Trace("Holder.Set", id, value, timeout.String())
 	ch := self.GetChan(id)
 	go func() {
 		select {
 		case ch <- value:
-		case <-time.After(time.Duration(timeout) * time.Second):
+		case <-time.After(timeout):
 		}
 		self.DelChan(id)
 	}()

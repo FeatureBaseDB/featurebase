@@ -1,4 +1,4 @@
-package util
+package statsd
 
 import (
 	"time"
@@ -7,11 +7,11 @@ import (
 	log "github.com/cihub/seelog"
 )
 
-// DefaultStatsdHost is the default host to send statsd data to.
-const DefaultStatsdHost = "127.0.0.1:8125"
+// DefaultHost is the default host to send statsd data to.
+const DefaultHost = "127.0.0.1:8125"
 
-// StatsdHost is the host to send statsd data to.
-var StatsdHost = DefaultStatsdHost
+// Host is the host to send statsd data to.
+var Host = DefaultHost
 
 type args struct {
 	stat  string
@@ -19,19 +19,17 @@ type args struct {
 	rate  float32
 }
 
-var (
-	timer chan args
-	count chan string
-	end   chan bool
-)
+var timer chan args
+var count chan string
+var end chan bool
 
-func SetupStatsd() {
+func Setup() {
 	timer = make(chan args, 32768)
 	count = make(chan string, 32768)
 	end = make(chan bool)
 
-	log.Warn("New Stats", StatsdHost)
-	stats, _ := statsd.New(StatsdHost, "")
+	log.Warn("New Stats", Host)
+	stats, _ := statsd.New(Host, "")
 
 	go func() {
 		for {

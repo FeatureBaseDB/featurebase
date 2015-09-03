@@ -4,23 +4,23 @@ import (
 	"encoding/gob"
 
 	log "github.com/cihub/seelog"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/db"
-	"github.com/umbel/pilosa/util"
 )
 
 type RemoteSetBit struct {
 	requests []remote_task
-	cluster  map[*util.GUID][]BitmapRequestItem
+	cluster  map[*pilosa.GUID][]BitmapRequestItem
 
-	ID         util.GUID
+	ID         pilosa.GUID
 	ProcessMap *ProcessMap
 
 	Hold interface {
-		Get(id *util.GUID, timeout int) (interface{}, error)
+		Get(id *pilosa.GUID, timeout int) (interface{}, error)
 	}
 
 	Transport interface {
-		Send(message *db.Message, host *util.GUID)
+		Send(message *db.Message, host *pilosa.GUID)
 	}
 }
 
@@ -32,12 +32,12 @@ func init() {
 
 type BitsRequest struct {
 	Bits            []BitmapRequestItem
-	ReturnProcessId util.GUID
-	QueryId         util.GUID
-	DestProcessId   util.GUID
+	ReturnProcessId pilosa.GUID
+	QueryId         pilosa.GUID
+	DestProcessId   pilosa.GUID
 }
 type BitmapRequestItem struct {
-	Fragment_id util.SUUID
+	Fragment_id pilosa.SUUID
 	Bitmap_id   uint64
 	Profile_id  uint64
 	Filter      uint64
@@ -47,7 +47,7 @@ type BitmapRequestItem struct {
 
 func NewRemoteSetBit() *RemoteSetBit {
 	obj := new(RemoteSetBit)
-	obj.cluster = make(map[*util.GUID][]BitmapRequestItem)
+	obj.cluster = make(map[*pilosa.GUID][]BitmapRequestItem)
 	return obj
 }
 
@@ -55,7 +55,7 @@ func (self *RemoteSetBit) Request() {
 	self.requests = make([]remote_task, 0)
 	source_process, _ := self.ProcessMap.GetProcess(&self.ID)
 	for process, request := range self.cluster {
-		random_id := util.RandomUUID()
+		random_id := pilosa.RandomUUID()
 		msg := new(db.Message)
 		msg.Data = BitsRequest{
 			Bits:            request,
@@ -74,7 +74,7 @@ func (self *RemoteSetBit) Request() {
 }
 
 type remote_task struct {
-	id        util.GUID
+	id        pilosa.GUID
 	wait_time int
 }
 
@@ -115,11 +115,11 @@ func (self *RemoteSetBit) Add(frag *db.Fragment, bitmap_id, profile_id, filter u
 }
 
 type BitsResponse struct {
-	Id    *util.GUID
+	Id    *pilosa.GUID
 	Items []SBResult
 }
 
-func (self *BitsResponse) ResultId() *util.GUID {
+func (self *BitsResponse) ResultId() *pilosa.GUID {
 	return self.Id
 }
 func (self *BitsResponse) ResultData() interface{} {

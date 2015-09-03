@@ -9,7 +9,7 @@ import (
 	"time"
 
 	log "github.com/cihub/seelog"
-	"github.com/umbel/pilosa/util"
+	"github.com/umbel/pilosa/statsd"
 )
 
 var FragmentBase string
@@ -159,7 +159,7 @@ func (b *Brand) Rank() {
 
 	b.rank_count = 0
 	delta := time.Since(start)
-	util.SendTimer("brand_Rank", delta.Nanoseconds())
+	statsd.SendTimer("brand_Rank", delta.Nanoseconds())
 	b.rank_time = start
 }
 
@@ -366,7 +366,7 @@ func (b *Brand) Persist() error {
 		log.Warn("Nothing to save ", b.getFileName())
 		return nil
 	}
-	w, err := util.Create(b.getFileName())
+	w, err := createFile(b.getFileName())
 	if err != nil {
 		log.Warn("Error opening outfile ", b.getFileName())
 		log.Warn(err)
@@ -396,7 +396,7 @@ func (b *Brand) Persist() error {
 func (b *Brand) Load(requestChan chan Command, f *Fragment) {
 	log.Warn("Brand Load")
 	time.Sleep(time.Duration(rand.Intn(32)) * time.Second) //trying to avoid mass cassandra hit
-	r, err := util.Open(b.getFileName())
+	r, err := openFile(b.getFileName())
 	if err != nil {
 		log.Warn("NO Brand Init File:", b.getFileName())
 		return

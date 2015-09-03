@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/umbel/pilosa"
+	"github.com/umbel/pilosa/statsd"
 	"github.com/umbel/pilosa/storage/mem"
-	"github.com/umbel/pilosa/util"
 )
 
 var (
@@ -18,7 +18,7 @@ var (
 func init() {
 	size = 1000
 
-	util.SetupStatsd()
+	statsd.Setup()
 	// SetupCassandra()
 
 	membrand = pilosa.NewBrand("db", "frame", 0, mem.NewStorage(), size, size, 0)

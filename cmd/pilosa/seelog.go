@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/umbel/pilosa/util"
+	"github.com/umbel/pilosa"
 )
 
-func SeelogProductionConfig(path string, id util.GUID, level string) string {
+func SeelogProductionConfig(path string, id pilosa.GUID, level string) string {
 	if path == "" {
 		path = "/tmp"
 	}

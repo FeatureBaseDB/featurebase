@@ -3,7 +3,7 @@ package db
 import (
 	"encoding/gob"
 
-	. "github.com/umbel/pilosa/util"
+	"github.com/umbel/pilosa"
 )
 
 type Message struct {
@@ -12,11 +12,11 @@ type Message struct {
 
 type Envelope struct {
 	Message *Message
-	Host    *GUID
+	Host    *pilosa.GUID
 }
 
 type HoldResult interface {
-	ResultId() *GUID
+	ResultId() *pilosa.GUID
 	ResultData() interface{}
 }
 
