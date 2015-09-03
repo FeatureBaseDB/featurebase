@@ -68,7 +68,7 @@ func (m *Main) Run(args ...string) error {
 	// Generate an ID if one is not specified in the config.
 	id := config.ID
 	if id == nil {
-		*id = pilosa.RandomUUID()
+		*id = pilosa.NewGUID()
 	}
 
 	// Set up profiling.

@@ -75,7 +75,7 @@ func (self *BaseQueryStep) GetLocation() *db.Location {
 
 func (self *BaseQueryStep) LocIsDest() bool {
 	log.Trace("BaseQueryStep.LocIsDest")
-	if pilosa.Equal(self.Location.ProcessId, self.Destination.ProcessId) &&
+	if self.Location.ProcessId.Equals(self.Destination.ProcessId) &&
 		self.Location.FragmentId == self.Destination.FragmentId {
 		log.Trace("BaseQueryStep.LocIsDest Return true")
 		return true
@@ -616,7 +616,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *pilosa.GUID, location *db.Lo
 		}
 		step := CatQueryStep{&BaseQueryStep{id, "cat", loc, location}, inputs, cat.N}
 		for index, subq := range cat.subqueries {
-			sub_id := pilosa.RandomUUID()
+			sub_id := pilosa.NewGUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -634,7 +634,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *pilosa.GUID, location *db.Lo
 		}
 		step := StashQueryStep{&BaseQueryStep{id, "stash", loc, location}, inputs, stash.N}
 		for index, subq := range stash.subqueries {
-			sub_id := pilosa.RandomUUID()
+			sub_id := pilosa.NewGUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -651,7 +651,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *pilosa.GUID, location *db.Lo
 		}
 		step := UnionQueryStep{&BaseQueryStep{id, "union", loc, location}, inputs}
 		for index, subq := range union.subqueries {
-			sub_id := pilosa.RandomUUID()
+			sub_id := pilosa.NewGUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -668,7 +668,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *pilosa.GUID, location *db.Lo
 		}
 		step := IntersectQueryStep{&BaseQueryStep{id, "intersect", loc, location}, inputs}
 		for index, subq := range intersect.subqueries {
-			sub_id := pilosa.RandomUUID()
+			sub_id := pilosa.NewGUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -685,7 +685,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *pilosa.GUID, location *db.Lo
 		}
 		step := DifferenceQueryStep{&BaseQueryStep{id, "difference", loc, location}, inputs}
 		for index, subq := range difference.subqueries {
-			sub_id := pilosa.RandomUUID()
+			sub_id := pilosa.NewGUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -727,7 +727,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *pilosa.GUID, location *db.Lo
 		plan := QueryPlan{step}
 		return &plan, nil
 	} else if cnt, ok := qt.(*CountQueryTree); ok {
-		sub_id := pilosa.RandomUUID()
+		sub_id := pilosa.NewGUID()
 		loc, err := cnt.getLocation(self.Database)
 		if err != nil {
 			return nil, err
@@ -740,7 +740,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *pilosa.GUID, location *db.Lo
 		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)
 	} else if topn, ok := qt.(*TopNQueryTree); ok {
-		sub_id := pilosa.RandomUUID()
+		sub_id := pilosa.NewGUID()
 		loc, err := topn.getLocation(self.Database)
 		if err != nil {
 			return nil, err

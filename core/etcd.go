@@ -193,7 +193,7 @@ func (self *TopologyMapper) AllocateFragment(process_guid, db, frame string, sli
 	//to create the node, just write off the items to etcd and the watch should spawn
 	//be nice if something would notify perhaps queue
 	//so i need db, frame, slice , fragment_id
-	fuid := pilosa.SUUID_to_Hex(pilosa.Id())
+	fuid := pilosa.NewSUUID().String()
 	fragment_key := fmt.Sprintf("%s/db/%s/frame/%s/slice/%d/fragment/%s/process", self.namespace, db, frame, slice_int, fuid)
 	// need to check value to see how many we have left
 	log.Warn("ALLOC:", process_guid, len(process_guid))
@@ -268,7 +268,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		}
 	}
 	if len(bits) > 7 {
-		fragment_id = pilosa.Hex_to_SUUID(bits[7])
+		fragment_id = pilosa.ParseSUUID(bits[7])
 		fragment = database.GetOrCreateFragment(frame, slice, fragment_id)
 	}
 
@@ -284,7 +284,7 @@ func (self *TopologyMapper) handlenode(node *etcd.Node) error {
 		process = db.NewProcess(&process_uuid)
 		fragment.SetProcess(process)
 
-		if pilosa.Equal(&self.ID, &process_uuid) {
+		if self.ID.Equals(&process_uuid) {
 			self.Index.AddFragment(bits[1], bits[3], slice_int, fragment_id)
 		}
 

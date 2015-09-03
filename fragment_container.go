@@ -173,7 +173,7 @@ func (self *FragmentContainer) TopN(frag_id SUUID, bh BitmapHandle, n int, categ
 		statsd.SendTimer("fragmant_container_TopN", result.exec_time.Nanoseconds())
 		return result.answer.([]Pair), nil
 	}
-	return nil, errors.New(fmt.Sprintf("Fragment not found:%s", SUUID_to_Hex(frag_id)))
+	return nil, errors.New(fmt.Sprintf("Fragment not found:%s", frag_id.String()))
 }
 
 func (self *FragmentContainer) TopNAll(frag_id SUUID, n int, categories []uint64) ([]Pair, error) {
@@ -185,7 +185,7 @@ func (self *FragmentContainer) TopNAll(frag_id SUUID, n int, categories []uint64
 		statsd.SendTimer("fragmant_container_TopNAll", result.exec_time.Nanoseconds())
 		return result.answer.([]Pair), nil
 	}
-	return nil, errors.New(fmt.Sprintf("Fragment not found:%s", SUUID_to_Hex(frag_id)))
+	return nil, errors.New(fmt.Sprintf("Fragment not found:%s", frag_id.String()))
 }
 
 func (self *FragmentContainer) TopFillBatch(args []FillArgs) ([]Pair, error) {
@@ -319,7 +319,7 @@ func (self *FragmentContainer) AddFragment(db string, frame string, slice int, i
 	_, ok := self.fragments[id]
 	if !ok {
 		//		dumpHandlesToLog()
-		log.Warn("ADD FRAGMENT", frame, db, slice, SUUID_to_Hex(id))
+		log.Warn("ADD FRAGMENT", frame, db, slice, id.String())
 		f := NewFragment(id, db, slice, frame)
 		loader := make(chan Command)
 		self.fragments[id] = f

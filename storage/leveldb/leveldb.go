@@ -40,7 +40,7 @@ func NewStorage(opt pilosa.StorageOptions) *Storage {
 		opt.DB,
 		strconv.Itoa(opt.Slice),
 		opt.Frame,
-		pilosa.SUUID_to_Hex(opt.FragmentID),
+		opt.FragmentID.String(),
 	)
 
 	return &Storage{path: path}
