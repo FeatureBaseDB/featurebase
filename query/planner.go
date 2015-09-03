@@ -11,11 +11,10 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/db"
-	"github.com/umbel/pilosa/util"
 )
 
 type PortableQueryStep interface {
-	GetId() *util.GUID
+	GetId() *pilosa.GUID
 	GetLocation() *db.Location
 }
 
@@ -59,13 +58,13 @@ func (self *FragmentNotFound) Error() string {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 type BaseQueryStep struct {
-	Id          *util.GUID
+	Id          *pilosa.GUID
 	Operation   string
 	Location    *db.Location
 	Destination *db.Location
 }
 
-func (self *BaseQueryStep) GetId() *util.GUID {
+func (self *BaseQueryStep) GetId() *pilosa.GUID {
 	log.Trace("BaseQueryStep", *self.Id)
 	return self.Id
 }
@@ -76,7 +75,7 @@ func (self *BaseQueryStep) GetLocation() *db.Location {
 
 func (self *BaseQueryStep) LocIsDest() bool {
 	log.Trace("BaseQueryStep.LocIsDest")
-	if util.Equal(self.Location.ProcessId, self.Destination.ProcessId) &&
+	if pilosa.Equal(self.Location.ProcessId, self.Destination.ProcessId) &&
 		self.Location.FragmentId == self.Destination.FragmentId {
 		log.Trace("BaseQueryStep.LocIsDest Return true")
 		return true
@@ -86,11 +85,11 @@ func (self *BaseQueryStep) LocIsDest() bool {
 }
 
 type BaseQueryResult struct {
-	Id   *util.GUID
+	Id   *pilosa.GUID
 	Data interface{}
 }
 
-func (self *BaseQueryResult) ResultId() *util.GUID {
+func (self *BaseQueryResult) ResultId() *pilosa.GUID {
 	log.Trace("BaseQueryStep.ResultId", self)
 
 	return self.Id
@@ -106,7 +105,7 @@ func (self *BaseQueryResult) ResultData() interface{} {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type CountQueryStep struct {
 	*BaseQueryStep
-	Input *util.GUID
+	Input *pilosa.GUID
 }
 
 type CountQueryResult struct {
@@ -130,7 +129,7 @@ func (qt *CountQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type TopNQueryStep struct {
 	*BaseQueryStep
-	Input   *util.GUID
+	Input   *pilosa.GUID
 	Filters []uint64
 	N       int
 	Frame   string
@@ -173,7 +172,7 @@ func (qt *TopNQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type UnionQueryStep struct {
 	*BaseQueryStep
-	Inputs []*util.GUID
+	Inputs []*pilosa.GUID
 }
 
 type UnionQueryResult struct {
@@ -206,7 +205,7 @@ func (qt *UnionQueryTree) getLocation(d *db.Database) (*db.Location, error) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type IntersectQueryStep struct {
 	*BaseQueryStep
-	Inputs []*util.GUID
+	Inputs []*pilosa.GUID
 }
 
 type IntersectQueryResult struct {
@@ -239,7 +238,7 @@ func (qt *IntersectQueryTree) getLocation(d *db.Database) (*db.Location, error) 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type DifferenceQueryStep struct {
 	*BaseQueryStep
-	Inputs []*util.GUID
+	Inputs []*pilosa.GUID
 }
 
 type DifferenceQueryResult struct {
@@ -272,7 +271,7 @@ func (qt *DifferenceQueryTree) getLocation(d *db.Database) (*db.Location, error)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 type CatQueryStep struct {
 	*BaseQueryStep
-	Inputs []*util.GUID
+	Inputs []*pilosa.GUID
 	N      int
 }
 type Appendable interface {
@@ -606,18 +605,18 @@ func (self *QueryPlanner) buildTree(query *Query, slice int) (QueryTree, error) 
 }
 
 // Produces flattened QueryPlan from QueryTree input
-func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Location) (*QueryPlan, error) {
+func (self *QueryPlanner) flatten(qt QueryTree, id *pilosa.GUID, location *db.Location) (*QueryPlan, error) {
 	log.Trace("QueryPlanner.flatten", self, qt, id, location)
 	plan := QueryPlan{}
 	if cat, ok := qt.(*CatQueryTree); ok {
-		inputs := make([]*util.GUID, len(cat.subqueries))
+		inputs := make([]*pilosa.GUID, len(cat.subqueries))
 		loc, err := cat.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := CatQueryStep{&BaseQueryStep{id, "cat", loc, location}, inputs, cat.N}
 		for index, subq := range cat.subqueries {
-			sub_id := util.RandomUUID()
+			sub_id := pilosa.RandomUUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -628,14 +627,14 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 		plan = append(plan, step)
 
 	} else if stash, ok := qt.(*StashQueryTree); ok {
-		inputs := make([]*util.GUID, len(stash.subqueries))
+		inputs := make([]*pilosa.GUID, len(stash.subqueries))
 		loc, err := stash.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := StashQueryStep{&BaseQueryStep{id, "stash", loc, location}, inputs, stash.N}
 		for index, subq := range stash.subqueries {
-			sub_id := util.RandomUUID()
+			sub_id := pilosa.RandomUUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -645,14 +644,14 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 		}
 		plan = append(plan, step)
 	} else if union, ok := qt.(*UnionQueryTree); ok {
-		inputs := make([]*util.GUID, len(union.subqueries))
+		inputs := make([]*pilosa.GUID, len(union.subqueries))
 		loc, err := union.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := UnionQueryStep{&BaseQueryStep{id, "union", loc, location}, inputs}
 		for index, subq := range union.subqueries {
-			sub_id := util.RandomUUID()
+			sub_id := pilosa.RandomUUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -662,14 +661,14 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 		}
 		plan = append(plan, step)
 	} else if intersect, ok := qt.(*IntersectQueryTree); ok {
-		inputs := make([]*util.GUID, len(intersect.subqueries))
+		inputs := make([]*pilosa.GUID, len(intersect.subqueries))
 		loc, err := intersect.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := IntersectQueryStep{&BaseQueryStep{id, "intersect", loc, location}, inputs}
 		for index, subq := range intersect.subqueries {
-			sub_id := util.RandomUUID()
+			sub_id := pilosa.RandomUUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -679,14 +678,14 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 		}
 		plan = append(plan, step)
 	} else if difference, ok := qt.(*DifferenceQueryTree); ok {
-		inputs := make([]*util.GUID, len(difference.subqueries))
+		inputs := make([]*pilosa.GUID, len(difference.subqueries))
 		loc, err := difference.getLocation(self.Database)
 		if err != nil {
 			return nil, err
 		}
 		step := DifferenceQueryStep{&BaseQueryStep{id, "difference", loc, location}, inputs}
 		for index, subq := range difference.subqueries {
-			sub_id := util.RandomUUID()
+			sub_id := pilosa.RandomUUID()
 			step.Inputs[index] = &sub_id
 			subq_steps, err := self.flatten(subq, &sub_id, loc)
 			if err != nil {
@@ -728,7 +727,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 		plan := QueryPlan{step}
 		return &plan, nil
 	} else if cnt, ok := qt.(*CountQueryTree); ok {
-		sub_id := util.RandomUUID()
+		sub_id := pilosa.RandomUUID()
 		loc, err := cnt.getLocation(self.Database)
 		if err != nil {
 			return nil, err
@@ -741,7 +740,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 		plan = append(plan, *subq_steps...)
 		plan = append(plan, step)
 	} else if topn, ok := qt.(*TopNQueryTree); ok {
-		sub_id := util.RandomUUID()
+		sub_id := pilosa.RandomUUID()
 		loc, err := topn.getLocation(self.Database)
 		if err != nil {
 			return nil, err
@@ -764,7 +763,7 @@ func (self *QueryPlanner) flatten(qt QueryTree, id *util.GUID, location *db.Loca
 }
 
 // Transforms Query into QueryTree and flattens to QueryPlan object
-func (self *QueryPlanner) Plan(query *Query, id *util.GUID, destination *db.Location) (*QueryPlan, error) {
+func (self *QueryPlanner) Plan(query *Query, id *pilosa.GUID, destination *db.Location) (*QueryPlan, error) {
 	log.Trace("QueryPlanner.Plan", self, query, id, destination)
 	queryTree, err := self.buildTree(query, -1)
 	if err != nil {
@@ -844,7 +843,7 @@ type FillResult struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 type CacheItem struct {
-	FragmentId util.SUUID
+	FragmentId pilosa.SUUID
 	Handle     pilosa.BitmapHandle
 }
 
@@ -857,7 +856,7 @@ func NewStash() Stash {
 	return Stash{make([]CacheItem, 0), false}
 }
 
-func (st *Stash) Add(i util.SUUID) {
+func (st *Stash) Add(i pilosa.SUUID) {
 	item := CacheItem{i, 0}
 	st.Stash = append(st.Stash, item)
 	st.incomplete = true
@@ -870,7 +869,7 @@ func (st *Stash) Assign(i pilosa.BitmapHandle) {
 
 type StashQueryStep struct {
 	*BaseQueryStep
-	Inputs []*util.GUID
+	Inputs []*pilosa.GUID
 	N      int
 }
 

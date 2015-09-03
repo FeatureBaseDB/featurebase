@@ -9,7 +9,6 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/util"
 )
 
 var InvalidQueryError = errors.New("Invalid query format.")
@@ -53,7 +52,7 @@ func (self *QueryParser) Parse() (query *Query, err error) {
 	}()
 	var token *Token
 
-	id := util.RandomUUID()
+	id := pilosa.RandomUUID()
 	query = &Query{Id: &id, Subqueries: make([]Query, 0), Args: make(map[string]interface{})}
 
 	token = self.next()
@@ -215,7 +214,7 @@ ArgLoop:
 					if err != nil {
 						return nil, fmt.Errorf("Expecting fragment id! (%v)", err)
 					}
-					recallArgs.Add(util.SUUID(i)) //constructs a new arg
+					recallArgs.Add(pilosa.SUUID(i)) //constructs a new arg
 				} else {
 					i, err := strconv.ParseUint(token.Text, 10, 64)
 					if err != nil {

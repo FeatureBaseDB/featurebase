@@ -10,7 +10,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	. "github.com/syndtr/goleveldb/leveldb/util"
 	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/util"
+	"github.com/umbel/pilosa/statsd"
 )
 
 func init() {
@@ -40,7 +40,7 @@ func NewStorage(opt pilosa.StorageOptions) *Storage {
 		opt.DB,
 		strconv.Itoa(opt.Slice),
 		opt.Frame,
-		util.SUUID_to_Hex(opt.FragmentID),
+		pilosa.SUUID_to_Hex(opt.FragmentID),
 	)
 
 	return &Storage{path: path}
@@ -101,7 +101,7 @@ func (s *Storage) Fetch(bitmapID uint64, db string, frame string, slice int) (*p
 		lastKey = key
 	}
 
-	util.SendTimer("leveldb_storage_Fetch", time.Since(start).Nanoseconds())
+	statsd.SendTimer("leveldb_storage_Fetch", time.Since(start).Nanoseconds())
 
 	// Set bit count on bitmap.
 	bm.SetCount(uint64(count))
@@ -126,7 +126,7 @@ func (s *Storage) endBatch() {
 	if time.Since(s.batchTime) > 15*time.Second || s.batchN > 300 {
 		s.Flush()
 	}
-	util.SendTimer("leveldb_storage_EndBatch", time.Since(start).Nanoseconds())
+	statsd.SendTimer("leveldb_storage_EndBatch", time.Since(start).Nanoseconds())
 }
 
 func (s *Storage) Flush() {
@@ -142,7 +142,7 @@ func (s *Storage) Flush() {
 	s.batchTime = time.Now()
 	s.batchN = 0
 
-	util.SendTimer("leveldb_storage_FlushBatch", time.Since(start).Nanoseconds())
+	statsd.SendTimer("leveldb_storage_FlushBatch", time.Since(start).Nanoseconds())
 }
 
 // Store saves a bitmap to storage.
@@ -167,7 +167,7 @@ func (s *Storage) Store(bitmapID uint64, db string, frame string, slice int, fil
 func (s *Storage) StoreBlock(bitmapID uint64, db string, frame string, slice int, filter uint64, chunk uint64, index int32, block uint64) error {
 	start := time.Now()
 	s.batch.Put(marshalKey(bitmapID, chunk, uint8(index)), marshalValue(block, filter))
-	util.SendTimer("leveldb_storage_StoreBlock", time.Since(start).Nanoseconds())
+	statsd.SendTimer("leveldb_storage_StoreBlock", time.Since(start).Nanoseconds())
 	return nil
 }
 
