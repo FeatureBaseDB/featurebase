@@ -4,10 +4,10 @@ import (
 	"time"
 
 	"github.com/umbel/pilosa"
+	"github.com/umbel/pilosa/statsd"
 	_ "github.com/umbel/pilosa/storage"
 	"github.com/umbel/pilosa/storage/cassandra"
 	"github.com/umbel/pilosa/transport"
-	"github.com/umbel/pilosa/util"
 )
 
 const (
@@ -31,8 +31,8 @@ var (
 
 // Config represents the configuration for the command.
 type Config struct {
-	ID   *util.GUID `toml:"id"`
-	Host string     `toml:"host"`
+	ID   *pilosa.GUID `toml:"id"`
+	Host string       `toml:"host"`
 
 	TCP struct {
 		Port int `toml:"port"`
@@ -99,7 +99,7 @@ func NewConfig() Config {
 	c.Storage.SupportedFrames = DefaultSupportedFrames[:]
 	c.Storage.CassandraTimeWindow = Duration(cassandra.DefaultFlushInterval)
 	c.Storage.CassandraMaxSizeBatch = cassandra.DefaultFlushThreshold
-	c.Statsd.Host = util.DefaultStatsdHost
+	c.Statsd.Host = statsd.DefaultHost
 	c.ETCD.Hosts = DefaultETCDHosts[:]
 	return c
 }

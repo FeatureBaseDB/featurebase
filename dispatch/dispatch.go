@@ -1,6 +1,8 @@
 package dispatch
 
 import (
+	"time"
+
 	log "github.com/cihub/seelog"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/umbel/pilosa"
@@ -8,7 +10,6 @@ import (
 	"github.com/umbel/pilosa/db"
 	"github.com/umbel/pilosa/executor"
 	"github.com/umbel/pilosa/query"
-	"github.com/umbel/pilosa/util"
 )
 
 type Dispatch struct {
@@ -17,19 +18,19 @@ type Dispatch struct {
 	}
 
 	Hold interface {
-		Set(id *util.GUID, value interface{}, timeout int)
+		Set(id *pilosa.GUID, value interface{}, timeout time.Duration)
 	}
 
 	Index interface {
-		ClearBit(fragID util.SUUID, bitmapID uint64, pos uint64) (bool, error)
-		LoadBitmap(fragID util.SUUID, bitmapID uint64, compressedBitmap string, filter uint64)
-		SetBit(fragID util.SUUID, bitmapID uint64, pos uint64, category uint64) (bool, error)
+		ClearBit(fragID pilosa.SUUID, bitmapID uint64, pos uint64) (bool, error)
+		LoadBitmap(fragID pilosa.SUUID, bitmapID uint64, compressedBitmap string, filter uint64)
+		SetBit(fragID pilosa.SUUID, bitmapID uint64, pos uint64, category uint64) (bool, error)
 		TopFillBatch(args []pilosa.FillArgs) ([]pilosa.Pair, error)
 	}
 
 	Transport interface {
 		Receive() *db.Message
-		Send(message *db.Message, host *util.GUID)
+		Send(message *db.Message, host *pilosa.GUID)
 	}
 }
 
@@ -84,7 +85,7 @@ func (d *Dispatch) Run() {
 
 		case db.HoldResult:
 			log.Trace("Dispatch.Run HoldResult")
-			d.Hold.Set(data.ResultId(), data.ResultData(), 30)
+			d.Hold.Set(data.ResultId(), data.ResultData(), 30*time.Second)
 
 		case query.PortableQueryStep:
 			log.Trace("Dispatch.Run PortableQueryStep")
@@ -95,7 +96,7 @@ func (d *Dispatch) Run() {
 			go d.topFillHandler(message)
 
 		case core.BitsResponse:
-			d.Hold.Set(data.ResultId(), data.ResultData(), 30)
+			d.Hold.Set(data.ResultId(), data.ResultData(), 30*time.Second)
 
 		default:
 			spew.Dump(data)

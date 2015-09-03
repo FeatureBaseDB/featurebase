@@ -4,20 +4,20 @@ import (
 	"encoding/gob"
 	"time"
 
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/db"
-	"github.com/umbel/pilosa/util"
 )
 
 type PingRequest struct {
-	Id     *util.GUID
-	Source *util.GUID
+	Id     *pilosa.GUID
+	Source *pilosa.GUID
 }
 
 type PongRequest struct {
-	Id *util.GUID
+	Id *pilosa.GUID
 }
 
-func (self PongRequest) ResultId() *util.GUID {
+func (self PongRequest) ResultId() *pilosa.GUID {
 	return self.Id
 }
 func (self PongRequest) ResultData() interface{} {
@@ -30,29 +30,29 @@ func init() {
 }
 
 type Pinger struct {
-	ID util.GUID
+	ID pilosa.GUID
 
 	Hold interface {
-		Get(id *util.GUID, timeout int) (interface{}, error)
+		Get(id *pilosa.GUID, timeout time.Duration) (interface{}, error)
 	}
 
 	Transport interface {
-		Send(message *db.Message, host *util.GUID)
+		Send(message *db.Message, host *pilosa.GUID)
 	}
 }
 
-func NewPinger(id util.GUID) *Pinger {
+func NewPinger(id pilosa.GUID) *Pinger {
 	return &Pinger{
 		ID: id,
 	}
 }
 
-func (self *Pinger) Ping(process_id *util.GUID) (*time.Duration, error) {
-	id := util.RandomUUID()
+func (self *Pinger) Ping(process_id *pilosa.GUID) (*time.Duration, error) {
+	id := pilosa.RandomUUID()
 	ping := db.Message{Data: PingRequest{Id: &id, Source: &self.ID}}
 	start := time.Now()
 	self.Transport.Send(&ping, process_id)
-	_, err := self.Hold.Get(&id, 60)
+	_, err := self.Hold.Get(&id, 60*time.Second)
 	if err != nil {
 		return nil, err
 	}

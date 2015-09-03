@@ -6,7 +6,6 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/golang/groupcache/lru"
-	"github.com/umbel/pilosa/util"
 )
 
 type General struct {
@@ -90,7 +89,7 @@ func (self *General) getFileName() string {
 
 func (self *General) Persist() error {
 	log.Warn("General Persist")
-	w, err := util.Create(self.getFileName())
+	w, err := createFile(self.getFileName())
 	if err != nil {
 		log.Warn("Error saving:", err)
 		return err
@@ -111,7 +110,7 @@ func (self *General) Persist() error {
 
 func (self *General) Load(requestChan chan Command, f *Fragment) {
 	log.Warn("General Load")
-	r, err := util.Open(self.getFileName())
+	r, err := openFile(self.getFileName())
 	if err != nil {
 		log.Warn("NO General Init File:", self.getFileName())
 		return

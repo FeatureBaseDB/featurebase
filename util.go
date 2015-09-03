@@ -1,4 +1,4 @@
-package util
+package pilosa
 
 import (
 	"io"
@@ -8,14 +8,14 @@ import (
 	"github.com/kr/s3/s3util"
 )
 
-func Open(s string) (io.ReadCloser, error) {
+func openFile(s string) (io.ReadCloser, error) {
 	if isURL(s) {
 		return s3util.Open(s, nil)
 	}
 	return os.Open(s)
 }
 
-func Create(s string) (io.WriteCloser, error) {
+func createFile(s string) (io.WriteCloser, error) {
 	if isURL(s) {
 		return s3util.Create(s, nil, nil)
 	}

@@ -4,25 +4,25 @@ import (
 	"encoding/gob"
 
 	log "github.com/cihub/seelog"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/db"
 	"github.com/umbel/pilosa/hold"
-	"github.com/umbel/pilosa/util"
 )
 
 type BatchRequest struct {
-	Id                *util.GUID
-	Source            *util.GUID
-	Fragment_id       util.SUUID
+	Id                *pilosa.GUID
+	Source            *pilosa.GUID
+	Fragment_id       pilosa.SUUID
 	Bitmap_id         uint64
 	Compressed_bitmap string
 	Filter            uint64
 }
 
 type BatchResponse struct {
-	Id *util.GUID
+	Id *pilosa.GUID
 }
 
-func (self BatchResponse) ResultId() *util.GUID {
+func (self BatchResponse) ResultId() *pilosa.GUID {
 	return self.Id
 }
 func (self BatchResponse) ResultData() interface{} {
@@ -35,16 +35,16 @@ func init() {
 }
 
 type Batcher struct {
-	ID      util.GUID
+	ID      pilosa.GUID
 	Cluster *db.Cluster
 	Hold    *hold.Holder
 
 	Transport interface {
-		Send(message *db.Message, host *util.GUID)
+		Send(message *db.Message, host *pilosa.GUID)
 	}
 }
 
-func NewBatcher(id util.GUID) *Batcher {
+func NewBatcher(id pilosa.GUID) *Batcher {
 	return &Batcher{ID: id}
 }
 
@@ -58,7 +58,7 @@ func (b *Batcher) Batch(database_name, frame, compressed_bitmap string, bitmap_i
 
 	fragment, err := database.GetFragmentForBitmap(oslice, &db.Bitmap{Id: bitmap_id, FrameType: frame, Filter: filter})
 	if err == nil {
-		id := util.RandomUUID()
+		id := pilosa.RandomUUID()
 		batch := db.Message{Data: BatchRequest{Id: &id, Source: &b.ID, Fragment_id: fragment.GetId(), Bitmap_id: bitmap_id, Compressed_bitmap: compressed_bitmap}}
 		dest_id := fragment.GetProcess().Id()
 		b.Transport.Send(&batch, &dest_id)

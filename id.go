@@ -1,4 +1,4 @@
-package util
+package pilosa
 
 import (
 	"bytes"
@@ -44,6 +44,7 @@ func SUUID_to_Hex(a SUUID) string {
 	binary.Write(buf, binary.BigEndian, a)
 	return hex.EncodeToString(buf.Bytes())
 }
+
 func Hex_to_SUUID(str string) SUUID {
 	l := len(str)
 	var m string

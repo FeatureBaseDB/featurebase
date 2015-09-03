@@ -7,7 +7,7 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/stathat/consistent"
-	"github.com/umbel/pilosa/util"
+	"github.com/umbel/pilosa"
 )
 
 // SupportedFrames is a list of frame types that are supported.
@@ -20,23 +20,23 @@ var FragmentDoesNotExistError = errors.New("Fragment does not exist.")
 var FrameSliceIntersectDoesNotExistError = errors.New("FrameSliceIntersect does not exist.")
 
 type Location struct {
-	ProcessId  *util.GUID
-	FragmentId util.SUUID
+	ProcessId  *pilosa.GUID
+	FragmentId pilosa.SUUID
 }
 
 type Process struct {
-	id        *util.GUID
+	id        *pilosa.GUID
 	host      string
 	port_tcp  int
 	port_http int
 	mutex     sync.Mutex
 }
 
-func NewProcess(id *util.GUID) *Process {
+func NewProcess(id *pilosa.GUID) *Process {
 	return &Process{id: id}
 }
 
-func (self *Process) Id() util.GUID {
+func (self *Process) Id() pilosa.GUID {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 	return *self.id
@@ -302,7 +302,7 @@ func (self *FrameSliceIntersect) GetFragments() []*Fragment {
 	return self.fragments
 }
 
-func (d *Database) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
+func (d *Database) GetFragment(fragment_id pilosa.SUUID) (*Fragment, error) {
 	for _, fsi := range d.frame_slice_intersects {
 		f, err := fsi.GetFragment(fragment_id)
 		if err == nil {
@@ -311,7 +311,7 @@ func (d *Database) GetFragment(fragment_id util.SUUID) (*Fragment, error) {
 	}
 	return nil, FragmentDoesNotExistError
 }
-func (self *FrameSliceIntersect) GetFragment(fragment_id util.SUUID) (*Fragment,
+func (self *FrameSliceIntersect) GetFragment(fragment_id pilosa.SUUID) (*Fragment,
 	error) {
 	for _, fragment := range self.fragments {
 		if fragment.id == fragment_id {
@@ -323,7 +323,7 @@ func (self *FrameSliceIntersect) GetFragment(fragment_id util.SUUID) (*Fragment,
 
 func (self *FrameSliceIntersect) AddFragment(fragment *Fragment) {
 	self.fragments = append(self.fragments, fragment)
-	self.hashring.Add(util.SUUID_to_Hex(fragment.id))
+	self.hashring.Add(pilosa.SUUID_to_Hex(fragment.id))
 }
 
 ///////// FRAGMENTS
@@ -333,11 +333,11 @@ func (self *FrameSliceIntersect) AddFragment(fragment *Fragment) {
 // reference to the responsible node for that fragment. The node is in the form
 // ip:port
 type Fragment struct {
-	id      util.SUUID
+	id      pilosa.SUUID
 	process *Process
 }
 
-func (self *Fragment) GetId() util.SUUID {
+func (self *Fragment) GetId() pilosa.SUUID {
 	return self.id
 }
 
@@ -345,7 +345,7 @@ func (self *Fragment) GetProcess() *Process {
 	return self.process
 }
 
-func (self *Fragment) GetProcessId() *util.GUID {
+func (self *Fragment) GetProcessId() *pilosa.GUID {
 	return self.process.id
 }
 
@@ -373,7 +373,7 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 		log.Warn(err)
 		return nil, err
 	}
-	frag_id := util.Hex_to_SUUID(frag_id_s)
+	frag_id := pilosa.Hex_to_SUUID(frag_id_s)
 	return fsi.GetFragment(frag_id)
 }
 
@@ -391,11 +391,11 @@ func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragme
 		log.Warn(err)
 		return nil, err
 	}
-	frag_id := util.Hex_to_SUUID(frag_id_s)
+	frag_id := pilosa.Hex_to_SUUID(frag_id_s)
 	return fsi.GetFragment(frag_id)
 }
 
-func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) (*Fragment, error) {
+func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id pilosa.SUUID) (*Fragment, error) {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Warn(err)
@@ -404,7 +404,7 @@ func (d *Database) getFragment(frame *Frame, slice *Slice, fragment_id util.SUUI
 	return fsi.GetFragment(fragment_id)
 }
 
-func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
+func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id pilosa.SUUID) *Fragment {
 	fsi, err := d.GetFrameSliceIntersect(frame, slice)
 	if err != nil {
 		log.Warn("database.addFragment", err)
@@ -415,7 +415,7 @@ func (d *Database) addFragment(frame *Frame, slice *Slice, fragment_id util.SUUI
 	return &fragment
 }
 
-func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id util.SUUID) *Fragment {
+func (d *Database) GetOrCreateFragment(frame *Frame, slice *Slice, fragment_id pilosa.SUUID) *Fragment {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	fragment, err := d.getFragment(frame, slice, fragment_id)
