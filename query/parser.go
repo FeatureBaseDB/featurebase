@@ -52,7 +52,7 @@ func (self *QueryParser) Parse() (query *Query, err error) {
 	}()
 	var token *Token
 
-	id := pilosa.RandomUUID()
+	id := pilosa.NewGUID()
 	query = &Query{Id: &id, Subqueries: make([]Query, 0), Args: make(map[string]interface{})}
 
 	token = self.next()
