@@ -12,7 +12,6 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/kr/s3/s3util"
-	"github.com/mitchellh/panicwrap"
 	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/core"
 	"github.com/umbel/pilosa/db"
@@ -51,16 +50,6 @@ func NewMain() *Main {
 // Run executes the main program execution.
 func (m *Main) Run(args ...string) error {
 	defer log.Flush()
-
-	// Handle panics with a log entry and process exit.
-	if code, err := panicwrap.BasicWrap(func(output string) {
-		log.Critical("The child panicked:\n\n", output)
-		os.Exit(1)
-	}); err != nil {
-		panic(err)
-	} else if code >= 0 {
-		os.Exit(code)
-	}
 
 	// Parse command line arguments.
 	opt, err := m.ParseFlags(args)
