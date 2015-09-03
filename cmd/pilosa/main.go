@@ -18,8 +18,8 @@ import (
 	"github.com/umbel/pilosa/dispatch"
 	"github.com/umbel/pilosa/executor"
 	"github.com/umbel/pilosa/hold"
+	"github.com/umbel/pilosa/statsd"
 	"github.com/umbel/pilosa/transport"
-	"github.com/umbel/pilosa/util"
 )
 
 // Build holds the build information passed in at compile time.
@@ -68,7 +68,7 @@ func (m *Main) Run(args ...string) error {
 	// Generate an ID if one is not specified in the config.
 	id := config.ID
 	if id == nil {
-		*id = util.RandomUUID()
+		*id = pilosa.RandomUUID()
 	}
 
 	// Set up profiling.
@@ -94,8 +94,8 @@ func (m *Main) Run(args ...string) error {
 	s3util.DefaultConfig.SecretKey = config.AWS.SecretAccessKey
 
 	// Initialize Statsd.
-	util.StatsdHost = config.Statsd.Host
-	util.SetupStatsd()
+	statsd.Host = config.Statsd.Host
+	statsd.Setup()
 
 	// Initialize logging.
 	logger, _ := log.LoggerFromConfigAsBytes([]byte(SeelogProductionConfig(config.Log.Path, *id, config.Log.Level)))

@@ -48,7 +48,7 @@ func TestQueryPlanner_Plan_Get(t *testing.T) {
 
 	if step := (*plan)[2].(query.CatQueryStep); step.Operation != "cat" {
 		t.Fatalf("unexpected step(2) operation: %s", step.Operation)
-	} else if !reflect.DeepEqual(step.Inputs, []*util.GUID{
+	} else if !reflect.DeepEqual(step.Inputs, []*pilosa.GUID{
 		(*plan)[0].(query.GetQueryStep).Id,
 		(*plan)[1].(query.GetQueryStep).Id,
 	}) {
@@ -212,7 +212,7 @@ func TestQueryPlanner_Plan_Union(t *testing.T) {
 	// Third step should union the first two steps.
 	if step := (*plan)[2].(query.UnionQueryStep); step.Operation != "union" {
 		t.Fatalf("unexpected step(2) operation: %s", step.Operation)
-	} else if !reflect.DeepEqual(step.Inputs, []*util.GUID{
+	} else if !reflect.DeepEqual(step.Inputs, []*pilosa.GUID{
 		(*plan)[0].(query.GetQueryStep).Id,
 		(*plan)[1].(query.GetQueryStep).Id,
 	}) {
@@ -240,7 +240,7 @@ func TestQueryPlanner_Plan_Union(t *testing.T) {
 	// Sixth step should union the previous two steps.
 	if step := (*plan)[5].(query.UnionQueryStep); step.Operation != "union" {
 		t.Fatalf("unexpected step(5) operation: %s", step.Operation)
-	} else if !reflect.DeepEqual(step.Inputs, []*util.GUID{
+	} else if !reflect.DeepEqual(step.Inputs, []*pilosa.GUID{
 		(*plan)[3].(query.GetQueryStep).Id,
 		(*plan)[4].(query.GetQueryStep).Id,
 	}) {
@@ -250,7 +250,7 @@ func TestQueryPlanner_Plan_Union(t *testing.T) {
 	// Final step should concatenate the two union steps.
 	if step := (*plan)[6].(query.CatQueryStep); step.Operation != "cat" {
 		t.Fatalf("unexpected step(6) operation: %s", step.Operation)
-	} else if !reflect.DeepEqual(step.Inputs, []*util.GUID{
+	} else if !reflect.DeepEqual(step.Inputs, []*pilosa.GUID{
 		(*plan)[2].(query.UnionQueryStep).Id,
 		(*plan)[5].(query.UnionQueryStep).Id,
 	}) {

@@ -9,9 +9,9 @@ import (
 
 	notify "github.com/bitly/go-notify"
 	log "github.com/cihub/seelog"
+	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/core"
 	"github.com/umbel/pilosa/db"
-	"github.com/umbel/pilosa/util"
 )
 
 const DefaultTCPPort = 12001
@@ -21,16 +21,16 @@ type connection struct {
 	inbox     chan *db.Message
 	outbox    chan *db.Message
 	conn      *net.Conn
-	process   *util.GUID
+	process   *pilosa.GUID
 }
 
 type newconnection struct {
-	id         *util.GUID
+	id         *pilosa.GUID
 	connection *connection
 }
 
 func init() {
-	gob.Register(util.GUID{})
+	gob.Register(pilosa.GUID{})
 }
 
 func (self *connection) manage() {
@@ -79,7 +79,7 @@ BeginManageConnection:
 					return
 				}
 			case message := <-self.inbox:
-				identifier, ok := message.Data.(util.GUID)
+				identifier, ok := message.Data.(pilosa.GUID)
 				if ok {
 					// message is connection registration; bypass inbox and register
 					self.process = &identifier
@@ -102,19 +102,19 @@ BeginManageConnection:
 type TcpTransport struct {
 	inbox       chan *db.Message
 	outbox      chan db.Envelope
-	connections map[util.GUID]*connection
+	connections map[pilosa.GUID]*connection
 	reg         chan *newconnection
 
-	ID         util.GUID
+	ID         pilosa.GUID
 	Port       int
 	ProcessMap *core.ProcessMap
 }
 
-func NewTcpTransport(id util.GUID) *TcpTransport {
+func NewTcpTransport(id pilosa.GUID) *TcpTransport {
 	return &TcpTransport{
 		inbox:       make(chan *db.Message, 100),
 		outbox:      make(chan db.Envelope, 100),
-		connections: make(map[util.GUID]*connection),
+		connections: make(map[pilosa.GUID]*connection),
 		reg:         make(chan *newconnection),
 
 		ID:   id,
@@ -168,7 +168,7 @@ func (self *TcpTransport) Close() {
 	log.Warn("Shutting down TCP transport")
 }
 
-func (self *TcpTransport) Send(message *db.Message, host *util.GUID) {
+func (self *TcpTransport) Send(message *db.Message, host *pilosa.GUID) {
 	log.Trace("TcpTransport.Send", message, host)
 	envelope := db.Envelope{Message: message, Host: host}
 	notify.Post("outbox", &envelope)

@@ -6,7 +6,7 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/gocql/gocql"
 	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/util"
+	"github.com/umbel/pilosa/statsd"
 )
 
 func init() {
@@ -124,8 +124,8 @@ func (s *Storage) Fetch(bitmapID uint64, db string, frame string, slice int) (*p
 		lastKey = chunkKey
 	}
 
-	util.SendTimer("cassandra_storage_Fetch", time.Since(start).Nanoseconds())
-	util.SendInc("cassandra_storage_Read")
+	statsd.SendTimer("cassandra_storage_Fetch", time.Since(start).Nanoseconds())
+	statsd.SendInc("cassandra_storage_Read")
 
 	// Set total bits set.
 	bm.SetCount(uint64(count))
@@ -148,8 +148,8 @@ func (s *Storage) endBatch() {
 
 	start := time.Now()
 	s.Flush()
-	util.SendTimer("cassandra_storage_EndBatch", time.Since(start).Nanoseconds())
-	util.SendInc("cassandra_storage_Write")
+	statsd.SendTimer("cassandra_storage_EndBatch", time.Since(start).Nanoseconds())
+	statsd.SendInc("cassandra_storage_Write")
 }
 
 // Flush flushes the current batch to storage.
@@ -168,7 +168,7 @@ func (s *Storage) Flush() {
 	s.batchTime = time.Now()
 	s.batchN = 0
 
-	util.SendTimer("cassandra_storage_FlushBatch", time.Since(start).Nanoseconds())
+	statsd.SendTimer("cassandra_storage_FlushBatch", time.Since(start).Nanoseconds())
 }
 
 // Store saves a bitmap to storage.
@@ -202,7 +202,7 @@ func (s *Storage) StoreBlock(bid uint64, db string, frame string, slice int, fil
 	start := time.Now()
 	s.batch.Query(`INSERT INTO bitmap ( bitmap_id, db, frame, slice , filter, ChunkKey, BlockIndex, block) VALUES (?,?,?,?,?,?,?,?)  USING timestamp ?;`,
 		id, db, frame, slice, int(filter), chunk, blockIndex, block, start.UnixNano())
-	util.SendTimer("cassandra_storage_StoreBlock", time.Since(start).Nanoseconds())
+	statsd.SendTimer("cassandra_storage_StoreBlock", time.Since(start).Nanoseconds())
 
 	return nil
 }
@@ -223,7 +223,7 @@ func (s *Storage) RemoveBlock(bid uint64, db string, frame string, slice int, bc
 	s.batch.Query(`DELETE FROM bitmap USING TIMESTAMP ? WHERE bitmap_id=? AND db=? AND frame=? AND slice=? AND chunkkey=? AND blockindex=?`,
 		startTime.UnixNano(), id, db, frame, slice, chunk, blockIndex)
 
-	util.SendTimer("cassandra_storage_DeleteBlock", time.Since(startTime).Nanoseconds())
+	statsd.SendTimer("cassandra_storage_DeleteBlock", time.Since(startTime).Nanoseconds())
 }
 
 func (s *Storage) StoreBit(bid uint64, db string, frame string, slice int, filter uint64, chunk uint64, blockIndex int32, val, count uint64) {

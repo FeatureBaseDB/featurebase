@@ -5,7 +5,6 @@ import (
 
 	"github.com/umbel/pilosa"
 	_ "github.com/umbel/pilosa/storage"
-	"github.com/umbel/pilosa/util"
 )
 
 func init() {
@@ -18,7 +17,7 @@ func TestFragmentContainer_Get(t *testing.T) {
 	fc.AddFragment("25", "general", 0, 1)
 	fc.MustClear(1)
 
-	if bh, err := fc.Get(util.SUUID(1), 1234); err != nil {
+	if bh, err := fc.Get(pilosa.SUUID(1), 1234); err != nil {
 		t.Fatal(err)
 	} else if bh == 0 {
 		t.Fatal("expected non-zero bitmap handle")
@@ -49,20 +48,20 @@ func TestFragmentContainer_SetBit(t *testing.T) {
 // Ensure the number of bits on a bitmap can be counted.
 func TestFragmentContainer_Count(t *testing.T) {
 	fc := NewFragmentContainer()
-	fc.AddFragment("25", "general", 0, util.SUUID(1))
+	fc.AddFragment("25", "general", 0, pilosa.SUUID(1))
 
 	// Set a bit on the bitmap.
 	bi1 := uint64(1234)
-	if changed, err := fc.SetBit(util.SUUID(1), bi1, 1, 0); err != nil {
+	if changed, err := fc.SetBit(pilosa.SUUID(1), bi1, 1, 0); err != nil {
 		t.Fatal(err)
 	} else if changed == false {
 		t.Fatal("expected change")
 	}
 
 	// Verify that one bit is set.
-	if bh, err := fc.Get(util.SUUID(1), bi1); err != nil {
+	if bh, err := fc.Get(pilosa.SUUID(1), bi1); err != nil {
 		t.Fatal(err)
-	} else if n, err := fc.Count(util.SUUID(1), bh); err != nil {
+	} else if n, err := fc.Count(pilosa.SUUID(1), bh); err != nil {
 		t.Fatal(err)
 	} else if n != 1 {
 		t.Fatalf("unexpected count: %d", n)
@@ -273,7 +272,7 @@ func NewFragmentContainer() *FragmentContainer {
 }
 
 // MustGet retrieves a bitmap by id. Panic on error.
-func (fc *FragmentContainer) MustGet(frag_id util.SUUID, bitmap_id uint64) pilosa.BitmapHandle {
+func (fc *FragmentContainer) MustGet(frag_id pilosa.SUUID, bitmap_id uint64) pilosa.BitmapHandle {
 	bh, err := fc.Get(frag_id, bitmap_id)
 	if err != nil {
 		panic(err)
@@ -282,7 +281,7 @@ func (fc *FragmentContainer) MustGet(frag_id util.SUUID, bitmap_id uint64) pilos
 }
 
 // MustSetBit sets a bit in a bitmap. Panic on error.
-func (fc *FragmentContainer) MustSetBit(frag_id util.SUUID, bitmap_id uint64, pos uint64, category uint64) bool {
+func (fc *FragmentContainer) MustSetBit(frag_id pilosa.SUUID, bitmap_id uint64, pos uint64, category uint64) bool {
 	changed, err := fc.SetBit(frag_id, bitmap_id, pos, category)
 	if err != nil {
 		panic(err)
@@ -291,7 +290,7 @@ func (fc *FragmentContainer) MustSetBit(frag_id util.SUUID, bitmap_id uint64, po
 }
 
 // MustClear clears a fragment. Panic on error.
-func (fc *FragmentContainer) MustClear(fragmentID util.SUUID) bool {
+func (fc *FragmentContainer) MustClear(fragmentID pilosa.SUUID) bool {
 	v, err := fc.Clear(fragmentID)
 	if err != nil {
 		panic(err)
@@ -300,7 +299,7 @@ func (fc *FragmentContainer) MustClear(fragmentID util.SUUID) bool {
 }
 
 // MustCount returns the number of set bits in a bitmap. Panic on error.
-func (fc *FragmentContainer) MustCount(frag_id util.SUUID, bitmap pilosa.BitmapHandle) uint64 {
+func (fc *FragmentContainer) MustCount(frag_id pilosa.SUUID, bitmap pilosa.BitmapHandle) uint64 {
 	v, err := fc.Count(frag_id, bitmap)
 	if err != nil {
 		panic(err)

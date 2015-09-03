@@ -1,9 +1,5 @@
 package pilosa
 
-import (
-	"github.com/umbel/pilosa/util"
-)
-
 // Storage represents
 type Storage interface {
 	Open() error
@@ -47,7 +43,7 @@ type StorageOptions struct {
 	DB         string
 	Slice      int
 	Frame      string
-	FragmentID util.SUUID
+	FragmentID SUUID
 
 	LevelDBPath string
 }
