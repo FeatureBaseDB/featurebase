@@ -48,7 +48,7 @@ func NewPinger(id pilosa.GUID) *Pinger {
 }
 
 func (self *Pinger) Ping(process_id *pilosa.GUID) (*time.Duration, error) {
-	id := pilosa.RandomUUID()
+	id := pilosa.NewGUID()
 	ping := db.Message{Data: PingRequest{Id: &id, Source: &self.ID}}
 	start := time.Now()
 	self.Transport.Send(&ping, process_id)

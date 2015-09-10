@@ -63,11 +63,15 @@ func (self *General) TopN(b *Bitmap, n int, categories []uint64) []Pair {
 
 	return empty
 }
-func (self *General) Store(bitmap_id uint64, bm *Bitmap, filter uint64) {
-	self.storage.Store(bitmap_id, self.db, self.frame, self.slice, filter, bm)
+func (self *General) Store(bitmap_id uint64, bm *Bitmap, filter uint64) error {
+	if err := self.storage.Store(bitmap_id, self.db, self.frame, self.slice, filter, bm); err != nil {
+		return err
+	}
 	self.bitmap_cache.Add(bitmap_id, bm)
 	self.keys[bitmap_id] = 0
+	return nil
 }
+
 func (self *General) OnEvicted(key lru.Key, value interface{}) {
 	delete(self.keys, key.(uint64))
 }
@@ -108,7 +112,7 @@ func (self *General) Persist() error {
 	return encoder.Encode(results)
 }
 
-func (self *General) Load(requestChan chan Command, f *Fragment) {
+func (self *General) Load(f *Fragment) {
 	log.Warn("General Load")
 	r, err := openFile(self.getFileName())
 	if err != nil {
@@ -123,14 +127,11 @@ func (self *General) Load(requestChan chan Command, f *Fragment) {
 		return
 	}
 	for _, k := range keys {
-		request := NewLoadRequest(k)
-		requestChan <- request
-		request.Response()
+		self.Get(k)
 	}
 }
 
 func (self *General) TopNAll(n int, categories []uint64) []Pair {
-
 	results := make([]Pair, 0, 0)
 
 	count := 0

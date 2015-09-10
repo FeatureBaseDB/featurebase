@@ -58,7 +58,7 @@ func (b *Batcher) Batch(database_name, frame, compressed_bitmap string, bitmap_i
 
 	fragment, err := database.GetFragmentForBitmap(oslice, &db.Bitmap{Id: bitmap_id, FrameType: frame, Filter: filter})
 	if err == nil {
-		id := pilosa.RandomUUID()
+		id := pilosa.NewGUID()
 		batch := db.Message{Data: BatchRequest{Id: &id, Source: &b.ID, Fragment_id: fragment.GetId(), Bitmap_id: bitmap_id, Compressed_bitmap: compressed_bitmap}}
 		dest_id := fragment.GetProcess().Id()
 		b.Transport.Send(&batch, &dest_id)

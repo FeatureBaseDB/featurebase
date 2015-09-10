@@ -444,7 +444,7 @@ func (self *Executor) GetQueryStepHandler(msg *db.Message) {
 	bh, err := self.Index.Get(qs.Location.FragmentId, qs.Bitmap.Id)
 	if err != nil {
 		spew.Dump(err)
-		log.Error("GetQueryStepHandler1", pilosa.SUUID_to_Hex(qs.Location.FragmentId), qs.Bitmap.Id)
+		log.Error("GetQueryStepHandler1", qs.Location.FragmentId.String(), qs.Bitmap.Id)
 		log.Error("GetQueryStepHandler2", err)
 	}
 
@@ -455,7 +455,7 @@ func (self *Executor) GetQueryStepHandler(msg *db.Message) {
 		bm, err := self.Index.GetBytes(qs.Location.FragmentId, bh)
 		if err != nil {
 			spew.Dump(err)
-			log.Error("GetQueryStepHandlerr3", pilosa.SUUID_to_Hex(qs.Location.FragmentId), qs.Bitmap.Id)
+			log.Error("GetQueryStepHandlerr3", qs.Location.FragmentId.String(), qs.Bitmap.Id)
 			log.Error("GetQueryStepHandler4", err)
 		}
 		result = bm
@@ -709,7 +709,7 @@ func newtask(p pilosa.GUID) *Task {
 	result := new(Task)
 	result.processid = p
 	result.f = make(map[pilosa.SUUID]pilosa.FillArgs)
-	result.hold_id = pilosa.RandomUUID()
+	result.hold_id = pilosa.NewGUID()
 	return result
 }
 
