@@ -55,7 +55,7 @@ func (self *RemoteSetBit) Request() {
 	self.requests = make([]remote_task, 0)
 	source_process, _ := self.ProcessMap.GetProcess(&self.ID)
 	for process, request := range self.cluster {
-		random_id := pilosa.RandomUUID()
+		random_id := pilosa.NewGUID()
 		msg := new(db.Message)
 		msg.Data = BitsRequest{
 			Bits:            request,

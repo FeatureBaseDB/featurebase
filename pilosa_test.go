@@ -8,44 +8,44 @@ import (
 )
 
 // Ensure id can be parsed from string.
-func TestId_Small(t *testing.T) {
-	if v := pilosa.Hex_to_SUUID("1"); v != 1 {
+func TestSUUID_Small(t *testing.T) {
+	if v := pilosa.ParseSUUID("1"); v != 1 {
 		t.Fatalf("unexpected SUUID: %v", v)
 	}
 }
 
 // Ensure generated IDs are unique.
-func TestId_Unique(t *testing.T) {
-	a, b := pilosa.Id(), pilosa.Id()
+func TestSUUID_Unique(t *testing.T) {
+	a, b := pilosa.NewSUUID(), pilosa.NewSUUID()
 	if a == b {
 		t.Fatalf("ids should be unique: %v != %v", a, b)
 	}
 }
 
 // Ensure ids can be converted to and from hex.
-func TestId_Hex(t *testing.T) {
-	a := pilosa.Id()
-	b := pilosa.Hex_to_SUUID(pilosa.SUUID_to_Hex(a))
+func TestSUUID_Hex(t *testing.T) {
+	a := pilosa.NewSUUID()
+	b := pilosa.ParseSUUID(a.String())
 	if a != b {
 		t.Fatalf("ids not equal: %v != %v", a, b)
 	}
 }
 
 // Ensure ids can be generated in sequence.
-func TestId_Multiple(t *testing.T) {
+func TestSUUID_Multiple(t *testing.T) {
 	for i := 0; i < 10; i++ {
-		println(pilosa.SUUID_to_Hex(pilosa.Id()))
+		println(pilosa.NewSUUID().String())
 	}
 }
 
-// Ensure a random UUID can be converted to a string.
-func TestRandomUUID_String(t *testing.T) {
-	fmt.Println(pilosa.RandomUUID().String())
+// Ensure a random GUID can be converted to a string.
+func TestGUID_String(t *testing.T) {
+	fmt.Println(pilosa.NewGUID().String())
 }
 
-func BenchmarkId(b *testing.B) {
+func BenchmarkSUUID(b *testing.B) {
 	// run the Fib function b.N times
 	for n := 0; n < b.N; n++ {
-		pilosa.Id()
+		pilosa.NewSUUID()
 	}
 }

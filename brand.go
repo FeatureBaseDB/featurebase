@@ -14,11 +14,7 @@ import (
 
 var FragmentBase string
 
-var globalLock *sync.Mutex
-
-func init() {
-	globalLock = new(sync.Mutex)
-}
+var globalLock sync.Mutex
 
 type Pair struct {
 	Key, Count uint64
@@ -199,10 +195,15 @@ func (b *Brand) Stats() interface{} {
 		"skip":                               b.skip}
 	return stats
 }
-func (b *Brand) Store(bitmap_id uint64, bm *Bitmap, filter uint64) {
-	b.storage.Store(bitmap_id, b.db, b.frame, b.slice, filter, bm)
+
+func (b *Brand) Store(bitmap_id uint64, bm *Bitmap, filter uint64) error {
+	if err := b.storage.Store(bitmap_id, b.db, b.frame, b.slice, filter, bm); err != nil {
+		return err
+	}
 	b.cache_it(bm, bitmap_id, filter)
+	return nil
 }
+
 func (b *Brand) checkRank() {
 	if len(b.rankings) < 50 {
 		b.Rank()
@@ -393,7 +394,7 @@ func (b *Brand) Persist() error {
 	return encoder.Encode(results)
 }
 
-func (b *Brand) Load(requestChan chan Command, f *Fragment) {
+func (b *Brand) Load(f *Fragment) {
 	log.Warn("Brand Load")
 	time.Sleep(time.Duration(rand.Intn(32)) * time.Second) //trying to avoid mass cassandra hit
 	r, err := openFile(b.getFileName())
@@ -406,15 +407,14 @@ func (b *Brand) Load(requestChan chan Command, f *Fragment) {
 	if err := dec.Decode(&keys); err != nil {
 		return
 	}
+
 	globalLock.Lock()
 	defer globalLock.Unlock()
+
 	// probaly need to get a etcd lock too someday
 	for _, k := range keys {
-		request := NewLoadRequest(k)
-		requestChan <- request
-		request.Response()
+		b.Get(k)
 		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) //trying to avoid mass cassandra hit
-
 	}
 }
 

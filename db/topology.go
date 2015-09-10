@@ -323,7 +323,7 @@ func (self *FrameSliceIntersect) GetFragment(fragment_id pilosa.SUUID) (*Fragmen
 
 func (self *FrameSliceIntersect) AddFragment(fragment *Fragment) {
 	self.fragments = append(self.fragments, fragment)
-	self.hashring.Add(pilosa.SUUID_to_Hex(fragment.id))
+	self.hashring.Add(fragment.id.String())
 }
 
 ///////// FRAGMENTS
@@ -373,7 +373,7 @@ func (d *Database) GetFragmentForBitmap(slice *Slice, bitmap *Bitmap) (*Fragment
 		log.Warn(err)
 		return nil, err
 	}
-	frag_id := pilosa.Hex_to_SUUID(frag_id_s)
+	frag_id := pilosa.ParseSUUID(frag_id_s)
 	return fsi.GetFragment(frag_id)
 }
 
@@ -391,7 +391,7 @@ func (d *Database) GetFragmentForFrameSlice(frame *Frame, slice *Slice) (*Fragme
 		log.Warn(err)
 		return nil, err
 	}
-	frag_id := pilosa.Hex_to_SUUID(frag_id_s)
+	frag_id := pilosa.ParseSUUID(frag_id_s)
 	return fsi.GetFragment(frag_id)
 }
 
