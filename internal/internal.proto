@@ -1,0 +1,28 @@
+package internal;
+
+message Bitmap {
+	repeated Chunk Chunks = 1;
+}
+
+message Chunk {
+	required uint64 Key   = 1;
+	repeated uint64 Value = 2;
+}
+
+message Pair {
+	required uint64 Key   = 1;
+	required uint64 Count = 2;
+}
+
+message QueryRequest {
+	required string DB = 1;
+	required string Query = 2;
+	repeated uint64 Slices = 3;
+}
+
+message QueryResponse {
+	optional string Err    = 1;
+	optional Bitmap Bitmap = 2;
+	optional uint64 N      = 3;
+	repeated Pair   Pairs  = 4;
+}
