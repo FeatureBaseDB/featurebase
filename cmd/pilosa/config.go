@@ -4,104 +4,53 @@ import (
 	"time"
 
 	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/statsd"
-	_ "github.com/umbel/pilosa/storage"
-	"github.com/umbel/pilosa/storage/cassandra"
-	"github.com/umbel/pilosa/transport"
 )
 
 const (
-	// DefaultLogPath is the default file path where the log will be written.
-	DefaultLogPath = "/tmps"
+	// DefaultHost is the default hostname to use.
+	DefaultHost = "localhost"
 
-	// DefaultLogLevel is the default logging level used by seelog.
-	DefaultLogLevel = "info"
-
-	// DefaultFragmentBase is the default path where fragments are stored.
-	DefaultFragmentBase = "/tmp/single"
-)
-
-var (
-	// DefaultSupportedFrames are the frames supported by default.
-	DefaultSupportedFrames = [...]string{"b.n", "t.t", "l.n", "d", "p.n"}
-
-	// DefaultETCDHosts are the default hosts to connect to.
-	DefaultETCDHosts = [...]string{"http://127.0.0.1:4001"}
+	// DefaultAddr is the default HTTP address to use.
+	DefaultAddr = ":15000"
 )
 
 // Config represents the configuration for the command.
 type Config struct {
-	ID   *pilosa.GUID `toml:"id"`
-	Host string       `toml:"host"`
+	Host string `toml:"host"`
+	Addr string `toml:"addr"`
 
-	TCP struct {
-		Port int `toml:"port"`
-	} `toml:"tcp"`
-
-	HTTP struct {
-		Port             int    `toml:"port"`
-		DefaultDB        string `toml:"default-db"`
-		RequestLogPath   string `toml:"request-log-path"`
-		SetBitLogEnabled bool   `toml:"set-bit-log-enabled"`
-	} `toml:"http"`
-
-	Log struct {
-		Path  string `toml:"path"`
-		Level string `toml:"level"`
-	}
-
-	Storage struct {
-		Backend  string   `toml:"backend"`
-		Hosts    []string `toml:"hosts"`
-		Keyspace string   `toml:"keyspace"`
-
-		FragmentBase    string   `toml:"fragment-base"`
-		SupportedFrames []string `toml:"supported-frames"`
-
-		CassandraTimeWindow   Duration `toml:"cassandra-time-window"`
-		CassandraMaxSizeBatch int      `toml:"cassandra-max-size-batch"`
-	} `toml:"storage"`
-
-	AWS struct {
-		AccessKeyID     string `toml:"access-key-id"`
-		SecretAccessKey string `toml:"secret-access-key"`
-	} `toml:"aws"`
-
-	LevelDB struct {
-		Path string `toml:"path"`
-	} `toml:"leveldb"`
-
-	Statsd struct {
-		Host string `toml:"host"`
-	} `toml:"statsd"`
+	Cluster struct {
+		ReplicaN int `toml:"replicas"`
+		Nodes    []struct {
+			Host string `toml:"host"`
+		} `toml:"nodes"`
+	} `toml:"cluster"`
 
 	Plugins struct {
 		Path string `toml:"path"`
 	} `toml:"plugins"`
-
-	ETCD struct {
-		Hosts                []string `toml:"hosts"`
-		FragmentAllocLockTTL Duration `toml:"fragment-alloc-lock-ttl"`
-	} `toml:"etcd"`
 }
 
 // NewConfig returns an instance of Config with default options.
-func NewConfig() Config {
-	var c Config
-	c.Host = "localhost"
-	c.TCP.Port = transport.DefaultTCPPort
-	c.HTTP.Port = transport.DefaultHTTPPort
-	c.Log.Path = DefaultLogPath
-	c.Storage.Backend = pilosa.DefaultBackend
-	c.Storage.Hosts = cassandra.DefaultHosts
-	c.Storage.Keyspace = cassandra.DefaultKeyspace
-	c.Storage.FragmentBase = DefaultFragmentBase
-	c.Storage.SupportedFrames = DefaultSupportedFrames[:]
-	c.Storage.CassandraTimeWindow = Duration(cassandra.DefaultFlushInterval)
-	c.Storage.CassandraMaxSizeBatch = cassandra.DefaultFlushThreshold
-	c.Statsd.Host = statsd.DefaultHost
-	c.ETCD.Hosts = DefaultETCDHosts[:]
+func NewConfig() *Config {
+	c := &Config{
+		Host: DefaultHost,
+		Addr: DefaultAddr,
+	}
+	c.Cluster.ReplicaN = pilosa.DefaultReplicaN
 	return c
+}
+
+// PilosaCluster returns a new instance of pilosa.Cluster based on the config.
+func (c *Config) PilosaCluster() *pilosa.Cluster {
+	cluster := pilosa.NewCluster()
+	cluster.ReplicaN = c.Cluster.ReplicaN
+
+	for _, n := range c.Cluster.Nodes {
+		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: n.Host})
+	}
+
+	return cluster
 }
 
 // Duration is a TOML wrapper type for time.Duration.
