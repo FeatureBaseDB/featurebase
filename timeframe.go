@@ -86,15 +86,18 @@ func NextMonth(start time.Time, end time.Time) bool {
 	nextMonth := start.AddDate(0, 1, 0)
 	return sameMonth(nextMonth, end) || end.After(nextMonth)
 }
+
 func sameDay(t1, t2 time.Time) bool {
 	y1, m1, d1 := t1.Date()
 	y2, m2, d2 := t2.Date()
 	return (y1 == y2) && (m1 == m2) && (d1 == d2)
 }
+
 func NextDay(start time.Time, end time.Time) bool {
 	nextDay := start.AddDate(0, 0, 1)
 	return sameDay(nextDay, end) || end.After(nextDay)
 }
+
 func GetRange(start_time time.Time, end_time time.Time, tile_id uint64) []uint64 {
 	results, marker := upHill(start_time, end_time, tile_id)
 	r2 := downHill(marker, end_time, tile_id)
@@ -142,8 +145,8 @@ func upHill(start_time time.Time, end_time time.Time, tile_id uint64) ([]uint64,
 	return results, time_iterator
 
 }
-func downHill(start_time time.Time, end_time time.Time, tile_id uint64) []uint64 {
 
+func downHill(start_time time.Time, end_time time.Time, tile_id uint64) []uint64 {
 	var results []uint64
 	time_iterator := start_time
 	for time_iterator.Before(end_time) {

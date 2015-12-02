@@ -1,213 +1,230 @@
 package pilosa
 
 import (
+	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	log "github.com/cihub/seelog"
-	"github.com/golang/groupcache/lru"
 )
 
+// SliceWidth is the number of profile IDs in a slice.
+const SliceWidth = 65536
+
+// Fragment represents the intersection of a frame and slice in a database.
 type Fragment struct {
-	mu    sync.Mutex
-	id    SUUID
-	slice int
-	impl  Pilosa
-	cache *lru.Cache
+	mu sync.Mutex
 
-	// Provide an autoincrementing index for bitmap handles.
-	seq uint64
+	// Composite identifiers
+	db    string
+	frame string
+	slice uint64
 
-	// Stats for how many messages have been processed.
-	stats FragmentStats
+	// Bitmap cache.
+	cache Cache
 }
 
-func NewFragment(id SUUID, db string, slice int, frame string) *Fragment {
-	storage := NewStorage(Backend, StorageOptions{
-		DB:          db,
-		Slice:       slice,
-		Frame:       frame,
-		FragmentID:  id,
-		LevelDBPath: LevelDBPath,
-	})
-
-	var impl Pilosa
-	if strings.HasSuffix(frame, ".n") {
-		impl = NewBrand(db, frame, slice, storage, 50000, 45000, 100)
-	} else {
-		impl = NewGeneral(db, frame, slice, storage)
-	}
-
-	return &Fragment{
-		id:    id,
-		cache: lru.New(50000),
-		impl:  impl,
+// NewFragment returns a new instance of Fragment.
+func NewFragment(db, frame string, slice uint64) *Fragment {
+	f := &Fragment{
+		db:    db,
+		frame: frame,
 		slice: slice,
 	}
-}
 
-func (f *Fragment) Bitmap(bh BitmapHandle) (*Bitmap, bool) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.bitmap(bh)
-}
-
-func (f *Fragment) bitmap(bh BitmapHandle) (*Bitmap, bool) {
-	bm, ok := f.cache.Get(bh)
-	if ok && bm != nil {
-		return bm.(*Bitmap), ok
+	// Determine cache type from frame name.
+	if strings.HasSuffix(frame, ".n") {
+		c := NewRankCache()
+		c.ThresholdLength = 50000
+		c.ThresholdIndex = 45000
+		f.cache = c
+	} else {
+		f.cache = NewLRUCache(50000)
 	}
-	return NewBitmap(), false //cache fail
+
+	return f
 }
 
-func (f *Fragment) exists(bitmapID uint64) bool {
+// Bitmap returns a bitmap by ID.
+func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.impl.Exists(bitmapID)
+	return f.bitmap(bitmapID)
+}
+
+func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
+	// Read from cache.
+	if bm, ok := f.cache.Get(bitmapID); ok {
+		return bm
+	}
+
+	// Read from storage engine.
+	// bm, filter := f.storage.Fetch(bitmapID, f.db, f.frame, f.slice)
+
+	bm := NewBitmap()
+	f.cache.Add(bitmapID, 0 /*filter*/, bm)
+	return bm
 }
 
 func (f *Fragment) TopNAll(n int, categories []uint64) []Pair {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.impl.TopNAll(n, categories)
-}
+	f.cache.Invalidate()
 
-func (f *Fragment) TopN(bitmap BitmapHandle, n int, categories []uint64) []Pair {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	bm, ok := f.cache.Get(bitmap)
-	if ok {
-		return f.impl.TopN(bm.(*Bitmap), n, categories)
+	// Create a set of categories.
+	m := make(map[uint64]struct{})
+	for _, v := range categories {
+		m[v] = struct{}{}
 	}
-	return nil
-}
 
-func (f *Fragment) NewHandle(bitmapID uint64) BitmapHandle {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.allocHandle(f.impl.Get(bitmapID))
-}
+	// Iterate over rankings and add to results until we have enough.
+	var results []Pair
+	for _, pair := range f.cache.Pairs() {
+		// Skip if categories are specified but category is not found.
+		if _, ok := m[pair.category]; (len(categories) > 0 && !ok) || pair.Count <= 0 {
+			continue
+		}
 
-func (f *Fragment) AllocHandle(bm *Bitmap) BitmapHandle {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.allocHandle(bm)
-}
+		// Append pair.
+		results = append(results, pair)
 
-func (f *Fragment) allocHandle(bm *Bitmap) BitmapHandle {
-	handle := f.nextHandle()
-	f.cache.Add(handle, bm)
-	return handle
-}
-
-func (f *Fragment) nextHandle() BitmapHandle {
-	millis := uint64(time.Now().UTC().UnixNano())
-	id := millis << (64 - 41)
-	id |= uint64(f.slice) << (64 - 41 - 13)
-	id |= f.seq % 1024
-	f.seq += 1
-	return BitmapHandle(id)
-}
-
-func (f *Fragment) Union(bitmaps []BitmapHandle) BitmapHandle {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	result := NewBitmap()
-	for i, id := range bitmaps {
-		bm, _ := f.bitmap(id)
-		if i == 0 {
-			result = bm
-		} else {
-			result = result.Union(bm)
+		// Exit when we have enough pairs.
+		if len(results) >= n {
+			break
 		}
 	}
-	return f.allocHandle(result)
+	return results
 }
 
-func (f *Fragment) build_time_range_bitmap(bitmapID uint64, start, end time.Time) BitmapHandle {
+func (f *Fragment) TopN(src *Bitmap, n int, categories []uint64) []Pair {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	result := NewBitmap()
-	for i, bid := range GetRange(start, end, bitmapID) {
-		bm := f.impl.Get(bid)
-		if i == 0 {
-			result = bm
-		} else {
-			result = result.Union(bm)
+	// Resort rank, if necessary.
+	f.cache.Invalidate()
+
+	// Create a set of categories.
+	set := make(map[uint64]struct{})
+	for _, v := range categories {
+		set[v] = struct{}{}
+	}
+
+	var results []Pair
+	var x int
+	breakout := 1000
+
+	// Iterate over rankings.
+	rankings := f.cache.Pairs()
+	for i, pair := range rankings {
+		// Skip if category not found.
+		if len(set) > 0 {
+			if _, ok := set[pair.category]; !ok {
+				continue
+			}
+		}
+
+		// Only append if there are intersecting bits with source bitmap.
+		bc := src.IntersectionCount(pair.bitmap)
+		if bc > 0 {
+			results = append(results, Pair{
+				Key:      pair.Key,
+				Count:    bc,
+				category: pair.category,
+			})
+		}
+		x = i
+
+		// Exit when we have enough.
+		if len(results) > n {
+			break
 		}
 	}
-	return f.AllocHandle(result)
-}
 
-func (f *Fragment) Intersect(bitmaps []BitmapHandle) BitmapHandle {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	// Sort results by ranking.
+	sort.Sort(Pairs(results))
 
-	var result *Bitmap
-	for i, id := range bitmaps {
-		bm, _ := f.bitmap(id)
-		if i == 0 {
-			result = bm.Clone()
-		} else {
-			result = result.Intersection(bm)
+	if len(results) < n {
+		return results
+	}
+
+	end := len(results) - 1
+	o := results[end]
+	threshold := o.Count
+
+	if threshold <= 10 {
+		return results
+	}
+
+	results = append(results, o)
+	for i := x + 1; i < len(rankings); i++ {
+		o = rankings[i]
+
+		if len(set) > 0 {
+			if _, ok := set[o.category]; !ok {
+				continue
+			}
+		}
+
+		// Need something to do with the size of initial bitmap
+		if len(results) > breakout || o.Count < threshold {
+			break
+		}
+
+		bc := src.IntersectionCount(o.bitmap)
+		if bc > threshold {
+			if results[end-1].Count > bc {
+				results[end] = Pair{Key: o.Key, Count: bc, category: o.category}
+				threshold = bc
+			} else {
+				results[end+1] = Pair{Key: o.Key, Count: bc, category: o.category}
+				sort.Sort(Pairs(results))
+				threshold = results[end].Count
+			}
 		}
 	}
-	return f.allocHandle(result)
+
+	return results[:end]
 }
 
-func (f *Fragment) Difference(bitmaps []BitmapHandle) BitmapHandle {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+/*
+func (f *Fragment) TopFill(args FillArgs) ([]Pair, error) {
+	result := make([]Pair, 0)
+	for _, id := range args.Bitmaps {
+		if _, ok := f.cache.Get(id); !ok {
+			continue
+		}
 
-	result := NewBitmap()
-	for i, id := range bitmaps {
-		bm, _ := f.bitmap(id)
-		if i == 0 {
-			result = bm
-		} else {
-			result = result.Difference(bm)
+		if args.Handle == 0 {
+			if bm := f.Bitmap(id); bm != nil && bm.Count() > 0 {
+				result = append(result, Pair{Key: id, Count: bm.Count()})
+			}
+			continue
+		}
+
+		res := f.Intersect([]uint64{args.Handle, id})
+		if res == nil {
+			continue
+		}
+
+		if bc := res.BitCount(); bc > 0 {
+			result = append(result, Pair{Key: id, Count: bc})
 		}
 	}
-	return f.allocHandle(result)
+	return result, nil
 }
+*/
 
-func (f *Fragment) Persist() {
+func (f *Fragment) Range(bitmapID uint64, start, end time.Time) *Bitmap {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	err := f.impl.Persist()
-	if err != nil {
-		log.Warn("Error saving:", err)
+	bitmapIDs := GetRange(start, end, bitmapID)
+	if len(bitmapIDs) == 0 {
+		return NewBitmap()
 	}
-}
 
-func (f *Fragment) Load() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.impl.Load(f)
-}
-
-// FragmentStats represents in-memory stats for a single fragment.
-type FragmentStats struct {
-	// Messages processed by the fragment
-	ProcessN    uint64
-	ProcessTime time.Duration
-}
-
-type Pilosa interface {
-	Get(id uint64) *Bitmap
-	SetBit(id uint64, bit_pos uint64, filter uint64) bool
-	ClearBit(id uint64, bit_pos uint64) bool
-	TopN(b *Bitmap, n int, categories []uint64) []Pair
-	TopNAll(n int, categories []uint64) []Pair
-	Clear() bool
-	Store(bitmapID uint64, bm *Bitmap, filter uint64) error
-	Stats() interface{}
-	Persist() error
-	Load(fragment *Fragment)
-	Exists(id uint64) bool
+	result := f.bitmap(bitmapIDs[0])
+	for _, id := range bitmapIDs[1:] {
+		result = result.Union(f.bitmap(id))
+	}
+	return result
 }
