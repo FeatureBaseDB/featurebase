@@ -24,27 +24,11 @@ Now you can install the `pilosa` binary:
 $ go install github.com/umbel/pilosa/...
 ```
 
-Pilosa requires that [etcd][] is running locally for coordinating the cluster:
-
-```sh
-# In another terminal window
-$ etcd
-```
-
 Now run `pilosa` with the default configuration:
 
 ```sh
 pilosa
 ```
-
-This setup assumes that cassandra and etcd are running locally and that
-cassandra keyspace pilosa has been setup as describe in the file
-`index/storage_cass.go`.
-
-If you don't want backend storage you can comment out storage_backend in the
-config file and it will just operate out of memory.
-
-[etcd]: https://github.com/coreos/etcd
 
 
 ## Development
@@ -66,11 +50,5 @@ $ godep save ./...
 *Make sure you have set the `GO15VENDOREXPERIMENT` environment variable!*
 
 [godep]: https://github.com/tools/godep
-
-
-### Running tests
-
-Because of a bug in Go 1.5, you'll need to run `make test` to exclude tests
-the the `vendor/` directory.
 
 
