@@ -4,37 +4,64 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
+	"math/rand"
+	"net"
+	"net/http"
 	"os"
 	"runtime/pprof"
 	"time"
 
 	"github.com/BurntSushi/toml"
-	log "github.com/cihub/seelog"
-	"github.com/coreos/go-etcd/etcd"
-	"github.com/kr/s3/s3util"
 	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/core"
-	"github.com/umbel/pilosa/db"
-	"github.com/umbel/pilosa/dispatch"
-	"github.com/umbel/pilosa/executor"
-	"github.com/umbel/pilosa/hold"
-	"github.com/umbel/pilosa/statsd"
-	"github.com/umbel/pilosa/transport"
 )
 
 // Build holds the build information passed in at compile time.
 var Build string
 
+func init() {
+	if Build == "" {
+		Build = "v0.0.0"
+	}
+
+	rand.Seed(time.Now().UTC().UnixNano())
+}
+
 func main() {
 	m := NewMain()
-	if err := m.Run(os.Args[1:]...); err != nil {
-		fmt.Fprintln(m.Stderr, err.Error())
-		os.Exit(-1)
+	fmt.Fprintf(m.Stderr, "Pilosa %s\n", Build)
+
+	// Parse command line arguments.
+	if err := m.ParseFlags(os.Args[1:]); err != nil {
+		fmt.Fprintln(m.Stderr, err)
+		os.Exit(2)
 	}
+
+	// Execute the program.
+	if err := m.Run(); err != nil {
+		fmt.Fprintln(m.Stderr, err)
+		os.Exit(1)
+	}
+
+	// Wait indefinitely.
+	<-(chan struct{})(nil)
 }
 
 // Main represents the main program execution.
 type Main struct {
+	ln net.Listener
+
+	// Path to the configuration file.
+	ConfigPath string
+
+	// Configuration options.
+	Config *Config
+
+	// Profiling paths
+	CPUProfile string
+
+	// Standard input/output
+	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
 }
@@ -42,6 +69,9 @@ type Main struct {
 // NewMain returns a new instance of Main.
 func NewMain() *Main {
 	return &Main{
+		Config: NewConfig(),
+
+		Stdin:  os.Stdin,
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}
@@ -49,31 +79,16 @@ func NewMain() *Main {
 
 // Run executes the main program execution.
 func (m *Main) Run(args ...string) error {
-	defer log.Flush()
+	logger := log.New(m.Stderr, "", log.LstdFlags)
 
-	// Parse command line arguments.
-	opt, err := m.ParseFlags(args)
-	if err != nil {
-		return err
-	}
-
-	// Parse configuration.
-	config := NewConfig()
-	if opt.ConfigPath != "" {
-		if _, err := toml.DecodeFile(opt.ConfigPath, &config); err != nil {
-			return err
-		}
-	}
-
-	// Generate an ID if one is not specified in the config.
-	id := config.ID
-	if id == nil {
-		*id = pilosa.NewGUID()
+	// Notify user of config file.
+	if m.ConfigPath != "" {
+		fmt.Fprintf(m.Stdout, "Using config: %s\n", m.ConfigPath)
 	}
 
 	// Set up profiling.
-	if opt.CPUProfile != "" {
-		f, err := os.Create(opt.CPUProfile)
+	if m.CPUProfile != "" {
+		f, err := os.Create(m.CPUProfile)
 		if err != nil {
 			return err
 		}
@@ -82,127 +97,61 @@ func (m *Main) Run(args ...string) error {
 		defer pprof.StopCPUProfile()
 	}
 
-	// Pass configuration to packages.
-	// NOTE: This is temporary. These config options should be encapsulated in the types.
-	db.SupportedFrames = config.Storage.SupportedFrames
-	pilosa.FragmentBase = config.Storage.FragmentBase
-	pilosa.Backend = config.Storage.Backend
-	pilosa.LevelDBPath = config.LevelDB.Path
+	// Build cluster from config file.
+	cluster := m.Config.PilosaCluster()
 
-	// Initialize AWS storage.
-	s3util.DefaultConfig.AccessKey = config.AWS.AccessKeyID
-	s3util.DefaultConfig.SecretKey = config.AWS.SecretAccessKey
+	// Create index to store fragments.
+	index := pilosa.NewIndex()
 
-	// Initialize Statsd.
-	statsd.Host = config.Statsd.Host
-	statsd.Setup()
+	// Create executor for executing queries.
+	e := pilosa.NewExecutor(index)
+	e.Host = m.Config.Host
+	e.Cluster = cluster
 
-	// Initialize logging.
-	logger, _ := log.LoggerFromConfigAsBytes([]byte(SeelogProductionConfig(config.Log.Path, *id, config.Log.Level)))
-	log.ReplaceLogger(logger)
+	// Initialize HTTP handler.
+	h := pilosa.NewHandler()
+	h.Executor = e
+	h.LogOutput = m.Stderr
 
-	// Initialize etcd client.
-	etcdClient := etcd.NewClient(config.ETCD.Hosts)
+	// Open HTTP listener.
+	ln, err := net.Listen("tcp", m.Config.Addr)
+	if err != nil {
+		return err
+	}
+	m.ln = ln
 
-	// Initialize the cluster.
-	cluster := db.NewCluster()
+	// Serve HTTP.
+	go func() { logger.Print(http.Serve(ln, h)) }()
 
-	// Create index.
-	idx := pilosa.NewFragmentContainer()
-
-	// Initialize the holder.
-	hold := hold.NewHolder()
-
-	// Initialize process map.
-	processMap := core.NewProcessMap()
-
-	// Start process mapper.
-	processMapper := core.NewProcessMapper("/pilosa/0")
-	processMapper.ID = *id
-	processMapper.TCPPort = config.TCP.Port
-	processMapper.HTTPPort = config.HTTP.Port
-	processMapper.Host = config.Host
-	processMapper.ProcessMap = processMap
-	processMapper.EtcdClient = etcdClient
-
-	// Start topology mapper.
-	topologyMapper := core.NewTopologyMapper("/pilosa/0")
-	topologyMapper.Cluster = cluster
-	topologyMapper.ProcessMap = processMap
-	topologyMapper.EtcdClient = etcdClient
-	topologyMapper.Index = idx
-	topologyMapper.SupportedFrames = config.Storage.SupportedFrames
-	topologyMapper.FragmentAllocLockTTL = time.Duration(config.ETCD.FragmentAllocLockTTL)
-
-	// Start the transport.
-	transport := transport.NewTcpTransport(*id)
-	transport.Port = config.TCP.Port
-	transport.ProcessMap = processMap
-	go transport.Run()
-
-	// Create the pinger.
-	pinger := core.NewPinger(*id)
-	pinger.Hold = hold
-	pinger.Transport = transport
-
-	// Create the batcher.
-	batcher := core.NewBatcher(*id)
-	batcher.Cluster = cluster
-	batcher.Hold = hold
-	batcher.Transport = transport
-
-	// Start the web service.
-	core.RequestLogPath = config.HTTP.RequestLogPath
-	ws := core.NewWebService()
-	ws.ID = *id
-	ws.Port = config.HTTP.Port
-	ws.Version = Build
-	ws.DefaultDB = config.HTTP.DefaultDB
-	ws.SetBitLogEnabled = config.HTTP.SetBitLogEnabled
-	ws.Cluster = cluster
-	ws.TopologyMapper = topologyMapper
-	ws.Pinger = pinger
-	ws.Batcher = batcher
-
-	// Start the executor.
-	ex := executor.NewExecutor(*id)
-	ex.ProcessMap = processMap
-	ex.PluginsPath = config.Plugins.Path
-	ex.Hold = hold
-	ex.Index = idx
-
-	// Start the dispatcher.
-	dispatch := dispatch.NewDispatch()
-	dispatch.Executor = ex
-	dispatch.Hold = hold
-	dispatch.Index = idx
-	dispatch.Transport = transport
-	go dispatch.Run()
-
-	fmt.Printf("Pilosa %s\n", Build)
-
-	log.Warn("STOP")
+	fmt.Fprintf(m.Stderr, "Listening on http://%s\n", ln.Addr().String())
 
 	return nil
 }
 
-// ParseFlags parses command line flags from args.
-func (m *Main) ParseFlags(args []string) (Options, error) {
-	var opt Options
-	fs := flag.NewFlagSet("pilosa", flag.ContinueOnError)
-	fs.SetOutput(m.Stderr)
-	fs.StringVar(&opt.ConfigPath, "config", "", "config path")
-	fs.StringVar(&opt.CPUProfile, "cpuprofile", "", "write cpu profile to file")
-
-	if err := fs.Parse(args); err != nil {
-		return opt, err
+// Close shuts down the process.
+func (m *Main) Close() error {
+	if m.ln != nil {
+		m.ln.Close()
 	}
-
-	return opt, nil
+	return nil
 }
 
-// Options represents the command line options.
-type Options struct {
-	CPUProfile string
-	ConfigPath string
+// ParseFlags parses command line flags from args.
+func (m *Main) ParseFlags(args []string) error {
+	fs := flag.NewFlagSet("pilosa", flag.ContinueOnError)
+	fs.SetOutput(m.Stderr)
+	fs.StringVar(&m.ConfigPath, "config", "", "config path")
+	fs.StringVar(&m.CPUProfile, "cpuprofile", "", "write cpu profile to file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Load config, if specified.
+	if m.ConfigPath != "" {
+		if _, err := toml.DecodeFile(m.ConfigPath, &m.Config); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

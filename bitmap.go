@@ -8,8 +8,11 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/gob"
+	"encoding/json"
+	"io"
 
-	log "github.com/cihub/seelog"
+	"github.com/gogo/protobuf/proto"
+	"github.com/umbel/pilosa/internal"
 	"github.com/yasushi-saito/rbtree"
 )
 
@@ -43,6 +46,15 @@ func (b *Bitmap) Chunk(c *Chunk) *Chunk {
 // AddChunk adds c to the bitmap.
 func (b *Bitmap) AddChunk(c *Chunk) { b.tree.Insert(c) }
 
+// Chunks returns a list of all chunks.
+func (b *Bitmap) Chunks() []*Chunk {
+	var a []*Chunk
+	for itr := b.ChunkIterator(); !itr.Limit(); itr = itr.Next() {
+		a = append(a, itr.Item().Clone())
+	}
+	return a
+}
+
 // ChunkIterator returns an iterator for looping over the bitmap's chunks.
 func (b *Bitmap) ChunkIterator() *ChunkIterator {
 	return &ChunkIterator{b.tree.Min()}
@@ -58,18 +70,21 @@ func (b *Bitmap) Clone() *Bitmap {
 			break
 		}
 
-		node := itr.Item()
-		other.AddChunk(&Chunk{
-			Key:   node.Key,
-			Value: node.Value.copy(),
-		})
-
+		other.AddChunk(itr.Item().Clone())
 		itr = itr.Next()
 	}
 	return other
 }
 
-// IntersectionCount returns the number of itersections between b and other.
+// Merge adds chunks from other to b.
+// Chunks in b are overwritten if they exist in other.
+func (b *Bitmap) Merge(other *Bitmap) {
+	for itr := other.ChunkIterator(); !itr.Limit(); itr = itr.Next() {
+		b.AddChunk(itr.Item().Clone())
+	}
+}
+
+// IntersectionCount returns the number of intersections between b and other.
 func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 	itr0 := b.ChunkIterator()
 	itr1 := other.ChunkIterator()
@@ -91,8 +106,8 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 	return results
 }
 
-// Intersection returns the itersection of b and other.
-func (b *Bitmap) Intersection(other *Bitmap) *Bitmap {
+// Intersect returns the itersection of b and other.
+func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	itr0 := b.ChunkIterator()
 	itr1 := other.ChunkIterator()
 
@@ -107,7 +122,7 @@ func (b *Bitmap) Intersection(other *Bitmap) *Bitmap {
 		} else if itr0.Item().Key == itr1.Item().Key {
 			output.AddChunk(&Chunk{
 				Key:   itr0.Item().Key,
-				Value: itr0.Item().Value.intersection(itr1.Item().Value),
+				Value: itr0.Item().Value.intersect(itr1.Item().Value),
 			})
 			itr0 = itr0.Next()
 			itr1 = itr1.Next()
@@ -202,7 +217,7 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 				Value: itr0.Item().Value.difference(itr1.Item().Value),
 			}
 
-			// Could not add if all zero
+			// Do not add if all bits are zeroed.
 			if chunk.Value.bitcount() > 0 {
 				output.AddChunk(chunk)
 			}
@@ -236,35 +251,87 @@ func (b *Bitmap) ToRawCompressString() (string, int) {
 	return base64.StdEncoding.EncodeToString(bt.Bytes()), max_slice
 }
 
-// ToBytes returns a gob-encoded byte slice of b.
-func (b *Bitmap) ToBytes() []byte {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	enc.Encode(b.tree.Len())
+// WriteTo writes the encoded bitmap to w.
+func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
+	// Wrap output in gzip compression.
+	z := gzip.NewWriter(w)
+
+	// Encode chunk count.
+	enc := gob.NewEncoder(w)
+	if err := enc.Encode(b.tree.Len()); err != nil {
+		return 0, err
+	}
+
+	// Encode all chunks.
 	for i := b.tree.Min(); !i.Limit(); i = i.Next() {
-		obj := i.Item().(*Chunk)
-		err := enc.Encode(obj)
-		if err != nil {
-			log.Warn(err)
+		if err := enc.Encode(i.Item().(*Chunk)); err != nil {
+			return 0, err
 		}
 	}
-	return buf.Bytes()
+
+	// Flush and close.
+	if err := z.Close(); err != nil {
+		return 0, err
+	}
+
+	return 0, nil
 }
 
-// FromBytes decodes a gob-encoded byte slice into b.
-func (b *Bitmap) FromBytes(raw []byte) {
-	buf := bytes.NewBuffer(raw)
-	dec := gob.NewDecoder(buf)
+// ReadFrom reads encoded bitmap data from r into b.
+func (b *Bitmap) ReadFrom(r io.Reader) (n int64, err error) {
+	// Uncompress from gzip format.
+	z, err := gzip.NewReader(r)
+	if err != nil {
+		return 0, err
+	}
+	dec := gob.NewDecoder(z)
 
+	// Read size from data.
 	var size int
-	dec.Decode(&size)
+	if err := dec.Decode(&size); err != nil {
+		return 0, err
+	}
+
+	// Read chunks into bitmap.
 	b.tree = rbtree.NewTree(rbtreeItemCompare)
 	for i := 0; i < size; i++ {
 		var chunk Chunk
-		dec.Decode(&chunk)
+		if err := dec.Decode(&chunk); err != nil {
+			return 0, err
+		}
 		b.AddChunk(&chunk)
 	}
 	b.SetCount(b.BitCount())
+
+	return 0, nil
+}
+
+// MarshalJSON returns a JSON-encoded byte slice of b.
+func (b *Bitmap) MarshalJSON() ([]byte, error) {
+	o := bitmapJSON{
+		Chunks: make([]chunkJSON, 0, b.tree.Len()),
+	}
+
+	for itr := b.ChunkIterator(); !itr.Limit(); itr = itr.Next() {
+		o.Chunks = append(o.Chunks, chunkJSON{Key: itr.Item().Key, Value: itr.Item().Value})
+	}
+
+	return json.Marshal(&o)
+}
+
+// MarshalBinary returns a gob-encoded byte slice of b.
+func (b *Bitmap) MarshalBinary() ([]byte, error) {
+	var buf bytes.Buffer
+	if _, err := b.WriteTo(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// UnmarshalBinary decodes a gob-encoded byte slice into b.
+func (b *Bitmap) UnmarshalBinary(data []byte) error {
+	_, err := b.ReadFrom(bytes.NewReader(data))
+	return err
 }
 
 // Bits returns the bits in b as a slice of ints.
@@ -291,7 +358,7 @@ func (b *Bitmap) Bits() []uint64 {
 }
 
 // SetBit sets the i-th bit of the bitmap.
-func (b *Bitmap) SetBit(i uint64) (bool, *Chunk, Address) {
+func (b *Bitmap) SetBit(i uint64) (changed bool) {
 	address := deref(i)
 
 	chunk := b.Chunk(&Chunk{address.ChunkKey, make(Blocks, 32)})
@@ -300,29 +367,29 @@ func (b *Bitmap) SetBit(i uint64) (bool, *Chunk, Address) {
 		b.AddChunk(chunk)
 	}
 
-	changed := chunk.Value.setBit(address.BlockIndex, address.Bit)
+	changed = chunk.Value.setBit(address.BlockIndex, address.Bit)
 	if changed {
 		b.bcount++
 	}
 
-	return changed, chunk, address
+	return changed
 }
 
 // ClearBit clears the i-th bit of the bitmap.
-func (b *Bitmap) ClearBit(i uint64) (bool, *Chunk, Address) {
+func (b *Bitmap) ClearBit(i uint64) (changed bool) {
 	address := deref(i)
 
 	chunk := b.Chunk(&Chunk{address.ChunkKey, make(Blocks, 32)})
 	if chunk == nil {
-		return false, nil, address
+		return false
 	}
 
-	changed := chunk.Value.clearBit(address.BlockIndex, address.Bit)
+	changed = chunk.Value.clearBit(address.BlockIndex, address.Bit)
 	if changed && b.bcount > 0 {
 		b.bcount--
 	}
 
-	return changed, chunk, address
+	return changed
 }
 
 // Len returns the number of chunks in b.
@@ -343,10 +410,73 @@ func (b *Bitmap) BitCount() uint64 {
 	return n
 }
 
+// encodeBitmap converts b into its internal representation.
+func encodeBitmap(b *Bitmap) *internal.Bitmap {
+	pb := &internal.Bitmap{}
+	for i := b.tree.Min(); !i.Limit(); i = i.Next() {
+		pb.Chunks = append(pb.Chunks, encodeChunk(i.Item().(*Chunk)))
+	}
+	return pb
+}
+
+// decodeBitmap converts b from its internal representation.
+func decodeBitmap(pb *internal.Bitmap) *Bitmap {
+	b := NewBitmap()
+	for _, chunk := range pb.GetChunks() {
+		b.AddChunk(decodeChunk(chunk))
+	}
+	b.SetCount(b.BitCount())
+	return b
+}
+
+// Union performs a union on a slice of bitmaps.
+func Union(bitmaps []*Bitmap) *Bitmap {
+	other := bitmaps[0]
+	for _, bm := range bitmaps[1:] {
+		other = other.Union(bm)
+	}
+	return other
+}
+
+// bitmapJSON is the JSON representation of Bitmap.
+type bitmapJSON struct {
+	Chunks []chunkJSON `json:"chunks"`
+}
+
 // Chunk represents a set of blocks in a Bitmap.
 type Chunk struct {
 	Key   uint64
 	Value Blocks
+}
+
+// Clone returns a copy of c.
+func (c *Chunk) Clone() *Chunk {
+	return &Chunk{
+		Key:   c.Key,
+		Value: c.Value.copy(),
+	}
+}
+
+// encodeChunks encodes c into its internal representation.
+func encodeChunk(c *Chunk) *internal.Chunk {
+	return &internal.Chunk{
+		Key:   proto.Uint64(c.Key),
+		Value: []uint64(c.Value),
+	}
+}
+
+// decodeChunk decodes c from its internal representation.
+func decodeChunk(pb *internal.Chunk) *Chunk {
+	return &Chunk{
+		Key:   pb.GetKey(),
+		Value: Blocks(pb.GetValue()),
+	}
+}
+
+// chunkJSON is the JSON representation of Chunk.
+type chunkJSON struct {
+	Key   uint64
+	Value []uint64
 }
 
 // ChunkIterator represents an object for iterating over chunks in a bitmap.
@@ -381,6 +511,73 @@ func rbtreeItemCompare(a, b rbtree.Item) int {
 		return 1
 	}
 	return 0
+}
+
+type Blocks []uint64
+
+// NewBlocks returns a 32-length Block.
+func NewBlocks() Blocks {
+	return make(Blocks, 32)
+}
+
+func (a Blocks) bitcount() uint64 {
+	return popcntSlice(a)
+}
+
+func (a Blocks) union(other Blocks) Blocks {
+	ret := NewBlocks()
+	for i, _ := range a {
+		ret[i] = a[i] | other[i]
+	}
+	return ret
+}
+
+func (a Blocks) invert() Blocks {
+	other := NewBlocks()
+	for i, _ := range a {
+		other[i] = ^a[i]
+	}
+	return other
+}
+
+func (a Blocks) copy() Blocks {
+	other := NewBlocks()
+	for i, _ := range a {
+		other[i] = a[i]
+	}
+	return other
+}
+
+func (a Blocks) andcount(other Blocks) uint64 {
+	return popcntAndSliceAsm(a, other)
+}
+
+func (a Blocks) intersect(other Blocks) Blocks {
+	ret := NewBlocks()
+	for i, _ := range a {
+		ret[i] = a[i] & other[i]
+	}
+	return ret
+}
+
+func (a Blocks) difference(other Blocks) Blocks {
+	ret := NewBlocks()
+	for i, _ := range a {
+		ret[i] = a[i] &^ other[i]
+	}
+	return ret
+}
+
+func (a Blocks) setBit(i uint8, bit uint8) (changed bool) {
+	val := a[i] & (1 << bit)
+	a[i] |= 1 << bit
+	return val == 0
+}
+
+func (a Blocks) clearBit(i uint8, bit uint8) (changed bool) {
+	val := a[i] & (1 << bit)
+	a[i] &= ^(1 << bit)
+	return val != 0
 }
 
 // Address represents a location for a given chunk/block/bit.
