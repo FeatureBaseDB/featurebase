@@ -7,23 +7,17 @@ import (
 )
 
 const (
-	// DefaultHost is the default hostname to use.
-	DefaultHost = "localhost"
-
-	// DefaultAddr is the default HTTP address to use.
-	DefaultAddr = ":15000"
+	// DefaultHost is the default hostname and port to use.
+	DefaultHost = "localhost:15000"
 )
 
 // Config represents the configuration for the command.
 type Config struct {
 	Host string `toml:"host"`
-	Addr string `toml:"addr"`
 
 	Cluster struct {
-		ReplicaN int `toml:"replicas"`
-		Nodes    []struct {
-			Host string `toml:"host"`
-		} `toml:"nodes"`
+		ReplicaN int           `toml:"replicas"`
+		Nodes    []*ConfigNode `toml:"nodes"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -31,13 +25,17 @@ type Config struct {
 	} `toml:"plugins"`
 }
 
+type ConfigNode struct {
+	Host string `toml:"host"`
+}
+
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
 		Host: DefaultHost,
-		Addr: DefaultAddr,
 	}
 	c.Cluster.ReplicaN = pilosa.DefaultReplicaN
+	c.Cluster.Nodes = []*ConfigNode{{Host: DefaultHost}}
 	return c
 }
 
