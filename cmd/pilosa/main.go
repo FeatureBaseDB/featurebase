@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -86,6 +87,14 @@ func (m *Main) Run(args ...string) error {
 		fmt.Fprintf(m.Stdout, "Using config: %s\n", m.ConfigPath)
 	}
 
+	// Require a port in the hostname.
+	_, addr, err := net.SplitHostPort(m.Config.Host)
+	if err != nil {
+		return err
+	} else if addr == "" {
+		return errors.New("port must be specified in config host")
+	}
+
 	// Set up profiling.
 	if m.CPUProfile != "" {
 		f, err := os.Create(m.CPUProfile)
@@ -114,7 +123,7 @@ func (m *Main) Run(args ...string) error {
 	h.LogOutput = m.Stderr
 
 	// Open HTTP listener.
-	ln, err := net.Listen("tcp", m.Config.Addr)
+	ln, err := net.Listen("tcp", ":"+addr)
 	if err != nil {
 		return err
 	}
