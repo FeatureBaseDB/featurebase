@@ -51,6 +51,12 @@ func (e *Executor) Execute(db string, q *pql.Query, slices []uint64) (interface{
 		return nil, ErrDatabaseRequired
 	}
 
+	// Ignore slices for set calls.
+	switch root := q.Root.(type) {
+	case *pql.Set:
+		return nil, e.executeSet(db, root)
+	}
+
 	// If slices aren't specified, then include all of them.
 	if len(slices) == 0 {
 		// Round up the number of slices.
@@ -224,6 +230,27 @@ func (e *Executor) executeCount(db string, c *pql.Count, slices []uint64) (uint6
 	return n, nil
 }
 
+// executeSet executes a set call.
+func (e *Executor) executeSet(db string, c *pql.Set) error {
+	slice := c.ProfileID / SliceWidth
+
+	for _, node := range e.Cluster.SliceNodes(slice) {
+		// Update locally if host matches.
+		if node.Host == e.Host {
+			f := e.Index().Fragment(db, c.Frame, slice)
+			f.Bitmap(c.ID).SetBit(c.ProfileID)
+			continue
+		}
+
+		// Forward call to remote node otherwise.
+		if _, err := e.exec(node, db, &pql.Query{Root: c}, nil); err != nil {
+			// FIXME: Handle errors more gracefully.
+			return err
+		}
+	}
+	return nil
+}
+
 // exec executes a PQL query remotely for a set of slices on a node.
 func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64) (result interface{}, err error) {
 	// Encode request object.
@@ -287,6 +314,8 @@ func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64) (r
 		return decodePairs(pb.GetPairs()), nil
 	case *pql.Count:
 		return pb.GetN(), nil
+	case *pql.Set:
+		return nil, nil
 	default:
 		panic(fmt.Sprintf("invalid node for remote exec: %T", q.Root))
 	}
