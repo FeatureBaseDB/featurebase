@@ -102,6 +102,20 @@ func TestExecutor_Execute_Count(t *testing.T) {
 	}
 }
 
+// Ensure a set query can be executed.
+func TestExecutor_Execute_Set(t *testing.T) {
+	e := NewExecutor(NewCluster(1))
+
+	if _, err := e.Execute("d", MustParse(`set(id=10, frame=f, profile_id=1)`), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	f := e.Index().Fragment("d", "f", 0)
+	if n := f.Bitmap(10).Count(); n != 1 {
+		t.Fatalf("unexpected bitmap count: %d", n)
+	}
+}
+
 // Ensure a remote query can return a bitmap.
 func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	c := NewCluster(2)
@@ -168,6 +182,43 @@ func TestExecutor_Execute_Remote_Count(t *testing.T) {
 		t.Fatal(err)
 	} else if n != uint64(12) {
 		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+// Ensure a remote query can set bits on multiple nodes.
+func TestExecutor_Execute_Remote_Set(t *testing.T) {
+	c := NewCluster(2)
+	c.ReplicaN = 2
+
+	// Create secondary server and update second cluster node.
+	s := NewServer()
+	defer s.Close()
+	c.Nodes[1].Host = s.Host()
+
+	// Mock secondary server's executor to verify arguments.
+	var remoteCalled bool
+	s.Handler.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64) (interface{}, error) {
+		if db != `d` {
+			t.Fatalf("unexpected db: %s", db)
+		} else if query.String() != `set(id=10, frame=f, profile_id=2)` {
+			t.Fatalf("unexpected query: %s", query.String())
+		}
+		remoteCalled = true
+		return nil, nil
+	}
+
+	// Create local executor data.
+	e := NewExecutor(c)
+	if _, err := e.Execute("d", MustParse(`set(id=10, frame=f, profile_id=2)`), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that one bit is set on both node's index.
+	if n := e.Index().Fragment("d", "f", 0).Bitmap(10).Count(); n != 1 {
+		t.Fatalf("unexpected local count: %d", n)
+	}
+	if !remoteCalled {
+		t.Fatalf("expected remote execution")
 	}
 }
 
