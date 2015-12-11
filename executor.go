@@ -150,6 +150,7 @@ func (e *Executor) executeDifferenceSlice(db string, c *pql.Difference, slice ui
 			other = other.Difference(bm)
 		}
 	}
+	other.SetCount(other.BitCount())
 	return other, nil
 }
 
@@ -178,6 +179,7 @@ func (e *Executor) executeIntersectSlice(db string, c *pql.Intersect, slice uint
 			other = other.Intersect(bm)
 		}
 	}
+	other.SetCount(other.BitCount())
 	return other, nil
 }
 
@@ -201,6 +203,7 @@ func (e *Executor) executeUnionSlice(db string, c *pql.Union, slice uint64) (*Bi
 			other = other.Union(bm)
 		}
 	}
+	other.SetCount(other.BitCount())
 	return other, nil
 }
 
