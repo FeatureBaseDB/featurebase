@@ -160,7 +160,10 @@ func (e *Executor) executeGetSlice(db string, c *pql.Get, slice uint64) (*Bitmap
 		frame = DefaultFrame
 	}
 
-	f := e.Index().Fragment(db, frame, slice)
+	f, err := e.Index().Fragment(db, frame, slice)
+	if err != nil {
+		return nil, fmt.Errorf("fragment: %s", err)
+	}
 	return f.Bitmap(c.ID), nil
 }
 
@@ -240,8 +243,11 @@ func (e *Executor) executeSet(db string, c *pql.Set) error {
 	for _, node := range e.Cluster.SliceNodes(slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
-			f := e.Index().Fragment(db, c.Frame, slice)
-			f.Bitmap(c.ID).SetBit(c.ProfileID)
+			f, err := e.Index().Fragment(db, c.Frame, slice)
+			if err != nil {
+				return fmt.Errorf("fragment: %s", err)
+			}
+			f.SetBit(c.ID, c.ProfileID)
 			continue
 		}
 

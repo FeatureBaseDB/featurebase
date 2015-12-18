@@ -1,10 +1,17 @@
 package pilosa
 
 import (
+	"errors"
+	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+	"unsafe"
+
+	"github.com/umbel/pilosa/roaring"
 )
 
 // SliceWidth is the number of profile IDs in a slice.
@@ -19,13 +26,20 @@ type Fragment struct {
 	frame string
 	slice uint64
 
+	// File-backed storage
+	path        string
+	file        *os.File
+	storage     *roaring.Bitmap
+	storageData []byte
+
 	// Bitmap cache.
 	cache Cache
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(db, frame string, slice uint64) *Fragment {
+func NewFragment(path, db, frame string, slice uint64) *Fragment {
 	f := &Fragment{
+		path:  path,
 		db:    db,
 		frame: frame,
 		slice: slice,
@@ -44,6 +58,115 @@ func NewFragment(db, frame string, slice uint64) *Fragment {
 	return f
 }
 
+// Open opens the underlying storage.
+func (f *Fragment) Open() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Initialize storage in a function so we can close if anything goes wrong.
+	if err := func() error {
+		// Create a roaring bitmap to serve as storage for the slice.
+		f.storage = roaring.NewBitmap()
+
+		// Open the data file to be mmap'd and used as an ops log.
+		file, err := os.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			return err
+		}
+		f.file = file
+
+		// Lock the underlying file.
+		if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
+			return nil
+		}
+
+		// If the file is empty then initialize it with an empty bitmap.
+		fi, err := f.file.Stat()
+		if err != nil {
+			return err
+		} else if fi.Size() == 0 {
+			if _, err := f.storage.WriteTo(f.file); err != nil {
+				return err
+			}
+		}
+
+		// Mmap the underlying file so it can be zero copied.
+		storageData, err := syscall.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
+		if err != nil {
+			return fmt.Errorf("mmap: %s", err)
+		}
+		f.storageData = storageData
+
+		// Advise the kernel that the mmap is accessed randomly.
+		if err := madvise(f.storageData, syscall.MADV_RANDOM); err != nil {
+			return fmt.Errorf("madvise: %s", err)
+		}
+
+		// Attach the mmap file to the bitmap.
+		if err := f.storage.UnmarshalBinary((*[0x7FFFFFFF]byte)(unsafe.Pointer(&f.storageData[0]))[:]); err != nil {
+			return fmt.Errorf("unmarshal storage: %s", err)
+		}
+
+		// Attach the file to the bitmap to act as a write-ahead log.
+		f.storage.OpWriter = f.file
+
+		return nil
+
+	}(); err != nil {
+		f.close()
+		return err
+	}
+
+	return nil
+}
+
+// Close flushes the underlying storage, closes the file and unlocks it.
+func (f *Fragment) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.close()
+}
+
+func (f *Fragment) close() error {
+	// Clear the storage bitmap so it doesn't access the closed mmap.
+	f.storage = roaring.NewBitmap()
+
+	// Unmap the file.
+	if f.storageData != nil {
+		if err := syscall.Munmap(f.storageData); err != nil {
+			return fmt.Errorf("munmap: %s", err)
+		}
+		f.storageData = nil
+	}
+
+	// Flush file, unlock & close.
+	if f.file != nil {
+		if err := f.file.Sync(); err != nil {
+			return fmt.Errorf("sync: %s", err)
+		}
+		if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_UN); err != nil {
+			return fmt.Errorf("unlock: %s", err)
+		}
+		if err := f.file.Close(); err != nil {
+			return fmt.Errorf("close file: %s", err)
+		}
+	}
+
+	return nil
+}
+
+// Path returns the path the fragment was initialized with.
+func (f *Fragment) Path() string { return f.path }
+
+// DB returns the database the fragment was initialized with.
+func (f *Fragment) DB() string { return f.db }
+
+// Frame returns the frame the fragment was initialized with.
+func (f *Fragment) Frame() string { return f.frame }
+
+// Slice returns the slice the fragment was initialized with.
+func (f *Fragment) Slice() uint64 { return f.slice }
+
 // Bitmap returns a bitmap by ID.
 func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
 	f.mu.Lock()
@@ -53,15 +176,20 @@ func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
 
 func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 	// Read from cache.
-	if bm, ok := f.cache.Get(bitmapID); ok {
+	if bm := f.cache.Get(bitmapID); bm != nil {
 		return bm
 	}
 
-	// Read from storage engine.
-	// bm, filter := f.storage.Fetch(bitmapID, f.db, f.frame, f.slice)
-
+	// Read bitmap from storage.
 	bm := NewBitmap()
+	f.storage.ForEachRange(uint32(bitmapID)*SliceWidth, uint32(bitmapID+1)*SliceWidth, func(i uint32) {
+		profileID := (f.slice * SliceWidth) + (uint64(i) % SliceWidth)
+		bm.setBit(profileID)
+	})
+
+	// Add to the cache.
 	f.cache.Add(bitmapID, 0 /*filter*/, bm)
+
 	return bm
 }
 
@@ -93,6 +221,63 @@ func (f *Fragment) TopNAll(n int, categories []uint64) []Pair {
 		}
 	}
 	return results
+}
+
+// SetBit sets a bit for a given profile & bitmap within the fragment.
+// This updates both the on-disk storage and the in-cache bitmap.
+func (f *Fragment) SetBit(bitmapID, profileID uint64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Determine the position of the bit in the storage.
+	pos, err := f.pos(bitmapID, profileID)
+	if err != nil {
+		return err
+	}
+
+	// Write to storage.
+	if err := f.storage.Add(pos); err != nil {
+		return err
+	}
+
+	// Update the cache.
+	f.bitmap(bitmapID).setBit(profileID)
+
+	return nil
+}
+
+// ClearBit clears a bit for a given profile & bitmap within the fragment.
+// This updates both the on-disk storage and the in-cache bitmap.
+func (f *Fragment) ClearBit(bitmapID, profileID uint64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Determine the position of the bit in the storage.
+	pos, err := f.pos(bitmapID, profileID)
+	if err != nil {
+		return err
+	}
+
+	// Write to storage.
+	if err := f.storage.Remove(pos); err != nil {
+		return err
+	}
+
+	// Update the cache.
+	f.bitmap(bitmapID).clearBit(profileID)
+
+	return nil
+}
+
+// pos translates the bitmap ID and profile ID into a position in the storage bitmap.
+func (f *Fragment) pos(bitmapID, profileID uint64) (uint32, error) {
+	// Return an error if the profile ID is out of the range of the fragment's slice.
+	minProfileID := f.slice * SliceWidth
+	if profileID < minProfileID || profileID >= minProfileID+SliceWidth {
+		return 0, errors.New("profile out of bounds")
+	}
+
+	return uint32((bitmapID * SliceWidth) + (profileID % SliceWidth)), nil
 }
 
 func (f *Fragment) TopN(src *Bitmap, n int, categories []uint64) []Pair {
@@ -227,4 +412,12 @@ func (f *Fragment) Range(bitmapID uint64, start, end time.Time) *Bitmap {
 		result = result.Union(f.bitmap(id))
 	}
 	return result
+}
+
+func madvise(b []byte, advice int) (err error) {
+	_, _, e1 := syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(advice))
+	if e1 != 0 {
+		err = e1
+	}
+	return
 }
