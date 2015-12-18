@@ -28,10 +28,12 @@ type Bitmap struct {
 }
 
 // NewBitmap returns a new instance of Bitmap.
-func NewBitmap() *Bitmap {
-	return &Bitmap{
-		tree: rbtree.NewTree(rbtreeItemCompare),
+func NewBitmap(bits ...uint64) *Bitmap {
+	bm := &Bitmap{tree: rbtree.NewTree(rbtreeItemCompare)}
+	for _, i := range bits {
+		bm.setBit(i)
 	}
+	return bm
 }
 
 // Chunk returns the chunk within the bitmap.
@@ -357,8 +359,8 @@ func (b *Bitmap) Bits() []uint64 {
 	return result
 }
 
-// SetBit sets the i-th bit of the bitmap.
-func (b *Bitmap) SetBit(i uint64) (changed bool) {
+// setBit sets the i-th bit of the bitmap.
+func (b *Bitmap) setBit(i uint64) (changed bool) {
 	address := deref(i)
 
 	chunk := b.Chunk(&Chunk{address.ChunkKey, make(Blocks, 32)})
@@ -375,8 +377,8 @@ func (b *Bitmap) SetBit(i uint64) (changed bool) {
 	return changed
 }
 
-// ClearBit clears the i-th bit of the bitmap.
-func (b *Bitmap) ClearBit(i uint64) (changed bool) {
+// clearBit clears the i-th bit of the bitmap.
+func (b *Bitmap) clearBit(i uint64) (changed bool) {
 	address := deref(i)
 
 	chunk := b.Chunk(&Chunk{address.ChunkKey, make(Blocks, 32)})

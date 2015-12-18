@@ -17,7 +17,7 @@ type Cache interface {
 	io.ReaderFrom
 
 	Add(bitmapID, category uint64, bm *Bitmap)
-	Get(bitmapID uint64) (bm *Bitmap, ok bool)
+	Get(bitmapID uint64) *Bitmap
 	Len() int
 
 	// Updates the cache, if necessary.
@@ -50,12 +50,12 @@ func (c *LRUCache) Add(bitmapID, category uint64, bm *Bitmap) {
 }
 
 // Get returns a bitmap with a given id.
-func (c *LRUCache) Get(bitmapID uint64) (bm *Bitmap, ok bool) {
-	value, ok := c.cache.Get(bitmapID)
+func (c *LRUCache) Get(bitmapID uint64) *Bitmap {
+	bm, ok := c.cache.Get(bitmapID)
 	if !ok {
-		return nil, false
+		return nil
 	}
-	return value.(*Bitmap), true
+	return bm.(*Bitmap)
 }
 
 // Len returns the number of items in the cache.
@@ -68,11 +68,9 @@ func (c *LRUCache) Invalidate() {}
 func (c *LRUCache) Pairs() []Pair {
 	a := make([]Pair, 0, len(c.keys))
 	for k := range c.keys {
-		bm, _ := c.Get(k)
-
 		a = append(a, Pair{
 			Key:   k,
-			Count: bm.Count(),
+			Count: c.Get(k).Count(),
 		})
 	}
 	return a
@@ -156,12 +154,12 @@ func (c *RankCache) Add(bitmapID, category uint64, bm *Bitmap) {
 }
 
 // Get returns a bitmap with a given id.
-func (c *RankCache) Get(bitmapID uint64) (bm *Bitmap, ok bool) {
+func (c *RankCache) Get(bitmapID uint64) *Bitmap {
 	entry, ok := c.entries[bitmapID]
 	if !ok {
-		return nil, false
+		return nil
 	}
-	return entry.bitmap, true
+	return entry.bitmap
 }
 
 // Len returns the number of items in the cache.

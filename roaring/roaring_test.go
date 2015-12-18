@@ -132,11 +132,18 @@ func TestBitmap_Marshal_Quick_LargeValue(t *testing.T) {
 
 // Ensure a bitmap can be marshaled and unmarshaled.
 func testBitmapMarshalQuick(t *testing.T, n int, min, max uint32) {
-	quick.Check(func(a0, a1 []uint32) bool {
-		println("=================================================")
+	if testing.Short() {
+		t.Skip("short")
+	}
 
+	quick.Check(func(a0, a1 []uint32) bool {
 		// Create bitmap with initial values set.
 		bm := roaring.NewBitmap(a0...)
+
+		set := make(map[uint32]struct{})
+		for _, v := range a0 {
+			set[v] = struct{}{}
+		}
 
 		// Write snapshot to buffer.
 		var buf bytes.Buffer
@@ -151,19 +158,28 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint32) {
 
 		// Add more values to bitmap.
 		for _, v := range a1 {
+			set[v] = struct{}{}
 			if err := bm.Add(v); err != nil {
 				t.Fatal(err)
 			}
 
+			// Extract buffer as a byte slice so it can be mapped.
+			data := buf.Bytes()
+
 			// Create new bitmap from ops log data.
 			bm2 := roaring.NewBitmap()
-			if err := bm2.UnmarshalBinary(buf.Bytes()); err != nil {
+			if err := bm2.UnmarshalBinary(data); err != nil {
 				t.Fatal(err)
 			}
 
-			// Verify the two bitmaps match.
-			if x, y := bm.Slice(), bm2.Slice(); !reflect.DeepEqual(x, y) {
-				t.Fatalf("mismatch: %s\n\nbm1=%+v\n\nbm2=%+v\n\n", diff(x, y), x, y)
+			// Verify the original bitmap has the correct set of values.
+			if exp, got := uint32SetSlice(set), bm.Slice(); !reflect.DeepEqual(exp, got) {
+				t.Fatalf("mismatch: %s\n\nexp=%+v\n\ngot=%+v\n\n", diff(exp, got), exp, got)
+			}
+
+			// Verify the bitmap loaded with the ops log has the correct set of values.
+			if exp, got := uint32SetSlice(set), bm2.Slice(); !reflect.DeepEqual(exp, got) {
+				t.Fatalf("mismatch: %s\n\nexp=%+v\n\ngot=%+v\n\n", diff(exp, got), exp, got)
 			}
 		}
 
