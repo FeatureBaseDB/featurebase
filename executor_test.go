@@ -12,10 +12,12 @@ import (
 
 // Ensure a get query can be executed.
 func TestExecutor_Execute_Get(t *testing.T) {
-	e := NewExecutor(NewCluster(1))
-	e.Index().Fragment("d", "f", 0).Bitmap(10).SetBit(3)
-	e.Index().Fragment("d", "f", 1).Bitmap(10).SetBit(SliceWidth + 1)
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustFragment("d", "f", 0).MustSetBit(10, 3)
+	idx.MustFragment("d", "f", 1).MustSetBit(10, SliceWidth+1)
 
+	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`get(id=10, frame=f)`), nil); err != nil {
 		t.Fatal(err)
 	} else if chunks := res.(*pilosa.Bitmap).Chunks(); len(chunks) != 2 {
@@ -29,13 +31,14 @@ func TestExecutor_Execute_Get(t *testing.T) {
 
 // Ensure a difference query can be executed.
 func TestExecutor_Execute_Difference(t *testing.T) {
-	e := NewExecutor(NewCluster(1))
-	e.Index().Fragment("d", "general", 0).Bitmap(10).SetBit(1)
-	e.Index().Fragment("d", "general", 0).Bitmap(10).SetBit(2)
-	e.Index().Fragment("d", "general", 0).Bitmap(10).SetBit(3)
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustFragment("d", "general", 0).MustSetBit(10, 1)
+	idx.MustFragment("d", "general", 0).MustSetBit(10, 2)
+	idx.MustFragment("d", "general", 0).MustSetBit(10, 3)
+	idx.MustFragment("d", "general", 0).MustSetBit(11, 2)
 
-	e.Index().Fragment("d", "general", 0).Bitmap(11).SetBit(2)
-
+	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`difference(get(id=10), get(id=11))`), nil); err != nil {
 		t.Fatal(err)
 	} else if chunks := res.(*pilosa.Bitmap).Chunks(); len(chunks) != 1 {
@@ -47,15 +50,17 @@ func TestExecutor_Execute_Difference(t *testing.T) {
 
 // Ensure an intersect query can be executed.
 func TestExecutor_Execute_Intersect(t *testing.T) {
-	e := NewExecutor(NewCluster(1))
-	e.Index().Fragment("d", "general", 0).Bitmap(10).SetBit(1)
-	e.Index().Fragment("d", "general", 0).Bitmap(10).SetBit(SliceWidth + 1)
-	e.Index().Fragment("d", "general", 0).Bitmap(10).SetBit(SliceWidth + 2)
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustFragment("d", "general", 0).MustSetBit(10, 1)
+	idx.MustFragment("d", "general", 1).MustSetBit(10, SliceWidth+1)
+	idx.MustFragment("d", "general", 1).MustSetBit(10, SliceWidth+2)
 
-	e.Index().Fragment("d", "general", 0).Bitmap(11).SetBit(1)
-	e.Index().Fragment("d", "general", 0).Bitmap(11).SetBit(2)
-	e.Index().Fragment("d", "general", 0).Bitmap(11).SetBit(SliceWidth + 2)
+	idx.MustFragment("d", "general", 0).MustSetBit(11, 1)
+	idx.MustFragment("d", "general", 0).MustSetBit(11, 2)
+	idx.MustFragment("d", "general", 1).MustSetBit(11, SliceWidth+2)
 
+	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`intersect(get(id=10), get(id=11))`), nil); err != nil {
 		t.Fatal(err)
 	} else if chunks := res.(*pilosa.Bitmap).Chunks(); len(chunks) != 2 {
@@ -69,14 +74,16 @@ func TestExecutor_Execute_Intersect(t *testing.T) {
 
 // Ensure a union query can be executed.
 func TestExecutor_Execute_Union(t *testing.T) {
-	e := NewExecutor(NewCluster(1))
-	e.Index().Fragment("d", "general", 0).Bitmap(10).SetBit(0)
-	e.Index().Fragment("d", "general", 0).Bitmap(10).SetBit(SliceWidth + 1)
-	e.Index().Fragment("d", "general", 0).Bitmap(10).SetBit(SliceWidth + 2)
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustFragment("d", "general", 0).MustSetBit(10, 0)
+	idx.MustFragment("d", "general", 1).MustSetBit(10, SliceWidth+1)
+	idx.MustFragment("d", "general", 1).MustSetBit(10, SliceWidth+2)
 
-	e.Index().Fragment("d", "general", 0).Bitmap(11).SetBit(2)
-	e.Index().Fragment("d", "general", 0).Bitmap(11).SetBit(SliceWidth + 2)
+	idx.MustFragment("d", "general", 0).MustSetBit(11, 2)
+	idx.MustFragment("d", "general", 1).MustSetBit(11, SliceWidth+2)
 
+	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`union(get(id=10), get(id=11))`), nil); err != nil {
 		t.Fatal(err)
 	} else if chunks := res.(*pilosa.Bitmap).Chunks(); len(chunks) != 2 {
@@ -90,11 +97,13 @@ func TestExecutor_Execute_Union(t *testing.T) {
 
 // Ensure a count query can be executed.
 func TestExecutor_Execute_Count(t *testing.T) {
-	e := NewExecutor(NewCluster(1))
-	e.Index().Fragment("d", "f", 0).Bitmap(10).SetBit(3)
-	e.Index().Fragment("d", "f", 1).Bitmap(10).SetBit(SliceWidth + 1)
-	e.Index().Fragment("d", "f", 1).Bitmap(10).SetBit(SliceWidth + 2)
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustFragment("d", "f", 0).MustSetBit(10, 3)
+	idx.MustFragment("d", "f", 1).MustSetBit(10, SliceWidth+1)
+	idx.MustFragment("d", "f", 1).MustSetBit(10, SliceWidth+2)
 
+	e := NewExecutor(idx.Index, NewCluster(1))
 	if n, err := e.Execute("d", MustParse(`count(get(id=10, frame=f))`), nil); err != nil {
 		t.Fatal(err)
 	} else if n != uint64(3) {
@@ -104,13 +113,15 @@ func TestExecutor_Execute_Count(t *testing.T) {
 
 // Ensure a set query can be executed.
 func TestExecutor_Execute_Set(t *testing.T) {
-	e := NewExecutor(NewCluster(1))
+	idx := MustOpenIndex()
+	defer idx.Close()
 
+	e := NewExecutor(idx.Index, NewCluster(1))
 	if _, err := e.Execute("d", MustParse(`set(id=10, frame=f, profile_id=1)`), nil); err != nil {
 		t.Fatal(err)
 	}
 
-	f := e.Index().Fragment("d", "f", 0)
+	f := idx.MustFragment("d", "f", 0)
 	if n := f.Bitmap(10).Count(); n != 1 {
 		t.Fatalf("unexpected bitmap count: %d", n)
 	}
@@ -136,18 +147,21 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 		}
 
 		// Set bits in slice 0 & 2.
-		bm := pilosa.NewBitmap()
-		bm.SetBit((0 * SliceWidth) + 1)
-		bm.SetBit((0 * SliceWidth) + 2)
-		bm.SetBit((2 * SliceWidth) + 4)
+		bm := pilosa.NewBitmap(
+			(0*SliceWidth)+1,
+			(0*SliceWidth)+2,
+			(2*SliceWidth)+4,
+		)
 		return bm, nil
 	}
 
 	// Create local executor data.
 	// The local node owns slice 1.
-	e := NewExecutor(c)
-	e.Index().Fragment("d", "f", 1).Bitmap(10).SetBit((1 * SliceWidth) + 1)
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustFragment("d", "f", 1).MustSetBit(10, (1*SliceWidth)+1)
 
+	e := NewExecutor(idx.Index, c)
 	if res, err := e.Execute("d", MustParse(`get(id=10, frame=f)`), nil); err != nil {
 		t.Fatal(err)
 	} else if chunks := res.(*pilosa.Bitmap).Chunks(); len(chunks) != 3 {
@@ -174,10 +188,12 @@ func TestExecutor_Execute_Remote_Count(t *testing.T) {
 	}
 
 	// Create local executor data. The local node owns slice 1.
-	e := NewExecutor(c)
-	e.Index().Fragment("d", "f", 1).Bitmap(10).SetBit((1 * SliceWidth) + 1)
-	e.Index().Fragment("d", "f", 1).Bitmap(10).SetBit((1 * SliceWidth) + 2)
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustFragment("d", "f", 1).MustSetBit(10, (1*SliceWidth)+1)
+	idx.MustFragment("d", "f", 1).MustSetBit(10, (1*SliceWidth)+2)
 
+	e := NewExecutor(idx.Index, c)
 	if n, err := e.Execute("d", MustParse(`count(get(id=10, frame=f))`), nil); err != nil {
 		t.Fatal(err)
 	} else if n != uint64(12) {
@@ -208,13 +224,16 @@ func TestExecutor_Execute_Remote_Set(t *testing.T) {
 	}
 
 	// Create local executor data.
-	e := NewExecutor(c)
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	e := NewExecutor(idx.Index, c)
 	if _, err := e.Execute("d", MustParse(`set(id=10, frame=f, profile_id=2)`), nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that one bit is set on both node's index.
-	if n := e.Index().Fragment("d", "f", 0).Bitmap(10).Count(); n != 1 {
+	if n := idx.MustFragment("d", "f", 0).Bitmap(10).Count(); n != 1 {
 		t.Fatalf("unexpected local count: %d", n)
 	}
 	if !remoteCalled {
@@ -229,13 +248,10 @@ type Executor struct {
 
 // NewExecutor returns a new instance of Executor.
 // The executor always matches the hostname of the first cluster node.
-func NewExecutor(cluster *pilosa.Cluster) *Executor {
-	e := &Executor{
-		Executor: pilosa.NewExecutor(pilosa.NewIndex()),
-	}
+func NewExecutor(index *pilosa.Index, cluster *pilosa.Cluster) *Executor {
+	e := &Executor{Executor: pilosa.NewExecutor(index)}
 	e.Cluster = cluster
 	e.Host = cluster.Nodes[0].Host
-
 	return e
 }
 

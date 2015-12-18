@@ -138,12 +138,7 @@ func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	h := NewHandler()
 	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64) (interface{}, error) {
-		bm := pilosa.NewBitmap()
-		bm.SetBit(1)
-		bm.SetBit(3)
-		bm.SetBit(66)
-		bm.SetBit(pilosa.SliceWidth + 1)
-		return bm, nil
+		return pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1), nil
 	}
 
 	w := httptest.NewRecorder()
@@ -159,10 +154,7 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	h := NewHandler()
 	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64) (interface{}, error) {
-		bm := pilosa.NewBitmap()
-		bm.SetBit(1)
-		bm.SetBit(pilosa.SliceWidth + 1)
-		return bm, nil
+		return pilosa.NewBitmap(1, pilosa.SliceWidth+1), nil
 	}
 
 	w := httptest.NewRecorder()

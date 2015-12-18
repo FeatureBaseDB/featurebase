@@ -69,7 +69,6 @@ func (b *Bitmap) add(v uint32) {
 		i = -i - 1
 	}
 
-	println("DBG*", highbits(v))
 	b.containers[i].add(lowbits(v))
 }
 
@@ -221,7 +220,10 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	// Read container key headers.
 	for i, buf := 0, data[8:]; i < int(keyN); i, buf = i+1, buf[4:] {
 		b.keys[i] = binary.LittleEndian.Uint16(buf[0:2])
-		b.containers[i] = &container{n: int(binary.LittleEndian.Uint16(buf[2:4])) + 1}
+		b.containers[i] = &container{
+			n:      int(binary.LittleEndian.Uint16(buf[2:4])) + 1,
+			mapped: true,
+		}
 	}
 
 	// Read container offsets and attach data.
@@ -459,7 +461,6 @@ func (c *container) arrayAdd(v uint16) {
 
 	// Otherwise insert into array.
 	c.unmap()
-	println("DBG&&&&&", v)
 	i = -i - 1
 	c.array = append(c.array, 0)
 	copy(c.array[i+1:], c.array[i:])
@@ -616,8 +617,6 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 	h := fnv.New32a()
 	h.Write(buf[0:5])
 	binary.LittleEndian.PutUint32(buf[5:9], h.Sum32())
-	fmt.Println("")
-	fmt.Println("W<<<<<<<<<<<<", op.value)
 
 	// Write to writer.
 	nn, err := w.Write(buf)
@@ -640,7 +639,6 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	// Read type and value.
 	op.typ = opType(data[0])
 	op.value = binary.LittleEndian.Uint32(data[1:5])
-	fmt.Println("R>", op.value)
 
 	return nil
 }
