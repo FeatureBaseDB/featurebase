@@ -71,13 +71,13 @@ func (f *Fragment) Open() error {
 		// Open the data file to be mmap'd and used as an ops log.
 		file, err := os.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 		if err != nil {
-			return err
+			return fmt.Errorf("open file: %s", err)
 		}
 		f.file = file
 
 		// Lock the underlying file.
-		if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
-			return nil
+		if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+			return fmt.Errorf("flock: %s", err)
 		}
 
 		// If the file is empty then initialize it with an empty bitmap.
@@ -86,6 +86,11 @@ func (f *Fragment) Open() error {
 			return err
 		} else if fi.Size() == 0 {
 			if _, err := f.storage.WriteTo(f.file); err != nil {
+				return fmt.Errorf("init storage file: %s", err)
+			}
+
+			fi, err = f.file.Stat()
+			if err != nil {
 				return err
 			}
 		}
@@ -103,8 +108,9 @@ func (f *Fragment) Open() error {
 		}
 
 		// Attach the mmap file to the bitmap.
-		if err := f.storage.UnmarshalBinary((*[0x7FFFFFFF]byte)(unsafe.Pointer(&f.storageData[0]))[:]); err != nil {
-			return fmt.Errorf("unmarshal storage: %s", err)
+		data := (*[0x7FFFFFFF]byte)(unsafe.Pointer(&f.storageData[0]))[:fi.Size()]
+		if err := f.storage.UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 		}
 
 		// Attach the file to the bitmap to act as a write-ahead log.

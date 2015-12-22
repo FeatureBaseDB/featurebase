@@ -69,6 +69,9 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// Parse incoming request.
 	db, query, slices, err := h.readQueryRequest(r)
+
+	// h.logger().Printf("%s %s db=%s q=%s slices=%v", r.Method, r.URL.Path, db, query, slices)
+
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		h.writeQueryResponse(w, r, nil, err)
