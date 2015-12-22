@@ -93,6 +93,7 @@ func (m *Main) Run(args ...string) error {
 		return err
 	} else if addr == "" {
 		return errors.New("port must be specified in config host")
+
 	}
 
 	// Set up profiling.
@@ -110,7 +111,7 @@ func (m *Main) Run(args ...string) error {
 	cluster := m.Config.PilosaCluster()
 
 	// Create index to store fragments.
-	index := pilosa.NewIndex()
+	index := pilosa.NewIndex("/tmp/")
 
 	// Create executor for executing queries.
 	e := pilosa.NewExecutor(index)

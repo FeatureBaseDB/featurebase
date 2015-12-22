@@ -100,3 +100,10 @@ LOOP	popcntXorSliceLoop
 popcntXorSliceEnd:
 MOVQ	AX, ret+48(FP)
 RET
+
+
+TEXT ·popcntAsm(SB),4,$0-16
+        MOVQ  x+0(FP), DX
+        POPCNTQ_DX_DX
+        MOVQ DX, ret+8(FP)
+        RET
