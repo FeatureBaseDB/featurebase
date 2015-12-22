@@ -309,17 +309,7 @@ func (b *Bitmap) ReadFrom(r io.Reader) (n int64, err error) {
 }
 
 // MarshalJSON returns a JSON-encoded byte slice of b.
-func (b *Bitmap) MarshalJSON() ([]byte, error) {
-	o := bitmapJSON{
-		Chunks: make([]chunkJSON, 0, b.tree.Len()),
-	}
-
-	for itr := b.ChunkIterator(); !itr.Limit(); itr = itr.Next() {
-		o.Chunks = append(o.Chunks, chunkJSON{Key: itr.Item().Key, Value: itr.Item().Value})
-	}
-
-	return json.Marshal(&o)
-}
+func (b *Bitmap) MarshalJSON() ([]byte, error) { return json.Marshal(b.Bits()) }
 
 // MarshalBinary returns a gob-encoded byte slice of b.
 func (b *Bitmap) MarshalBinary() ([]byte, error) {
@@ -338,9 +328,8 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 // Bits returns the bits in b as a slice of ints.
 func (b *Bitmap) Bits() []uint64 {
-	result := make([]uint64, b.Count())
+	result := make([]uint64, 0, b.Count())
 
-	x := 0
 	for i := b.ChunkIterator(); !i.Limit(); i = i.Next() {
 		item := i.Item()
 		chunk := item.Key
@@ -349,8 +338,7 @@ func (b *Bitmap) Bits() []uint64 {
 				if (block & (1 << bit)) != 0 {
 					idx := chunk << 11
 					idx = idx | uint64((uint(bi)<<6)|bit)
-					result[x] = idx
-					x++
+					result = append(result, idx)
 				}
 			}
 		}
@@ -440,11 +428,6 @@ func Union(bitmaps []*Bitmap) *Bitmap {
 	return other
 }
 
-// bitmapJSON is the JSON representation of Bitmap.
-type bitmapJSON struct {
-	Chunks []chunkJSON `json:"chunks"`
-}
-
 // Chunk represents a set of blocks in a Bitmap.
 type Chunk struct {
 	Key   uint64
@@ -473,12 +456,6 @@ func decodeChunk(pb *internal.Chunk) *Chunk {
 		Key:   pb.GetKey(),
 		Value: Blocks(pb.GetValue()),
 	}
-}
-
-// chunkJSON is the JSON representation of Chunk.
-type chunkJSON struct {
-	Key   uint64
-	Value []uint64
 }
 
 // ChunkIterator represents an object for iterating over chunks in a bitmap.
