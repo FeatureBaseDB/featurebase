@@ -5,12 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
 	"os"
+	"os/user"
+	"path/filepath"
 	"runtime/pprof"
+	"strconv"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -27,6 +29,11 @@ func init() {
 
 	rand.Seed(time.Now().UTC().UnixNano())
 }
+
+const (
+	// DefaultHost is the default hostname and port to use.
+	DefaultHost = "localhost:15000"
+)
 
 func main() {
 	m := NewMain()
@@ -50,7 +57,8 @@ func main() {
 
 // Main represents the main program execution.
 type Main struct {
-	ln net.Listener
+	index *pilosa.Index
+	ln    net.Listener
 
 	// Path to the configuration file.
 	ConfigPath string
@@ -78,22 +86,27 @@ func NewMain() *Main {
 	}
 }
 
+// Addr returns the address of the listener.
+func (m *Main) Addr() net.Addr {
+	if m.ln == nil {
+		return nil
+	}
+	return m.ln.Addr()
+}
+
 // Run executes the main program execution.
 func (m *Main) Run(args ...string) error {
-	logger := log.New(m.Stderr, "", log.LstdFlags)
-
 	// Notify user of config file.
 	if m.ConfigPath != "" {
 		fmt.Fprintf(m.Stdout, "Using config: %s\n", m.ConfigPath)
 	}
 
 	// Require a port in the hostname.
-	_, addr, err := net.SplitHostPort(m.Config.Host)
+	host, port, err := net.SplitHostPort(m.Config.Host)
 	if err != nil {
 		return err
-	} else if addr == "" {
+	} else if port == "" {
 		return errors.New("port must be specified in config host")
-
 	}
 
 	// Set up profiling.
@@ -107,15 +120,31 @@ func (m *Main) Run(args ...string) error {
 		defer pprof.StopCPUProfile()
 	}
 
-	// Build cluster from config file.
+	// Open HTTP listener to determine port (if specified as :0).
+	ln, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return err
+	}
+	m.ln = ln
+
+	// Determine hostname based on listening port.
+	hostname := net.JoinHostPort(host, strconv.Itoa(m.ln.Addr().(*net.TCPAddr).Port))
+
+	// Build cluster from config file. Create local host if none are specified.
 	cluster := m.Config.PilosaCluster()
+	if len(cluster.Nodes) == 0 {
+		cluster.Nodes = []*pilosa.Node{{
+			Host: hostname,
+		}}
+	}
 
 	// Create index to store fragments.
-	index := pilosa.NewIndex("/tmp/")
+	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
+	m.index = pilosa.NewIndex(m.Config.DataDir)
 
 	// Create executor for executing queries.
-	e := pilosa.NewExecutor(index)
-	e.Host = m.Config.Host
+	e := pilosa.NewExecutor(m.index)
+	e.Host = hostname
 	e.Cluster = cluster
 
 	// Initialize HTTP handler.
@@ -123,17 +152,10 @@ func (m *Main) Run(args ...string) error {
 	h.Executor = e
 	h.LogOutput = m.Stderr
 
-	// Open HTTP listener.
-	ln, err := net.Listen("tcp", ":"+addr)
-	if err != nil {
-		return err
-	}
-	m.ln = ln
-
 	// Serve HTTP.
-	go func() { logger.Print(http.Serve(ln, h)) }()
+	go func() { http.Serve(ln, h) }()
 
-	fmt.Fprintf(m.Stderr, "Listening on http://%s\n", ln.Addr().String())
+	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", hostname)
 
 	return nil
 }
@@ -143,6 +165,11 @@ func (m *Main) Close() error {
 	if m.ln != nil {
 		m.ln.Close()
 	}
+
+	if m.index != nil {
+		m.index.Close()
+	}
+
 	return nil
 }
 
@@ -163,5 +190,73 @@ func (m *Main) ParseFlags(args []string) error {
 		}
 	}
 
+	// If no data directory is specified then use ~/.pilosa
+	if m.Config.DataDir == "" {
+		u, err := user.Current()
+		if err != nil {
+			return err
+		} else if u.HomeDir == "" {
+			return errors.New("data directory not specified and no home dir available")
+		}
+		m.Config.DataDir = filepath.Join(u.HomeDir, ".pilosa")
+	}
+
+	return nil
+}
+
+// Config represents the configuration for the command.
+type Config struct {
+	DataDir string `toml:"data-dir"`
+	Host    string `toml:"host"`
+
+	Cluster struct {
+		ReplicaN int           `toml:"replicas"`
+		Nodes    []*ConfigNode `toml:"nodes"`
+	} `toml:"cluster"`
+
+	Plugins struct {
+		Path string `toml:"path"`
+	} `toml:"plugins"`
+}
+
+type ConfigNode struct {
+	Host string `toml:"host"`
+}
+
+// NewConfig returns an instance of Config with default options.
+func NewConfig() *Config {
+	c := &Config{
+		Host: DefaultHost,
+	}
+	c.Cluster.ReplicaN = pilosa.DefaultReplicaN
+	return c
+}
+
+// PilosaCluster returns a new instance of pilosa.Cluster based on the config.
+func (c *Config) PilosaCluster() *pilosa.Cluster {
+	cluster := pilosa.NewCluster()
+	cluster.ReplicaN = c.Cluster.ReplicaN
+
+	for _, n := range c.Cluster.Nodes {
+		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: n.Host})
+	}
+
+	return cluster
+}
+
+// Duration is a TOML wrapper type for time.Duration.
+type Duration time.Duration
+
+// String returns the string representation of the duration.
+func (d Duration) String() string { return time.Duration(d).String() }
+
+// UnmarshalText parses a TOML value into a duration value.
+func (d *Duration) UnmarshalText(text []byte) error {
+	v, err := time.ParseDuration(string(text))
+	if err != nil {
+		return err
+	}
+
+	*d = Duration(v)
 	return nil
 }
