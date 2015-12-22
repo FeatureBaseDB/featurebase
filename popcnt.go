@@ -3,7 +3,7 @@ package pilosa
 // bit population count, take from
 // https://code.google.com/p/go/issues/detail?id=4988#c11
 // credit: https://code.google.com/u/arnehormann/
-func popcount(x uint64) (n uint64) {
+func popcntGo(x uint64) (n uint64) {
 	x -= (x >> 1) & 0x5555555555555555
 	x = (x>>2)&0x3333333333333333 + x&0x3333333333333333
 	x += x >> 4
@@ -15,7 +15,7 @@ func popcount(x uint64) (n uint64) {
 func popcntSliceGo(s []uint64) uint64 {
 	cnt := uint64(0)
 	for _, x := range s {
-		cnt += popcount(x)
+		cnt += popcntGo(x)
 	}
 	return cnt
 }
@@ -23,7 +23,7 @@ func popcntSliceGo(s []uint64) uint64 {
 func popcntMaskSliceGo(s, m []uint64) uint64 {
 	cnt := uint64(0)
 	for i := range s {
-		cnt += popcount(s[i] &^ m[i])
+		cnt += popcntGo(s[i] &^ m[i])
 	}
 	return cnt
 }
@@ -31,7 +31,7 @@ func popcntMaskSliceGo(s, m []uint64) uint64 {
 func popcntAndSliceGo(s, m []uint64) uint64 {
 	cnt := uint64(0)
 	for i := range s {
-		cnt += popcount(s[i] & m[i])
+		cnt += popcntGo(s[i] & m[i])
 	}
 	return cnt
 }
@@ -39,7 +39,7 @@ func popcntAndSliceGo(s, m []uint64) uint64 {
 func popcntOrSliceGo(s, m []uint64) uint64 {
 	cnt := uint64(0)
 	for i := range s {
-		cnt += popcount(s[i] | m[i])
+		cnt += popcntGo(s[i] | m[i])
 	}
 	return cnt
 }
@@ -47,7 +47,7 @@ func popcntOrSliceGo(s, m []uint64) uint64 {
 func popcntXorSliceGo(s, m []uint64) uint64 {
 	cnt := uint64(0)
 	for i := range s {
-		cnt += popcount(s[i] ^ m[i])
+		cnt += popcntGo(s[i] ^ m[i])
 	}
 	return cnt
 }
