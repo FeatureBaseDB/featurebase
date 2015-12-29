@@ -14,8 +14,8 @@ import (
 func TestExecutor_Execute_Get(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustFragment("d", "f", 0).MustSetBit(10, 3)
-	idx.MustFragment("d", "f", 1).MustSetBit(10, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).MustSetBit(10, 3)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBit(10, SliceWidth+1)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`get(id=10, frame=f)`), nil); err != nil {
@@ -33,10 +33,10 @@ func TestExecutor_Execute_Get(t *testing.T) {
 func TestExecutor_Execute_Difference(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustFragment("d", "general", 0).MustSetBit(10, 1)
-	idx.MustFragment("d", "general", 0).MustSetBit(10, 2)
-	idx.MustFragment("d", "general", 0).MustSetBit(10, 3)
-	idx.MustFragment("d", "general", 0).MustSetBit(11, 2)
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBit(10, 1)
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBit(10, 2)
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBit(10, 3)
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBit(11, 2)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`difference(get(id=10), get(id=11))`), nil); err != nil {
@@ -52,13 +52,13 @@ func TestExecutor_Execute_Difference(t *testing.T) {
 func TestExecutor_Execute_Intersect(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustFragment("d", "general", 0).MustSetBit(10, 1)
-	idx.MustFragment("d", "general", 1).MustSetBit(10, SliceWidth+1)
-	idx.MustFragment("d", "general", 1).MustSetBit(10, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBit(10, 1)
+	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBit(10, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBit(10, SliceWidth+2)
 
-	idx.MustFragment("d", "general", 0).MustSetBit(11, 1)
-	idx.MustFragment("d", "general", 0).MustSetBit(11, 2)
-	idx.MustFragment("d", "general", 1).MustSetBit(11, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBit(11, 1)
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBit(11, 2)
+	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBit(11, SliceWidth+2)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`intersect(get(id=10), get(id=11))`), nil); err != nil {
@@ -76,12 +76,12 @@ func TestExecutor_Execute_Intersect(t *testing.T) {
 func TestExecutor_Execute_Union(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustFragment("d", "general", 0).MustSetBit(10, 0)
-	idx.MustFragment("d", "general", 1).MustSetBit(10, SliceWidth+1)
-	idx.MustFragment("d", "general", 1).MustSetBit(10, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBit(10, 0)
+	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBit(10, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBit(10, SliceWidth+2)
 
-	idx.MustFragment("d", "general", 0).MustSetBit(11, 2)
-	idx.MustFragment("d", "general", 1).MustSetBit(11, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBit(11, 2)
+	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBit(11, SliceWidth+2)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`union(get(id=10), get(id=11))`), nil); err != nil {
@@ -99,9 +99,9 @@ func TestExecutor_Execute_Union(t *testing.T) {
 func TestExecutor_Execute_Count(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustFragment("d", "f", 0).MustSetBit(10, 3)
-	idx.MustFragment("d", "f", 1).MustSetBit(10, SliceWidth+1)
-	idx.MustFragment("d", "f", 1).MustSetBit(10, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).MustSetBit(10, 3)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBit(10, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBit(10, SliceWidth+2)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if n, err := e.Execute("d", MustParse(`count(get(id=10, frame=f))`), nil); err != nil {
@@ -121,7 +121,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f := idx.MustFragment("d", "f", 0)
+	f := idx.MustCreateFragmentIfNotExists("d", "f", 0)
 	if n := f.Bitmap(10).Count(); n != 1 {
 		t.Fatalf("unexpected bitmap count: %d", n)
 	}
@@ -142,7 +142,7 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 			t.Fatalf("unexpected db: %s", db)
 		} else if query.String() != `get(id=10, frame=f)` {
 			t.Fatalf("unexpected query: %s", query.String())
-		} else if !reflect.DeepEqual(slices, []uint64{0, 2}) {
+		} else if !reflect.DeepEqual(slices, []uint64{0, 2, 4}) {
 			t.Fatalf("unexpected slices: %+v", slices)
 		}
 
@@ -159,7 +159,7 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	// The local node owns slice 1.
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustFragment("d", "f", 1).MustSetBit(10, (1*SliceWidth)+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBit(10, (1*SliceWidth)+1)
 
 	e := NewExecutor(idx.Index, c)
 	if res, err := e.Execute("d", MustParse(`get(id=10, frame=f)`), nil); err != nil {
@@ -190,8 +190,8 @@ func TestExecutor_Execute_Remote_Count(t *testing.T) {
 	// Create local executor data. The local node owns slice 1.
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustFragment("d", "f", 1).MustSetBit(10, (1*SliceWidth)+1)
-	idx.MustFragment("d", "f", 1).MustSetBit(10, (1*SliceWidth)+2)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBit(10, (1*SliceWidth)+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBit(10, (1*SliceWidth)+2)
 
 	e := NewExecutor(idx.Index, c)
 	if n, err := e.Execute("d", MustParse(`count(get(id=10, frame=f))`), nil); err != nil {
@@ -233,7 +233,7 @@ func TestExecutor_Execute_Remote_Set(t *testing.T) {
 	}
 
 	// Verify that one bit is set on both node's index.
-	if n := idx.MustFragment("d", "f", 0).Bitmap(10).Count(); n != 1 {
+	if n := idx.MustCreateFragmentIfNotExists("d", "f", 0).Bitmap(10).Count(); n != 1 {
 		t.Fatalf("unexpected local count: %d", n)
 	}
 	if !remoteCalled {

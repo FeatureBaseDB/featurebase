@@ -141,6 +141,9 @@ func (m *Main) Run(args ...string) error {
 	// Create index to store fragments.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
 	m.index = pilosa.NewIndex(m.Config.DataDir)
+	if err := m.index.Open(); err != nil {
+		return err
+	}
 
 	// Create executor for executing queries.
 	e := pilosa.NewExecutor(m.index)
@@ -149,6 +152,9 @@ func (m *Main) Run(args ...string) error {
 
 	// Initialize HTTP handler.
 	h := pilosa.NewHandler()
+	h.Index = m.index
+	h.Host = hostname
+	h.Cluster = cluster
 	h.Executor = e
 	h.LogOutput = m.Stderr
 

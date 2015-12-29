@@ -17,6 +17,9 @@ import (
 // SliceWidth is the number of profile IDs in a slice.
 const SliceWidth = 65536
 
+// SnapshotExt is the file extension used for an in-process snapshot.
+const SnapshotExt = ".snapshotting"
+
 // Fragment represents the intersection of a frame and slice in a database.
 type Fragment struct {
 	mu sync.Mutex
@@ -64,66 +67,69 @@ func (f *Fragment) Open() error {
 	defer f.mu.Unlock()
 
 	// Initialize storage in a function so we can close if anything goes wrong.
-	if err := func() error {
-		// Create a roaring bitmap to serve as storage for the slice.
-		f.storage = roaring.NewBitmap()
-
-		// Open the data file to be mmap'd and used as an ops log.
-		file, err := os.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			return fmt.Errorf("open file: %s", err)
-		}
-		f.file = file
-
-		// Lock the underlying file.
-		if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-			return fmt.Errorf("flock: %s", err)
-		}
-
-		// If the file is empty then initialize it with an empty bitmap.
-		fi, err := f.file.Stat()
-		if err != nil {
-			return err
-		} else if fi.Size() == 0 {
-			if _, err := f.storage.WriteTo(f.file); err != nil {
-				return fmt.Errorf("init storage file: %s", err)
-			}
-
-			fi, err = f.file.Stat()
-			if err != nil {
-				return err
-			}
-		}
-
-		// Mmap the underlying file so it can be zero copied.
-		storageData, err := syscall.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
-		if err != nil {
-			return fmt.Errorf("mmap: %s", err)
-		}
-		f.storageData = storageData
-
-		// Advise the kernel that the mmap is accessed randomly.
-		if err := madvise(f.storageData, syscall.MADV_RANDOM); err != nil {
-			return fmt.Errorf("madvise: %s", err)
-		}
-
-		// Attach the mmap file to the bitmap.
-		data := (*[0x7FFFFFFF]byte)(unsafe.Pointer(&f.storageData[0]))[:fi.Size()]
-		if err := f.storage.UnmarshalBinary(data); err != nil {
-			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
-		}
-
-		// Attach the file to the bitmap to act as a write-ahead log.
-		f.storage.OpWriter = f.file
-
-		return nil
-
-	}(); err != nil {
+	if err := f.openStorage(); err != nil {
 		f.close()
 		return err
 	}
 
 	return nil
+}
+
+// openStorage opens the storage bitmap.
+func (f *Fragment) openStorage() error {
+	// Create a roaring bitmap to serve as storage for the slice.
+	f.storage = roaring.NewBitmap()
+
+	// Open the data file to be mmap'd and used as an ops log.
+	file, err := os.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return fmt.Errorf("open file: %s", err)
+	}
+	f.file = file
+
+	// Lock the underlying file.
+	if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		return fmt.Errorf("flock: %s", err)
+	}
+
+	// If the file is empty then initialize it with an empty bitmap.
+	fi, err := f.file.Stat()
+	if err != nil {
+		return err
+	} else if fi.Size() == 0 {
+		if _, err := f.storage.WriteTo(f.file); err != nil {
+			return fmt.Errorf("init storage file: %s", err)
+		}
+
+		fi, err = f.file.Stat()
+		if err != nil {
+			return err
+		}
+	}
+
+	// Mmap the underlying file so it can be zero copied.
+	storageData, err := syscall.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
+	if err != nil {
+		return fmt.Errorf("mmap: %s", err)
+	}
+	f.storageData = storageData
+
+	// Advise the kernel that the mmap is accessed randomly.
+	if err := madvise(f.storageData, syscall.MADV_RANDOM); err != nil {
+		return fmt.Errorf("madvise: %s", err)
+	}
+
+	// Attach the mmap file to the bitmap.
+	data := (*[0x7FFFFFFF]byte)(unsafe.Pointer(&f.storageData[0]))[:fi.Size()]
+	if err := f.storage.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
+	}
+
+	// Attach the file to the bitmap to act as a write-ahead log.
+	f.storage.OpWriter = f.file
+
+	return nil
+
 }
 
 // Close flushes the underlying storage, closes the file and unlocks it.
@@ -134,6 +140,13 @@ func (f *Fragment) Close() error {
 }
 
 func (f *Fragment) close() error {
+	if err := f.closeStorage(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (f *Fragment) closeStorage() error {
 	// Clear the storage bitmap so it doesn't access the closed mmap.
 	f.storage = roaring.NewBitmap()
 
@@ -234,7 +247,10 @@ func (f *Fragment) TopNAll(n int, categories []uint64) []Pair {
 func (f *Fragment) SetBit(bitmapID, profileID uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	return f.setBit(bitmapID, profileID)
+}
 
+func (f *Fragment) setBit(bitmapID, profileID uint64) error {
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(bitmapID, profileID)
 	if err != nil {
@@ -418,6 +434,89 @@ func (f *Fragment) Range(bitmapID uint64, start, end time.Time) *Bitmap {
 		result = result.Union(f.bitmap(id))
 	}
 	return result
+}
+
+// Import bulk imports a set of bits and then snapshots the storage.
+// This does not affect the fragment's cache.
+func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Verify that there are an equal number of bitmap ids and profile ids.
+	if len(bitmapIDs) != len(profileIDs) {
+		return fmt.Errorf("mismatch of bitmap and profile len: %d != %d", len(bitmapIDs), len(profileIDs))
+	}
+
+	// Disconnect op writer so we don't append updates.
+	f.storage.OpWriter = nil
+
+	// Process every bit.
+	// If an error occurs then reopen the storage.
+	if err := func() error {
+		for i := range bitmapIDs {
+			// Determine the position of the bit in the storage.
+			pos, err := f.pos(bitmapIDs[i], profileIDs[i])
+			if err != nil {
+				return err
+			}
+
+			// Write to storage.
+			if err := f.storage.Add(pos); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		_ = f.closeStorage()
+		_ = f.openStorage()
+		return err
+	}
+
+	// Write the storage to disk and reload.
+	if err := f.snapshot(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Snapshot writes the storage bitmap to disk and reopens it.
+func (f *Fragment) Snapshot() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.snapshot()
+}
+
+func (f *Fragment) snapshot() error {
+	// Create a temporary file to snapshot to.
+	snapshotPath := f.path + SnapshotExt
+	file, err := os.Create(snapshotPath)
+	if err != nil {
+		return fmt.Errorf("create snapshot file: %s", err)
+	}
+	defer file.Close()
+
+	// Write storage to snapshot.
+	if _, err := f.storage.WriteTo(file); err != nil {
+		return fmt.Errorf("snapshot write to: %s", err)
+	}
+
+	// Close current storage.
+	if err := f.closeStorage(); err != nil {
+		return fmt.Errorf("close storage: %s", err)
+	}
+
+	// Move snapshot to data file location.
+	if err := os.Rename(snapshotPath, f.path); err != nil {
+		return fmt.Errorf("rename snapshot: %s", err)
+	}
+
+	// Reopen storage.
+	if err := f.openStorage(); err != nil {
+		return fmt.Errorf("open storage: %s", err)
+	}
+
+	return nil
 }
 
 func madvise(b []byte, advice int) (err error) {

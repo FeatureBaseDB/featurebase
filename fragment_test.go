@@ -69,6 +69,35 @@ func TestFragment_ClearBit(t *testing.T) {
 	}
 }
 
+// Ensure a fragment can snapshot correctly.
+func TestFragment_Snapshot(t *testing.T) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+
+	// Set and then clear bits on the fragment.
+	if err := f.SetBit(1000, 1); err != nil {
+		t.Fatal(err)
+	} else if err := f.SetBit(1000, 2); err != nil {
+		t.Fatal(err)
+	} else if err := f.ClearBit(1000, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Snapshot bitmap and verify data.
+	if err := f.Snapshot(); err != nil {
+		t.Fatal(err)
+	} else if n := f.Bitmap(1000).Count(); n != 1 {
+		t.Fatalf("unexpected count: %d", n)
+	}
+
+	// Close and reopen the fragment & verify the data.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if n := f.Bitmap(1000).Count(); n != 1 {
+		t.Fatalf("unexpected count (reopen): %d", n)
+	}
+}
+
 // Fragment is a test wrapper for pilosa.Fragment.
 type Fragment struct {
 	*pilosa.Fragment
