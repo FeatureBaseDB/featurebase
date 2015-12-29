@@ -14,6 +14,11 @@ message Pair {
 	required uint64 Count = 2;
 }
 
+message Bit {
+	required uint64 BitmapID  = 1;
+	required uint64 ProfileID = 2;
+}
+
 message QueryRequest {
 	required string DB = 1;
 	required string Query = 2;
@@ -25,4 +30,16 @@ message QueryResponse {
 	optional Bitmap Bitmap = 2;
 	optional uint64 N      = 3;
 	repeated Pair   Pairs  = 4;
+}
+
+message ImportRequest {
+	required string DB         = 1;
+	required string Frame      = 2;
+	required uint64 Slice      = 3;
+	repeated uint64 BitmapIDs  = 4;
+	repeated uint64 ProfileIDs = 5;
+}
+
+message ImportResponse {
+	optional string Err = 1;
 }

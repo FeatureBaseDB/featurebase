@@ -145,7 +145,7 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query", strings.NewReader("get(100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"result":{"chunks":[{"Key":0,"Value":[10,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"Key":32,"Value":[2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}]}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"result":[1,3,66,65537]}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
 }

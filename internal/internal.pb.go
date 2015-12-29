@@ -12,8 +12,11 @@ It has these top-level messages:
 	Bitmap
 	Chunk
 	Pair
+	Bit
 	QueryRequest
 	QueryResponse
+	ImportRequest
+	ImportResponse
 */
 package internal
 
@@ -88,6 +91,30 @@ func (m *Pair) GetCount() uint64 {
 	return 0
 }
 
+type Bit struct {
+	BitmapID         *uint64 `protobuf:"varint,1,req" json:"BitmapID,omitempty"`
+	ProfileID        *uint64 `protobuf:"varint,2,req" json:"ProfileID,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *Bit) Reset()         { *m = Bit{} }
+func (m *Bit) String() string { return proto.CompactTextString(m) }
+func (*Bit) ProtoMessage()    {}
+
+func (m *Bit) GetBitmapID() uint64 {
+	if m != nil && m.BitmapID != nil {
+		return *m.BitmapID
+	}
+	return 0
+}
+
+func (m *Bit) GetProfileID() uint64 {
+	if m != nil && m.ProfileID != nil {
+		return *m.ProfileID
+	}
+	return 0
+}
+
 type QueryRequest struct {
 	DB               *string  `protobuf:"bytes,1,req" json:"DB,omitempty"`
 	Query            *string  `protobuf:"bytes,2,req" json:"Query,omitempty"`
@@ -158,6 +185,70 @@ func (m *QueryResponse) GetPairs() []*Pair {
 		return m.Pairs
 	}
 	return nil
+}
+
+type ImportRequest struct {
+	DB               *string  `protobuf:"bytes,1,req" json:"DB,omitempty"`
+	Frame            *string  `protobuf:"bytes,2,req" json:"Frame,omitempty"`
+	Slice            *uint64  `protobuf:"varint,3,req" json:"Slice,omitempty"`
+	BitmapIDs        []uint64 `protobuf:"varint,4,rep" json:"BitmapIDs,omitempty"`
+	ProfileIDs       []uint64 `protobuf:"varint,5,rep" json:"ProfileIDs,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *ImportRequest) Reset()         { *m = ImportRequest{} }
+func (m *ImportRequest) String() string { return proto.CompactTextString(m) }
+func (*ImportRequest) ProtoMessage()    {}
+
+func (m *ImportRequest) GetDB() string {
+	if m != nil && m.DB != nil {
+		return *m.DB
+	}
+	return ""
+}
+
+func (m *ImportRequest) GetFrame() string {
+	if m != nil && m.Frame != nil {
+		return *m.Frame
+	}
+	return ""
+}
+
+func (m *ImportRequest) GetSlice() uint64 {
+	if m != nil && m.Slice != nil {
+		return *m.Slice
+	}
+	return 0
+}
+
+func (m *ImportRequest) GetBitmapIDs() []uint64 {
+	if m != nil {
+		return m.BitmapIDs
+	}
+	return nil
+}
+
+func (m *ImportRequest) GetProfileIDs() []uint64 {
+	if m != nil {
+		return m.ProfileIDs
+	}
+	return nil
+}
+
+type ImportResponse struct {
+	Err              *string `protobuf:"bytes,1,opt" json:"Err,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *ImportResponse) Reset()         { *m = ImportResponse{} }
+func (m *ImportResponse) String() string { return proto.CompactTextString(m) }
+func (*ImportResponse) ProtoMessage()    {}
+
+func (m *ImportResponse) GetErr() string {
+	if m != nil && m.Err != nil {
+		return *m.Err
+	}
+	return ""
 }
 
 func init() {
