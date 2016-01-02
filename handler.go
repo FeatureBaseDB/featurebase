@@ -20,6 +20,12 @@ import (
 
 // Handler represents an HTTP handler.
 type Handler struct {
+	Index *Index
+
+	// Local hostname & cluster configuration.
+	Host    string
+	Cluster *Cluster
+
 	// The execution engine for running queries.
 	Executor interface {
 		Execute(db string, query *pql.Query, slices []uint64) (interface{}, error)
@@ -44,7 +50,19 @@ func NewHandler() *Handler {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/query":
-		h.handleQuery(w, r)
+		switch r.Method {
+		case "POST":
+			h.handlePostQuery(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	case "/import":
+		switch r.Method {
+		case "POST":
+			h.handlePostImport(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/version":
 		h.handleVersion(w, r)
 
@@ -52,16 +70,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleExpvar(w, r)
 	default:
 		http.NotFound(w, r)
-	}
-}
-
-// handleQuery handles /query requests.
-func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "POST":
-		h.handlePostQuery(w, r)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -212,6 +220,66 @@ func (h *Handler) writeJSONQueryResponse(w http.ResponseWriter, res interface{},
 	return json.NewEncoder(w).Encode(o)
 }
 
+// handlePostImport handles /import requests.
+func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Marshal into request object.
+	var req internal.ImportRequest
+	if err := proto.Unmarshal(body, &req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	db, frame, slice := req.GetDB(), req.GetFrame(), req.GetSlice()
+
+	// Validate that this handler owns the slice.
+	if !h.Cluster.OwnsSlice(h.Host, slice) {
+		http.Error(w, "host does not own slice", http.StatusPreconditionFailed)
+		return
+	}
+
+	// Find the correct fragment.
+	f, err := h.Index.CreateFragmentIfNotExists(db, frame, slice)
+	if err != nil {
+		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%s, err=%s", db, frame, slice, err)
+		http.Error(w, "fragment error", http.StatusInternalServerError)
+		return
+	}
+
+	// Import into fragment.
+	err = f.Import(req.GetBitmapIDs(), req.GetProfileIDs())
+	if err != nil {
+		h.logger().Printf("import error: db=%s, frame=%s, slice=%s, bits=%d", db, frame, slice, len(req.GetProfileIDs()))
+	}
+
+	// Marshal response object.
+	buf, e := proto.Marshal(&internal.ImportResponse{Err: proto.String(errorString(err))})
+	if e != nil {
+		http.Error(w, fmt.Sprintf("marshal import response: %s", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Write response.
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	w.Write(buf)
+}
+
 // handleGetVersion handles /version requests.
 func (h *Handler) handleVersion(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(struct {
@@ -261,4 +329,12 @@ func parseUint64Slice(s string) ([]uint64, error) {
 		a = append(a, num)
 	}
 	return a, nil
+}
+
+// errorString returns the string representation of err.
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
