@@ -21,6 +21,10 @@ import (
 
 // Ensure program can process queries and maintain consistency.
 func TestMain_Set_Quick(t *testing.T) {
+	if testing.Short() {
+		t.Skip("short")
+	}
+
 	if err := quick.Check(func(cmds []SetCommand) bool {
 		m := MustRunMain()
 		defer m.Close()
@@ -57,7 +61,7 @@ func TestMain_Set_Quick(t *testing.T) {
 				if res, err := m.Query("d", fmt.Sprintf(`get(id=%d, frame=%q)`, id, frame)); err != nil {
 					t.Fatal(err)
 				} else if res != exp {
-					t.Fatalf("unexpected result:\n\ngot=%s\n\nexp=%s\n\n", res, exp)
+					t.Fatalf("unexpected result (reopen):\n\ngot=%s\n\nexp=%s\n\n", res, exp)
 				}
 			}
 		}

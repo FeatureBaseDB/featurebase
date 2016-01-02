@@ -16,17 +16,12 @@ import (
 // DefaultFrame is the frame used if one is not specified.
 const DefaultFrame = "general"
 
-// ErrDatabaseRequired is returned when no database is specified.
-var ErrDatabaseRequired = errors.New("database required")
-
 // Executor recursively executes calls in a PQL query across all slices.
 type Executor struct {
 	index *Index
 
-	// Local hostname.
-	Host string
-
-	// Cluster configuration
+	// Local hostname & cluster configuration.
+	Host    string
 	Cluster *Cluster
 
 	// Client used for remote HTTP requests.
@@ -60,7 +55,8 @@ func (e *Executor) Execute(db string, q *pql.Query, slices []uint64) (interface{
 	// If slices aren't specified, then include all of them.
 	if len(slices) == 0 {
 		// Round up the number of slices.
-		sliceN := (e.index.SliceN() % uint64(len(e.Cluster.Nodes))) + uint64(len(e.Cluster.Nodes))
+		sliceN := e.index.SliceN()
+		sliceN += (sliceN % uint64(len(e.Cluster.Nodes))) + uint64(len(e.Cluster.Nodes))
 
 		// Generate a slices of all slices.
 		slices = make([]uint64, sliceN+1)
@@ -160,9 +156,9 @@ func (e *Executor) executeGetSlice(db string, c *pql.Get, slice uint64) (*Bitmap
 		frame = DefaultFrame
 	}
 
-	f, err := e.Index().Fragment(db, frame, slice)
-	if err != nil {
-		return nil, fmt.Errorf("fragment: %s", err)
+	f := e.Index().Fragment(db, frame, slice)
+	if f == nil {
+		return NewBitmap(), nil
 	}
 	return f.Bitmap(c.ID), nil
 }
@@ -243,7 +239,7 @@ func (e *Executor) executeSet(db string, c *pql.Set) error {
 	for _, node := range e.Cluster.SliceNodes(slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
-			f, err := e.Index().Fragment(db, c.Frame, slice)
+			f, err := e.Index().CreateFragmentIfNotExists(db, c.Frame, slice)
 			if err != nil {
 				return fmt.Errorf("fragment: %s", err)
 			}

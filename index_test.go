@@ -36,9 +36,9 @@ func (i *Index) Close() error {
 	return i.Index.Close()
 }
 
-// MustFragment returns a given fragment. Panic on error.
-func (i *Index) MustFragment(db, frame string, slice uint64) *Fragment {
-	f, err := i.Index.Fragment(db, frame, slice)
+// MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
+func (i *Index) MustCreateFragmentIfNotExists(db, frame string, slice uint64) *Fragment {
+	f, err := i.Index.CreateFragmentIfNotExists(db, frame, slice)
 	if err != nil {
 		panic(err)
 	}

@@ -79,6 +79,11 @@ func (c *Cluster) SliceNodes(slice uint64) []*Node {
 	return c.PartitionNodes(c.Partition(slice))
 }
 
+// OwnsSlice returns true if a host owns slice.
+func (c *Cluster) OwnsSlice(host string, slice uint64) bool {
+	return Nodes(c.SliceNodes(slice)).ContainsHost(host)
+}
+
 // PartitionNodes returns a list of nodes that own a partition.
 func (c *Cluster) PartitionNodes(partitionID int) []*Node {
 	// Default replica count to between one and the number of nodes.
