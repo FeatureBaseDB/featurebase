@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime/pprof"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -31,6 +32,9 @@ func init() {
 }
 
 const (
+	// DefaultDataDir is the default data directory.
+	DefaultDataDir = "~/.pilosa"
+
 	// DefaultHost is the default hostname and port to use.
 	DefaultHost = "localhost:15000"
 )
@@ -196,15 +200,21 @@ func (m *Main) ParseFlags(args []string) error {
 		}
 	}
 
-	// If no data directory is specified then use ~/.pilosa
+	// Use default data directory if one is not specified.
 	if m.Config.DataDir == "" {
+		m.Config.DataDir = DefaultDataDir
+	}
+
+	// Expand home directory.
+	prefix := "~" + string(filepath.Separator)
+	if strings.HasPrefix(m.Config.DataDir, prefix) {
 		u, err := user.Current()
 		if err != nil {
 			return err
 		} else if u.HomeDir == "" {
 			return errors.New("data directory not specified and no home dir available")
 		}
-		m.Config.DataDir = filepath.Join(u.HomeDir, ".pilosa")
+		m.Config.DataDir = filepath.Join(u.HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
 	}
 
 	return nil
@@ -217,7 +227,7 @@ type Config struct {
 
 	Cluster struct {
 		ReplicaN int           `toml:"replicas"`
-		Nodes    []*ConfigNode `toml:"nodes"`
+		Nodes    []*ConfigNode `toml:"node"`
 	} `toml:"cluster"`
 
 	Plugins struct {
