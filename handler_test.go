@@ -293,6 +293,22 @@ func TestHandler_Version(t *testing.T) {
 	}
 }
 
+// Ensure the handler can return a list of nodes for a slice.
+func TestHandler_Slices_Nodes(t *testing.T) {
+	h := NewHandler()
+	h.Cluster = NewCluster(3)
+	h.Cluster.ReplicaN = 2
+
+	w := httptest.NewRecorder()
+	r := MustNewHTTPRequest("GET", "/slices/nodes?slice=0", nil)
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if w.Body.String() != `[{"host":"host2"},{"host":"host0"}]`+"\n" {
+		t.Fatalf("unexpected body: %q", w.Body.String())
+	}
+}
+
 // Ensure the handler can return expvars without panicking.
 func TestHandler_Expvars(t *testing.T) {
 	h := NewHandler()

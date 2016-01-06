@@ -15,7 +15,7 @@ const (
 
 // Node represents a node in the cluster.
 type Node struct {
-	Host string
+	Host string `json:"host"`
 }
 
 // Nodes represents a list of nodes.

@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -37,12 +38,43 @@ func NewClient(host string) (*Client, error) {
 // Host returns the host the client was initialized with.
 func (c *Client) Host() string { return c.host }
 
+// SliceNodes returns a list of nodes that own a slice.
+func (c *Client) SliceNodes(slice uint64) ([]*Node, error) {
+	// Execute request against the host.
+	u := url.URL{
+		Scheme:   "http",
+		Host:     c.host,
+		Path:     "/slices/nodes",
+		RawQuery: (url.Values{"slice": {strconv.FormatUint(slice, 10)}}).Encode(),
+	}
+	resp, err := c.HTTPClient.Get(u.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var a []*Node
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
+	} else if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+
+	return a, nil
+}
+
 // Import bulk imports bits for a single slice to a host.
 func (c *Client) Import(db, frame string, slice uint64, bits []Bit) error {
 	if db == "" {
 		return ErrDatabaseRequired
 	} else if frame == "" {
 		return ErrFrameRequired
+	}
+
+	// Retrieve a list of nodes that own the slice.
+	nodes, err := c.SliceNodes(slice)
+	if err != nil {
+		return fmt.Errorf("slice nodes: %s", err)
 	}
 
 	// Separate bitmap and profile IDs to reduce allocations.
@@ -61,8 +93,20 @@ func (c *Client) Import(db, frame string, slice uint64, bits []Bit) error {
 		return fmt.Errorf("marshal import request: %s", err)
 	}
 
+	// Import to each node.
+	for _, node := range nodes {
+		if err := c.importNode(node, buf); err != nil {
+			return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+		}
+	}
+
+	return nil
+}
+
+// importNode sends a pre-marshaled import request to a node.
+func (c *Client) importNode(node *Node, buf []byte) error {
 	// Create URL & HTTP request.
-	u := url.URL{Scheme: "http", Host: c.host, Path: "/import"}
+	u := url.URL{Scheme: "http", Host: node.Host, Path: "/import"}
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return err

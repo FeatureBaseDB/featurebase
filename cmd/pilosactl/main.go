@@ -74,6 +74,8 @@ func (m *Main) Run() error {
 	switch m.Command {
 	case "", "help", "-h":
 		return ErrUsage
+	case "config":
+		cmd = NewConfigCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "import":
 		cmd = NewImportCommand(m.Stdin, m.Stdout, m.Stderr)
 	default:
@@ -111,6 +113,60 @@ type Command interface {
 	Usage() string
 	ParseFlags(args []string) error
 	Run() error
+}
+
+// ConfigCommand represents a command for printing a default config.
+type ConfigCommand struct {
+	// Standard input/output
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// NewConfigCommand returns a new instance of ConfigCommand.
+func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *ConfigCommand {
+	return &ConfigCommand{
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+}
+
+// ParseFlags parses command line flags from args.
+func (cmd *ConfigCommand) ParseFlags(args []string) error {
+	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
+	fs.SetOutput(cmd.Stderr)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Usage returns the usage message to be printed.
+func (cmd *ConfigCommand) Usage() string {
+	return strings.TrimSpace(`
+usage: pilosactl config
+
+Prints the default configuration file to standard out.
+`)
+}
+
+// Run executes the main program execution.
+func (cmd *ConfigCommand) Run() error {
+	fmt.Fprintln(cmd.Stdout, strings.TrimSpace(`
+data-dir = "~/.pilosa"
+host = "localhost:15000"
+
+[cluster]
+replicas = 1
+
+[[cluster.node]]
+host = "localhost:15000"
+
+[plugins]
+path = ""
+`)+"\n")
+	return nil
 }
 
 // ImportCommand represents a command for bulk importing data.
