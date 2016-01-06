@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/umbel/pilosa/internal"
@@ -48,6 +49,8 @@ func NewHandler() *Handler {
 
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t := time.Now()
+
 	switch r.URL.Path {
 	case "/query":
 		switch r.Method {
@@ -63,6 +66,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/slices/nodes":
+		switch r.Method {
+		case "GET":
+			h.handleGetSlicesNodes(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/version":
 		h.handleVersion(w, r)
 
@@ -71,6 +81,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+
+	h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), time.Since(t).Seconds())
 }
 
 // handlePostQuery handles /query requests.
@@ -278,6 +290,25 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 	w.Write(buf)
+}
+
+// handleGetSlicesNodes handles /slices/nodes requests.
+func (h *Handler) handleGetSlicesNodes(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	// Read slice parameter.
+	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
+	if err != nil {
+		http.Error(w, "slice required", http.StatusBadRequest)
+	}
+
+	// Retrieve slice owner nodes.
+	nodes := h.Cluster.SliceNodes(slice)
+
+	// Write to response.
+	if err := json.NewEncoder(w).Encode(nodes); err != nil {
+		h.logger().Printf("json write error: %s", err)
+	}
 }
 
 // handleGetVersion handles /version requests.
