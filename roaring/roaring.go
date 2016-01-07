@@ -23,7 +23,7 @@ const (
 
 // Bitmap represents a roaring bitmap.
 type Bitmap struct {
-	keys       []uint16     // keys for containers
+	keys       []uint64     // keys for containers
 	containers []*container // array and bitmap containers
 
 	// Number of operations written to the writer.
@@ -34,14 +34,14 @@ type Bitmap struct {
 }
 
 // NewBitmap returns a Bitmap with an initial set of values.
-func NewBitmap(a ...uint32) *Bitmap {
+func NewBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{}
 	b.Add(a...)
 	return b
 }
 
 // Add adds values to the bitmap.
-func (b *Bitmap) Add(a ...uint32) error {
+func (b *Bitmap) Add(a ...uint64) error {
 	for _, v := range a {
 		// Create an add operation.
 		op := &op{typ: opTypeAdd, value: v}
@@ -58,9 +58,9 @@ func (b *Bitmap) Add(a ...uint32) error {
 	return nil
 }
 
-func (b *Bitmap) add(v uint32) {
+func (b *Bitmap) add(v uint64) {
 	hb := highbits(v)
-	i := search(b.keys, hb)
+	i := search64(b.keys, hb)
 
 	// If index is negative then there's not an exact match
 	// and a container needs to be added.
@@ -73,7 +73,7 @@ func (b *Bitmap) add(v uint32) {
 }
 
 // Contains returns true if v is in the bitmap.
-func (b *Bitmap) Contains(v uint32) bool {
+func (b *Bitmap) Contains(v uint64) bool {
 	c := b.container(highbits(v))
 	if c == nil {
 		return false
@@ -82,7 +82,7 @@ func (b *Bitmap) Contains(v uint32) bool {
 }
 
 // Remove removes values from the bitmap.
-func (b *Bitmap) Remove(a ...uint32) error {
+func (b *Bitmap) Remove(a ...uint64) error {
 	for _, v := range a {
 		// Create an add operation.
 		op := &op{typ: opTypeRemove, value: v}
@@ -98,9 +98,9 @@ func (b *Bitmap) Remove(a ...uint32) error {
 	return nil
 }
 
-func (b *Bitmap) remove(v uint32) {
+func (b *Bitmap) remove(v uint64) {
 	hb := highbits(v)
-	i := search(b.keys, hb)
+	i := search64(b.keys, hb)
 	if i < 0 {
 		return
 	}
@@ -108,8 +108,8 @@ func (b *Bitmap) remove(v uint32) {
 }
 
 // Slice returns a slice of all integers in the bitmap.
-func (b *Bitmap) Slice() []uint32 {
-	var a []uint32
+func (b *Bitmap) Slice() []uint64 {
+	var a []uint64
 	itr := b.iterator()
 	for v := itr.Seek(0); !itr.EOF(); v = itr.Next() {
 		a = append(a, v)
@@ -118,8 +118,8 @@ func (b *Bitmap) Slice() []uint32 {
 }
 
 // SliceRange returns a slice of integers between [start, end).
-func (b *Bitmap) SliceRange(start, end uint32) []uint32 {
-	var a []uint32
+func (b *Bitmap) SliceRange(start, end uint64) []uint64 {
+	var a []uint64
 	itr := b.iterator()
 	for v := itr.Seek(start); !itr.EOF() && v < end; v = itr.Next() {
 		a = append(a, v)
@@ -128,7 +128,7 @@ func (b *Bitmap) SliceRange(start, end uint32) []uint32 {
 }
 
 // ForEach executes fn for each value in the bitmap.
-func (b *Bitmap) ForEach(fn func(uint32)) {
+func (b *Bitmap) ForEach(fn func(uint64)) {
 	itr := b.iterator()
 	for v := itr.Seek(0); !itr.EOF(); v = itr.Next() {
 		fn(v)
@@ -136,7 +136,7 @@ func (b *Bitmap) ForEach(fn func(uint32)) {
 }
 
 // ForEachRange executes fn for each value in the bitmap between [start, end).
-func (b *Bitmap) ForEachRange(start, end uint32, fn func(uint32)) {
+func (b *Bitmap) ForEachRange(start, end uint64, fn func(uint64)) {
 	itr := b.iterator()
 	for v := itr.Seek(start); !itr.EOF() && v < end; v = itr.Next() {
 		fn(v)
@@ -144,15 +144,15 @@ func (b *Bitmap) ForEachRange(start, end uint32, fn func(uint32)) {
 }
 
 // container returns the container with the given key.
-func (b *Bitmap) container(key uint16) *container {
-	i := search(b.keys, key)
+func (b *Bitmap) container(key uint64) *container {
+	i := search64(b.keys, key)
 	if i < 0 {
 		return nil
 	}
 	return b.containers[i]
 }
 
-func (b *Bitmap) insertAt(key uint16, c *container, i int) {
+func (b *Bitmap) insertAt(key uint64, c *container, i int) {
 	b.keys = append(b.keys, 0)
 	copy(b.keys[i+1:], b.keys[i:])
 	b.keys[i] = key
@@ -165,20 +165,20 @@ func (b *Bitmap) insertAt(key uint16, c *container, i int) {
 // WriteTo writes b to w.
 func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	// Build header before writing individual container blocks.
-	buf := make([]byte, headerSize+(len(b.keys)*(2+2+4)))
+	buf := make([]byte, headerSize+(len(b.keys)*(2+8+4)))
 	binary.LittleEndian.PutUint32(buf[0:], cookie)
 	binary.LittleEndian.PutUint32(buf[4:], uint32(len(b.keys)))
 
 	// Encode keys and cardinality.
 	for i, key := range b.keys {
-		binary.LittleEndian.PutUint16(buf[headerSize+i*4:], uint16(key))
-		binary.LittleEndian.PutUint16(buf[headerSize+i*4+2:], uint16(b.containers[i].n-1))
+		binary.LittleEndian.PutUint64(buf[headerSize+i*10:], uint64(key))
+		binary.LittleEndian.PutUint16(buf[headerSize+i*10+8:], uint16(b.containers[i].n-1))
 	}
 
 	// Write the offset for each container block.
 	offset := uint32(len(buf))
 	for i, c := range b.containers {
-		binary.LittleEndian.PutUint32(buf[headerSize+(len(b.keys)*4)+(i*4):], uint32(offset))
+		binary.LittleEndian.PutUint32(buf[headerSize+(len(b.keys)*10)+(i*4):], uint32(offset))
 		offset += uint32(c.size())
 	}
 
@@ -214,21 +214,21 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	// Read key count.
 	keyN := binary.LittleEndian.Uint32(data[4:8])
-	b.keys = make([]uint16, keyN)
+	b.keys = make([]uint64, keyN)
 	b.containers = make([]*container, keyN)
 
 	// Read container key headers.
-	for i, buf := 0, data[8:]; i < int(keyN); i, buf = i+1, buf[4:] {
-		b.keys[i] = binary.LittleEndian.Uint16(buf[0:2])
+	for i, buf := 0, data[8:]; i < int(keyN); i, buf = i+1, buf[10:] {
+		b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
 		b.containers[i] = &container{
-			n:      int(binary.LittleEndian.Uint16(buf[2:4])) + 1,
+			n:      int(binary.LittleEndian.Uint16(buf[8:10])) + 1,
 			mapped: true,
 		}
 	}
 
 	// Read container offsets and attach data.
-	opsOffset := 8 + int(keyN)*4
-	for i, buf := 0, data[8+int(keyN)*4:]; i < int(keyN); i, buf = i+1, buf[4:] {
+	opsOffset := 8 + int(keyN)*10
+	for i, buf := 0, data[opsOffset:]; i < int(keyN); i, buf = i+1, buf[4:] {
 		offset := binary.LittleEndian.Uint32(buf[0:4])
 
 		// Verify the offset is within the bounds of the input data.
@@ -297,9 +297,9 @@ type iterator struct {
 func (itr *iterator) EOF() bool { return itr.i >= len(itr.bitmap.containers) }
 
 // Seek moves to the first value equal to or greater than v.
-func (itr *iterator) Seek(seek uint32) uint32 {
+func (itr *iterator) Seek(seek uint64) uint64 {
 	// Move to the correct container.
-	itr.i = search(itr.bitmap.keys, highbits(seek))
+	itr.i = search64(itr.bitmap.keys, highbits(seek))
 	if itr.i < 0 {
 		itr.i = -itr.i - 1
 	}
@@ -311,7 +311,7 @@ func (itr *iterator) Seek(seek uint32) uint32 {
 	lb := lowbits(seek)
 	if c := itr.bitmap.containers[itr.i]; c.isArray() {
 		// Find index in the container.
-		itr.j = search(c.array, lb)
+		itr.j = search16(c.array, lb)
 		if itr.j < 0 {
 			itr.j = -itr.j - 1
 		}
@@ -330,7 +330,7 @@ func (itr *iterator) Seek(seek uint32) uint32 {
 }
 
 // Next returns the next value in the bitmap.
-func (itr *iterator) Next() uint32 {
+func (itr *iterator) Next() uint64 {
 	// Iterate over containers until we find the next value or EOF.
 	for {
 		if itr.EOF() {
@@ -373,13 +373,13 @@ func (itr *iterator) Next() uint32 {
 }
 
 // peek returns the current value.
-func (itr *iterator) peek() uint32 {
+func (itr *iterator) peek() uint64 {
 	key := itr.bitmap.keys[itr.i]
 	c := itr.bitmap.containers[itr.i]
 	if c.isArray() {
-		return uint32(key)<<16 | uint32(c.array[itr.j])
+		return uint64(key)<<16 | uint64(c.array[itr.j])
 	}
-	return uint32(key)<<16 | uint32(itr.j)
+	return uint64(key)<<16 | uint64(itr.j)
 }
 
 // The maximum size of array containers.
@@ -447,7 +447,7 @@ func (c *container) arrayAdd(v uint16) {
 	}
 
 	// Find index of the integer in the container. Exit if it already exists.
-	i := search(c.array, v)
+	i := search16(c.array, v)
 	if i >= 0 {
 		return
 	}
@@ -486,7 +486,7 @@ func (c *container) contains(v uint16) bool {
 }
 
 func (c *container) arrayContains(v uint16) bool {
-	return search(c.array, v) >= 0
+	return search16(c.array, v) >= 0
 }
 
 func (c *container) bitmapContains(v uint16) bool {
@@ -503,7 +503,7 @@ func (c *container) remove(v uint16) {
 }
 
 func (c *container) arrayRemove(v uint16) {
-	i := search(c.array, v)
+	i := search16(c.array, v)
 	if i < 0 {
 		return
 	}
@@ -590,7 +590,7 @@ const (
 // op represents an operation on the bitmap.
 type op struct {
 	typ   opType
-	value uint32
+	value uint64
 }
 
 // apply executes the operation against a bitmap.
@@ -611,12 +611,12 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Write type and value.
 	buf[0] = byte(op.typ)
-	binary.LittleEndian.PutUint32(buf[1:5], op.value)
+	binary.LittleEndian.PutUint64(buf[1:9], op.value)
 
 	// Add checksum at the end.
 	h := fnv.New32a()
-	h.Write(buf[0:5])
-	binary.LittleEndian.PutUint32(buf[5:9], h.Sum32())
+	h.Write(buf[0:9])
+	binary.LittleEndian.PutUint32(buf[9:13], h.Sum32())
 
 	// Write to writer.
 	nn, err := w.Write(buf)
@@ -631,26 +631,63 @@ func (op *op) UnmarshalBinary(data []byte) error {
 
 	// Verify checksum.
 	h := fnv.New32a()
-	h.Write(data[0:5])
-	if chk := binary.LittleEndian.Uint32(data[5:9]); chk != h.Sum32() {
+	h.Write(data[0:9])
+	if chk := binary.LittleEndian.Uint32(data[9:13]); chk != h.Sum32() {
 		return fmt.Errorf("checksum mismatch: exp=%08x, got=%08x", h.Sum32(), chk)
 	}
 
 	// Read type and value.
 	op.typ = opType(data[0])
-	op.value = binary.LittleEndian.Uint32(data[1:5])
+	op.value = binary.LittleEndian.Uint64(data[1:9])
 
 	return nil
 }
 
 // size returns the encoded size of the op, in bytes.
-func (*op) size() int { return 1 + 4 + 4 }
+func (*op) size() int { return 1 + 8 + 4 }
 
-func highbits(v uint32) uint16 { return uint16(v >> 16) }
-func lowbits(v uint32) uint16  { return uint16(v & 0xFFFF) }
+func highbits(v uint64) uint64 { return uint64(v >> 16) }
+func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
 
-// search returns the index of v in a.
-func search(a []uint16, value uint16) int {
+// search16 returns the index of v in a.
+func search16(a []uint16, value uint16) int {
+	// Optimize for elements and the last element.
+	n := len(a)
+	if n == 0 {
+		return -1
+	} else if a[n-1] == value {
+		return n - 1
+	}
+
+	// Otherwise perform binary search for exact match.
+	lo, hi := 0, n-1
+	for lo+16 <= hi {
+		i := int(uint((lo + hi)) >> 1)
+		v := a[i]
+
+		if v < value {
+			lo = i + 1
+		} else if v > value {
+			hi = i - 1
+		} else {
+			return i
+		}
+	}
+
+	// If an exact match isn't found then return a negative index.
+	for ; lo <= hi; lo++ {
+		v := a[lo]
+		if v == value {
+			return lo
+		} else if v > value {
+			break
+		}
+	}
+	return -(lo + 1)
+}
+
+// search64 returns the index of v in a.
+func search64(a []uint64, value uint64) int {
 	// Optimize for elements and the last element.
 	n := len(a)
 	if n == 0 {
