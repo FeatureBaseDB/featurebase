@@ -201,8 +201,8 @@ func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 
 	// Read bitmap from storage.
 	bm := NewBitmap()
-	f.storage.ForEachRange(uint32(bitmapID)*SliceWidth, uint32(bitmapID+1)*SliceWidth, func(i uint32) {
-		profileID := (f.slice * SliceWidth) + (uint64(i) % SliceWidth)
+	f.storage.ForEachRange(bitmapID*SliceWidth, (bitmapID+1)*SliceWidth, func(i uint64) {
+		profileID := (f.slice * SliceWidth) + (i % SliceWidth)
 		bm.setBit(profileID)
 	})
 
@@ -292,14 +292,14 @@ func (f *Fragment) ClearBit(bitmapID, profileID uint64) error {
 }
 
 // pos translates the bitmap ID and profile ID into a position in the storage bitmap.
-func (f *Fragment) pos(bitmapID, profileID uint64) (uint32, error) {
+func (f *Fragment) pos(bitmapID, profileID uint64) (uint64, error) {
 	// Return an error if the profile ID is out of the range of the fragment's slice.
 	minProfileID := f.slice * SliceWidth
 	if profileID < minProfileID || profileID >= minProfileID+SliceWidth {
 		return 0, errors.New("profile out of bounds")
 	}
 
-	return uint32((bitmapID * SliceWidth) + (profileID % SliceWidth)), nil
+	return (bitmapID * SliceWidth) + (profileID % SliceWidth), nil
 }
 
 func (f *Fragment) TopN(src *Bitmap, n int, categories []uint64) []Pair {
