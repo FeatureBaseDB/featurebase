@@ -275,7 +275,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Import into fragment.
 	err = f.Import(req.GetBitmapIDs(), req.GetProfileIDs())
 	if err != nil {
-		h.logger().Printf("import error: db=%s, frame=%s, slice=%s, bits=%d", db, frame, slice, len(req.GetProfileIDs()))
+		h.logger().Printf("import error: db=%s, frame=%s, slice=%s, bits=%d, err=%s", db, frame, slice, len(req.GetProfileIDs()), err)
 	}
 
 	// Marshal response object.
