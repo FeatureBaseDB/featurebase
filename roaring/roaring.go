@@ -439,7 +439,7 @@ func (c *container) add(v uint16) {
 
 func (c *container) arrayAdd(v uint16) {
 	// Optimize appending to the end of an array container.
-	if c.n > 0 && c.isArray() && c.array[c.n-1] < v {
+	if c.n > 0 && c.n < arrayMaxSize && c.isArray() && c.array[c.n-1] < v {
 		c.unmap()
 		c.array = append(c.array, v)
 		c.n++
