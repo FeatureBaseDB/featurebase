@@ -117,21 +117,27 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		return true
 	}, &quick.Config{
 		Values: func(values []reflect.Value, rand *rand.Rand) {
-			values[0] = reflect.ValueOf(GenerateUint64Slice(n, min, max, rand))
+			values[0] = reflect.ValueOf(GenerateUint64Slice(n, min, max, false, rand))
 		},
 	})
 }
 
-func TestBitmap_Marshal_Quick_Array1(t *testing.T)  { testBitmapMarshalQuick(t, 1000, 1000, 2000) }
-func TestBitmap_Marshal_Quick_Array2(t *testing.T)  { testBitmapMarshalQuick(t, 10000, 0, 1000) }
-func TestBitmap_Marshal_Quick_Bitmap1(t *testing.T) { testBitmapMarshalQuick(t, 10000, 0, 10000) }
-func TestBitmap_Marshal_Quick_Bitmap2(t *testing.T) { testBitmapMarshalQuick(t, 10000, 10000, 20000) }
+func TestBitmap_Marshal_Quick_Array1(t *testing.T)  { testBitmapMarshalQuick(t, 1000, 1000, 2000, false) }
+func TestBitmap_Marshal_Quick_Array2(t *testing.T)  { testBitmapMarshalQuick(t, 10000, 0, 1000, false) }
+func TestBitmap_Marshal_Quick_Bitmap1(t *testing.T) { testBitmapMarshalQuick(t, 10000, 0, 10000, false) }
+func TestBitmap_Marshal_Quick_Bitmap2(t *testing.T) {
+	testBitmapMarshalQuick(t, 10000, 10000, 20000, false)
+}
 func TestBitmap_Marshal_Quick_LargeValue(t *testing.T) {
-	testBitmapMarshalQuick(t, 100, 0, math.MaxInt64)
+	testBitmapMarshalQuick(t, 100, 0, math.MaxInt64, false)
+}
+
+func TestBitmap_Marshal_Quick_Bitmap_Sorted(t *testing.T) {
+	testBitmapMarshalQuick(t, 10000, 0, 10000, true)
 }
 
 // Ensure a bitmap can be marshaled and unmarshaled.
-func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64) {
+func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 	if testing.Short() {
 		t.Skip("short")
 	}
@@ -186,18 +192,23 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64) {
 		return true
 	}, &quick.Config{
 		Values: func(values []reflect.Value, rand *rand.Rand) {
-			values[0] = reflect.ValueOf(GenerateUint64Slice(n, min, max, rand))
-			values[1] = reflect.ValueOf(GenerateUint64Slice(100, min, max, rand))
+			values[0] = reflect.ValueOf(GenerateUint64Slice(n, min, max, sorted, rand))
+			values[1] = reflect.ValueOf(GenerateUint64Slice(100, min, max, sorted, rand))
 		},
 	})
 }
 
 // GenerateUint64Slice generates between [0, n) random uint64 numbers between min and max.
-func GenerateUint64Slice(n int, min, max uint64, rand *rand.Rand) []uint64 {
+func GenerateUint64Slice(n int, min, max uint64, sorted bool, rand *rand.Rand) []uint64 {
 	a := make([]uint64, rand.Intn(n))
 	for i := range a {
 		a[i] = min + uint64(rand.Int63n(int64(max-min)))
 	}
+
+	if sorted {
+		sort.Sort(uint64Slice(a))
+	}
+
 	return a
 }
 
