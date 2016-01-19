@@ -48,8 +48,12 @@ func (e *Executor) Execute(db string, q *pql.Query, slices []uint64) (interface{
 
 	// Ignore slices for set calls.
 	switch root := q.Root.(type) {
-	case *pql.Set:
-		return nil, e.executeSet(db, root)
+	case *pql.SetBit:
+		return nil, e.executeSetBit(db, root)
+	case *pql.SetBitmapAttrs:
+		return nil, e.executeSetBitmapAttrs(db, root)
+	case *pql.SetProfileAttrs:
+		return nil, e.executeSetProfileAttrs(db, root)
 	}
 
 	// If slices aren't specified, then include all of them.
@@ -75,6 +79,8 @@ func (e *Executor) executeCall(db string, c pql.Call, slices []uint64) (interfac
 		return e.executeBitmapCall(db, c, slices)
 	case *pql.Count:
 		return e.executeCount(db, c, slices)
+	case *pql.Profile:
+		return e.executeProfile(db, c)
 	case *pql.TopN:
 		return e.executeTopN(db, c, slices)
 	default:
@@ -105,16 +111,29 @@ func (e *Executor) executeBitmapCall(db string, c pql.BitmapCall, slices []uint6
 		}
 		other.Merge(res.(*Bitmap))
 	}
+
+	// Attach bitmap attributes for Bitmap() calls.
+	if c, ok := c.(*pql.Bitmap); ok {
+		fr := e.Index().Frame(db, c.Frame)
+		if fr != nil {
+			attrs, err := fr.BitmapAttrs(c.ID)
+			if err != nil {
+				return nil, err
+			}
+			other.Attrs = attrs
+		}
+	}
+
 	return other, nil
 }
 
 // executeBitmapCallSlice executes a bitmap call for a single slice.
 func (e *Executor) executeBitmapCallSlice(db string, c pql.BitmapCall, slice uint64) (*Bitmap, error) {
 	switch c := c.(type) {
+	case *pql.Bitmap:
+		return e.executeBitmapSlice(db, c, slice)
 	case *pql.Difference:
 		return e.executeDifferenceSlice(db, c, slice)
-	case *pql.Get:
-		return e.executeGetSlice(db, c, slice)
 	case *pql.Intersect:
 		return e.executeIntersectSlice(db, c, slice)
 	case *pql.Range:
@@ -126,7 +145,7 @@ func (e *Executor) executeBitmapCallSlice(db string, c pql.BitmapCall, slice uin
 	}
 }
 
-// executeTopN executes a top-n() call.
+// executeTopN executes a TopN() call.
 func (e *Executor) executeTopN(db string, c *pql.TopN, slices []uint64) ([]Pair, error) {
 	panic("FIXME: calculate top n from each slice")
 }
@@ -150,7 +169,7 @@ func (e *Executor) executeDifferenceSlice(db string, c *pql.Difference, slice ui
 	return other, nil
 }
 
-func (e *Executor) executeGetSlice(db string, c *pql.Get, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeBitmapSlice(db string, c *pql.Bitmap, slice uint64) (*Bitmap, error) {
 	frame := c.Frame
 	if frame == "" {
 		frame = DefaultFrame
@@ -232,8 +251,14 @@ func (e *Executor) executeCount(db string, c *pql.Count, slices []uint64) (uint6
 	return n, nil
 }
 
-// executeSet executes a set call.
-func (e *Executor) executeSet(db string, c *pql.Set) error {
+// executeProfile executes a Profile() call.
+// This call only executes locally since the profile attibutes are stored locally.
+func (e *Executor) executeProfile(db string, c *pql.Profile) (*Profile, error) {
+	panic("FIXME: impl: e.Index().ProfileAttr(c.ID)")
+}
+
+// executeSetBit executes a SetBit() call.
+func (e *Executor) executeSetBit(db string, c *pql.SetBit) error {
 	slice := c.ProfileID / SliceWidth
 
 	for _, node := range e.Cluster.SliceNodes(slice) {
@@ -253,6 +278,42 @@ func (e *Executor) executeSet(db string, c *pql.Set) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// executeSetBitmapAttrs executes a SetBitmapAttrs() call.
+func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs) error {
+	// Retrieve frame.
+	frame, err := e.Index().CreateFrameIfNotExists(db, c.Frame)
+	if err != nil {
+		return err
+	}
+
+	// Set attributes.
+	if err := frame.SetBitmapAttrs(c.ID, c.Attrs); err != nil {
+		return err
+	}
+
+	// TODO: Propagate attributes to other servers in cluster.
+
+	return nil
+}
+
+// executeSetProfileAttrs executes a SetProfileAttrs() call.
+func (e *Executor) executeSetProfileAttrs(db string, c *pql.SetProfileAttrs) error {
+	// Retrieve database.
+	d, err := e.Index().CreateDBIfNotExists(db)
+	if err != nil {
+		return err
+	}
+
+	// Set attributes.
+	if err := d.SetProfileAttrs(c.ID, c.Attrs); err != nil {
+		return err
+	}
+
+	// TODO: Propagate attributes to other servers in cluster.
+
 	return nil
 }
 
@@ -319,7 +380,7 @@ func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64) (r
 		return decodePairs(pb.GetPairs()), nil
 	case *pql.Count:
 		return pb.GetN(), nil
-	case *pql.Set:
+	case *pql.SetBit:
 		return nil, nil
 	default:
 		panic(fmt.Sprintf("invalid node for remote exec: %T", q.Root))
