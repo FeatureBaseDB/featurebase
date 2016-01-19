@@ -25,6 +25,9 @@ var CounterKey = int64(-1)
 type Bitmap struct {
 	tree   *rbtree.Tree
 	bcount uint64
+
+	// Attributes associated with the bitmap.
+	Attrs map[string]interface{}
 }
 
 // NewBitmap returns a new instance of Bitmap.
@@ -309,7 +312,20 @@ func (b *Bitmap) ReadFrom(r io.Reader) (n int64, err error) {
 }
 
 // MarshalJSON returns a JSON-encoded byte slice of b.
-func (b *Bitmap) MarshalJSON() ([]byte, error) { return json.Marshal(b.Bits()) }
+func (b *Bitmap) MarshalJSON() ([]byte, error) {
+	var o struct {
+		Attrs map[string]interface{} `json:"attrs"`
+		Bits  []uint64               `json:"bits"`
+	}
+	o.Bits = b.Bits()
+
+	o.Attrs = b.Attrs
+	if o.Attrs == nil {
+		o.Attrs = make(map[string]interface{})
+	}
+
+	return json.Marshal(&o)
+}
 
 // MarshalBinary returns a gob-encoded byte slice of b.
 func (b *Bitmap) MarshalBinary() ([]byte, error) {
@@ -402,7 +418,13 @@ func (b *Bitmap) BitCount() uint64 {
 
 // encodeBitmap converts b into its internal representation.
 func encodeBitmap(b *Bitmap) *internal.Bitmap {
-	pb := &internal.Bitmap{}
+	if b == nil {
+		return nil
+	}
+
+	pb := &internal.Bitmap{
+		Attrs: encodeAttrs(b.Attrs),
+	}
 	for i := b.tree.Min(); !i.Limit(); i = i.Next() {
 		pb.Chunks = append(pb.Chunks, encodeChunk(i.Item().(*Chunk)))
 	}
@@ -411,7 +433,12 @@ func encodeBitmap(b *Bitmap) *internal.Bitmap {
 
 // decodeBitmap converts b from its internal representation.
 func decodeBitmap(pb *internal.Bitmap) *Bitmap {
+	if pb == nil {
+		return nil
+	}
+
 	b := NewBitmap()
+	b.Attrs = decodeAttrs(pb.GetAttrs())
 	for _, chunk := range pb.GetChunks() {
 		b.AddChunk(decodeChunk(chunk))
 	}

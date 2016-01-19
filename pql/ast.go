@@ -2,6 +2,7 @@ package pql
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -20,15 +21,18 @@ type Node interface {
 	String() string
 }
 
-func (*Clear) node()      {}
-func (*Count) node()      {}
-func (*Difference) node() {}
-func (*Get) node()        {}
-func (*Intersect) node()  {}
-func (*Range) node()      {}
-func (*Set) node()        {}
-func (*TopN) node()       {}
-func (*Union) node()      {}
+func (*Bitmap) node()          {}
+func (*ClearBit) node()        {}
+func (*Count) node()           {}
+func (*Difference) node()      {}
+func (*Intersect) node()       {}
+func (*Profile) node()         {}
+func (*Range) node()           {}
+func (*SetBit) node()          {}
+func (*SetBitmapAttrs) node()  {}
+func (*SetProfileAttrs) node() {}
+func (*TopN) node()            {}
+func (*Union) node()           {}
 
 // Call represents a function call in the AST.
 type Call interface {
@@ -36,15 +40,18 @@ type Call interface {
 	call()
 }
 
-func (*Clear) call()      {}
-func (*Count) call()      {}
-func (*Difference) call() {}
-func (*Get) call()        {}
-func (*Intersect) call()  {}
-func (*Range) call()      {}
-func (*Set) call()        {}
-func (*TopN) call()       {}
-func (*Union) call()      {}
+func (*Bitmap) call()          {}
+func (*ClearBit) call()        {}
+func (*Count) call()           {}
+func (*Difference) call()      {}
+func (*Intersect) call()       {}
+func (*Profile) call()         {}
+func (*Range) call()           {}
+func (*SetBit) call()          {}
+func (*SetBitmapAttrs) call()  {}
+func (*SetProfileAttrs) call() {}
+func (*TopN) call()            {}
+func (*Union) call()           {}
 
 // Calls represents a list of calls.
 type Calls []Call
@@ -77,13 +84,31 @@ func (a BitmapCalls) String() string {
 }
 
 func (*Difference) bitmapCall() {}
-func (*Get) bitmapCall()        {}
+func (*Bitmap) bitmapCall()     {}
 func (*Intersect) bitmapCall()  {}
 func (*Range) bitmapCall()      {}
 func (*Union) bitmapCall()      {}
 
-// Clear represents a clear() function call.
-type Clear struct {
+// Bitmap represents a Bitmap() function call.
+type Bitmap struct {
+	ID    uint64
+	Frame string
+}
+
+// String returns the string representation of the call.
+func (c *Bitmap) String() string {
+	args := make([]string, 0, 2)
+	if c.ID != 0 {
+		args = append(args, fmt.Sprintf("id=%d", c.ID))
+	}
+	if c.Frame != "" {
+		args = append(args, fmt.Sprintf("frame=%s", c.Frame))
+	}
+	return fmt.Sprintf("Bitmap(%s)", strings.Join(args, ", "))
+}
+
+// ClearBit represents a ClearBit() function call.
+type ClearBit struct {
 	ID        uint64
 	Frame     string
 	Filter    uint64
@@ -91,11 +116,9 @@ type Clear struct {
 }
 
 // String returns the string representation of the call.
-func (c *Clear) String() string {
+func (c *ClearBit) String() string {
 	args := make([]string, 0, 4)
-	if c.ID != 0 {
-		args = append(args, fmt.Sprintf("id=%d", c.ID))
-	}
+	args = append(args, fmt.Sprintf("id=%d", c.ID))
 	if c.Frame != "" {
 		args = append(args, fmt.Sprintf("frame=%s", c.Frame))
 	}
@@ -103,9 +126,9 @@ func (c *Clear) String() string {
 		args = append(args, fmt.Sprintf("filter=%d", c.Filter))
 	}
 	if c.ProfileID != 0 {
-		args = append(args, fmt.Sprintf("profile_id=%d", c.ProfileID))
+		args = append(args, fmt.Sprintf("profileID=%d", c.ProfileID))
 	}
-	return fmt.Sprintf("clear(%s)", strings.Join(args, ", "))
+	return fmt.Sprintf("ClearBit(%s)", strings.Join(args, ", "))
 }
 
 // Count represents a count() function call.
@@ -115,7 +138,7 @@ type Count struct {
 
 // String returns the string representation of the call.
 func (c *Count) String() string {
-	return fmt.Sprintf("count(%s)", c.Input.String())
+	return fmt.Sprintf("Count(%s)", c.Input.String())
 }
 
 // Difference represents an difference() function call.
@@ -125,25 +148,7 @@ type Difference struct {
 
 // String returns the string representation of the call.
 func (c *Difference) String() string {
-	return fmt.Sprintf("difference(%s)", c.Inputs.String())
-}
-
-// Get represents a get() function call.
-type Get struct {
-	ID    uint64
-	Frame string
-}
-
-// String returns the string representation of the call.
-func (c *Get) String() string {
-	args := make([]string, 0, 2)
-	if c.ID != 0 {
-		args = append(args, fmt.Sprintf("id=%d", c.ID))
-	}
-	if c.Frame != "" {
-		args = append(args, fmt.Sprintf("frame=%s", c.Frame))
-	}
-	return fmt.Sprintf("get(%s)", strings.Join(args, ", "))
+	return fmt.Sprintf("Difference(%s)", c.Inputs.String())
 }
 
 // Intersect represents an intersect() function call.
@@ -153,7 +158,19 @@ type Intersect struct {
 
 // String returns the string representation of the call.
 func (c *Intersect) String() string {
-	return fmt.Sprintf("intersect(%s)", c.Inputs.String())
+	return fmt.Sprintf("Intersect(%s)", c.Inputs.String())
+}
+
+// Profile represents a Profile() function call.
+type Profile struct {
+	ID uint64
+}
+
+// String returns the string representation of the call.
+func (c *Profile) String() string {
+	args := make([]string, 0, 1)
+	args = append(args, fmt.Sprintf("id=%d", c.ID))
+	return fmt.Sprintf("Profile(%s)", strings.Join(args, ", "))
 }
 
 // Range represents a range() function call.
@@ -179,11 +196,11 @@ func (c *Range) String() string {
 	if !c.EndTime.IsZero() {
 		args = append(args, fmt.Sprintf("end=%s", c.EndTime.Format(TimeFormat)))
 	}
-	return fmt.Sprintf("range(%s)", strings.Join(args, ", "))
+	return fmt.Sprintf("Range(%s)", strings.Join(args, ", "))
 }
 
-// Set represents a set() function call.
-type Set struct {
+// SetBit represents a SetBit() function call.
+type SetBit struct {
 	ID        uint64
 	Frame     string
 	Filter    uint64
@@ -191,11 +208,9 @@ type Set struct {
 }
 
 // String returns the string representation of the call.
-func (c *Set) String() string {
+func (c *SetBit) String() string {
 	args := make([]string, 0, 2)
-	if c.ID != 0 {
-		args = append(args, fmt.Sprintf("id=%d", c.ID))
-	}
+	args = append(args, fmt.Sprintf("id=%d", c.ID))
 	if c.Frame != "" {
 		args = append(args, fmt.Sprintf("frame=%s", c.Frame))
 	}
@@ -203,12 +218,88 @@ func (c *Set) String() string {
 		args = append(args, fmt.Sprintf("filter=%d", c.Filter))
 	}
 	if c.ProfileID != 0 {
-		args = append(args, fmt.Sprintf("profile_id=%d", c.ProfileID))
+		args = append(args, fmt.Sprintf("profileID=%d", c.ProfileID))
 	}
-	return fmt.Sprintf("set(%s)", strings.Join(args, ", "))
+	return fmt.Sprintf("SetBit(%s)", strings.Join(args, ", "))
 }
 
-// TopN represents a top-n() function call.
+// SetBitmapAttrs represents a SetBitmapAttrs() function call.
+type SetBitmapAttrs struct {
+	ID    uint64
+	Frame string
+	Attrs map[string]interface{}
+}
+
+// String returns the string representation of the call.
+func (c *SetBitmapAttrs) String() string {
+	args := make([]string, 0, 2)
+	args = append(args, fmt.Sprintf("id=%d", c.ID))
+	if c.Frame != "" {
+		args = append(args, fmt.Sprintf("frame=%s", c.Frame))
+	}
+
+	// Sort keys.
+	keys := make([]string, 0, len(c.Attrs))
+	for k := range c.Attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Write key/value pairs.
+	for _, k := range keys {
+		if c.Attrs[k] == nil {
+			args = append(args, fmt.Sprintf("%s=null", k))
+			continue
+		}
+
+		switch v := c.Attrs[k].(type) {
+		case string:
+			args = append(args, fmt.Sprintf("%s=\"%s\"", k, v))
+		default:
+			args = append(args, fmt.Sprintf("%s=%v", k, v))
+		}
+	}
+
+	return fmt.Sprintf("SetBitmapAttrs(%s)", strings.Join(args, ", "))
+}
+
+// SetProfileAttrs represents a SetProfileAttrs() function call.
+type SetProfileAttrs struct {
+	ID    uint64
+	Attrs map[string]interface{}
+}
+
+// String returns the string representation of the call.
+func (c *SetProfileAttrs) String() string {
+	args := make([]string, 0, 2)
+	args = append(args, fmt.Sprintf("id=%d", c.ID))
+
+	// Sort keys.
+	keys := make([]string, 0, len(c.Attrs))
+	for k := range c.Attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Write key/value pairs.
+	for _, k := range keys {
+		if c.Attrs[k] == nil {
+			args = append(args, fmt.Sprintf("%s=null", k))
+			continue
+		}
+
+		switch v := c.Attrs[k].(type) {
+		case string:
+			args = append(args, fmt.Sprintf("%s=\"%s\"", k, v))
+		default:
+			args = append(args, fmt.Sprintf("%s=%v", k, v))
+		}
+	}
+
+	return fmt.Sprintf("SetProfileAttrs(%s)", strings.Join(args, ", "))
+}
+
+// TopN represents a TopN() function call.
 type TopN struct {
 	Frame string
 	N     int
@@ -224,5 +315,5 @@ type Union struct {
 
 // String returns the string representation of the call.
 func (c *Union) String() string {
-	return fmt.Sprintf("union(%s)", c.Inputs.String())
+	return fmt.Sprintf("Union(%s)", c.Inputs.String())
 }

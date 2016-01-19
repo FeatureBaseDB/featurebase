@@ -45,32 +45,73 @@ func (p *Parser) parseCall() (Call, error) {
 	}
 
 	switch lit {
-	case "count":
+	case "Bitmap":
+		return p.parseBitmapCall()
+	case "Count":
 		return p.parseCountCall()
-	case "clear":
-		return p.parseClearCall()
-	case "difference":
+	case "ClearBit":
+		return p.parseClearBitCall()
+	case "Difference":
 		return p.parseDifferenceCall()
-	case "get":
-		return p.parseGetCall()
-	case "intersect":
+	case "Intersect":
 		return p.parseIntersectCall()
-	case "range":
+	case "Profile":
+		return p.parseProfileCall()
+	case "Range":
 		return p.parseRangeCall()
-	case "set":
-		return p.parseSetCall()
-	case "top-n":
+	case "SetBit":
+		return p.parseSetBitCall()
+	case "SetBitmapAttrs":
+		return p.parseSetBitmapAttrsCall()
+	case "SetProfileAttrs":
+		return p.parseSetProfileAttrsCall()
+	case "TopN":
 		return p.parseTopNCall()
-	case "union":
+	case "Union":
 		return p.parseUnionCall()
 	default:
 		return nil, &ParseError{Message: fmt.Sprintf("function not found: %s", lit), Pos: pos}
 	}
 }
 
-// parseClearCall parses a clear() function call.
-func (p *Parser) parseClearCall() (*Clear, error) {
-	c := &Clear{}
+// parseBitmapCall parses a Bitmap() function call.
+func (p *Parser) parseBitmapCall() (*Bitmap, error) {
+	c := &Bitmap{}
+	pos := p.pos()
+
+	// Scan opening parenthesis.
+	if err := p.expect(LPAREN); err != nil {
+		return nil, err
+	}
+
+	// Parse arguments.
+	args, err := p.parseArgs()
+	if err != nil {
+		return nil, err
+	}
+
+	// Copy arguments to AST.
+	for _, arg := range args {
+		switch arg.key {
+		case 0, "id":
+			if err := decodeUint64(arg.value, &c.ID); err != nil {
+				return nil, parseErrorf(pos, "id: %s", err)
+			}
+		case 1, "frame":
+			if err := decodeString(arg.value, &c.Frame); err != nil {
+				return nil, parseErrorf(pos, "frame: %s", err)
+			}
+		default:
+			return nil, parseErrorf(pos, "invalid Bitmap() arg: %v", arg.key)
+		}
+	}
+
+	return c, nil
+}
+
+// parseClearBitCall parses a ClearBit() function call.
+func (p *Parser) parseClearBitCall() (*ClearBit, error) {
+	c := &ClearBit{}
 	pos := p.pos()
 
 	// Scan opening parenthesis.
@@ -99,19 +140,19 @@ func (p *Parser) parseClearCall() (*Clear, error) {
 			if err := decodeUint64(arg.value, &c.Filter); err != nil {
 				return nil, parseErrorf(pos, "filter: %s", err)
 			}
-		case 3, "profile_id":
+		case 3, "profileID":
 			if err := decodeUint64(arg.value, &c.ProfileID); err != nil {
-				return nil, parseErrorf(pos, "profile_id: %s", err)
+				return nil, parseErrorf(pos, "profileID: %s", err)
 			}
 		default:
-			return nil, parseErrorf(pos, "invalid arg: %v", arg.key)
+			return nil, parseErrorf(pos, "invalid ClearBit() arg: %v", arg.key)
 		}
 	}
 
 	return c, nil
 }
 
-// parseCount parses a count() function call.
+// parseCount parses a Count() function call.
 func (p *Parser) parseCountCall() (*Count, error) {
 	c := &Count{}
 	pos := p.pos()
@@ -139,7 +180,7 @@ func (p *Parser) parseCountCall() (*Count, error) {
 	return c, nil
 }
 
-// parseDifference parses a difference() function call.
+// parseDifference parses a Difference() function call.
 func (p *Parser) parseDifferenceCall() (*Difference, error) {
 	c := &Difference{}
 	pos := p.pos()
@@ -160,49 +201,14 @@ func (p *Parser) parseDifferenceCall() (*Difference, error) {
 		if v, ok := arg.value.(BitmapCall); ok {
 			c.Inputs = append(c.Inputs, v)
 		} else {
-			return nil, parseErrorf(pos, "invalid arg: %v", arg.value)
+			return nil, parseErrorf(pos, "invalid Difference() arg: %v", arg.value)
 		}
 	}
 
 	return c, nil
 }
 
-// parseGetCall parses a get() function call.
-func (p *Parser) parseGetCall() (*Get, error) {
-	c := &Get{}
-	pos := p.pos()
-
-	// Scan opening parenthesis.
-	if err := p.expect(LPAREN); err != nil {
-		return nil, err
-	}
-
-	// Parse arguments.
-	args, err := p.parseArgs()
-	if err != nil {
-		return nil, err
-	}
-
-	// Copy arguments to AST.
-	for _, arg := range args {
-		switch arg.key {
-		case 0, "id":
-			if err := decodeUint64(arg.value, &c.ID); err != nil {
-				return nil, parseErrorf(pos, "id: %s", err)
-			}
-		case 1, "frame":
-			if err := decodeString(arg.value, &c.Frame); err != nil {
-				return nil, parseErrorf(pos, "frame: %s", err)
-			}
-		default:
-			return nil, parseErrorf(pos, "invalid arg: %v", arg.key)
-		}
-	}
-
-	return c, nil
-}
-
-// parseIntersect parses a intersect() function call.
+// parseIntersect parses a Intersect() function call.
 func (p *Parser) parseIntersectCall() (*Intersect, error) {
 	c := &Intersect{}
 	pos := p.pos()
@@ -223,14 +229,45 @@ func (p *Parser) parseIntersectCall() (*Intersect, error) {
 		if v, ok := arg.value.(BitmapCall); ok {
 			c.Inputs = append(c.Inputs, v)
 		} else {
-			return nil, parseErrorf(pos, "invalid arg: %v", arg.value)
+			return nil, parseErrorf(pos, "invalid Intersect() arg: %v", arg.value)
 		}
 	}
 
 	return c, nil
 }
 
-// parseRangeCall parses a range() function call.
+// parseProfileCall parses a Profile() function call.
+func (p *Parser) parseProfileCall() (*Profile, error) {
+	c := &Profile{}
+	pos := p.pos()
+
+	// Scan opening parenthesis.
+	if err := p.expect(LPAREN); err != nil {
+		return nil, err
+	}
+
+	// Parse arguments.
+	args, err := p.parseArgs()
+	if err != nil {
+		return nil, err
+	}
+
+	// Copy arguments to AST.
+	for _, arg := range args {
+		switch arg.key {
+		case 0, "id":
+			if err := decodeUint64(arg.value, &c.ID); err != nil {
+				return nil, parseErrorf(pos, "id: %s", err)
+			}
+		default:
+			return nil, parseErrorf(pos, "invalid Profile() arg: %v", arg.key)
+		}
+	}
+
+	return c, nil
+}
+
+// parseRangeCall parses a Range() function call.
 func (p *Parser) parseRangeCall() (*Range, error) {
 	c := &Range{}
 	pos := p.pos()
@@ -266,16 +303,16 @@ func (p *Parser) parseRangeCall() (*Range, error) {
 				return nil, parseErrorf(pos, "end: %s", err)
 			}
 		default:
-			return nil, parseErrorf(pos, "invalid arg: %v", arg.key)
+			return nil, parseErrorf(pos, "invalid Range() arg: %v", arg.key)
 		}
 	}
 
 	return c, nil
 }
 
-// parseSetCall parses a set() function call.
-func (p *Parser) parseSetCall() (*Set, error) {
-	c := &Set{}
+// parseSetBitCall parses a SetBit() function call.
+func (p *Parser) parseSetBitCall() (*SetBit, error) {
+	c := &SetBit{}
 	pos := p.pos()
 
 	// Scan opening parenthesis.
@@ -304,19 +341,125 @@ func (p *Parser) parseSetCall() (*Set, error) {
 			if err := decodeUint64(arg.value, &c.Filter); err != nil {
 				return nil, parseErrorf(pos, "filter: %s", err)
 			}
-		case 3, "profile_id":
+		case 3, "profileID":
 			if err := decodeUint64(arg.value, &c.ProfileID); err != nil {
-				return nil, parseErrorf(pos, "profile_id: %s", err)
+				return nil, parseErrorf(pos, "profileID: %s", err)
 			}
 		default:
-			return nil, parseErrorf(pos, "invalid arg: %v", arg.key)
+			return nil, parseErrorf(pos, "invalid SetBit() arg: %v", arg.key)
 		}
 	}
 
 	return c, nil
 }
 
-// parseTopNCall parses a top-n() function call.
+// parseSetBitmapAttrsCall parses a SetBitmapAttrs() function call.
+func (p *Parser) parseSetBitmapAttrsCall() (*SetBitmapAttrs, error) {
+	c := &SetBitmapAttrs{
+		Attrs: make(map[string]interface{}),
+	}
+	pos := p.pos()
+
+	// Scan opening parenthesis.
+	if err := p.expect(LPAREN); err != nil {
+		return nil, err
+	}
+
+	// Parse arguments.
+	args, err := p.parseArgs()
+	if err != nil {
+		return nil, err
+	}
+
+	// Copy arguments to AST.
+	for _, arg := range args {
+		switch arg.key {
+		case 0, "id":
+			if err := decodeUint64(arg.value, &c.ID); err != nil {
+				return nil, parseErrorf(pos, "id: %s", err)
+			}
+		case 1, "frame":
+			if err := decodeString(arg.value, &c.Frame); err != nil {
+				return nil, parseErrorf(pos, "frame: %s", err)
+			}
+		default:
+			key, ok := arg.key.(string)
+			if !ok {
+				return nil, parseErrorf(pos, "invalid attr arg: %v", arg.key)
+			}
+
+			// Special handling for nil values.
+			if arg.value == nil {
+				c.Attrs[key] = nil
+				continue
+			}
+
+			switch v := arg.value.(type) {
+			case string, bool:
+				c.Attrs[key] = v
+			case uint64:
+				c.Attrs[key] = int64(v)
+			default:
+				return nil, parseErrorf(pos, "invalid SetBitmapAttrs() arg: %v", arg.key)
+			}
+		}
+	}
+
+	return c, nil
+}
+
+// parseSetProfileAttrsCall parses a SetProfileAttrs() function call.
+func (p *Parser) parseSetProfileAttrsCall() (*SetProfileAttrs, error) {
+	c := &SetProfileAttrs{
+		Attrs: make(map[string]interface{}),
+	}
+	pos := p.pos()
+
+	// Scan opening parenthesis.
+	if err := p.expect(LPAREN); err != nil {
+		return nil, err
+	}
+
+	// Parse arguments.
+	args, err := p.parseArgs()
+	if err != nil {
+		return nil, err
+	}
+
+	// Copy arguments to AST.
+	for _, arg := range args {
+		switch arg.key {
+		case 0, "id":
+			if err := decodeUint64(arg.value, &c.ID); err != nil {
+				return nil, parseErrorf(pos, "id: %s", err)
+			}
+		default:
+			key, ok := arg.key.(string)
+			if !ok {
+				return nil, parseErrorf(pos, "invalid attr arg: %v", arg.key)
+			}
+
+			// Special handling for nil values.
+			if arg.value == nil {
+				c.Attrs[key] = nil
+				continue
+			}
+
+			switch v := arg.value.(type) {
+			case string, bool:
+				c.Attrs[key] = v
+			case uint64:
+				c.Attrs[key] = int64(v)
+			default:
+				return nil, parseErrorf(pos, "invalid SetProfileAttrs() arg: %v", arg.key)
+			}
+		}
+	}
+
+	return c, nil
+}
+
+// parseTopNCall parses a TopN() function call.
 func (p *Parser) parseTopNCall() (*TopN, error) {
 	c := &TopN{}
 	pos := p.pos()
@@ -344,14 +487,14 @@ func (p *Parser) parseTopNCall() (*TopN, error) {
 				return nil, parseErrorf(pos, "n: %s", err)
 			}
 		default:
-			return nil, parseErrorf(pos, "invalid arg: %v", arg.key)
+			return nil, parseErrorf(pos, "invalid TopN() arg: %v", arg.key)
 		}
 	}
 
 	return c, nil
 }
 
-// parseUnion parses a union() function call.
+// parseUnion parses a Union() function call.
 func (p *Parser) parseUnionCall() (*Union, error) {
 	c := &Union{}
 	pos := p.pos()
@@ -372,7 +515,7 @@ func (p *Parser) parseUnionCall() (*Union, error) {
 		if v, ok := arg.value.(BitmapCall); ok {
 			c.Inputs = append(c.Inputs, v)
 		} else {
-			return nil, parseErrorf(pos, "invalid arg: %v", arg.value)
+			return nil, parseErrorf(pos, "invalid Union() arg: %v", arg.value)
 		}
 	}
 
@@ -446,7 +589,17 @@ func (p *Parser) parseArg() (arg, error) {
 	// Read value token.
 	tok, pos, lit = p.scanIgnoreWhitespace()
 	switch tok {
-	case IDENT, STRING:
+	case IDENT:
+		if lit == "true" {
+			value = true
+		} else if lit == "false" {
+			value = false
+		} else if lit == "null" {
+			value = nil
+		} else {
+			value = lit
+		}
+	case STRING:
 		value = lit
 	case NUMBER:
 		v, err := strconv.ParseUint(lit, 10, 64)

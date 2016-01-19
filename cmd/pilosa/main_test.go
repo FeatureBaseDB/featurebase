@@ -29,9 +29,9 @@ func TestMain_Set_Quick(t *testing.T) {
 		m := MustRunMain()
 		defer m.Close()
 
-		// Execute set() commands.
+		// Execute SetBit() commands.
 		for _, cmd := range cmds {
-			if res, err := m.Query("d", fmt.Sprintf(`set(id=%d, frame=%q, profile_id=%d)`, cmd.ID, cmd.Frame, cmd.ProfileID)); err != nil {
+			if res, err := m.Query("db=d", fmt.Sprintf(`SetBit(id=%d, frame=%q, profileID=%d)`, cmd.ID, cmd.Frame, cmd.ProfileID)); err != nil {
 				t.Fatal(err)
 			} else if res != `{}`+"\n" {
 				t.Fatalf("unexpected result: %s", res)
@@ -41,8 +41,13 @@ func TestMain_Set_Quick(t *testing.T) {
 		// Validate data.
 		for frame, frameSet := range SetCommands(cmds).Frames() {
 			for id, profileIDs := range frameSet {
-				exp := MustMarshalJSON(map[string]interface{}{"result": profileIDs}) + "\n"
-				if res, err := m.Query("d", fmt.Sprintf(`get(id=%d, frame=%q)`, id, frame)); err != nil {
+				exp := MustMarshalJSON(map[string]interface{}{
+					"result": map[string]interface{}{
+						"bits":  profileIDs,
+						"attrs": map[string]interface{}{},
+					},
+				}) + "\n"
+				if res, err := m.Query("db=d", fmt.Sprintf(`Bitmap(id=%d, frame=%q)`, id, frame)); err != nil {
 					t.Fatal(err)
 				} else if res != exp {
 					t.Fatalf("unexpected result:\n\ngot=%s\n\nexp=%s\n\n", res, exp)
@@ -57,8 +62,13 @@ func TestMain_Set_Quick(t *testing.T) {
 		// Validate data after reopening.
 		for frame, frameSet := range SetCommands(cmds).Frames() {
 			for id, profileIDs := range frameSet {
-				exp := MustMarshalJSON(map[string]interface{}{"result": profileIDs}) + "\n"
-				if res, err := m.Query("d", fmt.Sprintf(`get(id=%d, frame=%q)`, id, frame)); err != nil {
+				exp := MustMarshalJSON(map[string]interface{}{
+					"result": map[string]interface{}{
+						"bits":  profileIDs,
+						"attrs": map[string]interface{}{},
+					},
+				}) + "\n"
+				if res, err := m.Query("db=d", fmt.Sprintf(`Bitmap(id=%d, frame=%q)`, id, frame)); err != nil {
 					t.Fatal(err)
 				} else if res != exp {
 					t.Fatalf("unexpected result (reopen):\n\ngot=%s\n\nexp=%s\n\n", res, exp)
@@ -73,6 +83,91 @@ func TestMain_Set_Quick(t *testing.T) {
 		},
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Ensure program can set bitmap attributes and retrieve them.
+func TestMain_SetBitmapAttrs(t *testing.T) {
+	m := MustRunMain()
+	defer m.Close()
+
+	// Set bits on different bitmaps in different frames.
+	if _, err := m.Query("db=d", `SetBit(id=1, frame="x.n", profileID=100)`); err != nil {
+		t.Fatal(err)
+	} else if _, err := m.Query("db=d", `SetBit(id=2, frame="x.n", profileID=100)`); err != nil {
+		t.Fatal(err)
+	} else if _, err := m.Query("db=d", `SetBit(id=2, frame="z", profileID=100)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set bitmap attributes.
+	if _, err := m.Query("db=d", `SetBitmapAttrs(id=1, frame="x.n", x=100)`); err != nil {
+		t.Fatal(err)
+	} else if _, err := m.Query("db=d", `SetBitmapAttrs(id=2, frame="x.n", x=200)`); err != nil {
+		t.Fatal(err)
+	} else if _, err := m.Query("db=d", `SetBitmapAttrs(id=2, frame="z", x=300)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query bitmap x.n/1.
+	if res, err := m.Query("db=d", `Bitmap(id=1, frame="x.n")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"result":{"attrs":{"x":100},"bits":[100]}}`+"\n" {
+		t.Fatalf("unexpected result: %s", res)
+	}
+
+	// Query bitmap x.n/2.
+	if res, err := m.Query("db=d", `Bitmap(id=2, frame="x.n")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"result":{"attrs":{"x":200},"bits":[100]}}`+"\n" {
+		t.Fatalf("unexpected result: %s", res)
+	}
+
+	if err := m.Reopen(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query bitmap after reopening.
+	if res, err := m.Query("db=d&profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"result":{"attrs":{"x":100},"bits":[100]}}`+"\n" {
+		t.Fatalf("unexpected result(reopen): %s", res)
+	}
+}
+
+// Ensure program can set profile attributes and retrieve them.
+func TestMain_SetProfileAttrs(t *testing.T) {
+	m := MustRunMain()
+	defer m.Close()
+
+	// Set bits on bitmap.
+	if _, err := m.Query("db=d", `SetBit(id=1, frame="x.n", profileID=100)`); err != nil {
+		t.Fatal(err)
+	} else if _, err := m.Query("db=d", `SetBit(id=1, frame="x.n", profileID=101)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set profile attributes.
+	if _, err := m.Query("db=d", `SetProfileAttrs(id=100, foo="bar")`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query bitmap.
+	if res, err := m.Query("db=d&profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"result":{"attrs":{},"bits":[100,101]},"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+		t.Fatalf("unexpected result: %s", res)
+	}
+
+	if err := m.Reopen(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query bitmap after reopening.
+	if res, err := m.Query("db=d&profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"result":{"attrs":{},"bits":[100,101]},"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 }
 
@@ -174,8 +269,8 @@ func (m *Main) Reopen() error {
 func (m *Main) URL() string { return "http://" + m.Addr().String() }
 
 // Query executes a query against the program through the HTTP API.
-func (m *Main) Query(db, query string) (string, error) {
-	resp := MustDo("POST", m.URL()+"/query?db="+db, query)
+func (m *Main) Query(rawQuery, query string) (string, error) {
+	resp := MustDo("POST", m.URL()+"/query?"+rawQuery, query)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}

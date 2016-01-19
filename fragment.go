@@ -61,6 +61,18 @@ func NewFragment(path, db, frame string, slice uint64) *Fragment {
 	return f
 }
 
+// Path returns the path the fragment was initialized with.
+func (f *Fragment) Path() string { return f.path }
+
+// DB returns the database the fragment was initialized with.
+func (f *Fragment) DB() string { return f.db }
+
+// Frame returns the frame the fragment was initialized with.
+func (f *Fragment) Frame() string { return f.frame }
+
+// Slice returns the slice the fragment was initialized with.
+func (f *Fragment) Slice() uint64 { return f.slice }
+
 // Open opens the underlying storage.
 func (f *Fragment) Open() error {
 	f.mu.Lock()
@@ -173,18 +185,6 @@ func (f *Fragment) closeStorage() error {
 
 	return nil
 }
-
-// Path returns the path the fragment was initialized with.
-func (f *Fragment) Path() string { return f.path }
-
-// DB returns the database the fragment was initialized with.
-func (f *Fragment) DB() string { return f.db }
-
-// Frame returns the frame the fragment was initialized with.
-func (f *Fragment) Frame() string { return f.frame }
-
-// Slice returns the slice the fragment was initialized with.
-func (f *Fragment) Slice() uint64 { return f.slice }
 
 // Bitmap returns a bitmap by ID.
 func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
