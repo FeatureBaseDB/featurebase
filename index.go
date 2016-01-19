@@ -11,17 +11,18 @@ import (
 
 // Index represents a container for fragments.
 type Index struct {
-	mu        sync.Mutex
-	path      string
-	sliceN    uint64
-	fragments map[fragmentKey]*Fragment
+	mu     sync.Mutex
+	path   string
+	sliceN uint64
+
+	frames map[frameKey]*Frame
 }
 
 // NewIndex returns a new instance of Index.
 func NewIndex(path string) *Index {
 	return &Index{
-		path:      path,
-		fragments: make(map[fragmentKey]*Fragment),
+		path:   path,
+		frames: make(map[frameKey]*Frame),
 	}
 }
 
@@ -112,9 +113,9 @@ func (i *Index) openFrame(db, frame string) error {
 
 // Close closes all open fragments.
 func (i *Index) Close() error {
-	for key, f := range i.fragments {
+	for key, f := range i.frames {
 		if err := f.Close(); err != nil {
-			log.Println("error closing fragment(%v): %s", key, err)
+			log.Println("error closing frame(%s/%s): %s", key.db, key.frame, err)
 		}
 	}
 	return nil
@@ -130,16 +131,14 @@ func (i *Index) SliceN() uint64 {
 	return i.sliceN
 }
 
-// FragmentPath returns the path where a given fragment is stored.
-func (i *Index) FragmentPath(db, frame string, slice uint64) string {
-	return filepath.Join(i.path, db, frame, strconv.FormatUint(slice, 10))
-}
+// FramePath returns the path where a given frame is stored.
+func (i *Index) FramePath(db, frame string) string { return filepath.Join(i.path, db, frame) }
 
 // Fragment returns the fragment for a database, frame & slice.
 func (i *Index) Fragment(db, frame string, slice uint64) *Fragment {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return i.fragments[fragmentKey{db, frame, slice}]
+	return i.frames[frameKey{db, frame}].fragment(slice)
 }
 
 // CreateFragmentIfNotExists returns the fragment for a database, frame & slice.
@@ -153,30 +152,22 @@ func (i *Index) CreateFragmentIfNotExists(db, frame string, slice uint64) (*Frag
 		i.sliceN = slice
 	}
 
-	// Create fragment, if not exists.
-	key := fragmentKey{db, frame, slice}
-	if i.fragments[key] == nil {
-		path := i.FragmentPath(db, frame, slice)
-
-		// Create parent directory, if necessary.
-		if err := os.MkdirAll(filepath.Dir(path), 0777); err != nil {
-			return nil, fmt.Errorf("parent fragment dir: %s", err)
-		}
-
-		// Initialize and open fragment.
-		f := NewFragment(path, db, frame, slice)
+	// Create frame, if not exists.
+	key := frameKey{db, frame}
+	if i.frames[key] == nil {
+		f := NewFrame(i.FramePath(db, frame), db, frame)
 		if err := f.Open(); err != nil {
 			return nil, err
 		}
-		i.fragments[key] = f
+		i.frames[key] = f
 	}
 
-	return i.fragments[key], nil
+	// Create fragment, if not exists.
+	return i.frames[key].createFragmentIfNotExists(slice)
 }
 
-// fragmentKey is the map key for fragment look ups.
-type fragmentKey struct {
+// frameKey is the map key for frame look ups.
+type frameKey struct {
 	db    string
 	frame string
-	slice uint64
 }
