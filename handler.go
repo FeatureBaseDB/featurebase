@@ -267,7 +267,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Find the correct fragment.
 	f, err := h.Index.CreateFragmentIfNotExists(db, frame, slice)
 	if err != nil {
-		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%s, err=%s", db, frame, slice, err)
+		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%d, err=%s", db, frame, slice, err)
 		http.Error(w, "fragment error", http.StatusInternalServerError)
 		return
 	}
