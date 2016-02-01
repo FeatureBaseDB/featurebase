@@ -88,40 +88,72 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handlePostQuery handles /query requests.
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// Parse incoming request.
-	db, query, slices, err := h.readQueryRequest(r)
-
-	// h.logger().Printf("%s %s db=%s q=%s slices=%v", r.Method, r.URL.Path, db, query, slices)
-
+	req, err := h.readQueryRequest(r)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		h.writeQueryResponse(w, r, nil, err)
+		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 		return
 	}
 
 	// Parse query string.
-	q, err := pql.NewParser(strings.NewReader(query)).Parse()
+	q, err := pql.NewParser(strings.NewReader(req.Query)).Parse()
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		h.writeQueryResponse(w, r, nil, err)
+		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 		return
 	}
 
 	// Execute the query.
-	res, e := h.Executor.Execute(db, q, slices)
+	result, err := h.Executor.Execute(req.DB, q, req.Slices)
+	resp := &QueryResponse{Result: result, Err: err}
+
+	// Fill profile attributes if requested.
+	if bm, ok := result.(*Bitmap); ok && req.Profiles {
+		profiles, err := h.readProfiles(h.Index.DB(req.DB), bm.Bits())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			h.writeQueryResponse(w, r, &QueryResponse{Err: err})
+			return
+		}
+		resp.Profiles = profiles
+	}
 
 	// Set appropriate status code, if there is an error.
-	if e != nil {
+	if resp.Err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
 	// Write response back to client.
-	if err := h.writeQueryResponse(w, r, res, e); err != nil {
+	if err := h.writeQueryResponse(w, r, resp); err != nil {
 		h.logger().Printf("write query response error: %s", err)
 	}
 }
 
+// readProfiles returns a list of profile objects by id.
+func (h *Handler) readProfiles(db *DB, ids []uint64) ([]*Profile, error) {
+	if db == nil {
+		return nil, nil
+	}
+
+	a := make([]*Profile, 0, len(ids))
+	for _, id := range ids {
+		// Read attributes for profile. Skip profile if empty.
+		attrs, err := db.ProfileAttrs(id)
+		if err != nil {
+			return nil, err
+		} else if len(attrs) == 0 {
+			continue
+		}
+
+		// Append profile with attributes.
+		a = append(a, &Profile{ID: id, Attrs: attrs})
+	}
+
+	return a, nil
+}
+
 // readQueryRequest parses an query parameters from r.
-func (h *Handler) readQueryRequest(r *http.Request) (db, query string, slices []uint64, err error) {
+func (h *Handler) readQueryRequest(r *http.Request) (*QueryRequest, error) {
 	switch r.Header.Get("Content-Type") {
 	case "application/x-protobuf":
 		return h.readProtobufQueryRequest(r)
@@ -131,105 +163,68 @@ func (h *Handler) readQueryRequest(r *http.Request) (db, query string, slices []
 }
 
 // readProtobufQueryRequest parses query parameters in protobuf from r.
-func (h *Handler) readProtobufQueryRequest(r *http.Request) (db, query string, slices []uint64, err error) {
+func (h *Handler) readProtobufQueryRequest(r *http.Request) (*QueryRequest, error) {
 	// Slurp the body.
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	// Unmarshal into object.
 	var req internal.QueryRequest
-	if err = proto.Unmarshal(body, &req); err != nil {
-		return
+	if err := proto.Unmarshal(body, &req); err != nil {
+		return nil, err
 	}
 
-	return req.GetDB(), req.GetQuery(), req.GetSlices(), nil
+	return decodeQueryRequest(&req), nil
 }
 
 // readURLQueryRequest parses query parameters from URL parameters from r.
-func (h *Handler) readURLQueryRequest(r *http.Request) (db, query string, slices []uint64, err error) {
+func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	q := r.URL.Query()
-
-	// Read DB argument.
-	db = q.Get("db")
 
 	// Parse query string.
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return
+		return nil, err
 	}
-	query = string(buf)
+	query := string(buf)
 
 	// Parse list of slices.
-	slices, err = parseUint64Slice(q.Get("slices"))
+	slices, err := parseUint64Slice(q.Get("slices"))
 	if err != nil {
-		err = errors.New("invalid slice argument")
-		return
+		return nil, errors.New("invalid slice argument")
 	}
 
-	return
+	return &QueryRequest{
+		DB:       q.Get("db"),
+		Query:    query,
+		Slices:   slices,
+		Profiles: q.Get("profiles") == "true",
+	}, nil
 }
 
 // writeQueryResponse writes the response from the executor to w.
-func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, res interface{}, err error) error {
+func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, resp *QueryResponse) error {
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
-		return h.writeProtobufQueryResponse(w, res, err)
+		return h.writeProtobufQueryResponse(w, resp)
 	}
-	return h.writeJSONQueryResponse(w, res, err)
+	return h.writeJSONQueryResponse(w, resp)
 }
 
 // writeProtobufQueryResponse writes the response from the executor to w as protobuf.
-func (h *Handler) writeProtobufQueryResponse(w http.ResponseWriter, res interface{}, e error) error {
-	var resp internal.QueryResponse
-
-	// Set the result on the appropriate field.
-	if res != nil {
-		switch res := res.(type) {
-		case *Bitmap:
-			resp.Bitmap = encodeBitmap(res)
-		case Pairs:
-			resp.Pairs = encodePairs(res)
-		case uint64:
-			resp.N = proto.Uint64(res)
-		default:
-			panic(fmt.Sprintf("invalid query response type: %T", res))
-		}
-	}
-
-	// Set the error if there is one.
-	if e != nil {
-		resp.Err = proto.String(e.Error())
-	}
-
-	// Encode response.
-	buf, err := proto.Marshal(&resp)
-	if err != nil {
+func (h *Handler) writeProtobufQueryResponse(w http.ResponseWriter, resp *QueryResponse) error {
+	if buf, err := proto.Marshal(encodeQueryResponse(resp)); err != nil {
+		return err
+	} else if _, err := w.Write(buf); err != nil {
 		return err
 	}
-
-	// Write response back to client.
-	if _, err := w.Write(buf); err != nil {
-		return err
-	}
-
 	return nil
 }
 
 // writeJSONQueryResponse writes the response from the executor to w as JSON.
-func (h *Handler) writeJSONQueryResponse(w http.ResponseWriter, res interface{}, e error) error {
-	var o struct {
-		Result interface{} `json:"result,omitempty"`
-		Error  string      `json:"error,omitempty"`
-	}
-	o.Result = res
-
-	if e != nil {
-		o.Error = e.Error()
-	}
-
-	// Otherwise marshal the result as JSON.
-	return json.NewEncoder(w).Encode(o)
+func (h *Handler) writeJSONQueryResponse(w http.ResponseWriter, resp *QueryResponse) error {
+	return json.NewEncoder(w).Encode(resp)
 }
 
 // handlePostImport handles /import requests.
@@ -341,6 +336,84 @@ func (h *Handler) handleExpvar(w http.ResponseWriter, r *http.Request) {
 // logger returns a logger for the handler.
 func (h *Handler) logger() *log.Logger {
 	return log.New(h.LogOutput, "", log.LstdFlags)
+}
+
+// QueryRequest represent a request to process a query.
+type QueryRequest struct {
+	// Database to execute query against.
+	DB string
+
+	// The query string to parse and execute.
+	Query string
+
+	// The slices to include in the query execution.
+	// If empty, all slices are included.
+	Slices []uint64
+
+	// Return profile attributes, if true.
+	Profiles bool
+}
+
+func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
+	return &QueryRequest{
+		DB:       pb.GetDB(),
+		Query:    pb.GetQuery(),
+		Slices:   pb.GetSlices(),
+		Profiles: pb.GetProfiles(),
+	}
+}
+
+// QueryResponse represent a response from a processed query.
+type QueryResponse struct {
+	// Query execution results.
+	// Can be a Bitmap, Pairs, or uint64.
+	Result interface{}
+
+	// Set of profiles matching IDs returned in Result.
+	Profiles []*Profile
+
+	// Error during parsing or execution.
+	Err error
+}
+
+func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
+	var output struct {
+		Result   interface{} `json:"result,omitempty"`
+		Profiles []*Profile  `json:"profiles,omitempty"`
+		Err      string      `json:"error,omitempty"`
+	}
+	output.Result = resp.Result
+	output.Profiles = resp.Profiles
+
+	if resp.Err != nil {
+		output.Err = resp.Err.Error()
+	}
+	return json.Marshal(output)
+}
+
+func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
+	pb := &internal.QueryResponse{
+		Profiles: encodeProfiles(resp.Profiles),
+	}
+
+	if resp.Result != nil {
+		switch result := resp.Result.(type) {
+		case *Bitmap:
+			pb.Bitmap = encodeBitmap(result)
+		case Pairs:
+			pb.Pairs = encodePairs(result)
+		case uint64:
+			pb.N = proto.Uint64(result)
+		default:
+			panic(fmt.Sprintf("invalid query result type: %T", resp.Result))
+		}
+	}
+
+	if resp.Err != nil {
+		pb.Err = proto.String(resp.Err.Error())
+	}
+
+	return pb
 }
 
 // parseUint64Slice returns a slice of uint64s from a comma-delimited string.

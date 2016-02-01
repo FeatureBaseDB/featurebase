@@ -13,6 +13,8 @@ It has these top-level messages:
 	Chunk
 	Pair
 	Bit
+	Profile
+	Attr
 	QueryRequest
 	QueryResponse
 	ImportRequest
@@ -29,6 +31,7 @@ var _ = math.Inf
 
 type Bitmap struct {
 	Chunks           []*Chunk `protobuf:"bytes,1,rep" json:"Chunks,omitempty"`
+	Attrs            []*Attr  `protobuf:"bytes,2,rep" json:"Attrs,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -39,6 +42,13 @@ func (*Bitmap) ProtoMessage()    {}
 func (m *Bitmap) GetChunks() []*Chunk {
 	if m != nil {
 		return m.Chunks
+	}
+	return nil
+}
+
+func (m *Bitmap) GetAttrs() []*Attr {
+	if m != nil {
+		return m.Attrs
 	}
 	return nil
 }
@@ -115,10 +125,75 @@ func (m *Bit) GetProfileID() uint64 {
 	return 0
 }
 
+type Profile struct {
+	ID               *uint64 `protobuf:"varint,1,req" json:"ID,omitempty"`
+	Attrs            []*Attr `protobuf:"bytes,2,rep" json:"Attrs,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *Profile) Reset()         { *m = Profile{} }
+func (m *Profile) String() string { return proto.CompactTextString(m) }
+func (*Profile) ProtoMessage()    {}
+
+func (m *Profile) GetID() uint64 {
+	if m != nil && m.ID != nil {
+		return *m.ID
+	}
+	return 0
+}
+
+func (m *Profile) GetAttrs() []*Attr {
+	if m != nil {
+		return m.Attrs
+	}
+	return nil
+}
+
+type Attr struct {
+	Key              *string `protobuf:"bytes,1,req" json:"Key,omitempty"`
+	StringValue      *string `protobuf:"bytes,2,opt" json:"StringValue,omitempty"`
+	IntValue         *int64  `protobuf:"varint,3,opt" json:"IntValue,omitempty"`
+	BoolValue        *bool   `protobuf:"varint,4,opt" json:"BoolValue,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *Attr) Reset()         { *m = Attr{} }
+func (m *Attr) String() string { return proto.CompactTextString(m) }
+func (*Attr) ProtoMessage()    {}
+
+func (m *Attr) GetKey() string {
+	if m != nil && m.Key != nil {
+		return *m.Key
+	}
+	return ""
+}
+
+func (m *Attr) GetStringValue() string {
+	if m != nil && m.StringValue != nil {
+		return *m.StringValue
+	}
+	return ""
+}
+
+func (m *Attr) GetIntValue() int64 {
+	if m != nil && m.IntValue != nil {
+		return *m.IntValue
+	}
+	return 0
+}
+
+func (m *Attr) GetBoolValue() bool {
+	if m != nil && m.BoolValue != nil {
+		return *m.BoolValue
+	}
+	return false
+}
+
 type QueryRequest struct {
 	DB               *string  `protobuf:"bytes,1,req" json:"DB,omitempty"`
 	Query            *string  `protobuf:"bytes,2,req" json:"Query,omitempty"`
 	Slices           []uint64 `protobuf:"varint,3,rep" json:"Slices,omitempty"`
+	Profiles         *bool    `protobuf:"varint,4,opt" json:"Profiles,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -147,12 +222,20 @@ func (m *QueryRequest) GetSlices() []uint64 {
 	return nil
 }
 
+func (m *QueryRequest) GetProfiles() bool {
+	if m != nil && m.Profiles != nil {
+		return *m.Profiles
+	}
+	return false
+}
+
 type QueryResponse struct {
-	Err              *string `protobuf:"bytes,1,opt" json:"Err,omitempty"`
-	Bitmap           *Bitmap `protobuf:"bytes,2,opt" json:"Bitmap,omitempty"`
-	N                *uint64 `protobuf:"varint,3,opt" json:"N,omitempty"`
-	Pairs            []*Pair `protobuf:"bytes,4,rep" json:"Pairs,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
+	Err              *string    `protobuf:"bytes,1,opt" json:"Err,omitempty"`
+	Bitmap           *Bitmap    `protobuf:"bytes,2,opt" json:"Bitmap,omitempty"`
+	N                *uint64    `protobuf:"varint,3,opt" json:"N,omitempty"`
+	Pairs            []*Pair    `protobuf:"bytes,4,rep" json:"Pairs,omitempty"`
+	Profiles         []*Profile `protobuf:"bytes,5,rep" json:"Profiles,omitempty"`
+	XXX_unrecognized []byte     `json:"-"`
 }
 
 func (m *QueryResponse) Reset()         { *m = QueryResponse{} }
@@ -183,6 +266,13 @@ func (m *QueryResponse) GetN() uint64 {
 func (m *QueryResponse) GetPairs() []*Pair {
 	if m != nil {
 		return m.Pairs
+	}
+	return nil
+}
+
+func (m *QueryResponse) GetProfiles() []*Profile {
+	if m != nil {
+		return m.Profiles
 	}
 	return nil
 }

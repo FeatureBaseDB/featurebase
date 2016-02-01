@@ -2,27 +2,25 @@ package pilosa
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 )
 
 // Index represents a container for fragments.
 type Index struct {
-	mu     sync.Mutex
-	path   string
-	sliceN uint64
+	mu   sync.Mutex
+	path string
 
-	frames map[frameKey]*Frame
+	// Databases by name.
+	dbs map[string]*DB
 }
 
 // NewIndex returns a new instance of Index.
 func NewIndex(path string) *Index {
 	return &Index{
-		path:   path,
-		frames: make(map[frameKey]*Frame),
+		path: path,
+		dbs:  make(map[string]*DB),
 	}
 }
 
@@ -32,16 +30,7 @@ func (i *Index) Open() error {
 		return err
 	}
 
-	// Open all databases.
-	if err := i.openDatabases(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// openDatabases recursively opens all directories within the data directory.
-func (i *Index) openDatabases() error {
+	// Open path to read all database directories.
 	f, err := os.Open(i.path)
 	if err != nil {
 		return err
@@ -56,67 +45,21 @@ func (i *Index) openDatabases() error {
 	for _, fi := range fis {
 		if !fi.IsDir() {
 			continue
-		} else if err := i.openDatabase(filepath.Base(fi.Name())); err != nil {
-			return err
 		}
-	}
-	return nil
-}
 
-// openDatabase recursively opens all frames within a database directory.
-func (i *Index) openDatabase(db string) error {
-	f, err := os.Open(filepath.Join(i.path, db))
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	fis, err := f.Readdir(0)
-	if err != nil {
-		return err
-	}
-
-	for _, fi := range fis {
-		if !fi.IsDir() {
-			continue
-		} else if err := i.openFrame(db, filepath.Base(fi.Name())); err != nil {
-			return err
+		db := NewDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		if err := db.Open(); err != nil {
+			return fmt.Errorf("open db: name=%s, err=%s", db.Name(), err)
 		}
-	}
-	return nil
-}
-
-// openFrame recursively opens all fragments within a frame directory.
-func (i *Index) openFrame(db, frame string) error {
-	f, err := os.Open(filepath.Join(i.path, db, frame))
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	fis, err := f.Readdir(0)
-	if err != nil {
-		return err
-	}
-
-	for _, fi := range fis {
-		slice, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
-		if err != nil || fi.IsDir() {
-			continue
-		}
-		if _, err := i.CreateFragmentIfNotExists(db, frame, slice); err != nil {
-			return fmt.Errorf("open fragment: db=%s, frame=%d, slice=%d, err=%s", db, frame, slice, err)
-		}
+		i.dbs[db.Name()] = db
 	}
 	return nil
 }
 
 // Close closes all open fragments.
 func (i *Index) Close() error {
-	for key, f := range i.frames {
-		if err := f.Close(); err != nil {
-			log.Println("error closing frame(%s/%s): %s", key.db, key.frame, err)
-		}
+	for _, db := range i.dbs {
+		db.Close()
 	}
 	return nil
 }
@@ -124,50 +67,90 @@ func (i *Index) Close() error {
 // Path returns the path the index was initialized with.
 func (i *Index) Path() string { return i.path }
 
-// SliceN returs the total number of slices managed by the index.
+// SliceN returns the highest slice across all frames.
 func (i *Index) SliceN() uint64 {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return i.sliceN
+
+	var sliceN uint64
+	for _, db := range i.dbs {
+		if n := db.SliceN(); n > sliceN {
+			sliceN = n
+		}
+	}
+	return sliceN
 }
 
-// FramePath returns the path where a given frame is stored.
-func (i *Index) FramePath(db, frame string) string { return filepath.Join(i.path, db, frame) }
+// DBPath returns the path where a given database is stored.
+func (i *Index) DBPath(name string) string { return filepath.Join(i.path, name) }
+
+// DB returns the database by name.
+func (i *Index) DB(name string) *DB {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.db(name)
+}
+
+func (i *Index) db(name string) *DB { return i.dbs[name] }
+
+// CreateDBIfNotExists returns a database by name.
+// The database is created if it does not already exist.
+func (i *Index) CreateDBIfNotExists(name string) (*DB, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.createDBIfNotExists(name)
+}
+
+func (i *Index) createDBIfNotExists(name string) (*DB, error) {
+	// Return database if it exists.
+	if db := i.db(name); db != nil {
+		return db, nil
+	}
+
+	// Otherwise create a new database.
+	db := NewDB(i.DBPath(name), name)
+	if err := db.Open(); err != nil {
+		return nil, err
+	}
+	i.dbs[db.Name()] = db
+
+	return db, nil
+}
+
+// Frame returns the frame for a database and name.
+func (i *Index) Frame(db, name string) *Frame {
+	d := i.DB(db)
+	if d == nil {
+		return nil
+	}
+	return d.Frame(name)
+}
+
+// CreateFrameIfNotExists returns the frame for a database & name.
+// The frame is created if it doesn't already exist.
+func (i *Index) CreateFrameIfNotExists(db, name string) (*Frame, error) {
+	d, err := i.CreateDBIfNotExists(db)
+	if err != nil {
+		return nil, err
+	}
+	return d.CreateFrameIfNotExists(name)
+}
 
 // Fragment returns the fragment for a database, frame & slice.
 func (i *Index) Fragment(db, frame string, slice uint64) *Fragment {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	return i.frames[frameKey{db, frame}].fragment(slice)
+	f := i.Frame(db, frame)
+	if f == nil {
+		return nil
+	}
+	return f.fragment(slice)
 }
 
 // CreateFragmentIfNotExists returns the fragment for a database, frame & slice.
 // The fragment is created if it doesn't already exist.
 func (i *Index) CreateFragmentIfNotExists(db, frame string, slice uint64) (*Fragment, error) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Track the highest slice.
-	if slice > i.sliceN {
-		i.sliceN = slice
+	f, err := i.CreateFrameIfNotExists(db, frame)
+	if err != nil {
+		return nil, err
 	}
-
-	// Create frame, if not exists.
-	key := frameKey{db, frame}
-	if i.frames[key] == nil {
-		f := NewFrame(i.FramePath(db, frame), db, frame)
-		if err := f.Open(); err != nil {
-			return nil, err
-		}
-		i.frames[key] = f
-	}
-
-	// Create fragment, if not exists.
-	return i.frames[key].createFragmentIfNotExists(slice)
-}
-
-// frameKey is the map key for frame look ups.
-type frameKey struct {
-	db    string
-	frame string
+	return f.CreateFragmentIfNotExists(slice)
 }
