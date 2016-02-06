@@ -20,6 +20,8 @@ const SliceWidth = 65536
 // SnapshotExt is the file extension used for an in-process snapshot.
 const SnapshotExt = ".snapshotting"
 
+const MinThreshold = 10
+
 // Fragment represents the intersection of a frame and slice in a database.
 type Fragment struct {
 	mu sync.Mutex
@@ -37,6 +39,12 @@ type Fragment struct {
 
 	// Bitmap cache.
 	cache Cache
+
+	// Bitmap attribute storage.
+	// Typically this is the parent frame unless overridden for testing.
+	BitmapAttrStore interface {
+		BitmapAttrs(id uint64) (map[string]interface{}, error)
+	}
 }
 
 // NewFragment returns a new instance of Fragment.
@@ -207,39 +215,9 @@ func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 	})
 
 	// Add to the cache.
-	f.cache.Add(bitmapID, 0 /*filter*/, bm)
+	f.cache.Add(bitmapID, bm)
 
 	return bm
-}
-
-func (f *Fragment) TopNAll(n int, categories []uint64) []Pair {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.cache.Invalidate()
-
-	// Create a set of categories.
-	m := make(map[uint64]struct{})
-	for _, v := range categories {
-		m[v] = struct{}{}
-	}
-
-	// Iterate over rankings and add to results until we have enough.
-	var results []Pair
-	for _, pair := range f.cache.Pairs() {
-		// Skip if categories are specified but category is not found.
-		if _, ok := m[pair.category]; (len(categories) > 0 && !ok) || pair.Count <= 0 {
-			continue
-		}
-
-		// Append pair.
-		results = append(results, pair)
-
-		// Exit when we have enough pairs.
-		if len(results) >= n {
-			break
-		}
-	}
-	return results
 }
 
 // SetBit sets a bit for a given profile & bitmap within the fragment.
@@ -302,123 +280,105 @@ func (f *Fragment) pos(bitmapID, profileID uint64) (uint64, error) {
 	return (bitmapID * SliceWidth) + (profileID % SliceWidth), nil
 }
 
-func (f *Fragment) TopN(src *Bitmap, n int, categories []uint64) []Pair {
+// TopN returns the top n bitmaps from the fragment.
+// If src is specified then only bitmaps which intersect src are returned.
+// If fieldValues exist then the bitmap attribute specified by field is matched.
+func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interface{}) ([]Pair, error) {
+	// Resort cache, if needed, and retrieve the top bitmaps.
 	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Resort rank, if necessary.
 	f.cache.Invalidate()
+	pairs := f.cache.Top()
+	f.mu.Unlock()
 
-	// Create a set of categories.
-	set := make(map[uint64]struct{})
-	for _, v := range categories {
-		set[v] = struct{}{}
+	// Create a fast lookup of filter values.
+	var filters map[interface{}]struct{}
+	if len(fieldValues) > 0 {
+		filters = make(map[interface{}]struct{})
+		for _, v := range fieldValues {
+			filters[v] = struct{}{}
+		}
 	}
 
-	var results []Pair
-	var x int
-	breakout := 1000
+	// Iterate over rankings and add to results until we have enough.
+	results := make([]Pair, 0, n)
+	for _, pair := range pairs {
+		bitmapID, bm := pair.ID, pair.Bitmap
 
-	// Iterate over rankings.
-	rankings := f.cache.Pairs()
-	for i, pair := range rankings {
-		// Skip if category not found.
-		if len(set) > 0 {
-			if _, ok := set[pair.category]; !ok {
+		// Ignore empty bitmaps.
+		if bm.Count() <= 0 {
+			continue
+		}
+
+		// Apply filter, if set.
+		if filters != nil {
+			attr, err := f.BitmapAttrStore.BitmapAttrs(bitmapID)
+			if err != nil {
+				return nil, err
+			} else if attr == nil {
+				continue
+			} else if attrValue := attr[field]; attrValue == nil {
+				continue
+			} else if _, ok := filters[attrValue]; !ok {
 				continue
 			}
 		}
 
-		// Only append if there are intersecting bits with source bitmap.
-		bc := src.IntersectionCount(pair.bitmap)
-		if bc > 0 {
-			results = append(results, Pair{
-				Key:      pair.Key,
-				Count:    bc,
-				category: pair.category,
-			})
-		}
-		x = i
-
-		// Exit when we have enough.
-		if len(results) > n {
-			break
-		}
-	}
-
-	// Sort results by ranking.
-	sort.Sort(Pairs(results))
-
-	if len(results) < n {
-		return results
-	}
-
-	end := len(results) - 1
-	o := results[end]
-	threshold := o.Count
-
-	if threshold <= 10 {
-		return results
-	}
-
-	results = append(results, o)
-	for i := x + 1; i < len(rankings); i++ {
-		o = rankings[i]
-
-		if len(set) > 0 {
-			if _, ok := set[o.category]; !ok {
+		// The initial n pairs should simply be added to the results.
+		if len(results) < n {
+			// Calculate count and append.
+			count := bm.Count()
+			if src != nil {
+				count = src.IntersectionCount(bm)
+			}
+			if count == 0 {
 				continue
 			}
-		}
+			results = append(results, Pair{Key: bitmapID, Count: count})
 
-		// Need something to do with the size of initial bitmap
-		if len(results) > breakout || o.Count < threshold {
-			break
-		}
-
-		bc := src.IntersectionCount(o.bitmap)
-		if bc > threshold {
-			if results[end-1].Count > bc {
-				results[end] = Pair{Key: o.Key, Count: bc, category: o.category}
-				threshold = bc
-			} else {
-				results[end+1] = Pair{Key: o.Key, Count: bc, category: o.category}
+			// If we reach the requested number of pairs and we are not computing
+			// intersections then simply exit. If we are intersecting then sort
+			// and then only keep pairs that are higher than the lowest count.
+			if len(results) == n {
+				if src == nil {
+					break
+				}
 				sort.Sort(Pairs(results))
-				threshold = results[end].Count
-			}
-		}
-	}
-
-	return results[:end]
-}
-
-/*
-func (f *Fragment) TopFill(args FillArgs) ([]Pair, error) {
-	result := make([]Pair, 0)
-	for _, id := range args.Bitmaps {
-		if _, ok := f.cache.Get(id); !ok {
-			continue
-		}
-
-		if args.Handle == 0 {
-			if bm := f.Bitmap(id); bm != nil && bm.Count() > 0 {
-				result = append(result, Pair{Key: id, Count: bm.Count()})
 			}
 			continue
 		}
 
-		res := f.Intersect([]uint64{args.Handle, id})
-		if res == nil {
+		// Retrieve the lowest count we have.
+		// If it's too low then don't try finding anymore pairs.
+		threshold := results[len(results)-1].Count
+		if threshold < MinThreshold {
+			break
+		}
+
+		// If the bitmap doesn't have enough bits set before the intersection
+		// then we can assume that any remaing bitmaps also have a count too low.
+		if bm.Count() < threshold {
+			break
+		}
+
+		// Calculate the intersecting bit count and skip if it's below our
+		// last bitmap in our current result set.
+		count := src.IntersectionCount(bm)
+		if count < threshold {
 			continue
 		}
 
-		if bc := res.BitCount(); bc > 0 {
-			result = append(result, Pair{Key: id, Count: bc})
+		// Swap out the last pair for this new count.
+		results[len(results)-1] = Pair{Key: bitmapID, Count: count}
+
+		// If it's count is also higher than the second to last item then resort.
+		if len(results) >= 2 && count > results[len(results)-2].Count {
+			sort.Sort(Pairs(results))
 		}
 	}
-	return result, nil
+
+	sort.Sort(Pairs(results))
+	return results, nil
 }
-*/
 
 func (f *Fragment) Range(bitmapID uint64, start, end time.Time) *Bitmap {
 	f.mu.Lock()

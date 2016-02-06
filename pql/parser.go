@@ -136,11 +136,7 @@ func (p *Parser) parseClearBitCall() (*ClearBit, error) {
 			if err := decodeString(arg.value, &c.Frame); err != nil {
 				return nil, parseErrorf(pos, "frame: %s", err)
 			}
-		case 2, "filter":
-			if err := decodeUint64(arg.value, &c.Filter); err != nil {
-				return nil, parseErrorf(pos, "filter: %s", err)
-			}
-		case 3, "profileID":
+		case 2, "profileID":
 			if err := decodeUint64(arg.value, &c.ProfileID); err != nil {
 				return nil, parseErrorf(pos, "profileID: %s", err)
 			}
@@ -337,11 +333,7 @@ func (p *Parser) parseSetBitCall() (*SetBit, error) {
 			if err := decodeString(arg.value, &c.Frame); err != nil {
 				return nil, parseErrorf(pos, "frame: %s", err)
 			}
-		case 2, "filter":
-			if err := decodeUint64(arg.value, &c.Filter); err != nil {
-				return nil, parseErrorf(pos, "filter: %s", err)
-			}
-		case 3, "profileID":
+		case 2, "profileID":
 			if err := decodeUint64(arg.value, &c.ProfileID); err != nil {
 				return nil, parseErrorf(pos, "profileID: %s", err)
 			}
@@ -477,6 +469,15 @@ func (p *Parser) parseTopNCall() (*TopN, error) {
 
 	// Copy arguments to AST.
 	for _, arg := range args {
+		if v, ok := arg.value.(BitmapCall); ok {
+			c.Src = v
+			continue
+		}
+		if v, ok := arg.value.([]interface{}); ok {
+			c.Filters = v
+			continue
+		}
+
 		switch arg.key {
 		case 0, "frame":
 			if err := decodeString(arg.value, &c.Frame); err != nil {
@@ -484,6 +485,10 @@ func (p *Parser) parseTopNCall() (*TopN, error) {
 			}
 		case 1, "n":
 			if err := decodeInt(arg.value, &c.N); err != nil {
+				return nil, parseErrorf(pos, "n: %s", err)
+			}
+		case 2, "field":
+			if err := decodeString(arg.value, &c.Field); err != nil {
 				return nil, parseErrorf(pos, "n: %s", err)
 			}
 		default:
@@ -608,12 +613,53 @@ func (p *Parser) parseArg() (arg, error) {
 		}
 		value = v
 	case LBRACK:
-		panic("FIXME: parse list of integers")
+		v, err := p.parseList()
+		if err != nil {
+			return arg{}, err
+		}
+		value = v
 	default:
 		return arg{}, parseErrorf(pos, "invalid value: %q", lit)
 	}
 
 	return arg{key: key, value: value}, nil
+}
+
+// parseListArg parses a list of primitives. This is used by the TopN() filters.
+func (p *Parser) parseList() ([]interface{}, error) {
+	var values []interface{}
+	for {
+		// Read next value.
+		tok, pos, lit := p.scanIgnoreWhitespace()
+		switch tok {
+		case IDENT:
+			if lit == "true" {
+				values = append(values, true)
+			} else if lit == "false" {
+				values = append(values, false)
+			} else {
+				values = append(values, lit)
+			}
+		case STRING:
+			values = append(values, lit)
+		case NUMBER:
+			v, err := strconv.ParseUint(lit, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, v)
+		default:
+			return nil, parseErrorf(pos, "invalid list value: %q", lit)
+		}
+
+		// Expect a comma or closing bracket next.
+		if tok, pos, lit := p.scanIgnoreWhitespace(); tok == RBRACK {
+			break
+		} else if tok != COMMA {
+			return nil, parseErrorf(pos, "expected COMMA, found %q", lit)
+		}
+	}
+	return values, nil
 }
 
 // scan returns the next token from the scanner.

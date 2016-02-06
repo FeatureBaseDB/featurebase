@@ -400,7 +400,7 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 		switch result := resp.Result.(type) {
 		case *Bitmap:
 			pb.Bitmap = encodeBitmap(result)
-		case Pairs:
+		case []Pair:
 			pb.Pairs = encodePairs(result)
 		case uint64:
 			pb.N = proto.Uint64(result)
