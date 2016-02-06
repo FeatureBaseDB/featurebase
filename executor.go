@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"sort"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/umbel/pilosa/internal"
@@ -147,7 +148,63 @@ func (e *Executor) executeBitmapCallSlice(db string, c pql.BitmapCall, slice uin
 
 // executeTopN executes a TopN() call.
 func (e *Executor) executeTopN(db string, c *pql.TopN, slices []uint64) ([]Pair, error) {
-	panic("FIXME: calculate top n from each slice")
+	var results []Pair
+	for node, nodeSlices := range e.slicesByNode(slices) {
+		// Execute locally if the hostname matches.
+		if node.Host == e.Host {
+			for _, slice := range nodeSlices {
+				pairs, err := e.executeTopNSlice(db, c, slice)
+				if err != nil {
+					return nil, err
+				}
+				results = Pairs(results).Add(pairs)
+			}
+			continue
+		}
+
+		// Otherwise execute remotely.
+		res, err := e.exec(node, db, &pql.Query{Root: c}, nodeSlices)
+		if err != nil {
+			return nil, err
+		}
+		results = Pairs(results).Add(res.([]Pair))
+	}
+
+	// Sort final merged results.
+	sort.Sort(Pairs(results))
+
+	// Only keep the top n after sorting.
+	if len(results) > c.N {
+		results = results[0:c.N]
+	}
+
+	return results, nil
+}
+
+// executeTopNSlice executes a TopN call for a single slice.
+func (e *Executor) executeTopNSlice(db string, c *pql.TopN, slice uint64) ([]Pair, error) {
+	// Retrieve bitmap used to intersect.
+	var src *Bitmap
+	if c.Src != nil {
+		bm, err := e.executeBitmapCallSlice(db, c.Src, slice)
+		if err != nil {
+			return nil, err
+		}
+		src = bm
+	}
+
+	// Set default frame.
+	frame := c.Frame
+	if frame == "" {
+		frame = DefaultFrame
+	}
+
+	f := e.Index().Fragment(db, frame, slice)
+	if f == nil {
+		return nil, nil
+	}
+
+	return f.TopN(c.N, src, c.Field, c.Filters)
 }
 
 // executeDifferenceSlice executes a difference() call for a local slice.

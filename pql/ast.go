@@ -111,7 +111,6 @@ func (c *Bitmap) String() string {
 type ClearBit struct {
 	ID        uint64
 	Frame     string
-	Filter    uint64
 	ProfileID uint64
 }
 
@@ -121,9 +120,6 @@ func (c *ClearBit) String() string {
 	args = append(args, fmt.Sprintf("id=%d", c.ID))
 	if c.Frame != "" {
 		args = append(args, fmt.Sprintf("frame=%s", c.Frame))
-	}
-	if c.Filter != 0 {
-		args = append(args, fmt.Sprintf("filter=%d", c.Filter))
 	}
 	if c.ProfileID != 0 {
 		args = append(args, fmt.Sprintf("profileID=%d", c.ProfileID))
@@ -203,7 +199,6 @@ func (c *Range) String() string {
 type SetBit struct {
 	ID        uint64
 	Frame     string
-	Filter    uint64
 	ProfileID uint64
 }
 
@@ -213,9 +208,6 @@ func (c *SetBit) String() string {
 	args = append(args, fmt.Sprintf("id=%d", c.ID))
 	if c.Frame != "" {
 		args = append(args, fmt.Sprintf("frame=%s", c.Frame))
-	}
-	if c.Filter != 0 {
-		args = append(args, fmt.Sprintf("filter=%d", c.Filter))
 	}
 	if c.ProfileID != 0 {
 		args = append(args, fmt.Sprintf("profileID=%d", c.ProfileID))
@@ -302,11 +294,48 @@ func (c *SetProfileAttrs) String() string {
 // TopN represents a TopN() function call.
 type TopN struct {
 	Frame string
-	N     int
+
+	// Bitmap to use for intersection while computing top results.
+	// Original bitmap counts are used if no Src is provided.
+	Src BitmapCall
+
+	// Maximum number of results to return.
+	N int
+
+	// Field name and values to filter on.
+	Field   string
+	Filters []interface{}
 }
 
 // String returns the string representation of the call.
-func (c *TopN) String() string { panic("FIXME") }
+func (c *TopN) String() string {
+	args := make([]string, 0, 2)
+	if c.Src != nil {
+		args = append(args, c.Src.String())
+	}
+	if c.Frame != "" {
+		args = append(args, fmt.Sprintf("frame=%s", c.Frame))
+	}
+	if c.N > 0 {
+		args = append(args, fmt.Sprintf("n=%d", c.N))
+	}
+	if c.Field != "" {
+		args = append(args, fmt.Sprintf("field=%q", c.Field))
+	}
+	if len(c.Filters) > 0 {
+		filters := make([]string, 0, len(c.Filters))
+		for i := range c.Filters {
+			switch filter := c.Filters[i].(type) {
+			case string:
+				filters = append(filters, fmt.Sprintf("%q", filter))
+			default:
+				filters = append(filters, fmt.Sprintf("%v", filter))
+			}
+		}
+		args = append(args, fmt.Sprintf("[%s]", strings.Join(filters, ",")))
+	}
+	return fmt.Sprintf("TopN(%s)", strings.Join(args, ", "))
+}
 
 // Union represents a union() function call.
 type Union struct {

@@ -109,6 +109,7 @@ func (f *Frame) openFragments() error {
 		if err := frag.Open(); err != nil {
 			return fmt.Errorf("open fragment: slice=%s, err=%s", frag.Slice(), err)
 		}
+		frag.BitmapAttrStore = f
 		f.fragments[frag.Slice()] = frag
 	}
 
@@ -189,6 +190,7 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	if err := frag.Open(); err != nil {
 		return nil, err
 	}
+	frag.BitmapAttrStore = f
 	f.fragments[slice] = frag
 
 	return frag, nil

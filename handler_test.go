@@ -288,7 +288,7 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 func TestHandler_Query_Pairs_JSON(t *testing.T) {
 	h := NewHandler()
 	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64) (interface{}, error) {
-		return pilosa.Pairs{
+		return []pilosa.Pair{
 			{Key: 1, Count: 2},
 			{Key: 3, Count: 4},
 		}, nil
@@ -307,7 +307,7 @@ func TestHandler_Query_Pairs_JSON(t *testing.T) {
 func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 	h := NewHandler()
 	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64) (interface{}, error) {
-		return pilosa.Pairs{
+		return []pilosa.Pair{
 			{Key: 1, Count: 2},
 			{Key: 3, Count: 4},
 		}, nil
