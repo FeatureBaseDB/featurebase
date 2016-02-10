@@ -17,8 +17,8 @@ func TestBitmap_String(t *testing.T) {
 
 // Ensure the ClearBit call can be converted into a string.
 func TestClearBit_String(t *testing.T) {
-	s := (&pql.ClearBit{ID: 1, Frame: "x.n", Filter: 2, ProfileID: 3}).String()
-	if s != `ClearBit(id=1, frame=x.n, filter=2, profileID=3)` {
+	s := (&pql.ClearBit{ID: 1, Frame: "x.n", ProfileID: 3}).String()
+	if s != `ClearBit(id=1, frame=x.n, profileID=3)` {
 		t.Fatalf("unexpected string: %s", s)
 	}
 }
@@ -77,8 +77,8 @@ func TestRange_String(t *testing.T) {
 
 // Ensure the SetBit call can be converted into a string.
 func TestSetBit_String(t *testing.T) {
-	s := (&pql.SetBit{ID: 1, Frame: "x.n", Filter: 2, ProfileID: 3}).String()
-	if s != `SetBit(id=1, frame=x.n, filter=2, profileID=3)` {
+	s := (&pql.SetBit{ID: 1, Frame: "x.n", ProfileID: 3}).String()
+	if s != `SetBit(id=1, frame=x.n, profileID=3)` {
 		t.Fatalf("unexpected string: %s", s)
 	}
 }
