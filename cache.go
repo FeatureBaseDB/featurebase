@@ -16,6 +16,9 @@ type Cache interface {
 	Get(bitmapID uint64) *Bitmap
 	Len() int
 
+	// Returns a list of all bitmap IDs.
+	BitmapIDs() []uint64
+
 	// Updates the cache, if necessary.
 	Invalidate()
 
@@ -39,7 +42,7 @@ func NewLRUCache(maxEntries int) *LRUCache {
 	return c
 }
 
-// Get returns a bitmap with a given id.
+// Add adds a bitmap to the cache.
 func (c *LRUCache) Add(bitmapID uint64, bm *Bitmap) {
 	c.cache.Add(bitmapID, bm)
 	c.bitmaps[bitmapID] = bm
@@ -59,6 +62,16 @@ func (c *LRUCache) Len() int { return c.cache.Len() }
 
 // Invalidate is a no-op.
 func (c *LRUCache) Invalidate() {}
+
+// BitmapIDs returns a list of all bitmap IDs in the cache.
+func (c *LRUCache) BitmapIDs() []uint64 {
+	a := make([]uint64, 0, len(c.bitmaps))
+	for id := range c.bitmaps {
+		a = append(a, id)
+	}
+	sort.Sort(uint64Slice(a))
+	return a
+}
 
 // Top returns all bitmaps in the cache.
 func (c *LRUCache) Top() []BitmapPair {
@@ -98,7 +111,7 @@ func NewRankCache() *RankCache {
 	}
 }
 
-// Get returns a bitmap with a given id.
+// Add adds a bitmap to the cache.
 func (c *RankCache) Add(bitmapID uint64, bm *Bitmap) {
 	// Ignore if the bit count on the bitmap is below the threshold.
 	if bm.Count() < c.ThresholdValue {
@@ -124,6 +137,16 @@ func (c *RankCache) Get(bitmapID uint64) *Bitmap { return c.entries[bitmapID] }
 
 // Len returns the number of items in the cache.
 func (c *RankCache) Len() int { return len(c.entries) }
+
+// BitmapIDs returns a list of all bitmap IDs in the cache.
+func (c *RankCache) BitmapIDs() []uint64 {
+	a := make([]uint64, 0, len(c.entries))
+	for id := range c.entries {
+		a = append(a, id)
+	}
+	sort.Sort(uint64Slice(a))
+	return a
+}
 
 // Invalidate reorders the entries, if necessary.
 func (c *RankCache) Invalidate() {
@@ -247,3 +270,10 @@ func decodePairs(a []*internal.Pair) []Pair {
 	}
 	return other
 }
+
+// uint64Slice represents a sortable slice of uint64 numbers.
+type uint64Slice []uint64
+
+func (p uint64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p uint64Slice) Len() int           { return len(p) }
+func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
