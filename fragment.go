@@ -3,6 +3,9 @@ package pilosa
 import (
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
 	"os"
 	"sort"
 	"strings"
@@ -11,16 +14,28 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/umbel/pilosa/internal"
 	"github.com/umbel/pilosa/roaring"
 )
 
-// SliceWidth is the number of profile IDs in a slice.
-const SliceWidth = 65536
+const (
+	// SliceWidth is the number of profile IDs in a slice.
+	SliceWidth = 65536
 
-// SnapshotExt is the file extension used for an in-process snapshot.
-const SnapshotExt = ".snapshotting"
+	// SnapshotExt is the file extension used for an in-process snapshot.
+	SnapshotExt = ".snapshotting"
 
-const MinThreshold = 10
+	// CacheExt is the file extension for persisted cache ids.
+	CacheExt = ".cache"
+
+	MinThreshold = 10
+)
+
+const (
+	// DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
+	DefaultCacheFlushInterval = 1 * time.Minute
+)
 
 // Fragment represents the intersection of a frame and slice in a database.
 type Fragment struct {
@@ -40,6 +55,16 @@ type Fragment struct {
 	// Bitmap cache.
 	cache Cache
 
+	// Close management
+	wg      sync.WaitGroup
+	closing chan struct{}
+
+	// The interval at which the cached bitmap ids are persisted to disk.
+	CacheFlushInterval time.Duration
+
+	// Writer used for out-of-band log entries.
+	LogOutput io.Writer
+
 	// Bitmap attribute storage.
 	// Typically this is the parent frame unless overridden for testing.
 	BitmapAttrStore interface {
@@ -49,28 +74,23 @@ type Fragment struct {
 
 // NewFragment returns a new instance of Fragment.
 func NewFragment(path, db, frame string, slice uint64) *Fragment {
-	f := &Fragment{
-		path:  path,
-		db:    db,
-		frame: frame,
-		slice: slice,
-	}
+	return &Fragment{
+		path:    path,
+		db:      db,
+		frame:   frame,
+		slice:   slice,
+		closing: make(chan struct{}, 0),
 
-	// Determine cache type from frame name.
-	if strings.HasSuffix(frame, ".n") {
-		c := NewRankCache()
-		c.ThresholdLength = 50000
-		c.ThresholdIndex = 45000
-		f.cache = c
-	} else {
-		f.cache = NewLRUCache(50000)
+		LogOutput:          os.Stderr,
+		CacheFlushInterval: DefaultCacheFlushInterval,
 	}
-
-	return f
 }
 
 // Path returns the path the fragment was initialized with.
 func (f *Fragment) Path() string { return f.path }
+
+// CachePath returns the path to the fragment's cache data.
+func (f *Fragment) CachePath() string { return f.path + CacheExt }
 
 // DB returns the database the fragment was initialized with.
 func (f *Fragment) DB() string { return f.db }
@@ -81,13 +101,28 @@ func (f *Fragment) Frame() string { return f.frame }
 // Slice returns the slice the fragment was initialized with.
 func (f *Fragment) Slice() uint64 { return f.slice }
 
+// Cache returns the fragment's cache.
+// This is not safe for concurrent use.
+func (f *Fragment) Cache() Cache { return f.cache }
+
 // Open opens the underlying storage.
 func (f *Fragment) Open() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// Initialize storage in a function so we can close if anything goes wrong.
-	if err := f.openStorage(); err != nil {
+	if err := func() error {
+		// Initialize storage in a function so we can close if anything goes wrong.
+		if err := f.openStorage(); err != nil {
+			return err
+		}
+
+		// Fill cache with bitmaps persisted to disk.
+		if err := f.openCache(); err != nil {
+			return err
+		}
+
+		return nil
+	}(); err != nil {
 		f.close()
 		return err
 	}
@@ -152,6 +187,47 @@ func (f *Fragment) openStorage() error {
 
 }
 
+// openCache initializes the cache from bitmap ids persisted to disk.
+func (f *Fragment) openCache() error {
+	// Determine cache type from frame name.
+	if strings.HasSuffix(f.frame, ".n") {
+		c := NewRankCache()
+		c.ThresholdLength = 50000
+		c.ThresholdIndex = 45000
+		f.cache = c
+	} else {
+		f.cache = NewLRUCache(50000)
+	}
+
+	// Read cache data from disk.
+	path := f.CachePath()
+	buf, err := ioutil.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("open cache: %s", err)
+	}
+
+	// Unmarshal cache data.
+	var pb internal.Cache
+	if err := proto.Unmarshal(buf, &pb); err != nil {
+		log.Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
+		return nil
+	}
+
+	// Read in all bitmaps by ID.
+	// This will cause them to be added to the cache.
+	for _, bitmapID := range pb.GetBitmapIDs() {
+		f.bitmap(bitmapID)
+	}
+
+	// Periodically flush cache.
+	f.wg.Add(1)
+	go func() { defer f.wg.Done(); f.monitorCacheFlush() }()
+
+	return nil
+}
+
 // Close flushes the underlying storage, closes the file and unlocks it.
 func (f *Fragment) Close() error {
 	f.mu.Lock()
@@ -160,9 +236,22 @@ func (f *Fragment) Close() error {
 }
 
 func (f *Fragment) close() error {
-	if err := f.closeStorage(); err != nil {
-		return err
+	// Notify goroutines of closing and wait for completion.
+	close(f.closing)
+	f.mu.Unlock()
+	f.wg.Wait()
+	f.mu.Lock()
+
+	// Flush cache if closing gracefully.
+	if err := f.flushCache(); err != nil {
+		f.logger().Printf("error flushing cache on close: err=%s, path=%s", err, f.path)
 	}
+
+	// Close underlying storage.
+	if err := f.closeStorage(); err != nil {
+		f.logger().Printf("error closing storage: err=%s, path=%s", err, f.path)
+	}
+
 	return nil
 }
 
@@ -193,6 +282,9 @@ func (f *Fragment) closeStorage() error {
 
 	return nil
 }
+
+// logger returns a logger instance for the fragment.nt.
+func (f *Fragment) logger() *log.Logger { return log.New(f.LogOutput, "", log.LstdFlags) }
 
 // Bitmap returns a bitmap by ID.
 func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
@@ -474,6 +566,55 @@ func (f *Fragment) snapshot() error {
 	// Reopen storage.
 	if err := f.openStorage(); err != nil {
 		return fmt.Errorf("open storage: %s", err)
+	}
+
+	return nil
+}
+
+// monitorCacheFlush periodically flushes the cache to disk.
+// This is run in a goroutine.
+func (f *Fragment) monitorCacheFlush() {
+	ticker := time.NewTicker(f.CacheFlushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-f.closing:
+			return
+		case <-ticker.C:
+			if err := f.FlushCache(); err != nil {
+				f.logger().Printf("error flushing cache: err=%s, path=%s", err, f.CachePath())
+			}
+		}
+	}
+}
+
+// FlushCache writes the cache data to disk.
+func (f *Fragment) FlushCache() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.flushCache()
+}
+
+func (f *Fragment) flushCache() error {
+	if f.cache == nil {
+		return nil
+	}
+
+	// Retrieve a list of bitmap ids from the cache.
+	bitmapIDs := f.cache.BitmapIDs()
+
+	// Marshal cache data to bytes.
+	buf, err := proto.Marshal(&internal.Cache{
+		BitmapIDs: bitmapIDs,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Write to disk.
+	if err := ioutil.WriteFile(f.CachePath(), buf, 0666); err != nil {
+		return err
 	}
 
 	return nil

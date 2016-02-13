@@ -11,12 +11,18 @@
 			"Rev": "056c9bc7be7190eaa7715723883caffa5f8fa3e4"
 		},
 		{
+			"ImportPath": "github.com/boltdb/bolt",
+			"Comment": "v1.1.0-65-gee4a088",
+			"Rev": "ee4a0888a9abe7eefe5a0992ca4cb06864839873"
+		},
+		{
 			"ImportPath": "github.com/davecgh/go-spew/spew",
 			"Rev": "e762b3d1320b76030bd7f6cc2bfc3d9acce874c0"
 		},
 		{
 			"ImportPath": "github.com/gogo/protobuf/proto",
-			"Rev": "499788908625f4d83de42a204d1350fde8588e4f"
+			"Comment": "v0.1-125-g82d16f7",
+			"Rev": "82d16f734d6d871204a3feb1a73cb220cc92574c"
 		},
 		{
 			"ImportPath": "github.com/golang/groupcache/lru",
@@ -25,6 +31,10 @@
 		{
 			"ImportPath": "github.com/yasushi-saito/rbtree",
 			"Rev": "571e2538414bf914c7e2909b61217b4e3e5508f4"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "50c6bc5e4292a1d4e65c6e9be5f53be28bcbe28e"
 		}
 	]
 }
