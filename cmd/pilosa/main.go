@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"os/user"
 	"path/filepath"
 	"runtime/pprof"
@@ -55,8 +56,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Wait indefinitely.
-	<-(chan struct{})(nil)
+	// First SIGKILL causes server to shut down gracefully.
+	// Second signal causes a hard shutdown.
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt)
+	sig := <-c
+	fmt.Fprintf(m.Stderr, "Received %s; gracefully shutting down...\n", sig.String())
+	go func() { <-c; os.Exit(1) }()
+
+	if err := m.Close(); err != nil {
+		fmt.Fprintln(m.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 // Main represents the main program execution.

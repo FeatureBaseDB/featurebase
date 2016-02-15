@@ -211,6 +211,70 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	}
 }
 
+// Ensure a fragment's cache can be persisted between restarts.
+func TestFragment_LRUCache_Persistence(t *testing.T) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+
+	// Set bits on the fragment.
+	for i := uint64(0); i < 1000; i++ {
+		if err := f.SetBit(i, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify correct cache type and size.
+	if cache, ok := f.Cache().(*pilosa.LRUCache); !ok {
+		t.Fatalf("unexpected cache: %T", f.Cache())
+	} else if cache.Len() != 1000 {
+		t.Fatalf("unexpected cache len: %d", cache.Len())
+	}
+
+	// Reopen the fragment.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-verify correct cache type and size.
+	if cache, ok := f.Cache().(*pilosa.LRUCache); !ok {
+		t.Fatalf("unexpected cache: %T", f.Cache())
+	} else if cache.Len() != 1000 {
+		t.Fatalf("unexpected cache len: %d", cache.Len())
+	}
+}
+
+// Ensure a fragment's cache can be persisted between restarts.
+func TestFragment_RankCache_Persistence(t *testing.T) {
+	f := MustOpenFragment("d", "f.n", 0)
+	defer f.Close()
+
+	// Set bits on the fragment.
+	for i := uint64(0); i < 1000; i++ {
+		if err := f.SetBit(i, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Verify correct cache type and size.
+	if cache, ok := f.Cache().(*pilosa.RankCache); !ok {
+		t.Fatalf("unexpected cache: %T", f.Cache())
+	} else if cache.Len() != 1000 {
+		t.Fatalf("unexpected cache len: %d", cache.Len())
+	}
+
+	// Reopen the fragment.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-verify correct cache type and size.
+	if cache, ok := f.Cache().(*pilosa.RankCache); !ok {
+		t.Fatalf("unexpected cache: %T", f.Cache())
+	} else if cache.Len() != 1000 {
+		t.Fatalf("unexpected cache len: %d", cache.Len())
+	}
+}
+
 // Fragment is a test wrapper for pilosa.Fragment.
 type Fragment struct {
 	*pilosa.Fragment
@@ -245,17 +309,19 @@ func MustOpenFragment(db, frame string, slice uint64) *Fragment {
 // Close closes the fragment and removes all underlying data.
 func (f *Fragment) Close() error {
 	defer os.Remove(f.Path())
+	defer os.Remove(f.CachePath())
 	return f.Fragment.Close()
 }
 
 // Reopen closes the fragment and reopens it as a new instance.
 func (f *Fragment) Reopen() error {
 	path := f.Path()
-	if err := f.Close(); err != nil {
+	if err := f.Fragment.Close(); err != nil {
 		return err
 	}
 
-	f = &Fragment{Fragment: pilosa.NewFragment(path, f.DB(), f.Frame(), f.Slice())}
+	f.Fragment = pilosa.NewFragment(path, f.DB(), f.Frame(), f.Slice())
+	f.Fragment.BitmapAttrStore = f.BitmapAttrStore
 	if err := f.Open(); err != nil {
 		return err
 	}

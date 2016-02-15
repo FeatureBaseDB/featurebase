@@ -58,3 +58,7 @@ message ImportRequest {
 message ImportResponse {
 	optional string Err = 1;
 }
+
+message Cache {
+	repeated uint64 BitmapIDs = 1;
+}
