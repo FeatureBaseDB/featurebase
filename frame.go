@@ -1,16 +1,11 @@
 package pilosa
 
 import (
-	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
-	"time"
-
-	"github.com/boltdb/bolt"
 )
 
 // Frame represents a container for fragments.
@@ -24,8 +19,7 @@ type Frame struct {
 	fragments map[uint64]*Fragment
 
 	// Bitmap attribute storage and cache
-	store *bolt.DB
-	attrs map[uint64]map[string]interface{}
+	bitmapAttrStore *AttrStore
 }
 
 // NewFrame returns a new instance of frame.
@@ -35,8 +29,8 @@ func NewFrame(path, db, name string) *Frame {
 		db:   db,
 		name: name,
 
-		fragments: make(map[uint64]*Fragment),
-		attrs:     make(map[uint64]map[string]interface{}),
+		fragments:       make(map[uint64]*Fragment),
+		bitmapAttrStore: NewAttrStore(filepath.Join(path, "data")),
 	}
 }
 
@@ -48,6 +42,9 @@ func (f *Frame) DB() string { return f.db }
 
 // Path returns the path the frame was initialized with.
 func (f *Frame) Path() string { return f.path }
+
+// BitmapAttrStore returns the attribute storage.
+func (f *Frame) BitmapAttrStore() *AttrStore { return f.bitmapAttrStore }
 
 // SliceN returns the max slice in the frame.
 func (f *Frame) SliceN() uint64 {
@@ -65,16 +62,23 @@ func (f *Frame) SliceN() uint64 {
 
 // Open opens and initializes the frame.
 func (f *Frame) Open() error {
-	// Ensure the frame's path exists.
-	if err := os.MkdirAll(f.path, 0777); err != nil {
-		return err
-	}
+	if err := func() error {
+		// Ensure the frame's path exists.
+		if err := os.MkdirAll(f.path, 0777); err != nil {
+			return err
+		}
 
-	if err := f.openFragments(); err != nil {
-		return err
-	}
+		if err := f.openFragments(); err != nil {
+			return err
+		}
 
-	if err := f.openStore(); err != nil {
+		if err := f.bitmapAttrStore.Open(); err != nil {
+			return err
+		}
+
+		return nil
+	}(); err != nil {
+		f.Close()
 		return err
 	}
 
@@ -109,31 +113,8 @@ func (f *Frame) openFragments() error {
 		if err := frag.Open(); err != nil {
 			return fmt.Errorf("open fragment: slice=%s, err=%s", frag.Slice(), err)
 		}
-		frag.BitmapAttrStore = f
+		frag.BitmapAttrStore = f.bitmapAttrStore
 		f.fragments[frag.Slice()] = frag
-	}
-
-	return nil
-}
-
-// openStore opens and initializes the attribute store.
-func (f *Frame) openStore() error {
-	// Open attribute store.
-	store, err := bolt.Open(filepath.Join(f.path, "data"), 0666, &bolt.Options{Timeout: 1 * time.Second})
-	if err != nil {
-		return err
-	}
-	f.store = store
-
-	// Initialize database.
-	if err := f.store.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucketIfNotExists([]byte("attrs")); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		_ = f.Close()
-		return err
 	}
 
 	return nil
@@ -145,8 +126,8 @@ func (f *Frame) Close() error {
 	defer f.mu.Unlock()
 
 	// Close the attribute store.
-	if f.store != nil {
-		_ = f.store.Close()
+	if f.bitmapAttrStore != nil {
+		_ = f.bitmapAttrStore.Close()
 	}
 
 	// Close all fragments.
@@ -190,107 +171,10 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	if err := frag.Open(); err != nil {
 		return nil, err
 	}
-	frag.BitmapAttrStore = f
+	frag.BitmapAttrStore = f.bitmapAttrStore
+
+	// Save to lookup.
 	f.fragments[slice] = frag
 
 	return frag, nil
 }
-
-// BitmapAttrs returns the value of the attribute for a bitmap.
-func (f *Frame) BitmapAttrs(id uint64) (m map[string]interface{}, err error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Check cache for map.
-	if m = f.attrs[id]; m != nil {
-		return m, nil
-	}
-
-	// Find attributes from storage.
-	if err = f.store.View(func(tx *bolt.Tx) error {
-		m, err = txBitmapAttrs(tx, id)
-		if err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	// Add to cache.
-	f.attrs[id] = m
-
-	return
-}
-
-// SetBitmapAttrs sets attribute values for a bitmap.
-func (f *Frame) SetBitmapAttrs(id uint64, m map[string]interface{}) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	var attr map[string]interface{}
-	if err := f.store.Update(func(tx *bolt.Tx) error {
-		tmp, err := txBitmapAttrs(tx, id)
-		if err != nil {
-			return err
-		}
-		attr = tmp
-
-		// Create a new map if it is empty so we don't update emptyMap.
-		if len(attr) == 0 {
-			attr = make(map[string]interface{}, len(m))
-		}
-
-		// Merge attributes with original values.
-		// Nil values should delete keys.
-		for k, v := range m {
-			if v == nil {
-				delete(attr, k)
-			} else {
-				attr[k] = v
-			}
-		}
-
-		// Marshal and save new values.
-		buf, err := json.Marshal(attr)
-		if err != nil {
-			return err
-		}
-		if err := tx.Bucket([]byte("attrs")).Put(u64tob(id), buf); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	// Swap attributes map in cache.
-	f.attrs[id] = attr
-
-	return nil
-}
-
-// txBitmapAttrs returns a map of attributes for a bitmap.
-func txBitmapAttrs(tx *bolt.Tx, id uint64) (map[string]interface{}, error) {
-	if v := tx.Bucket([]byte("attrs")).Get(u64tob(id)); v != nil {
-		m := make(map[string]interface{})
-		if err := json.Unmarshal(v, &m); err != nil {
-			return nil, err
-		}
-		return m, nil
-	}
-	return emptyMap, nil
-}
-
-// u64tob encodes v to big endian encoding.
-func u64tob(v uint64) []byte {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, v)
-	return b
-}
-
-// btou64 decodes b from big endian encoding.
-func btou64(b []byte) uint64 { return binary.BigEndian.Uint64(b) }
-
-// emptyMap is a reusable map that contains no keys.
-var emptyMap = make(map[string]interface{})

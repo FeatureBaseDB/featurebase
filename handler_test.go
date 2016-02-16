@@ -161,9 +161,9 @@ func TestHandler_Query_Bitmap_Profiles_JSON(t *testing.T) {
 	db, err := idx.CreateDBIfNotExists("d")
 	if err != nil {
 		t.Fatal(err)
-	} else if err := db.SetProfileAttrs(3, map[string]interface{}{"x": "y"}); err != nil {
+	} else if err := db.ProfileAttrStore().SetAttrs(3, map[string]interface{}{"x": "y"}); err != nil {
 		t.Fatal(err)
-	} else if err := db.SetProfileAttrs(66, map[string]interface{}{"y": 123, "z": false}); err != nil {
+	} else if err := db.ProfileAttrStore().SetAttrs(66, map[string]interface{}{"y": 123, "z": false}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -226,7 +226,7 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 	db, err := idx.CreateDBIfNotExists("d")
 	if err != nil {
 		t.Fatal(err)
-	} else if err := db.SetProfileAttrs(1, map[string]interface{}{"x": "y"}); err != nil {
+	} else if err := db.ProfileAttrStore().SetAttrs(1, map[string]interface{}{"x": "y"}); err != nil {
 		t.Fatal(err)
 	}
 

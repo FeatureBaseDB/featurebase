@@ -17,7 +17,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 	idx.MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(10, 3)
 	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBits(10, SliceWidth+1)
 
-	if err := idx.Frame("d", "f").SetBitmapAttrs(10, map[string]interface{}{"foo": "bar", "baz": 123}); err != nil {
+	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"foo": "bar", "baz": 123}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -155,7 +155,7 @@ func TestExecutor_Execute_SetBitmapAttrs(t *testing.T) {
 	}
 
 	f := idx.Frame("d", "f")
-	if m, err := f.BitmapAttrs(10); err != nil {
+	if m, err := f.BitmapAttrStore().Attrs(10); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(m, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
 		t.Fatalf("unexpected bitmap attr: %#v", m)
