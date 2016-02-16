@@ -117,7 +117,7 @@ func (e *Executor) executeBitmapCall(db string, c pql.BitmapCall, slices []uint6
 	if c, ok := c.(*pql.Bitmap); ok {
 		fr := e.Index().Frame(db, c.Frame)
 		if fr != nil {
-			attrs, err := fr.BitmapAttrs(c.ID)
+			attrs, err := fr.BitmapAttrStore().Attrs(c.ID)
 			if err != nil {
 				return nil, err
 			}
@@ -347,7 +347,7 @@ func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs) error
 	}
 
 	// Set attributes.
-	if err := frame.SetBitmapAttrs(c.ID, c.Attrs); err != nil {
+	if err := frame.BitmapAttrStore().SetAttrs(c.ID, c.Attrs); err != nil {
 		return err
 	}
 
@@ -365,7 +365,7 @@ func (e *Executor) executeSetProfileAttrs(db string, c *pql.SetProfileAttrs) err
 	}
 
 	// Set attributes.
-	if err := d.SetProfileAttrs(c.ID, c.Attrs); err != nil {
+	if err := d.ProfileAttrStore().SetAttrs(c.ID, c.Attrs); err != nil {
 		return err
 	}
 

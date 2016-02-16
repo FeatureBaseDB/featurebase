@@ -15,6 +15,7 @@ It has these top-level messages:
 	Bit
 	Profile
 	Attr
+	AttrMap
 	QueryRequest
 	QueryResponse
 	ImportRequest
@@ -192,6 +193,22 @@ func (m *Attr) GetBoolValue() bool {
 	return false
 }
 
+type AttrMap struct {
+	Attrs            []*Attr `protobuf:"bytes,1,rep,name=Attrs" json:"Attrs,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *AttrMap) Reset()         { *m = AttrMap{} }
+func (m *AttrMap) String() string { return proto.CompactTextString(m) }
+func (*AttrMap) ProtoMessage()    {}
+
+func (m *AttrMap) GetAttrs() []*Attr {
+	if m != nil {
+		return m.Attrs
+	}
+	return nil
+}
+
 type QueryRequest struct {
 	DB               *string  `protobuf:"bytes,1,req,name=DB" json:"DB,omitempty"`
 	Query            *string  `protobuf:"bytes,2,req,name=Query" json:"Query,omitempty"`
@@ -367,6 +384,7 @@ func init() {
 	proto.RegisterType((*Bit)(nil), "internal.Bit")
 	proto.RegisterType((*Profile)(nil), "internal.Profile")
 	proto.RegisterType((*Attr)(nil), "internal.Attr")
+	proto.RegisterType((*AttrMap)(nil), "internal.AttrMap")
 	proto.RegisterType((*QueryRequest)(nil), "internal.QueryRequest")
 	proto.RegisterType((*QueryResponse)(nil), "internal.QueryResponse")
 	proto.RegisterType((*ImportRequest)(nil), "internal.ImportRequest")
