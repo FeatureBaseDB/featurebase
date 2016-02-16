@@ -303,7 +303,7 @@ func (cmd *ImportCommand) parsePath(path string) ([]pilosa.Bit, error) {
 		// Ignore blank rows.
 		if record[0] == "" {
 			continue
-		} else if len(record) != 2 {
+		} else if len(record) < 2 {
 			return nil, fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
 		}
 
