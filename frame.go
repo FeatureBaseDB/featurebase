@@ -2,7 +2,8 @@ package pilosa
 
 import (
 	"encoding/binary"
-	"encoding/json"
+	"encoding/gob"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -252,11 +253,16 @@ func (f *Frame) SetBitmapAttrs(id uint64, m map[string]interface{}) error {
 		}
 
 		// Marshal and save new values.
-		buf, err := json.Marshal(attr)
-		if err != nil {
+			var buf bytes.Buffer        // Stand-in for a network connection
+	enc := gob.NewEncoder(&buf) // Will write to network.
+		
+
+
+	//	buf, err := json.Marshal(attr)
+		if err:=		enc.Encode(attr);err != nil {
 			return err
 		}
-		if err := tx.Bucket([]byte("attrs")).Put(u64tob(id), buf); err != nil {
+		if err := tx.Bucket([]byte("attrs")).Put(u64tob(id), buf.Bytes()); err != nil {
 			return err
 		}
 		return nil
@@ -274,7 +280,8 @@ func (f *Frame) SetBitmapAttrs(id uint64, m map[string]interface{}) error {
 func txBitmapAttrs(tx *bolt.Tx, id uint64) (map[string]interface{}, error) {
 	if v := tx.Bucket([]byte("attrs")).Get(u64tob(id)); v != nil {
 		m := make(map[string]interface{})
-		if err := json.Unmarshal(v, &m); err != nil {
+		dec := gob.NewDecoder(bytes.NewReader(v))
+		if err:=		dec.Decode(&m); err != nil {
 			return nil, err
 		}
 		return m, nil

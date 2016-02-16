@@ -387,7 +387,13 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 	if len(fieldValues) > 0 {
 		filters = make(map[interface{}]struct{})
 		for _, v := range fieldValues {
-			filters[v] = struct{}{}
+			switch v.(type) {
+			case uint64:
+				filters[int64(v.(uint64))] = struct{}{}
+			default:
+				filters[v] = struct{}{}
+
+			}
 		}
 	}
 
@@ -404,6 +410,7 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 		// Apply filter, if set.
 		if filters != nil {
 			attr, err := f.BitmapAttrStore.BitmapAttrs(bitmapID)
+
 			if err != nil {
 				return nil, err
 			} else if attr == nil {
