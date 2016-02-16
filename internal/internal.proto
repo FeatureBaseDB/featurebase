@@ -32,6 +32,10 @@ message Attr {
 	optional bool BoolValue     = 4;
 }
 
+message AttrMap {
+	repeated Attr Attrs = 1;
+}
+
 message QueryRequest {
 	required string DB       = 1;
 	required string Query    = 2;

@@ -3,7 +3,6 @@ package pilosa_test
 import (
 	"io/ioutil"
 	"os"
-	"reflect"
 	"testing"
 
 	"github.com/umbel/pilosa"
@@ -32,67 +31,6 @@ func TestFrame_CreateFragmentIfNotExists(t *testing.T) {
 
 	if frag != f.Fragment(100) {
 		t.Fatal("fragment mismatch")
-	}
-}
-
-// Ensure frame can set and retrieve bitmap attributes.
-func TestFrame_BitmapAttrs(t *testing.T) {
-	f := MustOpenFrame()
-	defer f.Close()
-
-	// Set attributes.
-	if err := f.SetBitmapAttrs(1, map[string]interface{}{"A": float64(100)}); err != nil {
-		t.Fatal(err)
-	} else if err := f.SetBitmapAttrs(2, map[string]interface{}{"A": float64(200)}); err != nil {
-		t.Fatal(err)
-	} else if err := f.SetBitmapAttrs(1, map[string]interface{}{"B": "VALUE"}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Retrieve attributes for bitmap #1.
-	if m, err := f.BitmapAttrs(1); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(m, map[string]interface{}{"A": float64(100), "B": "VALUE"}) {
-		t.Fatalf("unexpected attrs(1): %#v", m)
-	}
-
-	// Retrieve attributes for bitmap #2.
-	if m, err := f.BitmapAttrs(2); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(m, map[string]interface{}{"A": float64(200)}) {
-		t.Fatalf("unexpected attrs(2): %#v", m)
-	}
-}
-
-// Ensure frame returns a non-nil empty map if unset.
-func TestFrame_BitmapAttrs_Empty(t *testing.T) {
-	f := MustOpenFrame()
-	defer f.Close()
-
-	if m, err := f.BitmapAttrs(100); err != nil {
-		t.Fatal(err)
-	} else if m == nil || len(m) > 0 {
-		t.Fatalf("unexpected attrs: %#v", m)
-	}
-}
-
-// Ensure frame can unset attributes if explicitly set to nil.
-func TestFrame_BitmapAttrs_Unset(t *testing.T) {
-	f := MustOpenFrame()
-	defer f.Close()
-
-	// Set attributes.
-	if err := f.SetBitmapAttrs(1, map[string]interface{}{"A": "X", "B": "Y"}); err != nil {
-		t.Fatal(err)
-	} else if err := f.SetBitmapAttrs(1, map[string]interface{}{"B": nil}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify attributes.
-	if m, err := f.BitmapAttrs(1); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(m, map[string]interface{}{"A": "X"}) {
-		t.Fatalf("unexpected attrs: %#v", m)
 	}
 }
 

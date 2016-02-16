@@ -138,7 +138,7 @@ func (h *Handler) readProfiles(db *DB, ids []uint64) ([]*Profile, error) {
 	a := make([]*Profile, 0, len(ids))
 	for _, id := range ids {
 		// Read attributes for profile. Skip profile if empty.
-		attrs, err := db.ProfileAttrs(id)
+		attrs, err := db.ProfileAttrStore().Attrs(id)
 		if err != nil {
 			return nil, err
 		} else if len(attrs) == 0 {

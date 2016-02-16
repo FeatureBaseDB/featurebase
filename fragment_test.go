@@ -133,8 +133,8 @@ func TestFragment_TopN_Filter(t *testing.T) {
 	f.MustSetBits(102, 1, 2)
 
 	// Assign attributes.
-	f.BitmapAttrStore.SetBitmapAttrs(101, map[string]interface{}{"x": 10})
-	f.BitmapAttrStore.SetBitmapAttrs(102, map[string]interface{}{"x": 20})
+	f.BitmapAttrStore.SetAttrs(101, map[string]interface{}{"x": 10})
+	f.BitmapAttrStore.SetAttrs(102, map[string]interface{}{"x": 20})
 
 	// Retrieve top bitmaps.
 	if pairs, err := f.TopN(2, nil, "x", []interface{}{10, 15, 20}); err != nil {
@@ -278,7 +278,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 // Fragment is a test wrapper for pilosa.Fragment.
 type Fragment struct {
 	*pilosa.Fragment
-	BitmapAttrStore *BitmapAttrStore
+	BitmapAttrStore *AttrStore
 }
 
 // NewFragment returns a new instance of Fragment with a temporary path.
@@ -291,9 +291,9 @@ func NewFragment(db, frame string, slice uint64) *Fragment {
 
 	f := &Fragment{
 		Fragment:        pilosa.NewFragment(file.Name(), db, frame, slice),
-		BitmapAttrStore: NewBitmapAttrStore(),
+		BitmapAttrStore: MustOpenAttrStore(),
 	}
-	f.Fragment.BitmapAttrStore = f.BitmapAttrStore
+	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
 	return f
 }
 
@@ -310,6 +310,7 @@ func MustOpenFragment(db, frame string, slice uint64) *Fragment {
 func (f *Fragment) Close() error {
 	defer os.Remove(f.Path())
 	defer os.Remove(f.CachePath())
+	defer f.BitmapAttrStore.Close()
 	return f.Fragment.Close()
 }
 
@@ -321,7 +322,7 @@ func (f *Fragment) Reopen() error {
 	}
 
 	f.Fragment = pilosa.NewFragment(path, f.DB(), f.Frame(), f.Slice())
-	f.Fragment.BitmapAttrStore = f.BitmapAttrStore
+	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
 	if err := f.Open(); err != nil {
 		return err
 	}
