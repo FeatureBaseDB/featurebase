@@ -2,7 +2,6 @@ package pilosa
 
 import (
 	"errors"
-	"sort"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/umbel/pilosa/internal"
@@ -72,53 +71,4 @@ func decodeProfile(pb *internal.Profile) *Profile {
 	}
 
 	return p
-}
-
-func encodeAttrs(m map[string]interface{}) []*internal.Attr {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	a := make([]*internal.Attr, len(keys))
-	for i := range keys {
-		a[i] = encodeAttr(keys[i], m[keys[i]])
-	}
-	return a
-}
-
-func decodeAttrs(pb []*internal.Attr) map[string]interface{} {
-	m := make(map[string]interface{}, len(pb))
-	for i := range pb {
-		key, value := decodeAttr(pb[i])
-		m[key] = value
-	}
-	return m
-}
-
-// encodeAttr converts a key/value pair into an Attr internal representation.
-func encodeAttr(key string, value interface{}) *internal.Attr {
-	pb := &internal.Attr{Key: proto.String(key)}
-	switch value := value.(type) {
-	case string:
-		pb.StringValue = proto.String(value)
-	case int64:
-		pb.IntValue = proto.Int64(value)
-	case bool:
-		pb.BoolValue = proto.Bool(value)
-	}
-	return pb
-}
-
-// decodeAttr converts from an Attr internal representation to a key/value pair.
-func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
-	if attr.StringValue != nil {
-		return attr.GetKey(), attr.GetStringValue()
-	} else if attr.IntValue != nil {
-		return attr.GetKey(), attr.GetIntValue()
-	} else if attr.BoolValue != nil {
-		return attr.GetKey(), attr.GetBoolValue()
-	}
-	return attr.GetKey(), nil
 }

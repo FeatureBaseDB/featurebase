@@ -66,10 +66,8 @@ type Fragment struct {
 	LogOutput io.Writer
 
 	// Bitmap attribute storage.
-	// Typically this is the parent frame unless overridden for testing.
-	BitmapAttrStore interface {
-		BitmapAttrs(id uint64) (map[string]interface{}, error)
-	}
+	// This is set by the parent frame unless overridden for testing.
+	BitmapAttrStore *AttrStore
 }
 
 // NewFragment returns a new instance of Fragment.
@@ -403,7 +401,7 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 
 		// Apply filter, if set.
 		if filters != nil {
-			attr, err := f.BitmapAttrStore.BitmapAttrs(bitmapID)
+			attr, err := f.BitmapAttrStore.Attrs(bitmapID)
 			if err != nil {
 				return nil, err
 			} else if attr == nil {

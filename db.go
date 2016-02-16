@@ -1,14 +1,10 @@
 package pilosa
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
-
-	"github.com/boltdb/bolt"
 )
 
 // DB represents a container for frames.
@@ -21,8 +17,7 @@ type DB struct {
 	frames map[string]*Frame
 
 	// Profile attribute storage and cache
-	store *bolt.DB
-	attrs map[uint64]map[string]interface{}
+	profileAttrStore *AttrStore
 }
 
 // NewDB returns a new instance of DB.
@@ -31,7 +26,8 @@ func NewDB(path, name string) *DB {
 		path:   path,
 		name:   name,
 		frames: make(map[string]*Frame),
-		attrs:  make(map[uint64]map[string]interface{}),
+
+		profileAttrStore: NewAttrStore(filepath.Join(path, "data")),
 	}
 }
 
@@ -40,6 +36,9 @@ func (db *DB) Name() string { return db.name }
 
 // Path returns the path the database was initialized with.
 func (db *DB) Path() string { return db.path }
+
+// ProfileAttrStore returns the storage for profile attributes.
+func (db *DB) ProfileAttrStore() *AttrStore { return db.profileAttrStore }
 
 // Open opens and initializes the database.
 func (db *DB) Open() error {
@@ -52,7 +51,7 @@ func (db *DB) Open() error {
 		return err
 	}
 
-	if err := db.openStore(); err != nil {
+	if err := db.profileAttrStore.Open(); err != nil {
 		return err
 	}
 
@@ -86,37 +85,14 @@ func (db *DB) openFrames() error {
 	return nil
 }
 
-// openStore opens and initializes the attribute store.
-func (db *DB) openStore() error {
-	// Open attribute store.
-	store, err := bolt.Open(filepath.Join(db.path, "data"), 0666, &bolt.Options{Timeout: 1 * time.Second})
-	if err != nil {
-		return err
-	}
-	db.store = store
-
-	// Initialize database.
-	if err := db.store.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucketIfNotExists([]byte("attrs")); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		_ = db.Close()
-		return err
-	}
-
-	return nil
-}
-
 // Close closes the database and its frames.
 func (db *DB) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
 	// Close the attribute store.
-	if db.store != nil {
-		db.store.Close()
+	if db.profileAttrStore != nil {
+		db.profileAttrStore.Close()
 	}
 
 	// Close all frames.
@@ -175,90 +151,4 @@ func (db *DB) createFrameIfNotExists(name string) (*Frame, error) {
 	db.frames[name] = f
 
 	return f, nil
-}
-
-// ProfileAttrs returns the value of the attribute for a profile.
-func (db *DB) ProfileAttrs(id uint64) (m map[string]interface{}, err error) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	// Check cache for map.
-	if m = db.attrs[id]; m != nil {
-		return m, nil
-	}
-
-	// Find attributes from storage.
-	if err = db.store.View(func(tx *bolt.Tx) error {
-		m, err = txProfileAttrs(tx, id)
-		if err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	// Add to cache.
-	db.attrs[id] = m
-
-	return
-}
-
-// SetProfileAttrs sets attribute values for a profile.
-func (db *DB) SetProfileAttrs(id uint64, m map[string]interface{}) error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	var attr map[string]interface{}
-	if err := db.store.Update(func(tx *bolt.Tx) error {
-		tmp, err := txProfileAttrs(tx, id)
-		if err != nil {
-			return err
-		}
-		attr = tmp
-
-		// Create a new map if it is empty so we don't update emptyMap.
-		if len(attr) == 0 {
-			attr = make(map[string]interface{}, len(m))
-		}
-
-		// Merge attributes with original values.
-		// Nil values should delete keys.
-		for k, v := range m {
-			if v == nil {
-				delete(attr, k)
-			} else {
-				attr[k] = v
-			}
-		}
-
-		// Marshal and save new values.
-		buf, err := json.Marshal(attr)
-		if err != nil {
-			return err
-		}
-		if err := tx.Bucket([]byte("attrs")).Put(u64tob(id), buf); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	// Swap attributes map in cache.
-	db.attrs[id] = attr
-
-	return nil
-}
-
-// txProfileAttrs returns a map of attributes for a profile.
-func txProfileAttrs(tx *bolt.Tx, id uint64) (map[string]interface{}, error) {
-	if v := tx.Bucket([]byte("attrs")).Get(u64tob(id)); v != nil {
-		m := make(map[string]interface{})
-		if err := json.Unmarshal(v, &m); err != nil {
-			return nil, err
-		}
-		return m, nil
-	}
-	return emptyMap, nil
 }
