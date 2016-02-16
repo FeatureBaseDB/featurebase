@@ -50,7 +50,7 @@ func (e *Executor) Execute(db string, q *pql.Query, slices []uint64) (interface{
 	// Ignore slices for set calls.
 	switch root := q.Root.(type) {
 	case *pql.SetBit:
-		return nil, e.executeSetBit(db, root)
+		return e.executeSetBit(db, root)
 	case *pql.SetBitmapAttrs:
 		return nil, e.executeSetBitmapAttrs(db, root)
 	case *pql.SetProfileAttrs:
@@ -315,27 +315,33 @@ func (e *Executor) executeProfile(db string, c *pql.Profile) (*Profile, error) {
 }
 
 // executeSetBit executes a SetBit() call.
-func (e *Executor) executeSetBit(db string, c *pql.SetBit) error {
+func (e *Executor) executeSetBit(db string, c *pql.SetBit) (bool,error){
 	slice := c.ProfileID / SliceWidth
-
+        ret :=false
 	for _, node := range e.Cluster.SliceNodes(slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
 			f, err := e.Index().CreateFragmentIfNotExists(db, c.Frame, slice)
 			if err != nil {
-				return fmt.Errorf("fragment: %s", err)
+				return false,fmt.Errorf("fragment: %s", err)
 			}
-			f.SetBit(c.ID, c.ProfileID)
+			err,val :=f.SetBit(c.ID, c.ProfileID)
+			if err != nil{
+				return false, err
+			}
+			if val{
+				ret = true
+			}
 			continue
 		}
 
 		// Forward call to remote node otherwise.
 		if _, err := e.exec(node, db, &pql.Query{Root: c}, nil); err != nil {
-			// FIXME: Handle errors more gracefully.
-			return err
+			return false,err
 		}
+		fmt.Println("NEED TO IMPLEMENT REMOTE SETBIT")
 	}
-	return nil
+	return ret,nil
 }
 
 // executeSetBitmapAttrs executes a SetBitmapAttrs() call.

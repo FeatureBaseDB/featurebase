@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+	"reflect"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/umbel/pilosa/internal"
@@ -312,51 +313,50 @@ func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 
 // SetBit sets a bit for a given profile & bitmap within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) SetBit(bitmapID, profileID uint64) error {
+func (f *Fragment) SetBit(bitmapID, profileID uint64) (error,bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.setBit(bitmapID, profileID)
 }
 
-func (f *Fragment) setBit(bitmapID, profileID uint64) error {
+func (f *Fragment) setBit(bitmapID, profileID uint64) (error,bool) {
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(bitmapID, profileID)
 	if err != nil {
-		return err
+		return err,false
 	}
 
 	// Write to storage.
 	if err := f.storage.Add(pos); err != nil {
-		return err
+		return err,false
 	}
 
-	// Update the cache.
-	f.bitmap(bitmapID).setBit(profileID)
 
-	return nil
+	// Update the cache.
+	return nil,f.bitmap(bitmapID).setBit(profileID)
+
 }
 
 // ClearBit clears a bit for a given profile & bitmap within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) ClearBit(bitmapID, profileID uint64) error {
+func (f *Fragment) ClearBit(bitmapID, profileID uint64) (error,bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(bitmapID, profileID)
 	if err != nil {
-		return err
+		return err,false
 	}
 
 	// Write to storage.
 	if err := f.storage.Remove(pos); err != nil {
-		return err
+		return err,false
 	}
 
 	// Update the cache.
-	f.bitmap(bitmapID).clearBit(profileID)
+        return nil,	f.bitmap(bitmapID).clearBit(profileID)
 
-	return nil
 }
 
 // pos translates the bitmap ID and profile ID into a position in the storage bitmap.
@@ -385,7 +385,15 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 	if len(fieldValues) > 0 {
 		filters = make(map[interface{}]struct{})
 		for _, v := range fieldValues {
-			filters[v] = struct{}{}
+			switch v.(type){
+			case uint64:
+				i:=int64(v.(uint64))
+				filters[i] = struct{}{}
+			default:
+				filters[v] = struct{}{}
+			}
+			    fmt.Println(reflect.TypeOf(v))
+
 		}
 	}
 
@@ -409,6 +417,8 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 			} else if attrValue := attr[field]; attrValue == nil {
 				continue
 			} else if _, ok := filters[attrValue]; !ok {
+				fmt.Println(reflect.TypeOf(attrValue),"==")
+
 				continue
 			}
 		}
