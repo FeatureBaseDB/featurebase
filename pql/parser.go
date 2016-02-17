@@ -390,7 +390,7 @@ func (p *Parser) parseSetBitmapAttrsCall() (*SetBitmapAttrs, error) {
 			case string, bool:
 				c.Attrs[key] = v
 			case uint64:
-				c.Attrs[key] = int64(v)
+				c.Attrs[key] = v
 			default:
 				return nil, parseErrorf(pos, "invalid SetBitmapAttrs() arg: %v", arg.key)
 			}
