@@ -108,8 +108,14 @@ func (s *AttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 		for k, v := range m {
 			if v == nil {
 				delete(attr, k)
-			} else {
+				continue
+			}
+
+			switch v := v.(type) {
+			case string, uint64, bool:
 				attr[k] = v
+			default:
+				return fmt.Errorf("invalid attr type: %T", v)
 			}
 		}
 
