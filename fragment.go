@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -385,8 +384,6 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 		filters = make(map[interface{}]struct{})
 		for _, v := range fieldValues {
 			filters[v] = struct{}{}
-			fmt.Println("B:", reflect.TypeOf(v))
-
 		}
 	}
 
@@ -403,7 +400,6 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 		// Apply filter, if set.
 		if filters != nil {
 			attr, err := f.BitmapAttrStore.Attrs(bitmapID)
-			fmt.Println("C:", reflect.TypeOf(attr), attr)
 			if err != nil {
 				return nil, err
 			} else if attr == nil {
@@ -411,7 +407,6 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 			} else if attrValue := attr[field]; attrValue == nil {
 				continue
 			} else if _, ok := filters[attrValue]; !ok {
-				fmt.Println("A:", reflect.TypeOf(attrValue))
 				continue
 			}
 		}
