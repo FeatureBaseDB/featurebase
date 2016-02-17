@@ -182,13 +182,10 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 	case string:
 		pb.StringValue = proto.String(value)
 	case float64:
-		fmt.Println("A")
 		pb.UintValue = proto.Uint64(uint64(value))
 	case uint64:
-		fmt.Println("b")
 		pb.UintValue = proto.Uint64(value)
 	case int64:
-		fmt.Println("c")
 		pb.UintValue = proto.Uint64(uint64(value))
 	case bool:
 		pb.BoolValue = proto.Bool(value)
