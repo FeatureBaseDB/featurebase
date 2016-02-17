@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"encoding/binary"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -175,9 +176,14 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 	case string:
 		pb.StringValue = proto.String(value)
 	case float64:
-		pb.IntValue = proto.Int64(int64(value))
+		fmt.Println("A")
+		pb.UintValue = proto.Uint64(uint64(value))
+	case uint64:
+		fmt.Println("b")
+		pb.UintValue = proto.Uint64(value)
 	case int64:
-		pb.IntValue = proto.Int64(value)
+		fmt.Println("c")
+		pb.UintValue = proto.Uint64(uint64(value))
 	case bool:
 		pb.BoolValue = proto.Bool(value)
 	}
@@ -188,8 +194,8 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 	if attr.StringValue != nil {
 		return attr.GetKey(), attr.GetStringValue()
-	} else if attr.IntValue != nil {
-		return attr.GetKey(), attr.GetIntValue()
+	} else if attr.UintValue != nil {
+		return attr.GetKey(), attr.GetUintValue()
 	} else if attr.BoolValue != nil {
 		return attr.GetKey(), attr.GetBoolValue()
 	}
