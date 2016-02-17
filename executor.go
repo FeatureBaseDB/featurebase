@@ -315,21 +315,21 @@ func (e *Executor) executeProfile(db string, c *pql.Profile) (*Profile, error) {
 }
 
 // executeSetBit executes a SetBit() call.
-func (e *Executor) executeSetBit(db string, c *pql.SetBit) (bool,error){
+func (e *Executor) executeSetBit(db string, c *pql.SetBit) (bool, error) {
 	slice := c.ProfileID / SliceWidth
-        ret :=false
+	ret := false
 	for _, node := range e.Cluster.SliceNodes(slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
 			f, err := e.Index().CreateFragmentIfNotExists(db, c.Frame, slice)
 			if err != nil {
-				return false,fmt.Errorf("fragment: %s", err)
+				return false, fmt.Errorf("fragment: %s", err)
 			}
-			err,val :=f.SetBit(c.ID, c.ProfileID)
-			if err != nil{
+			val, err := f.SetBit(c.ID, c.ProfileID)
+			if err != nil {
 				return false, err
 			}
-			if val{
+			if val {
 				ret = true
 			}
 			continue
@@ -337,11 +337,11 @@ func (e *Executor) executeSetBit(db string, c *pql.SetBit) (bool,error){
 
 		// Forward call to remote node otherwise.
 		if _, err := e.exec(node, db, &pql.Query{Root: c}, nil); err != nil {
-			return false,err
+			return false, err
 		}
 		fmt.Println("NEED TO IMPLEMENT REMOTE SETBIT")
 	}
-	return ret,nil
+	return ret, nil
 }
 
 // executeSetBitmapAttrs executes a SetBitmapAttrs() call.
