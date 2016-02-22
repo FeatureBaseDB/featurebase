@@ -28,7 +28,7 @@ message Profile {
 message Attr {
 	required string Key         = 1;
 	optional string StringValue = 2;
-	optional int64 IntValue     = 3;
+	optional uint64 UintValue   = 3;
 	optional bool BoolValue     = 4;
 }
 
