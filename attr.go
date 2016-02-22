@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"encoding/binary"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -107,8 +108,14 @@ func (s *AttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 		for k, v := range m {
 			if v == nil {
 				delete(attr, k)
-			} else {
+				continue
+			}
+
+			switch v := v.(type) {
+			case string, uint64, bool:
 				attr[k] = v
+			default:
+				return fmt.Errorf("invalid attr type: %T", v)
 			}
 		}
 
@@ -175,9 +182,11 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 	case string:
 		pb.StringValue = proto.String(value)
 	case float64:
-		pb.IntValue = proto.Int64(int64(value))
+		pb.UintValue = proto.Uint64(uint64(value))
+	case uint64:
+		pb.UintValue = proto.Uint64(value)
 	case int64:
-		pb.IntValue = proto.Int64(value)
+		pb.UintValue = proto.Uint64(uint64(value))
 	case bool:
 		pb.BoolValue = proto.Bool(value)
 	}
@@ -188,8 +197,8 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 	if attr.StringValue != nil {
 		return attr.GetKey(), attr.GetStringValue()
-	} else if attr.IntValue != nil {
-		return attr.GetKey(), attr.GetIntValue()
+	} else if attr.UintValue != nil {
+		return attr.GetKey(), attr.GetUintValue()
 	} else if attr.BoolValue != nil {
 		return attr.GetKey(), attr.GetBoolValue()
 	}

@@ -312,51 +312,49 @@ func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 
 // SetBit sets a bit for a given profile & bitmap within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) SetBit(bitmapID, profileID uint64) error {
+func (f *Fragment) SetBit(bitmapID, profileID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.setBit(bitmapID, profileID)
 }
 
-func (f *Fragment) setBit(bitmapID, profileID uint64) error {
+func (f *Fragment) setBit(bitmapID, profileID uint64) (bool, error) {
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(bitmapID, profileID)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Write to storage.
 	if err := f.storage.Add(pos); err != nil {
-		return err
+		return false, err
 	}
 
 	// Update the cache.
-	f.bitmap(bitmapID).setBit(profileID)
+	return f.bitmap(bitmapID).setBit(profileID), nil
 
-	return nil
 }
 
 // ClearBit clears a bit for a given profile & bitmap within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) ClearBit(bitmapID, profileID uint64) error {
+func (f *Fragment) ClearBit(bitmapID, profileID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(bitmapID, profileID)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Write to storage.
 	if err := f.storage.Remove(pos); err != nil {
-		return err
+		return false, err
 	}
 
 	// Update the cache.
-	f.bitmap(bitmapID).clearBit(profileID)
+	return f.bitmap(bitmapID).clearBit(profileID), nil
 
-	return nil
 }
 
 // pos translates the bitmap ID and profile ID into a position in the storage bitmap.

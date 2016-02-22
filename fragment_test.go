@@ -19,11 +19,11 @@ func TestFragment_SetBit(t *testing.T) {
 	defer f.Close()
 
 	// Set bits on the fragment.
-	if err := f.SetBit(120, 1); err != nil {
+	if _, err := f.SetBit(120, 1); err != nil {
 		t.Fatal(err)
-	} else if err := f.SetBit(120, 6); err != nil {
+	} else if _, err := f.SetBit(120, 6); err != nil {
 		t.Fatal(err)
-	} else if err := f.SetBit(121, 0); err != nil {
+	} else if _, err := f.SetBit(121, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,11 +50,11 @@ func TestFragment_ClearBit(t *testing.T) {
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
-	if err := f.SetBit(1000, 1); err != nil {
+	if _, err := f.SetBit(1000, 1); err != nil {
 		t.Fatal(err)
-	} else if err := f.SetBit(1000, 2); err != nil {
+	} else if _, err := f.SetBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if err := f.ClearBit(1000, 1); err != nil {
+	} else if _, err := f.ClearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -77,11 +77,11 @@ func TestFragment_Snapshot(t *testing.T) {
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
-	if err := f.SetBit(1000, 1); err != nil {
+	if _, err := f.SetBit(1000, 1); err != nil {
 		t.Fatal(err)
-	} else if err := f.SetBit(1000, 2); err != nil {
+	} else if _, err := f.SetBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if err := f.ClearBit(1000, 1); err != nil {
+	} else if _, err := f.ClearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -218,7 +218,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
-		if err := f.SetBit(i, 0); err != nil {
+		if _, err := f.SetBit(i, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -250,7 +250,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
-		if err := f.SetBit(i, 0); err != nil {
+		if _, err := f.SetBit(i, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -332,7 +332,7 @@ func (f *Fragment) Reopen() error {
 // MustSetBits sets bits on a bitmap. Panic on error.
 func (f *Fragment) MustSetBits(bitmapID uint64, profileIDs ...uint64) {
 	for _, profileID := range profileIDs {
-		if err := f.SetBit(bitmapID, profileID); err != nil {
+		if _, err := f.SetBit(bitmapID, profileID); err != nil {
 			panic(err)
 		}
 	}
@@ -341,7 +341,7 @@ func (f *Fragment) MustSetBits(bitmapID uint64, profileIDs ...uint64) {
 // MustClearBits clears bits on a bitmap. Panic on error.
 func (f *Fragment) MustClearBits(bitmapID uint64, profileIDs ...uint64) {
 	for _, profileID := range profileIDs {
-		if err := f.ClearBit(bitmapID, profileID); err != nil {
+		if _, err := f.ClearBit(bitmapID, profileID); err != nil {
 			panic(err)
 		}
 	}
