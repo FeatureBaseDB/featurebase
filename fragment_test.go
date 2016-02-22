@@ -19,11 +19,11 @@ func TestFragment_SetBit(t *testing.T) {
 	defer f.Close()
 
 	// Set bits on the fragment.
-	if _, err := f.SetBit(120, 1); err != nil {
+	if _, err := f.SetBit(120, 1, nil, 0); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(120, 6); err != nil {
+	} else if _, err := f.SetBit(120, 6, nil, 0); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(121, 0); err != nil {
+	} else if _, err := f.SetBit(121, 0, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,9 +50,9 @@ func TestFragment_ClearBit(t *testing.T) {
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
-	if _, err := f.SetBit(1000, 1); err != nil {
+	if _, err := f.SetBit(1000, 1, nil, 0); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(1000, 2); err != nil {
+	} else if _, err := f.SetBit(1000, 2, nil, 0); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.ClearBit(1000, 1); err != nil {
 		t.Fatal(err)
@@ -77,9 +77,9 @@ func TestFragment_Snapshot(t *testing.T) {
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
-	if _, err := f.SetBit(1000, 1); err != nil {
+	if _, err := f.SetBit(1000, 1, nil, 0); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(1000, 2); err != nil {
+	} else if _, err := f.SetBit(1000, 2, nil, 0); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.ClearBit(1000, 1); err != nil {
 		t.Fatal(err)
@@ -133,11 +133,11 @@ func TestFragment_TopN_Filter(t *testing.T) {
 	f.MustSetBits(102, 1, 2)
 
 	// Assign attributes.
-	f.BitmapAttrStore.SetAttrs(101, map[string]interface{}{"x": 10})
-	f.BitmapAttrStore.SetAttrs(102, map[string]interface{}{"x": 20})
+	f.BitmapAttrStore.SetAttrs(101, map[string]interface{}{"x": uint64(10)})
+	f.BitmapAttrStore.SetAttrs(102, map[string]interface{}{"x": uint64(20)})
 
 	// Retrieve top bitmaps.
-	if pairs, err := f.TopN(2, nil, "x", []interface{}{10, 15, 20}); err != nil {
+	if pairs, err := f.TopN(2, nil, "x", []interface{}{uint64(10), uint64(15), uint64(20)}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -176,6 +176,10 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 
 // Ensure a fragment can return top bitmaps that have many bits set.
 func TestFragment_TopN_Intersect_Large(t *testing.T) {
+	if testing.Short() {
+		t.Skip("short mode")
+	}
+
 	f := MustOpenFragment("d", "f", 0)
 	defer f.Close()
 
@@ -218,7 +222,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
-		if _, err := f.SetBit(i, 0); err != nil {
+		if _, err := f.SetBit(i, 0, nil, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -250,7 +254,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
-		if _, err := f.SetBit(i, 0); err != nil {
+		if _, err := f.SetBit(i, 0, nil, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -330,9 +334,10 @@ func (f *Fragment) Reopen() error {
 }
 
 // MustSetBits sets bits on a bitmap. Panic on error.
+// This function does not accept a timestamp or quantum.
 func (f *Fragment) MustSetBits(bitmapID uint64, profileIDs ...uint64) {
 	for _, profileID := range profileIDs {
-		if _, err := f.SetBit(bitmapID, profileID); err != nil {
+		if _, err := f.SetBit(bitmapID, profileID, nil, 0); err != nil {
 			panic(err)
 		}
 	}
