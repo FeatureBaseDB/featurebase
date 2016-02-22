@@ -31,10 +31,8 @@ func TestMain_Set_Quick(t *testing.T) {
 
 		// Execute SetBit() commands.
 		for _, cmd := range cmds {
-			if res, err := m.Query("db=d", fmt.Sprintf(`SetBit(id=%d, frame=%q, profileID=%d)`, cmd.ID, cmd.Frame, cmd.ProfileID)); err != nil {
+			if _, err := m.Query("db=d", fmt.Sprintf(`SetBit(id=%d, frame=%q, profileID=%d)`, cmd.ID, cmd.Frame, cmd.ProfileID)); err != nil {
 				t.Fatal(err)
-			} else if res != `{}`+"\n" {
-				t.Fatalf("unexpected result: %s", res)
 			}
 		}
 
