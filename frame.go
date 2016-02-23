@@ -8,6 +8,14 @@ import (
 	"sync"
 )
 
+const (
+	// FrameSuffixTime is the suffix used for time-based frames.
+	FrameSuffixTime = ".t"
+
+	// FrameSuffixRank is the suffix used for rank-based frames.
+	FrameSuffixRank = ".n"
+)
+
 // Frame represents a container for fragments.
 type Frame struct {
 	mu   sync.Mutex
