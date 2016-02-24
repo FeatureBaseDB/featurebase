@@ -41,24 +41,28 @@ func NewBitmap(a ...uint64) *Bitmap {
 }
 
 // Add adds values to the bitmap.
-func (b *Bitmap) Add(a ...uint64) error {
+func (b *Bitmap) Add(a ...uint64) (bool, error) {
+	ret := false
 	for _, v := range a {
 		// Create an add operation.
 		op := &op{typ: opTypeAdd, value: v}
 
 		// Write operation to op log.
 		if err := b.writeOp(op); err != nil {
-			return err
+			return false, err
 		}
 
 		// Apply to the in-memory bitmap.
-		op.apply(b)
+		if op.apply(b) {
+			ret = true
+
+		}
 	}
 
-	return nil
+	return ret, nil
 }
 
-func (b *Bitmap) add(v uint64) {
+func (b *Bitmap) add(v uint64) bool {
 	hb := highbits(v)
 	i := search64(b.keys, hb)
 
@@ -69,7 +73,7 @@ func (b *Bitmap) add(v uint64) {
 		i = -i - 1
 	}
 
-	b.containers[i].add(lowbits(v))
+	return b.containers[i].add(lowbits(v))
 }
 
 // Contains returns true if v is in the bitmap.
@@ -82,29 +86,32 @@ func (b *Bitmap) Contains(v uint64) bool {
 }
 
 // Remove removes values from the bitmap.
-func (b *Bitmap) Remove(a ...uint64) error {
+func (b *Bitmap) Remove(a ...uint64) (bool, error) {
+	ret := false
 	for _, v := range a {
 		// Create an add operation.
 		op := &op{typ: opTypeRemove, value: v}
 
 		// Write operation to op log.
 		if err := b.writeOp(op); err != nil {
-			return err
+			return false, err
 		}
 
 		// Apply operation to the bitmap.
-		op.apply(b)
+		if op.apply(b) {
+			ret = true
+		}
 	}
-	return nil
+	return ret, nil
 }
 
-func (b *Bitmap) remove(v uint64) {
+func (b *Bitmap) remove(v uint64) bool {
 	hb := highbits(v)
 	i := search64(b.keys, hb)
 	if i < 0 {
-		return
+		return false
 	}
-	b.containers[i].remove(lowbits(v))
+	return b.containers[i].remove(lowbits(v))
 }
 
 // Slice returns a slice of all integers in the bitmap.
@@ -429,34 +436,32 @@ func (c *container) unmap() {
 }
 
 // add adds a value to the container.
-func (c *container) add(v uint16) {
+func (c *container) add(v uint16) bool {
 	if c.isArray() {
-		c.arrayAdd(v)
-		return
+		return c.arrayAdd(v)
 	}
-	c.bitmapAdd(v)
+	return c.bitmapAdd(v)
 }
 
-func (c *container) arrayAdd(v uint16) {
+func (c *container) arrayAdd(v uint16) bool {
 	// Optimize appending to the end of an array container.
 	if c.n > 0 && c.n < arrayMaxSize && c.isArray() && c.array[c.n-1] < v {
 		c.unmap()
 		c.array = append(c.array, v)
 		c.n++
-		return
+		return true
 	}
 
 	// Find index of the integer in the container. Exit if it already exists.
 	i := search16(c.array, v)
 	if i >= 0 {
-		return
+		return false
 	}
 
 	// Convert to a bitmap container if too many values are in an array container.
 	if c.n >= arrayMaxSize {
 		c.convertToBitmap()
-		c.bitmapAdd(v)
-		return
+		return c.bitmapAdd(v)
 	}
 
 	// Otherwise insert into array.
@@ -466,15 +471,17 @@ func (c *container) arrayAdd(v uint16) {
 	copy(c.array[i+1:], c.array[i:])
 	c.array[i] = v
 	c.n++
+	return true
 }
 
-func (c *container) bitmapAdd(v uint16) {
+func (c *container) bitmapAdd(v uint16) bool {
 	if c.bitmapContains(v) {
-		return
+		return false
 	}
 	c.unmap()
 	c.bitmap[v/64] |= (1 << uint64(v%64))
 	c.n++
+	return true
 }
 
 // contains returns true if v is in the container.
@@ -494,28 +501,28 @@ func (c *container) bitmapContains(v uint16) bool {
 }
 
 // remove adds a value to the container.
-func (c *container) remove(v uint16) {
+func (c *container) remove(v uint16) bool {
 	if c.isArray() {
-		c.arrayRemove(v)
-		return
+		return c.arrayRemove(v)
 	}
-	c.bitmapRemove(v)
+	return c.bitmapRemove(v)
 }
 
-func (c *container) arrayRemove(v uint16) {
+func (c *container) arrayRemove(v uint16) bool {
 	i := search16(c.array, v)
 	if i < 0 {
-		return
+		return false
 	}
 	c.unmap()
 
 	c.n--
 	c.array = append(c.array[:i], c.array[i+1:]...)
+	return true
 }
 
-func (c *container) bitmapRemove(v uint16) {
+func (c *container) bitmapRemove(v uint16) bool {
 	if !c.bitmapContains(v) {
-		return
+		return false
 	}
 	c.unmap()
 
@@ -527,6 +534,7 @@ func (c *container) bitmapRemove(v uint16) {
 	if c.n == arrayMaxSize {
 		c.convertToArray()
 	}
+	return true
 }
 
 // convertToArray converts the values in the bitmap to array values.
@@ -594,15 +602,16 @@ type op struct {
 }
 
 // apply executes the operation against a bitmap.
-func (op *op) apply(b *Bitmap) {
+func (op *op) apply(b *Bitmap) bool {
 	switch op.typ {
 	case opTypeAdd:
-		b.add(op.value)
+		return b.add(op.value)
 	case opTypeRemove:
-		b.remove(op.value)
+		return b.remove(op.value)
 	default:
 		panic(fmt.Sprintf("invalid op type: %d", op.typ))
 	}
+	return false
 }
 
 // WriteTo writes op to the w.

@@ -51,6 +51,7 @@ message QueryResponse {
 	optional uint64  N        = 3;
 	repeated Pair    Pairs    = 4;
 	repeated Profile Profiles = 5;
+	optional bool    Changed  = 6;
 }
 
 message ImportRequest {
