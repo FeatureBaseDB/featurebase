@@ -37,10 +37,12 @@ message AttrMap {
 }
 
 message QueryRequest {
-	required string DB       = 1;
-	required string Query    = 2;
-	repeated uint64 Slices   = 3;
-	optional bool   Profiles = 4;
+	required string DB        = 1;
+	required string Query     = 2;
+	repeated uint64 Slices    = 3;
+	optional bool   Profiles  = 4;
+	optional int64  Timestamp = 5;
+	optional uint32 Quantum   = 6;
 }
 
 message QueryResponse {

@@ -441,7 +441,7 @@ func (p *Parser) parseSetProfileAttrsCall() (*SetProfileAttrs, error) {
 			case string, bool:
 				c.Attrs[key] = v
 			case uint64:
-				c.Attrs[key] = int64(v)
+				c.Attrs[key] = v
 			default:
 				return nil, parseErrorf(pos, "invalid SetProfileAttrs() arg: %v", arg.key)
 			}
