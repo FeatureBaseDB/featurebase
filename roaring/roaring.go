@@ -41,8 +41,8 @@ func NewBitmap(a ...uint64) *Bitmap {
 }
 
 // Add adds values to the bitmap.
-func (b *Bitmap) Add(a ...uint64) (bool, error) {
-	ret := false
+func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
+	changed = false
 	for _, v := range a {
 		// Create an add operation.
 		op := &op{typ: opTypeAdd, value: v}
@@ -54,12 +54,12 @@ func (b *Bitmap) Add(a ...uint64) (bool, error) {
 
 		// Apply to the in-memory bitmap.
 		if op.apply(b) {
-			ret = true
+			changed = true
 
 		}
 	}
 
-	return ret, nil
+	return changed, nil
 }
 
 func (b *Bitmap) add(v uint64) bool {
@@ -86,8 +86,8 @@ func (b *Bitmap) Contains(v uint64) bool {
 }
 
 // Remove removes values from the bitmap.
-func (b *Bitmap) Remove(a ...uint64) (bool, error) {
-	ret := false
+func (b *Bitmap) Remove(a ...uint64) (changed bool, err error) {
+	changed = false
 	for _, v := range a {
 		// Create an add operation.
 		op := &op{typ: opTypeRemove, value: v}
@@ -99,10 +99,10 @@ func (b *Bitmap) Remove(a ...uint64) (bool, error) {
 
 		// Apply operation to the bitmap.
 		if op.apply(b) {
-			ret = true
+			changed = true
 		}
 	}
-	return ret, nil
+	return changed, nil
 }
 
 func (b *Bitmap) remove(v uint64) bool {

@@ -326,7 +326,7 @@ func (f *Fragment) SetBit(bitmapID, profileID uint64, t *time.Time, q TimeQuantu
 
 func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error) {
 	// Determine the position of the bit in the storage.
-	ret := false
+	changed = false
 	pos, err := f.pos(bitmapID, profileID)
 	if err != nil {
 		return false, err
@@ -334,15 +334,15 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 
 	// Write to storage.
 
-	if ret, err = f.storage.Add(pos); err != nil {
+	if changed, err = f.storage.Add(pos); err != nil {
 		return false, err
 	}
 
 	// Update the cache.
 	if f.bitmap(bitmapID).setBit(profileID) {
-		ret = true
+		changed = true
 	}
-	return ret, nil
+	return changed, nil
 
 }
 
