@@ -404,6 +404,8 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 			pb.Pairs = encodePairs(result)
 		case uint64:
 			pb.N = proto.Uint64(result)
+		case bool:
+			pb.Changed = proto.Bool(result)
 		default:
 			panic(fmt.Sprintf("invalid query result type: %T", resp.Result))
 		}

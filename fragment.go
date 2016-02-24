@@ -320,18 +320,23 @@ func (f *Fragment) SetBit(bitmapID, profileID uint64) (changed bool, err error) 
 
 func (f *Fragment) setBit(bitmapID, profileID uint64) (bool, error) {
 	// Determine the position of the bit in the storage.
+	ret := false
 	pos, err := f.pos(bitmapID, profileID)
 	if err != nil {
 		return false, err
 	}
 
 	// Write to storage.
-	if err := f.storage.Add(pos); err != nil {
+
+	if ret, err = f.storage.Add(pos); err != nil {
 		return false, err
 	}
 
 	// Update the cache.
-	return f.bitmap(bitmapID).setBit(profileID), nil
+	if f.bitmap(bitmapID).setBit(profileID) {
+		ret = true
+	}
+	return ret, nil
 
 }
 
@@ -348,12 +353,16 @@ func (f *Fragment) ClearBit(bitmapID, profileID uint64) (bool, error) {
 	}
 
 	// Write to storage.
-	if err := f.storage.Remove(pos); err != nil {
+	changed, err := f.storage.Remove(pos)
+	if err != nil {
 		return false, err
 	}
 
 	// Update the cache.
-	return f.bitmap(bitmapID).clearBit(profileID), nil
+	if f.bitmap(bitmapID).clearBit(profileID) {
+		return true, nil
+	}
+	return changed, nil
 
 }
 
@@ -509,7 +518,7 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			}
 
 			// Write to storage.
-			if err := f.storage.Add(pos); err != nil {
+			if _, err := f.storage.Add(pos); err != nil {
 				return err
 			}
 		}

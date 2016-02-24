@@ -123,13 +123,28 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 	defer idx.Close()
 
 	e := NewExecutor(idx.Index, NewCluster(1))
-	if _, err := e.Execute("d", MustParse(`SetBit(id=10, frame=f, profileID=1)`), nil); err != nil {
-		t.Fatal(err)
+	f := idx.MustCreateFragmentIfNotExists("d", "f", 0)
+	if n := f.Bitmap(11).Count(); n != 0 {
+		t.Fatalf("unexpected bitmap count: %d", n)
 	}
 
-	f := idx.MustCreateFragmentIfNotExists("d", "f", 0)
-	if n := f.Bitmap(10).Count(); n != 1 {
+	if res, err := e.Execute("d", MustParse(`SetBit(id=11, frame=f, profileID=1)`), nil); err != nil {
+		t.Fatal(err)
+	} else {
+		if !res.(bool) {
+			t.Fatalf("expected bit changed")
+		}
+	}
+
+	if n := f.Bitmap(11).Count(); n != 1 {
 		t.Fatalf("unexpected bitmap count: %d", n)
+	}
+	if res, err := e.Execute("d", MustParse(`SetBit(id=11, frame=f, profileID=1)`), nil); err != nil {
+		t.Fatal(err)
+	} else {
+		if res.(bool) {
+			t.Fatalf("expected bit unchanged")
+		}
 	}
 }
 
