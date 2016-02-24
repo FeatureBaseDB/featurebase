@@ -188,7 +188,7 @@ func (f *Fragment) openStorage() error {
 // openCache initializes the cache from bitmap ids persisted to disk.
 func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
-	if strings.HasSuffix(f.frame, ".n") {
+	if strings.HasSuffix(f.frame, FrameSuffixRank) {
 		c := NewRankCache()
 		c.ThresholdLength = 50000
 		c.ThresholdIndex = 45000
@@ -312,13 +312,19 @@ func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 
 // SetBit sets a bit for a given profile & bitmap within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) SetBit(bitmapID, profileID uint64) (changed bool, err error) {
+func (f *Fragment) SetBit(bitmapID, profileID uint64, t *time.Time, q TimeQuantum) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	// Set time bits if this is a time-frame and a timestamp is specified.
+	if strings.HasSuffix(f.frame, FrameSuffixTime) && t != nil {
+		return f.setTimeBit(bitmapID, profileID, *t, q)
+	}
+
 	return f.setBit(bitmapID, profileID)
 }
 
-func (f *Fragment) setBit(bitmapID, profileID uint64) (bool, error) {
+func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error) {
 	// Determine the position of the bit in the storage.
 	ret := false
 	pos, err := f.pos(bitmapID, profileID)
@@ -338,6 +344,17 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (bool, error) {
 	}
 	return ret, nil
 
+}
+
+func (f *Fragment) setTimeBit(bitmapID, profileID uint64, t time.Time, q TimeQuantum) (changed bool, err error) {
+	for _, timeID := range TimeIDsFromQuantum(q, t, bitmapID) {
+		if v, err := f.setBit(timeID, profileID); err != nil {
+			return changed, fmt.Errorf("set time bit: t=%s, q=%s, err=%s", t, q, err)
+		} else if v {
+			changed = true
+		}
+	}
+	return changed, nil
 }
 
 // ClearBit clears a bit for a given profile & bitmap within the fragment.
@@ -481,16 +498,18 @@ func (f *Fragment) Range(bitmapID uint64, start, end time.Time) *Bitmap {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	bitmapIDs := GetRange(start, end, bitmapID)
+	// Retrieve a list of bitmap ids for a given time range.
+	bitmapIDs := TimeIDsFromRange(start, end, bitmapID)
 	if len(bitmapIDs) == 0 {
 		return NewBitmap()
 	}
 
-	result := f.bitmap(bitmapIDs[0])
+	// Union all bitmap ids from the time range.
+	bm := f.bitmap(bitmapIDs[0])
 	for _, id := range bitmapIDs[1:] {
-		result = result.Union(f.bitmap(id))
+		bm = bm.Union(f.bitmap(id))
 	}
-	return result
+	return bm
 }
 
 // Import bulk imports a set of bits and then snapshots the storage.

@@ -222,7 +222,7 @@ func TestParser_Parse_SetBitmapAttrs_Key(t *testing.T) {
 			Frame: "b.n",
 			Attrs: map[string]interface{}{
 				"foo": "bar",
-				"bar": int64(123),
+				"bar": uint64(123),
 				"baz": true,
 				"bat": false,
 				"x":   nil,
@@ -244,7 +244,7 @@ func TestParser_Parse_SetBitmapAttrs_Array(t *testing.T) {
 			Frame: "b.n",
 			Attrs: map[string]interface{}{
 				"foo": "bar",
-				"bar": int64(123),
+				"bar": uint64(123),
 			},
 		},
 	}) {
