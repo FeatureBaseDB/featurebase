@@ -69,3 +69,7 @@ message ImportResponse {
 message Cache {
 	repeated uint64 BitmapIDs = 1;
 }
+
+message SliceMaxResponse {
+	required uint64 SliceMax = 1;
+}
