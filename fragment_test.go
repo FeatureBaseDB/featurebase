@@ -1,6 +1,7 @@
 package pilosa_test
 
 import (
+	"bytes"
 	"io/ioutil"
 	"os"
 	"reflect"
@@ -276,6 +277,48 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 		t.Fatalf("unexpected cache: %T", f.Cache())
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
+	}
+}
+
+// Ensure a fragment can be copied to another fragment.
+func TestFragment_WriteTo_ReadFrom(t *testing.T) {
+	f0 := MustOpenFragment("d", "f", 0)
+	defer f0.Close()
+
+	// Set and then clear bits on the fragment.
+	if _, err := f0.SetBit(1000, 1, nil, 0); err != nil {
+		t.Fatal(err)
+	} else if _, err := f0.SetBit(1000, 2, nil, 0); err != nil {
+		t.Fatal(err)
+	} else if _, err := f0.ClearBit(1000, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write fragment to a buffer.
+	var buf bytes.Buffer
+	wn, err := f0.WriteTo(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read into another fragment.
+	f1 := MustOpenFragment("d", "f", 0)
+	if rn, err := f1.ReadFrom(&buf); err != nil {
+		t.Fatal(err)
+	} else if wn != rn {
+		t.Fatalf("read/write byte count mismatch: wn=%d, rn=%d", wn, rn)
+	}
+
+	// Verify data in other fragment.
+	if a := f1.Bitmap(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
+		t.Fatalf("unexpected bits: %+v", a)
+	}
+
+	// Close and reopen the fragment & verify the data.
+	if err := f1.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if a := f1.Bitmap(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
+		t.Fatalf("unexpected bits: %+v", a)
 	}
 }
 
