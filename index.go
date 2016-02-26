@@ -9,8 +9,9 @@ import (
 
 // Index represents a container for fragments.
 type Index struct {
-	mu   sync.Mutex
-	path string
+	mu        sync.Mutex
+	path      string
+	remoteMax uint64
 
 	// Databases by name.
 	dbs map[string]*DB
@@ -19,8 +20,9 @@ type Index struct {
 // NewIndex returns a new instance of Index.
 func NewIndex(path string) *Index {
 	return &Index{
-		path: path,
-		dbs:  make(map[string]*DB),
+		path:      path,
+		dbs:       make(map[string]*DB),
+		remoteMax: 0,
 	}
 }
 
@@ -72,7 +74,7 @@ func (i *Index) SliceN() uint64 {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	var sliceN uint64
+	sliceN := i.remoteMax
 	for _, db := range i.dbs {
 		if n := db.SliceN(); n > sliceN {
 			sliceN = n
@@ -153,4 +155,9 @@ func (i *Index) CreateFragmentIfNotExists(db, frame string, slice uint64) (*Frag
 		return nil, err
 	}
 	return f.CreateFragmentIfNotExists(slice)
+}
+func (i *Index) SetMax(newmax uint64) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.remoteMax = newmax
 }

@@ -351,10 +351,11 @@ func (e *Executor) executeSetBit(db string, c *pql.SetBit, opt *ExecOptions) (bo
 		}
 
 		// Forward call to remote node otherwise.
-		if _, err := e.exec(node, db, &pql.Query{Root: c}, nil, opt); err != nil {
+		if res, err := e.exec(node, db, &pql.Query{Root: c}, nil, opt); err != nil {
 			return false, err
+		} else {
+			ret = res.(bool)
 		}
-		fmt.Println("NEED TO IMPLEMENT REMOTE SETBIT")
 	}
 	return ret, nil
 }
@@ -464,7 +465,7 @@ func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64, op
 	case *pql.Count:
 		return pb.GetN(), nil
 	case *pql.SetBit:
-		return nil, nil
+		return pb.GetChanged(), nil
 	default:
 		panic(fmt.Sprintf("invalid node for remote exec: %T", q.Root))
 	}

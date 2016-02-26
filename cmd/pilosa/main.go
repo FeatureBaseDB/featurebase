@@ -5,9 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"os/user"
@@ -18,7 +20,9 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/gogo/protobuf/proto"
 	"github.com/umbel/pilosa"
+	"github.com/umbel/pilosa/internal"
 )
 
 // Build holds the build information passed in at compile time.
@@ -72,8 +76,10 @@ func main() {
 
 // Main represents the main program execution.
 type Main struct {
-	index *pilosa.Index
-	ln    net.Listener
+	index       *pilosa.Index
+	ln          net.Listener
+	ticker      *time.Ticker
+	pollingSecs int
 
 	// Path to the configuration file.
 	ConfigPath string
@@ -94,7 +100,6 @@ type Main struct {
 func NewMain() *Main {
 	return &Main{
 		Config: NewConfig(),
-
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
@@ -176,13 +181,84 @@ func (m *Main) Run(args ...string) error {
 	// Serve HTTP.
 	go func() { http.Serve(ln, h) }()
 
+	//sync up max slice if more than one node
+	if len(cluster.Nodes) > 1 { 
+		m.ticker = time.NewTicker(time.Second * time.Duration(m.pollingSecs))
+		go func() { 
+			for range m.ticker.C {
+				oldmax:= m.index.SliceN()
+				newmax:=oldmax
+				for _, node := range cluster.Nodes {
+					if hostname != node.Host {
+						newslice,_:=checkMaxSlice(node.Host)
+							if newslice>newmax{
+								newmax= newslice
+							}
+					}
+				}
+				if newmax>oldmax{
+					m.index.SetMax(newmax)
+				}
+			}
+		}()
+	}
+
 	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", hostname)
 
 	return nil
 }
 
+func checkMaxSlice(hostport string) (uint64, error) {
+
+	// Create HTTP request.
+	req, err := http.NewRequest("GET", (&url.URL{
+		Scheme: "http",
+		Host:   hostport,
+		Path:   "/slices/max",
+	}).String(), nil)
+
+	if err != nil {
+		return 0, err
+	}
+
+	// Require protobuf encoding.
+	req.Header.Set("Accept", "application/x-protobuf")
+	req.Header.Set("Content-Type", "application/x-protobuf")
+
+	// Send request to remote node.
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	// Read response into buffer.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	// Check status code.
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
+	}
+
+	// Decode response object.
+	pb := internal.SliceMaxResponse{}
+
+	if err = proto.Unmarshal(body, &pb); err != nil {
+		return 0, err
+	}
+
+	return *pb.SliceMax, nil
+
+}
+
 // Close shuts down the process.
 func (m *Main) Close() error {
+	if m.ticker != nil {
+		m.ticker.Stop()
+	}
 	if m.ln != nil {
 		m.ln.Close()
 	}
@@ -200,6 +276,7 @@ func (m *Main) ParseFlags(args []string) error {
 	fs.SetOutput(m.Stderr)
 	fs.StringVar(&m.ConfigPath, "config", "", "config path")
 	fs.StringVar(&m.CPUProfile, "cpuprofile", "", "write cpu profile to file")
+	fs.IntVar(&m.pollingSecs, "pollingSecs", 60, "number of seconds to poll the cluster for maxslice")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

@@ -73,6 +73,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/slices/max":
+		switch r.Method {
+		case "GET":
+			h.handleGetSliceMax(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/fragment/data":
 		switch r.Method {
 		case "GET":
@@ -142,6 +149,24 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	if err := h.writeQueryResponse(w, r, resp); err != nil {
 		h.logger().Printf("write query response error: %s", err)
 	}
+}
+
+func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) error {
+
+	sm := h.Index.SliceN()
+	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
+		pb := &internal.SliceMaxResponse{
+			SliceMax: &sm,
+		}
+		if buf, err := proto.Marshal(pb); err != nil {
+			return err
+		} else if _, err := w.Write(buf); err != nil {
+			return err
+		}
+		return nil
+	}
+	resp := map[string]uint64{"SliceMax": sm}
+	return json.NewEncoder(w).Encode(resp)
 }
 
 // readProfiles returns a list of profile objects by id.
@@ -508,6 +533,8 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 			pb.Pairs = encodePairs(result)
 		case uint64:
 			pb.N = proto.Uint64(result)
+		case bool:
+			pb.Changed = proto.Bool(result)
 		default:
 			panic(fmt.Sprintf("invalid query result type: %T", resp.Result))
 		}
