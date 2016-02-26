@@ -80,6 +80,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/fragment/data":
+		switch r.Method {
+		case "GET":
+			h.handleGetFragmentData(w, r)
+		case "POST":
+			h.handlePostFragmentData(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/version":
 		h.handleVersion(w, r)
 
@@ -353,6 +362,7 @@ func (h *Handler) handleGetSlicesNodes(w http.ResponseWriter, r *http.Request) {
 	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
 	if err != nil {
 		http.Error(w, "slice required", http.StatusBadRequest)
+		return
 	}
 
 	// Retrieve slice owner nodes.
@@ -361,6 +371,53 @@ func (h *Handler) handleGetSlicesNodes(w http.ResponseWriter, r *http.Request) {
 	// Write to response.
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
 		h.logger().Printf("json write error: %s", err)
+	}
+}
+
+// handleGetFragmentBackup handles GET /fragment/data requests.
+func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) {
+	// Read slice parameter.
+	q := r.URL.Query()
+	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
+	if err != nil {
+		http.Error(w, "slice required", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve fragment from index.
+	f := h.Index.Fragment(q.Get("db"), q.Get("frame"), slice)
+	if f == nil {
+		http.Error(w, "fragment not found", http.StatusNotFound)
+		return
+	}
+
+	// Stream fragment to response body.
+	if _, err := f.WriteTo(w); err != nil {
+		h.logger().Printf("fragment backup error: %s", err)
+	}
+}
+
+// handlePostFragmentRestore handles POST /fragment/data requests.
+func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request) {
+	// Read slice parameter.
+	q := r.URL.Query()
+	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
+	if err != nil {
+		http.Error(w, "slice required", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve fragment from index.
+	f, err := h.Index.CreateFragmentIfNotExists(q.Get("db"), q.Get("frame"), slice)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Read fragment in from request body.
+	if _, err := f.ReadFrom(r.Body); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
