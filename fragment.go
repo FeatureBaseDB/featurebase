@@ -26,6 +26,9 @@ const (
 	// SnapshotExt is the file extension used for an in-process snapshot.
 	SnapshotExt = ".snapshotting"
 
+	// CopyExt is the file extension used for the temp file used while copying.
+	CopyExt = ".copying"
+
 	// CacheExt is the file extension for persisted cache ids.
 	CacheExt = ".cache"
 
@@ -633,6 +636,74 @@ func (f *Fragment) flushCache() error {
 	}
 
 	return nil
+}
+
+// WriteTo writes the fragment's data to w.
+func (f *Fragment) WriteTo(w io.Writer) (n int64, err error) {
+	// Open separate file descriptor to read from.
+	file, err := os.Open(f.path)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	// Retrieve the current file size under lock so we don't read
+	// while an operation is appending to the end.
+	var sz int64
+	if err := func() error {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		fi, err := file.Stat()
+		if err != nil {
+			return err
+		}
+		sz = fi.Size()
+
+		return nil
+	}(); err != nil {
+		return 0, err
+	}
+
+	// Copy the file up to the last known size.
+	// This is done outside the lock because the storage format is append-only.
+	return io.CopyN(w, file, sz)
+}
+
+// ReadFrom reads a data file from r and loads it into the fragment.
+func (f *Fragment) ReadFrom(r io.Reader) (n int64, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Create a temporary file to copy into.
+	path := f.path + CopyExt
+	file, err := os.Create(path)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	// Copy reader into temporary path.
+	if n, err = io.Copy(file, r); err != nil {
+		return n, err
+	}
+
+	// Close current storage.
+	if err := f.closeStorage(); err != nil {
+		return n, err
+	}
+
+	// Move snapshot to data file location.
+	if err := os.Rename(path, f.path); err != nil {
+		return n, err
+	}
+
+	// Reopen storage.
+	if err := f.openStorage(); err != nil {
+		return n, err
+	}
+
+	return n, nil
 }
 
 func madvise(b []byte, advice int) (err error) {
