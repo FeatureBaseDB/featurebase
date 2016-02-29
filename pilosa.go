@@ -18,6 +18,9 @@ var (
 
 	// ErrFrameRequired is returned when no frame is specified.
 	ErrFrameRequired = errors.New("frame required")
+
+	// ErrFragmentNotFound is returned when a fragment does not exist.
+	ErrFragmentNotFound = errors.New("fragment not found")
 )
 
 // Version represents the current running version of Pilosa.
