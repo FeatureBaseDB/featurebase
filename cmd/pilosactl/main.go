@@ -78,6 +78,10 @@ func (m *Main) Run() error {
 		cmd = NewConfigCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "import":
 		cmd = NewImportCommand(m.Stdin, m.Stdout, m.Stderr)
+	case "backup":
+		cmd = NewBackupCommand(m.Stdin, m.Stdout, m.Stderr)
+	case "restore":
+		cmd = NewRestoreCommand(m.Stdin, m.Stdout, m.Stderr)
 	default:
 		return ErrUnknownCommand
 	}
@@ -323,4 +327,176 @@ func (cmd *ImportCommand) parsePath(path string) ([]pilosa.Bit, error) {
 	}
 
 	return a, nil
+}
+
+// BackupCommand represents a command for backing up a frame.
+type BackupCommand struct {
+	// Destination host and port.
+	Host string
+
+	// Name of the database & frame to backup.
+	Database string
+	Frame    string
+
+	// Output file to write to.
+	Path string
+
+	// Standard input/output
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// NewBackupCommand returns a new instance of BackupCommand.
+func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand {
+	return &BackupCommand{
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+}
+
+// ParseFlags parses command line flags from args.
+func (cmd *BackupCommand) ParseFlags(args []string) error {
+	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
+	fs.SetOutput(cmd.Stderr)
+	fs.StringVar(&cmd.Host, "host", "localhost:15000", "host:port")
+	fs.StringVar(&cmd.Database, "d", "", "database")
+	fs.StringVar(&cmd.Frame, "f", "", "frame")
+	fs.StringVar(&cmd.Path, "o", "", "output file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Usage returns the usage message to be printed.
+func (cmd *BackupCommand) Usage() string {
+	return strings.TrimSpace(`
+usage: pilosactl backup -host HOST -d database -f frame -o PATH
+
+Backs up the database and frame from across the cluster into a single file.
+`)
+}
+
+// Run executes the main program execution.
+func (cmd *BackupCommand) Run() error {
+	// Validate arguments.
+	if cmd.Path == "" {
+		return errors.New("output file required")
+	}
+
+	// Create a client to the server.
+	client, err := pilosa.NewClient(cmd.Host)
+	if err != nil {
+		return err
+	}
+
+	// Open output file.
+	f, err := os.Create(cmd.Path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Begin streaming backup.
+	if err := client.BackupTo(f, cmd.Database, cmd.Frame); err != nil {
+		return err
+	}
+
+	// Sync & close file to ensure durability.
+	if err := f.Sync(); err != nil {
+		return err
+	} else if err = f.Close(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RestoreCommand represents a command for restoring a frame from a backup.
+type RestoreCommand struct {
+	// Destination host and port.
+	Host string
+
+	// Name of the database & frame to backup.
+	Database string
+	Frame    string
+
+	// Import file to read from.
+	Path string
+
+	// Standard input/output
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// NewRestoreCommand returns a new instance of RestoreCommand.
+func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreCommand {
+	return &RestoreCommand{
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+}
+
+// ParseFlags parses command line flags from args.
+func (cmd *RestoreCommand) ParseFlags(args []string) error {
+	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
+	fs.SetOutput(cmd.Stderr)
+	fs.StringVar(&cmd.Host, "host", "localhost:15000", "host:port")
+	fs.StringVar(&cmd.Database, "d", "", "database")
+	fs.StringVar(&cmd.Frame, "f", "", "frame")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Read input path from the args.
+	if fs.NArg() == 0 {
+		return errors.New("path required")
+	} else if fs.NArg() > 1 {
+		return errors.New("too many paths specified")
+	}
+	cmd.Path = fs.Arg(0)
+
+	return nil
+}
+
+// Usage returns the usage message to be printed.
+func (cmd *RestoreCommand) Usage() string {
+	return strings.TrimSpace(`
+usage: pilosactl restore -host HOST -d database -f frame PATH
+
+Restores a frame to the cluster from a backup file.
+`)
+}
+
+// Run executes the main program execution.
+func (cmd *RestoreCommand) Run() error {
+	// Validate arguments.
+	if cmd.Path == "" {
+		return errors.New("backup file required")
+	}
+
+	// Create a client to the server.
+	client, err := pilosa.NewClient(cmd.Host)
+	if err != nil {
+		return err
+	}
+
+	// Open backup file.
+	f, err := os.Open(cmd.Path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Restore backup file to the cluster.
+	if err := client.RestoreFrom(f, cmd.Database, cmd.Frame); err != nil {
+		return err
+	}
+
+	return nil
 }
