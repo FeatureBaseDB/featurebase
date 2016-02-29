@@ -102,7 +102,7 @@ func TestFragment_Snapshot(t *testing.T) {
 }
 
 // Ensure a fragment can return the top n results.
-func TestFragment_TopN(t *testing.T) {
+func TestFragment_Top(t *testing.T) {
 	f := MustOpenFragment("d", "f", 0)
 	defer f.Close()
 
@@ -112,7 +112,7 @@ func TestFragment_TopN(t *testing.T) {
 	f.MustSetBits(102, 1, 2)
 
 	// Retrieve top bitmaps.
-	if pairs, err := f.TopN(2, nil, "", nil); err != nil {
+	if pairs, err := f.Top(pilosa.TopOptions{N: 2}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -124,7 +124,7 @@ func TestFragment_TopN(t *testing.T) {
 }
 
 // Ensure a fragment can filter bitmaps when retrieving the top n bitmaps.
-func TestFragment_TopN_Filter(t *testing.T) {
+func TestFragment_Top_Filter(t *testing.T) {
 	f := MustOpenFragment("d", "f", 0)
 	defer f.Close()
 
@@ -138,7 +138,11 @@ func TestFragment_TopN_Filter(t *testing.T) {
 	f.BitmapAttrStore.SetAttrs(102, map[string]interface{}{"x": uint64(20)})
 
 	// Retrieve top bitmaps.
-	if pairs, err := f.TopN(2, nil, "x", []interface{}{uint64(10), uint64(15), uint64(20)}); err != nil {
+	if pairs, err := f.Top(pilosa.TopOptions{
+		N:            2,
+		FilterField:  "x",
+		FilterValues: []interface{}{uint64(10), uint64(15), uint64(20)},
+	}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -164,7 +168,7 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 	f.MustSetBits(103, 1000, 1001, 1002) // no intersection
 
 	// Retrieve top bitmaps.
-	if pairs, err := f.TopN(3, src, "", nil); err != nil {
+	if pairs, err := f.Top(pilosa.TopOptions{N: 3, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
 		{Key: 101, Count: 3},
@@ -198,7 +202,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	}
 
 	// Retrieve top bitmaps.
-	if pairs, err := f.TopN(10, src, "", nil); err != nil {
+	if pairs, err := f.Top(pilosa.TopOptions{N: 10, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
 		{Key: 999, Count: 19},
@@ -211,6 +215,27 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 		{Key: 992, Count: 12},
 		{Key: 991, Count: 11},
 		{Key: 990, Count: 10},
+	}) {
+		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
+	}
+}
+
+// Ensure a fragment can return top bitmaps when specified by ID.
+func TestFragment_TopN_BitmapIDs(t *testing.T) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+
+	// Set bits on various bitmaps.
+	f.MustSetBits(100, 1, 2, 3)
+	f.MustSetBits(101, 4, 5, 6, 7)
+	f.MustSetBits(102, 8, 9, 10, 11, 12)
+
+	// Retrieve top bitmaps.
+	if pairs, err := f.Top(pilosa.TopOptions{BitmapIDs: []uint64{100, 101, 200}}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+		{Key: 101, Count: 4},
+		{Key: 100, Count: 3},
 	}) {
 		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
 	}

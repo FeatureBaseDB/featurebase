@@ -255,6 +255,15 @@ func (p Pairs) Add(other []Pair) []Pair {
 	return a
 }
 
+// Keys returns a slice of all keys in p.
+func (p Pairs) Keys() []uint64 {
+	a := make([]uint64, len(p))
+	for i := range p {
+		a[i] = p[i].Key
+	}
+	return a
+}
+
 func encodePairs(a Pairs) []*internal.Pair {
 	other := make([]*internal.Pair, len(a))
 	for i := range a {

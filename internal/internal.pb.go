@@ -26,17 +26,15 @@ It has these top-level messages:
 package internal
 
 import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
 import math "math"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
-var _ = fmt.Errorf
 var _ = math.Inf
 
 type Bitmap struct {
-	Chunks           []*Chunk `protobuf:"bytes,1,rep,name=Chunks" json:"Chunks,omitempty"`
-	Attrs            []*Attr  `protobuf:"bytes,2,rep,name=Attrs" json:"Attrs,omitempty"`
+	Chunks           []*Chunk `protobuf:"bytes,1,rep" json:"Chunks,omitempty"`
+	Attrs            []*Attr  `protobuf:"bytes,2,rep" json:"Attrs,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -59,8 +57,8 @@ func (m *Bitmap) GetAttrs() []*Attr {
 }
 
 type Chunk struct {
-	Key              *uint64  `protobuf:"varint,1,req,name=Key" json:"Key,omitempty"`
-	Value            []uint64 `protobuf:"varint,2,rep,name=Value" json:"Value,omitempty"`
+	Key              *uint64  `protobuf:"varint,1,req" json:"Key,omitempty"`
+	Value            []uint64 `protobuf:"varint,2,rep" json:"Value,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -83,8 +81,8 @@ func (m *Chunk) GetValue() []uint64 {
 }
 
 type Pair struct {
-	Key              *uint64 `protobuf:"varint,1,req,name=Key" json:"Key,omitempty"`
-	Count            *uint64 `protobuf:"varint,2,req,name=Count" json:"Count,omitempty"`
+	Key              *uint64 `protobuf:"varint,1,req" json:"Key,omitempty"`
+	Count            *uint64 `protobuf:"varint,2,req" json:"Count,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -107,8 +105,8 @@ func (m *Pair) GetCount() uint64 {
 }
 
 type Bit struct {
-	BitmapID         *uint64 `protobuf:"varint,1,req,name=BitmapID" json:"BitmapID,omitempty"`
-	ProfileID        *uint64 `protobuf:"varint,2,req,name=ProfileID" json:"ProfileID,omitempty"`
+	BitmapID         *uint64 `protobuf:"varint,1,req" json:"BitmapID,omitempty"`
+	ProfileID        *uint64 `protobuf:"varint,2,req" json:"ProfileID,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -131,8 +129,8 @@ func (m *Bit) GetProfileID() uint64 {
 }
 
 type Profile struct {
-	ID               *uint64 `protobuf:"varint,1,req,name=ID" json:"ID,omitempty"`
-	Attrs            []*Attr `protobuf:"bytes,2,rep,name=Attrs" json:"Attrs,omitempty"`
+	ID               *uint64 `protobuf:"varint,1,req" json:"ID,omitempty"`
+	Attrs            []*Attr `protobuf:"bytes,2,rep" json:"Attrs,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -155,10 +153,10 @@ func (m *Profile) GetAttrs() []*Attr {
 }
 
 type Attr struct {
-	Key              *string `protobuf:"bytes,1,req,name=Key" json:"Key,omitempty"`
-	StringValue      *string `protobuf:"bytes,2,opt,name=StringValue" json:"StringValue,omitempty"`
-	UintValue        *uint64 `protobuf:"varint,3,opt,name=UintValue" json:"UintValue,omitempty"`
-	BoolValue        *bool   `protobuf:"varint,4,opt,name=BoolValue" json:"BoolValue,omitempty"`
+	Key              *string `protobuf:"bytes,1,req" json:"Key,omitempty"`
+	StringValue      *string `protobuf:"bytes,2,opt" json:"StringValue,omitempty"`
+	UintValue        *uint64 `protobuf:"varint,3,opt" json:"UintValue,omitempty"`
+	BoolValue        *bool   `protobuf:"varint,4,opt" json:"BoolValue,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -195,7 +193,7 @@ func (m *Attr) GetBoolValue() bool {
 }
 
 type AttrMap struct {
-	Attrs            []*Attr `protobuf:"bytes,1,rep,name=Attrs" json:"Attrs,omitempty"`
+	Attrs            []*Attr `protobuf:"bytes,1,rep" json:"Attrs,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -211,12 +209,13 @@ func (m *AttrMap) GetAttrs() []*Attr {
 }
 
 type QueryRequest struct {
-	DB               *string  `protobuf:"bytes,1,req,name=DB" json:"DB,omitempty"`
-	Query            *string  `protobuf:"bytes,2,req,name=Query" json:"Query,omitempty"`
-	Slices           []uint64 `protobuf:"varint,3,rep,name=Slices" json:"Slices,omitempty"`
-	Profiles         *bool    `protobuf:"varint,4,opt,name=Profiles" json:"Profiles,omitempty"`
-	Timestamp        *int64   `protobuf:"varint,5,opt,name=Timestamp" json:"Timestamp,omitempty"`
-	Quantum          *uint32  `protobuf:"varint,6,opt,name=Quantum" json:"Quantum,omitempty"`
+	DB               *string  `protobuf:"bytes,1,req" json:"DB,omitempty"`
+	Query            *string  `protobuf:"bytes,2,req" json:"Query,omitempty"`
+	Slices           []uint64 `protobuf:"varint,3,rep" json:"Slices,omitempty"`
+	Profiles         *bool    `protobuf:"varint,4,opt" json:"Profiles,omitempty"`
+	Timestamp        *int64   `protobuf:"varint,5,opt" json:"Timestamp,omitempty"`
+	Quantum          *uint32  `protobuf:"varint,6,opt" json:"Quantum,omitempty"`
+	Remote           *bool    `protobuf:"varint,7,opt" json:"Remote,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -266,13 +265,20 @@ func (m *QueryRequest) GetQuantum() uint32 {
 	return 0
 }
 
+func (m *QueryRequest) GetRemote() bool {
+	if m != nil && m.Remote != nil {
+		return *m.Remote
+	}
+	return false
+}
+
 type QueryResponse struct {
-	Err              *string    `protobuf:"bytes,1,opt,name=Err" json:"Err,omitempty"`
-	Bitmap           *Bitmap    `protobuf:"bytes,2,opt,name=Bitmap" json:"Bitmap,omitempty"`
-	N                *uint64    `protobuf:"varint,3,opt,name=N" json:"N,omitempty"`
-	Pairs            []*Pair    `protobuf:"bytes,4,rep,name=Pairs" json:"Pairs,omitempty"`
-	Profiles         []*Profile `protobuf:"bytes,5,rep,name=Profiles" json:"Profiles,omitempty"`
-	Changed          *bool      `protobuf:"varint,6,opt,name=Changed" json:"Changed,omitempty"`
+	Err              *string    `protobuf:"bytes,1,opt" json:"Err,omitempty"`
+	Bitmap           *Bitmap    `protobuf:"bytes,2,opt" json:"Bitmap,omitempty"`
+	N                *uint64    `protobuf:"varint,3,opt" json:"N,omitempty"`
+	Pairs            []*Pair    `protobuf:"bytes,4,rep" json:"Pairs,omitempty"`
+	Profiles         []*Profile `protobuf:"bytes,5,rep" json:"Profiles,omitempty"`
+	Changed          *bool      `protobuf:"varint,6,opt" json:"Changed,omitempty"`
 	XXX_unrecognized []byte     `json:"-"`
 }
 
@@ -323,11 +329,11 @@ func (m *QueryResponse) GetChanged() bool {
 }
 
 type ImportRequest struct {
-	DB               *string  `protobuf:"bytes,1,req,name=DB" json:"DB,omitempty"`
-	Frame            *string  `protobuf:"bytes,2,req,name=Frame" json:"Frame,omitempty"`
-	Slice            *uint64  `protobuf:"varint,3,req,name=Slice" json:"Slice,omitempty"`
-	BitmapIDs        []uint64 `protobuf:"varint,4,rep,name=BitmapIDs" json:"BitmapIDs,omitempty"`
-	ProfileIDs       []uint64 `protobuf:"varint,5,rep,name=ProfileIDs" json:"ProfileIDs,omitempty"`
+	DB               *string  `protobuf:"bytes,1,req" json:"DB,omitempty"`
+	Frame            *string  `protobuf:"bytes,2,req" json:"Frame,omitempty"`
+	Slice            *uint64  `protobuf:"varint,3,req" json:"Slice,omitempty"`
+	BitmapIDs        []uint64 `protobuf:"varint,4,rep" json:"BitmapIDs,omitempty"`
+	ProfileIDs       []uint64 `protobuf:"varint,5,rep" json:"ProfileIDs,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -371,7 +377,7 @@ func (m *ImportRequest) GetProfileIDs() []uint64 {
 }
 
 type ImportResponse struct {
-	Err              *string `protobuf:"bytes,1,opt,name=Err" json:"Err,omitempty"`
+	Err              *string `protobuf:"bytes,1,opt" json:"Err,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -387,7 +393,7 @@ func (m *ImportResponse) GetErr() string {
 }
 
 type Cache struct {
-	BitmapIDs        []uint64 `protobuf:"varint,1,rep,name=BitmapIDs" json:"BitmapIDs,omitempty"`
+	BitmapIDs        []uint64 `protobuf:"varint,1,rep" json:"BitmapIDs,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
@@ -403,7 +409,7 @@ func (m *Cache) GetBitmapIDs() []uint64 {
 }
 
 type SliceMaxResponse struct {
-	SliceMax         *uint64 `protobuf:"varint,1,req,name=SliceMax" json:"SliceMax,omitempty"`
+	SliceMax         *uint64 `protobuf:"varint,1,req" json:"SliceMax,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -419,17 +425,4 @@ func (m *SliceMaxResponse) GetSliceMax() uint64 {
 }
 
 func init() {
-	proto.RegisterType((*Bitmap)(nil), "internal.Bitmap")
-	proto.RegisterType((*Chunk)(nil), "internal.Chunk")
-	proto.RegisterType((*Pair)(nil), "internal.Pair")
-	proto.RegisterType((*Bit)(nil), "internal.Bit")
-	proto.RegisterType((*Profile)(nil), "internal.Profile")
-	proto.RegisterType((*Attr)(nil), "internal.Attr")
-	proto.RegisterType((*AttrMap)(nil), "internal.AttrMap")
-	proto.RegisterType((*QueryRequest)(nil), "internal.QueryRequest")
-	proto.RegisterType((*QueryResponse)(nil), "internal.QueryResponse")
-	proto.RegisterType((*ImportRequest)(nil), "internal.ImportRequest")
-	proto.RegisterType((*ImportResponse)(nil), "internal.ImportResponse")
-	proto.RegisterType((*Cache)(nil), "internal.Cache")
-	proto.RegisterType((*SliceMaxResponse)(nil), "internal.SliceMaxResponse")
 }
