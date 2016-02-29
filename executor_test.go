@@ -204,6 +204,28 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
 }
+func TestExecutor_Execute_TopN_fill(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	// Set bits for bitmaps 0, 10, & 20 across two slices.
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0, nil, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1, nil, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 2, nil, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(0, SliceWidth, nil, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(1, SliceWidth+2, nil, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(1, SliceWidth, nil, 0)
+
+	// Execute query.
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if result, err := e.Execute("d", MustParse(`TopN(frame=f, n=1)`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(result, []pilosa.Pair{
+		{Key: 0, Count: 4},
+	}) {
+		t.Fatalf("unexpected result: %s", spew.Sdump(result))
+	}
+}
 
 // Ensure a TopN() query with a source bitmap can be executed.
 func TestExecutor_Execute_TopN_Src(t *testing.T) {
