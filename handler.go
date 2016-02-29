@@ -152,7 +152,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) error {
-
 	sm := h.Index.SliceN()
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
 		pb := &internal.SliceMaxResponse{
@@ -165,8 +164,11 @@ func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) erro
 		}
 		return nil
 	}
-	resp := map[string]uint64{"SliceMax": sm}
-	return json.NewEncoder(w).Encode(resp)
+	return json.NewEncoder(w).Encode(sliceMaxResponse{SliceMax: sm})
+}
+
+type sliceMaxResponse struct {
+	SliceMax uint64 `json:"SliceMax"`
 }
 
 // readProfiles returns a list of profile objects by id.

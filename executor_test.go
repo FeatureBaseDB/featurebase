@@ -128,7 +128,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 		t.Fatalf("unexpected bitmap count: %d", n)
 	}
 
-	if res, err := e.Execute("d", MustParse(`SetBit(id=11, frame=f, profileID=1)`), nil); err != nil {
+	if res, err := e.Execute("d", MustParse(`SetBit(id=11, frame=f, profileID=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else {
 		if !res.(bool) {
@@ -139,7 +139,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 	if n := f.Bitmap(11).Count(); n != 1 {
 		t.Fatalf("unexpected bitmap count: %d", n)
 	}
-	if res, err := e.Execute("d", MustParse(`SetBit(id=11, frame=f, profileID=1)`), nil); err != nil {
+	if res, err := e.Execute("d", MustParse(`SetBit(id=11, frame=f, profileID=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else {
 		if res.(bool) {
