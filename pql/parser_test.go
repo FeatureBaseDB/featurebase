@@ -254,22 +254,23 @@ func TestParser_Parse_SetBitmapAttrs_Array(t *testing.T) {
 
 // Ensure the parser can parse a "TopN()" function with keyed args.
 func TestParser_Parse_TopN_Key(t *testing.T) {
-	q, err := pql.ParseString(`TopN(Bitmap(100), frame="b.n", n=2, field="XXX", [5,10,15])`)
+	q, err := pql.ParseString(`TopN(Bitmap(100), frame="b.n", n=2, ids=[1,2,3], field="XXX", [5,10,15])`)
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
 		Root: &pql.TopN{
-			Src:     &pql.Bitmap{ID: 100},
-			Frame:   "b.n",
-			N:       2,
-			Field:   "XXX",
-			Filters: []interface{}{uint64(5), uint64(10), uint64(15)},
+			Src:       &pql.Bitmap{ID: 100},
+			Frame:     "b.n",
+			N:         2,
+			BitmapIDs: []uint64{1, 2, 3},
+			Field:     "XXX",
+			Filters:   []interface{}{uint64(5), uint64(10), uint64(15)},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
 	}
 
-	if s := q.String(); s != `TopN(Bitmap(id=100), frame=b.n, n=2, field="XXX", [5,10,15])` {
+	if s := q.String(); s != `TopN(Bitmap(id=100), frame=b.n, n=2, ids=[1,2,3], field="XXX", [5,10,15])` {
 		t.Fatalf("unexpected string encoding: %s", s)
 	}
 }

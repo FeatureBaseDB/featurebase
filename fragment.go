@@ -397,27 +397,24 @@ func (f *Fragment) pos(bitmapID, profileID uint64) (uint64, error) {
 	return (bitmapID * SliceWidth) + (profileID % SliceWidth), nil
 }
 
-// TopN returns the top n bitmaps from the fragment.
-// If src is specified then only bitmaps which intersect src are returned.
-// If fieldValues exist then the bitmap attribute specified by field is matched.
-func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interface{}) ([]Pair, error) {
-	// Resort cache, if needed, and retrieve the top bitmaps.
-	f.mu.Lock()
-	f.cache.Invalidate()
-	pairs := f.cache.Top()
-	f.mu.Unlock()
+// Top returns the top bitmaps from the fragment.
+// If opt.Src is specified then only bitmaps which intersect src are returned.
+// If opt.FilterValues exist then the bitmap attribute specified by field is matched.
+func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
+	// Retrieve pairs. If no bitmap ids specified then return from cache.
+	pairs := f.topBitmapPairs(opt.BitmapIDs)
 
 	// Create a fast lookup of filter values.
 	var filters map[interface{}]struct{}
-	if len(fieldValues) > 0 {
+	if opt.FilterField != "" && len(opt.FilterValues) > 0 {
 		filters = make(map[interface{}]struct{})
-		for _, v := range fieldValues {
+		for _, v := range opt.FilterValues {
 			filters[v] = struct{}{}
 		}
 	}
 
 	// Iterate over rankings and add to results until we have enough.
-	results := make([]Pair, 0, n)
+	results := make([]Pair, 0, opt.N)
 	for _, pair := range pairs {
 		bitmapID, bm := pair.ID, pair.Bitmap
 
@@ -433,7 +430,7 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 				return nil, err
 			} else if attr == nil {
 				continue
-			} else if attrValue := attr[field]; attrValue == nil {
+			} else if attrValue := attr[opt.FilterField]; attrValue == nil {
 				continue
 			} else if _, ok := filters[attrValue]; !ok {
 				continue
@@ -441,11 +438,11 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 		}
 
 		// The initial n pairs should simply be added to the results.
-		if len(results) < n {
+		if opt.N == 0 || len(results) < opt.N {
 			// Calculate count and append.
 			count := bm.Count()
-			if src != nil {
-				count = src.IntersectionCount(bm)
+			if opt.Src != nil {
+				count = opt.Src.IntersectionCount(bm)
 			}
 			if count == 0 {
 				continue
@@ -455,8 +452,8 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 			// If we reach the requested number of pairs and we are not computing
 			// intersections then simply exit. If we are intersecting then sort
 			// and then only keep pairs that are higher than the lowest count.
-			if len(results) == n {
-				if src == nil {
+			if opt.N > 0 && len(results) == opt.N {
+				if opt.Src == nil {
 					break
 				}
 				sort.Sort(Pairs(results))
@@ -479,7 +476,7 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 
 		// Calculate the intersecting bit count and skip if it's below our
 		// last bitmap in our current result set.
-		count := src.IntersectionCount(bm)
+		count := opt.Src.IntersectionCount(bm)
 		if count < threshold {
 			continue
 		}
@@ -495,6 +492,42 @@ func (f *Fragment) TopN(n int, src *Bitmap, field string, fieldValues []interfac
 
 	sort.Sort(Pairs(results))
 	return results, nil
+}
+
+func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
+	// If no specific bitmaps are requested, retrieve top bitmaps.
+	if len(bitmapIDs) == 0 {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.cache.Invalidate()
+		return f.cache.Top()
+	}
+
+	// Otherwise retrieve specific bitmaps.
+	pairs := make([]BitmapPair, len(bitmapIDs))
+	for i, bitmapID := range bitmapIDs {
+		pairs[i] = BitmapPair{
+			ID:     bitmapID,
+			Bitmap: f.Bitmap(bitmapID),
+		}
+	}
+	return pairs
+}
+
+// TopOptions represents options passed into the Top() function.
+type TopOptions struct {
+	// Number of bitmaps to return.
+	N int
+
+	// Bitmap to intersect with.
+	Src *Bitmap
+
+	// Specific bitmaps to filter against.
+	BitmapIDs []uint64
+
+	// Filter field name & values.
+	FilterField  string
+	FilterValues []interface{}
 }
 
 func (f *Fragment) Range(bitmapID uint64, start, end time.Time) *Bitmap {
