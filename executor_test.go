@@ -402,14 +402,29 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	c.Nodes[1].Host = s.Host()
 
 	// Mock secondary server's executor to verify arguments and return a bitmap.
+	var remoteExecN int
 	s.Handler.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
 		if db != `d` {
 			t.Fatalf("unexpected db: %s", db)
-		} else if query.String() != `TopN(frame=f, n=3)` {
-			t.Fatalf("unexpected query: %s", query.String())
 		} else if !reflect.DeepEqual(slices, []uint64{0, 2, 4, 6}) {
 			t.Fatalf("unexpected slices: %+v", slices)
 		}
+
+		// Query should be executed twice. Once to get the top bitmaps for the
+		// slices and a second time to get the counts for a set of bitmaps.
+		switch remoteExecN {
+		case 0:
+			if query.String() != `TopN(frame=f, n=3)` {
+				t.Fatalf("unexpected query(0): %s", query.String())
+			}
+		case 1:
+			if query.String() != `TopN(frame=f, ids=[0,10,30])` {
+				t.Fatalf("unexpected query(1): %s", query.String())
+			}
+		default:
+			t.Fatalf("too many remote exec calls")
+		}
+		remoteExecN++
 
 		// Return pair counts.
 		return []pilosa.Pair{

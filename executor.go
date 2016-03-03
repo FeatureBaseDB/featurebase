@@ -153,7 +153,31 @@ func (e *Executor) executeBitmapCallSlice(db string, c pql.BitmapCall, slice uin
 }
 
 // executeTopN executes a TopN() call.
+// This first performs the TopN() to determine the top results and then
+// requeries to retrieve the full counts for each of the top results.
 func (e *Executor) executeTopN(db string, c *pql.TopN, slices []uint64, opt *ExecOptions) ([]Pair, error) {
+	// Execute original query.
+	pairs, err := e.executeTopNSlices(db, c, slices, opt)
+	if err != nil {
+		return nil, err
+	}
+
+	// If this call is against specific ids, or we didn't get results,
+	// or we are part of a larger distributed query then don't refetch.
+	if len(pairs) == 0 || len(c.BitmapIDs) > 0 || opt.Remote {
+		return pairs, nil
+	}
+
+	// Only the original caller should refetch the full counts.
+	other := *c
+	other.N = 0
+	other.BitmapIDs = Pairs(pairs).Keys()
+	sort.Sort(uint64Slice(other.BitmapIDs))
+
+	return e.executeTopNSlices(db, &other, slices, opt)
+}
+
+func (e *Executor) executeTopNSlices(db string, c *pql.TopN, slices []uint64, opt *ExecOptions) ([]Pair, error) {
 	var results []Pair
 	for node, nodeSlices := range e.slicesByNode(slices) {
 		// Execute locally if the hostname matches.
@@ -180,7 +204,7 @@ func (e *Executor) executeTopN(db string, c *pql.TopN, slices []uint64, opt *Exe
 	sort.Sort(Pairs(results))
 
 	// Only keep the top n after sorting.
-	if len(results) > c.N {
+	if c.N > 0 && len(results) > c.N {
 		results = results[0:c.N]
 	}
 
@@ -210,7 +234,13 @@ func (e *Executor) executeTopNSlice(db string, c *pql.TopN, slice uint64) ([]Pai
 		return nil, nil
 	}
 
-	return f.TopN(c.N, src, c.Field, c.Filters)
+	return f.Top(TopOptions{
+		N:            c.N,
+		Src:          src,
+		BitmapIDs:    c.BitmapIDs,
+		FilterField:  c.Field,
+		FilterValues: c.Filters,
+	})
 }
 
 // executeDifferenceSlice executes a difference() call for a local slice.
@@ -404,6 +434,7 @@ func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64, op
 		Query:   proto.String(q.String()),
 		Slices:  slices,
 		Quantum: proto.Uint32(uint32(opt.Quantum)),
+		Remote:  proto.Bool(true),
 	}
 	if opt.Timestamp != nil {
 		pbreq.Timestamp = proto.Int64(opt.Timestamp.UnixNano())
@@ -489,6 +520,7 @@ func (e *Executor) slicesByNode(slices []uint64) map[*Node][]uint64 {
 type ExecOptions struct {
 	Timestamp *time.Time
 	Quantum   TimeQuantum
+	Remote    bool
 }
 
 // decodeError returns an error representation of s if s is non-blank.

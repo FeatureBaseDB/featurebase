@@ -115,6 +115,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	opt := &ExecOptions{
 		Timestamp: req.Timestamp,
 		Quantum:   req.Quantum,
+		Remote:    req.Remote,
 	}
 
 	// Parse query string.
@@ -475,6 +476,10 @@ type QueryRequest struct {
 
 	// Time granularity to use with the timestamp.
 	Quantum TimeQuantum
+
+	// If true, indicates that query is part of a larger distributed query.
+	// If false, this request is on the originating node.
+	Remote bool
 }
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
@@ -484,6 +489,7 @@ func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 		Slices:   pb.GetSlices(),
 		Profiles: pb.GetProfiles(),
 		Quantum:  TimeQuantum(pb.GetQuantum()),
+		Remote:   pb.GetRemote(),
 	}
 
 	if pb.Timestamp != nil {
