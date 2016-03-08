@@ -15,9 +15,11 @@ func TestParser_Parse_Bitmap_Key(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.Bitmap{
-			ID:    1,
-			Frame: "b.n",
+		Calls: pql.Calls{
+			&pql.Bitmap{
+				ID:    1,
+				Frame: "b.n",
+			},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
@@ -30,9 +32,11 @@ func TestParser_Parse_Bitmap_Array(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.Bitmap{
-			ID:    1,
-			Frame: "b.n",
+		Calls: pql.Calls{
+			&pql.Bitmap{
+				ID:    1,
+				Frame: "b.n",
+			},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
@@ -45,10 +49,12 @@ func TestParser_Parse_ClearBit_Key(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.ClearBit{
-			ID:        1,
-			Frame:     "b.n",
-			ProfileID: 3,
+		Calls: pql.Calls{
+			&pql.ClearBit{
+				ID:        1,
+				Frame:     "b.n",
+				ProfileID: 3,
+			},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
@@ -61,10 +67,12 @@ func TestParser_Parse_ClearBit_Array(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.ClearBit{
-			ID:        1,
-			Frame:     "b.n",
-			ProfileID: 3,
+		Calls: pql.Calls{
+			&pql.ClearBit{
+				ID:        1,
+				Frame:     "b.n",
+				ProfileID: 3,
+			},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
@@ -77,9 +85,11 @@ func TestParser_Parse_Count(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.Count{
-			Input: &pql.Bitmap{
-				ID: 1,
+		Calls: pql.Calls{
+			&pql.Count{
+				Input: &pql.Bitmap{
+					ID: 1,
+				},
 			},
 		},
 	}) {
@@ -93,10 +103,12 @@ func TestParser_Parse_Difference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.Difference{
-			Inputs: pql.BitmapCalls{
-				&pql.Bitmap{ID: 1},
-				&pql.Bitmap{ID: 2},
+		Calls: pql.Calls{
+			&pql.Difference{
+				Inputs: pql.BitmapCalls{
+					&pql.Bitmap{ID: 1},
+					&pql.Bitmap{ID: 2},
+				},
 			},
 		},
 	}) {
@@ -110,10 +122,12 @@ func TestParser_Parse_Intersect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.Intersect{
-			Inputs: pql.BitmapCalls{
-				&pql.Bitmap{ID: 1},
-				&pql.Bitmap{ID: 2},
+		Calls: pql.Calls{
+			&pql.Intersect{
+				Inputs: pql.BitmapCalls{
+					&pql.Bitmap{ID: 1},
+					&pql.Bitmap{ID: 2},
+				},
 			},
 		},
 	}) {
@@ -127,7 +141,9 @@ func TestParser_Parse_Profile_Key(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.Profile{ID: 1},
+		Calls: pql.Calls{
+			&pql.Profile{ID: 1},
+		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
 	}
@@ -139,7 +155,9 @@ func TestParser_Parse_Profile_Array(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.Profile{ID: 1},
+		Calls: pql.Calls{
+			&pql.Profile{ID: 1},
+		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
 	}
@@ -151,11 +169,13 @@ func TestParser_Parse_Range_Key(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.Range{
-			ID:        20,
-			Frame:     "b.n",
-			StartTime: time.Date(2000, 1, 2, 3, 4, 0, 0, time.UTC),
-			EndTime:   time.Date(2001, 1, 2, 3, 4, 0, 0, time.UTC),
+		Calls: pql.Calls{
+			&pql.Range{
+				ID:        20,
+				Frame:     "b.n",
+				StartTime: time.Date(2000, 1, 2, 3, 4, 0, 0, time.UTC),
+				EndTime:   time.Date(2001, 1, 2, 3, 4, 0, 0, time.UTC),
+			},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
@@ -168,11 +188,13 @@ func TestParser_Parse_Range_Array(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.Range{
-			ID:        20,
-			Frame:     "b.n",
-			StartTime: time.Date(2000, 1, 2, 3, 4, 0, 0, time.UTC),
-			EndTime:   time.Date(2001, 1, 2, 3, 4, 0, 0, time.UTC),
+		Calls: pql.Calls{
+			&pql.Range{
+				ID:        20,
+				Frame:     "b.n",
+				StartTime: time.Date(2000, 1, 2, 3, 4, 0, 0, time.UTC),
+				EndTime:   time.Date(2001, 1, 2, 3, 4, 0, 0, time.UTC),
+			},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
@@ -185,10 +207,12 @@ func TestParser_Parse_SetBit_Key(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.SetBit{
-			ID:        1,
-			Frame:     "b.n",
-			ProfileID: 3,
+		Calls: pql.Calls{
+			&pql.SetBit{
+				ID:        1,
+				Frame:     "b.n",
+				ProfileID: 3,
+			},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
@@ -201,10 +225,12 @@ func TestParser_Parse_SetBit_Array(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.SetBit{
-			ID:        1,
-			Frame:     "b.n",
-			ProfileID: 3,
+		Calls: pql.Calls{
+			&pql.SetBit{
+				ID:        1,
+				Frame:     "b.n",
+				ProfileID: 3,
+			},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
@@ -217,15 +243,17 @@ func TestParser_Parse_SetBitmapAttrs_Key(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.SetBitmapAttrs{
-			ID:    1,
-			Frame: "b.n",
-			Attrs: map[string]interface{}{
-				"foo": "bar",
-				"bar": uint64(123),
-				"baz": true,
-				"bat": false,
-				"x":   nil,
+		Calls: pql.Calls{
+			&pql.SetBitmapAttrs{
+				ID:    1,
+				Frame: "b.n",
+				Attrs: map[string]interface{}{
+					"foo": "bar",
+					"bar": uint64(123),
+					"baz": true,
+					"bat": false,
+					"x":   nil,
+				},
 			},
 		},
 	}) {
@@ -239,12 +267,14 @@ func TestParser_Parse_SetBitmapAttrs_Array(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.SetBitmapAttrs{
-			ID:    1,
-			Frame: "b.n",
-			Attrs: map[string]interface{}{
-				"foo": "bar",
-				"bar": uint64(123),
+		Calls: pql.Calls{
+			&pql.SetBitmapAttrs{
+				ID:    1,
+				Frame: "b.n",
+				Attrs: map[string]interface{}{
+					"foo": "bar",
+					"bar": uint64(123),
+				},
 			},
 		},
 	}) {
@@ -258,13 +288,15 @@ func TestParser_Parse_TopN_Key(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.TopN{
-			Src:       &pql.Bitmap{ID: 100},
-			Frame:     "b.n",
-			N:         2,
-			BitmapIDs: []uint64{1, 2, 3},
-			Field:     "XXX",
-			Filters:   []interface{}{uint64(5), uint64(10), uint64(15)},
+		Calls: pql.Calls{
+			&pql.TopN{
+				Src:       &pql.Bitmap{ID: 100},
+				Frame:     "b.n",
+				N:         2,
+				BitmapIDs: []uint64{1, 2, 3},
+				Field:     "XXX",
+				Filters:   []interface{}{uint64(5), uint64(10), uint64(15)},
+			},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
@@ -281,12 +313,14 @@ func TestParser_Parse_TopN_Array(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.TopN{
-			Src:     &pql.Bitmap{ID: 100},
-			Frame:   "b.n",
-			N:       2,
-			Field:   "XXX",
-			Filters: []interface{}{"foo", true, false},
+		Calls: pql.Calls{
+			&pql.TopN{
+				Src:     &pql.Bitmap{ID: 100},
+				Frame:   "b.n",
+				N:       2,
+				Field:   "XXX",
+				Filters: []interface{}{"foo", true, false},
+			},
 		},
 	}) {
 		t.Fatalf("unexpected query: %s", spew.Sdump(q))
@@ -303,10 +337,12 @@ func TestParser_Parse_Union(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(q, &pql.Query{
-		Root: &pql.Union{
-			Inputs: pql.BitmapCalls{
-				&pql.Bitmap{ID: 1},
-				&pql.Bitmap{ID: 2},
+		Calls: pql.Calls{
+			&pql.Union{
+				Inputs: pql.BitmapCalls{
+					&pql.Bitmap{ID: 1},
+					&pql.Bitmap{ID: 2},
+				},
 			},
 		},
 	}) {
