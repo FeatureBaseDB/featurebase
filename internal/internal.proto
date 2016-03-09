@@ -47,12 +47,16 @@ message QueryRequest {
 }
 
 message QueryResponse {
-	optional string  Err      = 1;
-	optional Bitmap  Bitmap   = 2;
-	optional uint64  N        = 3;
-	repeated Pair    Pairs    = 4;
-	repeated Profile Profiles = 5;
-	optional bool    Changed  = 6;
+	optional string      Err      = 1;
+	repeated QueryResult Results  = 2;
+	repeated Profile     Profiles = 3;
+}
+
+message QueryResult {
+	optional Bitmap  Bitmap   = 1;
+	optional uint64  N        = 2;
+	repeated Pair    Pairs    = 3;
+	optional bool    Changed  = 4;
 }
 
 message ImportRequest {

@@ -40,9 +40,11 @@ func TestMain_Set_Quick(t *testing.T) {
 		for frame, frameSet := range SetCommands(cmds).Frames() {
 			for id, profileIDs := range frameSet {
 				exp := MustMarshalJSON(map[string]interface{}{
-					"result": map[string]interface{}{
-						"bits":  profileIDs,
-						"attrs": map[string]interface{}{},
+					"results": []interface{}{
+						map[string]interface{}{
+							"bits":  profileIDs,
+							"attrs": map[string]interface{}{},
+						},
 					},
 				}) + "\n"
 				if res, err := m.Query("db=d", fmt.Sprintf(`Bitmap(id=%d, frame=%q)`, id, frame)); err != nil {
@@ -61,9 +63,11 @@ func TestMain_Set_Quick(t *testing.T) {
 		for frame, frameSet := range SetCommands(cmds).Frames() {
 			for id, profileIDs := range frameSet {
 				exp := MustMarshalJSON(map[string]interface{}{
-					"result": map[string]interface{}{
-						"bits":  profileIDs,
-						"attrs": map[string]interface{}{},
+					"results": []interface{}{
+						map[string]interface{}{
+							"bits":  profileIDs,
+							"attrs": map[string]interface{}{},
+						},
 					},
 				}) + "\n"
 				if res, err := m.Query("db=d", fmt.Sprintf(`Bitmap(id=%d, frame=%q)`, id, frame)); err != nil {
@@ -110,14 +114,14 @@ func TestMain_SetBitmapAttrs(t *testing.T) {
 	// Query bitmap x.n/1.
 	if res, err := m.Query("db=d", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"result":{"attrs":{"x":100},"bits":[100]}}`+"\n" {
+	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
 	// Query bitmap x.n/2.
 	if res, err := m.Query("db=d", `Bitmap(id=2, frame="x.n")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"result":{"attrs":{"x":200},"bits":[100]}}`+"\n" {
+	} else if res != `{"results":[{"attrs":{"x":200},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
@@ -128,7 +132,7 @@ func TestMain_SetBitmapAttrs(t *testing.T) {
 	// Query bitmap after reopening.
 	if res, err := m.Query("db=d&profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"result":{"attrs":{"x":100},"bits":[100]}}`+"\n" {
+	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 }
@@ -153,7 +157,7 @@ func TestMain_SetProfileAttrs(t *testing.T) {
 	// Query bitmap.
 	if res, err := m.Query("db=d&profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"result":{"attrs":{},"bits":[100,101]},"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
@@ -164,7 +168,7 @@ func TestMain_SetProfileAttrs(t *testing.T) {
 	// Query bitmap after reopening.
 	if res, err := m.Query("db=d&profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"result":{"attrs":{},"bits":[100,101]},"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 }

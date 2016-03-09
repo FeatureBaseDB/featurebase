@@ -165,7 +165,7 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 		// Add more values to bitmap.
 		for _, v := range a1 {
 			set[v] = struct{}{}
-			if err := bm.Add(v); err != nil {
+			if _, err := bm.Add(v); err != nil {
 				t.Fatal(err)
 			}
 

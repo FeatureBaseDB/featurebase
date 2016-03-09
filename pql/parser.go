@@ -30,17 +30,31 @@ func ParseString(s string) (*Query, error) {
 
 // Parse parses the next node in the query.
 func (p *Parser) Parse() (*Query, error) {
-	fn, err := p.parseCall()
-	if err != nil {
-		return nil, err
+	q := &Query{}
+	for {
+		call, err := p.parseCall()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+		q.Calls = append(q.Calls, call)
 	}
-	return &Query{Root: fn}, nil
+
+	// Require at least one call.
+	if len(q.Calls) == 0 {
+		return nil, io.ErrUnexpectedEOF
+	}
+
+	return q, nil
 }
 
 // parseCall parses the next function call.
 func (p *Parser) parseCall() (Call, error) {
 	tok, pos, lit := p.scanIgnoreWhitespace()
-	if tok != IDENT {
+	if tok == EOF {
+		return nil, io.EOF
+	} else if tok != IDENT {
 		return nil, &ParseError{Message: fmt.Sprintf("expected identifier, found: %s", lit), Pos: pos}
 	}
 
