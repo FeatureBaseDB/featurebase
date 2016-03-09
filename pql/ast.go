@@ -10,11 +10,17 @@ import (
 
 // Query represents a PQL query.
 type Query struct {
-	Root Call
+	Calls Calls
 }
 
 // String returns a string representation of the query.
-func (q *Query) String() string { return q.Root.String() }
+func (q *Query) String() string {
+	a := make([]string, len(q.Calls))
+	for i, call := range q.Calls {
+		a[i] = call.String()
+	}
+	return strings.Join(a, "\n")
+}
 
 // Node represents any node in the AST.
 type Node interface {

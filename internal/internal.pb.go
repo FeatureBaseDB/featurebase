@@ -18,6 +18,7 @@ It has these top-level messages:
 	AttrMap
 	QueryRequest
 	QueryResponse
+	QueryResult
 	ImportRequest
 	ImportResponse
 	Cache
@@ -273,13 +274,10 @@ func (m *QueryRequest) GetRemote() bool {
 }
 
 type QueryResponse struct {
-	Err              *string    `protobuf:"bytes,1,opt" json:"Err,omitempty"`
-	Bitmap           *Bitmap    `protobuf:"bytes,2,opt" json:"Bitmap,omitempty"`
-	N                *uint64    `protobuf:"varint,3,opt" json:"N,omitempty"`
-	Pairs            []*Pair    `protobuf:"bytes,4,rep" json:"Pairs,omitempty"`
-	Profiles         []*Profile `protobuf:"bytes,5,rep" json:"Profiles,omitempty"`
-	Changed          *bool      `protobuf:"varint,6,opt" json:"Changed,omitempty"`
-	XXX_unrecognized []byte     `json:"-"`
+	Err              *string        `protobuf:"bytes,1,opt" json:"Err,omitempty"`
+	Results          []*QueryResult `protobuf:"bytes,2,rep" json:"Results,omitempty"`
+	Profiles         []*Profile     `protobuf:"bytes,3,rep" json:"Profiles,omitempty"`
+	XXX_unrecognized []byte         `json:"-"`
 }
 
 func (m *QueryResponse) Reset()         { *m = QueryResponse{} }
@@ -293,23 +291,9 @@ func (m *QueryResponse) GetErr() string {
 	return ""
 }
 
-func (m *QueryResponse) GetBitmap() *Bitmap {
+func (m *QueryResponse) GetResults() []*QueryResult {
 	if m != nil {
-		return m.Bitmap
-	}
-	return nil
-}
-
-func (m *QueryResponse) GetN() uint64 {
-	if m != nil && m.N != nil {
-		return *m.N
-	}
-	return 0
-}
-
-func (m *QueryResponse) GetPairs() []*Pair {
-	if m != nil {
-		return m.Pairs
+		return m.Results
 	}
 	return nil
 }
@@ -321,7 +305,40 @@ func (m *QueryResponse) GetProfiles() []*Profile {
 	return nil
 }
 
-func (m *QueryResponse) GetChanged() bool {
+type QueryResult struct {
+	Bitmap           *Bitmap `protobuf:"bytes,1,opt" json:"Bitmap,omitempty"`
+	N                *uint64 `protobuf:"varint,2,opt" json:"N,omitempty"`
+	Pairs            []*Pair `protobuf:"bytes,3,rep" json:"Pairs,omitempty"`
+	Changed          *bool   `protobuf:"varint,4,opt" json:"Changed,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *QueryResult) Reset()         { *m = QueryResult{} }
+func (m *QueryResult) String() string { return proto.CompactTextString(m) }
+func (*QueryResult) ProtoMessage()    {}
+
+func (m *QueryResult) GetBitmap() *Bitmap {
+	if m != nil {
+		return m.Bitmap
+	}
+	return nil
+}
+
+func (m *QueryResult) GetN() uint64 {
+	if m != nil && m.N != nil {
+		return *m.N
+	}
+	return 0
+}
+
+func (m *QueryResult) GetPairs() []*Pair {
+	if m != nil {
+		return m.Pairs
+	}
+	return nil
+}
+
+func (m *QueryResult) GetChanged() bool {
 	if m != nil && m.Changed != nil {
 		return *m.Changed
 	}

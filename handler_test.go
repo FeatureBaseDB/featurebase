@@ -29,7 +29,7 @@ func TestHandler_NotFound(t *testing.T) {
 // Ensure the handler can accept URL arguments.
 func TestHandler_Query_Args_URL(t *testing.T) {
 	h := NewHandler()
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if db != "db0" {
 			t.Fatalf("unexpected db: %s", db)
 		} else if query.String() != `Count(Bitmap(id=100))` {
@@ -37,14 +37,14 @@ func TestHandler_Query_Args_URL(t *testing.T) {
 		} else if !reflect.DeepEqual(slices, []uint64{0, 1}) {
 			t.Fatalf("unexpected slices: %+v", slices)
 		}
-		return uint64(100), nil
+		return []interface{}{uint64(100)}, nil
 	}
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=0,1", strings.NewReader("Count( Bitmap( 100))")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"result":100}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[100]}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
 }
@@ -52,7 +52,7 @@ func TestHandler_Query_Args_URL(t *testing.T) {
 // Ensure the handler can accept arguments via protobufs.
 func TestHandler_Query_Args_Protobuf(t *testing.T) {
 	h := NewHandler()
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if db != "db0" {
 			t.Fatalf("unexpected db: %s", db)
 		} else if query.String() != `Count(Bitmap(id=100))` {
@@ -60,7 +60,7 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 		} else if !reflect.DeepEqual(slices, []uint64{0, 1}) {
 			t.Fatalf("unexpected slices: %+v", slices)
 		}
-		return uint64(100), nil
+		return []interface{}{uint64(100)}, nil
 	}
 
 	// Generate request body.
@@ -98,15 +98,15 @@ func TestHandler_Query_Args_Err(t *testing.T) {
 // Ensure the handler can execute a query with a uint64 response as JSON.
 func TestHandler_Query_Uint64_JSON(t *testing.T) {
 	h := NewHandler()
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
-		return uint64(100), nil
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+		return []interface{}{uint64(100)}, nil
 	}
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=0,1", strings.NewReader("Count( Bitmap( 100))")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"result":100}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[100]}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
 }
@@ -114,8 +114,8 @@ func TestHandler_Query_Uint64_JSON(t *testing.T) {
 // Ensure the handler can execute a query with a uint64 response as protobufs.
 func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 	h := NewHandler()
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
-		return uint64(100), nil
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+		return []interface{}{uint64(100)}, nil
 	}
 
 	w := httptest.NewRecorder()
@@ -129,25 +129,25 @@ func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
-	} else if resp.GetN() != 100 {
-		t.Fatalf("unexpected n: %d", resp.GetN())
+	} else if n := resp.Results[0].GetN(); n != 100 {
+		t.Fatalf("unexpected n: %d", n)
 	}
 }
 
 // Ensure the handler can execute a query that returns a bitmap as JSON.
 func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	h := NewHandler()
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
-		return bm, nil
+		return []interface{}{bm}, nil
 	}
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=d", strings.NewReader("Bitmap(100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"result":{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,65537]}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,65537]}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -169,17 +169,17 @@ func TestHandler_Query_Bitmap_Profiles_JSON(t *testing.T) {
 
 	h := NewHandler()
 	h.Index = idx.Index
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
-		return bm, nil
+		return []interface{}{bm}, nil
 	}
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=d&profiles=true", strings.NewReader("Bitmap(100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"result":{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,65537]},"profiles":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,65537]}],"profiles":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -187,10 +187,10 @@ func TestHandler_Query_Bitmap_Profiles_JSON(t *testing.T) {
 // Ensure the handler can execute a query that returns a bitmap as protobuf.
 func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	h := NewHandler()
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
-		return bm, nil
+		return []interface{}{bm}, nil
 	}
 
 	w := httptest.NewRecorder()
@@ -204,9 +204,9 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
-	} else if a := resp.GetBitmap().GetChunks(); len(a) != 2 {
+	} else if a := resp.Results[0].GetBitmap().GetChunks(); len(a) != 2 {
 		t.Fatalf("unexpected bitmap chunk length: %d", len(a))
-	} else if attrs := resp.GetBitmap().GetAttrs(); len(attrs) != 3 {
+	} else if attrs := resp.Results[0].GetBitmap().GetAttrs(); len(attrs) != 3 {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
 	} else if k, v := attrs[0].GetKey(), attrs[0].GetStringValue(); k != "a" || v != "b" {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
@@ -232,10 +232,10 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 
 	h := NewHandler()
 	h.Index = idx.Index
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
-		return bm, nil
+		return []interface{}{bm}, nil
 	}
 
 	// Encode request body.
@@ -261,9 +261,9 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if a := resp.GetBitmap().GetChunks(); len(a) != 2 {
+	if a := resp.Results[0].GetBitmap().GetChunks(); len(a) != 2 {
 		t.Fatalf("unexpected bitmap chunk length: %d", len(a))
-	} else if attrs := resp.GetBitmap().GetAttrs(); len(attrs) != 3 {
+	} else if attrs := resp.Results[0].GetBitmap().GetAttrs(); len(attrs) != 3 {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
 	} else if k, v := attrs[0].GetKey(), attrs[0].GetStringValue(); k != "a" || v != "b" {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
@@ -287,18 +287,18 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 // Ensure the handler can execute a query that returns pairs as JSON.
 func TestHandler_Query_Pairs_JSON(t *testing.T) {
 	h := NewHandler()
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
-		return []pilosa.Pair{
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+		return []interface{}{[]pilosa.Pair{
 			{Key: 1, Count: 2},
 			{Key: 3, Count: 4},
-		}, nil
+		}}, nil
 	}
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query", strings.NewReader(`TopN(frame=x, n=2)`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"result":[{"key":1,"count":2},{"key":3,"count":4}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[[{"key":1,"count":2},{"key":3,"count":4}]]}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
 }
@@ -306,11 +306,11 @@ func TestHandler_Query_Pairs_JSON(t *testing.T) {
 // Ensure the handler can execute a query that returns pairs as protobuf.
 func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 	h := NewHandler()
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
-		return []pilosa.Pair{
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+		return []interface{}{[]pilosa.Pair{
 			{Key: 1, Count: 2},
 			{Key: 3, Count: 4},
-		}, nil
+		}}, nil
 	}
 
 	w := httptest.NewRecorder()
@@ -324,7 +324,7 @@ func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
-	} else if a := resp.GetPairs(); len(a) != 2 {
+	} else if a := resp.Results[0].GetPairs(); len(a) != 2 {
 		t.Fatalf("unexpected pair length: %d", len(a))
 	}
 }
@@ -332,7 +332,7 @@ func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 // Ensure the handler can return an error as JSON.
 func TestHandler_Query_Err_JSON(t *testing.T) {
 	h := NewHandler()
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return nil, errors.New("marker")
 	}
 
@@ -348,7 +348,7 @@ func TestHandler_Query_Err_JSON(t *testing.T) {
 // Ensure the handler can return an error as protobuf.
 func TestHandler_Query_Err_Protobuf(t *testing.T) {
 	h := NewHandler()
-	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
+	h.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return nil, errors.New("marker")
 	}
 
@@ -493,12 +493,12 @@ func NewHandler() *Handler {
 // HandlerExecutor is a mock implementing pilosa.Handler.Executor.
 type HandlerExecutor struct {
 	cluster   *pilosa.Cluster
-	ExecuteFn func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error)
+	ExecuteFn func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error)
 }
 
 func (c *HandlerExecutor) Cluster() *pilosa.Cluster { return c.cluster }
 
-func (c *HandlerExecutor) Execute(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) (interface{}, error) {
+func (c *HandlerExecutor) Execute(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 	return c.ExecuteFn(db, query, slices, opt)
 }
 
