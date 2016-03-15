@@ -89,6 +89,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/frame/restore":
+		switch r.Method {
+		case "POST":
+			h.handlePostFrameRestore(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/version":
 		h.handleVersion(w, r)
 
@@ -432,6 +439,75 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 	if _, err := f.ReadFrom(r.Body); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+}
+
+// handlePostFrameRestore handles POST /frame/restore requests.
+func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	host := q.Get("host")
+	db, frame := q.Get("db"), q.Get("frame")
+
+	// Validate query parameters.
+	if host == "" {
+		http.Error(w, "host required", http.StatusBadRequest)
+		return
+	} else if db == "" {
+		http.Error(w, "db required", http.StatusBadRequest)
+		return
+	} else if frame == "" {
+		http.Error(w, "frame required", http.StatusBadRequest)
+		return
+	}
+
+	// Create a client for the remote cluster.
+	client, err := NewClient(host)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Determine the maximum number of slices.
+	sliceN, err := client.SliceN()
+	if err != nil {
+		http.Error(w, "cannot determine remote slice count: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Loop over each slice and import it if this node owns it.
+	for slice := uint64(0); slice <= sliceN; slice++ {
+		// Ignore this slice if we don't own it.
+		if !h.Cluster.OwnsSlice(h.Host, slice) {
+			continue
+		}
+
+		// Otherwise retrieve the local fragment.
+		f, err := h.Index.CreateFragmentIfNotExists(db, frame, slice)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Stream backup from remote node.
+		r, err := client.BackupSlice(db, frame, slice)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else if r == nil {
+			continue // slice doesn't exist
+		}
+
+		// Restore to local frame and always close reader.
+		if err := func() error {
+			defer r.Close()
+			if _, err := f.ReadFrom(r); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 

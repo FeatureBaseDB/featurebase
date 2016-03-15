@@ -402,6 +402,7 @@ func (e *Executor) executeClearBit(db string, c *pql.ClearBit, opt *ExecOptions)
 func (e *Executor) executeSetBit(db string, c *pql.SetBit, opt *ExecOptions) (bool, error) {
 	slice := c.ProfileID / SliceWidth
 	ret := false
+
 	for _, node := range e.Cluster.SliceNodes(slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
