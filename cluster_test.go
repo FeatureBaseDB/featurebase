@@ -56,6 +56,26 @@ func TestCluster_Partition(t *testing.T) {
 	}
 }
 
+// Ensure the hasher can hash correctly.
+func TestHasher(t *testing.T) {
+	for _, tt := range []struct {
+		key    uint64
+		bucket []int
+	}{
+		// Generated from the reference C++ code
+		{0, []int{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+		{1, []int{0, 0, 0, 0, 0, 0, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 17, 17}},
+		{0xdeadbeef, []int{0, 1, 2, 3, 3, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 16, 16, 16}},
+		{0x0ddc0ffeebadf00d, []int{0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15}},
+	} {
+		for i, v := range tt.bucket {
+			if got := pilosa.NewHasher().Hash(tt.key, i+1); got != v {
+				t.Errorf("hash(%v,%v)=%v, want %v", tt.key, i+1, got, v)
+			}
+		}
+	}
+}
+
 // NewCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewCluster(n int) *pilosa.Cluster {
 	c := pilosa.NewCluster()

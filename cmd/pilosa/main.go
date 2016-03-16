@@ -87,6 +87,10 @@ type Main struct {
 	// Configuration options.
 	Config *Config
 
+	// Cluster configuration shared by components
+	Host    string
+	Cluster *pilosa.Cluster
+
 	// Profiling paths
 	CPUProfile string
 
@@ -148,13 +152,13 @@ func (m *Main) Run(args ...string) error {
 	m.ln = ln
 
 	// Determine hostname based on listening port.
-	hostname := net.JoinHostPort(host, strconv.Itoa(m.ln.Addr().(*net.TCPAddr).Port))
+	m.Host = net.JoinHostPort(host, strconv.Itoa(m.ln.Addr().(*net.TCPAddr).Port))
 
 	// Build cluster from config file. Create local host if none are specified.
-	cluster := m.Config.PilosaCluster()
-	if len(cluster.Nodes) == 0 {
-		cluster.Nodes = []*pilosa.Node{{
-			Host: hostname,
+	m.Cluster = m.Config.PilosaCluster()
+	if len(m.Cluster.Nodes) == 0 {
+		m.Cluster.Nodes = []*pilosa.Node{{
+			Host: m.Host,
 		}}
 	}
 
@@ -167,43 +171,43 @@ func (m *Main) Run(args ...string) error {
 
 	// Create executor for executing queries.
 	e := pilosa.NewExecutor(m.index)
-	e.Host = hostname
-	e.Cluster = cluster
+	e.Host = m.Host
+	e.Cluster = m.Cluster
 
 	// Initialize HTTP handler.
 	h := pilosa.NewHandler()
 	h.Index = m.index
-	h.Host = hostname
-	h.Cluster = cluster
+	h.Host = m.Host
+	h.Cluster = m.Cluster
 	h.Executor = e
 	h.LogOutput = m.Stderr
 
 	// Serve HTTP.
 	go func() { http.Serve(ln, h) }()
 
-	//sync up max slice if more than one node
-	if len(cluster.Nodes) > 1 { 
+	// Sync up max slice if more than one node
+	if len(m.Cluster.Nodes) > 1 {
 		m.ticker = time.NewTicker(time.Second * time.Duration(m.pollingSecs))
-		go func() { 
+		go func() {
 			for range m.ticker.C {
-				oldmax:= m.index.SliceN()
-				newmax:=oldmax
-				for _, node := range cluster.Nodes {
-					if hostname != node.Host {
-						newslice,_:=checkMaxSlice(node.Host)
-							if newslice>newmax{
-								newmax= newslice
-							}
+				oldmax := m.index.SliceN()
+				newmax := oldmax
+				for _, node := range m.Cluster.Nodes {
+					if m.Host != node.Host {
+						newslice, _ := checkMaxSlice(node.Host)
+						if newslice > newmax {
+							newmax = newslice
+						}
 					}
 				}
-				if newmax>oldmax{
+				if newmax > oldmax {
 					m.index.SetMax(newmax)
 				}
 			}
 		}()
 	}
 
-	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", hostname)
+	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Host)
 
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"testing/quick"
 
 	"github.com/BurntSushi/toml"
+	"github.com/umbel/pilosa"
 	main "github.com/umbel/pilosa/cmd/pilosa"
 )
 
@@ -170,6 +171,61 @@ func TestMain_SetProfileAttrs(t *testing.T) {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
+	}
+}
+
+// Ensure program can set bits on one cluster and then restore to a second cluster.
+func TestMain_FrameRestore(t *testing.T) {
+	m0 := MustRunMain()
+	defer m0.Close()
+
+	m1 := MustRunMain()
+	defer m1.Close()
+
+	// Update cluster config.
+	m0.Cluster.Nodes = []*pilosa.Node{
+		{Host: m0.Host},
+		{Host: m1.Host},
+	}
+	m1.Cluster.Nodes = m0.Cluster.Nodes
+
+	// Write data on first cluster.
+	if _, err := m0.Query("db=d", `
+		SetBit(id=1, frame="f", profileID=100)
+		SetBit(id=1, frame="f", profileID=1000)
+		SetBit(id=1, frame="f", profileID=100000)
+		SetBit(id=1, frame="f", profileID=200000)
+		SetBit(id=1, frame="f", profileID=400000)
+		SetBit(id=1, frame="f", profileID=600000)
+		SetBit(id=1, frame="f", profileID=800000)
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query bitmap on first cluster.
+	if res, err := m0.Query("db=d", `Bitmap(id=1, frame="f")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
+		t.Fatalf("unexpected result: %s", res)
+	}
+
+	// Start second cluster.
+	m2 := MustRunMain()
+	defer m2.Close()
+
+	// Import from first cluster.
+	client, err := pilosa.NewClient(m2.Host)
+	if err != nil {
+		t.Fatal(err)
+	} else if err := client.RestoreFrame(m0.Host, "d", "f"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query bitmap on second cluster.
+	if res, err := m2.Query("db=d", `Bitmap(id=1, frame="f")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
+		t.Fatalf("unexpected result: %s", res)
 	}
 }
 
