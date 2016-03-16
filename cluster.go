@@ -7,7 +7,7 @@ import (
 
 const (
 	// DefaultPartitionN is the default number of partitions in a cluster.
-	DefaultPartitionN = 64
+	DefaultPartitionN = 16
 
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
@@ -112,6 +112,9 @@ type Hasher interface {
 	// Hashes the key into a number between [0,N).
 	Hash(key uint64, n int) int
 }
+
+// NewHasher returns a new instance of the default hasher.
+func NewHasher() Hasher { return &jmphasher{} }
 
 // jmphasher represents an implementation of jmphash. Implements Hasher.
 type jmphasher struct{}
