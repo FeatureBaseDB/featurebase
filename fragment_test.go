@@ -319,6 +319,11 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Verify cache is populated.
+	if n := f0.Cache().Len(); n != 1 {
+		t.Fatalf("unexpected cache size: %d", n)
+	}
+
 	// Write fragment to a buffer.
 	var buf bytes.Buffer
 	wn, err := f0.WriteTo(&buf)
@@ -334,6 +339,11 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 		t.Fatalf("read/write byte count mismatch: wn=%d, rn=%d", wn, rn)
 	}
 
+	// Verify cache is in other fragment.
+	if n := f1.Cache().Len(); n != 1 {
+		t.Fatalf("unexpected cache size: %d", n)
+	}
+
 	// Verify data in other fragment.
 	if a := f1.Bitmap(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
 		t.Fatalf("unexpected bits: %+v", a)
@@ -342,8 +352,10 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	// Close and reopen the fragment & verify the data.
 	if err := f1.Reopen(); err != nil {
 		t.Fatal(err)
+	} else if n := f1.Cache().Len(); n != 1 {
+		t.Fatalf("unexpected cache size (reopen): %d", n)
 	} else if a := f1.Bitmap(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
-		t.Fatalf("unexpected bits: %+v", a)
+		t.Fatalf("unexpected bits (reopen): %+v", a)
 	}
 }
 
