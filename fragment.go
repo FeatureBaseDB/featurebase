@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"archive/tar"
 	"errors"
 	"fmt"
 	"io"
@@ -122,6 +123,10 @@ func (f *Fragment) Open() error {
 			return err
 		}
 
+		// Periodically flush cache.
+		f.wg.Add(1)
+		go func() { defer f.wg.Done(); f.monitorCacheFlush() }()
+
 		return nil
 	}(); err != nil {
 		f.close()
@@ -221,10 +226,6 @@ func (f *Fragment) openCache() error {
 	for _, bitmapID := range pb.GetBitmapIDs() {
 		f.bitmap(bitmapID)
 	}
-
-	// Periodically flush cache.
-	f.wg.Add(1)
-	go func() { defer f.wg.Done(); f.monitorCacheFlush() }()
 
 	return nil
 }
@@ -682,10 +683,27 @@ func (f *Fragment) flushCache() error {
 
 // WriteTo writes the fragment's data to w.
 func (f *Fragment) WriteTo(w io.Writer) (n int64, err error) {
+	// Force cache flush.
+	if err := f.FlushCache(); err != nil {
+		return 0, err
+	}
+
+	// Write out data and cache to a tar archive.
+	tw := tar.NewWriter(w)
+	if err := f.writeStorageToArchive(tw); err != nil {
+		return 0, fmt.Errorf("write storage: %s", err)
+	}
+	if err := f.writeCacheToArchive(tw); err != nil {
+		return 0, fmt.Errorf("write cache: %s", err)
+	}
+	return 0, nil
+}
+
+func (f *Fragment) writeStorageToArchive(tw *tar.Writer) error {
 	// Open separate file descriptor to read from.
 	file, err := os.Open(f.path)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	defer file.Close()
 
@@ -704,12 +722,54 @@ func (f *Fragment) WriteTo(w io.Writer) (n int64, err error) {
 
 		return nil
 	}(); err != nil {
-		return 0, err
+		return err
+	}
+
+	// Write archive header.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:    "data",
+		Mode:    0600,
+		Size:    sz,
+		ModTime: time.Now(),
+	}); err != nil {
+		return err
 	}
 
 	// Copy the file up to the last known size.
 	// This is done outside the lock because the storage format is append-only.
-	return io.CopyN(w, file, sz)
+	if _, err := io.CopyN(tw, file, sz); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (f *Fragment) writeCacheToArchive(tw *tar.Writer) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Read cache into buffer.
+	buf, err := ioutil.ReadFile(f.CachePath())
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	// Write archive header.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:    "cache",
+		Mode:    0600,
+		Size:    int64(len(buf)),
+		ModTime: time.Now(),
+	}); err != nil {
+		return err
+	}
+
+	// Write data to archive.
+	if _, err := tw.Write(buf); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ReadFrom reads a data file from r and loads it into the fragment.
@@ -717,35 +777,81 @@ func (f *Fragment) ReadFrom(r io.Reader) (n int64, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	tr := tar.NewReader(r)
+	for {
+		// Read next tar header.
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return 0, err
+		}
+
+		// Process file based on file name.
+		switch hdr.Name {
+		case "data":
+			if err := f.readStorageFromArchive(tr); err != nil {
+				return 0, err
+			}
+		case "cache":
+			if err := f.readCacheFromArchive(tr); err != nil {
+				return 0, err
+			}
+		default:
+			return 0, fmt.Errorf("invalid fragment archive file: %s", hdr.Name)
+		}
+	}
+
+	return 0, nil
+}
+
+func (f *Fragment) readStorageFromArchive(r io.Reader) error {
 	// Create a temporary file to copy into.
 	path := f.path + CopyExt
 	file, err := os.Create(path)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	defer file.Close()
 
 	// Copy reader into temporary path.
-	if n, err = io.Copy(file, r); err != nil {
-		return n, err
+	if _, err = io.Copy(file, r); err != nil {
+		return err
 	}
 
 	// Close current storage.
 	if err := f.closeStorage(); err != nil {
-		return n, err
+		return err
 	}
 
 	// Move snapshot to data file location.
 	if err := os.Rename(path, f.path); err != nil {
-		return n, err
+		return err
 	}
 
 	// Reopen storage.
 	if err := f.openStorage(); err != nil {
-		return n, err
+		return err
 	}
 
-	return n, nil
+	return nil
+}
+
+func (f *Fragment) readCacheFromArchive(r io.Reader) error {
+	// Slurp data from reader and write to disk.
+	buf, err := ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	} else if err := ioutil.WriteFile(f.CachePath(), buf, 0666); err != nil {
+		return err
+	}
+
+	// Re-open cache.
+	if err := f.openCache(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func madvise(b []byte, advice int) (err error) {
