@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 )
 
@@ -130,6 +131,20 @@ func (db *DB) Frame(name string) *Frame {
 
 func (db *DB) frame(name string) *Frame { return db.frames[name] }
 
+// Frames returns a list of all frames in the database.
+func (db *DB) Frames() []*Frame {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	a := make([]*Frame, 0, len(db.frames))
+	for _, f := range db.frames {
+		a = append(a, f)
+	}
+	sort.Sort(frameSlice(a))
+
+	return a
+}
+
 // CreateFrameIfNotExists returns a frame in the database by name.
 func (db *DB) CreateFrameIfNotExists(name string) (*Frame, error) {
 	db.mu.Lock()
@@ -152,3 +167,9 @@ func (db *DB) createFrameIfNotExists(name string) (*Frame, error) {
 
 	return f, nil
 }
+
+type dbSlice []*DB
+
+func (p dbSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p dbSlice) Len() int           { return len(p) }
+func (p dbSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
