@@ -186,3 +186,9 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 
 	return frag, nil
 }
+
+type frameSlice []*Frame
+
+func (p frameSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p frameSlice) Len() int           { return len(p) }
+func (p frameSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
