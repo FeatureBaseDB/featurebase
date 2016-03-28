@@ -52,6 +52,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	t := time.Now()
 
 	switch r.URL.Path {
+	case "/schema":
+		switch r.Method {
+		case "GET":
+			h.handleGetSchema(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/query":
 		switch r.Method {
 		case "POST":
@@ -106,6 +113,39 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), time.Since(t).Seconds())
+}
+
+// handleGetSchema handles GET /schema requests.
+func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
+	// Construct schema based on databases and frames.
+	var resp getSchemaResponse
+	for _, db := range h.Index.DBs() {
+		respDB := getSchemaDB{Name: db.Name()}
+		for _, frame := range db.Frames() {
+			respDB.Frames = append(respDB.Frames, getSchemaFrame{
+				Name: frame.Name(),
+			})
+		}
+		resp.DBs = append(resp.DBs, respDB)
+	}
+
+	// Write JSON to response.
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		h.logger().Printf("write schema response error: %s", err)
+	}
+}
+
+type getSchemaResponse struct {
+	DBs []getSchemaDB `json:"dbs"`
+}
+
+type getSchemaDB struct {
+	Name   string           `json:"name"`
+	Frames []getSchemaFrame `json:"frames"`
+}
+
+type getSchemaFrame struct {
+	Name string `json:"name"`
 }
 
 // handlePostQuery handles /query requests.
