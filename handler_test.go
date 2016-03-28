@@ -26,6 +26,31 @@ func TestHandler_NotFound(t *testing.T) {
 	}
 }
 
+// Ensure the handler can return the schema.
+func TestHandler_Schema(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+	if _, err := idx.CreateFrameIfNotExists("d0", "f1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := idx.CreateFrameIfNotExists("d1", "f0"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := idx.CreateFrameIfNotExists("d0", "f0"); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewHandler()
+	h.Index = idx.Index
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/schema", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{"dbs":[{"name":"d0","frames":[{"name":"f0"},{"name":"f1"}]},{"name":"d1","frames":[{"name":"f0"}]}]}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
 // Ensure the handler can accept URL arguments.
 func TestHandler_Query_Args_URL(t *testing.T) {
 	h := NewHandler()
