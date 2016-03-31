@@ -21,6 +21,9 @@ var (
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
+
+	// ErrQueryRequired is returned when no query is specified.
+	ErrQueryRequired = errors.New("query required")
 )
 
 // Version represents the current running version of Pilosa.

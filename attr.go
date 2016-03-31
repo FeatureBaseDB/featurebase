@@ -56,7 +56,12 @@ func (s *AttrStore) Open() error {
 }
 
 // Close closes the store.
-func (s *AttrStore) Close() error { return s.db.Close() }
+func (s *AttrStore) Close() error {
+	if s.db != nil {
+		s.db.Close()
+	}
+	return nil
+}
 
 // Attrs returns a set of attributes by ID.
 func (s *AttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
