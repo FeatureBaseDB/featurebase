@@ -41,7 +41,7 @@ const (
 	DefaultCacheFlushInterval = 1 * time.Minute
 
 	// DefaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
-	DefaultFragmentMaxOpN = 10000
+	DefaultFragmentMaxOpN = 1000
 )
 
 // Fragment represents the intersection of a frame and slice in a database.
@@ -256,12 +256,12 @@ func (f *Fragment) close() error {
 
 	// Flush cache if closing gracefully.
 	if err := f.flushCache(); err != nil {
-		f.logger().Printf("error flushing cache on close: err=%s, path=%s", err, f.path)
+		f.logger().Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
 	}
 
 	// Close underlying storage.
 	if err := f.closeStorage(); err != nil {
-		f.logger().Printf("error closing storage: err=%s, path=%s", err, f.path)
+		f.logger().Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
 	}
 
 	return nil
@@ -634,6 +634,9 @@ func (f *Fragment) Snapshot() error {
 }
 
 func (f *Fragment) snapshot() error {
+	logger := f.logger()
+	logger.Printf("fragment: snapshotting %s/%s/%d", f.db, f.frame, f.slice)
+
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + SnapshotExt
 	file, err := os.Create(snapshotPath)

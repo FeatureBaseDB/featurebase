@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -153,6 +154,10 @@ func (db *DB) CreateFrameIfNotExists(name string) (*Frame, error) {
 }
 
 func (db *DB) createFrameIfNotExists(name string) (*Frame, error) {
+	if name == "" {
+		return nil, errors.New("frame name required")
+	}
+
 	// Find frame in cache first.
 	if f := db.frames[name]; f != nil {
 		return f, nil
