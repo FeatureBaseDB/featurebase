@@ -39,6 +39,9 @@ const (
 const (
 	// DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
 	DefaultCacheFlushInterval = 1 * time.Minute
+
+	// DefaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
+	DefaultFragmentMaxOpN = 10000
 )
 
 // Fragment represents the intersection of a frame and slice in a database.
@@ -55,6 +58,7 @@ type Fragment struct {
 	file        *os.File
 	storage     *roaring.Bitmap
 	storageData []byte
+	opN         int // number of ops since snapshot
 
 	// Bitmap cache.
 	cache Cache
@@ -65,6 +69,11 @@ type Fragment struct {
 
 	// The interval at which the cached bitmap ids are persisted to disk.
 	CacheFlushInterval time.Duration
+
+	// Number of operations performed before performing a snapshot.
+	// This limits the size of fragments on the heap and flushes them to disk
+	// so that they can be mmapped and heap utilization can be kept low.
+	MaxOpN int
 
 	// Writer used for out-of-band log entries.
 	LogOutput io.Writer
@@ -85,6 +94,7 @@ func NewFragment(path, db, frame string, slice uint64) *Fragment {
 
 		LogOutput:          os.Stderr,
 		CacheFlushInterval: DefaultCacheFlushInterval,
+		MaxOpN:             DefaultFragmentMaxOpN,
 	}
 }
 
@@ -337,8 +347,12 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	}
 
 	// Write to storage.
-
 	if changed, err = f.storage.Add(pos); err != nil {
+		return false, err
+	}
+
+	// If the number of operations exceeds the limit then snapshot.
+	if err := f.incrementOpN(); err != nil {
 		return false, err
 	}
 
@@ -346,8 +360,8 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	if f.bitmap(bitmapID).setBit(profileID) {
 		changed = true
 	}
-	return changed, nil
 
+	return changed, nil
 }
 
 func (f *Fragment) setTimeBit(bitmapID, profileID uint64, t time.Time, q TimeQuantum) (changed bool, err error) {
@@ -379,12 +393,17 @@ func (f *Fragment) ClearBit(bitmapID, profileID uint64) (bool, error) {
 		return false, err
 	}
 
+	// Increment number of operations until snapshot is required.
+	if err := f.incrementOpN(); err != nil {
+		return false, err
+	}
+
 	// Update the cache.
 	if f.bitmap(bitmapID).clearBit(profileID) {
 		return true, nil
 	}
-	return changed, nil
 
+	return changed, nil
 }
 
 // pos translates the bitmap ID and profile ID into a position in the storage bitmap.
@@ -593,6 +612,20 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 	return nil
 }
 
+// incrementOpN increase the operation count by one.
+// If the count exceeds the maximum allowed then a snapshot is performed.
+func (f *Fragment) incrementOpN() error {
+	f.opN++
+	if f.opN <= f.MaxOpN {
+		return nil
+	}
+
+	if err := f.snapshot(); err != nil {
+		return fmt.Errorf("snapshot: %s", err)
+	}
+	return nil
+}
+
 // Snapshot writes the storage bitmap to disk and reopens it.
 func (f *Fragment) Snapshot() error {
 	f.mu.Lock()
@@ -628,6 +661,9 @@ func (f *Fragment) snapshot() error {
 	if err := f.openStorage(); err != nil {
 		return fmt.Errorf("open storage: %s", err)
 	}
+
+	// Reset operation count.
+	f.opN = 0
 
 	return nil
 }
