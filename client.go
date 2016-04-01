@@ -92,6 +92,58 @@ func (c *Client) SliceNodes(slice uint64) ([]*Node, error) {
 	return a, nil
 }
 
+// ExecuteQuery executes query against db on the server.
+func (c *Client) ExecuteQuery(db, query string) (result interface{}, err error) {
+	if db == "" {
+		return nil, ErrDatabaseRequired
+	} else if query == "" {
+		return nil, ErrQueryRequired
+	}
+
+	// Encode query request.
+	buf, err := proto.Marshal(&internal.QueryRequest{
+		DB:    proto.String(db),
+		Query: proto.String(query),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal: %s", err)
+	}
+
+	// Create URL & HTTP request.
+	u := url.URL{Scheme: "http", Host: c.host, Path: "/query"}
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
+
+	// Execute request against the host.
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read body and unmarshal response.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	} else if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(string(body))
+	}
+
+	var qresp internal.QueryResponse
+	if err := proto.Unmarshal(body, &qresp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %s", err)
+	} else if s := qresp.GetErr(); s != "" {
+		return nil, errors.New(s)
+	}
+
+	return nil, nil
+}
+
 // Import bulk imports bits for a single slice to a host.
 func (c *Client) Import(db, frame string, slice uint64, bits []Bit) error {
 	if db == "" {

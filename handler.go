@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"strconv"
 	"strings"
@@ -49,8 +50,23 @@ func NewHandler() *Handler {
 
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	t := time.Now()
+	// Handle pprof requests separately.
+	if strings.HasPrefix(r.URL.Path, "/debug/pprof") {
+		switch r.URL.Path {
+		case "/debug/pprof/cmdline":
+			pprof.Cmdline(w, r)
+		case "/debug/pprof/profile":
+			pprof.Profile(w, r)
+		case "/debug/pprof/symbol":
+			pprof.Symbol(w, r)
+		default:
+			pprof.Index(w, r)
+		}
+		return
+	}
 
+	// Route API calls to appropriate handler functions.
+	t := time.Now()
 	switch r.URL.Path {
 	case "/schema":
 		switch r.Method {

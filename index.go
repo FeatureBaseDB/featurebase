@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -119,6 +120,10 @@ func (i *Index) CreateDBIfNotExists(name string) (*DB, error) {
 }
 
 func (i *Index) createDBIfNotExists(name string) (*DB, error) {
+	if name == "" {
+		return nil, errors.New("database name required")
+	}
+
 	// Return database if it exists.
 	if db := i.db(name); db != nil {
 		return db, nil
