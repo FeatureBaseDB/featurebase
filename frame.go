@@ -192,3 +192,14 @@ type frameSlice []*Frame
 func (p frameSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p frameSlice) Len() int           { return len(p) }
 func (p frameSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
+
+// FrameInfo represents schema information for a frame.
+type FrameInfo struct {
+	Name string `json:"name"`
+}
+
+type frameInfoSlice []*FrameInfo
+
+func (p frameInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p frameInfoSlice) Len() int           { return len(p) }
+func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }

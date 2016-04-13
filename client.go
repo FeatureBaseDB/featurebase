@@ -67,6 +67,29 @@ func (c *Client) SliceN() (uint64, error) {
 	return rsp.SliceMax, nil
 }
 
+// Schema returns all database and frame schema information.
+func (c *Client) Schema() ([]*DBInfo, error) {
+	// Execute request against the host.
+	u := url.URL{
+		Scheme: "http",
+		Host:   c.host,
+		Path:   "/schema",
+	}
+	resp, err := c.HTTPClient.Get(u.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var rsp getSchemaResponse
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
+	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+	return rsp.DBs, nil
+}
+
 // SliceNodes returns a list of nodes that own a slice.
 func (c *Client) SliceNodes(slice uint64) ([]*Node, error) {
 	// Execute request against the host.
@@ -441,6 +464,90 @@ func (c *Client) RestoreFrame(host, db, frame string) error {
 	}
 
 	return nil
+}
+
+// FragmentBlocks returns a list of block checksums for a fragment on a host.
+// Only returns blocks which contain data.
+func (c *Client) FragmentBlocks(db, frame string, slice uint64) ([]FragmentBlock, error) {
+	u := url.URL{
+		Scheme: "http",
+		Host:   c.host,
+		Path:   "/fragment/blocks",
+		RawQuery: url.Values{
+			"db":    {db},
+			"frame": {frame},
+			"slice": {strconv.FormatUint(slice, 10)},
+		}.Encode(),
+	}
+	resp, err := c.HTTPClient.Get(u.String())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Return error if status is not OK.
+	switch resp.StatusCode {
+	case http.StatusOK: // ok
+	case http.StatusNotFound:
+		return nil, ErrFragmentNotFound
+	default:
+		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
+	}
+
+	// Decode response object.
+	var rsp getFragmentBlocksResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return nil, err
+	}
+	return rsp.Blocks, nil
+}
+
+// MergeBlock sends data for a block for the remote host to merge.
+//
+// The remote host returns a list of bitmap/profile bit pairs for each bit
+// that was set on the remote host but not sent by the client. These bits
+// can be used by the caller to synchronize the local index.
+func (c *Client) MergeBlock(db, frame string, slice uint64, block int, bitmapIDs, profileIDs []uint64) ([]uint64, []uint64, error) {
+	buf, err := proto.Marshal(&internal.MergeBlockRequest{
+		DB:         proto.String(db),
+		Frame:      proto.String(frame),
+		Slice:      proto.Uint64(slice),
+		Block:      proto.Uint64(uint64(block)),
+		BitmapIDs:  bitmapIDs,
+		ProfileIDs: profileIDs,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	u := url.URL{Scheme: "http", Host: c.host, Path: "/fragment/block"}
+	req, err := http.NewRequest("PATCH", u.String(), bytes.NewReader(buf))
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("Content-Type", "application/protobuf")
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Accept", "application/protobuf")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	// Return error if status is not OK.
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
+	}
+
+	// Decode response object.
+	var rsp internal.MergeBlockResponse
+	if body, err := ioutil.ReadAll(resp.Body); err != nil {
+		return nil, nil, err
+	} else if err := proto.Unmarshal(body, &rsp); err != nil {
+		return nil, nil, err
+	}
+	return rsp.BitmapIDs, rsp.ProfileIDs, nil
 }
 
 // Bit represents the location of a single bit.

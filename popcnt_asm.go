@@ -29,7 +29,7 @@ func popcntOrSliceAsm(s, m []uint64) uint64
 func popcntXorSliceAsm(s, m []uint64) uint64
 
 //go:noescape
-func popcntAsm(x uint64)uint64 
+func popcntAsm(x uint64) uint64
 
 func popcntSlice(s []uint64) uint64 {
 	if useAsm {
@@ -66,10 +66,9 @@ func popcntXorSlice(s, m []uint64) uint64 {
 	return popcntXorSliceGo(s, m)
 }
 
-func popcnt(x uint64) uint64{
-		if useAsm {
+func popcnt(x uint64) uint64 {
+	if useAsm {
 		return popcntAsm(x)
 	}
 	return popcntGo(x)
 }
-

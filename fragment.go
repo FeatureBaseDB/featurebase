@@ -2,6 +2,9 @@ package pilosa
 
 import (
 	"archive/tar"
+	"bytes"
+	"crypto/sha1"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -33,7 +36,12 @@ const (
 	// CacheExt is the file extension for persisted cache ids.
 	CacheExt = ".cache"
 
+	// MinThreshold is the lowest count to use in a Top-N operation when
+	// looking for additional bitmap/count pairs.
 	MinThreshold = 10
+
+	// HashBlockSize is the number of bitmaps in a merkle hash block.
+	HashBlockSize = 100
 )
 
 const (
@@ -62,6 +70,9 @@ type Fragment struct {
 
 	// Bitmap cache.
 	cache Cache
+
+	// Cached checksums for each block.
+	checksums map[int][]byte
 
 	// Close management
 	wg      sync.WaitGroup
@@ -132,6 +143,9 @@ func (f *Fragment) Open() error {
 		if err := f.openCache(); err != nil {
 			return err
 		}
+
+		// Clear checksums.
+		f.checksums = make(map[int][]byte)
 
 		// Periodically flush cache.
 		f.wg.Add(1)
@@ -264,6 +278,9 @@ func (f *Fragment) close() error {
 		f.logger().Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
 	}
 
+	// Remove checksums.
+	f.checksums = nil
+
 	return nil
 }
 
@@ -351,6 +368,9 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 		return false, err
 	}
 
+	// Invalidate block checksum.
+	delete(f.checksums, int(bitmapID/HashBlockSize))
+
 	// If the number of operations exceeds the limit then snapshot.
 	if err := f.incrementOpN(); err != nil {
 		return false, err
@@ -392,6 +412,9 @@ func (f *Fragment) ClearBit(bitmapID, profileID uint64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
+	// Invalidate block checksum.
+	delete(f.checksums, int(bitmapID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
 	if err := f.incrementOpN(); err != nil {
@@ -566,6 +589,170 @@ func (f *Fragment) Range(bitmapID uint64, start, end time.Time) *Bitmap {
 		bm = bm.Union(f.bitmap(id))
 	}
 	return bm
+}
+
+// Checksum returns a checksum for the entire fragment.
+// If two fragments have the same checksum then they have the same data.
+func (f *Fragment) Checksum() []byte {
+	h := sha1.New()
+	for i, blockN := 0, f.BlockN(); i < blockN; i++ {
+		h.Write(f.BlockChecksum(i))
+	}
+	return h.Sum(nil)
+}
+
+// BlockN returns the number of blocks in the fragment.
+func (f *Fragment) BlockN() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return int(f.storage.Max() / (HashBlockSize * SliceWidth))
+}
+
+// BlockChecksum returns the checksum for a single block in the fragment.
+// Returns nil if there is no data for the block.
+func (f *Fragment) BlockChecksum(i int) []byte {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Use the cached checksum, if available.
+	if chksum, ok := f.checksums[i]; ok {
+		return chksum
+	}
+
+	// Otherwise calculate the checksum from the data on disk.
+	h := sha1.New()
+	var written bool
+	f.storage.ForEachRange(uint64(i)*HashBlockSize*SliceWidth, (uint64(i)+1)*HashBlockSize*SliceWidth, func(i uint64) {
+		// Write value to the hash.
+		var buf [8]byte
+		binary.BigEndian.PutUint64(buf[:], i)
+		h.Write(buf[:])
+
+		// Mark the block has having data.
+		written = true
+	})
+
+	// If no data was written then return a nil checksum.
+	if !written {
+		return nil
+	}
+
+	// Cache checksum for later use.
+	chksum := h.Sum(nil)[:]
+	f.checksums[i] = chksum
+
+	return chksum
+}
+
+// InvalidateChecksums clears all cached block checksums.
+func (f *Fragment) InvalidateChecksums() {
+	f.mu.Lock()
+	f.checksums = make(map[int][]byte)
+	f.mu.Unlock()
+}
+
+// Blocks returns info for all blocks containing data.
+func (f *Fragment) Blocks() []FragmentBlock {
+	var a []FragmentBlock
+	for i, blockN := 0, f.BlockN(); i <= blockN; i++ {
+		chksum := f.BlockChecksum(i)
+		if chksum == nil {
+			continue
+		}
+
+		a = append(a, FragmentBlock{
+			ID:       i,
+			Checksum: chksum,
+		})
+	}
+	return a
+}
+
+// BlockBits returns bits in a block as bitmap & profile ID pairs.
+func (f *Fragment) BlockBits(id int) (bitmapIDs, profileIDs []uint64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.storage.ForEachRange(uint64(id)*HashBlockSize*SliceWidth, (uint64(id)+1)*HashBlockSize*SliceWidth, func(i uint64) {
+		bitmapIDs = append(bitmapIDs, i/SliceWidth)
+		profileIDs = append(profileIDs, i%SliceWidth)
+	})
+	return
+}
+
+// MergeBlock sets bit pairs on the fragment if they aren't already set.
+// Bit pairs must be sorted in bitmap/profile order. Returns a set of changed bit pairs.
+func (f *Fragment) MergeBlock(id int, bitmapIDs, profileIDs []uint64) (bids, pids []uint64, err error) {
+	// Ensure that both slices are of equal length.
+	if len(bitmapIDs) != len(profileIDs) {
+		return nil, nil, fmt.Errorf("bitmap/profile len mismatch: %d != %d", len(bitmapIDs), len(profileIDs))
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Track writes to be made separately so we aren't mutating while we iterate.
+	var queued [][2]uint64
+
+	// Only look at values within hash block range.
+	min := uint64(id) * HashBlockSize * SliceWidth
+	max := uint64(id+1) * HashBlockSize * SliceWidth
+
+	// Buffer iterator so we can unread values.
+	// Add initial seek to buffer so we can just use Next() in the loop.
+	itr := roaring.NewBufIterator(f.storage.Iterator())
+	if v := itr.Seek(min); !itr.EOF() {
+		itr.Unread(v)
+	}
+
+	for i := 0; ; {
+		// Read local value into x.
+		// Mark as EOF if at the end of the hash block.
+		x := itr.Next()
+		xEOF := itr.EOF()
+		if !xEOF && x >= max {
+			itr.Unread(x)
+			x, xEOF = 0, true
+		}
+
+		// Read next incoming value into y.
+		// Mark as EOF if at the end of the hash block.
+		var y uint64
+		yEOF := i >= len(bitmapIDs)
+		if !yEOF {
+			y = (bitmapIDs[i] * SliceWidth) + profileIDs[i]
+			if y >= max {
+				y, yEOF = 0, true
+			}
+		}
+
+		if xEOF && yEOF { // no more data
+			break
+		} else if yEOF || (!xEOF && x < y) { // local data
+			bids = append(bids, x/SliceWidth)
+			pids = append(pids, x%SliceWidth)
+			continue
+		} else if xEOF || (!yEOF && y < x) { // incoming data
+			if !xEOF {
+				itr.Unread(x)
+			}
+			i++
+			queued = append(queued, [2]uint64{y / SliceWidth, y % SliceWidth})
+			continue
+		} else { // local and incoming match, skip
+			i++
+			continue
+		}
+	}
+
+	// Set bits for queued writes.
+	for _, values := range queued {
+		if _, err := f.setBit(values[0], (f.slice*SliceWidth)+values[1]); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return bids, pids, nil
 }
 
 // Import bulk imports a set of bits and then snapshots the storage.
@@ -888,6 +1075,94 @@ func (f *Fragment) readCacheFromArchive(r io.Reader) error {
 	// Re-open cache.
 	if err := f.openCache(); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// FragmentBlock represents info about a subsection of the bitmaps in a block.
+// This is used for comparing data in remote blocks for active anti-entropy.
+type FragmentBlock struct {
+	ID       int    `json:"id"`
+	Checksum []byte `json:"checksum"`
+}
+
+// FragmentSyncer syncs a local fragment to one on a remote host.
+type FragmentSyncer struct {
+	Fragment *Fragment
+	Client   *Client
+}
+
+// SyncFragment compares checksums for the local and remote fragments and
+// then merges any blocks which have differences.
+func (s *FragmentSyncer) SyncFragment() error {
+	// Retrieve local blocks immediately to minimize read skew.
+	localBlocks := s.Fragment.Blocks()
+
+	// Retrieve blocks.
+	remoteBlocks, err := s.Client.FragmentBlocks(s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.Slice())
+	if err != nil && err != ErrFragmentNotFound {
+		return err
+	}
+
+	// Iterate over each block and merge if different.
+	for i, j := 0, 0; ; {
+		// Retrieve the next block for local & remote.
+		var a, b *FragmentBlock
+		if i < len(localBlocks) {
+			a = &localBlocks[i]
+		}
+		if j < len(remoteBlocks) {
+			b = &remoteBlocks[j]
+		}
+
+		// Determine the next block to be merged.
+		var block *FragmentBlock
+		if a == nil && b == nil {
+			break
+		} else if a != nil && b == nil { // only local blocks remain
+			block, i = a, i+1
+		} else if a == nil && b != nil { // only remote blocks remain
+			block, j = b, j+1
+		} else if a.ID < b.ID { // lower local block id
+			block, i = a, i+1
+		} else if a.ID > b.ID { // lower remote block id
+			block, j = b, j+1
+		} else if !bytes.Equal(a.Checksum, b.Checksum) { // checksum mismatch
+			block, i, j = a, i+1, j+1
+		} else { // blocks equal, skip
+			i, j = i+1, j+1
+			continue
+		}
+
+		// Synchronize block.
+		if err := s.syncBlock(block.ID); err != nil {
+			return fmt.Errorf("sync block: id=%d, err=%s", block.ID, err)
+		}
+	}
+
+	return nil
+}
+
+// syncBlock sends and receives all bitmaps for a given block.
+// The remote bitmaps are merges it the local bitmaps.
+func (s *FragmentSyncer) syncBlock(id int) error {
+	f := s.Fragment
+
+	// Retrieve bitmaps for block.
+	bitmapIDs, profileIDs := f.BlockBits(id)
+
+	// Send bitmaps to remote.
+	bids, pids, err := s.Client.MergeBlock(f.DB(), f.Frame(), f.Slice(), id, bitmapIDs, profileIDs)
+	if err != nil {
+		return err
+	}
+
+	// Set any local bits which are not set in remote.
+	for i := range bids {
+		if _, err := f.SetBit(bids[i], (s.Fragment.Slice()*SliceWidth)+pids[i], nil, 0); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/umbel/pilosa"
 )
 
@@ -82,6 +83,44 @@ func TestClient_BackupRestore(t *testing.T) {
 	}
 	if a := idx.Fragment("x", "y", 0).Bitmap(200).Bits(); !reflect.DeepEqual(a, []uint64{20000}) {
 		t.Fatalf("unexpected bits: %+v", a)
+	}
+}
+
+// Ensure client can retrieve a list of all checksums for blocks in a fragment.
+func TestClient_FragmentBlocks(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	// Set two bits on blocks 0 & 3.
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1, nil, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(pilosa.HashBlockSize*3, 100, nil, 0)
+
+	// Set a bit on a different slice.
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(0, 1, nil, 0)
+
+	s := NewServer()
+	defer s.Close()
+	s.Handler.Host = s.Host()
+	s.Handler.Cluster = NewCluster(1)
+	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Index = idx.Index
+
+	// Retrieve blocks.
+	c := MustNewClient(s.Host())
+	blocks, err := c.FragmentBlocks("d", "f", 0)
+	if err != nil {
+		t.Fatal(err)
+	} else if len(blocks) != 2 {
+		t.Fatalf("unexpected blocks: %s", spew.Sdump(blocks))
+	} else if blocks[0].ID != 0 {
+		t.Fatalf("unexpected block id(0): %d", blocks[0].ID)
+	} else if blocks[1].ID != 3 {
+		t.Fatalf("unexpected block id(1): %d", blocks[1].ID)
+	}
+
+	// Verify data matches local blocks.
+	if a := idx.Fragment("d", "f", 0).Blocks(); !reflect.DeepEqual(a, blocks) {
+		t.Fatalf("blocks mismatch:\n\nexp=%s\n\ngot=%s\n\n", spew.Sdump(a), spew.Sdump(blocks))
 	}
 }
 

@@ -112,6 +112,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/fragment/block":
+		switch r.Method {
+		case "PATCH":
+			h.handlePatchFragmentBlock(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	case "/fragment/blocks":
+		switch r.Method {
+		case "GET":
+			h.handleGetFragmentBlocks(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/frame/restore":
 		switch r.Method {
 		case "POST":
@@ -133,35 +147,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
-	// Construct schema based on databases and frames.
-	var resp getSchemaResponse
-	for _, db := range h.Index.DBs() {
-		respDB := getSchemaDB{Name: db.Name()}
-		for _, frame := range db.Frames() {
-			respDB.Frames = append(respDB.Frames, getSchemaFrame{
-				Name: frame.Name(),
-			})
-		}
-		resp.DBs = append(resp.DBs, respDB)
-	}
-
-	// Write JSON to response.
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
+	if err := json.NewEncoder(w).Encode(getSchemaResponse{
+		DBs: h.Index.Schema(),
+	}); err != nil {
 		h.logger().Printf("write schema response error: %s", err)
 	}
 }
 
 type getSchemaResponse struct {
-	DBs []getSchemaDB `json:"dbs"`
-}
-
-type getSchemaDB struct {
-	Name   string           `json:"name"`
-	Frames []getSchemaFrame `json:"frames"`
-}
-
-type getSchemaFrame struct {
-	Name string `json:"name"`
+	DBs []*DBInfo `json:"dbs"`
 }
 
 // handlePostQuery handles /query requests.
@@ -496,6 +490,80 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+// handlePatchFragmentBlock handles PATCH /fragment/block requests.
+func (h *Handler) handlePatchFragmentBlock(w http.ResponseWriter, r *http.Request) {
+	// Read request object.
+	var req internal.MergeBlockRequest
+	if body, err := ioutil.ReadAll(r.Body); err != nil {
+		http.Error(w, "ready body error", http.StatusBadRequest)
+		return
+	} else if err := proto.Unmarshal(body, &req); err != nil {
+		http.Error(w, "unmarshal body error", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve fragment from index.
+	f, err := h.Index.CreateFragmentIfNotExists(req.GetDB(), req.GetFrame(), req.GetSlice())
+	if err != nil {
+		http.Error(w, "create fragment error", http.StatusInternalServerError)
+		return
+	}
+
+	// Merge data into block.
+	bids, pids, err := f.MergeBlock(int(req.GetBlock()), req.BitmapIDs, req.ProfileIDs)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	// Encode response.
+	buf, err := proto.Marshal(&internal.MergeBlockResponse{
+		BitmapIDs:  bids,
+		ProfileIDs: pids,
+		Err:        proto.String(errorString(err)),
+	})
+	if err != nil {
+		h.logger().Printf("merge block response encoding error: %s", err)
+		return
+	}
+
+	// Write response.
+	w.Header().Set("Content-Type", "application/protobuf")
+	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
+	w.Write(buf)
+}
+
+// handleGetFragmentBlocks handles GET /fragment/blocks requests.
+func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request) {
+	// Read slice parameter.
+	q := r.URL.Query()
+	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
+	if err != nil {
+		http.Error(w, "slice required", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve fragment from index.
+	f := h.Index.Fragment(q.Get("db"), q.Get("frame"), slice)
+	if f == nil {
+		http.Error(w, "fragment not found", http.StatusNotFound)
+		return
+	}
+
+	// Retrieve blocks.
+	blocks := f.Blocks()
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(getFragmentBlocksResponse{
+		Blocks: blocks,
+	}); err != nil {
+		h.logger().Printf("block response encoding error: %s", err)
+	}
+}
+
+type getFragmentBlocksResponse struct {
+	Blocks []FragmentBlock `json:"blocks"`
 }
 
 // handlePostFrameRestore handles POST /frame/restore requests.
