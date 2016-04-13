@@ -114,10 +114,22 @@ func (b *Bitmap) remove(v uint64) bool {
 	return b.containers[i].remove(lowbits(v))
 }
 
+// Max returns the highest value in the bitmap.
+// Returns zero if the bitmap is empty.
+func (b *Bitmap) Max() uint64 {
+	if len(b.keys) == 0 {
+		return 0
+	}
+
+	hb := b.keys[len(b.keys)-1]
+	lb := b.containers[len(b.containers)-1].max()
+	return uint64(hb)<<16 | uint64(lb)
+}
+
 // Slice returns a slice of all integers in the bitmap.
 func (b *Bitmap) Slice() []uint64 {
 	var a []uint64
-	itr := b.iterator()
+	itr := b.Iterator()
 	for v := itr.Seek(0); !itr.EOF(); v = itr.Next() {
 		a = append(a, v)
 	}
@@ -127,7 +139,7 @@ func (b *Bitmap) Slice() []uint64 {
 // SliceRange returns a slice of integers between [start, end).
 func (b *Bitmap) SliceRange(start, end uint64) []uint64 {
 	var a []uint64
-	itr := b.iterator()
+	itr := b.Iterator()
 	for v := itr.Seek(start); !itr.EOF() && v < end; v = itr.Next() {
 		a = append(a, v)
 	}
@@ -136,7 +148,7 @@ func (b *Bitmap) SliceRange(start, end uint64) []uint64 {
 
 // ForEach executes fn for each value in the bitmap.
 func (b *Bitmap) ForEach(fn func(uint64)) {
-	itr := b.iterator()
+	itr := b.Iterator()
 	for v := itr.Seek(0); !itr.EOF(); v = itr.Next() {
 		fn(v)
 	}
@@ -144,7 +156,7 @@ func (b *Bitmap) ForEach(fn func(uint64)) {
 
 // ForEachRange executes fn for each value in the bitmap between [start, end).
 func (b *Bitmap) ForEachRange(start, end uint64, fn func(uint64)) {
-	itr := b.iterator()
+	itr := b.Iterator()
 	for v := itr.Seek(start); !itr.EOF() && v < end; v = itr.Next() {
 		fn(v)
 	}
@@ -291,20 +303,20 @@ func (b *Bitmap) writeOp(op *op) error {
 	return nil
 }
 
-// iterator returns an iterator for the bitmap.
-func (b *Bitmap) iterator() *iterator { return &iterator{bitmap: b} }
+// Iterator returns a new iterator for the bitmap.
+func (b *Bitmap) Iterator() *Iterator { return &Iterator{bitmap: b} }
 
-// iterator represents an iterator over a Bitmap.
-type iterator struct {
+// Iterator represents an iterator over a Bitmap.
+type Iterator struct {
 	bitmap *Bitmap
 	i, j   int
 }
 
 // EOF returns true if the iterator is at the end of the bitmap.
-func (itr *iterator) EOF() bool { return itr.i >= len(itr.bitmap.containers) }
+func (itr *Iterator) EOF() bool { return itr.i >= len(itr.bitmap.containers) }
 
 // Seek moves to the first value equal to or greater than v.
-func (itr *iterator) Seek(seek uint64) uint64 {
+func (itr *Iterator) Seek(seek uint64) uint64 {
 	// Move to the correct container.
 	itr.i = search64(itr.bitmap.keys, highbits(seek))
 	if itr.i < 0 {
@@ -337,7 +349,7 @@ func (itr *iterator) Seek(seek uint64) uint64 {
 }
 
 // Next returns the next value in the bitmap.
-func (itr *iterator) Next() uint64 {
+func (itr *Iterator) Next() uint64 {
 	// Iterate over containers until we find the next value or EOF.
 	for {
 		if itr.EOF() {
@@ -380,13 +392,63 @@ func (itr *iterator) Next() uint64 {
 }
 
 // peek returns the current value.
-func (itr *iterator) peek() uint64 {
+func (itr *Iterator) peek() uint64 {
 	key := itr.bitmap.keys[itr.i]
 	c := itr.bitmap.containers[itr.i]
 	if c.isArray() {
 		return uint64(key)<<16 | uint64(c.array[itr.j])
 	}
 	return uint64(key)<<16 | uint64(itr.j)
+}
+
+// BufIterator wraps an iterator to provide the ability to unread values.
+type BufIterator struct {
+	buf struct {
+		v    uint64
+		full bool
+	}
+	itr *Iterator
+}
+
+// NewBufIterator returns a buffered iterator that wraps itr.
+func NewBufIterator(itr *Iterator) *BufIterator {
+	return &BufIterator{itr: itr}
+}
+
+// EOF returns true if the iterator is at the end of the bitmap.
+func (itr *BufIterator) EOF() bool {
+	if itr.buf.full {
+		return false
+	}
+	return itr.itr.EOF()
+}
+
+// Seek moves to the first value equal to or greater than v.
+func (itr *BufIterator) Seek(seek uint64) uint64 {
+	itr.buf.v = 0
+	itr.buf.full = false
+	return itr.itr.Seek(seek)
+}
+
+// Next returns the next value in the bitmap.
+// If a value has been buffered then it is returned and the buffer is cleared.
+func (itr *BufIterator) Next() uint64 {
+	if itr.buf.full {
+		v := itr.buf.v
+		itr.buf.full = false
+		return v
+	}
+	return itr.itr.Next()
+}
+
+// Unread pushes a value on to the buffer.
+// Panics if the buffer is already full.
+func (itr *BufIterator) Unread(v uint64) {
+	if itr.buf.full {
+		panic("roaring.BufIterator: buffer full")
+	}
+	itr.buf.v = v
+	itr.buf.full = true
 }
 
 // The maximum size of array containers.
@@ -535,6 +597,37 @@ func (c *container) bitmapRemove(v uint16) bool {
 		c.convertToArray()
 	}
 	return true
+}
+
+// max returns the maximum value in the container.
+func (c *container) max() uint16 {
+	if c.isArray() {
+		return c.arrayMax()
+	}
+	return c.bitmapMax()
+}
+
+func (c *container) arrayMax() uint16 {
+	return c.array[len(c.array)-1]
+}
+
+func (c *container) bitmapMax() uint16 {
+	// Search bitmap in reverse order.
+	for i := len(c.bitmap) - 1; i >= 0; i-- {
+		// If value is zero then skip.
+		v := c.bitmap[i]
+		if v == 0 {
+			continue
+		}
+
+		// Find the highest set bit.
+		for j := uint16(63); j >= 0; j-- {
+			if v&(1<<j) != 0 {
+				return uint16(i)*64 + j
+			}
+		}
+	}
+	return 0
 }
 
 // convertToArray converts the values in the bitmap to array values.
