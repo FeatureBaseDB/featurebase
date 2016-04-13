@@ -71,6 +71,21 @@ message ImportResponse {
 	optional string Err = 1;
 }
 
+message MergeBlockRequest {
+	required string DB         = 1;
+	required string Frame      = 2;
+	required uint64 Slice      = 3;
+	required uint64 Block      = 4;
+	repeated uint64 BitmapIDs  = 5;
+	repeated uint64 ProfileIDs = 6;
+}
+
+message MergeBlockResponse {
+	optional string Err        = 1;
+	repeated uint64 BitmapIDs  = 2;
+	repeated uint64 ProfileIDs = 3;
+}
+
 message Cache {
 	repeated uint64 BitmapIDs = 1;
 }

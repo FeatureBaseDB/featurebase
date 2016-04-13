@@ -539,6 +539,14 @@ func NewServer() *Server {
 		Handler: NewHandler(),
 	}
 	s.Server = httptest.NewServer(s.Handler.Handler)
+
+	// Update handler to use hostname.
+	s.Handler.Host = s.Host()
+
+	// Create a default cluster on the handler
+	s.Handler.Cluster = NewCluster(1)
+	s.Handler.Cluster.Nodes[0].Host = s.Host()
+
 	return s
 }
 

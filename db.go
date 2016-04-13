@@ -178,3 +178,45 @@ type dbSlice []*DB
 func (p dbSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p dbSlice) Len() int           { return len(p) }
 func (p dbSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
+
+// DBInfo represents schema information for a database.
+type DBInfo struct {
+	Name   string       `json:"name"`
+	Frames []*FrameInfo `json:"frames"`
+}
+
+type dbInfoSlice []*DBInfo
+
+func (p dbInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p dbInfoSlice) Len() int           { return len(p) }
+func (p dbInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
+
+// MergeSchemas combines databases and frames from a and b into one schema.
+func MergeSchemas(a, b []*DBInfo) []*DBInfo {
+	// Generate a map from both schemas.
+	m := make(map[string]map[string]struct{})
+	for _, dbs := range [][]*DBInfo{a, b} {
+		for _, db := range dbs {
+			if m[db.Name] == nil {
+				m[db.Name] = make(map[string]struct{})
+			}
+			for _, frame := range db.Frames {
+				m[db.Name][frame.Name] = struct{}{}
+			}
+		}
+	}
+
+	// Generate new schema from map.
+	dbs := make([]*DBInfo, 0, len(m))
+	for db, frames := range m {
+		di := &DBInfo{Name: db}
+		for frame := range frames {
+			di.Frames = append(di.Frames, &FrameInfo{Name: frame})
+		}
+		sort.Sort(frameInfoSlice(di.Frames))
+		dbs = append(dbs, di)
+	}
+	sort.Sort(dbInfoSlice(dbs))
+
+	return dbs
+}

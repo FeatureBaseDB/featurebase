@@ -85,6 +85,21 @@ func (i *Index) SliceN() uint64 {
 	return sliceN
 }
 
+// Schema returns schema data for all databases and frames.
+func (i *Index) Schema() []*DBInfo {
+	var a []*DBInfo
+	for _, db := range i.DBs() {
+		di := &DBInfo{Name: db.Name()}
+		for _, frame := range db.Frames() {
+			di.Frames = append(di.Frames, &FrameInfo{
+				Name: frame.Name(),
+			})
+		}
+		a = append(a, di)
+	}
+	return a
+}
+
 // DBPath returns the path where a given database is stored.
 func (i *Index) DBPath(name string) string { return filepath.Join(i.path, name) }
 
@@ -176,8 +191,65 @@ func (i *Index) CreateFragmentIfNotExists(db, frame string, slice uint64) (*Frag
 	}
 	return f.CreateFragmentIfNotExists(slice)
 }
+
 func (i *Index) SetMax(newmax uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.remoteMax = newmax
+}
+
+// IndexSyncer is an active anti-entropy tool that compares the local index
+// with a remote index based on block checksums and resolves differences.
+type IndexSyncer struct {
+	Index  *Index
+	Client *Client
+}
+
+// SyncIndex compares the index on host with the local index and resolves differences.
+func (s *IndexSyncer) SyncIndex() error {
+	// Ensure slice range is in sync first.
+	if newmax, err := s.Client.SliceN(); err != nil {
+		return err
+	} else if newmax > s.Index.SliceN() {
+		s.Index.SetMax(newmax)
+	}
+
+	// Retrieve schema data from remote node.
+	other, err := s.Client.Schema()
+	if err != nil {
+		return err
+	}
+
+	// Merge with local schema.
+	dbs := MergeSchemas(s.Index.Schema(), other)
+
+	// Iterate over schema in sorted order.
+	sliceN := s.Index.SliceN()
+	for _, di := range dbs {
+		for _, fi := range di.Frames {
+			for slice := uint64(0); slice <= sliceN; slice++ {
+				if err := s.syncFragment(di.Name, fi.Name, slice); err != nil {
+					return fmt.Errorf("sync error: db=%s, frame=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// syncFragment synchronizes
+func (s *IndexSyncer) syncFragment(db, frame string, slice uint64) error {
+	// Ensure fragment exists locally.
+	f, err := s.Index.CreateFragmentIfNotExists(db, frame, slice)
+	if err != nil {
+		return err
+	}
+
+	// Sync fragments together.
+	fs := FragmentSyncer{Fragment: f, Client: s.Client}
+	if err := fs.SyncFragment(); err != nil {
+		return err
+	}
+	return nil
 }

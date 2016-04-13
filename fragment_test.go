@@ -241,6 +241,83 @@ func TestFragment_TopN_BitmapIDs(t *testing.T) {
 	}
 }
 
+// Ensure fragment can return a checksum for its blocks.
+func TestFragment_Checksum(t *testing.T) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+
+	// Retrieve checksum and set bits.
+	orig := f.Checksum()
+	if _, err := f.SetBit(1, 200, nil, 0); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(pilosa.HashBlockSize*2, 200, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure new checksum is different.
+	if chksum := f.Checksum(); bytes.Equal(chksum, orig) {
+		t.Fatalf("expected checksum to change: %x", chksum, orig)
+	}
+}
+
+// Ensure fragment can return a checksum for a given block.
+func TestFragment_BlockChecksum(t *testing.T) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+
+	// Retrieve initial checksum.
+	var chksum []byte
+	prev := f.Checksum()
+
+	// Set first bit.
+	if _, err := f.SetBit(0, 0, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	chksum = f.BlockChecksum(0)
+	if bytes.Equal(chksum, prev) {
+		t.Fatalf("expected checksum to change: %x", chksum)
+	}
+	prev = chksum
+
+	// Set bit on different bitmap.
+	if _, err := f.SetBit(20, 0, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	chksum = f.BlockChecksum(0)
+	if bytes.Equal(chksum, prev) {
+		t.Fatalf("expected checksum to change: %x", chksum)
+	}
+	prev = chksum
+
+	// Set bit on different profile.
+	if _, err := f.SetBit(20, 100, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	chksum = f.BlockChecksum(0)
+	if bytes.Equal(chksum, prev) {
+		t.Fatalf("expected checksum to change: %x", chksum)
+	}
+}
+
+// Ensure fragment returns an empty checksum if no data exists for a block.
+func TestFragment_BlockChecksum_Empty(t *testing.T) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+
+	// Set bits on a different block.
+	if _, err := f.SetBit(1, 200, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure checksum for block 1 is blank.
+	if chksum := f.BlockChecksum(0); chksum == nil {
+		t.Fatalf("expected chksum(0)")
+	}
+	if chksum := f.BlockChecksum(1); chksum != nil {
+		t.Fatalf("expected empty checksum: %x", chksum)
+	}
+}
+
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_LRUCache_Persistence(t *testing.T) {
 	f := MustOpenFragment("d", "f", 0)
@@ -359,6 +436,33 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 }
 
+func BenchmarkFragment_BlockChecksum_Fill1(b *testing.B)  { benchmarkFragmentBlockChecksum(b, 0.01) }
+func BenchmarkFragment_BlockChecksum_Fill10(b *testing.B) { benchmarkFragmentBlockChecksum(b, 0.10) }
+func BenchmarkFragment_BlockChecksum_Fill50(b *testing.B) { benchmarkFragmentBlockChecksum(b, 0.50) }
+
+func benchmarkFragmentBlockChecksum(b *testing.B, fillPercent float64) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+
+	// Fill fragment.
+	bitmapIDs, profileIDs := GenerateImportFill(pilosa.HashBlockSize, fillPercent)
+	if err := f.Import(bitmapIDs, profileIDs); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	// Calculate block checksum.
+	for i := 0; i < b.N; i++ {
+		f.InvalidateChecksums()
+
+		if chksum := f.BlockChecksum(0); chksum == nil {
+			b.Fatal("expected checksum")
+		}
+	}
+}
+
 // Fragment is a test wrapper for pilosa.Fragment.
 type Fragment struct {
 	*pilosa.Fragment
@@ -452,4 +556,18 @@ func (s *BitmapAttrStore) BitmapAttrs(id uint64) (map[string]interface{}, error)
 // SetBitmapAttrs assigns a set of attributes to a bitmap id.
 func (s *BitmapAttrStore) SetBitmapAttrs(id uint64, m map[string]interface{}) {
 	s.attrs[id] = m
+}
+
+// GenerateImportFill generates a set of bits pairs that evenly fill a fragment chunk.
+func GenerateImportFill(bitmapN int, pct float64) (bitmapIDs, profileIDs []uint64) {
+	ipct := int(pct * 100)
+	for i := 0; i < SliceWidth*bitmapN; i++ {
+		if i%100 >= ipct {
+			continue
+		}
+
+		bitmapIDs = append(bitmapIDs, uint64(i%SliceWidth))
+		profileIDs = append(profileIDs, uint64(i/SliceWidth))
+	}
+	return
 }
