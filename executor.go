@@ -420,6 +420,11 @@ func (e *Executor) executeSetBit(db string, c *pql.SetBit, opt *ExecOptions) (bo
 			continue
 		}
 
+		// Do not forward call if this is already being forwarded.
+		if opt.Remote {
+			continue
+		}
+
 		// Forward call to remote node otherwise.
 		if res, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt); err != nil {
 			return false, err
