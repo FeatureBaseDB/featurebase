@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"runtime/pprof"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -42,6 +44,9 @@ const (
 
 	// DefaultHost is the default hostname and port to use.
 	DefaultHost = "localhost:15000"
+
+	// DefaultAntiEntropyInterval is the default interval to run AAE.
+	DefaultAntiEntropyInterval = 10 * time.Minute
 )
 
 func main() {
@@ -81,6 +86,10 @@ type Main struct {
 	ticker      *time.Ticker
 	pollingSecs int
 
+	// Close management.
+	wg      sync.WaitGroup
+	closing chan struct{}
+
 	// Path to the configuration file.
 	ConfigPath string
 
@@ -103,6 +112,8 @@ type Main struct {
 // NewMain returns a new instance of Main.
 func NewMain() *Main {
 	return &Main{
+		closing: make(chan struct{}),
+
 		Config: NewConfig(),
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,
@@ -185,6 +196,9 @@ func (m *Main) Run(args ...string) error {
 	// Serve HTTP.
 	go func() { http.Serve(ln, h) }()
 
+	// Start anti-entropy background workers.
+	m.startAntiEntropyMonitors()
+
 	// Sync up max slice if more than one node
 	if len(m.Cluster.Nodes) > 1 {
 		m.ticker = time.NewTicker(time.Second * time.Duration(m.pollingSecs))
@@ -212,8 +226,61 @@ func (m *Main) Run(args ...string) error {
 	return nil
 }
 
-func checkMaxSlice(hostport string) (uint64, error) {
+func (m *Main) startAntiEntropyMonitors() {
+	for _, node := range m.Cluster.Nodes {
+		// Skip this node.
+		if node.Host == m.Host {
+			continue
+		}
 
+		m.wg.Add(1)
+		go func(node *pilosa.Node) {
+			defer m.wg.Done()
+			m.monitorAntiEntropy(node)
+		}(node)
+	}
+}
+
+func (m *Main) monitorAntiEntropy(node *pilosa.Node) {
+	ticker := time.NewTicker(time.Duration(m.Config.AntiEntropy.Interval))
+	defer ticker.Stop()
+
+	m.logger().Printf("index sync monitor initializing: host=%s", node.Host)
+
+	for {
+		// Wait for tick or a close.
+		select {
+		case <-m.closing:
+			return
+		case <-ticker.C:
+		}
+
+		m.logger().Printf("index sync beginning: host=%s", node.Host)
+
+		// Set up remote client.
+		client, err := pilosa.NewClient(node.Host)
+		if err != nil {
+			m.logger().Printf("anti-entropy client error: host=%s", node.Host)
+			continue
+		}
+
+		// Initialize syncer with local index and remote client.
+		var syncer pilosa.IndexSyncer
+		syncer.Index = m.index
+		syncer.Client = client
+
+		// Sync indexes.
+		if err := syncer.SyncIndex(); err != nil {
+			m.logger().Printf("index sync error: host=%s, err=%s", node.Host, err)
+			continue
+		}
+
+		// Record successful sync in log.
+		m.logger().Printf("index sync complete: host=%s", node.Host)
+	}
+}
+
+func checkMaxSlice(hostport string) (uint64, error) {
 	// Create HTTP request.
 	req, err := http.NewRequest("GET", (&url.URL{
 		Scheme: "http",
@@ -260,6 +327,10 @@ func checkMaxSlice(hostport string) (uint64, error) {
 
 // Close shuts down the process.
 func (m *Main) Close() error {
+	// Notify goroutines to stop.
+	close(m.closing)
+	m.wg.Wait()
+
 	if m.ticker != nil {
 		m.ticker.Stop()
 	}
@@ -312,6 +383,8 @@ func (m *Main) ParseFlags(args []string) error {
 	return nil
 }
 
+func (m *Main) logger() *log.Logger { return log.New(m.Stderr, "", log.LstdFlags) }
+
 // Config represents the configuration for the command.
 type Config struct {
 	DataDir string `toml:"data-dir"`
@@ -325,6 +398,10 @@ type Config struct {
 	Plugins struct {
 		Path string `toml:"path"`
 	} `toml:"plugins"`
+
+	AntiEntropy struct {
+		Interval Duration `toml:"interval"`
+	} `toml:"anti-entropy"`
 }
 
 type ConfigNode struct {
@@ -337,6 +414,7 @@ func NewConfig() *Config {
 		Host: DefaultHost,
 	}
 	c.Cluster.ReplicaN = pilosa.DefaultReplicaN
+	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	return c
 }
 

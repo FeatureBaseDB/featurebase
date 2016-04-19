@@ -27,11 +27,11 @@ pilosa
 
 ## Configuration
 
-You can specify a configuration by setting the `--config` flag when running `pilosa`.
+You can specify a configuration by setting the `-config` flag when running `pilosa`.
 
 
 ```sh
-pilosa --config=custom-config-file.cfg
+pilosa -config custom-config-file.cfg
 ```
 
 The config file uses the [TOML](https://github.com/toml-lang/toml) configuration file format,
@@ -141,7 +141,7 @@ attributes set using `SetBitmapAttrs()` and `bits` are the bits set using `SetBi
 ```
 Union(Bitmap(id=10, frame="foo"), Bitmap(id=20, frame="foo")))
 ```
-Returns a result set similar to that of a `Bitmap()` query, only the `attrs` dictionaly will be empty: `{"results":[{"attrs":{},"bits":[1,2]}]}`.
+Returns a result set similar to that of a `Bitmap()` query, only the `attrs` dictionary will be empty: `{"results":[{"attrs":{},"bits":[1,2]}]}`.
 Note that a `Union()` query can be nested within other queries anywhere that you would otherwise provide a `Bitmap()`.
 
 ---
@@ -149,7 +149,7 @@ Note that a `Union()` query can be nested within other queries anywhere that you
 ```
 Intersect(Bitmap(id=10, frame="foo"), Bitmap(id=20, frame="foo")))
 ```
-Returns a result set similar to that of a `Bitmap()` query, only the `attrs` dictionaly will be empty: `{"results":[{"attrs":{},"bits":[1]}]}`.
+Returns a result set similar to that of a `Bitmap()` query, only the `attrs` dictionary will be empty: `{"results":[{"attrs":{},"bits":[1]}]}`.
 Note that an `Intersect()` query can be nested within other queries anywhere that you would otherwise provide a `Bitmap()`.
 
 ---
@@ -157,7 +157,7 @@ Note that an `Intersect()` query can be nested within other queries anywhere tha
 ```
 Difference(Bitmap(id=10, frame="foo"), Bitmap(id=20, frame="foo")))
 ```
-`Difference()` represents all of the bits that are set in the first `Bitmap()` but are not set in the second `Bitmap()`.  It returns a result set similar to that of a `Bitmap()` query, only the `attrs` dictionaly will be empty: `{"results":[{"attrs":{},"bits":[2]}]}`.
+`Difference()` represents all of the bits that are set in the first `Bitmap()` but are not set in the second `Bitmap()`.  It returns a result set similar to that of a `Bitmap()` query, only the `attrs` dictionary will be empty: `{"results":[{"attrs":{},"bits":[2]}]}`.
 Note that a `Difference()` query can be nested within other queries anywhere that you would otherwise provide a `Bitmap()`.
 
 ---
