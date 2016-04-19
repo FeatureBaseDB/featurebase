@@ -332,7 +332,7 @@ func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 	bm := NewBitmap()
 	f.storage.ForEachRange(bitmapID*SliceWidth, (bitmapID+1)*SliceWidth, func(i uint64) {
 		profileID := (f.slice * SliceWidth) + (i % SliceWidth)
-		bm.setBit(profileID)
+		bm.SetBit(profileID)
 	})
 
 	// Add to the cache.
@@ -377,7 +377,7 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	}
 
 	// Update the cache.
-	if f.bitmap(bitmapID).setBit(profileID) {
+	if f.bitmap(bitmapID).SetBit(profileID) {
 		changed = true
 	}
 
@@ -422,7 +422,7 @@ func (f *Fragment) ClearBit(bitmapID, profileID uint64) (bool, error) {
 	}
 
 	// Update the cache.
-	if f.bitmap(bitmapID).clearBit(profileID) {
+	if f.bitmap(bitmapID).ClearBit(profileID) {
 		return true, nil
 	}
 
