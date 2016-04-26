@@ -1,5 +1,7 @@
+.PHONY: vendor
+
 default:
 
-# Temporary workaround to avoid testing vendor directory.
-test:
-	go test $(go list ./... | grep -v /vendor/)
+vendor:
+	godep save ./...
+	cp -r $(GOPATH)/src/github.com/gogo/protobuf/proto/testdata vendor/github.com/gogo/protobuf/proto/testdata
