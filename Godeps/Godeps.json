@@ -1,6 +1,6 @@
 {
 	"ImportPath": "github.com/umbel/pilosa",
-	"GoVersion": "go1.5.1",
+	"GoVersion": "go1.6.2",
 	"Packages": [
 		"./..."
 	],
@@ -21,8 +21,8 @@
 		},
 		{
 			"ImportPath": "github.com/gogo/protobuf/proto",
-			"Comment": "v0.2-9-g4365f75",
-			"Rev": "4365f750fe246471f2a03ef5da5231c3565c5628"
+			"Comment": "v0.2-10-g74b6e9d",
+			"Rev": "74b6e9deaff6ba6da1389ec97351d337f0d08b06"
 		},
 		{
 			"ImportPath": "github.com/golang/groupcache/lru",
