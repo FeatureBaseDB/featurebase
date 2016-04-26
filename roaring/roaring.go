@@ -366,12 +366,16 @@ func (itr *Iterator) Next() uint64 {
 			itr.j++
 			return itr.peek()
 		}
-
 		// Move to the next possible index in the bitmap container.
 		itr.j++
 
 		// Find first non-zero bit in current bitmap, if possible.
 		hb := int(itr.j / 64)
+
+		if hb >= len(c.bitmap) {
+			itr.i, itr.j = itr.i+1, -1
+			continue
+		}
 		lb := c.bitmap[hb] >> (uint(itr.j) % 64)
 		if lb != 0 {
 			itr.j = int(itr.j) + trailingZeroN(lb)
