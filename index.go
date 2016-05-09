@@ -201,33 +201,26 @@ func (i *Index) SetMax(newmax uint64) {
 // IndexSyncer is an active anti-entropy tool that compares the local index
 // with a remote index based on block checksums and resolves differences.
 type IndexSyncer struct {
-	Index  *Index
-	Client *Client
+	Index *Index
+
+	Host    string
+	Cluster *Cluster
 }
 
 // SyncIndex compares the index on host with the local index and resolves differences.
 func (s *IndexSyncer) SyncIndex() error {
-	// Ensure slice range is in sync first.
-	if newmax, err := s.Client.SliceN(); err != nil {
-		return err
-	} else if newmax > s.Index.SliceN() {
-		s.Index.SetMax(newmax)
-	}
-
-	// Retrieve schema data from remote node.
-	other, err := s.Client.Schema()
-	if err != nil {
-		return err
-	}
-
-	// Merge with local schema.
-	dbs := MergeSchemas(s.Index.Schema(), other)
+	sliceN := s.Index.SliceN()
 
 	// Iterate over schema in sorted order.
-	sliceN := s.Index.SliceN()
-	for _, di := range dbs {
+	for _, di := range s.Index.Schema() {
 		for _, fi := range di.Frames {
 			for slice := uint64(0); slice <= sliceN; slice++ {
+				// Ignore slices that this host doesn't own.
+				if !s.Cluster.OwnsSlice(s.Host, slice) {
+					continue
+				}
+
+				// Sync fragment if own it.
 				if err := s.syncFragment(di.Name, fi.Name, slice); err != nil {
 					return fmt.Errorf("sync error: db=%s, frame=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
 				}
@@ -247,7 +240,11 @@ func (s *IndexSyncer) syncFragment(db, frame string, slice uint64) error {
 	}
 
 	// Sync fragments together.
-	fs := FragmentSyncer{Fragment: f, Client: s.Client}
+	fs := FragmentSyncer{
+		Fragment: f,
+		Host:     s.Host,
+		Cluster:  s.Cluster,
+	}
 	if err := fs.SyncFragment(); err != nil {
 		return err
 	}

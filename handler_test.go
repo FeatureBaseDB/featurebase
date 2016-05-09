@@ -551,8 +551,11 @@ func NewServer() *Server {
 }
 
 // Host returns the hostname of the running server.
-func (s *Server) Host() string {
-	u, err := url.Parse(s.URL)
+func (s *Server) Host() string { return MustParseURLHost(s.URL) }
+
+// MustParseURLHost parses rawurl and returns the hostname. Panic on error.
+func MustParseURLHost(rawurl string) string {
+	u, err := url.Parse(rawurl)
 	if err != nil {
 		panic(err)
 	}
