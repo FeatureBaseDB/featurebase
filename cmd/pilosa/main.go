@@ -196,8 +196,9 @@ func (m *Main) Run(args ...string) error {
 	// Serve HTTP.
 	go func() { http.Serve(ln, h) }()
 
-	// Start anti-entropy background workers.
-	m.startAntiEntropyMonitors()
+	// Start anti-entropy background worker.
+	m.wg.Add(1)
+	go func() { defer m.wg.Done(); m.monitorAntiEntropy() }()
 
 	// Sync up max slice if more than one node
 	if len(m.Cluster.Nodes) > 1 {
@@ -226,26 +227,11 @@ func (m *Main) Run(args ...string) error {
 	return nil
 }
 
-func (m *Main) startAntiEntropyMonitors() {
-	for _, node := range m.Cluster.Nodes {
-		// Skip this node.
-		if node.Host == m.Host {
-			continue
-		}
-
-		m.wg.Add(1)
-		go func(node *pilosa.Node) {
-			defer m.wg.Done()
-			m.monitorAntiEntropy(node)
-		}(node)
-	}
-}
-
-func (m *Main) monitorAntiEntropy(node *pilosa.Node) {
+func (m *Main) monitorAntiEntropy() {
 	ticker := time.NewTicker(time.Duration(m.Config.AntiEntropy.Interval))
 	defer ticker.Stop()
 
-	m.logger().Printf("index sync monitor initializing: host=%s", node.Host)
+	m.logger().Printf("index sync monitor initializing")
 
 	for {
 		// Wait for tick or a close.
@@ -255,28 +241,22 @@ func (m *Main) monitorAntiEntropy(node *pilosa.Node) {
 		case <-ticker.C:
 		}
 
-		m.logger().Printf("index sync beginning: host=%s", node.Host)
-
-		// Set up remote client.
-		client, err := pilosa.NewClient(node.Host)
-		if err != nil {
-			m.logger().Printf("anti-entropy client error: host=%s", node.Host)
-			continue
-		}
+		m.logger().Printf("index sync beginning")
 
 		// Initialize syncer with local index and remote client.
 		var syncer pilosa.IndexSyncer
 		syncer.Index = m.index
-		syncer.Client = client
+		syncer.Host = m.Host
+		syncer.Cluster = m.Cluster
 
 		// Sync indexes.
 		if err := syncer.SyncIndex(); err != nil {
-			m.logger().Printf("index sync error: host=%s, err=%s", node.Host, err)
+			m.logger().Printf("index sync error: err=%s", err)
 			continue
 		}
 
 		// Record successful sync in log.
-		m.logger().Printf("index sync complete: host=%s", node.Host)
+		m.logger().Printf("index sync complete")
 	}
 }
 

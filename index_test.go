@@ -7,10 +7,13 @@ import (
 	"testing"
 
 	"github.com/umbel/pilosa"
+	"github.com/umbel/pilosa/pql"
 )
 
 // Ensure index can sync with a remote index.
 func TestIndexSyncer_SyncIndex(t *testing.T) {
+	cluster := NewCluster(2)
+
 	// Create a local index.
 	idx0 := MustOpenIndex()
 	defer idx0.Close()
@@ -21,6 +24,17 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	s := NewServer()
 	defer s.Close()
 	s.Handler.Index = idx1.Index
+	s.Handler.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+		e := pilosa.NewExecutor(idx1.Index)
+		e.Host = cluster.Nodes[1].Host
+		e.Cluster = cluster
+		return e.Execute(db, query, slices, opt)
+	}
+
+	// Mock 2-node, fully replicated cluster.
+	cluster.ReplicaN = 2
+	cluster.Nodes[0].Host = "localhost:0"
+	cluster.Nodes[1].Host = MustParseURLHost(s.URL)
 
 	// Set data on the local index.
 	f := idx0.MustCreateFragmentIfNotExists("d", "f", 0)
@@ -39,6 +53,8 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	idx0.MustCreateFragmentIfNotExists("y", "z", 0)
+
 	// Set data on the remote index.
 	f = idx1.MustCreateFragmentIfNotExists("d", "f", 0)
 	if _, err := f.SetBit(0, 4000, nil, 0); err != nil {
@@ -46,8 +62,6 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	} else if _, err := f.SetBit(3, 10, nil, 0); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(120, 10, nil, 0); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(350, 0, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -60,10 +74,14 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Set highest slice.
+	idx0.SetMax(3)
+
 	// Set up syncer.
 	syncer := pilosa.IndexSyncer{
-		Index:  idx0.Index,
-		Client: MustNewClient(s.Host()).Client,
+		Index:   idx0.Index,
+		Host:    cluster.Nodes[0].Host,
+		Cluster: cluster,
 	}
 	if err := syncer.SyncIndex(); err != nil {
 		t.Fatal(err)
@@ -82,8 +100,6 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 			t.Fatalf("unexpected bits(%d/120): %+v", i, a)
 		} else if a := f.Bitmap(200).Bits(); !reflect.DeepEqual(a, []uint64{4}) {
 			t.Fatalf("unexpected bits(%d/200): %+v", i, a)
-		} else if a := f.Bitmap(350).Bits(); !reflect.DeepEqual(a, []uint64{0}) {
-			t.Fatalf("unexpected bits(%d/350): %+v", i, a)
 		}
 
 		f = idx.Fragment("d", "f0", 1)

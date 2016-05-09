@@ -400,7 +400,10 @@ func (f *Fragment) setTimeBit(bitmapID, profileID uint64, t time.Time, q TimeQua
 func (f *Fragment) ClearBit(bitmapID, profileID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	return f.clearBit(bitmapID, profileID)
+}
 
+func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(bitmapID, profileID)
 	if err != nil {
@@ -668,8 +671,8 @@ func (f *Fragment) Blocks() []FragmentBlock {
 	return a
 }
 
-// BlockBits returns bits in a block as bitmap & profile ID pairs.
-func (f *Fragment) BlockBits(id int) (bitmapIDs, profileIDs []uint64) {
+// BlockData returns bits in a block as bitmap & profile ID pairs.
+func (f *Fragment) BlockData(id int) (bitmapIDs, profileIDs []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -680,79 +683,130 @@ func (f *Fragment) BlockBits(id int) (bitmapIDs, profileIDs []uint64) {
 	return
 }
 
-// MergeBlock sets bit pairs on the fragment if they aren't already set.
-// Bit pairs must be sorted in bitmap/profile order. Returns a set of changed bit pairs.
-func (f *Fragment) MergeBlock(id int, bitmapIDs, profileIDs []uint64) (bids, pids []uint64, err error) {
-	// Ensure that both slices are of equal length.
-	if len(bitmapIDs) != len(profileIDs) {
-		return nil, nil, fmt.Errorf("bitmap/profile len mismatch: %d != %d", len(bitmapIDs), len(profileIDs))
+// MergeBlock compares the block's bits and computes a diff with another set of block bits.
+// The state of a bit is determined by consensus from all blocks being considered.
+//
+// For example, if 3 blocks are compared and two have a set bit and one has a
+// cleared bit then the bit is considered cleared. The function returns the
+// diff per incoming block so that all can be in sync.
+func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, err error) {
+	// Ensure that all pair sets are of equal length.
+	for i := range data {
+		if len(data[i].BitmapIDs) != len(data[i].ProfileIDs) {
+			return nil, nil, fmt.Errorf("pair set mismatch(idx=%d): %d != %d", i, len(data[i].BitmapIDs), len(data[i].ProfileIDs))
+		}
 	}
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// Track writes to be made separately so we aren't mutating while we iterate.
-	var queued [][2]uint64
+	// Track sets and clears for all blocks (including local).
+	sets = make([]PairSet, len(data)+1)
+	clears = make([]PairSet, len(data)+1)
 
-	// Only look at values within hash block range.
-	min := uint64(id) * HashBlockSize * SliceWidth
-	max := uint64(id+1) * HashBlockSize * SliceWidth
+	// Limit upper bitmap/profile pair.
+	maxBitmapID := uint64(id+1) * HashBlockSize
+	maxProfileID := uint64(SliceWidth)
 
-	// Buffer iterator so we can unread values.
-	// Add initial seek to buffer so we can just use Next() in the loop.
-	itr := roaring.NewBufIterator(f.storage.Iterator())
-	if v := itr.Seek(min); !itr.EOF() {
-		itr.Unread(v)
+	// Create buffered iterator for local block.
+	itrs := make([]*BufIterator, 1, len(data)+1)
+	itrs[0] = NewBufIterator(
+		NewLimitIterator(
+			NewRoaringIterator(f.storage.Iterator()), maxBitmapID, maxProfileID,
+		),
+	)
+
+	// Append buffered iterators for each incoming block.
+	for i := range data {
+		var itr Iterator = NewSliceIterator(data[i].BitmapIDs, data[i].ProfileIDs)
+		itr = NewLimitIterator(itr, maxBitmapID, maxProfileID)
+		itrs = append(itrs, NewBufIterator(itr))
 	}
 
-	for i := 0; ; {
-		// Read local value into x.
-		// Mark as EOF if at the end of the hash block.
-		x := itr.Next()
-		xEOF := itr.EOF()
-		if !xEOF && x >= max {
-			itr.Unread(x)
-			x, xEOF = 0, true
+	// Seek to initial pair.
+	for _, itr := range itrs {
+		itr.Seek(uint64(id)*HashBlockSize, 0)
+	}
+
+	// Determine the number of blocks needed to meet consensus.
+	// If there is an even split then a set is used.
+	majorityN := (len(itrs) + 1) / 2
+
+	// Iterate over all values in all iterators to determine differences.
+	values := make([]bool, len(itrs))
+	for {
+		var min struct {
+			bitmapID  uint64
+			profileID uint64
 		}
 
-		// Read next incoming value into y.
-		// Mark as EOF if at the end of the hash block.
-		var y uint64
-		yEOF := i >= len(bitmapIDs)
-		if !yEOF {
-			y = (bitmapIDs[i] * SliceWidth) + profileIDs[i]
-			if y >= max {
-				y, yEOF = 0, true
+		// Find the lowest pair.
+		var hasData bool
+		for _, itr := range itrs {
+			bid, pid, eof := itr.Peek()
+			if eof { // no more data
+				continue
+			} else if !hasData { // first pair
+				min.bitmapID, min.profileID, hasData = bid, pid, true
+			} else if bid < min.bitmapID || (bid == min.bitmapID && pid < min.profileID) { // lower pair
+				min.bitmapID, min.profileID = bid, pid
 			}
 		}
 
-		if xEOF && yEOF { // no more data
+		// If all iterators are EOF then exit.
+		if !hasData {
 			break
-		} else if yEOF || (!xEOF && x < y) { // local data
-			bids = append(bids, x/SliceWidth)
-			pids = append(pids, x%SliceWidth)
-			continue
-		} else if xEOF || (!yEOF && y < x) { // incoming data
-			if !xEOF {
-				itr.Unread(x)
+		}
+
+		// Determine consensus of point.
+		var setN int
+		for i, itr := range itrs {
+			bid, pid, eof := itr.Next()
+
+			values[i] = !eof && bid == min.bitmapID && pid == min.profileID
+			if values[i] {
+				setN++ // set
+			} else {
+				itr.Unread() // clear
 			}
-			i++
-			queued = append(queued, [2]uint64{y / SliceWidth, y % SliceWidth})
-			continue
-		} else { // local and incoming match, skip
-			i++
-			continue
+		}
+
+		// Determine consensus value.
+		newValue := setN >= majorityN
+
+		// Add a diff for any node with a different value.
+		for i := range itrs {
+			// Value matches, ignore.
+			if values[i] == newValue {
+				continue
+			}
+
+			// Append to either the set or clear diff.
+			if newValue {
+				sets[i].BitmapIDs = append(sets[i].BitmapIDs, min.bitmapID)
+				sets[i].ProfileIDs = append(sets[i].ProfileIDs, min.profileID)
+			} else {
+				clears[i].BitmapIDs = append(sets[i].BitmapIDs, min.bitmapID)
+				clears[i].ProfileIDs = append(sets[i].ProfileIDs, min.profileID)
+			}
 		}
 	}
 
-	// Set bits for queued writes.
-	for _, values := range queued {
-		if _, err := f.setBit(values[0], (f.slice*SliceWidth)+values[1]); err != nil {
+	// Set local bits.
+	for i := range sets[0].ProfileIDs {
+		if _, err := f.setBit(sets[0].BitmapIDs[i], (f.Slice()*SliceWidth)+sets[0].ProfileIDs[i]); err != nil {
 			return nil, nil, err
 		}
 	}
 
-	return bids, pids, nil
+	// Clear local bits.
+	for i := range clears[0].ProfileIDs {
+		if _, err := f.clearBit(clears[0].BitmapIDs[i], (f.Slice()*SliceWidth)+clears[0].ProfileIDs[i]); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return sets[1:], clears[1:], nil
 }
 
 // Import bulk imports a set of bits and then snapshots the storage.
@@ -1090,54 +1144,77 @@ type FragmentBlock struct {
 // FragmentSyncer syncs a local fragment to one on a remote host.
 type FragmentSyncer struct {
 	Fragment *Fragment
-	Client   *Client
+
+	Host    string
+	Cluster *Cluster
 }
 
 // SyncFragment compares checksums for the local and remote fragments and
 // then merges any blocks which have differences.
 func (s *FragmentSyncer) SyncFragment() error {
-	// Retrieve local blocks immediately to minimize read skew.
-	localBlocks := s.Fragment.Blocks()
+	// Determine replica set.
+	nodes := s.Cluster.SliceNodes(s.Fragment.Slice())
 
-	// Retrieve blocks.
-	remoteBlocks, err := s.Client.FragmentBlocks(s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.Slice())
-	if err != nil && err != ErrFragmentNotFound {
-		return err
+	// Create a set of blocks.
+	blockSets := make([][]FragmentBlock, 0, len(nodes))
+	for _, node := range nodes {
+		// Read local blocks.
+		if node.Host == s.Host {
+			blockSets = append(blockSets, s.Fragment.Blocks())
+			continue
+		}
+
+		// Retrieve remote blocks.
+		client, err := NewClient(node.Host)
+		if err != nil {
+			return err
+		}
+		blocks, err := client.FragmentBlocks(s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.Slice())
+		if err != nil && err != ErrFragmentNotFound {
+			return err
+		}
+		blockSets = append(blockSets, blocks)
 	}
 
-	// Iterate over each block and merge if different.
-	for i, j := 0, 0; ; {
-		// Retrieve the next block for local & remote.
-		var a, b *FragmentBlock
-		if i < len(localBlocks) {
-			a = &localBlocks[i]
-		}
-		if j < len(remoteBlocks) {
-			b = &remoteBlocks[j]
+	// Iterate over all blocks and find differences.
+	checksums := make([][]byte, len(nodes))
+	for {
+		// Find min block id.
+		blockID := -1
+		for _, blocks := range blockSets {
+			if len(blocks) == 0 {
+				continue
+			} else if blockID == -1 || blocks[0].ID < blockID {
+				blockID = blocks[0].ID
+			}
 		}
 
-		// Determine the next block to be merged.
-		var block *FragmentBlock
-		if a == nil && b == nil {
+		// Exit loop if no blocks are left.
+		if blockID == -1 {
 			break
-		} else if a != nil && b == nil { // only local blocks remain
-			block, i = a, i+1
-		} else if a == nil && b != nil { // only remote blocks remain
-			block, j = b, j+1
-		} else if a.ID < b.ID { // lower local block id
-			block, i = a, i+1
-		} else if a.ID > b.ID { // lower remote block id
-			block, j = b, j+1
-		} else if !bytes.Equal(a.Checksum, b.Checksum) { // checksum mismatch
-			block, i, j = a, i+1, j+1
-		} else { // blocks equal, skip
-			i, j = i+1, j+1
+		}
+
+		// Read the checksum for the current block.
+		for i, blocks := range blockSets {
+			// Clear checksum if the next block for the node doesn't match current ID.
+			if len(blocks) == 0 || blocks[0].ID != blockID {
+				checksums[i] = nil
+				continue
+			}
+
+			// Otherwise set checksum and move forward.
+			checksums[i] = blocks[0].Checksum
+			blockSets[i] = blockSets[i][1:]
+		}
+
+		// Ignore if all the blocks on each node match.
+		if byteSlicesEqual(checksums) {
 			continue
 		}
 
 		// Synchronize block.
-		if err := s.syncBlock(block.ID); err != nil {
-			return fmt.Errorf("sync block: id=%d, err=%s", block.ID, err)
+		if err := s.syncBlock(blockID); err != nil {
+			return fmt.Errorf("sync block: id=%d, err=%s", blockID, err)
 		}
 	}
 
@@ -1145,22 +1222,62 @@ func (s *FragmentSyncer) SyncFragment() error {
 }
 
 // syncBlock sends and receives all bitmaps for a given block.
-// The remote bitmaps are merges it the local bitmaps.
+// Returns an error if any remote hosts are unreachable.
 func (s *FragmentSyncer) syncBlock(id int) error {
 	f := s.Fragment
 
-	// Retrieve bitmaps for block.
-	bitmapIDs, profileIDs := f.BlockBits(id)
+	// Read pairs from each remote block.
+	var pairSets []PairSet
+	var clients []*Client
+	for _, node := range s.Cluster.SliceNodes(f.Slice()) {
+		if s.Host == node.Host {
+			continue
+		}
 
-	// Send bitmaps to remote.
-	bids, pids, err := s.Client.MergeBlock(f.DB(), f.Frame(), f.Slice(), id, bitmapIDs, profileIDs)
+		client, err := NewClient(node.Host)
+		if err != nil {
+			return err
+		}
+		clients = append(clients, client)
+
+		bitmapIDs, profileIDs, err := client.BlockData(f.DB(), f.Frame(), f.Slice(), id)
+		if err != nil {
+			return err
+		}
+
+		pairSets = append(pairSets, PairSet{
+			ProfileIDs: profileIDs,
+			BitmapIDs:  bitmapIDs,
+		})
+	}
+
+	// Merge blocks together.
+	sets, clears, err := f.MergeBlock(id, pairSets)
 	if err != nil {
 		return err
 	}
 
-	// Set any local bits which are not set in remote.
-	for i := range bids {
-		if _, err := f.SetBit(bids[i], (s.Fragment.Slice()*SliceWidth)+pids[i], nil, 0); err != nil {
+	// Write updates to remote blocks.
+	for i := 0; i < len(clients); i++ {
+		set, clear := sets[i], clears[i]
+
+		// Ignore if there are no differences.
+		if len(set.ProfileIDs) == 0 && len(clear.ProfileIDs) == 0 {
+			continue
+		}
+
+		// Generate query with sets & clears.
+		var buf bytes.Buffer
+		for j := 0; j < len(set.ProfileIDs); j++ {
+			fmt.Fprintf(&buf, "SetBit(frame=%q, id=%d, profileID=%d)\n", f.Frame(), set.BitmapIDs[j], (f.Slice()*SliceWidth)+set.ProfileIDs[j])
+		}
+		for j := 0; j < len(clear.ProfileIDs); j++ {
+			fmt.Fprintf(&buf, "ClearBit(frame=%q, id=%d, profileID=%d)\n", f.Frame(), clear.BitmapIDs[j], (f.Slice()*SliceWidth)+clear.ProfileIDs[j])
+		}
+
+		// Execute query.
+		_, err := clients[i].ExecuteQuery(f.DB(), buf.String(), false)
+		if err != nil {
 			return err
 		}
 	}
@@ -1174,4 +1291,24 @@ func madvise(b []byte, advice int) (err error) {
 		err = e1
 	}
 	return
+}
+
+// PairSet is a list of equal length bitmap and profile id lists.
+type PairSet struct {
+	BitmapIDs  []uint64
+	ProfileIDs []uint64
+}
+
+// byteSlicesEqual returns true if all slices are equal.
+func byteSlicesEqual(a [][]byte) bool {
+	if len(a) == 0 {
+		return true
+	}
+
+	for _, v := range a[1:] {
+		if !bytes.Equal(a[0], v) {
+			return false
+		}
+	}
+	return true
 }
