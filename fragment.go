@@ -827,8 +827,10 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 	// If an error occurs then reopen the storage.
 	if err := func() error {
 		for i := range bitmapIDs {
+			bitmapID, profileID := bitmapIDs[i], profileIDs[i]
+
 			// Determine the position of the bit in the storage.
-			pos, err := f.pos(bitmapIDs[i], profileIDs[i])
+			pos, err := f.pos(bitmapID, profileID)
 			if err != nil {
 				return err
 			}
@@ -837,6 +839,12 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			if _, err := f.storage.Add(pos); err != nil {
 				return err
 			}
+
+			// Invalidate block checksum.
+			delete(f.checksums, int(bitmapID/HashBlockSize))
+
+			// Update the cache.
+			f.bitmap(bitmapID).SetBit(profileID)
 		}
 		return nil
 	}(); err != nil {
