@@ -14,6 +14,10 @@ func TestClient_Import(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
+	// Load bitmap into cache to ensure cache gets updated.
+	f := idx.MustCreateFragmentIfNotExists("d", "f", 0)
+	f.Bitmap(0)
+
 	s := NewServer()
 	defer s.Close()
 	s.Handler.Host = s.Host()
@@ -32,7 +36,6 @@ func TestClient_Import(t *testing.T) {
 	}
 
 	// Verify data.
-	f := idx.MustCreateFragmentIfNotExists("d", "f", 0)
 	if a := f.Bitmap(0).Bits(); !reflect.DeepEqual(a, []uint64{1, 5}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
