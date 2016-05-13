@@ -20,7 +20,7 @@ const DefaultFrame = "general"
 
 // Executor recursively executes calls in a PQL query across all slices.
 type Executor struct {
-	index *Index
+	Index *Index
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -31,15 +31,11 @@ type Executor struct {
 }
 
 // NewExecutor returns a new instance of Executor.
-func NewExecutor(index *Index) *Executor {
+func NewExecutor() *Executor {
 	return &Executor{
-		index:      index,
 		HTTPClient: http.DefaultClient,
 	}
 }
-
-// Index returns the index that the executor runs against.
-func (e *Executor) Index() *Index { return e.index }
 
 // Execute executes a PQL query.
 func (e *Executor) Execute(db string, q *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error) {
@@ -56,7 +52,7 @@ func (e *Executor) Execute(db string, q *pql.Query, slices []uint64, opt *ExecOp
 	// If slices aren't specified, then include all of them.
 	if len(slices) == 0 {
 		// Round up the number of slices.
-		sliceN := e.index.SliceN()
+		sliceN := e.Index.SliceN()
 		sliceN += (sliceN % uint64(len(e.Cluster.Nodes))) + uint64(len(e.Cluster.Nodes))
 
 		// Generate a slices of all slices.
@@ -129,7 +125,7 @@ func (e *Executor) executeBitmapCall(db string, c pql.BitmapCall, slices []uint6
 
 	// Attach bitmap attributes for Bitmap() calls.
 	if c, ok := c.(*pql.Bitmap); ok {
-		fr := e.Index().Frame(db, c.Frame)
+		fr := e.Index.Frame(db, c.Frame)
 		if fr != nil {
 			attrs, err := fr.BitmapAttrStore().Attrs(c.ID)
 			if err != nil {
@@ -237,7 +233,7 @@ func (e *Executor) executeTopNSlice(db string, c *pql.TopN, slice uint64) ([]Pai
 		frame = DefaultFrame
 	}
 
-	f := e.Index().Fragment(db, frame, slice)
+	f := e.Index.Fragment(db, frame, slice)
 	if f == nil {
 		return nil, nil
 	}
@@ -276,7 +272,7 @@ func (e *Executor) executeBitmapSlice(db string, c *pql.Bitmap, slice uint64) (*
 		frame = DefaultFrame
 	}
 
-	f := e.Index().Fragment(db, frame, slice)
+	f := e.Index.Fragment(db, frame, slice)
 	if f == nil {
 		return NewBitmap(), nil
 	}
@@ -309,7 +305,7 @@ func (e *Executor) executeRangeSlice(db string, c *pql.Range, slice uint64) (*Bi
 		frame = DefaultFrame
 	}
 
-	f := e.Index().Fragment(db, frame, slice)
+	f := e.Index.Fragment(db, frame, slice)
 	if f == nil {
 		return NewBitmap(), nil
 	}
@@ -364,7 +360,7 @@ func (e *Executor) executeCount(db string, c *pql.Count, slices []uint64, opt *E
 // executeProfile executes a Profile() call.
 // This call only executes locally since the profile attibutes are stored locally.
 func (e *Executor) executeProfile(db string, c *pql.Profile, opt *ExecOptions) (*Profile, error) {
-	panic("FIXME: impl: e.Index().ProfileAttr(c.ID)")
+	panic("FIXME: impl: e.Index.ProfileAttr(c.ID)")
 }
 
 // executeClearBit executes a ClearBit() call.
@@ -374,7 +370,7 @@ func (e *Executor) executeClearBit(db string, c *pql.ClearBit, opt *ExecOptions)
 	for _, node := range e.Cluster.SliceNodes(slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
-			f, err := e.Index().CreateFragmentIfNotExists(db, c.Frame, slice)
+			f, err := e.Index.CreateFragmentIfNotExists(db, c.Frame, slice)
 			if err != nil {
 				return false, fmt.Errorf("fragment: %s", err)
 			}
@@ -406,7 +402,7 @@ func (e *Executor) executeSetBit(db string, c *pql.SetBit, opt *ExecOptions) (bo
 	for _, node := range e.Cluster.SliceNodes(slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
-			f, err := e.Index().CreateFragmentIfNotExists(db, c.Frame, slice)
+			f, err := e.Index.CreateFragmentIfNotExists(db, c.Frame, slice)
 			if err != nil {
 				return false, fmt.Errorf("fragment: %s", err)
 			}
@@ -438,7 +434,7 @@ func (e *Executor) executeSetBit(db string, c *pql.SetBit, opt *ExecOptions) (bo
 // executeSetBitmapAttrs executes a SetBitmapAttrs() call.
 func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs) error {
 	// Retrieve frame.
-	frame, err := e.Index().CreateFrameIfNotExists(db, c.Frame)
+	frame, err := e.Index.CreateFrameIfNotExists(db, c.Frame)
 	if err != nil {
 		return err
 	}
@@ -456,7 +452,7 @@ func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs) error
 // executeSetProfileAttrs executes a SetProfileAttrs() call.
 func (e *Executor) executeSetProfileAttrs(db string, c *pql.SetProfileAttrs) error {
 	// Retrieve database.
-	d, err := e.Index().CreateDBIfNotExists(db)
+	d, err := e.Index.CreateDBIfNotExists(db)
 	if err != nil {
 		return err
 	}
@@ -490,6 +486,7 @@ func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64, op
 	}
 
 	// Create HTTP request.
+	println("dbg.host?", node.Host)
 	req, err := http.NewRequest("POST", (&url.URL{
 		Scheme: "http",
 		Host:   node.Host,

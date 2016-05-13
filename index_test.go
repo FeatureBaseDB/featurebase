@@ -25,7 +25,8 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	defer s.Close()
 	s.Handler.Index = idx1.Index
 	s.Handler.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(idx1.Index)
+		e := pilosa.NewExecutor()
+		e.Index = idx1.Index
 		e.Host = cluster.Nodes[1].Host
 		e.Cluster = cluster
 		return e.Execute(db, query, slices, opt)
@@ -125,7 +126,10 @@ func NewIndex() *Index {
 	if err != nil {
 		panic(err)
 	}
-	return &Index{Index: pilosa.NewIndex(path)}
+
+	i := &Index{Index: pilosa.NewIndex()}
+	i.Path = path
+	return i
 }
 
 // MustOpenIndex creates and opens an index at a temporary path. Panic on error.
@@ -139,7 +143,7 @@ func MustOpenIndex() *Index {
 
 // Close closes the index and removes all underlying data.
 func (i *Index) Close() error {
-	defer os.RemoveAll(i.Path())
+	defer os.RemoveAll(i.Path)
 	return i.Index.Close()
 }
 

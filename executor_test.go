@@ -460,7 +460,8 @@ type Executor struct {
 // NewExecutor returns a new instance of Executor.
 // The executor always matches the hostname of the first cluster node.
 func NewExecutor(index *pilosa.Index, cluster *pilosa.Cluster) *Executor {
-	e := &Executor{Executor: pilosa.NewExecutor(index)}
+	e := &Executor{Executor: pilosa.NewExecutor()}
+	e.Index = index
 	e.Cluster = cluster
 	e.Host = cluster.Nodes[0].Host
 	return e
