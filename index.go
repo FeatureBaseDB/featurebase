@@ -12,17 +12,18 @@ import (
 // Index represents a container for fragments.
 type Index struct {
 	mu        sync.Mutex
-	path      string
 	remoteMax uint64
 
 	// Databases by name.
 	dbs map[string]*DB
+
+	// Data directory path.
+	Path string
 }
 
 // NewIndex returns a new instance of Index.
-func NewIndex(path string) *Index {
+func NewIndex() *Index {
 	return &Index{
-		path:      path,
 		dbs:       make(map[string]*DB),
 		remoteMax: 0,
 	}
@@ -30,12 +31,12 @@ func NewIndex(path string) *Index {
 
 // Open initializes the root data directory for the index.
 func (i *Index) Open() error {
-	if err := os.MkdirAll(i.path, 0777); err != nil {
+	if err := os.MkdirAll(i.Path, 0777); err != nil {
 		return err
 	}
 
 	// Open path to read all database directories.
-	f, err := os.Open(i.path)
+	f, err := os.Open(i.Path)
 	if err != nil {
 		return err
 	}
@@ -68,9 +69,6 @@ func (i *Index) Close() error {
 	return nil
 }
 
-// Path returns the path the index was initialized with.
-func (i *Index) Path() string { return i.path }
-
 // SliceN returns the highest slice across all frames.
 func (i *Index) SliceN() uint64 {
 	i.mu.Lock()
@@ -101,7 +99,7 @@ func (i *Index) Schema() []*DBInfo {
 }
 
 // DBPath returns the path where a given database is stored.
-func (i *Index) DBPath(name string) string { return filepath.Join(i.path, name) }
+func (i *Index) DBPath(name string) string { return filepath.Join(i.Path, name) }
 
 // DB returns the database by name.
 func (i *Index) DB(name string) *DB {
