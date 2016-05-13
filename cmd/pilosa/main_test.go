@@ -183,11 +183,11 @@ func TestMain_FrameRestore(t *testing.T) {
 	defer m1.Close()
 
 	// Update cluster config.
-	m0.Cluster.Nodes = []*pilosa.Node{
-		{Host: m0.Host},
-		{Host: m1.Host},
+	m0.Server.Cluster.Nodes = []*pilosa.Node{
+		{Host: m0.Server.Host},
+		{Host: m1.Server.Host},
 	}
-	m1.Cluster.Nodes = m0.Cluster.Nodes
+	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
 
 	// Write data on first cluster.
 	if _, err := m0.Query("db=d", `
@@ -214,10 +214,10 @@ func TestMain_FrameRestore(t *testing.T) {
 	defer m2.Close()
 
 	// Import from first cluster.
-	client, err := pilosa.NewClient(m2.Host)
+	client, err := pilosa.NewClient(m2.Server.Host)
 	if err != nil {
 		t.Fatal(err)
-	} else if err := client.RestoreFrame(m0.Host, "d", "f"); err != nil {
+	} else if err := client.RestoreFrame(m0.Server.Host, "d", "f"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -324,7 +324,7 @@ func (m *Main) Reopen() error {
 }
 
 // URL returns the base URL string for accessing the running program.
-func (m *Main) URL() string { return "http://" + m.Addr().String() }
+func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
 
 // Query executes a query against the program through the HTTP API.
 func (m *Main) Query(rawQuery, query string) (string, error) {
