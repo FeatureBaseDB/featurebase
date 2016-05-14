@@ -213,51 +213,15 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 // Ensure iterator can iterate over all the values on the bitmap.
 func TestIterator(t *testing.T) {
 	itr := roaring.NewBitmap(1, 2, 3).Iterator()
+	itr.Seek(0)
 
 	var a []uint64
-	for v := itr.Seek(0); !itr.EOF(); v = itr.Next() {
+	for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
 		a = append(a, v)
 	}
 
 	if !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
 		t.Fatalf("unexpected values: %+v", a)
-	}
-}
-
-// Ensure buffered iterator can unread values on to the buffer.
-func TestBufIterator(t *testing.T) {
-	itr := roaring.NewBufIterator(roaring.NewBitmap(1, 2, 3).Iterator())
-	if v := itr.Seek(1); v != 1 {
-		t.Fatalf("unexpected seek: %d", v)
-	} else if v := itr.Next(); v != 2 {
-		t.Fatalf("unexpected next: %d", v)
-	}
-
-	itr.Unread(10)
-	if v := itr.Next(); v != 10 {
-		t.Fatalf("unexpected next(buffered): %d", v)
-	}
-
-	if v := itr.Next(); v != 3 {
-		t.Fatalf("unexpected next: %d", v)
-	} else if itr.Next(); !itr.EOF() {
-		t.Fatal("expected eof")
-	}
-}
-
-// Ensure buffered iterator will panic if unreading onto a full buffer.
-func TestBufIterator_DoubleFillPanic(t *testing.T) {
-	var v interface{}
-	func() {
-		defer func() { v = recover() }()
-
-		itr := roaring.NewBufIterator(roaring.NewBitmap(1, 2, 3).Iterator())
-		itr.Unread(1)
-		itr.Unread(2)
-	}()
-
-	if !reflect.DeepEqual(v, "roaring.BufIterator: buffer full") {
-		t.Fatalf("unexpected panic value: %#v", v)
 	}
 }
 

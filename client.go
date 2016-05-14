@@ -116,7 +116,7 @@ func (c *Client) SliceNodes(slice uint64) ([]*Node, error) {
 }
 
 // ExecuteQuery executes query against db on the server.
-func (c *Client) ExecuteQuery(db, query string) (result interface{}, err error) {
+func (c *Client) ExecuteQuery(db, query string, allowRedirect bool) (result interface{}, err error) {
 	if db == "" {
 		return nil, ErrDatabaseRequired
 	} else if query == "" {
@@ -125,8 +125,9 @@ func (c *Client) ExecuteQuery(db, query string) (result interface{}, err error) 
 
 	// Encode query request.
 	buf, err := proto.Marshal(&internal.QueryRequest{
-		DB:    proto.String(db),
-		Query: proto.String(query),
+		DB:     proto.String(db),
+		Query:  proto.String(query),
+		Remote: proto.Bool(!allowRedirect),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %s", err)
@@ -511,26 +512,20 @@ func (c *Client) FragmentBlocks(db, frame string, slice uint64) ([]FragmentBlock
 	return rsp.Blocks, nil
 }
 
-// MergeBlock sends data for a block for the remote host to merge.
-//
-// The remote host returns a list of bitmap/profile bit pairs for each bit
-// that was set on the remote host but not sent by the client. These bits
-// can be used by the caller to synchronize the local index.
-func (c *Client) MergeBlock(db, frame string, slice uint64, block int, bitmapIDs, profileIDs []uint64) ([]uint64, []uint64, error) {
-	buf, err := proto.Marshal(&internal.MergeBlockRequest{
-		DB:         proto.String(db),
-		Frame:      proto.String(frame),
-		Slice:      proto.Uint64(slice),
-		Block:      proto.Uint64(uint64(block)),
-		BitmapIDs:  bitmapIDs,
-		ProfileIDs: profileIDs,
+// BlockData returns bitmap/profile id pairs for a block.
+func (c *Client) BlockData(db, frame string, slice uint64, block int) ([]uint64, []uint64, error) {
+	buf, err := proto.Marshal(&internal.BlockDataRequest{
+		DB:    proto.String(db),
+		Frame: proto.String(frame),
+		Slice: proto.Uint64(slice),
+		Block: proto.Uint64(uint64(block)),
 	})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	u := url.URL{Scheme: "http", Host: c.host, Path: "/fragment/block"}
-	req, err := http.NewRequest("PATCH", u.String(), bytes.NewReader(buf))
+	u := url.URL{Scheme: "http", Host: c.host, Path: "/fragment/block/data"}
+	req, err := http.NewRequest("GET", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -545,12 +540,16 @@ func (c *Client) MergeBlock(db, frame string, slice uint64, block int, bitmapIDs
 	defer resp.Body.Close()
 
 	// Return error if status is not OK.
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK: // fallthrough
+	case http.StatusNotFound:
+		return nil, nil, nil
+	default:
 		return nil, nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
 	}
 
 	// Decode response object.
-	var rsp internal.MergeBlockResponse
+	var rsp internal.BlockDataResponse
 	if body, err := ioutil.ReadAll(resp.Body); err != nil {
 		return nil, nil, err
 	} else if err := proto.Unmarshal(body, &rsp); err != nil {

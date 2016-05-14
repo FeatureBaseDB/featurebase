@@ -5,25 +5,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"math/rand"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime/pprof"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/gogo/protobuf/proto"
 	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/internal"
 )
 
 // Build holds the build information passed in at compile time.
@@ -43,9 +33,6 @@ const (
 
 	// DefaultHost is the default hostname and port to use.
 	DefaultHost = "localhost:15000"
-
-	// DefaultAntiEntropyInterval is the default interval to run AAE.
-	DefaultAntiEntropyInterval = 10 * time.Minute
 )
 
 func main() {
@@ -80,27 +67,11 @@ func main() {
 
 // Main represents the main program execution.
 type Main struct {
-	index       *pilosa.Index
-	ln          net.Listener
-	ticker      *time.Ticker
-	pollingSecs int
-
-	// Close management.
-	wg      sync.WaitGroup
-	closing chan struct{}
-
-	// Path to the configuration file.
-	ConfigPath string
+	Server *pilosa.Server
 
 	// Configuration options.
-	Config *Config
-
-	// Cluster configuration shared by components
-	Host    string
-	Cluster *pilosa.Cluster
-
-	// Profiling paths
-	CPUProfile string
+	ConfigPath string
+	Config     *Config
 
 	// Standard input/output
 	Stdin  io.Reader
@@ -111,21 +82,13 @@ type Main struct {
 // NewMain returns a new instance of Main.
 func NewMain() *Main {
 	return &Main{
-		closing: make(chan struct{}),
-
+		Server: pilosa.NewServer(),
 		Config: NewConfig(),
+
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}
-}
-
-// Addr returns the address of the listener.
-func (m *Main) Addr() net.Addr {
-	if m.ln == nil {
-		return nil
-	}
-	return m.ln.Addr()
 }
 
 // Run executes the main program execution.
@@ -135,213 +98,30 @@ func (m *Main) Run(args ...string) error {
 		fmt.Fprintf(m.Stdout, "Using config: %s\n", m.ConfigPath)
 	}
 
-	// Require a port in the hostname.
-	host, port, err := net.SplitHostPort(m.Config.Host)
-	if err != nil {
-		return err
-	} else if port == "" {
-		return errors.New("port must be specified in config host")
-	}
+	// Setup logging output.
+	m.Server.LogOutput = m.Stderr
 
-	// Set up profiling.
-	if m.CPUProfile != "" {
-		f, err := os.Create(m.CPUProfile)
-		if err != nil {
-			return err
-		}
-
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
-
-	// Open HTTP listener to determine port (if specified as :0).
-	ln, err := net.Listen("tcp", ":"+port)
-	if err != nil {
-		return err
-	}
-	m.ln = ln
-
-	// Determine hostname based on listening port.
-	m.Host = net.JoinHostPort(host, strconv.Itoa(m.ln.Addr().(*net.TCPAddr).Port))
-
-	// Build cluster from config file. Create local host if none are specified.
-	m.Cluster = m.Config.PilosaCluster()
-	if len(m.Cluster.Nodes) == 0 {
-		m.Cluster.Nodes = []*pilosa.Node{{
-			Host: m.Host,
-		}}
-	}
-
-	// Create index to store fragments.
+	// Configure index.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
-	m.index = pilosa.NewIndex(m.Config.DataDir)
-	if err := m.index.Open(); err != nil {
+	m.Server.Index.Path = m.Config.DataDir
+
+	// Build cluster from config file.
+	m.Server.Host = m.Config.Host
+	m.Server.Cluster = m.Config.PilosaCluster()
+
+	// Initialize server.
+	if err := m.Server.Open(); err != nil {
 		return err
 	}
 
-	// Create executor for executing queries.
-	e := pilosa.NewExecutor(m.index)
-	e.Host = m.Host
-	e.Cluster = m.Cluster
-
-	// Initialize HTTP handler.
-	h := pilosa.NewHandler()
-	h.Index = m.index
-	h.Host = m.Host
-	h.Cluster = m.Cluster
-	h.Executor = e
-	h.LogOutput = m.Stderr
-
-	// Serve HTTP.
-	go func() { http.Serve(ln, h) }()
-
-	// Start anti-entropy background workers.
-	m.startAntiEntropyMonitors()
-
-	// Sync up max slice if more than one node
-	if len(m.Cluster.Nodes) > 1 {
-		m.ticker = time.NewTicker(time.Second * time.Duration(m.pollingSecs))
-		go func() {
-			for range m.ticker.C {
-				oldmax := m.index.SliceN()
-				newmax := oldmax
-				for _, node := range m.Cluster.Nodes {
-					if m.Host != node.Host {
-						newslice, _ := checkMaxSlice(node.Host)
-						if newslice > newmax {
-							newmax = newslice
-						}
-					}
-				}
-				if newmax > oldmax {
-					m.index.SetMax(newmax)
-				}
-			}
-		}()
-	}
-
-	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Host)
+	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Server.Host)
 
 	return nil
 }
 
-func (m *Main) startAntiEntropyMonitors() {
-	for _, node := range m.Cluster.Nodes {
-		// Skip this node.
-		if node.Host == m.Host {
-			continue
-		}
-
-		m.wg.Add(1)
-		go func(node *pilosa.Node) {
-			defer m.wg.Done()
-			m.monitorAntiEntropy(node)
-		}(node)
-	}
-}
-
-func (m *Main) monitorAntiEntropy(node *pilosa.Node) {
-	ticker := time.NewTicker(time.Duration(m.Config.AntiEntropy.Interval))
-	defer ticker.Stop()
-
-	m.logger().Printf("index sync monitor initializing: host=%s", node.Host)
-
-	for {
-		// Wait for tick or a close.
-		select {
-		case <-m.closing:
-			return
-		case <-ticker.C:
-		}
-
-		m.logger().Printf("index sync beginning: host=%s", node.Host)
-
-		// Set up remote client.
-		client, err := pilosa.NewClient(node.Host)
-		if err != nil {
-			m.logger().Printf("anti-entropy client error: host=%s", node.Host)
-			continue
-		}
-
-		// Initialize syncer with local index and remote client.
-		var syncer pilosa.IndexSyncer
-		syncer.Index = m.index
-		syncer.Client = client
-
-		// Sync indexes.
-		if err := syncer.SyncIndex(); err != nil {
-			m.logger().Printf("index sync error: host=%s, err=%s", node.Host, err)
-			continue
-		}
-
-		// Record successful sync in log.
-		m.logger().Printf("index sync complete: host=%s", node.Host)
-	}
-}
-
-func checkMaxSlice(hostport string) (uint64, error) {
-	// Create HTTP request.
-	req, err := http.NewRequest("GET", (&url.URL{
-		Scheme: "http",
-		Host:   hostport,
-		Path:   "/slices/max",
-	}).String(), nil)
-
-	if err != nil {
-		return 0, err
-	}
-
-	// Require protobuf encoding.
-	req.Header.Set("Accept", "application/x-protobuf")
-	req.Header.Set("Content-Type", "application/x-protobuf")
-
-	// Send request to remote node.
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-
-	// Read response into buffer.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
-	}
-
-	// Check status code.
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
-	}
-
-	// Decode response object.
-	pb := internal.SliceMaxResponse{}
-
-	if err = proto.Unmarshal(body, &pb); err != nil {
-		return 0, err
-	}
-
-	return *pb.SliceMax, nil
-
-}
-
-// Close shuts down the process.
+// Close shuts down the server.
 func (m *Main) Close() error {
-	// Notify goroutines to stop.
-	close(m.closing)
-	m.wg.Wait()
-
-	if m.ticker != nil {
-		m.ticker.Stop()
-	}
-	if m.ln != nil {
-		m.ln.Close()
-	}
-
-	if m.index != nil {
-		m.index.Close()
-	}
-
-	return nil
+	return m.Server.Close()
 }
 
 // ParseFlags parses command line flags from args.
@@ -349,8 +129,6 @@ func (m *Main) ParseFlags(args []string) error {
 	fs := flag.NewFlagSet("pilosa", flag.ContinueOnError)
 	fs.SetOutput(m.Stderr)
 	fs.StringVar(&m.ConfigPath, "config", "", "config path")
-	fs.StringVar(&m.CPUProfile, "cpuprofile", "", "write cpu profile to file")
-	fs.IntVar(&m.pollingSecs, "pollingSecs", 60, "number of seconds to poll the cluster for maxslice")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -383,16 +161,15 @@ func (m *Main) ParseFlags(args []string) error {
 	return nil
 }
 
-func (m *Main) logger() *log.Logger { return log.New(m.Stderr, "", log.LstdFlags) }
-
 // Config represents the configuration for the command.
 type Config struct {
 	DataDir string `toml:"data-dir"`
 	Host    string `toml:"host"`
 
 	Cluster struct {
-		ReplicaN int           `toml:"replicas"`
-		Nodes    []*ConfigNode `toml:"node"`
+		ReplicaN        int           `toml:"replicas"`
+		Nodes           []*ConfigNode `toml:"node"`
+		PollingInterval Duration      `toml:"polling-interval"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -414,7 +191,8 @@ func NewConfig() *Config {
 		Host: DefaultHost,
 	}
 	c.Cluster.ReplicaN = pilosa.DefaultReplicaN
-	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
+	c.Cluster.PollingInterval = Duration(pilosa.DefaultPollingInterval)
+	c.AntiEntropy.Interval = Duration(pilosa.DefaultAntiEntropyInterval)
 	return c
 }
 

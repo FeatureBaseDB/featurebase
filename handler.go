@@ -112,17 +112,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	case "/fragment/block":
-		switch r.Method {
-		case "PATCH":
-			h.handlePatchFragmentBlock(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
 	case "/fragment/blocks":
 		switch r.Method {
 		case "GET":
 			h.handleGetFragmentBlocks(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	case "/fragment/block/data":
+		switch r.Method {
+		case "GET":
+			h.handleGetFragmentBlockData(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -492,10 +492,10 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handlePatchFragmentBlock handles PATCH /fragment/block requests.
-func (h *Handler) handlePatchFragmentBlock(w http.ResponseWriter, r *http.Request) {
+// handleGetFragmentData handles GET /fragment/block/data requests.
+func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
 	// Read request object.
-	var req internal.MergeBlockRequest
+	var req internal.BlockDataRequest
 	if body, err := ioutil.ReadAll(r.Body); err != nil {
 		http.Error(w, "ready body error", http.StatusBadRequest)
 		return
@@ -505,24 +505,20 @@ func (h *Handler) handlePatchFragmentBlock(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Retrieve fragment from index.
-	f, err := h.Index.CreateFragmentIfNotExists(req.GetDB(), req.GetFrame(), req.GetSlice())
-	if err != nil {
-		http.Error(w, "create fragment error", http.StatusInternalServerError)
+	f := h.Index.Fragment(req.GetDB(), req.GetFrame(), req.GetSlice())
+	if f == nil {
+		http.Error(w, ErrFragmentNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
-	// Merge data into block.
-	bids, pids, err := f.MergeBlock(int(req.GetBlock()), req.BitmapIDs, req.ProfileIDs)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	// Read data
+	var resp internal.BlockDataResponse
+	if f != nil {
+		resp.BitmapIDs, resp.ProfileIDs = f.BlockData(int(req.GetBlock()))
 	}
 
 	// Encode response.
-	buf, err := proto.Marshal(&internal.MergeBlockResponse{
-		BitmapIDs:  bids,
-		ProfileIDs: pids,
-		Err:        proto.String(errorString(err)),
-	})
+	buf, err := proto.Marshal(&resp)
 	if err != nil {
 		h.logger().Printf("merge block response encoding error: %s", err)
 		return
