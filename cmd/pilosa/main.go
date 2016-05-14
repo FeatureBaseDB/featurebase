@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"os/user"
 	"path/filepath"
 	"runtime/pprof"
 	"strconv"
@@ -371,13 +370,14 @@ func (m *Main) ParseFlags(args []string) error {
 	// Expand home directory.
 	prefix := "~" + string(filepath.Separator)
 	if strings.HasPrefix(m.Config.DataDir, prefix) {
-		u, err := user.Current()
-		if err != nil {
+		//	u, err := user.Current()
+		HomeDir := os.Getenv("HOME")
+		/*if err != nil {
 			return err
-		} else if u.HomeDir == "" {
+		} else*/if HomeDir == "" {
 			return errors.New("data directory not specified and no home dir available")
 		}
-		m.Config.DataDir = filepath.Join(u.HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
+		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
 	}
 
 	return nil
