@@ -631,7 +631,7 @@ func (cmd *BenchCommand) runSetBit(client *pilosa.Client) error {
 
 		q := fmt.Sprintf(`SetBit(id=%d, frame="%s", profileID=%d)`, bitmapID, cmd.Frame, profileID)
 
-		if _, err := client.ExecuteQuery(cmd.Database, q); err != nil {
+		if _, err := client.ExecuteQuery(cmd.Database, q, true); err != nil {
 			return err
 		}
 	}

@@ -12,17 +12,18 @@ import (
 // Index represents a container for fragments.
 type Index struct {
 	mu        sync.Mutex
-	path      string
 	remoteMax uint64
 
 	// Databases by name.
 	dbs map[string]*DB
+
+	// Data directory path.
+	Path string
 }
 
 // NewIndex returns a new instance of Index.
-func NewIndex(path string) *Index {
+func NewIndex() *Index {
 	return &Index{
-		path:      path,
 		dbs:       make(map[string]*DB),
 		remoteMax: 0,
 	}
@@ -30,12 +31,12 @@ func NewIndex(path string) *Index {
 
 // Open initializes the root data directory for the index.
 func (i *Index) Open() error {
-	if err := os.MkdirAll(i.path, 0777); err != nil {
+	if err := os.MkdirAll(i.Path, 0777); err != nil {
 		return err
 	}
 
 	// Open path to read all database directories.
-	f, err := os.Open(i.path)
+	f, err := os.Open(i.Path)
 	if err != nil {
 		return err
 	}
@@ -68,9 +69,6 @@ func (i *Index) Close() error {
 	return nil
 }
 
-// Path returns the path the index was initialized with.
-func (i *Index) Path() string { return i.path }
-
 // SliceN returns the highest slice across all frames.
 func (i *Index) SliceN() uint64 {
 	i.mu.Lock()
@@ -101,7 +99,7 @@ func (i *Index) Schema() []*DBInfo {
 }
 
 // DBPath returns the path where a given database is stored.
-func (i *Index) DBPath(name string) string { return filepath.Join(i.path, name) }
+func (i *Index) DBPath(name string) string { return filepath.Join(i.Path, name) }
 
 // DB returns the database by name.
 func (i *Index) DB(name string) *DB {
@@ -201,33 +199,26 @@ func (i *Index) SetMax(newmax uint64) {
 // IndexSyncer is an active anti-entropy tool that compares the local index
 // with a remote index based on block checksums and resolves differences.
 type IndexSyncer struct {
-	Index  *Index
-	Client *Client
+	Index *Index
+
+	Host    string
+	Cluster *Cluster
 }
 
 // SyncIndex compares the index on host with the local index and resolves differences.
 func (s *IndexSyncer) SyncIndex() error {
-	// Ensure slice range is in sync first.
-	if newmax, err := s.Client.SliceN(); err != nil {
-		return err
-	} else if newmax > s.Index.SliceN() {
-		s.Index.SetMax(newmax)
-	}
-
-	// Retrieve schema data from remote node.
-	other, err := s.Client.Schema()
-	if err != nil {
-		return err
-	}
-
-	// Merge with local schema.
-	dbs := MergeSchemas(s.Index.Schema(), other)
+	sliceN := s.Index.SliceN()
 
 	// Iterate over schema in sorted order.
-	sliceN := s.Index.SliceN()
-	for _, di := range dbs {
+	for _, di := range s.Index.Schema() {
 		for _, fi := range di.Frames {
 			for slice := uint64(0); slice <= sliceN; slice++ {
+				// Ignore slices that this host doesn't own.
+				if !s.Cluster.OwnsSlice(s.Host, slice) {
+					continue
+				}
+
+				// Sync fragment if own it.
 				if err := s.syncFragment(di.Name, fi.Name, slice); err != nil {
 					return fmt.Errorf("sync error: db=%s, frame=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
 				}
@@ -247,7 +238,11 @@ func (s *IndexSyncer) syncFragment(db, frame string, slice uint64) error {
 	}
 
 	// Sync fragments together.
-	fs := FragmentSyncer{Fragment: f, Client: s.Client}
+	fs := FragmentSyncer{
+		Fragment: f,
+		Host:     s.Host,
+		Cluster:  s.Cluster,
+	}
 	if err := fs.SyncFragment(); err != nil {
 		return err
 	}
