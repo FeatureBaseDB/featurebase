@@ -1,13 +1,8 @@
 package internal;
 
 message Bitmap {
-	repeated Chunk Chunks = 1;
-	repeated Attr Attrs   = 2;
-}
-
-message Chunk {
-	required uint64 Key   = 1;
-	repeated uint64 Value = 2;
+	repeated uint64 Bits  = 1;
+	repeated Attr   Attrs = 2;
 }
 
 message Pair {

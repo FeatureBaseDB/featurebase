@@ -262,7 +262,7 @@ func (e *Executor) executeDifferenceSlice(db string, c *pql.Difference, slice ui
 			other = other.Difference(bm)
 		}
 	}
-	other.SetCount(other.BitCount())
+	other.InvalidateCount()
 	return other, nil
 }
 
@@ -294,7 +294,7 @@ func (e *Executor) executeIntersectSlice(db string, c *pql.Intersect, slice uint
 			other = other.Intersect(bm)
 		}
 	}
-	other.SetCount(other.BitCount())
+	other.InvalidateCount()
 	return other, nil
 }
 
@@ -327,7 +327,7 @@ func (e *Executor) executeUnionSlice(db string, c *pql.Union, slice uint64) (*Bi
 			other = other.Union(bm)
 		}
 	}
-	other.SetCount(other.BitCount())
+	other.InvalidateCount()
 	return other, nil
 }
 
@@ -486,7 +486,6 @@ func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64, op
 	}
 
 	// Create HTTP request.
-	println("dbg.host?", node.Host)
 	req, err := http.NewRequest("POST", (&url.URL{
 		Scheme: "http",
 		Host:   node.Host,
