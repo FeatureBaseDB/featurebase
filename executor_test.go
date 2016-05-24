@@ -24,12 +24,8 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`Bitmap(id=10, frame=f)`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if chunks := res[0].(*pilosa.Bitmap).Chunks(); len(chunks) != 2 {
-		t.Fatalf("unexpected chunk length: %s", spew.Sdump(chunks))
-	} else if chunks[0].Value[0] != 8 {
-		t.Fatalf("unexpected chunk(0): %s", spew.Sdump(chunks[0]))
-	} else if chunks[1].Value[0] != 2 {
-		t.Fatalf("unexpected chunk(1): %s", spew.Sdump(chunks[1]))
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
+		t.Fatalf("unexpected bits: %+v", bits)
 	} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": uint64(123)}) {
 		t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 	}
@@ -43,14 +39,13 @@ func TestExecutor_Execute_Difference(t *testing.T) {
 	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 2)
 	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 3)
 	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(11, 2)
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(11, 4)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`Difference(Bitmap(id=10), Bitmap(id=11))`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if chunks := res[0].(*pilosa.Bitmap).Chunks(); len(chunks) != 1 {
-		t.Fatalf("unexpected chunk length: %s", spew.Sdump(chunks))
-	} else if chunks[0].Value[0] != 10 { // b1010
-		t.Fatalf("unexpected chunk(0): %s", spew.Sdump(chunks[0]))
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{1, 3}) {
+		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
 
@@ -69,12 +64,8 @@ func TestExecutor_Execute_Intersect(t *testing.T) {
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`Intersect(Bitmap(id=10), Bitmap(id=11))`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if chunks := res[0].(*pilosa.Bitmap).Chunks(); len(chunks) != 2 {
-		t.Fatalf("unexpected chunk length: %s", spew.Sdump(chunks))
-	} else if chunks[0].Value[0] != 2 {
-		t.Fatalf("unexpected chunk(0): %s", spew.Sdump(chunks[0]))
-	} else if chunks[1].Value[0] != 4 {
-		t.Fatalf("unexpected chunk(1): %s", spew.Sdump(chunks[1]))
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 2}) {
+		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
 
@@ -92,12 +83,8 @@ func TestExecutor_Execute_Union(t *testing.T) {
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute("d", MustParse(`Union(Bitmap(id=10), Bitmap(id=11))`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if chunks := res[0].(*pilosa.Bitmap).Chunks(); len(chunks) != 2 {
-		t.Fatalf("unexpected chunk length: %s", spew.Sdump(chunks))
-	} else if chunks[0].Value[0] != 5 {
-		t.Fatalf("unexpected chunk(0): %s", spew.Sdump(chunks[0]))
-	} else if chunks[1].Value[0] != 6 {
-		t.Fatalf("unexpected chunk(1): %s", spew.Sdump(chunks[1]))
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{0, 2, SliceWidth + 1, SliceWidth + 2}) {
+		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
 
@@ -315,12 +302,8 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	e := NewExecutor(idx.Index, c)
 	if res, err := e.Execute("d", MustParse(`Bitmap(id=10, frame=f)`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if chunks := res[0].(*pilosa.Bitmap).Chunks(); len(chunks) != 3 {
-		t.Fatalf("unexpected chunk length: %s", spew.Sdump(chunks))
-	} else if chunks[0].Value[0] != 6 {
-		t.Fatalf("unexpected chunk(0): %s", spew.Sdump(chunks[0]))
-	} else if chunks[1].Value[0] != 2 {
-		t.Fatalf("unexpected chunk(1): %s", spew.Sdump(chunks[1]))
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{1, 2, (1 * SliceWidth) + 1, 2*SliceWidth + 4}) {
+		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
 
