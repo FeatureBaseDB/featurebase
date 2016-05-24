@@ -29,10 +29,6 @@
 			"Rev": "d781998583680cda80cf61e0b37dd0cd8da2eb52"
 		},
 		{
-			"ImportPath": "github.com/yasushi-saito/rbtree",
-			"Rev": "571e2538414bf914c7e2909b61217b4e3e5508f4"
-		},
-		{
 			"ImportPath": "golang.org/x/sys/unix",
 			"Rev": "50c6bc5e4292a1d4e65c6e9be5f53be28bcbe28e"
 		}
