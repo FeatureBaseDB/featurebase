@@ -16,9 +16,14 @@ import (
 	"github.com/yasushi-saito/rbtree"
 )
 
-const CounterMask = uint64(0xffffffffffffffff)
+const (
+	CounterMask = uint64(0xffffffffffffffff)
+)
 
-var CounterKey = int64(-1)
+var (
+	CounterKey  = int64(-1)
+	EMPTY_BLOCK = make(Blocks, 32)
+)
 
 // Bitmap represents a bitmap broken up into Chunks.
 // Internally it is represented as a red-black tree of chunks.
@@ -367,7 +372,7 @@ func (b *Bitmap) Bits() []uint64 {
 func (b *Bitmap) SetBit(i uint64) (changed bool) {
 	address := deref(i)
 
-	chunk := b.Chunk(&Chunk{address.ChunkKey, make(Blocks, 32)})
+	chunk := b.Chunk(&Chunk{address.ChunkKey, EMPTY_BLOCK})
 	if chunk == nil {
 		chunk = &Chunk{address.ChunkKey, make(Blocks, 32)}
 		b.AddChunk(chunk)
@@ -385,7 +390,7 @@ func (b *Bitmap) SetBit(i uint64) (changed bool) {
 func (b *Bitmap) ClearBit(i uint64) (changed bool) {
 	address := deref(i)
 
-	chunk := b.Chunk(&Chunk{address.ChunkKey, make(Blocks, 32)})
+	chunk := b.Chunk(&Chunk{address.ChunkKey, EMPTY_BLOCK})
 	if chunk == nil {
 		return false
 	}
