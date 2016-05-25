@@ -229,8 +229,8 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
-	} else if a := resp.Results[0].GetBitmap().GetChunks(); len(a) != 2 {
-		t.Fatalf("unexpected bitmap chunk length: %d", len(a))
+	} else if bits := resp.Results[0].GetBitmap().GetBits(); !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
+		t.Fatalf("unexpected bits: %+v", bits)
 	} else if attrs := resp.Results[0].GetBitmap().GetAttrs(); len(attrs) != 3 {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
 	} else if k, v := attrs[0].GetKey(), attrs[0].GetStringValue(); k != "a" || v != "b" {
@@ -286,8 +286,8 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if a := resp.Results[0].GetBitmap().GetChunks(); len(a) != 2 {
-		t.Fatalf("unexpected bitmap chunk length: %d", len(a))
+	if bits := resp.Results[0].GetBitmap().GetBits(); !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
+		t.Fatalf("unexpected bits: %+v", bits)
 	} else if attrs := resp.Results[0].GetBitmap().GetAttrs(); len(attrs) != 3 {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
 	} else if k, v := attrs[0].GetKey(), attrs[0].GetStringValue(); k != "a" || v != "b" {

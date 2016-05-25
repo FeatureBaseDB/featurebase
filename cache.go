@@ -10,10 +10,10 @@ import (
 	"github.com/umbel/pilosa/internal"
 )
 
-// Cache represents a cache for bitmaps.
+// Cache represents a cache for bitmap counts.
 type Cache interface {
-	Add(bitmapID uint64, bm *Bitmap)
-	Get(bitmapID uint64) *Bitmap
+	Add(bitmapID uint64, n uint64)
+	Get(bitmapID uint64) uint64
 	Len() int
 
 	// Returns a list of all bitmap IDs.
@@ -28,33 +28,30 @@ type Cache interface {
 
 // LRUCache represents a least recently used Cache implemenation.
 type LRUCache struct {
-	cache   *lru.Cache
-	bitmaps map[uint64]*Bitmap
+	cache  *lru.Cache
+	counts map[uint64]uint64
 }
 
 // NewLRUCache returns a new instance of LRUCache.
 func NewLRUCache(maxEntries int) *LRUCache {
 	c := &LRUCache{
-		cache:   lru.New(maxEntries),
-		bitmaps: make(map[uint64]*Bitmap),
+		cache:  lru.New(maxEntries),
+		counts: make(map[uint64]uint64),
 	}
 	c.cache.OnEvicted = c.onEvicted
 	return c
 }
 
 // Add adds a bitmap to the cache.
-func (c *LRUCache) Add(bitmapID uint64, bm *Bitmap) {
-	c.cache.Add(bitmapID, bm)
-	c.bitmaps[bitmapID] = bm
+func (c *LRUCache) Add(bitmapID, n uint64) {
+	c.cache.Add(bitmapID, n)
+	c.counts[bitmapID] = n
 }
 
 // Get returns a bitmap with a given id.
-func (c *LRUCache) Get(bitmapID uint64) *Bitmap {
-	bm, ok := c.cache.Get(bitmapID)
-	if !ok {
-		return nil
-	}
-	return bm.(*Bitmap)
+func (c *LRUCache) Get(bitmapID uint64) uint64 {
+	n, _ := c.cache.Get(bitmapID)
+	return n.(uint64)
 }
 
 // Len returns the number of items in the cache.
@@ -65,35 +62,35 @@ func (c *LRUCache) Invalidate() {}
 
 // BitmapIDs returns a list of all bitmap IDs in the cache.
 func (c *LRUCache) BitmapIDs() []uint64 {
-	a := make([]uint64, 0, len(c.bitmaps))
-	for id := range c.bitmaps {
+	a := make([]uint64, 0, len(c.counts))
+	for id := range c.counts {
 		a = append(a, id)
 	}
 	sort.Sort(uint64Slice(a))
 	return a
 }
 
-// Top returns all bitmaps in the cache.
+// Top returns all counts in the cache.
 func (c *LRUCache) Top() []BitmapPair {
-	a := make([]BitmapPair, 0, len(c.bitmaps))
-	for id, bm := range c.bitmaps {
+	a := make([]BitmapPair, 0, len(c.counts))
+	for id, n := range c.counts {
 		a = append(a, BitmapPair{
-			ID:     id,
-			Bitmap: bm,
+			ID:    id,
+			Count: uint64(n),
 		})
 	}
 	sort.Sort(BitmapPairs(a))
 	return a
 }
 
-func (c *LRUCache) onEvicted(key lru.Key, _ interface{}) { delete(c.bitmaps, key.(uint64)) }
+func (c *LRUCache) onEvicted(key lru.Key, _ interface{}) { delete(c.counts, key.(uint64)) }
 
 // Ensure LRUCache implements Cache.
 var _ Cache = &LRUCache{}
 
 // RankCache represents a cache with sorted entries.
 type RankCache struct {
-	entries  map[uint64]*Bitmap
+	entries  map[uint64]uint64
 	rankings []BitmapPair // cached, ordered list
 
 	updateN    int
@@ -107,25 +104,25 @@ type RankCache struct {
 // NewRankCache returns a new instance of RankCache.
 func NewRankCache() *RankCache {
 	return &RankCache{
-		entries: make(map[uint64]*Bitmap),
+		entries: make(map[uint64]uint64),
 	}
 }
 
 // Add adds a bitmap to the cache.
-func (c *RankCache) Add(bitmapID uint64, bm *Bitmap) {
+func (c *RankCache) Add(bitmapID uint64, n uint64) {
 	// Ignore if the bit count on the bitmap is below the threshold.
-	if bm.Count() < c.ThresholdValue {
+	if n < c.ThresholdValue {
 		return
 	}
 
 	// Add to cache.
-	c.entries[bitmapID] = bm
+	c.entries[bitmapID] = n
 
 	// If size is larger than the threshold then trim it.
 	if len(c.entries) > c.ThresholdLength {
 		c.update()
-		for id, bm := range c.entries {
-			if bm.Count() <= c.ThresholdValue {
+		for id, n := range c.entries {
+			if n <= c.ThresholdValue {
 				delete(c.entries, id)
 			}
 		}
@@ -133,7 +130,7 @@ func (c *RankCache) Add(bitmapID uint64, bm *Bitmap) {
 }
 
 // Get returns a bitmap with a given id.
-func (c *RankCache) Get(bitmapID uint64) *Bitmap { return c.entries[bitmapID] }
+func (c *RankCache) Get(bitmapID uint64) uint64 { return c.entries[bitmapID] }
 
 // Len returns the number of items in the cache.
 func (c *RankCache) Len() int { return len(c.entries) }
@@ -160,10 +157,10 @@ func (c *RankCache) Invalidate() {
 func (c *RankCache) update() {
 	// Convert cache to a sorted list.
 	rankings := make([]BitmapPair, 0, len(c.entries))
-	for id, bm := range c.entries {
+	for id, n := range c.entries {
 		rankings = append(rankings, BitmapPair{
-			ID:     id,
-			Bitmap: bm,
+			ID:    id,
+			Count: n,
 		})
 	}
 	sort.Sort(BitmapPairs(rankings))
@@ -171,7 +168,7 @@ func (c *RankCache) update() {
 	// Store the count of the item at the threshold index.
 	c.rankings = rankings
 	if len(c.rankings) > c.ThresholdIndex {
-		c.ThresholdValue = rankings[c.ThresholdIndex].Bitmap.Count()
+		c.ThresholdValue = rankings[c.ThresholdIndex].Count
 	} else {
 		c.ThresholdValue = 1
 	}
@@ -198,8 +195,8 @@ var _ Cache = &RankCache{}
 
 // BitmapPair represents a bitmap with an associated identifier.
 type BitmapPair struct {
-	ID     uint64
-	Bitmap *Bitmap
+	ID    uint64
+	Count uint64
 }
 
 // BitmapPairs is a sortable list of BitmapPair objects.
@@ -207,7 +204,7 @@ type BitmapPairs []BitmapPair
 
 func (p BitmapPairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p BitmapPairs) Len() int           { return len(p) }
-func (p BitmapPairs) Less(i, j int) bool { return p[i].Bitmap.Count() > p[j].Bitmap.Count() }
+func (p BitmapPairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
 type Pair struct {
 	Key   uint64 `json:"key"`

@@ -323,11 +323,6 @@ func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
 }
 
 func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
-	// Read from cache.
-	if bm := f.cache.Get(bitmapID); bm != nil {
-		return bm
-	}
-
 	// Read bitmap from storage.
 	bm := NewBitmap()
 	f.storage.ForEachRange(bitmapID*SliceWidth, (bitmapID+1)*SliceWidth, func(i uint64) {
@@ -335,8 +330,8 @@ func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 		bm.SetBit(profileID)
 	})
 
-	// Add to the cache.
-	f.cache.Add(bitmapID, bm)
+	// Update cache.
+	f.cache.Add(bitmapID, bm.Count())
 
 	return bm
 }
@@ -462,10 +457,10 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 	// Iterate over rankings and add to results until we have enough.
 	results := make([]Pair, 0, opt.N)
 	for _, pair := range pairs {
-		bitmapID, bm := pair.ID, pair.Bitmap
+		bitmapID, n := pair.ID, pair.Count
 
 		// Ignore empty bitmaps.
-		if bm.Count() <= 0 {
+		if n <= 0 {
 			continue
 		}
 
@@ -486,9 +481,9 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		// The initial n pairs should simply be added to the results.
 		if opt.N == 0 || len(results) < opt.N {
 			// Calculate count and append.
-			count := bm.Count()
+			count := n
 			if opt.Src != nil {
-				count = opt.Src.IntersectionCount(bm)
+				count = opt.Src.IntersectionCount(f.Bitmap(bitmapID))
 			}
 			if count == 0 {
 				continue
@@ -516,13 +511,13 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 		// If the bitmap doesn't have enough bits set before the intersection
 		// then we can assume that any remaing bitmaps also have a count too low.
-		if bm.Count() < threshold {
+		if n < threshold {
 			break
 		}
 
 		// Calculate the intersecting bit count and skip if it's below our
 		// last bitmap in our current result set.
-		count := opt.Src.IntersectionCount(bm)
+		count := opt.Src.IntersectionCount(f.Bitmap(bitmapID))
 		if count < threshold {
 			continue
 		}
@@ -553,8 +548,8 @@ func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
 	pairs := make([]BitmapPair, len(bitmapIDs))
 	for i, bitmapID := range bitmapIDs {
 		pairs[i] = BitmapPair{
-			ID:     bitmapID,
-			Bitmap: f.Bitmap(bitmapID),
+			ID:    bitmapID,
+			Count: f.Bitmap(bitmapID).Count(),
 		}
 	}
 	return pairs

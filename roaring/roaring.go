@@ -308,7 +308,11 @@ func (b *Bitmap) writeOp(op *op) error {
 }
 
 // Iterator returns a new iterator for the bitmap.
-func (b *Bitmap) Iterator() *Iterator { return &Iterator{bitmap: b} }
+func (b *Bitmap) Iterator() *Iterator {
+	itr := &Iterator{bitmap: b}
+	itr.Seek(0)
+	return itr
+}
 
 // Iterator represents an iterator over a Bitmap.
 type Iterator struct {
@@ -408,6 +412,56 @@ func (itr *Iterator) peek() uint64 {
 		return uint64(key)<<16 | uint64(c.array[itr.j])
 	}
 	return uint64(key)<<16 | uint64(itr.j)
+}
+
+// BufIterator wraps an iterator to provide the ability to unread values.
+type BufIterator struct {
+	buf struct {
+		v    uint64
+		eof  bool
+		full bool
+	}
+	itr *Iterator
+}
+
+// NewBufIterator returns a buffered iterator that wraps itr.
+func NewBufIterator(itr *Iterator) *BufIterator {
+	return &BufIterator{itr: itr}
+}
+
+// Seek moves to the first pair equal to or greater than pseek/bseek.
+func (itr *BufIterator) Seek(v uint64) {
+	itr.buf.full = false
+	itr.itr.Seek(v)
+}
+
+// Next returns the next pair in the bitmap.
+// If a value has been buffered then it is returned and the buffer is cleared.
+func (itr *BufIterator) Next() (v uint64, eof bool) {
+	if itr.buf.full {
+		itr.buf.full = false
+		return itr.buf.v, itr.buf.eof
+	}
+
+	// Read value onto buffer in case of unread.
+	itr.buf.v, itr.buf.eof = itr.itr.Next()
+	return itr.buf.v, itr.buf.eof
+}
+
+// Peek reads the next value but leaves it on the buffer.
+func (itr *BufIterator) Peek() (v uint64, eof bool) {
+	v, eof = itr.Next()
+	itr.Unread()
+	return
+}
+
+// Unread pushes previous pair on to the buffer.
+// Panics if the buffer is already full.
+func (itr *BufIterator) Unread() {
+	if itr.buf.full {
+		panic("roaring.BufIterator: buffer full")
+	}
+	itr.buf.full = true
 }
 
 // The maximum size of array containers.
