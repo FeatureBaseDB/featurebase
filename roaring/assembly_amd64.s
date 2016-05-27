@@ -1,0 +1,21 @@
+#include "textflag.h"
+
+TEXT ·hasAsm(SB),4,$0
+	MOVQ $1, AX
+	CPUID
+	SHRQ $23, CX
+	ANDQ $1, CX
+	MOVB CX, ret+0(FP)
+	RET
+
+TEXT ·POPCNTQ(SB),NOSPLIT,$0-8
+	MOVQ x+0(FP), BP
+	POPCNTQ BP, BX
+	MOVQ BX, ret+8(FP)
+	RET
+
+TEXT ·BSFQ(SB),NOSPLIT,$0-8
+	MOVQ x+0(FP), BP
+	BSFQ BP, BX
+	MOVQ BX, ret+8(FP)
+	RET
