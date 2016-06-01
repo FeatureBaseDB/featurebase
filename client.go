@@ -176,7 +176,7 @@ func (c *Client) Import(db, frame string, slice uint64, bits []Bit) error {
 		return ErrFrameRequired
 	}
 
-	buf, err := ImportPayload(db, frame, slice, bits)
+	buf, err := MarshalImportPayload(db, frame, slice, bits)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -198,7 +198,7 @@ func (c *Client) Import(db, frame string, slice uint64, bits []Bit) error {
 	return nil
 }
 
-func ImportPayload(db, frame string, slice uint64, bits []Bit) ([]byte, error) {
+func MarshalImportPayload(db, frame string, slice uint64, bits []Bit) ([]byte, error) {
 	// Separate bitmap and profile IDs to reduce allocations.
 	bitmapIDs := Bits(bits).BitmapIDs()
 	profileIDs := Bits(bits).ProfileIDs()
