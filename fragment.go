@@ -821,9 +821,11 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 	// Process every bit.
 	// If an error occurs then reopen the storage.
 	if err := func() error {
+		last_id := uint64(0)
+		bm_counter := uint64(0)
+		var bitmap *Bitmap
 		for i := range bitmapIDs {
 			bitmapID, profileID := bitmapIDs[i], profileIDs[i]
-
 			// Determine the position of the bit in the storage.
 			pos, err := f.pos(bitmapID, profileID)
 			if err != nil {
@@ -835,11 +837,24 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 				return err
 			}
 
+			// import optimization to avoid linear foreach calls
+			// slight risk of concurrent cache counter being off but
+			// no real danger
+			if bitmapID != last_id {
+				bitmap = f.bitmap(bitmapID)
+				if last_id != 0 {
+					f.cache.Add(last_id, bm_counter)
+				}
+				bm_counter = bitmap.Count()
+				last_id = bitmapID
+			}
+
 			// Invalidate block checksum.
 			delete(f.checksums, int(bitmapID/HashBlockSize))
-
+			if bitmap.SetBit(profileID) {
+				bm_counter += 1
+			}
 			// Update the cache.
-			f.bitmap(bitmapID).SetBit(profileID)
 		}
 		return nil
 	}(); err != nil {
