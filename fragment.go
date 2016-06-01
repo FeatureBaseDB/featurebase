@@ -25,7 +25,7 @@ import (
 
 const (
 	// SliceWidth is the number of profile IDs in a slice.
-	SliceWidth = 65536
+	SliceWidth = 2097152
 
 	// SnapshotExt is the file extension used for an in-process snapshot.
 	SnapshotExt = ".snapshotting"
@@ -821,9 +821,11 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 	// Process every bit.
 	// If an error occurs then reopen the storage.
 	if err := func() error {
+		lastID := uint64(0)
+		bmCounter := uint64(0)
+		var bitmap *Bitmap
 		for i := range bitmapIDs {
 			bitmapID, profileID := bitmapIDs[i], profileIDs[i]
-
 			// Determine the position of the bit in the storage.
 			pos, err := f.pos(bitmapID, profileID)
 			if err != nil {
@@ -835,11 +837,24 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 				return err
 			}
 
+			// import optimization to avoid linear foreach calls
+			// slight risk of concurrent cache counter being off but
+			// no real danger
+			if i == 0 || bitmapID != lastID {
+				bitmap = f.bitmap(bitmapID)
+				if i != 0 {
+					f.cache.Add(lastID, bmCounter)
+				}
+				bmCounter = bitmap.Count()
+				lastID = bitmapID
+			}
+
 			// Invalidate block checksum.
 			delete(f.checksums, int(bitmapID/HashBlockSize))
-
+			if bitmap.SetBit(profileID) {
+				bmCounter += 1
+			}
 			// Update the cache.
-			f.bitmap(bitmapID).SetBit(profileID)
 		}
 		return nil
 	}(); err != nil {

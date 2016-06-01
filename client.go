@@ -176,12 +176,29 @@ func (c *Client) Import(db, frame string, slice uint64, bits []Bit) error {
 		return ErrFrameRequired
 	}
 
+	buf, err := MarshalImportPayload(db, frame, slice, bits)
+	if err != nil {
+		return fmt.Errorf("Error Creating Payload: %s", err)
+	}
+
 	// Retrieve a list of nodes that own the slice.
 	nodes, err := c.SliceNodes(slice)
+
 	if err != nil {
 		return fmt.Errorf("slice nodes: %s", err)
 	}
 
+	// Import to each node.
+	for _, node := range nodes {
+		if err := c.importNode(node, buf); err != nil {
+			return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+		}
+	}
+
+	return nil
+}
+
+func MarshalImportPayload(db, frame string, slice uint64, bits []Bit) ([]byte, error) {
 	// Separate bitmap and profile IDs to reduce allocations.
 	bitmapIDs := Bits(bits).BitmapIDs()
 	profileIDs := Bits(bits).ProfileIDs()
@@ -195,17 +212,9 @@ func (c *Client) Import(db, frame string, slice uint64, bits []Bit) error {
 		ProfileIDs: profileIDs,
 	})
 	if err != nil {
-		return fmt.Errorf("marshal import request: %s", err)
+		return nil, fmt.Errorf("marshal import request: %s", err)
 	}
-
-	// Import to each node.
-	for _, node := range nodes {
-		if err := c.importNode(node, buf); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
-		}
-	}
-
-	return nil
+	return buf, nil
 }
 
 // importNode sends a pre-marshaled import request to a node.
