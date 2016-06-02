@@ -38,27 +38,7 @@ func (b *Bitmap) Merge(other *Bitmap) {
 
 // IntersectionCount returns the number of intersections between b and other.
 func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
-	// OPTIMIZE: Implement roaring.Bitmap.IntersectionCount()
-
-	itr0 := roaring.NewBufIterator(b.data.Iterator())
-	itr1 := roaring.NewBufIterator(other.data.Iterator())
-
-	var n uint64
-	for {
-		v0, eof0 := itr0.Next()
-		v1, eof1 := itr1.Next()
-
-		if eof0 || eof1 {
-			break
-		} else if v0 < v1 {
-			itr1.Unread()
-		} else if v0 > v1 {
-			itr0.Unread()
-		} else {
-			n++
-		}
-	}
-	return n
+	return b.data.IntersectionCount(&other.data)
 }
 
 // Intersect returns the itersection of b and other.

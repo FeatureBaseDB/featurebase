@@ -185,6 +185,23 @@ func (b *Bitmap) insertAt(key uint64, c *container, i int) {
 	b.containers[i] = c
 }
 
+// IntersectionCount returns the number of intersections between b and other.
+func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
+	var n uint64
+	for i, j := 0, 0; i < len(b.containers) && i < len(other.containers); {
+		ki, kj := b.keys[i], other.keys[j]
+		if ki < kj {
+			i++
+		} else if ki > kj {
+			j++
+		} else {
+			n += intersectionCount(b.containers[i], other.containers[j])
+			i, j = i+1, j+1
+		}
+	}
+	return n
+}
+
 // WriteTo writes b to w.
 func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	// Build header before writing individual container blocks.
@@ -693,6 +710,64 @@ func (c *container) size() int {
 	return len(c.bitmap) * 8
 }
 
+func intersectionCount(a, b *container) uint64 {
+	if a.isArray() {
+		if b.isArray() {
+			return intersectionCountArrayArray(a, b)
+		} else {
+			return intersectionCountArrayBitmap(a, b)
+		}
+	} else {
+		if b.isArray() {
+			return intersectionCountArrayBitmap(b, a)
+		} else {
+			return intersectionCountBitmapBitmap(a, b)
+		}
+	}
+}
+
+func intersectionCountArrayArray(a, b *container) (n uint64) {
+	na, nb := len(a.array), len(b.array)
+	for i, j := 0, 0; i < na && j < nb; {
+		va, vb := a.array[i], b.array[j]
+		if va < vb {
+			i++
+		} else if va > vb {
+			j++
+		} else {
+			n++
+			i, j = i+1, j+1
+		}
+	}
+	return n
+}
+
+func intersectionCountArrayBitmap(a, b *container) (n uint64) {
+	itr := newBufIterator(newBitmapIterator(b.bitmap))
+	for i := 0; i < len(a.array); {
+		va := a.array[i]
+		vb, eof := itr.next()
+		if eof {
+			break
+		}
+
+		if va < vb {
+			i++
+			itr.unread()
+		} else if va > vb {
+			// nop
+		} else {
+			n++
+			i++
+		}
+	}
+	return n
+}
+
+func intersectionCountBitmapBitmap(a, b *container) (n uint64) {
+	return popcntAndSliceGo(a.bitmap, b.bitmap)
+}
+
 // opType represents a type of operation.
 type opType uint8
 
@@ -870,4 +945,80 @@ func popcount(x uint64) (n uint64) {
 	x &= 0x0f0f0f0f0f0f0f0f
 	x *= 0x0101010101010101
 	return x >> 56
+}
+
+// bitmapIterator represents an iterator over container bitmap values.
+type bitmapIterator struct {
+	bitmap []uint64
+	i      int
+}
+
+func newBitmapIterator(bitmap []uint64) *bitmapIterator {
+	return &bitmapIterator{
+		bitmap: bitmap,
+		i:      -1,
+	}
+}
+
+// next returns the next value in the bitmap.
+// Returns eof as true if there are no values left in the iterator.
+func (itr *bitmapIterator) next() (v uint16, eof bool) {
+	if itr.i+1 >= len(itr.bitmap)*64 {
+		return 0, true
+	}
+	itr.i++
+
+	// Find first non-zero bit in current bitmap, if possible.
+	hb := int(itr.i / 64)
+	lb := itr.bitmap[hb] >> (uint(itr.i) % 64)
+	if lb != 0 {
+		itr.i = int(itr.i) + trailingZeroN(lb)
+		return uint16(itr.i), false
+	}
+
+	// Otherwise iterate through remaining bitmaps to find next bit.
+	for hb++; hb < len(itr.bitmap); hb++ {
+		if itr.bitmap[hb] != 0 {
+			itr.i = int(hb*64) + trailingZeroN(itr.bitmap[hb])
+			return uint16(itr.i), false
+		}
+	}
+
+	return 0, true
+}
+
+// bufBitmapIterator wraps an iterator to provide the ability to unread values.
+type bufBitmapIterator struct {
+	buf struct {
+		v    uint16
+		eof  bool
+		full bool
+	}
+	itr *bitmapIterator
+}
+
+// newBufBitmapIterator returns a buffered iterator that wraps a bitmapIterator.
+func newBufIterator(itr *bitmapIterator) *bufBitmapIterator {
+	return &bufBitmapIterator{itr: itr}
+}
+
+// next returns the next pair in the bitmap.
+// If a value has been buffered then it is returned and the buffer is cleared.
+func (itr *bufBitmapIterator) next() (v uint16, eof bool) {
+	if itr.buf.full {
+		itr.buf.full = false
+		return itr.buf.v, itr.buf.eof
+	}
+
+	// Read value onto buffer in case of unread.
+	itr.buf.v, itr.buf.eof = itr.itr.next()
+	return itr.buf.v, itr.buf.eof
+}
+
+// unread pushes previous pair on to the buffer. Panics if the buffer is already full.
+func (itr *bufBitmapIterator) unread() {
+	if itr.buf.full {
+		panic("roaring.bufBitmapIterator: buffer full")
+	}
+	itr.buf.full = true
 }

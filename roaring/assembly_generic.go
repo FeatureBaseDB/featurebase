@@ -1,6 +1,6 @@
 // +build !amd64
 
-package pilosa
+package roaring
 
 func popcntSlice(s []uint64) uint64        { return popcntSliceGo(s) }
 func popcntMaskSlice(s, m []uint64) uint64 { return popcntMaskSliceGo(s, m) }
