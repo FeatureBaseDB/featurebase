@@ -80,6 +80,55 @@ func TestBitmap_Max(t *testing.T) {
 	}
 }
 
+// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+func TestBitmap_IntersectionCount_ArrayArray(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 1000001, 1000002, 1000003)
+	bm1 := roaring.NewBitmap(0, 50000, 1000001, 1000002)
+
+	if n := bm0.IntersectionCount(bm1); n != 3 {
+		t.Fatalf("unexpected n: %d", n)
+	} else if n := bm1.IntersectionCount(bm0); n != 3 {
+		t.Fatalf("unexpected n (reverse): %d", n)
+	}
+}
+
+// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+func TestBitmap_IntersectionCount_ArrayBitmap(t *testing.T) {
+	bm0 := roaring.NewBitmap(1, 70, 200, 4097, 4098)
+	bm1 := roaring.NewBitmap()
+	for i := uint64(0); i <= 10000; i += 2 {
+		bm1.Add(i)
+	}
+
+	if n := bm0.IntersectionCount(bm1); n != 3 {
+		t.Fatalf("unexpected n: %d", n)
+	} else if n := bm1.IntersectionCount(bm0); n != 3 {
+		t.Fatalf("unexpected n (reverse): %d", n)
+	}
+}
+
+// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+func TestBitmap_IntersectionCount_BitmapBitmap(t *testing.T) {
+	bm0 := roaring.NewBitmap()
+	bm1 := roaring.NewBitmap()
+	for i := uint64(0); i <= 10000; i += 2 {
+		bm0.Add(i)
+		bm1.Add(i + 1)
+	}
+
+	bm0.Add(1000)
+	bm1.Add(1000)
+
+	bm0.Add(2000)
+	bm1.Add(2000)
+
+	if n := bm0.IntersectionCount(bm1); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	} else if n := bm1.IntersectionCount(bm0); n != 2 {
+		t.Fatalf("unexpected n (reverse): %d", n)
+	}
+}
+
 func TestBitmap_Quick_Array1(t *testing.T)     { testBitmapQuick(t, 1000, 1000, 2000) }
 func TestBitmap_Quick_Array2(t *testing.T)     { testBitmapQuick(t, 10000, 0, 1000) }
 func TestBitmap_Quick_Bitmap1(t *testing.T)    { testBitmapQuick(t, 10000, 0, 10000) }
