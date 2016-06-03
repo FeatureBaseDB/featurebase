@@ -1,10 +1,8 @@
 // +build amd64
 
-package pilosa
+package roaring
 
 //go:noescape
-
-func hasAsm() bool
 
 var useAsm = hasAsm()
 
