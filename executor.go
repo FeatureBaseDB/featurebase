@@ -71,7 +71,6 @@ func (e *Executor) Execute(db string, q *pql.Query, slices []uint64, opt *ExecOp
 		}
 		results = append(results, v)
 	}
-
 	return results, nil
 }
 
