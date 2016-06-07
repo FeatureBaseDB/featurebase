@@ -1171,7 +1171,7 @@ type FragmentSyncer struct {
 // then merges any blocks which have differences.
 func (s *FragmentSyncer) SyncFragment() error {
 	// Determine replica set.
-	nodes := s.Cluster.SliceNodes(s.Fragment.Slice())
+	nodes := s.Cluster.FragmentNodes(s.Fragment.DB(), s.Fragment.Slice())
 
 	// Create a set of blocks.
 	blockSets := make([][]FragmentBlock, 0, len(nodes))
@@ -1247,7 +1247,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	// Read pairs from each remote block.
 	var pairSets []PairSet
 	var clients []*Client
-	for _, node := range s.Cluster.SliceNodes(f.Slice()) {
+	for _, node := range s.Cluster.FragmentNodes(f.DB(), f.Slice()) {
 		if s.Host == node.Host {
 			continue
 		}
