@@ -398,12 +398,14 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the correct fragment.
+	h.logger().Println("Go Import:", db, frame, slice)
 	f, err := h.Index.CreateFragmentIfNotExists(db, frame, slice)
 	if err != nil {
 		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%d, err=%s", db, frame, slice, err)
 		http.Error(w, "fragment error", http.StatusInternalServerError)
 		return
 	}
+	h.logger().Println("Import into Fragment:", db, frame, slice, len(reg.GetProfileIDs()))
 
 	// Import into fragment.
 	err = f.Import(req.GetBitmapIDs(), req.GetProfileIDs())

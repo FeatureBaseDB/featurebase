@@ -638,6 +638,9 @@ func (c *container) max() uint16 {
 }
 
 func (c *container) arrayMax() uint16 {
+	if len(c.array) == 0 {
+		return 0 //probably hiding some ugly bug but it prevents a crash
+	}
 	return c.array[len(c.array)-1]
 }
 

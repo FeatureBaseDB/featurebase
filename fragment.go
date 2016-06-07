@@ -854,8 +854,8 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			if bitmap.SetBit(profileID) {
 				bmCounter += 1
 			}
-			// Update the cache.
 		}
+		f.cache.Invalidate()
 		return nil
 	}(); err != nil {
 		_ = f.closeStorage()
