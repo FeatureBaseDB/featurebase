@@ -90,14 +90,14 @@ func (c *Client) Schema() ([]*DBInfo, error) {
 	return rsp.DBs, nil
 }
 
-// SliceNodes returns a list of nodes that own a slice.
-func (c *Client) SliceNodes(slice uint64) ([]*Node, error) {
+// FragmentNodes returns a list of nodes that own a slice.
+func (c *Client) FragmentNodes(slice uint64) ([]*Node, error) {
 	// Execute request against the host.
 	u := url.URL{
 		Scheme:   "http",
 		Host:     c.host,
-		Path:     "/slices/nodes",
-		RawQuery: (url.Values{"slice": {strconv.FormatUint(slice, 10)}}).Encode(),
+		Path:     "/fragment/nodes",
+		RawQuery: (url.Values{"db": {"d"}, "slice": {strconv.FormatUint(slice, 10)}}).Encode(),
 	}
 	resp, err := c.HTTPClient.Get(u.String())
 	if err != nil {
@@ -182,7 +182,7 @@ func (c *Client) Import(db, frame string, slice uint64, bits []Bit) error {
 	}
 
 	// Retrieve a list of nodes that own the slice.
-	nodes, err := c.SliceNodes(slice)
+	nodes, err := c.FragmentNodes(slice)
 
 	if err != nil {
 		return fmt.Errorf("slice nodes: %s", err)
@@ -327,7 +327,7 @@ func (c *Client) backupSliceTo(tw *tar.Writer, db, frame string, slice uint64) e
 // This function tries slice owners until one succeeds.
 func (c *Client) BackupSlice(db, frame string, slice uint64) (io.ReadCloser, error) {
 	// Retrieve a list of nodes that own the slice.
-	nodes, err := c.SliceNodes(slice)
+	nodes, err := c.FragmentNodes(slice)
 	if err != nil {
 		return nil, fmt.Errorf("slice nodes: %s", err)
 	}
@@ -418,7 +418,7 @@ func (c *Client) RestoreFrom(r io.Reader, db, frame string) error {
 // restoreSliceFrom restores a single slice to all owning nodes.
 func (c *Client) restoreSliceFrom(buf []byte, db, frame string, slice uint64) error {
 	// Retrieve a list of nodes that own the slice.
-	nodes, err := c.SliceNodes(slice)
+	nodes, err := c.FragmentNodes(slice)
 	if err != nil {
 		return fmt.Errorf("slice nodes: %s", err)
 	}

@@ -102,7 +102,7 @@ func (e *Executor) executeCall(db string, c pql.Call, slices []uint64, opt *Exec
 // executeBitmapCall executes a call that returns a bitmap.
 func (e *Executor) executeBitmapCall(db string, c pql.BitmapCall, slices []uint64, opt *ExecOptions) (*Bitmap, error) {
 	other := NewBitmap()
-	for node, nodeSlices := range e.slicesByNode(slices) {
+	for node, nodeSlices := range e.slicesByNode(db, slices) {
 		// Execute locally if the hostname matches.
 		if node.Host == e.Host {
 			for _, slice := range nodeSlices {
@@ -183,7 +183,7 @@ func (e *Executor) executeTopN(db string, c *pql.TopN, slices []uint64, opt *Exe
 
 func (e *Executor) executeTopNSlices(db string, c *pql.TopN, slices []uint64, opt *ExecOptions) ([]Pair, error) {
 	var results []Pair
-	for node, nodeSlices := range e.slicesByNode(slices) {
+	for node, nodeSlices := range e.slicesByNode(db, slices) {
 		// Execute locally if the hostname matches.
 		if node.Host == e.Host {
 			for _, slice := range nodeSlices {
@@ -334,7 +334,7 @@ func (e *Executor) executeUnionSlice(db string, c *pql.Union, slice uint64) (*Bi
 // executeCount executes a count() call.
 func (e *Executor) executeCount(db string, c *pql.Count, slices []uint64, opt *ExecOptions) (uint64, error) {
 	var n uint64
-	for node, nodeSlices := range e.slicesByNode(slices) {
+	for node, nodeSlices := range e.slicesByNode(db, slices) {
 		// Execute locally if the hostname matches.
 		if node.Host == e.Host {
 			for _, slice := range nodeSlices {
@@ -367,7 +367,7 @@ func (e *Executor) executeProfile(db string, c *pql.Profile, opt *ExecOptions) (
 func (e *Executor) executeClearBit(db string, c *pql.ClearBit, opt *ExecOptions) (bool, error) {
 	slice := c.ProfileID / SliceWidth
 	ret := false
-	for _, node := range e.Cluster.SliceNodes(slice) {
+	for _, node := range e.Cluster.FragmentNodes(db, slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
 			f, err := e.Index.CreateFragmentIfNotExists(db, c.Frame, slice)
@@ -399,7 +399,7 @@ func (e *Executor) executeSetBit(db string, c *pql.SetBit, opt *ExecOptions) (bo
 	slice := c.ProfileID / SliceWidth
 	ret := false
 
-	for _, node := range e.Cluster.SliceNodes(slice) {
+	for _, node := range e.Cluster.FragmentNodes(db, slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
 			f, err := e.Index.CreateFragmentIfNotExists(db, c.Frame, slice)
@@ -558,10 +558,10 @@ func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64, op
 // slicesByNode returns a mapping of nodes to slices.
 //
 // NOTE: Currently the only primary node is used.
-func (e *Executor) slicesByNode(slices []uint64) map[*Node][]uint64 {
+func (e *Executor) slicesByNode(db string, slices []uint64) map[*Node][]uint64 {
 	m := make(map[*Node][]uint64)
 	for _, slice := range slices {
-		nodes := e.Cluster.SliceNodes(slice)
+		nodes := e.Cluster.FragmentNodes(db, slice)
 
 		node := nodes[0]
 		m[node] = append(m[node], slice)

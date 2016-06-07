@@ -172,7 +172,7 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=d", strings.NewReader("Bitmap(100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,65537]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,2097153]}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -204,7 +204,7 @@ func TestHandler_Query_Bitmap_Profiles_JSON(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=d&profiles=true", strings.NewReader("Bitmap(100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,65537]}],"profiles":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,2097153]}],"profiles":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -473,18 +473,18 @@ func TestHandler_Version(t *testing.T) {
 	}
 }
 
-// Ensure the handler can return a list of nodes for a slice.
-func TestHandler_Slices_Nodes(t *testing.T) {
+// Ensure the handler can return a list of nodes for a fragment.
+func TestHandler_Fragment_Nodes(t *testing.T) {
 	h := NewHandler()
 	h.Cluster = NewCluster(3)
 	h.Cluster.ReplicaN = 2
 
 	w := httptest.NewRecorder()
-	r := MustNewHTTPRequest("GET", "/slices/nodes?slice=0", nil)
+	r := MustNewHTTPRequest("GET", "/fragment/nodes?db=X&slice=0", nil)
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if w.Body.String() != `[{"host":"host2"},{"host":"host0"}]`+"\n" {
+	} else if w.Body.String() != `[{"host":"host1"},{"host":"host2"}]`+"\n" {
 		t.Fatalf("unexpected body: %q", w.Body.String())
 	}
 }
