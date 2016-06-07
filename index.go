@@ -214,7 +214,7 @@ func (s *IndexSyncer) SyncIndex() error {
 		for _, fi := range di.Frames {
 			for slice := uint64(0); slice <= sliceN; slice++ {
 				// Ignore slices that this host doesn't own.
-				if !s.Cluster.OwnsSlice(s.Host, slice) {
+				if !s.Cluster.OwnsFragment(s.Host, di.Name, slice) {
 					continue
 				}
 
