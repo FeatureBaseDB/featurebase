@@ -405,7 +405,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "fragment error", http.StatusInternalServerError)
 		return
 	}
-	h.logger().Println("Import into Fragment:", db, frame, slice, len(reg.GetProfileIDs()))
+	h.logger().Println("Import into Fragment:", db, frame, slice, len(req.GetProfileIDs()))
 
 	// Import into fragment.
 	err = f.Import(req.GetBitmapIDs(), req.GetProfileIDs())
