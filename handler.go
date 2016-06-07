@@ -89,17 +89,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-	case "/slices/nodes":
-		switch r.Method {
-		case "GET":
-			h.handleGetSlicesNodes(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
 	case "/slices/max":
 		switch r.Method {
 		case "GET":
 			h.handleGetSliceMax(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	case "/fragment/nodes":
+		switch r.Method {
+		case "GET":
+			h.handleGetFragmentNodes(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -392,7 +392,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	db, frame, slice := req.GetDB(), req.GetFrame(), req.GetSlice()
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsSlice(h.Host, slice) {
+	if !h.Cluster.OwnsFragment(h.Host, db, slice) {
 		http.Error(w, "host does not own slice", http.StatusPreconditionFailed)
 		return
 	}
@@ -425,9 +425,10 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf)
 }
 
-// handleGetSlicesNodes handles /slices/nodes requests.
-func (h *Handler) handleGetSlicesNodes(w http.ResponseWriter, r *http.Request) {
+// handleGetFragmentNodes handles /fragment/nodes requests.
+func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	db := q.Get("db")
 
 	// Read slice parameter.
 	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
@@ -436,8 +437,8 @@ func (h *Handler) handleGetSlicesNodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Retrieve slice owner nodes.
-	nodes := h.Cluster.SliceNodes(slice)
+	// Retrieve fragment owner nodes.
+	nodes := h.Cluster.FragmentNodes(db, slice)
 
 	// Write to response.
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
@@ -597,7 +598,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	// Loop over each slice and import it if this node owns it.
 	for slice := uint64(0); slice <= sliceN; slice++ {
 		// Ignore this slice if we don't own it.
-		if !h.Cluster.OwnsSlice(h.Host, slice) {
+		if !h.Cluster.OwnsFragment(h.Host, db, slice) {
 			continue
 		}
 
