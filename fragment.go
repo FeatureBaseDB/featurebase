@@ -848,13 +848,14 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 				bmCounter = bitmap.Count()
 				lastID = bitmapID
 			}
-
-			// Invalidate block checksum.
-			delete(f.checksums, int(bitmapID/HashBlockSize))
 			if bitmap.SetBit(profileID) {
 				bmCounter += 1
 			}
+
+			// Invalidate block checksum.
+			delete(f.checksums, int(bitmapID/HashBlockSize))
 		}
+
 		f.cache.Invalidate()
 		return nil
 	}(); err != nil {
