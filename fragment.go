@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"crypto/sha1"
 	"encoding/binary"
@@ -848,13 +849,14 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 				bmCounter = bitmap.Count()
 				lastID = bitmapID
 			}
-
-			// Invalidate block checksum.
-			delete(f.checksums, int(bitmapID/HashBlockSize))
 			if bitmap.SetBit(profileID) {
 				bmCounter += 1
 			}
+
+			// Invalidate block checksum.
+			delete(f.checksums, int(bitmapID/HashBlockSize))
 		}
+
 		f.cache.Invalidate()
 		return nil
 	}(); err != nil {
@@ -905,8 +907,11 @@ func (f *Fragment) snapshot() error {
 	defer file.Close()
 
 	// Write storage to snapshot.
-	if _, err := f.storage.WriteTo(file); err != nil {
+	bw := bufio.NewWriter(file)
+	if _, err := f.storage.WriteTo(bw); err != nil {
 		return fmt.Errorf("snapshot write to: %s", err)
+	} else if err := bw.Flush(); err != nil {
+		return fmt.Errorf("flush: %s", err)
 	}
 
 	// Close current storage.

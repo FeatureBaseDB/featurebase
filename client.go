@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"time"
 
@@ -567,6 +568,16 @@ type Bit struct {
 // Bits represents a slice of bits.
 type Bits []Bit
 
+func (p Bits) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+func (p Bits) Len() int      { return len(p) }
+
+func (p Bits) Less(i, j int) bool {
+	if p[i].BitmapID == p[j].BitmapID {
+		return p[i].ProfileID < p[j].ProfileID
+	}
+	return p[i].BitmapID < p[j].BitmapID
+}
+
 // BitmapIDs returns a slice of all the bitmap IDs.
 func (a Bits) BitmapIDs() []uint64 {
 	other := make([]uint64, len(a))
@@ -592,5 +603,11 @@ func (a Bits) GroupBySlice() map[uint64][]Bit {
 		slice := bit.ProfileID / SliceWidth
 		m[slice] = append(m[slice], bit)
 	}
+
+	for slice, bits := range m {
+		sort.Sort(Bits(bits))
+		m[slice] = bits
+	}
+
 	return m
 }
