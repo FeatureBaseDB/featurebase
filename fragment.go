@@ -25,7 +25,7 @@ import (
 
 const (
 	// SliceWidth is the number of profile IDs in a slice.
-	SliceWidth = 2097152
+	SliceWidth = 1048576
 
 	// SnapshotExt is the file extension used for an in-process snapshot.
 	SnapshotExt = ".snapshotting"
