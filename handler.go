@@ -393,7 +393,8 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 	// Validate that this handler owns the slice.
 	if !h.Cluster.OwnsFragment(h.Host, db, slice) {
-		http.Error(w, "host does not own slice", http.StatusPreconditionFailed)
+		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, db, slice)
+		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
 	}
 
