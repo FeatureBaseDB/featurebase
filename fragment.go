@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"crypto/sha1"
 	"encoding/binary"
@@ -906,8 +907,11 @@ func (f *Fragment) snapshot() error {
 	defer file.Close()
 
 	// Write storage to snapshot.
-	if _, err := f.storage.WriteTo(file); err != nil {
+	bw := bufio.NewWriter(file)
+	if _, err := f.storage.WriteTo(bw); err != nil {
 		return fmt.Errorf("snapshot write to: %s", err)
+	} else if err := bw.Flush(); err != nil {
+		return fmt.Errorf("flush: %s", err)
 	}
 
 	// Close current storage.
