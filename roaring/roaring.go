@@ -126,6 +126,14 @@ func (b *Bitmap) Max() uint64 {
 	return uint64(hb)<<16 | uint64(lb)
 }
 
+// Count returns the number of bits set in the bitmap.
+func (b *Bitmap) Count() (n uint64) {
+	for _, container := range b.containers {
+		n += uint64(container.n)
+	}
+	return n
+}
+
 // Slice returns a slice of all integers in the bitmap.
 func (b *Bitmap) Slice() []uint64 {
 	var a []uint64
@@ -188,7 +196,7 @@ func (b *Bitmap) insertAt(key uint64, c *container, i int) {
 // IntersectionCount returns the number of intersections between b and other.
 func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 	var n uint64
-	for i, j := 0, 0; i < len(b.containers) && i < len(other.containers); {
+	for i, j := 0, 0; i < len(b.containers) && j < len(other.containers); {
 		ki, kj := b.keys[i], other.keys[j]
 		if ki < kj {
 			i++
@@ -200,6 +208,45 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 		}
 	}
 	return n
+}
+
+// Intersect returns the intersection of b and other.
+func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
+	output := &Bitmap{}
+
+	ki, ci := b.keys, b.containers
+	kj, cj := other.keys, other.containers
+
+	for {
+		var key uint64
+		var container *container
+
+		ni, nj := len(ki), len(kj)
+		if ni == 0 && nj == 0 { // eof(i,j)
+			break
+		} else if ni == 0 { // eof(i)
+			key, container = kj[0], cj[0]
+			kj, cj = kj[1:], cj[1:]
+		} else if nj == 0 { // eof(j)
+			key, container = ki[0], ci[0]
+			ki, ci = ki[1:], ci[1:]
+		} else if ki[0] < kj[0] { // i < j
+			key, container = ki[0], ci[0]
+			ki, ci = ki[1:], ci[1:]
+		} else if ki[0] > kj[0] { // i > j
+			key, container = kj[0], cj[0]
+			kj, cj = kj[1:], cj[1:]
+		} else { // i == j
+			key, container = ki[0], intersect(ci[0], cj[0])
+			ki, ci = ki[1:], ci[1:]
+			kj, cj = kj[1:], cj[1:]
+		}
+
+		output.keys = append(output.keys, key)
+		output.containers = append(output.containers, container)
+	}
+
+	return output
 }
 
 // WriteTo writes b to w.
@@ -769,6 +816,89 @@ func intersectionCountArrayBitmap(a, b *container) (n uint64) {
 
 func intersectionCountBitmapBitmap(a, b *container) (n uint64) {
 	return popcntAndSliceGo(a.bitmap, b.bitmap)
+}
+
+func intersect(a, b *container) *container {
+	if a.isArray() {
+		if b.isArray() {
+			return intersectArrayArray(a, b)
+		} else {
+			return intersectArrayBitmap(a, b)
+		}
+	} else {
+		if b.isArray() {
+			return intersectArrayBitmap(b, a)
+		} else {
+			return intersectBitmapBitmap(a, b)
+		}
+	}
+}
+
+func intersectArrayArray(a, b *container) *container {
+	output := &container{}
+	na, nb := len(a.array), len(b.array)
+	for i, j := 0, 0; i < na && j < nb; {
+		va, vb := a.array[i], b.array[j]
+		if va < vb {
+			i++
+		} else if va > vb {
+			j++
+		} else {
+			output.array = append(output.array, va)
+			output.n++
+			i, j = i+1, j+1
+		}
+	}
+	return output
+}
+
+func intersectArrayBitmap(a, b *container) *container {
+	output := &container{}
+	itr := newBufIterator(newBitmapIterator(b.bitmap))
+	for i := 0; i < len(a.array); {
+		va := a.array[i]
+		vb, eof := itr.next()
+		if eof {
+			break
+		}
+
+		if va < vb {
+			i++
+			itr.unread()
+		} else if va > vb {
+			// nop
+		} else {
+			output.add(va)
+			i++
+		}
+	}
+	return output
+}
+
+func intersectBitmapBitmap(a, b *container) *container {
+	output := &container{}
+	itr0 := newBufIterator(newBitmapIterator(a.bitmap))
+	itr1 := newBufIterator(newBitmapIterator(b.bitmap))
+	for {
+		va, eof := itr0.next()
+		if eof {
+			break
+		}
+
+		vb, eof := itr1.next()
+		if eof {
+			break
+		}
+
+		if va < vb {
+			itr1.unread()
+		} else if va > vb {
+			itr0.unread()
+		} else {
+			output.add(va)
+		}
+	}
+	return output
 }
 
 // opType represents a type of operation.
