@@ -43,27 +43,12 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 
 // Intersect returns the itersection of b and other.
 func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
-	// OPTIMIZE: Implement roaring.Bitmap.Intersect()
+	data := b.data.Intersect(&other.data)
 
-	itr0 := roaring.NewBufIterator(b.data.Iterator())
-	itr1 := roaring.NewBufIterator(other.data.Iterator())
-
-	output := NewBitmap()
-	for {
-		v0, eof0 := itr0.Next()
-		v1, eof1 := itr1.Next()
-
-		if eof0 || eof1 {
-			break
-		} else if v0 < v1 {
-			itr1.Unread()
-		} else if v0 > v1 {
-			itr0.Unread()
-		} else {
-			output.SetBit(v0)
-		}
+	return &Bitmap{
+		data: *data,
+		n:    data.Count(),
 	}
-	return output
 }
 
 // Union returns the bitwise union of b and other.
