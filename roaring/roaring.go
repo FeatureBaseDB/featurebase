@@ -18,7 +18,7 @@ const (
 	headerSize = 4 + 4
 
 	// bitmapN is the number of values in a container.bitmap.
-	bitmapN = (1 << 16) / 64
+	bitmapN = (1 << 24) / 64
 )
 
 // Bitmap represents a roaring bitmap.
@@ -123,7 +123,7 @@ func (b *Bitmap) Max() uint64 {
 
 	hb := b.keys[len(b.keys)-1]
 	lb := b.containers[len(b.containers)-1].max()
-	return uint64(hb)<<16 | uint64(lb)
+	return uint64(hb)<<24 | uint64(lb)
 }
 
 // Count returns the number of bits set in the bitmap.
@@ -252,20 +252,20 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 // WriteTo writes b to w.
 func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	// Build header before writing individual container blocks.
-	buf := make([]byte, headerSize+(len(b.keys)*(2+8+4)))
+	buf := make([]byte, headerSize+(len(b.keys)*(4+8+4)))
 	binary.LittleEndian.PutUint32(buf[0:], cookie)
 	binary.LittleEndian.PutUint32(buf[4:], uint32(len(b.keys)))
 
 	// Encode keys and cardinality.
 	for i, key := range b.keys {
-		binary.LittleEndian.PutUint64(buf[headerSize+i*10:], uint64(key))
-		binary.LittleEndian.PutUint16(buf[headerSize+i*10+8:], uint16(b.containers[i].n-1))
+		binary.LittleEndian.PutUint64(buf[headerSize+i*12:], uint64(key))
+		binary.LittleEndian.PutUint32(buf[headerSize+i*12+8:], uint32(b.containers[i].n-1))
 	}
 
 	// Write the offset for each container block.
 	offset := uint32(len(buf))
 	for i, c := range b.containers {
-		binary.LittleEndian.PutUint32(buf[headerSize+(len(b.keys)*10)+(i*4):], uint32(offset))
+		binary.LittleEndian.PutUint32(buf[headerSize+(len(b.keys)*12)+(i*4):], uint32(offset))
 		offset += uint32(c.size())
 	}
 
@@ -305,16 +305,16 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	b.containers = make([]*container, keyN)
 
 	// Read container key headers.
-	for i, buf := 0, data[8:]; i < int(keyN); i, buf = i+1, buf[10:] {
+	for i, buf := 0, data[8:]; i < int(keyN); i, buf = i+1, buf[12:] {
 		b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
 		b.containers[i] = &container{
-			n:      int(binary.LittleEndian.Uint16(buf[8:10])) + 1,
+			n:      int(binary.LittleEndian.Uint32(buf[8:12])) + 1,
 			mapped: true,
 		}
 	}
 
 	// Read container offsets and attach data.
-	opsOffset := 8 + int(keyN)*10
+	opsOffset := 8 + int(keyN)*12
 	for i, buf := 0, data[opsOffset:]; i < int(keyN); i, buf = i+1, buf[4:] {
 		offset := binary.LittleEndian.Uint32(buf[0:4])
 
@@ -326,8 +326,8 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		// Map byte slice directly to the container data.
 		c := b.containers[i]
 		if c.n <= arrayMaxSize {
-			c.array = (*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n]
-			opsOffset = int(offset) + len(c.array)*2
+			c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
+			opsOffset = int(offset) + len(c.array)*4
 		} else {
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
 			opsOffset = int(offset) + len(c.bitmap)*8
@@ -402,7 +402,7 @@ func (itr *Iterator) Seek(seek uint64) {
 	lb := lowbits(seek)
 	if c := itr.bitmap.containers[itr.i]; c.isArray() {
 		// Find index in the container.
-		itr.j = search16(c.array, lb)
+		itr.j = search32(c.array, lb)
 		if itr.j < 0 {
 			itr.j = -itr.j - 1
 		}
@@ -473,9 +473,9 @@ func (itr *Iterator) peek() uint64 {
 	key := itr.bitmap.keys[itr.i]
 	c := itr.bitmap.containers[itr.i]
 	if c.isArray() {
-		return uint64(key)<<16 | uint64(c.array[itr.j])
+		return uint64(key)<<24 | uint64(c.array[itr.j])
 	}
-	return uint64(key)<<16 | uint64(itr.j)
+	return uint64(key)<<24 | uint64(itr.j)
 }
 
 // BufIterator wraps an iterator to provide the ability to unread values.
@@ -529,9 +529,9 @@ func (itr *BufIterator) Unread() {
 }
 
 // The maximum size of array containers.
-const arrayMaxSize = 4096
+const arrayMaxSize = (1 << 20)
 
-// container represents a container for uint16 integers.
+// container represents a container for uint32 integers.
 //
 // These are used for storing the low bits. Containers are separated into two
 // types depending on cardinality. For containers with less than 4,096 values,
@@ -539,7 +539,7 @@ const arrayMaxSize = 4096
 // the values are encoded into bitmaps.
 type container struct {
 	n      int      // number of integers in container
-	array  []uint16 // used for array containers
+	array  []uint32 // used for array containers
 	bitmap []uint64 // used for bitmap containers
 	mapped bool     // mapped directly to a byte slice when true
 }
@@ -562,7 +562,7 @@ func (c *container) unmap() {
 	}
 
 	if c.array != nil {
-		tmp := make([]uint16, len(c.array))
+		tmp := make([]uint32, len(c.array))
 		copy(tmp, c.array)
 		c.array = tmp
 	}
@@ -575,14 +575,14 @@ func (c *container) unmap() {
 }
 
 // add adds a value to the container.
-func (c *container) add(v uint16) bool {
+func (c *container) add(v uint32) bool {
 	if c.isArray() {
 		return c.arrayAdd(v)
 	}
 	return c.bitmapAdd(v)
 }
 
-func (c *container) arrayAdd(v uint16) bool {
+func (c *container) arrayAdd(v uint32) bool {
 	// Optimize appending to the end of an array container.
 	if c.n > 0 && c.n < arrayMaxSize && c.isArray() && c.array[c.n-1] < v {
 		c.unmap()
@@ -592,7 +592,7 @@ func (c *container) arrayAdd(v uint16) bool {
 	}
 
 	// Find index of the integer in the container. Exit if it already exists.
-	i := search16(c.array, v)
+	i := search32(c.array, v)
 	if i >= 0 {
 		return false
 	}
@@ -613,7 +613,7 @@ func (c *container) arrayAdd(v uint16) bool {
 	return true
 }
 
-func (c *container) bitmapAdd(v uint16) bool {
+func (c *container) bitmapAdd(v uint32) bool {
 	if c.bitmapContains(v) {
 		return false
 	}
@@ -624,31 +624,31 @@ func (c *container) bitmapAdd(v uint16) bool {
 }
 
 // contains returns true if v is in the container.
-func (c *container) contains(v uint16) bool {
+func (c *container) contains(v uint32) bool {
 	if c.isArray() {
 		return c.arrayContains(v)
 	}
 	return c.bitmapContains(v)
 }
 
-func (c *container) arrayContains(v uint16) bool {
-	return search16(c.array, v) >= 0
+func (c *container) arrayContains(v uint32) bool {
+	return search32(c.array, v) >= 0
 }
 
-func (c *container) bitmapContains(v uint16) bool {
+func (c *container) bitmapContains(v uint32) bool {
 	return (c.bitmap[v/64] & (1 << uint64(v%64))) != 0
 }
 
 // remove adds a value to the container.
-func (c *container) remove(v uint16) bool {
+func (c *container) remove(v uint32) bool {
 	if c.isArray() {
 		return c.arrayRemove(v)
 	}
 	return c.bitmapRemove(v)
 }
 
-func (c *container) arrayRemove(v uint16) bool {
-	i := search16(c.array, v)
+func (c *container) arrayRemove(v uint32) bool {
+	i := search32(c.array, v)
 	if i < 0 {
 		return false
 	}
@@ -659,7 +659,7 @@ func (c *container) arrayRemove(v uint16) bool {
 	return true
 }
 
-func (c *container) bitmapRemove(v uint16) bool {
+func (c *container) bitmapRemove(v uint32) bool {
 	if !c.bitmapContains(v) {
 		return false
 	}
@@ -677,21 +677,21 @@ func (c *container) bitmapRemove(v uint16) bool {
 }
 
 // max returns the maximum value in the container.
-func (c *container) max() uint16 {
+func (c *container) max() uint32 {
 	if c.isArray() {
 		return c.arrayMax()
 	}
 	return c.bitmapMax()
 }
 
-func (c *container) arrayMax() uint16 {
+func (c *container) arrayMax() uint32 {
 	if len(c.array) == 0 {
 		return 0 //probably hiding some ugly bug but it prevents a crash
 	}
 	return c.array[len(c.array)-1]
 }
 
-func (c *container) bitmapMax() uint16 {
+func (c *container) bitmapMax() uint32 {
 	// Search bitmap in reverse order.
 	for i := len(c.bitmap) - 1; i >= 0; i-- {
 		// If value is zero then skip.
@@ -701,9 +701,9 @@ func (c *container) bitmapMax() uint16 {
 		}
 
 		// Find the highest set bit.
-		for j := uint16(63); j >= 0; j-- {
+		for j := uint32(63); j >= 0; j-- {
 			if v&(1<<j) != 0 {
-				return uint16(i)*64 + j
+				return uint32(i)*64 + j
 			}
 		}
 	}
@@ -712,11 +712,11 @@ func (c *container) bitmapMax() uint16 {
 
 // convertToArray converts the values in the bitmap to array values.
 func (c *container) convertToArray() {
-	c.array = make([]uint16, 0, c.n)
+	c.array = make([]uint32, 0, c.n)
 	for i, bitmap := range c.bitmap {
 		for bitmap != 0 {
 			t := bitmap & -bitmap
-			c.array = append(c.array, uint16((i*64 + int(popcount(t-1)))))
+			c.array = append(c.array, uint32((i*64 + int(popcount(t-1)))))
 			bitmap ^= t
 		}
 	}
@@ -743,7 +743,7 @@ func (c *container) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 func (c *container) arrayWriteTo(w io.Writer) (n int64, err error) {
-	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.array[0]))[:2*c.n])
+	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.array[0]))[:4*c.n])
 	return int64(nn), err
 }
 
@@ -755,7 +755,7 @@ func (c *container) bitmapWriteTo(w io.Writer) (n int64, err error) {
 // size returns the encoded size of the container, in bytes.
 func (c *container) size() int {
 	if c.isArray() {
-		return len(c.array) * 2
+		return len(c.array) * 4
 	}
 	return len(c.bitmap) * 8
 }
@@ -969,11 +969,11 @@ func (op *op) UnmarshalBinary(data []byte) error {
 // size returns the encoded size of the op, in bytes.
 func (*op) size() int { return 1 + 8 + 4 }
 
-func highbits(v uint64) uint64 { return uint64(v >> 16) }
-func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
+func highbits(v uint64) uint64 { return uint64(v >> 24) }
+func lowbits(v uint64) uint32  { return uint32(v & 0xFFFFFF) }
 
-// search16 returns the index of v in a.
-func search16(a []uint16, value uint16) int {
+// search32 returns the index of v in a.
+func search32(a []uint32, value uint32) int {
 	// Optimize for elements and the last element.
 	n := len(a)
 	if n == 0 {
@@ -1095,7 +1095,7 @@ func newBitmapIterator(bitmap []uint64) *bitmapIterator {
 
 // next returns the next value in the bitmap.
 // Returns eof as true if there are no values left in the iterator.
-func (itr *bitmapIterator) next() (v uint16, eof bool) {
+func (itr *bitmapIterator) next() (v uint32, eof bool) {
 	if itr.i+1 >= len(itr.bitmap)*64 {
 		return 0, true
 	}
@@ -1106,14 +1106,14 @@ func (itr *bitmapIterator) next() (v uint16, eof bool) {
 	lb := itr.bitmap[hb] >> (uint(itr.i) % 64)
 	if lb != 0 {
 		itr.i = int(itr.i) + trailingZeroN(lb)
-		return uint16(itr.i), false
+		return uint32(itr.i), false
 	}
 
 	// Otherwise iterate through remaining bitmaps to find next bit.
 	for hb++; hb < len(itr.bitmap); hb++ {
 		if itr.bitmap[hb] != 0 {
 			itr.i = int(hb*64) + trailingZeroN(itr.bitmap[hb])
-			return uint16(itr.i), false
+			return uint32(itr.i), false
 		}
 	}
 
@@ -1123,7 +1123,7 @@ func (itr *bitmapIterator) next() (v uint16, eof bool) {
 // bufBitmapIterator wraps an iterator to provide the ability to unread values.
 type bufBitmapIterator struct {
 	buf struct {
-		v    uint16
+		v    uint32
 		eof  bool
 		full bool
 	}
@@ -1137,7 +1137,7 @@ func newBufIterator(itr *bitmapIterator) *bufBitmapIterator {
 
 // next returns the next pair in the bitmap.
 // If a value has been buffered then it is returned and the buffer is cleared.
-func (itr *bufBitmapIterator) next() (v uint16, eof bool) {
+func (itr *bufBitmapIterator) next() (v uint32, eof bool) {
 	if itr.buf.full {
 		itr.buf.full = false
 		return itr.buf.v, itr.buf.eof
