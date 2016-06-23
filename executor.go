@@ -62,6 +62,11 @@ func (e *Executor) Execute(db string, q *pql.Query, slices []uint64, opt *ExecOp
 		}
 	}
 
+	// Optimize handling for bulk attribute insertion.
+	if hasOnlySetBitmapAttrs(q.Calls) {
+		return e.executeBulkSetBitmapAttrs(db, q.Calls)
+	}
+
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
@@ -448,6 +453,51 @@ func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs) error
 	return nil
 }
 
+// executeBulkSetBitmapAttrs executes a set of SetBitmapAttrs() calls.
+func (e *Executor) executeBulkSetBitmapAttrs(db string, calls pql.Calls) ([]interface{}, error) {
+	// Collect attributes by frame/id.
+	m := make(map[string]map[uint64]map[string]interface{})
+	for _, call := range calls {
+		c := call.(*pql.SetBitmapAttrs)
+
+		// Create frame group, if not exists.
+		frameMap := m[c.Frame]
+		if frameMap == nil {
+			frameMap = make(map[uint64]map[string]interface{})
+			m[c.Frame] = frameMap
+		}
+
+		// Set or merge attributes.
+		attr := frameMap[c.ID]
+		if attr == nil {
+			frameMap[c.ID] = cloneAttrs(c.Attrs)
+		} else {
+			for k, v := range c.Attrs {
+				attr[k] = v
+			}
+		}
+	}
+
+	// Bulk insert attributes by frame.
+	for name, frameMap := range m {
+		// Retrieve frame.
+		frame, err := e.Index.CreateFrameIfNotExists(db, name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Set attributes.
+		if err := frame.BitmapAttrStore().SetBulkAttrs(frameMap); err != nil {
+			return nil, err
+		}
+	}
+
+	// TODO: Propagate attributes to other servers in cluster.
+
+	// Return a set of nil responses to match the non-optimized return.
+	return make([]interface{}, len(calls)), nil
+}
+
 // executeSetProfileAttrs executes a SetProfileAttrs() call.
 func (e *Executor) executeSetProfileAttrs(db string, c *pql.SetProfileAttrs) error {
 	// Retrieve database.
@@ -582,4 +632,18 @@ func decodeError(s string) error {
 		return nil
 	}
 	return errors.New(s)
+}
+
+// hasOnlySetBitmapAttrs returns true if calls only contains SetBitmapAttrs() calls.
+func hasOnlySetBitmapAttrs(calls pql.Calls) bool {
+	if len(calls) == 0 {
+		return false
+	}
+
+	for _, call := range calls {
+		if _, ok := call.(*pql.SetBitmapAttrs); !ok {
+			return false
+		}
+	}
+	return true
 }
