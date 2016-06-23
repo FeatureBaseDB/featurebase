@@ -97,47 +97,12 @@ func (s *AttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 
 	var attr map[string]interface{}
 	if err := s.db.Update(func(tx *bolt.Tx) error {
-		tmp, err := txAttrs(tx, id)
+		tmp, err := txUpdateAttrs(tx, id, m)
 		if err != nil {
 			return err
 		}
 		attr = tmp
 
-		// Create a new map if it is empty so we don't update emptyMap.
-		if len(attr) == 0 {
-			attr = make(map[string]interface{}, len(m))
-		}
-
-		// Merge attributes with original values.
-		// Nil values should delete keys.
-		for k, v := range m {
-			if v == nil {
-				delete(attr, k)
-				continue
-			}
-
-			switch v := v.(type) {
-			case int:
-				attr[k] = uint64(v)
-			case uint:
-				attr[k] = uint64(v)
-			case int64:
-				attr[k] = uint64(v)
-			case string, uint64, bool:
-				attr[k] = v
-			default:
-				return fmt.Errorf("invalid attr type: %T", v)
-			}
-		}
-
-		// Marshal and save new values.
-		buf, err := proto.Marshal(&internal.AttrMap{Attrs: encodeAttrs(attr)})
-		if err != nil {
-			return err
-		}
-		if err := tx.Bucket([]byte("attrs")).Put(u64tob(id), buf); err != nil {
-			return err
-		}
 		return nil
 	}); err != nil {
 		return err
@@ -145,6 +110,42 @@ func (s *AttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 
 	// Swap attributes map in cache.
 	s.attrs[id] = attr
+
+	return nil
+}
+
+// SetBulkAttrs sets attribute values for a set of ids.
+func (s *AttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	attrs := make(map[uint64]map[string]interface{})
+	if err := s.db.Update(func(tx *bolt.Tx) error {
+		// Collect and sort keys.
+		ids := make([]uint64, 0, len(m))
+		for id := range m {
+			ids = append(ids, id)
+		}
+		sort.Sort(uint64Slice(ids))
+
+		// Update attributes for each id.
+		for _, id := range ids {
+			attr, err := txUpdateAttrs(tx, id, m[id])
+			if err != nil {
+				return err
+			}
+			attrs[id] = attr
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// Swap attributes map in cache.
+	for id, attr := range attrs {
+		s.attrs[id] = attr
+	}
 
 	return nil
 }
@@ -161,6 +162,52 @@ func txAttrs(tx *bolt.Tx, id uint64) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return decodeAttrs(pb.GetAttrs()), nil
+}
+
+// txUpdateAttrs updates the attributes for an id.
+// Returns the new combined set of attributes for the id.
+func txUpdateAttrs(tx *bolt.Tx, id uint64, m map[string]interface{}) (map[string]interface{}, error) {
+	attr, err := txAttrs(tx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new map if it is empty so we don't update emptyMap.
+	if len(attr) == 0 {
+		attr = make(map[string]interface{}, len(m))
+	}
+
+	// Merge attributes with original values.
+	// Nil values should delete keys.
+	for k, v := range m {
+		if v == nil {
+			delete(attr, k)
+			continue
+		}
+
+		switch v := v.(type) {
+		case int:
+			attr[k] = uint64(v)
+		case uint:
+			attr[k] = uint64(v)
+		case int64:
+			attr[k] = uint64(v)
+		case string, uint64, bool:
+			attr[k] = v
+		default:
+			return nil, fmt.Errorf("invalid attr type: %T", v)
+		}
+	}
+
+	// Marshal and save new values.
+	buf, err := proto.Marshal(&internal.AttrMap{Attrs: encodeAttrs(attr)})
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Bucket([]byte("attrs")).Put(u64tob(id), buf); err != nil {
+		return nil, err
+	}
+	return attr, nil
 }
 
 func encodeAttrs(m map[string]interface{}) []*internal.Attr {
@@ -214,6 +261,15 @@ func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 		return attr.GetKey(), attr.GetBoolValue()
 	}
 	return attr.GetKey(), nil
+}
+
+// cloneAttrs returns a shallow clone of m.
+func cloneAttrs(m map[string]interface{}) map[string]interface{} {
+	other := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		other[k] = v
+	}
+	return other
 }
 
 // u64tob encodes v to big endian encoding.
