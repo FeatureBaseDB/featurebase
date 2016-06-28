@@ -53,59 +53,22 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 
 // Union returns the bitwise union of b and other.
 func (b *Bitmap) Union(other *Bitmap) *Bitmap {
-	// OPTIMIZE: Implement roaring.Bitmap.Union()
+	data := b.data.Union(&other.data)
 
-	itr0 := roaring.NewBufIterator(b.data.Iterator())
-	itr1 := roaring.NewBufIterator(other.data.Iterator())
-
-	output := NewBitmap()
-	for {
-		v0, eof0 := itr0.Next()
-		v1, eof1 := itr1.Next()
-
-		if eof0 && eof1 {
-			break
-		} else if eof0 {
-			output.SetBit(v1)
-		} else if eof1 {
-			output.SetBit(v0)
-		} else if v0 < v1 {
-			output.SetBit(v0)
-			itr1.Unread()
-		} else if v0 > v1 {
-			output.SetBit(v1)
-			itr0.Unread()
-		} else {
-			output.SetBit(v0)
-		}
+	return &Bitmap{
+		data: *data,
+		n:    data.Count(),
 	}
-	return output
 }
 
 // Difference returns the diff of b and other.
 func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
-	// OPTIMIZE: Implement roaring.Bitmap.Difference()
+	data := b.data.Difference(&other.data)
 
-	itr0 := roaring.NewBufIterator(b.data.Iterator())
-	itr1 := roaring.NewBufIterator(other.data.Iterator())
-
-	output := NewBitmap()
-	for {
-		v0, eof0 := itr0.Next()
-		v1, eof1 := itr1.Next()
-
-		if eof0 {
-			break
-		} else if eof1 {
-			output.SetBit(v0)
-		} else if v0 < v1 {
-			output.SetBit(v0)
-			itr1.Unread()
-		} else if v0 > v1 {
-			itr0.Unread()
-		}
+	return &Bitmap{
+		data: *data,
+		n:    data.Count(),
 	}
-	return output
 }
 
 // MarshalJSON returns a JSON-encoded byte slice of b.
