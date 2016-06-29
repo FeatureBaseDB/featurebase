@@ -167,6 +167,7 @@ func (s *Server) monitorAntiEntropy() {
 		syncer.Index = s.Index
 		syncer.Host = s.Host
 		syncer.Cluster = s.Cluster
+		syncer.Closing = s.closing
 
 		// Sync indexes.
 		if err := syncer.SyncIndex(); err != nil {

@@ -203,6 +203,9 @@ type IndexSyncer struct {
 
 	Host    string
 	Cluster *Cluster
+
+	// Signals that the sync should stop.
+	Closing <-chan struct{}
 }
 
 // SyncIndex compares the index on host with the local index and resolves differences.
@@ -216,6 +219,13 @@ func (s *IndexSyncer) SyncIndex() error {
 				// Ignore slices that this host doesn't own.
 				if !s.Cluster.OwnsFragment(s.Host, di.Name, slice) {
 					continue
+				}
+
+				// Verify syncer has not closed.
+				select {
+				case <-s.Closing:
+					return nil
+				default:
 				}
 
 				// Sync fragment if own it.
@@ -242,9 +252,11 @@ func (s *IndexSyncer) syncFragment(db, frame string, slice uint64) error {
 		Fragment: f,
 		Host:     s.Host,
 		Cluster:  s.Cluster,
+		Closing:  s.Closing,
 	}
 	if err := fs.SyncFragment(); err != nil {
 		return err
 	}
+
 	return nil
 }
