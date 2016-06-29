@@ -1170,6 +1170,18 @@ type FragmentSyncer struct {
 
 	Host    string
 	Cluster *Cluster
+
+	Closing <-chan struct{}
+}
+
+// isClosing returns true if the closing channel is closed.
+func (s *FragmentSyncer) isClosing() bool {
+	select {
+	case <-s.Closing:
+		return true
+	default:
+		return false
+	}
 }
 
 // SyncFragment compares checksums for the local and remote fragments and
@@ -1197,6 +1209,11 @@ func (s *FragmentSyncer) SyncFragment() error {
 			return err
 		}
 		blockSets = append(blockSets, blocks)
+
+		// Verify sync is not prematurely closing.
+		if s.isClosing() {
+			return nil
+		}
 	}
 
 	// Iterate over all blocks and find differences.
@@ -1257,6 +1274,11 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 			continue
 		}
 
+		// Verify sync is not prematurely closing.
+		if s.isClosing() {
+			return nil
+		}
+
 		client, err := NewClient(node.Host)
 		if err != nil {
 			return err
@@ -1272,6 +1294,11 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 			ProfileIDs: profileIDs,
 			BitmapIDs:  bitmapIDs,
 		})
+	}
+
+	// Verify sync is not prematurely closing.
+	if s.isClosing() {
+		return nil
 	}
 
 	// Merge blocks together.
@@ -1296,6 +1323,11 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		}
 		for j := 0; j < len(clear.ProfileIDs); j++ {
 			fmt.Fprintf(&buf, "ClearBit(frame=%q, id=%d, profileID=%d)\n", f.Frame(), clear.BitmapIDs[j], (f.Slice()*SliceWidth)+clear.ProfileIDs[j])
+		}
+
+		// Verify sync is not prematurely closing.
+		if s.isClosing() {
+			return nil
 		}
 
 		// Execute query.
