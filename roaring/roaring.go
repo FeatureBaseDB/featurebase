@@ -224,20 +224,79 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 		ni, nj := len(ki), len(kj)
 		if ni == 0 && nj == 0 { // eof(i,j)
 			break
-		} else if ni == 0 { // eof(i)
-			key, container = kj[0], cj[0]
+		} else if ni == 0 || (nj != 0 && ki[0] > kj[0]) { // eof(i) or i > j
+			key, container = kj[0], cj[0].clone()
 			kj, cj = kj[1:], cj[1:]
-		} else if nj == 0 { // eof(j)
-			key, container = ki[0], ci[0]
+		} else if nj == 0 || (ki[0] < kj[0]) { // eof(j) or i < j
+			key, container = ki[0], ci[0].clone()
 			ki, ci = ki[1:], ci[1:]
-		} else if ki[0] < kj[0] { // i < j
-			key, container = ki[0], ci[0]
-			ki, ci = ki[1:], ci[1:]
-		} else if ki[0] > kj[0] { // i > j
-			key, container = kj[0], cj[0]
-			kj, cj = kj[1:], cj[1:]
 		} else { // i == j
 			key, container = ki[0], intersect(ci[0], cj[0])
+			ki, ci = ki[1:], ci[1:]
+			kj, cj = kj[1:], cj[1:]
+		}
+
+		output.keys = append(output.keys, key)
+		output.containers = append(output.containers, container)
+	}
+
+	return output
+}
+
+// Union returns the bitwise union of b and other.
+func (b *Bitmap) Union(other *Bitmap) *Bitmap {
+	output := &Bitmap{}
+
+	ki, ci := b.keys, b.containers
+	kj, cj := other.keys, other.containers
+
+	for {
+		var key uint64
+		var container *container
+
+		ni, nj := len(ki), len(kj)
+		if ni == 0 && nj == 0 { // eof(i,j)
+			break
+		} else if ni == 0 || (nj != 0 && ki[0] > kj[0]) { // eof(i) or i > j
+			key, container = kj[0], cj[0].clone()
+			kj, cj = kj[1:], cj[1:]
+		} else if nj == 0 || (ki[0] < kj[0]) { // eof(j) or i < j
+			key, container = ki[0], ci[0].clone()
+			ki, ci = ki[1:], ci[1:]
+		} else { // i == j
+			key, container = ki[0], union(ci[0], cj[0])
+			ki, ci = ki[1:], ci[1:]
+			kj, cj = kj[1:], cj[1:]
+		}
+
+		output.keys = append(output.keys, key)
+		output.containers = append(output.containers, container)
+	}
+
+	return output
+}
+
+// Difference returns the difference of b and other.
+func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
+	output := &Bitmap{}
+
+	ki, ci := b.keys, b.containers
+	kj, cj := other.keys, other.containers
+
+	for {
+		var key uint64
+		var container *container
+
+		ni, nj := len(ki), len(kj)
+		if ni == 0 { // eof(i)
+			break
+		} else if nj == 0 || ki[0] < kj[0] { // eof(j) or i < j
+			key, container = ki[0], ci[0].clone()
+			ki, ci = ki[1:], ci[1:]
+		} else if nj > 0 && ki[0] > kj[0] { // i > j
+			kj, cj = kj[1:], cj[1:]
+		} else { // i == j
+			key, container = ki[0], difference(ci[0], cj[0])
 			ki, ci = ki[1:], ci[1:]
 			kj, cj = kj[1:], cj[1:]
 		}
@@ -734,6 +793,23 @@ func (c *container) convertToBitmap() {
 	c.mapped = false
 }
 
+// clone returns a copy of c.
+func (c *container) clone() *container {
+	other := &container{n: c.n}
+
+	if c.array != nil {
+		other.array = make([]uint32, len(c.array))
+		copy(other.array, c.array)
+	}
+
+	if c.bitmap != nil {
+		other.bitmap = make([]uint64, len(c.bitmap))
+		copy(other.bitmap, c.bitmap)
+	}
+
+	return c
+}
+
 // WriteTo writes c to w.
 func (c *container) WriteTo(w io.Writer) (n int64, err error) {
 	if c.isArray() {
@@ -896,6 +972,212 @@ func intersectBitmapBitmap(a, b *container) *container {
 			itr0.unread()
 		} else {
 			output.add(va)
+		}
+	}
+	return output
+}
+
+func union(a, b *container) *container {
+	if a.isArray() {
+		if b.isArray() {
+			return unionArrayArray(a, b)
+		} else {
+			return unionArrayBitmap(a, b)
+		}
+	} else {
+		if b.isArray() {
+			return unionArrayBitmap(b, a)
+		} else {
+			return unionBitmapBitmap(a, b)
+		}
+	}
+}
+
+func unionArrayArray(a, b *container) *container {
+	output := &container{}
+	na, nb := len(a.array), len(b.array)
+	for i, j := 0, 0; ; {
+		if i >= na && j >= nb {
+			break
+		} else if i < na && j >= nb {
+			output.add(a.array[i])
+			i++
+			continue
+		} else if i >= na && j < nb {
+			output.add(b.array[j])
+			j++
+			continue
+		}
+
+		va, vb := a.array[i], b.array[j]
+		if va < vb {
+			output.add(va)
+			i++
+		} else if va > vb {
+			output.add(vb)
+			j++
+		} else {
+			output.add(va)
+			i, j = i+1, j+1
+		}
+	}
+	return output
+}
+
+func unionArrayBitmap(a, b *container) *container {
+	output := &container{}
+	itr := newBufIterator(newBitmapIterator(b.bitmap))
+	for i := 0; ; {
+		vb, eof := itr.next()
+		if i >= len(a.array) && eof {
+			break
+		} else if i >= len(a.array) {
+			output.add(vb)
+		} else if eof {
+			output.add(a.array[i])
+			i++
+			continue
+		}
+
+		va := a.array[i]
+		if va < vb {
+			output.add(va)
+			i++
+			itr.unread()
+		} else if va > vb {
+			output.add(vb)
+		} else {
+			output.add(va)
+			i++
+		}
+	}
+	return output
+}
+
+func unionBitmapBitmap(a, b *container) *container {
+	output := &container{
+		bitmap: make([]uint64, bitmapN),
+	}
+
+	for i := 0; i < bitmapN; i++ {
+		v := a.bitmap[i] | b.bitmap[i]
+		output.bitmap[i] = v
+		output.n += int(popcnt(v))
+	}
+
+	return output
+}
+
+func difference(a, b *container) *container {
+	if a.isArray() {
+		if b.isArray() {
+			return differenceArrayArray(a, b)
+		} else {
+			return differenceArrayBitmap(a, b)
+		}
+	} else {
+		if b.isArray() {
+			return differenceBitmapArray(a, b)
+		} else {
+			return differenceBitmapBitmap(a, b)
+		}
+	}
+}
+
+func differenceArrayArray(a, b *container) *container {
+	output := &container{}
+	na, nb := len(a.array), len(b.array)
+	for i, j := 0, 0; i < na; {
+		va := a.array[i]
+		if j >= nb {
+			output.add(va)
+			i++
+			continue
+		}
+
+		vb := b.array[j]
+		if va < vb {
+			output.add(va)
+			i++
+		} else if va > vb {
+			j++
+		} else {
+			i, j = i+1, j+1
+		}
+	}
+	return output
+}
+
+func differenceArrayBitmap(a, b *container) *container {
+	output := &container{}
+	itr := newBufIterator(newBitmapIterator(b.bitmap))
+	for i := 0; i < len(a.array); {
+		va := a.array[i]
+		vb, eof := itr.next()
+		if eof {
+			output.add(va)
+			i++
+			continue
+		}
+
+		if va < vb {
+			output.add(va)
+			i++
+			itr.unread()
+		} else if va > vb {
+			// nop
+		} else {
+			i++
+		}
+	}
+	return output
+}
+
+func differenceBitmapArray(a, b *container) *container {
+	output := &container{}
+	itr := newBufIterator(newBitmapIterator(a.bitmap))
+	array := b.array
+	for {
+		va, eof := itr.next()
+		if eof {
+			break
+		}
+
+		if len(array) == 0 {
+			output.add(va)
+			continue
+		}
+
+		vb := array[0]
+		if va < vb {
+			output.add(va)
+		} else if va > vb {
+			array = array[1:]
+			itr.unread()
+		} else {
+			array = array[1:]
+		}
+	}
+	return output
+}
+
+func differenceBitmapBitmap(a, b *container) *container {
+	output := &container{}
+	itr0 := newBufIterator(newBitmapIterator(a.bitmap))
+	itr1 := newBufIterator(newBitmapIterator(b.bitmap))
+	for {
+		v0, eof0 := itr0.next()
+		v1, eof1 := itr1.next()
+
+		if eof0 {
+			break
+		} else if eof1 {
+			output.add(v0)
+		} else if v0 < v1 {
+			output.add(v0)
+			itr1.unread()
+		} else if v0 > v1 {
+			itr0.unread()
 		}
 	}
 	return output
