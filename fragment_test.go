@@ -2,6 +2,7 @@ package pilosa_test
 
 import (
 	"bytes"
+	"flag"
 	"io/ioutil"
 	"os"
 	"reflect"
@@ -9,6 +10,11 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/umbel/pilosa"
+)
+
+// Test flags
+var (
+	FragmentPath = flag.String("fragment", "", "fragment path")
 )
 
 // SliceWidth is a helper reference to use when testing.
@@ -261,60 +267,58 @@ func TestFragment_Checksum(t *testing.T) {
 }
 
 // Ensure fragment can return a checksum for a given block.
-func TestFragment_BlockChecksum(t *testing.T) {
+func TestFragment_Blocks(t *testing.T) {
 	f := MustOpenFragment("d", "f", 0)
 	defer f.Close()
 
 	// Retrieve initial checksum.
-	var chksum []byte
-	prev := f.Checksum()
+	var prev []pilosa.FragmentBlock
 
 	// Set first bit.
 	if _, err := f.SetBit(0, 0, nil, 0); err != nil {
 		t.Fatal(err)
 	}
-	chksum = f.BlockChecksum(0)
-	if bytes.Equal(chksum, prev) {
-		t.Fatalf("expected checksum to change: %x", chksum)
+	blocks := f.Blocks()
+	if blocks[0].Checksum == nil {
+		t.Fatalf("expected checksum: %x", blocks[0].Checksum)
 	}
-	prev = chksum
+	prev = blocks
 
 	// Set bit on different bitmap.
 	if _, err := f.SetBit(20, 0, nil, 0); err != nil {
 		t.Fatal(err)
 	}
-	chksum = f.BlockChecksum(0)
-	if bytes.Equal(chksum, prev) {
-		t.Fatalf("expected checksum to change: %x", chksum)
+	blocks = f.Blocks()
+	if bytes.Equal(blocks[0].Checksum, prev[0].Checksum) {
+		t.Fatalf("expected checksum to change: %x", blocks[0].Checksum)
 	}
-	prev = chksum
+	prev = blocks
 
 	// Set bit on different profile.
 	if _, err := f.SetBit(20, 100, nil, 0); err != nil {
 		t.Fatal(err)
 	}
-	chksum = f.BlockChecksum(0)
-	if bytes.Equal(chksum, prev) {
-		t.Fatalf("expected checksum to change: %x", chksum)
+	blocks = f.Blocks()
+	if bytes.Equal(blocks[0].Checksum, prev[0].Checksum) {
+		t.Fatalf("expected checksum to change: %x", blocks[0].Checksum)
 	}
 }
 
 // Ensure fragment returns an empty checksum if no data exists for a block.
-func TestFragment_BlockChecksum_Empty(t *testing.T) {
+func TestFragment_Blocks_Empty(t *testing.T) {
 	f := MustOpenFragment("d", "f", 0)
 	defer f.Close()
 
 	// Set bits on a different block.
-	if _, err := f.SetBit(1, 200, nil, 0); err != nil {
+	if _, err := f.SetBit(100, 1, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 
 	// Ensure checksum for block 1 is blank.
-	if chksum := f.BlockChecksum(0); chksum == nil {
-		t.Fatalf("expected chksum(0)")
-	}
-	if chksum := f.BlockChecksum(1); chksum != nil {
-		t.Fatalf("expected empty checksum: %x", chksum)
+	if blocks := f.Blocks(); len(blocks) != 1 {
+		t.Fatalf("unexpected block count: %d", len(blocks))
+	} else if blocks[0].ID != 1 {
+		t.Fatalf("unexpected block id: %d", blocks[0].ID)
 	}
 }
 
@@ -436,6 +440,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 }
 
+/*
 func BenchmarkFragment_BlockChecksum_Fill1(b *testing.B)  { benchmarkFragmentBlockChecksum(b, 0.01) }
 func BenchmarkFragment_BlockChecksum_Fill10(b *testing.B) { benchmarkFragmentBlockChecksum(b, 0.10) }
 func BenchmarkFragment_BlockChecksum_Fill50(b *testing.B) { benchmarkFragmentBlockChecksum(b, 0.50) }
@@ -459,6 +464,28 @@ func benchmarkFragmentBlockChecksum(b *testing.B, fillPercent float64) {
 
 		if chksum := f.BlockChecksum(0); chksum == nil {
 			b.Fatal("expected checksum")
+		}
+	}
+}
+*/
+
+func BenchmarkFragment_Blocks(b *testing.B) {
+	if *FragmentPath == "" {
+		b.Skip("no fragment specified")
+	}
+
+	// Open the fragment specified by the path.
+	f := pilosa.NewFragment(*FragmentPath, "d", "f", 0)
+	if err := f.Open(); err != nil {
+		b.Fatal(err)
+	}
+	defer f.Close()
+
+	// Reset timer and execute benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if a := f.Blocks(); len(a) == 0 {
+			b.Fatal("no blocks in fragment")
 		}
 	}
 }
