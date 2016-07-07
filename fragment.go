@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"io/ioutil"
 	"log"
@@ -594,8 +595,8 @@ func (f *Fragment) Range(bitmapID uint64, start, end time.Time) *Bitmap {
 // If two fragments have the same checksum then they have the same data.
 func (f *Fragment) Checksum() []byte {
 	h := sha1.New()
-	for i, blockN := 0, f.BlockN(); i < blockN; i++ {
-		h.Write(f.BlockChecksum(i))
+	for _, block := range f.Blocks() {
+		h.Write(block.Checksum)
 	}
 	return h.Sum(nil)
 }
@@ -607,42 +608,6 @@ func (f *Fragment) BlockN() int {
 	return int(f.storage.Max() / (HashBlockSize * SliceWidth))
 }
 
-// BlockChecksum returns the checksum for a single block in the fragment.
-// Returns nil if there is no data for the block.
-func (f *Fragment) BlockChecksum(i int) []byte {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Use the cached checksum, if available.
-	if chksum, ok := f.checksums[i]; ok {
-		return chksum
-	}
-
-	// Otherwise calculate the checksum from the data on disk.
-	h := sha1.New()
-	var written bool
-	f.storage.ForEachRange(uint64(i)*HashBlockSize*SliceWidth, (uint64(i)+1)*HashBlockSize*SliceWidth, func(i uint64) {
-		// Write value to the hash.
-		var buf [8]byte
-		binary.BigEndian.PutUint64(buf[:], i)
-		h.Write(buf[:])
-
-		// Mark the block has having data.
-		written = true
-	})
-
-	// If no data was written then return a nil checksum.
-	if !written {
-		return nil
-	}
-
-	// Cache checksum for later use.
-	chksum := h.Sum(nil)[:]
-	f.checksums[i] = chksum
-
-	return chksum
-}
-
 // InvalidateChecksums clears all cached block checksums.
 func (f *Fragment) InvalidateChecksums() {
 	f.mu.Lock()
@@ -652,19 +617,83 @@ func (f *Fragment) InvalidateChecksums() {
 
 // Blocks returns info for all blocks containing data.
 func (f *Fragment) Blocks() []FragmentBlock {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	var a []FragmentBlock
-	for i, blockN := 0, f.BlockN(); i <= blockN; i++ {
-		chksum := f.BlockChecksum(i)
-		if chksum == nil {
+
+	// Initialize the iterator.
+	itr := f.storage.Iterator()
+	itr.Seek(0)
+
+	// Initialize block hasher.
+	h := newBlockHasher()
+
+	// Iterate over each value in the fragment.
+	v, eof := itr.Next()
+	if eof {
+		return nil
+	}
+	blockID := int(v / (HashBlockSize * SliceWidth))
+	for {
+		// Check for multiple block checksums in a row.
+		if n := f.readContiguousChecksums(&a, blockID); n > 0 {
+			itr.Seek(uint64(blockID+n) * HashBlockSize * SliceWidth)
+			v, eof = itr.Next()
+			if eof {
+				break
+			}
+			blockID = int(v / (HashBlockSize * SliceWidth))
 			continue
 		}
 
+		// Reset hasher.
+		h.blockID = blockID
+		h.Reset()
+
+		// Read all values for the block.
+		for ; ; v, eof = itr.Next() {
+			// Once we hit the next block, save the value for the next iteration.
+			blockID = int(v / (HashBlockSize * SliceWidth))
+			if blockID != h.blockID || eof {
+				break
+			}
+
+			h.WriteValue(v)
+		}
+
+		// Cache checksum.
+		chksum := h.Sum()
+		f.checksums[h.blockID] = chksum
+
+		// Append block.
 		a = append(a, FragmentBlock{
-			ID:       i,
+			ID:       h.blockID,
+			Checksum: chksum,
+		})
+
+		// Exit if we're at the end.
+		if eof {
+			break
+		}
+	}
+
+	return a
+}
+
+// readContiguousChecksums appends multiple checksums in a row and returns the count added.
+func (f *Fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n int) {
+	for i := 0; ; i++ {
+		chksum := f.checksums[blockID+i]
+		if chksum == nil {
+			return i
+		}
+
+		*a = append(*a, FragmentBlock{
+			ID:       blockID + i,
 			Checksum: chksum,
 		})
 	}
-	return a
 }
 
 // BlockData returns bits in a block as bitmap & profile ID pairs.
@@ -1162,6 +1191,31 @@ func (f *Fragment) readCacheFromArchive(r io.Reader) error {
 type FragmentBlock struct {
 	ID       int    `json:"id"`
 	Checksum []byte `json:"checksum"`
+}
+
+type blockHasher struct {
+	blockID int
+	buf     [8]byte
+	hash    hash.Hash
+}
+
+func newBlockHasher() blockHasher {
+	return blockHasher{
+		blockID: -1,
+		hash:    sha1.New(),
+	}
+}
+func (h *blockHasher) Reset() {
+	h.hash.Reset()
+}
+
+func (h *blockHasher) Sum() []byte {
+	return h.hash.Sum(nil)[:]
+}
+
+func (h *blockHasher) WriteValue(v uint64) {
+	binary.BigEndian.PutUint64(h.buf[:], v)
+	h.hash.Write(h.buf[:])
 }
 
 // FragmentSyncer syncs a local fragment to one on a remote host.
