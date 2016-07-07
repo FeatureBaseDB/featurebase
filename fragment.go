@@ -1189,13 +1189,17 @@ func (s *FragmentSyncer) isClosing() bool {
 func (s *FragmentSyncer) SyncFragment() error {
 	// Determine replica set.
 	nodes := s.Cluster.FragmentNodes(s.Fragment.DB(), s.Fragment.Slice())
-
+	if len(nodes) == 1 {
+		//fmt.Println("no place to replicate", s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.Slice())
+		return nil
+	}
 	// Create a set of blocks.
 	blockSets := make([][]FragmentBlock, 0, len(nodes))
 	for _, node := range nodes {
 		// Read local blocks.
 		if node.Host == s.Host {
-			blockSets = append(blockSets, s.Fragment.Blocks())
+			b := s.Fragment.Blocks()
+			blockSets = append(blockSets, b)
 			continue
 		}
 
