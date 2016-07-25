@@ -31,6 +31,17 @@ func (a Nodes) ContainsHost(host string) bool {
 	return false
 }
 
+// FilterHost returns a new list of nodes with host removed.
+func (a Nodes) FilterHost(host string) []*Node {
+	other := make([]*Node, 0, len(a))
+	for _, node := range a {
+		if node.Host != host {
+			other = append(other, node)
+		}
+	}
+	return other
+}
+
 // Hosts returns a list of all hostnames.
 func (a Nodes) Hosts() []string {
 	hosts := make([]string, len(a))
