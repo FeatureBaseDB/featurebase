@@ -64,7 +64,7 @@ func (e *Executor) Execute(db string, q *pql.Query, slices []uint64, opt *ExecOp
 
 	// Optimize handling for bulk attribute insertion.
 	if hasOnlySetBitmapAttrs(q.Calls) {
-		return e.executeBulkSetBitmapAttrs(db, q.Calls)
+		return e.executeBulkSetBitmapAttrs(db, q.Calls, opt)
 	}
 
 	// Execute each call serially.
@@ -93,9 +93,9 @@ func (e *Executor) executeCall(db string, c pql.Call, slices []uint64, opt *Exec
 	case *pql.SetBit:
 		return e.executeSetBit(db, c, opt)
 	case *pql.SetBitmapAttrs:
-		return nil, e.executeSetBitmapAttrs(db, c)
+		return nil, e.executeSetBitmapAttrs(db, c, opt)
 	case *pql.SetProfileAttrs:
-		return nil, e.executeSetProfileAttrs(db, c)
+		return nil, e.executeSetProfileAttrs(db, c, opt)
 	case *pql.TopN:
 		return e.executeTopN(db, c, slices, opt)
 	default:
@@ -436,7 +436,7 @@ func (e *Executor) executeSetBit(db string, c *pql.SetBit, opt *ExecOptions) (bo
 }
 
 // executeSetBitmapAttrs executes a SetBitmapAttrs() call.
-func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs) error {
+func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs, opt *ExecOptions) error {
 	// Retrieve frame.
 	frame, err := e.Index.CreateFrameIfNotExists(db, c.Frame)
 	if err != nil {
@@ -448,13 +448,33 @@ func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs) error
 		return err
 	}
 
-	// TODO: Propagate attributes to other servers in cluster.
+	// Do not forward call if this is already being forwarded.
+	if opt.Remote {
+		return nil
+	}
+
+	// Execute on remote nodes in parallel.
+	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	resp := make(chan error, len(nodes))
+	for _, node := range nodes {
+		go func(node *Node) {
+			_, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt)
+			resp <- err
+		}(node)
+	}
+
+	// Return first error.
+	for range nodes {
+		if err := <-resp; err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
 
 // executeBulkSetBitmapAttrs executes a set of SetBitmapAttrs() calls.
-func (e *Executor) executeBulkSetBitmapAttrs(db string, calls pql.Calls) ([]interface{}, error) {
+func (e *Executor) executeBulkSetBitmapAttrs(db string, calls pql.Calls, opt *ExecOptions) ([]interface{}, error) {
 	// Collect attributes by frame/id.
 	m := make(map[string]map[uint64]map[string]interface{})
 	for _, call := range calls {
@@ -492,14 +512,34 @@ func (e *Executor) executeBulkSetBitmapAttrs(db string, calls pql.Calls) ([]inte
 		}
 	}
 
-	// TODO: Propagate attributes to other servers in cluster.
+	// Do not forward call if this is already being forwarded.
+	if opt.Remote {
+		return make([]interface{}, len(calls)), nil
+	}
+
+	// Execute on remote nodes in parallel.
+	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	resp := make(chan error, len(nodes))
+	for _, node := range nodes {
+		go func(node *Node) {
+			_, err := e.exec(node, db, &pql.Query{Calls: calls}, nil, opt)
+			resp <- err
+		}(node)
+	}
+
+	// Return first error.
+	for range nodes {
+		if err := <-resp; err != nil {
+			return nil, err
+		}
+	}
 
 	// Return a set of nil responses to match the non-optimized return.
 	return make([]interface{}, len(calls)), nil
 }
 
 // executeSetProfileAttrs executes a SetProfileAttrs() call.
-func (e *Executor) executeSetProfileAttrs(db string, c *pql.SetProfileAttrs) error {
+func (e *Executor) executeSetProfileAttrs(db string, c *pql.SetProfileAttrs, opt *ExecOptions) error {
 	// Retrieve database.
 	d, err := e.Index.CreateDBIfNotExists(db)
 	if err != nil {
@@ -511,7 +551,27 @@ func (e *Executor) executeSetProfileAttrs(db string, c *pql.SetProfileAttrs) err
 		return err
 	}
 
-	// TODO: Propagate attributes to other servers in cluster.
+	// Do not forward call if this is already being forwarded.
+	if opt.Remote {
+		return nil
+	}
+
+	// Execute on remote nodes in parallel.
+	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	resp := make(chan error, len(nodes))
+	for _, node := range nodes {
+		go func(node *Node) {
+			_, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt)
+			resp <- err
+		}(node)
+	}
+
+	// Return first error.
+	for range nodes {
+		if err := <-resp; err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -592,6 +652,8 @@ func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64, op
 			v, err = pb.Results[i].GetN(), nil
 		case *pql.SetBit:
 			v, err = pb.Results[i].GetChanged(), nil
+		case *pql.SetBitmapAttrs:
+		case *pql.SetProfileAttrs:
 		default:
 			panic(fmt.Sprintf("invalid node for remote exec: %T", call))
 		}
