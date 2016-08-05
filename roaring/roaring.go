@@ -409,6 +409,9 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		}
 		op.apply(b)
 
+		// Increase the op count.
+		b.opN++
+
 		// Move the buffer forward.
 		buf = buf[op.size():]
 	}
@@ -435,6 +438,28 @@ func (b *Bitmap) Iterator() *Iterator {
 	itr := &Iterator{bitmap: b}
 	itr.Seek(0)
 	return itr
+}
+
+// Info returns stats for the bitmap.
+func (b *Bitmap) Info() BitmapInfo {
+	info := BitmapInfo{
+		OpN:        b.opN,
+		Containers: make([]ContainerInfo, len(b.containers)),
+	}
+
+	for i, c := range b.containers {
+		ci := c.info()
+		ci.Key = b.keys[i]
+		info.Containers[i] = ci
+	}
+
+	return info
+}
+
+// BitmapInfo represents a point-in-time snapshot of bitmap stats.
+type BitmapInfo struct {
+	OpN        int
+	Containers []ContainerInfo
 }
 
 // Iterator represents an iterator over a Bitmap.
@@ -834,6 +859,38 @@ func (c *container) size() int {
 		return len(c.array) * 4
 	}
 	return len(c.bitmap) * 8
+}
+
+// info returns the current stats about the container.
+func (c *container) info() ContainerInfo {
+	info := ContainerInfo{N: c.n}
+
+	if c.isArray() {
+		info.Type = "array"
+		info.Alloc = len(c.array) * 4
+	} else {
+		info.Type = "bitmap"
+		info.Alloc = len(c.bitmap) * 8
+	}
+
+	if c.mapped {
+		if c.isArray() {
+			info.Pointer = unsafe.Pointer(&c.array[0])
+		} else {
+			info.Pointer = unsafe.Pointer(&c.bitmap[0])
+		}
+	}
+
+	return info
+}
+
+// ContainerInfo represents a point-in-time snapshot of container stats.
+type ContainerInfo struct {
+	Key     uint64         // container key
+	Type    string         // container type (array or bitmap)
+	N       int            // number of bits
+	Alloc   int            // memory used
+	Pointer unsafe.Pointer // offset within the mmap
 }
 
 func intersectionCount(a, b *container) uint64 {
