@@ -1,6 +1,7 @@
 package pilosa_test
 
 import (
+	"bytes"
 	"io/ioutil"
 	"os"
 	"reflect"
@@ -118,6 +119,7 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 // Index is a test wrapper for pilosa.Index.
 type Index struct {
 	*pilosa.Index
+	LogOutput bytes.Buffer
 }
 
 // NewIndex returns a new instance of Index with a temporary path.
@@ -129,6 +131,8 @@ func NewIndex() *Index {
 
 	i := &Index{Index: pilosa.NewIndex()}
 	i.Path = path
+	i.Index.LogOutput = &i.LogOutput
+
 	return i
 }
 

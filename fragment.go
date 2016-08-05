@@ -47,9 +47,6 @@ const (
 )
 
 const (
-	// DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
-	DefaultCacheFlushInterval = 1 * time.Minute
-
 	// DefaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
 	DefaultFragmentMaxOpN = 1000
 )
@@ -76,13 +73,6 @@ type Fragment struct {
 	// Cached checksums for each block.
 	checksums map[int][]byte
 
-	// Close management
-	wg      sync.WaitGroup
-	closing chan struct{}
-
-	// The interval at which the cached bitmap ids are persisted to disk.
-	CacheFlushInterval time.Duration
-
 	// Number of operations performed before performing a snapshot.
 	// This limits the size of fragments on the heap and flushes them to disk
 	// so that they can be mmapped and heap utilization can be kept low.
@@ -99,15 +89,13 @@ type Fragment struct {
 // NewFragment returns a new instance of Fragment.
 func NewFragment(path, db, frame string, slice uint64) *Fragment {
 	return &Fragment{
-		path:    path,
-		db:      db,
-		frame:   frame,
-		slice:   slice,
-		closing: make(chan struct{}, 0),
+		path:  path,
+		db:    db,
+		frame: frame,
+		slice: slice,
 
-		LogOutput:          os.Stderr,
-		CacheFlushInterval: DefaultCacheFlushInterval,
-		MaxOpN:             DefaultFragmentMaxOpN,
+		LogOutput: os.Stderr,
+		MaxOpN:    DefaultFragmentMaxOpN,
 	}
 }
 
@@ -148,10 +136,6 @@ func (f *Fragment) Open() error {
 
 		// Clear checksums.
 		f.checksums = make(map[int][]byte)
-
-		// Periodically flush cache.
-		f.wg.Add(1)
-		go func() { defer f.wg.Done(); f.monitorCacheFlush() }()
 
 		return nil
 	}(); err != nil {
@@ -250,7 +234,7 @@ func (f *Fragment) openCache() error {
 	// Read in all bitmaps by ID.
 	// This will cause them to be added to the cache.
 	for _, bitmapID := range pb.GetBitmapIDs() {
-		f.bitmap(bitmapID)
+		bm := f.bitmap(bitmapID)
 	}
 
 	return nil
@@ -264,12 +248,6 @@ func (f *Fragment) Close() error {
 }
 
 func (f *Fragment) close() error {
-	// Notify goroutines of closing and wait for completion.
-	close(f.closing)
-	f.mu.Unlock()
-	f.wg.Wait()
-	f.mu.Lock()
-
 	// Flush cache if closing gracefully.
 	if err := f.flushCache(); err != nil {
 		f.logger().Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
@@ -962,24 +940,6 @@ func (f *Fragment) snapshot() error {
 	f.opN = 0
 
 	return nil
-}
-
-// monitorCacheFlush periodically flushes the cache to disk.
-// This is run in a goroutine.
-func (f *Fragment) monitorCacheFlush() {
-	ticker := time.NewTicker(f.CacheFlushInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-f.closing:
-			return
-		case <-ticker.C:
-			if err := f.FlushCache(); err != nil {
-				f.logger().Printf("error flushing cache: err=%s, path=%s", err, f.CachePath())
-			}
-		}
-	}
 }
 
 // FlushCache writes the cache data to disk.
