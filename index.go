@@ -3,11 +3,17 @@ package pilosa
 import (
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 )
+
+// DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
+const DefaultCacheFlushInterval = 1 * time.Minute
 
 // Index represents a container for fragments.
 type Index struct {
@@ -17,8 +23,17 @@ type Index struct {
 	// Databases by name.
 	dbs map[string]*DB
 
+	// Close management
+	wg      sync.WaitGroup
+	closing chan struct{}
+
 	// Data directory path.
 	Path string
+
+	// The interval at which the cached bitmap ids are persisted to disk.
+	CacheFlushInterval time.Duration
+
+	LogOutput io.Writer
 }
 
 // NewIndex returns a new instance of Index.
@@ -26,6 +41,11 @@ func NewIndex() *Index {
 	return &Index{
 		dbs:       make(map[string]*DB),
 		remoteMax: 0,
+		closing:   make(chan struct{}, 0),
+
+		CacheFlushInterval: DefaultCacheFlushInterval,
+
+		LogOutput: os.Stderr,
 	}
 }
 
@@ -52,17 +72,28 @@ func (i *Index) Open() error {
 			continue
 		}
 
+		i.logger().Printf("opening database: %s", filepath.Base(fi.Name()))
+
 		db := NewDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err := db.Open(); err != nil {
 			return fmt.Errorf("open db: name=%s, err=%s", db.Name(), err)
 		}
 		i.dbs[db.Name()] = db
 	}
+
+	// Periodically flush cache.
+	i.wg.Add(1)
+	go func() { defer i.wg.Done(); i.monitorCacheFlush() }()
+
 	return nil
 }
 
 // Close closes all open fragments.
 func (i *Index) Close() error {
+	// Notify goroutines of closing and wait for completion.
+	close(i.closing)
+	i.wg.Wait()
+
 	for _, db := range i.dbs {
 		db.Close()
 	}
@@ -195,6 +226,42 @@ func (i *Index) SetMax(newmax uint64) {
 	defer i.mu.Unlock()
 	i.remoteMax = newmax
 }
+
+// monitorCacheFlush periodically flushes all fragment caches sequentially.
+// This is run in a goroutine.
+func (i *Index) monitorCacheFlush() {
+	ticker := time.NewTicker(i.CacheFlushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-i.closing:
+			return
+		case <-ticker.C:
+			i.flushCaches()
+		}
+	}
+}
+
+func (i *Index) flushCaches() {
+	for _, db := range i.DBs() {
+		for _, frame := range db.Frames() {
+			for _, fragment := range frame.Fragments() {
+				select {
+				case <-i.closing:
+					return
+				default:
+				}
+
+				if err := fragment.FlushCache(); err != nil {
+					i.logger().Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
+				}
+			}
+		}
+	}
+}
+
+func (i *Index) logger() *log.Logger { return log.New(i.LogOutput, "", log.LstdFlags) }
 
 // IndexSyncer is an active anti-entropy tool that compares the local index
 // with a remote index based on block checksums and resolves differences.
