@@ -161,6 +161,18 @@ func (f *Frame) Fragment(slice uint64) *Fragment {
 
 func (f *Frame) fragment(slice uint64) *Fragment { return f.fragments[slice] }
 
+// Fragments returns a list of all fragments in the frame.
+func (f *Frame) Fragments() []*Fragment {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	other := make([]*Fragment, 0, len(f.fragments))
+	for _, fragment := range f.fragments {
+		other = append(other, fragment)
+	}
+	return other
+}
+
 // CreateFragmentIfNotExists returns a fragment in the frame by slice.
 func (f *Frame) CreateFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	f.mu.Lock()
