@@ -59,6 +59,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			pprof.Profile(w, r)
 		case "/debug/pprof/symbol":
 			pprof.Symbol(w, r)
+		case "/debug/pprof/trace":
+			pprof.Trace(w, r)
 		default:
 			pprof.Index(w, r)
 		}
