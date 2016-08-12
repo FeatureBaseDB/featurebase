@@ -527,6 +527,16 @@ func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
 	// Otherwise retrieve specific bitmaps.
 	pairs := make([]BitmapPair, len(bitmapIDs))
 	for i, bitmapID := range bitmapIDs {
+		// Look up cache first, if available.
+		if n := f.cache.Get(bitmapID); n > 0 {
+			pairs[i] = BitmapPair{
+				ID:    bitmapID,
+				Count: n,
+			}
+			continue
+		}
+
+		// Otherwise load from storage.
 		pairs[i] = BitmapPair{
 			ID:    bitmapID,
 			Count: f.Bitmap(bitmapID).Count(),
