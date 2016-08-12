@@ -51,7 +51,8 @@ func (c *LRUCache) Add(bitmapID, n uint64) {
 // Get returns a bitmap with a given id.
 func (c *LRUCache) Get(bitmapID uint64) uint64 {
 	n, _ := c.cache.Get(bitmapID)
-	return n.(uint64)
+	nn, _ := n.(uint64)
+	return nn
 }
 
 // Len returns the number of items in the cache.
