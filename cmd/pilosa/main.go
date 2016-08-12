@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -45,18 +46,38 @@ func main() {
 		os.Exit(2)
 	}
 
+	// Start CPU profiling.
+	if m.CPUProfile != "" {
+		f, err := os.Create(m.CPUProfile)
+		if err != nil {
+			fmt.Fprintf(m.Stderr, "create cpu profile: %v", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+
+		fmt.Fprintln(m.Stderr, "Starting cpu profile")
+		pprof.StartCPUProfile(f)
+		time.AfterFunc(m.CPUTime, func() {
+			fmt.Fprintln(m.Stderr, "Stopping cpu profile")
+			pprof.StopCPUProfile()
+			f.Close()
+		})
+	}
+
 	// Execute the program.
 	if err := m.Run(); err != nil {
 		fmt.Fprintln(m.Stderr, err)
+		fmt.Fprintln(m.Stderr, "stopping profile")
 		os.Exit(1)
 	}
 
 	// First SIGKILL causes server to shut down gracefully.
-	// Second signal causes a hard shutdown.
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt)
 	sig := <-c
 	fmt.Fprintf(m.Stderr, "Received %s; gracefully shutting down...\n", sig.String())
+
+	// Second signal causes a hard shutdown.
 	go func() { <-c; os.Exit(1) }()
 
 	if err := m.Close(); err != nil {
@@ -72,6 +93,10 @@ type Main struct {
 	// Configuration options.
 	ConfigPath string
 	Config     *Config
+
+	// Profiling options.
+	CPUProfile string
+	CPUTime    time.Duration
 
 	// Standard input/output
 	Stdin  io.Reader
@@ -127,8 +152,10 @@ func (m *Main) Close() error {
 // ParseFlags parses command line flags from args.
 func (m *Main) ParseFlags(args []string) error {
 	fs := flag.NewFlagSet("pilosa", flag.ContinueOnError)
-	fs.SetOutput(m.Stderr)
+	fs.StringVar(&m.CPUProfile, "cpuprofile", "", "cpu profile")
+	fs.DurationVar(&m.CPUTime, "cputime", 30*time.Second, "cpu profile duration")
 	fs.StringVar(&m.ConfigPath, "config", "", "config path")
+	fs.SetOutput(m.Stderr)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
