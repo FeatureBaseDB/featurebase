@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"sort"
 	"unsafe"
 )
 
@@ -131,6 +132,41 @@ func (b *Bitmap) Count() (n uint64) {
 	for _, container := range b.containers {
 		n += uint64(container.n)
 	}
+	return n
+}
+
+// CountRange returns the number of bits set between [start, end).
+func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
+	i := search64(b.keys, highbits(start))
+	j := search64(b.keys, highbits(end))
+
+	// If range is entirely in one container then just count that range.
+	if i > 0 && i == j {
+		return uint64(b.containers[i].countRange(lowbits(start), lowbits(end)))
+	}
+
+	// Count first partial container.
+	if i < 0 {
+		i = -i
+	} else {
+		n += uint64(b.containers[i].countRange(lowbits(start), (bitmapN*64)+1))
+	}
+
+	// Count last container.
+	if j < 0 {
+		j = -j
+		if j > len(b.containers) {
+			j = len(b.containers)
+		}
+	} else {
+		n += uint64(b.containers[j].countRange(0, lowbits(end)))
+	}
+
+	// Count containers in between.
+	for x := i + 1; x < j; x++ {
+		n += uint64(b.containers[x].n)
+	}
+
 	return n
 }
 
@@ -656,6 +692,50 @@ func (c *container) unmap() {
 		c.bitmap = tmp
 	}
 	c.mapped = false
+}
+
+// countRange counts the number of bits set between [start, end).
+func (c *container) countRange(start, end uint32) (n int) {
+	if c.isArray() {
+		return c.arrayCountRange(start, end)
+	}
+	return c.bitmapCountRange(start, end)
+}
+
+func (c *container) arrayCountRange(start, end uint32) (n int) {
+	i := sort.Search(len(c.array), func(i int) bool { return c.array[i] >= start })
+	for ; i < len(c.array); i++ {
+		v := c.array[i]
+		if v >= end {
+			break
+		}
+		n++
+	}
+	return n
+}
+
+func (c *container) bitmapCountRange(start, end uint32) int {
+	var n uint64
+	i, j := start/64, end/64
+
+	// Count partial starting word.
+	if off := start % 64; off != 0 {
+		n += popcount(c.bitmap[i] << off)
+	}
+
+	// Count words in between.
+	for ; i < j; i++ {
+		n += popcount(c.bitmap[i])
+	}
+
+	// Count partial ending word.
+	if int(j) < len(c.bitmap) {
+		if off := end % 64; off != 0 {
+			n += popcount(c.bitmap[j] >> off)
+		}
+	}
+
+	return int(n)
 }
 
 // add adds a value to the container.
