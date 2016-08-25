@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"io/ioutil"
+	"math"
 	"os"
 	"reflect"
 	"testing"
@@ -486,6 +487,37 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if a := f.Blocks(); len(a) == 0 {
 			b.Fatal("no blocks in fragment")
+		}
+	}
+}
+
+func BenchmarkFragment_IntersectionCount(b *testing.B) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+	f.MaxOpN = math.MaxInt32
+
+	// Generate some intersecting data.
+	for i := 0; i < 10000; i += 2 {
+		if _, err := f.SetBit(1, uint64(i), nil, 0); err != nil {
+			b.Fatal(err)
+		}
+	}
+	for i := 0; i < 10000; i += 3 {
+		if _, err := f.SetBit(2, uint64(i), nil, 0); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	// Snapshot to disk before benchmarking.
+	if err := f.Snapshot(); err != nil {
+		b.Fatal(err)
+	}
+
+	// Start benchmark
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if n := f.Bitmap(1).IntersectionCount(f.Bitmap(2)); n == 0 {
+			b.Fatalf("unexpected count: %d", n)
 		}
 	}
 }
