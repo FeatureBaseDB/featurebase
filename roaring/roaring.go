@@ -41,6 +41,28 @@ func NewBitmap(a ...uint64) *Bitmap {
 	return b
 }
 
+// Clone returns a heap allocated copy of the bitmap.
+// Note: The OpWriter IS NOT copied to the new bitmap.
+func (b *Bitmap) Clone() *Bitmap {
+	if b == nil {
+		return nil
+	}
+
+	// Create a copy of the bitmap structure.
+	other := &Bitmap{
+		keys:       make([]uint64, len(b.keys)),
+		containers: make([]*container, len(b.containers)),
+	}
+
+	// Copy keys & clone containers.
+	copy(other.keys, b.keys)
+	for i, c := range b.containers {
+		other.containers[i] = c.clone()
+	}
+
+	return other
+}
+
 // Add adds values to the bitmap.
 func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 	changed = false
@@ -208,6 +230,39 @@ func (b *Bitmap) ForEachRange(start, end uint64, fn func(uint64)) {
 	for v, eof := itr.Next(); !eof && v < end; v, eof = itr.Next() {
 		fn(v)
 	}
+}
+
+// OffsetRange returns a new bitmap with a containers offset by start.
+func (b *Bitmap) OffsetRange(offset, start, end uint64) *Bitmap {
+	if lowbits(offset) != 0 {
+		panic("offset must not contain low bits")
+	}
+	if lowbits(start) != 0 {
+		panic("range start must not contain low bits")
+	}
+	if lowbits(end) != 0 {
+		panic("range end must not contain low bits")
+	}
+
+	off := highbits(offset)
+	hi0, hi1 := highbits(start), highbits(end)
+
+	var other Bitmap
+	for i, c := range b.containers {
+		key := b.keys[i]
+
+		// If we've exceeded the upper bound then exit.
+		if key >= hi1 {
+			break
+		} else if key < hi0 {
+			continue
+		}
+
+		// Otherwise append container with offset key.
+		other.keys = append(other.keys, off+(key-hi0))
+		other.containers = append(other.containers, c)
+	}
+	return &other
 }
 
 // container returns the container with the given key.
