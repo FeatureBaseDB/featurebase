@@ -27,7 +27,7 @@ import (
 
 const (
 	// SliceWidth is the number of profile IDs in a slice.
-	SliceWidth = 1048576
+	SliceWidth = 0x1000000 // 1048576
 
 	// SnapshotExt is the file extension used for an in-process snapshot.
 	SnapshotExt = ".snapshotting"
@@ -304,12 +304,24 @@ func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
 }
 
 func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
-	// Read bitmap from storage.
-	bm := NewBitmap()
-	f.storage.ForEachRange(bitmapID*SliceWidth, (bitmapID+1)*SliceWidth, func(i uint64) {
-		profileID := (f.slice * SliceWidth) + (i % SliceWidth)
-		bm.SetBit(profileID)
-	})
+	// Only use a subset of the containers.
+	// NOTE: The start & end ranges must be divisible by
+	data := f.storage.OffsetRange(f.slice*SliceWidth, bitmapID*SliceWidth, (bitmapID+1)*SliceWidth)
+
+	// Reference bitmap subrange in storage.
+	bm := &Bitmap{
+		segments: []BitmapSegment{{
+			data:     *data,
+			slice:    f.slice,
+			writable: false,
+		}},
+	}
+	bm.InvalidateCount()
+
+	// f.storage.ForEachRange(bitmapID*SliceWidth, (bitmapID+1)*SliceWidth, func(i uint64) {
+	// 	profileID := (f.slice * SliceWidth) + (i % SliceWidth)
+	// 	bm.SetBit(profileID)
+	// })
 
 	// Update cache.
 	f.cache.Add(bitmapID, bm.Count())
