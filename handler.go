@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"expvar"
@@ -88,6 +89,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "POST":
 			h.handlePostImport(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	case "/export":
+		switch r.Method {
+		case "GET":
+			h.handleGetExport(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -428,6 +436,58 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 	w.Write(buf)
+}
+
+// handleGetExport handles /export requests.
+func (h *Handler) handleGetExport(w http.ResponseWriter, r *http.Request) {
+	switch r.Header.Get("Accept") {
+	case "text/csv":
+		h.handleGetExportCSV(w, r)
+	default:
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+	}
+}
+
+func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters.
+	q := r.URL.Query()
+	db, frame := q.Get("db"), q.Get("frame")
+
+	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid slice", http.StatusBadRequest)
+		return
+	}
+
+	// Validate that this handler owns the slice.
+	if !h.Cluster.OwnsFragment(h.Host, db, slice) {
+		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, db, slice)
+		http.Error(w, mesg, http.StatusPreconditionFailed)
+		return
+	}
+
+	// Find the fragment.
+	f := h.Index.Fragment(db, frame, slice)
+	if f == nil {
+		return
+	}
+
+	// Wrap writer with a CSV writer.
+	cw := csv.NewWriter(w)
+
+	// Iterate over each bit.
+	if err := f.ForEachBit(func(bitmapID, profileID uint64) error {
+		return cw.Write([]string{
+			strconv.FormatUint(bitmapID, 10),
+			strconv.FormatUint(profileID, 10),
+		})
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Ensure data is flushed.
+	cw.Flush()
 }
 
 // handleGetFragmentNodes handles /fragment/nodes requests.

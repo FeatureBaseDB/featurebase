@@ -255,6 +255,77 @@ func (c *Client) importNode(node *Node, buf []byte) error {
 	return nil
 }
 
+// ExportCSV bulk exports data for a single slice from a host to CSV format.
+func (c *Client) ExportCSV(db, frame string, slice uint64, w io.Writer) error {
+	if db == "" {
+		return ErrDatabaseRequired
+	} else if frame == "" {
+		return ErrFrameRequired
+	}
+
+	// Retrieve a list of nodes that own the slice.
+	nodes, err := c.FragmentNodes(db, slice)
+	if err != nil {
+		return fmt.Errorf("slice nodes: %s", err)
+	}
+
+	// Attempt nodes in random order.
+	var e error
+	for _, i := range rand.Perm(len(nodes)) {
+		node := nodes[i]
+
+		if err := c.exportNodeCSV(node, db, frame, slice, w); err != nil {
+			e = fmt.Errorf("export node: host=%s, err=%s", node.Host, err)
+			continue
+		} else {
+			return nil
+		}
+	}
+
+	return e
+}
+
+// exportNode copies a CSV export from a node to w.
+func (c *Client) exportNodeCSV(node *Node, db, frame string, slice uint64, w io.Writer) error {
+	// Create URL.
+	u := url.URL{
+		Scheme: "http",
+		Host:   node.Host,
+		Path:   "/export",
+		RawQuery: url.Values{
+			"db":    {db},
+			"frame": {frame},
+			"slice": {strconv.FormatUint(slice, 10)},
+		}.Encode(),
+	}
+
+	// Generate HTTP request.
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "text/csv")
+
+	// Execute request against the host.
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Validate status code.
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("invalid status: %d", resp.StatusCode)
+	}
+
+	// Copy body to writer.
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // BackupTo backs up an entire frame from a cluster to w.
 func (c *Client) BackupTo(w io.Writer, db, frame string) error {
 	if db == "" {
