@@ -431,6 +431,25 @@ func (f *Fragment) pos(bitmapID, profileID uint64) (uint64, error) {
 	return (bitmapID * SliceWidth) + (profileID % SliceWidth), nil
 }
 
+// ForEachBit executes fn for every bit set in the fragment.
+// Errors returned from fn are passed through.
+func (f *Fragment) ForEachBit(fn func(bitmapID, profileID uint64) error) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var err error
+	f.storage.ForEach(func(i uint64) {
+		// Skip if an error has already occurred.
+		if err != nil {
+			return
+		}
+
+		// Invoke caller's function.
+		err = fn(i/SliceWidth, (f.slice*SliceWidth)+(i%SliceWidth))
+	})
+	return err
+}
+
 // Top returns the top bitmaps from the fragment.
 // If opt.Src is specified then only bitmaps which intersect src are returned.
 // If opt.FilterValues exist then the bitmap attribute specified by field is matched.

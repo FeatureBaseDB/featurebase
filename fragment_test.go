@@ -108,6 +108,35 @@ func TestFragment_Snapshot(t *testing.T) {
 	}
 }
 
+// Ensure a fragment can iterate over all bits in order.
+func TestFragment_ForEachBit(t *testing.T) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+
+	// Set bits on the fragment.
+	if _, err := f.SetBit(100, 20, nil, 0); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(2, 38, nil, 0); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(2, 37, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Iterate over bits.
+	var result [][2]uint64
+	if err := f.ForEachBit(func(bitmapID, profileID uint64) error {
+		result = append(result, [2]uint64{bitmapID, profileID})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify bits are correct.
+	if !reflect.DeepEqual(result, [][2]uint64{{2, 37}, {2, 38}, {100, 20}}) {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
 // Ensure a fragment can return the top n results.
 func TestFragment_Top(t *testing.T) {
 	f := MustOpenFragment("d", "f", 0)
