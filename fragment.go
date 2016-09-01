@@ -191,7 +191,7 @@ func (f *Fragment) openStorage() error {
 	}
 
 	// Attach the mmap file to the bitmap.
-	data := (*[0x7FFFFFFF]byte)(unsafe.Pointer(&f.storageData[0]))[:fi.Size()]
+	data := f.storageData
 	if err := f.storage.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 	}
