@@ -711,8 +711,7 @@ func (cmd *InspectCommand) Run() error {
 	t := time.Now()
 	fmt.Fprintf(cmd.Stderr, "unmarshaling bitmap...")
 	bm := roaring.NewBitmap()
-	buf := (*[0x7FFFFFFF]byte)(unsafe.Pointer(&data[0]))[:fi.Size()]
-	if err := bm.UnmarshalBinary(buf); err != nil {
+	if err := bm.UnmarshalBinary(data); err != nil {
 		return err
 	}
 	fmt.Fprintf(cmd.Stderr, " (%s)\n", time.Since(t))
