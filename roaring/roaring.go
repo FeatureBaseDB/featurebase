@@ -475,7 +475,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 		// Map byte slice directly to the container data.
 		c := b.containers[i]
-		if c.n <= arrayMaxSize {
+		if c.n <= ArrayMaxSize {
 			c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
 			opsOffset = int(offset) + len(c.array)*4
 		} else {
@@ -704,7 +704,7 @@ func (itr *BufIterator) Unread() {
 }
 
 // The maximum size of array containers.
-const arrayMaxSize = (1 << 20)
+const ArrayMaxSize = (1 << 20)
 
 // container represents a container for uint32 integers.
 //
@@ -803,7 +803,7 @@ func (c *container) add(v uint32) bool {
 
 func (c *container) arrayAdd(v uint32) bool {
 	// Optimize appending to the end of an array container.
-	if c.n > 0 && c.n < arrayMaxSize && c.isArray() && c.array[c.n-1] < v {
+	if c.n > 0 && c.n < ArrayMaxSize && c.isArray() && c.array[c.n-1] < v {
 		c.unmap()
 		c.array = append(c.array, v)
 		c.n++
@@ -817,7 +817,7 @@ func (c *container) arrayAdd(v uint32) bool {
 	}
 
 	// Convert to a bitmap container if too many values are in an array container.
-	if c.n >= arrayMaxSize {
+	if c.n >= ArrayMaxSize {
 		c.convertToBitmap()
 		return c.bitmapAdd(v)
 	}
@@ -889,7 +889,7 @@ func (c *container) bitmapRemove(v uint32) bool {
 	c.bitmap[v/64] &^= (uint64(1) << (v % 64))
 
 	// Convert to array if we go below the threshold.
-	if c.n == arrayMaxSize {
+	if c.n == ArrayMaxSize {
 		c.convertToArray()
 	}
 	return true
@@ -1061,24 +1061,44 @@ func intersectionCountArrayArray(a, b *container) (n uint64) {
 }
 
 func intersectionCountArrayBitmap(a, b *container) (n uint64) {
-	itr := newBufIterator(newBitmapIterator(b.bitmap))
-	for i := 0; i < len(a.array); {
-		va := a.array[i]
-		vb, eof := itr.next()
-		if eof {
-			break
+	// Copy array header so we can shrink it.
+	array := a.array
+	if len(array) == 0 {
+		return 0
+	}
+
+	// Iterate over bitmap and find matching bits.
+	for i, bn := uint32(0), uint32(len(b.bitmap)); i < bn; i++ {
+		v := b.bitmap[i]
+
+		// Ignore if bytes are empty or array is done.
+		if v == 0 {
+			continue
 		}
 
-		if va < vb {
-			i++
-			itr.unread()
-		} else if va > vb {
-			// nop
-		} else {
-			n++
-			i++
+		// Check each bit.
+		for j := uint32(0); j < 64; j++ {
+			if v&(1<<j) == 0 {
+				continue
+			}
+
+			// Search array until match.
+			bv := (i * 64) + j
+			for {
+				if len(array) == 0 {
+					return n
+				} else if array[0] < bv {
+					array = array[1:]
+				} else if array[0] == bv {
+					n++
+					break
+				} else {
+					break
+				}
+			}
 		}
 	}
+
 	return n
 }
 
