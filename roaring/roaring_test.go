@@ -274,6 +274,35 @@ func TestIterator(t *testing.T) {
 	}
 }
 
+var benchmarkBitmapIntersectionCountData struct {
+	a, b *roaring.Bitmap
+}
+
+func BenchmarkBitmap_IntersectionCount_ArrayBitmap(b *testing.B) {
+	data := &benchmarkBitmapIntersectionCountData
+	if data.a == nil {
+		const max = (1 << 24) / 64
+
+		// Build bitmap with array container.
+		data.a = roaring.NewBitmap()
+		for i, n := 0, rand.Intn(roaring.ArrayMaxSize); i < n; i++ {
+			data.a.Add(uint64(rand.Intn(max)))
+		}
+
+		// Build bitmap with bitmap container.
+		data.b = roaring.NewBitmap()
+		for i, n := 0, roaring.ArrayMaxSize*2; i < n; i++ {
+			data.b.Add(uint64(i * 3))
+		}
+	}
+
+	// Reset timer & benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		data.a.IntersectionCount(data.b)
+	}
+}
+
 // GenerateUint64Slice generates between [0, n) random uint64 numbers between min and max.
 func GenerateUint64Slice(n int, min, max uint64, sorted bool, rand *rand.Rand) []uint64 {
 	a := make([]uint64, rand.Intn(n))
