@@ -3,27 +3,21 @@
 package roaring
 
 //go:noescape
-
 var useAsm = hasAsm()
 
 //go:noescape
-
 func popcntSliceAsm(s []uint64) uint64
 
 //go:noescape
-
 func popcntMaskSliceAsm(s, m []uint64) uint64
 
 //go:noescape
-
 func popcntAndSliceAsm(s, m []uint64) uint64
 
 //go:noescape
-
 func popcntOrSliceAsm(s, m []uint64) uint64
 
 //go:noescape
-
 func popcntXorSliceAsm(s, m []uint64) uint64
 
 //go:noescape
