@@ -316,11 +316,7 @@ func (s *BitmapSegment) ClearBit(i uint64) (changed bool) {
 
 // InvalidateCount updates the cached count in the bitmap.
 func (s *BitmapSegment) InvalidateCount() {
-	itr, n := s.data.Iterator(), uint64(0)
-	for _, eof := itr.Next(); !eof; _, eof = itr.Next() {
-		n++
-	}
-	s.n = n
+	s.n = s.data.Count()
 }
 
 // Bits returns a list of all bits set in the segment.

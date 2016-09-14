@@ -19,7 +19,7 @@ const (
 	headerSize = 4 + 4
 
 	// bitmapN is the number of values in a container.bitmap.
-	bitmapN = (1 << 24) / 64
+	bitmapN = (1 << 16) / 64
 )
 
 // Bitmap represents a roaring bitmap.
@@ -146,7 +146,7 @@ func (b *Bitmap) Max() uint64 {
 
 	hb := b.keys[len(b.keys)-1]
 	lb := b.containers[len(b.containers)-1].max()
-	return uint64(hb)<<24 | uint64(lb)
+	return uint64(hb)<<16 | uint64(lb)
 }
 
 // Count returns the number of bits set in the bitmap.
@@ -648,9 +648,9 @@ func (itr *Iterator) peek() uint64 {
 	key := itr.bitmap.keys[itr.i]
 	c := itr.bitmap.containers[itr.i]
 	if c.isArray() {
-		return uint64(key)<<24 | uint64(c.array[itr.j])
+		return uint64(key)<<16 | uint64(c.array[itr.j])
 	}
-	return uint64(key)<<24 | uint64(itr.j)
+	return uint64(key)<<16 | uint64(itr.j)
 }
 
 // BufIterator wraps an iterator to provide the ability to unread values.
@@ -704,7 +704,7 @@ func (itr *BufIterator) Unread() {
 }
 
 // The maximum size of array containers.
-const ArrayMaxSize = (1 << 20)
+const ArrayMaxSize = 4096
 
 // container represents a container for uint32 integers.
 //
@@ -1103,7 +1103,7 @@ func intersectionCountArrayBitmap(a, b *container) (n uint64) {
 }
 
 func intersectionCountBitmapBitmap(a, b *container) (n uint64) {
-	return popcntAndSliceGo(a.bitmap, b.bitmap)
+	return popcntAndSlice(a.bitmap, b.bitmap)
 }
 
 func intersect(a, b *container) *container {
@@ -1463,8 +1463,8 @@ func (op *op) UnmarshalBinary(data []byte) error {
 // size returns the encoded size of the op, in bytes.
 func (*op) size() int { return 1 + 8 + 4 }
 
-func highbits(v uint64) uint64 { return uint64(v >> 24) }
-func lowbits(v uint64) uint32  { return uint32(v & 0xFFFFFF) }
+func highbits(v uint64) uint64 { return uint64(v >> 16) }
+func lowbits(v uint64) uint32  { return uint32(v & 0xFFFF) }
 
 // search32 returns the index of v in a.
 func search32(a []uint32, value uint32) int {
