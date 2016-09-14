@@ -186,26 +186,41 @@ func (e *Executor) executeTopN(db string, c *pql.TopN, slices []uint64, opt *Exe
 }
 
 func (e *Executor) executeTopNSlices(db string, c *pql.TopN, slices []uint64, opt *ExecOptions) ([]Pair, error) {
-	var results []Pair
-	for node, nodeSlices := range e.slicesByNode(db, slices) {
-		// Execute locally if the hostname matches.
-		if node.Host == e.Host {
-			for _, slice := range nodeSlices {
-				pairs, err := e.executeTopNSlice(db, c, slice)
-				if err != nil {
-					return nil, err
-				}
-				results = Pairs(results).Add(pairs)
-			}
-			continue
-		}
+	slicesByNode := e.slicesByNode(db, slices)
 
-		// Otherwise execute remotely.
-		res, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nodeSlices, opt)
-		if err != nil {
-			return nil, err
+	type resp struct {
+		pairs []Pair
+		err   error
+	}
+	ch := make(chan resp, len(slicesByNode))
+
+	for node, nodeSlices := range slicesByNode {
+		go func(node *Node, nodeSlices []uint64) {
+			// Execute locally if the hostname matches.
+			if node.Host == e.Host {
+				pairs, err := e.executeTopNSlicesLocal(db, c, nodeSlices)
+				ch <- resp{pairs: pairs, err: err}
+				return
+			}
+
+			// Otherwise execute remotely.
+			res, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nodeSlices, opt)
+			if err != nil {
+				ch <- resp{err: err}
+				return
+			}
+			ch <- resp{pairs: res[0].([]Pair)}
+		}(node, nodeSlices)
+	}
+
+	// Collect results.
+	var results []Pair
+	for range slicesByNode {
+		r := <-ch
+		if r.err != nil {
+			return nil, r.err
 		}
-		results = Pairs(results).Add(res[0].([]Pair))
+		results = Pairs(results).Add(r.pairs)
 	}
 
 	// Sort final merged results.
@@ -214,6 +229,34 @@ func (e *Executor) executeTopNSlices(db string, c *pql.TopN, slices []uint64, op
 	// Only keep the top n after sorting.
 	if c.N > 0 && len(results) > c.N {
 		results = results[0:c.N]
+	}
+
+	return results, nil
+}
+
+func (e *Executor) executeTopNSlicesLocal(db string, c *pql.TopN, slices []uint64) ([]Pair, error) {
+	type resp struct {
+		pairs []Pair
+		err   error
+	}
+	ch := make(chan resp, len(slices))
+
+	// Execute TopN() in parallel across slices.
+	for _, slice := range slices {
+		go func(slice uint64) {
+			pairs, err := e.executeTopNSlice(db, c, slice)
+			ch <- resp{pairs: pairs, err: err}
+		}(slice)
+	}
+
+	// Collect results.
+	var results []Pair
+	for range slices {
+		r := <-ch
+		if r.err != nil {
+			return nil, r.err
+		}
+		results = Pairs(results).Add(r.pairs)
 	}
 
 	return results, nil

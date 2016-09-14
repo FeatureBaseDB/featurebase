@@ -209,6 +209,12 @@ type ImportCommand struct {
 	// Filenames to import from.
 	Paths []string
 
+	// Size of buffer used to chunk import.
+	BufferSize int
+
+	// Reusable client.
+	Client *pilosa.Client
+
 	// Standard input/output
 	Stdin  io.Reader
 	Stdout io.Writer
@@ -221,6 +227,8 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand 
 		Stdin:  stdin,
 		Stdout: stdout,
 		Stderr: stderr,
+
+		BufferSize: 1000000,
 	}
 }
 
@@ -276,41 +284,28 @@ func (cmd *ImportCommand) Run() error {
 	if err != nil {
 		return err
 	}
+	cmd.Client = client
 
 	// Import each path and import by slice.
 	for _, path := range cmd.Paths {
 		// Parse path into bits.
 		logger.Printf("parsing: %s", path)
-		bits, err := cmd.parsePath(path)
-		if err != nil {
+		if err := cmd.importPath(path); err != nil {
 			return err
-		}
-
-		// Group bits by slice.
-		logger.Printf("grouping %d bits", len(bits))
-		bitsBySlice := pilosa.Bits(bits).GroupBySlice()
-		logger.Printf("grouped into %d slices", len(bitsBySlice))
-
-		// Parse path into bits.
-		for slice, bits := range bitsBySlice {
-			logger.Printf("importing slice: %d, n=%d", slice, len(bits))
-			if err := client.Import(cmd.Database, cmd.Frame, slice, bits); err != nil {
-				return err
-			}
 		}
 	}
 
 	return nil
 }
 
-// parsePath parses a path into bits.
-func (cmd *ImportCommand) parsePath(path string) ([]pilosa.Bit, error) {
-	var a []pilosa.Bit
+// importPath parses a path into bits and imports it to the server.
+func (cmd *ImportCommand) importPath(path string) error {
+	a := make([]pilosa.Bit, 0, cmd.BufferSize)
 
 	// Open file for reading.
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer f.Close()
 
@@ -325,32 +320,64 @@ func (cmd *ImportCommand) parsePath(path string) ([]pilosa.Bit, error) {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return nil, err
+			return err
 		}
 
 		// Ignore blank rows.
 		if record[0] == "" {
 			continue
 		} else if len(record) < 2 {
-			return nil, fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
+			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
 		}
 
 		// Parse bitmap id.
 		bitmapID, err := strconv.ParseUint(record[0], 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("invalid bitmap id on row %d: %q", rnum, record[0])
+			return fmt.Errorf("invalid bitmap id on row %d: %q", rnum, record[0])
 		}
 
 		// Parse bitmap id.
 		profileID, err := strconv.ParseUint(record[1], 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("invalid profile id on row %d: %q", rnum, record[1])
+			return fmt.Errorf("invalid profile id on row %d: %q", rnum, record[1])
 		}
 
 		a = append(a, pilosa.Bit{BitmapID: bitmapID, ProfileID: profileID})
+
+		// If we've reached the buffer size then import bits.
+		if len(a) == cmd.BufferSize {
+			if err := cmd.importBits(a); err != nil {
+				return err
+			}
+			a = a[:0]
+		}
 	}
 
-	return a, nil
+	// If there are still bits in the buffer then flush them.
+	if err := cmd.importBits(a); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// importPath parses a path into bits and imports it to the server.
+func (cmd *ImportCommand) importBits(bits []pilosa.Bit) error {
+	logger := log.New(cmd.Stderr, "", log.LstdFlags)
+
+	// Group bits by slice.
+	logger.Printf("grouping %d bits", len(bits))
+	bitsBySlice := pilosa.Bits(bits).GroupBySlice()
+
+	// Parse path into bits.
+	for slice, bits := range bitsBySlice {
+		logger.Printf("importing slice: %d, n=%d", slice, len(bits))
+		if err := cmd.Client.Import(cmd.Database, cmd.Frame, slice, bits); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ExportCommand represents a command for bulk exporting data from a server.
