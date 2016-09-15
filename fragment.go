@@ -883,7 +883,8 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			}
 
 			// Write to storage.
-			if _, err := f.storage.Add(pos); err != nil {
+			changed, err := f.storage.Add(pos)
+			if err != nil {
 				return err
 			}
 
@@ -898,13 +899,14 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 				bmCounter = bitmap.Count()
 				lastID = bitmapID
 			}
-			if bitmap.SetBit(profileID) {
+			if changed {
 				bmCounter += 1
 			}
 
 			// Invalidate block checksum.
 			delete(f.checksums, int(bitmapID/HashBlockSize))
 		}
+		f.cache.Add(lastID, bmCounter)
 
 		f.cache.Invalidate()
 		return nil
