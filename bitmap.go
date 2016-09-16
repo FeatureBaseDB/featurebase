@@ -127,7 +127,7 @@ func (b *Bitmap) SetBit(i uint64) (changed bool) {
 
 // ClearBit clears the i-th bit of the bitmap.
 func (b *Bitmap) ClearBit(i uint64) (changed bool) {
-	return b.createSegmentIfNotExists(i / SliceWidth).SetBit(i)
+	return b.createSegmentIfNotExists(i / SliceWidth).ClearBit(i)
 }
 
 func (b *Bitmap) createSegmentIfNotExists(slice uint64) *BitmapSegment {
