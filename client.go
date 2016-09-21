@@ -682,3 +682,12 @@ func (a Bits) GroupBySlice() map[uint64][]Bit {
 
 	return m
 }
+
+// BitsByPos represents a slice of bits sorted by internal position.
+type BitsByPos []Bit
+
+func (p BitsByPos) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+func (p BitsByPos) Len() int      { return len(p) }
+func (p BitsByPos) Less(i, j int) bool {
+	return Pos(p[i].BitmapID, p[i].ProfileID) < Pos(p[j].BitmapID, p[j].ProfileID)
+}
