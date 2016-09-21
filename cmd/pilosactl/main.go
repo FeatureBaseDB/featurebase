@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/csv"
 	"errors"
 	"flag"
@@ -10,6 +11,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -81,6 +83,7 @@ The commands are:
 	config     prints the default configuration
 	import     imports data from a CSV file
 	export     exports data to a CSV file
+	sort       sorts a data file for optimal import speed
 	backup     backs up a frame to an archive file
 	restore    restores a frame from an archive file
 	inspect    inspects fragment data files
@@ -112,6 +115,8 @@ func (m *Main) ParseFlags(args []string) error {
 		m.Cmd = NewImportCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "export":
 		m.Cmd = NewExportCommand(m.Stdin, m.Stdout, m.Stderr)
+	case "sort":
+		m.Cmd = NewSortCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "backup":
 		m.Cmd = NewBackupCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "restore":
@@ -239,6 +244,7 @@ func (cmd *ImportCommand) ParseFlags(args []string) error {
 	fs.StringVar(&cmd.Host, "host", "localhost:15000", "host:port")
 	fs.StringVar(&cmd.Database, "d", "", "database")
 	fs.StringVar(&cmd.Frame, "f", "", "frame")
+	fs.IntVar(&cmd.BufferSize, "buffer-size", cmd.BufferSize, "buffer size")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -487,6 +493,112 @@ func (cmd *ExportCommand) Run() error {
 		if err := w.Close(); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+// SortCommand represents a command for sorting import data.
+type SortCommand struct {
+	// Filename to sort
+	Path string
+
+	// Standard input/output
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// NewSortCommand returns a new instance of SortCommand.
+func NewSortCommand(stdin io.Reader, stdout, stderr io.Writer) *SortCommand {
+	return &SortCommand{
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+}
+
+// ParseFlags parses command line flags from args.
+func (cmd *SortCommand) ParseFlags(args []string) error {
+	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
+	fs.SetOutput(ioutil.Discard)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// Extract the data path.
+	if fs.NArg() == 0 {
+		return errors.New("path required")
+	} else if fs.NArg() > 1 {
+		return errors.New("only one path allowed")
+	}
+	cmd.Path = fs.Arg(0)
+
+	return nil
+}
+
+// Usage returns the usage message to be printed.
+func (cmd *SortCommand) Usage() string {
+	return strings.TrimSpace(`
+usage: pilosactl sort PATH
+
+Sorts the import data at PATH into the optimal sort order for importing.
+
+The format of the CSV file is:
+
+	BITMAPID,PROFILEID
+
+The file should contain no headers.
+`)
+}
+
+// Run executes the main program execution.
+func (cmd *SortCommand) Run() error {
+	// Open file for reading.
+	f, err := os.Open(cmd.Path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Read rows as bits.
+	r := csv.NewReader(f)
+	a := make([]pilosa.Bit, 0, 1000000)
+	for {
+		bitmapID, profileID, err := readCSVRow(r)
+		if err == io.EOF {
+			break
+		} else if err == errBlank {
+			continue
+		} else if err != nil {
+			return err
+		}
+		a = append(a, pilosa.Bit{BitmapID: bitmapID, ProfileID: profileID})
+	}
+
+	// Sort bits by position.
+	sort.Sort(pilosa.BitsByPos(a))
+
+	// Rewrite to STDOUT.
+	w := bufio.NewWriter(cmd.Stdout)
+	buf := make([]byte, 0, 1024)
+	for _, bit := range a {
+		// Write CSV to buffer.
+		buf = buf[:0]
+		buf = strconv.AppendUint(buf, bit.BitmapID, 10)
+		buf = append(buf, ',')
+		buf = strconv.AppendUint(buf, bit.ProfileID, 10)
+		buf = append(buf, '\n')
+
+		// Write to output.
+		if _, err := w.Write(buf); err != nil {
+			return err
+		}
+	}
+
+	// Ensure buffer is flushed before exiting.
+	if err := w.Flush(); err != nil {
+		return err
 	}
 
 	return nil
@@ -900,3 +1012,36 @@ func (cmd *BenchCommand) runSetBit(client *pilosa.Client) error {
 
 	return nil
 }
+
+// readCSVRow reads a bitmap/profile pair from a CSV row.
+func readCSVRow(r *csv.Reader) (bitmapID, profileID uint64, err error) {
+	// Read CSV row.
+	record, err := r.Read()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// Ignore blank rows.
+	if record[0] == "" {
+		return 0, 0, errBlank
+	} else if len(record) < 2 {
+		return 0, 0, fmt.Errorf("bad column count: %d", len(record))
+	}
+
+	// Parse bitmap id.
+	bitmapID, err = strconv.ParseUint(record[0], 10, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid bitmap id: %q", record[0])
+	}
+
+	// Parse bitmap id.
+	profileID, err = strconv.ParseUint(record[1], 10, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid profile id: %q", record[1])
+	}
+
+	return bitmapID, profileID, nil
+}
+
+// errBlank indicates a blank row in a CSV file.
+var errBlank = errors.New("blank row")
