@@ -427,8 +427,7 @@ func (f *Fragment) pos(bitmapID, profileID uint64) (uint64, error) {
 	if profileID < minProfileID || profileID >= minProfileID+SliceWidth {
 		return 0, errors.New("profile out of bounds")
 	}
-
-	return (bitmapID * SliceWidth) + (profileID % SliceWidth), nil
+	return Pos(bitmapID, profileID), nil
 }
 
 // ForEachBit executes fn for every bit set in the fragment.
@@ -1421,4 +1420,9 @@ func byteSlicesEqual(a [][]byte) bool {
 		}
 	}
 	return true
+}
+
+// Pos returns the bitmap position of a bitmap/profile pair.
+func Pos(bitmapID, profileID uint64) uint64 {
+	return (bitmapID * SliceWidth) + (profileID % SliceWidth)
 }
