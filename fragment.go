@@ -427,8 +427,7 @@ func (f *Fragment) pos(bitmapID, profileID uint64) (uint64, error) {
 	if profileID < minProfileID || profileID >= minProfileID+SliceWidth {
 		return 0, errors.New("profile out of bounds")
 	}
-
-	return (bitmapID * SliceWidth) + (profileID % SliceWidth), nil
+	return Pos(bitmapID, profileID), nil
 }
 
 // ForEachBit executes fn for every bit set in the fragment.
@@ -870,12 +869,13 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 
 	// Process every bit.
 	// If an error occurs then reopen the storage.
+	lastID := uint64(0)
+	bmCounter := 0
 	if err := func() error {
-		lastID := uint64(0)
-		bmCounter := uint64(0)
-		var bitmap *Bitmap
+		set := make(map[uint64]struct{})
 		for i := range bitmapIDs {
 			bitmapID, profileID := bitmapIDs[i], profileIDs[i]
+
 			// Determine the position of the bit in the storage.
 			pos, err := f.pos(bitmapID, profileID)
 			if err != nil {
@@ -892,12 +892,11 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			// slight risk of concurrent cache counter being off but
 			// no real danger
 			if i == 0 || bitmapID != lastID {
-				bitmap = f.bitmap(bitmapID)
-				if i != 0 {
-					f.cache.Add(lastID, bmCounter)
-				}
-				bmCounter = bitmap.Count()
 				lastID = bitmapID
+				if bmCounter > 5 {
+					set[bitmapID] = struct{}{}
+				}
+				bmCounter = 0
 			}
 			if changed {
 				bmCounter += 1
@@ -906,7 +905,11 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			// Invalidate block checksum.
 			delete(f.checksums, int(bitmapID/HashBlockSize))
 		}
-		f.cache.Add(lastID, bmCounter)
+
+		// Update cache counts for all bitmaps.
+		for bitmapID := range set {
+			f.cache.Add(bitmapID, f.bitmap(bitmapID).Count())
+		}
 
 		f.cache.Invalidate()
 		return nil
@@ -1428,4 +1431,9 @@ func byteSlicesEqual(a [][]byte) bool {
 		}
 	}
 	return true
+}
+
+// Pos returns the bitmap position of a bitmap/profile pair.
+func Pos(bitmapID, profileID uint64) uint64 {
+	return (bitmapID * SliceWidth) + (profileID % SliceWidth)
 }

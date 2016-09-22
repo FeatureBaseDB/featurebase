@@ -247,20 +247,22 @@ func (b *Bitmap) OffsetRange(offset, start, end uint64) *Bitmap {
 	off := highbits(offset)
 	hi0, hi1 := highbits(start), highbits(end)
 
+	// Find starting container.
+	n := len(b.containers)
+	i := sort.Search(n, func(i int) bool { return b.keys[i] >= hi0 })
+
 	var other Bitmap
-	for i, c := range b.containers {
+	for ; i < n; i++ {
 		key := b.keys[i]
 
 		// If we've exceeded the upper bound then exit.
 		if key >= hi1 {
 			break
-		} else if key < hi0 {
-			continue
 		}
 
 		// Otherwise append container with offset key.
 		other.keys = append(other.keys, off+(key-hi0))
-		other.containers = append(other.containers, c)
+		other.containers = append(other.containers, b.containers[i])
 	}
 	return &other
 }
