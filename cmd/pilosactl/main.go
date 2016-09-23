@@ -233,7 +233,7 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand 
 		Stdout: stdout,
 		Stderr: stderr,
 
-		BufferSize: 1000000,
+		BufferSize: 10000000,
 	}
 }
 
