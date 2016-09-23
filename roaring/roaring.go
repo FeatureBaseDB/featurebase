@@ -20,6 +20,9 @@ const (
 
 	// bitmapN is the number of values in a container.bitmap.
 	bitmapN = (1 << 16) / 64
+
+	// manual allocation size tuned to our average client data
+	manualAlloc = 524288
 )
 
 // Bitmap represents a roaring bitmap.
@@ -279,7 +282,7 @@ func insertU64(original []uint64, position int, value uint64) []uint64 {
 	l := len(original)
 	target := original
 	if cap(original) == l {
-		target = make([]uint64, l+1, l+524288)
+		target = make([]uint64, l+1, l+manualAlloc)
 		copy(target, original[:position])
 	} else {
 		target = append(target, 0)
@@ -293,7 +296,7 @@ func insertContainer(original []*container, position int, value *container) []*c
 	l := len(original)
 	target := original
 	if cap(original) == l {
-		target = make([]*container, l+1, l+524288)
+		target = make([]*container, l+1, l+manualAlloc)
 		copy(target, original[:position])
 	} else {
 		target = append(target, nil)
