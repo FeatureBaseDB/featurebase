@@ -20,6 +20,9 @@ const (
 
 	// bitmapN is the number of values in a container.bitmap.
 	bitmapN = (1 << 16) / 64
+
+	// manual allocation size tuned to our average client data
+	manualAlloc = 524288
 )
 
 // Bitmap represents a roaring bitmap.
@@ -275,15 +278,36 @@ func (b *Bitmap) container(key uint64) *container {
 	}
 	return b.containers[i]
 }
+func insertU64(original []uint64, position int, value uint64) []uint64 {
+	l := len(original)
+	target := original
+	if cap(original) == l {
+		target = make([]uint64, l+1, l+manualAlloc)
+		copy(target, original[:position])
+	} else {
+		target = append(target, 0)
+	}
+	copy(target[position+1:], original[position:])
+	target[position] = value
+	return target
+}
 
+func insertContainer(original []*container, position int, value *container) []*container {
+	l := len(original)
+	target := original
+	if cap(original) == l {
+		target = make([]*container, l+1, l+manualAlloc)
+		copy(target, original[:position])
+	} else {
+		target = append(target, nil)
+	}
+	copy(target[position+1:], original[position:])
+	target[position] = value
+	return target
+}
 func (b *Bitmap) insertAt(key uint64, c *container, i int) {
-	b.keys = append(b.keys, 0)
-	copy(b.keys[i+1:], b.keys[i:])
-	b.keys[i] = key
-
-	b.containers = append(b.containers, nil)
-	copy(b.containers[i+1:], b.containers[i:])
-	b.containers[i] = c
+	b.keys = insertU64(b.keys, i, key)
+	b.containers = insertContainer(b.containers, i, c)
 }
 
 // IntersectionCount returns the number of intersections between b and other.
@@ -309,7 +333,6 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 
 	ki, ci := b.keys, b.containers
 	kj, cj := other.keys, other.containers
-
 	for {
 		var key uint64
 		var container *container
@@ -327,10 +350,10 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 			key, container = ki[0], intersect(ci[0], cj[0])
 			ki, ci = ki[1:], ci[1:]
 			kj, cj = kj[1:], cj[1:]
+			output.keys = append(output.keys, key)
+			output.containers = append(output.containers, container)
 		}
 
-		output.keys = append(output.keys, key)
-		output.containers = append(output.containers, container)
 	}
 
 	return output
@@ -386,16 +409,18 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 		} else if nj == 0 || ki[0] < kj[0] { // eof(j) or i < j
 			key, container = ki[0], ci[0].clone()
 			ki, ci = ki[1:], ci[1:]
+			output.keys = append(output.keys, key)
+			output.containers = append(output.containers, container)
 		} else if nj > 0 && ki[0] > kj[0] { // i > j
 			kj, cj = kj[1:], cj[1:]
 		} else { // i == j
 			key, container = ki[0], difference(ci[0], cj[0])
 			ki, ci = ki[1:], ci[1:]
 			kj, cj = kj[1:], cj[1:]
+			output.keys = append(output.keys, key)
+			output.containers = append(output.containers, container)
 		}
 
-		output.keys = append(output.keys, key)
-		output.containers = append(output.containers, container)
 	}
 
 	return output
