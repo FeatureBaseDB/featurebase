@@ -406,16 +406,18 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 		} else if nj == 0 || ki[0] < kj[0] { // eof(j) or i < j
 			key, container = ki[0], ci[0].clone()
 			ki, ci = ki[1:], ci[1:]
+			output.keys = append(output.keys, key)
+			output.containers = append(output.containers, container)
 		} else if nj > 0 && ki[0] > kj[0] { // i > j
 			kj, cj = kj[1:], cj[1:]
 		} else { // i == j
 			key, container = ki[0], difference(ci[0], cj[0])
 			ki, ci = ki[1:], ci[1:]
 			kj, cj = kj[1:], cj[1:]
+			output.keys = append(output.keys, key)
+			output.containers = append(output.containers, container)
 		}
 
-		output.keys = append(output.keys, key)
-		output.containers = append(output.containers, container)
 	}
 
 	return output
