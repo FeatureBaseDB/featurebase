@@ -86,13 +86,12 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 // Union returns the bitwise union of b and other.
 func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 	var segments []BitmapSegment
-
 	itr := newMergeSegmentIterator(b.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
-		if s0 == nil {
+		if s1 == nil {
 			segments = append(segments, *s0)
 			continue
-		} else if s1 == nil {
+		} else if s0 == nil {
 			segments = append(segments, *s1)
 			continue
 		}
@@ -111,7 +110,7 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 		if s0 == nil {
 			continue
 		} else if s1 == nil {
-			segments = append(segments, *s1)
+			segments = append(segments, *s0)
 			continue
 		}
 		segments = append(segments, *s0.Difference(s1))
