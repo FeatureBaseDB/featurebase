@@ -110,7 +110,7 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 		if s0 == nil {
 			continue
 		} else if s1 == nil {
-			segments = append(segments, *s1)
+			segments = append(segments, *s0)
 			continue
 		}
 		segments = append(segments, *s0.Difference(s1))
