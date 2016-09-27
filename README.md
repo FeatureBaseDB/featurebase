@@ -183,9 +183,15 @@ Returns the top 20 Bitmaps from frame `bar`.
 ```
 TopN(Bitmap(id=10, frame="foo"), frame="bar", n=20)
 ```
-Returns the top 20 Bitmaps from `bar` sorted by the count of bits in the intersection with `Bitmap()`.
+Returns the top 20 Bitmaps from `bar` sorted by the count of bits in the intersection with `Bitmap(id=10)`.
 
 
+```
+TopN(Bitmap(id=10, frame="foo"), frame="bar", n=20, field="category", [81,82])
+```
+
+Returns the top 20 Bitmaps from `bar`in attribute `category` with values `81 or
+82` sorted by the count of bits in the intersection with `Bitmap(id=10)`.
 
 ## Development
 
