@@ -147,10 +147,10 @@ func (s *Server) Addr() net.Addr {
 func (s *Server) logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
 
 func (s *Server) monitorAntiEntropy() {
-	ticker := time.NewTicker(time.Duration(s.AntiEntropyInterval))
+	ticker := time.NewTicker(s.AntiEntropyInterval)
 	defer ticker.Stop()
 
-	s.logger().Printf("index sync monitor initializing")
+	s.logger().Printf("index sync monitor initializing (%s interval)", s.AntiEntropyInterval)
 
 	for {
 		// Wait for tick or a close.

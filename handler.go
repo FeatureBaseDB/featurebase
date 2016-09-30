@@ -106,6 +106,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/db/attr/diff":
+		switch r.Method {
+		case "POST":
+			h.handlePostDBAttrDiff(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	case "/frame/attr/diff":
+		switch r.Method {
+		case "POST":
+			h.handlePostFrameAttrDiff(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/fragment/nodes":
 		switch r.Method {
 		case "GET":
@@ -248,6 +262,119 @@ func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) erro
 
 type sliceMaxResponse struct {
 	SliceMax uint64 `json:"SliceMax"`
+}
+
+// handlePostDBAttrDiff handles POST /db/attr/diff requests.
+func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req postDBAttrDiffRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve database from index.
+	db, err := h.Index.CreateDBIfNotExists(req.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Retrieve local blocks.
+	blks, err := db.ProfileAttrStore().Blocks()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Read all attributes from all mismatched blocks.
+	attrs := make(map[uint64]map[string]interface{})
+	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
+		// Retrieve block data.
+		m, err := db.ProfileAttrStore().BlockData(blockID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Copy to database-wide struct.
+		for k, v := range m {
+			attrs[k] = v
+		}
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(postDBAttrDiffResponse{
+		Attrs: attrs,
+	}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type postDBAttrDiffRequest struct {
+	DB     string      `json:"db"`
+	Blocks []AttrBlock `json:"blocks"`
+}
+
+type postDBAttrDiffResponse struct {
+	Attrs map[uint64]map[string]interface{} `json:"attrs"`
+}
+
+// handlePostFrameAttrDiff handles POST /frame/attr/diff requests.
+func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req postFrameAttrDiffRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve database from index.
+	f, err := h.Index.CreateFrameIfNotExists(req.DB, req.Frame)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Retrieve local blocks.
+	blks, err := f.BitmapAttrStore().Blocks()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Read all attributes from all mismatched blocks.
+	attrs := make(map[uint64]map[string]interface{})
+	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
+		// Retrieve block data.
+		m, err := f.BitmapAttrStore().BlockData(blockID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Copy to database-wide struct.
+		for k, v := range m {
+			attrs[k] = v
+		}
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(postFrameAttrDiffResponse{
+		Attrs: attrs,
+	}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type postFrameAttrDiffRequest struct {
+	DB     string      `json:"db"`
+	Frame  string      `json:"frame"`
+	Blocks []AttrBlock `json:"blocks"`
+}
+
+type postFrameAttrDiffResponse struct {
+	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
 
 // readProfiles returns a list of profile objects by id.
