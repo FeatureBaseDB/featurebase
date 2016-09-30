@@ -1254,6 +1254,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		//fmt.Println("no place to replicate", s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.Slice())
 		return nil
 	}
+
 	// Create a set of blocks.
 	blockSets := make([][]FragmentBlock, 0, len(nodes))
 	for _, node := range nodes {

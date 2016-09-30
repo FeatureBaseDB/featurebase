@@ -630,6 +630,80 @@ func (c *Client) BlockData(db, frame string, slice uint64, block int) ([]uint64,
 	return rsp.BitmapIDs, rsp.ProfileIDs, nil
 }
 
+// ProfileAttrDiff returns data from differing blocks on a remote host.
+func (c *Client) ProfileAttrDiff(db string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+	u := url.URL{
+		Scheme:   "http",
+		Host:     c.host,
+		Path:     "/db/attr/diff",
+		RawQuery: url.Values{"db": {db}}.Encode(),
+	}
+
+	// Encode request.
+	buf, err := json.Marshal(postDBAttrDiffRequest{DB: db, Blocks: blks})
+	if err != nil {
+		return nil, err
+	}
+
+	// Send request.
+	resp, err := c.HTTPClient.Post(u.String(), "application/json", bytes.NewReader(buf))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Return error if status is not OK.
+	switch resp.StatusCode {
+	case http.StatusOK: // ok
+	default:
+		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
+	}
+
+	// Decode response object.
+	var rsp postDBAttrDiffResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return nil, err
+	}
+	return rsp.Attrs, nil
+}
+
+// BitmapAttrDiff returns data from differing blocks on a remote host.
+func (c *Client) BitmapAttrDiff(db, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+	u := url.URL{
+		Scheme:   "http",
+		Host:     c.host,
+		Path:     "/frame/attr/diff",
+		RawQuery: url.Values{"db": {db}, "frame": {frame}}.Encode(),
+	}
+
+	// Encode request.
+	buf, err := json.Marshal(postFrameAttrDiffRequest{DB: db, Frame: frame, Blocks: blks})
+	if err != nil {
+		return nil, err
+	}
+
+	// Send request.
+	resp, err := c.HTTPClient.Post(u.String(), "application/json", bytes.NewReader(buf))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Return error if status is not OK.
+	switch resp.StatusCode {
+	case http.StatusOK: // ok
+	default:
+		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
+	}
+
+	// Decode response object.
+	var rsp postFrameAttrDiffResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return nil, err
+	}
+	return rsp.Attrs, nil
+}
+
 // Bit represents the location of a single bit.
 type Bit struct {
 	BitmapID  uint64
