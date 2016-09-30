@@ -275,13 +275,43 @@ type IndexSyncer struct {
 	Closing <-chan struct{}
 }
 
+// Returns true if the syncer has been marked to close.
+func (s *IndexSyncer) IsClosing() bool {
+	select {
+	case <-s.Closing:
+		return true
+	default:
+		return false
+	}
+}
+
 // SyncIndex compares the index on host with the local index and resolves differences.
 func (s *IndexSyncer) SyncIndex() error {
 	sliceN := s.Index.SliceN()
 
 	// Iterate over schema in sorted order.
 	for _, di := range s.Index.Schema() {
+		// Verify syncer has not closed.
+		if s.IsClosing() {
+			return nil
+		}
+
+		// Sync database profile attributes.
+		if err := s.syncDatabase(di.Name); err != nil {
+			return fmt.Errorf("db sync error: db=%s, err=%s", di.Name, err)
+		}
+
 		for _, fi := range di.Frames {
+			// Verify syncer has not closed.
+			if s.IsClosing() {
+				return nil
+			}
+
+			// Sync frame bitmap attributes.
+			if err := s.syncFrame(di.Name, fi.Name); err != nil {
+				return fmt.Errorf("frame sync error: db=%s, frame=%s, err=%s", di.Name, fi.Name, err)
+			}
+
 			for slice := uint64(0); slice <= sliceN; slice++ {
 				// Ignore slices that this host doesn't own.
 				if !s.Cluster.OwnsFragment(s.Host, di.Name, slice) {
@@ -289,15 +319,13 @@ func (s *IndexSyncer) SyncIndex() error {
 				}
 
 				// Verify syncer has not closed.
-				select {
-				case <-s.Closing:
+				if s.IsClosing() {
 					return nil
-				default:
 				}
 
 				// Sync fragment if own it.
 				if err := s.syncFragment(di.Name, fi.Name, slice); err != nil {
-					return fmt.Errorf("sync error: db=%s, frame=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
+					return fmt.Errorf("fragment sync error: db=%s, frame=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
 				}
 			}
 		}
@@ -306,7 +334,97 @@ func (s *IndexSyncer) SyncIndex() error {
 	return nil
 }
 
-// syncFragment synchronizes
+// syncDatabase synchronizes database attributes with the rest of the cluster.
+func (s *IndexSyncer) syncDatabase(db string) error {
+	// Retrieve database reference.
+	d := s.Index.DB(db)
+	if d == nil {
+		return nil
+	}
+
+	// Read block checksums.
+	blks, err := d.ProfileAttrStore().Blocks()
+	if err != nil {
+		return err
+	}
+
+	// Sync with every other host.
+	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.Host) {
+		client, err := NewClient(node.Host)
+		if err != nil {
+			return err
+		}
+
+		// Retrieve attributes from differing blocks.
+		// Skip update and recomputation if no attributes have changed.
+		m, err := client.ProfileAttrDiff(db, blks)
+		if err != nil {
+			return err
+		} else if len(m) == 0 {
+			continue
+		}
+
+		// Update local copy.
+		if err := d.ProfileAttrStore().SetBulkAttrs(m); err != nil {
+			return err
+		}
+
+		// Recompute blocks.
+		blks, err = d.ProfileAttrStore().Blocks()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// syncFrame synchronizes frame attributes with the rest of the cluster.
+func (s *IndexSyncer) syncFrame(db, name string) error {
+	// Retrieve database reference.
+	f := s.Index.Frame(db, name)
+	if f == nil {
+		return nil
+	}
+
+	// Read block checksums.
+	blks, err := f.BitmapAttrStore().Blocks()
+	if err != nil {
+		return err
+	}
+
+	// Sync with every other host.
+	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.Host) {
+		client, err := NewClient(node.Host)
+		if err != nil {
+			return err
+		}
+
+		// Retrieve attributes from differing blocks.
+		// Skip update and recomputation if no attributes have changed.
+		m, err := client.BitmapAttrDiff(db, name, blks)
+		if err != nil {
+			return err
+		} else if len(m) == 0 {
+			continue
+		}
+
+		// Update local copy.
+		if err := f.BitmapAttrStore().SetBulkAttrs(m); err != nil {
+			return err
+		}
+
+		// Recompute blocks.
+		blks, err = f.BitmapAttrStore().Blocks()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// syncFragment synchronizes a fragment with the rest of the cluster.
 func (s *IndexSyncer) syncFragment(db, frame string, slice uint64) error {
 	// Ensure fragment exists locally.
 	f, err := s.Index.CreateFragmentIfNotExists(db, frame, slice)

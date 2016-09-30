@@ -2,8 +2,10 @@ package pilosa_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -414,6 +416,104 @@ func TestHandler_Query_ErrParse(t *testing.T) {
 	}
 }
 
+// Ensure the handler can return data in differing blocks for a database.
+func TestHandler_DB_AttrStore_Diff(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	s := NewServer()
+	s.Handler.Index = idx.Index
+	defer s.Close()
+
+	// Set attributes on the database.
+	db, err := idx.CreateDBIfNotExists("d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.ProfileAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
+		t.Fatal(err)
+	} else if err := db.ProfileAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
+		t.Fatal(err)
+	} else if err := db.ProfileAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Retrieve block checksums.
+	blks, err := db.ProfileAttrStore().Blocks()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove block #0 and alter block 2's checksum.
+	blks = blks[1:]
+	blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
+
+	// Send block checksums to determine diff.
+	resp, err := http.Post(
+		s.URL+"/db/attr/diff?db=d",
+		"application/json",
+		strings.NewReader(`{"db":"d", "blocks":`+string(MustMarshalJSON(blks))+`}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Read and validate body.
+	if body := string(MustReadAll(resp.Body)); body != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
+// Ensure the handler can return data in differing blocks for a frame.
+func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	s := NewServer()
+	s.Handler.Index = idx.Index
+	defer s.Close()
+
+	// Set attributes on the database.
+	f, err := idx.CreateFrameIfNotExists("d", "f")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.BitmapAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
+		t.Fatal(err)
+	} else if err := f.BitmapAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
+		t.Fatal(err)
+	} else if err := f.BitmapAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Retrieve block checksums.
+	blks, err := f.BitmapAttrStore().Blocks()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove block #0 and alter block 2's checksum.
+	blks = blks[1:]
+	blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
+
+	// Send block checksums to determine diff.
+	resp, err := http.Post(
+		s.URL+"/frame/attr/diff?db=d",
+		"application/json",
+		strings.NewReader(`{"db":"d", "frame":"f", "blocks":`+string(MustMarshalJSON(blks))+`}`),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Read and validate body.
+	if body := string(MustReadAll(resp.Body)); body != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
 // Ensure the handler can backup a fragment and then restore it.
 func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	idx := MustOpenIndex()
@@ -569,4 +669,22 @@ func MustNewHTTPRequest(method, urlStr string, body io.Reader) *http.Request {
 		panic(err)
 	}
 	return req
+}
+
+// MustMarshalJSON marshals v to JSON. Panic on error.
+func MustMarshalJSON(v interface{}) []byte {
+	buf, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return buf
+}
+
+// MustReadAll reads a reader into a buffer and returns it. Panic on error.
+func MustReadAll(r io.Reader) []byte {
+	buf, err := ioutil.ReadAll(r)
+	if err != nil {
+		panic(err)
+	}
+	return buf
 }

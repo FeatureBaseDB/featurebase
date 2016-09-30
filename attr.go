@@ -1,6 +1,8 @@
 package pilosa
 
 import (
+	"bytes"
+	"crypto/sha1"
 	"encoding/binary"
 	"fmt"
 	"sort"
@@ -11,6 +13,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/umbel/pilosa/internal"
 )
+
+// AttrBlockSize is the size of attribute blocks for anti-entropy.
+const AttrBlockSize = 100
 
 // AttrStore represents a storage layer for attributes.
 type AttrStore struct {
@@ -150,6 +155,69 @@ func (s *AttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
 	return nil
 }
 
+// Blocks returns a list of all blocks in the store.
+func (s *AttrStore) Blocks() ([]AttrBlock, error) {
+	tx, err := s.db.Begin(false)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Wrap cursor to segment by block.
+	cur := newBlockCursor(tx.Bucket([]byte("attrs")).Cursor(), AttrBlockSize)
+
+	// Iterate over each block.
+	var blocks []AttrBlock
+	for cur.nextBlock() {
+		block := AttrBlock{ID: cur.blockID()}
+
+		// Compute checksum of every key/value in block.
+		h := sha1.New()
+		for k, v := cur.next(); k != nil; k, v = cur.next() {
+			h.Write(k)
+			h.Write(v)
+		}
+		block.Checksum = h.Sum(nil)
+
+		// Append block.
+		blocks = append(blocks, block)
+	}
+
+	return blocks, nil
+}
+
+// BlockData returns all data for a single block.
+func (s *AttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
+	m := make(map[uint64]map[string]interface{})
+
+	// Start read-only transaction.
+	tx, err := s.db.Begin(false)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	// Move to the start of the block.
+	min := u64tob(uint64(i) * AttrBlockSize)
+	max := u64tob(uint64(i+1) * AttrBlockSize)
+	cur := tx.Bucket([]byte("attrs")).Cursor()
+	for k, v := cur.Seek(min); k != nil; k, v = cur.Next() {
+		// Exit if we're past the end of the block.
+		if bytes.Compare(k, max) != -1 {
+			break
+		}
+
+		// Decode attribute map and associate with id.
+		var pb internal.AttrMap
+		if err := proto.Unmarshal(v, &pb); err != nil {
+			return nil, err
+		}
+		m[btou64(k)] = decodeAttrs(pb.GetAttrs())
+	}
+
+	return m, nil
+}
+
 // txAttrs returns a map of attributes for a bitmap.
 func txAttrs(tx *bolt.Tx, id uint64) (map[string]interface{}, error) {
 	v := tx.Bucket([]byte("attrs")).Get(u64tob(id))
@@ -284,3 +352,113 @@ func btou64(b []byte) uint64 { return binary.BigEndian.Uint64(b) }
 
 // emptyMap is a reusable map that contains no keys.
 var emptyMap = make(map[string]interface{})
+
+// AttrBlock represents a checksummed block of the attribute store.
+type AttrBlock struct {
+	ID       uint64 `json:"id"`
+	Checksum []byte `json:"checksum"`
+}
+
+// AttrBlocks represents a list of blocks.
+type AttrBlocks []AttrBlock
+
+// Diff returns a list of block ids that are different or are new in other.
+// Block lists must be in sorted order.
+func (a AttrBlocks) Diff(other []AttrBlock) []uint64 {
+	var ids []uint64
+	for {
+		// Read next block from each list.
+		var blk0, blk1 *AttrBlock
+		if len(a) > 0 {
+			blk0 = &a[0]
+		}
+		if len(other) > 0 {
+			blk1 = &other[0]
+		}
+
+		// Exit if "a" contains no more blocks.
+		if blk0 == nil {
+			return ids
+		}
+
+		// Add block ID if it's different or if it's only in "a".
+		if blk1 == nil || blk0.ID < blk1.ID {
+			ids = append(ids, blk0.ID)
+			a = a[1:]
+		} else if blk1.ID < blk0.ID {
+			other = other[1:]
+		} else {
+			if !bytes.Equal(blk0.Checksum, blk1.Checksum) {
+				ids = append(ids, blk0.ID)
+			}
+			a, other = a[1:], other[1:]
+		}
+	}
+}
+
+// blockCursor represents a cursor for iterating over blocks of a bolt bucket.
+type blockCursor struct {
+	cur  *bolt.Cursor
+	base uint64
+	n    uint64
+
+	buf struct {
+		key    []byte
+		value  []byte
+		filled bool
+	}
+}
+
+// newBlockCursor returns a new block cursor that wraps cur using n sized blocks.
+func newBlockCursor(c *bolt.Cursor, n int) blockCursor {
+	cur := blockCursor{
+		cur: c,
+		n:   uint64(n),
+	}
+	cur.buf.key, cur.buf.value = c.First()
+	cur.buf.filled = true
+	return cur
+}
+
+// blockID returns the current block ID. Only valid after call to nextBlock().
+func (cur *blockCursor) blockID() uint64 { return cur.base }
+
+// nextBlock moves the cursor to the next block.
+// Returns true if another block exists, otherwise returns false.
+func (cur *blockCursor) nextBlock() bool {
+	if cur.buf.key == nil {
+		return false
+	}
+
+	cur.base = binary.BigEndian.Uint64(cur.buf.key) / cur.n
+	return true
+}
+
+// next returns the next key/value within the block.
+// Returns nils at the end of the block.
+func (cur *blockCursor) next() (key, value []byte) {
+	// Use buffered value, if set.
+	if cur.buf.filled {
+		key, value = cur.buf.key, cur.buf.value
+		cur.buf.filled = false
+		return key, value
+	}
+
+	// Read next key.
+	key, value = cur.cur.Next()
+
+	// Fill buffer for EOF.
+	if key == nil {
+		cur.buf.key, cur.buf.value, cur.buf.filled = key, value, false
+		return nil, nil
+	}
+
+	// Parse key and buffer if outside of block.
+	id := binary.BigEndian.Uint64(key)
+	if id/cur.n > cur.base {
+		cur.buf.key, cur.buf.value, cur.buf.filled = key, value, true
+		return nil, nil
+	}
+
+	return key, value
+}

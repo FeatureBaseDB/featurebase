@@ -134,6 +134,9 @@ func (m *Main) Run(args ...string) error {
 	m.Server.Host = m.Config.Host
 	m.Server.Cluster = m.Config.PilosaCluster()
 
+	// Set configuration options.
+	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
+
 	// Initialize server.
 	if err := m.Server.Open(); err != nil {
 		return err
