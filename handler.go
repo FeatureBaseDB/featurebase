@@ -106,6 +106,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/db":
+		switch r.Method {
+		case "DELETE":
+			h.handleDeleteDB(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/db/attr/diff":
 		switch r.Method {
 		case "POST":
@@ -263,6 +270,33 @@ func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) erro
 type sliceMaxResponse struct {
 	SliceMax uint64 `json:"SliceMax"`
 }
+
+// handleDeleteDB handles DELETE /db request.
+func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req deleteDBRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Delete database from the index.
+	if err := h.Index.DeleteDB(req.DB); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(deleteDBResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type deleteDBRequest struct {
+	DB string `json:"db"`
+}
+
+type deleteDBResponse struct{}
 
 // handlePostDBAttrDiff handles POST /db/attr/diff requests.
 func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
