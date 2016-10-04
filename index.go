@@ -183,6 +183,33 @@ func (i *Index) createDBIfNotExists(name string) (*DB, error) {
 	return db, nil
 }
 
+// DeleteDB removes a database from the index.
+func (i *Index) DeleteDB(name string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Ignore if database doesn't exist.
+	db := i.db(name)
+	if db == nil {
+		return nil
+	}
+
+	// Close database.
+	if err := db.Close(); err != nil {
+		return err
+	}
+
+	// Delete database directory.
+	if err := os.RemoveAll(i.DBPath(name)); err != nil {
+		return err
+	}
+
+	// Remove reference.
+	delete(i.dbs, name)
+
+	return nil
+}
+
 // Frame returns the frame for a database and name.
 func (i *Index) Frame(db, name string) *Frame {
 	d := i.DB(db)

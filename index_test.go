@@ -11,6 +11,39 @@ import (
 	"github.com/umbel/pilosa/pql"
 )
 
+// Ensure index can delete a database and its underlying files.
+func TestIndex_DeleteDB(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	// Write bits to separate databases.
+	f0 := idx.MustCreateFragmentIfNotExists("d0", "f", 0)
+	if _, err := f0.SetBit(100, 200, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	f1 := idx.MustCreateFragmentIfNotExists("d1", "f", 0)
+	if _, err := f1.SetBit(100, 200, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure d0 exists.
+	if _, err := os.Stat(idx.DBPath("d0")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete d0.
+	if err := idx.DeleteDB("d0"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure d0 files are removed & d1 still exists.
+	if _, err := os.Stat(idx.DBPath("d0")); !os.IsNotExist(err) {
+		t.Fatal("expected d0 file deletion")
+	} else if _, err := os.Stat(idx.DBPath("d1")); err != nil {
+		t.Fatal("expected d1 files to still exist", err)
+	}
+}
+
 // Ensure index can sync with a remote index.
 func TestIndexSyncer_SyncIndex(t *testing.T) {
 	cluster := NewCluster(2)

@@ -416,6 +416,42 @@ func TestHandler_Query_ErrParse(t *testing.T) {
 	}
 }
 
+// Ensure the handler can delete a database.
+func TestHandler_DB_Delete(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	s := NewServer()
+	s.Handler.Index = idx.Index
+	defer s.Close()
+
+	// Create database.
+	if _, err := idx.CreateDBIfNotExists("d"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Send request to delete database.
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("DELETE", s.URL+"/db", strings.NewReader(`{"db":"d"}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Verify body response.
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	} else if buf, err := ioutil.ReadAll(resp.Body); err != nil {
+		t.Fatal(err)
+	} else if string(buf) != "{}\n" {
+		t.Fatalf("unexpected response body: %s", buf)
+	}
+
+	// Verify database is gone.
+	if idx.DB("d") != nil {
+		t.Fatal("expected nil database")
+	}
+}
+
 // Ensure the handler can return data in differing blocks for a database.
 func TestHandler_DB_AttrStore_Diff(t *testing.T) {
 	idx := MustOpenIndex()
