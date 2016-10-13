@@ -266,8 +266,9 @@ func (s *BitmapSegment) Intersect(other *BitmapSegment) *BitmapSegment {
 	data := s.data.Intersect(&other.data)
 
 	return &BitmapSegment{
-		data: *data,
-		n:    data.Count(),
+		data:  *data,
+		slice: s.slice,
+		n:     data.Count(),
 	}
 }
 
@@ -276,8 +277,9 @@ func (s *BitmapSegment) Union(other *BitmapSegment) *BitmapSegment {
 	data := s.data.Union(&other.data)
 
 	return &BitmapSegment{
-		data: *data,
-		n:    data.Count(),
+		data:  *data,
+		slice: s.slice,
+		n:     data.Count(),
 	}
 }
 
@@ -286,8 +288,9 @@ func (s *BitmapSegment) Difference(other *BitmapSegment) *BitmapSegment {
 	data := s.data.Difference(&other.data)
 
 	return &BitmapSegment{
-		data: *data,
-		n:    data.Count(),
+		data:  *data,
+		slice: s.slice,
+		n:     data.Count(),
 	}
 }
 
@@ -344,7 +347,6 @@ func (s *BitmapSegment) ensureWritable() {
 // mergeSegmentIterator produces an iterator that loops through two sets of segments.
 type mergeSegmentIterator struct {
 	a0, a1 []BitmapSegment
-	i0, i1 int
 }
 
 // newMergeSegmentIterator returns a new instance of mergeSegmentIterator.
@@ -355,34 +357,34 @@ func newMergeSegmentIterator(a0, a1 []BitmapSegment) mergeSegmentIterator {
 // next returns the next set of segments.
 func (itr *mergeSegmentIterator) next() (s0, s1 *BitmapSegment) {
 	// Find current segments.
-	if itr.i0 < len(itr.a0) {
-		s0 = &itr.a0[itr.i0]
+	if len(itr.a0) > 0 {
+		s0 = &itr.a0[0]
 	}
-	if itr.i1 < len(itr.a1) {
-		s1 = &itr.a1[itr.i1]
+	if len(itr.a1) > 0 {
+		s1 = &itr.a1[0]
 	}
 
 	// Return if either or both are nil.
 	if s0 == nil && s1 == nil {
 		return
 	} else if s0 == nil {
-		itr.i1++
+		itr.a1 = itr.a1[1:]
 		return
 	} else if s1 == nil {
-		itr.i0++
+		itr.a0 = itr.a0[1:]
 		return
 	}
 
 	// Otherwise determine which is first.
 	if s0.slice < s1.slice {
-		itr.i0++
+		itr.a0 = itr.a0[1:]
 		return s0, nil
 	} else if s0.slice > s1.slice {
-		itr.i1++
+		itr.a1 = itr.a1[1:]
 		return s1, nil
 	}
 
 	// Return both if slices are equal.
-	itr.i0, itr.i1 = itr.i0+1, itr.i1+1
-	return
+	itr.a0, itr.a1 = itr.a0[1:], itr.a1[1:]
+	return s0, s1
 }
