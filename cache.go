@@ -1,6 +1,8 @@
 package pilosa
 
 import (
+	"bytes"
+	"fmt"
 	"io"
 	"sort"
 	"time"
@@ -260,6 +262,19 @@ func (p Pairs) Keys() []uint64 {
 		a[i] = p[i].Key
 	}
 	return a
+}
+
+func (p Pairs) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("Pairs(")
+	for i := range p {
+		fmt.Fprintf(&buf, "%d/%d", p[i].Key, p[i].Count)
+		if i < len(p)-1 {
+			buf.WriteString(", ")
+		}
+	}
+	buf.WriteString(")")
+	return buf.String()
 }
 
 func encodePairs(a Pairs) []*internal.Pair {
