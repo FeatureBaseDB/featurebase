@@ -417,15 +417,15 @@ func (e *Executor) executeClearBit(db string, c *pql.ClearBit, opt *ExecOptions)
 	for _, node := range e.Cluster.FragmentNodes(db, slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
-			f, err := e.Index.CreateFragmentIfNotExists(db, c.Frame, slice)
-			if err != nil {
-				return false, fmt.Errorf("fragment: %s", err)
+			f := e.Index.Fragment(db, c.Frame, slice)
+			if f == nil {
+				return false, nil
 			}
+
 			val, err := f.ClearBit(c.ID, c.ProfileID)
 			if err != nil {
 				return false, err
-			}
-			if val {
+			} else if val {
 				ret = true
 			}
 			continue
