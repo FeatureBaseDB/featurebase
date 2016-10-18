@@ -695,6 +695,8 @@ func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64, op
 			v, err = pb.Results[i].GetN(), nil
 		case *pql.SetBit:
 			v, err = pb.Results[i].GetChanged(), nil
+		case *pql.ClearBit:
+			v, err = pb.Results[i].GetChanged(), nil
 		case *pql.SetBitmapAttrs:
 		case *pql.SetProfileAttrs:
 		default:
