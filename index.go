@@ -27,6 +27,9 @@ type Index struct {
 	wg      sync.WaitGroup
 	closing chan struct{}
 
+	// Stats
+	Stats StatsClient
+
 	// Data directory path.
 	Path string
 
@@ -42,6 +45,8 @@ func NewIndex() *Index {
 		dbs:       make(map[string]*DB),
 		remoteMax: 0,
 		closing:   make(chan struct{}, 0),
+
+		Stats: NopStatsClient,
 
 		CacheFlushInterval: DefaultCacheFlushInterval,
 
@@ -74,11 +79,13 @@ func (i *Index) Open() error {
 
 		i.logger().Printf("opening database: %s", filepath.Base(fi.Name()))
 
-		db := NewDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		db := i.newDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err := db.Open(); err != nil {
 			return fmt.Errorf("open db: name=%s, err=%s", db.Name(), err)
 		}
 		i.dbs[db.Name()] = db
+
+		i.Stats.Count("dbN", 1)
 	}
 
 	// Periodically flush cache.
@@ -174,13 +181,21 @@ func (i *Index) createDBIfNotExists(name string) (*DB, error) {
 	}
 
 	// Otherwise create a new database.
-	db := NewDB(i.DBPath(name), name)
+	db := i.newDB(i.DBPath(name), name)
 	if err := db.Open(); err != nil {
 		return nil, err
 	}
 	i.dbs[db.Name()] = db
 
+	i.Stats.Count("dbN", 1)
+
 	return db, nil
+}
+
+func (i *Index) newDB(path, name string) *DB {
+	db := NewDB(path, name)
+	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
+	return db
 }
 
 // DeleteDB removes a database from the index.
@@ -206,6 +221,8 @@ func (i *Index) DeleteDB(name string) error {
 
 	// Remove reference.
 	delete(i.dbs, name)
+
+	i.Stats.Count("dbN", -1)
 
 	return nil
 }

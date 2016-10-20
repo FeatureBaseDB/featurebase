@@ -129,6 +129,7 @@ func (m *Main) Run(args ...string) error {
 	// Configure index.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
 	m.Server.Index.Path = m.Config.DataDir
+	m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
 
 	// Build cluster from config file.
 	m.Server.Host = m.Config.Host
