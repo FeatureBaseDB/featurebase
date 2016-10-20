@@ -28,6 +28,8 @@ type Frame struct {
 
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
+
+	stats StatsClient
 }
 
 // NewFrame returns a new instance of frame.
@@ -39,6 +41,8 @@ func NewFrame(path, db, name string) *Frame {
 
 		fragments:       make(map[uint64]*Fragment),
 		bitmapAttrStore: NewAttrStore(filepath.Join(path, "data")),
+
+		stats: NopStatsClient,
 	}
 }
 
@@ -117,12 +121,14 @@ func (f *Frame) openFragments() error {
 			continue
 		}
 
-		frag := NewFragment(f.FragmentPath(slice), f.db, f.name, slice)
+		frag := f.newFragment(f.FragmentPath(slice), slice)
 		if err := frag.Open(); err != nil {
 			return fmt.Errorf("open fragment: slice=%s, err=%s", frag.Slice(), err)
 		}
 		frag.BitmapAttrStore = f.bitmapAttrStore
 		f.fragments[frag.Slice()] = frag
+
+		f.stats.Count("sliceN", 1)
 	}
 
 	return nil
@@ -187,7 +193,7 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	}
 
 	// Initialize and open fragment.
-	frag := NewFragment(f.FragmentPath(slice), f.db, f.name, slice)
+	frag := f.newFragment(f.FragmentPath(slice), slice)
 	if err := frag.Open(); err != nil {
 		return nil, err
 	}
@@ -196,7 +202,15 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	// Save to lookup.
 	f.fragments[slice] = frag
 
+	f.stats.Count("sliceN", 1)
+
 	return frag, nil
+}
+
+func (f *Frame) newFragment(path string, slice uint64) *Fragment {
+	frag := NewFragment(path, f.db, f.name, slice)
+	frag.stats = f.stats.WithTags(fmt.Sprintf("slice:%d", slice))
+	return frag
 }
 
 type frameSlice []*Frame

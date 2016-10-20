@@ -84,6 +84,8 @@ type Fragment struct {
 	// Bitmap attribute storage.
 	// This is set by the parent frame unless overridden for testing.
 	BitmapAttrStore *AttrStore
+
+	stats StatsClient
 }
 
 // NewFragment returns a new instance of Fragment.
@@ -96,6 +98,8 @@ func NewFragment(path, db, frame string, slice uint64) *Fragment {
 
 		LogOutput: os.Stderr,
 		MaxOpN:    DefaultFragmentMaxOpN,
+
+		stats: NopStatsClient,
 	}
 }
 
@@ -369,6 +373,8 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 		changed = true
 	}
 
+	f.stats.Count("setN", 1)
+
 	return changed, nil
 }
 
@@ -416,6 +422,8 @@ func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
 	if f.bitmap(bitmapID).ClearBit(profileID) {
 		return true, nil
 	}
+
+	f.stats.Count("clearN", 1)
 
 	return changed, nil
 }
