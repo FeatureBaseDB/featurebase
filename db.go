@@ -20,6 +20,8 @@ type DB struct {
 
 	// Profile attribute storage and cache
 	profileAttrStore *AttrStore
+
+	stats StatsClient
 }
 
 // NewDB returns a new instance of DB.
@@ -30,6 +32,8 @@ func NewDB(path, name string) *DB {
 		frames: make(map[string]*Frame),
 
 		profileAttrStore: NewAttrStore(filepath.Join(path, "data")),
+
+		stats: NopStatsClient,
 	}
 }
 
@@ -78,11 +82,13 @@ func (db *DB) openFrames() error {
 			continue
 		}
 
-		fr := NewFrame(db.FramePath(filepath.Base(fi.Name())), db.name, filepath.Base(fi.Name()))
+		fr := db.newFrame(db.FramePath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err := fr.Open(); err != nil {
 			return fmt.Errorf("open frame: name=%s, err=%s", fr.Name(), err)
 		}
 		db.frames[fr.Name()] = fr
+
+		db.stats.Count("frameN", 1)
 	}
 	return nil
 }
@@ -164,13 +170,21 @@ func (db *DB) createFrameIfNotExists(name string) (*Frame, error) {
 	}
 
 	// Initialize and open frame.
-	f := NewFrame(db.FramePath(name), db.name, name)
+	f := db.newFrame(db.FramePath(name), name)
 	if err := f.Open(); err != nil {
 		return nil, err
 	}
 	db.frames[name] = f
 
+	db.stats.Count("frameN", 1)
+
 	return f, nil
+}
+
+func (db *DB) newFrame(path, name string) *Frame {
+	f := NewFrame(path, db.name, name)
+	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
+	return f
 }
 
 type dbSlice []*DB

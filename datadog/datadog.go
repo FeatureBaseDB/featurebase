@@ -1,6 +1,9 @@
 package datadog
 
 import (
+	"io"
+	"io/ioutil"
+	"log"
 	"sort"
 	"time"
 
@@ -23,6 +26,8 @@ var _ pilosa.StatsClient = &StatsClient{}
 type StatsClient struct {
 	client *statsd.Client
 	tags   []string
+
+	LogOutput io.Writer
 }
 
 // NewStatsClient returns a new instance of StatsClient.
@@ -31,7 +36,11 @@ func NewStatsClient() (*StatsClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &StatsClient{client: c}, nil
+
+	return &StatsClient{
+		client:    c,
+		LogOutput: ioutil.Discard,
+	}, nil
 }
 
 // Close closes the connection to the agent.
@@ -48,66 +57,46 @@ func (c *StatsClient) Tags() []string {
 func (c *StatsClient) WithTags(tags ...string) pilosa.StatsClient {
 	return &StatsClient{
 		client: c.client,
-		tags:   unionTags(c.tags, tags),
+		tags:   pilosa.UnionStringSlice(c.tags, tags),
 	}
 }
 
 // Count tracks the number of times something occurs per second.
-func (c *StatsClient) Count(name string, value int64) error {
-	return c.client.Count(name, value, c.tags, Rate)
+func (c *StatsClient) Count(name string, value int64) {
+	if err := c.client.Count(name, value, c.tags, Rate); err != nil {
+		c.logger.Printf("datadog.StatsClient.Count error: %s", err)
+	}
 }
 
 // Gauge sets the value of a metric.
-func (c *StatsClient) Gauge(name string, value float64) error {
-	return c.client.Gauge(name, value, c.tags, Rate)
+func (c *StatsClient) Gauge(name string, value float64) {
+	if err := c.client.Gauge(name, value, c.tags, Rate); err != nil {
+		c.logger.Printf("datadog.StatsClient.Gauge error: %s", err)
+	}
 }
 
 // Histogram tracks statistical distribution of a metric.
 func (c *StatsClient) Histogram(name string, value float64) error {
-	return c.client.Histogram(name, value, c.tags, Rate)
+	if err := c.client.Histogram(name, value, c.tags, Rate); err != nil {
+		c.logger.Printf("datadog.StatsClient.Histogram error: %s", err)
+	}
 }
 
 // Set tracks number of unique elements.
 func (c *StatsClient) Set(name string, value string) error {
-	return c.client.Set(name, value, c.tags, Rate)
+	if err := c.client.Set(name, value, c.tags, Rate); err != nil {
+		c.logger.Printf("datadog.StatsClient.Set error: %s", err)
+	}
 }
 
 // Timing tracks timing information for a metric.
 func (c *StatsClient) Timing(name string, value time.Duration) error {
-	return c.client.Timing(name, value, c.tags, Rate)
+	if err := c.client.Timing(name, value, c.tags, Rate); err != nil {
+		c.logger.Printf("datadog.StatsClient.Timing error: %s", err)
+	}
 }
 
-// unionTags returns a sorted set of tags which combine a & b.
-func unionTags(a, b []string) []string {
-	// Sort both sets first.
-	sort.Strings(a)
-	sort.Strings(b)
-
-	// Find size of largest slice.
-	n := len(a)
-	if len(b) > n {
-		n = len(b)
-	}
-
-	// Exit if both sets are empty.
-	if n == 0 {
-		return nil
-	}
-
-	// Iterate over both in order and merge.
-	other := make([]string, 0, n)
-	for len(a) > 0 || len(b) > 0 {
-		if len(a) == 0 {
-			other, b = append(other, b[0]), b[1:]
-		} else if len(b) == 0 {
-			other, a = append(other, a[0]), a[1:]
-		} else if a[0] < b[0] {
-			other, a = append(other, a[0]), a[1:]
-		} else if b[0] < a[0] {
-			other, b = append(other, b[0]), b[1:]
-		} else {
-			other, a, b = append(other, a[0]), a[1:], b[1:]
-		}
-	}
-	return other
+// logger returns a logger that writes to LogOutput
+func (c *StatsClient) logger() *log.Logger {
+	return log.New(c.LogOutput, "", log.LstdFlags)
 }
