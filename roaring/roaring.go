@@ -1006,6 +1006,10 @@ func (c *container) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 func (c *container) arrayWriteTo(w io.Writer) (n int64, err error) {
+	if len(c.array) == 0 {
+		return 0, nil
+	}
+
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.array[0]))[:4*c.n])
 	return int64(nn), err
 }
