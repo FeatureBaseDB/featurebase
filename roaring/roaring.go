@@ -278,6 +278,7 @@ func (b *Bitmap) container(key uint64) *container {
 	}
 	return b.containers[i]
 }
+
 func insertU64(original []uint64, position int, value uint64) []uint64 {
 	l := len(original)
 	target := original
@@ -572,6 +573,29 @@ func (b *Bitmap) Info() BitmapInfo {
 	}
 
 	return info
+}
+
+// Check performs a consistency check on the bitmap. Returns nil if consistent.
+func (b *Bitmap) Check() error {
+	var a ErrorList
+
+	// Check keys/containers match. Return immediately if this happens.
+	if len(b.keys) != len(b.containers) {
+		a.Append(fmt.Errorf("key/container count mismatch: %d != %d", len(b.keys), len(b.containers)))
+		return a
+	}
+
+	// Check each container.
+	for i, c := range b.containers {
+		if err := c.check(); err != nil {
+			a.AppendWithPrefix(err, fmt.Sprintf("%d/", b.keys[i]))
+		}
+	}
+
+	if len(a) == 0 {
+		return nil
+	}
+	return a
 }
 
 // BitmapInfo represents a point-in-time snapshot of bitmap stats.
@@ -1048,6 +1072,26 @@ func (c *container) info() ContainerInfo {
 	}
 
 	return info
+}
+
+// check performs a consistency check on the container.
+func (c *container) check() error {
+	var a ErrorList
+
+	if c.n <= ArrayMaxSize {
+		if len(c.array) != c.n {
+			a.Append(fmt.Errorf("array count mismatch: count=%d, n=%d", len(c.array), c.n))
+		}
+	} else {
+		if n := c.bitmapCountRange(0, uint32(len(c.bitmap)*64)); n != c.n {
+			a.Append(fmt.Errorf("bitmap count mismatch: count=%d, n=%d", n, c.n))
+		}
+	}
+
+	if a == nil {
+		return nil
+	}
+	return a
 }
 
 // ContainerInfo represents a point-in-time snapshot of container stats.
@@ -1679,4 +1723,39 @@ func (itr *bufBitmapIterator) unread() {
 		panic("roaring.bufBitmapIterator: buffer full")
 	}
 	itr.buf.full = true
+}
+
+// ErrorList represents a list of errors.
+type ErrorList []error
+
+func (a ErrorList) Error() string {
+	switch len(a) {
+	case 0:
+		return "no errors"
+	case 1:
+		return a[0].Error()
+	}
+	return fmt.Sprintf("%s (and %d more errors)", a[0], len(a)-1)
+}
+
+// Append appends an error to the list. If err is an ErrorList then all errors are appended.
+func (a *ErrorList) Append(err error) {
+	switch err := err.(type) {
+	case ErrorList:
+		*a = append(*a, err...)
+	default:
+		*a = append(*a, err)
+	}
+}
+
+// AppendWithPrefix appends an error to the list and includes a prefix.
+func (a *ErrorList) AppendWithPrefix(err error, prefix string) {
+	switch err := err.(type) {
+	case ErrorList:
+		for i := range err {
+			*a = append(*a, fmt.Errorf("%s%s", prefix, err[i]))
+		}
+	default:
+		*a = append(*a, fmt.Errorf("%s%s", prefix, err))
+	}
 }
