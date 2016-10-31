@@ -1,0 +1,32 @@
+version: '2'
+services:
+  pil0:
+    build:
+      context: .
+      args:
+        dchostname: pil0
+    container_name: p0
+    environment:
+      - GODEBUG=netdns=cgo+1
+    ports:
+      - "16000:15000"
+  pil1:
+    build:
+      context: .
+      args:
+        dchostname: pil1
+    container_name: p1
+    environment:
+      - GODEBUG=netdns=cgo+1
+    ports:
+      - "16001:15000"
+  pil2:
+    build:
+      context: .
+      args:
+        dchostname: pil2
+    container_name: p2
+    environment:
+      - GODEBUG=netdns=cgo+1
+    ports:
+      - "16002:15000"
