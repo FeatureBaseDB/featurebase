@@ -1,2 +1,2 @@
-sed -i -e s/ZZZ/${DCHOSTNAME}/ /etc/pilosa.conf
+sed -i -e s/HOSTNAMEVAR/${HOSTNAMEVAR}/ /etc/pilosa.conf
 pilosa -config /etc/pilosa.conf
