@@ -6,17 +6,7 @@ Install Go versions 1.6.2+ or 1.7 for your platform.
 
 Fork `github.com/umbel/pilosa` to your own account. The forked repo will be private.
 
-In a shell, export your work directory as `$GOPATH`:
-
-```sh
-export GOPATH=$HOME/Work/pilosa/server
-```
-
-Update `$PATH` to get access to Pilosa command line tools:
-
-```sh
-export PATH=$GOPATH/bin:$PATH
-```
+Make sure `$GOPATH` environment variable points to your Go working directory and `$PATH` incudes `$GOPATH/bin`.
 
 Create a directory (note that we use `github.com/umbel`, NOT `github.com/USER`) and clone your own Pilosa repo:
 
