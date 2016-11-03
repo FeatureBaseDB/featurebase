@@ -427,8 +427,29 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 	return output
 }
 
+// removeEmptyContainers deletes all containers that have a count of zero.
+func (b *Bitmap) removeEmptyContainers() {
+	for i := 0; i < len(b.containers); {
+		c := b.containers[i]
+
+		if c.n == 0 {
+			b.keys = append(b.keys[:i], b.keys[i+1:]...)
+
+			copy(b.containers[i:], b.containers[i+1:])
+			b.containers[len(b.containers)-1] = nil
+			b.containers = b.containers[:len(b.containers)-1]
+			continue
+		}
+
+		i++
+	}
+}
+
 // WriteTo writes b to w.
 func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
+	// Remove empty containers before persisting.
+	b.removeEmptyContainers()
+
 	// Build header before writing individual container blocks.
 	buf := make([]byte, headerSize+(len(b.keys)*(4+8+4)))
 	binary.LittleEndian.PutUint32(buf[0:], cookie)
@@ -436,8 +457,14 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Encode keys and cardinality.
 	for i, key := range b.keys {
+		c := b.containers[i]
+
+		// Verify container count before writing.
+		count := c.count()
+		assert(c.count() == c.n, "cannot write container count, mismatch: count=%d, n=%d", count, c.n)
+
 		binary.LittleEndian.PutUint64(buf[headerSize+i*12:], uint64(key))
-		binary.LittleEndian.PutUint32(buf[headerSize+i*12+8:], uint32(b.containers[i].n-1))
+		binary.LittleEndian.PutUint32(buf[headerSize+i*12+8:], uint32(c.n-1))
 	}
 
 	// Write the offset for each container block.
@@ -505,11 +532,18 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		c := b.containers[i]
 		if c.n <= ArrayMaxSize {
 			c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
+			for _, v := range c.array {
+				assert(lowbits(uint64(v)) == v, "array value out of range: %d", v)
+			}
 			opsOffset = int(offset) + len(c.array)*4
 		} else {
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
 			opsOffset = int(offset) + len(c.bitmap)*8
 		}
+
+		// Verify container count on load.
+		count := c.count()
+		assert(c.count() == c.n, "container count mismatch: count=%d, n=%d", count, c.n)
 	}
 
 	// Read ops log until the end of the file.
@@ -800,6 +834,11 @@ func (c *container) unmap() {
 	c.mapped = false
 }
 
+// count counts all bits in the container.
+func (c *container) count() (n int) {
+	return c.countRange(0, (bitmapN*64)+1)
+}
+
 // countRange counts the number of bits set between [start, end).
 func (c *container) countRange(start, end uint32) (n int) {
 	if c.isArray() {
@@ -1032,6 +1071,11 @@ func (c *container) WriteTo(w io.Writer) (n int64, err error) {
 func (c *container) arrayWriteTo(w io.Writer) (n int64, err error) {
 	if len(c.array) == 0 {
 		return 0, nil
+	}
+
+	// Verify all elements are valid.
+	for _, v := range c.array {
+		assert(lowbits(uint64(v)) == v, "cannot write array value out of range: %d", v)
 	}
 
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.array[0]))[:4*c.n])
@@ -1757,5 +1801,12 @@ func (a *ErrorList) AppendWithPrefix(err error, prefix string) {
 		}
 	default:
 		*a = append(*a, fmt.Errorf("%s%s", prefix, err))
+	}
+}
+
+// assert panics with a formatted message if condition is false.
+func assert(condition bool, format string, a ...interface{}) {
+	if !condition {
+		panic(fmt.Sprintf(format, a...))
 	}
 }
