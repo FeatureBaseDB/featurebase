@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Dave Collins <dave@davec.name>
+ * Copyright (c) 2013-2016 Dave Collins <dave@davec.name>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -91,6 +91,15 @@ The following configuration options are available:
 		which only accept pointer receivers from non-pointer variables.
 		Pointer method invocation is enabled by default.
 
+	* DisablePointerAddresses
+		DisablePointerAddresses specifies whether to disable the printing of
+		pointer addresses. This is useful when diffing data structures in tests.
+
+	* DisableCapacities
+		DisableCapacities specifies whether to disable the printing of
+		capacities for arrays, slices, maps and channels. This is useful when
+		diffing data structures in tests.
+
 	* ContinueOnMethod
 		Enables recursion into types after invoking error and Stringer interface
 		methods. Recursion after method invocation is disabled by default.
@@ -99,9 +108,15 @@ The following configuration options are available:
 		Specifies map keys should be sorted before being printed. Use
 		this to have a more deterministic, diffable output.  Note that
 		only native types (bool, int, uint, floats, uintptr and string)
-		are supported with other types sorted according to the
-		reflect.Value.String() output which guarantees display stability.
-		Natural map order is used by default.
+		and types which implement error or Stringer interfaces are
+		supported with other types sorted according to the
+		reflect.Value.String() output which guarantees display
+		stability.  Natural map order is used by default.
+
+	* SpewKeys
+		Specifies that, as a last resort attempt, map keys should be
+		spewed to strings and sorted by those strings.  This is only
+		considered if SortKeys is true.
 
 Dump Usage
 
@@ -128,14 +143,14 @@ shown here.
 	  flag: (main.Flag) flagTwo,
 	  data: (uintptr) <nil>
 	 }),
-	 ExportedField: (map[interface {}]interface {}) {
-	  (string) "one": (bool) true
+	 ExportedField: (map[interface {}]interface {}) (len=1) {
+	  (string) (len=3) "one": (bool) true
 	 }
 	}
 
 Byte (and uint8) arrays and slices are displayed uniquely like the hexdump -C
 command as shown.
-	([]uint8) {
+	([]uint8) (len=32 cap=32) {
 	 00000000  11 12 13 14 15 16 17 18  19 1a 1b 1c 1d 1e 1f 20  |............... |
 	 00000010  21 22 23 24 25 26 27 28  29 2a 2b 2c 2d 2e 2f 30  |!"#$%&'()*+,-./0|
 	 00000020  31 32                                             |12|
@@ -143,7 +158,7 @@ command as shown.
 
 Custom Formatter
 
-Spew provides a custom formatter the implements the fmt.Formatter interface
+Spew provides a custom formatter that implements the fmt.Formatter interface
 so that it integrates cleanly with standard fmt package printing functions. The
 formatter is useful for inline printing of smaller data types similar to the
 standard %v format specifier.

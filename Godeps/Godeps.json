@@ -1,36 +1,43 @@
 {
 	"ImportPath": "github.com/umbel/pilosa",
-	"GoVersion": "go1.6.2",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v75",
 	"Packages": [
 		"./..."
 	],
 	"Deps": [
 		{
 			"ImportPath": "github.com/BurntSushi/toml",
-			"Comment": "v0.1.0-21-g056c9bc",
-			"Rev": "056c9bc7be7190eaa7715723883caffa5f8fa3e4"
+			"Comment": "v0.2.0-21-g9906417",
+			"Rev": "99064174e013895bbd9b025c31100bd1d9b590ca"
+		},
+		{
+			"ImportPath": "github.com/DataDog/datadog-go/statsd",
+			"Comment": "1.0.0",
+			"Rev": "909c02b65dd8a52e8fa6072db9752a112227cf21"
 		},
 		{
 			"ImportPath": "github.com/boltdb/bolt",
-			"Comment": "v1.1.0-65-gee4a088",
-			"Rev": "ee4a0888a9abe7eefe5a0992ca4cb06864839873"
+			"Comment": "v1.3.0-29-g4b1ebc1",
+			"Rev": "4b1ebc1869ad66568b313d0dc410e2be72670dda"
 		},
 		{
 			"ImportPath": "github.com/davecgh/go-spew/spew",
-			"Rev": "e762b3d1320b76030bd7f6cc2bfc3d9acce874c0"
+			"Comment": "v1.0.0-9-g346938d",
+			"Rev": "346938d642f2ec3594ed81d874461961cd0faa76"
 		},
 		{
 			"ImportPath": "github.com/gogo/protobuf/proto",
-			"Comment": "v0.2-10-g74b6e9d",
-			"Rev": "74b6e9deaff6ba6da1389ec97351d337f0d08b06"
+			"Comment": "v0.3-123-ga9cd0c3",
+			"Rev": "a9cd0c35b97daf74d0ebf3514c5254814b2703b4"
 		},
 		{
 			"ImportPath": "github.com/golang/groupcache/lru",
-			"Rev": "d781998583680cda80cf61e0b37dd0cd8da2eb52"
+			"Rev": "a6b377e3400b08991b80d6805d627f347f983866"
 		},
 		{
 			"ImportPath": "golang.org/x/sys/unix",
-			"Rev": "50c6bc5e4292a1d4e65c6e9be5f53be28bcbe28e"
+			"Rev": "c200b10b5d5e122be351b67af224adc6128af5bf"
 		}
 	]
 }
