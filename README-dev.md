@@ -15,7 +15,7 @@ export GOPATH=$HOME/Work/pilosa/server
 Update `$PATH` to get access to Pilosa command line tools:
 
 ```sh
-export PATH=GOPATH/bin:$PATH
+export PATH=$GOPATH/bin:$PATH
 ```
 
 Create a directory (note that we use `github.com/umbel`, NOT `github.com/USER`) and clone your own Pilosa repo:
