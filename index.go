@@ -252,7 +252,7 @@ func (i *Index) Fragment(db, frame string, slice uint64) *Fragment {
 	if f == nil {
 		return nil
 	}
-	return f.fragment(slice)
+	return f.Fragment(slice)
 }
 
 // CreateFragmentIfNotExists returns the fragment for a database, frame & slice.
