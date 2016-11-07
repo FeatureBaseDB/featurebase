@@ -2,6 +2,9 @@ package bench
 
 import (
 	"fmt"
+	"sync"
+
+	"strconv"
 
 	"github.com/umbel/pilosa"
 )
@@ -76,4 +79,101 @@ func (b *SetBitBenchmark) Run(agentNum int) map[string]interface{} {
 // number across all loop iterations on all agents.
 func agentizeNum(n, iterations, agentNum int) int {
 	return n + (agentNum * iterations)
+}
+
+type parallelBenchmark struct {
+	benchmarkers []Benchmarker
+}
+
+// Init calls Init for each benchmark. If there are any errors, it will return a
+// non-nil error value.
+func (pb *parallelBenchmark) Init(hosts []string) error {
+	errors := make([]error, len(pb.benchmarkers))
+	hadErr := false
+	wg := sync.WaitGroup{}
+	for i, b := range pb.benchmarkers {
+		wg.Add(1)
+		go func(i int, b Benchmarker) {
+			defer wg.Done()
+			errors[i] = b.Init(hosts)
+			if errors[i] != nil {
+				hadErr = true
+			}
+		}(i, b)
+	}
+	wg.Wait()
+	if hadErr {
+		return fmt.Errorf("Had errs in parallelBenchmark.Init: %v", errors)
+	}
+	return nil
+}
+
+// Run runs the parallel benchmark and returns it's results in a nested map - the
+// top level keys are the indices of each benchmark in the list of benchmarks,
+// and the values are the results of each benchmark's Run method.
+func (pb *parallelBenchmark) Run(agentNum int) map[string]interface{} {
+	wg := sync.WaitGroup{}
+	results := make(map[string]interface{}, len(pb.benchmarkers))
+	resultsLock := sync.Mutex{}
+	for i, b := range pb.benchmarkers {
+		wg.Add(1)
+		go func(i int, b Benchmarker) {
+			defer wg.Done()
+			ret := b.Run(agentNum)
+			resultsLock.Lock()
+			results[strconv.Itoa(i)] = ret
+			resultsLock.Unlock()
+		}(i, b)
+	}
+	wg.Wait()
+	return results
+}
+
+// Parallel takes a variable number of Benchmarkers and returns a Benchmarker
+// which combines them and will run them in parallel.
+func Parallel(bs ...Benchmarker) Benchmarker {
+	return &parallelBenchmark{
+		benchmarkers: bs,
+	}
+}
+
+type serialBenchmark struct {
+	benchmarkers []Benchmarker
+}
+
+// Init calls Init for each benchmark. If there are any errors, it will return a
+// non-nil error value.
+func (sb *serialBenchmark) Init(hosts []string) error {
+	errors := make([]error, len(sb.benchmarkers))
+	hadErr := false
+	for i, b := range sb.benchmarkers {
+		errors[i] = b.Init(hosts)
+		if errors[i] != nil {
+			hadErr = true
+		}
+	}
+	if hadErr {
+		return fmt.Errorf("Had errs in serialBenchmark.Init: %v", errors)
+	}
+	return nil
+}
+
+// Run runs the serial benchmark and returns it's results in a nested map - the
+// top level keys are the indices of each benchmark in the list of benchmarks,
+// and the values are the results of each benchmark's Run method.
+func (sb *serialBenchmark) Run(agentNum int) map[string]interface{} {
+	results := make(map[string]interface{}, len(sb.benchmarkers))
+	for i, b := range sb.benchmarkers {
+		ret := b.Run(agentNum)
+		results[strconv.Itoa(i)] = ret
+	}
+	return results
+}
+
+// Serial takes a variable number of Benchmarkers and returns a Benchmarker
+// which combines then and will run each serially.
+func Serial(bs ...Benchmarker) Benchmarker {
+	return &serialBenchmark{
+		benchmarkers: bs,
+	}
 }
