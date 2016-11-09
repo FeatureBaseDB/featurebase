@@ -110,6 +110,6 @@ func (m *Main) Run() error {
 		return fmt.Errorf("in m.Run initialization: %v", err)
 	}
 	res := sbm.Run(m.AgentNum)
-	fmt.Println(res)
+	fmt.Fprintln(m.Stdout, res)
 	return nil
 }

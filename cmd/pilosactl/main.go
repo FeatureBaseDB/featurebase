@@ -12,6 +12,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -21,8 +22,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/roaring"
+	"github.com/umbel/pilosa"
+	"github.com/umbel/pilosa/creator"
+	"github.com/umbel/pilosa/roaring"
 )
 
 var (
@@ -91,6 +93,7 @@ The commands are:
 	inspect    inspects fragment data files
 	check      performs a consistency check of data files
 	bench      benchmarks operations
+  create     create pilosa clusters
 
 Use the "-h" flag with any command for more information.
 `)
@@ -130,6 +133,8 @@ func (m *Main) ParseFlags(args []string) error {
 		m.Cmd = NewCheckCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "bench":
 		m.Cmd = NewBenchCommand(m.Stdin, m.Stdout, m.Stderr)
+	case "create":
+		m.Cmd = NewCreateCommand(m.Stdin, m.Stdout, m.Stderr)
 	default:
 		return ErrUnknownCommand
 	}
@@ -1143,6 +1148,108 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 	// Print results.
 	elapsed := time.Since(startTime)
 	fmt.Fprintf(cmd.Stdout, "Executed %d operations in %s (%0.3f op/sec)\n", cmd.N, elapsed, float64(cmd.N)/elapsed.Seconds())
+
+	return nil
+}
+
+// CreateCommand represents a command for creating a pilosa cluster.
+type CreateCommand struct {
+	// Type can be AWS, local, etc.
+	Type string
+
+	// ServerN is the number of pilosa hosts in the cluster
+	ServerN int
+
+	// ReplicaN is the replication number for the cluster
+	ReplicaN int
+
+	// run is used internally by local cluster to signal that the cluster should be run and not exit
+	run bool
+
+	// Standard input/output
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// NewCreateCommand returns a new instance of CreateCommand.
+func NewCreateCommand(stdin io.Reader, stdout, stderr io.Writer) *CreateCommand {
+	return &CreateCommand{
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+}
+
+// ParseFlags parses command line flags from args.
+func (cmd *CreateCommand) ParseFlags(args []string) error {
+	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
+	fs.SetOutput(ioutil.Discard)
+	fs.StringVar(&cmd.Type, "type", "local", "Type of cluster - local, AWS, etc.")
+	fs.IntVar(&cmd.ServerN, "serverN", 3, "Number of hosts in cluster")
+	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "Replication factor for cluster")
+	fs.BoolVar(&cmd.run, "run", false, "run, don't exit")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Usage returns the usage message to be printed.
+func (cmd *CreateCommand) Usage() string {
+	return strings.TrimSpace(`
+usage: pilosactl create [args]
+
+Creates a cluster based on the arguments.
+
+The following flags are allowed:
+
+	-type 
+		type of cluster - local, AWS, etc.
+
+	-serverN
+		number of hosts in cluster
+
+	-replicaN
+		replication factor for cluster
+`)
+}
+
+// Run executes the main program execution.
+func (cmd *CreateCommand) Run() error {
+	var clus creator.Cluster
+	switch cmd.Type {
+	case "local":
+		var err error
+		if cmd.run {
+			clus, err = creator.NewLocalCluster(cmd.ReplicaN, cmd.ServerN)
+			if err != nil {
+				return fmt.Errorf("running create command: %v", err)
+			}
+			fmt.Fprintln(cmd.Stdout, strings.Join(clus.Hosts(), ","))
+			select {}
+		}
+		args := append(os.Args, "-run")
+		subcmd := exec.Command(args[0], args[1:]...)
+		pipeR, pipeW := io.Pipe()
+		subcmd.Stdout = pipeW
+		subcmd.Stderr = cmd.Stderr
+		scanner := bufio.NewScanner(pipeR)
+		err = subcmd.Start()
+		if err != nil {
+			return fmt.Errorf("error kicking off local cluster: %v", err)
+		}
+		scanner.Scan()
+		fmt.Fprintln(cmd.Stdout, scanner.Text())
+		subcmd.Stdout = ioutil.Discard
+		pipeR.Close()
+
+	case "AWS":
+		return fmt.Errorf("AWS cluster type is not yet implemented")
+	default:
+		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
+	}
 
 	return nil
 }

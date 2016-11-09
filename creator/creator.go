@@ -4,7 +4,6 @@ package creator
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -77,7 +76,6 @@ func NewLocalCluster(replicaN, serverN int) (Cluster, error) {
 
 	// Open all servers.
 	for _, s := range servers {
-		log.Printf("opening : %v", s)
 		if err := s.Open(); err != nil {
 			return localCluster, err
 		}
