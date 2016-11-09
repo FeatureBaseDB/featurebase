@@ -95,7 +95,7 @@ The following arguments are available:
 	-benchmarks
       Comma separated list of benchmarks.
 
-  -pilosaHosts
+  -hosts
       Comma separated list of host:port describing all hosts in the cluster.
 
 	-agentNum N
