@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/umbel/pilosa"
+	"github.com/umbel/pilosa/bench"
 	"github.com/umbel/pilosa/creator"
 	"github.com/umbel/pilosa/roaring"
 )
@@ -93,7 +94,8 @@ The commands are:
 	inspect    inspects fragment data files
 	check      performs a consistency check of data files
 	bench      benchmarks operations
-  create     create pilosa clusters
+	create     create pilosa clusters
+  bagent     run a benchmarking agent
 
 Use the "-h" flag with any command for more information.
 `)
@@ -135,6 +137,8 @@ func (m *Main) ParseFlags(args []string) error {
 		m.Cmd = NewBenchCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "create":
 		m.Cmd = NewCreateCommand(m.Stdin, m.Stdout, m.Stderr)
+	case "bagent":
+		m.Cmd = NewBagentCommand(m.Stdin, m.Stdout, m.Stderr)
 	default:
 		return ErrUnknownCommand
 	}
@@ -1205,7 +1209,7 @@ Creates a cluster based on the arguments.
 
 The following flags are allowed:
 
-	-type 
+	-type
 		type of cluster - local, AWS, etc.
 
 	-serverN
@@ -1251,6 +1255,91 @@ func (cmd *CreateCommand) Run() error {
 		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
 	}
 
+	return nil
+}
+
+// BagentCommand represents a command for creating a pilosa cluster.
+type BagentCommand struct {
+	Benchmarks []bench.Benchmarker
+	AgentNum   int
+	Hosts      []string
+
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// NewBagentCommand returns a new instance of BagentCommand.
+func NewBagentCommand(stdin io.Reader, stdout, stderr io.Writer) *BagentCommand {
+	return &BagentCommand{
+		Benchmarks: []bench.Benchmarker{},
+		Hosts:      []string{},
+		AgentNum:   0,
+
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+}
+
+// ParseFlags parses command line flags from args.
+func (cmd *BagentCommand) ParseFlags(args []string) error {
+	fs := flag.NewFlagSet("pilosa-bench-agent", flag.ContinueOnError)
+	fs.SetOutput(ioutil.Discard)
+
+	var benchmarks string
+	var pilosaHosts string
+
+	fs.StringVar(&benchmarks, "benchmarks", "", "Comma separated list of benchmarks to run")
+	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "Comma separated list of host:port")
+	fs.IntVar(&cmd.AgentNum, "agentNum", 0, "An integer differentiating this agent from other in the fleet.")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	for _, bmName := range strings.Split(benchmarks, ",") {
+		if bm, ok := bench.Benchmarks[bmName]; ok {
+			cmd.Benchmarks = append(cmd.Benchmarks, bm)
+		} else {
+			return fmt.Errorf("%v is not a configured benchmark", bmName)
+		}
+	}
+	cmd.Hosts = strings.Split(pilosaHosts, ",")
+
+	return nil
+}
+
+// Usage returns the usage message to be printed.
+func (cmd *BagentCommand) Usage() string {
+	return strings.TrimSpace(`
+pilosa-benchmark-agent is a tool for running a set of benchmarks against a pilosa cluster.
+
+Usage:
+
+	pilosa-benchmark-agent [arguments]
+
+The following arguments are available:
+
+	-benchmarks
+		Comma separated list of benchmarks.
+
+	-hosts
+		Comma separated list of host:port describing all hosts in the cluster.
+
+	-agentNum N
+		An integer differentiating this agent from others in the fleet.
+`)
+}
+
+// Run executes the main program execution.
+func (cmd *BagentCommand) Run() error {
+	sbm := bench.Serial(cmd.Benchmarks...)
+	err := sbm.Init(cmd.Hosts)
+	if err != nil {
+		return fmt.Errorf("in cmd.Run initialization: %v", err)
+	}
+	res := sbm.Run(cmd.AgentNum)
+	fmt.Fprintln(cmd.Stdout, res)
 	return nil
 }
 

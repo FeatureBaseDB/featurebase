@@ -177,3 +177,7 @@ func Serial(bs ...Benchmarker) Benchmarker {
 		benchmarkers: bs,
 	}
 }
+
+var Benchmarks = map[string]Benchmarker{
+	"SetContiguousBits": &SetBitBenchmark{Iterations: 100000, NumProfiles: 1000, DB: "setcontiguousbench"},
+}
