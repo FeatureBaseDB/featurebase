@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -401,7 +402,7 @@ func (s *IndexSyncer) syncDatabase(db string) error {
 
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := client.ProfileAttrDiff(db, blks)
+		m, err := client.ProfileAttrDiff(context.Background(), db, blks)
 		if err != nil {
 			return err
 		} else if len(m) == 0 {
@@ -446,7 +447,7 @@ func (s *IndexSyncer) syncFrame(db, name string) error {
 
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := client.BitmapAttrDiff(db, name, blks)
+		m, err := client.BitmapAttrDiff(context.Background(), db, name, blks)
 		if err != nil {
 			return err
 		} else if len(m) == 0 {
