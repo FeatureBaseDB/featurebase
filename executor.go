@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -38,7 +39,7 @@ func NewExecutor() *Executor {
 }
 
 // Execute executes a PQL query.
-func (e *Executor) Execute(db string, q *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error) {
+func (e *Executor) Execute(ctx context.Context, db string, q *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error) {
 	// Verify that a database is set.
 	if db == "" {
 		return nil, ErrDatabaseRequired
@@ -64,13 +65,13 @@ func (e *Executor) Execute(db string, q *pql.Query, slices []uint64, opt *ExecOp
 
 	// Optimize handling for bulk attribute insertion.
 	if hasOnlySetBitmapAttrs(q.Calls) {
-		return e.executeBulkSetBitmapAttrs(db, q.Calls, opt)
+		return e.executeBulkSetBitmapAttrs(ctx, db, q.Calls, opt)
 	}
 
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
-		v, err := e.executeCall(db, call, slices, opt)
+		v, err := e.executeCall(ctx, db, call, slices, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -80,37 +81,37 @@ func (e *Executor) Execute(db string, q *pql.Query, slices []uint64, opt *ExecOp
 }
 
 // executeCall executes a call.
-func (e *Executor) executeCall(db string, c pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
+func (e *Executor) executeCall(ctx context.Context, db string, c pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
 	switch c := c.(type) {
 	case pql.BitmapCall:
-		return e.executeBitmapCall(db, c, slices, opt)
+		return e.executeBitmapCall(ctx, db, c, slices, opt)
 	case *pql.ClearBit:
-		return e.executeClearBit(db, c, opt)
+		return e.executeClearBit(ctx, db, c, opt)
 	case *pql.Count:
-		return e.executeCount(db, c, slices, opt)
+		return e.executeCount(ctx, db, c, slices, opt)
 	case *pql.Profile:
-		return e.executeProfile(db, c, opt)
+		return e.executeProfile(ctx, db, c, opt)
 	case *pql.SetBit:
-		return e.executeSetBit(db, c, opt)
+		return e.executeSetBit(ctx, db, c, opt)
 	case *pql.SetBitmapAttrs:
-		return nil, e.executeSetBitmapAttrs(db, c, opt)
+		return nil, e.executeSetBitmapAttrs(ctx, db, c, opt)
 	case *pql.SetProfileAttrs:
-		return nil, e.executeSetProfileAttrs(db, c, opt)
+		return nil, e.executeSetProfileAttrs(ctx, db, c, opt)
 	case *pql.TopN:
-		return e.executeTopN(db, c, slices, opt)
+		return e.executeTopN(ctx, db, c, slices, opt)
 	default:
 		panic("unreachable")
 	}
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
-func (e *Executor) executeBitmapCall(db string, c pql.BitmapCall, slices []uint64, opt *ExecOptions) (*Bitmap, error) {
+func (e *Executor) executeBitmapCall(ctx context.Context, db string, c pql.BitmapCall, slices []uint64, opt *ExecOptions) (*Bitmap, error) {
 	other := NewBitmap()
 	for node, nodeSlices := range e.slicesByNode(db, slices) {
 		// Execute locally if the hostname matches.
 		if node.Host == e.Host {
 			for _, slice := range nodeSlices {
-				bm, err := e.executeBitmapCallSlice(db, c, slice)
+				bm, err := e.executeBitmapCallSlice(ctx, db, c, slice)
 				if err != nil {
 					return nil, err
 				}
@@ -120,7 +121,7 @@ func (e *Executor) executeBitmapCall(db string, c pql.BitmapCall, slices []uint6
 		}
 
 		// Otherwise execute remotely.
-		res, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nodeSlices, opt)
+		res, err := e.exec(ctx, node, db, &pql.Query{Calls: pql.Calls{c}}, nodeSlices, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -143,18 +144,18 @@ func (e *Executor) executeBitmapCall(db string, c pql.BitmapCall, slices []uint6
 }
 
 // executeBitmapCallSlice executes a bitmap call for a single slice.
-func (e *Executor) executeBitmapCallSlice(db string, c pql.BitmapCall, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeBitmapCallSlice(ctx context.Context, db string, c pql.BitmapCall, slice uint64) (*Bitmap, error) {
 	switch c := c.(type) {
 	case *pql.Bitmap:
-		return e.executeBitmapSlice(db, c, slice)
+		return e.executeBitmapSlice(ctx, db, c, slice)
 	case *pql.Difference:
-		return e.executeDifferenceSlice(db, c, slice)
+		return e.executeDifferenceSlice(ctx, db, c, slice)
 	case *pql.Intersect:
-		return e.executeIntersectSlice(db, c, slice)
+		return e.executeIntersectSlice(ctx, db, c, slice)
 	case *pql.Range:
-		return e.executeRangeSlice(db, c, slice)
+		return e.executeRangeSlice(ctx, db, c, slice)
 	case *pql.Union:
-		return e.executeUnionSlice(db, c, slice)
+		return e.executeUnionSlice(ctx, db, c, slice)
 	default:
 		panic("unreachable")
 	}
@@ -163,9 +164,9 @@ func (e *Executor) executeBitmapCallSlice(db string, c pql.BitmapCall, slice uin
 // executeTopN executes a TopN() call.
 // This first performs the TopN() to determine the top results and then
 // requeries to retrieve the full counts for each of the top results.
-func (e *Executor) executeTopN(db string, c *pql.TopN, slices []uint64, opt *ExecOptions) ([]Pair, error) {
+func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.TopN, slices []uint64, opt *ExecOptions) ([]Pair, error) {
 	// Execute original query.
-	pairs, err := e.executeTopNSlices(db, c, slices, opt)
+	pairs, err := e.executeTopNSlices(ctx, db, c, slices, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -182,10 +183,10 @@ func (e *Executor) executeTopN(db string, c *pql.TopN, slices []uint64, opt *Exe
 	other.BitmapIDs = Pairs(pairs).Keys()
 	sort.Sort(uint64Slice(other.BitmapIDs))
 
-	return e.executeTopNSlices(db, &other, slices, opt)
+	return e.executeTopNSlices(ctx, db, &other, slices, opt)
 }
 
-func (e *Executor) executeTopNSlices(db string, c *pql.TopN, slices []uint64, opt *ExecOptions) ([]Pair, error) {
+func (e *Executor) executeTopNSlices(ctx context.Context, db string, c *pql.TopN, slices []uint64, opt *ExecOptions) ([]Pair, error) {
 	slicesByNode := e.slicesByNode(db, slices)
 
 	type resp struct {
@@ -198,13 +199,13 @@ func (e *Executor) executeTopNSlices(db string, c *pql.TopN, slices []uint64, op
 		go func(node *Node, nodeSlices []uint64) {
 			// Execute locally if the hostname matches.
 			if node.Host == e.Host {
-				pairs, err := e.executeTopNSlicesLocal(db, c, nodeSlices)
+				pairs, err := e.executeTopNSlicesLocal(ctx, db, c, nodeSlices)
 				ch <- resp{pairs: pairs, err: err}
 				return
 			}
 
 			// Otherwise execute remotely.
-			res, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nodeSlices, opt)
+			res, err := e.exec(ctx, node, db, &pql.Query{Calls: pql.Calls{c}}, nodeSlices, opt)
 			if err != nil {
 				ch <- resp{err: err}
 				return
@@ -234,7 +235,7 @@ func (e *Executor) executeTopNSlices(db string, c *pql.TopN, slices []uint64, op
 	return results, nil
 }
 
-func (e *Executor) executeTopNSlicesLocal(db string, c *pql.TopN, slices []uint64) ([]Pair, error) {
+func (e *Executor) executeTopNSlicesLocal(ctx context.Context, db string, c *pql.TopN, slices []uint64) ([]Pair, error) {
 	type resp struct {
 		pairs []Pair
 		err   error
@@ -244,7 +245,7 @@ func (e *Executor) executeTopNSlicesLocal(db string, c *pql.TopN, slices []uint6
 	// Execute TopN() in parallel across slices.
 	for _, slice := range slices {
 		go func(slice uint64) {
-			pairs, err := e.executeTopNSlice(db, c, slice)
+			pairs, err := e.executeTopNSlice(ctx, db, c, slice)
 			ch <- resp{pairs: pairs, err: err}
 		}(slice)
 	}
@@ -263,11 +264,11 @@ func (e *Executor) executeTopNSlicesLocal(db string, c *pql.TopN, slices []uint6
 }
 
 // executeTopNSlice executes a TopN call for a single slice.
-func (e *Executor) executeTopNSlice(db string, c *pql.TopN, slice uint64) ([]Pair, error) {
+func (e *Executor) executeTopNSlice(ctx context.Context, db string, c *pql.TopN, slice uint64) ([]Pair, error) {
 	// Retrieve bitmap used to intersect.
 	var src *Bitmap
 	if c.Src != nil {
-		bm, err := e.executeBitmapCallSlice(db, c.Src, slice)
+		bm, err := e.executeBitmapCallSlice(ctx, db, c.Src, slice)
 		if err != nil {
 			return nil, err
 		}
@@ -295,10 +296,10 @@ func (e *Executor) executeTopNSlice(db string, c *pql.TopN, slice uint64) ([]Pai
 }
 
 // executeDifferenceSlice executes a difference() call for a local slice.
-func (e *Executor) executeDifferenceSlice(db string, c *pql.Difference, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeDifferenceSlice(ctx context.Context, db string, c *pql.Difference, slice uint64) (*Bitmap, error) {
 	var other *Bitmap
 	for i, input := range c.Inputs {
-		bm, err := e.executeBitmapCallSlice(db, input, slice)
+		bm, err := e.executeBitmapCallSlice(ctx, db, input, slice)
 		if err != nil {
 			return nil, err
 		}
@@ -313,7 +314,7 @@ func (e *Executor) executeDifferenceSlice(db string, c *pql.Difference, slice ui
 	return other, nil
 }
 
-func (e *Executor) executeBitmapSlice(db string, c *pql.Bitmap, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeBitmapSlice(ctx context.Context, db string, c *pql.Bitmap, slice uint64) (*Bitmap, error) {
 	frame := c.Frame
 	if frame == "" {
 		frame = DefaultFrame
@@ -327,10 +328,10 @@ func (e *Executor) executeBitmapSlice(db string, c *pql.Bitmap, slice uint64) (*
 }
 
 // executeIntersectSlice executes a intersect() call for a local slice.
-func (e *Executor) executeIntersectSlice(db string, c *pql.Intersect, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeIntersectSlice(ctx context.Context, db string, c *pql.Intersect, slice uint64) (*Bitmap, error) {
 	var other *Bitmap
 	for i, input := range c.Inputs {
-		bm, err := e.executeBitmapCallSlice(db, input, slice)
+		bm, err := e.executeBitmapCallSlice(ctx, db, input, slice)
 		if err != nil {
 			return nil, err
 		}
@@ -346,7 +347,7 @@ func (e *Executor) executeIntersectSlice(db string, c *pql.Intersect, slice uint
 }
 
 // executeRangeSlice executes a range() call for a local slice.
-func (e *Executor) executeRangeSlice(db string, c *pql.Range, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Range, slice uint64) (*Bitmap, error) {
 	frame := c.Frame
 	if frame == "" {
 		frame = DefaultFrame
@@ -360,10 +361,10 @@ func (e *Executor) executeRangeSlice(db string, c *pql.Range, slice uint64) (*Bi
 }
 
 // executeUnionSlice executes a union() call for a local slice.
-func (e *Executor) executeUnionSlice(db string, c *pql.Union, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeUnionSlice(ctx context.Context, db string, c *pql.Union, slice uint64) (*Bitmap, error) {
 	var other *Bitmap
 	for i, input := range c.Inputs {
-		bm, err := e.executeBitmapCallSlice(db, input, slice)
+		bm, err := e.executeBitmapCallSlice(ctx, db, input, slice)
 		if err != nil {
 			return nil, err
 		}
@@ -379,13 +380,13 @@ func (e *Executor) executeUnionSlice(db string, c *pql.Union, slice uint64) (*Bi
 }
 
 // executeCount executes a count() call.
-func (e *Executor) executeCount(db string, c *pql.Count, slices []uint64, opt *ExecOptions) (uint64, error) {
+func (e *Executor) executeCount(ctx context.Context, db string, c *pql.Count, slices []uint64, opt *ExecOptions) (uint64, error) {
 	var n uint64
 	for node, nodeSlices := range e.slicesByNode(db, slices) {
 		// Execute locally if the hostname matches.
 		if node.Host == e.Host {
 			for _, slice := range nodeSlices {
-				bm, err := e.executeBitmapCallSlice(db, c.Input, slice)
+				bm, err := e.executeBitmapCallSlice(ctx, db, c.Input, slice)
 				if err != nil {
 					return 0, err
 				}
@@ -395,7 +396,7 @@ func (e *Executor) executeCount(db string, c *pql.Count, slices []uint64, opt *E
 		}
 
 		// Otherwise execute remotely.
-		res, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nodeSlices, opt)
+		res, err := e.exec(ctx, node, db, &pql.Query{Calls: pql.Calls{c}}, nodeSlices, opt)
 		if err != nil {
 			return 0, err
 		}
@@ -406,12 +407,12 @@ func (e *Executor) executeCount(db string, c *pql.Count, slices []uint64, opt *E
 
 // executeProfile executes a Profile() call.
 // This call only executes locally since the profile attibutes are stored locally.
-func (e *Executor) executeProfile(db string, c *pql.Profile, opt *ExecOptions) (*Profile, error) {
+func (e *Executor) executeProfile(ctx context.Context, db string, c *pql.Profile, opt *ExecOptions) (*Profile, error) {
 	panic("FIXME: impl: e.Index.ProfileAttr(c.ID)")
 }
 
 // executeClearBit executes a ClearBit() call.
-func (e *Executor) executeClearBit(db string, c *pql.ClearBit, opt *ExecOptions) (bool, error) {
+func (e *Executor) executeClearBit(ctx context.Context, db string, c *pql.ClearBit, opt *ExecOptions) (bool, error) {
 	slice := c.ProfileID / SliceWidth
 	ret := false
 	for _, node := range e.Cluster.FragmentNodes(db, slice) {
@@ -436,7 +437,7 @@ func (e *Executor) executeClearBit(db string, c *pql.ClearBit, opt *ExecOptions)
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt); err != nil {
+		if res, err := e.exec(ctx, node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt); err != nil {
 			return false, err
 		} else {
 			ret = res[0].(bool)
@@ -446,7 +447,7 @@ func (e *Executor) executeClearBit(db string, c *pql.ClearBit, opt *ExecOptions)
 }
 
 // executeSetBit executes a SetBit() call.
-func (e *Executor) executeSetBit(db string, c *pql.SetBit, opt *ExecOptions) (bool, error) {
+func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.SetBit, opt *ExecOptions) (bool, error) {
 	slice := c.ProfileID / SliceWidth
 	ret := false
 
@@ -473,7 +474,7 @@ func (e *Executor) executeSetBit(db string, c *pql.SetBit, opt *ExecOptions) (bo
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt); err != nil {
+		if res, err := e.exec(ctx, node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt); err != nil {
 			return false, err
 		} else {
 			ret = res[0].(bool)
@@ -483,7 +484,7 @@ func (e *Executor) executeSetBit(db string, c *pql.SetBit, opt *ExecOptions) (bo
 }
 
 // executeSetBitmapAttrs executes a SetBitmapAttrs() call.
-func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs, opt *ExecOptions) error {
+func (e *Executor) executeSetBitmapAttrs(ctx context.Context, db string, c *pql.SetBitmapAttrs, opt *ExecOptions) error {
 	// Retrieve frame.
 	frame, err := e.Index.CreateFrameIfNotExists(db, c.Frame)
 	if err != nil {
@@ -505,7 +506,7 @@ func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs, opt *
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
-			_, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt)
+			_, err := e.exec(ctx, node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt)
 			resp <- err
 		}(node)
 	}
@@ -521,7 +522,7 @@ func (e *Executor) executeSetBitmapAttrs(db string, c *pql.SetBitmapAttrs, opt *
 }
 
 // executeBulkSetBitmapAttrs executes a set of SetBitmapAttrs() calls.
-func (e *Executor) executeBulkSetBitmapAttrs(db string, calls pql.Calls, opt *ExecOptions) ([]interface{}, error) {
+func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, calls pql.Calls, opt *ExecOptions) ([]interface{}, error) {
 	// Collect attributes by frame/id.
 	m := make(map[string]map[uint64]map[string]interface{})
 	for _, call := range calls {
@@ -569,7 +570,7 @@ func (e *Executor) executeBulkSetBitmapAttrs(db string, calls pql.Calls, opt *Ex
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
-			_, err := e.exec(node, db, &pql.Query{Calls: calls}, nil, opt)
+			_, err := e.exec(ctx, node, db, &pql.Query{Calls: calls}, nil, opt)
 			resp <- err
 		}(node)
 	}
@@ -586,7 +587,7 @@ func (e *Executor) executeBulkSetBitmapAttrs(db string, calls pql.Calls, opt *Ex
 }
 
 // executeSetProfileAttrs executes a SetProfileAttrs() call.
-func (e *Executor) executeSetProfileAttrs(db string, c *pql.SetProfileAttrs, opt *ExecOptions) error {
+func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql.SetProfileAttrs, opt *ExecOptions) error {
 	// Retrieve database.
 	d, err := e.Index.CreateDBIfNotExists(db)
 	if err != nil {
@@ -608,7 +609,7 @@ func (e *Executor) executeSetProfileAttrs(db string, c *pql.SetProfileAttrs, opt
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
-			_, err := e.exec(node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt)
+			_, err := e.exec(ctx, node, db, &pql.Query{Calls: pql.Calls{c}}, nil, opt)
 			resp <- err
 		}(node)
 	}
@@ -624,7 +625,7 @@ func (e *Executor) executeSetProfileAttrs(db string, c *pql.SetProfileAttrs, opt
 }
 
 // exec executes a PQL query remotely for a set of slices on a node.
-func (e *Executor) exec(node *Node, db string, q *pql.Query, slices []uint64, opt *ExecOptions) (results []interface{}, err error) {
+func (e *Executor) exec(ctx context.Context, node *Node, db string, q *pql.Query, slices []uint64, opt *ExecOptions) (results []interface{}, err error) {
 	// Encode request object.
 	pbreq := &internal.QueryRequest{
 		DB:      proto.String(db),

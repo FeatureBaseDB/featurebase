@@ -2,6 +2,7 @@ package pilosa_test
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"os"
 	"reflect"
@@ -58,12 +59,12 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	s := NewServer()
 	defer s.Close()
 	s.Handler.Index = idx1.Index
-	s.Handler.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor()
 		e.Index = idx1.Index
 		e.Host = cluster.Nodes[1].Host
 		e.Cluster = cluster
-		return e.Execute(db, query, slices, opt)
+		return e.Execute(ctx, db, query, slices, opt)
 	}
 
 	// Mock 2-node, fully replicated cluster.

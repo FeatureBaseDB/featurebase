@@ -2,6 +2,7 @@ package pilosa_test
 
 import (
 	"bytes"
+	"context"
 	"reflect"
 	"testing"
 
@@ -27,7 +28,7 @@ func TestClient_Import(t *testing.T) {
 
 	// Send import request.
 	c := MustNewClient(s.Host())
-	if err := c.Import("d", "f", 0, []pilosa.Bit{
+	if err := c.Import(context.Background(), "d", "f", 0, []pilosa.Bit{
 		{BitmapID: 0, ProfileID: 1},
 		{BitmapID: 0, ProfileID: 5},
 		{BitmapID: 200, ProfileID: 6},
@@ -65,12 +66,12 @@ func TestClient_BackupRestore(t *testing.T) {
 
 	// Backup from frame.
 	var buf bytes.Buffer
-	if err := c.BackupTo(&buf, "d", "f"); err != nil {
+	if err := c.BackupTo(context.Background(), &buf, "d", "f"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Restore to a different frame.
-	if err := c.RestoreFrom(&buf, "x", "y"); err != nil {
+	if err := c.RestoreFrom(context.Background(), &buf, "x", "y"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,7 +111,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 
 	// Retrieve blocks.
 	c := MustNewClient(s.Host())
-	blocks, err := c.FragmentBlocks("d", "f", 0)
+	blocks, err := c.FragmentBlocks(context.Background(), "d", "f", 0)
 	if err != nil {
 		t.Fatal(err)
 	} else if len(blocks) != 2 {
