@@ -6,6 +6,9 @@ import (
 
 	"strconv"
 
+	"flag"
+	"io/ioutil"
+
 	"github.com/umbel/pilosa"
 )
 
@@ -27,6 +30,12 @@ type Benchmarker interface {
 	Run(agentNum int) map[string]interface{}
 }
 
+type BenchmarkCmd interface {
+	Benchmarker
+	ConsumeFlags(args []string) ([]string, error)
+	Usage() string
+}
+
 // SetBitBenchmark sets a bunch of bits in pilosa, and can be configured in a
 // number of ways.
 type SetBitBenchmark struct {
@@ -42,6 +51,46 @@ type SetBitBenchmark struct {
 	NumProfiles int
 	// DB to use in pilosa.
 	DB string
+}
+
+func (b *SetBitBenchmark) Usage() string {
+	return `
+SetBitBenchmark sets a bunch of bits.
+
+Usage: SetBitBenchmark [arguments]
+
+The following arguments are available:
+
+	-BaseBitmapID int
+		bit num to start from
+
+	-BaseProfileID int
+		profile id num to start from
+
+	-Iterations int
+		number of bits to set
+
+	-NumProfiles int
+		number of profiles to loop through
+
+	-DB string
+		pilosa db to use
+`[1:]
+}
+
+func (b *SetBitBenchmark) ConsumeFlags(args []string) ([]string, error) {
+	fs := flag.NewFlagSet("SetBitBenchmark", flag.ContinueOnError)
+	fs.SetOutput(ioutil.Discard)
+	fs.IntVar(&b.BaseBitmapID, "BaseBitmapID", 0, "bits being set will all be greater than BaseBitmapID")
+	fs.IntVar(&b.BaseProfileID, "BaseProfileID", 0, "profile ids used will all be greater than BaseProfileID")
+	fs.IntVar(&b.Iterations, "Iterations", 100, "Iterations is the number of bits that will be set by this Benchmark")
+	fs.IntVar(&b.NumProfiles, "NumProfiles", 100, "number of profiles to iterate through")
+	fs.StringVar(&b.DB, "DB", "benchdb", "pilosa DB to use")
+
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	return fs.Args(), nil
 }
 
 // Init connects to pilosa and sets the client on b.

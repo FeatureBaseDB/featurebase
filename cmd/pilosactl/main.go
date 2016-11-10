@@ -1284,24 +1284,39 @@ func NewBagentCommand(stdin io.Reader, stdout, stderr io.Writer) *BagentCommand 
 
 // ParseFlags parses command line flags from args.
 func (cmd *BagentCommand) ParseFlags(args []string) error {
-	fs := flag.NewFlagSet("pilosa-bench-agent", flag.ContinueOnError)
+	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
 
-	var benchmarks string
 	var pilosaHosts string
-
-	fs.StringVar(&benchmarks, "benchmarks", "", "Comma separated list of benchmarks to run")
 	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "Comma separated list of host:port")
 	fs.IntVar(&cmd.AgentNum, "agentNum", 0, "An integer differentiating this agent from other in the fleet.")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	for _, bmName := range strings.Split(benchmarks, ",") {
-		if bm, ok := bench.Benchmarks[bmName]; ok {
-			cmd.Benchmarks = append(cmd.Benchmarks, bm)
-		} else {
-			return fmt.Errorf("%v is not a configured benchmark", bmName)
+	remArgs := fs.Args()
+	if len(remArgs) == 0 {
+		return flag.ErrHelp
+	}
+	for len(remArgs) > 0 {
+		var bm bench.BenchmarkCmd
+		var err error
+		switch remArgs[0] {
+		case "-help", "-h":
+			return flag.ErrHelp
+		case "SetBitBenchmark":
+			bm = &bench.SetBitBenchmark{}
+		default:
+			return fmt.Errorf("Unknown benchmark cmd: %v", remArgs[0])
+		}
+		remArgs, err = bm.ConsumeFlags(remArgs[1:])
+		cmd.Benchmarks = append(cmd.Benchmarks, bm)
+		if err != nil {
+			if err == flag.ErrHelp {
+				fmt.Fprintln(cmd.Stderr, bm.Usage())
+				return fmt.Errorf("")
+			}
+			return fmt.Errorf("BagentCommand.ParseFlags: %v", err)
 		}
 	}
 	cmd.Hosts = strings.Split(pilosaHosts, ",")
@@ -1312,22 +1327,22 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 // Usage returns the usage message to be printed.
 func (cmd *BagentCommand) Usage() string {
 	return strings.TrimSpace(`
-pilosa-benchmark-agent is a tool for running a set of benchmarks against a pilosa cluster.
+pilosactl bagent is a tool for running benchmarks against a pilosa cluster.
 
 Usage:
 
-	pilosa-benchmark-agent [arguments]
+pilosactl bagent [options] <subcommand [options]>...
 
 The following arguments are available:
-
-	-benchmarks
-		Comma separated list of benchmarks.
 
 	-hosts
 		Comma separated list of host:port describing all hosts in the cluster.
 
 	-agentNum N
 		An integer differentiating this agent from others in the fleet.
+
+	subcommands:
+		SetBitBenchmark
 `)
 }
 
