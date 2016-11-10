@@ -12,11 +12,11 @@ import (
 	"github.com/umbel/pilosa"
 )
 
-// Benchmarker is an interface to guide the creation of new pilosa benchmarks or
+// Benchmark is an interface to guide the creation of new pilosa benchmarks or
 // benchmark components. It defines 2 methods, Init, and Run. These are separate
 // methods so that benchmark running code can time only the running of the
 // benchmark, and not any setup.
-type Benchmarker interface {
+type Benchmark interface {
 	// Init takes a list of hosts and is generally expected to set up a
 	// connection to pilosa using whatever client it chooses.
 	Init(hosts []string) error
@@ -30,15 +30,15 @@ type Benchmarker interface {
 	Run(agentNum int) map[string]interface{}
 }
 
-type BenchmarkCmd interface {
-	Benchmarker
+type Command interface {
+	Benchmark
 	ConsumeFlags(args []string) ([]string, error)
 	Usage() string
 }
 
-// SetBitBenchmark sets a bunch of bits in pilosa, and can be configured in a
+// SetBits sets a bunch of bits in pilosa, and can be configured in a
 // number of ways.
-type SetBitBenchmark struct {
+type SetBits struct {
 	cli *pilosa.Client
 	// bits being set will all be greater than BaseBitmapID.
 	BaseBitmapID int
@@ -53,11 +53,11 @@ type SetBitBenchmark struct {
 	DB string
 }
 
-func (b *SetBitBenchmark) Usage() string {
+func (b *SetBits) Usage() string {
 	return `
-SetBitBenchmark sets a bunch of bits.
+SetBits sets a bunch of bits.
 
-Usage: SetBitBenchmark [arguments]
+Usage: SetBits [arguments]
 
 The following arguments are available:
 
@@ -78,8 +78,8 @@ The following arguments are available:
 `[1:]
 }
 
-func (b *SetBitBenchmark) ConsumeFlags(args []string) ([]string, error) {
-	fs := flag.NewFlagSet("SetBitBenchmark", flag.ContinueOnError)
+func (b *SetBits) ConsumeFlags(args []string) ([]string, error) {
+	fs := flag.NewFlagSet("SetBits", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
 	fs.IntVar(&b.BaseBitmapID, "BaseBitmapID", 0, "bits being set will all be greater than BaseBitmapID")
 	fs.IntVar(&b.BaseProfileID, "BaseProfileID", 0, "profile ids used will all be greater than BaseProfileID")
@@ -94,7 +94,7 @@ func (b *SetBitBenchmark) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Init connects to pilosa and sets the client on b.
-func (b *SetBitBenchmark) Init(hosts []string) (err error) {
+func (b *SetBits) Init(hosts []string) (err error) {
 	b.cli, err = pilosa.NewClient(hosts[0])
 	if err != nil {
 		return err
@@ -103,16 +103,16 @@ func (b *SetBitBenchmark) Init(hosts []string) (err error) {
 		b.Iterations = 100
 	}
 	if b.DB == "" {
-		b.DB = "SetBitBenchmark"
+		b.DB = "SetBits"
 	}
 	return nil
 }
 
-// Run runs the SetBitBenchmark
-func (b *SetBitBenchmark) Run(agentNum int) map[string]interface{} {
+// Run runs the SetBits benchmark
+func (b *SetBits) Run(agentNum int) map[string]interface{} {
 	results := make(map[string]interface{})
 	if b.cli == nil {
-		results["error"] = fmt.Errorf("No client set for SetBitBenchmark agent: %v", agentNum)
+		results["error"] = fmt.Errorf("No client set for SetBits agent: %v", agentNum)
 		return results
 	}
 	for n := 0; n < b.Iterations; n++ {
@@ -131,7 +131,7 @@ func agentizeNum(n, iterations, agentNum int) int {
 }
 
 type parallelBenchmark struct {
-	benchmarkers []Benchmarker
+	benchmarkers []Benchmark
 }
 
 // Init calls Init for each benchmark. If there are any errors, it will return a
@@ -142,7 +142,7 @@ func (pb *parallelBenchmark) Init(hosts []string) error {
 	wg := sync.WaitGroup{}
 	for i, b := range pb.benchmarkers {
 		wg.Add(1)
-		go func(i int, b Benchmarker) {
+		go func(i int, b Benchmark) {
 			defer wg.Done()
 			errors[i] = b.Init(hosts)
 			if errors[i] != nil {
@@ -166,7 +166,7 @@ func (pb *parallelBenchmark) Run(agentNum int) map[string]interface{} {
 	resultsLock := sync.Mutex{}
 	for i, b := range pb.benchmarkers {
 		wg.Add(1)
-		go func(i int, b Benchmarker) {
+		go func(i int, b Benchmark) {
 			defer wg.Done()
 			ret := b.Run(agentNum)
 			resultsLock.Lock()
@@ -178,16 +178,16 @@ func (pb *parallelBenchmark) Run(agentNum int) map[string]interface{} {
 	return results
 }
 
-// Parallel takes a variable number of Benchmarkers and returns a Benchmarker
+// Parallel takes a variable number of Benchmarks and returns a Benchmark
 // which combines them and will run them in parallel.
-func Parallel(bs ...Benchmarker) Benchmarker {
+func Parallel(bs ...Benchmark) Benchmark {
 	return &parallelBenchmark{
 		benchmarkers: bs,
 	}
 }
 
 type serialBenchmark struct {
-	benchmarkers []Benchmarker
+	benchmarkers []Benchmark
 }
 
 // Init calls Init for each benchmark. If there are any errors, it will return a
@@ -219,14 +219,14 @@ func (sb *serialBenchmark) Run(agentNum int) map[string]interface{} {
 	return results
 }
 
-// Serial takes a variable number of Benchmarkers and returns a Benchmarker
+// Serial takes a variable number of Benchmarks and returns a Benchmark
 // which combines then and will run each serially.
-func Serial(bs ...Benchmarker) Benchmarker {
+func Serial(bs ...Benchmark) Benchmark {
 	return &serialBenchmark{
 		benchmarkers: bs,
 	}
 }
 
-var Benchmarks = map[string]Benchmarker{
-	"SetContiguousBits": &SetBitBenchmark{Iterations: 100000, NumProfiles: 1000, DB: "setcontiguousbench"},
+var Benchmarks = map[string]Benchmark{
+	"SetContiguousBits": &SetBits{Iterations: 100000, NumProfiles: 1000, DB: "setcontiguousbench"},
 }
