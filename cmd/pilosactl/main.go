@@ -1236,9 +1236,16 @@ func (cmd *CreateCommand) Run() error {
 		}
 		args := append(os.Args, "-run")
 		subcmd := exec.Command(args[0], args[1:]...)
-		pipeR, pipeW := io.Pipe()
-		subcmd.Stdout = pipeW
-		subcmd.Stderr = cmd.Stderr
+		pipeR, err := subcmd.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("Couldn't get pipe for subcmd stdout: %v", err)
+		}
+		if subcmdOut, err := ioutil.TempFile("", "pilosactl-create"); err == nil {
+			subcmd.Stderr = subcmdOut
+			fmt.Fprintln(cmd.Stderr, subcmdOut.Name())
+		} else {
+			fmt.Fprintf(cmd.Stderr, "Error creating file for pilosa output - discarding: %v", err)
+		}
 		scanner := bufio.NewScanner(pipeR)
 		err = subcmd.Start()
 		if err != nil {
@@ -1246,7 +1253,7 @@ func (cmd *CreateCommand) Run() error {
 		}
 		scanner.Scan()
 		fmt.Fprintln(cmd.Stdout, scanner.Text())
-		subcmd.Stdout = ioutil.Discard
+		subcmd.Stdout = subcmd.Stderr
 		pipeR.Close()
 
 	case "AWS":
