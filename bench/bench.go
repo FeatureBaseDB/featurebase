@@ -9,6 +9,8 @@ import (
 	"flag"
 	"io/ioutil"
 
+	"time"
+
 	"github.com/umbel/pilosa"
 )
 
@@ -201,10 +203,15 @@ func (sb *serialBenchmark) Init(hosts []string) error {
 // and the values are the results of each benchmark's Run method.
 func (sb *serialBenchmark) Run(agentNum int) map[string]interface{} {
 	results := make(map[string]interface{}, len(sb.benchmarkers))
+	runtimes := make(map[string]time.Duration)
 	for i, b := range sb.benchmarkers {
+		start := time.Now()
 		ret := b.Run(agentNum)
+		end := time.Now()
 		results[strconv.Itoa(i)] = ret
+		runtimes[strconv.Itoa(i)] = end.Sub(start)
 	}
+	results["runtimes"] = runtimes
 	return results
 }
 
