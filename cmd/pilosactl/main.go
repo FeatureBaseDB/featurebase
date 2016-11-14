@@ -17,11 +17,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"text/tabwriter"
 	"time"
 	"unsafe"
 
+	"encoding/json"
 	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/bench"
 	"github.com/umbel/pilosa/creator"
@@ -139,6 +141,8 @@ func (m *Main) ParseFlags(args []string) error {
 		m.Cmd = NewCreateCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "bagent":
 		m.Cmd = NewBagentCommand(m.Stdin, m.Stdout, m.Stderr)
+	case "bspawn":
+		m.Cmd = NewBspawnCommand(m.Stdin, m.Stdout, m.Stderr)
 	default:
 		return ErrUnknownCommand
 	}
@@ -1360,8 +1364,119 @@ func (cmd *BagentCommand) Run() error {
 	if err != nil {
 		return fmt.Errorf("in cmd.Run initialization: %v", err)
 	}
+	fmt.Fprintf(cmd.Stderr, "cmd: %v\n", *cmd)
 	res := sbm.Run(cmd.AgentNum)
 	fmt.Fprintln(cmd.Stdout, res)
+	return nil
+}
+
+// BspawnCommand represents a command for creating a pilosa cluster.
+type BspawnCommand struct {
+	PilosaHosts []string
+	CreatorArgs []string // everything that comes after `pilosactl create`
+
+	AgentHosts []string
+	Agents     AgentConfig
+
+	Benchmarks []Spawn
+
+	Stdin  io.Reader `json:"-"`
+	Stdout io.Writer `json:"-"`
+	Stderr io.Writer `json:"-"`
+}
+
+type AgentConfig struct {
+	Type string
+}
+
+type Spawn struct {
+	Num  int      // number of agents to run
+	Args []string // everything that comes after `pilosactl bagent [arguments]`
+}
+
+// NewBspawnCommand returns a new instance of BspawnCommand.
+func NewBspawnCommand(stdin io.Reader, stdout, stderr io.Writer) *BspawnCommand {
+	return &BspawnCommand{
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+}
+
+// ParseFlags parses command line flags from args.
+func (cmd *BspawnCommand) ParseFlags(args []string) error {
+	if len(args) != 1 {
+		return flag.ErrHelp
+	}
+	f, err := os.Open(args[0])
+	if err != nil {
+		return err
+	}
+	dec := json.NewDecoder(f)
+	err = dec.Decode(cmd)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(cmd.Stderr, "%v", cmd)
+
+	// handle pilosa creation
+	// handle agent creation
+
+	return nil
+}
+
+// Usage returns the usage message to be printed.
+func (cmd *BspawnCommand) Usage() string {
+	return strings.TrimSpace(`
+pilosactl bspaw is a tool for running multiple instances of bagent against a cluster.
+
+Usage:
+
+pilosactl spawn configfile
+`)
+}
+
+// Run executes the main program execution.
+func (cmd *BspawnCommand) Run() error {
+	switch cmd.Agents.Type {
+	case "local":
+		fmt.Fprintf(cmd.Stderr, "running! local\n")
+		return cmd.spawnLocal()
+	case "remote":
+		return fmt.Errorf("remote type spawning is unimplemented")
+	default:
+		return fmt.Errorf("'%v' is not a supported type of spawn command", cmd.Agents.Type)
+	}
+}
+
+func (cmd *BspawnCommand) spawnLocal() error {
+	agents := []*BagentCommand{}
+	for _, sp := range cmd.Benchmarks {
+		for i := 0; i < sp.Num; i++ {
+			agentCmd := NewBagentCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+			agents = append(agents, agentCmd)
+			err := agentCmd.ParseFlags(append([]string{"-agentNum", strconv.Itoa(i), "-hosts", strings.Join(cmd.PilosaHosts, ",")}, sp.Args...))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	errors := make([]error, len(agents))
+	fmt.Fprintf(cmd.Stderr, "agents: %v\n", agents)
+	wg := sync.WaitGroup{}
+	for i, agent := range agents {
+		wg.Add(1)
+		go func(i int, agent *BagentCommand) {
+			defer wg.Done()
+			errors[i] = agent.Run()
+		}(i, agent)
+	}
+	wg.Wait()
+	for _, err := range errors {
+		if err != nil {
+			return fmt.Errorf("%v", errors)
+		}
+	}
 	return nil
 }
 
