@@ -23,6 +23,7 @@ import (
 	"time"
 	"unsafe"
 
+	"context"
 	"encoding/json"
 	"github.com/umbel/pilosa"
 	"github.com/umbel/pilosa/bench"
