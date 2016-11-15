@@ -11,6 +11,7 @@ import (
 
 	"time"
 
+	"context"
 	"github.com/umbel/pilosa"
 	"math/rand"
 )
@@ -111,7 +112,7 @@ func (b *DiagonalSetBits) Run(agentNum int) map[string]interface{} {
 	for n := 0; n < b.Iterations; n++ {
 		iterID := agentizeNum(n, b.Iterations, agentNum)
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+iterID, b.BaseProfileID+iterID)
-		b.cli.ExecuteQuery(b.DB, query, true)
+		b.cli.ExecuteQuery(context.TODO(), b.DB, query, true)
 	}
 	return results
 }
@@ -175,7 +176,7 @@ func (b *MultiDBSetBits) Run(agentNum int) map[string]interface{} {
 	}
 	for n := 0; n < b.Iterations; n++ {
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+n, b.BaseProfileID+n)
-		b.cli.ExecuteQuery("multidb"+strconv.Itoa(agentNum), query, true)
+		b.cli.ExecuteQuery(context.TODO(), "multidb"+strconv.Itoa(agentNum), query, true)
 	}
 	return results
 }
@@ -266,7 +267,7 @@ func (b *RandomSetBits) Run(agentNum int) map[string]interface{} {
 		bitmapID := rng.Int63n(b.BitmapIDRange)
 		profID := rng.Int63n(b.ProfileIDRange)
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+bitmapID, b.BaseProfileID+profID)
-		b.cli.ExecuteQuery(b.DB, query, true)
+		b.cli.ExecuteQuery(context.TODO(), b.DB, query, true)
 	}
 	return results
 }
