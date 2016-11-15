@@ -1,0 +1,10 @@
+{
+    "PilosaHosts": ["localhost:19327","localhost:19328","localhost:19329"],
+    "Agents": { "Type": "local" },
+    "Benchmarks": [
+        {
+            "Num": 1,
+            "Args": ["RandomSetBits", "-Iterations", "10000", "-ProfileIDRange", "1000000", "-BitmapIDRange", "1000000", "-Seed", "2345"]
+        }
+    ]
+}
