@@ -5,7 +5,7 @@ Pilosa is a bitmap index database.
 
 ## Getting Started
 
-Pilosa requires Go 1.6 or greater.
+Pilosa requires Go 1.7 or greater.
 
 You can download the source by running `go get`:
 
