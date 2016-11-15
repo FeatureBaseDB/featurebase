@@ -33,23 +33,24 @@ type Benchmark interface {
 	Run(agentNum int) map[string]interface{}
 }
 
+// Command extends Benchmark by adding methods for configuring via command line flags and returning usage information.
 type Command interface {
 	Benchmark
+
+	// ConsumeFlags sets and parses flags, and then returns flagSet.Args()
 	ConsumeFlags(args []string) ([]string, error)
+
+	// Usage returns information on how to use this benchmark
 	Usage() string
 }
 
 // DiagonalSetBits sets bits with increasing profile id and bitmap id.
 type DiagonalSetBits struct {
-	cli *pilosa.Client
-	// bits being set will all be greater than BaseBitmapID.
-	BaseBitmapID int
-	// profile ids used will all be greater than BaseProfileID.
+	cli           *pilosa.Client
+	BaseBitmapID  int
 	BaseProfileID int
-	// Iterations is the number of bits that will be set by this Benchmark.
-	Iterations int
-	// DB to use in pilosa.
-	DB string
+	Iterations    int
+	DB            string
 }
 
 func (b *DiagonalSetBits) Usage() string {
@@ -61,7 +62,7 @@ Usage: DiagonalSetBits [arguments]
 The following arguments are available:
 
 	-BaseBitmapID int
-		bitmap id to start from
+		bits being set will all be greater than BaseBitmapID
 
 	-BaseProfileID int
 		profile id num to start from
@@ -77,10 +78,10 @@ The following arguments are available:
 func (b *DiagonalSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("DiagonalSetBits", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.IntVar(&b.BaseBitmapID, "BaseBitmapID", 0, "bits being set will all be greater than BaseBitmapID")
-	fs.IntVar(&b.BaseProfileID, "BaseProfileID", 0, "profile ids used will all be greater than BaseProfileID")
-	fs.IntVar(&b.Iterations, "Iterations", 100, "Iterations is the number of bits that will be set by this Benchmark")
-	fs.StringVar(&b.DB, "DB", "benchdb", "pilosa DB to use")
+	fs.IntVar(&b.BaseBitmapID, "BaseBitmapID", 0, "")
+	fs.IntVar(&b.BaseProfileID, "BaseProfileID", 0, "")
+	fs.IntVar(&b.Iterations, "Iterations", 100, "")
+	fs.StringVar(&b.DB, "DB", "benchdb", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
