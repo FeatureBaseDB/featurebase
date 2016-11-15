@@ -1,0 +1,10 @@
+{
+    "PilosaHosts": ["localhost:19327","localhost:19328","localhost:19329"],
+    "Agents": { "Type": "local" },
+    "Benchmarks": [
+        {
+            "Num": 4,
+            "Args": ["MultiDBSetBits", "-Iterations", "100000"]
+        }
+    ]
+}
