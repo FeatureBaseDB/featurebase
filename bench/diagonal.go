@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 
 	"context"
+	"time"
 )
 
 // DiagonalSetBits sets bits with increasing profile id and bitmap id.
@@ -66,10 +67,15 @@ func (b *DiagonalSetBits) Run(agentNum int) map[string]interface{} {
 		results["error"] = fmt.Errorf("No client set for DiagonalSetBits agent: %v", agentNum)
 		return results
 	}
+	s := NewStats()
+	var start time.Time
 	for n := 0; n < b.Iterations; n++ {
 		iterID := agentizeNum(n, b.Iterations, agentNum)
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+iterID, b.BaseProfileID+iterID)
+		start = time.Now()
 		b.cli.ExecuteQuery(context.TODO(), b.DB, query, true)
+		s.Add(time.Now().Sub(start))
 	}
+	AddToResults(s, results)
 	return results
 }

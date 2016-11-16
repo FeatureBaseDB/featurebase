@@ -8,6 +8,7 @@ import (
 
 	"context"
 	"math/rand"
+	"time"
 )
 
 // RandomSetBits sets bits randomly and deterministically based on a seed.
@@ -84,11 +85,16 @@ func (b *RandomSetBits) Run(agentNum int) map[string]interface{} {
 		results["error"] = fmt.Errorf("No client set for RandomSetBits agent: %v", agentNum)
 		return results
 	}
+	s := NewStats()
+	var start time.Time
 	for n := 0; n < b.Iterations; n++ {
 		bitmapID := rng.Int63n(b.BitmapIDRange)
 		profID := rng.Int63n(b.ProfileIDRange)
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+bitmapID, b.BaseProfileID+profID)
+		start = time.Now()
 		b.cli.ExecuteQuery(context.TODO(), b.DB, query, true)
+		s.Add(time.Now().Sub(start))
 	}
+	AddToResults(s, results)
 	return results
 }
