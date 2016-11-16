@@ -56,7 +56,7 @@ func (b *DiagonalSetBits) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Init connects to pilosa and sets the client on b.
-func (b *DiagonalSetBits) Init(hosts []string) (err error) {
+func (b *DiagonalSetBits) Init(hosts []string, agentNum int) (err error) {
 	b.cli, err = pilosa.NewClient(hosts[0])
 	if err != nil {
 		return err

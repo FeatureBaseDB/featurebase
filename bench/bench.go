@@ -14,7 +14,7 @@ import (
 type Benchmark interface {
 	// Init takes a list of hosts and is generally expected to set up a
 	// connection to pilosa using whatever client it chooses.
-	Init(hosts []string) error
+	Init(hosts []string, agentNum int) error
 
 	// Run runs the benchmark. It takes an agentNum which should be used to
 	// parameterize the benchmark if it is being run simultaneously on multiple
@@ -49,7 +49,7 @@ type parallelBenchmark struct {
 
 // Init calls Init for each benchmark. If there are any errors, it will return a
 // non-nil error value.
-func (pb *parallelBenchmark) Init(hosts []string) error {
+func (pb *parallelBenchmark) Init(hosts []string, agentNum int) error {
 	errors := make([]error, len(pb.benchmarkers))
 	hadErr := false
 	wg := sync.WaitGroup{}
@@ -57,7 +57,7 @@ func (pb *parallelBenchmark) Init(hosts []string) error {
 		wg.Add(1)
 		go func(i int, b Benchmark) {
 			defer wg.Done()
-			errors[i] = b.Init(hosts)
+			errors[i] = b.Init(hosts, agentNum)
 			if errors[i] != nil {
 				hadErr = true
 			}
@@ -105,11 +105,11 @@ type serialBenchmark struct {
 
 // Init calls Init for each benchmark. If there are any errors, it will return a
 // non-nil error value.
-func (sb *serialBenchmark) Init(hosts []string) error {
+func (sb *serialBenchmark) Init(hosts []string, agentNum int) error {
 	errors := make([]error, len(sb.benchmarkers))
 	hadErr := false
 	for i, b := range sb.benchmarkers {
-		errors[i] = b.Init(hosts)
+		errors[i] = b.Init(hosts, agentNum)
 		if errors[i] != nil {
 			hadErr = true
 		}
