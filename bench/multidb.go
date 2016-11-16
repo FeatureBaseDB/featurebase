@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 
 	"context"
+	"time"
 )
 
 // MultiDBSetBits sets bits with increasing profile id and bitmap id.
@@ -62,9 +63,14 @@ func (b *MultiDBSetBits) Run(agentNum int) map[string]interface{} {
 		results["error"] = fmt.Errorf("No client set for MultiDBSetBits agent: %v", agentNum)
 		return results
 	}
+	s := NewStats()
+	var start time.Time
 	for n := 0; n < b.Iterations; n++ {
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+n, b.BaseProfileID+n)
+		start = time.Now()
 		b.cli.ExecuteQuery(context.TODO(), "multidb"+strconv.Itoa(agentNum), query, true)
+		s.Add(time.Now().Sub(start))
 	}
+	AddToResults(s, results)
 	return results
 }
