@@ -1,10 +1,10 @@
 {
-    "PilosaHosts": ["localhost:19327","localhost:19328","localhost:19329"],
+    "CreatorArgs": ["-type", "local", "-serverN", "3", "-replicaN", "1"],
     "Agents": { "Type": "local" },
     "Benchmarks": [
         {
             "Num": 3,
-            "Args": ["DiagonalSetBits", "-Iterations", "100000", "-ClientType", "round_robin"]
+            "Args": ["DiagonalSetBits", "-Iterations", "30000", "-ClientType", "round_robin"]
         }
     ]
 }
