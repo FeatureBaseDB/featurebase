@@ -7,13 +7,12 @@ import (
 	"io/ioutil"
 
 	"context"
-	"github.com/umbel/pilosa"
 	"math/rand"
 )
 
 // RandomSetBits sets bits randomly and deterministically based on a seed.
 type RandomSetBits struct {
-	cli            *pilosa.Client
+	HasClient
 	BaseBitmapID   int64
 	BaseProfileID  int64
 	BitmapIDRange  int64
@@ -52,6 +51,9 @@ The following arguments are available:
 
 	-DB string
 		pilosa db to use
+
+	-ClientType string
+		Can be 'single' (all agents hitting one host) or 'round_robin'
 `[1:]
 }
 
@@ -65,23 +67,12 @@ func (b *RandomSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs.Int64Var(&b.Seed, "Seed", 1, "")
 	fs.IntVar(&b.Iterations, "Iterations", 100, "")
 	fs.StringVar(&b.DB, "DB", "benchdb", "")
+	fs.StringVar(&b.ClientType, "ClientType", "single", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 	return fs.Args(), nil
-}
-
-// Init connects to pilosa and sets the client on b.
-func (b *RandomSetBits) Init(hosts []string, agentNum int) (err error) {
-	b.cli, err = pilosa.NewClient(hosts[0])
-	if err != nil {
-		return err
-	}
-	if b.DB == "" {
-		b.DB = "RandomSetBits"
-	}
-	return nil
 }
 
 // Run runs the RandomSetBits benchmark
