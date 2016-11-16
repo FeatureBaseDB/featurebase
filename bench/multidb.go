@@ -53,7 +53,7 @@ func (b *MultiDBSetBits) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Init connects to pilosa and sets the client on b.
-func (b *MultiDBSetBits) Init(hosts []string) (err error) {
+func (b *MultiDBSetBits) Init(hosts []string, agentNum int) (err error) {
 	b.cli, err = pilosa.NewClient(hosts[0])
 	if err != nil {
 		return err

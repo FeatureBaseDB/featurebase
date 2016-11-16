@@ -1369,7 +1369,7 @@ The following arguments are available:
 // Run executes the main program execution.
 func (cmd *BagentCommand) Run() error {
 	sbm := bench.Serial(cmd.Benchmarks...)
-	err := sbm.Init(cmd.Hosts)
+	err := sbm.Init(cmd.Hosts, cmd.AgentNum)
 	if err != nil {
 		return fmt.Errorf("in cmd.Run initialization: %v", err)
 	}
