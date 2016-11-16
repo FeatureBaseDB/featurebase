@@ -1225,14 +1225,27 @@ The following flags are allowed:
 `)
 }
 
-// Run executes the main program execution.
+// create separates creation from running for use programmatically by other
+// commands like bspawn.
+func (cmd *CreateCommand) create() (creator.Cluster, error) {
+	switch cmd.Type {
+	case "local":
+		return creator.NewLocalCluster(cmd.ReplicaN, cmd.ServerN)
+	case "AWS":
+		return nil, fmt.Errorf("unimplemented create type: %v", cmd.Type)
+	default:
+		return nil, fmt.Errorf("unsupported create type: %v", cmd.Type)
+	}
+}
+
+// Run executes cluster creation.
 func (cmd *CreateCommand) Run() error {
 	var clus creator.Cluster
 	switch cmd.Type {
 	case "local":
 		var err error
 		if cmd.run {
-			clus, err = creator.NewLocalCluster(cmd.ReplicaN, cmd.ServerN)
+			clus, err = cmd.create()
 			if err != nil {
 				return fmt.Errorf("running create command: %v", err)
 			}
@@ -1436,7 +1449,7 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 // Usage returns the usage message to be printed.
 func (cmd *BspawnCommand) Usage() string {
 	return strings.TrimSpace(`
-pilosactl bspaw is a tool for running multiple instances of bagent against a cluster.
+pilosactl bspawn is a tool for running multiple instances of bagent against a cluster.
 
 Usage:
 
@@ -1446,6 +1459,17 @@ pilosactl spawn configfile
 
 // Run executes the main program execution.
 func (cmd *BspawnCommand) Run() error {
+	if len(cmd.PilosaHosts) == 0 {
+		// must create cluster
+		createCmd := NewCreateCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+		createCmd.ParseFlags(cmd.CreatorArgs)
+		clus, err := createCmd.create()
+		if err != nil {
+			return fmt.Errorf("Cluster creation error while spawning: %v", err)
+		}
+		defer clus.Shutdown()
+		cmd.PilosaHosts = clus.Hosts()
+	}
 	switch cmd.Agents.Type {
 	case "local":
 		return cmd.spawnLocal()
