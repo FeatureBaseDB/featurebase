@@ -7,12 +7,11 @@ import (
 	"io/ioutil"
 
 	"context"
-	"github.com/umbel/pilosa"
 )
 
 // DiagonalSetBits sets bits with increasing profile id and bitmap id.
 type DiagonalSetBits struct {
-	cli           *pilosa.Client
+	HasClient
 	BaseBitmapID  int
 	BaseProfileID int
 	Iterations    int
@@ -38,6 +37,10 @@ The following arguments are available:
 
 	-DB string
 		pilosa db to use
+
+	-ClientType string
+		Can be 'single' (all agents hitting one host) or 'round_robin'
+
 `[1:]
 }
 
@@ -48,23 +51,12 @@ func (b *DiagonalSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs.IntVar(&b.BaseProfileID, "BaseProfileID", 0, "")
 	fs.IntVar(&b.Iterations, "Iterations", 100, "")
 	fs.StringVar(&b.DB, "DB", "benchdb", "")
+	fs.StringVar(&b.ClientType, "ClientType", "single", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 	return fs.Args(), nil
-}
-
-// Init connects to pilosa and sets the client on b.
-func (b *DiagonalSetBits) Init(hosts []string, agentNum int) (err error) {
-	b.cli, err = pilosa.NewClient(hosts[0])
-	if err != nil {
-		return err
-	}
-	if b.DB == "" {
-		b.DB = "DiagonalSetBits"
-	}
-	return nil
 }
 
 // Run runs the DiagonalSetBits benchmark

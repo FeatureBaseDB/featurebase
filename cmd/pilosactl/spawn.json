@@ -3,8 +3,8 @@
     "Agents": { "Type": "local" },
     "Benchmarks": [
         {
-            "Num": 1,
-            "Args": ["DiagonalSetBits", "-Iterations", "100000"]
+            "Num": 3,
+            "Args": ["DiagonalSetBits", "-Iterations", "100000", "-ClientType", "round_robin"]
         }
     ]
 }

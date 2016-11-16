@@ -8,12 +8,11 @@ import (
 	"io/ioutil"
 
 	"context"
-	"github.com/umbel/pilosa"
 )
 
 // MultiDBSetBits sets bits with increasing profile id and bitmap id.
 type MultiDBSetBits struct {
-	cli           *pilosa.Client
+	HasClient
 	BaseBitmapID  int
 	BaseProfileID int
 	Iterations    int
@@ -36,6 +35,9 @@ The following arguments are available:
 	-Iterations int
 		number of bits to set
 
+	-ClientType string
+		Can be 'single' (all agents hitting one host) or 'round_robin'
+
 `[1:]
 }
 
@@ -45,20 +47,12 @@ func (b *MultiDBSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs.IntVar(&b.BaseBitmapID, "BaseBitmapID", 0, "")
 	fs.IntVar(&b.BaseProfileID, "BaseProfileID", 0, "")
 	fs.IntVar(&b.Iterations, "Iterations", 100, "")
+	fs.StringVar(&b.ClientType, "ClientType", "single", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 	return fs.Args(), nil
-}
-
-// Init connects to pilosa and sets the client on b.
-func (b *MultiDBSetBits) Init(hosts []string, agentNum int) (err error) {
-	b.cli, err = pilosa.NewClient(hosts[0])
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // Run runs the MultiDBSetBits benchmark

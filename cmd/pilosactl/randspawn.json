@@ -3,8 +3,8 @@
     "Agents": { "Type": "local" },
     "Benchmarks": [
         {
-            "Num": 1,
-            "Args": ["RandomSetBits", "-Iterations", "10000", "-ProfileIDRange", "1000000", "-BitmapIDRange", "1000000", "-Seed", "2345"]
+            "Num": 3,
+            "Args": ["RandomSetBits", "-Iterations", "10000", "-ProfileIDRange", "1000000", "-BitmapIDRange", "1000000", "-Seed", "2345", "-ClientType", "round_robin"]
         }
     ]
 }

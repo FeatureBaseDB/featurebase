@@ -3,8 +3,8 @@
     "Agents": { "Type": "local" },
     "Benchmarks": [
         {
-            "Num": 4,
-            "Args": ["MultiDBSetBits", "-Iterations", "100000"]
+            "Num": 3,
+            "Args": ["MultiDBSetBits", "-Iterations", "100000", "-ClientType", "round_robin"]
         }
     ]
 }
