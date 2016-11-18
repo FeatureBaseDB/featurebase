@@ -20,6 +20,7 @@ type QueryMaker struct {
 }
 
 func (q *QueryMaker) Random(maxN, depth, maxargs int, idmin, idmax uint64) pql.Call {
+	// TODO: handle depth==1 or 0
 	val := q.R.Intn(5)
 	switch val {
 	case 0:
