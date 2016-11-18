@@ -1335,6 +1335,8 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 			bm = &bench.RandomSetBits{}
 		case "MultiDBSetBits":
 			bm = &bench.MultiDBSetBits{}
+		case "RandomQuery":
+			bm = &bench.RandomQuery{}
 		default:
 			return fmt.Errorf("Unknown benchmark cmd: %v", remArgs[0])
 		}
@@ -1374,6 +1376,8 @@ The following arguments are available:
 		DiagonalSetBits
 		RandomSetBits
 		MultiDBSetBits
+		RandomQuery
+
 
 
 `)
