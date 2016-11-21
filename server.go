@@ -21,8 +21,7 @@ import (
 // Default server settings.
 const (
 	DefaultAntiEntropyInterval = 10 * time.Minute
-	//DefaultPollingInterval     = 60 * time.Second
-	DefaultPollingInterval = 5 * time.Second
+	DefaultPollingInterval     = 60 * time.Second
 )
 
 // Server represents an index wrapped by a running HTTP server.
