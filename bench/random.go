@@ -26,34 +26,34 @@ type RandomSetBits struct {
 
 func (b *RandomSetBits) Usage() string {
 	return `
-RandomSetBits sets random bits
+random-set-bits sets random bits
 
-Usage: RandomSetBits [arguments]
+Usage: random-set-bits [arguments]
 
 The following arguments are available:
 
-	-BaseBitmapID int
-		bitmap id to start from
+	-base-bitmap-id int
+		bits being set will all be greater than BaseBitmapID
 
-	-BitmapIDRange int
+	-bitmap-id-range int
 		number of possible bitmap ids that can be set
 
-	-BaseProfileID int
+	-base-profile-id int
 		profile id num to start from
 
-	-ProfileIDRange int
+	-profile-id-range int
 		number of possible profile ids that can be set
 
-	-Iterations int
+	-iterations int
 		number of bits to set
 
-	-Seed int
+	-seed int
 		Seed for RNG
 
-	-DB string
+	-db string
 		pilosa db to use
 
-	-ClientType string
+	-client-type string
 		Can be 'single' (all agents hitting one host) or 'round_robin'
 `[1:]
 }
@@ -61,14 +61,14 @@ The following arguments are available:
 func (b *RandomSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("RandomSetBits", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.Int64Var(&b.BaseBitmapID, "BaseBitmapID", 0, "")
-	fs.Int64Var(&b.BitmapIDRange, "BitmapIDRange", 100000, "")
-	fs.Int64Var(&b.BaseProfileID, "BaseProfileID", 0, "")
-	fs.Int64Var(&b.ProfileIDRange, "ProfileIDRange", 100000, "")
-	fs.Int64Var(&b.Seed, "Seed", 1, "")
-	fs.IntVar(&b.Iterations, "Iterations", 100, "")
-	fs.StringVar(&b.DB, "DB", "benchdb", "")
-	fs.StringVar(&b.ClientType, "ClientType", "single", "")
+	fs.Int64Var(&b.BaseBitmapID, "base-bitmap-id", 0, "")
+	fs.Int64Var(&b.BitmapIDRange, "bitmap-id-range", 100000, "")
+	fs.Int64Var(&b.BaseProfileID, "base-profile-id", 0, "")
+	fs.Int64Var(&b.ProfileIDRange, "profile-id-range", 100000, "")
+	fs.Int64Var(&b.Seed, "seed", 1, "")
+	fs.IntVar(&b.Iterations, "iterations", 100, "")
+	fs.StringVar(&b.DB, "db", "benchdb", "")
+	fs.StringVar(&b.ClientType, "client-type", "single", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err

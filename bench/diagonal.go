@@ -21,25 +21,25 @@ type DiagonalSetBits struct {
 
 func (b *DiagonalSetBits) Usage() string {
 	return `
-DiagonalSetBits sets bits with increasing profile id and bitmap id.
+diagonal-set-bits sets bits with increasing profile id and bitmap id.
 
-Usage: DiagonalSetBits [arguments]
+Usage: diagonal-set-bits [arguments]
 
 The following arguments are available:
 
-	-BaseBitmapID int
+	-base-bitmap-id int
 		bits being set will all be greater than BaseBitmapID
 
-	-BaseProfileID int
+	-base-profile-id int
 		profile id num to start from
 
-	-Iterations int
+	-iterations int
 		number of bits to set
 
-	-DB string
+	-db string
 		pilosa db to use
 
-	-ClientType string
+	-client-type string
 		Can be 'single' (all agents hitting one host) or 'round_robin'
 
 `[1:]
@@ -48,11 +48,11 @@ The following arguments are available:
 func (b *DiagonalSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("DiagonalSetBits", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.IntVar(&b.BaseBitmapID, "BaseBitmapID", 0, "")
-	fs.IntVar(&b.BaseProfileID, "BaseProfileID", 0, "")
-	fs.IntVar(&b.Iterations, "Iterations", 100, "")
-	fs.StringVar(&b.DB, "DB", "benchdb", "")
-	fs.StringVar(&b.ClientType, "ClientType", "single", "")
+	fs.IntVar(&b.BaseBitmapID, "base-bitmap-id", 0, "")
+	fs.IntVar(&b.BaseProfileID, "base-profile-id", 0, "")
+	fs.IntVar(&b.Iterations, "iterations", 100, "")
+	fs.StringVar(&b.DB, "db", "benchdb", "")
+	fs.StringVar(&b.ClientType, "client-type", "single", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err

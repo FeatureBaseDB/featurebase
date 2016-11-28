@@ -4,7 +4,7 @@
     "Benchmarks": [
         {
             "Num": 3,
-            "Args": ["MultiDBSetBits", "-Iterations", "30000", "-ClientType", "round_robin"]
+            "Args": ["multi-db-set-bits", "-iterations", "30000", "-client-type", "round_robin"]
         }
     ]
 }
