@@ -1283,11 +1283,17 @@ func (cmd *CreateCommand) Run() error {
 	return nil
 }
 
-// BagentCommand represents a command for creating a pilosa cluster.
+// BagentCommand represents a command for running a benchmark agent. A benchmark
+// agent runs multiple benchmarks in series in the order that they are specified
+// on the command line.
 type BagentCommand struct {
+	// Slice of Benchmarks which will be run serially.
 	Benchmarks []bench.Benchmark
-	AgentNum   int
-	Hosts      []string
+	// AgentNum will be passed to each benchmark's Run method so that it can
+	// parameterize its behavior.
+	AgentNum int
+	// Slice of pilosa hosts to run the Benchmarks against.
+	Hosts []string
 
 	Stdin  io.Reader
 	Stdout io.Writer
@@ -1307,7 +1313,12 @@ func NewBagentCommand(stdin io.Reader, stdout, stderr io.Writer) *BagentCommand 
 	}
 }
 
-// ParseFlags parses command line flags from args.
+// ParseFlags parses command line flags for the BagentCommand. First the command
+// wide flags `hosts` and `agentNum` are parsed. The rest of the flags should be
+// a series of subcommands along with their flags. ParseFlags runs each
+// subcommand's `ConsumeFlags` method which parses the flags for that command
+// and returns the rest of the argument slice which should contain further
+// subcommands.
 func (cmd *BagentCommand) ParseFlags(args []string) error {
 	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
@@ -1383,7 +1394,7 @@ The following arguments are available:
 `)
 }
 
-// Run executes the main program execution.
+// Run executes the benchmark agent.
 func (cmd *BagentCommand) Run() error {
 	sbm := bench.Serial(cmd.Benchmarks...)
 	err := sbm.Init(cmd.Hosts, cmd.AgentNum)
@@ -1396,14 +1407,30 @@ func (cmd *BagentCommand) Run() error {
 	return nil
 }
 
-// BspawnCommand represents a command for creating a pilosa cluster.
+// BspawnCommand represents a command for spawning complex benchmarks. This
+// includes cluster creation and teardown, agent creation and teardown, running
+// multiple benchmarks in series and/or parallel, and collecting all the
+// results.
 type BspawnCommand struct {
+	// If PilosaHosts is specified, CreatorArgs is ignored and the existing
+	// cluster specified here is used.
 	PilosaHosts []string
-	CreatorArgs []string // everything that comes after `pilosactl create`
 
+	// CreateCommand will be used with these arguments to create a cluster -
+	// the cluster will be used to populate the PilosaHosts field. This
+	// should include everything that comes after `pilosactl create`
+	CreatorArgs []string
+
+	// If AgentHosts is specified, Agents is ignored, and the existing
+	// agents specified here are used.
 	AgentHosts []string
-	Agents     AgentConfig
+	// Agents is config for creating a fleet of agents from which to run the
+	// benchmark. TODO: mostly unimplemented.
+	Agents AgentConfig
 
+	// Benchmarks is a slice of Spawns which specifies all of the bagent
+	// commands to run. These will all be run in parallel, started on each
+	// of the agents in a round robin fashion.
 	Benchmarks []Spawn
 
 	Stdin  io.Reader `json:"-"`
@@ -1415,6 +1442,8 @@ type AgentConfig struct {
 	Type string
 }
 
+// Spawn represents a bagent command run in parallel across Num agents. The
+// bagent command can run multiple Benchmarks serially within itself.
 type Spawn struct {
 	Num  int      // number of agents to run
 	Args []string // everything that comes after `pilosactl bagent [arguments]`
