@@ -5,8 +5,8 @@
         {
             "Num": 3,
             "Args": [
-                    "RandomSetBits", "-Iterations", "30000", "-ProfileIDRange", "1000000", "-BitmapIDRange", "1000000", "-Seed", "2345", "-ClientType", "round_robin", "-DB", "randsetandquery",
-                    "RandomQuery", "-Iterations", "1000", "-BitmapIDRange", "1000000", "-Seed", "1239", "-DBs", "randsetandquery"
+                    "random-set-bits", "-iterations", "30000", "-profile-id-range", "1000000", "-bitmap-id-range", "1000000", "-seed", "2345", "-client-type", "round_robin", "-db", "randsetandquery",
+                    "random-query", "-iterations", "1000", "-bitmap-id-range", "1000000", "-seed", "1239", "-dbs", "randsetandquery"
             ]
         }
     ]

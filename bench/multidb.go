@@ -19,22 +19,22 @@ type MultiDBSetBits struct {
 
 func (b *MultiDBSetBits) Usage() string {
 	return `
-MultiDBSetBits sets bits with increasing profile id and bitmap id using a different DB for each agent.
+multi-db-set-bits sets bits with increasing profile id and bitmap id using a different DB for each agent.
 
-Usage: MultiDBSetBits [arguments]
+Usage: multi-db-set-bits [arguments]
 
 The following arguments are available:
 
-	-BaseBitmapID int
-		bits being set will all be greater than BaseBitmapID
+	-base-bitmap-id int
+		bits being set will all be greater than base-bitmap-id
 
-	-BaseProfileID int
+	-base-profile-id int
 		profile id num to start from
 
-	-Iterations int
+	-iterations int
 		number of bits to set
 
-	-ClientType string
+	-client-type string
 		Can be 'single' (all agents hitting one host) or 'round_robin'
 
 `[1:]
@@ -43,10 +43,10 @@ The following arguments are available:
 func (b *MultiDBSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("MultiDBSetBits", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.IntVar(&b.BaseBitmapID, "BaseBitmapID", 0, "")
-	fs.IntVar(&b.BaseProfileID, "BaseProfileID", 0, "")
-	fs.IntVar(&b.Iterations, "Iterations", 100, "")
-	fs.StringVar(&b.ClientType, "ClientType", "single", "")
+	fs.IntVar(&b.BaseBitmapID, "base-bitmap-id", 0, "")
+	fs.IntVar(&b.BaseProfileID, "base-profile-id", 0, "")
+	fs.IntVar(&b.Iterations, "iterations", 100, "")
+	fs.StringVar(&b.ClientType, "client-type", "single", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err

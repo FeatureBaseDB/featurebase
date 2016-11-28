@@ -25,37 +25,37 @@ type RandomQuery struct {
 
 func (b *RandomQuery) Usage() string {
 	return `
-RandomQuery constructs random queries
+random-query constructs random queries
 
-Usage: RandomQuery [arguments]
+Usage: random-query [arguments]
 
 The following arguments are available:
 
-	-MaxDepth int
+	-max-depth int
 		Maximum nesting depth of queries
 
-	-MaxArgs int
+	-max-args int
 		Maximum number of args for Union/Intersect/Difference Queries
 
-	-MaxN int
+	-max-n int
 		Maximum N value for TopN queries.
 
-	-BaseBitmapID int
+	-base-bitmap-id int
 		bitmap id to start from
 
-	-BitmapIDRange int
+	-bitmap-id-range int
 		number of possible bitmap ids that can be set
 
-	-Iterations int
+	-iterations int
 		number of bits to set
 
-	-Seed int
+	-seed int
 		Seed for RNG
 
-	-DBs string
+	-dbs string
 		Comma separated list of DBs to query against
 
-	-ClientType string
+	-client-type string
 		Can be 'single' (all agents hitting one host) or 'round_robin'
 `[1:]
 }
@@ -63,16 +63,16 @@ The following arguments are available:
 func (b *RandomQuery) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("RandomQuery", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.IntVar(&b.MaxDepth, "MaxDepth", 4, "")
-	fs.IntVar(&b.MaxArgs, "MaxArgs", 4, "")
-	fs.IntVar(&b.MaxN, "MaxN", 4, "")
-	fs.Int64Var(&b.BaseBitmapID, "BaseBitmapID", 0, "")
-	fs.Int64Var(&b.BitmapIDRange, "BitmapIDRange", 100000, "")
-	fs.Int64Var(&b.Seed, "Seed", 1, "")
-	fs.IntVar(&b.Iterations, "Iterations", 100, "")
+	fs.IntVar(&b.MaxDepth, "max-depth", 4, "")
+	fs.IntVar(&b.MaxArgs, "max-args", 4, "")
+	fs.IntVar(&b.MaxN, "max-n", 4, "")
+	fs.Int64Var(&b.BaseBitmapID, "base-bitmap-id", 0, "")
+	fs.Int64Var(&b.BitmapIDRange, "bitmap-id-range", 100000, "")
+	fs.Int64Var(&b.Seed, "seed", 1, "")
+	fs.IntVar(&b.Iterations, "iterations", 100, "")
 	var dbs string
-	fs.StringVar(&dbs, "DBs", "benchdb", "")
-	fs.StringVar(&b.ClientType, "ClientType", "single", "")
+	fs.StringVar(&dbs, "dbs", "benchdb", "")
+	fs.StringVar(&b.ClientType, "client-type", "single", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
