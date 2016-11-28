@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Ensure index can delete a database and its underlying files.

@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	main "github.com/umbel/pilosa/cmd/pilosa-bench"
+	main "github.com/pilosa/pilosa/cmd/pilosa-bench"
 )
 
 // Ensure server count flag can be parsed.

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 func TestTimeIDsFromRange_1h_0(t *testing.T) {

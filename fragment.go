@@ -22,8 +22,8 @@ import (
 	"unsafe"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/umbel/pilosa/internal"
-	"github.com/umbel/pilosa/roaring"
+	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/roaring"
 )
 
 const (
