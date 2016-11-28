@@ -1,7 +1,7 @@
 package bench_test
 
 import (
-	"github.com/umbel/pilosa/bench"
+	"github.com/pilosa/pilosa/bench"
 	"testing"
 )
 

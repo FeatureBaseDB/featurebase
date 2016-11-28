@@ -23,12 +23,11 @@ import (
 	"time"
 	"unsafe"
 
-	"context"
 	"encoding/json"
-	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/bench"
-	"github.com/umbel/pilosa/creator"
-	"github.com/umbel/pilosa/roaring"
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/bench"
+	"github.com/pilosa/pilosa/creator"
+	"github.com/pilosa/pilosa/roaring"
 )
 
 var (
@@ -1239,7 +1238,7 @@ func (cmd *CreateCommand) create() (creator.Cluster, error) {
 }
 
 // Run executes cluster creation.
-func (cmd *CreateCommand) Run() error {
+func (cmd *CreateCommand) Run(ctx context.Context) error {
 	var clus creator.Cluster
 	switch cmd.Type {
 	case "local":
@@ -1395,7 +1394,7 @@ The following arguments are available:
 }
 
 // Run executes the benchmark agent.
-func (cmd *BagentCommand) Run() error {
+func (cmd *BagentCommand) Run(ctx context.Context) error {
 	sbm := bench.Serial(cmd.Benchmarks...)
 	err := sbm.Init(cmd.Hosts, cmd.AgentNum)
 	if err != nil {
@@ -1491,7 +1490,7 @@ pilosactl spawn configfile
 }
 
 // Run executes the main program execution.
-func (cmd *BspawnCommand) Run() error {
+func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	if len(cmd.PilosaHosts) == 0 {
 		// must create cluster
 		createCmd := NewCreateCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
@@ -1505,7 +1504,7 @@ func (cmd *BspawnCommand) Run() error {
 	}
 	switch cmd.Agents.Type {
 	case "local":
-		return cmd.spawnLocal()
+		return cmd.spawnLocal(ctx)
 	case "remote":
 		return fmt.Errorf("remote type spawning is unimplemented")
 	default:
@@ -1513,7 +1512,7 @@ func (cmd *BspawnCommand) Run() error {
 	}
 }
 
-func (cmd *BspawnCommand) spawnLocal() error {
+func (cmd *BspawnCommand) spawnLocal(ctx context.Context) error {
 	agents := []*BagentCommand{}
 	for _, sp := range cmd.Benchmarks {
 		for i := 0; i < sp.Num; i++ {
@@ -1532,7 +1531,7 @@ func (cmd *BspawnCommand) spawnLocal() error {
 		wg.Add(1)
 		go func(i int, agent *BagentCommand) {
 			defer wg.Done()
-			errors[i] = agent.Run()
+			errors[i] = agent.Run(ctx)
 		}(i, agent)
 	}
 	wg.Wait()

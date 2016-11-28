@@ -1,7 +1,7 @@
 package bench
 
 import (
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa/pql"
 	"math/rand"
 )
 

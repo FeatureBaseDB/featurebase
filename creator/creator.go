@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 type Cluster interface {

@@ -2,7 +2,7 @@ package bench
 
 import (
 	"fmt"
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 func firstHostClient(hosts []string) (*pilosa.Client, error) {
