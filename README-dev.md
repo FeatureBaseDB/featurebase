@@ -4,21 +4,21 @@ Development Environment
 
 Install Go versions 1.6.2+ or 1.7 for your platform.
 
-Fork `github.com/umbel/pilosa` to your own account. The forked repo will be private.
+Fork `github.com/pilosa/pilosa` to your own account. The forked repo will be private.
 
 Make sure `$GOPATH` environment variable points to your Go working directory and `$PATH` incudes `$GOPATH/bin`.
 
-Create a directory (note that we use `github.com/umbel`, NOT `github.com/USER`) and clone your own Pilosa repo:
+Create a directory (note that we use `github.com/pilosa`, NOT `github.com/USER`) and clone your own Pilosa repo:
 
 ```sh
-mkdir -p ${GOPATH}/src/github.com/umbel && cd $_
+mkdir -p ${GOPATH}/src/github.com/pilosa && cd $_
 git clone git@github.com:${USER}/pilosa.git
 ```
 
 `cd` to your pilosa directory:
 
 ```sh
-cd ${GOPATH}/src/github.com/umbel/pilosa
+cd ${GOPATH}/src/github.com/pilosa/pilosa
 ```
 
 Install `godep` to manage dependencies:
@@ -30,16 +30,16 @@ go get -u github.com/tools/godep
 Install Pilosa command line tools:
 
 ```sh
-go install github.com/umbel/pilosa/...
+go install github.com/pilosa/pilosa/...
 ```
 
 Running `pilosa` should now run a Pilosa instance.
 
-In order to sync your fork with upstream Umbel repo, add an *upstream* to your repo:
+In order to sync your fork with upstream Pilosa repo, add an *upstream* to your repo:
 
 ```sh
-cd ${GOPATH}/src/github.com/umbel/pilosa
-git remote add upstream git@github.com:umbel/pilosa.git
+cd ${GOPATH}/src/github.com/pilosa/pilosa
+git remote add upstream git@github.com:pilosa/pilosa.git
 ```
 
 Before starting to work on a task, sync your branch with the upstream:
