@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 // Build holds the build information passed in at compile time.

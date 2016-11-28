@@ -15,9 +15,9 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/internal"
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Ensure the handler returns "not found" for invalid paths.

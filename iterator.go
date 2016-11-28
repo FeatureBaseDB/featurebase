@@ -3,7 +3,7 @@ package pilosa
 import (
 	"fmt"
 
-	"github.com/umbel/pilosa/roaring"
+	"github.com/pilosa/pilosa/roaring"
 )
 
 // Iterator is an interface for looping over bitmap/profile pairs.

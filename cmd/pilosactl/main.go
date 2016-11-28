@@ -21,8 +21,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/roaring"
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/roaring"
 )
 
 var (

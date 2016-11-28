@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/umbel/pilosa/internal"
+	"github.com/pilosa/pilosa/internal"
 )
 
 //go:generate protoc --gogo_out=. internal/internal.proto

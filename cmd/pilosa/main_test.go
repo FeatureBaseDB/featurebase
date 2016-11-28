@@ -17,8 +17,8 @@ import (
 	"testing/quick"
 
 	"github.com/BurntSushi/toml"
-	"github.com/umbel/pilosa"
-	main "github.com/umbel/pilosa/cmd/pilosa"
+	"github.com/pilosa/pilosa"
+	main "github.com/pilosa/pilosa/cmd/pilosa"
 )
 
 // Ensure program can process queries and maintain consistency.
