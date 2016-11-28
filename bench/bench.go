@@ -2,6 +2,7 @@ package bench
 
 import (
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"strconv"
 	"sync"
 	"time"
@@ -50,24 +51,14 @@ type parallelBenchmark struct {
 // Init calls Init for each benchmark. If there are any errors, it will return a
 // non-nil error value.
 func (pb *parallelBenchmark) Init(hosts []string, agentNum int) error {
-	errors := make([]error, len(pb.benchmarkers))
-	hadErr := false
-	wg := sync.WaitGroup{}
-	for i, b := range pb.benchmarkers {
-		wg.Add(1)
-		go func(i int, b Benchmark) {
-			defer wg.Done()
-			errors[i] = b.Init(hosts, agentNum)
-			if errors[i] != nil {
-				hadErr = true
-			}
-		}(i, b)
+	var g errgroup.Group
+	for i, _ := range pb.benchmarkers {
+		b := pb.benchmarkers[i]
+		g.Go(func() error {
+			return b.Init(hosts, agentNum)
+		})
 	}
-	wg.Wait()
-	if hadErr {
-		return fmt.Errorf("Had errs in parallelBenchmark.Init: %v", errors)
-	}
-	return nil
+	return g.Wait()
 }
 
 // Run runs the parallel benchmark and returns it's results in a nested map - the
