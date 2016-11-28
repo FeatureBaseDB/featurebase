@@ -5,21 +5,21 @@ import (
 	"math/rand"
 )
 
-func NewQueryMaker(seed int64) *QueryMaker {
-	return &QueryMaker{
+func NewQueryGenerator(seed int64) *QueryGenerator {
+	return &QueryGenerator{
 		IDToFrameFn: func(id uint64) string { return "frame.n" },
 		R:           rand.New(rand.NewSource(seed)),
 		Frames:      []string{"frame.n"},
 	}
 }
 
-type QueryMaker struct {
+type QueryGenerator struct {
 	IDToFrameFn func(id uint64) string
 	R           *rand.Rand
 	Frames      []string
 }
 
-func (q *QueryMaker) Random(maxN, depth, maxargs int, idmin, idmax uint64) pql.Call {
+func (q *QueryGenerator) Random(maxN, depth, maxargs int, idmin, idmax uint64) pql.Call {
 	// TODO: handle depth==1 or 0
 	val := q.R.Intn(5)
 	switch val {
@@ -30,7 +30,7 @@ func (q *QueryMaker) Random(maxN, depth, maxargs int, idmin, idmax uint64) pql.C
 	}
 }
 
-func (q *QueryMaker) RandomTopN(maxN, depth, maxargs int, idmin, idmax uint64) *pql.TopN {
+func (q *QueryGenerator) RandomTopN(maxN, depth, maxargs int, idmin, idmax uint64) *pql.TopN {
 	frameIdx := q.R.Intn(len(q.Frames))
 	return &pql.TopN{
 		Frame: q.Frames[frameIdx],
@@ -39,7 +39,7 @@ func (q *QueryMaker) RandomTopN(maxN, depth, maxargs int, idmin, idmax uint64) *
 	}
 }
 
-func (q *QueryMaker) RandomBitmapCall(depth, maxargs int, idmin, idmax uint64) pql.BitmapCall {
+func (q *QueryGenerator) RandomBitmapCall(depth, maxargs int, idmin, idmax uint64) pql.BitmapCall {
 	if depth <= 1 {
 		bitmapID := q.R.Int63n(int64(idmax)-int64(idmin)) + int64(idmin)
 		return Bitmap(uint64(bitmapID), q.IDToFrameFn(uint64(bitmapID)))

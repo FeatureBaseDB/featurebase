@@ -89,7 +89,7 @@ func (b *RandomQuery) Run(agentNum int) map[string]interface{} {
 		results["error"] = fmt.Errorf("No client set for RandomQuery agent: %v", agentNum)
 		return results
 	}
-	qm := NewQueryMaker(seed)
+	qm := NewQueryGenerator(seed)
 	s := NewStats()
 	var start time.Time
 	for n := 0; n < b.Iterations; n++ {
