@@ -1,13 +1,11 @@
 package bench
 
 import (
-	"fmt"
-	"strconv"
-
-	"flag"
-	"io/ioutil"
-
 	"context"
+	"flag"
+	"fmt"
+	"io/ioutil"
+	"strconv"
 	"time"
 )
 
