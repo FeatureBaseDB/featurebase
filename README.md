@@ -197,11 +197,7 @@ Returns the top 20 Bitmaps from `bar`in attribute `category` with values `81 or
 
 ### Updating dependencies
 
-To update dependencies, you'll need to install [Glide][]:
-
-```sh
-$ curl https://glide.sh/get | sh
-```
+To update dependencies, you'll need to install [Glide][].
 
 Then add the new dependencies in your project:
 
@@ -224,5 +220,3 @@ $ go install --ldflags="-X main.Version=1.0.0"
 ```
 
 [Glide]: http://glide.sh/
-
-

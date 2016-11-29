@@ -21,11 +21,7 @@ git clone git@github.com:${USER}/pilosa.git
 cd ${GOPATH}/src/github.com/pilosa/pilosa
 ```
 
-Install `glide` to manage dependencies:
-
-```sh
-curl https://glide.sh/get | sh
-```
+Install [Glide][] to manage dependencies.
 
 Install Pilosa command line tools:
 
@@ -65,3 +61,5 @@ git push --set-upstream origin a-branch-for-the-task
 ```
 
 All left to do is creating a pull request on github.com.
+
+[Glide]: http://glide.sh/
