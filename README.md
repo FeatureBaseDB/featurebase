@@ -197,16 +197,16 @@ Returns the top 20 Bitmaps from `bar`in attribute `category` with values `81 or
 
 ### Updating dependencies
 
-To update dependencies, you'll need to install [godep][]:
+To update dependencies, you'll need to install [Glide][]:
 
 ```sh
-$ go get -u github.com/tools/godep
+$ curl https://glide.sh/get | sh
 ```
 
-Then save the dependencies in your project:
+Then add the new dependencies in your project:
 
 ```sh
-$ godep save ./...
+$ glide get github.com/foo/bar
 ```
 
 ### Protobuf
@@ -223,6 +223,6 @@ In order to set the version number, compile Pilosa with the following argument:
 $ go install --ldflags="-X main.Version=1.0.0"
 ```
 
-[godep]: https://github.com/tools/godep
+[Glide]: http://glide.sh/
 
 
