@@ -53,8 +53,7 @@ func (e *Executor) Execute(ctx context.Context, db string, q *pql.Query, slices 
 	// If slices aren't specified, then include all of them.
 	if len(slices) == 0 {
 		// Round up the number of slices.
-		sliceN := e.Index.SliceN()
-		sliceN += (sliceN % uint64(len(e.Cluster.Nodes))) + uint64(len(e.Cluster.Nodes))
+		sliceN := e.Index.DB(db).SliceN()
 
 		// Generate a slices of all slices.
 		slices = make([]uint64, sliceN+1)
