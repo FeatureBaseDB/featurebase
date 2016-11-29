@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 // BasePort is the initial port used when generating a cluster.

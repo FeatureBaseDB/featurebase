@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/umbel/pilosa/internal"
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // DefaultFrame is the frame used if one is not specified.

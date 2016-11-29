@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Ensure the parser can parse a "Bitmap()" function with keyed args.

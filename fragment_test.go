@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 // Test flags

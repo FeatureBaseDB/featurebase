@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/umbel/pilosa/datadog"
+	"github.com/pilosa/pilosa/datadog"
 )
 
 func TestStatsClient_WithTags(t *testing.T) {
