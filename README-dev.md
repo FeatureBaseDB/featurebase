@@ -21,16 +21,16 @@ git clone git@github.com:${USER}/pilosa.git
 cd ${GOPATH}/src/github.com/pilosa/pilosa
 ```
 
-Install `godep` to manage dependencies:
+Install `glide` to manage dependencies:
 
 ```sh
-go get -u github.com/tools/godep
+curl https://glide.sh/get | sh
 ```
 
 Install Pilosa command line tools:
 
 ```sh
-go install github.com/pilosa/pilosa/...
+go install github.com/pilosa/pilosa/cmd/...
 ```
 
 Running `pilosa` should now run a Pilosa instance.
