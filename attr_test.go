@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 // Ensure database can set and retrieve profile attributes.

@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 // Ensure database can open and retrieve a frame.

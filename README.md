@@ -10,13 +10,13 @@ Pilosa requires Go 1.7 or greater.
 You can download the source by running `go get`:
 
 ```sh
-$ go get github.com/umbel/pilosa
+$ go get github.com/pilosa/pilosa
 ```
 
 Now you can install the `pilosa` binary:
 
 ```sh
-$ go install github.com/umbel/pilosa/...
+$ go install github.com/pilosa/pilosa/...
 ```
 
 Now run `pilosa` with the default configuration:

@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/umbel/pilosa/internal"
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Handler represents an HTTP handler.

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Ensure the Bitmap call can be converted into a string.

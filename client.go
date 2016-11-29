@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/umbel/pilosa/internal"
+	"github.com/pilosa/pilosa/internal"
 )
 
 // Client represents a client to the Pilosa cluster.

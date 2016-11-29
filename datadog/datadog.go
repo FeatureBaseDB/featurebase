@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 const (

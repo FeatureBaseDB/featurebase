@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/umbel/pilosa",
+	"ImportPath": "github.com/pilosa/pilosa",
 	"GoVersion": "go1.7",
 	"GodepVersion": "v75",
 	"Packages": [

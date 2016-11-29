@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Ensure a bitmap query can be executed.
