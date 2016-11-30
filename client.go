@@ -45,8 +45,8 @@ func NewClient(host string) (*Client, error) {
 // Host returns the host the client was initialized with.
 func (c *Client) Host() string { return c.host }
 
-// SliceNs returns the number of slices on a server by database.
-func (c *Client) SliceNs(ctx context.Context) (MaxSlices, error) {
+// MaxSliceByDatabase returns the number of slices on a server by database.
+func (c *Client) MaxSliceByDatabase(ctx context.Context) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := url.URL{
 		Scheme: "http",
@@ -362,13 +362,13 @@ func (c *Client) BackupTo(ctx context.Context, w io.Writer, db, frame string) er
 	tw := tar.NewWriter(w)
 
 	// Find the maximum number of slices.
-	sliceNs, err := c.SliceNs(ctx)
+	maxSlices, err := c.MaxSliceByDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("slice n: %s", err)
 	}
 
 	// Backup every slice to the tar file.
-	for i := uint64(0); i <= sliceNs[db]; i++ {
+	for i := uint64(0); i <= maxSlices[db]; i++ {
 		if err := c.backupSliceTo(ctx, tw, db, frame, i); err != nil {
 			return err
 		}

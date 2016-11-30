@@ -197,19 +197,26 @@ func (s *Server) monitorMaxSlices() {
 		case <-ticker.C:
 		}
 
-		oldmaxslices := s.Index.SliceNs()
+		oldmaxslices := s.Index.MaxSlices()
 		for _, node := range s.Cluster.Nodes {
 			if s.Host != node.Host {
 				maxSlices, _ := checkMaxSlices(node.Host)
 				for db, newmax := range maxSlices {
-					// we're not going to create a db locally if we don't know about it already
-					// TODO: consider changing this so we DO create a db locally
-					// do we want/need nodes to have empty files structures?
+					// if we don't know about a db locally, create it
+					// so that the /schema endpoint can report it
 					if localdb := s.Index.DB(db); localdb != nil {
 						if newmax > oldmaxslices[db] {
 							oldmaxslices[db] = newmax
 							localdb.SetRemoteMaxSlice(newmax)
 						}
+					} else {
+						d, err := s.Index.CreateDBIfNotExists(db)
+						if err != nil {
+							s.logger().Printf("Failed to create DB locally: %s", db)
+							return
+						}
+						oldmaxslices[db] = newmax
+						d.SetRemoteMaxSlice(newmax)
 					}
 				}
 			}
@@ -217,7 +224,7 @@ func (s *Server) monitorMaxSlices() {
 	}
 }
 
-func checkMaxSlices(hostport string) (MaxSlices, error) {
+func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	// Create HTTP request.
 	req, err := http.NewRequest("GET", (&url.URL{
 		Scheme: "http",
