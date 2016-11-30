@@ -106,14 +106,11 @@ func (i *Index) Close() error {
 	return nil
 }
 
-// MaxSlices contains the max known slice -by this node- for each DB
-type MaxSlices map[string]uint64
-
-// SliceNs returns MaxSlice map for all databases.
-func (i *Index) SliceNs() MaxSlices {
-	a := make(MaxSlices)
+// MaxSlices returns MaxSlice map for all databases.
+func (i *Index) MaxSlices() map[string]uint64 {
+	a := make(map[string]uint64)
 	for _, db := range i.DBs() {
-		a[db.Name()] = db.SliceN()
+		a[db.Name()] = db.MaxSlice()
 	}
 	return a
 }
@@ -345,7 +342,7 @@ func (s *IndexSyncer) SyncIndex() error {
 				return fmt.Errorf("frame sync error: db=%s, frame=%s, err=%s", di.Name, fi.Name, err)
 			}
 
-			for slice := uint64(0); slice <= s.Index.DB(di.Name).SliceN(); slice++ {
+			for slice := uint64(0); slice <= s.Index.DB(di.Name).MaxSlice(); slice++ {
 				// Ignore slices that this host doesn't own.
 				if !s.Cluster.OwnsFragment(s.Host, di.Name, slice) {
 					continue

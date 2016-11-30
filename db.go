@@ -116,8 +116,8 @@ func (db *DB) Close() error {
 	return nil
 }
 
-// SliceN returns the max slice in the database according to this node.
-func (db *DB) SliceN() uint64 {
+// MaxSlice returns the max slice in the database according to this node.
+func (db *DB) MaxSlice() uint64 {
 	if db == nil {
 		return 0
 	}
@@ -126,7 +126,7 @@ func (db *DB) SliceN() uint64 {
 
 	max := db.remoteMaxSlice
 	for _, f := range db.frames {
-		if slice := f.SliceN(); slice > max {
+		if slice := f.MaxSlice(); slice > max {
 			max = slice
 		}
 	}

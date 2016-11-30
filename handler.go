@@ -103,7 +103,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/slices/max":
 		switch r.Method {
 		case "GET":
-			h.handleGetMaxSlices(w, r)
+			h.handleGetSliceMax(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -252,8 +252,8 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleGetMaxSlices(w http.ResponseWriter, r *http.Request) error {
-	ms := h.Index.SliceNs()
+func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) error {
+	ms := h.Index.MaxSlices()
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
 		pb := &internal.MaxSlicesResponse{
 			MaxSlices: ms,
@@ -271,7 +271,7 @@ func (h *Handler) handleGetMaxSlices(w http.ResponseWriter, r *http.Request) err
 }
 
 type sliceMaxResponse struct {
-	MaxSlices MaxSlices `json:"MaxSlices"`
+	MaxSlices map[string]uint64 `json:"MaxSlices"`
 }
 
 // handleDeleteDB handles DELETE /db request.
@@ -818,7 +818,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Determine the maximum number of slices.
-	sliceNs, err := client.SliceNs(r.Context())
+	maxSlices, err := client.MaxSliceByDatabase(r.Context())
 	if err != nil {
 		http.Error(w, "cannot determine remote slice count: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -826,7 +826,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 
 	// Loop over each slice and import it if this node owns it.
 	//travis
-	for slice := uint64(0); slice <= sliceNs[db]; slice++ {
+	for slice := uint64(0); slice <= maxSlices[db]; slice++ {
 		// Ignore this slice if we don't own it.
 		if !h.Cluster.OwnsFragment(h.Host, db, slice) {
 			continue
