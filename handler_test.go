@@ -54,6 +54,30 @@ func TestHandler_Schema(t *testing.T) {
 	}
 }
 
+// Ensure the handler can return the maxslice map.
+func TestHandler_MaxSlices(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	idx.MustCreateFragmentIfNotExists("d0", "f0", 1).MustSetBits(30, (1*SliceWidth)+1)
+	idx.MustCreateFragmentIfNotExists("d0", "f0", 1).MustSetBits(30, (1*SliceWidth)+2)
+	idx.MustCreateFragmentIfNotExists("d0", "f0", 3).MustSetBits(30, (3*SliceWidth)+4)
+
+	idx.MustCreateFragmentIfNotExists("d1", "f1", 0).MustSetBits(40, (0*SliceWidth)+1)
+	idx.MustCreateFragmentIfNotExists("d1", "f1", 0).MustSetBits(40, (0*SliceWidth)+2)
+	idx.MustCreateFragmentIfNotExists("d1", "f1", 0).MustSetBits(40, (0*SliceWidth)+8)
+
+	h := NewHandler()
+	h.Index = idx.Index
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/slices/max", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{"MaxSlices":{"d0":3,"d1":0}}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
 // Ensure the handler can accept URL arguments.
 func TestHandler_Query_Args_URL(t *testing.T) {
 	h := NewHandler()

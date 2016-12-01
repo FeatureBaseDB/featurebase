@@ -45,8 +45,8 @@ func NewClient(host string) (*Client, error) {
 // Host returns the host the client was initialized with.
 func (c *Client) Host() string { return c.host }
 
-// SliceN returns the number of slices on a server.
-func (c *Client) SliceN(ctx context.Context) (uint64, error) {
+// MaxSliceByDatabase returns the number of slices on a server by database.
+func (c *Client) MaxSliceByDatabase(ctx context.Context) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := url.URL{
 		Scheme: "http",
@@ -57,24 +57,24 @@ func (c *Client) SliceN(ctx context.Context) (uint64, error) {
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var rsp sliceMaxResponse
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("http: status=%d", resp.StatusCode)
+		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
 	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
-		return 0, fmt.Errorf("json decode: %s", err)
+		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
-	return rsp.SliceMax, nil
+	return rsp.MaxSlices, nil
 }
 
 // Schema returns all database and frame schema information.
@@ -362,13 +362,13 @@ func (c *Client) BackupTo(ctx context.Context, w io.Writer, db, frame string) er
 	tw := tar.NewWriter(w)
 
 	// Find the maximum number of slices.
-	sliceN, err := c.SliceN(ctx)
+	maxSlices, err := c.MaxSliceByDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("slice n: %s", err)
 	}
 
 	// Backup every slice to the tar file.
-	for i := uint64(0); i <= sliceN; i++ {
+	for i := uint64(0); i <= maxSlices[db]; i++ {
 		if err := c.backupSliceTo(ctx, tw, db, frame, i); err != nil {
 			return err
 		}

@@ -53,11 +53,10 @@ func (e *Executor) Execute(ctx context.Context, db string, q *pql.Query, slices 
 	// If slices aren't specified, then include all of them.
 	if len(slices) == 0 {
 		// Round up the number of slices.
-		sliceN := e.Index.SliceN()
-		sliceN += (sliceN % uint64(len(e.Cluster.Nodes))) + uint64(len(e.Cluster.Nodes))
+		maxSlice := e.Index.DB(db).MaxSlice()
 
 		// Generate a slices of all slices.
-		slices = make([]uint64, sliceN+1)
+		slices = make([]uint64, maxSlice+1)
 		for i := range slices {
 			slices[i] = uint64(i)
 		}
@@ -714,7 +713,7 @@ func (e *Executor) mapReduce(ctx context.Context, db string, slices []uint64, c 
 
 	// Iterate over all map responses and reduce.
 	var result interface{}
-	var sliceN int
+	var maxSlice int
 	for {
 		select {
 		case <-ctx.Done():
@@ -739,8 +738,8 @@ func (e *Executor) mapReduce(ctx context.Context, db string, slices []uint64, c 
 			result = reduceFn(result, resp.result)
 
 			// If all slices have been processed then return.
-			sliceN += len(resp.slices)
-			if sliceN >= len(slices) {
+			maxSlice += len(resp.slices)
+			if maxSlice >= len(slices) {
 				return result, nil
 			}
 		}
@@ -798,7 +797,7 @@ func (e *Executor) mapperLocal(ctx context.Context, slices []uint64, mapFn mapFu
 	}
 
 	// Reduce results
-	var sliceN int
+	var maxSlice int
 	var result interface{}
 	for {
 		select {
@@ -809,11 +808,11 @@ func (e *Executor) mapperLocal(ctx context.Context, slices []uint64, mapFn mapFu
 				return nil, resp.err
 			}
 			result = reduceFn(result, resp.result)
-			sliceN++
+			maxSlice++
 		}
 
 		// Exit once all slices are processed.
-		if sliceN == len(slices) {
+		if maxSlice == len(slices) {
 			return result, nil
 		}
 	}

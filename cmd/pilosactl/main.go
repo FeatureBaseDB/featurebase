@@ -480,13 +480,13 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	}
 
 	// Determine slice count.
-	sliceN, err := client.SliceN(ctx)
+	maxSlices, err := client.MaxSliceByDatabase(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Export each slice.
-	for slice := uint64(0); slice <= sliceN; slice++ {
+	for slice := uint64(0); slice <= maxSlices[cmd.Database]; slice++ {
 		logger.Printf("exporting slice: %d", slice)
 		if err := client.ExportCSV(ctx, cmd.Database, cmd.Frame, slice, w); err != nil {
 			return err
