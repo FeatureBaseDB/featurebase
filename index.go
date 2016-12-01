@@ -18,8 +18,7 @@ const DefaultCacheFlushInterval = 1 * time.Minute
 
 // Index represents a container for fragments.
 type Index struct {
-	mu        sync.Mutex
-	remoteMax uint64
+	mu sync.Mutex
 
 	// Databases by name.
 	dbs map[string]*DB
@@ -43,9 +42,8 @@ type Index struct {
 // NewIndex returns a new instance of Index.
 func NewIndex() *Index {
 	return &Index{
-		dbs:       make(map[string]*DB),
-		remoteMax: 0,
-		closing:   make(chan struct{}, 0),
+		dbs:     make(map[string]*DB),
+		closing: make(chan struct{}, 0),
 
 		Stats: NopStatsClient,
 
@@ -108,18 +106,13 @@ func (i *Index) Close() error {
 	return nil
 }
 
-// SliceN returns the highest slice across all frames.
-func (i *Index) SliceN() uint64 {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	sliceN := i.remoteMax
-	for _, db := range i.dbs {
-		if n := db.SliceN(); n > sliceN {
-			sliceN = n
-		}
+// MaxSlices returns MaxSlice map for all databases.
+func (i *Index) MaxSlices() map[string]uint64 {
+	a := make(map[string]uint64)
+	for _, db := range i.DBs() {
+		a[db.Name()] = db.MaxSlice()
 	}
-	return sliceN
+	return a
 }
 
 // Schema returns schema data for all databases and frames.
@@ -266,12 +259,6 @@ func (i *Index) CreateFragmentIfNotExists(db, frame string, slice uint64) (*Frag
 	return f.CreateFragmentIfNotExists(slice)
 }
 
-func (i *Index) SetMax(newmax uint64) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	i.remoteMax = newmax
-}
-
 // monitorCacheFlush periodically flushes all fragment caches sequentially.
 // This is run in a goroutine.
 func (i *Index) monitorCacheFlush() {
@@ -332,8 +319,6 @@ func (s *IndexSyncer) IsClosing() bool {
 
 // SyncIndex compares the index on host with the local index and resolves differences.
 func (s *IndexSyncer) SyncIndex() error {
-	sliceN := s.Index.SliceN()
-
 	// Iterate over schema in sorted order.
 	for _, di := range s.Index.Schema() {
 		// Verify syncer has not closed.
@@ -357,7 +342,7 @@ func (s *IndexSyncer) SyncIndex() error {
 				return fmt.Errorf("frame sync error: db=%s, frame=%s, err=%s", di.Name, fi.Name, err)
 			}
 
-			for slice := uint64(0); slice <= sliceN; slice++ {
+			for slice := uint64(0); slice <= s.Index.DB(di.Name).MaxSlice(); slice++ {
 				// Ignore slices that this host doesn't own.
 				if !s.Cluster.OwnsFragment(s.Host, di.Name, slice) {
 					continue

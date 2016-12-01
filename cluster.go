@@ -31,7 +31,7 @@ func (a Nodes) Contains(n *Node) bool {
 	return false
 }
 
-// ContainsHost returns true if host matches on of the node's host.
+// ContainsHost returns true if host matches one of the node's host.
 func (a Nodes) ContainsHost(host string) bool {
 	for _, n := range a {
 		if n.Host == host {
