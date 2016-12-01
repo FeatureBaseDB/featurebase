@@ -16,7 +16,6 @@ import (
 	"testing"
 	"testing/quick"
 
-	"context"
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
 	main "github.com/pilosa/pilosa/cmd/pilosa"
