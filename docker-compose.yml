@@ -5,6 +5,8 @@ services:
     environment:
       - GODEBUG=netdns=cgo+1 # set go to use the cgo dns resolver to work around https://github.com/golang/go/issues/15419
       - HOSTNAMEVAR=pil0 # this needs to be set to customize the pilosa config file per node
+      - REPLICAS=3
+      - NODES=3
     ports:
       - "16000:15000" # port forward to localhost 16000
   pil1:
@@ -12,6 +14,8 @@ services:
     environment:
       - GODEBUG=netdns=cgo+1
       - HOSTNAMEVAR=pil1
+      - REPLICAS=3
+      - NODES=3
     ports:
       - "16001:15000"
   pil2:
@@ -19,5 +23,7 @@ services:
     environment:
       - GODEBUG=netdns=cgo+1
       - HOSTNAMEVAR=pil2
+      - REPLICAS=3
+      - NODES=3
     ports:
       - "16002:15000"
