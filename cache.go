@@ -9,7 +9,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/groupcache/lru"
-	"github.com/umbel/pilosa/internal"
+	"github.com/pilosa/pilosa/internal"
 )
 
 // Cache represents a cache for bitmap counts.

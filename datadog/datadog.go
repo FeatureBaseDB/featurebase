@@ -4,11 +4,10 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"sort"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 const (
@@ -64,35 +63,35 @@ func (c *StatsClient) WithTags(tags ...string) pilosa.StatsClient {
 // Count tracks the number of times something occurs per second.
 func (c *StatsClient) Count(name string, value int64) {
 	if err := c.client.Count(name, value, c.tags, Rate); err != nil {
-		c.logger.Printf("datadog.StatsClient.Count error: %s", err)
+		c.logger().Printf("datadog.StatsClient.Count error: %s", err)
 	}
 }
 
 // Gauge sets the value of a metric.
 func (c *StatsClient) Gauge(name string, value float64) {
 	if err := c.client.Gauge(name, value, c.tags, Rate); err != nil {
-		c.logger.Printf("datadog.StatsClient.Gauge error: %s", err)
+		c.logger().Printf("datadog.StatsClient.Gauge error: %s", err)
 	}
 }
 
 // Histogram tracks statistical distribution of a metric.
-func (c *StatsClient) Histogram(name string, value float64) error {
+func (c *StatsClient) Histogram(name string, value float64) {
 	if err := c.client.Histogram(name, value, c.tags, Rate); err != nil {
-		c.logger.Printf("datadog.StatsClient.Histogram error: %s", err)
+		c.logger().Printf("datadog.StatsClient.Histogram error: %s", err)
 	}
 }
 
 // Set tracks number of unique elements.
-func (c *StatsClient) Set(name string, value string) error {
+func (c *StatsClient) Set(name string, value string) {
 	if err := c.client.Set(name, value, c.tags, Rate); err != nil {
-		c.logger.Printf("datadog.StatsClient.Set error: %s", err)
+		c.logger().Printf("datadog.StatsClient.Set error: %s", err)
 	}
 }
 
 // Timing tracks timing information for a metric.
-func (c *StatsClient) Timing(name string, value time.Duration) error {
+func (c *StatsClient) Timing(name string, value time.Duration) {
 	if err := c.client.Timing(name, value, c.tags, Rate); err != nil {
-		c.logger.Printf("datadog.StatsClient.Timing error: %s", err)
+		c.logger().Printf("datadog.StatsClient.Timing error: %s", err)
 	}
 }
 

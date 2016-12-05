@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa/pql"
 )
 
 func TestScanner_Scan(t *testing.T) {

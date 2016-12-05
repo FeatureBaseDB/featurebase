@@ -10,7 +10,7 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/umbel/pilosa/roaring"
+	"github.com/pilosa/pilosa/roaring"
 )
 
 // Ensure an empty bitmap returns false if checking for existence.

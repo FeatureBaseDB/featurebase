@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Dave Collins <dave@davec.name>
+ * Copyright (c) 2013-2016 Dave Collins <dave@davec.name>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -296,6 +296,12 @@ func (f *formatState) format(v reflect.Value) {
 		// been handled above.
 
 	case reflect.Map:
+		// nil maps should be indicated as different than empty maps
+		if v.IsNil() {
+			f.fs.Write(nilAngleBytes)
+			break
+		}
+
 		f.fs.Write(openMapBytes)
 		f.depth++
 		if (f.cs.MaxDepth != 0) && (f.depth > f.cs.MaxDepth) {
@@ -303,7 +309,7 @@ func (f *formatState) format(v reflect.Value) {
 		} else {
 			keys := v.MapKeys()
 			if f.cs.SortKeys {
-				sortValues(keys)
+				sortValues(keys, f.cs)
 			}
 			for i, key := range keys {
 				if i > 0 {

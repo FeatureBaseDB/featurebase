@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Dave Collins <dave@davec.name>
+ * Copyright (c) 2013-2016 Dave Collins <dave@davec.name>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -129,7 +129,7 @@ func (d *dumpState) dumpPtr(v reflect.Value) {
 	d.w.Write(closeParenBytes)
 
 	// Display pointer information.
-	if len(pointerChain) > 0 {
+	if !d.cs.DisablePointerAddresses && len(pointerChain) > 0 {
 		d.w.Write(openParenBytes)
 		for i, addr := range pointerChain {
 			if i > 0 {
@@ -181,25 +181,28 @@ func (d *dumpState) dumpSlice(v reflect.Value) {
 		// Try to use existing uint8 slices and fall back to converting
 		// and copying if that fails.
 		case vt.Kind() == reflect.Uint8:
-			// We need an addressable interface to convert the type back
-			// into a byte slice.  However, the reflect package won't give
-			// us an interface on certain things like unexported struct
-			// fields in order to enforce visibility rules.  We use unsafe
-			// to bypass these restrictions since this package does not
+			// We need an addressable interface to convert the type
+			// to a byte slice.  However, the reflect package won't
+			// give us an interface on certain things like
+			// unexported struct fields in order to enforce
+			// visibility rules.  We use unsafe, when available, to
+			// bypass these restrictions since this package does not
 			// mutate the values.
 			vs := v
 			if !vs.CanInterface() || !vs.CanAddr() {
 				vs = unsafeReflectValue(vs)
 			}
-			vs = vs.Slice(0, numEntries)
+			if !UnsafeDisabled {
+				vs = vs.Slice(0, numEntries)
 
-			// Use the existing uint8 slice if it can be type
-			// asserted.
-			iface := vs.Interface()
-			if slice, ok := iface.([]uint8); ok {
-				buf = slice
-				doHexDump = true
-				break
+				// Use the existing uint8 slice if it can be
+				// type asserted.
+				iface := vs.Interface()
+				if slice, ok := iface.([]uint8); ok {
+					buf = slice
+					doHexDump = true
+					break
+				}
 			}
 
 			// The underlying data needs to be converted if it can't
@@ -269,6 +272,32 @@ func (d *dumpState) dump(v reflect.Value) {
 		d.w.Write(spaceBytes)
 	}
 	d.ignoreNextType = false
+
+	// Display length and capacity if the built-in len and cap functions
+	// work with the value's kind and the len/cap itself is non-zero.
+	valueLen, valueCap := 0, 0
+	switch v.Kind() {
+	case reflect.Array, reflect.Slice, reflect.Chan:
+		valueLen, valueCap = v.Len(), v.Cap()
+	case reflect.Map, reflect.String:
+		valueLen = v.Len()
+	}
+	if valueLen != 0 || !d.cs.DisableCapacities && valueCap != 0 {
+		d.w.Write(openParenBytes)
+		if valueLen != 0 {
+			d.w.Write(lenEqualsBytes)
+			printInt(d.w, int64(valueLen), 10)
+		}
+		if !d.cs.DisableCapacities && valueCap != 0 {
+			if valueLen != 0 {
+				d.w.Write(spaceBytes)
+			}
+			d.w.Write(capEqualsBytes)
+			printInt(d.w, int64(valueCap), 10)
+		}
+		d.w.Write(closeParenBytes)
+		d.w.Write(spaceBytes)
+	}
 
 	// Call Stringer/error interfaces if they exist and the handle methods flag
 	// is enabled
@@ -341,6 +370,12 @@ func (d *dumpState) dump(v reflect.Value) {
 		// been handled above.
 
 	case reflect.Map:
+		// nil maps should be indicated as different than empty maps
+		if v.IsNil() {
+			d.w.Write(nilAngleBytes)
+			break
+		}
+
 		d.w.Write(openBraceNewlineBytes)
 		d.depth++
 		if (d.cs.MaxDepth != 0) && (d.depth > d.cs.MaxDepth) {
@@ -350,7 +385,7 @@ func (d *dumpState) dump(v reflect.Value) {
 			numEntries := v.Len()
 			keys := v.MapKeys()
 			if d.cs.SortKeys {
-				sortValues(keys)
+				sortValues(keys, d.cs)
 			}
 			for i, key := range keys {
 				d.dump(d.unpackValue(key))

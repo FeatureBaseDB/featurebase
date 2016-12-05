@@ -58,8 +58,8 @@ func (f *Frame) Path() string { return f.path }
 // BitmapAttrStore returns the attribute storage.
 func (f *Frame) BitmapAttrStore() *AttrStore { return f.bitmapAttrStore }
 
-// SliceN returns the max slice in the frame.
-func (f *Frame) SliceN() uint64 {
+// MaxSlice returns the max slice in the frame.
+func (f *Frame) MaxSlice() uint64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -128,7 +128,7 @@ func (f *Frame) openFragments() error {
 		frag.BitmapAttrStore = f.bitmapAttrStore
 		f.fragments[frag.Slice()] = frag
 
-		f.stats.Count("sliceN", 1)
+		f.stats.Count("maxSlice", 1)
 	}
 
 	return nil
@@ -202,7 +202,7 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	// Save to lookup.
 	f.fragments[slice] = frag
 
-	f.stats.Count("sliceN", 1)
+	f.stats.Count("maxSlice", 1)
 
 	return frag, nil
 }

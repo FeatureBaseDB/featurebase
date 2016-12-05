@@ -5,18 +5,18 @@ Pilosa is a bitmap index database.
 
 ## Getting Started
 
-Pilosa requires Go 1.6 or greater.
+Pilosa requires Go 1.7 or greater.
 
 You can download the source by running `go get`:
 
 ```sh
-$ go get github.com/umbel/pilosa
+$ go get github.com/pilosa/pilosa
 ```
 
 Now you can install the `pilosa` binary:
 
 ```sh
-$ go install github.com/umbel/pilosa/...
+$ go install github.com/pilosa/pilosa/...
 ```
 
 Now run `pilosa` with the default configuration:
@@ -197,16 +197,12 @@ Returns the top 20 Bitmaps from `bar`in attribute `category` with values `81 or
 
 ### Updating dependencies
 
-To update dependencies, you'll need to install [godep][]:
+To update dependencies, you'll need to install [Glide][].
+
+Then add the new dependencies in your project:
 
 ```sh
-$ go get -u github.com/tools/godep
-```
-
-Then save the dependencies in your project:
-
-```sh
-$ godep save ./...
+$ glide get github.com/foo/bar
 ```
 
 ### Protobuf
@@ -223,7 +219,7 @@ In order to set the version number, compile Pilosa with the following argument:
 $ go install --ldflags="-X main.Version=1.0.0"
 ```
 
-[godep]: https://github.com/tools/godep
+[Glide]: http://glide.sh/
 
 
 ### Docker / Docker-compose

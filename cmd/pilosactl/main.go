@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/csv"
 	"errors"
 	"flag"
@@ -20,8 +21,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/roaring"
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/roaring"
 )
 
 var (
@@ -96,7 +97,7 @@ Use the "-h" flag with any command for more information.
 }
 
 // Run executes the main program execution.
-func (m *Main) Run() error { return m.Cmd.Run() }
+func (m *Main) Run() error { return m.Cmd.Run(context.Background()) }
 
 // ParseFlags parses command line flags from args.
 func (m *Main) ParseFlags(args []string) error {
@@ -149,7 +150,7 @@ func (m *Main) ParseFlags(args []string) error {
 type Command interface {
 	Usage() string
 	ParseFlags(args []string) error
-	Run() error
+	Run(context.Context) error
 }
 
 // ConfigCommand represents a command for printing a default config.
@@ -189,7 +190,7 @@ Prints the default configuration file to standard out.
 }
 
 // Run executes the main program execution.
-func (cmd *ConfigCommand) Run() error {
+func (cmd *ConfigCommand) Run(ctx context.Context) error {
 	fmt.Fprintln(cmd.Stdout, strings.TrimSpace(`
 data-dir = "~/.pilosa"
 host = "localhost:15000"
@@ -276,7 +277,7 @@ The file should contain no headers.
 }
 
 // Run executes the main program execution.
-func (cmd *ImportCommand) Run() error {
+func (cmd *ImportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Validate arguments.
@@ -300,7 +301,7 @@ func (cmd *ImportCommand) Run() error {
 	for _, path := range cmd.Paths {
 		// Parse path into bits.
 		logger.Printf("parsing: %s", path)
-		if err := cmd.importPath(path); err != nil {
+		if err := cmd.importPath(ctx, path); err != nil {
 			return err
 		}
 	}
@@ -309,7 +310,7 @@ func (cmd *ImportCommand) Run() error {
 }
 
 // importPath parses a path into bits and imports it to the server.
-func (cmd *ImportCommand) importPath(path string) error {
+func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
 	a := make([]pilosa.Bit, 0, cmd.BufferSize)
 
 	// Open file for reading.
@@ -356,7 +357,7 @@ func (cmd *ImportCommand) importPath(path string) error {
 
 		// If we've reached the buffer size then import bits.
 		if len(a) == cmd.BufferSize {
-			if err := cmd.importBits(a); err != nil {
+			if err := cmd.importBits(ctx, a); err != nil {
 				return err
 			}
 			a = a[:0]
@@ -364,7 +365,7 @@ func (cmd *ImportCommand) importPath(path string) error {
 	}
 
 	// If there are still bits in the buffer then flush them.
-	if err := cmd.importBits(a); err != nil {
+	if err := cmd.importBits(ctx, a); err != nil {
 		return err
 	}
 
@@ -372,7 +373,7 @@ func (cmd *ImportCommand) importPath(path string) error {
 }
 
 // importPath parses a path into bits and imports it to the server.
-func (cmd *ImportCommand) importBits(bits []pilosa.Bit) error {
+func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Group bits by slice.
@@ -382,7 +383,7 @@ func (cmd *ImportCommand) importBits(bits []pilosa.Bit) error {
 	// Parse path into bits.
 	for slice, bits := range bitsBySlice {
 		logger.Printf("importing slice: %d, n=%d", slice, len(bits))
-		if err := cmd.Client.Import(cmd.Database, cmd.Frame, slice, bits); err != nil {
+		if err := cmd.Client.Import(ctx, cmd.Database, cmd.Frame, slice, bits); err != nil {
 			return err
 		}
 	}
@@ -449,7 +450,7 @@ The file does not contain any headers.
 }
 
 // Run executes the main program execution.
-func (cmd *ExportCommand) Run() error {
+func (cmd *ExportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Validate arguments.
@@ -479,15 +480,15 @@ func (cmd *ExportCommand) Run() error {
 	}
 
 	// Determine slice count.
-	sliceN, err := client.SliceN()
+	maxSlices, err := client.MaxSliceByDatabase(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Export each slice.
-	for slice := uint64(0); slice <= sliceN; slice++ {
+	for slice := uint64(0); slice <= maxSlices[cmd.Database]; slice++ {
 		logger.Printf("exporting slice: %d", slice)
-		if err := client.ExportCSV(cmd.Database, cmd.Frame, slice, w); err != nil {
+		if err := client.ExportCSV(ctx, cmd.Database, cmd.Frame, slice, w); err != nil {
 			return err
 		}
 	}
@@ -557,7 +558,7 @@ The file should contain no headers.
 }
 
 // Run executes the main program execution.
-func (cmd *SortCommand) Run() error {
+func (cmd *SortCommand) Run(ctx context.Context) error {
 	// Open file for reading.
 	f, err := os.Open(cmd.Path)
 	if err != nil {
@@ -660,7 +661,7 @@ Backs up the database and frame from across the cluster into a single file.
 }
 
 // Run executes the main program execution.
-func (cmd *BackupCommand) Run() error {
+func (cmd *BackupCommand) Run(ctx context.Context) error {
 	// Validate arguments.
 	if cmd.Path == "" {
 		return errors.New("output file required")
@@ -680,7 +681,7 @@ func (cmd *BackupCommand) Run() error {
 	defer f.Close()
 
 	// Begin streaming backup.
-	if err := client.BackupTo(f, cmd.Database, cmd.Frame); err != nil {
+	if err := client.BackupTo(ctx, f, cmd.Database, cmd.Frame); err != nil {
 		return err
 	}
 
@@ -753,7 +754,7 @@ Restores a frame to the cluster from a backup file.
 }
 
 // Run executes the main program execution.
-func (cmd *RestoreCommand) Run() error {
+func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	// Validate arguments.
 	if cmd.Path == "" {
 		return errors.New("backup file required")
@@ -773,7 +774,7 @@ func (cmd *RestoreCommand) Run() error {
 	defer f.Close()
 
 	// Restore backup file to the cluster.
-	if err := client.RestoreFrom(f, cmd.Database, cmd.Frame); err != nil {
+	if err := client.RestoreFrom(ctx, f, cmd.Database, cmd.Frame); err != nil {
 		return err
 	}
 
@@ -830,7 +831,7 @@ Inspects a data file and provides stats.
 }
 
 // Run executes the main program execution.
-func (cmd *InspectCommand) Run() error {
+func (cmd *InspectCommand) Run(ctx context.Context) error {
 	// Open file handle.
 	f, err := os.Open(cmd.Path)
 	if err != nil {
@@ -937,7 +938,7 @@ Performs a consistency check on data files.
 }
 
 // Run executes the main program execution.
-func (cmd *CheckCommand) Run() error {
+func (cmd *CheckCommand) Run(ctx context.Context) error {
 	for _, path := range cmd.Paths {
 		switch filepath.Ext(path) {
 		case "":
@@ -1095,7 +1096,7 @@ The following operations are available:
 }
 
 // Run executes the main program execution.
-func (cmd *BenchCommand) Run() error {
+func (cmd *BenchCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
 	client, err := pilosa.NewClient(cmd.Host)
 	if err != nil {
@@ -1104,7 +1105,7 @@ func (cmd *BenchCommand) Run() error {
 
 	switch cmd.Op {
 	case "set-bit":
-		return cmd.runSetBit(client)
+		return cmd.runSetBit(ctx, client)
 	case "":
 		return errors.New("op required")
 	default:
@@ -1113,7 +1114,7 @@ func (cmd *BenchCommand) Run() error {
 }
 
 // runSetBit executes a benchmark of random SetBit() operations.
-func (cmd *BenchCommand) runSetBit(client *pilosa.Client) error {
+func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) error {
 	if cmd.N == 0 {
 		return errors.New("operation count required")
 	} else if cmd.Database == "" {
@@ -1134,7 +1135,7 @@ func (cmd *BenchCommand) runSetBit(client *pilosa.Client) error {
 
 		q := fmt.Sprintf(`SetBit(id=%d, frame="%s", profileID=%d)`, bitmapID, cmd.Frame, profileID)
 
-		if _, err := client.ExecuteQuery(cmd.Database, q, true); err != nil {
+		if _, err := client.ExecuteQuery(ctx, cmd.Database, q, true); err != nil {
 			return err
 		}
 	}

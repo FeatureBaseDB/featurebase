@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
@@ -21,8 +22,8 @@ import (
 	"unsafe"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/umbel/pilosa/internal"
-	"github.com/umbel/pilosa/roaring"
+	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/roaring"
 )
 
 const (
@@ -1278,7 +1279,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		if err != nil {
 			return err
 		}
-		blocks, err := client.FragmentBlocks(s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.Slice())
+		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return err
 		}
@@ -1359,7 +1360,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		}
 		clients = append(clients, client)
 
-		bitmapIDs, profileIDs, err := client.BlockData(f.DB(), f.Frame(), f.Slice(), id)
+		bitmapIDs, profileIDs, err := client.BlockData(context.Background(), f.DB(), f.Frame(), f.Slice(), id)
 		if err != nil {
 			return err
 		}
@@ -1405,7 +1406,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		}
 
 		// Execute query.
-		_, err := clients[i].ExecuteQuery(f.DB(), buf.String(), false)
+		_, err := clients[i].ExecuteQuery(context.Background(), f.DB(), buf.String(), false)
 		if err != nil {
 			return err
 		}
