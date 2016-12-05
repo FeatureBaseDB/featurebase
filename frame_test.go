@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 // Ensure frame can open and retrieve a fragment.

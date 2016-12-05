@@ -3,6 +3,7 @@ package main_test
 import (
 	"bytes"
 	"encoding/json"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,8 +17,8 @@ import (
 	"testing/quick"
 
 	"github.com/BurntSushi/toml"
-	"github.com/umbel/pilosa"
-	main "github.com/umbel/pilosa/cmd/pilosa"
+	"github.com/pilosa/pilosa"
+	main "github.com/pilosa/pilosa/cmd/pilosa"
 )
 
 // Ensure program can process queries and maintain consistency.
@@ -217,7 +218,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	client, err := pilosa.NewClient(m2.Server.Host)
 	if err != nil {
 		t.Fatal(err)
-	} else if err := client.RestoreFrame(m0.Server.Host, "d", "f"); err != nil {
+	} else if err := client.RestoreFrame(context.Background(), m0.Server.Host, "d", "f"); err != nil {
 		t.Fatal(err)
 	}
 

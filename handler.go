@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -17,8 +18,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/umbel/pilosa/internal"
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Handler represents an HTTP handler.
@@ -31,7 +32,7 @@ type Handler struct {
 
 	// The execution engine for running queries.
 	Executor interface {
-		Execute(db string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
+		Execute(context context.Context, db string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
 	}
 
 	// The version to report on the /version endpoint.
@@ -215,7 +216,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute the query.
-	results, err := h.Executor.Execute(req.DB, q, req.Slices, opt)
+	results, err := h.Executor.Execute(r.Context(), req.DB, q, req.Slices, opt)
 	resp := &QueryResponse{Results: results, Err: err}
 
 	// Fill profile attributes if requested.
@@ -252,10 +253,10 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) error {
-	sm := h.Index.SliceN()
+	ms := h.Index.MaxSlices()
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
-		pb := &internal.SliceMaxResponse{
-			SliceMax: &sm,
+		pb := &internal.MaxSlicesResponse{
+			MaxSlices: ms,
 		}
 		if buf, err := proto.Marshal(pb); err != nil {
 			return err
@@ -264,11 +265,13 @@ func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) erro
 		}
 		return nil
 	}
-	return json.NewEncoder(w).Encode(sliceMaxResponse{SliceMax: sm})
+	return json.NewEncoder(w).Encode(sliceMaxResponse{
+		MaxSlices: ms,
+	})
 }
 
 type sliceMaxResponse struct {
-	SliceMax uint64 `json:"SliceMax"`
+	MaxSlices map[string]uint64 `json:"MaxSlices"`
 }
 
 // handleDeleteDB handles DELETE /db request.
@@ -570,7 +573,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the correct fragment.
-	h.logger().Println("Go Import:", db, frame, slice)
+	h.logger().Println("importing:", db, frame, slice)
 	f, err := h.Index.CreateFragmentIfNotExists(db, frame, slice)
 	if err != nil {
 		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%d, err=%s", db, frame, slice, err)
@@ -815,14 +818,15 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Determine the maximum number of slices.
-	sliceN, err := client.SliceN()
+	maxSlices, err := client.MaxSliceByDatabase(r.Context())
 	if err != nil {
 		http.Error(w, "cannot determine remote slice count: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Loop over each slice and import it if this node owns it.
-	for slice := uint64(0); slice <= sliceN; slice++ {
+	//travis
+	for slice := uint64(0); slice <= maxSlices[db]; slice++ {
 		// Ignore this slice if we don't own it.
 		if !h.Cluster.OwnsFragment(h.Host, db, slice) {
 			continue
@@ -836,18 +840,18 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Stream backup from remote node.
-		r, err := client.BackupSlice(db, frame, slice)
+		rd, err := client.BackupSlice(r.Context(), db, frame, slice)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
-		} else if r == nil {
+		} else if rd == nil {
 			continue // slice doesn't exist
 		}
 
 		// Restore to local frame and always close reader.
 		if err := func() error {
-			defer r.Close()
-			if _, err := f.ReadFrom(r); err != nil {
+			defer rd.Close()
+			if _, err := f.ReadFrom(rd); err != nil {
 				return err
 			}
 			return nil

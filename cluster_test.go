@@ -8,7 +8,7 @@ import (
 	"testing/quick"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/umbel/pilosa"
+	"github.com/pilosa/pilosa"
 )
 
 // Ensure the cluster can fairly distribute partitions across the nodes.

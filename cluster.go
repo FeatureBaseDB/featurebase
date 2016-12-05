@@ -21,7 +21,17 @@ type Node struct {
 // Nodes represents a list of nodes.
 type Nodes []*Node
 
-// ContainsHost returns true if host matches on of the node's host.
+// Contains returns true if a node exists in the list.
+func (a Nodes) Contains(n *Node) bool {
+	for i := range a {
+		if a[i] == n {
+			return true
+		}
+	}
+	return false
+}
+
+// ContainsHost returns true if host matches one of the node's host.
 func (a Nodes) ContainsHost(host string) bool {
 	for _, n := range a {
 		if n.Host == host {
@@ -29,6 +39,17 @@ func (a Nodes) ContainsHost(host string) bool {
 		}
 	}
 	return false
+}
+
+// Filter returns a new list of nodes with node removed.
+func (a Nodes) Filter(n *Node) []*Node {
+	other := make([]*Node, 0, len(a))
+	for i := range a {
+		if a[i] != n {
+			other = append(other, a[i])
+		}
+	}
+	return other
 }
 
 // FilterHost returns a new list of nodes with host removed.
@@ -49,6 +70,13 @@ func (a Nodes) Hosts() []string {
 		hosts[i] = n.Host
 	}
 	return hosts
+}
+
+// Clone returns a shallow copy of nodes.
+func (a Nodes) Clone() []*Node {
+	other := make([]*Node, len(a))
+	copy(other, a)
+	return other
 }
 
 // Cluster represents a collection of nodes.
@@ -72,6 +100,16 @@ func NewCluster() *Cluster {
 		PartitionN: DefaultPartitionN,
 		ReplicaN:   DefaultReplicaN,
 	}
+}
+
+// NodeByHost returns a node reference by host.
+func (c *Cluster) NodeByHost(host string) *Node {
+	for _, n := range c.Nodes {
+		if n.Host == host {
+			return n
+		}
+	}
+	return nil
 }
 
 // Partition returns the partition that a slice belongs to.

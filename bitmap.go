@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/umbel/pilosa/internal"
-	"github.com/umbel/pilosa/roaring"
+	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/roaring"
 )
 
 // Bitmap represents a set of bits.

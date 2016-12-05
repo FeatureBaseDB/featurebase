@@ -18,6 +18,9 @@ type DB struct {
 	// Frames by name.
 	frames map[string]*Frame
 
+	// Max Slice on any node in the cluster, according to this node
+	remoteMaxSlice uint64
+
 	// Profile attribute storage and cache
 	profileAttrStore *AttrStore
 
@@ -27,9 +30,10 @@ type DB struct {
 // NewDB returns a new instance of DB.
 func NewDB(path, name string) *DB {
 	return &DB{
-		path:   path,
-		name:   name,
-		frames: make(map[string]*Frame),
+		path:           path,
+		name:           name,
+		frames:         make(map[string]*Frame),
+		remoteMaxSlice: 0,
 
 		profileAttrStore: NewAttrStore(filepath.Join(path, "data")),
 
@@ -112,14 +116,17 @@ func (db *DB) Close() error {
 	return nil
 }
 
-// SliceN returns the max slice in the database.
-func (db *DB) SliceN() uint64 {
+// MaxSlice returns the max slice in the database according to this node.
+func (db *DB) MaxSlice() uint64 {
+	if db == nil {
+		return 0
+	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	var max uint64
+	max := db.remoteMaxSlice
 	for _, f := range db.frames {
-		if slice := f.SliceN(); slice > max {
+		if slice := f.MaxSlice(); slice > max {
 			max = slice
 		}
 	}
@@ -233,4 +240,10 @@ func MergeSchemas(a, b []*DBInfo) []*DBInfo {
 	sort.Sort(dbInfoSlice(dbs))
 
 	return dbs
+}
+
+func (db *DB) SetRemoteMaxSlice(newmax uint64) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.remoteMaxSlice = newmax
 }

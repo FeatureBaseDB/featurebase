@@ -2,13 +2,14 @@ package pilosa_test
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
 
-	"github.com/umbel/pilosa"
-	"github.com/umbel/pilosa/pql"
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Ensure index can delete a database and its underlying files.
@@ -58,12 +59,12 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	s := NewServer()
 	defer s.Close()
 	s.Handler.Index = idx1.Index
-	s.Handler.Executor.ExecuteFn = func(db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor()
 		e.Index = idx1.Index
 		e.Host = cluster.Nodes[1].Host
 		e.Cluster = cluster
-		return e.Execute(db, query, slices, opt)
+		return e.Execute(ctx, db, query, slices, opt)
 	}
 
 	// Mock 2-node, fully replicated cluster.
@@ -110,7 +111,8 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	}
 
 	// Set highest slice.
-	idx0.SetMax(3)
+	idx0.DB("d").SetRemoteMaxSlice(1)
+	idx0.DB("y").SetRemoteMaxSlice(3)
 
 	// Set up syncer.
 	syncer := pilosa.IndexSyncer{
@@ -118,6 +120,7 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 		Host:    cluster.Nodes[0].Host,
 		Cluster: cluster,
 	}
+
 	if err := syncer.SyncIndex(); err != nil {
 		t.Fatal(err)
 	}
@@ -138,10 +141,13 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 		}
 
 		f = idx.Fragment("d", "f0", 1)
+		a := f.Bitmap(9).Bits()
+		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
+		}
 		if a := f.Bitmap(9).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
 		}
-
 		f = idx.Fragment("y", "z", 3)
 		if a := f.Bitmap(10).Bits(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
 			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)

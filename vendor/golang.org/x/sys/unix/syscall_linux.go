@@ -36,10 +36,10 @@ func Creat(path string, mode uint32) (fd int, err error) {
 	return Open(path, O_CREAT|O_WRONLY|O_TRUNC, mode)
 }
 
-//sys	linkat(olddirfd int, oldpath string, newdirfd int, newpath string, flags int) (err error)
+//sys	Linkat(olddirfd int, oldpath string, newdirfd int, newpath string, flags int) (err error)
 
 func Link(oldpath string, newpath string) (err error) {
-	return linkat(AT_FDCWD, oldpath, AT_FDCWD, newpath, 0)
+	return Linkat(AT_FDCWD, oldpath, AT_FDCWD, newpath, 0)
 }
 
 func Mkdir(path string, mode uint32) (err error) {
@@ -60,10 +60,19 @@ func Openat(dirfd int, path string, flags int, mode uint32) (fd int, err error) 
 	return openat(dirfd, path, flags|O_LARGEFILE, mode)
 }
 
-//sys	readlinkat(dirfd int, path string, buf []byte) (n int, err error)
+//sys	ppoll(fds *PollFd, nfds int, timeout *Timespec, sigmask *Sigset_t) (n int, err error)
+
+func Ppoll(fds []PollFd, timeout *Timespec, sigmask *Sigset_t) (n int, err error) {
+	if len(fds) == 0 {
+		return ppoll(nil, 0, timeout, sigmask)
+	}
+	return ppoll(&fds[0], len(fds), timeout, sigmask)
+}
+
+//sys	Readlinkat(dirfd int, path string, buf []byte) (n int, err error)
 
 func Readlink(path string, buf []byte) (n int, err error) {
-	return readlinkat(AT_FDCWD, path, buf)
+	return Readlinkat(AT_FDCWD, path, buf)
 }
 
 func Rename(oldpath string, newpath string) (err error) {
@@ -71,33 +80,40 @@ func Rename(oldpath string, newpath string) (err error) {
 }
 
 func Rmdir(path string) error {
-	return unlinkat(AT_FDCWD, path, AT_REMOVEDIR)
+	return Unlinkat(AT_FDCWD, path, AT_REMOVEDIR)
 }
 
-//sys	symlinkat(oldpath string, newdirfd int, newpath string) (err error)
+//sys	Symlinkat(oldpath string, newdirfd int, newpath string) (err error)
 
 func Symlink(oldpath string, newpath string) (err error) {
-	return symlinkat(oldpath, AT_FDCWD, newpath)
+	return Symlinkat(oldpath, AT_FDCWD, newpath)
 }
 
 func Unlink(path string) error {
-	return unlinkat(AT_FDCWD, path, 0)
+	return Unlinkat(AT_FDCWD, path, 0)
 }
 
-//sys	unlinkat(dirfd int, path string, flags int) (err error)
-
-func Unlinkat(dirfd int, path string, flags int) error {
-	return unlinkat(dirfd, path, flags)
-}
+//sys	Unlinkat(dirfd int, path string, flags int) (err error)
 
 //sys	utimes(path string, times *[2]Timeval) (err error)
 
-func Utimes(path string, tv []Timeval) (err error) {
+func Utimes(path string, tv []Timeval) error {
 	if tv == nil {
+		err := utimensat(AT_FDCWD, path, nil, 0)
+		if err != ENOSYS {
+			return err
+		}
 		return utimes(path, nil)
 	}
 	if len(tv) != 2 {
 		return EINVAL
+	}
+	var ts [2]Timespec
+	ts[0] = NsecToTimespec(TimevalToNsec(tv[0]))
+	ts[1] = NsecToTimespec(TimevalToNsec(tv[1]))
+	err := utimensat(AT_FDCWD, path, (*[2]Timespec)(unsafe.Pointer(&ts[0])), 0)
+	if err != ENOSYS {
+		return err
 	}
 	return utimes(path, (*[2]Timeval)(unsafe.Pointer(&tv[0])))
 }
@@ -123,8 +139,7 @@ func UtimesNano(path string, ts []Timespec) error {
 	// in 2.6.22, Released, 8 July 2007) then fall back to utimes
 	var tv [2]Timeval
 	for i := 0; i < 2; i++ {
-		tv[i].Sec = ts[i].Sec
-		tv[i].Usec = ts[i].Nsec / 1000
+		tv[i] = NsecToTimeval(TimespecToNsec(ts[i]))
 	}
 	return utimes(path, (*[2]Timeval)(unsafe.Pointer(&tv[0])))
 }
@@ -381,6 +396,19 @@ func (sa *SockaddrNetlink) sockaddr() (unsafe.Pointer, _Socklen, error) {
 	sa.raw.Pid = sa.Pid
 	sa.raw.Groups = sa.Groups
 	return unsafe.Pointer(&sa.raw), SizeofSockaddrNetlink, nil
+}
+
+type SockaddrHCI struct {
+	Dev     uint16
+	Channel uint16
+	raw     RawSockaddrHCI
+}
+
+func (sa *SockaddrHCI) sockaddr() (unsafe.Pointer, _Socklen, error) {
+	sa.raw.Family = AF_BLUETOOTH
+	sa.raw.Dev = sa.Dev
+	sa.raw.Channel = sa.Channel
+	return unsafe.Pointer(&sa.raw), SizeofSockaddrHCI, nil
 }
 
 func anyToSockaddr(rsa *RawSockaddrAny) (Sockaddr, error) {
@@ -848,7 +876,6 @@ func Mount(source string, target string, fstype string, flags uintptr, data stri
 //sysnb	EpollCreate(size int) (fd int, err error)
 //sysnb	EpollCreate1(flag int) (fd int, err error)
 //sysnb	EpollCtl(epfd int, op int, fd int, event *EpollEvent) (err error)
-//sys	EpollWait(epfd int, events []EpollEvent, msec int) (n int, err error)
 //sys	Exit(code int) = SYS_EXIT_GROUP
 //sys	Faccessat(dirfd int, path string, mode uint32, flags int) (err error)
 //sys	Fallocate(fd int, mode uint32, off int64, len int64) (err error)
@@ -883,7 +910,6 @@ func Getpgrp() (pid int) {
 //sys	Mkdirat(dirfd int, path string, mode uint32) (err error)
 //sys	Mknodat(dirfd int, path string, mode uint32, dev int) (err error)
 //sys	Nanosleep(time *Timespec, leftover *Timespec) (err error)
-//sys	Pause() (err error)
 //sys	PivotRoot(newroot string, putold string) (err error) = SYS_PIVOT_ROOT
 //sysnb prlimit(pid int, resource int, old *Rlimit, newlimit *Rlimit) (err error) = SYS_PRLIMIT64
 //sys   Prctl(option int, arg2 uintptr, arg3 uintptr, arg4 uintptr, arg5 uintptr) (err error)
@@ -895,6 +921,7 @@ func Getpgrp() (pid int) {
 //sysnb	Setpgid(pid int, pgid int) (err error)
 //sysnb	Setsid() (pid int, err error)
 //sysnb	Settimeofday(tv *Timeval) (err error)
+//sys	Setns(fd int, nstype int) (err error)
 
 // issue 1435.
 // On linux Setuid and Setgid only affects the current thread, not the process.
@@ -921,7 +948,6 @@ func Setgid(uid int) (err error) {
 //sys	Unmount(target string, flags int) (err error) = SYS_UMOUNT2
 //sys	Unshare(flags int) (err error)
 //sys	Ustat(dev int, ubuf *Ustat_t) (err error)
-//sys	Utime(path string, buf *Utimbuf) (err error)
 //sys	write(fd int, p []byte) (n int, err error)
 //sys	exitThread(code int) (err error) = SYS_EXIT
 //sys	readlen(fd int, p *byte, np int) (n int, err error) = SYS_READ
@@ -1021,8 +1047,6 @@ func Munmap(b []byte) (err error) {
 // Newfstatat
 // Nfsservctl
 // Personality
-// Poll
-// Ppoll
 // Pselect6
 // Ptrace
 // Putpmsg
