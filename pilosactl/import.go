@@ -51,6 +51,10 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand 
 	}
 }
 
+func (cmd *ImportCommand) String() string {
+	return fmt.Sprint(*cmd)
+}
+
 // ParseFlags parses command line flags from args.
 func (cmd *ImportCommand) ParseFlags(args []string) error {
 	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
