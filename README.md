@@ -220,3 +220,45 @@ $ go install --ldflags="-X main.Version=1.0.0"
 ```
 
 [Glide]: http://glide.sh/
+
+## Benchmarks
+
+To run a preconfigured benchmark do:
+```
+pilosactl bspawn benchmark-file.json
+```
+There are several example json config files in `cmd/pilosactl`
+
+### Configuration Format
+
+bspawn uses a json config format that has 5 top level items - an annotated example is below.
+
+```json
+{
+    // CreatorArgs specifies the pilosa cluster that should be created to run benchmarks against. For more information about the configuration for this option, see the `pilosactl create` documentation.
+    "CreatorArgs": ["-type", "local", "-serverN", "1", "-replicaN", "1"],
+    // If PilosaHosts is set, CreatorArgs will be ignored, and an existing pilosa cluster specified by the list of hosts will be used.
+    "PilosaHosts": ["localhost:19327"],
+    // Agents specifies the host(s) that the benchmark should be run from. Currently only running from localhost is supported.
+    "Agents": { "Type": "local" },
+	// If AgentHosts is specified, Agents is ignored, and the existing
+	// agents specified here are used. This is not yet implemented.
+	"AgentHosts": ["localhost"],
+
+    // Benchmarks is where the actual benchmarks to run are specified - each contains a `Num` which is the number of agents that should run that benchmark, and Args which specifies the benchmark. For more information about Args, see the `pilosactl bagent` documentation. The benchmarks in the `Benchmarks` list will be run concurrently.
+    "Benchmarks": [
+        {
+            "Num": 1,
+            "Args": ["import", "-max-bitmap-id", "100000", "-max-profile-id", "10000", "-max-bits-per-map", "100", "-seed", "0", "-agent-controls", "width"]
+        },
+        {
+            "Num": 1,
+            "Args": ["import", "-max-bitmap-id", "100000", "-max-profile-id", "10000", "-max-bits-per-map", "100", "-seed", "0", "-agent-controls", "width", "-random-bitmap-order", "-db", "randoload"]
+        }
+    ]
+}
+
+```
+
+
+
