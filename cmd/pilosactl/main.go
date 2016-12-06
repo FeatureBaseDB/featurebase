@@ -24,6 +24,7 @@ import (
 	"unsafe"
 
 	"encoding/json"
+
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/bench"
 	"github.com/pilosa/pilosa/creator"
@@ -1164,6 +1165,8 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 			bm = &bench.MultiDBSetBits{}
 		case "random-query":
 			bm = &bench.RandomQuery{}
+		case "import":
+			bm = bench.NewImport(cmd.Stdin, cmd.Stdout, cmd.Stderr)
 		default:
 			return fmt.Errorf("Unknown benchmark cmd: %v", remArgs[0])
 		}
@@ -1204,9 +1207,7 @@ The following arguments are available:
 		random-set-bits
 		multi-db-set-bits
 		random-query
-
-
-
+		import
 `)
 }
 

@@ -11,6 +11,12 @@ import (
 	"github.com/pilosa/pilosa/pilosactl"
 )
 
+func NewImport(stdin io.Reader, stdout, stderr io.Writer) *Import {
+	return &Import{
+		ImportCommand: pilosactl.NewImportCommand(stdin, stdout, stderr),
+	}
+}
+
 // Import sets bits with increasing profile id and bitmap id.
 type Import struct {
 	BaseBitmapID      int64
@@ -22,8 +28,9 @@ type Import struct {
 	MaxBitsPerMap     int64
 	AgentControls     string
 	Seed              int64
+	numbits           int
 
-	pilosactl.ImportCommand
+	*pilosactl.ImportCommand
 }
 
 func (b *Import) Usage() string {
@@ -94,30 +101,36 @@ func (b *Import) ConsumeFlags(args []string) ([]string, error) {
 }
 
 func (b *Import) Init(hosts []string, agentNum int) error {
-	var err error
-	b.Client, err = firstHostClient(hosts)
-	if err != nil {
-		return err
+	if len(hosts) == 0 {
+		return fmt.Errorf("Need at least one host")
 	}
+	b.Host = hosts[0]
 	// generate csv data
 	baseBitmapID, maxBitmapID, baseProfileID, maxProfileID := b.BaseBitmapID, b.MaxBitmapID, b.BaseProfileID, b.MaxProfileID
-	if b.AgentControls == "height" {
+	switch b.AgentControls {
+	case "height":
 		numBitmapIDs := (b.MaxBitmapID - b.BaseBitmapID)
 		baseBitmapID = b.BaseBitmapID + (numBitmapIDs * int64(agentNum))
 		maxBitmapID = baseBitmapID + numBitmapIDs
-	}
-	if b.AgentControls == "height" {
+	case "width":
 		numProfileIDs := (b.MaxProfileID - b.BaseProfileID)
 		baseProfileID = b.BaseProfileID + (numProfileIDs * int64(agentNum))
 		maxProfileID = baseProfileID + numProfileIDs
+	case "":
+		break
+	default:
+		return fmt.Errorf("agent-controls: '%v' is not supported", b.AgentControls)
 	}
 	f, err := ioutil.TempFile("", "")
 	if err != nil {
 		return err
 	}
-	GenerateImportCSV(f, baseBitmapID, maxBitmapID, baseProfileID, maxProfileID,
+	// set b.Paths)
+	num := GenerateImportCSV(f, baseBitmapID, maxBitmapID, baseProfileID, maxProfileID,
 		b.MinBitsPerMap, b.MaxBitsPerMap, b.Seed+int64(agentNum), b.RandomBitmapOrder)
+	b.numbits = num
 	// set b.Paths
+	f.Close()
 	b.Paths = []string{f.Name()}
 	return nil
 }
@@ -125,11 +138,16 @@ func (b *Import) Init(hosts []string, agentNum int) error {
 // Run runs the Import benchmark
 func (b *Import) Run(agentNum int) map[string]interface{} {
 	results := make(map[string]interface{})
-	b.ImportCommand.Run(context.TODO())
+	err := b.ImportCommand.Run(context.TODO())
+	if err != nil {
+		results["error"] = err.Error()
+	}
+	results["numbits"] = b.numbits
+	results["config"] = *b
 	return results
 }
 
-func GenerateImportCSV(w io.Writer, baseBitmapID, maxBitmapID, baseProfileID, maxProfileID, minBitsPerMap, maxBitsPerMap, seed int64, randomOrder bool) {
+func GenerateImportCSV(w io.Writer, baseBitmapID, maxBitmapID, baseProfileID, maxProfileID, minBitsPerMap, maxBitsPerMap, seed int64, randomOrder bool) int {
 	src := rand.NewSource(seed)
 	rng := rand.New(src)
 
@@ -137,6 +155,7 @@ func GenerateImportCSV(w io.Writer, baseBitmapID, maxBitmapID, baseProfileID, ma
 	if randomOrder {
 		bitmapIDs = rng.Perm(int(maxBitmapID - baseBitmapID))
 	}
+	numrows := 0
 	for i := baseBitmapID; i < maxBitmapID; i++ {
 		var bitmapID int64
 		if randomOrder {
@@ -149,6 +168,8 @@ func GenerateImportCSV(w io.Writer, baseBitmapID, maxBitmapID, baseProfileID, ma
 		for j := int64(0); j < numBitsToSet; j++ {
 			profileID := rng.Int63n(maxProfileID-baseProfileID) + baseProfileID
 			fmt.Fprintf(w, "%d,%d\n", bitmapID, profileID)
+			numrows += 1
 		}
 	}
+	return numrows
 }

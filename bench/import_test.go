@@ -2,17 +2,73 @@ package bench_test
 
 import (
 	"bytes"
+	"log"
 	"testing"
 
 	"io/ioutil"
 
+	"os"
+
 	"github.com/pilosa/pilosa/bench"
 )
+
+func TestImportInit(t *testing.T) {
+	imp := bench.Import{
+		BaseBitmapID:      0,
+		MaxBitmapID:       10,
+		BaseProfileID:     0,
+		MaxProfileID:      10,
+		RandomBitmapOrder: false,
+		MinBitsPerMap:     2,
+		MaxBitsPerMap:     3,
+		AgentControls:     "width",
+		Seed:              0,
+	}
+
+	imp.Init([]string{"blah"}, 2)
+	f, err := os.Open(imp.Paths[0])
+	if err != nil {
+		t.Fatalf("Couldn't open file: %v, err: %v", imp.Paths[0], err)
+	}
+	bytes, err := ioutil.ReadAll(f)
+	if err != nil {
+		t.Fatalf("error reading file: %v", err)
+	}
+
+	expected := `
+0,21
+0,22
+1,22
+1,20
+2,22
+2,26
+3,21
+3,23
+4,21
+4,22
+5,20
+5,28
+6,23
+6,27
+7,20
+7,20
+8,29
+8,23
+9,29
+9,23
+`[1:]
+
+	if string(bytes) != expected {
+		t.Fatalf("unexpected result: %v", string(bytes))
+	}
+
+	log.Println(imp)
+}
 
 func TestGenerateImportCSVNonRand(t *testing.T) {
 	b := bytes.NewBuffer(make([]byte, 0))
 
-	bench.GenerateImportCSV(b, 0, 10, 21, 29, 2, 3, 0, false)
+	bench.GenerateImportCSV(b, 0, 10, 20, 30, 2, 3, 2, false)
 
 	bytes, err := ioutil.ReadAll(b)
 	if err != nil {
@@ -21,25 +77,25 @@ func TestGenerateImportCSVNonRand(t *testing.T) {
 
 	expected := `
 0,21
-0,24
-1,23
-1,28
-2,21
+0,22
+1,22
+1,20
 2,22
+2,26
 3,21
-3,25
-4,23
+3,23
 4,21
+4,22
+5,20
 5,28
-5,28
-6,25
 6,23
-7,26
-7,23
-8,21
+6,27
+7,20
+7,20
+8,29
 8,23
-9,25
-9,24
+9,29
+9,23
 `[1:]
 
 	if string(bytes) != expected {
