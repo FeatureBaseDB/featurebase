@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"math/rand"
 
+	"sort"
+
 	"github.com/pilosa/pilosa/pilosactl"
 )
 
@@ -147,6 +149,12 @@ func (b *Import) Run(agentNum int) map[string]interface{} {
 	return results
 }
 
+type Int64Slice []int64
+
+func (s Int64Slice) Len() int           { return len(s) }
+func (s Int64Slice) Less(i, j int) bool { return s[i] < s[j] }
+func (s Int64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
 func GenerateImportCSV(w io.Writer, baseBitmapID, maxBitmapID, baseProfileID, maxProfileID, minBitsPerMap, maxBitsPerMap, seed int64, randomOrder bool) int {
 	src := rand.NewSource(seed)
 	rng := rand.New(src)
@@ -156,6 +164,7 @@ func GenerateImportCSV(w io.Writer, baseBitmapID, maxBitmapID, baseProfileID, ma
 		bitmapIDs = rng.Perm(int(maxBitmapID - baseBitmapID))
 	}
 	numrows := 0
+	profileIDs := make(Int64Slice, maxBitsPerMap)
 	for i := baseBitmapID; i < maxBitmapID; i++ {
 		var bitmapID int64
 		if randomOrder {
@@ -165,11 +174,18 @@ func GenerateImportCSV(w io.Writer, baseBitmapID, maxBitmapID, baseProfileID, ma
 		}
 
 		numBitsToSet := rng.Int63n(maxBitsPerMap-minBitsPerMap) + minBitsPerMap
+		numrows += int(numBitsToSet)
 		for j := int64(0); j < numBitsToSet; j++ {
-			profileID := rng.Int63n(maxProfileID-baseProfileID) + baseProfileID
-			fmt.Fprintf(w, "%d,%d\n", bitmapID, profileID)
-			numrows += 1
+			profileIDs[j] = rng.Int63n(maxProfileID-baseProfileID) + baseProfileID
 		}
+		profIDs := profileIDs[:numBitsToSet]
+		if !randomOrder {
+			sort.Sort(profIDs)
+		}
+		for j := int64(0); j < numBitsToSet; j++ {
+			fmt.Fprintf(w, "%d,%d\n", bitmapID, profIDs[j])
+		}
+
 	}
 	return numrows
 }

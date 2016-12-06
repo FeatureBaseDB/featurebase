@@ -13,17 +13,16 @@ import (
 )
 
 func TestImportInit(t *testing.T) {
-	imp := bench.Import{
-		BaseBitmapID:      0,
-		MaxBitmapID:       10,
-		BaseProfileID:     0,
-		MaxProfileID:      10,
-		RandomBitmapOrder: false,
-		MinBitsPerMap:     2,
-		MaxBitsPerMap:     3,
-		AgentControls:     "width",
-		Seed:              0,
-	}
+	imp := bench.NewImport(os.Stdin, os.Stdout, os.Stderr)
+	imp.BaseBitmapID = 0
+	imp.MaxBitmapID = 10
+	imp.BaseProfileID = 0
+	imp.MaxProfileID = 10
+	imp.RandomBitmapOrder = false
+	imp.MinBitsPerMap = 2
+	imp.MaxBitsPerMap = 3
+	imp.AgentControls = "width"
+	imp.Seed = 0
 
 	imp.Init([]string{"blah"}, 2)
 	f, err := os.Open(imp.Paths[0])
@@ -38,8 +37,8 @@ func TestImportInit(t *testing.T) {
 	expected := `
 0,21
 0,22
-1,22
 1,20
+1,22
 2,22
 2,26
 3,21
@@ -52,10 +51,10 @@ func TestImportInit(t *testing.T) {
 6,27
 7,20
 7,20
-8,29
 8,23
-9,29
+8,29
 9,23
+9,29
 `[1:]
 
 	if string(bytes) != expected {
@@ -78,8 +77,8 @@ func TestGenerateImportCSVNonRand(t *testing.T) {
 	expected := `
 0,21
 0,22
-1,22
 1,20
+1,22
 2,22
 2,26
 3,21
@@ -92,10 +91,10 @@ func TestGenerateImportCSVNonRand(t *testing.T) {
 6,27
 7,20
 7,20
-8,29
 8,23
-9,29
+8,29
 9,23
+9,29
 `[1:]
 
 	if string(bytes) != expected {
