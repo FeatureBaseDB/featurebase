@@ -4,7 +4,7 @@
     "Benchmarks": [
         {
             "Num": 1,
-            "Args": ["slice-height", "-max-time", "10", "-max-bits-per-map", "100"]
+            "Args": ["slice-height", "-max-time", "1", "-max-bits-per-map", "100"]
         }
     ]
 }

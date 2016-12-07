@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"time"
 
 	"sort"
 
@@ -140,12 +141,14 @@ func (b *Import) Init(hosts []string, agentNum int) error {
 // Run runs the Import benchmark
 func (b *Import) Run(agentNum int) map[string]interface{} {
 	results := make(map[string]interface{})
+	results["numbits"] = b.numbits
+	results["db"] = b.Database
+	start := time.Now()
 	err := b.ImportCommand.Run(context.TODO())
 	if err != nil {
 		results["error"] = err.Error()
 	}
-	results["numbits"] = b.numbits
-	results["config"] = *b
+	results["time"] = time.Now().Sub(start)
 	return results
 }
 
