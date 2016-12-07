@@ -220,3 +220,54 @@ $ go install --ldflags="-X main.Version=1.0.0"
 ```
 
 [Glide]: http://glide.sh/
+
+## Benchmarks
+
+The usual interface for running benchmarks is:
+```
+pilosactl bspawn benchmark-file.json
+```
+There are several example json config files in `cmd/pilosactl`
+
+The `bspawn` command calls other `pilosactl` subcommands such as `create` and `bagent` to perform the benchmarks. These commands can also be used directly if one wishes e.g. to just create a cluster, or locally run a benchmarks against an existing cluster. Pass the `-help` flag to either to get more information about its usage.
+
+### Configuration Format
+
+bspawn uses a json config format that has 5 top level items - an example is below.
+
+```json
+{
+    "CreatorArgs": ["-type", "local", "-serverN", "1", "-replicaN", "1"],
+    "PilosaHosts": ["localhost:19327"],
+    "Agents": { "Type": "local" },
+	"AgentHosts": ["localhost"],
+    "Benchmarks": [
+        {
+            "Num": 1,
+            "Args": ["import", "-max-bitmap-id", "100000", "-max-profile-id", "10000", "-max-bits-per-map", "100", "-seed", "0", "-agent-controls", "width"]
+        },
+        {
+            "Num": 1,
+            "Args": ["import", "-max-bitmap-id", "100000", "-max-profile-id", "10000", "-max-bits-per-map", "100", "-seed", "0", "-agent-controls", "width", "-random-bitmap-order", "-db", "randoload"]
+        }
+    ]
+}
+
+```
+
+#### CreatorArgs
+Specifies the pilosa cluster that should be created to run benchmarks against. For more information about the configuration for this option, see the `pilosactl create -help`
+
+#### PilosaHosts
+If PilosaHosts is set, CreatorArgs will be ignored, and an existing pilosa cluster specified by the list of hosts will be used.
+
+#### Agents
+Agents specifies the host(s) that the benchmark should be run from. Currently only running from localhost is supported.
+
+#### AgentHosts
+If AgentHosts is specified, Agents is ignored, and the existing agents specified here are used. This is not yet implemented.
+
+#### Benchmarks
+Benchmarks is where the actual benchmarks to run are specified - each contains a `Num` which is the number of agents that should run that benchmark, and Args which specifies the benchmark. The benchmarks in the `Benchmarks` list will be run concurrently. For more information about Args, see the `pilosactl bagent -help`.
+
+For documentation on a specific `bagent` subcommand do `pilosactl bagent <subcommand> -help`
