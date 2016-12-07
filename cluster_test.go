@@ -77,6 +77,46 @@ func TestHasher(t *testing.T) {
 	}
 }
 
+// Ensure that an empty cluster returns a valid (empty) NodeSet
+func TestCluster_NodeSetHosts(t *testing.T) {
+
+	c := pilosa.Cluster{}
+
+	if h := c.NodeSetHosts(); !reflect.DeepEqual(h, []string{}) {
+		t.Fatalf("unexpected slice of hosts: %s", h)
+	}
+}
+
+// Ensure cluster can compare its Nodes and Members
+func TestCluster_Health(t *testing.T) {
+	c := pilosa.Cluster{
+		Nodes: []*pilosa.Node{
+			{Host: "serverA:1000"},
+			{Host: "serverB:1000"},
+			{Host: "serverC:1000"},
+		},
+		NodeSet: &pilosa.StaticNodeSet{},
+	}
+
+	j, err := c.NodeSet.Join([]*pilosa.Node{
+		&pilosa.Node{Host: "serverA:1000"},
+		&pilosa.Node{Host: "serverC:1000"},
+		&pilosa.Node{Host: "serverD:1000"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected gossiper nodes: %s", j)
+	}
+
+	// Verify a DOWN node is reported, and extraneous nodes are ignored
+	if a := c.Health(); !reflect.DeepEqual(a, map[string]string{
+		"serverA:1000": "UP",
+		"serverB:1000": "DOWN",
+		"serverC:1000": "UP",
+	}) {
+		t.Fatalf("unexpected health: %s", spew.Sdump(a))
+	}
+}
+
 // NewCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewCluster(n int) *pilosa.Cluster {
 	c := pilosa.NewCluster()

@@ -1,11 +1,15 @@
 package pilosa
 
-import "time"
+import (
+	"net"
+	"time"
+)
 
 const (
 	// DefaultHost is the default hostname and port to use.
-	DefaultHost = "localhost"
-	DefaultPort = "10101"
+	DefaultHost       = "localhost"
+	DefaultPort       = "10101"
+	DefaultGossipPort = 14000
 )
 
 // Config represents the configuration for the command.
@@ -14,9 +18,11 @@ type Config struct {
 	Host    string `toml:"host"`
 
 	Cluster struct {
-		ReplicaN        int      `toml:"replicas"`
-		Nodes           []string `toml:"hosts"`
-		PollingInterval Duration `toml:"polling-interval"`
+		ReplicaN        int           `toml:"replicas"`
+		MessengerType   string        `toml:"messenger-type"`
+		Nodes           []string      `toml:"hosts"`
+		PollingInterval Duration      `toml:"polling-interval"`
+		Gossip          *ConfigGossip `toml:"gossip"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -28,6 +34,15 @@ type Config struct {
 	} `toml:"anti-entropy"`
 
 	LogPath string `toml:"log-path"`
+}
+
+type ConfigNode struct {
+	Host string `toml:"host"`
+}
+
+type ConfigGossip struct {
+	Port int    `toml:"port"`
+	Seed string `toml:"seed"`
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -59,6 +74,29 @@ func (c *Config) PilosaCluster() *Cluster {
 
 	for _, hostport := range c.Cluster.Nodes {
 		cluster.Nodes = append(cluster.Nodes, &Node{Host: hostport})
+	}
+
+	// Setup a Broadcast (over HTTP) or Gossip NodeSet based on config.
+	if c.Cluster.MessengerType == "broadcast" {
+		cluster.NodeSet = NewHTTPNodeSet()
+		cluster.NodeSet.Join(cluster.Nodes)
+	} else if (c.Cluster.MessengerType == "gossip") && (c.Cluster.Gossip != nil) {
+		gossipPort := DefaultGossipPort
+		gossipSeed := DefaultHost
+		if c.Cluster.Gossip.Port != 0 {
+			gossipPort = c.Cluster.Gossip.Port
+		}
+		if c.Cluster.Gossip.Seed != "" {
+			gossipSeed = c.Cluster.Gossip.Seed
+		}
+		// get the host portion of addr to use for binding
+		gossipHost, _, err := net.SplitHostPort(c.Host)
+		if err != nil {
+			gossipHost = c.Host
+		}
+		cluster.NodeSet = NewGossipNodeSet(c.Host, gossipHost, gossipPort, gossipSeed)
+	} else {
+		cluster.NodeSet = NewStaticNodeSet()
 	}
 
 	return cluster

@@ -43,7 +43,8 @@ type DB struct {
 	// Profile attribute storage and cache
 	profileAttrStore *AttrStore
 
-	stats StatsClient
+	messenger Messenger
+	stats     StatsClient
 
 	LogOutput io.Writer
 }
@@ -67,6 +68,7 @@ func NewDB(path, name string) (*DB, error) {
 
 		columnLabel: DefaultColumnLabel,
 
+		messenger: NopMessenger,
 		stats:     NopStatsClient,
 		LogOutput: ioutil.Discard,
 	}, nil
@@ -416,6 +418,7 @@ func (db *DB) newFrame(path, name string) (*Frame, error) {
 	}
 	f.LogOutput = db.LogOutput
 	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.messenger = db.messenger
 	return f, nil
 }
 

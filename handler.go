@@ -25,7 +25,8 @@ import (
 
 // Handler represents an HTTP handler.
 type Handler struct {
-	Index *Index
+	Index     *Index
+	Messenger Messenger
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -49,6 +50,7 @@ type Handler struct {
 func NewHandler() *Handler {
 	handler := &Handler{
 		LogOutput: os.Stderr,
+		Messenger: NopMessenger,
 	}
 	handler.Router = NewRouter(handler)
 	return handler
@@ -111,8 +113,21 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleGetStatus handles GET /status requests.
+func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+	if err := json.NewEncoder(w).Encode(getStatusResponse{
+		Health: h.Cluster.Health(),
+	}); err != nil {
+		h.logger().Printf("write status response error: %s", err)
+	}
+}
+
 type getSchemaResponse struct {
 	DBs []*DBInfo `json:"dbs"`
+}
+
+type getStatusResponse struct {
+	Health map[string]string `json:"health"`
 }
 
 // handlePostQuery handles /query requests.
@@ -175,6 +190,36 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	if err := h.writeQueryResponse(w, r, resp); err != nil {
 		h.logger().Printf("write query response error: %s", err)
 	}
+}
+
+// handlePostMessage handles /message requests.
+func (h *Handler) handlePostMessage(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Unmarshal message to specific proto type.
+	m, err := UnmarshalMessage(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Messenger.ReceiveMessage(m); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	return
 }
 
 func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
@@ -323,6 +368,13 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Send the delete message to all nodes.
+	// NOTE: this calls a second DeleteDB on the local node
+	h.Messenger.SendMessage(
+		&internal.DeleteDBMessage{
+			DB: req.DB,
+		})
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postDBResponse{}); err != nil {

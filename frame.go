@@ -38,7 +38,8 @@ type Frame struct {
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
 
-	stats StatsClient
+	messenger Messenger
+	stats     StatsClient
 
 	// Frame settings.
 	rowLabel       string
@@ -66,7 +67,8 @@ func NewFrame(path, db, name string) (*Frame, error) {
 		views:           make(map[string]*View),
 		bitmapAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
-		stats: NopStatsClient,
+		messenger: NopMessenger,
+		stats:     NopStatsClient,
 
 		rowLabel:        DefaultRowLabel,
 		cacheType:       DefaultCacheType,
@@ -408,6 +410,21 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 	}
 	view.BitmapAttrStore = f.bitmapAttrStore
 	f.views[view.Name()] = view
+
+	// TODO: this needs to be refactored for views
+	/*
+		// Send a MaxSlice message
+		f.messenger.SendMessage(
+			&internal.CreateSliceMessage{
+				DB:    f.db,
+				Slice: slice,
+			})
+
+		frag.BitmapAttrStore = f.bitmapAttrStore
+
+		// Save to lookup.
+		f.fragments[slice] = frag
+	*/
 
 	return view, nil
 }
