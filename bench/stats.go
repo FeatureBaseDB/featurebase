@@ -1,14 +1,17 @@
 package bench
 
 import (
+	"math"
 	"time"
 )
 
 type Stats struct {
-	Min   time.Duration
-	Max   time.Duration
-	Total time.Duration
-	Num   int64
+	Min            time.Duration
+	Max            time.Duration
+	Mean           time.Duration
+	sumSquareDelta float64
+	Total          time.Duration
+	Num            int64
 }
 
 func NewStats() *Stats {
@@ -26,6 +29,12 @@ func (s *Stats) Add(td time.Duration) {
 	if td > s.Max {
 		s.Max = td
 	}
+
+	// online variance calculation
+	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm
+	delta := td - s.Mean
+	s.Mean += delta / time.Duration(s.Num)
+	s.sumSquareDelta += float64(delta * (td - s.Mean))
 }
 
 func (s *Stats) Avg() time.Duration {
@@ -35,5 +44,7 @@ func (s *Stats) Avg() time.Duration {
 func AddToResults(s *Stats, results map[string]interface{}) {
 	results["min"] = s.Min
 	results["max"] = s.Max
-	results["avg"] = s.Avg()
+	results["avg"] = s.Mean
+	variance := s.sumSquareDelta / float64(s.Num)
+	results["std"] = time.Duration(math.Sqrt(variance))
 }
