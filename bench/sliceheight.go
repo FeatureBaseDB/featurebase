@@ -103,16 +103,24 @@ func (b *SliceHeight) Run(agentNum int) map[string]interface{} {
 	start := time.Now()
 
 	for i := 0; i > -1; i++ {
+		iresults := make(map[string]interface{})
+		results["iteration"+strconv.Itoa(i)] = iresults
+
+		genstart := time.Now()
 		imp.Init(b.hosts, agentNum)
-		results["import"+strconv.Itoa(i)] = imp.Run(agentNum)
-		qt := time.Now()
+		gendur := time.Now().Sub(genstart)
+		iresults["csvgen"] = gendur
+
+		iresults["import"] = imp.Run(agentNum)
+
+		qstart := time.Now()
 		q := &pql.TopN{Frame: b.Frame, N: 50}
 		_, err := imp.Client.ExecuteQuery(context.TODO(), b.Database, q.String(), true)
 		if err != nil {
-			results["query"+strconv.Itoa(i)+"error"] = err.Error()
+			iresults["query_error"] = err.Error()
 		} else {
-			qdur := time.Now().Sub(qt)
-			results["query"+strconv.Itoa(i)] = qdur
+			qdur := time.Now().Sub(qstart)
+			iresults["query"] = qdur
 		}
 		imp.BaseBitmapID = imp.MaxBitmapID
 		imp.MaxBitmapID = imp.MaxBitmapID * 10

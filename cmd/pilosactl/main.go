@@ -1223,7 +1223,13 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 	}
 
 	res := sbm.Run(cmd.AgentNum)
-	fmt.Fprintln(cmd.Stdout, res)
+	enc := json.NewEncoder(cmd.Stdout)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(res)
+	if err != nil {
+		fmt.Fprintln(cmd.Stderr, err)
+	}
+	// fmt.Fprintln(cmd.Stdout, res)
 	return nil
 }
 
