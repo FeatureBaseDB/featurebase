@@ -137,6 +137,8 @@ func (m *Main) Run(args ...string) error {
 
 	// Build cluster from config file.
 	m.Server.Host = m.Config.Host
+	m.Server.GossipPort = m.Config.GossipPort
+	m.Server.GossipSeed = m.Config.GossipSeed
 	m.Server.Cluster = m.Config.PilosaCluster()
 
 	// Set configuration options.

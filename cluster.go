@@ -3,6 +3,8 @@ package pilosa
 import (
 	"encoding/binary"
 	"hash/fnv"
+
+	"github.com/hashicorp/memberlist"
 )
 
 const (
@@ -81,7 +83,8 @@ func (a Nodes) Clone() []*Node {
 
 // Cluster represents a collection of nodes.
 type Cluster struct {
-	Nodes []*Node
+	Nodes    []*Node
+	Gossiper Gossiper
 
 	// Hashing algorithm used to assign partitions to nodes.
 	Hasher Hasher
@@ -93,6 +96,13 @@ type Cluster struct {
 	ReplicaN int
 }
 
+// Gossiper represents an interface to gossip a implementation like memberlist.
+type Gossiper interface {
+	Members() []*memberlist.Node
+	NumMembers() int
+	Join(existing []string) (int, error)
+}
+
 // NewCluster returns a new instance of Cluster with defaults.
 func NewCluster() *Cluster {
 	return &Cluster{
@@ -100,6 +110,50 @@ func NewCluster() *Cluster {
 		PartitionN: DefaultPartitionN,
 		ReplicaN:   DefaultReplicaN,
 	}
+}
+
+// GossipHosts returns the list of host strings for Gossiper members
+func (c *Cluster) GossipHosts() []string {
+	if c.Gossiper == nil {
+		return []string{}
+	}
+	a := make([]string, 0, len(c.Gossiper.Members()))
+	for _, m := range c.Gossiper.Members() {
+		a = append(a, m.Name)
+	}
+	return a
+}
+
+func (c *Cluster) Health() map[string]string {
+	h := make(map[string]string)
+	for _, n := range c.Nodes {
+		h[n.Host] = "DOWN"
+	}
+	// we are assuming that GossipHosts is a subset of c.Nodes
+	for _, m := range c.GossipHosts() {
+		if _, ok := h[m]; ok {
+			h[m] = "UP"
+		}
+	}
+	return h
+}
+
+// CreateGossiper initiates a Memberlist based on the node's gossip configuration
+func (c *Cluster) CreateGossiper(name string, gossipPort int, gossipSeed string) error {
+	//TODO: pull memberlist config from pilosa.cfg file
+	cfg := memberlist.DefaultLocalConfig()
+	cfg.Name = name
+	cfg.BindPort = gossipPort
+	cfg.GossipNodes = 1
+	g, err := memberlist.Create(cfg)
+	if err != nil {
+		return err
+	}
+	// attach to gossip seed node
+	g.Join([]string{gossipSeed}) //TODO: support a list of seeds
+	c.Gossiper = g
+
+	return nil
 }
 
 // NodeByHost returns a node reference by host.

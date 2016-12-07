@@ -38,8 +38,10 @@ type Server struct {
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
-	Host    string
-	Cluster *Cluster
+	Host       string
+	GossipPort int
+	GossipSeed string
+	Cluster    *Cluster
 
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
@@ -94,6 +96,11 @@ func (s *Server) Open() error {
 
 	// Open index.
 	if err := s.Index.Open(); err != nil {
+		return err
+	}
+
+	// Create Memberlist for Cluster
+	if err := s.Cluster.CreateGossiper(s.Host, s.GossipPort, s.GossipSeed); err != nil {
 		return err
 	}
 

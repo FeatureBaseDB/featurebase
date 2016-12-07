@@ -4,13 +4,16 @@ import "time"
 
 const (
 	// DefaultHost is the default hostname and port to use.
-	DefaultHost = "localhost:15000"
+	DefaultHost       = "localhost:15000"
+	DefaultGossipPort = 14000
 )
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir string `toml:"data-dir"`
-	Host    string `toml:"host"`
+	DataDir    string `toml:"data-dir"`
+	Host       string `toml:"host"`
+	GossipPort int    `toml:"gossip-port"`
+	GossipSeed string `toml:"gossip-seed"`
 
 	Cluster struct {
 		ReplicaN        int           `toml:"replicas"`
@@ -34,7 +37,9 @@ type ConfigNode struct {
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Host: DefaultHost,
+		Host:       DefaultHost,
+		GossipPort: DefaultGossipPort,
+		GossipSeed: DefaultHost,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
