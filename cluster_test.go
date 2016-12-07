@@ -8,6 +8,7 @@ import (
 	"testing/quick"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
 )
 
@@ -77,6 +78,32 @@ func TestHasher(t *testing.T) {
 	}
 }
 
+// Ensure cluster can compare its Nodes and Members
+func TestCluster_Health(t *testing.T) {
+	c := pilosa.Cluster{
+		Nodes: []*pilosa.Node{
+			{Host: "serverA:1000"},
+			{Host: "serverB:1000"},
+			{Host: "serverC:1000"},
+		},
+		Gossiper: &LocalGossiper{},
+	}
+
+	j, err := c.Gossiper.Join([]string{"serverA:1000", "serverC:1000", "serverD:1000"})
+	if err != nil {
+		t.Fatalf("unexpected gossiper nodes: %s", j)
+	}
+
+	// Verify a DOWN node is reported, and extraneous nodes are ignored
+	if a := c.Health(); !reflect.DeepEqual(a, map[string]string{
+		"serverA:1000": "UP",
+		"serverB:1000": "DOWN",
+		"serverC:1000": "UP",
+	}) {
+		t.Fatalf("unexpected health: %s", spew.Sdump(a))
+	}
+}
+
 // NewCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewCluster(n int) *pilosa.Cluster {
 	c := pilosa.NewCluster()
@@ -109,3 +136,25 @@ type ConstHasher struct {
 func NewConstHasher(i int) *ConstHasher { return &ConstHasher{i: i} }
 
 func (h *ConstHasher) Hash(key uint64, n int) int { return h.i }
+
+// LocalGossiper represents a basic Gossiper for testing
+type LocalGossiper struct {
+	Nodes []string
+}
+
+func (g *LocalGossiper) Members() []*memberlist.Node {
+	a := make([]*memberlist.Node, 0, len(g.Nodes))
+	for _, n := range g.Nodes {
+		a = append(a, &memberlist.Node{Name: n})
+	}
+	return a
+}
+
+func (g *LocalGossiper) NumMembers() int {
+	return len(g.Nodes)
+}
+
+func (g *LocalGossiper) Join(nodes []string) (int, error) {
+	g.Nodes = nodes
+	return 0, nil
+}

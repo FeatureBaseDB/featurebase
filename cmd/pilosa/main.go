@@ -33,7 +33,8 @@ const (
 	DefaultDataDir = "~/.pilosa"
 
 	// DefaultHost is the default hostname and port to use.
-	DefaultHost = "localhost:15000"
+	DefaultHost       = "localhost:15000"
+	DefaultGossipPort = 14000
 )
 
 func main() {
@@ -133,6 +134,8 @@ func (m *Main) Run(args ...string) error {
 
 	// Build cluster from config file.
 	m.Server.Host = m.Config.Host
+	m.Server.GossipPort = m.Config.GossipPort
+	m.Server.GossipSeed = m.Config.GossipSeed
 	m.Server.Cluster = m.Config.PilosaCluster()
 
 	// Set configuration options.
@@ -194,8 +197,10 @@ func (m *Main) ParseFlags(args []string) error {
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir string `toml:"data-dir"`
-	Host    string `toml:"host"`
+	DataDir    string `toml:"data-dir"`
+	Host       string `toml:"host"`
+	GossipPort int    `toml:"gossip-port"`
+	GossipSeed string `toml:"gossip-seed"`
 
 	Cluster struct {
 		ReplicaN        int           `toml:"replicas"`
@@ -219,7 +224,9 @@ type ConfigNode struct {
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Host: DefaultHost,
+		Host:       DefaultHost,
+		GossipPort: DefaultGossipPort,
+		GossipSeed: DefaultHost,
 	}
 	c.Cluster.ReplicaN = pilosa.DefaultReplicaN
 	c.Cluster.PollingInterval = Duration(pilosa.DefaultPollingInterval)
