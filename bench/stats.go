@@ -12,15 +12,21 @@ type Stats struct {
 	sumSquareDelta float64
 	Total          time.Duration
 	Num            int64
+	All            []time.Duration
+	SaveAll        bool
 }
 
 func NewStats() *Stats {
 	return &Stats{
 		Min: 1<<63 - 1,
+		All: make([]time.Duration, 0),
 	}
 }
 
 func (s *Stats) Add(td time.Duration) {
+	if s.SaveAll {
+		s.All = append(s.All, td)
+	}
 	s.Num += 1
 	s.Total += td
 	if td < s.Min {
@@ -47,4 +53,7 @@ func AddToResults(s *Stats, results map[string]interface{}) {
 	results["avg"] = s.Mean
 	variance := s.sumSquareDelta / float64(s.Num)
 	results["std"] = time.Duration(math.Sqrt(variance))
+	if s.SaveAll {
+		results["all"] = s.All
+	}
 }
