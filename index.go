@@ -11,6 +11,9 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/internal"
 )
 
 // DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
@@ -22,6 +25,8 @@ type Index struct {
 
 	// Databases by name.
 	dbs map[string]*DB
+
+	Messenger Messenger
 
 	// Close management
 	wg      sync.WaitGroup
@@ -45,7 +50,8 @@ func NewIndex() *Index {
 		dbs:     make(map[string]*DB),
 		closing: make(chan struct{}, 0),
 
-		Stats: NopStatsClient,
+		Messenger: NopMessenger,
+		Stats:     NopStatsClient,
 
 		CacheFlushInterval: DefaultCacheFlushInterval,
 
@@ -229,6 +235,7 @@ func (i *Index) newDB(path, name string) (*DB, error) {
 	}
 	db.LogOutput = i.LogOutput
 	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
+	db.messenger = i.Messenger
 	return db, nil
 }
 
@@ -311,6 +318,25 @@ func (i *Index) flushCaches() {
 			}
 		}
 	}
+}
+
+// HandleMessage handles protobuf Messages broadcasted to nodes in the
+// cluster from the Cluster's NodeSet.
+func (i *Index) HandleMessage(pb proto.Message) error {
+	switch obj := pb.(type) {
+	case *internal.CreateSliceMessage:
+		d := i.DB(obj.DB)
+		if d == nil {
+			return fmt.Errorf("Local DB not found: %s", obj.DB)
+		}
+		d.SetRemoteMaxSlice(obj.Slice)
+	case *internal.DeleteDBMessage:
+		err := i.DeleteDB(obj.DB)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (i *Index) logger() *log.Logger { return log.New(i.LogOutput, "", log.LstdFlags) }
