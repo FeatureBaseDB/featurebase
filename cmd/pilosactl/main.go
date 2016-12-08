@@ -1226,6 +1226,7 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 	res := sbm.Run(ctx, cmd.AgentNum)
 	enc := json.NewEncoder(cmd.Stdout)
 	enc.SetIndent("", "  ")
+	res = bench.Prettify(res)
 	err = enc.Encode(res)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err)
