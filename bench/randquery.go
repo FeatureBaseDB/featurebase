@@ -82,7 +82,7 @@ func (b *RandomQuery) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Run runs the RandomQuery benchmark
-func (b *RandomQuery) Run(agentNum int) map[string]interface{} {
+func (b *RandomQuery) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	seed := b.Seed + int64(agentNum)
 	results := make(map[string]interface{})
 	if b.cli == nil {
@@ -95,7 +95,7 @@ func (b *RandomQuery) Run(agentNum int) map[string]interface{} {
 	for n := 0; n < b.Iterations; n++ {
 		call := qm.Random(b.MaxN, b.MaxDepth, b.MaxArgs, uint64(b.BaseBitmapID), uint64(b.BitmapIDRange))
 		start = time.Now()
-		b.cli.ExecuteQuery(context.TODO(), b.DBs[n%len(b.DBs)], call.String(), true)
+		b.cli.ExecuteQuery(ctx, b.DBs[n%len(b.DBs)], call.String(), true)
 		s.Add(time.Now().Sub(start))
 	}
 	AddToResults(s, results)

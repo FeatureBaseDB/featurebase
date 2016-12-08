@@ -77,7 +77,7 @@ func (b *RandomSetBits) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Run runs the RandomSetBits benchmark
-func (b *RandomSetBits) Run(agentNum int) map[string]interface{} {
+func (b *RandomSetBits) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	src := rand.NewSource(b.Seed + int64(agentNum))
 	rng := rand.New(src)
 	results := make(map[string]interface{})
@@ -92,7 +92,7 @@ func (b *RandomSetBits) Run(agentNum int) map[string]interface{} {
 		profID := rng.Int63n(b.ProfileIDRange)
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+bitmapID, b.BaseProfileID+profID)
 		start = time.Now()
-		b.cli.ExecuteQuery(context.TODO(), b.DB, query, true)
+		b.cli.ExecuteQuery(ctx, b.DB, query, true)
 		s.Add(time.Now().Sub(start))
 	}
 	AddToResults(s, results)
