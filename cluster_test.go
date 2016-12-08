@@ -8,7 +8,6 @@ import (
 	"testing/quick"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
 )
 
@@ -86,10 +85,10 @@ func TestCluster_Health(t *testing.T) {
 			{Host: "serverB:1000"},
 			{Host: "serverC:1000"},
 		},
-		Gossiper: &LocalGossiper{},
+		NodeSet: &StaticNodeSet{},
 	}
 
-	j, err := c.Gossiper.Join([]string{"serverA:1000", "serverC:1000", "serverD:1000"})
+	j, err := c.NodeSet.Join([]string{"serverA:1000", "serverC:1000", "serverD:1000"})
 	if err != nil {
 		t.Fatalf("unexpected gossiper nodes: %s", j)
 	}
@@ -137,24 +136,20 @@ func NewConstHasher(i int) *ConstHasher { return &ConstHasher{i: i} }
 
 func (h *ConstHasher) Hash(key uint64, n int) int { return h.i }
 
-// LocalGossiper represents a basic Gossiper for testing
-type LocalGossiper struct {
-	Nodes []string
+// StaticNodeSet represents a basic NodeSet for testing
+type StaticNodeSet struct {
+	nodes []string
 }
 
-func (g *LocalGossiper) Members() []*memberlist.Node {
-	a := make([]*memberlist.Node, 0, len(g.Nodes))
-	for _, n := range g.Nodes {
-		a = append(a, &memberlist.Node{Name: n})
+func (g *StaticNodeSet) Nodes() []*pilosa.Node {
+	a := make([]*pilosa.Node, 0, len(g.nodes))
+	for _, n := range g.nodes {
+		a = append(a, &pilosa.Node{Host: n})
 	}
 	return a
 }
 
-func (g *LocalGossiper) NumMembers() int {
-	return len(g.Nodes)
-}
-
-func (g *LocalGossiper) Join(nodes []string) (int, error) {
-	g.Nodes = nodes
+func (g *StaticNodeSet) Join(nodes []string) (int, error) {
+	g.nodes = nodes
 	return 0, nil
 }

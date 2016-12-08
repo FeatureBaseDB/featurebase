@@ -99,10 +99,12 @@ func (s *Server) Open() error {
 		return err
 	}
 
-	// Create Memberlist for Cluster
-	if err := s.Cluster.CreateGossiper(s.Host, s.GossipPort, s.GossipSeed); err != nil {
+	// Create NodeSet for Cluster
+	ns, err := NewGossipNodeSet(s.Host, s.GossipPort, s.GossipSeed)
+	if err != nil {
 		return err
 	}
+	s.Cluster.NodeSet = ns
 
 	// Create executor for executing queries.
 	e := NewExecutor()

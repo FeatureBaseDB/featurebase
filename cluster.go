@@ -83,8 +83,8 @@ func (a Nodes) Clone() []*Node {
 
 // Cluster represents a collection of nodes.
 type Cluster struct {
-	Nodes    []*Node
-	Gossiper Gossiper
+	Nodes   []*Node
+	NodeSet NodeSet
 
 	// Hashing algorithm used to assign partitions to nodes.
 	Hasher Hasher
@@ -96,11 +96,49 @@ type Cluster struct {
 	ReplicaN int
 }
 
-// Gossiper represents an interface to gossip a implementation like memberlist.
-type Gossiper interface {
-	Members() []*memberlist.Node
-	NumMembers() int
-	Join(existing []string) (int, error)
+// NodeSet represents an interface to maintaining Node state.
+type NodeSet interface {
+	Nodes() []*Node
+	Join(nodes []string) (int, error)
+}
+
+// GossipNodeSet represents a gossip implementation of NodeSet using memberlist
+type GossipNodeSet struct {
+	Memberlist *memberlist.Memberlist
+}
+
+func (g *GossipNodeSet) Nodes() []*Node {
+	a := make([]*Node, 0, g.Memberlist.NumMembers())
+	for _, n := range g.Memberlist.Members() {
+		a = append(a, &Node{Host: n.Name})
+	}
+	return a
+}
+
+func (g *GossipNodeSet) Join(nodes []string) (int, error) {
+	return g.Memberlist.Join(nodes)
+}
+
+// NewGossipNodeSet returns a new instance of GossipNodeSet.
+func NewGossipNodeSet(name string, gossipPort int, gossipSeed string) (*GossipNodeSet, error) {
+	g := &GossipNodeSet{}
+
+	//TODO: pull memberlist config from pilosa.cfg file
+	cfg := memberlist.DefaultLocalConfig()
+	cfg.Name = name
+	cfg.BindPort = gossipPort
+	cfg.GossipNodes = 1
+
+	ml, err := memberlist.Create(cfg)
+	if err != nil {
+		return nil, err
+	}
+	g.Memberlist = ml
+
+	// attach to gossip seed node
+	g.Join([]string{gossipSeed}) //TODO: support a list of seeds
+
+	return g, nil
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
@@ -112,14 +150,14 @@ func NewCluster() *Cluster {
 	}
 }
 
-// GossipHosts returns the list of host strings for Gossiper members
-func (c *Cluster) GossipHosts() []string {
-	if c.Gossiper == nil {
+// NodeSetHosts returns the list of host strings for NodeSet members
+func (c *Cluster) NodeSetHosts() []string {
+	if c.NodeSet == nil {
 		return []string{}
 	}
-	a := make([]string, 0, len(c.Gossiper.Members()))
-	for _, m := range c.Gossiper.Members() {
-		a = append(a, m.Name)
+	a := make([]string, 0, len(c.NodeSet.Nodes()))
+	for _, m := range c.NodeSet.Nodes() {
+		a = append(a, m.Host)
 	}
 	return a
 }
@@ -129,31 +167,13 @@ func (c *Cluster) Health() map[string]string {
 	for _, n := range c.Nodes {
 		h[n.Host] = "DOWN"
 	}
-	// we are assuming that GossipHosts is a subset of c.Nodes
-	for _, m := range c.GossipHosts() {
+	// we are assuming that NodeSetHosts is a subset of c.Nodes
+	for _, m := range c.NodeSetHosts() {
 		if _, ok := h[m]; ok {
 			h[m] = "UP"
 		}
 	}
 	return h
-}
-
-// CreateGossiper initiates a Memberlist based on the node's gossip configuration
-func (c *Cluster) CreateGossiper(name string, gossipPort int, gossipSeed string) error {
-	//TODO: pull memberlist config from pilosa.cfg file
-	cfg := memberlist.DefaultLocalConfig()
-	cfg.Name = name
-	cfg.BindPort = gossipPort
-	cfg.GossipNodes = 1
-	g, err := memberlist.Create(cfg)
-	if err != nil {
-		return err
-	}
-	// attach to gossip seed node
-	g.Join([]string{gossipSeed}) //TODO: support a list of seeds
-	c.Gossiper = g
-
-	return nil
 }
 
 // NodeByHost returns a node reference by host.
