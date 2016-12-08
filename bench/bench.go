@@ -118,7 +118,7 @@ func (sb *serialBenchmark) Init(hosts []string, agentNum int) error {
 // and the values are the results of each benchmark's Run method.
 func (sb *serialBenchmark) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	results := make(map[string]interface{}, len(sb.benchmarkers))
-	runtimes := make(map[string]time.Duration)
+	runtimes := make(map[string]interface{})
 	total_start := time.Now()
 	for i, b := range sb.benchmarkers {
 		start := time.Now()
@@ -138,4 +138,24 @@ func Serial(bs ...Benchmark) Benchmark {
 	return &serialBenchmark{
 		benchmarkers: bs,
 	}
+}
+
+type PrettyDuration time.Duration
+
+func (d PrettyDuration) MarshalJSON() ([]byte, error) {
+	s := time.Duration(d).String()
+	return []byte("\"" + s + "\""), nil
+}
+
+func Prettify(m map[string]interface{}) map[string]interface{} {
+	newmap := make(map[string]interface{})
+	for k, v := range m {
+		switch v.(type) {
+		case time.Duration:
+			newmap[k] = PrettyDuration(v.(time.Duration))
+		default:
+			newmap[k] = Prettify(v.(map[string]interface{}))
+		}
+	}
+	return newmap
 }
