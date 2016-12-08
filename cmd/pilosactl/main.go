@@ -99,7 +99,8 @@ The commands are:
 	check      performs a consistency check of data files
 	bench      benchmarks operations
 	create     create pilosa clusters
-  bagent     run a benchmarking agent
+	bagent     run a benchmarking agent
+	bspawn     create a cluster and agents and run benchmarks based on config file
 
 Use the "-h" flag with any command for more information.
 `)
@@ -1222,7 +1223,7 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 		return fmt.Errorf("in cmd.Run initialization: %v", err)
 	}
 
-	res := sbm.Run(cmd.AgentNum)
+	res := sbm.Run(ctx, cmd.AgentNum)
 	enc := json.NewEncoder(cmd.Stdout)
 	enc.SetIndent("", "  ")
 	err = enc.Encode(res)
@@ -1230,6 +1231,7 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 		fmt.Fprintln(cmd.Stderr, err)
 	}
 	// fmt.Fprintln(cmd.Stdout, res)
+
 	return nil
 }
 
