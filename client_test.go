@@ -96,11 +96,11 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	defer idx.Close()
 
 	// Set two bits on blocks 0 & 3.
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1, nil, 0)
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(pilosa.HashBlockSize*3, 100, nil, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1)
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(pilosa.HashBlockSize*3, 100)
 
 	// Set a bit on a different slice.
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(0, 1, nil, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(0, 1)
 
 	s := NewServer()
 	defer s.Close()
