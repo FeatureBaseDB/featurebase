@@ -61,7 +61,7 @@ func (b *DiagonalSetBits) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Run runs the DiagonalSetBits benchmark
-func (b *DiagonalSetBits) Run(agentNum int) map[string]interface{} {
+func (b *DiagonalSetBits) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	results := make(map[string]interface{})
 	if b.cli == nil {
 		results["error"] = fmt.Errorf("No client set for DiagonalSetBits agent: %v", agentNum)
@@ -73,7 +73,11 @@ func (b *DiagonalSetBits) Run(agentNum int) map[string]interface{} {
 		iterID := agentizeNum(n, b.Iterations, agentNum)
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+iterID, b.BaseProfileID+iterID)
 		start = time.Now()
-		b.cli.ExecuteQuery(context.TODO(), b.DB, query, true)
+		_, err := b.cli.ExecuteQuery(ctx, b.DB, query, true)
+		if err != nil {
+			results["error"] = err
+			return results
+		}
 		s.Add(time.Now().Sub(start))
 	}
 	AddToResults(s, results)
