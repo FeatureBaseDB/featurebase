@@ -1,8 +1,9 @@
 package bench
 
 import (
-	"github.com/pilosa/pilosa/pql"
 	"math/rand"
+
+	"github.com/pilosa/pilosa/pql"
 )
 
 func NewQueryGenerator(seed int64) *QueryGenerator {

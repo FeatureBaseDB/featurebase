@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// RandomQuery sets bits randomly and deterministically based on a seed.
+// RandomQuery queries randomly and deterministically based on a seed.
 type RandomQuery struct {
 	HasClient
 	MaxDepth      int
