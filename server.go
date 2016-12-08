@@ -255,6 +255,5 @@ func checkMaxSlice(hostport string) (uint64, error) {
 		return 0, err
 	}
 
-	return *pb.SliceMax, nil
-
+	return pb.SliceMax, nil
 }

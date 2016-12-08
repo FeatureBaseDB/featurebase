@@ -2,122 +2,166 @@ package pilosa
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
 
-// TimeQuantum represents a time granularity for time-based bitmap ids.
-type TimeQuantum uint
+// ErrInvalidTimeQuantum is returned when parsing a time quantum.
+var ErrInvalidTimeQuantum = errors.New("invalid time quantum")
 
-// ParseTimeQuantum parses s into a quantum.
-func ParseTimeQuantum(s string) (TimeQuantum, error) {
-	switch strings.ToUpper(s) {
-	case "Y":
-		return Y, nil
-	case "M":
-		return YM, nil
-	case "D":
-		return YMD, nil
-	case "H":
-		return YMDH, nil
-	default:
-		return 0, errors.New("invalid quantum")
-	}
-}
+// TimeQuantum represents a time granularity for time-based bitmaps.
+type TimeQuantum string
 
-// String returns the string representation of the quantum.
-func (q TimeQuantum) String() string {
+// HasYear returns true if the quantum contains a 'Y' unit.
+func (q TimeQuantum) HasYear() bool { return strings.ContainsRune(string(q), 'Y') }
+
+// HasMonth returns true if the quantum contains a 'M' unit.
+func (q TimeQuantum) HasMonth() bool { return strings.ContainsRune(string(q), 'M') }
+
+// HasDay returns true if the quantum contains a 'D' unit.
+func (q TimeQuantum) HasDay() bool { return strings.ContainsRune(string(q), 'D') }
+
+// HasHour returns true if the quantum contains a 'H' unit.
+func (q TimeQuantum) HasHour() bool { return strings.ContainsRune(string(q), 'H') }
+
+// Valid returns true if q is a valid time quantum value.
+func (q TimeQuantum) Valid() bool {
 	switch q {
-	case Y:
-		return "Y"
-	case YM:
-		return "M"
-	case YMD:
-		return "D"
-	case YMDH:
-		return "H"
+	case "Y", "YM", "YMD", "YMDH",
+		"M", "MD", "MDH",
+		"D", "DH",
+		"H",
+		"":
+		return true
 	default:
-		return "Y"
+		return false
 	}
 }
 
-const (
-	Y    TimeQuantum = 3
-	YM   TimeQuantum = 2
-	YMD  TimeQuantum = 1
-	YMDH TimeQuantum = 0
-)
-
-// TimeID returns a packed time identifier from a year/month/day/hour & tile.
-func TimeID(q TimeQuantum, year uint, month uint, day uint, hour uint, tileID uint64) uint64 {
-	v := uint64((uint(q) << 30) | ((year - 1970) << 23) | (month << 19) | (day << 14) | (hour << 9))
-	return (v << 32) | tileID
+// ParseTimeQuantum parses v into a time quantum.
+func ParseTimeQuantum(v string) (TimeQuantum, error) {
+	q := TimeQuantum(strings.ToUpper(v))
+	if !q.Valid() {
+		return "", ErrInvalidTimeQuantum
+	}
+	return q, nil
 }
 
-// TimeIDsFromRange returns timestamp bitmap ids within a time range.
-func TimeIDsFromRange(start, end time.Time, tileID uint64) []uint64 {
+// FrameByTimeUnit returns the frame name for time with a given quantum unit.
+func FrameByTimeUnit(name string, t time.Time, unit rune) string {
+	switch unit {
+	case 'Y':
+		return fmt.Sprintf("%s_%s", name, t.Format("2006"))
+	case 'M':
+		return fmt.Sprintf("%s_%s", name, t.Format("200601"))
+	case 'D':
+		return fmt.Sprintf("%s_%s", name, t.Format("20060102"))
+	case 'H':
+		return fmt.Sprintf("%s_%s", name, t.Format("2006010215"))
+	default:
+		return ""
+	}
+}
+
+// FramesByTime returns a list of frames for a given timestamp.
+func FramesByTime(name string, t time.Time, q TimeQuantum) []string {
+	a := make([]string, 0, len(q))
+	for _, unit := range q {
+		frame := FrameByTimeUnit(name, t, unit)
+		if frame == "" {
+			continue
+		}
+		a = append(a, frame)
+	}
+	return a
+}
+
+// FramesByTimeRange returns a list of frames to traverse to query a time range.
+func FramesByTimeRange(name string, start, end time.Time, q TimeQuantum) []string {
 	t := start
 
-	var results []uint64
-	for t.Before(end) {
-		if !nextDay(t, end) {
+	// Save flags for performance.
+	hasYear := q.HasYear()
+	hasMonth := q.HasMonth()
+	hasDay := q.HasDay()
+	hasHour := q.HasHour()
+
+	var results []string
+
+	// Walk up from smallest units to largest units.
+	if hasHour || hasDay || hasMonth {
+		for t.Before(end) {
+			if hasHour {
+				if !nextDayGTE(t, end) {
+					break
+				} else if t.Hour() != 0 {
+					results = append(results, FrameByTimeUnit(name, t, 'H'))
+					t = t.Add(time.Hour)
+					continue
+				}
+
+			}
+
+			if hasDay {
+				if !nextMonthGTE(t, end) {
+					break
+				} else if t.Day() != 1 {
+					results = append(results, FrameByTimeUnit(name, t, 'D'))
+					t = t.AddDate(0, 0, 1)
+					continue
+				}
+			}
+
+			if hasMonth {
+				if !nextYearGTE(t, end) {
+					break
+				} else if t.Month() != 1 {
+					results = append(results, FrameByTimeUnit(name, t, 'M'))
+					t = t.AddDate(0, 1, 0)
+					continue
+				}
+			}
+
+			// If a unit exists but isn't set and there are no larger units
+			// available then we need to exit the loop because we are no longer
+			// making progress.
 			break
-		}
-		if t.Hour() == 0 {
-			if !nextMonth(t, end) {
-				break
-			}
-
-			if t.Day() == 1 {
-				if !nextYear(t, end) {
-					break
-				}
-
-				if t.Month() == 1 {
-					break
-				}
-
-				results = append(results, TimeID(YM, uint(t.Year()), uint(t.Month()), 0, 0, tileID))
-				t = t.AddDate(0, 1, 0)
-			} else {
-				results = append(results, TimeID(YMD, uint(t.Year()), uint(t.Month()), uint(t.Day()), 0, tileID))
-				t = t.AddDate(0, 0, 1)
-			}
-		} else {
-			results = append(results, TimeID(YMDH, uint(t.Year()), uint(t.Month()), uint(t.Day()), uint(t.Hour()), tileID))
-			t = t.Add(time.Hour)
 		}
 	}
 
+	// Walk back down from largest units to smallest units.
 	for t.Before(end) {
-		if nextYear(t, end) {
-			results = append(results, TimeID(Y, uint(t.Year()), 0, 0, 0, tileID))
+		if hasYear && nextYearGTE(t, end) {
+			results = append(results, FrameByTimeUnit(name, t, 'Y'))
 			t = t.AddDate(1, 0, 0)
-		} else if nextMonth(t, end) {
-			results = append(results, TimeID(YM, uint(t.Year()), uint(t.Month()), 0, 0, tileID))
+		} else if hasMonth && nextMonthGTE(t, end) {
+			results = append(results, FrameByTimeUnit(name, t, 'M'))
 			t = t.AddDate(0, 1, 0)
-		} else if nextDay(t, end) {
-			results = append(results, TimeID(YMD, uint(t.Year()), uint(t.Month()), uint(t.Day()), 0, tileID))
+		} else if hasDay && nextDayGTE(t, end) {
+			results = append(results, FrameByTimeUnit(name, t, 'D'))
 			t = t.AddDate(0, 0, 1)
-		} else {
-			results = append(results, TimeID(YMDH, uint(t.Year()), uint(t.Month()), uint(t.Day()), uint(t.Hour()), tileID))
+		} else if hasHour {
+			results = append(results, FrameByTimeUnit(name, t, 'H'))
 			t = t.Add(time.Hour)
+		} else {
+			break
 		}
 	}
 
 	return results
 }
 
-func nextYear(start time.Time, end time.Time) bool {
-	next := start.AddDate(1, 0, 0)
+func nextYearGTE(t time.Time, end time.Time) bool {
+	next := t.AddDate(1, 0, 0)
 	if next.Year() == end.Year() {
 		return true
 	}
 	return end.After(next)
 }
 
-func nextMonth(start time.Time, end time.Time) bool {
-	next := start.AddDate(0, 1, 0)
+func nextMonthGTE(t time.Time, end time.Time) bool {
+	next := t.AddDate(0, 1, 0)
 	y1, m1, _ := next.Date()
 	y2, m2, _ := end.Date()
 	if (y1 == y2) && (m1 == m2) {
@@ -126,32 +170,12 @@ func nextMonth(start time.Time, end time.Time) bool {
 	return end.After(next)
 }
 
-func nextDay(start time.Time, end time.Time) bool {
-	next := start.AddDate(0, 0, 1)
+func nextDayGTE(t time.Time, end time.Time) bool {
+	next := t.AddDate(0, 0, 1)
 	y1, m1, d1 := next.Date()
 	y2, m2, d2 := end.Date()
 	if (y1 == y2) && (m1 == m2) && (d1 == d2) {
 		return true
 	}
 	return end.After(next)
-}
-
-// TimeIDsFromQuantum returns a list of time identifiers for a single quantum.
-func TimeIDsFromQuantum(q TimeQuantum, t time.Time, tileID uint64) []uint64 {
-	y, m, d, h := uint(t.Year()), uint(t.Month()), uint(t.Day()), uint(t.Hour())
-
-	v := make([]uint64, 0, 4)
-	if q <= Y {
-		v = append(v, TimeID(Y, y, 0, 0, 0, tileID))
-	}
-	if q <= YM {
-		v = append(v, TimeID(YM, y, m, 0, 0, tileID))
-	}
-	if q <= YMD {
-		v = append(v, TimeID(YMD, y, m, d, 0, tileID))
-	}
-	if q <= YMDH {
-		v = append(v, TimeID(YMDH, y, m, d, h, tileID))
-	}
-	return v
 }

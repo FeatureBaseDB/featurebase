@@ -151,9 +151,9 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 
 	// Encode query request.
 	buf, err := proto.Marshal(&internal.QueryRequest{
-		DB:     proto.String(db),
-		Query:  proto.String(query),
-		Remote: proto.Bool(!allowRedirect),
+		DB:     db,
+		Query:  query,
+		Remote: !allowRedirect,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %s", err)
@@ -187,7 +187,7 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 	var qresp internal.QueryResponse
 	if err := proto.Unmarshal(body, &qresp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %s", err)
-	} else if s := qresp.GetErr(); s != "" {
+	} else if s := qresp.Err; s != "" {
 		return nil, errors.New(s)
 	}
 
@@ -230,9 +230,9 @@ func MarshalImportPayload(db, frame string, slice uint64, bits []Bit) ([]byte, e
 
 	// Marshal bits to protobufs.
 	buf, err := proto.Marshal(&internal.ImportRequest{
-		DB:         proto.String(db),
-		Frame:      proto.String(frame),
-		Slice:      proto.Uint64(slice),
+		DB:         db,
+		Frame:      frame,
+		Slice:      slice,
 		BitmapIDs:  bitmapIDs,
 		ProfileIDs: profileIDs,
 	})
@@ -272,7 +272,7 @@ func (c *Client) importNode(ctx context.Context, node *Node, buf []byte) error {
 	var isresp internal.ImportResponse
 	if err := proto.Unmarshal(body, &isresp); err != nil {
 		return fmt.Errorf("unmarshal import response: %s", err)
-	} else if s := isresp.GetErr(); s != "" {
+	} else if s := isresp.Err; s != "" {
 		return errors.New(s)
 	}
 
@@ -644,10 +644,10 @@ func (c *Client) FragmentBlocks(ctx context.Context, db, frame string, slice uin
 // BlockData returns bitmap/profile id pairs for a block.
 func (c *Client) BlockData(ctx context.Context, db, frame string, slice uint64, block int) ([]uint64, []uint64, error) {
 	buf, err := proto.Marshal(&internal.BlockDataRequest{
-		DB:    proto.String(db),
-		Frame: proto.String(frame),
-		Slice: proto.Uint64(slice),
-		Block: proto.Uint64(uint64(block)),
+		DB:    db,
+		Frame: frame,
+		Slice: slice,
+		Block: uint64(block),
 	})
 	if err != nil {
 		return nil, nil, err
