@@ -1167,6 +1167,8 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 			bm = &bench.RandomQuery{}
 		case "import":
 			bm = bench.NewImport(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+		case "slice-height":
+			bm = bench.NewSliceHeight(cmd.Stdin, cmd.Stdout, cmd.Stderr)
 		default:
 			return fmt.Errorf("Unknown benchmark cmd: %v", remArgs[0])
 		}
@@ -1208,6 +1210,7 @@ The following arguments are available:
 		multi-db-set-bits
 		random-query
 		import
+		slice-height
 `)
 }
 
@@ -1220,7 +1223,13 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 	}
 
 	res := sbm.Run(cmd.AgentNum)
-	fmt.Fprintln(cmd.Stdout, res)
+	enc := json.NewEncoder(cmd.Stdout)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(res)
+	if err != nil {
+		fmt.Fprintln(cmd.Stderr, err)
+	}
+	// fmt.Fprintln(cmd.Stdout, res)
 	return nil
 }
 
