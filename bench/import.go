@@ -139,12 +139,13 @@ func (b *Import) Init(hosts []string, agentNum int) error {
 }
 
 // Run runs the Import benchmark
-func (b *Import) Run(agentNum int) map[string]interface{} {
+func (b *Import) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	results := make(map[string]interface{})
 	results["numbits"] = b.numbits
 	results["db"] = b.Database
 	start := time.Now()
-	err := b.ImportCommand.Run(context.TODO())
+	err := b.ImportCommand.Run(ctx)
+
 	if err != nil {
 		results["error"] = err.Error()
 	}

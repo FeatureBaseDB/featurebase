@@ -55,7 +55,7 @@ func (b *MultiDBSetBits) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Run runs the MultiDBSetBits benchmark
-func (b *MultiDBSetBits) Run(agentNum int) map[string]interface{} {
+func (b *MultiDBSetBits) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	results := make(map[string]interface{})
 	if b.cli == nil {
 		results["error"] = fmt.Errorf("No client set for MultiDBSetBits agent: %v", agentNum)
@@ -66,7 +66,11 @@ func (b *MultiDBSetBits) Run(agentNum int) map[string]interface{} {
 	for n := 0; n < b.Iterations; n++ {
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+n, b.BaseProfileID+n)
 		start = time.Now()
-		b.cli.ExecuteQuery(context.TODO(), "multidb"+strconv.Itoa(agentNum), query, true)
+		_, err := b.cli.ExecuteQuery(ctx, "multidb"+strconv.Itoa(agentNum), query, true)
+		if err != nil {
+			results["error"] = err
+			return results
+		}
 		s.Add(time.Now().Sub(start))
 	}
 	AddToResults(s, results)

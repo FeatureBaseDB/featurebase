@@ -89,7 +89,7 @@ func (b *SliceHeight) Init(hosts []string, agentNum int) error {
 }
 
 // Run runs the SliceHeight benchmark
-func (b *SliceHeight) Run(agentNum int) map[string]interface{} {
+func (b *SliceHeight) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	results := make(map[string]interface{})
 
 	imp := NewImport(b.Stdin, b.Stdout, b.Stderr)
@@ -111,11 +111,11 @@ func (b *SliceHeight) Run(agentNum int) map[string]interface{} {
 		gendur := time.Now().Sub(genstart)
 		iresults["csvgen"] = gendur
 
-		iresults["import"] = imp.Run(agentNum)
+		iresults["import"] = imp.Run(ctx, agentNum)
 
 		qstart := time.Now()
 		q := &pql.TopN{Frame: b.Frame, N: 50}
-		_, err := imp.Client.ExecuteQuery(context.TODO(), b.Database, q.String(), true)
+		_, err := imp.Client.ExecuteQuery(ctx, b.Database, q.String(), true)
 		if err != nil {
 			iresults["query_error"] = err.Error()
 		} else {

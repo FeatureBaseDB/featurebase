@@ -1,11 +1,13 @@
 package bench
 
 import (
+	"context"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"strconv"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // Benchmark is an interface to guide the creation of new pilosa benchmarks or
@@ -23,7 +25,7 @@ type Benchmark interface {
 	// for each agent, or have each agent set a different set of bits. The return
 	// value of Run is kept generic so that any relevant statistics or metrics
 	// that may be specific to the benchmark in question can be reported.
-	Run(agentNum int) map[string]interface{}
+	Run(ctx context.Context, agentNum int) map[string]interface{}
 }
 
 // Command extends Benchmark by adding methods for configuring via command line flags and returning usage information.
@@ -64,7 +66,7 @@ func (pb *parallelBenchmark) Init(hosts []string, agentNum int) error {
 // Run runs the parallel benchmark and returns it's results in a nested map - the
 // top level keys are the indices of each benchmark in the list of benchmarks,
 // and the values are the results of each benchmark's Run method.
-func (pb *parallelBenchmark) Run(agentNum int) map[string]interface{} {
+func (pb *parallelBenchmark) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	wg := sync.WaitGroup{}
 	results := make(map[string]interface{}, len(pb.benchmarkers))
 	resultsLock := sync.Mutex{}
@@ -72,7 +74,7 @@ func (pb *parallelBenchmark) Run(agentNum int) map[string]interface{} {
 		wg.Add(1)
 		go func(i int, b Benchmark) {
 			defer wg.Done()
-			ret := b.Run(agentNum)
+			ret := b.Run(ctx, agentNum)
 			resultsLock.Lock()
 			results[strconv.Itoa(i)] = ret
 			resultsLock.Unlock()
@@ -114,13 +116,13 @@ func (sb *serialBenchmark) Init(hosts []string, agentNum int) error {
 // Run runs the serial benchmark and returns it's results in a nested map - the
 // top level keys are the indices of each benchmark in the list of benchmarks,
 // and the values are the results of each benchmark's Run method.
-func (sb *serialBenchmark) Run(agentNum int) map[string]interface{} {
+func (sb *serialBenchmark) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	results := make(map[string]interface{}, len(sb.benchmarkers))
 	runtimes := make(map[string]time.Duration)
 	total_start := time.Now()
 	for i, b := range sb.benchmarkers {
 		start := time.Now()
-		ret := b.Run(agentNum)
+		ret := b.Run(ctx, agentNum)
 		end := time.Now()
 		results[strconv.Itoa(i)] = ret
 		runtimes[strconv.Itoa(i)] = end.Sub(start)
