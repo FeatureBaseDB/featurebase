@@ -227,8 +227,8 @@ func decodeBitmap(pb *internal.Bitmap) *Bitmap {
 	}
 
 	b := NewBitmap()
-	b.Attrs = decodeAttrs(pb.GetAttrs())
-	for _, v := range pb.GetBits() {
+	b.Attrs = decodeAttrs(pb.Attrs)
+	for _, v := range pb.Bits {
 		b.SetBit(v)
 	}
 	return b
