@@ -140,6 +140,7 @@ func Serial(bs ...Benchmark) Benchmark {
 	}
 }
 
+// wrapper type to force human-readable JSON output
 type PrettyDuration time.Duration
 
 func (d PrettyDuration) MarshalJSON() ([]byte, error) {
@@ -147,6 +148,7 @@ func (d PrettyDuration) MarshalJSON() ([]byte, error) {
 	return []byte("\"" + s + "\""), nil
 }
 
+// Recursively replaces elements of ugly types with their pretty wrappers
 func Prettify(m map[string]interface{}) map[string]interface{} {
 	newmap := make(map[string]interface{})
 	for k, v := range m {
