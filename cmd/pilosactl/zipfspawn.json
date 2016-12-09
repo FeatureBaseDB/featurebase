@@ -1,0 +1,10 @@
+{
+    "CreatorArgs": ["-type", "local", "-serverN", "3", "-replicaN", "1"],
+    "Agents": { "Type": "local" },
+    "Benchmarks": [
+        {
+            "Num": 3,
+            "Args": ["zipf-set-bits", "-iterations", "30000", "-profile-id-range", "1000000", "-bitmap-id-range", "1000000", "-seed", "2345", "-client-type", "round_robin", "-bitmap-exponent", "1.5", "-profile-exponent", "1.5"]
+        }
+    ]
+}
