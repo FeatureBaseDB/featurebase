@@ -218,7 +218,7 @@ func (f *Frame) SetTimeQuantum(q TimeQuantum) error {
 	// Update value on frame.
 	f.timeQuantum = q
 
-	// Perist meta data to disk.
+	// Persist meta data to disk.
 	if err := f.saveMeta(); err != nil {
 		return err
 	}
@@ -288,7 +288,7 @@ func (f *Frame) newFragment(path string, slice uint64) *Fragment {
 
 // SetBit sets a bit within the frame.
 func (f *Frame) SetBit(bitmapID, profileID uint64) (changed bool, err error) {
-	slice := bitmapID / SliceWidth
+	slice := profileID / SliceWidth
 	frag, err := f.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return changed, err
