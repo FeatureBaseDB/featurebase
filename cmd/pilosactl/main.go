@@ -1040,19 +1040,6 @@ The following flags are allowed:
 `)
 }
 
-// create separates creation from running for use programmatically by other
-// commands like bspawn.
-func (cmd *CreateCommand) create() (creator.Cluster, error) {
-	switch cmd.Type {
-	case "local":
-		return creator.NewLocalCluster(cmd.ReplicaN, cmd.ServerN)
-	case "AWS":
-		return nil, fmt.Errorf("unimplemented create type: %v", cmd.Type)
-	default:
-		return nil, fmt.Errorf("unsupported create type: %v", cmd.Type)
-	}
-}
-
 type CreateOutput struct {
 	Hosts    []string `json:"hosts"`
 	LogFiles []string `json:"log-files"`
@@ -1065,10 +1052,11 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 	switch cmd.Type {
 	case "local":
 		var err error
-		clus, err = cmd.create()
+		clus, err = creator.NewLocalCluster(cmd.ReplicaN, cmd.ServerN)
 		if err != nil {
 			return fmt.Errorf("running create command: %v", err)
 		}
+		defer clus.Shutdown()
 		output.Hosts = clus.Hosts()
 
 		logReaders := clus.Logs()
@@ -1328,14 +1316,22 @@ pilosactl spawn configfile
 func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	if len(cmd.PilosaHosts) == 0 {
 		// must create cluster
-		createCmd := NewCreateCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+		r, w := io.Pipe()
+		createCmd := NewCreateCommand(cmd.Stdin, w, cmd.Stderr)
 		createCmd.ParseFlags(cmd.CreatorArgs)
-		clus, err := createCmd.create()
+		go func() {
+			err := createCmd.Run(ctx)
+			if err != nil {
+				fmt.Fprintf(cmd.Stderr, "Cluster creation error while spawning: %v", err)
+			}
+		}()
+		clus := &CreateOutput{}
+		dec := json.NewDecoder(r)
+		err := dec.Decode(clus)
 		if err != nil {
-			return fmt.Errorf("Cluster creation error while spawning: %v", err)
+			return err
 		}
-		defer clus.Shutdown()
-		cmd.PilosaHosts = clus.Hosts()
+		cmd.PilosaHosts = clus.Hosts
 	}
 	switch cmd.Agents.Type {
 	case "local":
