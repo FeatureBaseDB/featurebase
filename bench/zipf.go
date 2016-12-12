@@ -57,17 +57,17 @@ The following arguments are available:
 	-db string
 		pilosa db to use
 
-  -bitmap-exponent float64
-    zipf exponent parameter for bitmap IDs
+	-bitmap-exponent float64
+		zipf exponent parameter for bitmap IDs
 
-  -bitmap-offset float64
-    zipf offset parameter for bitmap IDs
+	-bitmap-ratio float64
+		zipf probability ratio parameter for bitmap IDs
 
-  -profile-exponent float64
-    zipf exponent parameter for profile IDs
+	-profile-exponent float64
+		zipf exponent parameter for profile IDs
 
-  -profile-offset float64
-    zipf offset parameter for profile IDs
+	-profile-ratio float64
+		zipf probability ratio parameter for profile IDs
 
 	-client-type string
 		Can be 'single' (all agents hitting one host) or 'round_robin'
