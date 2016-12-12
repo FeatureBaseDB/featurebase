@@ -108,6 +108,7 @@ func (s *Server) Open() error {
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
+	s.Index.LogOutput = s.LogOutput
 
 	// Serve HTTP.
 	go func() { http.Serve(ln, s.Handler) }()
