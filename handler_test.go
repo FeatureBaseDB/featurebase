@@ -117,8 +117,8 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 
 	// Generate request body.
 	reqBody, err := proto.Marshal(&internal.QueryRequest{
-		DB:     proto.String("db0"),
-		Query:  proto.String("Count(Bitmap(100))"),
+		DB:     "db0",
+		Query:  "Count(Bitmap(100))",
 		Slices: []uint64{0, 1},
 	})
 	if err != nil {
@@ -181,7 +181,7 @@ func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
-	} else if n := resp.Results[0].GetN(); n != 100 {
+	} else if n := resp.Results[0].N; n != 100 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
@@ -256,15 +256,15 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
-	} else if bits := resp.Results[0].GetBitmap().GetBits(); !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
+	} else if bits := resp.Results[0].Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
 		t.Fatalf("unexpected bits: %+v", bits)
-	} else if attrs := resp.Results[0].GetBitmap().GetAttrs(); len(attrs) != 3 {
+	} else if attrs := resp.Results[0].Bitmap.Attrs; len(attrs) != 3 {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
-	} else if k, v := attrs[0].GetKey(), attrs[0].GetStringValue(); k != "a" || v != "b" {
+	} else if k, v := attrs[0].Key, attrs[0].StringValue; k != "a" || v != "b" {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
-	} else if k, v := attrs[1].GetKey(), attrs[1].GetUintValue(); k != "c" || v != uint64(1) {
+	} else if k, v := attrs[1].Key, attrs[1].UintValue; k != "c" || v != uint64(1) {
 		t.Fatalf("unexpected attr[1]: %s=%v", k, v)
-	} else if k, v := attrs[2].GetKey(), attrs[2].GetBoolValue(); k != "d" || v != true {
+	} else if k, v := attrs[2].Key, attrs[2].BoolValue; k != "d" || v != true {
 		t.Fatalf("unexpected attr[2]: %s=%v", k, v)
 	}
 }
@@ -292,9 +292,9 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 
 	// Encode request body.
 	buf, err := proto.Marshal(&internal.QueryRequest{
-		DB:       proto.String("d"),
-		Query:    proto.String("Bitmap(100)"),
-		Profiles: proto.Bool(true),
+		DB:       "d",
+		Query:    "Bitmap(100)",
+		Profiles: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -313,25 +313,25 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if bits := resp.Results[0].GetBitmap().GetBits(); !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
+	if bits := resp.Results[0].Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
 		t.Fatalf("unexpected bits: %+v", bits)
-	} else if attrs := resp.Results[0].GetBitmap().GetAttrs(); len(attrs) != 3 {
+	} else if attrs := resp.Results[0].Bitmap.Attrs; len(attrs) != 3 {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
-	} else if k, v := attrs[0].GetKey(), attrs[0].GetStringValue(); k != "a" || v != "b" {
+	} else if k, v := attrs[0].Key, attrs[0].StringValue; k != "a" || v != "b" {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
-	} else if k, v := attrs[1].GetKey(), attrs[1].GetUintValue(); k != "c" || v != uint64(1) {
+	} else if k, v := attrs[1].Key, attrs[1].UintValue; k != "c" || v != uint64(1) {
 		t.Fatalf("unexpected attr[1]: %s=%v", k, v)
-	} else if k, v := attrs[2].GetKey(), attrs[2].GetBoolValue(); k != "d" || v != true {
+	} else if k, v := attrs[2].Key, attrs[2].BoolValue; k != "d" || v != true {
 		t.Fatalf("unexpected attr[2]: %s=%v", k, v)
 	}
 
-	if a := resp.GetProfiles(); len(a) != 1 {
+	if a := resp.Profiles; len(a) != 1 {
 		t.Fatalf("unexpected profiles length: %d", len(a))
-	} else if a[0].GetID() != 1 {
-		t.Fatalf("unexpected id: %d", a[0].GetID())
-	} else if len(a[0].GetAttrs()) != 1 {
+	} else if a[0].ID != 1 {
+		t.Fatalf("unexpected id: %d", a[0].ID)
+	} else if len(a[0].Attrs) != 1 {
 		t.Fatalf("unexpected profile attr length: %d", len(a))
-	} else if k, v := a[0].GetAttrs()[0].GetKey(), a[0].GetAttrs()[0].GetStringValue(); k != "x" || v != "y" {
+	} else if k, v := a[0].Attrs[0].Key, a[0].Attrs[0].StringValue; k != "x" || v != "y" {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
 	}
 }
@@ -415,7 +415,7 @@ func TestHandler_Query_Err_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
-	} else if s := resp.GetErr(); s != `marker` {
+	} else if s := resp.Err; s != `marker` {
 		t.Fatalf("unexpected error: %s", s)
 	}
 }
@@ -474,6 +474,63 @@ func TestHandler_DB_Delete(t *testing.T) {
 	// Verify database is gone.
 	if idx.DB("d") != nil {
 		t.Fatal("expected nil database")
+	}
+}
+
+// Ensure handler can delete a frame.
+func TestHandler_DeleteFrame(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+	if _, err := idx.CreateFrameIfNotExists("d0", "f1"); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewHandler()
+	h.Index = idx.Index
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/frame", strings.NewReader(`{"db":"d0","frame":"f1"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	} else if f := idx.DB("d0").Frame("f1"); f != nil {
+		t.Fatal("expected nil frame")
+	}
+}
+
+// Ensure handler can set the DB time quantum.
+func TestHandler_SetDBTimeQuantum(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	h := NewHandler()
+	h.Index = idx.Index
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/time_quantum", strings.NewReader(`{"db":"d0","time_quantum":"ymdh"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	} else if q := idx.DB("d0").TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+		t.Fatalf("unexpected time quantum: %s", q)
+	}
+}
+
+// Ensure handler can set the frame time quantum.
+func TestHandler_SetFrameTimeQuantum(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	h := NewHandler()
+	h.Index = idx.Index
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/frame/time_quantum", strings.NewReader(`{"db":"d0","frame":"f1","time_quantum":"ymdh"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	} else if q := idx.DB("d0").Frame("f1").TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+		t.Fatalf("unexpected time quantum: %s", q)
 	}
 }
 
