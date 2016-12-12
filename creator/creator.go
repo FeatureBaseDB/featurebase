@@ -3,6 +3,7 @@ package creator
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,10 +15,12 @@ import (
 type Cluster interface {
 	Hosts() []string
 	Shutdown() error
+	Logs() []io.Reader
 }
 
 type cluster struct {
 	hosts   []string
+	logs    []io.Reader
 	servers []*pilosa.Server
 	cluster *pilosa.Cluster
 	path    string
@@ -27,8 +30,9 @@ func NewLocalCluster(replicaN, serverN int) (Cluster, error) {
 	BasePort := 19327
 
 	localCluster := &cluster{
-		hosts:   make([]string, 0),
-		servers: make([]*pilosa.Server, 0),
+		hosts:   make([]string, serverN),
+		servers: make([]*pilosa.Server, serverN),
+		logs:    make([]io.Reader, serverN),
 	}
 	path, err := ioutil.TempDir("", "pilosa-bench-")
 	if err != nil {
@@ -48,8 +52,7 @@ func NewLocalCluster(replicaN, serverN int) (Cluster, error) {
 	localCluster.cluster = cluster
 
 	// Build servers.
-	servers := make([]*pilosa.Server, serverN)
-	for i := range servers {
+	for i := range localCluster.servers {
 		// Make server work directory.
 		if err := os.MkdirAll(filepath.Join(path, strconv.Itoa(i)), 0777); err != nil {
 			return localCluster, err
@@ -61,35 +64,25 @@ func NewLocalCluster(replicaN, serverN int) (Cluster, error) {
 		s.Cluster = cluster
 		s.Index.Path = filepath.Join(path, strconv.Itoa(i), "data")
 
-		// Create log file.
-		f, err := os.Create(filepath.Join(path, strconv.Itoa(i), "log"))
-		if err != nil {
-			return localCluster, err
-		}
+		// Create log stream
+		localCluster.logs[i], s.LogOutput = io.Pipe()
 
-		// Set log and optionally write out to stderr as well.
-		s.LogOutput = f
-
-		servers[i] = s
+		localCluster.servers[i] = s
 	}
-	localCluster.servers = servers
 
 	// Open all servers.
-	for _, s := range servers {
+	for i, s := range localCluster.servers {
 		if err := s.Open(); err != nil {
 			return localCluster, err
 		}
+		localCluster.hosts[i] = s.Host
 	}
 
-	hosts := make([]string, 0)
-	for _, s := range servers {
-		hosts = append(hosts, s.Host)
-	}
-	localCluster.hosts = hosts
 	return localCluster, nil
 }
 
-func (c *cluster) Hosts() []string { return c.hosts }
+func (c *cluster) Hosts() []string   { return c.hosts }
+func (c *cluster) Logs() []io.Reader { return c.logs }
 func (c *cluster) Shutdown() error {
 	errs := ""
 	for _, s := range c.servers {

@@ -12,7 +12,6 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -981,17 +980,10 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 
 // CreateCommand represents a command for creating a pilosa cluster.
 type CreateCommand struct {
-	// Type can be AWS, local, etc.
-	Type string
-
-	// ServerN is the number of pilosa hosts in the cluster
-	ServerN int
-
-	// ReplicaN is the replication number for the cluster
-	ReplicaN int
-
-	// run is used internally by local cluster to signal that the cluster should be run and not exit
-	run bool
+	Type          string
+	ServerN       int
+	ReplicaN      int
+	LogFilePrefix string
 
 	// Standard input/output
 	Stdin  io.Reader
@@ -1012,10 +1004,10 @@ func NewCreateCommand(stdin io.Reader, stdout, stderr io.Writer) *CreateCommand 
 func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Type, "type", "local", "Type of cluster - local, AWS, etc.")
-	fs.IntVar(&cmd.ServerN, "serverN", 3, "Number of hosts in cluster")
-	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "Replication factor for cluster")
-	fs.BoolVar(&cmd.run, "run", false, "run, don't exit")
+	fs.StringVar(&cmd.Type, "type", "local", "")
+	fs.IntVar(&cmd.ServerN, "serverN", 3, "")
+	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "")
+	fs.StringVar(&cmd.LogFilePrefix, "log-file-prefix", "", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1040,6 +1032,11 @@ The following flags are allowed:
 
 	-replicaN
 		replication factor for cluster
+
+	-log-file-prefix
+		output from the started cluster will go
+		into files with this prefix (one per node)
+
 `)
 }
 
@@ -1056,49 +1053,58 @@ func (cmd *CreateCommand) create() (creator.Cluster, error) {
 	}
 }
 
+type CreateOutput struct {
+	Hosts    []string `json:"hosts"`
+	LogFiles []string `json:"log-files"`
+}
+
 // Run executes cluster creation.
 func (cmd *CreateCommand) Run(ctx context.Context) error {
 	var clus creator.Cluster
+	output := &CreateOutput{}
 	switch cmd.Type {
 	case "local":
 		var err error
-		if cmd.run {
-			clus, err = cmd.create()
-			if err != nil {
-				return fmt.Errorf("running create command: %v", err)
-			}
-			fmt.Fprintln(cmd.Stdout, strings.Join(clus.Hosts(), ","))
-			select {}
-		}
-		args := append(os.Args, "-run")
-		subcmd := exec.Command(args[0], args[1:]...)
-		pipeR, err := subcmd.StdoutPipe()
+		clus, err = cmd.create()
 		if err != nil {
-			return fmt.Errorf("Couldn't get pipe for subcmd stdout: %v", err)
+			return fmt.Errorf("running create command: %v", err)
 		}
-		if subcmdOut, err := ioutil.TempFile("", "pilosactl-create"); err == nil {
-			subcmd.Stderr = subcmdOut
-			fmt.Fprintln(cmd.Stderr, subcmdOut.Name())
-		} else {
-			fmt.Fprintf(cmd.Stderr, "Error creating file for pilosa output - discarding: %v", err)
-		}
-		scanner := bufio.NewScanner(pipeR)
-		err = subcmd.Start()
-		if err != nil {
-			return fmt.Errorf("error kicking off local cluster: %v", err)
-		}
-		scanner.Scan()
-		fmt.Fprintln(cmd.Stdout, scanner.Text())
-		subcmd.Stdout = subcmd.Stderr
-		pipeR.Close()
+		output.Hosts = clus.Hosts()
 
+		logReaders := clus.Logs()
+		if cmd.LogFilePrefix != "" {
+			output.LogFiles = make([]string, len(clus.Hosts()))
+		}
+		for i, _ := range clus.Hosts() {
+			var f io.Writer = cmd.Stderr
+			var err error
+			if cmd.LogFilePrefix != "" {
+				f, err = os.Create(cmd.LogFilePrefix + strconv.Itoa(i))
+				if err != nil {
+					return err
+				}
+				output.LogFiles[i] = f.(*os.File).Name()
+			}
+
+			go func(i int, f io.Writer) {
+				_, err := io.Copy(f, logReaders[i])
+				if err != nil {
+					fmt.Fprintf(cmd.Stderr, "Error copying cluster logs: '%v'", err)
+				}
+			}(i, f)
+		}
+
+		enc := json.NewEncoder(cmd.Stdout)
+		err = enc.Encode(output)
+		if err != nil {
+			return err
+		}
+		select {}
 	case "AWS":
 		return fmt.Errorf("AWS cluster type is not yet implemented")
 	default:
 		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
 	}
-
-	return nil
 }
 
 // BagentCommand represents a command for running a benchmark agent. A benchmark
