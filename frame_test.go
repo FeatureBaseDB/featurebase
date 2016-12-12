@@ -34,6 +34,26 @@ func TestFrame_CreateFragmentIfNotExists(t *testing.T) {
 	}
 }
 
+// Ensure frame can set its time quantum.
+func TestFrame_SetTimeQuantum(t *testing.T) {
+	f := MustOpenFrame()
+	defer f.Close()
+
+	// Set & retrieve time quantum.
+	if err := f.SetTimeQuantum(pilosa.TimeQuantum("YMDH")); err != nil {
+		t.Fatal(err)
+	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+		t.Fatalf("unexpected quantum: %s", q)
+	}
+
+	// Reload frame and verify that it is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+		t.Fatalf("unexpected quantum (reopen): %s", q)
+	}
+}
+
 // Frame represents a test wrapper for pilosa.Frame.
 type Frame struct {
 	*pilosa.Frame
@@ -62,4 +82,19 @@ func MustOpenFrame() *Frame {
 func (f *Frame) Close() error {
 	defer os.RemoveAll(f.Path())
 	return f.Frame.Close()
+}
+
+// Reopen closes the database and reopens it.
+func (f *Frame) Reopen() error {
+	if err := f.Frame.Close(); err != nil {
+		return err
+	}
+
+	path, db, name := f.Path(), f.DB(), f.Name()
+	f.Frame = pilosa.NewFrame(path, db, name)
+
+	if err := f.Open(); err != nil {
+		return err
+	}
+	return nil
 }

@@ -7,6 +7,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
+//go:generate protoc --gofast_out=. internal.proto
+
 type Request proto.Message
 
 type Response proto.Message
