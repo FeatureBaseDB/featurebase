@@ -303,11 +303,28 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Rang
 		frame = DefaultFrame
 	}
 
-	f := e.Index.Fragment(db, frame, slice)
+	// Retrieve base frame.
+	f := e.Index.Frame(db, frame)
 	if f == nil {
-		return NewBitmap(), nil
+		return &Bitmap{}, nil
 	}
-	return f.Range(c.ID, c.StartTime, c.EndTime), nil
+
+	// If no quantum exists then return an empty bitmap.
+	q := f.TimeQuantum()
+	if q == "" {
+		return &Bitmap{}, nil
+	}
+
+	// Union bitmaps across all time-based subframes.
+	bm := &Bitmap{}
+	for _, subframe := range FramesByTimeRange(frame, c.StartTime, c.EndTime, q) {
+		f := e.Index.Fragment(db, subframe, slice)
+		if f == nil {
+			continue
+		}
+		bm = bm.Union(f.Bitmap(c.ID))
+	}
+	return bm, nil
 }
 
 // executeUnionSlice executes a union() call for a local slice.
@@ -404,15 +421,14 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.SetBit, 
 	for _, node := range e.Cluster.FragmentNodes(db, slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
-			f, err := e.Index.CreateFragmentIfNotExists(db, c.Frame, slice)
+			db, err := e.Index.CreateDBIfNotExists(db)
 			if err != nil {
-				return false, fmt.Errorf("fragment: %s", err)
+				return false, fmt.Errorf("db: %s", err)
 			}
-			val, err := f.SetBit(c.ID, c.ProfileID, opt.Timestamp, opt.Quantum)
+			val, err := db.SetBit(c.Frame, c.ID, c.ProfileID, opt.Timestamp)
 			if err != nil {
 				return false, err
-			}
-			if val {
+			} else if val {
 				ret = true
 			}
 			continue
@@ -578,14 +594,13 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 func (e *Executor) exec(ctx context.Context, node *Node, db string, q *pql.Query, slices []uint64, opt *ExecOptions) (results []interface{}, err error) {
 	// Encode request object.
 	pbreq := &internal.QueryRequest{
-		DB:      proto.String(db),
-		Query:   proto.String(q.String()),
-		Slices:  slices,
-		Quantum: proto.Uint32(uint32(opt.Quantum)),
-		Remote:  proto.Bool(true),
+		DB:     db,
+		Query:  q.String(),
+		Slices: slices,
+		Remote: true,
 	}
 	if opt.Timestamp != nil {
-		pbreq.Timestamp = proto.Int64(opt.Timestamp.UnixNano())
+		pbreq.Timestamp = opt.Timestamp.UnixNano()
 	}
 	buf, err := proto.Marshal(pbreq)
 	if err != nil {
@@ -631,7 +646,7 @@ func (e *Executor) exec(ctx context.Context, node *Node, db string, q *pql.Query
 	}
 
 	// Return an error, if specified on response.
-	if err := decodeError(pb.GetErr()); err != nil {
+	if err := decodeError(pb.Err); err != nil {
 		return nil, err
 	}
 
@@ -647,11 +662,11 @@ func (e *Executor) exec(ctx context.Context, node *Node, db string, q *pql.Query
 		case *pql.TopN:
 			v, err = decodePairs(pb.Results[i].GetPairs()), nil
 		case *pql.Count:
-			v, err = pb.Results[i].GetN(), nil
+			v, err = pb.Results[i].N, nil
 		case *pql.SetBit:
-			v, err = pb.Results[i].GetChanged(), nil
+			v, err = pb.Results[i].Changed, nil
 		case *pql.ClearBit:
-			v, err = pb.Results[i].GetChanged(), nil
+			v, err = pb.Results[i].Changed, nil
 		case *pql.SetBitmapAttrs:
 		case *pql.SetProfileAttrs:
 		default:
@@ -836,7 +851,6 @@ type mapResponse struct {
 // ExecOptions represents an execution context for a single Execute() call.
 type ExecOptions struct {
 	Timestamp *time.Time
-	Quantum   TimeQuantum
 	Remote    bool
 }
 
