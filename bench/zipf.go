@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 
 	"context"
+	"math"
 	"math/rand"
 	"time"
 )
@@ -14,18 +15,23 @@ import (
 // ZipfSetBits sets bits randomly and deterministically based on a seed, according to the Zipf distribution
 type ZipfSetBits struct {
 	HasClient
-	BaseBitmapID    int64
-	BaseProfileID   int64
-	BitmapIDRange   int64
-	ProfileIDRange  int64
-	Iterations      int // number of bits that will be set
-	Seed            int64
-	BitmapExponent  float64
-	BitmapOffset    float64
-	ProfileExponent float64
-	ProfileOffset   float64
-	DB              string // DB to use in pilosa.
+	BaseBitmapID   int64
+	BaseProfileID  int64
+	BitmapIDRange  int64
+	ProfileIDRange int64
+	Iterations     int // number of bits that will be set
+	Seed           int64
+	BitmapRng      *rand.Zipf
+	ProfileRng     *rand.Zipf
+	BitmapPerm     *PermutationGenerator
+	ProfilePerm    *PermutationGenerator
+	DB             string // DB to use in pilosa.
 
+	// TODO remove these - but theyre needed in ConsumeFlags
+	BitmapExponent  float64
+	BitmapRatio     float64
+	ProfileExponent float64
+	ProfileRatio    float64
 }
 
 func (b *ZipfSetBits) Usage() string {
@@ -85,9 +91,9 @@ func (b *ZipfSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs.IntVar(&b.Iterations, "iterations", 100, "")
 	fs.StringVar(&b.DB, "db", "benchdb", "")
 	fs.Float64Var(&b.BitmapExponent, "bitmap-exponent", 1.01, "")
-	fs.Float64Var(&b.BitmapOffset, "bitmap-offset", 1, "")
+	fs.Float64Var(&b.BitmapRatio, "bitmap-ratio", 0.25, "")
 	fs.Float64Var(&b.ProfileExponent, "profile-exponent", 1.01, "")
-	fs.Float64Var(&b.ProfileOffset, "profile-offset", 1, "")
+	fs.Float64Var(&b.ProfileRatio, "profile-ratio", 0.25, "")
 	fs.StringVar(&b.ClientType, "client-type", "single", "")
 
 	if err := fs.Parse(args); err != nil {
@@ -96,14 +102,34 @@ func (b *ZipfSetBits) ConsumeFlags(args []string) ([]string, error) {
 	return fs.Args(), nil
 }
 
+func getZipfOffset(N int64, exp, ratio float64) float64 {
+	// Offset is the true parameter used by the Zipf distribution, but the ratio,
+	// as defined here, is a simpler, readable way to define the distribution.
+	// Offset is in [1, inf), and its meaning depends on N (a pain for updating benchmark configs)
+	// ratio is in (0, 1), and its meaning does not depend on N.
+	// it is the ratio of the lowest probability in the distribution to the highest.
+	// ratio=0.01 corresponds to a very small offset - the most skewed distribution for a given pair (N, exp)
+	// ratio=0.99 corresponds to a very large offset - the most nearly uniform distribution for a given (N, exp)
+
+	z := math.Pow(ratio, 1/exp)
+	return z * float64(N-1) / (1 - z)
+}
+
+func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
+	rnd := rand.New(rand.NewSource(b.Seed + int64(agentNum)))
+	bitmapOffset := getZipfOffset(b.BitmapIDRange, b.BitmapExponent, b.BitmapRatio)
+	b.BitmapRng = rand.NewZipf(rnd, b.BitmapExponent, bitmapOffset, uint64(b.BitmapIDRange-1))
+	profileOffset := getZipfOffset(b.ProfileIDRange, b.ProfileExponent, b.ProfileRatio)
+	b.ProfileRng = rand.NewZipf(rnd, b.ProfileExponent, profileOffset, uint64(b.ProfileIDRange-1))
+
+	b.BitmapPerm = NewPermutationGenerator(b.BitmapIDRange, b.Seed)
+	b.ProfilePerm = NewPermutationGenerator(b.ProfileIDRange, b.Seed+1)
+
+	return b.HasClient.Init(hosts, agentNum)
+}
+
 // Run runs the ZipfSetBits benchmark
 func (b *ZipfSetBits) Run(ctx context.Context, agentNum int) map[string]interface{} {
-	rnd := rand.New(rand.NewSource(b.Seed + int64(agentNum)))
-	bitmapRng := rand.NewZipf(rnd, b.BitmapExponent, b.BitmapOffset, uint64(b.BitmapIDRange))
-	profileRng := rand.NewZipf(rnd, b.ProfileExponent, b.ProfileOffset, uint64(b.ProfileIDRange))
-	bitmapPerm := NewPermutationGenerator(b.BitmapIDRange, b.Seed)
-	profilePerm := NewPermutationGenerator(b.ProfileIDRange, b.Seed)
-
 	results := make(map[string]interface{})
 	if b.cli == nil {
 		results["error"] = fmt.Errorf("No client set for ZipfSetBits agent: %v", agentNum)
@@ -113,11 +139,11 @@ func (b *ZipfSetBits) Run(ctx context.Context, agentNum int) map[string]interfac
 	var start time.Time
 	for n := 0; n < b.Iterations; n++ {
 		// generate IDs from Zipf distribution
-		bitmapIDOriginal := bitmapRng.Uint64()
-		profIDOriginal := profileRng.Uint64()
+		bitmapIDOriginal := b.BitmapRng.Uint64()
+		profIDOriginal := b.ProfileRng.Uint64()
 		// permute IDs randomly, but repeatably
-		bitmapID := bitmapPerm.Next(int64(bitmapIDOriginal))
-		profID := profilePerm.Next(int64(profIDOriginal))
+		bitmapID := b.BitmapPerm.Next(int64(bitmapIDOriginal))
+		profID := b.ProfilePerm.Next(int64(profIDOriginal))
 
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+int64(bitmapID), b.BaseProfileID+int64(profID))
 		start = time.Now()
