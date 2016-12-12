@@ -12,7 +12,12 @@ import (
 	"time"
 )
 
-// ZipfSetBits sets bits randomly and deterministically based on a seed, according to the Zipf distribution
+// ZipfSetBits sets random bits according to the Zipf-Mandelbrot distribution.
+// This distribution accepts two parameters for both bitmaps and profiles:
+// Exponent in (1, inf), default 1.001 - "sharpness" of the distribution.
+// Ratio in (0, 1), default 0.25 - maximum variation of the distribution (the relative probability of the least likely ID to the most likely ID)
+//
+// It also uses PermutationGenerator to permute IDs randomly.
 type ZipfSetBits struct {
 	HasClient
 	BaseBitmapID   int64
