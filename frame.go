@@ -288,7 +288,7 @@ func (f *Frame) newFragment(path string, slice uint64) *Fragment {
 
 // SetBit sets a bit within the frame.
 func (f *Frame) SetBit(bitmapID, profileID uint64) (changed bool, err error) {
-	slice := bitmapID / SliceWidth
+	slice := profileID / SliceWidth
 	frag, err := f.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return changed, err
