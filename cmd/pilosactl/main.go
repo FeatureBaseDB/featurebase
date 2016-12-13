@@ -12,8 +12,8 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
-	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -24,7 +24,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/bench"
 	"github.com/pilosa/pilosa/creator"
@@ -1064,120 +1063,78 @@ type CreateOutput struct {
 // Run executes cluster creation.
 func (cmd *CreateCommand) Run(ctx context.Context) error {
 	var clus creator.Cluster
-	output := &CreateOutput{}
 	switch cmd.Type {
 	case "local":
-		var err error
-		clus, err = creator.NewLocalCluster(cmd.ReplicaN, cmd.ServerN)
-		if err != nil {
-			return fmt.Errorf("running create command: %v", err)
+		clus = &creator.LocalCluster{
+			ReplicaN: cmd.ReplicaN,
+			ServerN:  cmd.ServerN,
 		}
-		defer clus.Shutdown()
-		output.Hosts = clus.Hosts()
-
-		logReaders := clus.Logs()
-		if cmd.LogFilePrefix != "" {
-			output.LogFiles = make([]string, len(clus.Hosts()))
-		}
-		for i, _ := range clus.Hosts() {
-			var f io.Writer = cmd.Stderr
-			var err error
-			if cmd.LogFilePrefix != "" {
-				f, err = os.Create(cmd.LogFilePrefix + strconv.Itoa(i))
-				if err != nil {
-					return err
-				}
-				output.LogFiles[i] = f.(*os.File).Name()
-			}
-
-			go func(i int, f io.Writer) {
-				_, err := io.Copy(f, logReaders[i])
-				if err != nil {
-					fmt.Fprintf(cmd.Stderr, "Error copying cluster logs: '%v'", err)
-				}
-			}(i, f)
-		}
-
-		enc := json.NewEncoder(cmd.Stdout)
-		err = enc.Encode(output)
-		if err != nil {
-			return err
-		}
-		select {}
 	case "AWS":
 		return fmt.Errorf("AWS cluster type is not yet implemented")
 	case "":
-		if len(cmd.Hosts) == 0 {
-			return fmt.Errorf("no type or hosts specified - cannot continue")
+		clus = &creator.RemoteCluster{
+			ClusterHosts: cmd.Hosts,
+			ReplicaN:     cmd.ReplicaN,
+			SSHUser:      cmd.SSHUser,
+			Stderr:       cmd.Stderr,
 		}
-		// TODO: build pilosa
-		// TODO: copy binary to hosts
-		// build config
-		conf := pilosa.NewConfigForHosts(cmd.Hosts)
-		conf.Cluster.ReplicaN = cmd.ReplicaN
-
-		// copy config to remote hosts and start pilosa
-		waitall := &sync.WaitGroup{}
-		for _, hostport := range cmd.Hosts {
-			host, port, err := net.SplitHostPort(hostport)
-			if err != nil {
-				return err
-			}
-			conf.Host = hostport
-			conf.DataDir = "~/.pilosa" + port
-
-			client, err := pilosactl.NewSSH(host, cmd.SSHUser, "")
-			if err != nil {
-				return err
-			}
-			sess, err := client.NewSession()
-			if err != nil {
-				return err
-			}
-			configname := "pilosa" + port + ".conf"
-			w, err := sess.StdinPipe()
-			err = sess.Start("cat > " + configname)
-			if err != nil {
-				return err
-			}
-			enc := toml.NewEncoder(w)
-			err = enc.Encode(conf)
-			if err != nil {
-				return fmt.Errorf("encoding config: %v", err)
-			}
-			err = w.Close()
-			if err != nil {
-				return err
-			}
-			err = sess.Wait()
-			if err != nil {
-				return err
-			}
-
-			sess, err = client.NewSession()
-			if err != nil {
-				return err
-			}
-			sess.Stdout = cmd.Stdout
-			sess.Stderr = cmd.Stderr
-			err = sess.Start("pilosa -config " + configname)
-			if err != nil {
-				return err
-			}
-			waitall.Add(1)
-			go func() {
-				defer waitall.Done()
-				err = sess.Wait()
-				if err != nil {
-					fmt.Fprintf(cmd.Stderr, "problem with remote pilosa process: %v", err)
-				}
-			}()
-		}
-		waitall.Wait()
-		return nil
 	default:
 		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
 	}
+
+	err := clus.Start()
+	if err != nil {
+		return fmt.Errorf("starting cluster: %v", err)
+	}
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for range c {
+			fmt.Fprintf(cmd.Stderr, "caught signal\n")
+			err := clus.Shutdown()
+			code := 0
+			if err != nil {
+				code = 1
+			}
+			os.Exit(code)
+		}
+	}()
+
+	defer clus.Shutdown()
+	output := &CreateOutput{}
+	output.Hosts = clus.Hosts()
+
+	logReaders := clus.Logs()
+	if cmd.LogFilePrefix != "" {
+		output.LogFiles = make([]string, len(clus.Hosts()))
+	}
+	for i, _ := range clus.Hosts() {
+		var f io.Writer = cmd.Stderr
+		var err error
+		if cmd.LogFilePrefix != "" {
+			f, err = os.Create(cmd.LogFilePrefix + strconv.Itoa(i))
+			if err != nil {
+				return err
+			}
+			output.LogFiles[i] = f.(*os.File).Name()
+		}
+
+		go func(i int, f io.Writer) {
+			_, err := io.Copy(f, logReaders[i])
+			if err != nil {
+				fmt.Fprintf(cmd.Stderr, "Error copying cluster logs: '%v'", err)
+			}
+		}(i, f)
+	}
+
+	enc := json.NewEncoder(cmd.Stdout)
+	err = enc.Encode(output)
+	if err != nil {
+		return err
+	}
+	select {}
+
 }
 
 // BagentCommand represents a command for running a benchmark agent. A benchmark
