@@ -31,9 +31,6 @@ func init() {
 const (
 	// DefaultDataDir is the default data directory.
 	DefaultDataDir = "~/.pilosa"
-
-	// DefaultHost is the default hostname and port to use.
-	DefaultHost = "localhost:15000"
 )
 
 func main() {
@@ -92,7 +89,7 @@ type Main struct {
 
 	// Configuration options.
 	ConfigPath string
-	Config     *Config
+	Config     *pilosa.Config
 
 	// Profiling options.
 	CPUProfile string
@@ -108,7 +105,7 @@ type Main struct {
 func NewMain() *Main {
 	return &Main{
 		Server: pilosa.NewServer(),
-		Config: NewConfig(),
+		Config: pilosa.NewConfig(),
 
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,
@@ -189,69 +186,5 @@ func (m *Main) ParseFlags(args []string) error {
 		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
 	}
 
-	return nil
-}
-
-// Config represents the configuration for the command.
-type Config struct {
-	DataDir string `toml:"data-dir"`
-	Host    string `toml:"host"`
-
-	Cluster struct {
-		ReplicaN        int           `toml:"replicas"`
-		Nodes           []*ConfigNode `toml:"node"`
-		PollingInterval Duration      `toml:"polling-interval"`
-	} `toml:"cluster"`
-
-	Plugins struct {
-		Path string `toml:"path"`
-	} `toml:"plugins"`
-
-	AntiEntropy struct {
-		Interval Duration `toml:"interval"`
-	} `toml:"anti-entropy"`
-}
-
-type ConfigNode struct {
-	Host string `toml:"host"`
-}
-
-// NewConfig returns an instance of Config with default options.
-func NewConfig() *Config {
-	c := &Config{
-		Host: DefaultHost,
-	}
-	c.Cluster.ReplicaN = pilosa.DefaultReplicaN
-	c.Cluster.PollingInterval = Duration(pilosa.DefaultPollingInterval)
-	c.AntiEntropy.Interval = Duration(pilosa.DefaultAntiEntropyInterval)
-	return c
-}
-
-// PilosaCluster returns a new instance of pilosa.Cluster based on the config.
-func (c *Config) PilosaCluster() *pilosa.Cluster {
-	cluster := pilosa.NewCluster()
-	cluster.ReplicaN = c.Cluster.ReplicaN
-
-	for _, n := range c.Cluster.Nodes {
-		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: n.Host})
-	}
-
-	return cluster
-}
-
-// Duration is a TOML wrapper type for time.Duration.
-type Duration time.Duration
-
-// String returns the string representation of the duration.
-func (d Duration) String() string { return time.Duration(d).String() }
-
-// UnmarshalText parses a TOML value into a duration value.
-func (d *Duration) UnmarshalText(text []byte) error {
-	v, err := time.ParseDuration(string(text))
-	if err != nil {
-		return err
-	}
-
-	*d = Duration(v)
 	return nil
 }
