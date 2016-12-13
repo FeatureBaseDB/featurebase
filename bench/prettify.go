@@ -1,8 +1,6 @@
 package bench
 
-import (
-	"time"
-)
+import "time"
 
 // wrapper type to force human-readable JSON output
 type PrettyDuration time.Duration
@@ -17,10 +15,19 @@ func Prettify(m map[string]interface{}) map[string]interface{} {
 	newmap := make(map[string]interface{})
 	for k, v := range m {
 		switch v.(type) {
+		case map[string]interface{}:
+			newmap[k] = Prettify(v.(map[string]interface{}))
+		case []time.Duration:
+			newslice := make([]PrettyDuration, len(v.([]time.Duration)))
+			slice := v.([]time.Duration)
+			for n, e := range slice {
+				newslice[n] = PrettyDuration(e)
+			}
+			newmap[k] = newslice
 		case time.Duration:
 			newmap[k] = PrettyDuration(v.(time.Duration))
 		default:
-			newmap[k] = Prettify(v.(map[string]interface{}))
+			newmap[k] = v
 		}
 	}
 	return newmap
