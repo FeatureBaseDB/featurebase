@@ -1210,7 +1210,7 @@ The following arguments are available:
 	subcommands:
 		diagonal-set-bits
 		random-set-bits
-    zipf-set-bits
+		zipf-set-bits
 		multi-db-set-bits
 		random-query
 		import
