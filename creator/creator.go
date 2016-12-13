@@ -18,7 +18,7 @@ type Cluster interface {
 	Logs() []io.Reader
 }
 
-type cluster struct {
+type localcluster struct {
 	hosts   []string
 	logs    []io.Reader
 	servers []*pilosa.Server
@@ -29,7 +29,7 @@ type cluster struct {
 func NewLocalCluster(replicaN, serverN int) (Cluster, error) {
 	BasePort := 19327
 
-	localCluster := &cluster{
+	localCluster := &localcluster{
 		hosts:   make([]string, serverN),
 		servers: make([]*pilosa.Server, serverN),
 		logs:    make([]io.Reader, serverN),
@@ -81,9 +81,9 @@ func NewLocalCluster(replicaN, serverN int) (Cluster, error) {
 	return localCluster, nil
 }
 
-func (c *cluster) Hosts() []string   { return c.hosts }
-func (c *cluster) Logs() []io.Reader { return c.logs }
-func (c *cluster) Shutdown() error {
+func (c *localcluster) Hosts() []string   { return c.hosts }
+func (c *localcluster) Logs() []io.Reader { return c.logs }
+func (c *localcluster) Shutdown() error {
 	errs := ""
 	for _, s := range c.servers {
 		if err := s.Close(); err != nil {

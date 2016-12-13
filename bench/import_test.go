@@ -2,7 +2,6 @@ package bench_test
 
 import (
 	"bytes"
-	"log"
 	"testing"
 
 	"io/ioutil"
@@ -60,8 +59,6 @@ func TestImportInit(t *testing.T) {
 	if string(bytes) != expected {
 		t.Fatalf("unexpected result: %v", string(bytes))
 	}
-
-	log.Println(imp)
 }
 
 func TestGenerateImportCSVNonRand(t *testing.T) {

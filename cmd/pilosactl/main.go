@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,8 +24,7 @@ import (
 	"time"
 	"unsafe"
 
-	"encoding/json"
-
+	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/bench"
 	"github.com/pilosa/pilosa/creator"
@@ -984,6 +985,9 @@ type CreateCommand struct {
 	ServerN       int
 	ReplicaN      int
 	LogFilePrefix string
+	Hosts         []string
+
+	SSHUser string
 
 	// Standard input/output
 	Stdin  io.Reader
@@ -1004,14 +1008,18 @@ func NewCreateCommand(stdin io.Reader, stdout, stderr io.Writer) *CreateCommand 
 func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Type, "type", "local", "")
+	fs.StringVar(&cmd.Type, "type", "", "")
 	fs.IntVar(&cmd.ServerN, "serverN", 3, "")
 	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "")
 	fs.StringVar(&cmd.LogFilePrefix, "log-file-prefix", "", "")
+	var hosts string
+	fs.StringVar(&hosts, "hosts", "", "")
+	fs.StringVar(&cmd.SSHUser, "ssh-user", "", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	cmd.Hosts = strings.Split(hosts, ",")
 	return nil
 }
 
@@ -1033,10 +1041,18 @@ The following flags are allowed:
 	-replicaN
 		replication factor for cluster
 
+	-hosts
+		Comma separated host:port list. Instead of
+		creating hosts, just start pilosa on these
+		pre-existing hosts. The same host may be
+		listed multiple times with different ports.
+
 	-log-file-prefix
 		output from the started cluster will go
 		into files with this prefix (one per node)
 
+	-ssh-user
+		username to use when contacting remote hosts
 `)
 }
 
@@ -1090,6 +1106,75 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 		select {}
 	case "AWS":
 		return fmt.Errorf("AWS cluster type is not yet implemented")
+	case "":
+		if len(cmd.Hosts) == 0 {
+			return fmt.Errorf("no type or hosts specified - cannot continue")
+		}
+		// TODO: build pilosa
+		// TODO: copy binary to hosts
+		// build config
+		conf := pilosa.NewConfigForHosts(cmd.Hosts)
+		conf.Cluster.ReplicaN = cmd.ReplicaN
+
+		// copy config to remote hosts and start pilosa
+		waitall := &sync.WaitGroup{}
+		for _, hostport := range cmd.Hosts {
+			host, port, err := net.SplitHostPort(hostport)
+			if err != nil {
+				return err
+			}
+			conf.Host = hostport
+			conf.DataDir = "~/.pilosa" + port
+
+			client, err := pilosactl.NewSSH(host, cmd.SSHUser, "")
+			if err != nil {
+				return err
+			}
+			sess, err := client.NewSession()
+			if err != nil {
+				return err
+			}
+			configname := "pilosa" + port + ".conf"
+			w, err := sess.StdinPipe()
+			err = sess.Start("cat > " + configname)
+			if err != nil {
+				return err
+			}
+			enc := toml.NewEncoder(w)
+			err = enc.Encode(conf)
+			if err != nil {
+				return fmt.Errorf("encoding config: %v", err)
+			}
+			err = w.Close()
+			if err != nil {
+				return err
+			}
+			err = sess.Wait()
+			if err != nil {
+				return err
+			}
+
+			sess, err = client.NewSession()
+			if err != nil {
+				return err
+			}
+			sess.Stdout = cmd.Stdout
+			sess.Stderr = cmd.Stderr
+			err = sess.Start("pilosa -config " + configname)
+			if err != nil {
+				return err
+			}
+			waitall.Add(1)
+			go func() {
+				defer waitall.Done()
+				err = sess.Wait()
+				if err != nil {
+					fmt.Fprintf(cmd.Stderr, "problem with remote pilosa process: %v", err)
+				}
+			}()
+		}
+		waitall.Wait()
+		return nil
 	default:
 		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
 	}
