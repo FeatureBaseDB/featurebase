@@ -13,10 +13,7 @@ import (
 )
 
 // ZipfSetBits sets random bits according to the Zipf-Mandelbrot distribution.
-// This distribution accepts two parameters for both bitmaps and profiles:
-// Exponent in (1, inf), default 1.001 - "sharpness" of the distribution.
-// Ratio in (0, 1), default 0.25 - maximum variation of the distribution (the relative probability of the least likely ID to the most likely ID)
-//
+// This distribution accepts two parameters, Exponent and Ratio, for both bitmaps and profiles.
 // It also uses PermutationGenerator to permute IDs randomly.
 type ZipfSetBits struct {
 	HasClient
@@ -41,7 +38,12 @@ type ZipfSetBits struct {
 
 func (b *ZipfSetBits) Usage() string {
 	return `
-zipf-set-bits sets random bits according to Zipf distribution
+zipf-set-bits sets random bits according to the Zipf distribution.
+This is a power-law distribution controlled by two parameters.
+Exponent, in the range (1, inf), with a default value of 1.001, controls
+the "sharpness" of the distribution, with higher exponent being sharper.
+Ratio, in the range (0, 1), with a default value of 0.25, controls the
+maximum variation of the distribution, with higher ratio being more uniform.
 
 Usage: zipf-set-bits [arguments]
 
