@@ -1091,7 +1091,7 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for range c {
-			fmt.Fprintf(cmd.Stderr, "caught signal\n")
+			fmt.Fprintf(cmd.Stderr, "\ncaught signal - shutting down\n")
 			err := clus.Shutdown()
 			code := 0
 			if err != nil {

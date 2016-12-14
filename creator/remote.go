@@ -29,6 +29,8 @@ type RemoteCluster struct {
 	stdins       []io.WriteCloser
 }
 
+// Start creates a configuration for each host in the cluster, copies it to the
+// node, and starts the pilosa process on the remote host.
 func (c *RemoteCluster) Start() error {
 	c.logs = make([]io.Reader, 0)
 	if len(c.ClusterHosts) == 0 {
@@ -118,9 +120,7 @@ func (c *RemoteCluster) Start() error {
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			fmt.Fprintf(c.Stderr, "start waiting on %v\n", sess)
 			err = sess.Wait()
-			fmt.Fprintf(c.Stderr, "done waiting on session\n")
 			if err != nil {
 				fmt.Fprintf(c.Stderr, "problem with remote pilosa process: %v", err)
 			}
@@ -138,25 +138,29 @@ func (c *RemoteCluster) Shutdown() error {
 		if err != nil {
 			fmt.Fprintf(c.Stderr, "Error write-signaling remote process: %v\n", err)
 		}
+		// signaling isn't supported by many ssh servers - hence the hack above
 		err = sess.Signal(ssh.SIGINT)
 		if err != nil {
 			fmt.Fprintf(c.Stderr, "Error signaling remote process: %v\n", err)
 		}
-		err = sess.Close()
-		if err != nil {
-			fmt.Fprintf(c.Stderr, "Error closing remote session: %v\n", err)
-		}
 	}
+
 	done := make(chan struct{}, 1)
 	go func() {
-		fmt.Fprintf(c.Stderr, "Waiting\n")
 		c.wg.Wait()
-		done <- struct{}{}
+		close(done)
 	}()
 	select {
 	case <-done:
 		return nil
 	case <-time.After(time.Second * 5):
+		for _, sess := range c.sessions {
+			err := sess.Close()
+			if err != nil {
+				fmt.Fprintf(c.Stderr, "Error closing remote session: %v\n", err)
+			}
+		}
 		return fmt.Errorf("timed out waiting for remote processes to exit")
 	}
+
 }
