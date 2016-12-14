@@ -985,6 +985,7 @@ type CreateCommand struct {
 	ReplicaN      int
 	LogFilePrefix string
 	Hosts         []string
+	GoMaxProcs    int
 
 	SSHUser string
 
@@ -1012,6 +1013,7 @@ func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "")
 	fs.StringVar(&cmd.LogFilePrefix, "log-file-prefix", "", "")
 	var hosts string
+	fs.IntVar(&cmd.GoMaxProcs, "gomaxprocs", 0, "")
 	fs.StringVar(&hosts, "hosts", "", "")
 	fs.StringVar(&cmd.SSHUser, "ssh-user", "", "")
 
@@ -1052,6 +1054,11 @@ The following flags are allowed:
 
 	-ssh-user
 		username to use when contacting remote hosts
+
+	-gomaxprocs
+		when starting a cluster on remote hosts, this
+		will set the value of GOMAXPROCS.
+
 `)
 }
 
@@ -1077,6 +1084,7 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 			ReplicaN:     cmd.ReplicaN,
 			SSHUser:      cmd.SSHUser,
 			Stderr:       cmd.Stderr,
+			GoMaxProcs:   cmd.GoMaxProcs,
 		}
 	default:
 		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
