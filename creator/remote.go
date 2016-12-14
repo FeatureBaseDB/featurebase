@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 
 	"time"
@@ -20,6 +21,7 @@ type RemoteCluster struct {
 	SSHUser      string
 	Keyfile      string
 	Key          []byte
+	GoMaxProcs   int
 	Stderr       io.Writer
 	wg           *sync.WaitGroup
 	logs         []io.Reader
@@ -113,7 +115,12 @@ func (c *RemoteCluster) Start() error {
 		c.pipeWs = append(c.pipeWs, pipeW)
 		c.stdins = append(c.stdins, inpipe)
 
-		err = sess.Start("pilosa -config " + configname)
+		gomaxprocsString := ""
+		if c.GoMaxProcs != 0 {
+			gomaxprocsString = "GOMAXPROCS=" + strconv.Itoa(c.GoMaxProcs) + " "
+		}
+
+		err = sess.Start(gomaxprocsString + "pilosa -config " + configname)
 		if err != nil {
 			return err
 		}
