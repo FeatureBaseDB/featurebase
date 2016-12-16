@@ -1152,18 +1152,20 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 // on the command line.
 type BagentCommand struct {
 	// Slice of Benchmarks which will be run serially.
-	Benchmarks []bench.Benchmark
+	Benchmarks []bench.Benchmark `json:"benchmarks"`
 	// AgentNum will be passed to each benchmark's Run method so that it can
 	// parameterize its behavior.
-	AgentNum int
-	// Slice of pilosa hosts to run the Benchmarks against.
-	Hosts []string
+	AgentNum int `json:"agent-num"`
+
 	// Enable pretty printing of results, for human consumption.
 	HumanReadable bool
 
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	// Slice of pilosa hosts to run the Benchmarks against.
+	Hosts []string `json:"hosts"`
+
+	Stdin  io.Reader `json:"-"`
+	Stdout io.Writer `json:"-"`
+	Stderr io.Writer `json:"-"`
 }
 
 // NewBagentCommand returns a new instance of BagentCommand.
@@ -1280,6 +1282,7 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 	}
 
 	res := sbm.Run(ctx, cmd.AgentNum)
+	res["metadata"] = cmd
 	enc := json.NewEncoder(cmd.Stdout)
 	enc.SetIndent("", "  ")
 	if cmd.HumanReadable {
