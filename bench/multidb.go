@@ -12,9 +12,9 @@ import (
 // MultiDBSetBits sets bits with increasing profile id and bitmap id.
 type MultiDBSetBits struct {
 	HasClient
-	BaseBitmapID  int
-	BaseProfileID int
-	Iterations    int
+	BaseBitmapID  int `json:"base-bitmap-id"`
+	BaseProfileID int `json:"base-profile-id"`
+	Iterations    int `json:"iterations"`
 }
 
 func (b *MultiDBSetBits) Usage() string {

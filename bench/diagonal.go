@@ -13,10 +13,10 @@ import (
 // DiagonalSetBits sets bits with increasing profile id and bitmap id.
 type DiagonalSetBits struct {
 	HasClient
-	BaseBitmapID  int
-	BaseProfileID int
-	Iterations    int
-	DB            string
+	BaseBitmapID  int    `json:"base-bitmap-id"`
+	BaseProfileID int    `json:"base-profile-id"`
+	Iterations    int    `json:"iterations"`
+	DB            string `json:"db"`
 }
 
 func (b *DiagonalSetBits) Usage() string {
