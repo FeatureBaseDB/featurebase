@@ -1,6 +1,6 @@
 {
     "CreatorArgs": ["-type", "local", "-serverN", "3", "-replicaN", "1", "-log-file-prefix", "multidblog"],
-    "Agents": { "Type": "local" },
+    "AgentHosts": ["localhost"],
     "Benchmarks": [
         {
             "Num": 3,
