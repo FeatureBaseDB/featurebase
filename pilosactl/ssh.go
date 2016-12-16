@@ -55,6 +55,18 @@ func NewSSH(host, username, keyfile string) (*SSH, error) {
 	return &SSH{client: client}, nil
 }
 
+func SSHClients(hosts []string, username, keyfile string) ([]*SSH, error) {
+	clients := make([]*SSH, len(hosts))
+	for i, host := range hosts {
+		client, err := NewSSH(host, username, keyfile)
+		if err != nil {
+			return nil, err
+		}
+		clients[i] = client
+	}
+	return clients, nil
+}
+
 func (s *SSH) NewSession() (*ssh.Session, error) {
 	return s.client.NewSession()
 }
