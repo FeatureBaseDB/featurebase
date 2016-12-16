@@ -1,5 +1,5 @@
-hash: 9afe91839785e89880061fd2919b0a5cdb10d6f4c06b344c2924eeed0c9bfd65
-updated: 2016-11-29T12:31:19.234235928-06:00
+hash: d912921b0318c326771cd49debeec509d4ffb0558bd37e53570f6404fbec6604
+updated: 2016-11-29T16:10:39.53889541-06:00
 imports:
 - name: github.com/boltdb/bolt
   version: 4b1ebc1869ad66568b313d0dc410e2be72670dda
@@ -21,6 +21,14 @@ imports:
   version: a6b377e3400b08991b80d6805d627f347f983866
   subpackages:
   - lru
+- name: golang.org/x/net
+  version: 4971afdc2f162e82d185353533d3cf16188a9f4e
+  subpackages:
+  - context
+- name: golang.org/x/sync
+  version: 1ae7c7b29e06598039be46c5083819ba6fd7a97e
+  subpackages:
+  - errgroup
 - name: golang.org/x/sys
   version: c200b10b5d5e122be351b67af224adc6128af5bf
   subpackages:

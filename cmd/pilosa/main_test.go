@@ -2,8 +2,8 @@ package main_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"

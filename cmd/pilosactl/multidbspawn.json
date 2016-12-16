@@ -1,0 +1,10 @@
+{
+    "CreatorArgs": ["-type", "local", "-serverN", "3", "-replicaN", "1"],
+    "Agents": { "Type": "local" },
+    "Benchmarks": [
+        {
+            "Num": 3,
+            "Args": ["multi-db-set-bits", "-iterations", "30000", "-client-type", "round_robin"]
+        }
+    ]
+}

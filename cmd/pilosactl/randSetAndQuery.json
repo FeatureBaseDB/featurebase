@@ -1,0 +1,13 @@
+{
+    "CreatorArgs": ["-type", "local", "-serverN", "3", "-replicaN", "1"],
+    "Agents": { "Type": "local" },
+    "Benchmarks": [
+        {
+            "Num": 3,
+            "Args": [
+                    "random-set-bits", "-iterations", "30000", "-profile-id-range", "1000000", "-bitmap-id-range", "1000000", "-seed", "2345", "-client-type", "round_robin", "-db", "randsetandquery",
+                    "random-query", "-iterations", "1000", "-bitmap-id-range", "1000000", "-seed", "1239", "-dbs", "randsetandquery"
+            ]
+        }
+    ]
+}

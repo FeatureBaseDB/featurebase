@@ -12,16 +12,23 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"text/tabwriter"
 	"time"
 	"unsafe"
 
+	"encoding/json"
+
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/bench"
+	"github.com/pilosa/pilosa/creator"
+	"github.com/pilosa/pilosa/pilosactl"
 	"github.com/pilosa/pilosa/roaring"
 )
 
@@ -91,6 +98,9 @@ The commands are:
 	inspect    inspects fragment data files
 	check      performs a consistency check of data files
 	bench      benchmarks operations
+	create     create pilosa clusters
+	bagent     run a benchmarking agent
+	bspawn     create a cluster and agents and run benchmarks based on config file
 
 Use the "-h" flag with any command for more information.
 `)
@@ -115,7 +125,7 @@ func (m *Main) ParseFlags(args []string) error {
 	case "config":
 		m.Cmd = NewConfigCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "import":
-		m.Cmd = NewImportCommand(m.Stdin, m.Stdout, m.Stderr)
+		m.Cmd = pilosactl.NewImportCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "export":
 		m.Cmd = NewExportCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "sort":
@@ -130,6 +140,12 @@ func (m *Main) ParseFlags(args []string) error {
 		m.Cmd = NewCheckCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "bench":
 		m.Cmd = NewBenchCommand(m.Stdin, m.Stdout, m.Stderr)
+	case "create":
+		m.Cmd = NewCreateCommand(m.Stdin, m.Stdout, m.Stderr)
+	case "bagent":
+		m.Cmd = NewBagentCommand(m.Stdin, m.Stdout, m.Stderr)
+	case "bspawn":
+		m.Cmd = NewBspawnCommand(m.Stdin, m.Stdout, m.Stderr)
 	default:
 		return ErrUnknownCommand
 	}
@@ -204,190 +220,6 @@ host = "localhost:15000"
 [plugins]
 path = ""
 `)+"\n")
-	return nil
-}
-
-// ImportCommand represents a command for bulk importing data.
-type ImportCommand struct {
-	// Destination host and port.
-	Host string
-
-	// Name of the database & frame to import into.
-	Database string
-	Frame    string
-
-	// Filenames to import from.
-	Paths []string
-
-	// Size of buffer used to chunk import.
-	BufferSize int
-
-	// Reusable client.
-	Client *pilosa.Client
-
-	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-}
-
-// NewImportCommand returns a new instance of ImportCommand.
-func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand {
-	return &ImportCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
-
-		BufferSize: 10000000,
-	}
-}
-
-// ParseFlags parses command line flags from args.
-func (cmd *ImportCommand) ParseFlags(args []string) error {
-	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
-	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Host, "host", "localhost:15000", "host:port")
-	fs.StringVar(&cmd.Database, "d", "", "database")
-	fs.StringVar(&cmd.Frame, "f", "", "frame")
-	fs.IntVar(&cmd.BufferSize, "buffer-size", cmd.BufferSize, "buffer size")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	// Extract the import paths.
-	cmd.Paths = fs.Args()
-
-	return nil
-}
-
-// Usage returns the usage message to be printed.
-func (cmd *ImportCommand) Usage() string {
-	return strings.TrimSpace(`
-usage: pilosactl import -host HOST -d database -f frame paths
-
-Bulk imports one or more CSV files to a host's database and frame. The bits
-of the CSV file are grouped by slice for the most efficient import.
-
-The format of the CSV file is:
-
-	BITMAPID,PROFILEID
-
-The file should contain no headers.
-`)
-}
-
-// Run executes the main program execution.
-func (cmd *ImportCommand) Run(ctx context.Context) error {
-	logger := log.New(cmd.Stderr, "", log.LstdFlags)
-
-	// Validate arguments.
-	// Database and frame are validated early before the files are parsed.
-	if cmd.Database == "" {
-		return pilosa.ErrDatabaseRequired
-	} else if cmd.Frame == "" {
-		return pilosa.ErrFrameRequired
-	} else if len(cmd.Paths) == 0 {
-		return ErrPathRequired
-	}
-
-	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host)
-	if err != nil {
-		return err
-	}
-	cmd.Client = client
-
-	// Import each path and import by slice.
-	for _, path := range cmd.Paths {
-		// Parse path into bits.
-		logger.Printf("parsing: %s", path)
-		if err := cmd.importPath(ctx, path); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// importPath parses a path into bits and imports it to the server.
-func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
-	a := make([]pilosa.Bit, 0, cmd.BufferSize)
-
-	// Open file for reading.
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// Read rows as bits.
-	r := csv.NewReader(f)
-	rnum := 0
-	for {
-		rnum++
-
-		// Read CSV row.
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return err
-		}
-
-		// Ignore blank rows.
-		if record[0] == "" {
-			continue
-		} else if len(record) < 2 {
-			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
-		}
-
-		// Parse bitmap id.
-		bitmapID, err := strconv.ParseUint(record[0], 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid bitmap id on row %d: %q", rnum, record[0])
-		}
-
-		// Parse bitmap id.
-		profileID, err := strconv.ParseUint(record[1], 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid profile id on row %d: %q", rnum, record[1])
-		}
-
-		a = append(a, pilosa.Bit{BitmapID: bitmapID, ProfileID: profileID})
-
-		// If we've reached the buffer size then import bits.
-		if len(a) == cmd.BufferSize {
-			if err := cmd.importBits(ctx, a); err != nil {
-				return err
-			}
-			a = a[:0]
-		}
-	}
-
-	// If there are still bits in the buffer then flush them.
-	if err := cmd.importBits(ctx, a); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// importPath parses a path into bits and imports it to the server.
-func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) error {
-	logger := log.New(cmd.Stderr, "", log.LstdFlags)
-
-	// Group bits by slice.
-	logger.Printf("grouping %d bits", len(bits))
-	bitsBySlice := pilosa.Bits(bits).GroupBySlice()
-
-	// Parse path into bits.
-	for slice, bits := range bitsBySlice {
-		logger.Printf("importing slice: %d, n=%d", slice, len(bits))
-		if err := cmd.Client.Import(ctx, cmd.Database, cmd.Frame, slice, bits); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -1144,6 +976,400 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 	elapsed := time.Since(startTime)
 	fmt.Fprintf(cmd.Stdout, "Executed %d operations in %s (%0.3f op/sec)\n", cmd.N, elapsed, float64(cmd.N)/elapsed.Seconds())
 
+	return nil
+}
+
+// CreateCommand represents a command for creating a pilosa cluster.
+type CreateCommand struct {
+	// Type can be AWS, local, etc.
+	Type string
+
+	// ServerN is the number of pilosa hosts in the cluster
+	ServerN int
+
+	// ReplicaN is the replication number for the cluster
+	ReplicaN int
+
+	// run is used internally by local cluster to signal that the cluster should be run and not exit
+	run bool
+
+	// Standard input/output
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// NewCreateCommand returns a new instance of CreateCommand.
+func NewCreateCommand(stdin io.Reader, stdout, stderr io.Writer) *CreateCommand {
+	return &CreateCommand{
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+}
+
+// ParseFlags parses command line flags from args.
+func (cmd *CreateCommand) ParseFlags(args []string) error {
+	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
+	fs.SetOutput(ioutil.Discard)
+	fs.StringVar(&cmd.Type, "type", "local", "Type of cluster - local, AWS, etc.")
+	fs.IntVar(&cmd.ServerN, "serverN", 3, "Number of hosts in cluster")
+	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "Replication factor for cluster")
+	fs.BoolVar(&cmd.run, "run", false, "run, don't exit")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Usage returns the usage message to be printed.
+func (cmd *CreateCommand) Usage() string {
+	return strings.TrimSpace(`
+usage: pilosactl create [args]
+
+Creates a cluster based on the arguments.
+
+The following flags are allowed:
+
+	-type
+		type of cluster - local, AWS, etc.
+
+	-serverN
+		number of hosts in cluster
+
+	-replicaN
+		replication factor for cluster
+`)
+}
+
+// create separates creation from running for use programmatically by other
+// commands like bspawn.
+func (cmd *CreateCommand) create() (creator.Cluster, error) {
+	switch cmd.Type {
+	case "local":
+		return creator.NewLocalCluster(cmd.ReplicaN, cmd.ServerN)
+	case "AWS":
+		return nil, fmt.Errorf("unimplemented create type: %v", cmd.Type)
+	default:
+		return nil, fmt.Errorf("unsupported create type: %v", cmd.Type)
+	}
+}
+
+// Run executes cluster creation.
+func (cmd *CreateCommand) Run(ctx context.Context) error {
+	var clus creator.Cluster
+	switch cmd.Type {
+	case "local":
+		var err error
+		if cmd.run {
+			clus, err = cmd.create()
+			if err != nil {
+				return fmt.Errorf("running create command: %v", err)
+			}
+			fmt.Fprintln(cmd.Stdout, strings.Join(clus.Hosts(), ","))
+			select {}
+		}
+		args := append(os.Args, "-run")
+		subcmd := exec.Command(args[0], args[1:]...)
+		pipeR, err := subcmd.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("Couldn't get pipe for subcmd stdout: %v", err)
+		}
+		if subcmdOut, err := ioutil.TempFile("", "pilosactl-create"); err == nil {
+			subcmd.Stderr = subcmdOut
+			fmt.Fprintln(cmd.Stderr, subcmdOut.Name())
+		} else {
+			fmt.Fprintf(cmd.Stderr, "Error creating file for pilosa output - discarding: %v", err)
+		}
+		scanner := bufio.NewScanner(pipeR)
+		err = subcmd.Start()
+		if err != nil {
+			return fmt.Errorf("error kicking off local cluster: %v", err)
+		}
+		scanner.Scan()
+		fmt.Fprintln(cmd.Stdout, scanner.Text())
+		subcmd.Stdout = subcmd.Stderr
+		pipeR.Close()
+
+	case "AWS":
+		return fmt.Errorf("AWS cluster type is not yet implemented")
+	default:
+		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
+	}
+
+	return nil
+}
+
+// BagentCommand represents a command for running a benchmark agent. A benchmark
+// agent runs multiple benchmarks in series in the order that they are specified
+// on the command line.
+type BagentCommand struct {
+	// Slice of Benchmarks which will be run serially.
+	Benchmarks []bench.Benchmark
+	// AgentNum will be passed to each benchmark's Run method so that it can
+	// parameterize its behavior.
+	AgentNum int
+	// Slice of pilosa hosts to run the Benchmarks against.
+	Hosts []string
+
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// NewBagentCommand returns a new instance of BagentCommand.
+func NewBagentCommand(stdin io.Reader, stdout, stderr io.Writer) *BagentCommand {
+	return &BagentCommand{
+		Benchmarks: []bench.Benchmark{},
+		Hosts:      []string{},
+		AgentNum:   0,
+
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+}
+
+// ParseFlags parses command line flags for the BagentCommand. First the command
+// wide flags `hosts` and `agentNum` are parsed. The rest of the flags should be
+// a series of subcommands along with their flags. ParseFlags runs each
+// subcommand's `ConsumeFlags` method which parses the flags for that command
+// and returns the rest of the argument slice which should contain further
+// subcommands.
+func (cmd *BagentCommand) ParseFlags(args []string) error {
+	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
+	fs.SetOutput(ioutil.Discard)
+
+	var pilosaHosts string
+	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "Comma separated list of host:port")
+	fs.IntVar(&cmd.AgentNum, "agentNum", 0, "An integer differentiating this agent from other in the fleet.")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	remArgs := fs.Args()
+	if len(remArgs) == 0 {
+		return flag.ErrHelp
+	}
+	for len(remArgs) > 0 {
+		var bm bench.Command
+		var err error
+		switch remArgs[0] {
+		case "-help", "-h":
+			return flag.ErrHelp
+		case "diagonal-set-bits":
+			bm = &bench.DiagonalSetBits{}
+		case "random-set-bits":
+			bm = &bench.RandomSetBits{}
+		case "multi-db-set-bits":
+			bm = &bench.MultiDBSetBits{}
+		case "random-query":
+			bm = &bench.RandomQuery{}
+		case "import":
+			bm = bench.NewImport(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+		case "slice-height":
+			bm = bench.NewSliceHeight(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+		default:
+			return fmt.Errorf("Unknown benchmark cmd: %v", remArgs[0])
+		}
+		remArgs, err = bm.ConsumeFlags(remArgs[1:])
+		cmd.Benchmarks = append(cmd.Benchmarks, bm)
+		if err != nil {
+			if err == flag.ErrHelp {
+				fmt.Fprintln(cmd.Stderr, bm.Usage())
+				return fmt.Errorf("")
+			}
+			return fmt.Errorf("BagentCommand.ParseFlags: %v", err)
+		}
+	}
+	cmd.Hosts = strings.Split(pilosaHosts, ",")
+
+	return nil
+}
+
+// Usage returns the usage message to be printed.
+func (cmd *BagentCommand) Usage() string {
+	return strings.TrimSpace(`
+pilosactl bagent is a tool for running benchmarks against a pilosa cluster.
+
+Usage:
+
+pilosactl bagent [options] <subcommand [options]>...
+
+The following arguments are available:
+
+	-hosts
+		Comma separated list of host:port describing all hosts in the cluster.
+
+	-agentNum N
+		An integer differentiating this agent from others in the fleet.
+
+	subcommands:
+		diagonal-set-bits
+		random-set-bits
+		multi-db-set-bits
+		random-query
+		import
+		slice-height
+`)
+}
+
+// Run executes the benchmark agent.
+func (cmd *BagentCommand) Run(ctx context.Context) error {
+	sbm := bench.Serial(cmd.Benchmarks...)
+	err := sbm.Init(cmd.Hosts, cmd.AgentNum)
+	if err != nil {
+		return fmt.Errorf("in cmd.Run initialization: %v", err)
+	}
+
+	res := sbm.Run(ctx, cmd.AgentNum)
+	enc := json.NewEncoder(cmd.Stdout)
+	enc.SetIndent("", "  ")
+	res = bench.Prettify(res)
+	err = enc.Encode(res)
+	if err != nil {
+		fmt.Fprintln(cmd.Stderr, err)
+	}
+	// fmt.Fprintln(cmd.Stdout, res)
+
+	return nil
+}
+
+// BspawnCommand represents a command for spawning complex benchmarks. This
+// includes cluster creation and teardown, agent creation and teardown, running
+// multiple benchmarks in series and/or parallel, and collecting all the
+// results.
+type BspawnCommand struct {
+	// If PilosaHosts is specified, CreatorArgs is ignored and the existing
+	// cluster specified here is used.
+	PilosaHosts []string
+
+	// CreateCommand will be used with these arguments to create a cluster -
+	// the cluster will be used to populate the PilosaHosts field. This
+	// should include everything that comes after `pilosactl create`
+	CreatorArgs []string
+
+	// If AgentHosts is specified, Agents is ignored, and the existing
+	// agents specified here are used.
+	AgentHosts []string
+	// Agents is config for creating a fleet of agents from which to run the
+	// benchmark. TODO: mostly unimplemented.
+	Agents AgentConfig
+
+	// Benchmarks is a slice of Spawns which specifies all of the bagent
+	// commands to run. These will all be run in parallel, started on each
+	// of the agents in a round robin fashion.
+	Benchmarks []Spawn
+
+	Stdin  io.Reader `json:"-"`
+	Stdout io.Writer `json:"-"`
+	Stderr io.Writer `json:"-"`
+}
+
+type AgentConfig struct {
+	Type string
+}
+
+// Spawn represents a bagent command run in parallel across Num agents. The
+// bagent command can run multiple Benchmarks serially within itself.
+type Spawn struct {
+	Num  int      // number of agents to run
+	Args []string // everything that comes after `pilosactl bagent [arguments]`
+}
+
+// NewBspawnCommand returns a new instance of BspawnCommand.
+func NewBspawnCommand(stdin io.Reader, stdout, stderr io.Writer) *BspawnCommand {
+	return &BspawnCommand{
+		Stdin:  stdin,
+		Stdout: stdout,
+		Stderr: stderr,
+	}
+}
+
+// ParseFlags parses command line flags from args.
+func (cmd *BspawnCommand) ParseFlags(args []string) error {
+	if len(args) != 1 {
+		return flag.ErrHelp
+	}
+	f, err := os.Open(args[0])
+	if err != nil {
+		return err
+	}
+	dec := json.NewDecoder(f)
+	err = dec.Decode(cmd)
+	if err != nil {
+		return err
+	}
+
+	// handle pilosa creation
+	// handle agent creation
+
+	return nil
+}
+
+// Usage returns the usage message to be printed.
+func (cmd *BspawnCommand) Usage() string {
+	return strings.TrimSpace(`
+pilosactl bspawn is a tool for running multiple instances of bagent against a cluster.
+
+Usage:
+
+pilosactl spawn configfile
+`)
+}
+
+// Run executes the main program execution.
+func (cmd *BspawnCommand) Run(ctx context.Context) error {
+	if len(cmd.PilosaHosts) == 0 {
+		// must create cluster
+		createCmd := NewCreateCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+		createCmd.ParseFlags(cmd.CreatorArgs)
+		clus, err := createCmd.create()
+		if err != nil {
+			return fmt.Errorf("Cluster creation error while spawning: %v", err)
+		}
+		defer clus.Shutdown()
+		cmd.PilosaHosts = clus.Hosts()
+	}
+	switch cmd.Agents.Type {
+	case "local":
+		return cmd.spawnLocal(ctx)
+	case "remote":
+		return fmt.Errorf("remote type spawning is unimplemented")
+	default:
+		return fmt.Errorf("'%v' is not a supported type of spawn command", cmd.Agents.Type)
+	}
+}
+
+func (cmd *BspawnCommand) spawnLocal(ctx context.Context) error {
+	agents := []*BagentCommand{}
+	for _, sp := range cmd.Benchmarks {
+		for i := 0; i < sp.Num; i++ {
+			agentCmd := NewBagentCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+			agents = append(agents, agentCmd)
+			err := agentCmd.ParseFlags(append([]string{"-agentNum", strconv.Itoa(i), "-hosts", strings.Join(cmd.PilosaHosts, ",")}, sp.Args...))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	errors := make([]error, len(agents))
+
+	wg := sync.WaitGroup{}
+	for i, agent := range agents {
+		wg.Add(1)
+		go func(i int, agent *BagentCommand) {
+			defer wg.Done()
+			errors[i] = agent.Run(ctx)
+		}(i, agent)
+	}
+	wg.Wait()
+	for _, err := range errors {
+		if err != nil {
+			return fmt.Errorf("%v", errors)
+		}
+	}
 	return nil
 }
 

@@ -1,0 +1,10 @@
+{
+    "CreatorArgs": ["-type", "local", "-serverN", "1", "-replicaN", "1"],
+    "Agents": { "Type": "local" },
+    "Benchmarks": [
+        {
+            "Num": 1,
+            "Args": ["slice-height", "-max-time", "1", "-max-bits-per-map", "100"]
+        }
+    ]
+}

@@ -191,7 +191,7 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 		return nil, errors.New(s)
 	}
 
-	return nil, nil
+	return qresp, nil
 }
 
 // Import bulk imports bits for a single slice to a host.
