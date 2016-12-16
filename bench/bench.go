@@ -53,7 +53,7 @@ type parallelBenchmark struct {
 // Init calls Init for each benchmark. If there are any errors, it will return a
 // non-nil error value.
 func (pb *parallelBenchmark) Init(hosts []string, agentNum int) error {
-	var g errgroup.Group
+	var g ErrGroup
 	for i, _ := range pb.benchmarkers {
 		b := pb.benchmarkers[i]
 		g.Go(func() error {
