@@ -14,14 +14,13 @@ import (
 // RandomSetBits sets bits randomly and deterministically based on a seed.
 type RandomSetBits struct {
 	HasClient
-	BaseBitmapID   int64
-	BaseProfileID  int64
-	BitmapIDRange  int64
-	ProfileIDRange int64
-	Iterations     int // number of bits that will be set
-	Seed           int64
-	DB             string // DB to use in pilosa.
-
+	BaseBitmapID   int64  `json:"base-bitmap-id"`
+	BaseProfileID  int64  `json:"base-profile-id"`
+	BitmapIDRange  int64  `json:"bitmap-id-range"`
+	ProfileIDRange int64  `json:"profile-id-range"`
+	Iterations     int    `json:"iterations"`
+	Seed           int64  `json:"seed"`
+	DB             string `json:"db"`
 }
 
 func (b *RandomSetBits) Usage() string {

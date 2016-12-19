@@ -24,6 +24,8 @@ import (
 	"time"
 	"unsafe"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/bench"
 	"github.com/pilosa/pilosa/creator"
@@ -1150,18 +1152,20 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 // on the command line.
 type BagentCommand struct {
 	// Slice of Benchmarks which will be run serially.
-	Benchmarks []bench.Benchmark
+	Benchmarks []bench.Benchmark `json:"benchmarks"`
 	// AgentNum will be passed to each benchmark's Run method so that it can
 	// parameterize its behavior.
-	AgentNum int
-	// Slice of pilosa hosts to run the Benchmarks against.
-	Hosts []string
+	AgentNum int `json:"agent-num"`
+
 	// Enable pretty printing of results, for human consumption.
 	HumanReadable bool
 
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	// Slice of pilosa hosts to run the Benchmarks against.
+	Hosts []string `json:"hosts"`
+
+	Stdin  io.Reader `json:"-"`
+	Stdout io.Writer `json:"-"`
+	Stderr io.Writer `json:"-"`
 }
 
 // NewBagentCommand returns a new instance of BagentCommand.
@@ -1278,6 +1282,7 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 	}
 
 	res := sbm.Run(ctx, cmd.AgentNum)
+	res["metadata"] = cmd
 	enc := json.NewEncoder(cmd.Stdout)
 	enc.SetIndent("", "  ")
 	if cmd.HumanReadable {
@@ -1309,22 +1314,17 @@ type BspawnCommand struct {
 	// If AgentHosts is specified, Agents is ignored, and the existing
 	// agents specified here are used.
 	AgentHosts []string
-	// Agents is config for creating a fleet of agents from which to run the
-	// benchmark. TODO: mostly unimplemented.
-	Agents AgentConfig
 
 	// Benchmarks is a slice of Spawns which specifies all of the bagent
 	// commands to run. These will all be run in parallel, started on each
 	// of the agents in a round robin fashion.
 	Benchmarks []Spawn
 
+	SSHUser string
+
 	Stdin  io.Reader `json:"-"`
 	Stdout io.Writer `json:"-"`
 	Stderr io.Writer `json:"-"`
-}
-
-type AgentConfig struct {
-	Type string
 }
 
 // Spawn represents a bagent command run in parallel across Num agents. The
@@ -1381,7 +1381,10 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		// must create cluster
 		r, w := io.Pipe()
 		createCmd := NewCreateCommand(cmd.Stdin, w, cmd.Stderr)
-		createCmd.ParseFlags(cmd.CreatorArgs)
+		err := createCmd.ParseFlags(cmd.CreatorArgs)
+		if err != nil {
+			return err
+		}
 		go func() {
 			err := createCmd.Run(ctx)
 			if err != nil {
@@ -1390,20 +1393,49 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		}()
 		clus := &CreateOutput{}
 		dec := json.NewDecoder(r)
-		err := dec.Decode(clus)
+		err = dec.Decode(clus)
 		if err != nil {
 			return err
 		}
 		cmd.PilosaHosts = clus.Hosts
 	}
-	switch cmd.Agents.Type {
-	case "local":
+	if len(cmd.AgentHosts) > 0 {
+		return cmd.spawnRemote(ctx)
+	} else {
 		return cmd.spawnLocal(ctx)
-	case "remote":
-		return fmt.Errorf("remote type spawning is unimplemented")
-	default:
-		return fmt.Errorf("'%v' is not a supported type of spawn command", cmd.Agents.Type)
 	}
+}
+
+func (cmd *BspawnCommand) spawnRemote(ctx context.Context) error {
+	agentIndex := 0
+	agentConnections, err := pilosactl.SSHClients(cmd.AgentHosts, cmd.SSHUser, "")
+	if err != nil {
+		return err
+	}
+	sessions := make([]*ssh.Session, 0)
+	for _, sp := range cmd.Benchmarks {
+		for i := 0; i < sp.Num; i++ {
+			sess, err := agentConnections[agentIndex].NewSession()
+			if err != nil {
+				return err
+			}
+			sessions = append(sessions, sess)
+			sess.Stdout = cmd.Stdout
+			sess.Stderr = cmd.Stderr
+			err = sess.Start("pilosactl bagent -agentNum=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " " + strings.Join(sp.Args, " "))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	for _, sess := range sessions {
+		err = sess.Wait()
+		if err != nil {
+			return fmt.Errorf("error waiting for remote bagent: %v", err)
+		}
+	}
+	return nil
 }
 
 func (cmd *BspawnCommand) spawnLocal(ctx context.Context) error {

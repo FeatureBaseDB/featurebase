@@ -12,15 +12,14 @@ import (
 // RandomQuery queries randomly and deterministically based on a seed.
 type RandomQuery struct {
 	HasClient
-	MaxDepth      int
-	MaxArgs       int
-	MaxN          int
-	BaseBitmapID  int64
-	BitmapIDRange int64
-	Iterations    int // number of queries
-	Seed          int64
-	DBs           []string // DBs to query.
-
+	MaxDepth      int      `json:"max-depth"`
+	MaxArgs       int      `json:"max-args"`
+	MaxN          int      `json:"max-n"`
+	BaseBitmapID  int64    `json:"base-bitmap-id"`
+	BitmapIDRange int64    `json:"bitmap-id-range"`
+	Iterations    int      `json:"iterations"`
+	Seed          int64    `json:"seed"`
+	DBs           []string `json:"dbs"`
 }
 
 func (b *RandomQuery) Usage() string {

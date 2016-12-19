@@ -23,18 +23,18 @@ func NewSliceHeight(stdin io.Reader, stdout, stderr io.Writer) *SliceHeight {
 // SliceHeight benchmark tests the effect of an increasing number of bitmaps in
 // a single slice on query time.
 type SliceHeight struct {
-	MaxTime time.Duration
+	MaxTime time.Duration `json:"max-time"`
 	hosts   []string
 
-	MinBitsPerMap int64
-	MaxBitsPerMap int64
-	Seed          int64
-	Database      string
-	Frame         string
+	MinBitsPerMap int64  `json:"min-bits-per-map"`
+	MaxBitsPerMap int64  `json:"max-bits-per-map"`
+	Seed          int64  `json:"seed"`
+	Database      string `json:"database"`
+	Frame         string `json:"frame"`
 
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	Stdin  io.Reader `json:"-"`
+	Stdout io.Writer `json:"-"`
+	Stderr io.Writer `json:"-"`
 }
 
 func (b *SliceHeight) Usage() string {
