@@ -386,8 +386,8 @@ func GenerateSetCommands(n int, rand *rand.Rand) []SetCommand {
 }
 
 // ParseConfig parses s into a Config.
-func ParseConfig(s string) (main.Config, error) {
-	var c main.Config
+func ParseConfig(s string) (pilosa.Config, error) {
+	var c pilosa.Config
 	_, err := toml.Decode(s, &c)
 	return c, err
 }
