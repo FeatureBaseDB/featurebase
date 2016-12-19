@@ -26,6 +26,7 @@ type SliceHeight struct {
 	MaxTime time.Duration `json:"max-time"`
 	hosts   []string
 
+	Name          string `json:"name"`
 	MinBitsPerMap int64  `json:"min-bits-per-map"`
 	MaxBitsPerMap int64  `json:"max-bits-per-map"`
 	Seed          int64  `json:"seed"`
@@ -84,6 +85,7 @@ func (b *SliceHeight) ConsumeFlags(args []string) ([]string, error) {
 }
 
 func (b *SliceHeight) Init(hosts []string, agentNum int) error {
+	b.Name = "SliceHeight"
 	b.hosts = hosts
 	return nil
 }

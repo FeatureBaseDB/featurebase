@@ -14,6 +14,7 @@ import (
 // RandomSetBits sets bits randomly and deterministically based on a seed.
 type RandomSetBits struct {
 	HasClient
+	Name           string `json:"name"`
 	BaseBitmapID   int64  `json:"base-bitmap-id"`
 	BaseProfileID  int64  `json:"base-profile-id"`
 	BitmapIDRange  int64  `json:"bitmap-id-range"`
@@ -21,6 +22,11 @@ type RandomSetBits struct {
 	Iterations     int    `json:"iterations"`
 	Seed           int64  `json:"seed"`
 	DB             string `json:"db"`
+}
+
+func (b *RandomSetBits) Init(hosts []string, agentNum int) error {
+	b.Name = "RandomSetBits"
+	return b.HasClient.Init(hosts, agentNum)
 }
 
 func (b *RandomSetBits) Usage() string {

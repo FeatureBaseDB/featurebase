@@ -17,6 +17,7 @@ import (
 // It also uses PermutationGenerator to permute IDs randomly.
 type ZipfSetBits struct {
 	HasClient
+	Name           string
 	BaseBitmapID   int64
 	BaseProfileID  int64
 	BitmapIDRange  int64
@@ -122,6 +123,7 @@ func getZipfOffset(N int64, exp, ratio float64) float64 {
 }
 
 func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
+	b.Name = "ZipfSetBits"
 	rnd := rand.New(rand.NewSource(b.Seed + int64(agentNum)))
 	bitmapOffset := getZipfOffset(b.BitmapIDRange, b.BitmapExponent, b.BitmapRatio)
 	b.BitmapRng = rand.NewZipf(rnd, b.BitmapExponent, bitmapOffset, uint64(b.BitmapIDRange-1))
