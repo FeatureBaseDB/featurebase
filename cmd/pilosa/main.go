@@ -137,9 +137,10 @@ func (m *Main) Run(args ...string) error {
 
 	// Build cluster from config file.
 	m.Server.Host = m.Config.Host
-	m.Server.GossipPort = m.Config.GossipPort
-	m.Server.GossipSeed = m.Config.GossipSeed
 	m.Server.Cluster = m.Config.PilosaCluster()
+
+	// set message handler
+	m.Server.Cluster.NodeSet.SetMessageHandler(m.Server.Index.HandleMessage)
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)

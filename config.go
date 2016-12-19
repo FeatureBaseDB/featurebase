@@ -10,15 +10,14 @@ const (
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir    string `toml:"data-dir"`
-	Host       string `toml:"host"`
-	GossipPort int    `toml:"gossip-port"`
-	GossipSeed string `toml:"gossip-seed"`
+	DataDir string `toml:"data-dir"`
+	Host    string `toml:"host"`
 
 	Cluster struct {
 		ReplicaN        int           `toml:"replicas"`
 		Nodes           []*ConfigNode `toml:"node"`
 		PollingInterval Duration      `toml:"polling-interval"`
+		Gossip          *ConfigGossip `toml:"gossip"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -34,12 +33,15 @@ type ConfigNode struct {
 	Host string `toml:"host"`
 }
 
+type ConfigGossip struct {
+	Port int    `toml:"port"`
+	Seed string `toml:"seed"`
+}
+
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Host:       DefaultHost,
-		GossipPort: DefaultGossipPort,
-		GossipSeed: DefaultHost,
+		Host: DefaultHost,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
@@ -62,6 +64,21 @@ func (c *Config) PilosaCluster() *Cluster {
 
 	for _, n := range c.Cluster.Nodes {
 		cluster.Nodes = append(cluster.Nodes, &Node{Host: n.Host})
+	}
+
+	// setup gossip if specified
+	if c.Cluster.Gossip != nil {
+		gossipPort := DefaultGossipPort
+		gossipSeed := DefaultHost
+		if c.Cluster.Gossip.Port != 0 {
+			gossipPort = c.Cluster.Gossip.Port
+		}
+		if c.Cluster.Gossip.Seed != "" {
+			gossipSeed = c.Cluster.Gossip.Seed
+		}
+		cluster.NodeSet = NewGossipNodeSet(c.Host, gossipPort, gossipSeed)
+	} else {
+		cluster.NodeSet = NewStaticNodeSet()
 	}
 
 	return cluster

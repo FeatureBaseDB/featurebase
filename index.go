@@ -11,6 +11,9 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/internal"
 )
 
 // DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
@@ -294,6 +297,25 @@ func (i *Index) flushCaches() {
 			}
 		}
 	}
+}
+
+// HandleMessage handles protobuf Messages broadcasted to nodes
+// in the cluster from the cluster's NodeSet.
+func (i *Index) HandleMessage(m proto.Message) error {
+	switch obj := m.(type) {
+	case *internal.CreateSliceMessage:
+		d, err := i.CreateDBIfNotExists(obj.DB)
+		if err != nil {
+			return err
+		}
+		d.SetRemoteMaxSlice(obj.Slice)
+	case *internal.DeleteDBMessage:
+		err := i.DeleteDB(obj.DB)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (i *Index) logger() *log.Logger { return log.New(i.LogOutput, "", log.LstdFlags) }

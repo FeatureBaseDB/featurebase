@@ -77,6 +77,16 @@ func TestHasher(t *testing.T) {
 	}
 }
 
+// Ensure that an empty cluster returns a valid (empty) NodeSet
+func TestCluster_NodeSetHosts(t *testing.T) {
+
+	c := pilosa.Cluster{}
+
+	if h := c.NodeSetHosts(); !reflect.DeepEqual(h, []string{}) {
+		t.Fatalf("unexpected slice of hosts: %s", h)
+	}
+}
+
 // Ensure cluster can compare its Nodes and Members
 func TestCluster_Health(t *testing.T) {
 	c := pilosa.Cluster{
@@ -85,7 +95,7 @@ func TestCluster_Health(t *testing.T) {
 			{Host: "serverB:1000"},
 			{Host: "serverC:1000"},
 		},
-		NodeSet: &StaticNodeSet{},
+		NodeSet: &pilosa.StaticNodeSet{},
 	}
 
 	j, err := c.NodeSet.Join([]string{"serverA:1000", "serverC:1000", "serverD:1000"})
@@ -135,21 +145,3 @@ type ConstHasher struct {
 func NewConstHasher(i int) *ConstHasher { return &ConstHasher{i: i} }
 
 func (h *ConstHasher) Hash(key uint64, n int) int { return h.i }
-
-// StaticNodeSet represents a basic NodeSet for testing
-type StaticNodeSet struct {
-	nodes []string
-}
-
-func (g *StaticNodeSet) Nodes() []*pilosa.Node {
-	a := make([]*pilosa.Node, 0, len(g.nodes))
-	for _, n := range g.nodes {
-		a = append(a, &pilosa.Node{Host: n})
-	}
-	return a
-}
-
-func (g *StaticNodeSet) Join(nodes []string) (int, error) {
-	g.nodes = nodes
-	return 0, nil
-}

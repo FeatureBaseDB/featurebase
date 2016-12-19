@@ -19,6 +19,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/messenger"
 	"github.com/pilosa/pilosa/pql"
 )
 
@@ -369,6 +370,13 @@ func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// send the delete message to all nodes
+	// NOTE: this calls a second DeleteDB on the local node
+	messenger.GetMessenger("").SendMessage(
+		&internal.DeleteDBMessage{
+			DB: req.DB,
+		})
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteDBResponse{}); err != nil {
