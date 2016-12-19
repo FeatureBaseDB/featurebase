@@ -118,7 +118,7 @@ func (sb *serialBenchmark) Init(hosts []string, agentNum int) error {
 // and the values are the results of each benchmark's Run method.
 func (sb *serialBenchmark) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	results := make(map[string]interface{}, len(sb.benchmarkers))
-	runtimes := make(map[string]time.Duration)
+	runtimes := make(map[string]interface{})
 	total_start := time.Now()
 	for i, b := range sb.benchmarkers {
 		start := time.Now()
