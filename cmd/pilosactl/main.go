@@ -1158,7 +1158,7 @@ type BagentCommand struct {
 	AgentNum int `json:"agent-num"`
 
 	// Enable pretty printing of results, for human consumption.
-	HumanReadable bool
+	HumanReadable bool `json:"human-readable"`
 
 	// Slice of pilosa hosts to run the Benchmarks against.
 	Hosts []string `json:"hosts"`
