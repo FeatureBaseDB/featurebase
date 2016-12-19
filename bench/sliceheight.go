@@ -24,7 +24,7 @@ func NewSliceHeight(stdin io.Reader, stdout, stderr io.Writer) *SliceHeight {
 // a single slice on query time.
 type SliceHeight struct {
 	MaxTime time.Duration `json:"max-time"`
-	hosts   []string      `json:""`
+	hosts   []string
 
 	MinBitsPerMap int64  `json:"min-bits-per-map"`
 	MaxBitsPerMap int64  `json:"max-bits-per-map"`
@@ -32,9 +32,9 @@ type SliceHeight struct {
 	Database      string `json:"database"`
 	Frame         string `json:"frame"`
 
-	Stdin  io.Reader `json:""`
-	Stdout io.Writer `json:""`
-	Stderr io.Writer `json:""`
+	Stdin  io.Reader `json:"-"`
+	Stdout io.Writer `json:"-"`
+	Stderr io.Writer `json:"-"`
 }
 
 func (b *SliceHeight) Usage() string {
