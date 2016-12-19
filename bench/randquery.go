@@ -12,6 +12,7 @@ import (
 // RandomQuery queries randomly and deterministically based on a seed.
 type RandomQuery struct {
 	HasClient
+	Name          string   `json:"name"`
 	MaxDepth      int      `json:"max-depth"`
 	MaxArgs       int      `json:"max-args"`
 	MaxN          int      `json:"max-n"`
@@ -20,6 +21,11 @@ type RandomQuery struct {
 	Iterations    int      `json:"iterations"`
 	Seed          int64    `json:"seed"`
 	DBs           []string `json:"dbs"`
+}
+
+func (b *RandomQuery) Init(hosts []string, agentNum int) error {
+	b.Name = "RandomQuery"
+	return b.HasClient.Init(hosts, agentNum)
 }
 
 func (b *RandomQuery) Usage() string {

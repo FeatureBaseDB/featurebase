@@ -22,6 +22,7 @@ func NewImport(stdin io.Reader, stdout, stderr io.Writer) *Import {
 
 // Import sets bits with increasing profile id and bitmap id.
 type Import struct {
+	Name              string `json:"name"`
 	BaseBitmapID      int64  `json:"base-bitmap-id"`
 	MaxBitmapID       int64  `json:"max-bitmap-id"`
 	BaseProfileID     int64  `json:"base-profile-id"`
@@ -107,6 +108,7 @@ func (b *Import) Init(hosts []string, agentNum int) error {
 	if len(hosts) == 0 {
 		return fmt.Errorf("Need at least one host")
 	}
+	b.Name = "Import"
 	b.Host = hosts[0]
 	// generate csv data
 	baseBitmapID, maxBitmapID, baseProfileID, maxProfileID := b.BaseBitmapID, b.MaxBitmapID, b.BaseProfileID, b.MaxProfileID
