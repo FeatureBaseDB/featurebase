@@ -22,16 +22,16 @@ func NewImport(stdin io.Reader, stdout, stderr io.Writer) *Import {
 
 // Import sets bits with increasing profile id and bitmap id.
 type Import struct {
-	BaseBitmapID      int64
-	MaxBitmapID       int64
-	BaseProfileID     int64
-	MaxProfileID      int64
-	RandomBitmapOrder bool
-	MinBitsPerMap     int64
-	MaxBitsPerMap     int64
-	AgentControls     string
-	Seed              int64
-	numbits           int
+	BaseBitmapID      int64  `json:"base-bitmap-id"`
+	MaxBitmapID       int64  `json:"max-bitmap-id"`
+	BaseProfileID     int64  `json:"base-profile-id"`
+	MaxProfileID      int64  `json:"max-profile-id"`
+	RandomBitmapOrder bool   `json:"random-bitmap-order"`
+	MinBitsPerMap     int64  `json:"min-bits-per-map"`
+	MaxBitsPerMap     int64  `json:"max-bits-per-map"`
+	AgentControls     string `json:"agent-controls"`
+	Seed              int64  `json:"seed"`
+	numbits           int    `json:""`
 
 	*pilosactl.ImportCommand
 }
