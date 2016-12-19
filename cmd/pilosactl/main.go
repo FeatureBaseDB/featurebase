@@ -1156,6 +1156,8 @@ type BagentCommand struct {
 	AgentNum int
 	// Slice of pilosa hosts to run the Benchmarks against.
 	Hosts []string
+	// Enable pretty printing of results, for human consumption.
+	HumanReadable bool
 
 	Stdin  io.Reader
 	Stdout io.Writer
@@ -1165,9 +1167,10 @@ type BagentCommand struct {
 // NewBagentCommand returns a new instance of BagentCommand.
 func NewBagentCommand(stdin io.Reader, stdout, stderr io.Writer) *BagentCommand {
 	return &BagentCommand{
-		Benchmarks: []bench.Benchmark{},
-		Hosts:      []string{},
-		AgentNum:   0,
+		Benchmarks:    []bench.Benchmark{},
+		Hosts:         []string{},
+		AgentNum:      0,
+		HumanReadable: false,
 
 		Stdin:  stdin,
 		Stdout: stdout,
@@ -1188,6 +1191,7 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 	var pilosaHosts string
 	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "Comma separated list of host:port")
 	fs.IntVar(&cmd.AgentNum, "agentNum", 0, "An integer differentiating this agent from other in the fleet.")
+	fs.BoolVar(&cmd.HumanReadable, "human", false, "Boolean to enable human-readable format.")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1251,6 +1255,9 @@ The following arguments are available:
 	-agentNum N
 		An integer differentiating this agent from others in the fleet.
 
+	-human
+		Boolean to enable human-readable format.
+
 	subcommands:
 		diagonal-set-bits
 		random-set-bits
@@ -1273,6 +1280,9 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 	res := sbm.Run(ctx, cmd.AgentNum)
 	enc := json.NewEncoder(cmd.Stdout)
 	enc.SetIndent("", "  ")
+	if cmd.HumanReadable {
+		res = bench.Prettify(res)
+	}
 	err = enc.Encode(res)
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err)
