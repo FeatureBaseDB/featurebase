@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,7 +13,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -22,8 +23,6 @@ import (
 	"text/tabwriter"
 	"time"
 	"unsafe"
-
-	"encoding/json"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/bench"
@@ -981,17 +980,14 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 
 // CreateCommand represents a command for creating a pilosa cluster.
 type CreateCommand struct {
-	// Type can be AWS, local, etc.
-	Type string
+	Type          string
+	ServerN       int
+	ReplicaN      int
+	LogFilePrefix string
+	Hosts         []string
+	GoMaxProcs    int
 
-	// ServerN is the number of pilosa hosts in the cluster
-	ServerN int
-
-	// ReplicaN is the replication number for the cluster
-	ReplicaN int
-
-	// run is used internally by local cluster to signal that the cluster should be run and not exit
-	run bool
+	SSHUser string
 
 	// Standard input/output
 	Stdin  io.Reader
@@ -1012,14 +1008,19 @@ func NewCreateCommand(stdin io.Reader, stdout, stderr io.Writer) *CreateCommand 
 func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Type, "type", "local", "Type of cluster - local, AWS, etc.")
-	fs.IntVar(&cmd.ServerN, "serverN", 3, "Number of hosts in cluster")
-	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "Replication factor for cluster")
-	fs.BoolVar(&cmd.run, "run", false, "run, don't exit")
+	fs.StringVar(&cmd.Type, "type", "", "")
+	fs.IntVar(&cmd.ServerN, "serverN", 3, "")
+	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "")
+	fs.StringVar(&cmd.LogFilePrefix, "log-file-prefix", "", "")
+	var hosts string
+	fs.IntVar(&cmd.GoMaxProcs, "gomaxprocs", 0, "")
+	fs.StringVar(&hosts, "hosts", "", "")
+	fs.StringVar(&cmd.SSHUser, "ssh-user", "", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	cmd.Hosts = strings.Split(hosts, ",")
 	return nil
 }
 
@@ -1040,20 +1041,30 @@ The following flags are allowed:
 
 	-replicaN
 		replication factor for cluster
+
+	-hosts
+		Comma separated host:port list. Instead of
+		creating hosts, just start pilosa on these
+		pre-existing hosts. The same host may be
+		listed multiple times with different ports.
+
+	-log-file-prefix
+		output from the started cluster will go
+		into files with this prefix (one per node)
+
+	-ssh-user
+		username to use when contacting remote hosts
+
+	-gomaxprocs
+		when starting a cluster on remote hosts, this
+		will set the value of GOMAXPROCS.
+
 `)
 }
 
-// create separates creation from running for use programmatically by other
-// commands like bspawn.
-func (cmd *CreateCommand) create() (creator.Cluster, error) {
-	switch cmd.Type {
-	case "local":
-		return creator.NewLocalCluster(cmd.ReplicaN, cmd.ServerN)
-	case "AWS":
-		return nil, fmt.Errorf("unimplemented create type: %v", cmd.Type)
-	default:
-		return nil, fmt.Errorf("unsupported create type: %v", cmd.Type)
-	}
+type CreateOutput struct {
+	Hosts    []string `json:"hosts"`
+	LogFiles []string `json:"log-files"`
 }
 
 // Run executes cluster creation.
@@ -1061,44 +1072,77 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 	var clus creator.Cluster
 	switch cmd.Type {
 	case "local":
-		var err error
-		if cmd.run {
-			clus, err = cmd.create()
-			if err != nil {
-				return fmt.Errorf("running create command: %v", err)
-			}
-			fmt.Fprintln(cmd.Stdout, strings.Join(clus.Hosts(), ","))
-			select {}
+		clus = &creator.LocalCluster{
+			ReplicaN: cmd.ReplicaN,
+			ServerN:  cmd.ServerN,
 		}
-		args := append(os.Args, "-run")
-		subcmd := exec.Command(args[0], args[1:]...)
-		pipeR, err := subcmd.StdoutPipe()
-		if err != nil {
-			return fmt.Errorf("Couldn't get pipe for subcmd stdout: %v", err)
-		}
-		if subcmdOut, err := ioutil.TempFile("", "pilosactl-create"); err == nil {
-			subcmd.Stderr = subcmdOut
-			fmt.Fprintln(cmd.Stderr, subcmdOut.Name())
-		} else {
-			fmt.Fprintf(cmd.Stderr, "Error creating file for pilosa output - discarding: %v", err)
-		}
-		scanner := bufio.NewScanner(pipeR)
-		err = subcmd.Start()
-		if err != nil {
-			return fmt.Errorf("error kicking off local cluster: %v", err)
-		}
-		scanner.Scan()
-		fmt.Fprintln(cmd.Stdout, scanner.Text())
-		subcmd.Stdout = subcmd.Stderr
-		pipeR.Close()
-
 	case "AWS":
 		return fmt.Errorf("AWS cluster type is not yet implemented")
+	case "":
+		clus = &creator.RemoteCluster{
+			ClusterHosts: cmd.Hosts,
+			ReplicaN:     cmd.ReplicaN,
+			SSHUser:      cmd.SSHUser,
+			Stderr:       cmd.Stderr,
+			GoMaxProcs:   cmd.GoMaxProcs,
+		}
 	default:
 		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
 	}
 
-	return nil
+	err := clus.Start()
+	if err != nil {
+		return fmt.Errorf("starting cluster: %v", err)
+	}
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for range c {
+			fmt.Fprintf(cmd.Stderr, "\ncaught signal - shutting down\n")
+			err := clus.Shutdown()
+			code := 0
+			if err != nil {
+				code = 1
+			}
+			os.Exit(code)
+		}
+	}()
+
+	defer clus.Shutdown()
+	output := &CreateOutput{}
+	output.Hosts = clus.Hosts()
+
+	logReaders := clus.Logs()
+	if cmd.LogFilePrefix != "" {
+		output.LogFiles = make([]string, len(clus.Hosts()))
+	}
+	for i, _ := range clus.Hosts() {
+		var f io.Writer = cmd.Stderr
+		var err error
+		if cmd.LogFilePrefix != "" {
+			f, err = os.Create(cmd.LogFilePrefix + strconv.Itoa(i))
+			if err != nil {
+				return err
+			}
+			output.LogFiles[i] = f.(*os.File).Name()
+		}
+
+		go func(i int, f io.Writer) {
+			_, err := io.Copy(f, logReaders[i])
+			if err != nil {
+				fmt.Fprintf(cmd.Stderr, "Error copying cluster logs: '%v'", err)
+			}
+		}(i, f)
+	}
+
+	enc := json.NewEncoder(cmd.Stdout)
+	err = enc.Encode(output)
+	if err != nil {
+		return err
+	}
+	select {}
+
 }
 
 // BagentCommand represents a command for running a benchmark agent. A benchmark
@@ -1322,14 +1366,22 @@ pilosactl spawn configfile
 func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	if len(cmd.PilosaHosts) == 0 {
 		// must create cluster
-		createCmd := NewCreateCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+		r, w := io.Pipe()
+		createCmd := NewCreateCommand(cmd.Stdin, w, cmd.Stderr)
 		createCmd.ParseFlags(cmd.CreatorArgs)
-		clus, err := createCmd.create()
+		go func() {
+			err := createCmd.Run(ctx)
+			if err != nil {
+				fmt.Fprintf(cmd.Stderr, "Cluster creation error while spawning: %v", err)
+			}
+		}()
+		clus := &CreateOutput{}
+		dec := json.NewDecoder(r)
+		err := dec.Decode(clus)
 		if err != nil {
-			return fmt.Errorf("Cluster creation error while spawning: %v", err)
+			return err
 		}
-		defer clus.Shutdown()
-		cmd.PilosaHosts = clus.Hosts()
+		cmd.PilosaHosts = clus.Hosts
 	}
 	switch cmd.Agents.Type {
 	case "local":
