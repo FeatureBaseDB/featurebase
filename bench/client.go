@@ -2,6 +2,7 @@ package bench
 
 import (
 	"fmt"
+
 	"github.com/pilosa/pilosa"
 )
 
@@ -22,7 +23,7 @@ func roundRobinClient(hosts []string, agentNum int) (*pilosa.Client, error) {
 // provides the Init method, a ClientType argument and a cli internal variable.
 type HasClient struct {
 	cli        *pilosa.Client
-	ClientType string
+	ClientType string `json:"client-type"`
 }
 
 // Init for HasClient looks at the ClientType field and creates a pilosa client

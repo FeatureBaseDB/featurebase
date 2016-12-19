@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 // Benchmark is an interface to guide the creation of new pilosa benchmarks or
