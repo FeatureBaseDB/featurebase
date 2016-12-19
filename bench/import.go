@@ -31,7 +31,7 @@ type Import struct {
 	MaxBitsPerMap     int64  `json:"max-bits-per-map"`
 	AgentControls     string `json:"agent-controls"`
 	Seed              int64  `json:"seed"`
-	numbits           int    `json:""`
+	numbits           int
 
 	*pilosactl.ImportCommand
 }
