@@ -48,9 +48,9 @@ func LCGmultiplierFromModulus(m int64, seed int64) int64 {
 	return product*seed + 1
 }
 
+// Returns map of {integerFactor: count, ...}
+// This is a naive algorithm that will not work well for large prime n.
 func primeFactors(n int64) map[int64]int {
-	// Returns map of {integerFactor: count, ...}
-	// This is a naive algorithm that will not work well for large prime n.
 	factors := make(map[int64]int)
 	for i := int64(2); i <= n; i++ {
 		div, mod := n/i, n%i
