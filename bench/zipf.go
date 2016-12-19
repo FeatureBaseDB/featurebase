@@ -109,15 +109,14 @@ func (b *ZipfSetBits) ConsumeFlags(args []string) ([]string, error) {
 	return fs.Args(), nil
 }
 
+// Offset is the true parameter used by the Zipf distribution, but the ratio,
+// as defined here, is a simpler, readable way to define the distribution.
+// Offset is in [1, inf), and its meaning depends on N (a pain for updating benchmark configs)
+// ratio is in (0, 1), and its meaning does not depend on N.
+// it is the ratio of the lowest probability in the distribution to the highest.
+// ratio=0.01 corresponds to a very small offset - the most skewed distribution for a given pair (N, exp)
+// ratio=0.99 corresponds to a very large offset - the most nearly uniform distribution for a given (N, exp)
 func getZipfOffset(N int64, exp, ratio float64) float64 {
-	// Offset is the true parameter used by the Zipf distribution, but the ratio,
-	// as defined here, is a simpler, readable way to define the distribution.
-	// Offset is in [1, inf), and its meaning depends on N (a pain for updating benchmark configs)
-	// ratio is in (0, 1), and its meaning does not depend on N.
-	// it is the ratio of the lowest probability in the distribution to the highest.
-	// ratio=0.01 corresponds to a very small offset - the most skewed distribution for a given pair (N, exp)
-	// ratio=0.99 corresponds to a very large offset - the most nearly uniform distribution for a given (N, exp)
-
 	z := math.Pow(ratio, 1/exp)
 	return z * float64(N-1) / (1 - z)
 }
