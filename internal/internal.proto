@@ -97,3 +97,11 @@ message MaxSlicesResponse {
     map<string, uint64> MaxSlices = 1;
 }
 
+message CreateSliceMessage {
+	string DB = 1;
+	uint64 Slice = 2;
+}
+
+message DeleteDBMessage {
+	string DB = 1;
+}

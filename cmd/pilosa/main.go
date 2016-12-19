@@ -134,9 +134,10 @@ func (m *Main) Run(args ...string) error {
 
 	// Build cluster from config file.
 	m.Server.Host = m.Config.Host
-	m.Server.GossipPort = m.Config.GossipPort
-	m.Server.GossipSeed = m.Config.GossipSeed
 	m.Server.Cluster = m.Config.PilosaCluster()
+
+	// set message handler
+	m.Server.Cluster.NodeSet.SetMessageHandler(m.Server.Index.HandleMessage)
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
@@ -197,15 +198,14 @@ func (m *Main) ParseFlags(args []string) error {
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir    string `toml:"data-dir"`
-	Host       string `toml:"host"`
-	GossipPort int    `toml:"gossip-port"`
-	GossipSeed string `toml:"gossip-seed"`
+	DataDir string `toml:"data-dir"`
+	Host    string `toml:"host"`
 
 	Cluster struct {
 		ReplicaN        int           `toml:"replicas"`
 		Nodes           []*ConfigNode `toml:"node"`
 		PollingInterval Duration      `toml:"polling-interval"`
+		Gossip          *ConfigGossip `toml:"gossip"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -221,12 +221,15 @@ type ConfigNode struct {
 	Host string `toml:"host"`
 }
 
+type ConfigGossip struct {
+	Port int    `toml:"port"`
+	Seed string `toml:"seed"`
+}
+
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Host:       DefaultHost,
-		GossipPort: DefaultGossipPort,
-		GossipSeed: DefaultHost,
+		Host: DefaultHost,
 	}
 	c.Cluster.ReplicaN = pilosa.DefaultReplicaN
 	c.Cluster.PollingInterval = Duration(pilosa.DefaultPollingInterval)
@@ -241,6 +244,23 @@ func (c *Config) PilosaCluster() *pilosa.Cluster {
 
 	for _, n := range c.Cluster.Nodes {
 		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: n.Host})
+	}
+
+	// setup gossip if specified
+	if c.Cluster.Gossip != nil {
+		gossipPort := DefaultGossipPort
+		gossipSeed := DefaultHost
+		if c.Cluster.Gossip.Port != 0 {
+			gossipPort = c.Cluster.Gossip.Port
+		}
+		if c.Cluster.Gossip.Seed != "" {
+			gossipSeed = c.Cluster.Gossip.Seed
+		}
+		//cluster.NodeSet = pilosa.NewGossipNodeSet(c.Host, c.Cluster.Gossip.Port, c.Cluster.Gossip.Seed)
+		fmt.Println("SETUP:", c.Host)
+		cluster.NodeSet = pilosa.NewGossipNodeSet(c.Host, gossipPort, gossipSeed)
+	} else {
+		cluster.NodeSet = pilosa.NewStaticNodeSet()
 	}
 
 	return cluster

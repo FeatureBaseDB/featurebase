@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 
-	"github.com/hashicorp/memberlist"
+	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -98,47 +98,17 @@ type Cluster struct {
 
 // NodeSet represents an interface to maintaining Node state.
 type NodeSet interface {
+	// Returns a list of all Nodes in the cluster
 	Nodes() []*Node
+
+	// Attempts to join a cluster having `nodes` as its existing members
 	Join(nodes []string) (int, error)
-}
 
-// GossipNodeSet represents a gossip implementation of NodeSet using memberlist
-type GossipNodeSet struct {
-	Memberlist *memberlist.Memberlist
-}
+	// Open starts any network activity implemented by the NodeSet
+	Open() error
 
-func (g *GossipNodeSet) Nodes() []*Node {
-	a := make([]*Node, 0, g.Memberlist.NumMembers())
-	for _, n := range g.Memberlist.Members() {
-		a = append(a, &Node{Host: n.Name})
-	}
-	return a
-}
-
-func (g *GossipNodeSet) Join(nodes []string) (int, error) {
-	return g.Memberlist.Join(nodes)
-}
-
-// NewGossipNodeSet returns a new instance of GossipNodeSet.
-func NewGossipNodeSet(name string, gossipPort int, gossipSeed string) (*GossipNodeSet, error) {
-	g := &GossipNodeSet{}
-
-	//TODO: pull memberlist config from pilosa.cfg file
-	cfg := memberlist.DefaultLocalConfig()
-	cfg.Name = name
-	cfg.BindPort = gossipPort
-	cfg.GossipNodes = 1
-
-	ml, err := memberlist.Create(cfg)
-	if err != nil {
-		return nil, err
-	}
-	g.Memberlist = ml
-
-	// attach to gossip seed node
-	g.Join([]string{gossipSeed}) //TODO: support a list of seeds
-
-	return g, nil
+	// SetMessageHandler provides the NodeSet with a function to call on ReceiveMessage
+	SetMessageHandler(f func(proto.Message) error)
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
@@ -252,4 +222,34 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 		j = int64(float64(b+1) * (float64(int64(1)<<31) / float64((key>>33)+1)))
 	}
 	return int(b)
+}
+
+// StaticNodeSet represents a basic NodeSet for testing
+type StaticNodeSet struct {
+	nodes []string
+}
+
+func NewStaticNodeSet() *StaticNodeSet {
+	return &StaticNodeSet{}
+}
+
+func (g *StaticNodeSet) Nodes() []*Node {
+	a := make([]*Node, 0, len(g.nodes))
+	for _, n := range g.nodes {
+		a = append(a, &Node{Host: n})
+	}
+	return a
+}
+
+func (g *StaticNodeSet) Join(nodes []string) (int, error) {
+	g.nodes = nodes
+	return 0, nil
+}
+
+func (g *StaticNodeSet) Open() error {
+	return nil
+}
+
+func (g *StaticNodeSet) SetMessageHandler(f func(proto.Message) error) {
+	return
 }

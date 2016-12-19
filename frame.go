@@ -10,6 +10,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/messenger"
 )
 
 const (
@@ -270,6 +271,14 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	if err := frag.Open(); err != nil {
 		return nil, err
 	}
+
+	// push slice to the Messenger (for max slice consideration)
+	messenger.GetMessenger("").SendMessage(
+		&internal.CreateSliceMessage{
+			DB:    f.db,
+			Slice: slice,
+		})
+
 	frag.BitmapAttrStore = f.bitmapAttrStore
 
 	// Save to lookup.

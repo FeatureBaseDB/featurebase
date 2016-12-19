@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
 
@@ -152,6 +153,30 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 		if a := f.Bitmap(10).Bits(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
 			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
 		}
+	}
+}
+
+// Ensure index can handle Messenger messages.
+func TestIndex_HandleMessage(t *testing.T) {
+	// Create a local index.
+	idx0 := MustOpenIndex()
+	defer idx0.Close()
+
+	msg0 := &internal.CreateSliceMessage{
+		DB:    "d",
+		Slice: 8,
+	}
+	idx0.HandleMessage(msg0)
+	if ms := idx0.MaxSlices(); !reflect.DeepEqual(ms, map[string]uint64{"d": 8}) {
+		t.Fatalf("unexpected max slice: %s", ms)
+	}
+
+	msg1 := &internal.DeleteDBMessage{
+		DB: "d",
+	}
+	idx0.HandleMessage(msg1)
+	if ms := idx0.MaxSlices(); !reflect.DeepEqual(ms, map[string]uint64{}) {
+		t.Fatalf("unexpected delete db: %s", ms)
 	}
 }
 
