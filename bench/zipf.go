@@ -17,23 +17,22 @@ import (
 // It also uses PermutationGenerator to permute IDs randomly.
 type ZipfSetBits struct {
 	HasClient
-	Name           string                `json:"name"`
-	BaseBitmapID   int64                 `json:"base-bitmap-id"`
-	BaseProfileID  int64                 `json:"base-profile-id"`
-	BitmapIDRange  int64                 `json:"bitmap-id-range"`
-	ProfileIDRange int64                 `json:"profile-id-range"`
-	Iterations     int                   `json:"iterations"`
-	Seed           int64                 `json:"seed"`
-	DB             string                `json:"db"`
-	bitmapRng      *rand.Zipf            `json:"-"`
-	ProfileRng     *rand.Zipf            `json:"-"`
-	BitmapPerm     *PermutationGenerator `json:"-"`
-	ProfilePerm    *PermutationGenerator `json:"-"`
-
+	Name            string  `json:"name"`
+	BaseBitmapID    int64   `json:"base-bitmap-id"`
+	BaseProfileID   int64   `json:"base-profile-id"`
+	BitmapIDRange   int64   `json:"bitmap-id-range"`
+	ProfileIDRange  int64   `json:"profile-id-range"`
+	Iterations      int     `json:"iterations"`
+	Seed            int64   `json:"seed"`
+	DB              string  `json:"db"`
 	BitmapExponent  float64 `json:"bitmap-exponent"`
 	BitmapRatio     float64 `json:"bitmap-ratio"`
 	ProfileExponent float64 `json:"profile-exponent"`
 	ProfileRatio    float64 `json:"profile-ratio"`
+	bitmapRng       *rand.Zipf
+	ProfileRng      *rand.Zipf
+	BitmapPerm      *PermutationGenerator
+	ProfilePerm     *PermutationGenerator
 }
 
 func (b *ZipfSetBits) Usage() string {
