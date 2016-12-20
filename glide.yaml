@@ -24,4 +24,5 @@ import:
   version: c200b10b5d5e122be351b67af224adc6128af5bf
   subpackages:
   - unix
-  
+- package: github.com/satori/go.uuid
+  version: v1.1.0
