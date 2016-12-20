@@ -121,7 +121,7 @@ func getZipfOffset(N int64, exp, ratio float64) float64 {
 }
 
 func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
-	b.Name = "ZipfSetBits"
+	b.Name = "zipf-set-bits"
 	rnd := rand.New(rand.NewSource(b.Seed + int64(agentNum)))
 	bitmapOffset := getZipfOffset(b.BitmapIDRange, b.BitmapExponent, b.BitmapRatio)
 	b.bitmapRng = rand.NewZipf(rnd, b.BitmapExponent, bitmapOffset, uint64(b.BitmapIDRange-1))
