@@ -17,24 +17,23 @@ import (
 // It also uses PermutationGenerator to permute IDs randomly.
 type ZipfSetBits struct {
 	HasClient
-	Name           string
-	BaseBitmapID   int64
-	BaseProfileID  int64
-	BitmapIDRange  int64
-	ProfileIDRange int64
-	Iterations     int // number of bits that will be set
-	Seed           int64
-	BitmapRng      *rand.Zipf
-	ProfileRng     *rand.Zipf
-	BitmapPerm     *PermutationGenerator
-	ProfilePerm    *PermutationGenerator
-	DB             string // DB to use in pilosa.
+	Name           string                `json:"name"`
+	BaseBitmapID   int64                 `json:"base-bitmap-id"`
+	BaseProfileID  int64                 `json:"base-profile-id"`
+	BitmapIDRange  int64                 `json:"bitmap-id-range"`
+	ProfileIDRange int64                 `json:"profile-id-range"`
+	Iterations     int                   `json:"iterations"`
+	Seed           int64                 `json:"seed"`
+	BitmapRng      *rand.Zipf            `json:"-"`
+	ProfileRng     *rand.Zipf            `json:"-"`
+	BitmapPerm     *PermutationGenerator `json:"-"`
+	ProfilePerm    *PermutationGenerator `json:"-"`
+	DB             string                `json:"db"`
 
-	// TODO remove these - but theyre needed in ConsumeFlags
-	BitmapExponent  float64
-	BitmapRatio     float64
-	ProfileExponent float64
-	ProfileRatio    float64
+	BitmapExponent  float64 `json:"bitmap-exponent"`
+	BitmapRatio     float64 `json:"bitmap-ratio"`
+	ProfileExponent float64 `json:"profile-exponent"`
+	ProfileRatio    float64 `json:"profile-ratio"`
 }
 
 func (b *ZipfSetBits) Usage() string {
