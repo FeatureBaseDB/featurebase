@@ -75,3 +75,6 @@ func decodeProfile(pb *internal.Profile) *Profile {
 
 	return p
 }
+
+// TimeFormat is the go-style time format used to parse string dates.
+const TimeFormat = "2006-01-02T15:04"
