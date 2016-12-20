@@ -30,9 +30,9 @@ type ZipfSetBits struct {
 	ProfileExponent float64 `json:"profile-exponent"`
 	ProfileRatio    float64 `json:"profile-ratio"`
 	bitmapRng       *rand.Zipf
-	ProfileRng      *rand.Zipf
-	BitmapPerm      *PermutationGenerator
-	ProfilePerm     *PermutationGenerator
+	profileRng      *rand.Zipf
+	bitmapPerm      *PermutationGenerator
+	profilePerm     *PermutationGenerator
 }
 
 func (b *ZipfSetBits) Usage() string {
