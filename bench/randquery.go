@@ -24,7 +24,7 @@ type RandomQuery struct {
 }
 
 func (b *RandomQuery) Init(hosts []string, agentNum int) error {
-	b.Name = "RandomQuery"
+	b.Name = "random-query"
 	return b.HasClient.Init(hosts, agentNum)
 }
 

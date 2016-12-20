@@ -21,7 +21,7 @@ type DiagonalSetBits struct {
 }
 
 func (b *DiagonalSetBits) Init(hosts []string, agentNum int) error {
-	b.Name = "DiagonalSetBits"
+	b.Name = "diagonal-set-bits"
 	return b.HasClient.Init(hosts, agentNum)
 }
 

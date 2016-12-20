@@ -19,7 +19,7 @@ type MultiDBSetBits struct {
 }
 
 func (b *MultiDBSetBits) Init(hosts []string, agentNum int) error {
-	b.Name = "MultiDBSetBits"
+	b.Name = "multi-db-set-bits"
 	return b.HasClient.Init(hosts, agentNum)
 }
 

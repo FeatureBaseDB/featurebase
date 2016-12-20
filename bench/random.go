@@ -25,7 +25,7 @@ type RandomSetBits struct {
 }
 
 func (b *RandomSetBits) Init(hosts []string, agentNum int) error {
-	b.Name = "RandomSetBits"
+	b.Name = "random-set-bits"
 	return b.HasClient.Init(hosts, agentNum)
 }
 

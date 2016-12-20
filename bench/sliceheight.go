@@ -85,7 +85,7 @@ func (b *SliceHeight) ConsumeFlags(args []string) ([]string, error) {
 }
 
 func (b *SliceHeight) Init(hosts []string, agentNum int) error {
-	b.Name = "SliceHeight"
+	b.Name = "slice-height"
 	b.hosts = hosts
 	return nil
 }
