@@ -1158,7 +1158,7 @@ type BagentCommand struct {
 	AgentNum int `json:"agent-num"`
 
 	// Enable pretty printing of results, for human consumption.
-	HumanReadable bool
+	HumanReadable bool `json:"human-readable"`
 
 	// Slice of pilosa hosts to run the Benchmarks against.
 	Hosts []string `json:"hosts"`
@@ -1284,8 +1284,8 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 	res := sbm.Run(ctx, cmd.AgentNum)
 	res["metadata"] = cmd
 	enc := json.NewEncoder(cmd.Stdout)
-	enc.SetIndent("", "  ")
 	if cmd.HumanReadable {
+		enc.SetIndent("", "  ")
 		res = bench.Prettify(res)
 	}
 	err = enc.Encode(res)

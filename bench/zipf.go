@@ -17,23 +17,22 @@ import (
 // It also uses PermutationGenerator to permute IDs randomly.
 type ZipfSetBits struct {
 	HasClient
-	BaseBitmapID   int64
-	BaseProfileID  int64
-	BitmapIDRange  int64
-	ProfileIDRange int64
-	Iterations     int // number of bits that will be set
-	Seed           int64
-	BitmapRng      *rand.Zipf
-	ProfileRng     *rand.Zipf
-	BitmapPerm     *PermutationGenerator
-	ProfilePerm    *PermutationGenerator
-	DB             string // DB to use in pilosa.
-
-	// TODO remove these - but theyre needed in ConsumeFlags
-	BitmapExponent  float64
-	BitmapRatio     float64
-	ProfileExponent float64
-	ProfileRatio    float64
+	Name            string  `json:"name"`
+	BaseBitmapID    int64   `json:"base-bitmap-id"`
+	BaseProfileID   int64   `json:"base-profile-id"`
+	BitmapIDRange   int64   `json:"bitmap-id-range"`
+	ProfileIDRange  int64   `json:"profile-id-range"`
+	Iterations      int     `json:"iterations"`
+	Seed            int64   `json:"seed"`
+	DB              string  `json:"db"`
+	BitmapExponent  float64 `json:"bitmap-exponent"`
+	BitmapRatio     float64 `json:"bitmap-ratio"`
+	ProfileExponent float64 `json:"profile-exponent"`
+	ProfileRatio    float64 `json:"profile-ratio"`
+	bitmapRng       *rand.Zipf
+	profileRng      *rand.Zipf
+	bitmapPerm      *PermutationGenerator
+	profilePerm     *PermutationGenerator
 }
 
 func (b *ZipfSetBits) Usage() string {
@@ -122,14 +121,15 @@ func getZipfOffset(N int64, exp, ratio float64) float64 {
 }
 
 func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
+	b.Name = "zipf-set-bits"
 	rnd := rand.New(rand.NewSource(b.Seed + int64(agentNum)))
 	bitmapOffset := getZipfOffset(b.BitmapIDRange, b.BitmapExponent, b.BitmapRatio)
-	b.BitmapRng = rand.NewZipf(rnd, b.BitmapExponent, bitmapOffset, uint64(b.BitmapIDRange-1))
+	b.bitmapRng = rand.NewZipf(rnd, b.BitmapExponent, bitmapOffset, uint64(b.BitmapIDRange-1))
 	profileOffset := getZipfOffset(b.ProfileIDRange, b.ProfileExponent, b.ProfileRatio)
-	b.ProfileRng = rand.NewZipf(rnd, b.ProfileExponent, profileOffset, uint64(b.ProfileIDRange-1))
+	b.profileRng = rand.NewZipf(rnd, b.ProfileExponent, profileOffset, uint64(b.ProfileIDRange-1))
 
-	b.BitmapPerm = NewPermutationGenerator(b.BitmapIDRange, b.Seed)
-	b.ProfilePerm = NewPermutationGenerator(b.ProfileIDRange, b.Seed+1)
+	b.bitmapPerm = NewPermutationGenerator(b.BitmapIDRange, b.Seed)
+	b.profilePerm = NewPermutationGenerator(b.ProfileIDRange, b.Seed+1)
 
 	return b.HasClient.Init(hosts, agentNum)
 }
@@ -145,11 +145,11 @@ func (b *ZipfSetBits) Run(ctx context.Context, agentNum int) map[string]interfac
 	var start time.Time
 	for n := 0; n < b.Iterations; n++ {
 		// generate IDs from Zipf distribution
-		bitmapIDOriginal := b.BitmapRng.Uint64()
-		profIDOriginal := b.ProfileRng.Uint64()
+		bitmapIDOriginal := b.bitmapRng.Uint64()
+		profIDOriginal := b.profileRng.Uint64()
 		// permute IDs randomly, but repeatably
-		bitmapID := b.BitmapPerm.Next(int64(bitmapIDOriginal))
-		profID := b.ProfilePerm.Next(int64(profIDOriginal))
+		bitmapID := b.bitmapPerm.Next(int64(bitmapIDOriginal))
+		profID := b.profilePerm.Next(int64(profIDOriginal))
 
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+int64(bitmapID), b.BaseProfileID+int64(profID))
 		start = time.Now()
