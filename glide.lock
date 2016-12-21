@@ -1,5 +1,5 @@
-hash: 9afe91839785e89880061fd2919b0a5cdb10d6f4c06b344c2924eeed0c9bfd65
-updated: 2016-12-01T16:53:45.096741528-07:00
+hash: 3b8279eaeec5a7b790ab8f2beacc451145362e91d8d9871d1c5b2313f7cd5d19
+updated: 2016-12-20T13:41:45.723967488-06:00
 imports:
 - name: github.com/boltdb/bolt
   version: 4b1ebc1869ad66568b313d0dc410e2be72670dda
@@ -21,6 +21,16 @@ imports:
   version: a6b377e3400b08991b80d6805d627f347f983866
   subpackages:
   - lru
+- name: github.com/satori/go.uuid
+  version: 879c5887cd475cd7864858769793b2ceb0d44feb
+- name: golang.org/x/crypto
+  version: d8e61c69ab46ca38328da2f4995abaf93b252290
+  subpackages:
+  - curve25519
+  - ed25519
+  - ed25519/internal/edwards25519
+  - ssh
+  - ssh/agent
 - name: golang.org/x/sys
   version: c200b10b5d5e122be351b67af224adc6128af5bf
   subpackages:

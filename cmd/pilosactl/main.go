@@ -31,6 +31,8 @@ import (
 	"github.com/pilosa/pilosa/creator"
 	"github.com/pilosa/pilosa/pilosactl"
 	"github.com/pilosa/pilosa/roaring"
+
+	"github.com/satori/go.uuid"
 )
 
 var (
@@ -1067,6 +1069,7 @@ The following flags are allowed:
 type CreateOutput struct {
 	Hosts    []string `json:"hosts"`
 	LogFiles []string `json:"log-files"`
+	RunUUID  string   `json:"run-uuid"`
 }
 
 // Run executes cluster creation.
@@ -1160,6 +1163,8 @@ type BagentCommand struct {
 	// Enable pretty printing of results, for human consumption.
 	HumanReadable bool `json:"human-readable"`
 
+	RunUUID string `json:"-"` // ignoring this here because we add it to the top level of the output
+
 	// Slice of pilosa hosts to run the Benchmarks against.
 	Hosts []string `json:"hosts"`
 
@@ -1193,9 +1198,10 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 	fs.SetOutput(ioutil.Discard)
 
 	var pilosaHosts string
-	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "Comma separated list of host:port")
-	fs.IntVar(&cmd.AgentNum, "agentNum", 0, "An integer differentiating this agent from other in the fleet.")
-	fs.BoolVar(&cmd.HumanReadable, "human", false, "Boolean to enable human-readable format.")
+	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "")
+	fs.IntVar(&cmd.AgentNum, "agentNum", 0, "")
+	fs.BoolVar(&cmd.HumanReadable, "human", false, "")
+	fs.StringVar(&cmd.RunUUID, "run-uuid", "", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1283,6 +1289,9 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 
 	res := sbm.Run(ctx, cmd.AgentNum)
 	res["metadata"] = cmd
+	if cmd.RunUUID != "" {
+		res["run-uuid"] = cmd.RunUUID
+	}
 	enc := json.NewEncoder(cmd.Stdout)
 	if cmd.HumanReadable {
 		enc.SetIndent("", "  ")
@@ -1377,6 +1386,7 @@ pilosactl spawn configfile
 
 // Run executes the main program execution.
 func (cmd *BspawnCommand) Run(ctx context.Context) error {
+	runUUID := uuid.NewV1()
 	if len(cmd.PilosaHosts) == 0 {
 		// must create cluster
 		r, w := io.Pipe()
@@ -1398,15 +1408,24 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 			return err
 		}
 		cmd.PilosaHosts = clus.Hosts
+
+		// add runUUID to create output, and print to stdout
+		enc := json.NewEncoder(cmd.Stdout)
+		enc.SetIndent("", " ")
+		clus.RunUUID = runUUID.String()
+		err = enc.Encode(clus)
+		if err != nil {
+			return err
+		}
 	}
 	if len(cmd.AgentHosts) > 0 {
-		return cmd.spawnRemote(ctx)
+		return cmd.spawnRemote(ctx, runUUID)
 	} else {
-		return cmd.spawnLocal(ctx)
+		return cmd.spawnLocal(ctx, runUUID)
 	}
 }
 
-func (cmd *BspawnCommand) spawnRemote(ctx context.Context) error {
+func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) error {
 	agentIndex := 0
 	agentConnections, err := pilosactl.SSHClients(cmd.AgentHosts, cmd.SSHUser, "")
 	if err != nil {
@@ -1422,7 +1441,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) error {
 			sessions = append(sessions, sess)
 			sess.Stdout = cmd.Stdout
 			sess.Stderr = cmd.Stderr
-			err = sess.Start("pilosactl bagent -agentNum=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " " + strings.Join(sp.Args, " "))
+			err = sess.Start("pilosactl bagent -agentNum=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " -run-uuid=" + runUUID.String() + " " + strings.Join(sp.Args, " "))
 			if err != nil {
 				return err
 			}
@@ -1438,13 +1457,13 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) error {
 	return nil
 }
 
-func (cmd *BspawnCommand) spawnLocal(ctx context.Context) error {
+func (cmd *BspawnCommand) spawnLocal(ctx context.Context, runUUID uuid.UUID) error {
 	agents := []*BagentCommand{}
 	for _, sp := range cmd.Benchmarks {
 		for i := 0; i < sp.Num; i++ {
 			agentCmd := NewBagentCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
 			agents = append(agents, agentCmd)
-			err := agentCmd.ParseFlags(append([]string{"-agentNum", strconv.Itoa(i), "-hosts", strings.Join(cmd.PilosaHosts, ",")}, sp.Args...))
+			err := agentCmd.ParseFlags(append([]string{"-agentNum", strconv.Itoa(i), "-hosts", strings.Join(cmd.PilosaHosts, ","), "-run-uuid", runUUID.String()}, sp.Args...))
 			if err != nil {
 				return err
 			}
