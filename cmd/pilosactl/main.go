@@ -990,6 +990,7 @@ type CreateCommand struct {
 	LogFilePrefix string
 	Hosts         []string
 	GoMaxProcs    int
+	RunUUID       string
 
 	SSHUser string
 
@@ -1020,6 +1021,7 @@ func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs.IntVar(&cmd.GoMaxProcs, "gomaxprocs", 0, "")
 	fs.StringVar(&hosts, "hosts", "", "")
 	fs.StringVar(&cmd.SSHUser, "ssh-user", "", "")
+	fs.StringVar(&cmd.RunUUID, "run-uuid", "", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1115,8 +1117,10 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 	}()
 
 	defer clus.Shutdown()
-	output := &CreateOutput{}
-	output.Hosts = clus.Hosts()
+	output := &CreateOutput{
+		RunUUID: cmd.RunUUID,
+		Hosts:   clus.Hosts(),
+	}
 
 	logReaders := clus.Logs()
 	if cmd.LogFilePrefix != "" {
@@ -1391,7 +1395,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		// must create cluster
 		r, w := io.Pipe()
 		createCmd := NewCreateCommand(cmd.Stdin, w, cmd.Stderr)
-		err := createCmd.ParseFlags(cmd.CreatorArgs)
+		err := createCmd.ParseFlags(append(cmd.CreatorArgs, []string{"-run-uuid", runUUID.String()}...))
 		if err != nil {
 			return err
 		}
@@ -1409,10 +1413,9 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		}
 		cmd.PilosaHosts = clus.Hosts
 
-		// add runUUID to create output, and print to stdout
+		// print createOutput to stdout
 		enc := json.NewEncoder(cmd.Stdout)
 		enc.SetIndent("", " ")
-		clus.RunUUID = runUUID.String()
 		err = enc.Encode(clus)
 		if err != nil {
 			return err
