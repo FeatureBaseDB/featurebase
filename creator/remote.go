@@ -62,7 +62,7 @@ func (c *RemoteCluster) Start() error {
 			return err
 		}
 		configname := "pilosa" + port + ".conf"
-		w, err := client.OpenFile(configname)
+		w, err := client.OpenFile(configname, "")
 		if err != nil {
 			return fmt.Errorf("opening remote config file: %v", err)
 		}
