@@ -1432,43 +1432,56 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	}
 }
 
+func copyBinary(agentConnections []*pilosactl.SSH, pkg, goos, goarch string) error {
+	binName := path.Base(pkg)
+	binLoc := path.Join(os.TempDir(), binName)
+	com := exec.Command("go", "build", "-o", binLoc, pkg)
+	com.Env = append([]string{"GOOS=" + goos, "GOARCH=" + goarch}, os.Environ()...)
+
+	err := com.Run()
+	if err != nil {
+		return err
+	}
+
+	agentWriters := make([]io.Writer, len(agentConnections))
+	for i, conn := range agentConnections {
+		agentWriters[i], err = conn.OpenFile(binName, "+x")
+		if err != nil {
+			return err
+		}
+	}
+
+	f, err := os.Open(binLoc)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(io.MultiWriter(agentWriters...), f)
+	if err != nil {
+		return err
+	}
+
+	for _, w := range agentWriters {
+		if wc, ok := w.(io.WriteCloser); ok {
+			err = wc.Close()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) error {
 	agentIndex := 0
 	agentConnections, err := pilosactl.SSHClients(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
 	if err != nil {
 		return err
 	}
-	if cmd.CopyBinary {
-		binLoc := path.Join(os.TempDir(), "pilosactl")
-		cmd := exec.Command("go", "build", "-o", binLoc, "github.com/pilosa/pilosa/cmd/pilosactl")
-		cmd.Env = append([]string{"GOOS=linux", "GOARCH=amd64"}, os.Environ()...)
-		err := cmd.Run()
-		if err != nil {
-			return err
-		}
-		agentWriters := make([]io.Writer, len(agentConnections))
-		for i, conn := range agentConnections {
-			agentWriters[i], err = conn.OpenFile("pilosactl", "+x")
-			if err != nil {
-				return err
-			}
-		}
-		f, err := os.Open(binLoc)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(io.MultiWriter(agentWriters...), f)
-		if err != nil {
-			return err
-		}
 
-		for _, w := range agentWriters {
-			if wc, ok := w.(io.WriteCloser); ok {
-				err = wc.Close()
-				if err != nil {
-					return err
-				}
-			}
+	if cmd.CopyBinary {
+		err = copyBinary(agentConnections, "github.com/pilosa/pilosa/cmd/pilosactl", "linux", "amd64")
+		if err != nil {
+			return err
 		}
 	}
 
