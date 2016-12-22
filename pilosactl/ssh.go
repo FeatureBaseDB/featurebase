@@ -91,7 +91,12 @@ func (r *remoteFile) Close() error {
 	return nil
 }
 
-func (s *SSH) OpenFile(name string) (io.WriteCloser, error) {
+// OpenFile creates or truncates an existing file of the given name on the
+// remote host, and returns a WriteCloser which will write to that file. perm
+// will be passed directly to chmod to set the file permissions. rm, touch,
+// chmod, cat and support for semicolons, double ampersand, and output
+// redirection (>>) must be available in the remote shell.
+func (s *SSH) OpenFile(name string, perm string) (io.WriteCloser, error) {
 	sess, err := s.NewSession()
 	if err != nil {
 		return nil, err
@@ -100,7 +105,10 @@ func (s *SSH) OpenFile(name string) (io.WriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = sess.Start("cat > " + name)
+	if perm == "" {
+		perm = "0664"
+	}
+	err = sess.Start(fmt.Sprintf("rm %v; touch %v && chmod %v %v && cat >> %v", name, name, perm, name, name))
 	if err != nil {
 		return nil, err
 	}
