@@ -1301,7 +1301,9 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 		enc.SetIndent("", "  ")
 		res = bench.Prettify(res)
 	}
+	fmt.Println("  agent encoder setup")
 	err = enc.Encode(res)
+	fmt.Println("  agent encoder done")
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err)
 	}
@@ -1421,11 +1423,32 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 			return err
 		}
 	}
+
+	readers := []io.Reader{}
+	err := fmt.Errorf("ce n'est pas une erreur")
 	if len(cmd.AgentHosts) > 0 {
-		return cmd.spawnRemote(ctx, runUUID)
+		// these can return a slice of readers, which then go to either stdout or somewhere else
+		err = cmd.spawnRemote(ctx, runUUID)
 	} else {
-		return cmd.spawnLocal(ctx, runUUID)
+		fmt.Println("spawn local")
+		readers, err = cmd.spawnLocal(ctx, runUUID)
 	}
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(readers)
+	for i, r := range readers {
+		fmt.Println(i)
+		b, err := ioutil.ReadAll(r)
+		if err != nil {
+			return err
+		}
+		log.Printf("%s\n", b)
+	}
+
+	return nil
+
 }
 
 func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) error {
@@ -1460,35 +1483,45 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) er
 	return nil
 }
 
-func (cmd *BspawnCommand) spawnLocal(ctx context.Context, runUUID uuid.UUID) error {
+func (cmd *BspawnCommand) spawnLocal(ctx context.Context, runUUID uuid.UUID) ([]io.Reader, error) {
 	agents := []*BagentCommand{}
+	readers := make([]io.Reader, len(cmd.Benchmarks))
+	writers := make([]io.Writer, len(cmd.Benchmarks))
 	for _, sp := range cmd.Benchmarks {
 		for i := 0; i < sp.Num; i++ {
-			agentCmd := NewBagentCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+			r, w := io.Pipe()
+			readers = append(readers, r)
+			writers = append(writers, w)
+			defer w.Close()
+			//fmt.Printf("%T, %T\n", w, writers[i])
+			agentCmd := NewBagentCommand(cmd.Stdin, w, cmd.Stderr)
 			agents = append(agents, agentCmd)
 			err := agentCmd.ParseFlags(append([]string{"-agentNum", strconv.Itoa(i), "-hosts", strings.Join(cmd.PilosaHosts, ","), "-run-uuid", runUUID.String()}, sp.Args...))
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
 	errors := make([]error, len(agents))
+
+	fmt.Println(readers)
 
 	wg := sync.WaitGroup{}
 	for i, agent := range agents {
 		wg.Add(1)
 		go func(i int, agent *BagentCommand) {
 			defer wg.Done()
+			fmt.Printf("go func %d b\n", i)
 			errors[i] = agent.Run(ctx)
 		}(i, agent)
 	}
 	wg.Wait()
 	for _, err := range errors {
 		if err != nil {
-			return fmt.Errorf("%v", errors)
+			return nil, fmt.Errorf("%v", errors)
 		}
 	}
-	return nil
+	return readers, nil
 }
 
 // readCSVRow reads a bitmap/profile pair from a CSV row.
