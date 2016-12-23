@@ -304,6 +304,15 @@ func (db *DB) DeleteFrame(name string) error {
 	return nil
 }
 
+// CreateFragmentIfNotExists returns a fragment in the database by name/slice.
+func (db *DB) CreateFragmentIfNotExists(name string, slice uint64) (*Fragment, error) {
+	f, err := db.CreateFrameIfNotExists(name)
+	if err != nil {
+		return nil, err
+	}
+	return f.CreateFragmentIfNotExists(slice)
+}
+
 // SetBit sets a bit for a given profile & bitmap.
 // If a timestamp is specified then set all bits for the different quantum units.
 func (db *DB) SetBit(name string, bitmapID, profileID uint64, t *time.Time) (changed bool, err error) {
@@ -341,6 +350,67 @@ func (db *DB) SetBit(name string, bitmapID, profileID uint64, t *time.Time) (cha
 		}
 	}
 	return changed, nil
+}
+
+// Import bulk imports data.
+func (db *DB) Import(name string, bitmapIDs, profileIDs []uint64, timestamps []*time.Time) error {
+	// Read frame.
+	f, err := db.CreateFrameIfNotExists(name)
+	if err != nil {
+		return err
+	}
+
+	// Determine quantum if timestamps are set.
+	var q TimeQuantum
+	if hasTime(timestamps) {
+		if q = f.TimeQuantum(); q == "" {
+			q = db.TimeQuantum()
+			if err := f.SetTimeQuantum(q); err != nil {
+				return err
+			}
+		}
+
+		if q == "" {
+			return errors.New("time quantum not set in either database or frame")
+		}
+	}
+
+	// Split import data by fragment.
+	dataByFragment := make(map[importKey]importData)
+	for i := range bitmapIDs {
+		bitmapID, profileID, timestamp := bitmapIDs[i], profileIDs[i], timestamps[i]
+		slice := profileID / SliceWidth
+
+		var names []string
+		if timestamp == nil {
+			names = []string{name}
+		} else {
+			names = FramesByTime(name, *timestamp, q)
+		}
+
+		// Attach bit to each frame.
+		for _, name := range names {
+			key := importKey{Frame: name, Slice: slice}
+			data := dataByFragment[key]
+			data.BitmapIDs = append(data.BitmapIDs, bitmapID)
+			data.ProfileIDs = append(data.ProfileIDs, profileID)
+			dataByFragment[key] = data
+		}
+	}
+
+	// Import into each fragment.
+	for key, data := range dataByFragment {
+		f, err := db.CreateFragmentIfNotExists(key.Frame, key.Slice)
+		if err != nil {
+			return err
+		}
+
+		if err := f.Import(data.BitmapIDs, data.ProfileIDs); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type dbSlice []*DB
@@ -395,4 +465,24 @@ func (db *DB) SetRemoteMaxSlice(newmax uint64) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.remoteMaxSlice = newmax
+}
+
+// hasTime returns true if a contains a non-nil time.
+func hasTime(a []*time.Time) bool {
+	for _, t := range a {
+		if t != nil {
+			return true
+		}
+	}
+	return false
+}
+
+type importKey struct {
+	Frame string
+	Slice uint64
+}
+
+type importData struct {
+	BitmapIDs  []uint64
+	ProfileIDs []uint64
 }
