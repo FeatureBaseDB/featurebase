@@ -57,21 +57,14 @@ func (c *RemoteCluster) Start() error {
 		conf.DataDir = "~/.pilosa" + port
 
 		// Connect to remote host
-		client, err := pilosactl.NewSSH(host, c.SSHUser, "")
-		if err != nil {
-			return err
-		}
-
-		// Create config file on remote host
-		sess, err := client.NewSession()
+		client, err := pilosactl.NewSSH(host, c.SSHUser, "", c.Stderr)
 		if err != nil {
 			return err
 		}
 		configname := "pilosa" + port + ".conf"
-		w, err := sess.StdinPipe()
-		err = sess.Start("cat > " + configname)
+		w, err := client.OpenFile(configname, "")
 		if err != nil {
-			return err
+			return fmt.Errorf("opening remote config file: %v", err)
 		}
 		enc := toml.NewEncoder(w)
 		err = enc.Encode(conf)
@@ -82,13 +75,9 @@ func (c *RemoteCluster) Start() error {
 		if err != nil {
 			return err
 		}
-		err = sess.Wait()
-		if err != nil {
-			return err
-		}
 
 		// Start pilosa on remote host
-		sess, err = client.NewSession()
+		sess, err := client.NewSession()
 		if err != nil {
 			return err
 		}

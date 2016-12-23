@@ -1,6 +1,8 @@
 {
-    "CreatorArgs": ["-type", "local", "-serverN", "3", "-replicaN", "1", "-log-file-prefix", "multidblog"],
-    "AgentHosts": ["localhost"],
+    "CreatorArgs": ["-hosts", "pilosa0.jaffee.sandbox.pilosa.com:15000,pilosa1.jaffee.sandbox.pilosa.com:15000,pilosa2.jaffee.sandbox.pilosa.com:15000", "-log-file-prefix", "multidblog", "-ssh-user", "ubuntu"],
+    "AgentHosts": ["agent0.jaffee.sandbox.pilosa.com"],
+    "SSHUser": "ubuntu",
+    "CopyBinary": true,
     "Benchmarks": [
         {
             "Num": 3,

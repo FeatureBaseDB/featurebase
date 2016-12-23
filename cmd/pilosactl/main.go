@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -1328,6 +1329,8 @@ type BspawnCommand struct {
 	// agents specified here are used.
 	AgentHosts []string
 
+	CopyBinary bool
+
 	// Benchmarks is a slice of Spawns which specifies all of the bagent
 	// commands to run. These will all be run in parallel, started on each
 	// of the agents in a round robin fashion.
@@ -1370,10 +1373,6 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	if err != nil {
 		return err
 	}
-
-	// handle pilosa creation
-	// handle agent creation
-
 	return nil
 }
 
@@ -1428,12 +1427,38 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	}
 }
 
-func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) error {
-	agentIndex := 0
-	agentConnections, err := pilosactl.SSHClients(cmd.AgentHosts, cmd.SSHUser, "")
+func copyBinary(fleet pilosactl.SSHFleet, pkg, goos, goarch string) error {
+	bin, err := pilosactl.BuildBinary(pkg, goos, goarch)
 	if err != nil {
 		return err
 	}
+
+	wc, err := fleet.OpenFile(path.Base(pkg), "+x")
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(wc, bin)
+	if err != nil {
+		return err
+	}
+	return wc.Close()
+}
+
+func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) error {
+	agentIndex := 0
+	agentConnections, err := pilosactl.SSHClients(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
+	if err != nil {
+		return err
+	}
+
+	if cmd.CopyBinary {
+		err = copyBinary(agentConnections, "github.com/pilosa/pilosa/cmd/pilosactl", "linux", "amd64")
+		if err != nil {
+			return err
+		}
+	}
+
 	sessions := make([]*ssh.Session, 0)
 	for _, sp := range cmd.Benchmarks {
 		for i := 0; i < sp.Num; i++ {
@@ -1444,7 +1469,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) er
 			sessions = append(sessions, sess)
 			sess.Stdout = cmd.Stdout
 			sess.Stderr = cmd.Stderr
-			err = sess.Start("pilosactl bagent -agentNum=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " -run-uuid=" + runUUID.String() + " " + strings.Join(sp.Args, " "))
+			err = sess.Start("PATH=.:$PATH pilosactl bagent -agentNum=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " -run-uuid=" + runUUID.String() + " " + strings.Join(sp.Args, " "))
 			if err != nil {
 				return err
 			}
