@@ -13,7 +13,6 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path"
 	"path/filepath"
@@ -1374,10 +1373,6 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	if err != nil {
 		return err
 	}
-
-	// handle pilosa creation
-	// handle agent creation
-
 	return nil
 }
 
@@ -1432,43 +1427,22 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	}
 }
 
-func copyBinary(agentConnections []*pilosactl.SSH, pkg, goos, goarch string) error {
-	binName := path.Base(pkg)
-	binLoc := path.Join(os.TempDir(), binName)
-	com := exec.Command("go", "build", "-o", binLoc, pkg)
-	com.Env = append([]string{"GOOS=" + goos, "GOARCH=" + goarch}, os.Environ()...)
-
-	err := com.Run()
+func copyBinary(fleet pilosactl.SSHFleet, pkg, goos, goarch string) error {
+	bin, err := pilosactl.BuildBinary(pkg, goos, goarch)
 	if err != nil {
 		return err
 	}
 
-	agentWriters := make([]io.Writer, len(agentConnections))
-	for i, conn := range agentConnections {
-		agentWriters[i], err = conn.OpenFile(binName, "+x")
-		if err != nil {
-			return err
-		}
-	}
-
-	f, err := os.Open(binLoc)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(io.MultiWriter(agentWriters...), f)
+	wc, err := fleet.OpenFile(path.Base(pkg), "+x")
 	if err != nil {
 		return err
 	}
 
-	for _, w := range agentWriters {
-		if wc, ok := w.(io.WriteCloser); ok {
-			err = wc.Close()
-			if err != nil {
-				return err
-			}
-		}
+	_, err = io.Copy(wc, bin)
+	if err != nil {
+		return err
 	}
-	return nil
+	return wc.Close()
 }
 
 func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) error {

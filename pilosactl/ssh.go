@@ -8,6 +8,8 @@ import (
 	"os/user"
 	"strings"
 
+	"errors"
+
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -57,7 +59,9 @@ func NewSSH(host, username, keyfile string, stderr io.Writer) (*SSH, error) {
 	return &SSH{client: client, Stderr: stderr}, nil
 }
 
-func SSHClients(hosts []string, username, keyfile string, stderr io.Writer) ([]*SSH, error) {
+type SSHFleet []*SSH
+
+func SSHClients(hosts []string, username, keyfile string, stderr io.Writer) (SSHFleet, error) {
 	clients := make([]*SSH, len(hosts))
 	for i, host := range hosts {
 		client, err := NewSSH(host, username, keyfile, stderr)
@@ -96,7 +100,7 @@ func (r *remoteFile) Close() error {
 // will be passed directly to chmod to set the file permissions. rm, touch,
 // chmod, cat and support for semicolons, double ampersand, and output
 // redirection (>>) must be available in the remote shell.
-func (s *SSH) OpenFile(name string, perm string) (io.WriteCloser, error) {
+func (s *SSH) OpenFile(name, perm string) (io.WriteCloser, error) {
 	sess, err := s.NewSession()
 	if err != nil {
 		return nil, err
@@ -114,4 +118,52 @@ func (s *SSH) OpenFile(name string, perm string) (io.WriteCloser, error) {
 	}
 
 	return &remoteFile{w: w, sess: sess}, nil
+}
+
+type multiWriteCloser struct {
+	wcs []io.WriteCloser
+	ws  []io.Writer
+}
+
+func newMultiWriteCloser() *multiWriteCloser {
+	return &multiWriteCloser{
+		wcs: make([]io.WriteCloser, 0),
+		ws:  make([]io.Writer, 0),
+	}
+}
+
+func (mwc *multiWriteCloser) add(wc io.WriteCloser) {
+	mwc.wcs = append(mwc.wcs, wc)
+	mwc.ws = append(mwc.ws, wc)
+}
+
+func (mwc *multiWriteCloser) Write(p []byte) (n int, err error) {
+	mw := io.MultiWriter(mwc.ws...)
+	return mw.Write(p)
+}
+
+func (mwc *multiWriteCloser) Close() error {
+	errStr := ""
+	for _, wc := range mwc.wcs {
+		err := wc.Close()
+		if err != nil {
+			errStr = errStr + "; " + err.Error()
+		}
+	}
+	if errStr != "" {
+		return errors.New(errStr)
+	}
+	return nil
+}
+
+func (sf SSHFleet) OpenFile(name, perm string) (io.WriteCloser, error) {
+	writers := newMultiWriteCloser()
+	for _, cli := range sf {
+		wc, err := cli.OpenFile(name, "+x")
+		if err != nil {
+			return nil, err
+		}
+		writers.add(wc)
+	}
+	return writers, nil
 }
