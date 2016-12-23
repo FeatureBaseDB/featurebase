@@ -1486,13 +1486,12 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) er
 func (cmd *BspawnCommand) spawnLocal(ctx context.Context, runUUID uuid.UUID) ([]io.Reader, error) {
 	agents := []*BagentCommand{}
 	readers := make([]io.Reader, len(cmd.Benchmarks))
-	writers := make([]io.Writer, len(cmd.Benchmarks))
+	writers := make([]io.WriteCloser, len(cmd.Benchmarks))
 	for _, sp := range cmd.Benchmarks {
 		for i := 0; i < sp.Num; i++ {
 			r, w := io.Pipe()
 			readers = append(readers, r)
 			writers = append(writers, w)
-			defer w.Close()
 			//fmt.Printf("%T, %T\n", w, writers[i])
 			agentCmd := NewBagentCommand(cmd.Stdin, w, cmd.Stderr)
 			agents = append(agents, agentCmd)
@@ -1513,6 +1512,8 @@ func (cmd *BspawnCommand) spawnLocal(ctx context.Context, runUUID uuid.UUID) ([]
 			defer wg.Done()
 			fmt.Printf("go func %d b\n", i)
 			errors[i] = agent.Run(ctx)
+			fmt.Printf("go func %d c\n", i)
+			writers[i].Close()
 		}(i, agent)
 	}
 	wg.Wait()
