@@ -227,6 +227,7 @@ func MarshalImportPayload(db, frame string, slice uint64, bits []Bit) ([]byte, e
 	// Separate bitmap and profile IDs to reduce allocations.
 	bitmapIDs := Bits(bits).BitmapIDs()
 	profileIDs := Bits(bits).ProfileIDs()
+	timestamps := Bits(bits).Timestamps()
 
 	// Marshal bits to protobufs.
 	buf, err := proto.Marshal(&internal.ImportRequest{
@@ -235,6 +236,7 @@ func MarshalImportPayload(db, frame string, slice uint64, bits []Bit) ([]byte, e
 		Slice:      slice,
 		BitmapIDs:  bitmapIDs,
 		ProfileIDs: profileIDs,
+		Timestamps: timestamps,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal import request: %s", err)
@@ -779,6 +781,7 @@ func (c *Client) BitmapAttrDiff(ctx context.Context, db, frame string, blks []At
 type Bit struct {
 	BitmapID  uint64
 	ProfileID uint64
+	Timestamp int64
 }
 
 // Bits represents a slice of bits.
@@ -789,6 +792,9 @@ func (p Bits) Len() int      { return len(p) }
 
 func (p Bits) Less(i, j int) bool {
 	if p[i].BitmapID == p[j].BitmapID {
+		if p[i].ProfileID < p[j].ProfileID {
+			return p[i].Timestamp < p[j].Timestamp
+		}
 		return p[i].ProfileID < p[j].ProfileID
 	}
 	return p[i].BitmapID < p[j].BitmapID
@@ -808,6 +814,15 @@ func (a Bits) ProfileIDs() []uint64 {
 	other := make([]uint64, len(a))
 	for i := range a {
 		other[i] = a[i].ProfileID
+	}
+	return other
+}
+
+// Timestamps returns a slice of all the timestamps.
+func (a Bits) Timestamps() []int64 {
+	other := make([]int64, len(a))
+	for i := range a {
+		other[i] = a[i].Timestamp
 	}
 	return other
 }
@@ -834,5 +849,9 @@ type BitsByPos []Bit
 func (p BitsByPos) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 func (p BitsByPos) Len() int      { return len(p) }
 func (p BitsByPos) Less(i, j int) bool {
-	return Pos(p[i].BitmapID, p[i].ProfileID) < Pos(p[j].BitmapID, p[j].ProfileID)
+	p0, p1 := Pos(p[i].BitmapID, p[i].ProfileID), Pos(p[j].BitmapID, p[j].ProfileID)
+	if p0 == p1 {
+		return p[i].Timestamp < p[j].Timestamp
+	}
+	return p0 < p1
 }

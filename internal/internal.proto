@@ -23,6 +23,7 @@ message Pair {
 message Bit {
 	uint64 BitmapID = 1;
 	uint64 ProfileID = 2;
+	int64 Timestamp = 3;
 }
 
 message Profile {
@@ -71,6 +72,7 @@ message ImportRequest {
 	uint64 Slice = 3;
 	repeated uint64 BitmapIDs = 4;
 	repeated uint64 ProfileIDs = 5;
+	repeated int64 Timestamps = 6;
 }
 
 message ImportResponse {

@@ -830,7 +830,7 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 
 	// Verify that there are an equal number of bitmap ids and profile ids.
 	if len(bitmapIDs) != len(profileIDs) {
-		return fmt.Errorf("mismatch of bitmap and profile len: %d != %d", len(bitmapIDs), len(profileIDs))
+		return fmt.Errorf("mismatch of bitmap/profile len: %d != %d", len(bitmapIDs), len(profileIDs))
 	}
 
 	// Disconnect op writer so we don't append updates.

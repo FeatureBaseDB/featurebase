@@ -705,29 +705,37 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	db, frame, slice := req.DB, req.Frame, req.Slice
+
+	// Convert timestamps to time.Time.
+	timestamps := make([]*time.Time, len(req.Timestamps))
+	for i, ts := range req.Timestamps {
+		if ts == 0 {
+			continue
+		}
+		t := time.Unix(0, ts)
+		timestamps[i] = &t
+	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.Host, db, slice) {
-		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, db, slice)
+	if !h.Cluster.OwnsFragment(h.Host, req.DB, req.Slice) {
+		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, req.DB, req.Slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
 	}
 
 	// Find the correct fragment.
-	h.logger().Println("importing:", db, frame, slice)
-	f, err := h.Index.CreateFragmentIfNotExists(db, frame, slice)
+	h.logger().Println("importing:", req.DB, req.Frame, req.Slice)
+	db, err := h.Index.CreateDBIfNotExists(req.DB)
 	if err != nil {
-		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%d, err=%s", db, frame, slice, err)
+		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%d, err=%s", req.DB, req.Frame, req.Slice, err)
 		http.Error(w, "fragment error", http.StatusInternalServerError)
 		return
 	}
-	h.logger().Println("Import into Fragment:", db, frame, slice, len(req.ProfileIDs))
 
 	// Import into fragment.
-	err = f.Import(req.BitmapIDs, req.ProfileIDs)
+	err = db.Import(req.Frame, req.BitmapIDs, req.ProfileIDs, timestamps)
 	if err != nil {
-		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", db, frame, slice, len(req.ProfileIDs), err)
+		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", req.DB, req.Frame, req.Slice, len(req.ProfileIDs), err)
 	}
 
 	// Marshal response object.
