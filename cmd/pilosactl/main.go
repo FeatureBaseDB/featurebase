@@ -1293,7 +1293,7 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 	}
 
 	res := sbm.Run(ctx, cmd.AgentNum)
-	res["metadata"] = cmd
+	res["agent-num"] = cmd.AgentNum
 	if cmd.RunUUID != "" {
 		res["run-uuid"] = cmd.RunUUID
 	}

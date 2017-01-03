@@ -115,18 +115,21 @@ func (sb *serialBenchmark) Init(hosts []string, agentNum int) error {
 // top level keys are the indices of each benchmark in the list of benchmarks,
 // and the values are the results of each benchmark's Run method.
 func (sb *serialBenchmark) Run(ctx context.Context, agentNum int) map[string]interface{} {
-	results := make(map[string]interface{}, len(sb.benchmarkers))
-	runtimes := make(map[string]interface{})
+	benchmarks := make([]map[string]interface{}, len(sb.benchmarkers))
+	results := map[string]interface{}{"benchmarks": benchmarks}
+
 	total_start := time.Now()
 	for i, b := range sb.benchmarkers {
 		start := time.Now()
-		ret := b.Run(ctx, agentNum)
-		end := time.Now()
-		results[strconv.Itoa(i)] = ret
-		runtimes[strconv.Itoa(i)] = end.Sub(start)
+		output := b.Run(ctx, agentNum)
+		if _, ok := output["runtime"]; ok {
+			panic(fmt.Sprintf("Benchmark %v added 'runtime' to its results", b))
+		}
+		output["runtime"] = time.Now().Sub(start)
+		ret := map[string]interface{}{"output": output, "metadata": b}
+		benchmarks[i] = ret
 	}
-	runtimes["total"] = time.Now().Sub(total_start)
-	results["runtimes"] = runtimes
+	results["total_runtime"] = time.Now().Sub(total_start)
 	return results
 }
 
