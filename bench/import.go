@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"time"
 
 	"sort"
 
@@ -135,9 +134,8 @@ func (b *Import) Init(hosts []string, agentNum int) error {
 		b.MinBitsPerMap, b.MaxBitsPerMap, b.Seed+int64(agentNum), b.RandomBitmapOrder)
 	b.numbits = num
 	// set b.Paths
-	f.Close()
 	b.Paths = []string{f.Name()}
-	return nil
+	return f.Close()
 }
 
 // Run runs the Import benchmark
@@ -145,13 +143,11 @@ func (b *Import) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	results := make(map[string]interface{})
 	results["numbits"] = b.numbits
 	results["db"] = b.Database
-	start := time.Now()
 	err := b.ImportCommand.Run(ctx)
 
 	if err != nil {
 		results["error"] = err.Error()
 	}
-	results["time"] = time.Now().Sub(start)
 	return results
 }
 
