@@ -1325,10 +1325,11 @@ type BspawnCommand struct {
 	// should include everything that comes after `pilosactl create`
 	CreatorArgs []string
 
-	// If AgentHosts is specified, Agents is ignored, and the existing
-	// agents specified here are used.
+	// List of hosts to run agents on. If this is empty, agents will be run
+	// locally.
 	AgentHosts []string
 
+	// If this is true, build and copy pilosactl binary to agent hosts.
 	CopyBinary bool
 
 	// Benchmarks is a slice of Spawns which specifies all of the bagent

@@ -239,8 +239,7 @@ bspawn uses a json config format that has 5 top level items - an example is belo
 {
     "CreatorArgs": ["-type", "local", "-serverN", "1", "-replicaN", "1"],
     "PilosaHosts": ["localhost:19327"],
-    "Agents": { "Type": "local" },
-	"AgentHosts": ["localhost"],
+    "AgentHosts": ["agent.example.com"],
     "Benchmarks": [
         {
             "Num": 1,
@@ -261,11 +260,8 @@ Specifies the pilosa cluster that should be created to run benchmarks against. F
 #### PilosaHosts
 If PilosaHosts is set, CreatorArgs will be ignored, and an existing pilosa cluster specified by the list of hosts will be used.
 
-#### Agents
-Agents specifies the host(s) that the benchmark should be run from. Currently only running from localhost is supported.
-
 #### AgentHosts
-If AgentHosts is specified, Agents is ignored, and the existing agents specified here are used. This is not yet implemented.
+If AgentHosts is not empty, the agents specified here are used; if it is empty, agents will be run locally.
 
 #### Benchmarks
 Benchmarks is where the actual benchmarks to run are specified - each contains a `Num` which is the number of agents that should run that benchmark, and Args which specifies the benchmark. The benchmarks in the `Benchmarks` list will be run concurrently. For more information about Args, see the `pilosactl bagent -help`.
