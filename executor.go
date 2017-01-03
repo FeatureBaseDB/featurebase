@@ -29,6 +29,9 @@ type Executor struct {
 
 	// Client used for remote HTTP requests.
 	HTTPClient *http.Client
+
+	// Lookup of registered plugins.
+	PluginRegistry *PluginRegistry
 }
 
 // NewExecutor returns a new instance of Executor.
@@ -97,8 +100,10 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 		return nil, e.executeSetProfileAttrs(ctx, db, c, opt)
 	case "TopN":
 		return e.executeTopN(ctx, db, c, slices, opt)
-	default:
+	case "Bitmap", "Difference", "Intersect", "Range", "Union":
 		return e.executeBitmapCall(ctx, db, c, slices, opt)
+	default:
+		return e.executeExternalCall(ctx, db, c, slices, opt)
 	}
 }
 
@@ -159,6 +164,54 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, db string, c *pql
 	default:
 		return nil, fmt.Errorf("unknown call: %s", c.Name)
 	}
+}
+
+// executeExternalCall executes an external plugin call.
+func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.ExternalCall, slices []uint64, opt *ExecOptions) (interface{}, error) {
+	// Lookup plugin from registry.
+	p, err := e.PluginRegistry.NewPlugin(c.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set index on plugin if method exists.
+	if p, ok := p.(interface {
+		SetIndex(*Index)
+	}); ok {
+		p.SetIndex(e.Index)
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(slice uint64) (interface{}, error) {
+		// Evaluate nested calls within arguments.
+		newArgs := make([]pql.Arg, len(c.Args))
+		for i, arg := range newArgs {
+			switch v := arg.Value.(type) {
+			case pql.BitmapCall:
+				ret, err := e.executeBitmapCallSlice(ctx, db, v, slice)
+				if err != nil {
+					return nil, err
+				}
+				newArgs[i] = pql.Arg{Key: arg.Key, Value: ret}
+			default:
+				newArgs[i] = arg
+			}
+		}
+
+		return p.Map(ctx, db, newArgs, slice)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		return p.Reduce(ctx, prev, v)
+	}
+
+	other, err := e.mapReduce(ctx, db, slices, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+
+	return other, nil
 }
 
 // executeTopN executes a TopN() call.
