@@ -48,7 +48,7 @@ The following arguments are available:
 	-base-bitmap-id int
 		bits being set will all be greater than this
 
-	-maximum-bitmap-id int
+	-max-bitmap-id int
 		bits being set will all be less than this
 
 	-base-profile-id int
