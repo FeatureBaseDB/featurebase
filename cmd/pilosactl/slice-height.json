@@ -1,6 +1,6 @@
 {
     "CreatorArgs": ["-type", "local", "-serverN", "1", "-replicaN", "1"],
-    "Agents": { "Type": "local" },
+    "AgentHosts": [],
     "Benchmarks": [
         {
             "Num": 1,

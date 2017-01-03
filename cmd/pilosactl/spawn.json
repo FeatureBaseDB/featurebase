@@ -1,6 +1,6 @@
 {
-    "CreatorArgs": ["-type", "local", "-serverN", "3", "-replicaN", "1"],
-    "Agents": { "Type": "local" },
+    "CreatorArgs": ["-hosts=localhost:19444,localhost:19445,localhost:19446", "-log-file-prefix", "asdfe"],
+    "AgentHosts": [],
     "Benchmarks": [
         {
             "Num": 3,
