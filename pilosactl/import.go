@@ -19,25 +19,25 @@ import (
 // ImportCommand represents a command for bulk importing data.
 type ImportCommand struct {
 	// Destination host and port.
-	Host string
+	Host string `json:"host"`
 
 	// Name of the database & frame to import into.
-	Database string
-	Frame    string
+	Database string `json:"db"`
+	Frame    string `json:"frame"`
 
 	// Filenames to import from.
-	Paths []string
+	Paths []string `json:"paths"`
 
 	// Size of buffer used to chunk import.
-	BufferSize int
+	BufferSize int `json:"buffer-size"`
 
 	// Reusable client.
-	Client *pilosa.Client
+	Client *pilosa.Client `json:"-"`
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	Stdin  io.Reader `json:"-"`
+	Stdout io.Writer `json:"-"`
+	Stderr io.Writer `json:"-"`
 }
 
 // NewImportCommand returns a new instance of ImportCommand.
