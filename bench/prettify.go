@@ -27,6 +27,11 @@ func Prettify(m map[string]interface{}) map[string]interface{} {
 		case time.Duration:
 			newmap[k] = PrettyDuration(v.(time.Duration))
 		default:
+			if interv, ok := v.([]map[string]interface{}); ok {
+				for i, iv := range interv {
+					interv[i] = Prettify(iv)
+				}
+			}
 			newmap[k] = v
 		}
 	}
