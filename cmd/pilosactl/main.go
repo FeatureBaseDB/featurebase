@@ -1331,6 +1331,9 @@ type BspawnCommand struct {
 	// If this is true, build and copy pilosactl binary to agent hosts.
 	CopyBinary bool
 
+	// Makes output human readable
+	Human bool
+
 	// Benchmarks is a slice of Spawns which specifies all of the bagent
 	// commands to run. These will all be run in parallel, started on each
 	// of the agents in a round robin fashion.
@@ -1346,7 +1349,8 @@ type BspawnCommand struct {
 // Spawn represents a bagent command run in parallel across Num agents. The
 // bagent command can run multiple Benchmarks serially within itself.
 type Spawn struct {
-	Num  int      // number of agents to run
+	Num  int      `json:"num"`  // number of agents to run
+	Name string   `json:"name"` // Should describe what this Spawn does
 	Args []string // everything that comes after `pilosactl bagent [arguments]`
 }
 
@@ -1390,6 +1394,8 @@ pilosactl spawn configfile
 // Run executes the main program execution.
 func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	runUUID := uuid.NewV1()
+	output := make(map[string]interface{})
+	output["run-uuid"] = runUUID.String()
 	if len(cmd.PilosaHosts) == 0 {
 		// must create cluster
 		r, w := io.Pipe()
@@ -1411,20 +1417,23 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 			return err
 		}
 		cmd.PilosaHosts = clus.Hosts
-
-		// print createOutput to stdout
-		enc := json.NewEncoder(cmd.Stdout)
-		enc.SetIndent("", " ")
-		err = enc.Encode(clus)
-		if err != nil {
-			return err
-		}
+		output["cluster"] = clus
 	}
-	if len(cmd.AgentHosts) > 0 {
-		return cmd.spawnRemote(ctx, runUUID)
-	} else {
-		return cmd.spawnLocal(ctx, runUUID)
+	if len(cmd.AgentHosts) == 0 {
+		cmd.AgentHosts = []string{"localhost"}
 	}
+	output["agents"] = cmd.AgentHosts
+	res, err := cmd.spawnRemote(ctx, runUUID)
+	if err != nil {
+		return err
+	}
+	output["results"] = res
+	enc := json.NewEncoder(cmd.Stdout)
+	if cmd.Human {
+		enc.SetIndent("", "  ")
+		output = bench.Prettify(output)
+	}
+	return enc.Encode(output)
 }
 
 func copyBinary(fleet pilosactl.SSHFleet, pkg, goos, goarch string) error {
@@ -1445,33 +1454,53 @@ func copyBinary(fleet pilosactl.SSHFleet, pkg, goos, goarch string) error {
 	return wc.Close()
 }
 
-func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) error {
+func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) (map[string]interface{}, error) {
 	agentIndex := 0
 	agentConnections, err := pilosactl.SSHClients(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if cmd.CopyBinary {
 		err = copyBinary(agentConnections, "github.com/pilosa/pilosa/cmd/pilosactl", "linux", "amd64")
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	sessions := make([]*ssh.Session, 0)
+	results := make(map[string]interface{})
+	resLock := sync.Mutex{}
+	wg := sync.WaitGroup{}
 	for _, sp := range cmd.Benchmarks {
+		results[sp.Name] = make(map[int]interface{})
 		for i := 0; i < sp.Num; i++ {
 			sess, err := agentConnections[agentIndex].NewSession()
 			if err != nil {
-				return err
+				return nil, err
 			}
 			sessions = append(sessions, sess)
-			sess.Stdout = cmd.Stdout
+			stdout, err := sess.StdoutPipe()
+			if err != nil {
+				return nil, err
+			}
+			wg.Add(1)
+			go func(stdout io.Reader, name string, num int) {
+				defer wg.Done()
+				dec := json.NewDecoder(stdout)
+				var v interface{}
+				err := dec.Decode(&v)
+				if err != nil {
+					fmt.Fprintf(cmd.Stderr, "error decoding json: %v, spawn: %v", err, name)
+				}
+				resLock.Lock()
+				results[name].(map[int]interface{})[num] = v
+				resLock.Unlock()
+			}(stdout, sp.Name, i)
 			sess.Stderr = cmd.Stderr
 			err = sess.Start("PATH=.:$PATH pilosactl bagent -agent-num=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " -run-uuid=" + runUUID.String() + " " + strings.Join(sp.Args, " "))
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
@@ -1479,41 +1508,11 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) er
 	for _, sess := range sessions {
 		err = sess.Wait()
 		if err != nil {
-			return fmt.Errorf("error waiting for remote bagent: %v", err)
+			return nil, fmt.Errorf("error waiting for remote bagent: %v", err)
 		}
-	}
-	return nil
-}
-
-func (cmd *BspawnCommand) spawnLocal(ctx context.Context, runUUID uuid.UUID) error {
-	agents := []*BagentCommand{}
-	for _, sp := range cmd.Benchmarks {
-		for i := 0; i < sp.Num; i++ {
-			agentCmd := NewBagentCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
-			agents = append(agents, agentCmd)
-			err := agentCmd.ParseFlags(append([]string{"-agent-num", strconv.Itoa(i), "-hosts", strings.Join(cmd.PilosaHosts, ","), "-run-uuid", runUUID.String()}, sp.Args...))
-			if err != nil {
-				return err
-			}
-		}
-	}
-	errors := make([]error, len(agents))
-
-	wg := sync.WaitGroup{}
-	for i, agent := range agents {
-		wg.Add(1)
-		go func(i int, agent *BagentCommand) {
-			defer wg.Done()
-			errors[i] = agent.Run(ctx)
-		}(i, agent)
 	}
 	wg.Wait()
-	for _, err := range errors {
-		if err != nil {
-			return fmt.Errorf("%v", errors)
-		}
-	}
-	return nil
+	return results, nil
 }
 
 type serialBenchmark struct {

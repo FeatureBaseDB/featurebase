@@ -1,14 +1,17 @@
 {
     "CreatorArgs": ["-hosts=localhost:19444,localhost:19445,localhost:19446", "-log-file-prefix", "asdfe"],
     "AgentHosts": [],
+    "Human": true,
     "Benchmarks": [
         {
             "Num": 3,
-            "Args": ["-human", "diagonal-set-bits", "-iterations", "30000", "-client-type", "round_robin"]
+            "Name": "set-diags",
+            "Args": ["diagonal-set-bits", "-iterations", "30000", "-client-type", "round_robin"]
         },
         {
             "Num": 2,
-            "Args": ["-human", "random-set-bits", "-iterations", "20000", "zipf-set-bits"]
+            "Name": "rand-plus-zipf",
+            "Args": ["random-set-bits", "-iterations", "20000", "zipf-set-bits", "-iterations", "100"]
         }
     ]
 }

@@ -153,7 +153,11 @@ func (b *ZipfSetBits) Run(ctx context.Context, agentNum int) map[string]interfac
 
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+int64(bitmapID), b.BaseProfileID+int64(profID))
 		start = time.Now()
-		b.cli.ExecuteQuery(ctx, b.DB, query, true)
+		_, err := b.cli.ExecuteQuery(ctx, b.DB, query, true)
+		if err != nil {
+			results["error"] = fmt.Sprintf("Error executing query in zipf: %v", err)
+			return results
+		}
 		s.Add(time.Now().Sub(start))
 	}
 	AddToResults(s, results)
