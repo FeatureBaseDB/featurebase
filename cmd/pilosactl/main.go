@@ -1286,7 +1286,7 @@ The following arguments are available:
 
 // Run executes the benchmark agent.
 func (cmd *BagentCommand) Run(ctx context.Context) error {
-	sbm := bench.Serial(cmd.Benchmarks...)
+	sbm := serial(cmd.Benchmarks...)
 	err := sbm.Init(cmd.Hosts, cmd.AgentNum)
 	if err != nil {
 		return fmt.Errorf("in cmd.Run initialization: %v", err)
@@ -1515,6 +1515,57 @@ func (cmd *BspawnCommand) spawnLocal(ctx context.Context, runUUID uuid.UUID) err
 		}
 	}
 	return nil
+}
+
+type serialBenchmark struct {
+	benchmarkers []bench.Benchmark
+}
+
+// Init calls Init for each benchmark. If there are any errors, it will return a
+// non-nil error value.
+func (sb *serialBenchmark) Init(hosts []string, agentNum int) error {
+	errors := make([]error, len(sb.benchmarkers))
+	hadErr := false
+	for i, b := range sb.benchmarkers {
+		errors[i] = b.Init(hosts, agentNum)
+		if errors[i] != nil {
+			hadErr = true
+		}
+	}
+	if hadErr {
+		return fmt.Errorf("Had errs in serialBenchmark.Init: %v", errors)
+	}
+	return nil
+}
+
+// Run runs the serial benchmark and returns it's results in a nested map - the
+// top level keys are the indices of each benchmark in the list of benchmarks,
+// and the values are the results of each benchmark's Run method.
+func (sb *serialBenchmark) Run(ctx context.Context, agentNum int) map[string]interface{} {
+	benchmarks := make([]map[string]interface{}, len(sb.benchmarkers))
+	results := map[string]interface{}{"benchmarks": benchmarks}
+
+	total_start := time.Now()
+	for i, b := range sb.benchmarkers {
+		start := time.Now()
+		output := b.Run(ctx, agentNum)
+		if _, ok := output["runtime"]; ok {
+			panic(fmt.Sprintf("Benchmark %v added 'runtime' to its results", b))
+		}
+		output["runtime"] = time.Now().Sub(start)
+		ret := map[string]interface{}{"output": output, "metadata": b}
+		benchmarks[i] = ret
+	}
+	results["total_runtime"] = time.Now().Sub(total_start)
+	return results
+}
+
+// serial takes a variable number of Benchmarks and returns a Benchmark
+// which combines then and will run each serially.
+func serial(bs ...bench.Benchmark) bench.Benchmark {
+	return &serialBenchmark{
+		benchmarkers: bs,
+	}
 }
 
 // readCSVRow reads a bitmap/profile pair from a CSV row.
