@@ -25,8 +25,6 @@ import (
 	"time"
 	"unsafe"
 
-	"golang.org/x/crypto/ssh"
-
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/bench"
 	"github.com/pilosa/pilosa/creator"
@@ -34,6 +32,7 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 
 	"github.com/satori/go.uuid"
+	"golang.org/x/crypto/ssh"
 )
 
 var (
