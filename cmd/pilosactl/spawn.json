@@ -4,7 +4,11 @@
     "Benchmarks": [
         {
             "Num": 3,
-            "Args": ["diagonal-set-bits", "-iterations", "30000", "-client-type", "round_robin"]
+            "Args": ["-human", "diagonal-set-bits", "-iterations", "30000", "-client-type", "round_robin"]
+        },
+        {
+            "Num": 2,
+            "Args": ["-human", "random-set-bits", "-iterations", "20000", "zipf-set-bits"]
         }
     ]
 }
