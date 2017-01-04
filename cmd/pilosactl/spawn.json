@@ -1,7 +1,7 @@
 {
     "CreatorArgs": ["-hosts=localhost:19444,localhost:19445,localhost:19446", "-log-file-prefix", "asdfe"],
     "AgentHosts": [],
-    "Human": true,
+    "SSHUser": "nikolai-von-havlenhoken",
     "Benchmarks": [
         {
             "Num": 3,

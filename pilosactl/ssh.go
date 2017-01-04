@@ -53,7 +53,7 @@ func NewSSH(host, username, keyfile string, stderr io.Writer) (*SSH, error) {
 
 	client, err := ssh.Dial("tcp", host, config)
 	if err != nil {
-		return nil, fmt.Errorf("NewSHH failed Dial: %v ", err)
+		return nil, fmt.Errorf("NewSHH failed Dial - host: %v, config: %v, err: %v ", host, config, err)
 	}
 
 	return &SSH{client: client, Stderr: stderr}, nil
