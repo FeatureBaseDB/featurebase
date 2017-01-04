@@ -990,7 +990,6 @@ type CreateCommand struct {
 	LogFilePrefix string
 	Hosts         []string
 	GoMaxProcs    int
-	RunUUID       string
 
 	SSHUser string
 
@@ -1021,7 +1020,6 @@ func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs.IntVar(&cmd.GoMaxProcs, "gomaxprocs", 0, "")
 	fs.StringVar(&hosts, "hosts", "", "")
 	fs.StringVar(&cmd.SSHUser, "ssh-user", "", "")
-	fs.StringVar(&cmd.RunUUID, "run-uuid", "", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1071,7 +1069,6 @@ The following flags are allowed:
 type CreateOutput struct {
 	Hosts    []string `json:"hosts"`
 	LogFiles []string `json:"log-files"`
-	RunUUID  string   `json:"run-uuid"`
 }
 
 // Run executes cluster creation.
@@ -1118,8 +1115,7 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 
 	defer clus.Shutdown()
 	output := &CreateOutput{
-		RunUUID: cmd.RunUUID,
-		Hosts:   clus.Hosts(),
+		Hosts: clus.Hosts(),
 	}
 
 	logReaders := clus.Logs()
@@ -1167,8 +1163,6 @@ type BagentCommand struct {
 	// Enable pretty printing of results, for human consumption.
 	HumanReadable bool `json:"human-readable"`
 
-	RunUUID string `json:"-"` // ignoring this here because we add it to the top level of the output
-
 	// Slice of pilosa hosts to run the Benchmarks against.
 	Hosts []string `json:"hosts"`
 
@@ -1205,7 +1199,6 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "")
 	fs.IntVar(&cmd.AgentNum, "agent-num", 0, "")
 	fs.BoolVar(&cmd.HumanReadable, "human", false, "")
-	fs.StringVar(&cmd.RunUUID, "run-uuid", "", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1293,9 +1286,6 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 
 	res := sbm.Run(ctx, cmd.AgentNum)
 	res["agent-num"] = cmd.AgentNum
-	if cmd.RunUUID != "" {
-		res["run-uuid"] = cmd.RunUUID
-	}
 	enc := json.NewEncoder(cmd.Stdout)
 	if cmd.HumanReadable {
 		enc.SetIndent("", "  ")
@@ -1400,7 +1390,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		// must create cluster
 		r, w := io.Pipe()
 		createCmd := NewCreateCommand(cmd.Stdin, w, cmd.Stderr)
-		err := createCmd.ParseFlags(append(cmd.CreatorArgs, []string{"-run-uuid", runUUID.String()}...))
+		err := createCmd.ParseFlags(cmd.CreatorArgs)
 		if err != nil {
 			return err
 		}
@@ -1423,7 +1413,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		cmd.AgentHosts = []string{"localhost"}
 	}
 	output["agents"] = cmd.AgentHosts
-	res, err := cmd.spawnRemote(ctx, runUUID)
+	res, err := cmd.spawnRemote(ctx)
 	if err != nil {
 		return err
 	}
@@ -1454,7 +1444,7 @@ func copyBinary(fleet pilosactl.SSHFleet, pkg, goos, goarch string) error {
 	return wc.Close()
 }
 
-func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) (map[string]interface{}, error) {
+func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface{}, error) {
 	agentIndex := 0
 	agentConnections, err := pilosactl.SSHClients(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
 	if err != nil {
@@ -1498,7 +1488,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) (m
 				resLock.Unlock()
 			}(stdout, sp.Name, i)
 			sess.Stderr = cmd.Stderr
-			err = sess.Start("PATH=.:$PATH pilosactl bagent -agent-num=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " -run-uuid=" + runUUID.String() + " " + strings.Join(sp.Args, " "))
+			err = sess.Start("PATH=.:$PATH pilosactl bagent -agent-num=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " " + strings.Join(sp.Args, " "))
 			if err != nil {
 				return nil, err
 			}
