@@ -186,6 +186,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/nodes":
+		switch r.Method {
+		case "GET":
+			h.handleGetNodes(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/version":
 		h.handleVersion(w, r)
 
@@ -1009,6 +1016,13 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+}
+
+// handleGetNodes handles /nodes requests.
+func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
+	if err := json.NewEncoder(w).Encode(h.Cluster.Nodes); err != nil {
+		h.logger().Printf("write version response error: %s", err)
 	}
 }
 
