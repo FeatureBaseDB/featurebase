@@ -1193,7 +1193,7 @@ func NewBagentCommand(stdin io.Reader, stdout, stderr io.Writer) *BagentCommand 
 }
 
 // ParseFlags parses command line flags for the BagentCommand. First the command
-// wide flags `hosts` and `agentNum` are parsed. The rest of the flags should be
+// wide flags `hosts` and `agent-num` are parsed. The rest of the flags should be
 // a series of subcommands along with their flags. ParseFlags runs each
 // subcommand's `ConsumeFlags` method which parses the flags for that command
 // and returns the rest of the argument slice which should contain further
@@ -1204,7 +1204,7 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 
 	var pilosaHosts string
 	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "")
-	fs.IntVar(&cmd.AgentNum, "agentNum", 0, "")
+	fs.IntVar(&cmd.AgentNum, "agent-num", 0, "")
 	fs.BoolVar(&cmd.HumanReadable, "human", false, "")
 	fs.StringVar(&cmd.RunUUID, "run-uuid", "", "")
 
@@ -1267,7 +1267,7 @@ The following arguments are available:
 	-hosts
 		Comma separated list of host:port describing all hosts in the cluster.
 
-	-agentNum N
+	-agent-num N
 		An integer differentiating this agent from others in the fleet.
 
 	-human
@@ -1470,7 +1470,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context, runUUID uuid.UUID) er
 			sessions = append(sessions, sess)
 			sess.Stdout = cmd.Stdout
 			sess.Stderr = cmd.Stderr
-			err = sess.Start("PATH=.:$PATH pilosactl bagent -agentNum=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " -run-uuid=" + runUUID.String() + " " + strings.Join(sp.Args, " "))
+			err = sess.Start("PATH=.:$PATH pilosactl bagent -agent-num=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " -run-uuid=" + runUUID.String() + " " + strings.Join(sp.Args, " "))
 			if err != nil {
 				return err
 			}
@@ -1492,7 +1492,7 @@ func (cmd *BspawnCommand) spawnLocal(ctx context.Context, runUUID uuid.UUID) err
 		for i := 0; i < sp.Num; i++ {
 			agentCmd := NewBagentCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr)
 			agents = append(agents, agentCmd)
-			err := agentCmd.ParseFlags(append([]string{"-agentNum", strconv.Itoa(i), "-hosts", strings.Join(cmd.PilosaHosts, ","), "-run-uuid", runUUID.String()}, sp.Args...))
+			err := agentCmd.ParseFlags(append([]string{"-agent-num", strconv.Itoa(i), "-hosts", strings.Join(cmd.PilosaHosts, ","), "-run-uuid", runUUID.String()}, sp.Args...))
 			if err != nil {
 				return err
 			}
