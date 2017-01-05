@@ -1,10 +1,10 @@
 {
-    "CreatorArgs": ["-type", "local", "-serverN", "1", "-replicaN", "1"],
-    "Agents": { "Type": "local" },
+    "CreatorArgs": ["-hosts=localhost:19444,localhost:19445,localhost:19446", "-log-file-prefix", "asdfe"],
+    "AgentHosts": [],
     "Benchmarks": [
         {
             "Num": 1,
-            "Args": ["slice-height", "-max-time", "1", "-max-bits-per-map", "100"]
+            "Args": ["-human", "slice-height", "-max-time", "1", "-max-bits-per-map", "100"]
         }
     ]
 }
