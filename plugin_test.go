@@ -16,7 +16,7 @@ func TestPlugin(t *testing.T) {
 	if !pilosa.PluginsSupported {
 		t.Skip("plugins not supported")
 	} else if *plugin == "" {
-		t.Fatal("-plugin not set")
+		t.Skip("-plugin not set")
 	}
 
 	r := pilosa.NewPluginRegistry()

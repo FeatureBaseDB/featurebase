@@ -34,9 +34,11 @@ func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
 }
 
+// Configuration defaults.
 const (
-	// DefaultDataDir is the default data directory.
-	DefaultDataDir = "~/.pilosa"
+	DefaultDataDir    = "~/.pilosa/data"
+	DefaultPluginsDir = "~/.pilosa/plugins"
+	DefaultHost       = "localhost:15000"
 )
 
 func main() {
@@ -142,6 +144,9 @@ func (m *Main) Run(args ...string) error {
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
 
+	// Set plugins directory.
+	m.Server.PluginPath = m.Config.Plugins.Path
+
 	// Initialize server.
 	if err := m.Server.Open(); err != nil {
 		return err
@@ -179,19 +184,35 @@ func (m *Main) ParseFlags(args []string) error {
 	if m.Config.DataDir == "" {
 		m.Config.DataDir = DefaultDataDir
 	}
-
-	// Expand home directory.
-	prefix := "~" + string(filepath.Separator)
-	if strings.HasPrefix(m.Config.DataDir, prefix) {
-		//	u, err := user.Current()
-		HomeDir := os.Getenv("HOME")
-		/*if err != nil {
-			return err
-		} else*/if HomeDir == "" {
-			return errors.New("data directory not specified and no home dir available")
-		}
-		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
+	if err := ExpandPath(&m.Config.DataDir); err != nil {
+		return fmt.Errorf("cannot expand data directory: %s", err)
 	}
 
+	// Use default plugins directory if one is not specified.
+	if m.Config.Plugins.Path == "" {
+		m.Config.Plugins.Path = DefaultPluginsDir
+	}
+	if err := ExpandPath(&m.Config.Plugins.Path); err != nil {
+		return fmt.Errorf("cannot expand plugins directory: %s", err)
+	}
+
+	return nil
+}
+
+// ExpandPath interpolates path if it contains a home directory reference (~/).
+func ExpandPath(path *string) error {
+	// Ignore if path doesn't start with a tilde.
+	if *path != "~" && !strings.HasPrefix(*path, "~"+string(filepath.Separator)) {
+		return nil
+	}
+
+	// Validate that the home directory is set.
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		return errors.New("HOME not set")
+	}
+
+	// Replace original value.
+	*path = filepath.Join(homeDir, strings.TrimPrefix(*path, "~"))
 	return nil
 }

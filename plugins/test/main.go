@@ -52,7 +52,7 @@ func (p *DebugPlugin) Map(ctx context.Context, db string, args []pql.Arg, slice 
 // Reduce combines previous map results into a single value.
 func (p *DebugPlugin) Reduce(ctx context.Context, prev, v interface{}) interface{} {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Debug.Reduce(prev=%#v, v=%#v)", prev, v)
+	fmt.Fprintf(&buf, "Debug.Reduce(prev=%#v, v=%#v)\n", prev, v)
 	buf.WriteTo(os.Stderr)
 	return nil
 }
