@@ -1,5 +1,5 @@
-hash: 9afe91839785e89880061fd2919b0a5cdb10d6f4c06b344c2924eeed0c9bfd65
-updated: 2016-11-29T12:31:19.234235928-06:00
+hash: f60caa09b23585e33359d4ee206e0a1793633095cb92c7623609e9876ad697ab
+updated: 2017-01-05T14:22:16.623903529-06:00
 imports:
 - name: github.com/boltdb/bolt
   version: 4b1ebc1869ad66568b313d0dc410e2be72670dda
@@ -21,6 +21,10 @@ imports:
   version: a6b377e3400b08991b80d6805d627f347f983866
   subpackages:
   - lru
+- name: github.com/golang/protobuf
+  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+  subpackages:
+  - proto
 - name: golang.org/x/sys
   version: c200b10b5d5e122be351b67af224adc6128af5bf
   subpackages:
