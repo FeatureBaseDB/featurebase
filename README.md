@@ -220,3 +220,18 @@ $ go install --ldflags="-X main.Version=1.0.0"
 ```
 
 [Glide]: http://glide.sh/
+
+
+### Docker / Docker-compose
+If you have docker and docker-compose installed, you should be able to stand up a small pilosa cluster by simply doing
+```sh
+$ docker-compose up
+```
+
+Currently this will build the code inside the containers - this is necessary so that we can use the cgo dns resolver which is necessary because the go resolver has a bug where it won't resolve a name with 0 dots properly (which is what the docker containers are named on the internal network). This bug is fixed in Go master, so we should be able to simplify things in the future.
+
+The three docker pilosa nodes are port forwarded to localhost:16000-16002 So you should be able to do things like
+```sh
+$ curl -XPOST "http://localhost:16000/query?db=2" -d'SetBit(1,"a",99)'
+```
+From your local terminal.
