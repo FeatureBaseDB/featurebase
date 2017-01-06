@@ -1355,10 +1355,24 @@ func NewBspawnCommand(stdin io.Reader, stdout, stderr io.Writer) *BspawnCommand 
 
 // ParseFlags parses command line flags from args.
 func (cmd *BspawnCommand) ParseFlags(args []string) error {
-	if len(args) != 1 {
+	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
+	fs.SetOutput(ioutil.Discard)
+	creatorHosts := fs.String("creator.hosts", "", "")
+	creatorLFP := fs.String("creator.log-file-prefix", "", "")
+	pilosaHosts := fs.String("pilosa-hosts", "", "")
+	agentHosts := fs.String("agent-hosts", "", "")
+	sshUser := fs.String("ssh-user", "", "")
+	fs.BoolVar(&cmd.Human, "human", false, "")
+	fs.BoolVar(&cmd.CopyBinary, "copy-binary", false, "")
+
+	err := fs.Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(fs.Args()) != 1 {
 		return flag.ErrHelp
 	}
-	f, err := os.Open(args[0])
+	f, err := os.Open(fs.Args()[0])
 	if err != nil {
 		return err
 	}
@@ -1367,6 +1381,20 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	if err != nil {
 		return err
 	}
+	if *pilosaHosts != "" {
+		cmd.PilosaHosts = strings.Split(*pilosaHosts, ",")
+	}
+	if *agentHosts != "" {
+		cmd.AgentHosts = strings.Split(*agentHosts, ",")
+	}
+	if *sshUser != "" {
+		cmd.SSHUser = *sshUser
+	}
+	// TODO support all creator args - just checking for creatorHosts here won't be sufficient
+	if *creatorHosts != "" {
+		cmd.CreatorArgs = []string{"-hosts=" + *creatorHosts, "-log-file-prefix=" + *creatorLFP, "-ssh-user=" + cmd.SSHUser}
+	}
+
 	return nil
 }
 
@@ -1377,7 +1405,30 @@ pilosactl bspawn is a tool for running multiple instances of bagent against a cl
 
 Usage:
 
-pilosactl spawn configfile
+pilosactl spawn [flags] configfile
+
+The following flags are allowed and will override the values in the config file:
+
+	-creator.hosts
+		hosts argument for pilosactl create
+
+	-creator.log-file-prefix
+		log-file-prefix argument for pilosactl create
+
+	-pilosa-hosts
+		pilosa hosts to run against (will ignore creator args)
+
+	-agent-hosts
+		hosts to use for benchmark agents
+
+	-ssh-user
+		pilosa hosts to run against (will ignore creator args)
+
+	-copy-binary
+		controls whether or not to build and copy pilosactl to agents
+
+	-human
+		toggle human readable output (indented json with formatted times)
 `)
 }
 
