@@ -3,11 +3,8 @@ package pilosa
 import (
 	"errors"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
-
-//go:generate protoc --gogo_out=. internal/internal.proto
 
 var (
 	// ErrHostRequired is returned when excuting a remote operation without a host.
@@ -57,7 +54,7 @@ func decodeProfiles(a []*internal.Profile) []*Profile {
 // encodeProfile converts p into its internal representation.
 func encodeProfile(p *Profile) *internal.Profile {
 	return &internal.Profile{
-		ID:    proto.Uint64(p.ID),
+		ID:    p.ID,
 		Attrs: encodeAttrs(p.Attrs),
 	}
 }
@@ -65,12 +62,12 @@ func encodeProfile(p *Profile) *internal.Profile {
 // decodeProfile converts b from its internal representation.
 func decodeProfile(pb *internal.Profile) *Profile {
 	p := &Profile{
-		ID: pb.GetID(),
+		ID: pb.ID,
 	}
 
-	if len(pb.GetAttrs()) > 0 {
-		p.Attrs = make(map[string]interface{}, len(pb.GetAttrs()))
-		for _, attr := range pb.GetAttrs() {
+	if len(pb.Attrs) > 0 {
+		p.Attrs = make(map[string]interface{}, len(pb.Attrs))
+		for _, attr := range pb.Attrs {
 			k, v := decodeAttr(attr)
 			p.Attrs[k] = v
 		}
@@ -78,3 +75,6 @@ func decodeProfile(pb *internal.Profile) *Profile {
 
 	return p
 }
+
+// TimeFormat is the go-style time format used to parse string dates.
+const TimeFormat = "2006-01-02T15:04"

@@ -315,13 +315,13 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	}
 
 	// Determine slice count.
-	sliceN, err := client.SliceN(ctx)
+	maxSlices, err := client.MaxSliceByDatabase(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Export each slice.
-	for slice := uint64(0); slice <= sliceN; slice++ {
+	for slice := uint64(0); slice <= maxSlices[cmd.Database]; slice++ {
 		logger.Printf("exporting slice: %d", slice)
 		if err := client.ExportCSV(ctx, cmd.Database, cmd.Frame, slice, w); err != nil {
 			return err
@@ -403,9 +403,10 @@ func (cmd *SortCommand) Run(ctx context.Context) error {
 
 	// Read rows as bits.
 	r := csv.NewReader(f)
+	r.FieldsPerRecord = -1
 	a := make([]pilosa.Bit, 0, 1000000)
 	for {
-		bitmapID, profileID, err := readCSVRow(r)
+		bitmapID, profileID, timestamp, err := readCSVRow(r)
 		if err == io.EOF {
 			break
 		} else if err == errBlank {
@@ -413,7 +414,7 @@ func (cmd *SortCommand) Run(ctx context.Context) error {
 		} else if err != nil {
 			return err
 		}
-		a = append(a, pilosa.Bit{BitmapID: bitmapID, ProfileID: profileID})
+		a = append(a, pilosa.Bit{BitmapID: bitmapID, ProfileID: profileID, Timestamp: timestamp})
 	}
 
 	// Sort bits by position.
@@ -426,8 +427,15 @@ func (cmd *SortCommand) Run(ctx context.Context) error {
 		// Write CSV to buffer.
 		buf = buf[:0]
 		buf = strconv.AppendUint(buf, bit.BitmapID, 10)
+
 		buf = append(buf, ',')
 		buf = strconv.AppendUint(buf, bit.ProfileID, 10)
+
+		if bit.Timestamp != 0 {
+			buf = append(buf, ',')
+			buf = append(buf, time.Unix(0, bit.Timestamp).UTC().Format(pilosa.TimeFormat)...)
+		}
+
 		buf = append(buf, '\n')
 
 		// Write to output.
@@ -1608,33 +1616,42 @@ func serial(bs ...bench.Benchmark) bench.Benchmark {
 }
 
 // readCSVRow reads a bitmap/profile pair from a CSV row.
-func readCSVRow(r *csv.Reader) (bitmapID, profileID uint64, err error) {
+func readCSVRow(r *csv.Reader) (bitmapID, profileID uint64, timestamp int64, err error) {
 	// Read CSV row.
 	record, err := r.Read()
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 
 	// Ignore blank rows.
 	if record[0] == "" {
-		return 0, 0, errBlank
+		return 0, 0, 0, errBlank
 	} else if len(record) < 2 {
-		return 0, 0, fmt.Errorf("bad column count: %d", len(record))
+		return 0, 0, 0, fmt.Errorf("bad column count: %d", len(record))
 	}
 
 	// Parse bitmap id.
 	bitmapID, err = strconv.ParseUint(record[0], 10, 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("invalid bitmap id: %q", record[0])
+		return 0, 0, 0, fmt.Errorf("invalid bitmap id: %q", record[0])
 	}
 
 	// Parse bitmap id.
 	profileID, err = strconv.ParseUint(record[1], 10, 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("invalid profile id: %q", record[1])
+		return 0, 0, 0, fmt.Errorf("invalid profile id: %q", record[1])
 	}
 
-	return bitmapID, profileID, nil
+	// Parse timestamp, if available.
+	if len(record) > 2 && record[2] != "" {
+		t, err := time.Parse(pilosa.TimeFormat, record[2])
+		if err != nil {
+			return 0, 0, 0, fmt.Errorf("invalid timestamp: %q", record[2])
+		}
+		timestamp = t.UnixNano()
+	}
+
+	return bitmapID, profileID, timestamp, nil
 }
 
 // errBlank indicates a blank row in a CSV file.

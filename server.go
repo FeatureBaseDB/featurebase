@@ -115,7 +115,7 @@ func (s *Server) Open() error {
 	// Start background monitoring.
 	s.wg.Add(2)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
-	go func() { defer s.wg.Done(); s.monitorMaxSlice() }()
+	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
 
 	return nil
 }
@@ -180,14 +180,14 @@ func (s *Server) monitorAntiEntropy() {
 	}
 }
 
-// monitorMaxSlice periodically pulls the highest slice from each node in the cluster.
-func (s *Server) monitorMaxSlice() {
+// monitorMaxSlices periodically pulls the highest slice from each node in the cluster.
+func (s *Server) monitorMaxSlices() {
 	// Ignore if only one node in the cluster.
 	if len(s.Cluster.Nodes) <= 1 {
 		return
 	}
 
-	ticker := time.NewTicker(time.Second * time.Duration(s.PollingInterval))
+	ticker := time.NewTicker(s.PollingInterval)
 	defer ticker.Stop()
 
 	for {
@@ -197,24 +197,34 @@ func (s *Server) monitorMaxSlice() {
 		case <-ticker.C:
 		}
 
-		oldmax := s.Index.SliceN()
-		newmax := oldmax
+		oldmaxslices := s.Index.MaxSlices()
 		for _, node := range s.Cluster.Nodes {
 			if s.Host != node.Host {
-				newslice, _ := checkMaxSlice(node.Host)
-				if newslice > newmax {
-					newmax = newslice
+				maxSlices, _ := checkMaxSlices(node.Host)
+				for db, newmax := range maxSlices {
+					// if we don't know about a db locally, create it
+					// so that the /schema endpoint can report it
+					if localdb := s.Index.DB(db); localdb != nil {
+						if newmax > oldmaxslices[db] {
+							oldmaxslices[db] = newmax
+							localdb.SetRemoteMaxSlice(newmax)
+						}
+					} else {
+						d, err := s.Index.CreateDBIfNotExists(db)
+						if err != nil {
+							s.logger().Printf("Failed to create DB locally: %s", db)
+							return
+						}
+						oldmaxslices[db] = newmax
+						d.SetRemoteMaxSlice(newmax)
+					}
 				}
 			}
-		}
-
-		if newmax > oldmax {
-			s.Index.SetMax(newmax)
 		}
 	}
 }
 
-func checkMaxSlice(hostport string) (uint64, error) {
+func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	// Create HTTP request.
 	req, err := http.NewRequest("GET", (&url.URL{
 		Scheme: "http",
@@ -223,7 +233,7 @@ func checkMaxSlice(hostport string) (uint64, error) {
 	}).String(), nil)
 
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	// Require protobuf encoding.
@@ -233,28 +243,27 @@ func checkMaxSlice(hostport string) (uint64, error) {
 	// Send request to remote node.
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	// Read response into buffer.
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
+		return nil, fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
 	}
 
 	// Decode response object.
-	pb := internal.SliceMaxResponse{}
+	pb := internal.MaxSlicesResponse{}
 
 	if err = proto.Unmarshal(body, &pb); err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return *pb.SliceMax, nil
-
+	return pb.MaxSlices, nil
 }

@@ -1,5 +1,5 @@
-hash: 3b8279eaeec5a7b790ab8f2beacc451145362e91d8d9871d1c5b2313f7cd5d19
-updated: 2016-12-20T13:41:45.723967488-06:00
+hash: 469de49a1736f34a11e9b0e490f7c1da1d8cb0219fed4bf3ad9e71344ca7f58a
+updated: 2017-01-09T16:52:45.035926627-06:00
 imports:
 - name: github.com/boltdb/bolt
   version: 4b1ebc1869ad66568b313d0dc410e2be72670dda
@@ -21,10 +21,14 @@ imports:
   version: a6b377e3400b08991b80d6805d627f347f983866
   subpackages:
   - lru
+- name: github.com/golang/protobuf
+  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
+  subpackages:
+  - proto
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: golang.org/x/crypto
-  version: d8e61c69ab46ca38328da2f4995abaf93b252290
+  version: c3b1d0d6d8690eaebe3064711b026770cc37efa3
   subpackages:
   - curve25519
   - ed25519

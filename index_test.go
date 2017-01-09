@@ -19,11 +19,11 @@ func TestIndex_DeleteDB(t *testing.T) {
 
 	// Write bits to separate databases.
 	f0 := idx.MustCreateFragmentIfNotExists("d0", "f", 0)
-	if _, err := f0.SetBit(100, 200, nil, 0); err != nil {
+	if _, err := f0.SetBit(100, 200); err != nil {
 		t.Fatal(err)
 	}
 	f1 := idx.MustCreateFragmentIfNotExists("d1", "f", 0)
-	if _, err := f1.SetBit(100, 200, nil, 0); err != nil {
+	if _, err := f1.SetBit(100, 200); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,18 +74,18 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 
 	// Set data on the local index.
 	f := idx0.MustCreateFragmentIfNotExists("d", "f", 0)
-	if _, err := f.SetBit(0, 10, nil, 0); err != nil {
+	if _, err := f.SetBit(0, 10); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(2, 20, nil, 0); err != nil {
+	} else if _, err := f.SetBit(2, 20); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(120, 10, nil, 0); err != nil {
+	} else if _, err := f.SetBit(120, 10); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(200, 4, nil, 0); err != nil {
+	} else if _, err := f.SetBit(200, 4); err != nil {
 		t.Fatal(err)
 	}
 
 	f = idx0.MustCreateFragmentIfNotExists("d", "f0", 1)
-	if _, err := f.SetBit(9, SliceWidth+5, nil, 0); err != nil {
+	if _, err := f.SetBit(9, SliceWidth+5); err != nil {
 		t.Fatal(err)
 	}
 
@@ -93,25 +93,26 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 
 	// Set data on the remote index.
 	f = idx1.MustCreateFragmentIfNotExists("d", "f", 0)
-	if _, err := f.SetBit(0, 4000, nil, 0); err != nil {
+	if _, err := f.SetBit(0, 4000); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(3, 10, nil, 0); err != nil {
+	} else if _, err := f.SetBit(3, 10); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(120, 10, nil, 0); err != nil {
+	} else if _, err := f.SetBit(120, 10); err != nil {
 		t.Fatal(err)
 	}
 
 	f = idx1.MustCreateFragmentIfNotExists("y", "z", 3)
-	if _, err := f.SetBit(10, (3*SliceWidth)+4, nil, 0); err != nil {
+	if _, err := f.SetBit(10, (3*SliceWidth)+4); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(10, (3*SliceWidth)+5, nil, 0); err != nil {
+	} else if _, err := f.SetBit(10, (3*SliceWidth)+5); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(10, (3*SliceWidth)+7, nil, 0); err != nil {
+	} else if _, err := f.SetBit(10, (3*SliceWidth)+7); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set highest slice.
-	idx0.SetMax(3)
+	idx0.DB("d").SetRemoteMaxSlice(1)
+	idx0.DB("y").SetRemoteMaxSlice(3)
 
 	// Set up syncer.
 	syncer := pilosa.IndexSyncer{
@@ -119,6 +120,7 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 		Host:    cluster.Nodes[0].Host,
 		Cluster: cluster,
 	}
+
 	if err := syncer.SyncIndex(); err != nil {
 		t.Fatal(err)
 	}
@@ -139,10 +141,13 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 		}
 
 		f = idx.Fragment("d", "f0", 1)
+		a := f.Bitmap(9).Bits()
+		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
+		}
 		if a := f.Bitmap(9).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
 		}
-
 		f = idx.Fragment("y", "z", 3)
 		if a := f.Bitmap(10).Bits(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
 			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
@@ -183,6 +188,24 @@ func MustOpenIndex() *Index {
 func (i *Index) Close() error {
 	defer os.RemoveAll(i.Path)
 	return i.Index.Close()
+}
+
+// MustCreateDBIfNotExists returns a given db. Panic on error.
+func (i *Index) MustCreateDBIfNotExists(db string) *DB {
+	d, err := i.Index.CreateDBIfNotExists(db)
+	if err != nil {
+		panic(err)
+	}
+	return &DB{DB: d}
+}
+
+// MustCreateFrameIfNotExists returns a given frame. Panic on error.
+func (i *Index) MustCreateFrameIfNotExists(db, frame string) *Frame {
+	f, err := i.Index.CreateFrameIfNotExists(db, frame)
+	if err != nil {
+		panic(err)
+	}
+	return &Frame{Frame: f}
 }
 
 // MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
