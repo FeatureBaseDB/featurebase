@@ -45,8 +45,8 @@ func NewClient(host string) (*Client, error) {
 // Host returns the host the client was initialized with.
 func (c *Client) Host() string { return c.host }
 
-// SliceN returns the number of slices on a server.
-func (c *Client) SliceN(ctx context.Context) (uint64, error) {
+// MaxSliceByDatabase returns the number of slices on a server by database.
+func (c *Client) MaxSliceByDatabase(ctx context.Context) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := url.URL{
 		Scheme: "http",
@@ -57,24 +57,24 @@ func (c *Client) SliceN(ctx context.Context) (uint64, error) {
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var rsp sliceMaxResponse
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("http: status=%d", resp.StatusCode)
+		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
 	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
-		return 0, fmt.Errorf("json decode: %s", err)
+		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
-	return rsp.SliceMax, nil
+	return rsp.MaxSlices, nil
 }
 
 // Schema returns all database and frame schema information.
@@ -151,9 +151,9 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 
 	// Encode query request.
 	buf, err := proto.Marshal(&internal.QueryRequest{
-		DB:     proto.String(db),
-		Query:  proto.String(query),
-		Remote: proto.Bool(!allowRedirect),
+		DB:     db,
+		Query:  query,
+		Remote: !allowRedirect,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %s", err)
@@ -187,7 +187,7 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 	var qresp internal.QueryResponse
 	if err := proto.Unmarshal(body, &qresp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %s", err)
-	} else if s := qresp.GetErr(); s != "" {
+	} else if s := qresp.Err; s != "" {
 		return nil, errors.New(s)
 	}
 
@@ -227,14 +227,16 @@ func MarshalImportPayload(db, frame string, slice uint64, bits []Bit) ([]byte, e
 	// Separate bitmap and profile IDs to reduce allocations.
 	bitmapIDs := Bits(bits).BitmapIDs()
 	profileIDs := Bits(bits).ProfileIDs()
+	timestamps := Bits(bits).Timestamps()
 
 	// Marshal bits to protobufs.
 	buf, err := proto.Marshal(&internal.ImportRequest{
-		DB:         proto.String(db),
-		Frame:      proto.String(frame),
-		Slice:      proto.Uint64(slice),
+		DB:         db,
+		Frame:      frame,
+		Slice:      slice,
 		BitmapIDs:  bitmapIDs,
 		ProfileIDs: profileIDs,
+		Timestamps: timestamps,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal import request: %s", err)
@@ -272,7 +274,7 @@ func (c *Client) importNode(ctx context.Context, node *Node, buf []byte) error {
 	var isresp internal.ImportResponse
 	if err := proto.Unmarshal(body, &isresp); err != nil {
 		return fmt.Errorf("unmarshal import response: %s", err)
-	} else if s := isresp.GetErr(); s != "" {
+	} else if s := isresp.Err; s != "" {
 		return errors.New(s)
 	}
 
@@ -362,13 +364,13 @@ func (c *Client) BackupTo(ctx context.Context, w io.Writer, db, frame string) er
 	tw := tar.NewWriter(w)
 
 	// Find the maximum number of slices.
-	sliceN, err := c.SliceN(ctx)
+	maxSlices, err := c.MaxSliceByDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("slice n: %s", err)
 	}
 
 	// Backup every slice to the tar file.
-	for i := uint64(0); i <= sliceN; i++ {
+	for i := uint64(0); i <= maxSlices[db]; i++ {
 		if err := c.backupSliceTo(ctx, tw, db, frame, i); err != nil {
 			return err
 		}
@@ -644,10 +646,10 @@ func (c *Client) FragmentBlocks(ctx context.Context, db, frame string, slice uin
 // BlockData returns bitmap/profile id pairs for a block.
 func (c *Client) BlockData(ctx context.Context, db, frame string, slice uint64, block int) ([]uint64, []uint64, error) {
 	buf, err := proto.Marshal(&internal.BlockDataRequest{
-		DB:    proto.String(db),
-		Frame: proto.String(frame),
-		Slice: proto.Uint64(slice),
-		Block: proto.Uint64(uint64(block)),
+		DB:    db,
+		Frame: frame,
+		Slice: slice,
+		Block: uint64(block),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -779,6 +781,7 @@ func (c *Client) BitmapAttrDiff(ctx context.Context, db, frame string, blks []At
 type Bit struct {
 	BitmapID  uint64
 	ProfileID uint64
+	Timestamp int64
 }
 
 // Bits represents a slice of bits.
@@ -789,6 +792,9 @@ func (p Bits) Len() int      { return len(p) }
 
 func (p Bits) Less(i, j int) bool {
 	if p[i].BitmapID == p[j].BitmapID {
+		if p[i].ProfileID < p[j].ProfileID {
+			return p[i].Timestamp < p[j].Timestamp
+		}
 		return p[i].ProfileID < p[j].ProfileID
 	}
 	return p[i].BitmapID < p[j].BitmapID
@@ -808,6 +814,15 @@ func (a Bits) ProfileIDs() []uint64 {
 	other := make([]uint64, len(a))
 	for i := range a {
 		other[i] = a[i].ProfileID
+	}
+	return other
+}
+
+// Timestamps returns a slice of all the timestamps.
+func (a Bits) Timestamps() []int64 {
+	other := make([]int64, len(a))
+	for i := range a {
+		other[i] = a[i].Timestamp
 	}
 	return other
 }
@@ -834,5 +849,9 @@ type BitsByPos []Bit
 func (p BitsByPos) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 func (p BitsByPos) Len() int      { return len(p) }
 func (p BitsByPos) Less(i, j int) bool {
-	return Pos(p[i].BitmapID, p[i].ProfileID) < Pos(p[j].BitmapID, p[j].ProfileID)
+	p0, p1 := Pos(p[i].BitmapID, p[i].ProfileID), Pos(p[j].BitmapID, p[j].ProfileID)
+	if p0 == p1 {
+		return p[i].Timestamp < p[j].Timestamp
+	}
+	return p0 < p1
 }

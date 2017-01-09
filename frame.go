@@ -2,26 +2,28 @@ package pilosa
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/internal"
 )
 
 const (
-	// FrameSuffixTime is the suffix used for time-based frames.
-	FrameSuffixTime = ".t"
-
 	// FrameSuffixRank is the suffix used for rank-based frames.
 	FrameSuffixRank = ".n"
 )
 
 // Frame represents a container for fragments.
 type Frame struct {
-	mu   sync.Mutex
-	path string
-	db   string
-	name string
+	mu          sync.Mutex
+	path        string
+	db          string
+	name        string
+	timeQuantum TimeQuantum
 
 	// Fragments by slice.
 	fragments map[uint64]*Fragment
@@ -58,8 +60,8 @@ func (f *Frame) Path() string { return f.path }
 // BitmapAttrStore returns the attribute storage.
 func (f *Frame) BitmapAttrStore() *AttrStore { return f.bitmapAttrStore }
 
-// SliceN returns the max slice in the frame.
-func (f *Frame) SliceN() uint64 {
+// MaxSlice returns the max slice in the frame.
+func (f *Frame) MaxSlice() uint64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -77,6 +79,10 @@ func (f *Frame) Open() error {
 	if err := func() error {
 		// Ensure the frame's path exists.
 		if err := os.MkdirAll(f.path, 0777); err != nil {
+			return err
+		}
+
+		if err := f.loadMeta(); err != nil {
 			return err
 		}
 
@@ -128,7 +134,46 @@ func (f *Frame) openFragments() error {
 		frag.BitmapAttrStore = f.bitmapAttrStore
 		f.fragments[frag.Slice()] = frag
 
-		f.stats.Count("sliceN", 1)
+		f.stats.Count("maxSlice", 1)
+	}
+
+	return nil
+}
+
+// loadMeta reads meta data for the frame, if any.
+func (f *Frame) loadMeta() error {
+	var pb internal.Frame
+
+	// Read data from meta file.
+	buf, err := ioutil.ReadFile(filepath.Join(f.path, "meta"))
+	if os.IsNotExist(err) {
+		f.timeQuantum = ""
+		return nil
+	} else if err != nil {
+		return err
+	} else {
+		if err := proto.Unmarshal(buf, &pb); err != nil {
+			return err
+		}
+	}
+
+	// Copy metadata fields.
+	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
+
+	return nil
+}
+
+// saveMeta writes meta data for the frame.
+func (f *Frame) saveMeta() error {
+	// Marshal metadata.
+	buf, err := proto.Marshal(&internal.Frame{TimeQuantum: string(f.timeQuantum)})
+	if err != nil {
+		return err
+	}
+
+	// Write to meta file.
+	if err := ioutil.WriteFile(filepath.Join(f.path, "meta"), buf, 0666); err != nil {
+		return err
 	}
 
 	return nil
@@ -149,6 +194,34 @@ func (f *Frame) Close() error {
 		_ = frag.Close()
 	}
 	f.fragments = make(map[uint64]*Fragment)
+
+	return nil
+}
+
+// TimeQuantum returns the time quantum for the frame.
+func (f *Frame) TimeQuantum() TimeQuantum {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.timeQuantum
+}
+
+// SetTimeQuantum sets the time quantum for the frame.
+func (f *Frame) SetTimeQuantum(q TimeQuantum) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Validate input.
+	if !q.Valid() {
+		return ErrInvalidTimeQuantum
+	}
+
+	// Update value on frame.
+	f.timeQuantum = q
+
+	// Persist meta data to disk.
+	if err := f.saveMeta(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -202,7 +275,7 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	// Save to lookup.
 	f.fragments[slice] = frag
 
-	f.stats.Count("sliceN", 1)
+	f.stats.Count("maxSlice", 1)
 
 	return frag, nil
 }
@@ -211,6 +284,16 @@ func (f *Frame) newFragment(path string, slice uint64) *Fragment {
 	frag := NewFragment(path, f.db, f.name, slice)
 	frag.stats = f.stats.WithTags(fmt.Sprintf("slice:%d", slice))
 	return frag
+}
+
+// SetBit sets a bit within the frame.
+func (f *Frame) SetBit(bitmapID, profileID uint64) (changed bool, err error) {
+	slice := profileID / SliceWidth
+	frag, err := f.CreateFragmentIfNotExists(slice)
+	if err != nil {
+		return changed, err
+	}
+	return frag.SetBit(bitmapID, profileID)
 }
 
 type frameSlice []*Frame

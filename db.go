@@ -3,10 +3,15 @@ package pilosa
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/internal"
 )
 
 // DB represents a container for frames.
@@ -15,8 +20,15 @@ type DB struct {
 	path string
 	name string
 
+	// Default time quantum for all frames in database.
+	// This can be overridden by individual frames.
+	timeQuantum TimeQuantum
+
 	// Frames by name.
 	frames map[string]*Frame
+
+	// Max Slice on any node in the cluster, according to this node
+	remoteMaxSlice uint64
 
 	// Profile attribute storage and cache
 	profileAttrStore *AttrStore
@@ -27,9 +39,10 @@ type DB struct {
 // NewDB returns a new instance of DB.
 func NewDB(path, name string) *DB {
 	return &DB{
-		path:   path,
-		name:   name,
-		frames: make(map[string]*Frame),
+		path:           path,
+		name:           name,
+		frames:         make(map[string]*Frame),
+		remoteMaxSlice: 0,
 
 		profileAttrStore: NewAttrStore(filepath.Join(path, "data")),
 
@@ -50,6 +63,11 @@ func (db *DB) ProfileAttrStore() *AttrStore { return db.profileAttrStore }
 func (db *DB) Open() error {
 	// Ensure the path exists.
 	if err := os.MkdirAll(db.path, 0777); err != nil {
+		return err
+	}
+
+	// Read meta file.
+	if err := db.loadMeta(); err != nil {
 		return err
 	}
 
@@ -93,6 +111,45 @@ func (db *DB) openFrames() error {
 	return nil
 }
 
+// loadMeta reads meta data for the database, if any.
+func (db *DB) loadMeta() error {
+	var pb internal.DB
+
+	// Read data from meta file.
+	buf, err := ioutil.ReadFile(filepath.Join(db.path, "meta"))
+	if os.IsNotExist(err) {
+		db.timeQuantum = ""
+		return nil
+	} else if err != nil {
+		return err
+	} else {
+		if err := proto.Unmarshal(buf, &pb); err != nil {
+			return err
+		}
+	}
+
+	// Copy metadata fields.
+	db.timeQuantum = TimeQuantum(pb.TimeQuantum)
+
+	return nil
+}
+
+// saveMeta writes meta data for the database.
+func (db *DB) saveMeta() error {
+	// Marshal metadata.
+	buf, err := proto.Marshal(&internal.DB{TimeQuantum: string(db.timeQuantum)})
+	if err != nil {
+		return err
+	}
+
+	// Write to meta file.
+	if err := ioutil.WriteFile(filepath.Join(db.path, "meta"), buf, 0666); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Close closes the database and its frames.
 func (db *DB) Close() error {
 	db.mu.Lock()
@@ -112,18 +169,49 @@ func (db *DB) Close() error {
 	return nil
 }
 
-// SliceN returns the max slice in the database.
-func (db *DB) SliceN() uint64 {
+// MaxSlice returns the max slice in the database according to this node.
+func (db *DB) MaxSlice() uint64 {
+	if db == nil {
+		return 0
+	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	var max uint64
+	max := db.remoteMaxSlice
 	for _, f := range db.frames {
-		if slice := f.SliceN(); slice > max {
+		if slice := f.MaxSlice(); slice > max {
 			max = slice
 		}
 	}
 	return max
+}
+
+// TimeQuantum returns the default time quantum for the database.
+func (db *DB) TimeQuantum() TimeQuantum {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	return db.timeQuantum
+}
+
+// SetTimeQuantum sets the default time quantum for the database.
+func (db *DB) SetTimeQuantum(q TimeQuantum) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// Validate input.
+	if !q.Valid() {
+		return ErrInvalidTimeQuantum
+	}
+
+	// Update value on database.
+	db.timeQuantum = q
+
+	// Perist meta data to disk.
+	if err := db.saveMeta(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // FramePath returns the path to a frame in the database.
@@ -187,6 +275,144 @@ func (db *DB) newFrame(path, name string) *Frame {
 	return f
 }
 
+// DeleteFrame removes a frame from the database.
+func (db *DB) DeleteFrame(name string) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// Ignore if frame doesn't exist.
+	f := db.frame(name)
+	if f == nil {
+		return nil
+	}
+
+	// Close frame.
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	// Delete frame directory.
+	if err := os.RemoveAll(db.FramePath(name)); err != nil {
+		return err
+	}
+
+	// Remove reference.
+	delete(db.frames, name)
+
+	db.stats.Count("frameN", -1)
+
+	return nil
+}
+
+// CreateFragmentIfNotExists returns a fragment in the database by name/slice.
+func (db *DB) CreateFragmentIfNotExists(name string, slice uint64) (*Fragment, error) {
+	f, err := db.CreateFrameIfNotExists(name)
+	if err != nil {
+		return nil, err
+	}
+	return f.CreateFragmentIfNotExists(slice)
+}
+
+// SetBit sets a bit for a given profile & bitmap.
+// If a timestamp is specified then set all bits for the different quantum units.
+func (db *DB) SetBit(name string, bitmapID, profileID uint64, t *time.Time) (changed bool, err error) {
+	// Read frame.
+	f, err := db.CreateFrameIfNotExists(name)
+	if err != nil {
+		return changed, err
+	}
+
+	// If this is a non-time bit then simply set the bit on the frame.
+	if t == nil {
+		return f.SetBit(bitmapID, profileID)
+	}
+
+	// Determine quantum of frame. Set to the default quantum if it is unset.
+	q := f.TimeQuantum()
+	if q == "" {
+		q = db.TimeQuantum()
+		if err := f.SetTimeQuantum(q); err != nil {
+			return changed, err
+		}
+	}
+
+	// If a timestamp is specified then set bits across all frames for the quantum.
+	for _, subname := range FramesByTime(name, *t, q) {
+		f, err := db.CreateFrameIfNotExists(subname)
+		if err != nil {
+			return changed, err
+		}
+
+		if c, err := f.SetBit(bitmapID, profileID); err != nil {
+			return changed, err
+		} else if c {
+			changed = true
+		}
+	}
+	return changed, nil
+}
+
+// Import bulk imports data.
+func (db *DB) Import(name string, bitmapIDs, profileIDs []uint64, timestamps []*time.Time) error {
+	// Read frame.
+	f, err := db.CreateFrameIfNotExists(name)
+	if err != nil {
+		return err
+	}
+
+	// Determine quantum if timestamps are set.
+	var q TimeQuantum
+	if hasTime(timestamps) {
+		if q = f.TimeQuantum(); q == "" {
+			q = db.TimeQuantum()
+			if err := f.SetTimeQuantum(q); err != nil {
+				return err
+			}
+		}
+
+		if q == "" {
+			return errors.New("time quantum not set in either database or frame")
+		}
+	}
+
+	// Split import data by fragment.
+	dataByFragment := make(map[importKey]importData)
+	for i := range bitmapIDs {
+		bitmapID, profileID, timestamp := bitmapIDs[i], profileIDs[i], timestamps[i]
+		slice := profileID / SliceWidth
+
+		var names []string
+		if timestamp == nil {
+			names = []string{name}
+		} else {
+			names = FramesByTime(name, *timestamp, q)
+		}
+
+		// Attach bit to each frame.
+		for _, name := range names {
+			key := importKey{Frame: name, Slice: slice}
+			data := dataByFragment[key]
+			data.BitmapIDs = append(data.BitmapIDs, bitmapID)
+			data.ProfileIDs = append(data.ProfileIDs, profileID)
+			dataByFragment[key] = data
+		}
+	}
+
+	// Import into each fragment.
+	for key, data := range dataByFragment {
+		f, err := db.CreateFragmentIfNotExists(key.Frame, key.Slice)
+		if err != nil {
+			return err
+		}
+
+		if err := f.Import(data.BitmapIDs, data.ProfileIDs); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 type dbSlice []*DB
 
 func (p dbSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
@@ -233,4 +459,30 @@ func MergeSchemas(a, b []*DBInfo) []*DBInfo {
 	sort.Sort(dbInfoSlice(dbs))
 
 	return dbs
+}
+
+func (db *DB) SetRemoteMaxSlice(newmax uint64) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.remoteMaxSlice = newmax
+}
+
+// hasTime returns true if a contains a non-nil time.
+func hasTime(a []*time.Time) bool {
+	for _, t := range a {
+		if t != nil {
+			return true
+		}
+	}
+	return false
+}
+
+type importKey struct {
+	Frame string
+	Slice uint64
+}
+
+type importData struct {
+	BitmapIDs  []uint64
+	ProfileIDs []uint64
 }

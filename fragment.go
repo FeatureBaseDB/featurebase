@@ -238,7 +238,7 @@ func (f *Fragment) openCache() error {
 
 	// Read in all bitmaps by ID.
 	// This will cause them to be added to the cache.
-	for _, bitmapID := range pb.GetBitmapIDs() {
+	for _, bitmapID := range pb.BitmapIDs {
 		n := f.storage.CountRange(bitmapID*SliceWidth, (bitmapID+1)*SliceWidth)
 		f.cache.Add(bitmapID, n)
 	}
@@ -323,11 +323,6 @@ func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 	}
 	bm.InvalidateCount()
 
-	// f.storage.ForEachRange(bitmapID*SliceWidth, (bitmapID+1)*SliceWidth, func(i uint64) {
-	// 	profileID := (f.slice * SliceWidth) + (i % SliceWidth)
-	// 	bm.SetBit(profileID)
-	// })
-
 	// Update cache.
 	f.cache.Add(bitmapID, bm.Count())
 
@@ -336,15 +331,9 @@ func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 
 // SetBit sets a bit for a given profile & bitmap within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) SetBit(bitmapID, profileID uint64, t *time.Time, q TimeQuantum) (changed bool, err error) {
+func (f *Fragment) SetBit(bitmapID, profileID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
-	// Set time bits if this is a time-frame and a timestamp is specified.
-	if strings.HasSuffix(f.frame, FrameSuffixTime) && t != nil {
-		return f.setTimeBit(bitmapID, profileID, *t, q)
-	}
-
 	return f.setBit(bitmapID, profileID)
 }
 
@@ -376,17 +365,6 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 
 	f.stats.Count("setN", 1)
 
-	return changed, nil
-}
-
-func (f *Fragment) setTimeBit(bitmapID, profileID uint64, t time.Time, q TimeQuantum) (changed bool, err error) {
-	for _, timeID := range TimeIDsFromQuantum(q, t, bitmapID) {
-		if v, err := f.setBit(timeID, profileID); err != nil {
-			return changed, fmt.Errorf("set time bit: t=%s, q=%s, err=%s", t, q, err)
-		} else if v {
-			changed = true
-		}
-	}
 	return changed, nil
 }
 
@@ -599,24 +577,6 @@ type TopOptions struct {
 	// Filter field name & values.
 	FilterField  string
 	FilterValues []interface{}
-}
-
-func (f *Fragment) Range(bitmapID uint64, start, end time.Time) *Bitmap {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Retrieve a list of bitmap ids for a given time range.
-	bitmapIDs := TimeIDsFromRange(start, end, bitmapID)
-	if len(bitmapIDs) == 0 {
-		return NewBitmap()
-	}
-
-	// Union all bitmap ids from the time range.
-	bm := f.bitmap(bitmapIDs[0])
-	for _, id := range bitmapIDs[1:] {
-		bm = bm.Union(f.bitmap(id))
-	}
-	return bm
 }
 
 // Checksum returns a checksum for the entire fragment.
@@ -870,7 +830,7 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 
 	// Verify that there are an equal number of bitmap ids and profile ids.
 	if len(bitmapIDs) != len(profileIDs) {
-		return fmt.Errorf("mismatch of bitmap and profile len: %d != %d", len(bitmapIDs), len(profileIDs))
+		return fmt.Errorf("mismatch of bitmap/profile len: %d != %d", len(bitmapIDs), len(profileIDs))
 	}
 
 	// Disconnect op writer so we don't append updates.

@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pilosa/pilosa"
 )
@@ -83,9 +84,10 @@ of the CSV file are grouped by slice for the most efficient import.
 
 The format of the CSV file is:
 
-	BITMAPID,PROFILEID
+	BITMAPID,PROFILEID,[TIME]
 
-The file should contain no headers.
+The file should contain no headers. The TIME column is optional and can be
+omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 `)
 }
 
@@ -135,6 +137,7 @@ func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
 
 	// Read rows as bits.
 	r := csv.NewReader(f)
+	r.FieldsPerRecord = -1
 	rnum := 0
 	for {
 		rnum++
@@ -154,19 +157,32 @@ func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
 			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
 		}
 
+		var bit pilosa.Bit
+
 		// Parse bitmap id.
 		bitmapID, err := strconv.ParseUint(record[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid bitmap id on row %d: %q", rnum, record[0])
 		}
+		bit.BitmapID = bitmapID
 
 		// Parse bitmap id.
 		profileID, err := strconv.ParseUint(record[1], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid profile id on row %d: %q", rnum, record[1])
 		}
+		bit.ProfileID = profileID
 
-		a = append(a, pilosa.Bit{BitmapID: bitmapID, ProfileID: profileID})
+		// Parse time, if exists.
+		if len(record) > 2 && record[2] != "" {
+			t, err := time.Parse(pilosa.TimeFormat, record[2])
+			if err != nil {
+				return fmt.Errorf("invalid timestamp on row %d: %q", rnum, record[2])
+			}
+			bit.Timestamp = t.UnixNano()
+		}
+
+		a = append(a, bit)
 
 		// If we've reached the buffer size then import bits.
 		if len(a) == cmd.BufferSize {

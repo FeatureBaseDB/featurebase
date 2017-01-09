@@ -41,7 +41,7 @@ func TestCluster_Partition(t *testing.T) {
 		c.PartitionN = partitionN
 
 		partitionID := c.Partition(db, slice)
-		if partitionID < 0 || partitionID > partitionN {
+		if partitionID < 0 || partitionID >= partitionN {
 			t.Errorf("partition out of range: slice=%d, p=%d, n=%d", slice, partitionID, partitionN)
 		}
 
