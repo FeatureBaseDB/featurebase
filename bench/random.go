@@ -86,7 +86,7 @@ func (b *RandomSetBits) Run(ctx context.Context, agentNum int) map[string]interf
 	src := rand.NewSource(b.Seed + int64(agentNum))
 	rng := rand.New(src)
 	results := make(map[string]interface{})
-	if b.cli == nil {
+	if b.client == nil {
 		results["error"] = fmt.Errorf("No client set for RandomSetBits agent: %v", agentNum)
 		return results
 	}
@@ -97,7 +97,7 @@ func (b *RandomSetBits) Run(ctx context.Context, agentNum int) map[string]interf
 		profID := rng.Int63n(b.ProfileIDRange)
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+bitmapID, b.BaseProfileID+profID)
 		start = time.Now()
-		b.cli.ExecuteQuery(ctx, b.DB, query, true)
+		b.client.ExecuteQuery(ctx, b.DB, query, true)
 		s.Add(time.Now().Sub(start))
 	}
 	AddToResults(s, results)
