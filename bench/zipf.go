@@ -137,7 +137,7 @@ func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
 // Run runs the ZipfSetBits benchmark
 func (b *ZipfSetBits) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	results := make(map[string]interface{})
-	if b.cli == nil {
+	if b.client == nil {
 		results["error"] = fmt.Errorf("No client set for ZipfSetBits agent: %v", agentNum)
 		return results
 	}
@@ -153,7 +153,7 @@ func (b *ZipfSetBits) Run(ctx context.Context, agentNum int) map[string]interfac
 
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+int64(bitmapID), b.BaseProfileID+int64(profID))
 		start = time.Now()
-		_, err := b.cli.ExecuteQuery(ctx, b.DB, query, true)
+		_, err := b.client.ExecuteQuery(ctx, b.DB, query, true)
 		if err != nil {
 			results["error"] = fmt.Sprintf("Error executing query in zipf: %v", err)
 			return results

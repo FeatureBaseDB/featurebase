@@ -7,22 +7,22 @@ import (
 )
 
 func firstHostClient(hosts []string) (*pilosa.Client, error) {
-	cli, err := pilosa.NewClient(hosts[0])
+	client, err := pilosa.NewClient(hosts[0])
 	if err != nil {
 		return nil, err
 	}
-	return cli, nil
+	return client, nil
 }
 
 func roundRobinClient(hosts []string, agentNum int) (*pilosa.Client, error) {
-	cliNum := agentNum % len(hosts)
-	return firstHostClient(hosts[cliNum:])
+	clientNum := agentNum % len(hosts)
+	return firstHostClient(hosts[clientNum:])
 }
 
 // HasClient provides a reusable component for Benchmark implementations which
 // provides the Init method, a ClientType argument and a cli internal variable.
 type HasClient struct {
-	cli        *pilosa.Client
+	client     *pilosa.Client
 	ClientType string `json:"client-type"`
 }
 
@@ -33,10 +33,10 @@ func (h *HasClient) Init(hosts []string, agentNum int) error {
 	var err error
 	switch h.ClientType {
 	case "single":
-		h.cli, err = firstHostClient(hosts)
+		h.client, err = firstHostClient(hosts)
 		return err
 	case "round_robin":
-		h.cli, err = roundRobinClient(hosts, agentNum)
+		h.client, err = roundRobinClient(hosts, agentNum)
 		return err
 	default:
 		return fmt.Errorf("Unsupported ClientType: %v", h.ClientType)

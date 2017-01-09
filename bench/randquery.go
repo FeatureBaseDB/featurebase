@@ -90,7 +90,7 @@ func (b *RandomQuery) ConsumeFlags(args []string) ([]string, error) {
 func (b *RandomQuery) Run(ctx context.Context, agentNum int) map[string]interface{} {
 	seed := b.Seed + int64(agentNum)
 	results := make(map[string]interface{})
-	if b.cli == nil {
+	if b.client == nil {
 		results["error"] = fmt.Errorf("No client set for RandomQuery agent: %v", agentNum)
 		return results
 	}
@@ -100,7 +100,7 @@ func (b *RandomQuery) Run(ctx context.Context, agentNum int) map[string]interfac
 	for n := 0; n < b.Iterations; n++ {
 		call := qm.Random(b.MaxN, b.MaxDepth, b.MaxArgs, uint64(b.BaseBitmapID), uint64(b.BitmapIDRange))
 		start = time.Now()
-		b.cli.ExecuteQuery(ctx, b.DBs[n%len(b.DBs)], call.String(), true)
+		b.client.ExecuteQuery(ctx, b.DBs[n%len(b.DBs)], call.String(), true)
 		s.Add(time.Now().Sub(start))
 	}
 	AddToResults(s, results)
