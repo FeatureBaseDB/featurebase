@@ -33,8 +33,9 @@ type Server struct {
 	closing chan struct{}
 
 	// Data storage and HTTP interface.
-	Index   *Index
-	Handler *Handler
+	Index     *Index
+	Handler   *Handler
+	Messenger Messenger
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
@@ -53,8 +54,9 @@ func NewServer() *Server {
 	s := &Server{
 		closing: make(chan struct{}),
 
-		Index:   NewIndex(),
-		Handler: NewHandler(),
+		Index:     NewIndex(),
+		Handler:   NewHandler(),
+		Messenger: NopMessenger,
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,

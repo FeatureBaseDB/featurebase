@@ -11,7 +11,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
-	"github.com/pilosa/pilosa/messenger"
 )
 
 const (
@@ -38,7 +37,8 @@ type Frame struct {
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
 
-	stats StatsClient
+	messenger Messenger
+	stats     StatsClient
 
 	// Label used for referring to a row.
 	rowLabel string
@@ -56,7 +56,8 @@ func NewFrame(path, db, name string) *Frame {
 		fragments:       make(map[uint64]*Fragment),
 		bitmapAttrStore: NewAttrStore(filepath.Join(path, "data")),
 
-		stats: NopStatsClient,
+		messenger: NopMessenger,
+		stats:     NopStatsClient,
 
 		rowLabel: DefaultRowLabel,
 
@@ -329,8 +330,8 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 		return nil, err
 	}
 
-	// push slice to the Messenger (for max slice consideration)
-	messenger.GetMessenger("").SendMessage(
+	// Send a MaxSlice message
+	f.messenger.SendMessage(
 		&internal.CreateSliceMessage{
 			DB:    f.db,
 			Slice: slice,

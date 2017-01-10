@@ -26,6 +26,8 @@ type Index struct {
 	// Databases by name.
 	dbs map[string]*DB
 
+	Messenger Messenger
+
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
@@ -48,7 +50,8 @@ func NewIndex() *Index {
 		dbs:     make(map[string]*DB),
 		closing: make(chan struct{}, 0),
 
-		Stats: NopStatsClient,
+		Messenger: NopMessenger,
+		Stats:     NopStatsClient,
 
 		CacheFlushInterval: DefaultCacheFlushInterval,
 
@@ -215,6 +218,7 @@ func (i *Index) newDB(path, name string) *DB {
 	db := NewDB(path, name)
 	db.LogOutput = i.LogOutput
 	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
+	db.messenger = i.Messenger
 	return db
 }
 
@@ -299,10 +303,10 @@ func (i *Index) flushCaches() {
 	}
 }
 
-// HandleMessage handles protobuf Messages broadcasted to nodes
-// in the cluster from the cluster's NodeSet.
-func (i *Index) HandleMessage(m proto.Message) error {
-	switch obj := m.(type) {
+// HandleMessage handles protobuf Messages broadcasted to nodes in the
+// cluster from the Cluster's NodeSet.
+func (i *Index) HandleMessage(pb proto.Message) error {
+	switch obj := pb.(type) {
 	case *internal.CreateSliceMessage:
 		d, err := i.CreateDBIfNotExists(obj.DB)
 		if err != nil {

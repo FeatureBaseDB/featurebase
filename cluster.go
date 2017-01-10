@@ -1,8 +1,11 @@
 package pilosa
 
 import (
+	"bytes"
 	"encoding/binary"
 	"hash/fnv"
+	"net/http"
+	"net/url"
 
 	"github.com/gogo/protobuf/proto"
 )
@@ -96,21 +99,6 @@ type Cluster struct {
 	ReplicaN int
 }
 
-// NodeSet represents an interface to maintaining Node state.
-type NodeSet interface {
-	// Returns a list of all Nodes in the cluster
-	Nodes() []*Node
-
-	// Attempts to join a cluster having `nodes` as its existing members
-	Join(nodes []string) (int, error)
-
-	// Open starts any network activity implemented by the NodeSet
-	Open() error
-
-	// SetMessageHandler provides the NodeSet with a function to call on ReceiveMessage
-	SetMessageHandler(f func(proto.Message) error)
-}
-
 // NewCluster returns a new instance of Cluster with defaults.
 func NewCluster() *Cluster {
 	return &Cluster{
@@ -132,6 +120,7 @@ func (c *Cluster) NodeSetHosts() []string {
 	return a
 }
 
+// Health returns a list of nodes in the cluster along with each node's state (UP/DOWN).
 func (c *Cluster) Health() map[string]string {
 	h := make(map[string]string)
 	for _, n := range c.Nodes {
@@ -201,6 +190,21 @@ func (c *Cluster) PartitionNodes(partitionID int) []*Node {
 	return nodes
 }
 
+// NodeSet represents an interface to maintaining Node state.
+type NodeSet interface {
+	// Returns a list of all Nodes in the cluster
+	Nodes() []*Node
+
+	// Attempts to join a cluster having `nodes` as its existing members
+	Join(nodes []*Node) (int, error)
+
+	// Open starts any network activity implemented by the NodeSet
+	Open() error
+
+	// SetMessageHandler provides the NodeSet with a function to call on ReceiveMessage
+	SetMessageHandler(f func(proto.Message) error)
+}
+
 // Hasher represents an interface to hash integers into buckets.
 type Hasher interface {
 	// Hashes the key into a number between [0,N).
@@ -224,32 +228,118 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 	return int(b)
 }
 
+// HTTPNodeSet represents a NodeSet that broadcasts messages over HTTP.
+type HTTPNodeSet struct {
+	nodes          []*Node
+	messageHandler func(m proto.Message) error
+}
+
+// NewHTTPNodeSet returns a new instance of HTTPNodeSet.
+func NewHTTPNodeSet() *HTTPNodeSet {
+	return &HTTPNodeSet{}
+}
+
+func (h *HTTPNodeSet) Nodes() []*Node {
+	return h.nodes
+}
+
+func (h *HTTPNodeSet) Join(nodes []*Node) (int, error) {
+	h.nodes = nodes
+	return 0, nil
+}
+
+func (h *HTTPNodeSet) Open() error {
+	return nil
+}
+
+// SendMessage asyncronously broadcasts a protobuf message to all nodes.
+func (h *HTTPNodeSet) SendMessage(pb proto.Message) error {
+	for _, n := range h.nodes {
+		go func(node *Node, msg proto.Message) {
+			if err := h.sendNodeMessage(node, msg); err != nil {
+				// TODO: handle this error
+			}
+		}(n, pb)
+	}
+	return nil
+}
+
+// ReceiveMessage is called when a node recieves a message.
+func (h *HTTPNodeSet) ReceiveMessage(pb proto.Message) error {
+	err := h.messageHandler(pb)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (h *HTTPNodeSet) sendNodeMessage(node *Node, pb proto.Message) error {
+	var HTTPClient *http.Client
+	HTTPClient = http.DefaultClient
+
+	// Marshal the pb to []byte
+	buf, err := MarshalMessage(pb)
+	if err != nil {
+		return err
+	}
+
+	// Create HTTP request.
+	req, err := http.NewRequest("POST", (&url.URL{
+		Scheme: "http",
+		Host:   node.Host,
+		Path:   "/message",
+	}).String(), bytes.NewReader(buf))
+	if err != nil {
+		return err
+	}
+
+	// Require protobuf encoding.
+	req.Header.Set("Content-Type", "application/x-protobuf")
+
+	// Send request to remote node.
+	_, err = HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// SetMessageHandler provides the Messenger with a function to handle incoming messages.
+func (h *HTTPNodeSet) SetMessageHandler(f func(proto.Message) error) {
+	h.messageHandler = f
+}
+
 // StaticNodeSet represents a basic NodeSet for testing
 type StaticNodeSet struct {
-	nodes []string
+	Messenger
+	nodes []*Node
 }
 
 func NewStaticNodeSet() *StaticNodeSet {
 	return &StaticNodeSet{}
 }
 
-func (g *StaticNodeSet) Nodes() []*Node {
-	a := make([]*Node, 0, len(g.nodes))
-	for _, n := range g.nodes {
-		a = append(a, &Node{Host: n})
-	}
-	return a
+func (s *StaticNodeSet) Nodes() []*Node {
+	return s.nodes
 }
 
-func (g *StaticNodeSet) Join(nodes []string) (int, error) {
-	g.nodes = nodes
+func (s *StaticNodeSet) Join(nodes []*Node) (int, error) {
+	s.nodes = nodes
 	return 0, nil
 }
 
-func (g *StaticNodeSet) Open() error {
+func (s *StaticNodeSet) Open() error {
 	return nil
 }
 
-func (g *StaticNodeSet) SetMessageHandler(f func(proto.Message) error) {
+func (s *StaticNodeSet) SetMessageHandler(f func(proto.Message) error) {
 	return
+}
+
+func (s *StaticNodeSet) SendMessage(pb proto.Message) error {
+	return nil
+}
+func (s *StaticNodeSet) ReceiveMessage(pb proto.Message) error {
+	return nil
 }

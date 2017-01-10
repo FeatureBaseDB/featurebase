@@ -8,6 +8,29 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
+func init() {
+	NopMessenger = &nopMessenger{}
+}
+
+var NopMessenger Messenger
+
+// nopMessenger represents a Messenger that doesn't do anything.
+type nopMessenger struct{}
+
+func (c *nopMessenger) SendMessage(pb proto.Message) error {
+	fmt.Println("NOPMessenger: Send")
+	return nil
+}
+func (c *nopMessenger) ReceiveMessage(pb proto.Message) error {
+	fmt.Println("NOPMessenger: Receive")
+	return nil
+}
+
+type Messenger interface {
+	SendMessage(pb proto.Message) error
+	ReceiveMessage(pb proto.Message) error
+}
+
 const (
 	MessageTypeCreateSlice = 1
 	MessageTypeDeleteDB    = 2

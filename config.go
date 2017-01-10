@@ -15,6 +15,7 @@ type Config struct {
 
 	Cluster struct {
 		ReplicaN        int           `toml:"replicas"`
+		MessengerType   string        `toml:"messenger-type"`
 		Nodes           []*ConfigNode `toml:"node"`
 		PollingInterval Duration      `toml:"polling-interval"`
 		Gossip          *ConfigGossip `toml:"gossip"`
@@ -66,8 +67,11 @@ func (c *Config) PilosaCluster() *Cluster {
 		cluster.Nodes = append(cluster.Nodes, &Node{Host: n.Host})
 	}
 
-	// setup gossip if specified
-	if c.Cluster.Gossip != nil {
+	// Setup a Broadcast (over HTTP) or Gossip NodeSet based on config.
+	if c.Cluster.MessengerType == "broadcast" {
+		cluster.NodeSet = NewHTTPNodeSet()
+		cluster.NodeSet.Join(cluster.Nodes)
+	} else if (c.Cluster.MessengerType == "gossip") && (c.Cluster.Gossip != nil) {
 		gossipPort := DefaultGossipPort
 		gossipSeed := DefaultHost
 		if c.Cluster.Gossip.Port != 0 {

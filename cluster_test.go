@@ -98,7 +98,11 @@ func TestCluster_Health(t *testing.T) {
 		NodeSet: &pilosa.StaticNodeSet{},
 	}
 
-	j, err := c.NodeSet.Join([]string{"serverA:1000", "serverC:1000", "serverD:1000"})
+	j, err := c.NodeSet.Join([]*pilosa.Node{
+		&pilosa.Node{Host: "serverA:1000"},
+		&pilosa.Node{Host: "serverC:1000"},
+		&pilosa.Node{Host: "serverD:1000"},
+	})
 	if err != nil {
 		t.Fatalf("unexpected gossiper nodes: %s", j)
 	}
