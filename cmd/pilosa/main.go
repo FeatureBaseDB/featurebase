@@ -136,7 +136,13 @@ func (m *Main) Run(args ...string) error {
 	m.Server.Host = m.Config.Host
 	m.Server.Cluster = m.Config.PilosaCluster()
 
-	// set message handler
+	// Setup Messenger.
+	fmt.Fprintf(m.Stderr, "Using Messenger type: %s\n", m.Config.Cluster.MessengerType)
+	m.Server.Messenger = m.Server.Cluster.NodeSet.(pilosa.Messenger)
+	m.Server.Handler.Messenger = m.Server.Messenger
+	m.Server.Index.Messenger = m.Server.Messenger
+
+	// Set message handler.
 	m.Server.Cluster.NodeSet.SetMessageHandler(m.Server.Index.HandleMessage)
 
 	// Set configuration options.
@@ -203,6 +209,7 @@ type Config struct {
 
 	Cluster struct {
 		ReplicaN        int           `toml:"replicas"`
+		MessengerType   string        `toml:"messenger-type"`
 		Nodes           []*ConfigNode `toml:"node"`
 		PollingInterval Duration      `toml:"polling-interval"`
 		Gossip          *ConfigGossip `toml:"gossip"`
@@ -246,8 +253,11 @@ func (c *Config) PilosaCluster() *pilosa.Cluster {
 		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: n.Host})
 	}
 
-	// setup gossip if specified
-	if c.Cluster.Gossip != nil {
+	// Setup a Broadcast (over HTTP) or Gossip NodeSet based on config.
+	if c.Cluster.MessengerType == "broadcast" {
+		cluster.NodeSet = pilosa.NewHTTPNodeSet()
+		cluster.NodeSet.Join(cluster.Nodes)
+	} else if (c.Cluster.MessengerType == "gossip") && (c.Cluster.Gossip != nil) {
 		gossipPort := DefaultGossipPort
 		gossipSeed := DefaultHost
 		if c.Cluster.Gossip.Port != 0 {
@@ -256,8 +266,6 @@ func (c *Config) PilosaCluster() *pilosa.Cluster {
 		if c.Cluster.Gossip.Seed != "" {
 			gossipSeed = c.Cluster.Gossip.Seed
 		}
-		//cluster.NodeSet = pilosa.NewGossipNodeSet(c.Host, c.Cluster.Gossip.Port, c.Cluster.Gossip.Seed)
-		fmt.Println("SETUP:", c.Host)
 		cluster.NodeSet = pilosa.NewGossipNodeSet(c.Host, gossipPort, gossipSeed)
 	} else {
 		cluster.NodeSet = pilosa.NewStaticNodeSet()

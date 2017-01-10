@@ -33,7 +33,8 @@ type DB struct {
 	// Profile attribute storage and cache
 	profileAttrStore *AttrStore
 
-	stats StatsClient
+	messenger Messenger
+	stats     StatsClient
 }
 
 // NewDB returns a new instance of DB.
@@ -46,7 +47,8 @@ func NewDB(path, name string) *DB {
 
 		profileAttrStore: NewAttrStore(filepath.Join(path, "data")),
 
-		stats: NopStatsClient,
+		messenger: NopMessenger,
+		stats:     NopStatsClient,
 	}
 }
 
@@ -272,6 +274,7 @@ func (db *DB) createFrameIfNotExists(name string) (*Frame, error) {
 func (db *DB) newFrame(path, name string) *Frame {
 	f := NewFrame(path, db.name, name)
 	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.messenger = db.messenger
 	return f
 }
 

@@ -3,7 +3,6 @@ package pilosa
 import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/hashicorp/memberlist"
-	"github.com/pilosa/pilosa/messenger"
 )
 
 // GossipNodeSet represents a gossip implementation of NodeSet using memberlist
@@ -26,8 +25,8 @@ func (g *GossipNodeSet) Nodes() []*Node {
 	return a
 }
 
-func (g *GossipNodeSet) Join(nodes []string) (int, error) {
-	return g.Memberlist.Join(nodes)
+func (g *GossipNodeSet) Join(nodes []*Node) (int, error) {
+	return g.Memberlist.Join(Nodes(nodes).Hosts())
 }
 
 func (g *GossipNodeSet) Open() error {
@@ -38,7 +37,7 @@ func (g *GossipNodeSet) Open() error {
 	g.Memberlist = ml
 
 	// attach to gossip seed node
-	g.Join([]string{g.config.gossipSeed}) //TODO: support a list of seeds
+	g.Join([]*Node{&Node{Host: g.config.gossipSeed}}) //TODO: support a list of seeds
 
 	g.Broadcasts = &memberlist.TransmitLimitedQueue{
 		NumNodes: func() int {
@@ -54,8 +53,8 @@ func (g *GossipNodeSet) SetMessageHandler(f func(proto.Message) error) {
 }
 
 // implementation of the messenger.Messenger interface
-func (g *GossipNodeSet) SendMessage(m proto.Message) error {
-	msg, err := MarshalMessage(m)
+func (g *GossipNodeSet) SendMessage(pb proto.Message) error {
+	msg, err := MarshalMessage(pb)
 	if err != nil {
 		return err
 	}
@@ -68,12 +67,8 @@ func (g *GossipNodeSet) SendMessage(m proto.Message) error {
 	return nil
 }
 
-func (g *GossipNodeSet) ReceiveMessage(b []byte) error {
-	m, err := UnmarshalMessage(b)
-	if err != nil {
-		return err
-	}
-	err = g.messageHandler(m)
+func (g *GossipNodeSet) ReceiveMessage(pb proto.Message) error {
+	err := g.messageHandler(pb)
 	if err != nil {
 		return err
 	}
@@ -86,7 +81,11 @@ func (g *GossipNodeSet) NodeMeta(limit int) []byte {
 }
 
 func (g *GossipNodeSet) NotifyMsg(b []byte) {
-	g.ReceiveMessage(b)
+	m, err := UnmarshalMessage(b)
+	if err != nil {
+		return // TODO: this error is getting swallowed
+	}
+	g.ReceiveMessage(m)
 }
 
 func (g *GossipNodeSet) GetBroadcasts(overhead, limit int) [][]byte {
@@ -141,9 +140,6 @@ func NewGossipNodeSet(name string, gossipPort int, gossipSeed string) *GossipNod
 	g.config.memberlistConfig.BindPort = gossipPort
 	g.config.memberlistConfig.GossipNodes = 1
 	g.config.memberlistConfig.Delegate = g
-
-	// Set GossipNodeSet to act as Messenger
-	messenger.SetMessenger("", g)
 
 	return g
 }

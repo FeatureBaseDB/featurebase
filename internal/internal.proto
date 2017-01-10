@@ -98,10 +98,10 @@ message MaxSlicesResponse {
 }
 
 message CreateSliceMessage {
-	string DB = 1;
-	uint64 Slice = 2;
+    string DB = 1;
+    uint64 Slice = 2;
 }
 
 message DeleteDBMessage {
-	string DB = 1;
+    string DB = 1;
 }

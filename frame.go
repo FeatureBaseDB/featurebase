@@ -10,7 +10,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
-	"github.com/pilosa/pilosa/messenger"
 )
 
 const (
@@ -33,6 +32,8 @@ type Frame struct {
 	bitmapAttrStore *AttrStore
 
 	stats StatsClient
+
+	messenger Messenger
 }
 
 // NewFrame returns a new instance of frame.
@@ -45,7 +46,8 @@ func NewFrame(path, db, name string) *Frame {
 		fragments:       make(map[uint64]*Fragment),
 		bitmapAttrStore: NewAttrStore(filepath.Join(path, "data")),
 
-		stats: NopStatsClient,
+		messenger: NopMessenger,
+		stats:     NopStatsClient,
 	}
 }
 
@@ -272,8 +274,8 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 		return nil, err
 	}
 
-	// push slice to the Messenger (for max slice consideration)
-	messenger.GetMessenger("").SendMessage(
+	// Send a MaxSlice message
+	f.messenger.SendMessage(
 		&internal.CreateSliceMessage{
 			DB:    f.db,
 			Slice: slice,
