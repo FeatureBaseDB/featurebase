@@ -17,6 +17,13 @@ import (
 // AttrBlockSize is the size of attribute blocks for anti-entropy.
 const AttrBlockSize = 100
 
+// Attribute data type enum.
+const (
+	AttrTypeString = 1
+	AttrTypeUint   = 2
+	AttrTypeBool   = 3
+)
+
 // AttrStore represents a storage layer for attributes.
 type AttrStore struct {
 	mu   sync.Mutex
@@ -303,32 +310,39 @@ func decodeAttrs(pb []*internal.Attr) map[string]interface{} {
 
 // encodeAttr converts a key/value pair into an Attr internal representation.
 func encodeAttr(key string, value interface{}) *internal.Attr {
-	pb := &internal.Attr{Key: proto.String(key)}
+	pb := &internal.Attr{Key: key}
 	switch value := value.(type) {
 	case string:
-		pb.StringValue = proto.String(value)
+		pb.Type = AttrTypeString
+		pb.StringValue = value
 	case float64:
-		pb.UintValue = proto.Uint64(uint64(value))
+		pb.Type = AttrTypeUint
+		pb.UintValue = uint64(value)
 	case uint64:
-		pb.UintValue = proto.Uint64(value)
+		pb.Type = AttrTypeUint
+		pb.UintValue = value
 	case int64:
-		pb.UintValue = proto.Uint64(uint64(value))
+		pb.Type = AttrTypeUint
+		pb.UintValue = uint64(value)
 	case bool:
-		pb.BoolValue = proto.Bool(value)
+		pb.Type = AttrTypeBool
+		pb.BoolValue = value
 	}
 	return pb
 }
 
 // decodeAttr converts from an Attr internal representation to a key/value pair.
 func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
-	if attr.StringValue != nil {
-		return attr.GetKey(), attr.GetStringValue()
-	} else if attr.UintValue != nil {
-		return attr.GetKey(), attr.GetUintValue()
-	} else if attr.BoolValue != nil {
-		return attr.GetKey(), attr.GetBoolValue()
+	switch attr.Type {
+	case AttrTypeString:
+		return attr.Key, attr.StringValue
+	case AttrTypeUint:
+		return attr.Key, attr.UintValue
+	case AttrTypeBool:
+		return attr.Key, attr.BoolValue
+	default:
+		return attr.Key, nil
 	}
-	return attr.GetKey(), nil
 }
 
 // cloneAttrs returns a shallow clone of m.

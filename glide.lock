@@ -1,5 +1,5 @@
-hash: 9afe91839785e89880061fd2919b0a5cdb10d6f4c06b344c2924eeed0c9bfd65
-updated: 2016-11-29T12:31:19.234235928-06:00
+hash: 6d0ce0f6b480f78d143502cdf26598c3f5dd0e69134979d51f0c20b75e949b0c
+updated: 2016-12-07T13:26:29.581398702-06:00
 imports:
 - name: github.com/boltdb/bolt
   version: 4b1ebc1869ad66568b313d0dc410e2be72670dda
@@ -21,6 +21,8 @@ imports:
   version: a6b377e3400b08991b80d6805d627f347f983866
   subpackages:
   - lru
+- name: github.com/hashicorp/memberlist
+  version: 56f5fd70afa73f13bbe529192aeb3dc7bc4bc960
 - name: golang.org/x/sys
   version: c200b10b5d5e122be351b67af224adc6128af5bf
   subpackages:

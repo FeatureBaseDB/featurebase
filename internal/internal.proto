@@ -1,31 +1,41 @@
-syntax = "proto2";
+syntax = "proto3";
+
 package internal;
 
+message DB {
+	string TimeQuantum = 1;
+}
+
+message Frame {
+	string TimeQuantum = 1;
+}
+
 message Bitmap {
-	repeated uint64 Bits  = 1;
-	repeated Attr   Attrs = 2;
+	repeated uint64 Bits = 1;
+	repeated Attr Attrs = 2;
 }
 
 message Pair {
-	required uint64 Key   = 1;
-	required uint64 Count = 2;
+	uint64 Key = 1;
+	uint64 Count = 2;
 }
 
 message Bit {
-	required uint64 BitmapID  = 1;
-	required uint64 ProfileID = 2;
+	uint64 BitmapID = 1;
+	uint64 ProfileID = 2;
 }
 
 message Profile {
-	required uint64 ID  = 1;
+	uint64 ID = 1;
 	repeated Attr Attrs = 2;
 }
 
 message Attr {
-	required string Key         = 1;
-	optional string StringValue = 2;
-	optional uint64 UintValue   = 3;
-	optional bool BoolValue     = 4;
+	string Key = 1;
+	uint64 Type = 2;
+	string StringValue = 3;
+	uint64 UintValue = 4;
+	bool BoolValue = 5;
 }
 
 message AttrMap {
@@ -33,49 +43,49 @@ message AttrMap {
 }
 
 message QueryRequest {
-	required string DB        = 1;
-	required string Query     = 2;
-	repeated uint64 Slices    = 3;
-	optional bool   Profiles  = 4;
-	optional int64  Timestamp = 5;
-	optional uint32 Quantum   = 6;
-	optional bool   Remote    = 7;
+	string DB = 1;
+	string Query = 2;
+	repeated uint64 Slices = 3;
+	bool Profiles = 4;
+	int64 Timestamp = 5;
+	string Quantum = 6;
+	bool Remote = 7;
 }
 
 message QueryResponse {
-	optional string      Err      = 1;
-	repeated QueryResult Results  = 2;
-	repeated Profile     Profiles = 3;
+	string Err = 1;
+	repeated QueryResult Results = 2;
+	repeated Profile Profiles = 3;
 }
 
 message QueryResult {
-	optional Bitmap  Bitmap   = 1;
-	optional uint64  N        = 2;
-	repeated Pair    Pairs    = 3;
-	optional bool    Changed  = 4;
+	Bitmap Bitmap = 1;
+	uint64 N = 2;
+	repeated Pair Pairs = 3;
+	bool Changed = 4;
 }
 
 message ImportRequest {
-	required string DB         = 1;
-	required string Frame      = 2;
-	required uint64 Slice      = 3;
-	repeated uint64 BitmapIDs  = 4;
+	string DB = 1;
+	string Frame = 2;
+	uint64 Slice = 3;
+	repeated uint64 BitmapIDs = 4;
 	repeated uint64 ProfileIDs = 5;
 }
 
 message ImportResponse {
-	optional string Err = 1;
+	string Err = 1;
 }
 
 message BlockDataRequest {
-	required string DB         = 1;
-	required string Frame      = 2;
-	required uint64 Slice      = 3;
-	required uint64 Block      = 4;
+	string DB = 1;
+	string Frame = 2;
+	uint64 Slice = 3;
+	uint64 Block = 4;
 }
 
 message BlockDataResponse {
-	repeated uint64 BitmapIDs  = 1;
+	repeated uint64 BitmapIDs = 1;
 	repeated uint64 ProfileIDs = 2;
 }
 
@@ -85,4 +95,13 @@ message Cache {
 
 message MaxSlicesResponse {
     map<string, uint64> MaxSlices = 1;
+}
+
+message CreateSliceMessage {
+    string DB = 1;
+    uint64 Slice = 2;
+}
+
+message DeleteDBMessage {
+    string DB = 1;
 }

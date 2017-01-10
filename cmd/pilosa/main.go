@@ -33,7 +33,8 @@ const (
 	DefaultDataDir = "~/.pilosa"
 
 	// DefaultHost is the default hostname and port to use.
-	DefaultHost = "localhost:15000"
+	DefaultHost       = "localhost:15000"
+	DefaultGossipPort = 14000
 )
 
 func main() {
@@ -135,6 +136,15 @@ func (m *Main) Run(args ...string) error {
 	m.Server.Host = m.Config.Host
 	m.Server.Cluster = m.Config.PilosaCluster()
 
+	// Setup Messenger.
+	fmt.Fprintf(m.Stderr, "Using Messenger type: %s\n", m.Config.Cluster.MessengerType)
+	m.Server.Messenger = m.Server.Cluster.NodeSet.(pilosa.Messenger)
+	m.Server.Handler.Messenger = m.Server.Messenger
+	m.Server.Index.Messenger = m.Server.Messenger
+
+	// Set message handler.
+	m.Server.Cluster.NodeSet.SetMessageHandler(m.Server.Index.HandleMessage)
+
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
 
@@ -199,8 +209,10 @@ type Config struct {
 
 	Cluster struct {
 		ReplicaN        int           `toml:"replicas"`
+		MessengerType   string        `toml:"messenger-type"`
 		Nodes           []*ConfigNode `toml:"node"`
 		PollingInterval Duration      `toml:"polling-interval"`
+		Gossip          *ConfigGossip `toml:"gossip"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -214,6 +226,11 @@ type Config struct {
 
 type ConfigNode struct {
 	Host string `toml:"host"`
+}
+
+type ConfigGossip struct {
+	Port int    `toml:"port"`
+	Seed string `toml:"seed"`
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -234,6 +251,24 @@ func (c *Config) PilosaCluster() *pilosa.Cluster {
 
 	for _, n := range c.Cluster.Nodes {
 		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: n.Host})
+	}
+
+	// Setup a Broadcast (over HTTP) or Gossip NodeSet based on config.
+	if c.Cluster.MessengerType == "broadcast" {
+		cluster.NodeSet = pilosa.NewHTTPNodeSet()
+		cluster.NodeSet.Join(cluster.Nodes)
+	} else if (c.Cluster.MessengerType == "gossip") && (c.Cluster.Gossip != nil) {
+		gossipPort := DefaultGossipPort
+		gossipSeed := DefaultHost
+		if c.Cluster.Gossip.Port != 0 {
+			gossipPort = c.Cluster.Gossip.Port
+		}
+		if c.Cluster.Gossip.Seed != "" {
+			gossipSeed = c.Cluster.Gossip.Seed
+		}
+		cluster.NodeSet = pilosa.NewGossipNodeSet(c.Host, gossipPort, gossipSeed)
+	} else {
+		cluster.NodeSet = pilosa.NewStaticNodeSet()
 	}
 
 	return cluster

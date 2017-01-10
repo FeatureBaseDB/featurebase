@@ -24,7 +24,8 @@ import (
 
 // Handler represents an HTTP handler.
 type Handler struct {
-	Index *Index
+	Index     *Index
+	Messenger Messenger
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -47,6 +48,7 @@ func NewHandler() *Handler {
 	return &Handler{
 		Version:   Version,
 		LogOutput: os.Stderr,
+		Messenger: NopMessenger,
 	}
 }
 
@@ -79,10 +81,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/status":
+		switch r.Method {
+		case "GET":
+			h.handleGetStatus(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/query":
 		switch r.Method {
 		case "POST":
 			h.handlePostQuery(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	case "/message":
+		switch r.Method {
+		case "POST":
+			h.handlePostMessage(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -114,10 +130,31 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/db/time_quantum":
+		switch r.Method {
+		case "PATCH":
+			h.handlePatchDBTimeQuantum(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/db/attr/diff":
 		switch r.Method {
 		case "POST":
 			h.handlePostDBAttrDiff(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	case "/frame":
+		switch r.Method {
+		case "DELETE":
+			h.handleDeleteFrame(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	case "/frame/time_quantum":
+		switch r.Method {
+		case "PATCH":
+			h.handlePatchFrameTimeQuantum(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -167,7 +204,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case "/version":
 		h.handleVersion(w, r)
-
 	case "/debug/vars":
 		h.handleExpvar(w, r)
 	default:
@@ -186,8 +222,21 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleGetStatus handles GET /status requests.
+func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+	if err := json.NewEncoder(w).Encode(getStatusResponse{
+		Health: h.Cluster.Health(),
+	}); err != nil {
+		h.logger().Printf("write status response error: %s", err)
+	}
+}
+
 type getSchemaResponse struct {
 	DBs []*DBInfo `json:"dbs"`
+}
+
+type getStatusResponse struct {
+	Health map[string]string `json:"health"`
 }
 
 // handlePostQuery handles /query requests.
@@ -203,7 +252,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// Build execution options.
 	opt := &ExecOptions{
 		Timestamp: req.Timestamp,
-		Quantum:   req.Quantum,
 		Remote:    req.Remote,
 	}
 
@@ -252,6 +300,33 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handlePostMessage handles /message requests.
+func (h *Handler) handlePostMessage(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Unmarshal message to specific proto type.
+	m, err := UnmarshalMessage(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	h.Messenger.ReceiveMessage(m)
+
+	return
+}
+
 func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) error {
 	ms := h.Index.MaxSlices()
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
@@ -289,6 +364,13 @@ func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send the delete message to all nodes.
+	// NOTE: this calls a second DeleteDB on the local node
+	h.Messenger.SendMessage(
+		&internal.DeleteDBMessage{
+			DB: req.DB,
+		})
+
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteDBResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
@@ -300,6 +382,48 @@ type deleteDBRequest struct {
 }
 
 type deleteDBResponse struct{}
+
+// handlePatchDBTimeQuantum handles PATCH /db/time_quantum request.
+func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req patchDBTimeQuantumRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate quantum.
+	tq, err := ParseTimeQuantum(req.TimeQuantum)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve database by name.
+	db, err := h.Index.CreateDBIfNotExists(req.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Set default time quantum on database.
+	if err := db.SetTimeQuantum(tq); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(patchDBTimeQuantumResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type patchDBTimeQuantumRequest struct {
+	DB          string `json:"db"`
+	TimeQuantum string `json:"time_quantum"`
+}
+
+type patchDBTimeQuantumResponse struct{}
 
 // handlePostDBAttrDiff handles POST /db/attr/diff requests.
 func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
@@ -356,6 +480,86 @@ type postDBAttrDiffRequest struct {
 type postDBAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
+
+// handleDeleteFrame handles DELETE /frame request.
+func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req deleteFrameRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Find database.
+	db := h.Index.DB(req.DB)
+	if db == nil {
+		if err := json.NewEncoder(w).Encode(deleteDBResponse{}); err != nil {
+			h.logger().Printf("response encoding error: %s", err)
+		}
+		return
+	}
+
+	// Delete frame from the database.
+	if err := db.DeleteFrame(req.Frame); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(deleteFrameResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type deleteFrameRequest struct {
+	DB    string `json:"db"`
+	Frame string `json:"frame"`
+}
+
+type deleteFrameResponse struct{}
+
+// handlePatchFrameTimeQuantum handles PATCH /frame/time_quantum request.
+func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req patchFrameTimeQuantumRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate quantum.
+	tq, err := ParseTimeQuantum(req.TimeQuantum)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve database by name.
+	f, err := h.Index.CreateFrameIfNotExists(req.DB, req.Frame)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Set default time quantum on database.
+	if err := f.SetTimeQuantum(tq); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(patchFrameTimeQuantumResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type patchFrameTimeQuantumRequest struct {
+	DB          string `json:"db"`
+	Frame       string `json:"frame"`
+	TimeQuantum string `json:"time_quantum"`
+}
+
+type patchFrameTimeQuantumResponse struct{}
 
 // handlePostFrameAttrDiff handles POST /frame/attr/diff requests.
 func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request) {
@@ -497,7 +701,7 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	// Parse time granularity.
-	quantum := YMDH
+	quantum := TimeQuantum("YMDH")
 	if s := q.Get("time_granularity"); s != "" {
 		v, err := ParseTimeQuantum(s)
 		if err != nil {
@@ -563,7 +767,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	db, frame, slice := req.GetDB(), req.GetFrame(), req.GetSlice()
+	db, frame, slice := req.DB, req.Frame, req.Slice
 
 	// Validate that this handler owns the slice.
 	if !h.Cluster.OwnsFragment(h.Host, db, slice) {
@@ -580,16 +784,16 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "fragment error", http.StatusInternalServerError)
 		return
 	}
-	h.logger().Println("Import into Fragment:", db, frame, slice, len(req.GetProfileIDs()))
+	h.logger().Println("Import into Fragment:", db, frame, slice, len(req.ProfileIDs))
 
 	// Import into fragment.
-	err = f.Import(req.GetBitmapIDs(), req.GetProfileIDs())
+	err = f.Import(req.BitmapIDs, req.ProfileIDs)
 	if err != nil {
-		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", db, frame, slice, len(req.GetProfileIDs()), err)
+		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", db, frame, slice, len(req.ProfileIDs), err)
 	}
 
 	// Marshal response object.
-	buf, e := proto.Marshal(&internal.ImportResponse{Err: proto.String(errorString(err))})
+	buf, e := proto.Marshal(&internal.ImportResponse{Err: errorString(err)})
 	if e != nil {
 		http.Error(w, fmt.Sprintf("marshal import response: %s", err), http.StatusInternalServerError)
 		return
@@ -735,7 +939,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Retrieve fragment from index.
-	f := h.Index.Fragment(req.GetDB(), req.GetFrame(), req.GetSlice())
+	f := h.Index.Fragment(req.DB, req.Frame, req.Slice)
 	if f == nil {
 		http.Error(w, ErrFragmentNotFound.Error(), http.StatusNotFound)
 		return
@@ -744,7 +948,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	// Read data
 	var resp internal.BlockDataResponse
 	if f != nil {
-		resp.BitmapIDs, resp.ProfileIDs = f.BlockData(int(req.GetBlock()))
+		resp.BitmapIDs, resp.ProfileIDs = f.BlockData(int(req.Block))
 	}
 
 	// Encode response.
@@ -825,7 +1029,6 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Loop over each slice and import it if this node owns it.
-	//travis
 	for slice := uint64(0); slice <= maxSlices[db]; slice++ {
 		// Ignore this slice if we don't own it.
 		if !h.Cluster.OwnsFragment(h.Host, db, slice) {
@@ -922,16 +1125,16 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		DB:       pb.GetDB(),
-		Query:    pb.GetQuery(),
-		Slices:   pb.GetSlices(),
-		Profiles: pb.GetProfiles(),
-		Quantum:  TimeQuantum(pb.GetQuantum()),
-		Remote:   pb.GetRemote(),
+		DB:       pb.DB,
+		Query:    pb.Query,
+		Slices:   pb.Slices,
+		Profiles: pb.Profiles,
+		Quantum:  TimeQuantum(pb.Quantum),
+		Remote:   pb.Remote,
 	}
 
-	if pb.Timestamp != nil {
-		t := time.Unix(0, pb.GetTimestamp())
+	if pb.Timestamp != 0 {
+		t := time.Unix(0, pb.Timestamp)
 		req.Timestamp = &t
 	}
 
@@ -981,14 +1184,14 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 		case []Pair:
 			pb.Results[i].Pairs = encodePairs(result)
 		case uint64:
-			pb.Results[i].N = proto.Uint64(result)
+			pb.Results[i].N = result
 		case bool:
-			pb.Results[i].Changed = proto.Bool(result)
+			pb.Results[i].Changed = result
 		}
 	}
 
 	if resp.Err != nil {
-		pb.Err = proto.String(resp.Err.Error())
+		pb.Err = resp.Err.Error()
 	}
 
 	return pb

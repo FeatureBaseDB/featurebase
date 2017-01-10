@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/groupcache/lru"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -216,15 +215,15 @@ type Pair struct {
 
 func encodePair(p Pair) *internal.Pair {
 	return &internal.Pair{
-		Key:   proto.Uint64(p.Key),
-		Count: proto.Uint64(p.Count),
+		Key:   p.Key,
+		Count: p.Count,
 	}
 }
 
 func decodePair(pb *internal.Pair) Pair {
 	return Pair{
-		Key:   pb.GetKey(),
-		Count: pb.GetCount(),
+		Key:   pb.Key,
+		Count: pb.Count,
 	}
 }
 
