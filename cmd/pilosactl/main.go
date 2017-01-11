@@ -1495,7 +1495,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 
 	var writer io.Writer
 	if cmd.Output == "s3" {
-		writer = bench.NewS3Uploader(runUUID.String() + ".json")
+		writer = bench.NewS3Uploader("benchmarks-pilosa", runUUID.String()+".json")
 	} else if cmd.Output == "stdout" {
 		writer = cmd.Stdout
 	} else {
