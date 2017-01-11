@@ -1171,9 +1171,6 @@ type BagentCommand struct {
 	// Enable pretty printing of results, for human consumption.
 	HumanReadable bool `json:"human-readable"`
 
-	// Result destination, ["stdout", "s3"]
-	Output string `json:"output"`
-
 	// Slice of pilosa hosts to run the Benchmarks against.
 	Hosts []string `json:"hosts"`
 
@@ -1189,7 +1186,6 @@ func NewBagentCommand(stdin io.Reader, stdout, stderr io.Writer) *BagentCommand 
 		Hosts:         []string{},
 		AgentNum:      0,
 		HumanReadable: false,
-		Output:        "s3",
 
 		Stdin:  stdin,
 		Stdout: stdout,
@@ -1211,7 +1207,6 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "")
 	fs.IntVar(&cmd.AgentNum, "agent-num", 0, "")
 	fs.BoolVar(&cmd.HumanReadable, "human", false, "")
-	fs.StringVar(&cmd.Output, "output", "s3", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1277,9 +1272,6 @@ The following arguments are available:
 
 	-human
 		Boolean to enable human-readable format.
-
-	-output
-		String to select output destination, "stdout" or "s3"
 
 	subcommands:
 		diagonal-set-bits
