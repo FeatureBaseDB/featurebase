@@ -1547,7 +1547,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface
 				resLock.Unlock()
 			}(stdout, sp.Name, i)
 			sess.Stderr = cmd.Stderr
-			err = sess.Start("PATH=.:$PATH pilosactl bagent -agent-num=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " " + strings.Join(sp.Args, " "))
+			err = sess.Start("PATH=.:$PATH /usr/local/bin/pilosactl bagent -agent-num=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " " + strings.Join(sp.Args, " "))
 			if err != nil {
 				return nil, err
 			}
