@@ -9,22 +9,17 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-// NewS3Uploader creates an S3Uploader with a hardcoded region and bucket,
-// and a specified key.
-func NewS3Uploader(key string) *S3Uploader {
-	region := "us-east-1"
-	bucket := "benchmarks-pilosa"
+// NewS3Uploader creates an S3Uploader with specified bucket and key
+func NewS3Uploader(bucket string, key string) *S3Uploader {
 	return &S3Uploader{
-		region,
 		bucket,
-		s3.New(session.New(&aws.Config{Region: aws.String(region)})),
+		s3.New(session.New(&aws.Config{})),
 		key,
 	}
 }
 
 // S3Uploader is an io.Writer for sending output to AWS S3 storage.
 type S3Uploader struct {
-	region  string
 	bucket  string
 	service *s3.S3
 	key     string
