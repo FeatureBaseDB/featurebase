@@ -827,7 +827,6 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
 	// Verify that there are an equal number of bitmap ids and profile ids.
 	if len(bitmapIDs) != len(profileIDs) {
 		return fmt.Errorf("mismatch of bitmap/profile len: %d != %d", len(bitmapIDs), len(profileIDs))
@@ -862,10 +861,7 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			// no real danger
 			if i == 0 || bitmapID != lastID {
 				lastID = bitmapID
-				if bmCounter > 5 {
 					set[bitmapID] = struct{}{}
-				}
-				bmCounter = 0
 			}
 			if changed {
 				bmCounter += 1
