@@ -1382,7 +1382,7 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	agentHosts := fs.String("agent-hosts", "", "")
 	sshUser := fs.String("ssh-user", "", "")
 	fs.BoolVar(&cmd.Human, "human", false, "")
-	fs.StringVar(&cmd.Output, "output", "s3", "")
+	fs.StringVar(&cmd.Output, "output", "stdout", "")
 	fs.BoolVar(&cmd.CopyBinary, "copy-binary", false, "")
 
 	err := fs.Parse(args)
