@@ -1492,7 +1492,17 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		return err
 	}
 	output["results"] = res
-	enc := json.NewEncoder(cmd.Stdout)
+
+	var writer io.Writer
+	if cmd.Output == "aws" {
+		writer = bench.NewS3Uploader(runUUID.String() + ".json")
+	} else if cmd.Output == "stdout" {
+		writer = cmd.Stdout
+	} else {
+		return fmt.Errorf("invalid bspawn output destination")
+	}
+	enc := json.NewEncoder(writer)
+
 	if cmd.Human {
 		enc.SetIndent("", "  ")
 		output = bench.Prettify(output)
