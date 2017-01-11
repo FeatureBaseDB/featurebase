@@ -1171,7 +1171,7 @@ type BagentCommand struct {
 	// Enable pretty printing of results, for human consumption.
 	HumanReadable bool `json:"human-readable"`
 
-	// Result destination, ["stdout", "aws"]
+	// Result destination, ["stdout", "s3"]
 	Output string `json:"output"`
 
 	// Slice of pilosa hosts to run the Benchmarks against.
@@ -1189,7 +1189,7 @@ func NewBagentCommand(stdin io.Reader, stdout, stderr io.Writer) *BagentCommand 
 		Hosts:         []string{},
 		AgentNum:      0,
 		HumanReadable: false,
-		Output:        "aws",
+		Output:        "s3",
 
 		Stdin:  stdin,
 		Stdout: stdout,
@@ -1211,7 +1211,7 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "")
 	fs.IntVar(&cmd.AgentNum, "agent-num", 0, "")
 	fs.BoolVar(&cmd.HumanReadable, "human", false, "")
-	fs.StringVar(&cmd.Output, "output", "aws", "")
+	fs.StringVar(&cmd.Output, "output", "s3", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1278,8 +1278,8 @@ The following arguments are available:
 	-human
 		Boolean to enable human-readable format.
 
-  -output
-    String to select output destination, "stdout" or "aws"
+	-output
+		String to select output destination, "stdout" or "s3"
 
 	subcommands:
 		diagonal-set-bits
@@ -1340,7 +1340,7 @@ type BspawnCommand struct {
 	// Makes output human readable
 	Human bool
 
-	// Result destination, ["stdout", "aws"]
+	// Result destination, ["stdout", "s3"]
 	Output string
 
 	// Benchmarks is a slice of Spawns which specifies all of the bagent
@@ -1382,7 +1382,7 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	agentHosts := fs.String("agent-hosts", "", "")
 	sshUser := fs.String("ssh-user", "", "")
 	fs.BoolVar(&cmd.Human, "human", false, "")
-	fs.StringVar(&cmd.Output, "output", "aws", "")
+	fs.StringVar(&cmd.Output, "output", "s3", "")
 	fs.BoolVar(&cmd.CopyBinary, "copy-binary", false, "")
 
 	err := fs.Parse(args)
@@ -1450,8 +1450,8 @@ The following flags are allowed and will override the values in the config file:
 	-human
 		toggle human readable output (indented json with formatted times)
 
-  -output
-    string to select output destination, "stdout" or "aws"
+	-output
+		string to select output destination, "stdout" or "s3"
 `)
 }
 
@@ -1494,7 +1494,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	output["results"] = res
 
 	var writer io.Writer
-	if cmd.Output == "aws" {
+	if cmd.Output == "s3" {
 		writer = bench.NewS3Uploader(runUUID.String() + ".json")
 	} else if cmd.Output == "stdout" {
 		writer = cmd.Stdout
