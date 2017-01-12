@@ -14,15 +14,15 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
-type SSH struct {
+type Client struct {
 	client *ssh.Client
 	Stderr io.Writer
 }
 
-// NewSSH wraps up some of the complexity of using the crypto/ssh pacakge
+// NewClient wraps up some of the complexity of using the crypto/ssh pacakge
 // directly assuming you want to connect using public key auth and you can pass
 // a keyfile or your key is accessible through ssh agent.
-func NewSSH(host, username, keyfile string, stderr io.Writer) (*SSH, error) {
+func NewClient(host, username, keyfile string, stderr io.Writer) (*Client, error) {
 	if username == "" {
 		user, err := user.Current()
 		if err != nil {
@@ -56,16 +56,16 @@ func NewSSH(host, username, keyfile string, stderr io.Writer) (*SSH, error) {
 		return nil, fmt.Errorf("NewSSH failed Dial - host: %v, config: %v, err: %v ", host, config, err)
 	}
 
-	return &SSH{client: client, Stderr: stderr}, nil
+	return &Client{client: client, Stderr: stderr}, nil
 }
 
-type SSHFleet []*SSH
+type Fleet []*Client
 
-func SSHClients(hosts []string, username, keyfile string, stderr io.Writer) (SSHFleet, error) {
+func NewFleet(hosts []string, username, keyfile string, stderr io.Writer) (Fleet, error) {
 	hosts = DedupHosts(hosts)
-	clients := make([]*SSH, len(hosts))
+	clients := make([]*Client, len(hosts))
 	for i, host := range hosts {
-		client, err := NewSSH(host, username, keyfile, stderr)
+		client, err := NewClient(host, username, keyfile, stderr)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +92,7 @@ func DedupHosts(hosts []string) []string {
 	return ret
 }
 
-func (s *SSH) NewSession() (*ssh.Session, error) {
+func (s *Client) NewSession() (*ssh.Session, error) {
 	return s.client.NewSession()
 }
 
@@ -119,7 +119,7 @@ func (r *remoteFile) Close() error {
 // will be passed directly to chmod to set the file permissions. rm, touch,
 // chmod, cat and support for semicolons, double ampersand, and output
 // redirection (>>) must be available in the remote shell.
-func (s *SSH) OpenFile(name, perm string) (io.WriteCloser, error) {
+func (s *Client) OpenFile(name, perm string) (io.WriteCloser, error) {
 	sess, err := s.NewSession()
 	if err != nil {
 		return nil, err
@@ -175,7 +175,7 @@ func (mwc *multiWriteCloser) Close() error {
 	return nil
 }
 
-func (sf SSHFleet) OpenFile(name, perm string) (io.WriteCloser, error) {
+func (sf Fleet) OpenFile(name, perm string) (io.WriteCloser, error) {
 	writers := newMultiWriteCloser()
 	for _, cli := range sf {
 		wc, err := cli.OpenFile(name, "+x")
@@ -191,7 +191,7 @@ func (sf SSHFleet) OpenFile(name, perm string) (io.WriteCloser, error) {
 // each of the hosts in the fleet. It sets the permissions on the file to <perm>
 // which is any valid input to chmod. If <perm> is the empty string, it defaults
 // to 0664
-func (sf SSHFleet) WriteFile(name, perm string, data io.Reader) error {
+func (sf Fleet) WriteFile(name, perm string, data io.Reader) error {
 	wc, err := sf.OpenFile(name, perm)
 	if err != nil {
 		return err

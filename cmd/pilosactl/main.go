@@ -1541,7 +1541,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 
 func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface{}, error) {
 	agentIndex := 0
-	agentFleet, err := pssh.SSHClients(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
+	agentFleet, err := pssh.NewFleet(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
 	if err != nil {
 		return nil, err
 	}
