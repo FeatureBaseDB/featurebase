@@ -1332,6 +1332,9 @@ type BspawnCommand struct {
 	// Makes output human readable
 	Human bool
 
+	// Result destination, ["stdout", "s3"]
+	Output string
+
 	// Benchmarks is a slice of Spawns which specifies all of the bagent
 	// commands to run. These will all be run in parallel, started on each
 	// of the agents in a round robin fashion.
@@ -1371,6 +1374,7 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	agentHosts := fs.String("agent-hosts", "", "")
 	sshUser := fs.String("ssh-user", "", "")
 	fs.BoolVar(&cmd.Human, "human", false, "")
+	fs.StringVar(&cmd.Output, "output", "stdout", "")
 	fs.BoolVar(&cmd.CopyBinary, "copy-binary", false, "")
 
 	err := fs.Parse(args)
@@ -1437,6 +1441,9 @@ The following flags are allowed and will override the values in the config file:
 
 	-human
 		toggle human readable output (indented json with formatted times)
+
+	-output
+		string to select output destination, "stdout" or "s3"
 `)
 }
 
@@ -1477,7 +1484,17 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		return err
 	}
 	output["results"] = res
-	enc := json.NewEncoder(cmd.Stdout)
+
+	var writer io.Writer
+	if cmd.Output == "s3" {
+		writer = bench.NewS3Uploader("benchmarks-pilosa", runUUID.String()+".json")
+	} else if cmd.Output == "stdout" {
+		writer = cmd.Stdout
+	} else {
+		return fmt.Errorf("invalid bspawn output destination")
+	}
+	enc := json.NewEncoder(writer)
+
 	if cmd.Human {
 		enc.SetIndent("", "  ")
 		output = bench.Prettify(output)
