@@ -237,6 +237,22 @@ func TestParser_Parse_SetBit_Array(t *testing.T) {
 	}
 }
 
+// Ensure a "SetBit()" call without profileID fails
+func TestParser_Parse_SetBit_Key_Without_ProfileID(t *testing.T) {
+	_, err := pql.ParseString(`SetBit(id=1, frame="b.n"`)
+	if err == nil {
+		t.Fatalf("SetBit call without profileID must fail")
+	}
+}
+
+// Ensure a "SetBit()" call without profileID fails
+func TestParser_Parse_SetBit_Array_Without_ProfileID(t *testing.T) {
+	_, err := pql.ParseString(`SetBit(1, "b.n")`)
+	if err == nil {
+		t.Fatalf("SetBit call without profileID must fail")
+	}
+}
+
 // Ensure the parser can parse a "SetBitmapAttrs()" function with keyed args.
 func TestParser_Parse_SetBitmapAttrs_Key(t *testing.T) {
 	q, err := pql.ParseString(`SetBitmapAttrs(id=1, frame="b.n", foo="bar", bar=123, baz=true, bat=false, x=null)`)

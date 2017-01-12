@@ -336,6 +336,11 @@ func (p *Parser) parseSetBitCall() (*SetBit, error) {
 		return nil, err
 	}
 
+	// There must exactly be 3 arguments
+	if len(args) != 3 {
+		return nil, &ParseError{Message: "SetBit takes exactly 3 arguments", Pos: pos}
+	}
+
 	// Copy arguments to AST.
 	for _, arg := range args {
 		switch arg.key {
