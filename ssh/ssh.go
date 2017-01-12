@@ -1,4 +1,4 @@
-package pilosactl
+package ssh
 
 import (
 	"fmt"
@@ -53,7 +53,7 @@ func NewSSH(host, username, keyfile string, stderr io.Writer) (*SSH, error) {
 
 	client, err := ssh.Dial("tcp", host, config)
 	if err != nil {
-		return nil, fmt.Errorf("NewSHH failed Dial - host: %v, config: %v, err: %v ", host, config, err)
+		return nil, fmt.Errorf("NewSSH failed Dial - host: %v, config: %v, err: %v ", host, config, err)
 	}
 
 	return &SSH{client: client, Stderr: stderr}, nil
@@ -62,6 +62,7 @@ func NewSSH(host, username, keyfile string, stderr io.Writer) (*SSH, error) {
 type SSHFleet []*SSH
 
 func SSHClients(hosts []string, username, keyfile string, stderr io.Writer) (SSHFleet, error) {
+	hosts = DedupHosts(hosts)
 	clients := make([]*SSH, len(hosts))
 	for i, host := range hosts {
 		client, err := NewSSH(host, username, keyfile, stderr)
@@ -71,6 +72,24 @@ func SSHClients(hosts []string, username, keyfile string, stderr io.Writer) (SSH
 		clients[i] = client
 	}
 	return clients, nil
+}
+
+// DedupHosts takes a slice of hosts, strips off any specified ports, and
+// returns a de-duplicated slice of hosts.
+func DedupHosts(hosts []string) []string {
+	seenHosts := make(map[string]bool)
+	ret := []string{}
+	for _, h := range hosts {
+		colonIdx := strings.Index(h, ":")
+		if colonIdx != -1 {
+			h = h[:colonIdx]
+		}
+		if !seenHosts[h] {
+			ret = append(ret, h)
+		}
+		seenHosts[h] = true
+	}
+	return ret
 }
 
 func (s *SSH) NewSession() (*ssh.Session, error) {
@@ -166,4 +185,21 @@ func (sf SSHFleet) OpenFile(name, perm string) (io.WriteCloser, error) {
 		writers.add(wc)
 	}
 	return writers, nil
+}
+
+// WriteFile writes all of data (until EOF) into a file with the given name on
+// each of the hosts in the fleet. It sets the permissions on the file to <perm>
+// which is any valid input to chmod. If <perm> is the empty string, it defaults
+// to 0664
+func (sf SSHFleet) WriteFile(name, perm string, data io.Reader) error {
+	wc, err := sf.OpenFile(name, perm)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(wc, data)
+	if err != nil {
+		return err
+	}
+	return wc.Close()
 }

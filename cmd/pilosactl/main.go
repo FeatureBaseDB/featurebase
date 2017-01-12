@@ -27,9 +27,11 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/bench"
+	"github.com/pilosa/pilosa/build"
 	"github.com/pilosa/pilosa/creator"
 	"github.com/pilosa/pilosa/pilosactl"
 	"github.com/pilosa/pilosa/roaring"
+	pssh "github.com/pilosa/pilosa/ssh"
 
 	"github.com/satori/go.uuid"
 	"golang.org/x/crypto/ssh"
@@ -1001,6 +1003,10 @@ type CreateCommand struct {
 
 	SSHUser string
 
+	CopyBinary bool
+	GOOS       string
+	GOARCH     string
+
 	// Standard input/output
 	Stdin  io.Reader
 	Stdout io.Writer
@@ -1028,6 +1034,9 @@ func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs.IntVar(&cmd.GoMaxProcs, "gomaxprocs", 0, "")
 	fs.StringVar(&hosts, "hosts", "", "")
 	fs.StringVar(&cmd.SSHUser, "ssh-user", "", "")
+	fs.BoolVar(&cmd.CopyBinary, "copy-binary", false, "")
+	fs.StringVar(&cmd.GOOS, "goos", "linux", "")
+	fs.StringVar(&cmd.GOARCH, "goarch", "amd64", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1071,6 +1080,16 @@ The following flags are allowed:
 		when starting a cluster on remote hosts, this
 		will set the value of GOMAXPROCS.
 
+	-copy-binary
+		controls whether or not to build and copy pilosa to agents
+
+	-goos
+		when using copy-binary, GOOS to use while building binary
+
+	-goarch
+		when using copy-binary, GOARCH to use while building binary
+
+
 `)
 }
 
@@ -1097,6 +1116,9 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 			SSHUser:      cmd.SSHUser,
 			Stderr:       cmd.Stderr,
 			GoMaxProcs:   cmd.GoMaxProcs,
+			CopyBinary:   cmd.CopyBinary,
+			GOOS:         cmd.GOOS,
+			GOARCH:       cmd.GOARCH,
 		}
 	default:
 		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
@@ -1303,7 +1325,6 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err)
 	}
-	// fmt.Fprintln(cmd.Stdout, res)
 
 	return nil
 }
@@ -1326,14 +1347,16 @@ type BspawnCommand struct {
 	// locally.
 	AgentHosts []string
 
-	// If this is true, build and copy pilosactl binary to agent hosts.
-	CopyBinary bool
-
 	// Makes output human readable
 	Human bool
 
 	// Result destination, ["stdout", "s3"]
 	Output string
+
+	// If this is true, build and copy pilosactl binary to agent hosts.
+	CopyBinary bool
+	GOOS       string
+	GOARCH     string
 
 	// Benchmarks is a slice of Spawns which specifies all of the bagent
 	// commands to run. These will all be run in parallel, started on each
@@ -1370,12 +1393,15 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	fs.SetOutput(ioutil.Discard)
 	creatorHosts := fs.String("creator.hosts", "", "")
 	creatorLFP := fs.String("creator.log-file-prefix", "", "")
+	creatorCopyBinary := fs.Bool("creator.copy-binary", false, "")
 	pilosaHosts := fs.String("pilosa-hosts", "", "")
 	agentHosts := fs.String("agent-hosts", "", "")
 	sshUser := fs.String("ssh-user", "", "")
 	fs.BoolVar(&cmd.Human, "human", false, "")
 	fs.StringVar(&cmd.Output, "output", "stdout", "")
 	fs.BoolVar(&cmd.CopyBinary, "copy-binary", false, "")
+	fs.StringVar(&cmd.GOOS, "goos", "linux", "")
+	fs.StringVar(&cmd.GOARCH, "goarch", "amd64", "")
 
 	err := fs.Parse(args)
 	if err != nil {
@@ -1404,7 +1430,10 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	}
 	// TODO support all creator args - just checking for creatorHosts here won't be sufficient
 	if *creatorHosts != "" {
-		cmd.CreatorArgs = []string{"-hosts=" + *creatorHosts, "-log-file-prefix=" + *creatorLFP, "-ssh-user=" + cmd.SSHUser}
+		cmd.CreatorArgs = []string{"-hosts=" + *creatorHosts, "-log-file-prefix=" + *creatorLFP, "-ssh-user=" + cmd.SSHUser, "-goos=" + cmd.GOOS, "-goarch=" + cmd.GOARCH}
+		if *creatorCopyBinary {
+			cmd.CreatorArgs = append(cmd.CreatorArgs, "-copy-binary")
+		}
 	}
 
 	return nil
@@ -1436,14 +1465,22 @@ The following flags are allowed and will override the values in the config file:
 	-ssh-user
 		pilosa hosts to run against (will ignore creator args)
 
-	-copy-binary
-		controls whether or not to build and copy pilosactl to agents
-
 	-human
 		toggle human readable output (indented json with formatted times)
 
+	-copy-binary
+		controls whether or not to build and copy pilosactl to agents
+
 	-output
 		string to select output destination, "stdout" or "s3"
+
+	-goos
+		when using copy-binary, GOOS to use while building binary
+
+	-goarch
+		when using copy-binary, GOARCH to use while building binary
+
+
 `)
 }
 
@@ -1493,8 +1530,8 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	} else {
 		return fmt.Errorf("invalid bspawn output destination")
 	}
-	enc := json.NewEncoder(writer)
 
+	enc := json.NewEncoder(writer)
 	if cmd.Human {
 		enc.SetIndent("", "  ")
 		output = bench.Prettify(output)
@@ -1502,33 +1539,21 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	return enc.Encode(output)
 }
 
-func copyBinary(fleet pilosactl.SSHFleet, pkg, goos, goarch string) error {
-	bin, err := pilosactl.BuildBinary(pkg, goos, goarch)
-	if err != nil {
-		return err
-	}
-
-	wc, err := fleet.OpenFile(path.Base(pkg), "+x")
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(wc, bin)
-	if err != nil {
-		return err
-	}
-	return wc.Close()
-}
-
 func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface{}, error) {
 	agentIndex := 0
-	agentConnections, err := pilosactl.SSHClients(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
+	agentFleet, err := pssh.SSHClients(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
 	if err != nil {
 		return nil, err
 	}
 
 	if cmd.CopyBinary {
-		err = copyBinary(agentConnections, "github.com/pilosa/pilosa/cmd/pilosactl", "linux", "amd64")
+		pkg := "github.com/pilosa/pilosa/cmd/pilosactl"
+		bin, err := build.Binary(pkg, cmd.GOOS, cmd.GOARCH)
+		if err != nil {
+			return nil, err
+		}
+
+		err = agentFleet.WriteFile(path.Base(pkg), "+x", bin)
 		if err != nil {
 			return nil, err
 		}
@@ -1541,7 +1566,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface
 	for _, sp := range cmd.Benchmarks {
 		results[sp.Name] = make(map[int]interface{})
 		for i := 0; i < sp.Num; i++ {
-			sess, err := agentConnections[agentIndex].NewSession()
+			sess, err := agentFleet[agentIndex].NewSession()
 			if err != nil {
 				return nil, err
 			}
