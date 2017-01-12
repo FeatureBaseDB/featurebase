@@ -37,7 +37,8 @@ type Executor struct {
 // NewExecutor returns a new instance of Executor.
 func NewExecutor() *Executor {
 	return &Executor{
-		HTTPClient: http.DefaultClient,
+		HTTPClient:     http.DefaultClient,
+		PluginRegistry: NewPluginRegistry(),
 	}
 }
 
