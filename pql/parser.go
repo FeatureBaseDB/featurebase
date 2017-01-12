@@ -336,10 +336,7 @@ func (p *Parser) parseSetBitCall() (*SetBit, error) {
 		return nil, err
 	}
 
-	// There must exactly be 3 arguments
-	if len(args) != 3 {
-		return nil, &ParseError{Message: "SetBit takes exactly 3 arguments", Pos: pos}
-	}
+	profileIDSet := false
 
 	// Copy arguments to AST.
 	for _, arg := range args {
@@ -356,9 +353,14 @@ func (p *Parser) parseSetBitCall() (*SetBit, error) {
 			if err := decodeUint64(arg.value, &c.ProfileID); err != nil {
 				return nil, parseErrorf(pos, "profileID: %s", err)
 			}
+			profileIDSet = true
 		default:
 			return nil, parseErrorf(pos, "invalid SetBit() arg: %v", arg.key)
 		}
+	}
+
+	if !profileIDSet {
+		return nil, parseErrorf(pos, "SetBit() requires profileID to be set")
 	}
 
 	return c, nil
