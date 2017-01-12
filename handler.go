@@ -331,7 +331,10 @@ func (h *Handler) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.Messenger.ReceiveMessage(m)
+	if err := h.Messenger.ReceiveMessage(m); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	return
 }

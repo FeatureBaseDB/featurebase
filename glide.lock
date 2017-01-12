@@ -1,5 +1,5 @@
-hash: ee63b46f9c89a924c7f940862584315387dff85e5b0f39fd0a5d7511314cd631
-updated: 2017-01-12T15:20:24.286928755-06:00
+hash: 98a161830006ce5d166b495c34d00d496d24ea51d30462af6cf2473f78304bbd
+updated: 2017-01-12T15:25:20.114331331-06:00
 imports:
 - name: github.com/armon/go-metrics
   version: 97c69685293dce4c0a2d0b19535179bbc976e4d2
@@ -81,6 +81,14 @@ imports:
   - ed25519/internal/edwards25519
   - ssh
   - ssh/agent
+- name: golang.org/x/net
+  version: 60c41d1de8da134c05b7b40154a9a82bf5b7edb9
+  subpackages:
+  - context
+- name: golang.org/x/sync
+  version: 450f422ab23cf9881c94e2db30cac0eb1b7cf80c
+  subpackages:
+  - errgroup
 - name: golang.org/x/sys
   version: c200b10b5d5e122be351b67af224adc6128af5bf
   subpackages:

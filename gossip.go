@@ -1,6 +1,10 @@
 package pilosa
 
 import (
+	"io"
+	"log"
+	"os"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/hashicorp/memberlist"
 )
@@ -15,6 +19,9 @@ type GossipNodeSet struct {
 	config *GossipConfig
 
 	messageHandler func(m proto.Message) error
+
+	// The writer for any logging.
+	LogOutput io.Writer
 }
 
 func (g *GossipNodeSet) Nodes() []*Node {
@@ -83,9 +90,13 @@ func (g *GossipNodeSet) NodeMeta(limit int) []byte {
 func (g *GossipNodeSet) NotifyMsg(b []byte) {
 	m, err := UnmarshalMessage(b)
 	if err != nil {
-		return // TODO: this error is getting swallowed
+		g.logger().Printf("unmarshal message error: %s", err)
+		return
 	}
-	g.ReceiveMessage(m)
+	if err := g.ReceiveMessage(m); err != nil {
+		g.logger().Printf("receive message error: %s", err)
+		return
+	}
 }
 
 func (g *GossipNodeSet) GetBroadcasts(overhead, limit int) [][]byte {
@@ -98,6 +109,11 @@ func (g *GossipNodeSet) LocalState(join bool) []byte {
 
 func (g *GossipNodeSet) MergeRemoteState(buf []byte, join bool) {
 	return
+}
+
+// logger returns a logger for the GossipNodeSet.
+func (g *GossipNodeSet) logger() *log.Logger {
+	return log.New(g.LogOutput, "", log.LstdFlags)
 }
 
 // broadcast represents an implementation of memberlist.Broadcast
@@ -129,7 +145,9 @@ type GossipConfig struct {
 
 // NewGossipNodeSet returns a new instance of GossipNodeSet.
 func NewGossipNodeSet(name string, gossipPort int, gossipSeed string) *GossipNodeSet {
-	g := &GossipNodeSet{}
+	g := &GossipNodeSet{
+		LogOutput: os.Stderr,
+	}
 
 	//TODO: pull memberlist config from pilosa.cfg file
 	g.config = &GossipConfig{

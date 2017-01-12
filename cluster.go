@@ -3,9 +3,13 @@ package pilosa
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"hash/fnv"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/gogo/protobuf/proto"
 )
@@ -254,14 +258,21 @@ func (h *HTTPNodeSet) Open() error {
 
 // SendMessage asyncronously broadcasts a protobuf message to all nodes.
 func (h *HTTPNodeSet) SendMessage(pb proto.Message) error {
-	for _, n := range h.nodes {
-		go func(node *Node, msg proto.Message) {
-			if err := h.sendNodeMessage(node, msg); err != nil {
-				// TODO: handle this error
-			}
-		}(n, pb)
+
+	// Marshal the pb to []byte
+	buf, err := MarshalMessage(pb)
+	if err != nil {
+		return err
 	}
-	return nil
+
+	var g errgroup.Group
+	for _, n := range h.nodes {
+		node := n
+		g.Go(func() error {
+			return h.sendNodeMessage(node, buf)
+		})
+	}
+	return g.Wait()
 }
 
 // ReceiveMessage is called when a node recieves a message.
@@ -273,22 +284,16 @@ func (h *HTTPNodeSet) ReceiveMessage(pb proto.Message) error {
 	return nil
 }
 
-func (h *HTTPNodeSet) sendNodeMessage(node *Node, pb proto.Message) error {
-	var HTTPClient *http.Client
-	HTTPClient = http.DefaultClient
-
-	// Marshal the pb to []byte
-	buf, err := MarshalMessage(pb)
-	if err != nil {
-		return err
-	}
+func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {
+	var client *http.Client
+	client = http.DefaultClient
 
 	// Create HTTP request.
 	req, err := http.NewRequest("POST", (&url.URL{
 		Scheme: "http",
 		Host:   node.Host,
 		Path:   "/message",
-	}).String(), bytes.NewReader(buf))
+	}).String(), bytes.NewReader(msg))
 	if err != nil {
 		return err
 	}
@@ -297,9 +302,21 @@ func (h *HTTPNodeSet) sendNodeMessage(node *Node, pb proto.Message) error {
 	req.Header.Set("Content-Type", "application/x-protobuf")
 
 	// Send request to remote node.
-	_, err = HTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
+	}
+	defer resp.Body.Close()
+
+	// Read response into buffer.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	// Check status code.
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
 	}
 
 	return nil
