@@ -45,7 +45,7 @@ func (c *RemoteCluster) Start() error {
 	}
 
 	if c.CopyBinary {
-		fleet, err := pssh.SSHClients(c.ClusterHosts, c.SSHUser, c.Keyfile, c.Stderr)
+		fleet, err := pssh.NewFleet(c.ClusterHosts, c.SSHUser, c.Keyfile, c.Stderr)
 		if err != nil {
 			return fmt.Errorf("copying binary: %v", err)
 		}
@@ -80,7 +80,7 @@ func (c *RemoteCluster) Start() error {
 		conf.DataDir = "~/.pilosa" + port
 
 		// Connect to remote host
-		client, err := pssh.NewSSH(host, c.SSHUser, "", c.Stderr)
+		client, err := pssh.NewClient(host, c.SSHUser, "", c.Stderr)
 		if err != nil {
 			return fmt.Errorf("connecting to host: %v", err)
 		}
