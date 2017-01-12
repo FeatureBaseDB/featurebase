@@ -1,6 +1,8 @@
-hash: d11cedeb5b4d17ad5bc6d13441cfbb8769c74fbb5fe33839dd0988ee4e73cd4b
-updated: 2017-01-12T14:02:12.015478278-06:00
+hash: ee63b46f9c89a924c7f940862584315387dff85e5b0f39fd0a5d7511314cd631
+updated: 2017-01-12T15:20:24.286928755-06:00
 imports:
+- name: github.com/armon/go-metrics
+  version: 97c69685293dce4c0a2d0b19535179bbc976e4d2
 - name: github.com/aws/aws-sdk-go
   version: 63ce630574a5ec05ecd8e8de5cea16332a5a684d
   subpackages:
@@ -55,8 +57,20 @@ imports:
   version: 8ee79997227bf9b34611aee7946ae64735e6fd93
   subpackages:
   - proto
+- name: github.com/hashicorp/errwrap
+  version: 7554cd9344cec97297fa6649b055a8c98c2a1e55
+- name: github.com/hashicorp/go-msgpack
+  version: fa3f63826f7c23912c15263591e65d54d080b458
+  subpackages:
+  - codec
+- name: github.com/hashicorp/go-multierror
+  version: ed905158d87462226a13fe39ddf685ea65f1c11f
+- name: github.com/hashicorp/memberlist
+  version: 9800c50ab79c002353852a9b1095e9591b161513
 - name: github.com/jmespath/go-jmespath
   version: bd40a432e4c76585ef6b72d3fd96fb9b6dc7b68d
+- name: github.com/miekg/dns
+  version: ca336a1f95a6b89be9c250df26c7a41742eb4a6f
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: golang.org/x/crypto
