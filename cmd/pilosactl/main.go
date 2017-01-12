@@ -1348,7 +1348,7 @@ type BspawnCommand struct {
 	AgentHosts []string
 
 	// Makes output human readable
-	Human bool
+	HumanReadable bool
 
 	// Result destination, ["stdout", "s3"]
 	Output string
@@ -1397,7 +1397,7 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	pilosaHosts := fs.String("pilosa-hosts", "", "")
 	agentHosts := fs.String("agent-hosts", "", "")
 	sshUser := fs.String("ssh-user", "", "")
-	fs.BoolVar(&cmd.Human, "human", false, "")
+	fs.BoolVar(&cmd.HumanReadable, "human", false, "")
 	fs.StringVar(&cmd.Output, "output", "stdout", "")
 	fs.BoolVar(&cmd.CopyBinary, "copy-binary", false, "")
 	fs.StringVar(&cmd.GOOS, "goos", "linux", "")
@@ -1456,6 +1456,9 @@ The following flags are allowed and will override the values in the config file:
 	-creator.log-file-prefix
 		log-file-prefix argument for pilosactl create
 
+	-creator.copy-binary
+		pilosactl create should build and copy pilosa binary to cluster
+
 	-pilosa-hosts
 		pilosa hosts to run against (will ignore creator args)
 
@@ -1463,16 +1466,16 @@ The following flags are allowed and will override the values in the config file:
 		hosts to use for benchmark agents
 
 	-ssh-user
-		pilosa hosts to run against (will ignore creator args)
+		username to use when contacting remote hosts
 
 	-human
-		toggle human readable output (indented json with formatted times)
-
-	-copy-binary
-		controls whether or not to build and copy pilosactl to agents
+		toggle human readable output (indented json)
 
 	-output
 		string to select output destination, "stdout" or "s3"
+
+	-copy-binary
+		controls whether or not to build and copy pilosactl to agents
 
 	-goos
 		when using copy-binary, GOOS to use while building binary
@@ -1532,7 +1535,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	}
 
 	enc := json.NewEncoder(writer)
-	if cmd.Human {
+	if cmd.HumanReadable {
 		enc.SetIndent("", "  ")
 		output = bench.Prettify(output)
 	}
