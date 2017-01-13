@@ -1044,6 +1044,10 @@ func (cmd *CreateCommand) ParseFlags(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if len(fs.Args()) > 0 {
+		fmt.Fprintf(cmd.Stderr, "Uknown args: %v\n", strings.Join(fs.Args(), " "))
+		return flag.ErrHelp
+	}
 	cmd.Hosts = customSplit(hosts, ",")
 	return nil
 }
@@ -1087,8 +1091,6 @@ The following flags are allowed:
 
 	-goarch
 		when using copy-binary, GOARCH to use while building binary
-
-
 `)
 }
 
@@ -1100,7 +1102,6 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 			ReplicaN: cmd.ReplicaN,
 			ServerN:  cmd.ServerN,
 		}
-		log.Println(cmd.Hosts, len(cmd.Hosts))
 	} else {
 		clus = &creator.RemoteCluster{
 			ClusterHosts: cmd.Hosts,
@@ -1160,7 +1161,6 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 		}(i, f)
 	}
 
-	log.Println(cmd.Hosts, len(cmd.Hosts))
 	enc := json.NewEncoder(cmd.Stdout)
 	enc.SetIndent("", "  ")
 	err = enc.Encode(cmd)
@@ -1269,22 +1269,20 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 // Usage returns the usage message to be printed.
 func (cmd *BagentCommand) Usage() string {
 	return strings.TrimSpace(`
-pilosactl bagent is a tool for running benchmarks against a pilosa cluster.
+usage: pilosactl bagent [options] <subcommand [options]>...
 
-Usage:
+Runs benchmarks against a pilosa cluster.
 
-pilosactl bagent [options] <subcommand [options]>...
-
-The following arguments are available:
+The following flags are allowed:
 
 	-hosts
-		Comma separated list of host:port describing all hosts in the cluster.
+		comma separated list of host:port describing all hosts in the cluster
 
 	-agent-num N
-		An integer differentiating this agent from others in the fleet.
+		an integer differentiating this agent from others in the fleet
 
 	-human
-		Boolean to enable human-readable format.
+		boolean to enable human-readable format
 
 	subcommands:
 		diagonal-set-bits
@@ -1433,11 +1431,10 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 // Usage returns the usage message to be printed.
 func (cmd *BspawnCommand) Usage() string {
 	return strings.TrimSpace(`
-pilosactl bspawn is a tool for running multiple instances of bagent against a cluster.
+usage: pilosactl spawn [flags] configfile
 
-Usage:
-
-pilosactl spawn [flags] configfile
+Benchmark orchestration tool - runs 'create' and potentially multiple instance
+of 'bagent' spread across a number of hosts.
 
 The following flags are allowed and will override the values in the config file:
 
