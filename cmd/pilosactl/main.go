@@ -1534,7 +1534,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 }
 
 func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface{}, error) {
-	agentIndex := 0
+	agentIdx := 0
 	agentFleet, err := pssh.NewFleet(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
 	if err != nil {
 		return nil, err
@@ -1560,10 +1560,12 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface
 	for _, sp := range cmd.Benchmarks {
 		results[sp.Name] = make(map[int]interface{})
 		for i := 0; i < sp.Num; i++ {
-			sess, err := agentFleet[agentIndex].NewSession()
+			agentIdx %= len(cmd.AgentHosts)
+			sess, err := agentFleet[cmd.AgentHosts[agentIdx]].NewSession()
 			if err != nil {
 				return nil, err
 			}
+			agentIdx += 1
 			sessions = append(sessions, sess)
 			stdout, err := sess.StdoutPipe()
 			if err != nil {

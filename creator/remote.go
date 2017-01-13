@@ -44,11 +44,11 @@ func (c *RemoteCluster) Start() error {
 		return fmt.Errorf("no type or hosts specified - cannot continue")
 	}
 
+	fleet, err := pssh.NewFleet(c.ClusterHosts, c.SSHUser, c.Keyfile, c.Stderr)
+	if err != nil {
+		return fmt.Errorf("connecting to cluster hosts: %v", err)
+	}
 	if c.CopyBinary {
-		fleet, err := pssh.NewFleet(c.ClusterHosts, c.SSHUser, c.Keyfile, c.Stderr)
-		if err != nil {
-			return fmt.Errorf("copying binary: %v", err)
-		}
 
 		pkg := "github.com/pilosa/pilosa/cmd/pilosa"
 		bin, err := build.Binary(pkg, c.GOOS, c.GOARCH)
@@ -79,8 +79,8 @@ func (c *RemoteCluster) Start() error {
 		conf.Host = hostport
 		conf.DataDir = "~/.pilosa" + port
 
-		// Connect to remote host
-		client, err := pssh.NewClient(host, c.SSHUser, "", c.Stderr)
+		// Get client for host
+		client, err := fleet.Get(host)
 		if err != nil {
 			return fmt.Errorf("connecting to host: %v", err)
 		}
