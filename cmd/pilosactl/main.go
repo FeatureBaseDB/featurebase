@@ -1012,9 +1012,9 @@ type CreateCommand struct {
 	FinalHosts []string `json:"final-hosts"`
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	Stdin  io.Reader `json:"-"`
+	Stdout io.Writer `json:"-"`
+	Stderr io.Writer `json:"-"`
 }
 
 // NewCreateCommand returns a new instance of CreateCommand.
