@@ -68,17 +68,17 @@ func NewClient(host, username, keyfile string, stderr io.Writer) (*Client, error
 	return &Client{client: client, Stderr: stderr}, nil
 }
 
-type Fleet []*Client
+type Fleet map[string]*Client
 
 func NewFleet(hosts []string, username, keyfile string, stderr io.Writer) (Fleet, error) {
 	hosts = DedupHosts(hosts)
-	clients := make([]*Client, len(hosts))
-	for i, host := range hosts {
+	clients := make(map[string]*Client, len(hosts))
+	for _, host := range hosts {
 		client, err := NewClient(host, username, keyfile, stderr)
 		if err != nil {
 			return nil, err
 		}
-		clients[i] = client
+		clients[host] = client
 	}
 	return clients, nil
 }
@@ -211,4 +211,15 @@ func (sf Fleet) WriteFile(name, perm string, data io.Reader) error {
 		return err
 	}
 	return wc.Close()
+}
+
+func (sf Fleet) Get(host string) (*Client, error) {
+	colonIdx := strings.Index(host, ":")
+	if colonIdx != -1 {
+		host = host[:colonIdx]
+	}
+	if client, ok := sf[host]; ok {
+		return client, nil
+	}
+	return nil, fmt.Errorf("No client found in fleet: %v for host: %v", sf, host)
 }
