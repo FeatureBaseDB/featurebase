@@ -1,22 +1,24 @@
 package ssh
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/user"
 	"strings"
-
-	"errors"
+	"syscall"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 type Client struct {
-	client *ssh.Client
-	Stderr io.Writer
+	client   *ssh.Client
+	Stderr   io.Writer
+	password string
 }
 
 // NewClient wraps up some of the complexity of using the crypto/ssh pacakge
@@ -31,20 +33,27 @@ func NewClient(host, username, keyfile string, stderr io.Writer) (*Client, error
 		username = user.Username
 	}
 
-	var auth ssh.AuthMethod
+	var authkey ssh.AuthMethod
 	if keyfile == "" {
 		sshAgent, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
 		if err != nil {
 			return nil, err
 		}
-		auth = ssh.PublicKeysCallback(agent.NewClient(sshAgent).Signers)
+		authkey = ssh.PublicKeysCallback(agent.NewClient(sshAgent).Signers)
 	} else {
 		return nil, fmt.Errorf("using a keyfile is unimplemented")
 	}
 
+	authpw := ssh.PasswordCallback(func() (secret string, err error) {
+		fmt.Fprintf(stderr, "password for %v@%v: ", username, host)
+		pwbytes, err := terminal.ReadPassword(syscall.Stdin)
+		fmt.Fprintln(stderr)
+		return string(pwbytes), err
+	})
+
 	config := &ssh.ClientConfig{
 		User: username,
-		Auth: []ssh.AuthMethod{auth},
+		Auth: []ssh.AuthMethod{authkey, authpw},
 	}
 
 	if strings.Index(host, ":") == -1 {
