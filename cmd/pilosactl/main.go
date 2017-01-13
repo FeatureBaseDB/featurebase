@@ -994,7 +994,6 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 
 // CreateCommand represents a command for creating a pilosa cluster.
 type CreateCommand struct {
-	Type          string   `json:"type"`
 	ServerN       int      `json:"serverN"`
 	ReplicaN      int      `json:"replicaN"`
 	LogFilePrefix string   `json:"log-file-prefix"`
@@ -1031,7 +1030,6 @@ func NewCreateCommand(stdin io.Reader, stdout, stderr io.Writer) *CreateCommand 
 func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Type, "type", "local", "")
 	fs.IntVar(&cmd.ServerN, "serverN", 3, "")
 	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "")
 	fs.StringVar(&cmd.LogFilePrefix, "log-file-prefix", "", "")
@@ -1059,22 +1057,16 @@ Creates a pilosa cluster. Defaults to a 3-node in-process cluster.
 
 The following flags are allowed:
 
-	-type
-		type of cluster - 'local' or 'remote'. Default is 'local' and will use
-		'serverN' and 'replicaN' to create a cluster in-process. 'remote' will use
-		'hosts', ssh into each host and start a pilosa process on the given
-		port.
-
 	-serverN
-		number of hosts in cluster
+		number of hosts in cluster. Disregarded if 'hosts' is set
 
 	-replicaN
 		replication factor for cluster
 
 	-hosts
-		Comma separated host:port list. Instead of creating hosts, just start
+		comma separated host:port list. If hosts is set, create will start
 		pilosa on these pre-existing hosts. The same host may be listed multiple
-		times with different ports.
+		times with different ports
 
 	-log-file-prefix
 		output from the started cluster will go into files with
@@ -1088,7 +1080,7 @@ The following flags are allowed:
 		of GOMAXPROCS.
 
 	-copy-binary
-		controls whether or not to build and copy pilosa to agents
+		controls whether or not to build and copy pilosa to hosts
 
 	-goos
 		when using copy-binary, GOOS to use while building binary
@@ -1103,16 +1095,13 @@ The following flags are allowed:
 // Run executes cluster creation.
 func (cmd *CreateCommand) Run(ctx context.Context) error {
 	var clus creator.Cluster
-	switch cmd.Type {
-	case "local":
+	if len(cmd.Hosts) == 0 {
 		clus = &creator.LocalCluster{
 			ReplicaN: cmd.ReplicaN,
 			ServerN:  cmd.ServerN,
 		}
 		log.Println(cmd.Hosts, len(cmd.Hosts))
-	case "AWS":
-		return fmt.Errorf("AWS cluster type is not yet implemented")
-	case "remote":
+	} else {
 		clus = &creator.RemoteCluster{
 			ClusterHosts: cmd.Hosts,
 			ReplicaN:     cmd.ReplicaN,
@@ -1123,8 +1112,7 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 			GOOS:         cmd.GOOS,
 			GOARCH:       cmd.GOARCH,
 		}
-	default:
-		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
+
 	}
 
 	err := clus.Start()
