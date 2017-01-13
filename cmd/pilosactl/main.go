@@ -994,18 +994,23 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 
 // CreateCommand represents a command for creating a pilosa cluster.
 type CreateCommand struct {
-	Type          string
-	ServerN       int
-	ReplicaN      int
-	LogFilePrefix string
-	Hosts         []string
-	GoMaxProcs    int
+	Type          string   `json:"type"`
+	ServerN       int      `json:"serverN"`
+	ReplicaN      int      `json:"replicaN"`
+	LogFilePrefix string   `json:"log-file-prefix"`
+	Hosts         []string `json:"hosts"`
+	GoMaxProcs    int      `json:"gomaxprocs"`
 
-	SSHUser string
+	SSHUser string `json:"ssh-user"`
 
-	CopyBinary bool
-	GOOS       string
-	GOARCH     string
+	CopyBinary bool   `json:"copy-binary"`
+	GOOS       string `json:"goos"`
+	GOARCH     string `json:"goarch"`
+
+	// The following are set by CreateCommand.Run once they are known and exist
+	// to appear in the output
+	LogFiles   []string `json:"log-files"`
+	FinalHosts []string `json:"final-hosts"`
 
 	// Standard input/output
 	Stdin  io.Reader
@@ -1026,7 +1031,7 @@ func NewCreateCommand(stdin io.Reader, stdout, stderr io.Writer) *CreateCommand 
 func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Type, "type", "", "")
+	fs.StringVar(&cmd.Type, "type", "local", "")
 	fs.IntVar(&cmd.ServerN, "serverN", 3, "")
 	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "")
 	fs.StringVar(&cmd.LogFilePrefix, "log-file-prefix", "", "")
@@ -1041,7 +1046,7 @@ func (cmd *CreateCommand) ParseFlags(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cmd.Hosts = strings.Split(hosts, ",")
+	cmd.Hosts = customSplit(hosts, ",")
 	return nil
 }
 
@@ -1050,12 +1055,15 @@ func (cmd *CreateCommand) Usage() string {
 	return strings.TrimSpace(`
 usage: pilosactl create [args]
 
-Creates a cluster based on the arguments.
+Creates a pilosa cluster. Defaults to a 3-node in-process cluster.
 
 The following flags are allowed:
 
 	-type
-		type of cluster - local, AWS, etc.
+		type of cluster - 'local' or 'remote'. Default is 'local' and will use
+		'serverN' and 'replicaN' to create a cluster in-process. 'remote' will use
+		'hosts', ssh into each host and start a pilosa process on the given
+		port.
 
 	-serverN
 		number of hosts in cluster
@@ -1064,21 +1072,20 @@ The following flags are allowed:
 		replication factor for cluster
 
 	-hosts
-		Comma separated host:port list. Instead of
-		creating hosts, just start pilosa on these
-		pre-existing hosts. The same host may be
-		listed multiple times with different ports.
+		Comma separated host:port list. Instead of creating hosts, just start
+		pilosa on these pre-existing hosts. The same host may be listed multiple
+		times with different ports.
 
 	-log-file-prefix
-		output from the started cluster will go
-		into files with this prefix (one per node)
+		output from the started cluster will go into files with
+		this prefix (one per node)
 
 	-ssh-user
 		username to use when contacting remote hosts
 
 	-gomaxprocs
-		when starting a cluster on remote hosts, this
-		will set the value of GOMAXPROCS.
+		when starting a cluster on remote hosts, this will set the value
+		of GOMAXPROCS.
 
 	-copy-binary
 		controls whether or not to build and copy pilosa to agents
@@ -1093,11 +1100,6 @@ The following flags are allowed:
 `)
 }
 
-type CreateOutput struct {
-	Hosts    []string `json:"hosts"`
-	LogFiles []string `json:"log-files"`
-}
-
 // Run executes cluster creation.
 func (cmd *CreateCommand) Run(ctx context.Context) error {
 	var clus creator.Cluster
@@ -1107,9 +1109,10 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 			ReplicaN: cmd.ReplicaN,
 			ServerN:  cmd.ServerN,
 		}
+		log.Println(cmd.Hosts, len(cmd.Hosts))
 	case "AWS":
 		return fmt.Errorf("AWS cluster type is not yet implemented")
-	case "":
+	case "remote":
 		clus = &creator.RemoteCluster{
 			ClusterHosts: cmd.Hosts,
 			ReplicaN:     cmd.ReplicaN,
@@ -1144,13 +1147,11 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 	}()
 
 	defer clus.Shutdown()
-	output := &CreateOutput{
-		Hosts: clus.Hosts(),
-	}
+	cmd.FinalHosts = clus.Hosts()
 
 	logReaders := clus.Logs()
 	if cmd.LogFilePrefix != "" {
-		output.LogFiles = make([]string, len(clus.Hosts()))
+		cmd.LogFiles = make([]string, len(clus.Hosts()))
 	}
 	for i, _ := range clus.Hosts() {
 		var f io.Writer = cmd.Stderr
@@ -1160,7 +1161,7 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			output.LogFiles[i] = f.(*os.File).Name()
+			cmd.LogFiles[i] = f.(*os.File).Name()
 		}
 
 		go func(i int, f io.Writer) {
@@ -1171,8 +1172,10 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 		}(i, f)
 	}
 
+	log.Println(cmd.Hosts, len(cmd.Hosts))
 	enc := json.NewEncoder(cmd.Stdout)
-	err = enc.Encode(output)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(cmd)
 	if err != nil {
 		return err
 	}
@@ -1270,7 +1273,7 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 			return fmt.Errorf("BagentCommand.ParseFlags: %v", err)
 		}
 	}
-	cmd.Hosts = strings.Split(pilosaHosts, ",")
+	cmd.Hosts = customSplit(pilosaHosts, ",")
 
 	return nil
 }
@@ -1420,10 +1423,10 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 		return err
 	}
 	if *pilosaHosts != "" {
-		cmd.PilosaHosts = strings.Split(*pilosaHosts, ",")
+		cmd.PilosaHosts = customSplit(*pilosaHosts, ",")
 	}
 	if *agentHosts != "" {
-		cmd.AgentHosts = strings.Split(*agentHosts, ",")
+		cmd.AgentHosts = customSplit(*agentHosts, ",")
 	}
 	if *sshUser != "" {
 		cmd.SSHUser = *sshUser
@@ -1506,7 +1509,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 				fmt.Fprintf(cmd.Stderr, "Cluster creation error while spawning: %v", err)
 			}
 		}()
-		clus := &CreateOutput{}
+		clus := &CreateCommand{}
 		dec := json.NewDecoder(r)
 		err = dec.Decode(clus)
 		if err != nil {
@@ -1697,6 +1700,13 @@ func readCSVRow(r *csv.Reader) (bitmapID, profileID uint64, timestamp int64, err
 	}
 
 	return bitmapID, profileID, timestamp, nil
+}
+
+func customSplit(s string, sep string) []string {
+	if s == "" {
+		return []string{}
+	}
+	return strings.Split(s, sep)
 }
 
 // errBlank indicates a blank row in a CSV file.
