@@ -1,4 +1,4 @@
-package pilosactl
+package build
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"os/exec"
 )
 
-func BuildBinary(pkg, goos, goarch string) (io.Reader, error) {
+func Binary(pkg, goos, goarch string) (io.Reader, error) {
 	binFile, err := ioutil.TempFile("", "pilosactl")
 	if err != nil {
 		return nil, fmt.Errorf("build binary: %v", err)
