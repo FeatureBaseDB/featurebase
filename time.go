@@ -52,13 +52,13 @@ func ParseTimeQuantum(v string) (TimeQuantum, error) {
 func FrameByTimeUnit(name string, t time.Time, unit rune) string {
 	switch unit {
 	case 'Y':
-		return fmt.Sprintf("%s_%s", name, t.Format("2006"))
+		return fmt.Sprintf("%s::%s", name, t.Format("2006"))
 	case 'M':
-		return fmt.Sprintf("%s_%s", name, t.Format("200601"))
+		return fmt.Sprintf("%s::%s", name, t.Format("200601"))
 	case 'D':
-		return fmt.Sprintf("%s_%s", name, t.Format("20060102"))
+		return fmt.Sprintf("%s::%s", name, t.Format("20060102"))
 	case 'H':
-		return fmt.Sprintf("%s_%s", name, t.Format("2006010215"))
+		return fmt.Sprintf("%s::%s", name, t.Format("2006010215"))
 	default:
 		return ""
 	}
