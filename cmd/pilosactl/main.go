@@ -1417,8 +1417,7 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	if *sshUser != "" {
 		cmd.SSHUser = *sshUser
 	}
-	// TODO support all creator args - just checking for creatorHosts here won't be sufficient
-	if *creatorHosts != "" {
+	if *pilosaHosts == "" {
 		cmd.CreatorArgs = []string{"-hosts=" + *creatorHosts, "-log-file-prefix=" + *creatorLFP, "-ssh-user=" + cmd.SSHUser, "-goos=" + cmd.GOOS, "-goarch=" + cmd.GOARCH}
 		if *creatorCopyBinary {
 			cmd.CreatorArgs = append(cmd.CreatorArgs, "-copy-binary")
@@ -1433,7 +1432,7 @@ func (cmd *BspawnCommand) Usage() string {
 	return strings.TrimSpace(`
 usage: pilosactl spawn [flags] configfile
 
-Benchmark orchestration tool - runs 'create' and potentially multiple instance
+Benchmark orchestration tool - runs 'create' and potentially multiple instances
 of 'bagent' spread across a number of hosts.
 
 The following flags are allowed and will override the values in the config file:
@@ -1500,7 +1499,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		cmd.PilosaHosts = clus.Hosts
+		cmd.PilosaHosts = clus.FinalHosts
 		output["cluster"] = clus
 	}
 	if len(cmd.AgentHosts) == 0 {
