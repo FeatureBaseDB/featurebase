@@ -1325,34 +1325,34 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 type BspawnCommand struct {
 	// If PilosaHosts is specified, CreatorArgs is ignored and the existing
 	// cluster specified here is used.
-	PilosaHosts []string
+	PilosaHosts []string `json:"pilosa-hosts"`
 
 	// CreateCommand will be used with these arguments to create a cluster -
 	// the cluster will be used to populate the PilosaHosts field. This
 	// should include everything that comes after `pilosactl create`
-	CreatorArgs []string
+	CreatorArgs []string `json:"creator-args"`
 
 	// List of hosts to run agents on. If this is empty, agents will be run
 	// locally.
-	AgentHosts []string
+	AgentHosts []string `json:"agent-hosts"`
 
 	// Makes output human readable
-	HumanReadable bool
+	HumanReadable bool `json:"human-readable"`
 
 	// Result destination, ["stdout", "s3"]
-	Output string
+	Output string `json:"output"`
 
 	// If this is true, build and copy pilosactl binary to agent hosts.
-	CopyBinary bool
-	GOOS       string
-	GOARCH     string
+	CopyBinary bool   `json:"copy-binary"`
+	GOOS       string `json:"goos"`
+	GOARCH     string `json:"goarch"`
 
 	// Benchmarks is a slice of Spawns which specifies all of the bagent
 	// commands to run. These will all be run in parallel, started on each
 	// of the agents in a round robin fashion.
-	Benchmarks []Spawn
+	Benchmarks []Spawn `json:"benchmarks"`
 
-	SSHUser string
+	SSHUser string `json:"ssh-user"`
 
 	Stdin  io.Reader `json:"-"`
 	Stdout io.Writer `json:"-"`
@@ -1505,7 +1505,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	if len(cmd.AgentHosts) == 0 {
 		cmd.AgentHosts = []string{"localhost"}
 	}
-	output["agents"] = cmd.AgentHosts
+	output["spawn"] = cmd
 	res, err := cmd.spawnRemote(ctx)
 	if err != nil {
 		return err
