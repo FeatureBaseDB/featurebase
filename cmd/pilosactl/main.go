@@ -1219,7 +1219,7 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 	var pilosaHosts string
 	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "")
 	fs.IntVar(&cmd.AgentNum, "agent-num", 0, "")
-	fs.BoolVar(&cmd.HumanReadable, "human", false, "")
+	fs.BoolVar(&cmd.HumanReadable, "human", true, "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1275,13 +1275,13 @@ Runs benchmarks against a pilosa cluster.
 
 The following flags are allowed:
 
-	-hosts
+	-hosts ("localhost:15000")
 		comma separated list of host:port describing all hosts in the cluster
 
-	-agent-num N
+	-agent-num (0)
 		an integer differentiating this agent from others in the fleet
 
-	-human
+	-human (true)
 		boolean to enable human-readable format
 
 	subcommands:
@@ -1386,7 +1386,7 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	pilosaHosts := fs.String("pilosa-hosts", "", "")
 	agentHosts := fs.String("agent-hosts", "", "")
 	sshUser := fs.String("ssh-user", "", "")
-	fs.BoolVar(&cmd.HumanReadable, "human", false, "")
+	fs.BoolVar(&cmd.HumanReadable, "human", true, "")
 	fs.StringVar(&cmd.Output, "output", "stdout", "")
 	fs.BoolVar(&cmd.CopyBinary, "copy-binary", false, "")
 	fs.StringVar(&cmd.GOOS, "goos", "linux", "")
@@ -1430,44 +1430,44 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 // Usage returns the usage message to be printed.
 func (cmd *BspawnCommand) Usage() string {
 	return strings.TrimSpace(`
-usage: pilosactl spawn [flags] configfile
+usage: pilosactl spawn [flags] <configfile>
 
 Benchmark orchestration tool - runs 'create' and potentially multiple instances
 of 'bagent' spread across a number of hosts.
 
 The following flags are allowed and will override the values in the config file:
 
-	-creator.hosts
+	-creator.hosts ()
 		hosts argument for pilosactl create
 
-	-creator.log-file-prefix
-		log-file-prefix argument for pilosactl create
+	-creator.log-file-prefix ()
+		log-file-prefix argument for pilosactl create. If empty, log to stderr.
 
-	-creator.copy-binary
+	-creator.copy-binary (false)
 		pilosactl create should build and copy pilosa binary to cluster
 
-	-pilosa-hosts
+	-pilosa-hosts ([])
 		pilosa hosts to run against (will ignore creator args)
 
-	-agent-hosts
+	-agent-hosts ("localhost")
 		hosts to use for benchmark agents
 
-	-ssh-user
+	-ssh-user (current username)
 		username to use when contacting remote hosts
 
-	-human
+	-human (true)
 		toggle human readable output (indented json)
 
-	-output
+	-output ("stdout")
 		string to select output destination, "stdout" or "s3"
 
-	-copy-binary
+	-copy-binary (false)
 		controls whether or not to build and copy pilosactl to agents
 
-	-goos
+	-goos (linux)
 		when using copy-binary, GOOS to use while building binary
 
-	-goarch
+	-goarch (amd64)
 		when using copy-binary, GOARCH to use while building binary
 
 
