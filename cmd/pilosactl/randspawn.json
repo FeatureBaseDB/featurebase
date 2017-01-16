@@ -1,10 +1,8 @@
 {
-    "CreatorArgs": ["-type", "local", "-serverN", "3", "-replicaN", "1"],
-    "AgentHosts": [],
-    "Benchmarks": [
+    "benchmarks": [
         {
-            "Num": 3,
-            "Args": ["random-set-bits", "-iterations", "30000", "-profile-id-range", "1000000", "-bitmap-id-range", "1000000", "-seed", "2345", "-client-type", "round_robin"]
+            "num": 3,
+            "args": ["random-set-bits", "-iterations", "30000", "-profile-id-range", "1000000", "-bitmap-id-range", "1000000", "-seed", "2345", "-client-type", "round_robin"]
         }
     ]
 }
