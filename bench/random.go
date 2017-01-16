@@ -26,6 +26,7 @@ type RandomSetBits struct {
 
 func (b *RandomSetBits) Init(hosts []string, agentNum int) error {
 	b.Name = "random-set-bits"
+	b.Seed = b.Seed + int64(agentNum)
 	return b.HasClient.Init(hosts, agentNum)
 }
 
@@ -82,12 +83,12 @@ func (b *RandomSetBits) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Run runs the RandomSetBits benchmark
-func (b *RandomSetBits) Run(ctx context.Context, agentNum int) map[string]interface{} {
-	src := rand.NewSource(b.Seed + int64(agentNum))
+func (b *RandomSetBits) Run(ctx context.Context) map[string]interface{} {
+	src := rand.NewSource(b.Seed)
 	rng := rand.New(src)
 	results := make(map[string]interface{})
 	if b.client == nil {
-		results["error"] = fmt.Errorf("No client set for RandomSetBits agent: %v", agentNum)
+		results["error"] = fmt.Errorf("No client set for RandomSetBits")
 		return results
 	}
 	s := NewStats()

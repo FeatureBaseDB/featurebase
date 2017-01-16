@@ -110,16 +110,16 @@ func (b *Import) Init(hosts []string, agentNum int) error {
 	b.Name = "import"
 	b.Host = hosts[0]
 	// generate csv data
-	baseBitmapID, maxBitmapID, baseProfileID, maxProfileID := b.BaseBitmapID, b.MaxBitmapID, b.BaseProfileID, b.MaxProfileID
+	b.Seed = b.Seed + int64(agentNum)
 	switch b.AgentControls {
 	case "height":
 		numBitmapIDs := (b.MaxBitmapID - b.BaseBitmapID)
-		baseBitmapID = b.BaseBitmapID + (numBitmapIDs * int64(agentNum))
-		maxBitmapID = baseBitmapID + numBitmapIDs
+		b.BaseBitmapID = b.BaseBitmapID + (numBitmapIDs * int64(agentNum))
+		b.MaxBitmapID = b.BaseBitmapID + numBitmapIDs
 	case "width":
 		numProfileIDs := (b.MaxProfileID - b.BaseProfileID)
-		baseProfileID = b.BaseProfileID + (numProfileIDs * int64(agentNum))
-		maxProfileID = baseProfileID + numProfileIDs
+		b.BaseProfileID = b.BaseProfileID + (numProfileIDs * int64(agentNum))
+		b.MaxProfileID = b.BaseProfileID + numProfileIDs
 	case "":
 		break
 	default:
@@ -130,8 +130,8 @@ func (b *Import) Init(hosts []string, agentNum int) error {
 		return err
 	}
 	// set b.Paths)
-	num := GenerateImportCSV(f, baseBitmapID, maxBitmapID, baseProfileID, maxProfileID,
-		b.MinBitsPerMap, b.MaxBitsPerMap, b.Seed+int64(agentNum), b.RandomBitmapOrder)
+	num := GenerateImportCSV(f, b.BaseBitmapID, b.MaxBitmapID, b.BaseProfileID, b.MaxProfileID,
+		b.MinBitsPerMap, b.MaxBitsPerMap, b.Seed, b.RandomBitmapOrder)
 	b.numbits = num
 	// set b.Paths
 	b.Paths = []string{f.Name()}
@@ -139,7 +139,7 @@ func (b *Import) Init(hosts []string, agentNum int) error {
 }
 
 // Run runs the Import benchmark
-func (b *Import) Run(ctx context.Context, agentNum int) map[string]interface{} {
+func (b *Import) Run(ctx context.Context) map[string]interface{} {
 	results := make(map[string]interface{})
 	results["numbits"] = b.numbits
 	results["db"] = b.Database

@@ -25,6 +25,7 @@ type RandomQuery struct {
 
 func (b *RandomQuery) Init(hosts []string, agentNum int) error {
 	b.Name = "random-query"
+	b.Seed = b.Seed + int64(agentNum)
 	return b.HasClient.Init(hosts, agentNum)
 }
 
@@ -87,14 +88,13 @@ func (b *RandomQuery) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Run runs the RandomQuery benchmark
-func (b *RandomQuery) Run(ctx context.Context, agentNum int) map[string]interface{} {
-	seed := b.Seed + int64(agentNum)
+func (b *RandomQuery) Run(ctx context.Context) map[string]interface{} {
 	results := make(map[string]interface{})
 	if b.client == nil {
-		results["error"] = fmt.Errorf("No client set for RandomQuery agent: %v", agentNum)
+		results["error"] = fmt.Errorf("No client set for RandomQuery")
 		return results
 	}
-	qm := NewQueryGenerator(seed)
+	qm := NewQueryGenerator(b.Seed)
 	s := NewStats()
 	var start time.Time
 	for n := 0; n < b.Iterations; n++ {
