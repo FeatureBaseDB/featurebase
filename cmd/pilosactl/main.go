@@ -1364,7 +1364,7 @@ type BspawnCommand struct {
 type Spawn struct {
 	Num  int      `json:"num"`  // number of agents to run
 	Name string   `json:"name"` // Should describe what this Spawn does
-	Args []string // everything that comes after `pilosactl bagent [arguments]`
+	Args []string `json:"args"` // everything that comes after `pilosactl bagent [arguments]`
 }
 
 // NewBspawnCommand returns a new instance of BspawnCommand.
