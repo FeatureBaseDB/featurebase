@@ -91,7 +91,7 @@ func (b *SliceHeight) Init(hosts []string, agentNum int) error {
 }
 
 // Run runs the SliceHeight benchmark
-func (b *SliceHeight) Run(ctx context.Context, agentNum int) map[string]interface{} {
+func (b *SliceHeight) Run(ctx context.Context) map[string]interface{} {
 	results := make(map[string]interface{})
 
 	imp := NewImport(b.Stdin, b.Stdout, b.Stderr)
@@ -109,11 +109,11 @@ func (b *SliceHeight) Run(ctx context.Context, agentNum int) map[string]interfac
 		results["iteration"+strconv.Itoa(i)] = iresults
 
 		genstart := time.Now()
-		imp.Init(b.hosts, agentNum)
+		imp.Init(b.hosts, 0)
 		gendur := time.Now().Sub(genstart)
 		iresults["csvgen"] = gendur
 
-		iresults["import"] = imp.Run(ctx, agentNum)
+		iresults["import"] = imp.Run(ctx)
 
 		qstart := time.Now()
 		q := &pql.TopN{Frame: b.Frame, N: 50}

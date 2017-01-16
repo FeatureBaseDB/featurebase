@@ -1303,7 +1303,7 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 		return fmt.Errorf("in cmd.Run initialization: %v", err)
 	}
 
-	res := sbm.Run(ctx, cmd.AgentNum)
+	res := sbm.Run(ctx)
 	res["agent-num"] = cmd.AgentNum
 	enc := json.NewEncoder(cmd.Stdout)
 	if cmd.HumanReadable {
@@ -1622,14 +1622,14 @@ func (sb *serialBenchmark) Init(hosts []string, agentNum int) error {
 // Run runs the serial benchmark and returns it's results in a nested map - the
 // top level keys are the indices of each benchmark in the list of benchmarks,
 // and the values are the results of each benchmark's Run method.
-func (sb *serialBenchmark) Run(ctx context.Context, agentNum int) map[string]interface{} {
+func (sb *serialBenchmark) Run(ctx context.Context) map[string]interface{} {
 	benchmarks := make([]map[string]interface{}, len(sb.benchmarkers))
 	results := map[string]interface{}{"benchmarks": benchmarks}
 
 	total_start := time.Now()
 	for i, b := range sb.benchmarkers {
 		start := time.Now()
-		output := b.Run(ctx, agentNum)
+		output := b.Run(ctx)
 		if _, ok := output["runtime"]; ok {
 			panic(fmt.Sprintf("Benchmark %v added 'runtime' to its results", b))
 		}

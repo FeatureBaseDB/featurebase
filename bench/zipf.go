@@ -122,7 +122,8 @@ func getZipfOffset(N int64, exp, ratio float64) float64 {
 
 func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
 	b.Name = "zipf-set-bits"
-	rnd := rand.New(rand.NewSource(b.Seed + int64(agentNum)))
+	b.Seed = b.Seed + int64(agentNum)
+	rnd := rand.New(rand.NewSource(b.Seed))
 	bitmapOffset := getZipfOffset(b.BitmapIDRange, b.BitmapExponent, b.BitmapRatio)
 	b.bitmapRng = rand.NewZipf(rnd, b.BitmapExponent, bitmapOffset, uint64(b.BitmapIDRange-1))
 	profileOffset := getZipfOffset(b.ProfileIDRange, b.ProfileExponent, b.ProfileRatio)
@@ -135,10 +136,10 @@ func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
 }
 
 // Run runs the ZipfSetBits benchmark
-func (b *ZipfSetBits) Run(ctx context.Context, agentNum int) map[string]interface{} {
+func (b *ZipfSetBits) Run(ctx context.Context) map[string]interface{} {
 	results := make(map[string]interface{})
 	if b.client == nil {
-		results["error"] = fmt.Errorf("No client set for ZipfSetBits agent: %v", agentNum)
+		results["error"] = fmt.Errorf("No client set for ZipfSetBits")
 		return results
 	}
 	s := NewStats()
