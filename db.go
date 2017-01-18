@@ -3,6 +3,7 @@ package pilosa
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -34,10 +35,12 @@ type DB struct {
 	profileAttrStore *AttrStore
 
 	stats StatsClient
+
+	LogOutput io.Writer
 }
 
 // NewDB returns a new instance of DB.
-func NewDB(path, name string) *DB {
+func NewDB(path, name string, logOutput io.Writer) *DB {
 	return &DB{
 		path:           path,
 		name:           name,
@@ -47,6 +50,8 @@ func NewDB(path, name string) *DB {
 		profileAttrStore: NewAttrStore(filepath.Join(path, "data")),
 
 		stats: NopStatsClient,
+
+		LogOutput: logOutput,
 	}
 }
 
@@ -270,7 +275,7 @@ func (db *DB) createFrameIfNotExists(name string) (*Frame, error) {
 }
 
 func (db *DB) newFrame(path, name string) *Frame {
-	f := NewFrame(path, db.name, name)
+	f := NewFrame(path, db.name, name, db.LogOutput)
 	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
 	return f
 }

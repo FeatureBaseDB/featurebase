@@ -66,7 +66,7 @@ func NewFrame() *Frame {
 		panic(err)
 	}
 
-	return &Frame{Frame: pilosa.NewFrame(path, "d", "f")}
+	return &Frame{Frame: pilosa.NewFrame(path, "d", "f", ioutil.Discard)}
 }
 
 // MustOpenFrame returns a new, opened frame at a temporary path. Panic on error.
@@ -91,7 +91,7 @@ func (f *Frame) Reopen() error {
 	}
 
 	path, db, name := f.Path(), f.DB(), f.Name()
-	f.Frame = pilosa.NewFrame(path, db, name)
+	f.Frame = pilosa.NewFrame(path, db, name, ioutil.Discard)
 
 	if err := f.Open(); err != nil {
 		return err

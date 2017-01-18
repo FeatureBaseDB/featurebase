@@ -90,14 +90,14 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, db, frame string, slice uint64) *Fragment {
+func NewFragment(path, db, frame string, slice uint64, logOutput io.Writer) *Fragment {
 	return &Fragment{
 		path:  path,
 		db:    db,
 		frame: frame,
 		slice: slice,
 
-		LogOutput: os.Stderr,
+		LogOutput: logOutput,
 		MaxOpN:    DefaultFragmentMaxOpN,
 
 		stats: NopStatsClient,
@@ -861,7 +861,7 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			// no real danger
 			if i == 0 || bitmapID != lastID {
 				lastID = bitmapID
-					set[bitmapID] = struct{}{}
+				set[bitmapID] = struct{}{}
 			}
 			if changed {
 				bmCounter += 1
