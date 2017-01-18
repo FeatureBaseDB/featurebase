@@ -40,7 +40,7 @@ type DB struct {
 }
 
 // NewDB returns a new instance of DB.
-func NewDB(path, name string, logOutput io.Writer) *DB {
+func NewDB(path, name string) *DB {
 	return &DB{
 		path:           path,
 		name:           name,
@@ -49,9 +49,8 @@ func NewDB(path, name string, logOutput io.Writer) *DB {
 
 		profileAttrStore: NewAttrStore(filepath.Join(path, "data")),
 
-		stats: NopStatsClient,
-
-		LogOutput: logOutput,
+		stats:     NopStatsClient,
+		LogOutput: ioutil.Discard,
 	}
 }
 
@@ -275,7 +274,8 @@ func (db *DB) createFrameIfNotExists(name string) (*Frame, error) {
 }
 
 func (db *DB) newFrame(path, name string) *Frame {
-	f := NewFrame(path, db.name, name, db.LogOutput)
+	f := NewFrame(path, db.name, name)
+	f.LogOutput = db.LogOutput
 	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
 	return f
 }

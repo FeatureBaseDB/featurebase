@@ -38,7 +38,7 @@ type Frame struct {
 }
 
 // NewFrame returns a new instance of frame.
-func NewFrame(path, db, name string, logOutput io.Writer) *Frame {
+func NewFrame(path, db, name string) *Frame {
 	return &Frame{
 		path: path,
 		db:   db,
@@ -49,7 +49,7 @@ func NewFrame(path, db, name string, logOutput io.Writer) *Frame {
 
 		stats: NopStatsClient,
 
-		LogOutput: logOutput,
+		LogOutput: ioutil.Discard,
 	}
 }
 
@@ -286,7 +286,8 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 }
 
 func (f *Frame) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, f.db, f.name, slice, f.LogOutput)
+	frag := NewFragment(path, f.db, f.name, slice)
+	frag.LogOutput = f.LogOutput
 	frag.stats = f.stats.WithTags(fmt.Sprintf("slice:%d", slice))
 	return frag
 }

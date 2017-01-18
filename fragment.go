@@ -90,14 +90,14 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, db, frame string, slice uint64, logOutput io.Writer) *Fragment {
+func NewFragment(path, db, frame string, slice uint64) *Fragment {
 	return &Fragment{
 		path:  path,
 		db:    db,
 		frame: frame,
 		slice: slice,
 
-		LogOutput: logOutput,
+		LogOutput: ioutil.Discard,
 		MaxOpN:    DefaultFragmentMaxOpN,
 
 		stats: NopStatsClient,
