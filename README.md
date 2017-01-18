@@ -16,7 +16,7 @@ $ go get github.com/pilosa/pilosa
 Now you can install the `pilosa` binary:
 
 ```sh
-$ go install github.com/pilosa/pilosa/...
+$ go install github.com/pilosa/pilosa/cmd/...
 ```
 
 Now run `pilosa` with the default configuration:
