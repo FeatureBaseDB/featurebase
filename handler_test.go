@@ -730,6 +730,7 @@ func NewHandler() *Handler {
 		Handler: pilosa.NewHandler(),
 	}
 	h.Handler.Executor = &h.Executor
+	h.Handler.LogOutput = ioutil.Discard
 	return h
 }
 

@@ -90,7 +90,7 @@ func NewDB() *DB {
 		panic(err)
 	}
 
-	return &DB{DB: pilosa.NewDB(path, "d")}
+	return &DB{DB: pilosa.NewDB(path, "d", ioutil.Discard)}
 }
 
 // MustOpenDB returns a new, opened database at a temporary path. Panic on error.
@@ -115,7 +115,7 @@ func (db *DB) Reopen() error {
 	}
 
 	path, name := db.Path(), db.Name()
-	db.DB = pilosa.NewDB(path, name)
+	db.DB = pilosa.NewDB(path, name, ioutil.Discard)
 
 	if err := db.Open(); err != nil {
 		return err

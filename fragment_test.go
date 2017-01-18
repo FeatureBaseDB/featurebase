@@ -505,7 +505,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	}
 
 	// Open the fragment specified by the path.
-	f := pilosa.NewFragment(*FragmentPath, "d", "f", 0)
+	f := pilosa.NewFragment(*FragmentPath, "d", "f", 0, ioutil.Discard)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -566,7 +566,7 @@ func NewFragment(db, frame string, slice uint64) *Fragment {
 	file.Close()
 
 	f := &Fragment{
-		Fragment:        pilosa.NewFragment(file.Name(), db, frame, slice),
+		Fragment:        pilosa.NewFragment(file.Name(), db, frame, slice, ioutil.Discard),
 		BitmapAttrStore: MustOpenAttrStore(),
 	}
 	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
@@ -597,7 +597,7 @@ func (f *Fragment) Reopen() error {
 		return err
 	}
 
-	f.Fragment = pilosa.NewFragment(path, f.DB(), f.Frame(), f.Slice())
+	f.Fragment = pilosa.NewFragment(path, f.DB(), f.Frame(), f.Slice(), ioutil.Discard)
 	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
 	if err := f.Open(); err != nil {
 		return err

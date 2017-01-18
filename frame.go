@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -32,10 +33,12 @@ type Frame struct {
 	bitmapAttrStore *AttrStore
 
 	stats StatsClient
+
+	LogOutput io.Writer
 }
 
 // NewFrame returns a new instance of frame.
-func NewFrame(path, db, name string) *Frame {
+func NewFrame(path, db, name string, logOutput io.Writer) *Frame {
 	return &Frame{
 		path: path,
 		db:   db,
@@ -45,6 +48,8 @@ func NewFrame(path, db, name string) *Frame {
 		bitmapAttrStore: NewAttrStore(filepath.Join(path, "data")),
 
 		stats: NopStatsClient,
+
+		LogOutput: logOutput,
 	}
 }
 
@@ -281,7 +286,7 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 }
 
 func (f *Frame) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, f.db, f.name, slice)
+	frag := NewFragment(path, f.db, f.name, slice, f.LogOutput)
 	frag.stats = f.stats.WithTags(fmt.Sprintf("slice:%d", slice))
 	return frag
 }
