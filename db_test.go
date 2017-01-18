@@ -89,7 +89,6 @@ func NewDB() *DB {
 	if err != nil {
 		panic(err)
 	}
-
 	return &DB{DB: pilosa.NewDB(path, "d")}
 }
 

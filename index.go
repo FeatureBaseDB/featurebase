@@ -188,6 +188,7 @@ func (i *Index) createDBIfNotExists(name string) (*DB, error) {
 
 func (i *Index) newDB(path, name string) *DB {
 	db := NewDB(path, name)
+	db.LogOutput = i.LogOutput
 	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
 	return db
 }
