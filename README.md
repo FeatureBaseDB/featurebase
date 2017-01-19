@@ -235,24 +235,24 @@ Examples:
 
 Create a 5 node cluster locally (using 5 different ports), with a replication factor of 2.
 ```
-pilosactl create 
-  -serverN 5 
+pilosactl create \
+  -serverN 5 \
   -replicaN 2
 ```
 
 Create a cluster on 3 remote hosts - all logs will come to local stderr, pilosa binary must be available on remote hosts. The ssh user on the remote hosts needs to be the same as your local user. Otherwise use the `ssh-user` option.
 ```
-pilosactl create 
+pilosactl create \
   -hosts="node1.example.com:15000,node2.example.com:15000,node3.example.com:15000"
 ```
 
 Create a cluster on 3 remote hosts running OSX, but build the binary locally and copy it up. Stream the stderr of each node to a separate local log file.
 ```
-pilosactl create 
-  -hosts="mac1.example.com:15000,mac2.example.com:15000,mac3.example.com:15000" 
-  -copy-binary 
-  -goos=darwin 
-  -goarch=amd64 
+pilosactl create \
+  -hosts="mac1.example.com:15000,mac2.example.com:15000,mac3.example.com:15000" \
+  -copy-binary \
+  -goos=darwin \
+  -goarch=amd64 \
   -log-file-prefix=clusterlogs
 ```
 
@@ -270,7 +270,9 @@ Multiple subcommands and their arguments may be concatenated at the command line
 This will generate and import a bunch of data, and then execute random queries against it.
 
 ```
-pilosactl bagent import -max-bits-per-map=10000 random-query -iterations 100
+pilosactl bagent import \
+  -max-bits-per-map=10000 \
+  random-query -iterations 100
 ```
 
 ### Bspawn

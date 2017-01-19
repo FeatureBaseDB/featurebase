@@ -203,12 +203,12 @@ func (sf Fleet) OpenFile(name, perm string) (io.WriteCloser, error) {
 func (sf Fleet) WriteFile(name, perm string, data io.Reader) error {
 	wc, err := sf.OpenFile(name, perm)
 	if err != nil {
-		return err
+		return fmt.Errorf("opening: %v", err)
 	}
 
 	_, err = io.Copy(wc, data)
 	if err != nil {
-		return err
+		return fmt.Errorf("copying: %v", err)
 	}
 	return wc.Close()
 }
