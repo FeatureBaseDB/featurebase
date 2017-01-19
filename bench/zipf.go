@@ -12,10 +12,10 @@ import (
 	"time"
 )
 
-// ZipfSetBits sets random bits according to the Zipf-Mandelbrot distribution.
+// Zipf sets random bits according to the Zipf-Mandelbrot distribution.
 // This distribution accepts two parameters, Exponent and Ratio, for both bitmaps and profiles.
 // It also uses PermutationGenerator to permute IDs randomly.
-type ZipfSetBits struct {
+type Zipf struct {
 	HasClient
 	Name            string  `json:"name"`
 	BaseBitmapID    int64   `json:"base-bitmap-id"`
@@ -29,6 +29,7 @@ type ZipfSetBits struct {
 	BitmapRatio     float64 `json:"bitmap-ratio"`
 	ProfileExponent float64 `json:"profile-exponent"`
 	ProfileRatio    float64 `json:"profile-ratio"`
+	Operation       string  `json:"operation"`
 	bitmapRng       *rand.Zipf
 	profileRng      *rand.Zipf
 	bitmapPerm      *PermutationGenerator
@@ -36,9 +37,9 @@ type ZipfSetBits struct {
 }
 
 // Usage returns the usage message to be printed.
-func (b *ZipfSetBits) Usage() string {
+func (b *Zipf) Usage() string {
 	return `
-zipf-set-bits sets random bits according to the Zipf distribution.
+zipf sets random bits according to the Zipf distribution.
 This is a power-law distribution controlled by two parameters.
 Exponent, in the range (1, inf), with a default value of 1.001, controls
 the "sharpness" of the distribution, with higher exponent being sharper.
@@ -47,7 +48,7 @@ maximum variation of the distribution, with higher ratio being more uniform.
 
 Agent number modifies random seed.
 
-Usage: zipf-set-bits [arguments]
+Usage: zipf [arguments]
 
 The following arguments are available:
 
@@ -86,14 +87,17 @@ The following arguments are available:
 
 	-client-type string
 		Can be 'single' (all agents hitting one host) or 'round_robin'
+
+	-operation string
+		Can be 'set' or 'clear'
 `[1:]
 }
 
 // ConsumeFlags parses all flags up to the next non flag argument (argument does
 // not start with "-" and isn't the value of a flag). It returns the remaining
 // args.
-func (b *ZipfSetBits) ConsumeFlags(args []string) ([]string, error) {
-	fs := flag.NewFlagSet("ZipfSetBits", flag.ContinueOnError)
+func (b *Zipf) ConsumeFlags(args []string) ([]string, error) {
+	fs := flag.NewFlagSet("Zipf", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
 	fs.Int64Var(&b.BaseBitmapID, "base-bitmap-id", 0, "")
 	fs.Int64Var(&b.BitmapIDRange, "bitmap-id-range", 100000, "")
@@ -107,6 +111,7 @@ func (b *ZipfSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs.Float64Var(&b.ProfileExponent, "profile-exponent", 1.01, "")
 	fs.Float64Var(&b.ProfileRatio, "profile-ratio", 0.25, "")
 	fs.StringVar(&b.ClientType, "client-type", "single", "")
+	fs.StringVar(&b.Operation, "operation", "set", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -128,8 +133,8 @@ func getZipfOffset(N int64, exp, ratio float64) float64 {
 
 // Init sets up the benchmark based on the agent number and initializes the
 // client.
-func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
-	b.Name = "zipf-set-bits"
+func (b *Zipf) Init(hosts []string, agentNum int) error {
+	b.Name = "zipf"
 	b.Seed = b.Seed + int64(agentNum)
 	rnd := rand.New(rand.NewSource(b.Seed))
 	bitmapOffset := getZipfOffset(b.BitmapIDRange, b.BitmapExponent, b.BitmapRatio)
@@ -140,15 +145,23 @@ func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
 	b.bitmapPerm = NewPermutationGenerator(b.BitmapIDRange, b.Seed)
 	b.profilePerm = NewPermutationGenerator(b.ProfileIDRange, b.Seed+1)
 
+	if b.Operation != "set" && b.Operation != "clear" {
+		return fmt.Errorf("Unsupported operation: \"%s\" (must be \"set\" or \"clear\")", b.Operation)
+	}
+
 	return b.HasClient.Init(hosts, agentNum)
 }
 
-// Run runs the ZipfSetBits benchmark
-func (b *ZipfSetBits) Run(ctx context.Context) map[string]interface{} {
+// Run runs the Zipf benchmark
+func (b *Zipf) Run(ctx context.Context) map[string]interface{} {
 	results := make(map[string]interface{})
 	if b.client == nil {
-		results["error"] = fmt.Errorf("No client set for ZipfSetBits")
+		results["error"] = fmt.Errorf("No client set for Zipf")
 		return results
+	}
+	operation := "SetBit"
+	if b.Operation == "clear" {
+		operation = "ClearBit"
 	}
 	s := NewStats()
 	var start time.Time
@@ -160,7 +173,7 @@ func (b *ZipfSetBits) Run(ctx context.Context) map[string]interface{} {
 		bitmapID := b.bitmapPerm.Next(int64(bitmapIDOriginal))
 		profID := b.profilePerm.Next(int64(profIDOriginal))
 
-		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+int64(bitmapID), b.BaseProfileID+int64(profID))
+		query := fmt.Sprintf("%s(%d, 'frame.n', %d)", operation, b.BaseBitmapID+int64(bitmapID), b.BaseProfileID+int64(profID))
 		start = time.Now()
 		_, err := b.client.ExecuteQuery(ctx, b.DB, query, true)
 		if err != nil {
