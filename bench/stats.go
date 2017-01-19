@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// Stats object helps track timing stats.
 type Stats struct {
 	Min            time.Duration
 	Max            time.Duration
@@ -16,6 +17,7 @@ type Stats struct {
 	SaveAll        bool
 }
 
+// NewStats gets a Stats object.
 func NewStats() *Stats {
 	return &Stats{
 		Min: 1<<63 - 1,
@@ -23,6 +25,7 @@ func NewStats() *Stats {
 	}
 }
 
+// Add adds a new time to the stats object.
 func (s *Stats) Add(td time.Duration) {
 	if s.SaveAll {
 		s.All = append(s.All, td)
@@ -43,10 +46,13 @@ func (s *Stats) Add(td time.Duration) {
 	s.sumSquareDelta += float64(delta * (td - s.Mean))
 }
 
+// Avg returns the average of all durations Added to the Stats object.
 func (s *Stats) Avg() time.Duration {
 	return s.Total / time.Duration(s.Num)
 }
 
+// AddToResults serializes the summary of Stats and adds them to the results
+// map.
 func AddToResults(s *Stats, results map[string]interface{}) {
 	results["min"] = s.Min
 	results["max"] = s.Max

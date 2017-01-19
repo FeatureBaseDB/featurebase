@@ -20,14 +20,23 @@ type DiagonalSetBits struct {
 	DB            string `json:"db"`
 }
 
+// Init sets up the pilosa client and modifies the configured values based on
+// the agent num.
 func (b *DiagonalSetBits) Init(hosts []string, agentNum int) error {
 	b.Name = "diagonal-set-bits"
+	b.BaseBitmapID = b.BaseBitmapID + (agentNum * b.Iterations)
+	b.BaseProfileID = b.BaseProfileID + (agentNum * b.Iterations)
 	return b.HasClient.Init(hosts, agentNum)
 }
 
+// Usage returns the usage message to be printed.
 func (b *DiagonalSetBits) Usage() string {
 	return `
 diagonal-set-bits sets bits with increasing profile id and bitmap id.
+
+Agent num offsets both the base profile id and base bitmap id by the number of
+iterations, so that only bits on the main diagonal are set, and agents don't
+overlap at all.
 
 Usage: diagonal-set-bits [arguments]
 
@@ -51,6 +60,9 @@ The following arguments are available:
 `[1:]
 }
 
+// ConsumeFlags parses all flags up to the next non flag argument (argument does
+// not start with "-" and isn't the value of a flag). It returns the remaining
+// args.
 func (b *DiagonalSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("DiagonalSetBits", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
@@ -67,17 +79,16 @@ func (b *DiagonalSetBits) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Run runs the DiagonalSetBits benchmark
-func (b *DiagonalSetBits) Run(ctx context.Context, agentNum int) map[string]interface{} {
+func (b *DiagonalSetBits) Run(ctx context.Context) map[string]interface{} {
 	results := make(map[string]interface{})
 	if b.client == nil {
-		results["error"] = fmt.Errorf("No client set for DiagonalSetBits agent: %v", agentNum)
+		results["error"] = fmt.Errorf("No client set for DiagonalSetBits")
 		return results
 	}
 	s := NewStats()
 	var start time.Time
 	for n := 0; n < b.Iterations; n++ {
-		iterID := agentizeNum(n, b.Iterations, agentNum)
-		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+iterID, b.BaseProfileID+iterID)
+		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+n, b.BaseProfileID+n)
 		start = time.Now()
 		_, err := b.client.ExecuteQuery(ctx, b.DB, query, true)
 		if err != nil {
