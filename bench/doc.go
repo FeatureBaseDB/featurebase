@@ -9,7 +9,7 @@
 // When writing a new benchmark, there are a few things to keep in mind other
 // than just implementing the interface:
 //
-// 1. The benchmark should modify it's own configuration in its Init method based
+// 1. The benchmark should modify its own configuration in its Init method based
 // on the agentNum it is given. How it modifies is specific to the benchmark,
 // but the idea is that it should make sense to call the benchmark with the same
 // configuration, but multiple different agent numbers, and it should do useful
