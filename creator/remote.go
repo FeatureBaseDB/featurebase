@@ -96,7 +96,7 @@ func (c *RemoteCluster) Start() error {
 		}
 		err = w.Close()
 		if err != nil {
-			return err
+			return fmt.Errorf("closing config writer: %v", err)
 		}
 
 		// Start pilosa on remote host
