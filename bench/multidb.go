@@ -19,15 +19,19 @@ type MultiDBSetBits struct {
 	Database      string `json:"database"`
 }
 
+// Init sets up the db name based on the agentNum and sets up the pilosa client.
 func (b *MultiDBSetBits) Init(hosts []string, agentNum int) error {
 	b.Name = "multi-db-set-bits"
 	b.Database = b.Database + strconv.Itoa(agentNum)
 	return b.HasClient.Init(hosts, agentNum)
 }
 
+// Usage returns the usage message to be printed.
 func (b *MultiDBSetBits) Usage() string {
 	return `
 multi-db-set-bits sets bits with increasing profile id and bitmap id using a different DB for each agent.
+
+Agent num changes the database being written to.
 
 Usage: multi-db-set-bits [arguments]
 
@@ -48,6 +52,9 @@ The following arguments are available:
 `[1:]
 }
 
+// ConsumeFlags parses all flags up to the next non flag argument (argument does
+// not start with "-" and isn't the value of a flag). It returns the remaining
+// args.
 func (b *MultiDBSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("MultiDBSetBits", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)

@@ -23,15 +23,19 @@ type RandomQuery struct {
 	DBs           []string `json:"dbs"`
 }
 
+// Init adds the agent num to the random seed and initializes the client.
 func (b *RandomQuery) Init(hosts []string, agentNum int) error {
 	b.Name = "random-query"
 	b.Seed = b.Seed + int64(agentNum)
 	return b.HasClient.Init(hosts, agentNum)
 }
 
+// Usage returns the usage message to be printed.
 func (b *RandomQuery) Usage() string {
 	return `
 random-query constructs random queries
+
+Agent number modifies the random seed.
 
 Usage: random-query [arguments]
 
@@ -66,6 +70,9 @@ The following arguments are available:
 `[1:]
 }
 
+// ConsumeFlags parses all flags up to the next non flag argument (argument does
+// not start with "-" and isn't the value of a flag). It returns the remaining
+// args.
 func (b *RandomQuery) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("RandomQuery", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)

@@ -6,6 +6,7 @@ import (
 	"github.com/pilosa/pilosa/pql"
 )
 
+// NewQueryGenerator initializes a new QueryGenerator
 func NewQueryGenerator(seed int64) *QueryGenerator {
 	return &QueryGenerator{
 		IDToFrameFn: func(id uint64) string { return "frame.n" },
@@ -14,12 +15,15 @@ func NewQueryGenerator(seed int64) *QueryGenerator {
 	}
 }
 
+// QueryGenerator holds the configuration and state for randomly generating
+// queries.
 type QueryGenerator struct {
 	IDToFrameFn func(id uint64) string
 	R           *rand.Rand
 	Frames      []string
 }
 
+// Random returns a randomly generated query.
 func (q *QueryGenerator) Random(maxN, depth, maxargs int, idmin, idmax uint64) pql.Call {
 	// TODO: handle depth==1 or 0
 	val := q.R.Intn(5)
@@ -31,6 +35,7 @@ func (q *QueryGenerator) Random(maxN, depth, maxargs int, idmin, idmax uint64) p
 	}
 }
 
+// RandomTopN returns a randomly generated TopN query.
 func (q *QueryGenerator) RandomTopN(maxN, depth, maxargs int, idmin, idmax uint64) *pql.TopN {
 	frameIdx := q.R.Intn(len(q.Frames))
 	return &pql.TopN{
@@ -40,6 +45,7 @@ func (q *QueryGenerator) RandomTopN(maxN, depth, maxargs int, idmin, idmax uint6
 	}
 }
 
+// RandomBitmapCall returns a randomly generate query which is a pql.BitmapCall.
 func (q *QueryGenerator) RandomBitmapCall(depth, maxargs int, idmin, idmax uint64) pql.BitmapCall {
 	if depth <= 1 {
 		bitmapID := q.R.Int63n(int64(idmax)-int64(idmin)) + int64(idmin)

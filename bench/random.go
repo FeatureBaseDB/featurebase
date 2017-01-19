@@ -24,15 +24,19 @@ type RandomSetBits struct {
 	DB             string `json:"db"`
 }
 
+// Init adds the agent num to the random seed and initializes the client.
 func (b *RandomSetBits) Init(hosts []string, agentNum int) error {
 	b.Name = "random-set-bits"
 	b.Seed = b.Seed + int64(agentNum)
 	return b.HasClient.Init(hosts, agentNum)
 }
 
+// Usage returns the usage message to be printed.
 func (b *RandomSetBits) Usage() string {
 	return `
 random-set-bits sets random bits
+
+Agent number modifies the random seed.
 
 Usage: random-set-bits [arguments]
 
@@ -64,6 +68,9 @@ The following arguments are available:
 `[1:]
 }
 
+// ConsumeFlags parses all flags up to the next non flag argument (argument does
+// not start with "-" and isn't the value of a flag). It returns the remaining
+// args.
 func (b *RandomSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("RandomSetBits", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)

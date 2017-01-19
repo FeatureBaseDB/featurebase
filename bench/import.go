@@ -13,6 +13,7 @@ import (
 	"github.com/pilosa/pilosa/pilosactl"
 )
 
+// NewImport returns an Import Benchmark which pilosactl importer configured.
 func NewImport(stdin io.Reader, stdout, stderr io.Writer) *Import {
 	return &Import{
 		ImportCommand: pilosactl.NewImportCommand(stdin, stdout, stderr),
@@ -36,9 +37,12 @@ type Import struct {
 	*pilosactl.ImportCommand
 }
 
+// Usage returns the usage message to be printed.
 func (b *Import) Usage() string {
 	return `
 import generates an import file and imports using pilosa's bulk import interface
+
+Agent num can have various effects - see -agent-controls flag.
 
 Usage: import [arguments]
 
@@ -81,6 +85,9 @@ The following arguments are available:
 `[1:]
 }
 
+// ConsumeFlags parses all flags up to the next non flag argument (argument does
+// not start with "-" and isn't the value of a flag). It returns the remaining
+// args.
 func (b *Import) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("Import", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
@@ -103,6 +110,7 @@ func (b *Import) ConsumeFlags(args []string) ([]string, error) {
 	return fs.Args(), nil
 }
 
+// Init generates import data based on the agent num and fields of 'b'.
 func (b *Import) Init(hosts []string, agentNum int) error {
 	if len(hosts) == 0 {
 		return fmt.Errorf("Need at least one host")
@@ -151,12 +159,14 @@ func (b *Import) Run(ctx context.Context) map[string]interface{} {
 	return results
 }
 
+// Int64Slice is a sortable slice of 64 bit signed ints
 type Int64Slice []int64
 
 func (s Int64Slice) Len() int           { return len(s) }
 func (s Int64Slice) Less(i, j int) bool { return s[i] < s[j] }
 func (s Int64Slice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
+// GenerateImportCSV writes a generated csv to 'w' which is in the form pilosactl expects for imports.
 func GenerateImportCSV(w io.Writer, baseBitmapID, maxBitmapID, baseProfileID, maxProfileID, minBitsPerMap, maxBitsPerMap, seed int64, randomOrder bool) int {
 	src := rand.NewSource(seed)
 	rng := rand.New(src)
