@@ -225,9 +225,11 @@ $ go install --ldflags="-X main.Version=1.0.0"
 
 ## Pilosactl
 
+Pilosactl contains a suite of tools for interacting with pilosa. Run `pilosactl` for an overview of commands, and `pilosactl <command> -h` for specific information on that command.
+
 ### Create
 
-`pilosactl create` is used to create pilosa clusters. It has a number of options for controlling how the cluster is configured, what hosts it is on, and even the ability to build the pilosa binary locally and copy it to each cluster node automatically. To start pilosa on remote hosts, you only need `ssh` access to those hosts. See `pilosactl -h` for a full list of options.
+`pilosactl create` is used to create pilosa clusters. It has a number of options for controlling how the cluster is configured, what hosts it is on, and even the ability to build the pilosa binary locally and copy it to each cluster node automatically. To start pilosa on remote hosts, you only need `ssh` access to those hosts. See `pilosactl create -h` for a full list of options.
 
 Examples:
 
