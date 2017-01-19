@@ -12,6 +12,8 @@ import (
 	"github.com/pilosa/pilosa/pql"
 )
 
+// NewSliceHeight creates a new slice height benchmark with stdin/out/err
+// initialized.
 func NewSliceHeight(stdin io.Reader, stdout, stderr io.Writer) *SliceHeight {
 	return &SliceHeight{
 		Stdin:  stdin,
@@ -38,9 +40,12 @@ type SliceHeight struct {
 	Stderr io.Writer `json:"-"`
 }
 
+// Usage returns the usage message to be printed.
 func (b *SliceHeight) Usage() string {
 	return `
 slice-height repeatedly imports more bitmaps into a single slice and tests query times in between.
+
+Agent number has no effect on this benchmark.
 
 Usage: slice-height [arguments]
 
@@ -66,6 +71,9 @@ The following arguments are available:
 `[1:]
 }
 
+// ConsumeFlags parses all flags up to the next non flag argument (argument does
+// not start with "-" and isn't the value of a flag). It returns the remaining
+// args.
 func (b *SliceHeight) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("SliceHeight", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
@@ -84,6 +92,7 @@ func (b *SliceHeight) ConsumeFlags(args []string) ([]string, error) {
 	return fs.Args(), nil
 }
 
+// Init sets up the slice height benchmark.
 func (b *SliceHeight) Init(hosts []string, agentNum int) error {
 	b.Name = "slice-height"
 	b.hosts = hosts
@@ -91,7 +100,7 @@ func (b *SliceHeight) Init(hosts []string, agentNum int) error {
 }
 
 // Run runs the SliceHeight benchmark
-func (b *SliceHeight) Run(ctx context.Context, agentNum int) map[string]interface{} {
+func (b *SliceHeight) Run(ctx context.Context) map[string]interface{} {
 	results := make(map[string]interface{})
 
 	imp := NewImport(b.Stdin, b.Stdout, b.Stderr)
@@ -109,11 +118,11 @@ func (b *SliceHeight) Run(ctx context.Context, agentNum int) map[string]interfac
 		results["iteration"+strconv.Itoa(i)] = iresults
 
 		genstart := time.Now()
-		imp.Init(b.hosts, agentNum)
+		imp.Init(b.hosts, 0)
 		gendur := time.Now().Sub(genstart)
 		iresults["csvgen"] = gendur
 
-		iresults["import"] = imp.Run(ctx, agentNum)
+		iresults["import"] = imp.Run(ctx)
 
 		qstart := time.Now()
 		q := &pql.TopN{Frame: b.Frame, N: 50}

@@ -35,6 +35,7 @@ type ZipfSetBits struct {
 	profilePerm     *PermutationGenerator
 }
 
+// Usage returns the usage message to be printed.
 func (b *ZipfSetBits) Usage() string {
 	return `
 zipf-set-bits sets random bits according to the Zipf distribution.
@@ -43,6 +44,8 @@ Exponent, in the range (1, inf), with a default value of 1.001, controls
 the "sharpness" of the distribution, with higher exponent being sharper.
 Ratio, in the range (0, 1), with a default value of 0.25, controls the
 maximum variation of the distribution, with higher ratio being more uniform.
+
+Agent number modifies random seed.
 
 Usage: zipf-set-bits [arguments]
 
@@ -86,6 +89,9 @@ The following arguments are available:
 `[1:]
 }
 
+// ConsumeFlags parses all flags up to the next non flag argument (argument does
+// not start with "-" and isn't the value of a flag). It returns the remaining
+// args.
 func (b *ZipfSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("ZipfSetBits", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
@@ -120,9 +126,12 @@ func getZipfOffset(N int64, exp, ratio float64) float64 {
 	return z * float64(N-1) / (1 - z)
 }
 
+// Init sets up the benchmark based on the agent number and initializes the
+// client.
 func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
 	b.Name = "zipf-set-bits"
-	rnd := rand.New(rand.NewSource(b.Seed + int64(agentNum)))
+	b.Seed = b.Seed + int64(agentNum)
+	rnd := rand.New(rand.NewSource(b.Seed))
 	bitmapOffset := getZipfOffset(b.BitmapIDRange, b.BitmapExponent, b.BitmapRatio)
 	b.bitmapRng = rand.NewZipf(rnd, b.BitmapExponent, bitmapOffset, uint64(b.BitmapIDRange-1))
 	profileOffset := getZipfOffset(b.ProfileIDRange, b.ProfileExponent, b.ProfileRatio)
@@ -135,10 +144,10 @@ func (b *ZipfSetBits) Init(hosts []string, agentNum int) error {
 }
 
 // Run runs the ZipfSetBits benchmark
-func (b *ZipfSetBits) Run(ctx context.Context, agentNum int) map[string]interface{} {
+func (b *ZipfSetBits) Run(ctx context.Context) map[string]interface{} {
 	results := make(map[string]interface{})
 	if b.client == nil {
-		results["error"] = fmt.Errorf("No client set for ZipfSetBits agent: %v", agentNum)
+		results["error"] = fmt.Errorf("No client set for ZipfSetBits")
 		return results
 	}
 	s := NewStats()
