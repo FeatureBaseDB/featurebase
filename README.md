@@ -262,7 +262,9 @@ pilosactl create \
 
 E.G.
 ```
-pilosactl bagent import -h
+pilosactl bagent \
+  -hosts="localhost:15000,localhost:15001" \
+  import -h
 ```
 
 Multiple subcommands and their arguments may be concatenated at the command line and they will be run serially. This is useful (i.e.) for importing a bunch of data, and then executing queries against it.
@@ -270,8 +272,9 @@ Multiple subcommands and their arguments may be concatenated at the command line
 This will generate and import a bunch of data, and then execute random queries against it.
 
 ```
-pilosactl bagent import \
-  -max-bits-per-map=10000 \
+pilosactl bagent \
+  -hosts="localhost:15000,localhost:15001" \
+  import -max-bits-per-map=10000 \
   random-query -iterations 100
 ```
 
