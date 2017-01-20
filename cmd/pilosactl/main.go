@@ -1248,6 +1248,8 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 			bm = bench.NewImport(cmd.Stdin, cmd.Stdout, cmd.Stderr)
 		case "slice-height":
 			bm = bench.NewSliceHeight(cmd.Stdin, cmd.Stdout, cmd.Stderr)
+		case "random-pql":
+			bm = &bench.RandomPql{}
 		default:
 			return fmt.Errorf("Unknown benchmark cmd: %v", remArgs[0])
 		}
