@@ -193,7 +193,7 @@ func (m *Main) ParseFlags(args []string) error {
 	return nil
 }
 
-// LoadEnvConfig loads configuration from environment variables
+// loadEnvConfig loads configuration from environment variables
 func (m *Main) loadEnvConfig() {
 	envStringVar(&m.Config.DataDir, "DATA_DIR")
 	envStringVar(&m.Config.Host, "HOST")
