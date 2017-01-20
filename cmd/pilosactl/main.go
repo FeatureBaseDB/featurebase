@@ -1238,8 +1238,8 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 			bm = &bench.DiagonalSetBits{}
 		case "random-set-bits":
 			bm = &bench.RandomSetBits{}
-		case "zipf-set-bits":
-			bm = &bench.ZipfSetBits{}
+		case "zipf":
+			bm = &bench.Zipf{}
 		case "multi-db-set-bits":
 			bm = &bench.MultiDBSetBits{}
 		case "random-query":
@@ -1287,7 +1287,7 @@ The following flags are allowed:
 	subcommands:
 		diagonal-set-bits
 		random-set-bits
-		zipf-set-bits
+		zipf
 		multi-db-set-bits
 		random-query
 		import

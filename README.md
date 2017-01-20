@@ -290,7 +290,7 @@ The configuration file is a json object with the top level key `benchmarks`. Thi
         {
             "num": 2,
             "name": "rand-plus-zipf",
-            "args": ["random-set-bits", "-iterations", "20000", "zipf-set-bits", "-iterations", "100"]
+            "args": ["random-set-bits", "-iterations", "20000", "zipf", "-iterations", "100"]
         }
     ]
 }
