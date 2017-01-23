@@ -6,6 +6,8 @@ For bugs, please provide the following:
 
 ### Steps to reproduce the behavior
 
+### Information about your environment (OS, CPU, RAM, etc.)
+
 
 For feature requests, please provide the following:
 
