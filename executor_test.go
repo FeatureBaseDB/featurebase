@@ -70,6 +70,27 @@ func TestExecutor_Execute_Intersect(t *testing.T) {
 	}
 }
 
+// Ensure a profile query can be executed.
+func TestExecutor_Execute_Profile(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustCreateDBIfNotExists("d").MustSetBit("f", 3, 10, nil)
+	idx.MustCreateDBIfNotExists("d").MustSetBit("f", SliceWidth+1, 10, nil)
+
+	if err := idx.DB("d").ProfileAttrStore().SetAttrs(10, map[string]interface{}{"foo": "bar"}); err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if res, err := e.Execute(context.Background(), "d", MustParse(`Profile(id=10, frame=f)`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
+		t.Fatalf("unexpected bits: %+v", bits)
+	} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar"}) {
+		t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+	}
+}
+
 // Ensure a union query can be executed.
 func TestExecutor_Execute_Union(t *testing.T) {
 	idx := MustOpenIndex()

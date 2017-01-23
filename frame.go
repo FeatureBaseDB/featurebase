@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/gogo/protobuf/proto"
@@ -16,6 +17,13 @@ import (
 const (
 	// FrameSuffixRank is the suffix used for rank-based frames.
 	FrameSuffixRank = ".n"
+
+	// FrameSuffixDelimiter is used to delimit all special frame options.
+	// This is used by inverted frames and time-based frames.
+	FrameSuffixDelimiter = "::"
+
+	// InvertedFrameSuffix is the suffix of frames with inverted rows/columns.
+	InvertedFrameSuffix = FrameSuffixDelimiter + "I"
 )
 
 // Frame represents a container for fragments.
@@ -318,3 +326,13 @@ type frameInfoSlice []*FrameInfo
 func (p frameInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p frameInfoSlice) Len() int           { return len(p) }
 func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
+
+// FrameBase returns the base frame with all special options removed.
+//
+// For example, an inverted frame called "myframe::I" will return "myframe".
+func FrameBase(name string) string {
+	if i := strings.Index(name, FrameSuffixDelimiter); i != -1 {
+		return name[:i]
+	}
+	return name
+}
