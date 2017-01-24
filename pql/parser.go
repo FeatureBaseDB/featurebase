@@ -352,18 +352,7 @@ func (p *Parser) parseSetBitCall() (*SetBit, error) {
 				return nil, parseErrorf(pos, "profileID: %s", err)
 			}
 		case 3, "timestamp":
-			var ts string
-			if err := decodeString(arg.value, &ts); err == nil {
-				layout := "2006-01-02 15:04:05"
-				if strings.Contains(ts, "T") {
-					layout = "2006-01-02T15:04:05"
-				}
-				t, err := time.Parse(layout, ts)
-				if err != nil {
-					return nil, parseErrorf(pos, "timestamp: %s", err)
-				}
-				c.Timestamp = &t
-			} else {
+			if err := decodeDate(arg.value, c.Timestamp); err == nil {
 				return nil, parseErrorf(pos, "timestamp: %s", err)
 			}
 		default:
