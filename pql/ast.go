@@ -212,7 +212,7 @@ type SetBit struct {
 
 // String returns the string representation of the call.
 func (c *SetBit) String() string {
-	args := make([]string, 0, 3)
+	args := make([]string, 0, 4)
 	args = append(args, fmt.Sprintf("id=%d", c.ID))
 	if c.Frame != "" {
 		args = append(args, fmt.Sprintf("frame=%s", c.Frame))
