@@ -358,7 +358,6 @@ func (p *Parser) parseSetBitCall() (*SetBit, error) {
 				if strings.Contains(ts, "T") {
 					layout = "2006-01-02T15:04:05"
 				}
-
 				t, err := time.Parse(layout, ts)
 				if err != nil {
 					return nil, parseErrorf(pos, "timestamp: %s", err)
