@@ -221,8 +221,7 @@ func TestParser_Parse_SetBit_Key(t *testing.T) {
 
 // Ensure the parser can parse a "SetBit()" function with keyed args including a timestamp.
 func TestParser_Parse_SetBit_Key_With_Timestamp(t *testing.T) {
-	var targetTimestamp time.Time
-	targetTimestamp, _ = time.Parse("2006-01-02T15:04:05", "2016-12-11T10:09:07")
+	targetTimestamp, _ := time.Parse("2006-01-02T15:04:05", "2016-12-11T10:09:07")
 	q, err := pql.ParseString(`SetBit(id=1, frame="b.n", profileID = 3, timestamp="2016-12-11T10:09:07")`)
 	if err != nil {
 		t.Fatal(err)
@@ -251,6 +250,26 @@ func TestParser_Parse_SetBit_Array(t *testing.T) {
 				ID:        1,
 				Frame:     "b.n",
 				ProfileID: 3,
+			},
+		},
+	}) {
+		t.Fatalf("unexpected query: %s", spew.Sdump(q))
+	}
+}
+
+// Ensure the parser can parse a "SetBit()" function with array args including a timestamp.
+func TestParser_Parse_SetBit_Array_With_Timestamp(t *testing.T) {
+	targetTimestamp, _ := time.Parse("2006-01-02T15:04:05", "2016-12-11T10:09:07")
+	q, err := pql.ParseString(`SetBit(1, "b.n", 3, "2016-12-11T10:09:07")`)
+	if err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(q, &pql.Query{
+		Calls: pql.Calls{
+			&pql.SetBit{
+				ID:        1,
+				Frame:     "b.n",
+				ProfileID: 3,
+				Timestamp: &targetTimestamp,
 			},
 		},
 	}) {
