@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
@@ -425,7 +424,7 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.SetBit, 
 			if err != nil {
 				return false, fmt.Errorf("db: %s", err)
 			}
-			val, err := db.SetBit(c.Frame, c.ID, c.ProfileID, opt.Timestamp)
+			val, err := db.SetBit(c.Frame, c.ID, c.ProfileID, c.Timestamp)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -598,9 +597,6 @@ func (e *Executor) exec(ctx context.Context, node *Node, db string, q *pql.Query
 		Query:  q.String(),
 		Slices: slices,
 		Remote: true,
-	}
-	if opt.Timestamp != nil {
-		pbreq.Timestamp = opt.Timestamp.UnixNano()
 	}
 	buf, err := proto.Marshal(pbreq)
 	if err != nil {
@@ -850,8 +846,7 @@ type mapResponse struct {
 
 // ExecOptions represents an execution context for a single Execute() call.
 type ExecOptions struct {
-	Timestamp *time.Time
-	Remote    bool
+	Remote bool
 }
 
 // decodeError returns an error representation of s if s is non-blank.

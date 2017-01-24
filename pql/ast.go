@@ -207,17 +207,22 @@ type SetBit struct {
 	ID        uint64
 	Frame     string
 	ProfileID uint64
+	Timestamp *time.Time
 }
 
 // String returns the string representation of the call.
 func (c *SetBit) String() string {
-	args := make([]string, 0, 2)
+	args := make([]string, 0, 3)
 	args = append(args, fmt.Sprintf("id=%d", c.ID))
 	if c.Frame != "" {
 		args = append(args, fmt.Sprintf("frame=%s", c.Frame))
 	}
 	if c.ProfileID != 0 {
 		args = append(args, fmt.Sprintf("profileID=%d", c.ProfileID))
+	}
+	if c.Timestamp != nil {
+		layout := "2006-01-02T15:04:05"
+		args = append(args, fmt.Sprintf("timestamp=%s", c.Timestamp.Format(layout)))
 	}
 	return fmt.Sprintf("SetBit(%s)", strings.Join(args, ", "))
 }
