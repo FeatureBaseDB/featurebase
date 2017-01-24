@@ -1,17 +1,14 @@
 {
-    "CreatorArgs": ["-hosts=localhost:19444,localhost:19445,localhost:19446", "-log-file-prefix", "asdfe"],
-    "AgentHosts": [],
-    "SSHUser": "nikolai-von-havlenhoken",
-    "Benchmarks": [
+    "benchmarks": [
         {
-            "Num": 3,
-            "Name": "set-diags",
-            "Args": ["diagonal-set-bits", "-iterations", "30000", "-client-type", "round_robin"]
+            "num": 3,
+            "name": "set-diags",
+            "args": ["diagonal-set-bits", "-iterations", "30000", "-client-type", "round_robin"]
         },
         {
-            "Num": 2,
-            "Name": "rand-plus-zipf",
-            "Args": ["random-set-bits", "-iterations", "20000", "zipf-set-bits", "-iterations", "100"]
+            "num": 2,
+            "name": "rand-plus-zipf",
+            "args": ["random-set-bits", "-iterations", "20000", "zipf", "-iterations", "100"]
         }
     ]
 }

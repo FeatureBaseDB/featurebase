@@ -97,7 +97,7 @@ func NewFragment(path, db, frame string, slice uint64) *Fragment {
 		frame: frame,
 		slice: slice,
 
-		LogOutput: os.Stderr,
+		LogOutput: ioutil.Discard,
 		MaxOpN:    DefaultFragmentMaxOpN,
 
 		stats: NopStatsClient,
@@ -861,7 +861,7 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			// no real danger
 			if i == 0 || bitmapID != lastID {
 				lastID = bitmapID
-					set[bitmapID] = struct{}{}
+				set[bitmapID] = struct{}{}
 			}
 			if changed {
 				bmCounter += 1

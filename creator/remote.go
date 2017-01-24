@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path"
 	"strconv"
 	"sync"
 
@@ -11,7 +12,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/pilosactl"
+	"github.com/pilosa/pilosa/build"
+	pssh "github.com/pilosa/pilosa/ssh"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -22,6 +24,9 @@ type RemoteCluster struct {
 	Keyfile      string
 	Key          []byte
 	GoMaxProcs   int
+	CopyBinary   bool
+	GOOS         string
+	GOARCH       string
 	Stderr       io.Writer
 	wg           *sync.WaitGroup
 	logs         []io.Reader
@@ -38,8 +43,27 @@ func (c *RemoteCluster) Start() error {
 	if len(c.ClusterHosts) == 0 {
 		return fmt.Errorf("no type or hosts specified - cannot continue")
 	}
-	// TODO: build pilosa
-	// TODO: copy binary to hosts
+
+	fleet, err := pssh.NewFleet(c.ClusterHosts, c.SSHUser, c.Keyfile, c.Stderr)
+	if err != nil {
+		return fmt.Errorf("connecting to cluster hosts: %v", err)
+	}
+	if c.CopyBinary {
+		fmt.Fprintf(c.Stderr, "create: building pilosa binary with GOOS=%v and GOARCH=%v to copy to hosts", c.GOOS, c.GOARCH)
+
+		pkg := "github.com/pilosa/pilosa/cmd/pilosa"
+		bin, err := build.Binary(pkg, c.GOOS, c.GOARCH)
+		if err != nil {
+			return fmt.Errorf("building binary: %v", err)
+		}
+
+		err = fleet.WriteFile(path.Base(pkg), "+x", bin)
+		if err != nil {
+			return fmt.Errorf("writing binary to fleet: %v", err)
+		}
+
+	}
+
 	// build config
 	conf := pilosa.NewConfigForHosts(c.ClusterHosts)
 	conf.Cluster.ReplicaN = c.ReplicaN
@@ -51,15 +75,15 @@ func (c *RemoteCluster) Start() error {
 		// Set up config for this host
 		host, port, err := net.SplitHostPort(hostport)
 		if err != nil {
-			return err
+			return fmt.Errorf("splitting hostport: %v", err)
 		}
 		conf.Host = hostport
 		conf.DataDir = "~/.pilosa" + port
 
-		// Connect to remote host
-		client, err := pilosactl.NewSSH(host, c.SSHUser, "", c.Stderr)
+		// Get client for host
+		client, err := fleet.Get(host)
 		if err != nil {
-			return err
+			return fmt.Errorf("connecting to host: %v", err)
 		}
 		configname := "pilosa" + port + ".conf"
 		w, err := client.OpenFile(configname, "")
@@ -73,7 +97,7 @@ func (c *RemoteCluster) Start() error {
 		}
 		err = w.Close()
 		if err != nil {
-			return err
+			return fmt.Errorf("closing config writer: %v", err)
 		}
 
 		// Start pilosa on remote host
@@ -109,7 +133,7 @@ func (c *RemoteCluster) Start() error {
 			gomaxprocsString = "GOMAXPROCS=" + strconv.Itoa(c.GoMaxProcs) + " "
 		}
 
-		err = sess.Start(gomaxprocsString + "pilosa -config " + configname)
+		err = sess.Start("PATH=.:$PATH " + gomaxprocsString + "pilosa -config " + configname)
 		if err != nil {
 			return err
 		}
@@ -118,7 +142,7 @@ func (c *RemoteCluster) Start() error {
 			defer c.wg.Done()
 			err = sess.Wait()
 			if err != nil {
-				fmt.Fprintf(c.Stderr, "problem with remote pilosa process: %v", err)
+				fmt.Fprintf(c.Stderr, "problem with remote pilosa process: %v\n", err)
 			}
 		}()
 	}

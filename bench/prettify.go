@@ -5,6 +5,8 @@ import "time"
 // wrapper type to force human-readable JSON output
 type PrettyDuration time.Duration
 
+// MarshalJSON returns a nicely formatted duration, instead of it just being
+// treated like an int.
 func (d PrettyDuration) MarshalJSON() ([]byte, error) {
 	s := time.Duration(d).String()
 	return []byte("\"" + s + "\""), nil

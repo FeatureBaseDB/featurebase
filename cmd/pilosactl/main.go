@@ -27,9 +27,11 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/bench"
+	"github.com/pilosa/pilosa/build"
 	"github.com/pilosa/pilosa/creator"
 	"github.com/pilosa/pilosa/pilosactl"
 	"github.com/pilosa/pilosa/roaring"
+	pssh "github.com/pilosa/pilosa/ssh"
 
 	"github.com/satori/go.uuid"
 	"golang.org/x/crypto/ssh"
@@ -992,19 +994,27 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 
 // CreateCommand represents a command for creating a pilosa cluster.
 type CreateCommand struct {
-	Type          string
-	ServerN       int
-	ReplicaN      int
-	LogFilePrefix string
-	Hosts         []string
-	GoMaxProcs    int
+	ServerN       int      `json:"serverN"`
+	ReplicaN      int      `json:"replicaN"`
+	LogFilePrefix string   `json:"log-file-prefix"`
+	Hosts         []string `json:"hosts"`
+	GoMaxProcs    int      `json:"gomaxprocs"`
 
-	SSHUser string
+	SSHUser string `json:"ssh-user"`
+
+	CopyBinary bool   `json:"copy-binary"`
+	GOOS       string `json:"goos"`
+	GOARCH     string `json:"goarch"`
+
+	// The following are set by CreateCommand.Run once they are known and exist
+	// to appear in the output
+	LogFiles   []string `json:"log-files"`
+	FinalHosts []string `json:"final-hosts"`
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	Stdin  io.Reader `json:"-"`
+	Stdout io.Writer `json:"-"`
+	Stderr io.Writer `json:"-"`
 }
 
 // NewCreateCommand returns a new instance of CreateCommand.
@@ -1020,7 +1030,6 @@ func NewCreateCommand(stdin io.Reader, stdout, stderr io.Writer) *CreateCommand 
 func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Type, "type", "", "")
 	fs.IntVar(&cmd.ServerN, "serverN", 3, "")
 	fs.IntVar(&cmd.ReplicaN, "replicaN", 1, "")
 	fs.StringVar(&cmd.LogFilePrefix, "log-file-prefix", "", "")
@@ -1028,11 +1037,18 @@ func (cmd *CreateCommand) ParseFlags(args []string) error {
 	fs.IntVar(&cmd.GoMaxProcs, "gomaxprocs", 0, "")
 	fs.StringVar(&hosts, "hosts", "", "")
 	fs.StringVar(&cmd.SSHUser, "ssh-user", "", "")
+	fs.BoolVar(&cmd.CopyBinary, "copy-binary", false, "")
+	fs.StringVar(&cmd.GOOS, "goos", "linux", "")
+	fs.StringVar(&cmd.GOARCH, "goarch", "amd64", "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cmd.Hosts = strings.Split(hosts, ",")
+	if len(fs.Args()) > 0 {
+		fmt.Fprintf(cmd.Stderr, "Uknown args: %v\n", strings.Join(fs.Args(), " "))
+		return flag.ErrHelp
+	}
+	cmd.Hosts = customSplit(hosts, ",")
 	return nil
 }
 
@@ -1041,65 +1057,67 @@ func (cmd *CreateCommand) Usage() string {
 	return strings.TrimSpace(`
 usage: pilosactl create [args]
 
-Creates a cluster based on the arguments.
+Creates a pilosa cluster. Defaults to a 3-node in-process cluster.
 
 The following flags are allowed:
 
-	-type
-		type of cluster - local, AWS, etc.
-
 	-serverN
-		number of hosts in cluster
+		number of hosts in cluster. Disregarded if 'hosts' is set
 
 	-replicaN
 		replication factor for cluster
 
 	-hosts
-		Comma separated host:port list. Instead of
-		creating hosts, just start pilosa on these
-		pre-existing hosts. The same host may be
-		listed multiple times with different ports.
+		comma separated host:port list. If hosts is set, create will start
+		pilosa on these pre-existing hosts. The same host may be listed multiple
+		times with different ports
 
 	-log-file-prefix
-		output from the started cluster will go
-		into files with this prefix (one per node)
+		output from the started cluster will go into files with
+		this prefix (one per node)
 
 	-ssh-user
 		username to use when contacting remote hosts
 
 	-gomaxprocs
-		when starting a cluster on remote hosts, this
-		will set the value of GOMAXPROCS.
+		when starting a cluster on remote hosts, this will set the value
+		of GOMAXPROCS.
 
+	-copy-binary
+		controls whether or not to build and copy pilosa to hosts
+
+	-goos
+		when using copy-binary, GOOS to use while building binary
+
+	-goarch
+		when using copy-binary, GOARCH to use while building binary
 `)
-}
-
-type CreateOutput struct {
-	Hosts    []string `json:"hosts"`
-	LogFiles []string `json:"log-files"`
 }
 
 // Run executes cluster creation.
 func (cmd *CreateCommand) Run(ctx context.Context) error {
 	var clus creator.Cluster
-	switch cmd.Type {
-	case "local":
+	if len(cmd.Hosts) == 0 {
+		fmt.Fprintf(cmd.Stderr, "create: no hosts specified - creating cluster in-process\n")
 		clus = &creator.LocalCluster{
 			ReplicaN: cmd.ReplicaN,
 			ServerN:  cmd.ServerN,
 		}
-	case "AWS":
-		return fmt.Errorf("AWS cluster type is not yet implemented")
-	case "":
+	} else {
+		if cmd.ServerN != 0 {
+			fmt.Fprintf(cmd.Stderr, "create: hosts were specified, so ignoring serverN\n")
+		}
 		clus = &creator.RemoteCluster{
 			ClusterHosts: cmd.Hosts,
 			ReplicaN:     cmd.ReplicaN,
 			SSHUser:      cmd.SSHUser,
 			Stderr:       cmd.Stderr,
 			GoMaxProcs:   cmd.GoMaxProcs,
+			CopyBinary:   cmd.CopyBinary,
+			GOOS:         cmd.GOOS,
+			GOARCH:       cmd.GOARCH,
 		}
-	default:
-		return fmt.Errorf("Unknown cluster type %v", cmd.Type)
+
 	}
 
 	err := clus.Start()
@@ -1111,7 +1129,7 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for range c {
-			fmt.Fprintf(cmd.Stderr, "\ncaught signal - shutting down\n")
+			fmt.Fprintf(cmd.Stderr, "\ncreate: caught signal - shutting down\n")
 			err := clus.Shutdown()
 			code := 0
 			if err != nil {
@@ -1122,13 +1140,11 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 	}()
 
 	defer clus.Shutdown()
-	output := &CreateOutput{
-		Hosts: clus.Hosts(),
-	}
+	cmd.FinalHosts = clus.Hosts()
 
 	logReaders := clus.Logs()
 	if cmd.LogFilePrefix != "" {
-		output.LogFiles = make([]string, len(clus.Hosts()))
+		cmd.LogFiles = make([]string, len(clus.Hosts()))
 	}
 	for i, _ := range clus.Hosts() {
 		var f io.Writer = cmd.Stderr
@@ -1138,22 +1154,24 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			output.LogFiles[i] = f.(*os.File).Name()
+			cmd.LogFiles[i] = f.(*os.File).Name()
 		}
 
 		go func(i int, f io.Writer) {
 			_, err := io.Copy(f, logReaders[i])
 			if err != nil {
-				fmt.Fprintf(cmd.Stderr, "Error copying cluster logs: '%v'", err)
+				fmt.Fprintf(cmd.Stderr, "create: error copying cluster logs: '%v'\n", err)
 			}
 		}(i, f)
 	}
 
 	enc := json.NewEncoder(cmd.Stdout)
-	err = enc.Encode(output)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(cmd)
 	if err != nil {
 		return err
 	}
+	fmt.Fprintf(cmd.Stderr, "create: cluster started.\n")
 	select {}
 
 }
@@ -1206,7 +1224,7 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 	var pilosaHosts string
 	fs.StringVar(&pilosaHosts, "hosts", "localhost:15000", "")
 	fs.IntVar(&cmd.AgentNum, "agent-num", 0, "")
-	fs.BoolVar(&cmd.HumanReadable, "human", false, "")
+	fs.BoolVar(&cmd.HumanReadable, "human", true, "")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1225,8 +1243,8 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 			bm = &bench.DiagonalSetBits{}
 		case "random-set-bits":
 			bm = &bench.RandomSetBits{}
-		case "zipf-set-bits":
-			bm = &bench.ZipfSetBits{}
+		case "zipf":
+			bm = &bench.Zipf{}
 		case "multi-db-set-bits":
 			bm = &bench.MultiDBSetBits{}
 		case "random-query":
@@ -1248,7 +1266,7 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 			return fmt.Errorf("BagentCommand.ParseFlags: %v", err)
 		}
 	}
-	cmd.Hosts = strings.Split(pilosaHosts, ",")
+	cmd.Hosts = customSplit(pilosaHosts, ",")
 
 	return nil
 }
@@ -1256,27 +1274,25 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 // Usage returns the usage message to be printed.
 func (cmd *BagentCommand) Usage() string {
 	return strings.TrimSpace(`
-pilosactl bagent is a tool for running benchmarks against a pilosa cluster.
+usage: pilosactl bagent [options] <subcommand [options]>...
 
-Usage:
+Runs benchmarks against a pilosa cluster.
 
-pilosactl bagent [options] <subcommand [options]>...
+The following flags are allowed:
 
-The following arguments are available:
+	-hosts ("localhost:15000")
+		comma separated list of host:port describing all hosts in the cluster
 
-	-hosts
-		Comma separated list of host:port describing all hosts in the cluster.
+	-agent-num (0)
+		an integer differentiating this agent from others in the fleet
 
-	-agent-num N
-		An integer differentiating this agent from others in the fleet.
-
-	-human
-		Boolean to enable human-readable format.
+	-human (true)
+		boolean to enable human-readable format
 
 	subcommands:
 		diagonal-set-bits
 		random-set-bits
-		zipf-set-bits
+		zipf
 		multi-db-set-bits
 		random-query
 		import
@@ -1292,7 +1308,7 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 		return fmt.Errorf("in cmd.Run initialization: %v", err)
 	}
 
-	res := sbm.Run(ctx, cmd.AgentNum)
+	res := sbm.Run(ctx)
 	res["agent-num"] = cmd.AgentNum
 	enc := json.NewEncoder(cmd.Stdout)
 	if cmd.HumanReadable {
@@ -1303,7 +1319,6 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 	if err != nil {
 		fmt.Fprintln(cmd.Stderr, err)
 	}
-	// fmt.Fprintln(cmd.Stdout, res)
 
 	return nil
 }
@@ -1315,29 +1330,34 @@ func (cmd *BagentCommand) Run(ctx context.Context) error {
 type BspawnCommand struct {
 	// If PilosaHosts is specified, CreatorArgs is ignored and the existing
 	// cluster specified here is used.
-	PilosaHosts []string
+	PilosaHosts []string `json:"pilosa-hosts"`
 
 	// CreateCommand will be used with these arguments to create a cluster -
 	// the cluster will be used to populate the PilosaHosts field. This
 	// should include everything that comes after `pilosactl create`
-	CreatorArgs []string
+	CreatorArgs []string `json:"creator-args"`
 
 	// List of hosts to run agents on. If this is empty, agents will be run
 	// locally.
-	AgentHosts []string
-
-	// If this is true, build and copy pilosactl binary to agent hosts.
-	CopyBinary bool
+	AgentHosts []string `json:"agent-hosts"`
 
 	// Makes output human readable
-	Human bool
+	HumanReadable bool `json:"human-readable"`
+
+	// Result destination, ["stdout", "s3"]
+	Output string `json:"output"`
+
+	// If this is true, build and copy pilosactl binary to agent hosts.
+	CopyBinary bool   `json:"copy-binary"`
+	GOOS       string `json:"goos"`
+	GOARCH     string `json:"goarch"`
 
 	// Benchmarks is a slice of Spawns which specifies all of the bagent
 	// commands to run. These will all be run in parallel, started on each
 	// of the agents in a round robin fashion.
-	Benchmarks []Spawn
+	Benchmarks []Spawn `json:"benchmarks"`
 
-	SSHUser string
+	SSHUser string `json:"ssh-user"`
 
 	Stdin  io.Reader `json:"-"`
 	Stdout io.Writer `json:"-"`
@@ -1349,7 +1369,7 @@ type BspawnCommand struct {
 type Spawn struct {
 	Num  int      `json:"num"`  // number of agents to run
 	Name string   `json:"name"` // Should describe what this Spawn does
-	Args []string // everything that comes after `pilosactl bagent [arguments]`
+	Args []string `json:"args"` // everything that comes after `pilosactl bagent [arguments]`
 }
 
 // NewBspawnCommand returns a new instance of BspawnCommand.
@@ -1367,11 +1387,15 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 	fs.SetOutput(ioutil.Discard)
 	creatorHosts := fs.String("creator.hosts", "", "")
 	creatorLFP := fs.String("creator.log-file-prefix", "", "")
+	creatorCopyBinary := fs.Bool("creator.copy-binary", false, "")
 	pilosaHosts := fs.String("pilosa-hosts", "", "")
 	agentHosts := fs.String("agent-hosts", "", "")
 	sshUser := fs.String("ssh-user", "", "")
-	fs.BoolVar(&cmd.Human, "human", false, "")
+	fs.BoolVar(&cmd.HumanReadable, "human", true, "")
+	fs.StringVar(&cmd.Output, "output", "stdout", "")
 	fs.BoolVar(&cmd.CopyBinary, "copy-binary", false, "")
+	fs.StringVar(&cmd.GOOS, "goos", "linux", "")
+	fs.StringVar(&cmd.GOARCH, "goarch", "amd64", "")
 
 	err := fs.Parse(args)
 	if err != nil {
@@ -1390,17 +1414,19 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 		return err
 	}
 	if *pilosaHosts != "" {
-		cmd.PilosaHosts = strings.Split(*pilosaHosts, ",")
+		cmd.PilosaHosts = customSplit(*pilosaHosts, ",")
 	}
 	if *agentHosts != "" {
-		cmd.AgentHosts = strings.Split(*agentHosts, ",")
+		cmd.AgentHosts = customSplit(*agentHosts, ",")
 	}
 	if *sshUser != "" {
 		cmd.SSHUser = *sshUser
 	}
-	// TODO support all creator args - just checking for creatorHosts here won't be sufficient
-	if *creatorHosts != "" {
-		cmd.CreatorArgs = []string{"-hosts=" + *creatorHosts, "-log-file-prefix=" + *creatorLFP, "-ssh-user=" + cmd.SSHUser}
+	if *pilosaHosts == "" {
+		cmd.CreatorArgs = []string{"-hosts=" + *creatorHosts, "-log-file-prefix=" + *creatorLFP, "-ssh-user=" + cmd.SSHUser, "-goos=" + cmd.GOOS, "-goarch=" + cmd.GOARCH}
+		if *creatorCopyBinary {
+			cmd.CreatorArgs = append(cmd.CreatorArgs, "-copy-binary")
+		}
 	}
 
 	return nil
@@ -1409,34 +1435,47 @@ func (cmd *BspawnCommand) ParseFlags(args []string) error {
 // Usage returns the usage message to be printed.
 func (cmd *BspawnCommand) Usage() string {
 	return strings.TrimSpace(`
-pilosactl bspawn is a tool for running multiple instances of bagent against a cluster.
+usage: pilosactl spawn [flags] <configfile>
 
-Usage:
-
-pilosactl spawn [flags] configfile
+Benchmark orchestration tool - runs 'create' and potentially multiple instances
+of 'bagent' spread across a number of hosts.
 
 The following flags are allowed and will override the values in the config file:
 
-	-creator.hosts
+	-creator.hosts ()
 		hosts argument for pilosactl create
 
-	-creator.log-file-prefix
-		log-file-prefix argument for pilosactl create
+	-creator.log-file-prefix ()
+		log-file-prefix argument for pilosactl create. If empty, log to stderr.
 
-	-pilosa-hosts
+	-creator.copy-binary (false)
+		pilosactl create should build and copy pilosa binary to cluster
+
+	-pilosa-hosts ([])
 		pilosa hosts to run against (will ignore creator args)
 
-	-agent-hosts
+	-agent-hosts ("localhost")
 		hosts to use for benchmark agents
 
-	-ssh-user
-		pilosa hosts to run against (will ignore creator args)
+	-ssh-user (current username)
+		username to use when contacting remote hosts
 
-	-copy-binary
+	-human (true)
+		toggle human readable output (indented json)
+
+	-output ("stdout")
+		string to select output destination, "stdout" or "s3"
+
+	-copy-binary (false)
 		controls whether or not to build and copy pilosactl to agents
 
-	-human
-		toggle human readable output (indented json with formatted times)
+	-goos (linux)
+		when using copy-binary, GOOS to use while building binary
+
+	-goarch (amd64)
+		when using copy-binary, GOARCH to use while building binary
+
+
 `)
 }
 
@@ -1446,7 +1485,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	output := make(map[string]interface{})
 	output["run-uuid"] = runUUID.String()
 	if len(cmd.PilosaHosts) == 0 {
-		// must create cluster
+		fmt.Fprintln(cmd.Stderr, "bspawn: pilosa-hosts not specified - using create command to build cluster")
 		r, w := io.Pipe()
 		createCmd := NewCreateCommand(cmd.Stdin, w, cmd.Stderr)
 		err := createCmd.ParseFlags(cmd.CreatorArgs)
@@ -1456,62 +1495,62 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		go func() {
 			err := createCmd.Run(ctx)
 			if err != nil {
-				fmt.Fprintf(cmd.Stderr, "Cluster creation error while spawning: %v", err)
+				fmt.Fprintf(cmd.Stderr, "bspawn: cluster creation error while spawning: %v\n", err)
 			}
 		}()
-		clus := &CreateOutput{}
+		clus := &CreateCommand{}
 		dec := json.NewDecoder(r)
 		err = dec.Decode(clus)
 		if err != nil {
 			return err
 		}
-		cmd.PilosaHosts = clus.Hosts
+		cmd.PilosaHosts = clus.FinalHosts
 		output["cluster"] = clus
 	}
 	if len(cmd.AgentHosts) == 0 {
+		fmt.Fprintln(cmd.Stderr, "bpspawn: no agent-hosts specified; all agents will be spawned on localhost")
 		cmd.AgentHosts = []string{"localhost"}
 	}
-	output["agents"] = cmd.AgentHosts
+	output["spawn"] = cmd
 	res, err := cmd.spawnRemote(ctx)
 	if err != nil {
 		return err
 	}
 	output["results"] = res
-	enc := json.NewEncoder(cmd.Stdout)
-	if cmd.Human {
+
+	var writer io.Writer
+	if cmd.Output == "s3" {
+		writer = bench.NewS3Uploader("benchmarks-pilosa", runUUID.String()+".json")
+	} else if cmd.Output == "stdout" {
+		writer = cmd.Stdout
+	} else {
+		return fmt.Errorf("invalid bspawn output destination")
+	}
+
+	enc := json.NewEncoder(writer)
+	if cmd.HumanReadable {
 		enc.SetIndent("", "  ")
 		output = bench.Prettify(output)
 	}
 	return enc.Encode(output)
 }
 
-func copyBinary(fleet pilosactl.SSHFleet, pkg, goos, goarch string) error {
-	bin, err := pilosactl.BuildBinary(pkg, goos, goarch)
-	if err != nil {
-		return err
-	}
-
-	wc, err := fleet.OpenFile(path.Base(pkg), "+x")
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(wc, bin)
-	if err != nil {
-		return err
-	}
-	return wc.Close()
-}
-
 func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface{}, error) {
-	agentIndex := 0
-	agentConnections, err := pilosactl.SSHClients(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
+	agentIdx := 0
+	agentFleet, err := pssh.NewFleet(cmd.AgentHosts, cmd.SSHUser, "", cmd.Stderr)
 	if err != nil {
 		return nil, err
 	}
 
 	if cmd.CopyBinary {
-		err = copyBinary(agentConnections, "github.com/pilosa/pilosa/cmd/pilosactl", "linux", "amd64")
+		fmt.Fprintf(cmd.Stderr, "bspawn: building pilosactl binary with GOOS=%v and GOARCH=%v to copy to agent hosts\n", cmd.GOOS, cmd.GOARCH)
+		pkg := "github.com/pilosa/pilosa/cmd/pilosactl"
+		bin, err := build.Binary(pkg, cmd.GOOS, cmd.GOARCH)
+		if err != nil {
+			return nil, err
+		}
+
+		err = agentFleet.WriteFile(path.Base(pkg), "+x", bin)
 		if err != nil {
 			return nil, err
 		}
@@ -1521,13 +1560,16 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface
 	results := make(map[string]interface{})
 	resLock := sync.Mutex{}
 	wg := sync.WaitGroup{}
+	fmt.Fprintln(cmd.Stderr, "bspawn: running benchmarks")
 	for _, sp := range cmd.Benchmarks {
 		results[sp.Name] = make(map[int]interface{})
 		for i := 0; i < sp.Num; i++ {
-			sess, err := agentConnections[agentIndex].NewSession()
+			agentIdx %= len(cmd.AgentHosts)
+			sess, err := agentFleet[cmd.AgentHosts[agentIdx]].NewSession()
 			if err != nil {
 				return nil, err
 			}
+			agentIdx += 1
 			sessions = append(sessions, sess)
 			stdout, err := sess.StdoutPipe()
 			if err != nil {
@@ -1540,7 +1582,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface
 				var v interface{}
 				err := dec.Decode(&v)
 				if err != nil {
-					fmt.Fprintf(cmd.Stderr, "error decoding json: %v, spawn: %v", err, name)
+					fmt.Fprintf(cmd.Stderr, "error decoding json: %v, spawn: %v\n", err, name)
 				}
 				resLock.Lock()
 				results[name].(map[int]interface{})[num] = v
@@ -1588,14 +1630,14 @@ func (sb *serialBenchmark) Init(hosts []string, agentNum int) error {
 // Run runs the serial benchmark and returns it's results in a nested map - the
 // top level keys are the indices of each benchmark in the list of benchmarks,
 // and the values are the results of each benchmark's Run method.
-func (sb *serialBenchmark) Run(ctx context.Context, agentNum int) map[string]interface{} {
+func (sb *serialBenchmark) Run(ctx context.Context) map[string]interface{} {
 	benchmarks := make([]map[string]interface{}, len(sb.benchmarkers))
 	results := map[string]interface{}{"benchmarks": benchmarks}
 
 	total_start := time.Now()
 	for i, b := range sb.benchmarkers {
 		start := time.Now()
-		output := b.Run(ctx, agentNum)
+		output := b.Run(ctx)
 		if _, ok := output["runtime"]; ok {
 			panic(fmt.Sprintf("Benchmark %v added 'runtime' to its results", b))
 		}
@@ -1652,6 +1694,13 @@ func readCSVRow(r *csv.Reader) (bitmapID, profileID uint64, timestamp int64, err
 	}
 
 	return bitmapID, profileID, timestamp, nil
+}
+
+func customSplit(s string, sep string) []string {
+	if s == "" {
+		return []string{}
+	}
+	return strings.Split(s, sep)
 }
 
 // errBlank indicates a blank row in a CSV file.

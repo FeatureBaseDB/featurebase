@@ -16,16 +16,22 @@ type MultiDBSetBits struct {
 	BaseBitmapID  int    `json:"base-bitmap-id"`
 	BaseProfileID int    `json:"base-profile-id"`
 	Iterations    int    `json:"iterations"`
+	Database      string `json:"database"`
 }
 
+// Init sets up the db name based on the agentNum and sets up the pilosa client.
 func (b *MultiDBSetBits) Init(hosts []string, agentNum int) error {
 	b.Name = "multi-db-set-bits"
+	b.Database = b.Database + strconv.Itoa(agentNum)
 	return b.HasClient.Init(hosts, agentNum)
 }
 
+// Usage returns the usage message to be printed.
 func (b *MultiDBSetBits) Usage() string {
 	return `
 multi-db-set-bits sets bits with increasing profile id and bitmap id using a different DB for each agent.
+
+Agent num changes the database being written to.
 
 Usage: multi-db-set-bits [arguments]
 
@@ -46,6 +52,9 @@ The following arguments are available:
 `[1:]
 }
 
+// ConsumeFlags parses all flags up to the next non flag argument (argument does
+// not start with "-" and isn't the value of a flag). It returns the remaining
+// args.
 func (b *MultiDBSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("MultiDBSetBits", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
@@ -61,10 +70,10 @@ func (b *MultiDBSetBits) ConsumeFlags(args []string) ([]string, error) {
 }
 
 // Run runs the MultiDBSetBits benchmark
-func (b *MultiDBSetBits) Run(ctx context.Context, agentNum int) map[string]interface{} {
+func (b *MultiDBSetBits) Run(ctx context.Context) map[string]interface{} {
 	results := make(map[string]interface{})
 	if b.client == nil {
-		results["error"] = fmt.Errorf("No client set for MultiDBSetBits agent: %v", agentNum)
+		results["error"] = fmt.Errorf("No client set for MultiDBSetBits")
 		return results
 	}
 	s := NewStats()
@@ -72,7 +81,7 @@ func (b *MultiDBSetBits) Run(ctx context.Context, agentNum int) map[string]inter
 	for n := 0; n < b.Iterations; n++ {
 		query := fmt.Sprintf("SetBit(%d, 'frame.n', %d)", b.BaseBitmapID+n, b.BaseProfileID+n)
 		start = time.Now()
-		_, err := b.client.ExecuteQuery(ctx, "multidb"+strconv.Itoa(agentNum), query, true)
+		_, err := b.client.ExecuteQuery(ctx, b.Database, query, true)
 		if err != nil {
 			results["error"] = err
 			return results
