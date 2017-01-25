@@ -195,7 +195,7 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 }
 
 // ExecutePQL executes query string against db on the server.
-func (c *Client) ExecutePql(ctx context.Context, db, query string) (interface{}, error) {
+func (c *Client) ExecutePQL(ctx context.Context, db, query string) (interface{}, error) {
 	u := url.URL{
 		Scheme: "http",
 		Host: c.host,

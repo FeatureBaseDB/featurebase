@@ -123,8 +123,7 @@ func (b *RandomQuery) ExecuteQuery(contentType, db, query string, ctx context.Co
 	if contentType == "protobuf" {
 		return b.client.ExecuteQuery(ctx, db, query, true)
 	} else if contentType == "pql" {
-		fmt.Println("HERRR")
-		return b.client.ExecutePql(ctx, db, query)
+		return b.client.ExecutePQL(ctx, db, query)
 	} else {
 		return nil, errors.New("unsupport content type")
 	}
