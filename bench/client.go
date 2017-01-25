@@ -19,11 +19,13 @@ func roundRobinClient(hosts []string, agentNum int) (*pilosa.Client, error) {
 	return firstHostClient(hosts[clientNum:])
 }
 
+
 // HasClient provides a reusable component for Benchmark implementations which
 // provides the Init method, a ClientType argument and a cli internal variable.
 type HasClient struct {
-	client     *pilosa.Client
-	ClientType string `json:"client-type"`
+	client      *pilosa.Client
+	ClientType  string   `json:"client-type"`
+	ContentType string `json:"content-type"`
 }
 
 // Init for HasClient looks at the ClientType field and creates a pilosa client
@@ -34,11 +36,24 @@ func (h *HasClient) Init(hosts []string, agentNum int) error {
 	switch h.ClientType {
 	case "single":
 		h.client, err = firstHostClient(hosts)
-		return err
 	case "round_robin":
 		h.client, err = roundRobinClient(hosts, agentNum)
-		return err
 	default:
-		return fmt.Errorf("Unsupported ClientType: %v", h.ClientType)
+		err = fmt.Errorf("Unsupported ClientType: %v", h.ClientType)
+	}
+	if err != nil {
+		return err
+	}
+
+	switch h.ContentType {
+	case "protobuf":
+		return nil
+	case "pql":
+		return nil
+	default:
+		return fmt.Errorf("Unsupported ContentType: %v", h.ContentType)
+
 	}
 }
+
+
