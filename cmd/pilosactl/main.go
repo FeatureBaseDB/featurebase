@@ -14,7 +14,6 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -1542,15 +1541,16 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface
 		return nil, err
 	}
 
+	cmdName := "pilosactl"
 	if cmd.CopyBinary {
-		fmt.Fprintf(cmd.Stderr, "bspawn: building pilosactl binary with GOOS=%v and GOARCH=%v to copy to agent hosts\n", cmd.GOOS, cmd.GOARCH)
+		cmdName = "/tmp/pilosactl" + strconv.Itoa(rand.Int())
+		fmt.Fprintf(cmd.Stderr, "bspawn: building pilosactl binary with GOOS=%v and GOARCH=%v to copy to agents at %v\n", cmd.GOOS, cmd.GOARCH, cmdName)
 		pkg := "github.com/pilosa/pilosa/cmd/pilosactl"
 		bin, err := build.Binary(pkg, cmd.GOOS, cmd.GOARCH)
 		if err != nil {
 			return nil, err
 		}
-
-		err = agentFleet.WriteFile(path.Base(pkg), "+x", bin)
+		err = agentFleet.WriteFile(cmdName, "+x", bin)
 		if err != nil {
 			return nil, err
 		}
@@ -1589,7 +1589,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface
 				resLock.Unlock()
 			}(stdout, sp.Name, i)
 			sess.Stderr = cmd.Stderr
-			err = sess.Start("PATH=.:$PATH pilosactl bagent -agent-num=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " " + strings.Join(sp.Args, " "))
+			err = sess.Start(cmdName + " bagent -agent-num=" + strconv.Itoa(i) + " -hosts=" + strings.Join(cmd.PilosaHosts, ",") + " " + strings.Join(sp.Args, " "))
 			if err != nil {
 				return nil, err
 			}
