@@ -222,7 +222,7 @@ func (c *SetBit) String() string {
 	}
 	if c.Timestamp != nil {
 		layout := "2006-01-02T15:04:05"
-		args = append(args, fmt.Sprintf("timestamp=%s", c.Timestamp.Format(layout)))
+		args = append(args, fmt.Sprintf(`timestamp="%s"`, c.Timestamp.Format(layout)))
 	}
 	return fmt.Sprintf("SetBit(%s)", strings.Join(args, ", "))
 }
