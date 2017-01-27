@@ -460,8 +460,9 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		c := b.containers[i]
 
 		// Verify container count before writing.
-		count := c.count()
-		assert(c.count() == c.n, "cannot write container count, mismatch: count=%d, n=%d", count, c.n)
+		// TODO: instead of commenting this out, we need to make it a configuration option
+		//count := c.count()
+		//assert(c.count() == c.n, "cannot write container count, mismatch: count=%d, n=%d", count, c.n)
 
 		binary.LittleEndian.PutUint64(buf[headerSize+i*12:], uint64(key))
 		binary.LittleEndian.PutUint32(buf[headerSize+i*12+8:], uint32(c.n-1))
@@ -532,9 +533,10 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		c := b.containers[i]
 		if c.n <= ArrayMaxSize {
 			c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
-			for _, v := range c.array {
-				assert(lowbits(uint64(v)) == v, "array value out of range: %d", v)
-			}
+			// TODO: instead of commenting this out, we need to make it a configuration option
+			//for _, v := range c.array {
+			//    assert(lowbits(uint64(v)) == v, "array value out of range: %d", v)
+			//}
 			opsOffset = int(offset) + len(c.array)*4
 		} else {
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
@@ -542,8 +544,9 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		}
 
 		// Verify container count on load.
-		count := c.count()
-		assert(c.count() == c.n, "container count mismatch: count=%d, n=%d", count, c.n)
+		// TODO: instead of commenting this out, we need to make it a configuration option
+		//count := c.count()
+		//assert(c.count() == c.n, "container count mismatch: count=%d, n=%d", count, c.n)
 	}
 
 	// Read ops log until the end of the file.
@@ -1074,9 +1077,10 @@ func (c *container) arrayWriteTo(w io.Writer) (n int64, err error) {
 	}
 
 	// Verify all elements are valid.
-	for _, v := range c.array {
-		assert(lowbits(uint64(v)) == v, "cannot write array value out of range: %d", v)
-	}
+	// TODO: instead of commenting this out, we need to make it a configuration option
+	//for _, v := range c.array {
+	//  	assert(lowbits(uint64(v)) == v, "cannot write array value out of range: %d", v)
+	//}
 
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.array[0]))[:4*c.n])
 	return int64(nn), err
