@@ -86,6 +86,8 @@ The following arguments are available:
 
 	-client-type string
 		Can be 'single' (all agents hitting one host) or 'round_robin'
+	-content-type string
+		protobuf or pql
 `[1:]
 }
 
@@ -107,6 +109,7 @@ func (b *ZipfSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs.Float64Var(&b.ProfileExponent, "profile-exponent", 1.01, "")
 	fs.Float64Var(&b.ProfileRatio, "profile-ratio", 0.25, "")
 	fs.StringVar(&b.ClientType, "client-type", "single", "")
+	fs.StringVar(&b.ContentType, "content-type", "protobuf", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err

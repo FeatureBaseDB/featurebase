@@ -57,6 +57,8 @@ The following arguments are available:
 	-client-type string
 		Can be 'single' (all agents hitting one host) or 'round_robin'
 
+	-content-type string
+		protobuf or pql
 `[1:]
 }
 
@@ -71,6 +73,7 @@ func (b *DiagonalSetBits) ConsumeFlags(args []string) ([]string, error) {
 	fs.IntVar(&b.Iterations, "iterations", 100, "")
 	fs.StringVar(&b.DB, "db", "benchdb", "")
 	fs.StringVar(&b.ClientType, "client-type", "single", "")
+	fs.StringVar(&b.ContentType, "content-type", "protobuf", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
