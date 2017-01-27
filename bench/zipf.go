@@ -90,6 +90,9 @@ The following arguments are available:
 
 	-operation string
 		Can be 'set' or 'clear'
+
+	-content-type string
+		protobuf or pql
 `[1:]
 }
 
@@ -112,6 +115,7 @@ func (b *Zipf) ConsumeFlags(args []string) ([]string, error) {
 	fs.Float64Var(&b.ProfileRatio, "profile-ratio", 0.25, "")
 	fs.StringVar(&b.ClientType, "client-type", "single", "")
 	fs.StringVar(&b.Operation, "operation", "set", "")
+	fs.StringVar(&b.ContentType, "content-type", "protobuf", "")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
