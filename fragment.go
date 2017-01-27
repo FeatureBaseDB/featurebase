@@ -350,6 +350,11 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 		return false, err
 	}
 
+	// Don't update the cache if nothing changed.
+	if !changed {
+		return changed, nil
+	}
+
 	// Invalidate block checksum.
 	delete(f.checksums, int(bitmapID/HashBlockSize))
 
@@ -387,6 +392,11 @@ func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
 	changed, err := f.storage.Remove(pos)
 	if err != nil {
 		return false, err
+	}
+
+	// Don't update the cache if nothing changed.
+	if !changed {
+		return changed, nil
 	}
 
 	// Invalidate block checksum.
@@ -838,7 +848,6 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 	// Process every bit.
 	// If an error occurs then reopen the storage.
 	lastID := uint64(0)
-	bmCounter := 0
 	if err := func() error {
 		set := make(map[uint64]struct{})
 		for i := range bitmapIDs {
@@ -851,7 +860,7 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			}
 
 			// Write to storage.
-			changed, err := f.storage.Add(pos)
+			_, err = f.storage.Add(pos)
 			if err != nil {
 				return err
 			}
@@ -862,9 +871,6 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			if i == 0 || bitmapID != lastID {
 				lastID = bitmapID
 				set[bitmapID] = struct{}{}
-			}
-			if changed {
-				bmCounter += 1
 			}
 
 			// Invalidate block checksum.
