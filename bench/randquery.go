@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"strings"
 	"time"
-	"errors"
 )
 
 // RandomQuery queries randomly and deterministically based on a seed.
@@ -119,12 +118,3 @@ func (b *RandomQuery) Run(ctx context.Context) map[string]interface{} {
 	return results
 }
 
-func (b *RandomQuery) ExecuteQuery(contentType, db, query string, ctx context.Context, ) (interface{}, error) {
-	if contentType == "protobuf" {
-		return b.client.ExecuteQuery(ctx, db, query, true)
-	} else if contentType == "pql" {
-		return b.client.ExecutePQL(ctx, db, query)
-	} else {
-		return nil, errors.New("unsupport content type")
-	}
-}
