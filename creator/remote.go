@@ -49,6 +49,7 @@ func (c *RemoteCluster) Start() error {
 		return fmt.Errorf("connecting to cluster hosts: %v", err)
 	}
 	if c.CopyBinary {
+		fmt.Fprintf(c.Stderr, "create: building pilosa binary with GOOS=%v and GOARCH=%v to copy to hosts", c.GOOS, c.GOARCH)
 
 		pkg := "github.com/pilosa/pilosa/cmd/pilosa"
 		bin, err := build.Binary(pkg, c.GOOS, c.GOARCH)
@@ -96,7 +97,7 @@ func (c *RemoteCluster) Start() error {
 		}
 		err = w.Close()
 		if err != nil {
-			return err
+			return fmt.Errorf("closing config writer: %v", err)
 		}
 
 		// Start pilosa on remote host
@@ -141,7 +142,7 @@ func (c *RemoteCluster) Start() error {
 			defer c.wg.Done()
 			err = sess.Wait()
 			if err != nil {
-				fmt.Fprintf(c.Stderr, "problem with remote pilosa process: %v", err)
+				fmt.Fprintf(c.Stderr, "problem with remote pilosa process: %v\n", err)
 			}
 		}()
 	}
