@@ -52,13 +52,15 @@ func (e *Executor) Execute(ctx context.Context, db string, q *pql.Query, slices 
 
 	// If slices aren't specified, then include all of them.
 	if len(slices) == 0 {
-		// Round up the number of slices.
-		maxSlice := e.Index.DB(db).MaxSlice()
+		if needsSlices(q.Calls){
+			// Round up the number of slices.
+maxSlice := e.Index.DB(db).MaxSlice()
 
-		// Generate a slices of all slices.
-		slices = make([]uint64, maxSlice+1)
-		for i := range slices {
-			slices[i] = uint64(i)
+		  // Generate a slices of all slices.
+		  slices = make([]uint64, maxSlice+1)
+		  for i := range slices {
+			  slices[i] = uint64(i)
+		  }
 		}
 	}
 
@@ -875,4 +877,22 @@ func hasOnlySetBitmapAttrs(calls pql.Calls) bool {
 		}
 	}
 	return true
+}
+
+func needsSlices(calls pql.Calls) bool {
+        if len(calls) == 0 {
+                return false
+        }
+
+	for _, call := range calls {
+		if _, ok := call.(pql.BitmapCall); !ok {
+			return true
+		}else if  _, ok := call.(*pql.Count); !ok {
+			return true
+		}else if  _, ok := call.(*pql.TopN); !ok {
+			return true
+		}
+
+	}
+        return false
 }
