@@ -90,6 +90,7 @@ The following arguments are available:
 
 	-operation string
 		Can be 'set' or 'clear'
+
 	-content-type string
 		protobuf or pql
 `[1:]
