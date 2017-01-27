@@ -2,7 +2,11 @@
     "benchmarks": [
         {
             "num": 1,
-            "args": ["zipf-set-bits", "-iterations", "10000", "-profile-id-range", "100", "-bitmap-id-range", "100", "-seed", "2345", "-client-type", "round_robin", "-bitmap-exponent", "1.001", "-bitmap-ratio", ".9", "-profile-exponent", "1.001", "-profile-ratio", ".3"]
+            "args": ["zipf", "-iterations", "10000", "-profile-id-range", "100", "-bitmap-id-range", "100", "-seed", "2345", "-client-type", "round_robin", "-bitmap-exponent", "1.001", "-bitmap-ratio", ".9", "-profile-exponent", "1.001", "-profile-ratio", ".3"]
+        },
+        {
+            "num": 1,
+            "args": ["zipf", "-iterations", "10000", "-profile-id-range", "100", "-bitmap-id-range", "100", "-seed", "2345", "-client-type", "round_robin", "-bitmap-exponent", "1.001", "-bitmap-ratio", ".9", "-profile-exponent", "1.001", "-profile-ratio", ".3", "-operation", "clear"]
         }
     ]
 }

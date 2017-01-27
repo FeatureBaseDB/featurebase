@@ -1098,11 +1098,15 @@ The following flags are allowed:
 func (cmd *CreateCommand) Run(ctx context.Context) error {
 	var clus creator.Cluster
 	if len(cmd.Hosts) == 0 {
+		fmt.Fprintf(cmd.Stderr, "create: no hosts specified - creating cluster in-process\n")
 		clus = &creator.LocalCluster{
 			ReplicaN: cmd.ReplicaN,
 			ServerN:  cmd.ServerN,
 		}
 	} else {
+		if cmd.ServerN != 0 {
+			fmt.Fprintf(cmd.Stderr, "create: hosts were specified, so ignoring serverN\n")
+		}
 		clus = &creator.RemoteCluster{
 			ClusterHosts: cmd.Hosts,
 			ReplicaN:     cmd.ReplicaN,
@@ -1125,7 +1129,7 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for range c {
-			fmt.Fprintf(cmd.Stderr, "\ncaught signal - shutting down\n")
+			fmt.Fprintf(cmd.Stderr, "\ncreate: caught signal - shutting down\n")
 			err := clus.Shutdown()
 			code := 0
 			if err != nil {
@@ -1156,7 +1160,7 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 		go func(i int, f io.Writer) {
 			_, err := io.Copy(f, logReaders[i])
 			if err != nil {
-				fmt.Fprintf(cmd.Stderr, "Error copying cluster logs: '%v'", err)
+				fmt.Fprintf(cmd.Stderr, "create: error copying cluster logs: '%v'\n", err)
 			}
 		}(i, f)
 	}
@@ -1167,6 +1171,7 @@ func (cmd *CreateCommand) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	fmt.Fprintf(cmd.Stderr, "create: cluster started.\n")
 	select {}
 
 }
@@ -1238,8 +1243,8 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 			bm = &bench.DiagonalSetBits{}
 		case "random-set-bits":
 			bm = &bench.RandomSetBits{}
-		case "zipf-set-bits":
-			bm = &bench.ZipfSetBits{}
+		case "zipf":
+			bm = &bench.Zipf{}
 		case "multi-db-set-bits":
 			bm = &bench.MultiDBSetBits{}
 		case "random-query":
@@ -1287,7 +1292,7 @@ The following flags are allowed:
 	subcommands:
 		diagonal-set-bits
 		random-set-bits
-		zipf-set-bits
+		zipf
 		multi-db-set-bits
 		random-query
 		import
@@ -1480,7 +1485,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 	output := make(map[string]interface{})
 	output["run-uuid"] = runUUID.String()
 	if len(cmd.PilosaHosts) == 0 {
-		// must create cluster
+		fmt.Fprintln(cmd.Stderr, "bspawn: pilosa-hosts not specified - using create command to build cluster")
 		r, w := io.Pipe()
 		createCmd := NewCreateCommand(cmd.Stdin, w, cmd.Stderr)
 		err := createCmd.ParseFlags(cmd.CreatorArgs)
@@ -1490,7 +1495,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		go func() {
 			err := createCmd.Run(ctx)
 			if err != nil {
-				fmt.Fprintf(cmd.Stderr, "Cluster creation error while spawning: %v", err)
+				fmt.Fprintf(cmd.Stderr, "bspawn: cluster creation error while spawning: %v\n", err)
 			}
 		}()
 		clus := &CreateCommand{}
@@ -1503,6 +1508,7 @@ func (cmd *BspawnCommand) Run(ctx context.Context) error {
 		output["cluster"] = clus
 	}
 	if len(cmd.AgentHosts) == 0 {
+		fmt.Fprintln(cmd.Stderr, "bpspawn: no agent-hosts specified; all agents will be spawned on localhost")
 		cmd.AgentHosts = []string{"localhost"}
 	}
 	output["spawn"] = cmd
@@ -1537,6 +1543,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface
 	}
 
 	if cmd.CopyBinary {
+		fmt.Fprintf(cmd.Stderr, "bspawn: building pilosactl binary with GOOS=%v and GOARCH=%v to copy to agent hosts\n", cmd.GOOS, cmd.GOARCH)
 		pkg := "github.com/pilosa/pilosa/cmd/pilosactl"
 		bin, err := build.Binary(pkg, cmd.GOOS, cmd.GOARCH)
 		if err != nil {
@@ -1553,6 +1560,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface
 	results := make(map[string]interface{})
 	resLock := sync.Mutex{}
 	wg := sync.WaitGroup{}
+	fmt.Fprintln(cmd.Stderr, "bspawn: running benchmarks")
 	for _, sp := range cmd.Benchmarks {
 		results[sp.Name] = make(map[int]interface{})
 		for i := 0; i < sp.Num; i++ {
@@ -1574,7 +1582,7 @@ func (cmd *BspawnCommand) spawnRemote(ctx context.Context) (map[string]interface
 				var v interface{}
 				err := dec.Decode(&v)
 				if err != nil {
-					fmt.Fprintf(cmd.Stderr, "error decoding json: %v, spawn: %v", err, name)
+					fmt.Fprintf(cmd.Stderr, "error decoding json: %v, spawn: %v\n", err, name)
 				}
 				resLock.Lock()
 				results[name].(map[int]interface{})[num] = v
