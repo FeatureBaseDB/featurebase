@@ -198,10 +198,10 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 func (c *Client) ExecutePQL(ctx context.Context, db, query string) (interface{}, error) {
 	u := url.URL{
 		Scheme: "http",
-		Host: c.host,
-		Path: "/query",
+		Host:   c.host,
+		Path:   "/query",
 		RawQuery: url.Values{
-			"db":    {db},
+			"db": {db},
 		}.Encode(),
 	}
 

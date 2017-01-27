@@ -111,10 +111,9 @@ func (b *RandomQuery) Run(ctx context.Context) map[string]interface{} {
 	for n := 0; n < b.Iterations; n++ {
 		call := qm.Random(b.MaxN, b.MaxDepth, b.MaxArgs, uint64(b.BaseBitmapID), uint64(b.BitmapIDRange))
 		start = time.Now()
-		b.ExecuteQuery(b.ContentType, b.DBs[n % len(b.DBs)], call.String(), ctx)
+		b.ExecuteQuery(b.ContentType, b.DBs[n%len(b.DBs)], call.String(), ctx)
 		s.Add(time.Now().Sub(start))
 	}
 	AddToResults(s, results)
 	return results
 }
-

@@ -1,10 +1,10 @@
 package bench
 
 import (
-	"fmt"
-	"github.com/pilosa/pilosa"
 	"context"
 	"errors"
+	"fmt"
+	"github.com/pilosa/pilosa"
 )
 
 func firstHostClient(hosts []string) (*pilosa.Client, error) {
@@ -20,12 +20,11 @@ func roundRobinClient(hosts []string, agentNum int) (*pilosa.Client, error) {
 	return firstHostClient(hosts[clientNum:])
 }
 
-
 // HasClient provides a reusable component for Benchmark implementations which
 // provides the Init method, a ClientType argument and a cli internal variable.
 type HasClient struct {
 	client      *pilosa.Client
-	ClientType  string   `json:"client-type"`
+	ClientType  string `json:"client-type"`
 	ContentType string `json:"content-type"`
 }
 
@@ -66,5 +65,3 @@ func (h *HasClient) ExecuteQuery(contentType, db, query string, ctx context.Cont
 		return nil, errors.New("unsupport content type")
 	}
 }
-
-
