@@ -20,6 +20,10 @@ const (
 
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
+
+	// HealthStatus is the return value of the /health endpoint for a node in the cluster.
+	HealthStatusUp   = "UP"
+	HealthStatusDown = "DOWN"
 )
 
 // Node represents a node in the cluster.
@@ -128,12 +132,12 @@ func (c *Cluster) NodeSetHosts() []string {
 func (c *Cluster) Health() map[string]string {
 	h := make(map[string]string)
 	for _, n := range c.Nodes {
-		h[n.Host] = "DOWN"
+		h[n.Host] = HealthStatusDown
 	}
 	// we are assuming that NodeSetHosts is a subset of c.Nodes
 	for _, m := range c.NodeSetHosts() {
 		if _, ok := h[m]; ok {
-			h[m] = "UP"
+			h[m] = HealthStatusUp
 		}
 	}
 	return h
@@ -277,11 +281,7 @@ func (h *HTTPNodeSet) SendMessage(pb proto.Message) error {
 
 // ReceiveMessage is called when a node recieves a message.
 func (h *HTTPNodeSet) ReceiveMessage(pb proto.Message) error {
-	err := h.messageHandler(pb)
-	if err != nil {
-		return err
-	}
-	return nil
+	return h.messageHandler(pb)
 }
 
 func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {

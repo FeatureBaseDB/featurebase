@@ -15,7 +15,6 @@ type GossipNodeSet struct {
 	Memberlist *memberlist.Memberlist
 	Broadcasts *memberlist.TransmitLimitedQueue
 
-	//config *memberlist.Config
 	config *GossipConfig
 
 	messageHandler func(m proto.Message) error
