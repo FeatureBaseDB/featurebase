@@ -305,11 +305,11 @@ func (p *Parser) parseRangeCall() (*Range, error) {
 				return nil, parseErrorf(pos, "frame: %s", err)
 			}
 		case 2, "start":
-			if err := decodeDate(arg.value, &c.StartTime); err != nil {
+			if err := decodeDate(TimeFormat, arg.value, &c.StartTime); err != nil {
 				return nil, parseErrorf(pos, "start: %s", err)
 			}
 		case 3, "end":
-			if err := decodeDate(arg.value, &c.EndTime); err != nil {
+			if err := decodeDate(TimeFormat, arg.value, &c.EndTime); err != nil {
 				return nil, parseErrorf(pos, "end: %s", err)
 			}
 		default:
@@ -351,6 +351,12 @@ func (p *Parser) parseSetBitCall() (*SetBit, error) {
 			if err := decodeUint64(arg.value, &c.ProfileID); err != nil {
 				return nil, parseErrorf(pos, "profileID: %s", err)
 			}
+		case 3, "timestamp":
+			var t time.Time
+			if err := decodeDate("2006-01-02T15:04:05", arg.value, &t); err != nil {
+				return nil, parseErrorf(pos, "timestamp: %s", err)
+			}
+			c.Timestamp = &t
 		default:
 			return nil, parseErrorf(pos, "invalid SetBit() arg: %v", arg.key)
 		}
@@ -797,9 +803,9 @@ func decodeString(v interface{}, target *string) error {
 }
 
 // decodeDate type converts v to target.
-func decodeDate(v interface{}, target *time.Time) error {
+func decodeDate(format string, v interface{}, target *time.Time) error {
 	if v, ok := v.(string); ok {
-		t, err := time.Parse(TimeFormat, v)
+		t, err := time.Parse(format, v)
 		if err != nil {
 			return fmt.Errorf("invalid date format: %s", v)
 		}

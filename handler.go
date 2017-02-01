@@ -230,8 +230,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Build execution options.
 	opt := &ExecOptions{
-		Timestamp: req.Timestamp,
-		Remote:    req.Remote,
+		Remote: req.Remote,
 	}
 
 	// Parse query string.
@@ -630,21 +629,6 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 		return nil, errors.New("invalid slice argument")
 	}
 
-	// Parse timestamp, if available.
-	var timestamp *time.Time
-	if v := q.Get("timestamp"); v != "" {
-		layout := "2006-01-02 15:04:05"
-		if strings.Contains(v, "T") {
-			layout = "2006-01-02T15:04:05"
-		}
-
-		t, err := time.Parse(layout, v)
-		if err != nil {
-			return nil, errors.New("invalid timestamp")
-		}
-		timestamp = &t
-	}
-
 	// Parse time granularity.
 	quantum := TimeQuantum("YMDH")
 	if s := q.Get("time_granularity"); s != "" {
@@ -656,12 +640,11 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		DB:        q.Get("db"),
-		Query:     query,
-		Slices:    slices,
-		Profiles:  q.Get("profiles") == "true",
-		Timestamp: timestamp,
-		Quantum:   quantum,
+		DB:       q.Get("db"),
+		Query:    query,
+		Slices:   slices,
+		Profiles: q.Get("profiles") == "true",
+		Quantum:  quantum,
 	}, nil
 }
 
@@ -1073,9 +1056,6 @@ type QueryRequest struct {
 	// Return profile attributes, if true.
 	Profiles bool
 
-	// Timestamp passed into the query.
-	Timestamp *time.Time
-
 	// Time granularity to use with the timestamp.
 	Quantum TimeQuantum
 
@@ -1092,11 +1072,6 @@ func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 		Profiles: pb.Profiles,
 		Quantum:  TimeQuantum(pb.Quantum),
 		Remote:   pb.Remote,
-	}
-
-	if pb.Timestamp != 0 {
-		t := time.Unix(0, pb.Timestamp)
-		req.Timestamp = &t
 	}
 
 	return req
