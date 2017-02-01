@@ -16,6 +16,19 @@ type Parser struct {
 	scanner *bufScanner
 }
 
+// Args represent all arguments passed to a node
+type Args []arg
+
+func (a Args) hasKey(skey string, ikey int) bool {
+	// See: https://github.com/pilosa/pilosa/pull/249
+	for _, arg := range a {
+		if arg.key == skey || arg.key == ikey {
+			return true
+		}
+	}
+	return false
+}
+
 // NewParser returns a new instance of Parser.
 func NewParser(r io.Reader) *Parser {
 	return &Parser{
@@ -336,6 +349,10 @@ func (p *Parser) parseSetBitCall() (*SetBit, error) {
 		return nil, err
 	}
 
+	if !args.hasKey("profileID", 2) {
+		return nil, parseErrorf(pos, "SetBit() requires profileID to be set")
+	}
+
 	// Copy arguments to AST.
 	for _, arg := range args {
 		switch arg.key {
@@ -550,7 +567,7 @@ func (p *Parser) parseUnionCall() (*Union, error) {
 }
 
 // parseArgs arguments to a function call.
-func (p *Parser) parseArgs() ([]arg, error) {
+func (p *Parser) parseArgs() (Args, error) {
 	var i int
 	var args []arg
 	for {
