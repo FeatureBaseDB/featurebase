@@ -35,7 +35,10 @@ const (
 )
 
 func main() {
+	// Limit the number of connections that a server can make to a single node
+	// in order to prevent a cluster storm.
 	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 64
+
 	m := NewMain()
 	m.Server.Handler.Version = Version
 	fmt.Fprintf(m.Stderr, "Pilosa %s\n", Version)
