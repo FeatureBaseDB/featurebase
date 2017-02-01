@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -34,6 +35,7 @@ const (
 )
 
 func main() {
+	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 64
 	m := NewMain()
 	m.Server.Handler.Version = Version
 	fmt.Fprintf(m.Stderr, "Pilosa %s\n", Version)
