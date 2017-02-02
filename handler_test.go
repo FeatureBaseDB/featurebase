@@ -93,9 +93,9 @@ func TestHandler_Query_Args_URL(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=0,1", strings.NewReader("Count( Bitmap( 100))")))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=0,1", strings.NewReader("Count( Bitmap( id=100))")))
 	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
+		t.Fatalf("unexpected status code: %d", w.Code, w.Body.String())
 	} else if body := w.Body.String(); body != `{"results":[100]}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
@@ -118,7 +118,7 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 	// Generate request body.
 	reqBody, err := proto.Marshal(&internal.QueryRequest{
 		DB:     "db0",
-		Query:  "Count(Bitmap(100))",
+		Query:  "Count(Bitmap(id=100))",
 		Slices: []uint64{0, 1},
 	})
 	if err != nil {
@@ -139,7 +139,7 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 // Ensure the handler returns an error when parsing bad arguments.
 func TestHandler_Query_Args_Err(t *testing.T) {
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=a,b", strings.NewReader("Bitmap(100)")))
+	NewHandler().ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=a,b", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"invalid slice argument"}`+"\n" {
@@ -155,7 +155,7 @@ func TestHandler_Query_Uint64_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=0,1", strings.NewReader("Count( Bitmap( 100))")))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=0,1", strings.NewReader("Count( Bitmap( id=100))")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[100]}`+"\n" {
@@ -171,7 +171,7 @@ func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := MustNewHTTPRequest("POST", "/query", strings.NewReader("Count(Bitmap(100))"))
+	r := MustNewHTTPRequest("POST", "/query", strings.NewReader("Count(Bitmap(id=100))"))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
@@ -196,7 +196,7 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=d", strings.NewReader("Bitmap(100)")))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=d", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,1048577]}]}`+"\n" {
@@ -228,7 +228,7 @@ func TestHandler_Query_Bitmap_Profiles_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=d&profiles=true", strings.NewReader("Bitmap(100)")))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=d&profiles=true", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,1048577]}],"profiles":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
@@ -246,7 +246,7 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := MustNewHTTPRequest("POST", "/query", strings.NewReader("Bitmap(100)"))
+	r := MustNewHTTPRequest("POST", "/query", strings.NewReader("Bitmap(id=100)"))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
@@ -293,7 +293,7 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 	// Encode request body.
 	buf, err := proto.Marshal(&internal.QueryRequest{
 		DB:       "d",
-		Query:    "Bitmap(100)",
+		Query:    "Bitmap(id=100)",
 		Profiles: true,
 	})
 	if err != nil {
@@ -389,7 +389,7 @@ func TestHandler_Query_Err_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query", strings.NewReader(`Bitmap(100)`)))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query", strings.NewReader(`Bitmap(id=100)`)))
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"marker"}`+"\n" {
@@ -436,8 +436,8 @@ func TestHandler_Query_ErrParse(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=0,1", strings.NewReader("bad_fn(")))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"error":"function not found: bad_fn occurred at line 1, char 1"}`+"\n" {
-		t.Fatalf("unexpected body: %q", body)
+	} else if body := w.Body.String(); body != `{"error":"expected comma, right paren, or identifier, found \"\" occurred at line 1, char 8"}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
 	}
 }
 
