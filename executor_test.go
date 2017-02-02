@@ -287,7 +287,7 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if db != `d` {
 			t.Fatalf("unexpected db: %s", db)
-		} else if query.String() != `Bitmap(id=10, frame=f)` {
+		} else if query.String() != `Bitmap(frame="f", id=10)` {
 			t.Fatalf("unexpected query: %s", query.String())
 		} else if !reflect.DeepEqual(slices, []uint64{0}) { //TODO: this is incorrect because the calling node doesn't know about slice 2
 			t.Fatalf("unexpected slices: %+v", slices)
@@ -359,7 +359,7 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if db != `d` {
 			t.Fatalf("unexpected db: %s", db)
-		} else if query.String() != `SetBit(id=10, frame=f, profileID=2)` {
+		} else if query.String() != `SetBit(frame="f", id=10, profileID=2)` {
 			t.Fatalf("unexpected query: %s", query.String())
 		}
 		remoteCalled = true
@@ -406,11 +406,11 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 		// slices and a second time to get the counts for a set of bitmaps.
 		switch remoteExecN {
 		case 0:
-			if query.String() != `TopN(frame=f, n=3)` {
+			if query.String() != `TopN(frame="f", n=3)` {
 				t.Fatalf("unexpected query(0): %s", query.String())
 			}
 		case 1:
-			if query.String() != `TopN(frame=f, ids=[0,10,30])` {
+			if query.String() != `TopN(frame="f", ids=[0,10,30], n=0)` {
 				t.Fatalf("unexpected query(1): %s", query.String())
 			}
 		default:
