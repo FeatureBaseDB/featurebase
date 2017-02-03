@@ -143,7 +143,7 @@ type GossipConfig struct {
 }
 
 // NewGossipNodeSet returns a new instance of GossipNodeSet.
-func NewGossipNodeSet(name string, gossipPort int, gossipSeed string) *GossipNodeSet {
+func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string) *GossipNodeSet {
 	g := &GossipNodeSet{
 		LogOutput: os.Stderr,
 	}
@@ -154,7 +154,10 @@ func NewGossipNodeSet(name string, gossipPort int, gossipSeed string) *GossipNod
 		gossipSeed:       gossipSeed,
 	}
 	g.config.memberlistConfig.Name = name
+	g.config.memberlistConfig.BindAddr = gossipHost
 	g.config.memberlistConfig.BindPort = gossipPort
+	g.config.memberlistConfig.AdvertiseAddr = gossipHost
+	g.config.memberlistConfig.AdvertisePort = gossipPort
 	g.config.memberlistConfig.GossipNodes = 1
 	g.config.memberlistConfig.Delegate = g
 

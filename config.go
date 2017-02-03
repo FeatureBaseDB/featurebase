@@ -1,6 +1,9 @@
 package pilosa
 
-import "time"
+import (
+	"net"
+	"time"
+)
 
 const (
 	// DefaultHost is the default hostname and port to use.
@@ -80,7 +83,12 @@ func (c *Config) PilosaCluster() *Cluster {
 		if c.Cluster.Gossip.Seed != "" {
 			gossipSeed = c.Cluster.Gossip.Seed
 		}
-		cluster.NodeSet = NewGossipNodeSet(c.Host, gossipPort, gossipSeed)
+		// get the host portion of addr to use for binding
+		gossipHost, _, err := net.SplitHostPort(c.Host)
+		if err != nil {
+			gossipHost = c.Host
+		}
+		cluster.NodeSet = NewGossipNodeSet(c.Host, gossipHost, gossipPort, gossipSeed)
 	} else {
 		cluster.NodeSet = NewStaticNodeSet()
 	}
