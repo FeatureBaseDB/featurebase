@@ -13,7 +13,9 @@ type Benchmark interface {
 	// it is being run simultaneously on multiple "agents". E.G. the agentNum
 	// might be used to make a random seed different for each agent, or have
 	// each agent set a different set of bits. Init's doc string should document
-	// how the agentNum affects it.
+	// how the agentNum affects it. Every benchmark should have a 'Name' field
+	// set by init, which appears when the benchmark is marshalled to json as
+	// "name".
 	Init(hosts []string, agentNum int) error
 
 	// Run runs the benchmark. The return value of Run is kept generic so that

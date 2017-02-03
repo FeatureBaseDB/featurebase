@@ -3,11 +3,10 @@ package creator
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
-	"path"
 	"strconv"
 	"sync"
-
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -48,7 +47,10 @@ func (c *RemoteCluster) Start() error {
 	if err != nil {
 		return fmt.Errorf("connecting to cluster hosts: %v", err)
 	}
+	cmdName := "pilosa"
 	if c.CopyBinary {
+		cmdName = "/tmp/pilosa" + strconv.Itoa(rand.Int())
+		fmt.Fprintf(c.Stderr, "create: building pilosa binary with GOOS=%v and GOARCH=%v to copy to hosts at %v", c.GOOS, c.GOARCH, cmdName)
 
 		pkg := "github.com/pilosa/pilosa/cmd/pilosa"
 		bin, err := build.Binary(pkg, c.GOOS, c.GOARCH)
@@ -56,7 +58,7 @@ func (c *RemoteCluster) Start() error {
 			return fmt.Errorf("building binary: %v", err)
 		}
 
-		err = fleet.WriteFile(path.Base(pkg), "+x", bin)
+		err = fleet.WriteFile(cmdName, "+x", bin)
 		if err != nil {
 			return fmt.Errorf("writing binary to fleet: %v", err)
 		}
@@ -96,7 +98,7 @@ func (c *RemoteCluster) Start() error {
 		}
 		err = w.Close()
 		if err != nil {
-			return err
+			return fmt.Errorf("closing config writer: %v", err)
 		}
 
 		// Start pilosa on remote host
@@ -132,7 +134,7 @@ func (c *RemoteCluster) Start() error {
 			gomaxprocsString = "GOMAXPROCS=" + strconv.Itoa(c.GoMaxProcs) + " "
 		}
 
-		err = sess.Start("PATH=.:$PATH " + gomaxprocsString + "pilosa -config " + configname)
+		err = sess.Start(gomaxprocsString + cmdName + " -config " + configname)
 		if err != nil {
 			return err
 		}
@@ -141,7 +143,7 @@ func (c *RemoteCluster) Start() error {
 			defer c.wg.Done()
 			err = sess.Wait()
 			if err != nil {
-				fmt.Fprintf(c.Stderr, "problem with remote pilosa process: %v", err)
+				fmt.Fprintf(c.Stderr, "problem with remote pilosa process: %v\n", err)
 			}
 		}()
 	}
