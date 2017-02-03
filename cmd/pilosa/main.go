@@ -22,7 +22,7 @@ var Version string
 
 func init() {
 	if Version == "" {
-		Version = "0.0.0"
+		Version = "v0.0.0"
 	}
 
 	rand.Seed(time.Now().UTC().UnixNano())
