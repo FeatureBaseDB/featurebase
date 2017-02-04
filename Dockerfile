@@ -1,11 +1,14 @@
-FROM scratch
+FROM golang:1.7.5
 
-MAINTAINER Pilosa Corp. <engineering@pilosa.com>
+MAINTAINER Pilosa Corp. <dev@pilosa.com>
 
-ENV DATA_DIR /data
 EXPOSE 15000
 VOLUME /data
 
-COPY ./pilosa /pilosa
+RUN echo 'data-dir = "/data"' > /config
 
-ENTRYPOINT ["/pilosa"]
+COPY . /go/src/github.com/pilosa/pilosa
+RUN CGO_ENABLED=0 go install -a github.com/pilosa/pilosa/cmd/pilosa
+
+ENTRYPOINT ["/go/bin/pilosa"]
+CMD ["-config", "/config"]
