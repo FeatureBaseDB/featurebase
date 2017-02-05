@@ -195,12 +195,12 @@ func (m *Main) ParseFlags(args []string) error {
 
 // loadEnvConfig loads configuration from environment variables
 func (m *Main) loadEnvConfig() {
-	envStringVar(&m.Config.DataDir, "DATA_DIR")
-	envStringVar(&m.Config.Host, "HOST")
-	envIntVar(&m.Config.Cluster.ReplicaN, "CLUSTER_REPLICAS")
+	envStringVar(&m.Config.DataDir, "PILOSA_DATA_DIR")
+	envStringVar(&m.Config.Host, "PILOSA_BIND")
+	envIntVar(&m.Config.Cluster.ReplicaN, "PILOSA_CLUSTER_REPLICAS")
 
 	var clusterNodes string
-	envStringVar(&clusterNodes, "CLUSTER_NODES")
+	envStringVar(&clusterNodes, "PILOSA_CLUSTER_NODES")
 	if clusterNodes != "" {
 		for _, nodeAddr := range strings.Fields(clusterNodes) {
 			node := &pilosa.ConfigNode{
