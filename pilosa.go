@@ -23,9 +23,6 @@ var (
 	ErrQueryRequired = errors.New("query required")
 )
 
-// Version represents the current running version of Pilosa.
-var Version string
-
 // Profile represents vertical column in a database.
 // A profile can have a set of attributes attached to it.
 type Profile struct {
