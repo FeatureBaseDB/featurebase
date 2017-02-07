@@ -45,7 +45,6 @@ type Handler struct {
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler() *Handler {
 	return &Handler{
-		Version:   Version,
 		LogOutput: os.Stderr,
 	}
 }
