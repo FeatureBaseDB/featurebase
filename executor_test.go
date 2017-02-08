@@ -384,6 +384,54 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	}
 }
 
+// Ensure a remote query can set bits on multiple nodes.
+func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
+	c := NewCluster(2)
+	c.ReplicaN = 2
+
+	// Create secondary server and update second cluster node.
+	s := NewServer()
+	defer s.Close()
+	c.Nodes[1].Host = s.Host()
+
+	// Mock secondary server's executor to verify arguments.
+	var remoteCalled bool
+	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+		if db != `d` {
+			t.Fatalf("unexpected db: %s", db)
+		} else if query.String() != `SetBit(frame="f", id=10, profileID=2, timestamp="2016-12-11T10:09:07")` {
+			t.Fatalf("unexpected query: %s", query.String())
+		}
+		remoteCalled = true
+		return []interface{}{nil}, nil
+	}
+
+	// Create local executor data.
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.CreateDBIfNotExists("d")
+	oldQuantum := idx.DB("d").TimeQuantum()
+	defer func() {
+		// restore db quantum
+		idx.DB("d").SetTimeQuantum(oldQuantum)
+	}()
+	// need to set the quantum otherwise SetBit fails silently
+	idx.DB("d").SetTimeQuantum("Y")
+
+	e := NewExecutor(idx.Index, c)
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, profileID=2, timestamp="2016-12-11T10:09:07")`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that one bit is set on both node's index.
+	if n := idx.MustCreateFragmentIfNotExists("d", "f_2016", 0).Bitmap(10).Count(); n != 1 {
+		t.Fatalf("unexpected local count: %d", n)
+	}
+	if !remoteCalled {
+		t.Fatalf("expected remote execution")
+	}
+}
+
 // Ensure a remote query can return a top-n query.
 func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	c := NewCluster(2)

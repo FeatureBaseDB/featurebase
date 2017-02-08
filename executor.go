@@ -490,6 +490,16 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, op
 		return false, errors.New("SetBit() profileID required")
 	}
 
+	var timestamp *time.Time
+	sTimestamp, ok := c.Args["timestamp"].(string)
+	if ok {
+		t, err := time.Parse("2006-01-02T15:04:05", sTimestamp)
+		if err != nil {
+			return false, fmt.Errorf("invalid date: %s", sTimestamp)
+		}
+		timestamp = &t
+	}
+
 	slice := profileID / SliceWidth
 	ret := false
 
@@ -500,7 +510,7 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, op
 			if err != nil {
 				return false, fmt.Errorf("db: %s", err)
 			}
-			val, err := db.SetBit(frame, id, profileID, opt.Timestamp)
+			val, err := db.SetBit(frame, id, profileID, timestamp)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -710,9 +720,6 @@ func (e *Executor) exec(ctx context.Context, node *Node, db string, q *pql.Query
 		Query:  q.String(),
 		Slices: slices,
 		Remote: true,
-	}
-	if opt.Timestamp != nil {
-		pbreq.Timestamp = opt.Timestamp.UnixNano()
 	}
 	buf, err := proto.Marshal(pbreq)
 	if err != nil {
@@ -960,8 +967,7 @@ type mapResponse struct {
 
 // ExecOptions represents an execution context for a single Execute() call.
 type ExecOptions struct {
-	Timestamp *time.Time
-	Remote    bool
+	Remote bool
 }
 
 // decodeError returns an error representation of s if s is non-blank.
