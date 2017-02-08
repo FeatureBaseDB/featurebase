@@ -48,9 +48,8 @@ message QueryRequest {
 	string Query = 2;
 	repeated uint64 Slices = 3;
 	bool Profiles = 4;
-	int64 Timestamp = 5;
-	string Quantum = 6;
-	bool Remote = 7;
+	string Quantum = 5;
+	bool Remote = 6;
 }
 
 message QueryResponse {

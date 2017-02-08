@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Query represents a PQL query.
@@ -98,6 +99,9 @@ func (c *Call) String() string {
 			fmt.Fprintf(&buf, "%v=%s", key, joinInterfaceSlice(v))
 		case []uint64:
 			fmt.Fprintf(&buf, "%v=%s", key, joinUint64Slice(v))
+		case time.Time:
+			layout := "2006-01-02T15:04:05"
+			fmt.Fprintf(&buf, "%v=\"%s\"", key, v.Format(layout))
 		default:
 			fmt.Fprintf(&buf, "%v=%v", key, v)
 		}
