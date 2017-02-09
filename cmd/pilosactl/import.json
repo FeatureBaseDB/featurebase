@@ -1,9 +1,0 @@
-{
-    "benchmarks": [
-        {
-            "num": 1,
-            "name": "import",
-            "args": ["import", "-max-bitmap-id", "100000", "-max-profile-id", "10000", "-max-bits-per-map", "100", "-seed", "0", "-agent-controls", "width", "import", "-max-bitmap-id", "100000", "-max-profile-id", "10000", "-max-bits-per-map", "100", "-seed", "0", "-agent-controls", "width", "-random-bitmap-order", "-db", "randoload"]
-        }
-    ]
-}
