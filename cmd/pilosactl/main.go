@@ -1246,8 +1246,6 @@ func (cmd *BagentCommand) ParseFlags(args []string) error {
 			bm = &bench.Zipf{}
 		case "multi-db-set-bits":
 			bm = &bench.MultiDBSetBits{}
-		case "random-query":
-			bm = &bench.RandomQuery{}
 		case "import":
 			bm = bench.NewImport(cmd.Stdin, cmd.Stdout, cmd.Stderr)
 		case "slice-height":
@@ -1293,7 +1291,6 @@ The following flags are allowed:
 		random-set-bits
 		zipf
 		multi-db-set-bits
-		random-query
 		import
 		slice-height
 `)
