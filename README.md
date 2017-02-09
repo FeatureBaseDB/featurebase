@@ -115,6 +115,11 @@ SetBit(id=10, frame="foo", profileID=1)
 A return value of `{"results":[true]}` indicates that the bit was toggled from 0 to 1.
 A return value of `{"results":[false]}` indicates that the bit was already set to 1 and therefore nothing changed.
 
+SetBit accepts an optional `timestamp` field:
+```
+SetBit(id=10, frame=f, profileID=2, timestamp="2016-12-11T10:09:07")
+```
+
 ---
 #### ClearBit()
 ```
