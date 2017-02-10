@@ -125,7 +125,7 @@ func (b *SliceHeight) Run(ctx context.Context) map[string]interface{} {
 		iresults["import"] = imp.Run(ctx)
 
 		qstart := time.Now()
-		q := &pql.Call{Name: "TopN", Args: map[string]interface{}{"frame": b.Frame, "n": 50}}
+		q := &pql.TopN{Frame: b.Frame, N: 50}
 		_, err := imp.Client.ExecuteQuery(ctx, b.Database, q.String(), true)
 		if err != nil {
 			iresults["query_error"] = err.Error()

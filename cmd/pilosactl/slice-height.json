@@ -2,7 +2,7 @@
     "benchmarks": [
         {
             "num": 1,
-            "args": ["-human", "slice-height", "-max-time", "30", "-max-bits-per-map", "100"]
+            "args": ["-human", "slice-height", "-max-time", "1", "-max-bits-per-map", "100"]
         }
     ]
 }
