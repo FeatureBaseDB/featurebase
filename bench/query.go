@@ -24,7 +24,7 @@ type QueryGenerator struct {
 }
 
 // Random returns a randomly generated query.
-func (q *QueryGenerator) Random(maxN, depth, maxargs int, idmin, idmax uint64) pql.Call {
+func (q *QueryGenerator) Random(maxN, depth, maxargs int, idmin, idmax uint64) *pql.Call {
 	// TODO: handle depth==1 or 0
 	val := q.R.Intn(5)
 	switch val {
@@ -36,17 +36,19 @@ func (q *QueryGenerator) Random(maxN, depth, maxargs int, idmin, idmax uint64) p
 }
 
 // RandomTopN returns a randomly generated TopN query.
-func (q *QueryGenerator) RandomTopN(maxN, depth, maxargs int, idmin, idmax uint64) *pql.TopN {
+func (q *QueryGenerator) RandomTopN(maxN, depth, maxargs int, idmin, idmax uint64) *pql.Call {
 	frameIdx := q.R.Intn(len(q.Frames))
-	return &pql.TopN{
-		Frame: q.Frames[frameIdx],
-		N:     q.R.Intn(maxN-1) + 1,
-		Src:   q.RandomBitmapCall(depth, maxargs, idmin, idmax),
+	return &pql.Call{
+		Args: map[string]interface{}{
+			"frame": q.Frames[frameIdx],
+			"n":     uint64(q.R.Intn(maxN-1) + 1),
+		},
+		Children: []*pql.Call{q.RandomBitmapCall(depth, maxargs, idmin, idmax)},
 	}
 }
 
-// RandomBitmapCall returns a randomly generate query which is a pql.BitmapCall.
-func (q *QueryGenerator) RandomBitmapCall(depth, maxargs int, idmin, idmax uint64) pql.BitmapCall {
+// RandomBitmapCall returns a randomly generate query which returns a bitmap.
+func (q *QueryGenerator) RandomBitmapCall(depth, maxargs int, idmin, idmax uint64) *pql.Call {
 	if depth <= 1 {
 		bitmapID := q.R.Int63n(int64(idmax)-int64(idmin)) + int64(idmin)
 		return Bitmap(uint64(bitmapID), q.IDToFrameFn(uint64(bitmapID)))
@@ -62,7 +64,7 @@ func (q *QueryGenerator) RandomBitmapCall(depth, maxargs int, idmin, idmax uint6
 	} else {
 		numargs = q.R.Intn(maxargs-2) + 2
 	}
-	calls := make([]pql.BitmapCall, numargs)
+	calls := make([]*pql.Call, numargs)
 	for i := 0; i < numargs; i++ {
 		calls[i] = q.RandomBitmapCall(depth-1, maxargs, idmin, idmax)
 	}
@@ -82,82 +84,114 @@ func (q *QueryGenerator) RandomBitmapCall(depth, maxargs int, idmin, idmax uint6
 // Helpers TODO: move elsewhere
 ///////////////////////////////////////////////////
 
-func ClearBit(id uint64, frame string, profileID uint64) *pql.ClearBit {
-	return &pql.ClearBit{
-		ID:        id,
-		Frame:     frame,
-		ProfileID: profileID,
+func ClearBit(id uint64, frame string, profileID uint64) *pql.Call {
+	return &pql.Call{
+		Name: "ClearBit",
+		Args: map[string]interface{}{
+			"id":        id,
+			"frame":     frame,
+			"profileID": profileID,
+		},
 	}
 }
 
-func Count(bm pql.BitmapCall) *pql.Count {
-	return &pql.Count{
-		Input: bm,
+func Count(child *pql.Call) *pql.Call {
+	return &pql.Call{
+		Name:     "Count",
+		Children: []*pql.Call{child},
 	}
 }
 
-func Profile(id uint64) *pql.Profile {
-	return &pql.Profile{
-		ID: id,
+func Profile(id uint64) *pql.Call {
+	return &pql.Call{
+		Name: "Profile",
+		Args: map[string]interface{}{"id": id},
 	}
 }
 
-func SetBit(id uint64, frame string, profileID uint64) *pql.SetBit {
-	return &pql.SetBit{
-		ID:        id,
-		Frame:     frame,
-		ProfileID: profileID,
+func SetBit(id uint64, frame string, profileID uint64) *pql.Call {
+	return &pql.Call{
+		Name: "SetBit",
+		Args: map[string]interface{}{
+			"id":        id,
+			"frame":     frame,
+			"profileID": profileID,
+		},
 	}
 }
 
-func SetBitmapAttrs(id uint64, frame string, attrs map[string]interface{}) *pql.SetBitmapAttrs {
-	return &pql.SetBitmapAttrs{
-		ID:    id,
-		Frame: frame,
-		Attrs: attrs,
+func SetBitmapAttrs(id uint64, frame string, attrs map[string]interface{}) *pql.Call {
+	args := copyArgs(attrs)
+	args["id"] = id
+	args["profileID"] = frame
+
+	return &pql.Call{
+		Name: "SetBitmapAttrs",
+		Args: args,
 	}
 }
 
-func SetProfileAttrs(id uint64, attrs map[string]interface{}) *pql.SetProfileAttrs {
-	return &pql.SetProfileAttrs{
-		ID:    id,
-		Attrs: attrs,
+func SetProfileAttrs(id uint64, attrs map[string]interface{}) *pql.Call {
+	args := copyArgs(attrs)
+	args["id"] = id
+
+	return &pql.Call{
+		Name: "SetProfileAttrs",
+		Args: args,
 	}
 }
 
-func TopN(frame string, n int, src pql.BitmapCall, bmids []uint64, field string, filters []interface{}) *pql.TopN {
-	return &pql.TopN{
-		Frame:     frame,
-		N:         n,
-		Src:       src,
-		BitmapIDs: bmids,
-		Field:     field,
-		Filters:   filters,
+func TopN(frame string, n int, src *pql.Call, bmids []uint64, field string, filters []interface{}) *pql.Call {
+	return &pql.Call{
+		Name:     "TopN",
+		Children: []*pql.Call{src},
+		Args: map[string]interface{}{
+			"frame":   frame,
+			"n":       n,
+			"ids":     bmids,
+			"field":   field,
+			"filters": filters,
+		},
 	}
 }
 
-func Difference(bms ...pql.BitmapCall) *pql.Difference {
+func Difference(bms ...*pql.Call) *pql.Call {
 	// TODO does this need to be limited to two inputs?
-	return &pql.Difference{
-		Inputs: bms,
+	return &pql.Call{
+		Name:     "Difference",
+		Children: bms,
 	}
 }
 
-func Intersect(bms ...pql.BitmapCall) *pql.Intersect {
-	return &pql.Intersect{
-		Inputs: bms,
+func Intersect(bms ...*pql.Call) *pql.Call {
+	return &pql.Call{
+		Name:     "Intersect",
+		Children: bms,
 	}
 }
 
-func Union(bms ...pql.BitmapCall) *pql.Union {
-	return &pql.Union{
-		Inputs: bms,
+func Union(bms ...*pql.Call) *pql.Call {
+	return &pql.Call{
+		Name:     "Union",
+		Children: bms,
 	}
 }
 
-func Bitmap(id uint64, frame string) *pql.Bitmap {
-	return &pql.Bitmap{
-		ID:    id,
-		Frame: frame,
+func Bitmap(id uint64, frame string) *pql.Call {
+	return &pql.Call{
+		Name: "Bitmap",
+		Args: map[string]interface{}{
+			"id":    id,
+			"frame": frame,
+		},
 	}
+}
+
+// copyArgs returns a shallow copy of m.
+func copyArgs(m map[string]interface{}) map[string]interface{} {
+	other := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		other[k] = v
+	}
+	return other
 }
