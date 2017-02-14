@@ -131,6 +131,13 @@ SetBitmapAttrs(id=10, frame="foo", category=123, color="blue", happy=true)
 Returns `{"results":[null]}`
 
 ---
+### SetProfileAttrs()
+---
+SetProfileAttrs(id=10, category=123, color="blue", happy=true)
+```
+Returns `{"results":[null]}`
+
+---
 #### Bitmap()
 ```
 Bitmap(id=10, frame="foo")
