@@ -28,7 +28,8 @@ import (
 
 const (
 	// SliceWidth is the number of profile IDs in a slice.
-	SliceWidth = 1048576
+	//SliceWidth = 1048576
+	SliceWidth = 262144
 
 	// SnapshotExt is the file extension used for an in-process snapshot.
 	SnapshotExt = ".snapshotting"
@@ -49,8 +50,25 @@ const (
 
 const (
 	// DefaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
-	DefaultFragmentMaxOpN = 1000
+	//TODO CHANGING FOR TEST TO 10x
+	DefaultFragmentMaxOpN = 2000
 )
+type BitmapCacher interface {
+	Fetch(id uint64)(*Bitmap,bool)
+	Add(id uint64, b *Bitmap)
+}
+
+
+type Simple struct{
+	cache	map[uint64]*Bitmap
+}
+func (s *Simple)Fetch(id uint64)(*Bitmap,bool){
+	m,ok:=s.cache[id]
+	return m,ok
+}
+func (s *Simple)Add(id uint64,p*Bitmap){
+	s.cache[id]=p
+}
 
 // Fragment represents the intersection of a frame and slice in a database.
 type Fragment struct {
@@ -87,6 +105,8 @@ type Fragment struct {
 	BitmapAttrStore *AttrStore
 
 	stats StatsClient
+	turbo  BitmapCacher
+	
 }
 
 // NewFragment returns a new instance of Fragment.
@@ -203,6 +223,7 @@ func (f *Fragment) openStorage() error {
 
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
+	f.turbo = &Simple{make(map[uint64]*Bitmap)}
 
 	return nil
 
@@ -308,7 +329,12 @@ func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
 	return f.bitmap(bitmapID)
 }
 
+
 func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
+	r,ok:=f.turbo.Fetch(bitmapID)
+		if ok && r != nil{
+			return r
+		}
 	// Only use a subset of the containers.
 	// NOTE: The start & end ranges must be divisible by
 	data := f.storage.OffsetRange(f.slice*SliceWidth, bitmapID*SliceWidth, (bitmapID+1)*SliceWidth)
@@ -325,6 +351,7 @@ func (f *Fragment) bitmap(bitmapID uint64) *Bitmap {
 
 	// Update cache.
 	f.cache.Add(bitmapID, bm.Count())
+	f.turbo.Add(bitmapID, bm)
 
 	return bm
 }
@@ -348,6 +375,11 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	// Write to storage.
 	if changed, err = f.storage.Add(pos); err != nil {
 		return false, err
+	}
+
+	// Don't update the cache if nothing changed.
+	if !changed {
+		return changed, nil
 	}
 
 	// Invalidate block checksum.
@@ -387,6 +419,11 @@ func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
 	changed, err := f.storage.Remove(pos)
 	if err != nil {
 		return false, err
+	}
+
+	// Don't update the cache if nothing changed.
+	if !changed {
+		return changed, nil
 	}
 
 	// Invalidate block checksum.
@@ -838,7 +875,6 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 	// Process every bit.
 	// If an error occurs then reopen the storage.
 	lastID := uint64(0)
-	bmCounter := 0
 	if err := func() error {
 		set := make(map[uint64]struct{})
 		for i := range bitmapIDs {
@@ -851,7 +887,7 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			}
 
 			// Write to storage.
-			changed, err := f.storage.Add(pos)
+			_, err = f.storage.Add(pos)
 			if err != nil {
 				return err
 			}
@@ -862,9 +898,6 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			if i == 0 || bitmapID != lastID {
 				lastID = bitmapID
 				set[bitmapID] = struct{}{}
-			}
-			if changed {
-				bmCounter += 1
 			}
 
 			// Invalidate block checksum.
@@ -912,10 +945,15 @@ func (f *Fragment) Snapshot() error {
 	defer f.mu.Unlock()
 	return f.snapshot()
 }
+func track(start time.Time, name string, logger *log.Logger) {
+	elapsed := time.Since(start)
+	logger.Printf("%s took %s", name, elapsed)
+}
 
 func (f *Fragment) snapshot() error {
 	logger := f.logger()
 	logger.Printf("fragment: snapshotting %s/%s/%d", f.db, f.frame, f.slice)
+	defer track(time.Now(), fmt.Sprintf("fragment: snapshot complete %s/%s/%d", f.db, f.frame, f.slice), logger)
 
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + SnapshotExt
