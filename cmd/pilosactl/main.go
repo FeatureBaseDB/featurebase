@@ -42,10 +42,25 @@ var (
 
 	// ErrPathRequired is returned when executing a command without a required path.
 	ErrPathRequired = errors.New("path required")
+	Version         string
+	BuildTime       string
 )
+
+func init() {
+	if Version == "" {
+		Version = "v0.0.0"
+	}
+	if BuildTime == "" {
+		BuildTime = "not recorded"
+	}
+
+	rand.Seed(time.Now().UTC().UnixNano())
+}
 
 func main() {
 	m := NewMain()
+
+	fmt.Fprintf(m.Stderr, "Pilosactl %s, build time %s\n", Version, BuildTime)
 
 	// Parse command line arguments.
 	if err := m.ParseFlags(os.Args[1:]); err == flag.ErrHelp {
