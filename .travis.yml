@@ -2,4 +2,4 @@ language: go
 go:
   - 1.7.x
   - master
-script: go test $(go list ./... | grep -v vendor)
+script: make test
