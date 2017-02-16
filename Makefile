@@ -9,7 +9,10 @@ LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
 
 default: test pilosa pilosactl
 
-glide:
+$(GOPATH)/bin:
+	mkdir $(GOPATH)/bin
+
+glide: $(GOPATH)/bin
 ifndef GLIDE
 	curl https://glide.sh/get | sh
 endif
