@@ -426,8 +426,9 @@ func (p dbSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // DBInfo represents schema information for a database.
 type DBInfo struct {
-	Name   string       `json:"name"`
-	Frames []*FrameInfo `json:"frames"`
+	Name     string       `json:"name"`
+	Frames   []*FrameInfo `json:"frames"`
+	MaxSlice uint64
 }
 
 type dbInfoSlice []*DBInfo
