@@ -9,16 +9,15 @@ LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
 
 default: test pilosa pilosactl
 
-$(GLIDE):
+glide:
+ifndef GLIDE
 	curl https://glide.sh/get | sh
-	touch $(GLIDE)
+endif
 
-glide: $(GLIDE)
-
-vendor: $(GLIDE) glide.yaml
+vendor: glide glide.yaml
 	glide install
 
-glide.lock: $(GLIDE) glide.yaml
+glide.lock: glide glide.yaml
 	glide update
 
 vendor-update: glide.lock
