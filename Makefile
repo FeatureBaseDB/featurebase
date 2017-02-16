@@ -1,10 +1,45 @@
-.PHONY: vendor
+.PHONY: glide vendor-update docker pilosa pilosactl crossbuild install
 
-default:
+GLIDE := $(shell command -v glide 2>/dev/null)
+VERSION := $(shell git describe --tags)
+IDENTIFIER := $(VERSION)-$(GOOS)-$(GOARCH)
+CLONE_URL=github.com/pilosa/pilosa
+BUILD_TIME=`date -u +%FT%T%z`
+LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
 
-vendor:
-	godep save ./...
-	cp -r $(GOPATH)/src/github.com/gogo/protobuf/proto/testdata vendor/github.com/gogo/protobuf/proto/testdata
+default: test pilosa pilosactl
 
-docker:
+$(GLIDE):
+	curl https://glide.sh/get | sh
+	touch $(GLIDE)
+
+glide: $(GLIDE)
+
+vendor: $(GLIDE) glide.yaml
+	glide install
+
+glide.lock: $(GLIDE) glide.yaml
+	glide update
+
+vendor-update: glide.lock
+
+test: vendor
+	go test $(shell cd $(GOPATH)/src/$(CLONE_URL); go list ./... | grep -v vendor)
+
+pilosa: vendor
+	go build $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+
+pilosactl: vendor
+	go build $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosactl
+
+crossbuild: vendor
+	mkdir -p build/pilosa-$(IDENTIFIER)
+	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
+	make pilosactl FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosactl"
+
+install: vendor
+	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosactl
+
+docker: vendor
 	docker build -t pilosa:latest .
