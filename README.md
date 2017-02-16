@@ -136,12 +136,26 @@ SetBitmapAttrs(id=10, frame="foo", category=123, color="blue", happy=true)
 Returns `{"results":[null]}`
 
 ---
+#### SetProfileAttrs()
+---
+```
+SetProfileAttrs(id=10, category=123, color="blue", happy=true)
+```
+
+Returns `{"results":[null]}`
+
+---
 #### Bitmap()
 ```
 Bitmap(id=10, frame="foo")
 ```
 Returns `{"results":[{"attrs":{"category":123,"color":"blue","happy":true},"bits":[1,2]}]}` where `attrs` are the
 attributes set using `SetBitmapAttrs()` and `bits` are the bits set using `SetBit()`.
+
+In order to return profile attributes attached to the profiles of a bitmap, add `&profiles=true` to the query string. Sample response:
+```
+{"results":[{"attrs":{},"bits":[10]}],"profiles":[{"id":10,"attrs":{"category":123,"color":"blue","happy":true}}]}
+```
 
 ---
 #### Union()
