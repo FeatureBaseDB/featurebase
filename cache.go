@@ -22,6 +22,7 @@ type Cache interface {
 
 	// Updates the cache, if necessary.
 	Invalidate()
+	Refresh()
 
 	// Returns an ordered list of the top ranked bitmaps.
 	Top() []BitmapPair
@@ -86,6 +87,8 @@ func (c *LRUCache) Top() []BitmapPair {
 }
 
 func (c *LRUCache) onEvicted(key lru.Key, _ interface{}) { delete(c.counts, key.(uint64)) }
+func (c *LRUCache) Refresh() { 
+}
 
 // Ensure LRUCache implements Cache.
 var _ Cache = &LRUCache{}
@@ -117,17 +120,17 @@ func (c *RankCache) Add(bitmapID uint64, n uint64) {
 		return
 	}
 
-	// Add to cache.
 	c.entries[bitmapID] = n
+
 
 	// If size is larger than the threshold then trim it.
 	if len(c.entries) > c.ThresholdLength {
 		c.update()
-		for id, n := range c.entries {
-			if n <= c.ThresholdValue {
-				delete(c.entries, id)
+			for id, n := range c.entries {
+				if n <= c.ThresholdValue {
+					delete(c.entries, id)
+				}
 			}
-		}
 	}
 }
 
@@ -153,6 +156,9 @@ func (c *RankCache) Invalidate() {
 	if len(c.rankings) < 50 || (c.updateN > 0 && time.Since(c.updateTime) > 5*time.Minute) {
 		c.update()
 	}
+}
+func (c *RankCache) Refresh() { 
+		c.update()
 }
 
 // update reorders the entries by rank.
