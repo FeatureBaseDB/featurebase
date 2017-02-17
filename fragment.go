@@ -909,7 +909,7 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			f.cache.Add(bitmapID, f.bitmap(bitmapID).Count())
 		}
 
-		f.cache.Invalidate()
+		f.cache.Refresh()
 		return nil
 	}(); err != nil {
 		_ = f.closeStorage()
