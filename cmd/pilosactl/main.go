@@ -53,8 +53,6 @@ func init() {
 	if BuildTime == "" {
 		BuildTime = "not recorded"
 	}
-
-	rand.Seed(time.Now().UTC().UnixNano())
 }
 
 func main() {
