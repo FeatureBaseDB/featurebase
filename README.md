@@ -197,6 +197,11 @@ Range(id=10, frame="foo", start="1970-01-01T00:00", end="2000-01-02T03:04")
 ---
 #### TopN()
 ```
+TopN(frame="bar")
+```
+Returns all Bitmaps in the cache from frame `bar` sorted by the count of bits.
+
+```
 TopN(frame="bar", n=20)
 ```
 Returns the top 20 Bitmaps from frame `bar`.
@@ -206,11 +211,9 @@ TopN(Bitmap(id=10, frame="foo"), frame="bar", n=20)
 ```
 Returns the top 20 Bitmaps from `bar` sorted by the count of bits in the intersection with `Bitmap(id=10)`.
 
-
 ```
 TopN(Bitmap(id=10, frame="foo"), frame="bar", n=20, field="category", [81,82])
 ```
-
 Returns the top 20 Bitmaps from `bar`in attribute `category` with values `81 or
 82` sorted by the count of bits in the intersection with `Bitmap(id=10)`.
 
