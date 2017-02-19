@@ -128,15 +128,22 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
 	a := make([]pilosa.Bit, 0, cmd.BufferSize)
 
-	// Open file for reading.
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+	var r *csv.Reader
 
-	// Read rows as bits.
-	r := csv.NewReader(f)
+	if path != "-" {
+		// Open file for reading.
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		// Read rows as bits.
+		r = csv.NewReader(f)
+	} else {
+		r = csv.NewReader(cmd.Stdin)
+	}
+
 	r.FieldsPerRecord = -1
 	rnum := 0
 	for {

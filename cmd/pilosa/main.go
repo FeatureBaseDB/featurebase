@@ -17,12 +17,18 @@ import (
 	"github.com/pilosa/pilosa"
 )
 
-// Version holds the version information passed in at compile time.
-var Version string
+// Version and BuildTime hold the version/build time information passed in at compile time.
+var (
+	Version   string
+	BuildTime string
+)
 
 func init() {
 	if Version == "" {
 		Version = "v0.0.0"
+	}
+	if BuildTime == "" {
+		BuildTime = "not recorded"
 	}
 
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -36,7 +42,7 @@ const (
 func main() {
 	m := NewMain()
 	m.Server.Handler.Version = Version
-	fmt.Fprintf(m.Stderr, "Pilosa %s\n", Version)
+	fmt.Fprintf(m.Stderr, "Pilosa %s, build time %s\n", Version, BuildTime)
 
 	// Parse command line arguments.
 	if err := m.ParseFlags(os.Args[1:]); err != nil {
