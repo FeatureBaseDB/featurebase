@@ -71,6 +71,9 @@ func TestClient_BackupRestore(t *testing.T) {
 	}
 
 	// Restore to a different frame.
+	if _, err := idx.MustCreateDBIfNotExists("x", pilosa.DBOptions{}).CreateFrameIfNotExists("y", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	if err := c.RestoreFrom(context.Background(), &buf, "x", "y"); err != nil {
 		t.Fatal(err)
 	}

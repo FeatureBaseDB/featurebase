@@ -141,6 +141,14 @@ func TestExecutor_Execute_SetBitmapAttrs(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
+	// Create frames.
+	db := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
+	if _, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	} else if _, err := db.CreateFrameIfNotExists("XXX", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
 	// Set two fields on f/10.
 	// Also set fields on other bitmaps and frames to test isolation.
 	e := NewExecutor(idx.Index, NewCluster(1))
@@ -253,8 +261,16 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
-	db := idx.MustCreateDBIfNotExists("d")
+	// Create database.
+	db := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
 	db.SetTimeQuantum(pilosa.TimeQuantum("YMDH"))
+
+	// Create frame.
+	if _, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set bits.
 	db.MustSetBit("f", 1, 2, MustParseTimePtr("1999-12-31 00:00"))
 	db.MustSetBit("f", 1, 3, MustParseTimePtr("2000-01-01 00:00"))
 	db.MustSetBit("f", 1, 4, MustParseTimePtr("2000-01-02 00:00"))
@@ -370,6 +386,11 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
+	// Create frame.
+	if _, err := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{}).CreateFrame("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
 	e := NewExecutor(idx.Index, c)
 	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, profileID=2)`), nil, nil); err != nil {
 		t.Fatal(err)
@@ -409,7 +430,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	// Create local executor data.
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.CreateDBIfNotExists("d")
+	idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
 	oldQuantum := idx.DB("d").TimeQuantum()
 	defer func() {
 		// restore db quantum
@@ -417,6 +438,11 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	}()
 	// need to set the quantum otherwise SetBit fails silently
 	idx.DB("d").SetTimeQuantum("Y")
+
+	// Create frame.
+	if _, err := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{}).CreateFrame("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
 
 	e := NewExecutor(idx.Index, c)
 	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, profileID=2, timestamp="2016-12-11T10:09:07")`), nil, nil); err != nil {
