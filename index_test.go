@@ -72,6 +72,13 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	cluster.Nodes[0].Host = "localhost:0"
 	cluster.Nodes[1].Host = MustParseURLHost(s.URL)
 
+	// Create frames on nodes.
+	for _, idx := range []*Index{idx0, idx1} {
+		idx.MustCreateFrameIfNotExists("d", "f")
+		idx.MustCreateFrameIfNotExists("d", "f0")
+		idx.MustCreateFrameIfNotExists("y", "z")
+	}
+
 	// Set data on the local index.
 	f := idx0.MustCreateFragmentIfNotExists("d", "f", 0)
 	if _, err := f.SetBit(0, 10); err != nil {
@@ -191,8 +198,8 @@ func (i *Index) Close() error {
 }
 
 // MustCreateDBIfNotExists returns a given db. Panic on error.
-func (i *Index) MustCreateDBIfNotExists(db string) *DB {
-	d, err := i.Index.CreateDBIfNotExists(db)
+func (i *Index) MustCreateDBIfNotExists(db string, opt pilosa.DBOptions) *DB {
+	d, err := i.Index.CreateDBIfNotExists(db, opt)
 	if err != nil {
 		panic(err)
 	}
@@ -201,7 +208,7 @@ func (i *Index) MustCreateDBIfNotExists(db string) *DB {
 
 // MustCreateFrameIfNotExists returns a given frame. Panic on error.
 func (i *Index) MustCreateFrameIfNotExists(db, frame string) *Frame {
-	f, err := i.Index.CreateFrameIfNotExists(db, frame)
+	f, err := i.MustCreateDBIfNotExists(db, pilosa.DBOptions{}).CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -210,9 +217,14 @@ func (i *Index) MustCreateFrameIfNotExists(db, frame string) *Frame {
 
 // MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
 func (i *Index) MustCreateFragmentIfNotExists(db, frame string, slice uint64) *Fragment {
-	f, err := i.Index.CreateFragmentIfNotExists(db, frame, slice)
+	d := i.MustCreateDBIfNotExists(db, pilosa.DBOptions{})
+	f, err := d.CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
 	if err != nil {
 		panic(err)
 	}
-	return &Fragment{Fragment: f}
+	frag, err := f.CreateFragmentIfNotExists(slice)
+	if err != nil {
+		panic(err)
+	}
+	return &Fragment{Fragment: frag}
 }
