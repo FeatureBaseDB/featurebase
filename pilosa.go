@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/pilosa/pilosa/internal"
+	"regexp"
 )
 
 var (
@@ -15,6 +16,9 @@ var (
 
 	// ErrFrameRequired is returned when no frame is specified.
 	ErrFrameRequired = errors.New("frame required")
+
+	// ErrFrameRequired is returned when no frame is specified.
+	ErrName = errors.New("name restricted to [a-z0-9_-.]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
@@ -75,3 +79,15 @@ func decodeProfile(pb *internal.Profile) *Profile {
 
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
+
+
+// Restrict name using regex
+func ValidateName(name string) error {
+	expr := regexp.MustCompile(`^([a-z0-9._-]{2,64}$)`)
+	validName := expr.FindStringSubmatchIndex(name)
+
+	if len(validName) == 0 {
+		return ErrName
+	}
+	return nil
+}

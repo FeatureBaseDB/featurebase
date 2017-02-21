@@ -149,6 +149,11 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 		return nil, ErrQueryRequired
 	}
 
+	er := ValidateName(db)
+	if er != nil {
+		return nil, ErrName
+	}
+
 	// Encode query request.
 	buf, err := proto.Marshal(&internal.QueryRequest{
 		DB:     db,
@@ -203,6 +208,11 @@ func (c *Client) ExecutePQL(ctx context.Context, db, query string) (interface{},
 		RawQuery: url.Values{
 			"db": {db},
 		}.Encode(),
+	}
+
+	er := ValidateName(db)
+	if er != nil {
+		return nil, ErrName
 	}
 
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader([]byte(query)))

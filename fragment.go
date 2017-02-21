@@ -213,11 +213,11 @@ func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
 	if strings.HasSuffix(f.frame, FrameSuffixRank) {
 		c := NewRankCache()
-		c.ThresholdLength = 50000
-		c.ThresholdIndex = 45000
+		c.ThresholdLength = 500000
+		c.ThresholdIndex = 450000
 		f.cache = c
 	} else {
-		f.cache = NewLRUCache(50000)
+		f.cache = NewLRUCache(500000)
 	}
 
 	// Read cache data from disk.
