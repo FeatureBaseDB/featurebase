@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"regexp"
 )
 
 // ImportCommand represents a command for bulk importing data.
@@ -104,7 +105,16 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	} else if len(cmd.Paths) == 0 {
 		return errors.New("path required")
 	}
+	// Restrict frame name and database name with regex
+	dbError := pilosa.ValidateName(cmd.Database)
+	if dbError != nil {
+		return dbError
+	}
 
+	frameError := pilosa.ValidateName(cmd.Frame)
+	if frameError != nil {
+		return frameError
+	}
 	// Create a client to the server.
 	client, err := pilosa.NewClient(cmd.Host)
 	if err != nil {
