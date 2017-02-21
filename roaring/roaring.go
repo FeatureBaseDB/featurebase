@@ -467,7 +467,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	buf := make([]byte, headerSize+(containerCount*(4+8+4)))
 	binary.LittleEndian.PutUint32(buf[0:], cookie)
 	binary.LittleEndian.PutUint32(buf[4:], uint32(containerCount))
-	empty:=0
+	empty := 0
 	// Encode keys and cardinality.
 	for i, key := range b.keys {
 		c := b.containers[i]
@@ -479,20 +479,20 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		if c.n > 0 {
 			binary.LittleEndian.PutUint64(buf[headerSize+(i-empty)*12:], uint64(key))
 			binary.LittleEndian.PutUint32(buf[headerSize+(i-empty)*12+8:], uint32(c.n-1))
-		}else{
+		} else {
 			empty++
 		}
 	}
 
 	// Write the offset for each container block.
 	offset := uint32(len(buf))
-	empty=0
+	empty = 0
 	for i, c := range b.containers {
 
 		if c.n > 0 {
-		binary.LittleEndian.PutUint32(buf[headerSize+(containerCount*12)+((i-empty)*4):], uint32(offset))
-		}else{
-		  empty++
+			binary.LittleEndian.PutUint32(buf[headerSize+(containerCount*12)+((i-empty)*4):], uint32(offset))
+		} else {
+			empty++
 		}
 		offset += uint32(c.size())
 	}
