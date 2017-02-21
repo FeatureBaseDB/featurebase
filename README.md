@@ -65,6 +65,20 @@ The remaining configuration options should be the same on every node in the clus
 
 `[[cluster.node]]`: specifies each node within the cluster
 
+## Docker
+
+You can create a Pilosa container using `make docker` or equivalently:
+```
+docker build -t pilosa:latest .
+```
+
+You can run a temporary container using:
+```
+docker run -it --rm --name pilosa -p 15000:15000 pilosa:latest
+```
+
+When you click `Ctrl+C` to stop the container, the container and the data in the container will be erased. You can leave out `--rm` flag to keep the data in the container. See [Docker documentation](https://docs.docker.com) for other options.
+
 ## Usage
 
 You can interact with Pilosa via HTTP requests to the host:port on which you have Pilosa running.
