@@ -281,7 +281,7 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, db string, c *pql.Bit
 
 // executeIntersectSlice executes a intersect() call for a local slice.
 func (e *Executor) executeIntersectSlice(ctx context.Context, db string, c *pql.Intersect, slice uint64) (*Bitmap, error) {
-	var other *Bitmap
+	other := &Bitmap{}
 	for i, input := range c.Inputs {
 		bm, err := e.executeBitmapCallSlice(ctx, db, input, slice)
 		if err != nil {
@@ -331,7 +331,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Rang
 
 // executeUnionSlice executes a union() call for a local slice.
 func (e *Executor) executeUnionSlice(ctx context.Context, db string, c *pql.Union, slice uint64) (*Bitmap, error) {
-	var other *Bitmap
+	other := &Bitmap{}
 	for i, input := range c.Inputs {
 		bm, err := e.executeBitmapCallSlice(ctx, db, input, slice)
 		if err != nil {
