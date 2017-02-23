@@ -2,6 +2,7 @@
 
 Pilosa is a bitmap index database.
 
+[![Build Status](https://travis-ci.com/pilosa/pilosa.svg?token=Peb4jvQ3kLbjUEhpU5aR&branch=master)](https://travis-ci.com/pilosa/pilosa)
 
 ## Getting Started
 
