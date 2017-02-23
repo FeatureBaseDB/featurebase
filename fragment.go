@@ -458,7 +458,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		bitmapID, n := pair.ID, pair.Count
 
 		// Ignore empty bitmaps.
-		if n <= 0 {
+		if n <= 0 || n < opt.MinThreshold  {
 			continue
 		}
 
@@ -573,6 +573,7 @@ type TopOptions struct {
 
 	// Specific bitmaps to filter against.
 	BitmapIDs []uint64
+	MinThreshold uint64
 
 	// Filter field name & values.
 	FilterField  string

@@ -227,6 +227,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, db string, c *pql.Call,
 	n, _ := c.Args["n"].(uint64)
 	field, _ := c.Args["field"].(string)
 	bitmapIDs, _ := c.Args["ids"].([]uint64)
+	minThreshold, _ := c.Args["threshold"].(uint64)
 	filters, _ := c.Args["filters"].([]interface{})
 
 	// Retrieve bitmap used to intersect.
@@ -251,12 +252,17 @@ func (e *Executor) executeTopNSlice(ctx context.Context, db string, c *pql.Call,
 		return nil, nil
 	}
 
+	if minThreshold <= 0 {
+		minThreshold = MinThreshold
+	}
+
 	return f.Top(TopOptions{
 		N:            int(n),
 		Src:          src,
 		BitmapIDs:    bitmapIDs,
 		FilterField:  field,
 		FilterValues: filters,
+		MinThreshold: minThreshold,
 	})
 }
 
