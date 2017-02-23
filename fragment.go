@@ -458,7 +458,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		bitmapID, n := pair.ID, pair.Count
 
 		// Ignore empty bitmaps.
-		if n <= 0 || n < opt.MinThreshold  {
+		if n <= 0 {
 			continue
 		}
 
