@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"bytes"
+	"container/heap"
 	"context"
 	"crypto/sha1"
 	"encoding/binary"
@@ -28,7 +29,7 @@ import (
 
 const (
 	// SliceWidth is the number of profile IDs in a slice.
-	//SliceWidth = 1048576
+	//	SliceWidth = 1048576
 	SliceWidth = 262144
 
 	// SnapshotExt is the file extension used for an in-process snapshot.
@@ -173,7 +174,6 @@ func (f *Fragment) Open() error {
 
 // openStorage opens the storage bitmap.
 func (f *Fragment) openStorage() error {
-	//f.logger().Printf("Open Storage %s/%s/%d", f.db, f.frame, f.slice)
 	// Create a roaring bitmap to serve as storage for the slice.
 	f.storage = roaring.NewBitmap()
 
@@ -494,7 +494,8 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 	}
 
 	// Iterate over rankings and add to results until we have enough.
-	results := make([]Pair, 0, opt.N)
+	//results := make(PairHeap, 0, opt.N)
+	results := &PairHeap{}
 	for _, pair := range pairs {
 		bitmapID, n := pair.ID, pair.Count
 
@@ -518,7 +519,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		}
 
 		// The initial n pairs should simply be added to the results.
-		if opt.N == 0 || len(results) < opt.N {
+		if opt.N == 0 || results.Len() < opt.N {
 			// Calculate count and append.
 			count := n
 			if opt.Src != nil {
@@ -527,23 +528,26 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 			if count == 0 {
 				continue
 			}
-			results = append(results, Pair{Key: bitmapID, Count: count})
+			//results = append(results, Pair{Key: bitmapID, Count: count})
+			heap.Push(results, Pair{Key: bitmapID, Count: count})
 
 			// If we reach the requested number of pairs and we are not computing
 			// intersections then simply exit. If we are intersecting then sort
 			// and then only keep pairs that are higher than the lowest count.
-			if opt.N > 0 && len(results) == opt.N {
+			if opt.N > 0 && results.Len() == opt.N {
 				if opt.Src == nil {
 					break
 				}
-				sort.Sort(Pairs(results))
+				//	sort.Sort(Pairs(results))
 			}
 			continue
 		}
 
 		// Retrieve the lowest count we have.
 		// If it's too low then don't try finding anymore pairs.
-		threshold := results[len(results)-1].Count
+		//threshold := results[len(results)-1].Count
+
+		threshold := results.Pairs[0].Count
 		if threshold < MinThreshold {
 			break
 		}
@@ -556,34 +560,25 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 		// Calculate the intersecting bit count and skip if it's below our
 		// last bitmap in our current result set.
+
 		count := opt.Src.IntersectionCount(f.Bitmap(bitmapID))
 		if count < threshold {
 			continue
 		}
 
-		// Swap out the last pair for this new count.
-		results[len(results)-1] = Pair{Key: bitmapID, Count: count}
-
-		// If it's count is also higher than the second to last item then resort.
-		if len(results) >= 2 && count > results[len(results)-2].Count {
-			sort.Sort(Pairs(results))
-		}
+		heap.Push(results, Pair{Key: bitmapID, Count: count})
 	}
-
-	sort.Sort(Pairs(results))
-	return results, nil
-}
-
-func debugDumpPairs(pairs []BitmapPair) {
-	fmt.Println("=====Start")
-	for i, pair := range pairs {
-		fmt.Println(i, pair.ID, pair.Count)
+	r := make(Pairs, results.Len(), results.Len())
+	x := results.Len()
+	i := 1
+	for results.Len() > 0 {
+		r[x-i] = heap.Pop(results).(Pair)
+		i++
 	}
-	fmt.Println("=====Stop")
+	return r, nil
 }
 
 func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
-	//fmt.Println("DEBUG topBitmapPairs")
 	// If no specific bitmaps are requested, retrieve top bitmaps.
 	if len(bitmapIDs) == 0 {
 		f.mu.Lock()
