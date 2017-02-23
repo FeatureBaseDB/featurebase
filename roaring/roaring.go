@@ -444,17 +444,30 @@ func (b *Bitmap) removeEmptyContainers() {
 		i++
 	}
 }
+func (b *Bitmap) countEmptyContainers() int {
+	result := 0
+	for i := 0; i < len(b.containers); {
+		c := b.containers[i]
+
+		if c.n == 0 {
+			result++
+		}
+		i++
+	}
+	return result
+}
 
 // WriteTo writes b to w.
 func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	// Remove empty containers before persisting.
-	b.removeEmptyContainers()
+	//b.removeEmptyContainers()
+	containerCount := len(b.keys) - b.countEmptyContainers()
 
 	// Build header before writing individual container blocks.
-	buf := make([]byte, headerSize+(len(b.keys)*(4+8+4)))
+	buf := make([]byte, headerSize+(containerCount*(4+8+4)))
 	binary.LittleEndian.PutUint32(buf[0:], cookie)
-	binary.LittleEndian.PutUint32(buf[4:], uint32(len(b.keys)))
-
+	binary.LittleEndian.PutUint32(buf[4:], uint32(containerCount))
+	empty := 0
 	// Encode keys and cardinality.
 	for i, key := range b.keys {
 		c := b.containers[i]
@@ -463,15 +476,24 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		// TODO: instead of commenting this out, we need to make it a configuration option
 		//count := c.count()
 		//assert(c.count() == c.n, "cannot write container count, mismatch: count=%d, n=%d", count, c.n)
-
-		binary.LittleEndian.PutUint64(buf[headerSize+i*12:], uint64(key))
-		binary.LittleEndian.PutUint32(buf[headerSize+i*12+8:], uint32(c.n-1))
+		if c.n > 0 {
+			binary.LittleEndian.PutUint64(buf[headerSize+(i-empty)*12:], uint64(key))
+			binary.LittleEndian.PutUint32(buf[headerSize+(i-empty)*12+8:], uint32(c.n-1))
+		} else {
+			empty++
+		}
 	}
 
 	// Write the offset for each container block.
 	offset := uint32(len(buf))
+	empty = 0
 	for i, c := range b.containers {
-		binary.LittleEndian.PutUint32(buf[headerSize+(len(b.keys)*12)+(i*4):], uint32(offset))
+
+		if c.n > 0 {
+			binary.LittleEndian.PutUint32(buf[headerSize+(containerCount*12)+((i-empty)*4):], uint32(offset))
+		} else {
+			empty++
+		}
 		offset += uint32(c.size())
 	}
 
@@ -484,10 +506,12 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Write each container block.
 	for _, c := range b.containers {
-		nn, err := c.WriteTo(w)
-		n += nn
-		if err != nil {
-			return n, err
+		if c.n > 0 {
+			nn, err := c.WriteTo(w)
+			n += nn
+			if err != nil {
+				return n, err
+			}
 		}
 	}
 
