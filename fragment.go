@@ -29,8 +29,7 @@ import (
 
 const (
 	// SliceWidth is the number of profile IDs in a slice.
-	//	SliceWidth = 1048576
-	SliceWidth = 262144
+	SliceWidth = 1048576
 
 	// SnapshotExt is the file extension used for an in-process snapshot.
 	SnapshotExt = ".snapshotting"
@@ -51,24 +50,28 @@ const (
 
 const (
 	// DefaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
-	//TODO CHANGING FOR TEST TO 10x
 	DefaultFragmentMaxOpN = 2000
 )
 
+// BitmapCacher implements SimpleCache
+// it is meant to be a short-lived cache for cases where writes are continuing to access
+// the same bit withing a short time frame (i.e. good for write-heavy loads)
+// A read-heavy use case would cause the cache to get bigger, potentially causing the
+// node to run out of memory.
 type BitmapCacher interface {
 	Fetch(id uint64) (*Bitmap, bool)
 	Add(id uint64, b *Bitmap)
 }
 
-type Simple struct {
+type SimpleCache struct {
 	cache map[uint64]*Bitmap
 }
 
-func (s *Simple) Fetch(id uint64) (*Bitmap, bool) {
+func (s *SimpleCache) Fetch(id uint64) (*Bitmap, bool) {
 	m, ok := s.cache[id]
 	return m, ok
 }
-func (s *Simple) Add(id uint64, p *Bitmap) {
+func (s *SimpleCache) Add(id uint64, p *Bitmap) {
 	s.cache[id] = p
 }
 
@@ -106,8 +109,8 @@ type Fragment struct {
 	// This is set by the parent frame unless overridden for testing.
 	BitmapAttrStore *AttrStore
 
-	stats StatsClient
-	turbo BitmapCacher
+	stats       StatsClient
+	bitmapCache BitmapCacher
 }
 
 // NewFragment returns a new instance of Fragment.
@@ -224,7 +227,7 @@ func (f *Fragment) openStorage() error {
 
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
-	f.turbo = &Simple{make(map[uint64]*Bitmap)}
+	f.bitmapCache = &SimpleCache{make(map[uint64]*Bitmap)}
 
 	return nil
 
@@ -333,7 +336,7 @@ func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
 }
 
 func (f *Fragment) bitmap(bitmapID uint64, updateCache bool) *Bitmap {
-	r, ok := f.turbo.Fetch(bitmapID)
+	r, ok := f.bitmapCache.Fetch(bitmapID)
 	if ok && r != nil {
 		return r
 	}
@@ -354,7 +357,7 @@ func (f *Fragment) bitmap(bitmapID uint64, updateCache bool) *Bitmap {
 	if updateCache {
 		// Update cache.
 		f.cache.Add(bitmapID, bm.Count())
-		f.turbo.Add(bitmapID, bm)
+		f.bitmapCache.Add(bitmapID, bm)
 	}
 
 	return bm
