@@ -14,6 +14,7 @@ import (
 // Cache represents a cache for bitmap counts.
 type Cache interface {
 	Add(bitmapID uint64, n uint64)
+	BulkAdd(bitmapID uint64, n uint64)
 	Get(bitmapID uint64) uint64
 	Len() int
 
@@ -41,6 +42,10 @@ func NewLRUCache(maxEntries int) *LRUCache {
 	}
 	c.cache.OnEvicted = c.onEvicted
 	return c
+}
+
+func (c *LRUCache) BulkAdd(bitmapID, n uint64) {
+	c.Add(bitmapID, n)
 }
 
 // Add adds a bitmap to the cache.
@@ -86,6 +91,8 @@ func (c *LRUCache) Top() []BitmapPair {
 }
 
 func (c *LRUCache) onEvicted(key lru.Key, _ interface{}) { delete(c.counts, key.(uint64)) }
+func (c *LRUCache) Refresh() {
+}
 
 // Ensure LRUCache implements Cache.
 var _ Cache = &LRUCache{}
@@ -117,18 +124,26 @@ func (c *RankCache) Add(bitmapID uint64, n uint64) {
 		return
 	}
 
-	// Add to cache.
 	c.entries[bitmapID] = n
 
+	c.Invalidate()
 	// If size is larger than the threshold then trim it.
 	if len(c.entries) > c.ThresholdLength {
-		c.update()
 		for id, n := range c.entries {
 			if n <= c.ThresholdValue {
 				delete(c.entries, id)
 			}
 		}
 	}
+}
+
+// Add adds a bitmap to the cache unsorted you should Invalidate after completion
+func (c *RankCache) BulkAdd(bitmapID uint64, n uint64) {
+	if n < c.ThresholdValue {
+		return
+	}
+
+	c.entries[bitmapID] = n
 }
 
 // Get returns a bitmap with a given id.
@@ -147,16 +162,9 @@ func (c *RankCache) BitmapIDs() []uint64 {
 	return a
 }
 
-// Invalidate reorders the entries, if necessary.
-func (c *RankCache) Invalidate() {
-	// Update if there aren't many items or it hasn't been updated recently.
-	if len(c.rankings) < 50 || (c.updateN > 0 && time.Since(c.updateTime) > 5*time.Minute) {
-		c.update()
-	}
-}
-
 // update reorders the entries by rank.
-func (c *RankCache) update() {
+func (c *RankCache) Invalidate() {
+	//fmt.Println("RankCache Update")
 	// Convert cache to a sorted list.
 	rankings := make([]BitmapPair, 0, len(c.entries))
 	for id, n := range c.entries {
@@ -232,6 +240,24 @@ type Pairs []Pair
 func (p Pairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p Pairs) Len() int           { return len(p) }
 func (p Pairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
+
+type PairHeap struct {
+	Pairs
+}
+
+func (h *Pairs) Push(x interface{}) {
+	// Push and Pop use pointer receivers because they modify the slice's length,
+	// not just its contents.
+	*h = append(*h, x.(Pair))
+}
+
+func (h *Pairs) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
 
 // Add merges other into p and returns a new slice.
 func (p Pairs) Add(other []Pair) []Pair {
