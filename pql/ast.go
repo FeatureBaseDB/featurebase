@@ -100,8 +100,7 @@ func (c *Call) String() string {
 		case []uint64:
 			fmt.Fprintf(&buf, "%v=%s", key, joinUint64Slice(v))
 		case time.Time:
-			layout := "2006-01-02T15:04:05"
-			fmt.Fprintf(&buf, "%v=\"%s\"", key, v.Format(layout))
+			fmt.Fprintf(&buf, "%v=\"%s\"", key, v.Format(TimeFormat))
 		default:
 			fmt.Fprintf(&buf, "%v=%v", key, v)
 		}
