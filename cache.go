@@ -241,6 +241,24 @@ func (p Pairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p Pairs) Len() int           { return len(p) }
 func (p Pairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
+type PairHeap struct {
+	Pairs
+}
+
+func (h *Pairs) Push(x interface{}) {
+	// Push and Pop use pointer receivers because they modify the slice's length,
+	// not just its contents.
+	*h = append(*h, x.(Pair))
+}
+
+func (h *Pairs) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
 // Add merges other into p and returns a new slice.
 func (p Pairs) Add(other []Pair) []Pair {
 	// Create lookup of key/counts.
