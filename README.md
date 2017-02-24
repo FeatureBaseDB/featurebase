@@ -115,6 +115,11 @@ SetBit(id=10, frame="foo", profileID=1)
 A return value of `{"results":[true]}` indicates that the bit was toggled from 0 to 1.
 A return value of `{"results":[false]}` indicates that the bit was already set to 1 and therefore nothing changed.
 
+SetBit accepts an optional `timestamp` field:
+```
+SetBit(id=10, frame=f, profileID=2, timestamp="2016-12-11T10:09:07")
+```
+
 ---
 #### ClearBit()
 ```
@@ -131,12 +136,26 @@ SetBitmapAttrs(id=10, frame="foo", category=123, color="blue", happy=true)
 Returns `{"results":[null]}`
 
 ---
+#### SetProfileAttrs()
+---
+```
+SetProfileAttrs(id=10, category=123, color="blue", happy=true)
+```
+
+Returns `{"results":[null]}`
+
+---
 #### Bitmap()
 ```
 Bitmap(id=10, frame="foo")
 ```
 Returns `{"results":[{"attrs":{"category":123,"color":"blue","happy":true},"bits":[1,2]}]}` where `attrs` are the
 attributes set using `SetBitmapAttrs()` and `bits` are the bits set using `SetBit()`.
+
+In order to return profile attributes attached to the profiles of a bitmap, add `&profiles=true` to the query string. Sample response:
+```
+{"results":[{"attrs":{},"bits":[10]}],"profiles":[{"id":10,"attrs":{"category":123,"color":"blue","happy":true}}]}
+```
 
 ---
 #### Union()

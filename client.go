@@ -194,6 +194,38 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 	return qresp, nil
 }
 
+// ExecutePQL executes query string against db on the server.
+func (c *Client) ExecutePQL(ctx context.Context, db, query string) (interface{}, error) {
+	u := url.URL{
+		Scheme: "http",
+		Host:   c.host,
+		Path:   "/query",
+		RawQuery: url.Values{
+			"db": {db},
+		}.Encode(),
+	}
+
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader([]byte(query)))
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	} else if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(string(body))
+	}
+	return string(body), nil
+
+}
+
 // Import bulk imports bits for a single slice to a host.
 func (c *Client) Import(ctx context.Context, db, frame string, slice uint64, bits []Bit) error {
 	if db == "" {

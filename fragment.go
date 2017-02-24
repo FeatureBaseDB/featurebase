@@ -236,7 +236,7 @@ func (f *Fragment) openCache() error {
 	if strings.HasSuffix(f.frame, FrameSuffixRank) {
 		c := NewRankCache()
 		c.ThresholdLength = 50000
-		c.ThresholdIndex = 45000
+		c.ThresholdIndex = 50000
 		f.cache = c
 	} else {
 		f.cache = NewLRUCache(50000)
@@ -500,7 +500,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		bitmapID, n := pair.ID, pair.Count
 
 		// Ignore empty bitmaps.
-		if n <= 0 {
+		if n <= 0 || n < MinThreshold{
 			continue
 		}
 
@@ -525,7 +525,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 			if opt.Src != nil {
 				count = opt.Src.IntersectionCount(f.Bitmap(bitmapID))
 			}
-			if count == 0 {
+			if count == 0 || count < MinThreshold {
 				continue
 			}
 			//results = append(results, Pair{Key: bitmapID, Count: count})
