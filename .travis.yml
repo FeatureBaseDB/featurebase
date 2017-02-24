@@ -2,6 +2,10 @@ language: go
 go:
   - 1.7.x
   - master
+before_install:
+  - sudo add-apt-repository ppa:masterminds/glide -y
+  - sudo apt-get update -q
+  - sudo apt-get install glide -y
 script: make test
 notifications:
   slack:
