@@ -43,7 +43,7 @@ const (
 
 	// MinThreshold is the lowest count to use in a Top-N operation when
 	// looking for additional bitmap/count pairs.
-	MinThreshold = 1
+	MinThreshold = 10
 
 	// HashBlockSize is the number of bitmaps in a merkle hash block.
 	HashBlockSize = 100
@@ -500,7 +500,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		bitmapID, n := pair.ID, pair.Count
 
 		// Ignore empty bitmaps.
-		if n <= 0 {
+		if n <= 0 || n < MinThreshold{
 			continue
 		}
 
@@ -525,7 +525,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 			if opt.Src != nil {
 				count = opt.Src.IntersectionCount(f.Bitmap(bitmapID))
 			}
-			if count == 0 {
+			if count == 0 || count < MinThreshold {
 				continue
 			}
 			//results = append(results, Pair{Key: bitmapID, Count: count})
