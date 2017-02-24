@@ -54,6 +54,27 @@ func TestFrame_SetTimeQuantum(t *testing.T) {
 	}
 }
 
+// Ensure base frame name can be retrieved.
+func TestFrameBase(t *testing.T) {
+	t.Run("BaseOnly", func(t *testing.T) {
+		if v := pilosa.FrameBase("myframe"); v != "myframe" {
+			t.Fatalf("unexpected base: %s", v)
+		}
+	})
+
+	t.Run("Inverted", func(t *testing.T) {
+		if v := pilosa.FrameBase("myframe::I"); v != "myframe" {
+			t.Fatalf("unexpected base: %s", v)
+		}
+	})
+
+	t.Run("Empty", func(t *testing.T) {
+		if v := pilosa.FrameBase(""); v != "" {
+			t.Fatalf("unexpected base: %s", v)
+		}
+	})
+}
+
 // Frame represents a test wrapper for pilosa.Frame.
 type Frame struct {
 	*pilosa.Frame

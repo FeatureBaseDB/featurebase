@@ -321,24 +321,60 @@ func (db *DB) CreateFragmentIfNotExists(name string, slice uint64) (*Fragment, e
 // SetBit sets a bit for a given profile & bitmap.
 // If a timestamp is specified then set all bits for the different quantum units.
 func (db *DB) SetBit(name string, bitmapID, profileID uint64, t *time.Time) (changed bool, err error) {
+	// Ensure base frame exists first so we can retrieve quantum info.
+	f, err := db.CreateFrameIfNotExists(name)
+	if err != nil {
+		return changed, err
+	}
+
+	// Determine quantum of frame. Set to the default quantum if it is unset.
+	var q TimeQuantum
+	if t != nil {
+		q = f.TimeQuantum()
+		if q == "" {
+			q = db.TimeQuantum()
+			if err := f.SetTimeQuantum(q); err != nil {
+				return changed, err
+			}
+		}
+	}
+
+	// Set bit & time bits on the base frame first.
+	if v, err := db.setBit(name, bitmapID, profileID, t, q); err != nil {
+		return changed, err
+	} else if v {
+		changed = true
+	}
+
+	// Set inverse bit & time bits on the inverted frame next.
+	// This swaps the bitmap and profile ids and inserts into a "::I" suffixed frame.
+	if v, err := db.setBit(name+InvertedFrameSuffix, profileID, bitmapID, t, q); err != nil {
+		return changed, err
+	} else if v {
+		changed = true
+	}
+
+	return changed, nil
+}
+
+// setBit sets a bit for a given profile & bitmap.
+func (db *DB) setBit(name string, bitmapID, profileID uint64, t *time.Time, q TimeQuantum) (changed bool, err error) {
 	// Read frame.
 	f, err := db.CreateFrameIfNotExists(name)
 	if err != nil {
 		return changed, err
 	}
 
-	// If this is a non-time bit then simply set the bit on the frame.
-	if t == nil {
-		return f.SetBit(bitmapID, profileID)
+	// Set bit and update changed flag.
+	if v, err := f.SetBit(bitmapID, profileID); err != nil {
+		return changed, err
+	} else if v {
+		changed = true
 	}
 
-	// Determine quantum of frame. Set to the default quantum if it is unset.
-	q := f.TimeQuantum()
-	if q == "" {
-		q = db.TimeQuantum()
-		if err := f.SetTimeQuantum(q); err != nil {
-			return changed, err
-		}
+	// If this is a non-time bit then simply set the bit on the frame.
+	if t == nil {
+		return changed, nil
 	}
 
 	// If a timestamp is specified then set bits across all frames for the quantum.

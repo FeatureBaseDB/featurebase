@@ -87,8 +87,6 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 		return e.executeClearBit(ctx, db, c, opt)
 	case "Count":
 		return e.executeCount(ctx, db, c, slices, opt)
-	case "Profile":
-		return e.executeProfile(ctx, db, c, opt)
 	case "SetBit":
 		return e.executeSetBit(ctx, db, c, opt)
 	case "SetBitmapAttrs":
@@ -124,15 +122,28 @@ func (e *Executor) executeBitmapCall(ctx context.Context, db string, c *pql.Call
 		return nil, err
 	}
 
-	// Attach bitmap attributes for Bitmap() calls.
+	// Attach attributes for Bitmap() or Profile() calls.
 	bm, _ := other.(*Bitmap)
-	if c.Name == "Bitmap" {
+	switch c.Name {
+	case "Bitmap":
 		id, _ := c.Args["id"].(uint64)
 		frame, _ := c.Args["frame"].(string)
 
 		fr := e.Index.Frame(db, frame)
 		if fr != nil {
 			attrs, err := fr.BitmapAttrStore().Attrs(id)
+			if err != nil {
+				return nil, err
+			}
+			bm.Attrs = attrs
+		}
+
+	case "Profile":
+		id, _ := c.Args["id"].(uint64)
+
+		d := e.Index.DB(db)
+		if d != nil {
+			attrs, err := d.ProfileAttrStore().Attrs(id)
 			if err != nil {
 				return nil, err
 			}
@@ -152,6 +163,8 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, db string, c *pql
 		return e.executeDifferenceSlice(ctx, db, c, slice)
 	case "Intersect":
 		return e.executeIntersectSlice(ctx, db, c, slice)
+	case "Profile":
+		return e.executeProfileSlice(ctx, db, c, slice)
 	case "Range":
 		return e.executeRangeSlice(ctx, db, c, slice)
 	case "Union":
@@ -312,6 +325,20 @@ func (e *Executor) executeIntersectSlice(ctx context.Context, db string, c *pql.
 	return other, nil
 }
 
+func (e *Executor) executeProfileSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (*Bitmap, error) {
+	id, _ := c.Args["id"].(uint64)
+	frame, _ := c.Args["frame"].(string)
+	if frame == "" {
+		frame = DefaultFrame
+	}
+
+	f := e.Index.Fragment(db, frame+InvertedFrameSuffix, slice)
+	if f == nil {
+		return NewBitmap(), nil
+	}
+	return f.Bitmap(id), nil
+}
+
 // executeRangeSlice executes a range() call for a local slice.
 func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (*Bitmap, error) {
 	id, _ := c.Args["id"].(uint64)
@@ -415,12 +442,6 @@ func (e *Executor) executeCount(ctx context.Context, db string, c *pql.Call, sli
 	n, _ := result.(uint64)
 
 	return n, nil
-}
-
-// executeProfile executes a Profile() call.
-// This call only executes locally since the profile attibutes are stored locally.
-func (e *Executor) executeProfile(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) (*Profile, error) {
-	panic("FIXME: impl: e.Index.ProfileAttr(c.ID)")
 }
 
 // executeClearBit executes a ClearBit() call.
