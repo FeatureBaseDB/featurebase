@@ -91,8 +91,6 @@ func (c *LRUCache) Top() []BitmapPair {
 }
 
 func (c *LRUCache) onEvicted(key lru.Key, _ interface{}) { delete(c.counts, key.(uint64)) }
-func (c *LRUCache) Refresh() {
-}
 
 // Ensure LRUCache implements Cache.
 var _ Cache = &LRUCache{}
