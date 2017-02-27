@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/pql"
 )
 
 // Init is the entry point into the shared object to register any plugins.
@@ -27,22 +26,13 @@ func NewDebugPlugin() pilosa.Plugin {
 }
 
 // Map executes the plugin against a single slice.
-func (p *DebugPlugin) Map(ctx context.Context, db string, args []pql.Arg, slice uint64) (interface{}, error) {
+func (p *DebugPlugin) Map(ctx context.Context, db string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
 	var buf bytes.Buffer
 	fmt.Fprint(&buf, "Debug.Map(")
 	fmt.Fprintf(&buf, "db=%#v, ", db)
-
-	fmt.Fprintf(&buf, "args=[")
-	for i, arg := range args {
-		if i != 0 {
-			fmt.Fprint(&buf, " ")
-		}
-		fmt.Fprintf(&buf, "%#v:%#v", arg.Key, arg.Value)
-	}
-	fmt.Fprintf(&buf, "], ")
-
+	fmt.Fprintf(&buf, "children=%#v, ", children)
+	fmt.Fprintf(&buf, "args=%#v, ", args)
 	fmt.Fprintf(&buf, "slice=%d", slice)
-
 	fmt.Fprintln(&buf, ")")
 	buf.WriteTo(os.Stderr)
 

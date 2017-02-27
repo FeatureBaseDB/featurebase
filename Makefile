@@ -34,6 +34,10 @@ pilosa: vendor
 pilosactl: vendor
 	go build $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosactl
 
+plugins: pilosa
+	mkdir -p $(GOPATH)/bin/pilosa-plugins
+	go build $(LDFLAGS) $(FLAGS) -buildmode=plugin -o $(GOPATH)/bin/pilosa-plugins/test.so ./plugins/test
+
 crossbuild: vendor
 	mkdir -p build/pilosa-$(IDENTIFIER)
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
@@ -46,20 +50,3 @@ install: vendor
 docker: vendor
 	docker build -t pilosa:latest .
 
-install: pilosa pilosactl plugins
-	@echo "[install] plugins"
-	@mkdir -p ~/.pilosa/plugins
-	@cp bin/* ~/.pilosa/plugins
-
-pilosa:
-	@echo "[install] pilosa"
-	@go install ./cmd/pilosa
-
-pilosactl:
-	@echo "[install] pilosactl"
-	@go install ./cmd/pilosactl
-
-plugins:
-	@mkdir -p bin
-	@echo "[build] plugin: test"
-	@go build -buildmode=plugin -o bin/test.so ./plugins/test

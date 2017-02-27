@@ -285,8 +285,8 @@ func TestExecutor_Execute_ExternalCall(t *testing.T) {
 	e := NewExecutor(idx.Index, NewCluster(1))
 	e.PluginRegistry.Register("test1", func() pilosa.Plugin {
 		return &MockPlugin{
-			MapFn: func(ctx context.Context, db string, args []pql.Arg, slice uint64) (interface{}, error) {
-				bm := args[0].Value.(*pilosa.Bitmap)
+			MapFn: func(ctx context.Context, db string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
+				bm := children[0].(*pilosa.Bitmap)
 				return uint64(bm.Count() + 10), nil
 			},
 			ReduceFn: func(ctx context.Context, prev, v interface{}) interface{} {

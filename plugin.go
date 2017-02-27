@@ -3,13 +3,11 @@ package pilosa
 import (
 	"context"
 	"errors"
-
-	"github.com/pilosa/pilosa/pql"
 )
 
 // Plugin represents pluggable functionality into pilosa.
 type Plugin interface {
-	Map(ctx context.Context, db string, args []pql.Arg, slice uint64) (interface{}, error)
+	Map(ctx context.Context, db string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error)
 	Reduce(ctx context.Context, prev, v interface{}) interface{}
 }
 

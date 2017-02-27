@@ -2,3 +2,5 @@ default.etcd/
 *.test
 *.so
 vendor
+pilosa
+pilosactl
