@@ -243,6 +243,8 @@ type PairHeap struct {
 	Pairs
 }
 
+func (p PairHeap) Less(i, j int) bool { return p.Pairs[i].Count < p.Pairs[j].Count }
+
 func (h *Pairs) Push(x interface{}) {
 	// Push and Pop use pointer receivers because they modify the slice's length,
 	// not just its contents.
