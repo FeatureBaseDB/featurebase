@@ -109,18 +109,16 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 }
 
 // executeCallSlice executes a call for a single slice.
-func (e *Executor) executeCallSlice(ctx context.Context, db string, c pql.Call, slice uint64) (interface{}, error) {
-	switch c := c.(type) {
-	case pql.BitmapCall:
+func (e *Executor) executeCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (interface{}, error) {
+	switch c.Name {
+	case "Bitmap", "Difference", "Intersect", "Range", "Union":
 		return e.executeBitmapCallSlice(ctx, db, c, slice)
-	case *pql.Count:
+	case "Count":
 		return e.executeCountSlice(ctx, db, c, slice)
-	case *pql.TopN:
+	case "TopN":
 		return nil, errors.New("nested TopN() not currently supported")
-	case *pql.ExternalCall:
-		return e.executeExternalCallSlice(ctx, db, c, slice)
 	default:
-		panic("unreachable")
+		return e.executeExternalCallSlice(ctx, db, c, slice)
 	}
 }
 
@@ -184,7 +182,7 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, db string, c *pql
 }
 
 // executeExternalCall executes an external plugin call.
-func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.ExternalCall, slices []uint64, opt *ExecOptions) (interface{}, error) {
+func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
 	// Create plugin from registry for the reduction.
 	p, err := e.newPlugin(c)
 	if err != nil {
@@ -210,36 +208,33 @@ func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.Ex
 }
 
 // executeExternalCallSlice executes the map phase of an external plugin call against a single slice.
-func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *pql.ExternalCall, slice uint64) (interface{}, error) {
+func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (interface{}, error) {
 	p, err := e.newPlugin(c)
 	if err != nil {
 		return nil, err
 	}
 
-	// Evaluate nested calls within arguments.
-	newArgs := make([]pql.Arg, len(c.Args))
-	for i, arg := range c.Args {
-		// Copy key.
-		newArgs[i].Key = arg.Key
-
-		// Evaluate or copy value.
-		switch v := arg.Value.(type) {
-		case pql.Call:
-			ret, err := e.executeCallSlice(ctx, db, v, slice)
-			if err != nil {
-				return nil, err
-			}
-			newArgs[i].Value = ret
-		default:
-			newArgs[i].Value = arg.Value
+	// Evaluate children.
+	children := make([]interface{}, len(c.Children))
+	for i, child := range c.Children {
+		ret, err := e.executeCallSlice(ctx, db, child, slice)
+		if err != nil {
+			return nil, err
 		}
+		children[i] = ret
 	}
 
-	return p.Map(ctx, db, newArgs, slice)
+	// Copy arguments.
+	args := make(map[string]interface{}, len(c.Args))
+	for k, v := range c.Args {
+		args[k] = v
+	}
+
+	return p.Map(ctx, db, children, args, slice)
 }
 
 // newPlugin instantiates a plugin from an external call.
-func (e *Executor) newPlugin(c *pql.ExternalCall) (Plugin, error) {
+func (e *Executor) newPlugin(c *pql.Call) (Plugin, error) {
 	p, err := e.PluginRegistry.NewPlugin(c.Name)
 	if err != nil {
 		return nil, err
@@ -512,8 +507,8 @@ func (e *Executor) executeCount(ctx context.Context, db string, c *pql.Call, sli
 }
 
 // executeCountSlice executes a count() call against a single slice.
-func (e *Executor) executeCountSlice(ctx context.Context, db string, c *pql.Count, slice uint64) (uint64, error) {
-	bm, err := e.executeBitmapCallSlice(ctx, db, c.Input, slice)
+func (e *Executor) executeCountSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (uint64, error) {
+	bm, err := e.executeBitmapCallSlice(ctx, db, c.Children[0], slice)
 	if err != nil {
 		return 0, err
 	}
