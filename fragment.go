@@ -398,9 +398,10 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	}
 
 	// Update the cache.
-	if f.bitmap(bitmapID, true).SetBit(profileID) {
-		changed = true
-	}
+	bm := f.bitmap(bitmapID, true)
+	bm.SetBit(profileID)
+	bm.InvalidateCount() //maybe a perf opportunity?
+	f.cache.Add(bitmapID, bm.Count())
 
 	f.stats.Count("setN", 1)
 
@@ -442,9 +443,10 @@ func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
 	}
 
 	// Update the cache.
-	if f.bitmap(bitmapID, true).ClearBit(profileID) {
-		return true, nil
-	}
+	bm := f.bitmap(bitmapID, true)
+	bm.ClearBit(profileID)
+	bm.InvalidateCount() //maybe a perf opportunity?
+	f.cache.Add(bitmapID, bm.Count())
 
 	f.stats.Count("clearN", 1)
 
