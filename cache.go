@@ -135,7 +135,7 @@ func (c *RankCache) Add(bitmapID uint64, n uint64) {
 	}
 }
 
-// Add adds a bitmap to the cache unsorted you should Invalidate after completion
+// BulkAdd adds a bitmap to the cache unsorted. You should Invalidate after completion.
 func (c *RankCache) BulkAdd(bitmapID uint64, n uint64) {
 	if n < c.ThresholdValue {
 		return
