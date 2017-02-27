@@ -351,8 +351,10 @@ func (f *Fragment) bitmap(bitmapID uint64, updateCache bool) *Bitmap {
 			slice:    f.slice,
 			writable: false,
 		}},
+		cacheoveride: 0,
 	}
 	bm.InvalidateCount()
+	bm.cacheoveride = bm.Count()
 
 	if updateCache {
 		// Update cache.
@@ -380,6 +382,7 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	}
 
 	// Write to storage.
+
 	if changed, err = f.storage.Add(pos); err != nil {
 		return false, err
 	}
@@ -398,9 +401,16 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	}
 
 	// Update the cache.
-	if f.bitmap(bitmapID, true).SetBit(profileID) {
-		changed = true
+	bm := f.bitmap(bitmapID, true)
+	if bm.cacheoveride > 0 {
+		bm.SetCount(profileID, bm.cacheoveride)
+		bm.cacheoveride = 0
+	} else {
+		bm.IncrementCount(profileID)
 	}
+	bm.SetBit(profileID)
+
+	f.cache.Add(bitmapID, bm.Count())
 
 	f.stats.Count("setN", 1)
 
@@ -442,9 +452,14 @@ func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
 	}
 
 	// Update the cache.
-	if f.bitmap(bitmapID, true).ClearBit(profileID) {
-		return true, nil
+	bm := f.bitmap(bitmapID, false)
+	if bm.cacheoveride > 0 {
+		bm.SetCount(profileID, bm.cacheoveride)
+		bm.cacheoveride = 0
+	} else {
+		bm.DecrementCount(profileID)
 	}
+	f.cache.Add(bitmapID, bm.Count())
 
 	f.stats.Count("clearN", 1)
 
@@ -548,12 +563,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 		// Retrieve the lowest count we have.
 		// If it's too low then don't try finding anymore pairs.
-		//threshold := results[len(results)-1].Count
-
 		threshold := results.Pairs[0].Count
-		if threshold < MinThreshold {
-			break
-		}
 
 		// If the bitmap doesn't have enough bits set before the intersection
 		// then we can assume that any remaing bitmaps also have a count too low.
@@ -591,21 +601,24 @@ func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
 	}
 
 	// Otherwise retrieve specific bitmaps.
-	pairs := make([]BitmapPair, len(bitmapIDs))
-	for i, bitmapID := range bitmapIDs {
+	pairs := make([]BitmapPair, 0, len(bitmapIDs))
+	for _, bitmapID := range bitmapIDs {
 		// Look up cache first, if available.
 		if n := f.cache.Get(bitmapID); n > 0 {
-			pairs[i] = BitmapPair{
+			pairs = append(pairs, BitmapPair{
 				ID:    bitmapID,
 				Count: n,
-			}
+			})
 			continue
 		}
 
-		// Otherwise load from storage.
-		pairs[i] = BitmapPair{
-			ID:    bitmapID,
-			Count: f.Bitmap(bitmapID).Count(),
+		bm := f.Bitmap(bitmapID)
+		if bm.Count() > 0 {
+			// Otherwise load from storage.
+			pairs = append(pairs, BitmapPair{
+				ID:    bitmapID,
+				Count: bm.Count(),
+			})
 		}
 	}
 	sort.Sort(BitmapPairs(pairs))
