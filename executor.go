@@ -995,20 +995,20 @@ func hasOnlySetBitmapAttrs(calls []*pql.Call) bool {
 	return true
 }
 
-func needsSlices(calls pql.Calls) bool {
+func needsSlices(calls []*pql.Call) bool {
 	if len(calls) == 0 {
 		return false
 	}
-
 	for _, call := range calls {
-		if _, ok := call.(pql.BitmapCall); !ok {
+		switch call.Name {
+		case "ClearBit", "Profile", "SetBit", "SetBitmapAttrs", "SetProfileAttrs":
+			continue
+		case "Count", "TopN":
 			return true
-		} else if _, ok := call.(*pql.Count); !ok {
-			return true
-		} else if _, ok := call.(*pql.TopN); !ok {
+		// default catches Bitmap calls
+		default:
 			return true
 		}
-
 	}
 	return false
 }
