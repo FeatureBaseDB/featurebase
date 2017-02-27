@@ -563,12 +563,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 		// Retrieve the lowest count we have.
 		// If it's too low then don't try finding anymore pairs.
-		//threshold := results[len(results)-1].Count
-
 		threshold := results.Pairs[0].Count
-		//if threshold < MinThreshold {
-		//break
-		//}
 
 		// If the bitmap doesn't have enough bits set before the intersection
 		// then we can assume that any remaing bitmaps also have a count too low.
