@@ -553,9 +553,9 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		//threshold := results[len(results)-1].Count
 
 		threshold := results.Pairs[0].Count
-		if threshold < MinThreshold {
-			break
-		}
+		//if threshold < MinThreshold {
+		//break
+		//}
 
 		// If the bitmap doesn't have enough bits set before the intersection
 		// then we can assume that any remaing bitmaps also have a count too low.
@@ -593,21 +593,24 @@ func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
 	}
 
 	// Otherwise retrieve specific bitmaps.
-	pairs := make([]BitmapPair, len(bitmapIDs))
-	for i, bitmapID := range bitmapIDs {
+	pairs := make([]BitmapPair, 0, len(bitmapIDs))
+	for _, bitmapID := range bitmapIDs {
 		// Look up cache first, if available.
 		if n := f.cache.Get(bitmapID); n > 0 {
-			pairs[i] = BitmapPair{
+			pairs = append(pairs, BitmapPair{
 				ID:    bitmapID,
 				Count: n,
-			}
+			})
 			continue
 		}
 
-		// Otherwise load from storage.
-		pairs[i] = BitmapPair{
-			ID:    bitmapID,
-			Count: f.Bitmap(bitmapID).Count(),
+		bm := f.Bitmap(bitmapID)
+		if bm.Count() > 0 {
+			// Otherwise load from storage.
+			pairs = append(pairs, BitmapPair{
+				ID:    bitmapID,
+				Count: bm.Count(),
+			})
 		}
 	}
 	sort.Sort(BitmapPairs(pairs))
