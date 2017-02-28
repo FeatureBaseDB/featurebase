@@ -199,7 +199,7 @@ func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slic
 }
 
 func (e *Executor) executeTopNSlices(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
-	n, _ := c.Args["n"].(uint64)
+	//n, _ := c.Args["n"].(uint64)
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
@@ -222,9 +222,9 @@ func (e *Executor) executeTopNSlices(ctx context.Context, db string, c *pql.Call
 	sort.Sort(Pairs(results))
 
 	// Only keep the top n after sorting.
-	if n > 0 && len(results) > int(n) {
-		results = results[0:n]
-	}
+	//	if n > 0 && len(results) > int(n) {
+	//	results = results[0:n]
+	//}
 
 	return results, nil
 }
