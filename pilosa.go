@@ -6,21 +6,20 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
+// System errors.
 var (
-	// ErrHostRequired is returned when excuting a remote operation without a host.
 	ErrHostRequired = errors.New("host required")
 
-	// ErrDatabaseRequired is returned when no database is specified.
 	ErrDatabaseRequired = errors.New("database required")
+	ErrDatabaseExists   = errors.New("database already exists")
+	ErrDatabaseNotFound = errors.New("database not found")
 
-	// ErrFrameRequired is returned when no frame is specified.
 	ErrFrameRequired = errors.New("frame required")
+	ErrFrameExists   = errors.New("frame already exists")
+	ErrFrameNotFound = errors.New("frame not found")
 
-	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
-
-	// ErrQueryRequired is returned when no query is specified.
-	ErrQueryRequired = errors.New("query required")
+	ErrQueryRequired    = errors.New("query required")
 )
 
 // Profile represents vertical column in a database.

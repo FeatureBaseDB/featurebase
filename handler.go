@@ -108,6 +108,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case "/db":
 		switch r.Method {
+		case "POST":
+			h.handlePostDB(w, r)
 		case "DELETE":
 			h.handleDeleteDB(w, r)
 		default:
@@ -129,6 +131,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case "/frame":
 		switch r.Method {
+		case "POST":
+			h.handlePostFrame(w, r)
 		case "DELETE":
 			h.handleDeleteFrame(w, r)
 		default:
@@ -299,6 +303,38 @@ type sliceMaxResponse struct {
 	MaxSlices map[string]uint64 `json:"MaxSlices"`
 }
 
+// handlePostDB handles POST /db request.
+func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req postDBRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Create database.
+	_, err := h.Index.CreateDB(req.DB, req.Options)
+	if err == ErrDatabaseExists {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(postDBResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type postDBRequest struct {
+	DB      string    `json:"db"`
+	Options DBOptions `json:"options"`
+}
+
+type postDBResponse struct{}
+
 // handleDeleteDB handles DELETE /db request.
 func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 	// Decode request.
@@ -343,9 +379,9 @@ func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Retrieve database by name.
-	db, err := h.Index.CreateDBIfNotExists(req.DB)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	db := h.Index.DB(req.DB)
+	if db == nil {
+		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -378,9 +414,9 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Retrieve database from index.
-	db, err := h.Index.CreateDBIfNotExists(req.DB)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	db := h.Index.DB(req.DB)
+	if db == nil {
+		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -423,6 +459,46 @@ type postDBAttrDiffRequest struct {
 type postDBAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
+
+// handlePostFrame handles POST /frame request.
+func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req postFrameRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Find database.
+	db := h.Index.DB(req.DB)
+	if db == nil {
+		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Create frame.
+	_, err := db.CreateFrame(req.Frame, req.Options)
+	if err == ErrFrameExists {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type postFrameRequest struct {
+	DB      string       `json:"db"`
+	Frame   string       `json:"frame"`
+	Options FrameOptions `json:"options"`
+}
+
+type postFrameResponse struct{}
 
 // handleDeleteFrame handles DELETE /frame request.
 func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
@@ -478,9 +554,9 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 	}
 
 	// Retrieve database by name.
-	f, err := h.Index.CreateFrameIfNotExists(req.DB, req.Frame)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	f := h.Index.Frame(req.DB, req.Frame)
+	if f == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -514,9 +590,9 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 	}
 
 	// Retrieve database from index.
-	f, err := h.Index.CreateFrameIfNotExists(req.DB, req.Frame)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	f := h.Index.Frame(req.DB, req.Frame)
+	if f == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -714,10 +790,10 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 	// Find the correct fragment.
 	h.logger().Println("importing:", req.DB, req.Frame, req.Slice)
-	db, err := h.Index.CreateDBIfNotExists(req.DB)
-	if err != nil {
-		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%d, err=%s", req.DB, req.Frame, req.Slice, err)
-		http.Error(w, "fragment error", http.StatusInternalServerError)
+	db := h.Index.DB(req.DB)
+	if db == nil {
+		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%d, err=%s", req.DB, req.Frame, req.Slice, ErrDatabaseNotFound.Error())
+		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -725,6 +801,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	err = db.Import(req.Frame, req.BitmapIDs, req.ProfileIDs, timestamps)
 	if err != nil {
 		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", req.DB, req.Frame, req.Slice, len(req.ProfileIDs), err)
+		return
 	}
 
 	// Marshal response object.
@@ -847,15 +924,22 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Retrieve fragment from index.
-	f, err := h.Index.CreateFragmentIfNotExists(q.Get("db"), q.Get("frame"), slice)
+	// Retrieve frame.
+	f := h.Index.Frame(q.Get("db"), q.Get("frame"))
+	if f == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Retrieve fragment from frame.
+	frag, err := f.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Read fragment in from request body.
-	if _, err := f.ReadFrom(r.Body); err != nil {
+	if _, err := frag.ReadFrom(r.Body); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -971,8 +1055,15 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 			continue
 		}
 
+		// Retrieve frame.
+		f := h.Index.Frame(db, frame)
+		if f == nil {
+			http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+			return
+		}
+
 		// Otherwise retrieve the local fragment.
-		f, err := h.Index.CreateFragmentIfNotExists(db, frame, slice)
+		frag, err := f.CreateFragmentIfNotExists(slice)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -990,7 +1081,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 		// Restore to local frame and always close reader.
 		if err := func() error {
 			defer rd.Close()
-			if _, err := f.ReadFrom(rd); err != nil {
+			if _, err := frag.ReadFrom(rd); err != nil {
 				return err
 			}
 			return nil

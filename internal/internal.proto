@@ -4,10 +4,12 @@ package internal;
 
 message DB {
 	string TimeQuantum = 1;
+	string ColumnLabel = 2;
 }
 
 message Frame {
 	string TimeQuantum = 1;
+	string RowLabel = 2;
 }
 
 message Bitmap {
