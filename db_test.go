@@ -15,7 +15,7 @@ func TestDB_CreateFrameIfNotExists(t *testing.T) {
 	defer db.Close()
 
 	// Create frame.
-	f, err := db.CreateFrameIfNotExists("f")
+	f, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if f == nil {
@@ -23,7 +23,7 @@ func TestDB_CreateFrameIfNotExists(t *testing.T) {
 	}
 
 	// Retrieve existing frame.
-	other, err := db.CreateFrameIfNotExists("f")
+	other, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if f != other {
@@ -41,7 +41,7 @@ func TestDB_DeleteFrame(t *testing.T) {
 	defer db.Close()
 
 	// Create frame.
-	if _, err := db.CreateFrameIfNotExists("f"); err != nil {
+	if _, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 

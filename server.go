@@ -211,9 +211,9 @@ func (s *Server) monitorMaxSlices() {
 							localdb.SetRemoteMaxSlice(newmax)
 						}
 					} else {
-						d, err := s.Index.CreateDBIfNotExists(db)
-						if err != nil {
-							s.logger().Printf("Failed to create DB locally: %s", db)
+						d := s.Index.DB(db)
+						if d == nil {
+							s.logger().Printf("Local DB not found: %s", db)
 							return
 						}
 						oldmaxslices[db] = newmax
