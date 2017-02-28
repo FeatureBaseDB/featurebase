@@ -176,7 +176,6 @@ func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.TopN, slic
 	if len(pairs) == 0 || len(c.BitmapIDs) > 0 || opt.Remote {
 		return pairs, nil
 	}
-
 	// Only the original caller should refetch the full counts.
 	other := *c
 	other.N = 0
@@ -780,6 +779,7 @@ func (e *Executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 				resp.result, resp.err = e.mapperLocal(ctx, nodeSlices, mapFn, reduceFn)
 			} else if !opt.Remote {
 				results, err := e.exec(ctx, n, db, &pql.Query{Calls: pql.Calls{c}}, nodeSlices, opt)
+
 				if len(results) > 0 {
 					resp.result = results[0]
 				}
