@@ -194,7 +194,10 @@ func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slic
 	if x != nil {
 		return nil, x
 	}
-	trimedlist = trimedlist[0:n]
+
+	if int(n) < len(trimedlist) {
+		trimedlist = trimedlist[0:n]
+	}
 	return trimedlist, nil
 }
 
