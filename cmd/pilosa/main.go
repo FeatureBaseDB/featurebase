@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,6 +44,9 @@ func main() {
 	m := NewMain()
 	m.Server.Handler.Version = Version
 	fmt.Fprintf(m.Stderr, "Pilosa %s, build time %s\n", Version, BuildTime)
+
+	// Load configuration from environment variables
+	m.loadEnvConfig()
 
 	// Parse command line arguments.
 	if err := m.ParseFlags(os.Args[1:]); err != nil {
@@ -194,4 +198,40 @@ func (m *Main) ParseFlags(args []string) error {
 	}
 
 	return nil
+}
+
+// loadEnvConfig loads configuration from environment variables
+func (m *Main) loadEnvConfig() {
+	envStringVar(&m.Config.DataDir, "PILOSA_DATA_DIR")
+	envStringVar(&m.Config.Host, "PILOSA_BIND")
+	envIntVar(&m.Config.Cluster.ReplicaN, "PILOSA_CLUSTER_REPLICAS")
+
+	var clusterNodes string
+	envStringVar(&clusterNodes, "PILOSA_CLUSTER_NODES")
+	if clusterNodes != "" {
+		for _, nodeAddr := range strings.Fields(clusterNodes) {
+			node := &pilosa.ConfigNode{
+				Host: nodeAddr,
+			}
+			m.Config.Cluster.Nodes = append(m.Config.Cluster.Nodes, node)
+		}
+	}
+}
+
+func envStringVar(v *string, key string) {
+	value := os.Getenv(key)
+	if value != "" {
+		*v = value
+	}
+}
+
+func envIntVar(v *int, key string) {
+	value := os.Getenv(key)
+	if value != "" {
+		vi, err := strconv.Atoi(value)
+		if err != nil {
+			panic(err)
+		}
+		*v = vi
+	}
 }
