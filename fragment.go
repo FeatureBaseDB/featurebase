@@ -351,8 +351,10 @@ func (f *Fragment) bitmap(bitmapID uint64, updateCache bool) *Bitmap {
 			slice:    f.slice,
 			writable: false,
 		}},
+		cacheoveride: 0,
 	}
 	bm.InvalidateCount()
+	bm.cacheoveride = bm.Count()
 
 	if updateCache {
 		// Update cache.
@@ -380,6 +382,7 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	}
 
 	// Write to storage.
+
 	if changed, err = f.storage.Add(pos); err != nil {
 		return false, err
 	}
@@ -399,8 +402,13 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 
 	// Update the cache.
 	bm := f.bitmap(bitmapID, true)
-	bm.SetBit(profileID)
-	bm.InvalidateCount() //maybe a perf opportunity?
+	if bm.cacheoveride > 0 {
+		bm.SetCount(profileID, bm.cacheoveride)
+		bm.cacheoveride = 0
+	} else {
+		bm.IncrementCount(profileID)
+	}
+
 	f.cache.Add(bitmapID, bm.Count())
 
 	f.stats.Count("setN", 1)
@@ -443,9 +451,13 @@ func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
 	}
 
 	// Update the cache.
-	bm := f.bitmap(bitmapID, true)
-	bm.ClearBit(profileID)
-	bm.InvalidateCount() //maybe a perf opportunity?
+	bm := f.bitmap(bitmapID, false)
+	if bm.cacheoveride > 0 {
+		bm.SetCount(profileID, bm.cacheoveride)
+		bm.cacheoveride = 0
+	} else {
+		bm.DecrementCount(profileID)
+	}
 	f.cache.Add(bitmapID, bm.Count())
 
 	f.stats.Count("clearN", 1)
