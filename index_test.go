@@ -169,6 +169,8 @@ func TestIndex_HandleMessage(t *testing.T) {
 	idx0 := MustOpenIndex()
 	defer idx0.Close()
 
+	idx0.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
+
 	msg0 := &internal.CreateSliceMessage{
 		DB:    "d",
 		Slice: 8,

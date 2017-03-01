@@ -308,9 +308,9 @@ func (i *Index) flushCaches() {
 func (i *Index) HandleMessage(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.CreateSliceMessage:
-		d, err := i.CreateDBIfNotExists(obj.DB)
-		if err != nil {
-			return err
+		d := i.DB(obj.DB)
+		if d == nil {
+			return fmt.Errorf("Local DB not found: %s", obj.DB)
 		}
 		d.SetRemoteMaxSlice(obj.Slice)
 	case *internal.DeleteDBMessage:
