@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/golang/groupcache/lru"
@@ -97,6 +98,7 @@ var _ Cache = &LRUCache{}
 
 // RankCache represents a cache with sorted entries.
 type RankCache struct {
+	mu       sync.Mutex
 	entries  map[uint64]uint64
 	rankings []BitmapPair // cached, ordered list
 
@@ -117,6 +119,8 @@ func NewRankCache() *RankCache {
 
 // Add adds a bitmap to the cache.
 func (c *RankCache) Add(bitmapID uint64, n uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	// Ignore if the bit count on the bitmap is below the threshold.
 	if n < c.ThresholdValue {
 		return
@@ -124,19 +128,13 @@ func (c *RankCache) Add(bitmapID uint64, n uint64) {
 
 	c.entries[bitmapID] = n
 
-	c.Invalidate()
-	// If size is larger than the threshold then trim it.
-	if len(c.entries) > c.ThresholdLength {
-		for id, n := range c.entries {
-			if n <= c.ThresholdValue {
-				delete(c.entries, id)
-			}
-		}
-	}
+	c.invalidate()
 }
 
 // BulkAdd adds a bitmap to the cache unsorted. You should Invalidate after completion.
 func (c *RankCache) BulkAdd(bitmapID uint64, n uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if n < c.ThresholdValue {
 		return
 	}
@@ -145,13 +143,23 @@ func (c *RankCache) BulkAdd(bitmapID uint64, n uint64) {
 }
 
 // Get returns a bitmap with a given id.
-func (c *RankCache) Get(bitmapID uint64) uint64 { return c.entries[bitmapID] }
+func (c *RankCache) Get(bitmapID uint64) uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.entries[bitmapID]
+}
 
 // Len returns the number of items in the cache.
-func (c *RankCache) Len() int { return len(c.entries) }
+func (c *RankCache) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.entries)
+}
 
 // BitmapIDs returns a list of all bitmap IDs in the cache.
 func (c *RankCache) BitmapIDs() []uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	a := make([]uint64, 0, len(c.entries))
 	for id := range c.entries {
 		a = append(a, id)
@@ -162,6 +170,15 @@ func (c *RankCache) BitmapIDs() []uint64 {
 
 // update reorders the entries by rank.
 func (c *RankCache) Invalidate() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.invalidate()
+
+}
+func (c *RankCache) invalidate() {
+	if time.Now().Sub(c.updateTime).Seconds() < 10 {
+		return
+	}
 	//fmt.Println("RankCache Update")
 	// Convert cache to a sorted list.
 	rankings := make([]BitmapPair, 0, len(c.entries))
@@ -183,6 +200,14 @@ func (c *RankCache) Invalidate() {
 
 	// Reset counters.
 	c.updateTime, c.updateN = time.Now(), 0
+	// If size is larger than the threshold then trim it.
+	if len(c.entries) > c.ThresholdLength {
+		for id, n := range c.entries {
+			if n <= c.ThresholdValue {
+				delete(c.entries, id)
+			}
+		}
+	}
 }
 
 // Top returns an ordered list of bitmaps.
