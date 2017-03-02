@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
-	"regexp"
 )
 
 // ImportCommand represents a command for bulk importing data.

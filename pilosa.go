@@ -7,24 +7,24 @@ import (
 	"regexp"
 )
 
+// System errors.
 var (
-	// ErrHostRequired is returned when excuting a remote operation without a host.
 	ErrHostRequired = errors.New("host required")
 
-	// ErrDatabaseRequired is returned when no database is specified.
 	ErrDatabaseRequired = errors.New("database required")
+	ErrDatabaseExists   = errors.New("database already exists")
+	ErrDatabaseNotFound = errors.New("database not found")
 
-	// ErrFrameRequired is returned when no frame is specified.
 	ErrFrameRequired = errors.New("frame required")
+	ErrFrameExists   = errors.New("frame already exists")
+	ErrFrameNotFound = errors.New("frame not found")
 
 	// ErrFrameRequired is returned when no frame is specified.
 	ErrName = errors.New("name restricted to [a-z0-9_-.]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
-
-	// ErrQueryRequired is returned when no query is specified.
-	ErrQueryRequired = errors.New("query required")
+	ErrQueryRequired    = errors.New("query required")
 )
 
 // Profile represents vertical column in a database.
@@ -83,9 +83,8 @@ const TimeFormat = "2006-01-02T15:04"
 
 // Restrict name using regex
 func ValidateName(name string) error {
-	expr := regexp.MustCompile(`^([a-z0-9._-]{2,64}$)`)
+	expr := regexp.MustCompile(`^([a-z0-9._-]{1,64}$)`)
 	validName := expr.FindStringSubmatchIndex(name)
-
 	if len(validName) == 0 {
 		return ErrName
 	}
