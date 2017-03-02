@@ -127,12 +127,14 @@ func (e *Executor) executeBitmapCall(ctx context.Context, db string, c *pql.Call
 	// Attach bitmap attributes for Bitmap() calls.
 	bm, _ := other.(*Bitmap)
 	if c.Name == "Bitmap" {
-		id, _ := c.Args["id"].(uint64)
 		frame, _ := c.Args["frame"].(string)
 
 		fr := e.Index.Frame(db, frame)
 		if fr != nil {
-			attrs, err := fr.BitmapAttrStore().Attrs(id)
+			rowLabel := fr.RowLabel()
+			rowID, _ := c.Args[rowLabel].(uint64)
+
+			attrs, err := fr.BitmapAttrStore().Attrs(rowID)
 			if err != nil {
 				return nil, err
 			}
@@ -280,17 +282,27 @@ func (e *Executor) executeDifferenceSlice(ctx context.Context, db string, c *pql
 }
 
 func (e *Executor) executeBitmapSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (*Bitmap, error) {
-	id, _ := c.Args["id"].(uint64)
 	frame, _ := c.Args["frame"].(string)
 	if frame == "" {
 		frame = DefaultFrame
 	}
 
-	f := e.Index.Fragment(db, frame, slice)
+	f := e.Index.Frame(db, frame)
 	if f == nil {
+		return nil, ErrFrameNotFound
+	}
+	rowLabel := f.RowLabel()
+
+	rowID, ok := c.Args[rowLabel].(uint64)
+	if !ok {
+		return nil, fmt.Errorf("Bitmap() field required: %s", rowLabel)
+	}
+
+	frag := e.Index.Fragment(db, frame, slice)
+	if frag == nil {
 		return NewBitmap(), nil
 	}
-	return f.Bitmap(id), nil
+	return frag.Bitmap(rowID), nil
 }
 
 // executeIntersectSlice executes a intersect() call for a local slice.
@@ -314,7 +326,21 @@ func (e *Executor) executeIntersectSlice(ctx context.Context, db string, c *pql.
 
 // executeRangeSlice executes a range() call for a local slice.
 func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (*Bitmap, error) {
-	id, _ := c.Args["id"].(uint64)
+	// Parse frame, use default if unset.
+	frame, _ := c.Args["frame"].(string)
+	if frame == "" {
+		frame = DefaultFrame
+	}
+
+	// Retrieve base frame.
+	f := e.Index.Frame(db, frame)
+	if f == nil {
+		return nil, ErrFrameNotFound
+	}
+	rowLabel := f.RowLabel()
+
+	// Read row id.
+	rowID, _ := c.Args[rowLabel].(uint64)
 
 	// Parse start time.
 	startTimeStr, ok := c.Args["start"].(string)
@@ -336,18 +362,6 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call
 		return nil, errors.New("cannot parse Range() end time")
 	}
 
-	// Parse frame, use default if unset.
-	frame, _ := c.Args["frame"].(string)
-	if frame == "" {
-		frame = DefaultFrame
-	}
-
-	// Retrieve base frame.
-	f := e.Index.Frame(db, frame)
-	if f == nil {
-		return &Bitmap{}, nil
-	}
-
 	// If no quantum exists then return an empty bitmap.
 	q := f.TimeQuantum()
 	if q == "" {
@@ -361,7 +375,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call
 		if f == nil {
 			continue
 		}
-		bm = bm.Union(f.Bitmap(id))
+		bm = bm.Union(f.Bitmap(rowID))
 	}
 	return bm, nil
 }
@@ -430,27 +444,42 @@ func (e *Executor) executeClearBit(ctx context.Context, db string, c *pql.Call, 
 		return false, errors.New("ClearBit() frame required")
 	}
 
-	id, ok := c.Args["id"].(uint64)
+	// Lookup column label.
+	d := e.Index.DB(db)
+	if d == nil {
+		return false, nil
+	}
+	columnLabel := d.ColumnLabel()
+
+	// Lookup row label.
+	f := e.Index.Frame(db, frame)
+	if f == nil {
+		return false, nil
+	}
+	rowLabel := f.RowLabel()
+
+	// Read row & column ids.
+	rowID, ok := c.Args[rowLabel].(uint64)
 	if !ok {
-		return false, errors.New("ClearBit() id required")
+		return false, fmt.Errorf("ClearBit() field required: %s", rowLabel)
 	}
 
-	profileID, ok := c.Args["profileID"].(uint64)
+	colID, ok := c.Args[columnLabel].(uint64)
 	if !ok {
-		return false, errors.New("ClearBit() profileID required")
+		return false, fmt.Errorf("ClearBit() field required: %s", columnLabel)
 	}
 
-	slice := profileID / SliceWidth
+	slice := colID / SliceWidth
 	ret := false
 	for _, node := range e.Cluster.FragmentNodes(db, slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
-			f := e.Index.Fragment(db, frame, slice)
-			if f == nil {
+			frag := e.Index.Fragment(db, frame, slice)
+			if frag == nil {
 				return false, nil
 			}
 
-			val, err := f.ClearBit(id, profileID)
+			val, err := frag.ClearBit(rowID, colID)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -477,17 +506,32 @@ func (e *Executor) executeClearBit(ctx context.Context, db string, c *pql.Call, 
 func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) (bool, error) {
 	frame, ok := c.Args["frame"].(string)
 	if !ok {
-		return false, errors.New("SetBit() frame required")
+		return false, errors.New("SetBit() field required: frame")
 	}
 
-	id, ok := c.Args["id"].(uint64)
-	if !ok {
-		return false, errors.New("SetBit() id required")
+	// Retrieve frame.
+	d := e.Index.DB(db)
+	if d == nil {
+		return false, ErrFrameNotFound
+	}
+	f := d.Frame(frame)
+	if f == nil {
+		return false, ErrFrameNotFound
 	}
 
-	profileID, ok := c.Args["profileID"].(uint64)
+	// Retrieve labels.
+	columnLabel := d.ColumnLabel()
+	rowLabel := f.RowLabel()
+
+	// Read fields using labels.
+	rowID, ok := c.Args[rowLabel].(uint64)
 	if !ok {
-		return false, errors.New("SetBit() profileID required")
+		return false, fmt.Errorf("SetBit() field required: %s", rowLabel)
+	}
+
+	colID, ok := c.Args[columnLabel].(uint64)
+	if !ok {
+		return false, fmt.Errorf("SetBit() field required: %s", columnLabel)
 	}
 
 	var timestamp *time.Time
@@ -500,17 +544,18 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, op
 		timestamp = &t
 	}
 
-	slice := profileID / SliceWidth
+	slice := colID / SliceWidth
 	ret := false
 
 	for _, node := range e.Cluster.FragmentNodes(db, slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
-			db, err := e.Index.CreateDBIfNotExists(db)
-			if err != nil {
-				return false, fmt.Errorf("db: %s", err)
+			d := e.Index.DB(db)
+			if d == nil {
+				return false, ErrDatabaseNotFound
 			}
-			val, err := db.SetBit(frame, id, profileID, timestamp)
+
+			val, err := d.SetBit(frame, rowID, colID, timestamp)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -541,24 +586,26 @@ func (e *Executor) executeSetBitmapAttrs(ctx context.Context, db string, c *pql.
 		return errors.New("SetBitmapAttrs() frame required")
 	}
 
-	id, ok := c.Args["id"].(uint64)
+	// Retrieve frame.
+	frame := e.Index.Frame(db, frameName)
+	if frame == nil {
+		return ErrFrameNotFound
+	}
+	rowLabel := frame.RowLabel()
+
+	// Parse labels.
+	rowID, ok := c.Args[rowLabel].(uint64)
 	if !ok {
-		return errors.New("SetBitmapAttrs() id required")
+		return fmt.Errorf("SetBitmapAttrs() field required: %s", rowLabel)
 	}
 
 	// Copy args and remove reserved fields.
 	attrs := pql.CopyArgs(c.Args)
 	delete(attrs, "frame")
-	delete(attrs, "id")
-
-	// Retrieve frame.
-	frame, err := e.Index.CreateFrameIfNotExists(db, frameName)
-	if err != nil {
-		return err
-	}
+	delete(attrs, rowLabel)
 
 	// Set attributes.
-	if err := frame.BitmapAttrStore().SetAttrs(id, attrs); err != nil {
+	if err := frame.BitmapAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
 
@@ -597,15 +644,22 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 			return nil, errors.New("SetBitmapAttrs() frame required")
 		}
 
-		id, ok := c.Args["id"].(uint64)
+		// Retrieve frame.
+		f := e.Index.Frame(db, frame)
+		if f == nil {
+			return nil, ErrFrameNotFound
+		}
+		rowLabel := f.RowLabel()
+
+		rowID, ok := c.Args[rowLabel].(uint64)
 		if !ok {
-			return nil, errors.New("SetBitmapAttrs() id required")
+			return nil, fmt.Errorf("SetBitmapAttrs() field required: %s", rowLabel)
 		}
 
 		// Copy args and remove reserved fields.
 		attrs := pql.CopyArgs(c.Args)
 		delete(attrs, "frame")
-		delete(attrs, "id")
+		delete(attrs, rowLabel)
 
 		// Create frame group, if not exists.
 		frameMap := m[frame]
@@ -615,9 +669,9 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 		}
 
 		// Set or merge attributes.
-		attr := frameMap[id]
+		attr := frameMap[rowID]
 		if attr == nil {
-			frameMap[id] = cloneAttrs(attrs)
+			frameMap[rowID] = cloneAttrs(attrs)
 		} else {
 			for k, v := range attrs {
 				attr[k] = v
@@ -628,9 +682,9 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 	// Bulk insert attributes by frame.
 	for name, frameMap := range m {
 		// Retrieve frame.
-		frame, err := e.Index.CreateFrameIfNotExists(db, name)
-		if err != nil {
-			return nil, err
+		frame := e.Index.Frame(db, name)
+		if frame == nil {
+			return nil, ErrFrameNotFound
 		}
 
 		// Set attributes.
@@ -677,9 +731,9 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 	delete(attrs, "id")
 
 	// Retrieve database.
-	d, err := e.Index.CreateDBIfNotExists(db)
-	if err != nil {
-		return err
+	d := e.Index.DB(db)
+	if d == nil {
+		return ErrDatabaseNotFound
 	}
 
 	// Set attributes.

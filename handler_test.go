@@ -33,13 +33,17 @@ func TestHandler_NotFound(t *testing.T) {
 func TestHandler_Schema(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	if _, err := idx.CreateFrameIfNotExists("d0", "f1"); err != nil {
+
+	d0 := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
+	d1 := idx.MustCreateDBIfNotExists("d1", pilosa.DBOptions{})
+
+	if _, err := d0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := idx.CreateFrameIfNotExists("d1", "f0"); err != nil {
+	if _, err := d1.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := idx.CreateFrameIfNotExists("d0", "f0"); err != nil {
+	if _, err := d0.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -210,7 +214,7 @@ func TestHandler_Query_Bitmap_Profiles_JSON(t *testing.T) {
 	defer idx.Close()
 
 	// Create database and set profile attributes.
-	db, err := idx.CreateDBIfNotExists("d")
+	db, err := idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if err := db.ProfileAttrStore().SetAttrs(3, map[string]interface{}{"x": "y"}); err != nil {
@@ -275,7 +279,7 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 	defer idx.Close()
 
 	// Create database and set profile attributes.
-	db, err := idx.CreateDBIfNotExists("d")
+	db, err := idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if err := db.ProfileAttrStore().SetAttrs(1, map[string]interface{}{"x": "y"}); err != nil {
@@ -451,7 +455,7 @@ func TestHandler_DB_Delete(t *testing.T) {
 	defer s.Close()
 
 	// Create database.
-	if _, err := idx.CreateDBIfNotExists("d"); err != nil {
+	if _, err := idx.CreateDBIfNotExists("d", pilosa.DBOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -481,7 +485,8 @@ func TestHandler_DB_Delete(t *testing.T) {
 func TestHandler_DeleteFrame(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	if _, err := idx.CreateFrameIfNotExists("d0", "f1"); err != nil {
+	d0 := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
+	if _, err := d0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -502,6 +507,7 @@ func TestHandler_DeleteFrame(t *testing.T) {
 func TestHandler_SetDBTimeQuantum(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
+	idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
 
 	h := NewHandler()
 	h.Index = idx.Index
@@ -520,6 +526,11 @@ func TestHandler_SetDBTimeQuantum(t *testing.T) {
 func TestHandler_SetFrameTimeQuantum(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
+
+	// Create frame.
+	if _, err := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{}).CreateFrame("f1", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
 
 	h := NewHandler()
 	h.Index = idx.Index
@@ -544,7 +555,7 @@ func TestHandler_DB_AttrStore_Diff(t *testing.T) {
 	defer s.Close()
 
 	// Set attributes on the database.
-	db, err := idx.CreateDBIfNotExists("d")
+	db, err := idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -593,7 +604,8 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 	defer s.Close()
 
 	// Set attributes on the database.
-	f, err := idx.CreateFrameIfNotExists("d", "f")
+	d := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
+	f, err := d.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -655,6 +667,11 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	// Ensure response came back OK.
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected backup status code: %d", resp.StatusCode)
+	}
+
+	// Create frame.
+	if _, err := idx.MustCreateDBIfNotExists("x", pilosa.DBOptions{}).CreateFrame("y", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
 	}
 
 	// Restore backup to slice x/y/0.

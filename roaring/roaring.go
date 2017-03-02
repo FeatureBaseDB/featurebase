@@ -1364,6 +1364,7 @@ func unionArrayBitmap(a, b *container) *container {
 			break
 		} else if i >= len(a.array) {
 			output.add(vb)
+			continue
 		} else if eof {
 			output.add(a.array[i])
 			i++

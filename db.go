@@ -15,6 +15,11 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
+// Default database settings.
+const (
+	DefaultColumnLabel = "profileID"
+)
+
 // DB represents a container for frames.
 type DB struct {
 	mu   sync.Mutex
@@ -24,6 +29,9 @@ type DB struct {
 	// Default time quantum for all frames in database.
 	// This can be overridden by individual frames.
 	timeQuantum TimeQuantum
+
+	// Label used for referring to columns in database.
+	columnLabel string
 
 	// Frames by name.
 	frames map[string]*Frame
@@ -40,7 +48,12 @@ type DB struct {
 }
 
 // NewDB returns a new instance of DB.
-func NewDB(path, name string) *DB {
+func NewDB(path, name string) (*DB, error) {
+	err := ValidateName(name)
+	if err != nil {
+		return nil, err
+	}
+
 	return &DB{
 		path:           path,
 		name:           name,
@@ -49,9 +62,11 @@ func NewDB(path, name string) *DB {
 
 		profileAttrStore: NewAttrStore(filepath.Join(path, "data")),
 
+		columnLabel: DefaultColumnLabel,
+
 		stats:     NopStatsClient,
 		LogOutput: ioutil.Discard,
-	}
+	}, nil
 }
 
 // Name returns name of the database.
@@ -62,6 +77,33 @@ func (db *DB) Path() string { return db.path }
 
 // ProfileAttrStore returns the storage for profile attributes.
 func (db *DB) ProfileAttrStore() *AttrStore { return db.profileAttrStore }
+
+// SetColumnLabel sets the column label. Persists to meta file on update.
+func (db *DB) SetColumnLabel(v string) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// Ignore if no change occurred.
+	if v == "" || db.columnLabel == v {
+		return nil
+	}
+
+	// Persist meta data to disk on change.
+	db.columnLabel = v
+	if err := db.saveMeta(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ColumnLabel returns the column label.
+func (db *DB) ColumnLabel() string {
+	db.mu.Lock()
+	v := db.columnLabel
+	db.mu.Unlock()
+	return v
+}
 
 // Open opens and initializes the database.
 func (db *DB) Open() error {
@@ -104,7 +146,10 @@ func (db *DB) openFrames() error {
 			continue
 		}
 
-		fr := db.newFrame(db.FramePath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		fr, err := db.newFrame(db.FramePath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		if err != nil {
+			return ErrName
+		}
 		if err := fr.Open(); err != nil {
 			return fmt.Errorf("open frame: name=%s, err=%s", fr.Name(), err)
 		}
@@ -123,6 +168,7 @@ func (db *DB) loadMeta() error {
 	buf, err := ioutil.ReadFile(filepath.Join(db.path, "meta"))
 	if os.IsNotExist(err) {
 		db.timeQuantum = ""
+		db.columnLabel = DefaultColumnLabel
 		return nil
 	} else if err != nil {
 		return err
@@ -134,6 +180,7 @@ func (db *DB) loadMeta() error {
 
 	// Copy metadata fields.
 	db.timeQuantum = TimeQuantum(pb.TimeQuantum)
+	db.columnLabel = pb.ColumnLabel
 
 	return nil
 }
@@ -141,7 +188,10 @@ func (db *DB) loadMeta() error {
 // saveMeta writes meta data for the database.
 func (db *DB) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.DB{TimeQuantum: string(db.timeQuantum)})
+	buf, err := proto.Marshal(&internal.DB{
+		TimeQuantum: string(db.timeQuantum),
+		ColumnLabel: db.columnLabel,
+	})
 	if err != nil {
 		return err
 	}
@@ -244,28 +294,52 @@ func (db *DB) Frames() []*Frame {
 	return a
 }
 
-// CreateFrameIfNotExists returns a frame in the database by name.
-func (db *DB) CreateFrameIfNotExists(name string) (*Frame, error) {
+// CreateFrame creates a frame.
+func (db *DB) CreateFrame(name string, opt FrameOptions) (*Frame, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	return db.createFrameIfNotExists(name)
+
+	// Ensure frame doesn't already exist.
+	if db.frames[name] != nil {
+		return nil, ErrFrameExists
+	}
+	return db.createFrame(name, opt)
 }
 
-func (db *DB) createFrameIfNotExists(name string) (*Frame, error) {
-	if name == "" {
-		return nil, errors.New("frame name required")
-	}
+// CreateFrameIfNotExists creates a frame with the given options if it doesn't exist.
+func (db *DB) CreateFrameIfNotExists(name string, opt FrameOptions) (*Frame, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
 
 	// Find frame in cache first.
 	if f := db.frames[name]; f != nil {
 		return f, nil
 	}
 
-	// Initialize and open frame.
-	f := db.newFrame(db.FramePath(name), name)
+	return db.createFrame(name, opt)
+}
+
+func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
+
+	if name == "" {
+		return nil, errors.New("frame name required")
+	}
+
+	// Initialize frame.
+	f, err := db.newFrame(db.FramePath(name), name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Open frame.
 	if err := f.Open(); err != nil {
 		return nil, err
 	}
+
+	// Update options.
+	f.SetRowLabel(opt.RowLabel)
+
+	// Add to database's frame lookup.
 	db.frames[name] = f
 
 	db.stats.Count("frameN", 1)
@@ -273,14 +347,14 @@ func (db *DB) createFrameIfNotExists(name string) (*Frame, error) {
 	return f, nil
 }
 
-func (db *DB) newFrame(path, name string) *Frame {
+func (db *DB) newFrame(path, name string) (*Frame, error) {
 	f, err := NewFrame(path, db.name, name)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	f.LogOutput = db.LogOutput
 	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
-	return f
+	return f, nil
 }
 
 // DeleteFrame removes a frame from the database.
@@ -312,22 +386,13 @@ func (db *DB) DeleteFrame(name string) error {
 	return nil
 }
 
-// CreateFragmentIfNotExists returns a fragment in the database by name/slice.
-func (db *DB) CreateFragmentIfNotExists(name string, slice uint64) (*Fragment, error) {
-	f, err := db.CreateFrameIfNotExists(name)
-	if err != nil {
-		return nil, err
-	}
-	return f.CreateFragmentIfNotExists(slice)
-}
-
 // SetBit sets a bit for a given profile & bitmap.
 // If a timestamp is specified then set all bits for the different quantum units.
 func (db *DB) SetBit(name string, bitmapID, profileID uint64, t *time.Time) (changed bool, err error) {
 	// Read frame.
-	f, err := db.CreateFrameIfNotExists(name)
-	if err != nil {
-		return changed, err
+	f := db.Frame(name)
+	if f == nil {
+		return changed, ErrFrameNotFound
 	}
 
 	// If this is a non-time bit then simply set the bit on the frame.
@@ -345,8 +410,9 @@ func (db *DB) SetBit(name string, bitmapID, profileID uint64, t *time.Time) (cha
 	}
 
 	// If a timestamp is specified then set bits across all frames for the quantum.
+	opt := f.Options()
 	for _, subname := range FramesByTime(name, *t, q) {
-		f, err := db.CreateFrameIfNotExists(subname)
+		f, err := db.CreateFrameIfNotExists(subname, opt)
 		if err != nil {
 			return changed, err
 		}
@@ -363,9 +429,9 @@ func (db *DB) SetBit(name string, bitmapID, profileID uint64, t *time.Time) (cha
 // Import bulk imports data.
 func (db *DB) Import(name string, bitmapIDs, profileIDs []uint64, timestamps []*time.Time) error {
 	// Read frame.
-	f, err := db.CreateFrameIfNotExists(name)
-	if err != nil {
-		return err
+	f := db.Frame(name)
+	if f == nil {
+		return ErrFrameNotFound
 	}
 
 	// Determine quantum if timestamps are set.
@@ -408,12 +474,12 @@ func (db *DB) Import(name string, bitmapIDs, profileIDs []uint64, timestamps []*
 
 	// Import into each fragment.
 	for key, data := range dataByFragment {
-		f, err := db.CreateFragmentIfNotExists(key.Frame, key.Slice)
+		frag, err := f.CreateFragmentIfNotExists(key.Slice)
 		if err != nil {
 			return err
 		}
 
-		if err := f.Import(data.BitmapIDs, data.ProfileIDs); err != nil {
+		if err := frag.Import(data.BitmapIDs, data.ProfileIDs); err != nil {
 			return err
 		}
 	}
@@ -473,6 +539,11 @@ func (db *DB) SetRemoteMaxSlice(newmax uint64) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.remoteMaxSlice = newmax
+}
+
+// DBOptions represents options to set when initializing a db.
+type DBOptions struct {
+	ColumnLabel string `json:"columnLabel,omitempty"`
 }
 
 // hasTime returns true if a contains a non-nil time.
