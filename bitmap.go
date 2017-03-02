@@ -17,7 +17,7 @@ type Bitmap struct {
 	// Attributes associated with the bitmap.
 	Attrs map[string]interface{}
 
-	cacheoveride uint64
+	adjustedCount uint64
 }
 
 // NewBitmap returns a new instance of Bitmap.
