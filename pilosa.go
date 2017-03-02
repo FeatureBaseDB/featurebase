@@ -80,7 +80,6 @@ func decodeProfile(pb *internal.Profile) *Profile {
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
 
-
 // Restrict name using regex
 func ValidateName(name string) error {
 	expr := regexp.MustCompile(`^([a-z0-9._-]{1,64}$)`)

@@ -303,7 +303,6 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Validate arguments.
-	fmt.Print("1213224")
 	if cmd.Database == "" {
 		return pilosa.ErrDatabaseRequired
 	} else if cmd.Frame == "" {
@@ -973,7 +972,6 @@ func (cmd *BenchCommand) Run(ctx context.Context) error {
 
 // runSetBit executes a benchmark of random SetBit() operations.
 func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) error {
-	fmt.Print("Nodb")
 	if cmd.N == 0 {
 		return errors.New("operation count required")
 	} else if cmd.Database == "" {
