@@ -537,7 +537,7 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, op
 	var timestamp *time.Time
 	sTimestamp, ok := c.Args["timestamp"].(string)
 	if ok {
-		t, err := time.Parse("2006-01-02T15:04:05", sTimestamp)
+		t, err := time.Parse(TimeFormat, sTimestamp)
 		if err != nil {
 			return false, fmt.Errorf("invalid date: %s", sTimestamp)
 		}

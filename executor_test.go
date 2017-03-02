@@ -420,7 +420,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if db != `d` {
 			t.Fatalf("unexpected db: %s", db)
-		} else if query.String() != `SetBit(frame="f", id=10, profileID=2, timestamp="2016-12-11T10:09:07")` {
+		} else if query.String() != `SetBit(frame="f", id=10, profileID=2, timestamp="2016-12-11T10:09")` {
 			t.Fatalf("unexpected query: %s", query.String())
 		}
 		remoteCalled = true
@@ -445,7 +445,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	}
 
 	e := NewExecutor(idx.Index, c)
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, profileID=2, timestamp="2016-12-11T10:09:07")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, profileID=2, timestamp="2016-12-11T10:09")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
