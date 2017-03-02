@@ -139,6 +139,15 @@ func (m *Main) Run(args ...string) error {
 	m.Server.Host = m.Config.Host
 	m.Server.Cluster = m.Config.PilosaCluster()
 
+	// Setup Messenger.
+	fmt.Fprintf(m.Stderr, "Using Messenger type: %s\n", m.Config.Cluster.MessengerType)
+	m.Server.Messenger = m.Server.Cluster.NodeSet.(pilosa.Messenger)
+	m.Server.Handler.Messenger = m.Server.Messenger
+	m.Server.Index.Messenger = m.Server.Messenger
+
+	// Set message handler.
+	m.Server.Cluster.NodeSet.SetMessageHandler(m.Server.Index.HandleMessage)
+
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
 

@@ -305,7 +305,9 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 			t.Fatalf("unexpected db: %s", db)
 		} else if query.String() != `Bitmap(frame="f", id=10)` {
 			t.Fatalf("unexpected query: %s", query.String())
-		} else if !reflect.DeepEqual(slices, []uint64{0}) { //TODO: this is incorrect because the calling node doesn't know about slice 2
+			// NOTE: while the following is technically incorrect (it should be {0, 2}) because the calling node doesn't know about slice 2 yet,
+			// we are ok with this and assuming that the calling node will become aware of slice 2 via inter-node messaging
+		} else if !reflect.DeepEqual(slices, []uint64{0}) {
 			t.Fatalf("unexpected slices: %+v", slices)
 		}
 

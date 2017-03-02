@@ -29,3 +29,10 @@ import:
   version: ^1.1.0
 - package: github.com/aws/aws-sdk-go
   version: ^1.6.10
+- package: github.com/hashicorp/memberlist
+- package: golang.org/x/sync
+  subpackages:
+  - errgroup
+- package: golang.org/x/net
+  subpackages:
+  - context
