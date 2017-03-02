@@ -2,6 +2,12 @@ language: go
 go:
   - 1.7.x
   - master
+addons:
+  apt:
+    sources:
+      - sourceline: 'ppa:masterminds/glide'
+    packages:
+      - glide
 script: make test
 notifications:
   slack:
