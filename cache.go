@@ -176,16 +176,17 @@ func (c *RankCache) Invalidate() {
 
 }
 func (c *RankCache) invalidate() {
+	// Don't invalidate more than once every X seconds.
+	// TODO: consider making this configurable.
 	if time.Now().Sub(c.updateTime).Seconds() < 10 {
 		return
 	}
-	//fmt.Println("RankCache Update")
 	// Convert cache to a sorted list.
 	rankings := make([]BitmapPair, 0, len(c.entries))
-	for id, n := range c.entries {
+	for id, cnt := range c.entries {
 		rankings = append(rankings, BitmapPair{
 			ID:    id,
-			Count: n,
+			Count: cnt,
 		})
 	}
 	sort.Sort(BitmapPairs(rankings))
@@ -200,10 +201,11 @@ func (c *RankCache) invalidate() {
 
 	// Reset counters.
 	c.updateTime, c.updateN = time.Now(), 0
+
 	// If size is larger than the threshold then trim it.
 	if len(c.entries) > c.ThresholdLength {
-		for id, n := range c.entries {
-			if n <= c.ThresholdValue {
+		for id, cnt := range c.entries {
+			if cnt <= c.ThresholdValue {
 				delete(c.entries, id)
 			}
 		}
@@ -377,4 +379,27 @@ func (p uint64Slice) merge(other []uint64) []uint64 {
 	}
 
 	return ret
+}
+
+// BitmapCache provides an interface for caching full bitmaps.
+type BitmapCache interface {
+	Fetch(id uint64) (*Bitmap, bool)
+	Add(id uint64, b *Bitmap)
+}
+
+// SimpleCache implements BitmapCache
+// it is meant to be a short-lived cache for cases where writes are continuing to access
+// the same bit within a short time frame (i.e. good for write-heavy loads)
+// A read-heavy use case would cause the cache to get bigger, potentially causing the
+// node to run out of memory.
+type SimpleCache struct {
+	cache map[uint64]*Bitmap
+}
+
+func (s *SimpleCache) Fetch(id uint64) (*Bitmap, bool) {
+	return s.cache[id]
+}
+
+func (s *SimpleCache) Add(id uint64, b *Bitmap) {
+	s.cache[id] = b
 }

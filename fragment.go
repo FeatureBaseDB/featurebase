@@ -53,28 +53,6 @@ const (
 	DefaultFragmentMaxOpN = 2000
 )
 
-// BitmapCacher implements SimpleCache
-// it is meant to be a short-lived cache for cases where writes are continuing to access
-// the same bit withing a short time frame (i.e. good for write-heavy loads)
-// A read-heavy use case would cause the cache to get bigger, potentially causing the
-// node to run out of memory.
-type BitmapCacher interface {
-	Fetch(id uint64) (*Bitmap, bool)
-	Add(id uint64, b *Bitmap)
-}
-
-type SimpleCache struct {
-	cache map[uint64]*Bitmap
-}
-
-func (s *SimpleCache) Fetch(id uint64) (*Bitmap, bool) {
-	m, ok := s.cache[id]
-	return m, ok
-}
-func (s *SimpleCache) Add(id uint64, p *Bitmap) {
-	s.cache[id] = p
-}
-
 // Fragment represents the intersection of a frame and slice in a database.
 type Fragment struct {
 	mu sync.Mutex
@@ -91,8 +69,11 @@ type Fragment struct {
 	storageData []byte
 	opN         int // number of ops since snapshot
 
-	// Bitmap cache.
+	// Cache for bitmap counts.
 	cache Cache
+
+	// Cache containing full bitmaps (not just counts).
+	bitmapCache BitmapCache
 
 	// Cached checksums for each block.
 	checksums map[int][]byte
@@ -109,8 +90,7 @@ type Fragment struct {
 	// This is set by the parent frame unless overridden for testing.
 	BitmapAttrStore *AttrStore
 
-	stats       StatsClient
-	bitmapCache BitmapCacher
+	stats StatsClient
 }
 
 // NewFragment returns a new instance of Fragment.
@@ -351,10 +331,10 @@ func (f *Fragment) bitmap(bitmapID uint64, updateCache bool) *Bitmap {
 			slice:    f.slice,
 			writable: false,
 		}},
-		cacheoveride: 0,
+		adjustedCount: 0,
 	}
 	bm.InvalidateCount()
-	bm.cacheoveride = bm.Count()
+	bm.adjustedCount = bm.Count()
 
 	if updateCache {
 		// Update cache.
@@ -382,7 +362,6 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	}
 
 	// Write to storage.
-
 	if changed, err = f.storage.Add(pos); err != nil {
 		return false, err
 	}
@@ -400,17 +379,16 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 		return false, err
 	}
 
-	// Update the cache.
+	// If adjustedCount is set, then apply that value to bitmap.n instead.
 	bm := f.bitmap(bitmapID, true)
-	if bm.cacheoveride > 0 {
-		bm.SetCount(profileID, bm.cacheoveride)
-		bm.cacheoveride = 0
+	if bm.adjustedCount > 0 {
+		bm.SetCount(profileID, bm.adjustedCount)
+		bm.adjustedCount = 0
 	} else {
 		bm.IncrementCount(profileID)
+		f.cache.Add(bitmapID, bm.Count())
 	}
 	bm.SetBit(profileID)
-
-	f.cache.Add(bitmapID, bm.Count())
 
 	f.stats.Count("setN", 1)
 
@@ -451,15 +429,16 @@ func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
 		return false, err
 	}
 
-	// Update the cache.
-	bm := f.bitmap(bitmapID, false)
-	if bm.cacheoveride > 0 {
-		bm.SetCount(profileID, bm.cacheoveride)
-		bm.cacheoveride = 0
+	// If adjustedCount is set, then apply that value to bitmap.n instead.
+	bm := f.bitmap(bitmapID, true)
+	if bm.adjustedCount > 0 {
+		bm.SetCount(profileID, bm.adjustedCount)
+		bm.adjustedCount = 0
 	} else {
 		bm.DecrementCount(profileID)
+		f.cache.Add(bitmapID, bm.Count())
 	}
-	f.cache.Add(bitmapID, bm.Count())
+	bm.ClearBit(profileID)
 
 	f.stats.Count("clearN", 1)
 
@@ -546,7 +525,6 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 			if count == 0 {
 				continue
 			}
-			//results = append(results, Pair{Key: bitmapID, Count: count})
 			heap.Push(results, Pair{Key: bitmapID, Count: count})
 
 			// If we reach the requested number of pairs and we are not computing
@@ -556,7 +534,6 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 				if opt.Src == nil {
 					break
 				}
-				//	sort.Sort(Pairs(results))
 			}
 			continue
 		}
@@ -622,7 +599,6 @@ func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
 		}
 	}
 	sort.Sort(BitmapPairs(pairs))
-	//debugDumpPairs(pairs)
 	return pairs
 }
 
