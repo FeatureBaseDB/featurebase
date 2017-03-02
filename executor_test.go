@@ -50,6 +50,18 @@ func TestExecutor_Execute_Difference(t *testing.T) {
 	}
 }
 
+// Ensure an empty difference query behaves properly.
+func TestExecutor_Execute_Empty_Difference(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 1)
+
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if res, err := e.Execute(context.Background(), "d", MustParse(`Difference()`), nil, nil); err == nil {
+		t.Fatalf("Empty Difference query should give error, but got %v", res)
+	}
+}
+
 // Ensure an intersect query can be executed.
 func TestExecutor_Execute_Intersect(t *testing.T) {
 	idx := MustOpenIndex()
@@ -70,6 +82,17 @@ func TestExecutor_Execute_Intersect(t *testing.T) {
 	}
 }
 
+// Ensure an empty intersect query behaves properly.
+func TestExecutor_Execute_Empty_Intersect(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if res, err := e.Execute(context.Background(), "d", MustParse(`Intersect()`), nil, nil); err == nil {
+		t.Fatalf("Empty Intersect query should give error, but got %v", res)
+	}
+}
+
 // Ensure a union query can be executed.
 func TestExecutor_Execute_Union(t *testing.T) {
 	idx := MustOpenIndex()
@@ -85,6 +108,20 @@ func TestExecutor_Execute_Union(t *testing.T) {
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Union(Bitmap(id=10), Bitmap(id=11))`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{0, 2, SliceWidth + 1, SliceWidth + 2}) {
+		t.Fatalf("unexpected bits: %+v", bits)
+	}
+}
+
+// Ensure an empty union query behaves properly.
+func TestExecutor_Execute_Empty_Union(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 0)
+
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if res, err := e.Execute(context.Background(), "d", MustParse(`Union()`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{}) {
 		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }

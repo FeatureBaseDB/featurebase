@@ -265,6 +265,9 @@ func (e *Executor) executeTopNSlice(ctx context.Context, db string, c *pql.Call,
 // executeDifferenceSlice executes a difference() call for a local slice.
 func (e *Executor) executeDifferenceSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (*Bitmap, error) {
 	var other *Bitmap
+	if len(c.Children) == 0 {
+		return nil, fmt.Errorf("empty Difference query is currently not supported")
+	}
 	for i, input := range c.Children {
 		bm, err := e.executeBitmapCallSlice(ctx, db, input, slice)
 		if err != nil {
@@ -308,6 +311,9 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, db string, c *pql.Cal
 // executeIntersectSlice executes a intersect() call for a local slice.
 func (e *Executor) executeIntersectSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (*Bitmap, error) {
 	var other *Bitmap
+	if len(c.Children) == 0 {
+		return nil, fmt.Errorf("empty Intersect query is currently not supported")
+	}
 	for i, input := range c.Children {
 		bm, err := e.executeBitmapCallSlice(ctx, db, input, slice)
 		if err != nil {
@@ -382,7 +388,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call
 
 // executeUnionSlice executes a union() call for a local slice.
 func (e *Executor) executeUnionSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (*Bitmap, error) {
-	var other *Bitmap
+	other := NewBitmap()
 	for i, input := range c.Children {
 		bm, err := e.executeBitmapCallSlice(ctx, db, input, slice)
 		if err != nil {
