@@ -215,6 +215,40 @@ func TestExecutor_Execute_TopN_fill(t *testing.T) {
 	}
 }
 
+// Ensure
+func TestExecutor_Execute_TopN_fill_small(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(0, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", 2).SetBit(0, 2*SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", 3).SetBit(0, 3*SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", 4).SetBit(0, 4*SliceWidth)
+
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(1, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(1, 1)
+
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(2, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(2, SliceWidth+1)
+
+	idx.MustCreateFragmentIfNotExists("d", "f", 2).SetBit(3, 2*SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", 2).SetBit(3, 2*SliceWidth+1)
+
+	idx.MustCreateFragmentIfNotExists("d", "f", 3).SetBit(4, 3*SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", 3).SetBit(4, 3*SliceWidth+1)
+
+	// Execute query.
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if result, err := e.Execute(context.Background(), "d", MustParse(`TopN(frame=f, n=1)`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
+		{Key: 0, Count: 5},
+	}}) {
+		t.Fatalf("unexpected result: %s", spew.Sdump(result))
+	}
+}
+
 // Ensure a TopN() query with a source bitmap can be executed.
 func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	idx := MustOpenIndex()
@@ -246,6 +280,52 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
+}
+
+//Ensure TopN handles Attribute filters
+func TestExecutor_Execute_TopN_Attr(t *testing.T) {
+	//
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(10, SliceWidth)
+
+	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
+		t.Fatal(err)
+	}
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if result, err := e.Execute(context.Background(), "d", MustParse(`TopN(frame="f", n=1, field="category", filters=[123])`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
+		{Key: 10, Count: 1},
+	}}) {
+		t.Fatalf("unexpected result: %s", spew.Sdump(result))
+	}
+
+}
+
+//Ensure TopN handles Attribute filters with source bitmap
+func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
+	//
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1)
+	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(10, SliceWidth)
+
+	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
+		t.Fatal(err)
+	}
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if result, err := e.Execute(context.Background(), "d", MustParse(`TopN(Bitmap(id=10,frame=f),frame="f", n=1, field="category", filters=[123])`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
+		{Key: 10, Count: 1},
+	}}) {
+		t.Fatalf("unexpected result: %s", spew.Sdump(result))
+	}
+
 }
 
 // Ensure a range query can be executed.
