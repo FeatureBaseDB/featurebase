@@ -397,7 +397,8 @@ type SimpleCache struct {
 }
 
 func (s *SimpleCache) Fetch(id uint64) (*Bitmap, bool) {
-	return s.cache[id]
+	m, ok := s.cache[id]
+	return m, ok
 }
 
 func (s *SimpleCache) Add(id uint64, b *Bitmap) {
