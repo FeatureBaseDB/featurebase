@@ -408,6 +408,7 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	} else {
 		bm.IncrementCount(profileID)
 	}
+	bm.SetBit(profileID)
 
 	f.cache.Add(bitmapID, bm.Count())
 
