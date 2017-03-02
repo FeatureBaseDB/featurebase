@@ -96,7 +96,7 @@ func (f *Frame) Reopen() error {
 
 	path, db, name := f.Path(), f.DB(), f.Name()
 	f.Frame, err = pilosa.NewFrame(path, db, name)
-	if err != nil{
+	if err != nil {
 		return err
 	}
 
