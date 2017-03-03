@@ -90,7 +90,6 @@ Usage:
 
 The commands are:
 
-	backup     backs up a frame to an archive file
 	restore    restores a frame from an archive file
 	inspect    inspects fragment data files
 	check      performs a consistency check of data files
@@ -116,8 +115,6 @@ func (m *Main) ParseFlags(args []string) error {
 		fmt.Fprintln(m.Stderr, m.Usage())
 		fmt.Fprintln(m.Stderr, "")
 		return flag.ErrHelp
-	case "backup":
-		m.Cmd = NewBackupCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "restore":
 		m.Cmd = NewRestoreCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "inspect":
@@ -147,92 +144,6 @@ type Command interface {
 	Usage() string
 	ParseFlags(args []string) error
 	Run(context.Context) error
-}
-
-// BackupCommand represents a command for backing up a frame.
-type BackupCommand struct {
-	// Destination host and port.
-	Host string
-
-	// Name of the database & frame to backup.
-	Database string
-	Frame    string
-
-	// Output file to write to.
-	Path string
-
-	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-}
-
-// NewBackupCommand returns a new instance of BackupCommand.
-func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand {
-	return &BackupCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
-	}
-}
-
-// ParseFlags parses command line flags from args.
-func (cmd *BackupCommand) ParseFlags(args []string) error {
-	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
-	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Host, "host", "localhost:15000", "host:port")
-	fs.StringVar(&cmd.Database, "d", "", "database")
-	fs.StringVar(&cmd.Frame, "f", "", "frame")
-	fs.StringVar(&cmd.Path, "o", "", "output file")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Usage returns the usage message to be printed.
-func (cmd *BackupCommand) Usage() string {
-	return strings.TrimSpace(`
-usage: pilosactl backup -host HOST -d database -f frame -o PATH
-
-Backs up the database and frame from across the cluster into a single file.
-`)
-}
-
-// Run executes the main program execution.
-func (cmd *BackupCommand) Run(ctx context.Context) error {
-	// Validate arguments.
-	if cmd.Path == "" {
-		return errors.New("output file required")
-	}
-
-	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host)
-	if err != nil {
-		return err
-	}
-
-	// Open output file.
-	f, err := os.Create(cmd.Path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// Begin streaming backup.
-	if err := client.BackupTo(ctx, f, cmd.Database, cmd.Frame); err != nil {
-		return err
-	}
-
-	// Sync & close file to ensure durability.
-	if err := f.Sync(); err != nil {
-		return err
-	} else if err = f.Close(); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // RestoreCommand represents a command for restoring a frame from a backup.
