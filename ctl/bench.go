@@ -1,4 +1,4 @@
-package main
+package ctl
 
 import (
 	"context"
@@ -8,126 +8,11 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/pilosa/pilosa"
 )
-
-var (
-	// ErrUnknownCommand is returned when specifying an unknown command.
-	ErrUnknownCommand = errors.New("unknown command")
-
-	// ErrPathRequired is returned when executing a command without a required path.
-	ErrPathRequired = errors.New("path required")
-	Version         string
-	BuildTime       string
-)
-
-func init() {
-	if Version == "" {
-		Version = "v0.0.0"
-	}
-	if BuildTime == "" {
-		BuildTime = "not recorded"
-	}
-}
-
-func main() {
-	m := NewMain()
-
-	fmt.Fprintf(m.Stderr, "Pilosactl %s, build time %s\n", Version, BuildTime)
-
-	// Parse command line arguments.
-	if err := m.ParseFlags(os.Args[1:]); err == flag.ErrHelp {
-		os.Exit(2)
-	} else if err != nil {
-		fmt.Fprintln(m.Stderr, err)
-		os.Exit(2)
-	}
-
-	// Execute the program.
-	if err := m.Run(); err != nil {
-		fmt.Fprintln(m.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-// Main represents the main program execution.
-type Main struct {
-	// Subcommand to execute.
-	Cmd Command
-
-	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-}
-
-// NewMain returns a new instance of Main.
-func NewMain() *Main {
-	return &Main{
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
-}
-
-// Usage returns the usage message to be printed.
-func (m *Main) Usage() string {
-	return strings.TrimSpace(`
-Pilosactl is a tool for interacting with a pilosa server.
-
-Usage:
-
-	pilosactl command [arguments]
-
-The commands are:
-
-
-Use the "-h" flag with any command for more information.
-`)
-}
-
-// Run executes the main program execution.
-func (m *Main) Run() error { return m.Cmd.Run(context.Background()) }
-
-// ParseFlags parses command line flags from args.
-func (m *Main) ParseFlags(args []string) error {
-	var command string
-	if len(args) > 0 {
-		command = args[0]
-		args = args[1:]
-	}
-
-	switch command {
-	case "", "help", "-h":
-		fmt.Fprintln(m.Stderr, m.Usage())
-		fmt.Fprintln(m.Stderr, "")
-		return flag.ErrHelp
-	default:
-		return ErrUnknownCommand
-	}
-
-	// Parse command's flags.
-	if err := m.Cmd.ParseFlags(args); err == flag.ErrHelp {
-		fmt.Fprintln(m.Stderr, m.Cmd.Usage())
-		fmt.Fprintln(m.Stderr, "")
-		return err
-	} else if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Command represents an executable subcommand.
-type Command interface {
-	Usage() string
-	ParseFlags(args []string) error
-	Run(context.Context) error
-}
 
 // BenchCommand represents a command for benchmarking database operations.
 type BenchCommand struct {
