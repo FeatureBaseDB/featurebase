@@ -31,7 +31,7 @@ func init() {
 	restoreCmd.Flags().StringVarP(&restorer.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
 	restoreCmd.Flags().StringVarP(&restorer.Database, "database", "d", "", "Pilosa database to restore into.")
 	restoreCmd.Flags().StringVarP(&restorer.Frame, "frame", "f", "", "Frame to restore into.")
-	restoreCmd.Flags().StringVarP(&restorer.Path, "input-file", "i", "", "File to write restore from")
+	restoreCmd.Flags().StringVarP(&restorer.Path, "input-file", "i", "", "File to restore from.")
 
 	err := viper.BindPFlags(restoreCmd.Flags())
 	if err != nil {
