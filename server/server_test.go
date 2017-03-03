@@ -1,4 +1,4 @@
-package main_test
+package server_test
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
-	main "github.com/pilosa/pilosa/cmd/pilosa"
+	"github.com/pilosa/pilosa/server"
 )
 
 // Ensure program can process queries and maintain consistency.
@@ -304,7 +304,7 @@ path = "/path/to/plugins"
 
 // Main represents a test wrapper for main.Main.
 type Main struct {
-	*main.Main
+	*server.Main
 
 	Stdin  bytes.Buffer
 	Stdout bytes.Buffer
@@ -318,7 +318,7 @@ func NewMain() *Main {
 		panic(err)
 	}
 
-	m := &Main{Main: main.NewMain()}
+	m := &Main{Main: server.NewMain()}
 	m.Config.DataDir = path
 	m.Config.Host = "localhost:0"
 	m.Main.Stdin = &m.Stdin
@@ -356,7 +356,7 @@ func (m *Main) Reopen() error {
 
 	// Create new main with the same config.
 	config := m.Config
-	m.Main = main.NewMain()
+	m.Main = server.NewMain()
 	m.Config = config
 
 	// Run new program.
