@@ -22,7 +22,6 @@ import (
 	"unsafe"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/pilosactl"
 	"github.com/pilosa/pilosa/roaring"
 )
 
@@ -125,8 +124,6 @@ func (m *Main) ParseFlags(args []string) error {
 		fmt.Fprintln(m.Stderr, m.Usage())
 		fmt.Fprintln(m.Stderr, "")
 		return flag.ErrHelp
-	case "import":
-		m.Cmd = pilosactl.NewImportCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "export":
 		m.Cmd = NewExportCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "sort":
