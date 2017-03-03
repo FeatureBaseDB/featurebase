@@ -95,8 +95,6 @@ Usage:
 
 The commands are:
 
-	import     imports data from a CSV file
-	export     exports data to a CSV file
 	sort       sorts a data file for optimal import speed
 	backup     backs up a frame to an archive file
 	restore    restores a frame from an archive file
@@ -124,8 +122,6 @@ func (m *Main) ParseFlags(args []string) error {
 		fmt.Fprintln(m.Stderr, m.Usage())
 		fmt.Fprintln(m.Stderr, "")
 		return flag.ErrHelp
-	case "export":
-		m.Cmd = NewExportCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "sort":
 		m.Cmd = NewSortCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "backup":
@@ -159,118 +155,6 @@ type Command interface {
 	Usage() string
 	ParseFlags(args []string) error
 	Run(context.Context) error
-}
-
-// ExportCommand represents a command for bulk exporting data from a server.
-type ExportCommand struct {
-	// Remote host and port.
-	Host string
-
-	// Name of the database & frame to export from.
-	Database string
-	Frame    string
-
-	// Filename to export to.
-	Path string
-
-	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-}
-
-// NewExportCommand returns a new instance of ExportCommand.
-func NewExportCommand(stdin io.Reader, stdout, stderr io.Writer) *ExportCommand {
-	return &ExportCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
-	}
-}
-
-// ParseFlags parses command line flags from args.
-func (cmd *ExportCommand) ParseFlags(args []string) error {
-	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
-	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Host, "host", "localhost:15000", "host:port")
-	fs.StringVar(&cmd.Database, "d", "", "database")
-	fs.StringVar(&cmd.Frame, "f", "", "frame")
-	fs.StringVar(&cmd.Path, "o", "", "output file")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Usage returns the usage message to be printed.
-func (cmd *ExportCommand) Usage() string {
-	return strings.TrimSpace(`
-usage: pilosactl export -host HOST -d database -f frame -o OUTFILE
-
-Bulk exports a fragment to a CSV file. If the OUTFILE is not specified then
-the output is written to STDOUT.
-
-The format of the CSV file is:
-
-	BITMAPID,PROFILEID
-
-The file does not contain any headers.
-`)
-}
-
-// Run executes the main program execution.
-func (cmd *ExportCommand) Run(ctx context.Context) error {
-	logger := log.New(cmd.Stderr, "", log.LstdFlags)
-
-	// Validate arguments.
-	if cmd.Database == "" {
-		return pilosa.ErrDatabaseRequired
-	} else if cmd.Frame == "" {
-		return pilosa.ErrFrameRequired
-	}
-
-	// Use output file, if specified.
-	// Otherwise use STDOUT.
-	var w io.Writer = cmd.Stdout
-	if cmd.Path != "" {
-		f, err := os.Create(cmd.Path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-
-		w = f
-	}
-
-	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host)
-	if err != nil {
-		return err
-	}
-
-	// Determine slice count.
-	maxSlices, err := client.MaxSliceByDatabase(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Export each slice.
-	for slice := uint64(0); slice <= maxSlices[cmd.Database]; slice++ {
-		logger.Printf("exporting slice: %d", slice)
-		if err := client.ExportCSV(ctx, cmd.Database, cmd.Frame, slice, w); err != nil {
-			return err
-		}
-	}
-
-	// Close writer, if applicable.
-	if w, ok := w.(io.Closer); ok {
-		if err := w.Close(); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // SortCommand represents a command for sorting import data.
