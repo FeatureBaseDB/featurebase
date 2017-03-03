@@ -38,7 +38,7 @@ func init() {
 	exportCmd.Flags().StringVarP(&exporter.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
 	exportCmd.Flags().StringVarP(&exporter.Database, "database", "d", "", "Pilosa database to export into.")
 	exportCmd.Flags().StringVarP(&exporter.Frame, "frame", "f", "", "Frame to export into.")
-	exportCmd.Flags().StringVarP(&exporter.Frame, "output-file", "o", "", "File to write export to - default stdout")
+	exportCmd.Flags().StringVarP(&exporter.Path, "output-file", "o", "", "File to write export to - default stdout")
 
 	err := viper.BindPFlags(exportCmd.Flags())
 	if err != nil {
