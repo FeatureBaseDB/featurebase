@@ -90,7 +90,6 @@ Usage:
 
 The commands are:
 
-	restore    restores a frame from an archive file
 	inspect    inspects fragment data files
 	check      performs a consistency check of data files
 	bench      benchmarks operations
@@ -115,8 +114,6 @@ func (m *Main) ParseFlags(args []string) error {
 		fmt.Fprintln(m.Stderr, m.Usage())
 		fmt.Fprintln(m.Stderr, "")
 		return flag.ErrHelp
-	case "restore":
-		m.Cmd = NewRestoreCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "inspect":
 		m.Cmd = NewInspectCommand(m.Stdin, m.Stdout, m.Stderr)
 	case "check":
@@ -144,92 +141,6 @@ type Command interface {
 	Usage() string
 	ParseFlags(args []string) error
 	Run(context.Context) error
-}
-
-// RestoreCommand represents a command for restoring a frame from a backup.
-type RestoreCommand struct {
-	// Destination host and port.
-	Host string
-
-	// Name of the database & frame to backup.
-	Database string
-	Frame    string
-
-	// Import file to read from.
-	Path string
-
-	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-}
-
-// NewRestoreCommand returns a new instance of RestoreCommand.
-func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreCommand {
-	return &RestoreCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
-	}
-}
-
-// ParseFlags parses command line flags from args.
-func (cmd *RestoreCommand) ParseFlags(args []string) error {
-	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
-	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Host, "host", "localhost:15000", "host:port")
-	fs.StringVar(&cmd.Database, "d", "", "database")
-	fs.StringVar(&cmd.Frame, "f", "", "frame")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	// Read input path from the args.
-	if fs.NArg() == 0 {
-		return errors.New("path required")
-	} else if fs.NArg() > 1 {
-		return errors.New("too many paths specified")
-	}
-	cmd.Path = fs.Arg(0)
-
-	return nil
-}
-
-// Usage returns the usage message to be printed.
-func (cmd *RestoreCommand) Usage() string {
-	return strings.TrimSpace(`
-usage: pilosactl restore -host HOST -d database -f frame PATH
-
-Restores a frame to the cluster from a backup file.
-`)
-}
-
-// Run executes the main program execution.
-func (cmd *RestoreCommand) Run(ctx context.Context) error {
-	// Validate arguments.
-	if cmd.Path == "" {
-		return errors.New("backup file required")
-	}
-
-	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host)
-	if err != nil {
-		return err
-	}
-
-	// Open backup file.
-	f, err := os.Open(cmd.Path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// Restore backup file to the cluster.
-	if err := client.RestoreFrom(ctx, f, cmd.Database, cmd.Frame); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // InspectCommand represents a command for inspecting fragment data files.
