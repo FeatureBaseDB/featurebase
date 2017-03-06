@@ -16,6 +16,7 @@ const (
 	STRING    // "foo"
 	BADSTRING // bad escape or unclosed string
 	NUMBER    // 12345
+	FLOAT     // 100.2
 	literal_end
 
 	keyword_beg

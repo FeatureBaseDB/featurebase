@@ -30,6 +30,7 @@ func TestScanner_Scan(t *testing.T) {
 
 		{s: `foo`, tok: pql.IDENT, lit: `foo`},
 		{s: `100`, tok: pql.NUMBER, lit: `100`},
+		{s: `100.3`, tok: pql.FLOAT, lit: `100.3`},
 
 		{s: `all`, tok: pql.ALL, lit: `all`},
 		{s: `ALL`, tok: pql.ALL, lit: `ALL`}, // case insensitive

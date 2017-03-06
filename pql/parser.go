@@ -174,6 +174,12 @@ func (p *Parser) parseArgs() (map[string]interface{}, error) {
 				return nil, err
 			}
 			value = v
+		case FLOAT:
+			v, err := strconv.ParseFloat(lit, 64)
+			if err != nil {
+				return nil, err
+			}
+			value = v
 		case LBRACK:
 			v, err := p.parseList()
 			if err != nil {
