@@ -29,7 +29,7 @@ on the configured port.`,
 		fmt.Fprintf(serve.Stderr, "Pilosa %s, build time %s\n", server.Version, server.BuildTime)
 
 		// Parse command line arguments.
-		if err := serve.ParseFlags(os.Args[1:]); err != nil {
+		if err := serve.SetupConfig(args); err != nil {
 			fmt.Fprintln(serve.Stderr, err)
 			os.Exit(2)
 		}

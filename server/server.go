@@ -2,14 +2,11 @@ package server
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"math/rand"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -38,57 +35,6 @@ const (
 	// DefaultDataDir is the default data directory.
 	DefaultDataDir = "~/.pilosa"
 )
-
-func mainz() {
-	serve := NewMain()
-	serve.Server.Handler.Version = Version
-	fmt.Fprintf(serve.Stderr, "Pilosa %s, build time %s\n", Version, BuildTime)
-
-	// Parse command line arguments.
-	if err := serve.ParseFlags(os.Args[1:]); err != nil {
-		fmt.Fprintln(serve.Stderr, err)
-		os.Exit(2)
-	}
-
-	// Start CPU profiling.
-	if serve.CPUProfile != "" {
-		f, err := os.Create(serve.CPUProfile)
-		if err != nil {
-			fmt.Fprintf(serve.Stderr, "create cpu profile: %v", err)
-			os.Exit(1)
-		}
-		defer f.Close()
-
-		fmt.Fprintln(serve.Stderr, "Starting cpu profile")
-		pprof.StartCPUProfile(f)
-		time.AfterFunc(serve.CPUTime, func() {
-			fmt.Fprintln(serve.Stderr, "Stopping cpu profile")
-			pprof.StopCPUProfile()
-			f.Close()
-		})
-	}
-
-	// Execute the program.
-	if err := serve.Run(); err != nil {
-		fmt.Fprintln(serve.Stderr, err)
-		fmt.Fprintln(serve.Stderr, "stopping profile")
-		os.Exit(1)
-	}
-
-	// First SIGKILL causes server to shut down gracefully.
-	c := make(chan os.Signal, 2)
-	signal.Notify(c, os.Interrupt)
-	sig := <-c
-	fmt.Fprintf(serve.Stderr, "Received %s; gracefully shutting down...\n", sig.String())
-
-	// Second signal causes a hard shutdown.
-	go func() { <-c; os.Exit(1) }()
-
-	if err := serve.Close(); err != nil {
-		fmt.Fprintln(serve.Stderr, err)
-		os.Exit(1)
-	}
-}
 
 // Main represents the main program execution.
 type Main struct {
@@ -158,16 +104,7 @@ func (m *Main) Close() error {
 }
 
 // ParseFlags parses command line flags from args.
-func (m *Main) ParseFlags(args []string) error {
-	fs := flag.NewFlagSet("pilosa", flag.ContinueOnError)
-	fs.StringVar(&m.CPUProfile, "cpuprofile", "", "cpu profile")
-	fs.DurationVar(&m.CPUTime, "cputime", 30*time.Second, "cpu profile duration")
-	fs.StringVar(&m.ConfigPath, "config", "", "config path")
-	fs.SetOutput(m.Stderr)
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
+func (m *Main) SetupConfig(args []string) error {
 	// Load config, if specified.
 	if m.ConfigPath != "" {
 		if _, err := toml.DecodeFile(m.ConfigPath, &m.Config); err != nil {
