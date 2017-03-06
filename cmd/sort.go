@@ -25,7 +25,6 @@ The format of the CSV file is:
 The file should contain no headers.
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(cmd.Flags())
 		if len(args) == 0 {
 			fmt.Println("path required")
 			return
