@@ -143,17 +143,23 @@ func (s *Scanner) scanIdent() (tok Token, pos Pos, lit string) {
 // scanNumber consumes consecutive integer digits.
 func (s *Scanner) scanNumber() (tok Token, pos Pos, lit string) {
 	pos = s.pos
+	tok = NUMBER
 
 	var buf bytes.Buffer
+	var seenDot bool
 	for {
 		ch := s.read()
-		if !isDigit(ch) {
+		if !isDigit(ch) && (seenDot || ch != '.') {
 			s.unread()
 			break
 		}
+		if ch == '.' {
+			seenDot = true
+			tok = FLOAT
+		}
 		buf.WriteRune(ch)
 	}
-	return NUMBER, pos, buf.String()
+	return tok, pos, buf.String()
 }
 
 // scanString consumes a single-quoted or double-quoted string.
