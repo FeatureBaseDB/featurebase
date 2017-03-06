@@ -245,7 +245,7 @@ func (f *Fragment) openCache() error {
 	// This will cause them to be added to the cache.
 	for _, bitmapID := range pb.BitmapIDs {
 		//n := f.storage.CountRange(bitmapID*SliceWidth, (bitmapID+1)*SliceWidth)
-		n := f.bitmap(bitmapID, false).Count()
+		n := f.bitmap(bitmapID, true, false).Count()
 		f.cache.BulkAdd(bitmapID, n)
 	}
 	f.cache.Invalidate()
@@ -312,33 +312,35 @@ func (f *Fragment) logger() *log.Logger { return log.New(f.LogOutput, "", log.Ls
 func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.bitmap(bitmapID, false)
+	return f.bitmap(bitmapID, true, true)
 }
 
-func (f *Fragment) bitmap(bitmapID uint64, updateCache bool) *Bitmap {
-	r, ok := f.bitmapCache.Fetch(bitmapID)
-	if ok && r != nil {
-		return r
+func (f *Fragment) bitmap(bitmapID uint64, checkBitmapCache bool, updateBitmapCache bool) *Bitmap {
+
+	if checkBitmapCache {
+		r, ok := f.bitmapCache.Fetch(bitmapID)
+		if ok && r != nil {
+			return r
+		}
 	}
+
 	// Only use a subset of the containers.
 	// NOTE: The start & end ranges must be divisible by
 	data := f.storage.OffsetRange(f.slice*SliceWidth, bitmapID*SliceWidth, (bitmapID+1)*SliceWidth)
 
 	// Reference bitmap subrange in storage.
+	// We Clone() data because otherwise bm will contains pointers to containers in storage.
+	// This causes unexpected results when we cache the bitmap and try to use it later.
 	bm := &Bitmap{
 		segments: []BitmapSegment{{
-			data:     *data,
+			data:     *data.Clone(),
 			slice:    f.slice,
 			writable: false,
 		}},
-		adjustedCount: 0,
 	}
 	bm.InvalidateCount()
-	bm.adjustedCount = bm.Count()
 
-	if updateCache {
-		// Update cache.
-		f.cache.Add(bitmapID, bm.Count())
+	if updateBitmapCache {
 		f.bitmapCache.Add(bitmapID, bm)
 	}
 
@@ -353,9 +355,9 @@ func (f *Fragment) SetBit(bitmapID, profileID uint64) (changed bool, err error) 
 	return f.setBit(bitmapID, profileID)
 }
 
-func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error) {
-	// Determine the position of the bit in the storage.
+func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, err error) {
 	changed = false
+	// Determine the position of the bit in the storage.
 	pos, err := f.pos(bitmapID, profileID)
 	if err != nil {
 		return false, err
@@ -374,21 +376,17 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, bool error)
 	// Invalidate block checksum.
 	delete(f.checksums, int(bitmapID/HashBlockSize))
 
-	// If the number of operations exceeds the limit then snapshot.
+	// Increment number of operations until snapshot is required.
 	if err := f.incrementOpN(); err != nil {
 		return false, err
 	}
 
-	// If adjustedCount is set, then apply that value to bitmap.n instead.
-	bm := f.bitmap(bitmapID, true)
-	if bm.adjustedCount > 0 {
-		bm.SetCount(profileID, bm.adjustedCount)
-		bm.adjustedCount = 0
-	} else {
-		bm.IncrementCount(profileID)
-		f.cache.Add(bitmapID, bm.Count())
-	}
+	// Get the bitmap from bitmapCache or fragment.storage.
+	bm := f.bitmap(bitmapID, true, true)
 	bm.SetBit(profileID)
+
+	// Update the cache.
+	f.cache.Add(bitmapID, bm.Count())
 
 	f.stats.Count("setN", 1)
 
@@ -403,7 +401,8 @@ func (f *Fragment) ClearBit(bitmapID, profileID uint64) (bool, error) {
 	return f.clearBit(bitmapID, profileID)
 }
 
-func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
+func (f *Fragment) clearBit(bitmapID, profileID uint64) (changed bool, err error) {
+	changed = false
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(bitmapID, profileID)
 	if err != nil {
@@ -411,8 +410,7 @@ func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
 	}
 
 	// Write to storage.
-	changed, err := f.storage.Remove(pos)
-	if err != nil {
+	if changed, err = f.storage.Remove(pos); err != nil {
 		return false, err
 	}
 
@@ -429,16 +427,12 @@ func (f *Fragment) clearBit(bitmapID, profileID uint64) (bool, error) {
 		return false, err
 	}
 
-	// If adjustedCount is set, then apply that value to bitmap.n instead.
-	bm := f.bitmap(bitmapID, true)
-	if bm.adjustedCount > 0 {
-		bm.SetCount(profileID, bm.adjustedCount)
-		bm.adjustedCount = 0
-	} else {
-		bm.DecrementCount(profileID)
-		f.cache.Add(bitmapID, bm.Count())
-	}
+	// Get the bitmap from bitmapCache or fragment.storage.
+	bm := f.bitmap(bitmapID, true, true)
 	bm.ClearBit(profileID)
+
+	// Update the cache.
+	f.cache.Add(bitmapID, bm.Count())
 
 	f.stats.Count("clearN", 1)
 
@@ -908,7 +902,10 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 
 		// Update cache counts for all bitmaps.
 		for bitmapID := range set {
-			f.cache.BulkAdd(bitmapID, f.bitmap(bitmapID, false).Count())
+			// Import should ALWAYS have bitmap() load a new bm from fragment.storage
+			// because the bitmap that's in bitmapCache hasn't been updated with
+			// this import's data.
+			f.cache.BulkAdd(bitmapID, f.bitmap(bitmapID, false, false).Count())
 		}
 
 		f.cache.Invalidate()
@@ -1256,7 +1253,6 @@ func (s *FragmentSyncer) SyncFragment() error {
 	// Determine replica set.
 	nodes := s.Cluster.FragmentNodes(s.Fragment.DB(), s.Fragment.Slice())
 	if len(nodes) == 1 {
-		//fmt.Println("no place to replicate", s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.Slice())
 		return nil
 	}
 
