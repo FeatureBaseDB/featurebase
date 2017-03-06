@@ -1084,7 +1084,7 @@ func (c *container) clone() *container {
 		copy(other.bitmap, c.bitmap)
 	}
 
-	return c
+	return other
 }
 
 // WriteTo writes c to w.

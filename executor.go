@@ -183,27 +183,27 @@ func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slic
 	}
 	// Only the original caller should refetch the full counts.
 	other := c.Clone()
-	//other.Args["n"] = 0
+
+	// Double the size of n for other calls in order to...
+	// TODO: travis review
 	other.Args["n"] = len(bitmapIDs) * 2
 
 	ids := Pairs(pairs).Keys()
 	sort.Sort(uint64Slice(ids))
 	other.Args["ids"] = ids
 
-	trimedlist, x := e.executeTopNSlices(ctx, db, other, slices, opt)
-	if x != nil {
-		return nil, x
+	trimmedList, err := e.executeTopNSlices(ctx, db, other, slices, opt)
+	if err != nil {
+		return nil, err
 	}
 
-	if int(n) < len(trimedlist) {
-		trimedlist = trimedlist[0:n]
+	if int(n) < len(trimmedList) {
+		trimmedList = trimmedList[0:n]
 	}
-	return trimedlist, nil
+	return trimmedList, nil
 }
 
 func (e *Executor) executeTopNSlices(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
-	//n, _ := c.Args["n"].(uint64)
-
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
 		return e.executeTopNSlice(ctx, db, c, slice)
@@ -223,11 +223,6 @@ func (e *Executor) executeTopNSlices(ctx context.Context, db string, c *pql.Call
 
 	// Sort final merged results.
 	sort.Sort(Pairs(results))
-
-	// Only keep the top n after sorting.
-	//	if n > 0 && len(results) > int(n) {
-	//	results = results[0:n]
-	//}
 
 	return results, nil
 }
