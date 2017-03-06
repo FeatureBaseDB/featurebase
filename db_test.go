@@ -89,7 +89,11 @@ func NewDB() *DB {
 	if err != nil {
 		panic(err)
 	}
-	return &DB{DB: pilosa.NewDB(path, "d")}
+	db, err := pilosa.NewDB(path, "d")
+	if err != nil {
+		panic(err)
+	}
+	return &DB{DB: db}
 }
 
 // MustOpenDB returns a new, opened database at a temporary path. Panic on error.
@@ -109,12 +113,16 @@ func (db *DB) Close() error {
 
 // Reopen closes the database and reopens it.
 func (db *DB) Reopen() error {
+	var err error
 	if err := db.DB.Close(); err != nil {
 		return err
 	}
 
 	path, name := db.Path(), db.Name()
-	db.DB = pilosa.NewDB(path, name)
+	db.DB, err = pilosa.NewDB(path, name)
+	if err != nil {
+		return err
+	}
 
 	if err := db.Open(); err != nil {
 		return err
@@ -129,4 +137,16 @@ func (db *DB) MustSetBit(name string, bitmapID, profileID uint64, t *time.Time) 
 		panic(err)
 	}
 	return changed
+}
+
+// Ensure database can delete a frame.
+func TestDB_InvalidName(t *testing.T) {
+	path, err := ioutil.TempDir("", "pilosa-db-")
+	if err != nil {
+		panic(err)
+	}
+	db, err := pilosa.NewDB(path, "ABC")
+	if db != nil {
+		t.Fatalf("unexpected db name %s", db)
+	}
 }

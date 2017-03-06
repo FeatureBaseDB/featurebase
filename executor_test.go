@@ -182,7 +182,7 @@ func TestExecutor_Execute_SetBitmapAttrs(t *testing.T) {
 	db := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
 	if _, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
-	} else if _, err := db.CreateFrameIfNotExists("XXX", pilosa.FrameOptions{}); err != nil {
+	} else if _, err := db.CreateFrameIfNotExists("xxx", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -195,7 +195,7 @@ func TestExecutor_Execute_SetBitmapAttrs(t *testing.T) {
 	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=200, frame=f, YYY=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=10, frame=XXX, YYY=1)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=10, frame=xxx, YYY=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=10, frame=f, baz=123, bat=true)`), nil, nil); err != nil {

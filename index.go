@@ -78,7 +78,10 @@ func (i *Index) Open() error {
 
 		i.logger().Printf("opening database: %s", filepath.Base(fi.Name()))
 
-		db := i.newDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		db, err := i.newDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		if err != nil {
+			return ErrName
+		}
 		if err := db.Open(); err != nil {
 			return fmt.Errorf("open db: name=%s, err=%s", db.Name(), err)
 		}
@@ -193,7 +196,11 @@ func (i *Index) createDB(name string, opt DBOptions) (*DB, error) {
 	}
 
 	// Otherwise create a new database.
-	db := i.newDB(i.DBPath(name), name)
+	db, err := i.newDB(i.DBPath(name), name)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := db.Open(); err != nil {
 		return nil, err
 	}
@@ -208,11 +215,14 @@ func (i *Index) createDB(name string, opt DBOptions) (*DB, error) {
 	return db, nil
 }
 
-func (i *Index) newDB(path, name string) *DB {
-	db := NewDB(path, name)
+func (i *Index) newDB(path, name string) (*DB, error) {
+	db, err := NewDB(path, name)
+	if err != nil {
+		return nil, err
+	}
 	db.LogOutput = i.LogOutput
 	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
-	return db
+	return db, nil
 }
 
 // DeleteDB removes a database from the index.
