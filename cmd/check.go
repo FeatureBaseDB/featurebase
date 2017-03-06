@@ -14,7 +14,7 @@ var checker = ctl.NewCheckCommand(os.Stdin, os.Stdout, os.Stderr)
 
 var checkCmd = &cobra.Command{
 	Use:   "check <path> [path2]...",
-	Short: "check - check a pilosa data file",
+	Short: "Do a consistency check on a pilosa data file.",
 	Long: `
 Performs a consistency check on data files.
 `,

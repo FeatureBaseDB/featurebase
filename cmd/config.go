@@ -14,7 +14,7 @@ var conf = ctl.NewConfigCommand(os.Stdin, os.Stdout, os.Stderr)
 
 var confCmd = &cobra.Command{
 	Use:   "config",
-	Short: "config - prints the default configuration",
+	Short: "Print the default configuration.",
 	Long: `config prints the default configuration to stdout
 `,
 	Run: func(cmd *cobra.Command, args []string) {

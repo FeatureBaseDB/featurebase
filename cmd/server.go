@@ -18,7 +18,7 @@ var serve = server.NewMain()
 
 var serveCmd = &cobra.Command{
 	Use:   "server",
-	Short: "server - run the pilosa server",
+	Short: "Run Pilosa.",
 	Long: `pilosa server runs Pilosa.
 
 It will load existing data from the configured

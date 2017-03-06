@@ -14,7 +14,7 @@ var inspecter = ctl.NewInspectCommand(os.Stdin, os.Stdout, os.Stderr)
 
 var inspectCmd = &cobra.Command{
 	Use:   "inspect",
-	Short: "get stats on pilosa data file",
+	Short: "Get stats on a pilosa data file.",
 	Long: `
 Inspects a data file and provides stats.
 `,
