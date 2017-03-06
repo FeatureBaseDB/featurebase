@@ -49,9 +49,9 @@ type DB struct {
 
 // NewDB returns a new instance of DB.
 func NewDB(path, name string) (*DB, error) {
-	validName := Exp.FindStringSubmatchIndex(name)
-	if len(validName) == 0 {
-		return nil, ErrName
+	err := ValidateName(name)
+	if err != nil {
+		return nil, err
 	}
 
 	return &DB{

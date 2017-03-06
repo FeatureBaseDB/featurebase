@@ -28,7 +28,8 @@ var (
 )
 
 // Regular expression to valuate db and frame's name
-var Exp = regexp.MustCompile(`^([a-z0-9._-]{1,64}$)`)
+// Todo: remove . when frame doesn't require . for topN
+var nameRegexp = regexp.MustCompile(`^([a-z0-9._-]{1,64}$)`)
 
 // Profile represents vertical column in a database.
 // A profile can have a set of attributes attached to it.
@@ -82,3 +83,13 @@ func decodeProfile(pb *internal.Profile) *Profile {
 
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
+
+
+// Restrict name using regex
+func ValidateName(name string) error {
+	validName := nameRegexp.Match([]byte(name))
+	if validName == false{
+		return ErrName
+	}
+	return nil
+}
