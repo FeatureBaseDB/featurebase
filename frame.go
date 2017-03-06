@@ -47,9 +47,9 @@ type Frame struct {
 
 // NewFrame returns a new instance of frame.
 func NewFrame(path, db, name string) (*Frame, error) {
-	err := ValidateName(name)
-	if err != nil {
-		return nil, err
+	validName := Exp.FindStringSubmatchIndex(name)
+	if len(validName) == 0 {
+		return nil, ErrName
 	}
 
 	return &Frame{
