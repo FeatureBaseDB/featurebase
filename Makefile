@@ -1,4 +1,4 @@
-.PHONY: glide vendor-update docker pilosa pilosactl crossbuild install
+.PHONY: glide vendor-update docker pilosa pilosactl crossbuild install plugins
 
 GLIDE := $(shell command -v glide 2>/dev/null)
 VERSION := $(shell git describe --tags)
@@ -34,6 +34,10 @@ pilosa: vendor
 pilosactl: vendor
 	go build $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosactl
 
+plugins: pilosa
+	mkdir -p $(GOPATH)/bin/pilosa-plugins
+	go build $(LDFLAGS) $(FLAGS) -buildmode=plugin -o $(GOPATH)/bin/pilosa-plugins/test.so ./plugins/test
+
 crossbuild: vendor
 	mkdir -p build/pilosa-$(IDENTIFIER)
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
@@ -45,3 +49,4 @@ install: vendor
 
 docker:
 	docker build -t pilosa:latest .
+

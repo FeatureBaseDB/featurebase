@@ -117,3 +117,25 @@ func TestParser_Parse(t *testing.T) {
 		}
 	})
 }
+
+// Ensure the parser can parse an external function call.
+func TestParser_Parse_ExternalCall(t *testing.T) {
+	q, err := pql.ParseString(`MyFunc(Bitmap(1), "foo", x=1, y=2)`)
+	if err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(q, &pql.Query{
+		Calls: pql.Calls{
+			&pql.ExternalCall{
+				Name: "MyFunc",
+				Args: []pql.Arg{
+					{Value: &pql.Bitmap{ID: 1}},
+					{Key: 0, Value: "foo"},
+					{Key: "x", Value: uint64(1)},
+					{Key: "y", Value: uint64(2)},
+				},
+			},
+		},
+	}) {
+		t.Fatalf("unexpected query: %s", spew.Sdump(q))
+	}
+}
