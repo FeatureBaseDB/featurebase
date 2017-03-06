@@ -96,22 +96,55 @@ Return a list of all databases and frames in the index:
 $ curl "http://127.0.0.1:15000/schema"
 ```
 
+### Database and Frame Schema
+
+Before running a query, the corresponding database and frame must be created. Note that database and frame names can contain only lower case letters, numbers, dash (`-`), underscore (`_`) and dot (`.`).
+
+You can create the database `sample-db` using:
+
+```sh
+$ curl -XPOST "http://127.0.0.1:15000/db" \
+    -d '{"db": "sample-db"}'
+```
+
+Optionally, you can specify the column label on database creation:
+
+```sh
+$ curl -XPOST "http://127.0.0.1:15000/db" \
+    -d '{"db": "sample-db", "columnLabel": "user"}'
+```
+
+The frame `collaboration` may be created using the following call:
+
+```sh
+$ curl -XPOST "http://127.0.0.1:15000/frame" \
+    -d '{"db": "sample-db", "frame": "collaboration"}'
+```
+
+It is possible to specify the frame row label on frame creation:
+
+```sh
+$ curl -XPOST "http://127.0.0.1:15000/frame" \
+    -d '{"db": "sample-db", "frame": "collaboration"}, "options": {"rowLabel": "project"}}'
+```
 
 ### Queries
 
 Queries to Pilosa require sending a POST request where the query itself is sent as POST data.
 You specify the database on which to perform the query with a URL argument `db=database-name`.
 
-A query sent to database `exampleDB` will have the following format:
+In this section, we assume both the database `sample-db` with column label `user` and the frame `collaboration` with row label `project` was created.
+
+A query sent to database `sample-db` will have the following format:
 
 ```sh
-$ curl -X POST "http://127.0.0.1:15000/query?db=exampleDB" -d 'Query()'
+$ curl -X POST "http://127.0.0.1:15000/query?db=sample-db" -d 'Query()'
 ```
 
 The `Query()` object referenced above should be made up of one or more of the query types listed below.
 So for example, a SetBit() query would look like this:
 ```sh
-$ curl -X POST "http://127.0.0.1:15000/query?db=exampleDB" -d 'SetBit(id=10, frame="foo", profileID=1)'
+$ curl -X POST "http://127.0.0.1:15000/query?db=sample-db" -d 'SetBit(project=10, frame="collaboration", user=1)'
 ```
 
 Query results have the format `{"results":[]}`, where `results` is a list of results for each `Query()`. This
@@ -119,26 +152,26 @@ means that you can provide multiple `Query()` objects with each HTTP request and
 the results of all of the queries.
 
 ```sh
-$ curl -X POST "http://127.0.0.1:15000/query?db=exampleDB" -d 'Query() Query() Query()'
+$ curl -X POST "http://127.0.0.1:15000/query?db=sample-db" -d 'Query() Query() Query()'
 ```
 
 ---
 #### SetBit()
 ```
-SetBit(id=10, frame="foo", profileID=1)
+SetBit(project=10, frame="collaboration", user=1)
 ```
 A return value of `{"results":[true]}` indicates that the bit was toggled from 0 to 1.
 A return value of `{"results":[false]}` indicates that the bit was already set to 1 and therefore nothing changed.
 
 SetBit accepts an optional `timestamp` field:
 ```
-SetBit(id=10, frame=f, profileID=2, timestamp="2016-12-11T10:09:07")
+SetBit(project=10, frame="collaboration", user=2, timestamp="2016-12-11T10:09:07")
 ```
 
 ---
 #### ClearBit()
 ```
-ClearBit(id=10, frame="foo", profileID=1)
+ClearBit(project=10, frame="collaboration", user=1)
 ```
 A return value of `{"results":[true]}` indicates that the bit was toggled from 1 to 0.
 A return value of `{"results":[false]}` indicates that the bit was already set to 0 and therefore nothing changed.
@@ -146,7 +179,7 @@ A return value of `{"results":[false]}` indicates that the bit was already set t
 ---
 #### SetBitmapAttrs()
 ```
-SetBitmapAttrs(id=10, frame="foo", category=123, color="blue", happy=true)
+SetBitmapAttrs(project=10, frame="collaboration", stars=123, url="http://projects.pilosa.com/10", active=true)
 ```
 Returns `{"results":[null]}`
 
@@ -154,7 +187,7 @@ Returns `{"results":[null]}`
 #### SetProfileAttrs()
 ---
 ```
-SetProfileAttrs(id=10, category=123, color="blue", happy=true)
+SetProfileAttrs(user=10, friends=123, username="mrpi", active=true)
 ```
 
 Returns `{"results":[null]}`
@@ -162,20 +195,20 @@ Returns `{"results":[null]}`
 ---
 #### Bitmap()
 ```
-Bitmap(id=10, frame="foo")
+Bitmap(project=10, frame="collaboration")
 ```
-Returns `{"results":[{"attrs":{"category":123,"color":"blue","happy":true},"bits":[1,2]}]}` where `attrs` are the
+Returns `{"results":[{"attrs":{"stars":123, "url":"http://projects.pilosa.com/10", "active":true},"bits":[1,2]}]}` where `attrs` are the
 attributes set using `SetBitmapAttrs()` and `bits` are the bits set using `SetBit()`.
 
 In order to return profile attributes attached to the profiles of a bitmap, add `&profiles=true` to the query string. Sample response:
 ```
-{"results":[{"attrs":{},"bits":[10]}],"profiles":[{"id":10,"attrs":{"category":123,"color":"blue","happy":true}}]}
+{"results":[{"attrs":{},"bits":[10]}],"profiles":[{"user":10,"attrs":{"friends":123, "username":"mrpi", "active":true}}]}
 ```
 
 ---
 #### Union()
 ```
-Union(Bitmap(id=10, frame="foo"), Bitmap(id=20, frame="foo")))
+Union(Bitmap(project=10, frame="collaboration"), Bitmap(project=20, frame="collaboration")))
 ```
 Returns a result set similar to that of a `Bitmap()` query, only the `attrs` dictionary will be empty: `{"results":[{"attrs":{},"bits":[1,2]}]}`.
 Note that a `Union()` query can be nested within other queries anywhere that you would otherwise provide a `Bitmap()`.
@@ -183,7 +216,7 @@ Note that a `Union()` query can be nested within other queries anywhere that you
 ---
 #### Intersect()
 ```
-Intersect(Bitmap(id=10, frame="foo"), Bitmap(id=20, frame="foo")))
+Intersect(Bitmap(project=10, frame="collaboration"), Bitmap(project=20, frame="collaboration")))
 ```
 Returns a result set similar to that of a `Bitmap()` query, only the `attrs` dictionary will be empty: `{"results":[{"attrs":{},"bits":[1]}]}`.
 Note that an `Intersect()` query can be nested within other queries anywhere that you would otherwise provide a `Bitmap()`.
@@ -191,7 +224,7 @@ Note that an `Intersect()` query can be nested within other queries anywhere tha
 ---
 #### Difference()
 ```
-Difference(Bitmap(id=10, frame="foo"), Bitmap(id=20, frame="foo")))
+Difference(Bitmap(project=10, frame="collaboration"), Bitmap(project=20, frame="collaboration")))
 ```
 `Difference()` represents all of the bits that are set in the first `Bitmap()` but are not set in the second `Bitmap()`.  It returns a result set similar to that of a `Bitmap()` query, only the `attrs` dictionary will be empty: `{"results":[{"attrs":{},"bits":[2]}]}`.
 Note that a `Difference()` query can be nested within other queries anywhere that you would otherwise provide a `Bitmap()`.
@@ -199,35 +232,35 @@ Note that a `Difference()` query can be nested within other queries anywhere tha
 ---
 #### Count()
 ```
-Count(Bitmap(id=10, frame="foo"))
+Count(Bitmap(project=10, frame="collaboration"))
 ```
 Returns the count of the number of bits set in `Bitmap()`: `{"results":[28]}`
 
 ---
 #### Range()
 ```
-Range(id=10, frame="foo", start="1970-01-01T00:00", end="2000-01-02T03:04")
+Range(project=10, frame="collaboration", start="1970-01-01T00:00", end="2000-01-02T03:04")
 ```
 
 ---
 #### TopN()
 ```
-TopN(frame="bar", n=20)
+TopN(frame="geo", n=20)
 ```
-Returns the top 20 Bitmaps from frame `bar`.
+Returns the top 20 Bitmaps from frame `geo`.
 
 ```
-TopN(Bitmap(id=10, frame="foo"), frame="bar", n=20)
+TopN(Bitmap(project=10, frame="collaboration"), frame="geo", n=20)
 ```
-Returns the top 20 Bitmaps from `bar` sorted by the count of bits in the intersection with `Bitmap(id=10)`.
+Returns the top 20 Bitmaps from `geo` sorted by the count of bits in the intersection with `Bitmap(project=10)`.
 
 
 ```
-TopN(Bitmap(id=10, frame="foo"), frame="bar", n=20, field="category", [81,82])
+TopN(Bitmap(project=10, frame="collaboration"), frame="geo", n=20, field="category", [81,82])
 ```
 
-Returns the top 20 Bitmaps from `bar`in attribute `category` with values `81 or
-82` sorted by the count of bits in the intersection with `Bitmap(id=10)`.
+Returns the top 20 Bitmaps from `geo`in attribute `category` with values `81 or
+82` sorted by the count of bits in the intersection with `Bitmap(project=10)`.
 
 ## Development
 
