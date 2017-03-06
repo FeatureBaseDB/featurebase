@@ -16,7 +16,7 @@ var restorer = ctl.NewRestoreCommand(os.Stdin, os.Stdout, os.Stderr)
 
 var restoreCmd = &cobra.Command{
 	Use:   "restore",
-	Short: "restore - restore data to pilosa",
+	Short: "Restore data to pilosa from a backup file.",
 	Long: `
 Restores a frame to the cluster from a backup file.
 `,

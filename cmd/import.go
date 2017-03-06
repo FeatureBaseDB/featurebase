@@ -16,7 +16,7 @@ var importer = ctl.NewImportCommand(os.Stdin, os.Stdout, os.Stderr)
 
 var importCmd = &cobra.Command{
 	Use:   "import",
-	Short: "import - import data to pilosa",
+	Short: "Bulk load data into pilosa.",
 	Long: `Bulk imports one or more CSV files to a host's database and frame. The bits
 of the CSV file are grouped by slice for the most efficient import.
 

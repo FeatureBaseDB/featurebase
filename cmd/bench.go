@@ -16,7 +16,7 @@ var bencher = ctl.NewBenchCommand(os.Stdin, os.Stdout, os.Stderr)
 
 var benchCmd = &cobra.Command{
 	Use:   "bench",
-	Short: "bench - benchmark operations",
+	Short: "Benchmark operations.",
 	Long: `
 Executes a benchmark for a given operation against the database.
 `,

@@ -9,7 +9,7 @@ var (
 
 var RootCmd = &cobra.Command{
 	Use:   "pilosa",
-	Short: "pilosa - A Distributed In-memory Binary Bitmap Index",
+	Short: "Pilosa - A Distributed In-memory Binary Bitmap Index.",
 	// TODO - is documentation actually there?
 	Long: `Pilosa is a fast index to turbocharge your database.
 

@@ -16,7 +16,7 @@ var exporter = ctl.NewExportCommand(os.Stdin, os.Stdout, os.Stderr)
 
 var exportCmd = &cobra.Command{
 	Use:   "export",
-	Short: "export - export data from pilosa",
+	Short: "Export data from pilosa.",
 	Long: `
 Bulk exports a fragment to a CSV file. If the OUTFILE is not specified then
 the output is written to STDOUT.

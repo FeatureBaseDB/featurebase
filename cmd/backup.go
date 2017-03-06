@@ -16,7 +16,7 @@ var backuper = ctl.NewBackupCommand(os.Stdin, os.Stdout, os.Stderr)
 
 var backupCmd = &cobra.Command{
 	Use:   "backup",
-	Short: "backup - backup data from pilosa",
+	Short: "Backup data from pilosa.",
 	Long: `
 Backs up the database and frame from across the cluster into a single file.
 `,

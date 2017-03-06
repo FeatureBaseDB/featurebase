@@ -14,7 +14,7 @@ var sorter = ctl.NewSortCommand(os.Stdin, os.Stdout, os.Stderr)
 
 var sortCmd = &cobra.Command{
 	Use:   "sort <path>",
-	Short: "sort - sort import data for optimal import performance",
+	Short: "Sort import data for optimal import performance.",
 	Long: `
 Sorts the import data at PATH into the optimal sort order for importing.
 
