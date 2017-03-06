@@ -168,6 +168,10 @@ func (m *Main) ParseFlags(args []string) error {
 		return err
 	}
 
+	if len(fs.Args()) != 0 {
+		return errors.New("You passed a positional argument. Did you want to pass `-config` ?")
+	}
+
 	// Load config, if specified.
 	if m.ConfigPath != "" {
 		if _, err := toml.DecodeFile(m.ConfigPath, &m.Config); err != nil {
