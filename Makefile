@@ -43,5 +43,5 @@ install: vendor
 	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosactl
 
-docker: vendor
+docker:
 	docker build -t pilosa:latest .
