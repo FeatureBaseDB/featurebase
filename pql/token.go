@@ -38,6 +38,7 @@ var tokens = [...]string{
 
 	IDENT:  "IDENT",
 	NUMBER: "NUMBER",
+	FLOAT:  "FLOAT",
 
 	ALL: "ALL",
 
