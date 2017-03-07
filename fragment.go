@@ -337,10 +337,8 @@ func (f *Fragment) bitmap(bitmapID uint64, checkBitmapCache bool, updateBitmapCa
 			slice:    f.slice,
 			writable: false,
 		}},
-		cacheoveride: 0,
 	}
 	bm.InvalidateCount()
-	bm.cacheoveride = bm.Count()
 
 	if updateBitmapCache {
 		f.bitmapCache.Add(bitmapID, bm)
