@@ -46,7 +46,12 @@ type Frame struct {
 }
 
 // NewFrame returns a new instance of frame.
-func NewFrame(path, db, name string) *Frame {
+func NewFrame(path, db, name string) (*Frame, error) {
+	err := ValidateName(name)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Frame{
 		path: path,
 		db:   db,
@@ -60,7 +65,7 @@ func NewFrame(path, db, name string) *Frame {
 		rowLabel: DefaultRowLabel,
 
 		LogOutput: ioutil.Discard,
-	}
+	}, nil
 }
 
 // Name returns the name the frame was initialized with.
