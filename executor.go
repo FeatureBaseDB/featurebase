@@ -17,7 +17,13 @@ import (
 )
 
 // DefaultFrame is the frame used if one is not specified.
-const DefaultFrame = "general"
+const (
+	DefaultFrame = "general"
+
+	// MinThreshold is the lowest count to use in a Top-N operation when
+	// looking for additional bitmap/count pairs.
+	MinThreshold = 1
+)
 
 // Executor recursively executes calls in a PQL query across all slices.
 type Executor struct {
@@ -258,8 +264,9 @@ func (e *Executor) executeTopNSlice(ctx context.Context, db string, c *pql.Call,
 	n, _ := c.Args["n"].(uint64)
 	field, _ := c.Args["field"].(string)
 	bitmapIDs, _ := c.Args["ids"].([]uint64)
+	minThreshold, _ := c.Args["threshold"].(uint64)
 	filters, _ := c.Args["filters"].([]interface{})
-
+	tanimotoThreshold, _ := c.Args["tanimotoThreshold"].(uint64)
 	// Retrieve bitmap used to intersect.
 	var src *Bitmap
 	if len(c.Children) == 1 {
@@ -282,12 +289,21 @@ func (e *Executor) executeTopNSlice(ctx context.Context, db string, c *pql.Call,
 		return nil, nil
 	}
 
+	if minThreshold <= 0 {
+		minThreshold = MinThreshold
+	}
+
+	if tanimotoThreshold > 100 {
+		return nil, errors.New("Tanimoto Threshold is from 1 to 100 only")
+	}
 	return f.Top(TopOptions{
-		N:            int(n),
-		Src:          src,
-		BitmapIDs:    bitmapIDs,
-		FilterField:  field,
-		FilterValues: filters,
+		N:                 int(n),
+		Src:               src,
+		BitmapIDs:         bitmapIDs,
+		FilterField:       field,
+		FilterValues:      filters,
+		MinThreshold:      minThreshold,
+		TanimotoThreshold: tanimotoThreshold,
 	})
 }
 

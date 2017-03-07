@@ -22,6 +22,8 @@ import (
 	"time"
 	"unsafe"
 
+	"math"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/roaring"
@@ -39,10 +41,6 @@ const (
 
 	// CacheExt is the file extension for persisted cache ids.
 	CacheExt = ".cache"
-
-	// MinThreshold is the lowest count to use in a Top-N operation when
-	// looking for additional bitmap/count pairs.
-	MinThreshold = 10
 
 	// HashBlockSize is the number of bitmaps in a merkle hash block.
 	HashBlockSize = 100
@@ -491,7 +489,6 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 	}
 
 	// Iterate over rankings and add to results until we have enough.
-	//results := make(PairHeap, 0, opt.N)
 	results := &PairHeap{}
 	for _, pair := range pairs {
 		bitmapID, cnt := pair.ID, pair.Count
@@ -499,6 +496,20 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		// Ignore empty bitmaps.
 		if cnt <= 0 {
 			continue
+		}
+
+		if opt.TanimotoThreshold > 0 && opt.Src != nil {
+			minTanimoto := float64(opt.Src.Count() * opt.TanimotoThreshold / 100)
+			maxTanimoto := float64(opt.Src.Count() * 100 / opt.TanimotoThreshold)
+			if float64(n) <= minTanimoto || float64(n) >= float64(maxTanimoto) {
+				continue
+			}
+
+		} else {
+			// Ignore count that less than MinThreshold.
+			if cnt < opt.MinThreshold {
+				continue
+			}
 		}
 
 		// Apply filter, if set.
@@ -521,9 +532,22 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 			count := cnt
 			if opt.Src != nil {
 				count = opt.Src.IntersectionCount(f.Bitmap(bitmapID))
+
 			}
 			if count == 0 {
 				continue
+			}
+
+			if opt.TanimotoThreshold > 0 {
+				tanimoto := math.Ceil(float64(count * 100 / (cnt + opt.Src.Count() - count)))
+				if tanimoto <= float64(opt.TanimotoThreshold) {
+					continue
+				}
+
+			} else {
+				if count < opt.MinThreshold {
+					continue
+				}
 			}
 			heap.Push(results, Pair{Key: bitmapID, Count: count})
 
@@ -545,7 +569,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 		// If the bitmap doesn't have enough bits set before the intersection
 		// then we can assume that any remaining bitmaps also have a count too low.
-		if cnt < threshold {
+		if threshold < opt.MinThreshold || cnt < threshold {
 			break
 		}
 
@@ -558,6 +582,8 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 		heap.Push(results, Pair{Key: bitmapID, Count: count})
 	}
+
+	//Pop first opt.N elements out of heap
 	r := make(Pairs, results.Len(), results.Len())
 	x := results.Len()
 	i := 1
@@ -611,11 +637,13 @@ type TopOptions struct {
 	Src *Bitmap
 
 	// Specific bitmaps to filter against.
-	BitmapIDs []uint64
+	BitmapIDs    []uint64
+	MinThreshold uint64
 
 	// Filter field name & values.
-	FilterField  string
-	FilterValues []interface{}
+	FilterField       string
+	FilterValues      []interface{}
+	TanimotoThreshold uint64
 }
 
 // Checksum returns a checksum for the entire fragment.
