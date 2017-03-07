@@ -140,7 +140,7 @@ func (s *Scanner) scanIdent() (tok Token, pos Pos, lit string) {
 	return IDENT, pos, lit
 }
 
-// scanNumber consumes consecutive integer digits.
+// scanNumber consumes consecutive digits and up to one '.' character.
 func (s *Scanner) scanNumber() (tok Token, pos Pos, lit string) {
 	pos = s.pos
 	tok = NUMBER
