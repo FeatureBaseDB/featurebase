@@ -48,7 +48,12 @@ type DB struct {
 }
 
 // NewDB returns a new instance of DB.
-func NewDB(path, name string) *DB {
+func NewDB(path, name string) (*DB, error) {
+	err := ValidateName(name)
+	if err != nil {
+		return nil, err
+	}
+
 	return &DB{
 		path:           path,
 		name:           name,
@@ -61,7 +66,7 @@ func NewDB(path, name string) *DB {
 
 		stats:     NopStatsClient,
 		LogOutput: ioutil.Discard,
-	}
+	}, nil
 }
 
 // Name returns name of the database.
@@ -141,7 +146,10 @@ func (db *DB) openFrames() error {
 			continue
 		}
 
-		fr := db.newFrame(db.FramePath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		fr, err := db.newFrame(db.FramePath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		if err != nil {
+			return ErrName
+		}
 		if err := fr.Open(); err != nil {
 			return fmt.Errorf("open frame: name=%s, err=%s", fr.Name(), err)
 		}
@@ -312,12 +320,16 @@ func (db *DB) CreateFrameIfNotExists(name string, opt FrameOptions) (*Frame, err
 }
 
 func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
+
 	if name == "" {
 		return nil, errors.New("frame name required")
 	}
 
 	// Initialize frame.
-	f := db.newFrame(db.FramePath(name), name)
+	f, err := db.newFrame(db.FramePath(name), name)
+	if err != nil {
+		return nil, err
+	}
 
 	// Open frame.
 	if err := f.Open(); err != nil {
@@ -335,11 +347,14 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	return f, nil
 }
 
-func (db *DB) newFrame(path, name string) *Frame {
-	f := NewFrame(path, db.name, name)
+func (db *DB) newFrame(path, name string) (*Frame, error) {
+	f, err := NewFrame(path, db.name, name)
+	if err != nil {
+		return nil, err
+	}
 	f.LogOutput = db.LogOutput
 	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
-	return f
+	return f, nil
 }
 
 // DeleteFrame removes a frame from the database.

@@ -1,17 +1,14 @@
-package pilosactl
+package ctl
 
 import (
 	"context"
 	"encoding/csv"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pilosa/pilosa"
@@ -56,41 +53,6 @@ func (cmd *ImportCommand) String() string {
 	return fmt.Sprint(*cmd)
 }
 
-// ParseFlags parses command line flags from args.
-func (cmd *ImportCommand) ParseFlags(args []string) error {
-	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
-	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Host, "host", "localhost:15000", "host:port")
-	fs.StringVar(&cmd.Database, "d", "", "database")
-	fs.StringVar(&cmd.Frame, "f", "", "frame")
-	fs.IntVar(&cmd.BufferSize, "buffer-size", cmd.BufferSize, "buffer size")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	// Extract the import paths.
-	cmd.Paths = fs.Args()
-
-	return nil
-}
-
-// Usage returns the usage message to be printed.
-func (cmd *ImportCommand) Usage() string {
-	return strings.TrimSpace(`
-usage: pilosactl import -host HOST -d database -f frame paths
-
-Bulk imports one or more CSV files to a host's database and frame. The bits
-of the CSV file are grouped by slice for the most efficient import.
-
-The format of the CSV file is:
-
-	BITMAPID,PROFILEID,[TIME]
-
-The file should contain no headers. The TIME column is optional and can be
-omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
-`)
-}
-
 // Run executes the main program execution.
 func (cmd *ImportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
@@ -104,7 +66,6 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	} else if len(cmd.Paths) == 0 {
 		return errors.New("path required")
 	}
-
 	// Create a client to the server.
 	client, err := pilosa.NewClient(cmd.Host)
 	if err != nil {
