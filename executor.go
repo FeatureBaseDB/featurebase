@@ -52,13 +52,15 @@ func (e *Executor) Execute(ctx context.Context, db string, q *pql.Query, slices 
 
 	// If slices aren't specified, then include all of them.
 	if len(slices) == 0 {
-		// Round up the number of slices.
-		maxSlice := e.Index.DB(db).MaxSlice()
+		if needsSlices(q.Calls) {
+			// Round up the number of slices.
+			maxSlice := e.Index.DB(db).MaxSlice()
 
-		// Generate a slices of all slices.
-		slices = make([]uint64, maxSlice+1)
-		for i := range slices {
-			slices[i] = uint64(i)
+			// Generate a slices of all slices.
+			slices = make([]uint64, maxSlice+1)
+			for i := range slices {
+				slices[i] = uint64(i)
+			}
 		}
 	}
 
@@ -168,6 +170,10 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, db string, c *pql
 // requeries to retrieve the full counts for each of the top results.
 func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
 	bitmapIDs, _ := c.Args["ids"].([]uint64)
+	var n uint64
+	if nval, ok := c.Args["n"]; ok {
+		n = nval.(uint64)
+	}
 
 	// Execute original query.
 	pairs, err := e.executeTopNSlices(ctx, db, c, slices, opt)
@@ -180,21 +186,29 @@ func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slic
 	if len(pairs) == 0 || len(bitmapIDs) > 0 || opt.Remote {
 		return pairs, nil
 	}
-
 	// Only the original caller should refetch the full counts.
 	other := c.Clone()
-	other.Args["n"] = 0
+
+	// Double the size of n for other calls in order to...
+	// TODO: travis review
+	other.Args["n"] = len(bitmapIDs) * 2
 
 	ids := Pairs(pairs).Keys()
 	sort.Sort(uint64Slice(ids))
 	other.Args["ids"] = ids
 
-	return e.executeTopNSlices(ctx, db, other, slices, opt)
+	trimmedList, err := e.executeTopNSlices(ctx, db, other, slices, opt)
+	if err != nil {
+		return nil, err
+	}
+
+	if n != 0 && int(n) < len(trimmedList) {
+		trimmedList = trimmedList[0:n]
+	}
+	return trimmedList, nil
 }
 
 func (e *Executor) executeTopNSlices(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
-	n, _ := c.Args["n"].(uint64)
-
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
 		return e.executeTopNSlice(ctx, db, c, slice)
@@ -214,11 +228,6 @@ func (e *Executor) executeTopNSlices(ctx context.Context, db string, c *pql.Call
 
 	// Sort final merged results.
 	sort.Sort(Pairs(results))
-
-	// Only keep the top n after sorting.
-	if n > 0 && len(results) > int(n) {
-		results = results[0:n]
-	}
 
 	return results, nil
 }
@@ -954,6 +963,7 @@ func (e *Executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 			if n.Host == e.Host {
 				resp.result, resp.err = e.mapperLocal(ctx, nodeSlices, mapFn, reduceFn)
 			} else if !opt.Remote {
+
 				results, err := e.exec(ctx, n, db, &pql.Query{Calls: []*pql.Call{c}}, nodeSlices, opt)
 				if len(results) > 0 {
 					resp.result = results[0]
@@ -1051,4 +1061,22 @@ func hasOnlySetBitmapAttrs(calls []*pql.Call) bool {
 		}
 	}
 	return true
+}
+
+func needsSlices(calls []*pql.Call) bool {
+	if len(calls) == 0 {
+		return false
+	}
+	for _, call := range calls {
+		switch call.Name {
+		case "ClearBit", "Profile", "SetBit", "SetBitmapAttrs", "SetProfileAttrs":
+			continue
+		case "Count", "TopN":
+			return true
+		// default catches Bitmap calls
+		default:
+			return true
+		}
+	}
+	return false
 }
