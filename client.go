@@ -108,6 +108,51 @@ func (c *Client) Schema(ctx context.Context) ([]*DBInfo, error) {
 	return rsp.DBs, nil
 }
 
+// CreateDB creates a new database on the server.
+func (c *Client) CreateDB(ctx context.Context, db string, opt DBOptions) error {
+	// Encode query request.
+	buf, err := json.Marshal(&postDBRequest{
+		DB:      db,
+		Options: opt,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Create URL & HTTP request.
+	u := url.URL{Scheme: "http", Host: c.host, Path: "/db"}
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request against the host.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Read body.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	// Handle response based on status code.
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil // ok
+	case http.StatusConflict:
+		return ErrDatabaseExists
+	default:
+		return errors.New(string(body))
+	}
+}
+
 // FragmentNodes returns a list of nodes that own a slice.
 func (c *Client) FragmentNodes(ctx context.Context, db string, slice uint64) ([]*Node, error) {
 	// Execute request against the host.
@@ -596,6 +641,56 @@ func (c *Client) restoreSliceFrom(ctx context.Context, buf []byte, db, frame str
 	return nil
 }
 
+// CreateFrame creates a new frame on the server.
+func (c *Client) CreateFrame(ctx context.Context, db, frame string, opt FrameOptions) error {
+	if db == "" {
+		return ErrDatabaseRequired
+	}
+
+	// Encode query request.
+	buf, err := json.Marshal(&postFrameRequest{
+		DB:      db,
+		Frame:   frame,
+		Options: opt,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Create URL & HTTP request.
+	u := url.URL{Scheme: "http", Host: c.host, Path: "/frame"}
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request against the host.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Read body.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	// Handle response based on status code.
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return nil // ok
+	case http.StatusConflict:
+		return ErrFrameExists
+	default:
+		return errors.New(string(body))
+	}
+}
+
 // RestoreFrame restores an entire frame from a host in another cluster.
 func (c *Client) RestoreFrame(ctx context.Context, host, db, frame string) error {
 	u := url.URL{
@@ -797,6 +892,8 @@ func (c *Client) BitmapAttrDiff(ctx context.Context, db, frame string, blks []At
 	// Return error if status is not OK.
 	switch resp.StatusCode {
 	case http.StatusOK: // ok
+	case http.StatusNotFound:
+		return nil, ErrFrameNotFound
 	default:
 		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
 	}

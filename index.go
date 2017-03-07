@@ -78,7 +78,10 @@ func (i *Index) Open() error {
 
 		i.logger().Printf("opening database: %s", filepath.Base(fi.Name()))
 
-		db := i.newDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		db, err := i.newDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		if err != nil {
+			return ErrName
+		}
 		if err := db.Open(); err != nil {
 			return fmt.Errorf("open db: name=%s, err=%s", db.Name(), err)
 		}
@@ -156,15 +159,33 @@ func (i *Index) DBs() []*DB {
 	return a
 }
 
-// CreateDBIfNotExists returns a database by name.
-// The database is created if it does not already exist.
-func (i *Index) CreateDBIfNotExists(name string) (*DB, error) {
+// CreateDB creates a database.
+func (i *Index) CreateDB(name string, opt DBOptions) (*DB, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return i.createDBIfNotExists(name)
+
+	// Ensure db doesn't already exist.
+	if i.dbs[name] != nil {
+		return nil, ErrDatabaseExists
+	}
+	return i.createDB(name, opt)
 }
 
-func (i *Index) createDBIfNotExists(name string) (*DB, error) {
+// CreateDBIfNotExists returns a database by name.
+// The database is created if it does not already exist.
+func (i *Index) CreateDBIfNotExists(name string, opt DBOptions) (*DB, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Find frame in cache first.
+	if db := i.dbs[name]; db != nil {
+		return db, nil
+	}
+
+	return i.createDB(name, opt)
+}
+
+func (i *Index) createDB(name string, opt DBOptions) (*DB, error) {
 	if name == "" {
 		return nil, errors.New("database name required")
 	}
@@ -175,10 +196,18 @@ func (i *Index) createDBIfNotExists(name string) (*DB, error) {
 	}
 
 	// Otherwise create a new database.
-	db := i.newDB(i.DBPath(name), name)
+	db, err := i.newDB(i.DBPath(name), name)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := db.Open(); err != nil {
 		return nil, err
 	}
+
+	// Update options.
+	db.SetColumnLabel(opt.ColumnLabel)
+
 	i.dbs[db.Name()] = db
 
 	i.Stats.Count("dbN", 1)
@@ -186,11 +215,14 @@ func (i *Index) createDBIfNotExists(name string) (*DB, error) {
 	return db, nil
 }
 
-func (i *Index) newDB(path, name string) *DB {
-	db := NewDB(path, name)
+func (i *Index) newDB(path, name string) (*DB, error) {
+	db, err := NewDB(path, name)
+	if err != nil {
+		return nil, err
+	}
 	db.LogOutput = i.LogOutput
 	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
-	return db
+	return db, nil
 }
 
 // DeleteDB removes a database from the index.
@@ -231,16 +263,6 @@ func (i *Index) Frame(db, name string) *Frame {
 	return d.Frame(name)
 }
 
-// CreateFrameIfNotExists returns the frame for a database & name.
-// The frame is created if it doesn't already exist.
-func (i *Index) CreateFrameIfNotExists(db, name string) (*Frame, error) {
-	d, err := i.CreateDBIfNotExists(db)
-	if err != nil {
-		return nil, err
-	}
-	return d.CreateFrameIfNotExists(name)
-}
-
 // Fragment returns the fragment for a database, frame & slice.
 func (i *Index) Fragment(db, frame string, slice uint64) *Fragment {
 	f := i.Frame(db, frame)
@@ -248,16 +270,6 @@ func (i *Index) Fragment(db, frame string, slice uint64) *Fragment {
 		return nil
 	}
 	return f.Fragment(slice)
-}
-
-// CreateFragmentIfNotExists returns the fragment for a database, frame & slice.
-// The fragment is created if it doesn't already exist.
-func (i *Index) CreateFragmentIfNotExists(db, frame string, slice uint64) (*Fragment, error) {
-	f, err := i.CreateFrameIfNotExists(db, frame)
-	if err != nil {
-		return nil, err
-	}
-	return f.CreateFragmentIfNotExists(slice)
 }
 
 // monitorCacheFlush periodically flushes all fragment caches sequentially.
@@ -434,7 +446,9 @@ func (s *IndexSyncer) syncFrame(db, name string) error {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := client.BitmapAttrDiff(context.Background(), db, name, blks)
-		if err != nil {
+		if err == ErrFrameNotFound {
+			continue // frame not created remotely yet, skip
+		} else if err != nil {
 			return err
 		} else if len(m) == 0 {
 			continue
@@ -457,15 +471,21 @@ func (s *IndexSyncer) syncFrame(db, name string) error {
 
 // syncFragment synchronizes a fragment with the rest of the cluster.
 func (s *IndexSyncer) syncFragment(db, frame string, slice uint64) error {
+	// Retrieve local frame.
+	f := s.Index.Frame(db, frame)
+	if f == nil {
+		return ErrFrameNotFound
+	}
+
 	// Ensure fragment exists locally.
-	f, err := s.Index.CreateFragmentIfNotExists(db, frame, slice)
+	frag, err := f.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return err
 	}
 
 	// Sync fragments together.
 	fs := FragmentSyncer{
-		Fragment: f,
+		Fragment: frag,
 		Host:     s.Host,
 		Cluster:  s.Cluster,
 		Closing:  s.Closing,
