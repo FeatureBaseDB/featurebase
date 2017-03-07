@@ -659,3 +659,49 @@ func GenerateImportFill(bitmapN int, pct float64) (bitmapIDs, profileIDs []uint6
 	}
 	return
 }
+
+func TestFragment_Tanimoto(t *testing.T) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+
+	src := pilosa.NewBitmap(1, 2, 3)
+
+	// Set bits on the bitmaps 100, 101, & 102.
+	f.MustSetBits(100, 1, 3, 2, 200)
+	f.MustSetBits(101, 1, 3)
+	f.MustSetBits(102, 1, 2, 10, 12)
+
+	if pairs, err := f.Top(pilosa.TopOptions{TanimotoThreshold: 50, Src: src}); err != nil {
+		t.Fatal(err)
+	} else if len(pairs) != 2 {
+		t.Fatalf("unexpected count: %d", len(pairs))
+	} else if pairs[0] != (pilosa.Pair{Key: 100, Count: 3}) {
+		t.Fatalf("unexpected pair(0): %v", pairs[0])
+	} else if pairs[1] != (pilosa.Pair{Key: 101, Count: 2}) {
+		t.Fatalf("unexpected pair(1): %v", pairs[1])
+	}
+}
+
+func TestFragment_Zero_Tanimoto(t *testing.T) {
+	f := MustOpenFragment("d", "f", 0)
+	defer f.Close()
+
+	src := pilosa.NewBitmap(1, 2, 3)
+
+	// Set bits on the bitmaps 100, 101, & 102.
+	f.MustSetBits(100, 1, 3, 2, 200)
+	f.MustSetBits(101, 1, 3)
+	f.MustSetBits(102, 1, 2, 10, 12)
+
+	if pairs, err := f.Top(pilosa.TopOptions{TanimotoThreshold: 0, Src: src}); err != nil {
+		t.Fatal(err)
+	} else if len(pairs) != 3 {
+		t.Fatalf("unexpected count: %d", len(pairs))
+	} else if pairs[0] != (pilosa.Pair{Key: 100, Count: 3}) {
+		t.Fatalf("unexpected pair(0): %v", pairs[0])
+	} else if pairs[1] != (pilosa.Pair{Key: 101, Count: 2}) {
+		t.Fatalf("unexpected pair(1): %v", pairs[1])
+	} else if pairs[2] != (pilosa.Pair{Key: 102, Count: 2}) {
+		t.Fatalf("unexpected pair(1): %v", pairs[2])
+	}
+}
