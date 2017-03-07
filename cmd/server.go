@@ -55,7 +55,6 @@ on the configured port.`,
 		// Execute the program.
 		if err := serve.Run(); err != nil {
 			fmt.Fprintln(serve.Stderr, err)
-			fmt.Fprintln(serve.Stderr, "stopping profile")
 			os.Exit(1)
 		}
 
