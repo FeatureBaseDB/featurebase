@@ -22,7 +22,7 @@ func NewView(db, frame, name string) *View {
 	file.Close()
 
 	v := &View{
-		View:            pilosa.NewView(file.Name(), db, frame, name),
+		View:            pilosa.NewView(file.Name(), db, frame, name, pilosa.DefaultCacheSize),
 		BitmapAttrStore: MustOpenAttrStore(),
 	}
 	v.View.BitmapAttrStore = v.BitmapAttrStore.AttrStore
@@ -52,7 +52,7 @@ func (v *View) Reopen() error {
 		return err
 	}
 
-	v.View = pilosa.NewView(path, v.DB(), v.Frame(), v.Name())
+	v.View = pilosa.NewView(path, v.DB(), v.Frame(), v.Name(), pilosa.DefaultCacheSize)
 	v.View.BitmapAttrStore = v.BitmapAttrStore.AttrStore
 	if err := v.Open(); err != nil {
 		return err
