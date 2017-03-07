@@ -106,13 +106,13 @@ func (f *Frame) Reopen() error {
 	return nil
 }
 
-// NewFrame returns a new instance of Frame d/0.
+// NewFrame doesnot return with invalid name
 func TestFrame_NameRestriction(t *testing.T) {
 	path, err := ioutil.TempDir("", "pilosa-frame-")
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "d", "ABC")
+	frame, err := pilosa.NewFrame(path, "d", ".meta")
 	if frame != nil {
 		t.Fatalf("unexpected frame name %s", err)
 	}
