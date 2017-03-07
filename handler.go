@@ -205,7 +205,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}
 
-	h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), time.Since(t).Seconds())
+	dif := time.Since(t).Seconds()
+	if dif > 90 {
+		h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), dif)
+	}
 }
 
 // handleGetSchema handles GET /schema requests.
