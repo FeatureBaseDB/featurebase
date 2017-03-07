@@ -304,7 +304,7 @@ path = "/path/to/plugins"
 
 // Main represents a test wrapper for main.Main.
 type Main struct {
-	*server.Main
+	*server.Command
 
 	Stdin  bytes.Buffer
 	Stdout bytes.Buffer
@@ -318,16 +318,16 @@ func NewMain() *Main {
 		panic(err)
 	}
 
-	m := &Main{Main: server.NewMain()}
+	m := &Main{Command: server.NewCommand()}
 	m.Config.DataDir = path
 	m.Config.Host = "localhost:0"
-	m.Main.Stdin = &m.Stdin
-	m.Main.Stdout = &m.Stdout
-	m.Main.Stderr = &m.Stderr
+	m.Command.Stdin = &m.Stdin
+	m.Command.Stdout = &m.Stdout
+	m.Command.Stderr = &m.Stderr
 
 	if testing.Verbose() {
-		m.Main.Stdout = io.MultiWriter(os.Stdout, m.Main.Stdout)
-		m.Main.Stderr = io.MultiWriter(os.Stderr, m.Main.Stderr)
+		m.Command.Stdout = io.MultiWriter(os.Stdout, m.Command.Stdout)
+		m.Command.Stderr = io.MultiWriter(os.Stderr, m.Command.Stderr)
 	}
 
 	return m
@@ -345,18 +345,18 @@ func MustRunMain() *Main {
 // Close closes the program and removes the underlying data directory.
 func (m *Main) Close() error {
 	defer os.RemoveAll(m.Config.DataDir)
-	return m.Main.Close()
+	return m.Command.Close()
 }
 
 // Reopen closes the program and reopens it.
 func (m *Main) Reopen() error {
-	if err := m.Main.Close(); err != nil {
+	if err := m.Command.Close(); err != nil {
 		return err
 	}
 
 	// Create new main with the same config.
 	config := m.Config
-	m.Main = server.NewMain()
+	m.Command = server.NewCommand()
 	m.Config = config
 
 	// Run new program.

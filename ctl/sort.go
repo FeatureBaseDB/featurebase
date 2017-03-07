@@ -35,7 +35,7 @@ func NewSortCommand(stdin io.Reader, stdout, stderr io.Writer) *SortCommand {
 	}
 }
 
-// Run executes the main program execution.
+// Run executes the sort command.
 func (cmd *SortCommand) Run(ctx context.Context) error {
 	// Open file for reading.
 	f, err := os.Open(cmd.Path)

@@ -36,7 +36,7 @@ func NewExportCommand(stdin io.Reader, stdout, stderr io.Writer) *ExportCommand 
 	}
 }
 
-// Run executes the main program execution.
+// Run executes the export.
 func (cmd *ExportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
