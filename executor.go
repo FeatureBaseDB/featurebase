@@ -884,11 +884,11 @@ func needsSlices(calls pql.Calls) bool {
 	}
 
 	for _, call := range calls {
-		if _, ok := call.(pql.BitmapCall); !ok {
+		if _, ok := call.(pql.BitmapCall); ok {
 			return true
-		} else if _, ok := call.(*pql.Count); !ok {
+		} else if _, ok := call.(*pql.Count); ok {
 			return true
-		} else if _, ok := call.(*pql.TopN); !ok {
+		} else if _, ok := call.(*pql.TopN); ok {
 			return true
 		}
 
