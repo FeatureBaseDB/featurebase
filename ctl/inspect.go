@@ -2,13 +2,9 @@ package ctl
 
 import (
 	"context"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
-	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -37,36 +33,7 @@ func NewInspectCommand(stdin io.Reader, stdout, stderr io.Writer) *InspectComman
 	}
 }
 
-// ParseFlags parses command line flags from args.
-func (cmd *InspectCommand) ParseFlags(args []string) error {
-	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
-	fs.SetOutput(ioutil.Discard)
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	// Parse path.
-	if fs.NArg() == 0 {
-		return errors.New("path required")
-	} else if fs.NArg() > 1 {
-		return errors.New("only one path allowed")
-	}
-	cmd.Path = fs.Arg(0)
-
-	return nil
-}
-
-// Usage returns the usage message to be printed.
-func (cmd *InspectCommand) Usage() string {
-	return strings.TrimSpace(`
-usage: pilosactl inspect PATH
-
-Inspects a data file and provides stats.
-
-`)
-}
-
-// Run executes the main program execution.
+// Run executes the inspect command.
 func (cmd *InspectCommand) Run(ctx context.Context) error {
 	// Open file handle.
 	f, err := os.Open(cmd.Path)

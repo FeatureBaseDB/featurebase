@@ -103,7 +103,7 @@ func (m *Command) Close() error {
 	return m.Server.Close()
 }
 
-// ParseFlags parses command line flags from args.
+// SetupConfig loads the config file if specified and sets state on the Command.
 func (m *Command) SetupConfig(args []string) error {
 	// Load config, if specified.
 	if m.ConfigPath != "" {

@@ -3,12 +3,9 @@ package ctl
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/pilosa/pilosa"
@@ -42,55 +39,7 @@ func NewBenchCommand(stdin io.Reader, stdout, stderr io.Writer) *BenchCommand {
 	}
 }
 
-// ParseFlags parses command line flags from args.
-func (cmd *BenchCommand) ParseFlags(args []string) error {
-	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
-	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&cmd.Host, "host", "localhost:15000", "host:port")
-	fs.StringVar(&cmd.Database, "d", "", "database")
-	fs.StringVar(&cmd.Frame, "f", "", "frame")
-	fs.StringVar(&cmd.Op, "op", "", "operation")
-	fs.IntVar(&cmd.N, "n", 0, "op count")
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	return nil
-}
-
-// Usage returns the usage message to be printed.
-func (cmd *BenchCommand) Usage() string {
-	return strings.TrimSpace(`
-usage: pilosactl bench [args]
-
-Executes a benchmark for a given operation against the database.
-
-The following flags are allowed:
-
-	-host HOSTPORT
-		hostname and port of running pilosa server
-
-	-d DATABASE
-		database to execute operation against
-
-	-f FRAME
-		frame to execute operation against
-
-	-op OP
-		name of operation to execute
-
-	-n COUNT
-		number of iterations to execute
-
-The following operations are available:
-
-	set-bit
-		Sets a single random bit on the frame
-
-`)
-}
-
-// Run executes the main program execution.
+// Run executes the bench command.
 func (cmd *BenchCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
 	client, err := pilosa.NewClient(cmd.Host)

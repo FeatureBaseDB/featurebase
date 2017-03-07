@@ -2,14 +2,10 @@ package ctl
 
 import (
 	"context"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 
 	"github.com/pilosa/pilosa/roaring"
@@ -35,34 +31,7 @@ func NewCheckCommand(stdin io.Reader, stdout, stderr io.Writer) *CheckCommand {
 	}
 }
 
-// ParseFlags parses command line flags from args.
-func (cmd *CheckCommand) ParseFlags(args []string) error {
-	fs := flag.NewFlagSet("pilosactl", flag.ContinueOnError)
-	fs.SetOutput(ioutil.Discard)
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	// Parse path.
-	if fs.NArg() == 0 {
-		return errors.New("path required")
-	}
-	cmd.Paths = fs.Args()
-
-	return nil
-}
-
-// Usage returns the usage message to be printed.
-func (cmd *CheckCommand) Usage() string {
-	return strings.TrimSpace(`
-usage: pilosactl check PATHS...
-
-Performs a consistency check on data files.
-
-`)
-}
-
-// Run executes the main program execution.
+// Run executes the check command.
 func (cmd *CheckCommand) Run(ctx context.Context) error {
 	for _, path := range cmd.Paths {
 		switch filepath.Ext(path) {
