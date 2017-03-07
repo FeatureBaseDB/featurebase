@@ -43,6 +43,9 @@ const (
 
 	// HashBlockSize is the number of bitmaps in a merkle hash block.
 	HashBlockSize = 100
+
+	// Percentage of the ThresholdLength size to resort the cache at
+	ThresholdBufferPct = 0.9
 )
 
 const (
@@ -245,7 +248,7 @@ func (f *Fragment) openCache() error {
 	case CacheTypeRanked:
 		c := NewRankCache()
 		c.ThresholdLength = f.cacheSize
-		c.ThresholdIndex = f.cacheSize - 500
+		c.ThresholdIndex = int(float64(f.cacheSize) * ThresholdBufferPct)
 		f.cache = c
 	case CacheTypeLRU:
 		f.cache = NewLRUCache(f.cacheSize)
