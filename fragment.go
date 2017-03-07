@@ -70,6 +70,7 @@ type Fragment struct {
 	// Cache for bitmap counts.
 	cacheType string // passed in by frame
 	cache     Cache
+	cacheSize int
 
 	// Cache containing full bitmaps (not just counts).
 	bitmapCache BitmapCache
@@ -93,7 +94,7 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, db, frame, view string, slice uint64) *Fragment {
+func NewFragment(path, db, frame, view string, slice uint64, cacheSize int) *Fragment {
 	return &Fragment{
 		path:      path,
 		db:        db,
@@ -101,6 +102,7 @@ func NewFragment(path, db, frame, view string, slice uint64) *Fragment {
 		view:      view,
 		slice:     slice,
 		cacheType: DefaultCacheType,
+		cacheSize: cacheSize,
 
 		LogOutput: ioutil.Discard,
 		MaxOpN:    DefaultFragmentMaxOpN,
@@ -217,20 +219,42 @@ func (f *Fragment) openStorage() error {
 
 }
 
+// // It will be the one and only identifier after a package specifier.
+// var testNameRegexp = regexp.MustCompile(`\.(Test[\p{L}_\p{N}]*)$`)
+
+// // Returns the name of the test function from the call stack. See
+// // http://stackoverflow.com/q/35535635/149482 for another method.
+// func GetTestName() string {
+// 	pc := make([]uintptr, 32)
+// 	n := runtime.Callers(0, pc)
+// 	for i := 0; i < n; i++ {
+// 		name := runtime.FuncForPC(pc[i]).Name()
+// 		ms := testNameRegexp.FindStringSubmatch(name)
+// 		if ms == nil {
+// 			continue
+// 		}
+// 		return ms[1]
+// 	}
+// 	panic("test name could not be recovered")
+// }
+
 // openCache initializes the cache from bitmap ids persisted to disk.
 func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
 	switch f.cacheType {
 	case CacheTypeRanked:
 		c := NewRankCache()
-		c.ThresholdLength = 50000
-		c.ThresholdIndex = 45000
+		c.ThresholdLength = f.cacheSize
+		c.ThresholdIndex = f.cacheSize - 500
 		f.cache = c
 	case CacheTypeLRU:
-		f.cache = NewLRUCache(50000)
+		f.cache = NewLRUCache(f.cacheSize)
 	default:
 		return ErrInvalidCacheType
 	}
+
+	// fmt.Println(GetTestName())
+	// fmt.Printf("CACHE SIZE: %d\n", f.cacheSize)
 
 	// Read cache data from disk.
 	path := f.CachePath()

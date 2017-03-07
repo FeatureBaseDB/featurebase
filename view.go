@@ -30,6 +30,8 @@ type View struct {
 	frame string
 	name  string
 
+	cacheSize int
+
 	// Fragments by slice.
 	cacheType string // passed in by frame
 	fragments map[uint64]*Fragment
@@ -41,12 +43,13 @@ type View struct {
 }
 
 // NewView returns a new instance of View.
-func NewView(path, db, frame, name string) *View {
+func NewView(path, db, frame, name string, cacheSize int) *View {
 	return &View{
-		path:  path,
-		db:    db,
-		frame: frame,
-		name:  name,
+		path:      path,
+		db:        db,
+		frame:     frame,
+		name:      name,
+		cacheSize: cacheSize,
 
 		cacheType: DefaultCacheType,
 		fragments: make(map[uint64]*Fragment),
@@ -213,7 +216,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 }
 
 func (v *View) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, v.db, v.frame, v.name, slice)
+	frag := NewFragment(path, v.db, v.frame, v.name, slice, v.cacheSize)
 	frag.cacheType = v.cacheType
 	frag.LogOutput = v.LogOutput
 	frag.stats = v.stats.WithTags(fmt.Sprintf("slice:%d", slice))
