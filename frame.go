@@ -21,6 +21,9 @@ const (
 // Default frame settings.
 const (
 	DefaultRowLabel = "id"
+
+	// Default ranked frame cache
+	DefaultFrameCache = 50000
 )
 
 // Frame represents a container for fragments.
@@ -42,6 +45,9 @@ type Frame struct {
 	// Label used for referring to a row.
 	rowLabel string
 
+	// Cache size for ranked frames
+	rankedCacheSize int
+
 	LogOutput io.Writer
 }
 
@@ -62,7 +68,8 @@ func NewFrame(path, db, name string) (*Frame, error) {
 
 		stats: NopStatsClient,
 
-		rowLabel: DefaultRowLabel,
+		rowLabel:        DefaultRowLabel,
+		rankedCacheSize: DefaultFrameCache,
 
 		LogOutput: ioutil.Discard,
 	}, nil
@@ -121,11 +128,40 @@ func (f *Frame) RowLabel() string {
 	return v
 }
 
+// SetRankedCacheSize sets the cache size for ranked fames. Persists to meta file on update.
+// defaults to DefaultFrameCache 50000
+func (f *Frame) SetRankedCacheSize(v int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Ignore if no change occurred.
+	if v == 0 || f.rankedCacheSize == v {
+		return nil
+	}
+
+	// Persist meta data to disk on change.
+	f.rankedCacheSize = v
+	if err := f.saveMeta(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RankedCacheSize returns the ranked frame cache size.
+func (f *Frame) RankedCacheSize() int {
+	f.mu.Lock()
+	v := f.rankedCacheSize
+	f.mu.Unlock()
+	return v
+}
+
 // Options returns all options for this frame.
 func (f *Frame) Options() FrameOptions {
 	f.mu.Lock()
 	opt := FrameOptions{
-		RowLabel: f.rowLabel,
+		RowLabel:  f.rowLabel,
+		CacheSize: f.rankedCacheSize,
 	}
 	f.mu.Unlock()
 	return opt
@@ -343,7 +379,7 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 }
 
 func (f *Frame) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, f.db, f.name, slice)
+	frag := NewFragment(path, f.db, f.name, slice, f.rankedCacheSize)
 	frag.LogOutput = f.LogOutput
 	frag.stats = f.stats.WithTags(fmt.Sprintf("slice:%d", slice))
 	return frag
@@ -378,5 +414,6 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
-	RowLabel string `json:"rowLabel,omitempty"`
+	RowLabel  string `json:"rowLabel,omitempty"`
+	CacheSize int    `json:"cacheSize,omitempty"`
 }
