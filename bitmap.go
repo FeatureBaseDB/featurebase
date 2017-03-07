@@ -16,8 +16,6 @@ type Bitmap struct {
 
 	// Attributes associated with the bitmap.
 	Attrs map[string]interface{}
-
-	cacheoveride uint64
 }
 
 // NewBitmap returns a new instance of Bitmap.
@@ -190,10 +188,6 @@ func (b *Bitmap) DecrementCount(i uint64) {
 			seg.n--
 		}
 	}
-}
-func (b *Bitmap) SetCount(i uint64, count uint64) {
-	seg := b.segment(i / SliceWidth)
-	seg.n = count
 }
 
 // Count returns the number of set bits in the bitmap.
