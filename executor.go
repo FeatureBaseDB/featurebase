@@ -168,7 +168,10 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, db string, c *pql
 // requeries to retrieve the full counts for each of the top results.
 func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
 	bitmapIDs, _ := c.Args["ids"].([]uint64)
-	n := c.Args["n"].(uint64)
+	var n uint64
+	if nval, ok := c.Args["n"]; ok {
+		n = nval.(uint64)
+	}
 
 	// Execute original query.
 	pairs, err := e.executeTopNSlices(ctx, db, c, slices, opt)
@@ -197,7 +200,7 @@ func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slic
 		return nil, err
 	}
 
-	if int(n) < len(trimmedList) {
+	if n != 0 && int(n) < len(trimmedList) {
 		trimmedList = trimmedList[0:n]
 	}
 	return trimmedList, nil
