@@ -24,7 +24,7 @@ func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *ConfigCommand 
 	}
 }
 
-// Run executes the main program execution.
+// Run prints out the default config.
 func (cmd *ConfigCommand) Run(ctx context.Context) error {
 	fmt.Fprintln(cmd.Stdout, strings.TrimSpace(`
 data-dir = "~/.pilosa"

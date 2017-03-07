@@ -36,7 +36,7 @@ func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand 
 	}
 }
 
-// Run executes the main program execution.
+// Run executes the backup.
 func (cmd *BackupCommand) Run(ctx context.Context) error {
 	// Validate arguments.
 	if cmd.Path == "" {

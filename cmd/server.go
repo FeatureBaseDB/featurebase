@@ -14,7 +14,7 @@ import (
 	"github.com/pilosa/pilosa/server"
 )
 
-var serve = server.NewMain()
+var serve = server.NewCommand()
 
 var serveCmd = &cobra.Command{
 	Use:   "server",

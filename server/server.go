@@ -36,8 +36,8 @@ const (
 	DefaultDataDir = "~/.pilosa"
 )
 
-// Main represents the main program execution.
-type Main struct {
+// Command represents the state of the pilosa server command.
+type Command struct {
 	Server *pilosa.Server
 
 	// Configuration options.
@@ -55,8 +55,8 @@ type Main struct {
 }
 
 // NewMain returns a new instance of Main.
-func NewMain() *Main {
-	return &Main{
+func NewCommand() *Command {
+	return &Command{
 		Server: pilosa.NewServer(),
 		Config: pilosa.NewConfig(),
 
@@ -66,8 +66,8 @@ func NewMain() *Main {
 	}
 }
 
-// Run executes the main program execution.
-func (m *Main) Run(args ...string) error {
+// Run executes the pilosa server.
+func (m *Command) Run(args ...string) error {
 	// Notify user of config file.
 	if m.ConfigPath != "" {
 		fmt.Fprintf(m.Stdout, "Using config: %s\n", m.ConfigPath)
@@ -99,12 +99,12 @@ func (m *Main) Run(args ...string) error {
 }
 
 // Close shuts down the server.
-func (m *Main) Close() error {
+func (m *Command) Close() error {
 	return m.Server.Close()
 }
 
 // ParseFlags parses command line flags from args.
-func (m *Main) SetupConfig(args []string) error {
+func (m *Command) SetupConfig(args []string) error {
 	// Load config, if specified.
 	if m.ConfigPath != "" {
 		if _, err := toml.DecodeFile(m.ConfigPath, &m.Config); err != nil {
@@ -120,11 +120,8 @@ func (m *Main) SetupConfig(args []string) error {
 	// Expand home directory.
 	prefix := "~" + string(filepath.Separator)
 	if strings.HasPrefix(m.Config.DataDir, prefix) {
-		//	u, err := user.Current()
 		HomeDir := os.Getenv("HOME")
-		/*if err != nil {
-			return err
-		} else*/if HomeDir == "" {
+		if HomeDir == "" {
 			return errors.New("data directory not specified and no home dir available")
 		}
 		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
