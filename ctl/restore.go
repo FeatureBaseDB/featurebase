@@ -36,7 +36,7 @@ func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreComman
 	}
 }
 
-// Run executes the main program execution.
+// Run executes the restore command.
 func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	// Validate arguments.
 	if cmd.Path == "" {
