@@ -18,6 +18,11 @@ const (
 	FrameSuffixRank = ".n"
 )
 
+// Default frame settings.
+const (
+	DefaultRowLabel = "id"
+)
+
 // Frame represents a container for fragments.
 type Frame struct {
 	mu          sync.Mutex
@@ -34,11 +39,19 @@ type Frame struct {
 
 	stats StatsClient
 
+	// Label used for referring to a row.
+	rowLabel string
+
 	LogOutput io.Writer
 }
 
 // NewFrame returns a new instance of frame.
-func NewFrame(path, db, name string) *Frame {
+func NewFrame(path, db, name string) (*Frame, error) {
+	err := ValidateName(name)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Frame{
 		path: path,
 		db:   db,
@@ -49,8 +62,10 @@ func NewFrame(path, db, name string) *Frame {
 
 		stats: NopStatsClient,
 
+		rowLabel: DefaultRowLabel,
+
 		LogOutput: ioutil.Discard,
-	}
+	}, nil
 }
 
 // Name returns the name the frame was initialized with.
@@ -77,6 +92,43 @@ func (f *Frame) MaxSlice() uint64 {
 		}
 	}
 	return max
+}
+
+// SetRowLabel sets the row labels. Persists to meta file on update.
+func (f *Frame) SetRowLabel(v string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Ignore if no change occurred.
+	if v == "" || f.rowLabel == v {
+		return nil
+	}
+
+	// Persist meta data to disk on change.
+	f.rowLabel = v
+	if err := f.saveMeta(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RowLabel returns the row label.
+func (f *Frame) RowLabel() string {
+	f.mu.Lock()
+	v := f.rowLabel
+	f.mu.Unlock()
+	return v
+}
+
+// Options returns all options for this frame.
+func (f *Frame) Options() FrameOptions {
+	f.mu.Lock()
+	opt := FrameOptions{
+		RowLabel: f.rowLabel,
+	}
+	f.mu.Unlock()
+	return opt
 }
 
 // Open opens and initializes the frame.
@@ -153,6 +205,7 @@ func (f *Frame) loadMeta() error {
 	buf, err := ioutil.ReadFile(filepath.Join(f.path, "meta"))
 	if os.IsNotExist(err) {
 		f.timeQuantum = ""
+		f.rowLabel = DefaultRowLabel
 		return nil
 	} else if err != nil {
 		return err
@@ -164,6 +217,7 @@ func (f *Frame) loadMeta() error {
 
 	// Copy metadata fields.
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
+	f.rowLabel = pb.RowLabel
 
 	return nil
 }
@@ -171,7 +225,10 @@ func (f *Frame) loadMeta() error {
 // saveMeta writes meta data for the frame.
 func (f *Frame) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.Frame{TimeQuantum: string(f.timeQuantum)})
+	buf, err := proto.Marshal(&internal.Frame{
+		TimeQuantum: string(f.timeQuantum),
+		RowLabel:    f.rowLabel,
+	})
 	if err != nil {
 		return err
 	}
@@ -318,3 +375,8 @@ type frameInfoSlice []*FrameInfo
 func (p frameInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p frameInfoSlice) Len() int           { return len(p) }
 func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
+
+// FrameOptions represents options to set when initializing a frame.
+type FrameOptions struct {
+	RowLabel string `json:"rowLabel,omitempty"`
+}

@@ -65,8 +65,11 @@ func NewFrame() *Frame {
 	if err != nil {
 		panic(err)
 	}
-
-	return &Frame{Frame: pilosa.NewFrame(path, "d", "f")}
+	frame, err := pilosa.NewFrame(path, "d", "f")
+	if err != nil {
+		panic(err)
+	}
+	return &Frame{Frame: frame}
 }
 
 // MustOpenFrame returns a new, opened frame at a temporary path. Panic on error.
@@ -86,15 +89,31 @@ func (f *Frame) Close() error {
 
 // Reopen closes the database and reopens it.
 func (f *Frame) Reopen() error {
+	var err error
 	if err := f.Frame.Close(); err != nil {
 		return err
 	}
 
 	path, db, name := f.Path(), f.DB(), f.Name()
-	f.Frame = pilosa.NewFrame(path, db, name)
+	f.Frame, err = pilosa.NewFrame(path, db, name)
+	if err != nil {
+		return err
+	}
 
 	if err := f.Open(); err != nil {
 		return err
 	}
 	return nil
+}
+
+// NewFrame returns a new instance of Frame d/0.
+func TestFrame_NameRestriction(t *testing.T) {
+	path, err := ioutil.TempDir("", "pilosa-frame-")
+	if err != nil {
+		panic(err)
+	}
+	frame, err := pilosa.NewFrame(path, "d", "ABC")
+	if frame != nil {
+		t.Fatalf("unexpected frame name %s", err)
+	}
 }

@@ -50,6 +50,18 @@ func TestExecutor_Execute_Difference(t *testing.T) {
 	}
 }
 
+// Ensure an empty difference query behaves properly.
+func TestExecutor_Execute_Empty_Difference(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 1)
+
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if res, err := e.Execute(context.Background(), "d", MustParse(`Difference()`), nil, nil); err == nil {
+		t.Fatalf("Empty Difference query should give error, but got %v", res)
+	}
+}
+
 // Ensure an intersect query can be executed.
 func TestExecutor_Execute_Intersect(t *testing.T) {
 	idx := MustOpenIndex()
@@ -70,6 +82,17 @@ func TestExecutor_Execute_Intersect(t *testing.T) {
 	}
 }
 
+// Ensure an empty intersect query behaves properly.
+func TestExecutor_Execute_Empty_Intersect(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if res, err := e.Execute(context.Background(), "d", MustParse(`Intersect()`), nil, nil); err == nil {
+		t.Fatalf("Empty Intersect query should give error, but got %v", res)
+	}
+}
+
 // Ensure a union query can be executed.
 func TestExecutor_Execute_Union(t *testing.T) {
 	idx := MustOpenIndex()
@@ -85,6 +108,20 @@ func TestExecutor_Execute_Union(t *testing.T) {
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Union(Bitmap(id=10), Bitmap(id=11))`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{0, 2, SliceWidth + 1, SliceWidth + 2}) {
+		t.Fatalf("unexpected bits: %+v", bits)
+	}
+}
+
+// Ensure an empty union query behaves properly.
+func TestExecutor_Execute_Empty_Union(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 0)
+
+	e := NewExecutor(idx.Index, NewCluster(1))
+	if res, err := e.Execute(context.Background(), "d", MustParse(`Union()`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{}) {
 		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
@@ -141,6 +178,14 @@ func TestExecutor_Execute_SetBitmapAttrs(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
+	// Create frames.
+	db := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
+	if _, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	} else if _, err := db.CreateFrameIfNotExists("xxx", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
 	// Set two fields on f/10.
 	// Also set fields on other bitmaps and frames to test isolation.
 	e := NewExecutor(idx.Index, NewCluster(1))
@@ -150,7 +195,7 @@ func TestExecutor_Execute_SetBitmapAttrs(t *testing.T) {
 	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=200, frame=f, YYY=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=10, frame=XXX, YYY=1)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=10, frame=xxx, YYY=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=10, frame=f, baz=123, bat=true)`), nil, nil); err != nil {
@@ -333,8 +378,16 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
-	db := idx.MustCreateDBIfNotExists("d")
+	// Create database.
+	db := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
 	db.SetTimeQuantum(pilosa.TimeQuantum("YMDH"))
+
+	// Create frame.
+	if _, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set bits.
 	db.MustSetBit("f", 1, 2, MustParseTimePtr("1999-12-31 00:00"))
 	db.MustSetBit("f", 1, 3, MustParseTimePtr("2000-01-01 00:00"))
 	db.MustSetBit("f", 1, 4, MustParseTimePtr("2000-01-02 00:00"))
@@ -450,6 +503,11 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
+	// Create frame.
+	if _, err := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{}).CreateFrame("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
 	e := NewExecutor(idx.Index, c)
 	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, profileID=2)`), nil, nil); err != nil {
 		t.Fatal(err)
@@ -479,7 +537,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if db != `d` {
 			t.Fatalf("unexpected db: %s", db)
-		} else if query.String() != `SetBit(frame="f", id=10, profileID=2, timestamp="2016-12-11T10:09:07")` {
+		} else if query.String() != `SetBit(frame="f", id=10, profileID=2, timestamp="2016-12-11T10:09")` {
 			t.Fatalf("unexpected query: %s", query.String())
 		}
 		remoteCalled = true
@@ -489,7 +547,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	// Create local executor data.
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.CreateDBIfNotExists("d")
+	idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
 	oldQuantum := idx.DB("d").TimeQuantum()
 	defer func() {
 		// restore db quantum
@@ -498,8 +556,13 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	// need to set the quantum otherwise SetBit fails silently
 	idx.DB("d").SetTimeQuantum("Y")
 
+	// Create frame.
+	if _, err := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{}).CreateFrame("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
 	e := NewExecutor(idx.Index, c)
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, profileID=2, timestamp="2016-12-11T10:09:07")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, profileID=2, timestamp="2016-12-11T10:09")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
