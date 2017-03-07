@@ -245,7 +245,7 @@ func (f *Fragment) openCache() error {
 	// This will cause them to be added to the cache.
 	for _, bitmapID := range pb.BitmapIDs {
 		//n := f.storage.CountRange(bitmapID*SliceWidth, (bitmapID+1)*SliceWidth)
-		n := f.bitmap(bitmapID, true, false).Count()
+		n := f.bitmap(bitmapID, true, true).Count()
 		f.cache.BulkAdd(bitmapID, n)
 	}
 	f.cache.Invalidate()
