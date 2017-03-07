@@ -391,6 +391,10 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	if opt.RowLabel != "" {
 		f.rowLabel = opt.RowLabel
 	}
+	if opt.CacheSize != 0 {
+		f.rankedCacheSize = opt.CacheSize
+	}
+
 	f.inverseEnabled = opt.InverseEnabled
 	if err := f.saveMeta(); err != nil {
 		f.Close()
