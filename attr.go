@@ -265,6 +265,8 @@ func txUpdateAttrs(tx *bolt.Tx, id uint64, m map[string]interface{}) (map[string
 			attr[k] = uint64(v)
 		case uint:
 			attr[k] = uint64(v)
+		case float64:
+			attr[k] = uint64(v)
 		case int64:
 			attr[k] = uint64(v)
 		case string, uint64, bool:

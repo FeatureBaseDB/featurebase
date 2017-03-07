@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/golang/groupcache/lru"
@@ -14,6 +15,7 @@ import (
 // Cache represents a cache for bitmap counts.
 type Cache interface {
 	Add(bitmapID uint64, n uint64)
+	BulkAdd(bitmapID uint64, n uint64)
 	Get(bitmapID uint64) uint64
 	Len() int
 
@@ -41,6 +43,10 @@ func NewLRUCache(maxEntries int) *LRUCache {
 	}
 	c.cache.OnEvicted = c.onEvicted
 	return c
+}
+
+func (c *LRUCache) BulkAdd(bitmapID, n uint64) {
+	c.Add(bitmapID, n)
 }
 
 // Add adds a bitmap to the cache.
@@ -92,6 +98,7 @@ var _ Cache = &LRUCache{}
 
 // RankCache represents a cache with sorted entries.
 type RankCache struct {
+	mu       sync.Mutex
 	entries  map[uint64]uint64
 	rankings []BitmapPair // cached, ordered list
 
@@ -112,33 +119,47 @@ func NewRankCache() *RankCache {
 
 // Add adds a bitmap to the cache.
 func (c *RankCache) Add(bitmapID uint64, n uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	// Ignore if the bit count on the bitmap is below the threshold.
 	if n < c.ThresholdValue {
 		return
 	}
 
-	// Add to cache.
 	c.entries[bitmapID] = n
 
-	// If size is larger than the threshold then trim it.
-	if len(c.entries) > c.ThresholdLength {
-		c.update()
-		for id, n := range c.entries {
-			if n <= c.ThresholdValue {
-				delete(c.entries, id)
-			}
-		}
+	c.invalidate()
+}
+
+// BulkAdd adds a bitmap to the cache unsorted. You should Invalidate after completion.
+func (c *RankCache) BulkAdd(bitmapID uint64, n uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if n < c.ThresholdValue {
+		return
 	}
+
+	c.entries[bitmapID] = n
 }
 
 // Get returns a bitmap with a given id.
-func (c *RankCache) Get(bitmapID uint64) uint64 { return c.entries[bitmapID] }
+func (c *RankCache) Get(bitmapID uint64) uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.entries[bitmapID]
+}
 
 // Len returns the number of items in the cache.
-func (c *RankCache) Len() int { return len(c.entries) }
+func (c *RankCache) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.entries)
+}
 
 // BitmapIDs returns a list of all bitmap IDs in the cache.
 func (c *RankCache) BitmapIDs() []uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	a := make([]uint64, 0, len(c.entries))
 	for id := range c.entries {
 		a = append(a, id)
@@ -147,22 +168,25 @@ func (c *RankCache) BitmapIDs() []uint64 {
 	return a
 }
 
-// Invalidate reorders the entries, if necessary.
-func (c *RankCache) Invalidate() {
-	// Update if there aren't many items or it hasn't been updated recently.
-	if len(c.rankings) < 50 || (c.updateN > 0 && time.Since(c.updateTime) > 5*time.Minute) {
-		c.update()
-	}
-}
-
 // update reorders the entries by rank.
-func (c *RankCache) update() {
+func (c *RankCache) Invalidate() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.invalidate()
+
+}
+func (c *RankCache) invalidate() {
+	// Don't invalidate more than once every X seconds.
+	// TODO: consider making this configurable.
+	if time.Now().Sub(c.updateTime).Seconds() < 10 {
+		return
+	}
 	// Convert cache to a sorted list.
 	rankings := make([]BitmapPair, 0, len(c.entries))
-	for id, n := range c.entries {
+	for id, cnt := range c.entries {
 		rankings = append(rankings, BitmapPair{
 			ID:    id,
-			Count: n,
+			Count: cnt,
 		})
 	}
 	sort.Sort(BitmapPairs(rankings))
@@ -177,6 +201,15 @@ func (c *RankCache) update() {
 
 	// Reset counters.
 	c.updateTime, c.updateN = time.Now(), 0
+
+	// If size is larger than the threshold then trim it.
+	if len(c.entries) > c.ThresholdLength {
+		for id, cnt := range c.entries {
+			if cnt <= c.ThresholdValue {
+				delete(c.entries, id)
+			}
+		}
+	}
 }
 
 // Top returns an ordered list of bitmaps.
@@ -232,6 +265,26 @@ type Pairs []Pair
 func (p Pairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p Pairs) Len() int           { return len(p) }
 func (p Pairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
+
+type PairHeap struct {
+	Pairs
+}
+
+func (p PairHeap) Less(i, j int) bool { return p.Pairs[i].Count < p.Pairs[j].Count }
+
+func (h *Pairs) Push(x interface{}) {
+	// Push and Pop use pointer receivers because they modify the slice's length,
+	// not just its contents.
+	*h = append(*h, x.(Pair))
+}
+
+func (h *Pairs) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
 
 // Add merges other into p and returns a new slice.
 func (p Pairs) Add(other []Pair) []Pair {
@@ -326,4 +379,28 @@ func (p uint64Slice) merge(other []uint64) []uint64 {
 	}
 
 	return ret
+}
+
+// BitmapCache provides an interface for caching full bitmaps.
+type BitmapCache interface {
+	Fetch(id uint64) (*Bitmap, bool)
+	Add(id uint64, b *Bitmap)
+}
+
+// SimpleCache implements BitmapCache
+// it is meant to be a short-lived cache for cases where writes are continuing to access
+// the same bit within a short time frame (i.e. good for write-heavy loads)
+// A read-heavy use case would cause the cache to get bigger, potentially causing the
+// node to run out of memory.
+type SimpleCache struct {
+	cache map[uint64]*Bitmap
+}
+
+func (s *SimpleCache) Fetch(id uint64) (*Bitmap, bool) {
+	m, ok := s.cache[id]
+	return m, ok
+}
+
+func (s *SimpleCache) Add(id uint64, b *Bitmap) {
+	s.cache[id] = b
 }
