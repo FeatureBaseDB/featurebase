@@ -82,7 +82,7 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with float arguments.
 	t.Run("WithFloatArgs", func(t *testing.T) {
-		q, err := pql.ParseString(`MyCall( key=12.25, foo= 13.167)`)
+		q, err := pql.ParseString(`MyCall( key=12.25, foo= 13.167, bar=2., baz=0.9)`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
@@ -91,6 +91,8 @@ func TestParser_Parse(t *testing.T) {
 				Args: map[string]interface{}{
 					"key": 12.25,
 					"foo": 13.167,
+					"bar": 2.,
+					"baz": 0.9,
 				},
 			},
 		) {
