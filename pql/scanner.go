@@ -143,7 +143,7 @@ func (s *Scanner) scanIdent() (tok Token, pos Pos, lit string) {
 // scanNumber consumes consecutive digits and up to one '.' character.
 func (s *Scanner) scanNumber() (tok Token, pos Pos, lit string) {
 	pos = s.pos
-	tok = NUMBER
+	tok = INTEGER
 
 	var buf bytes.Buffer
 	var seenDot bool

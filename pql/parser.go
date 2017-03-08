@@ -168,7 +168,7 @@ func (p *Parser) parseArgs() (map[string]interface{}, error) {
 			}
 		case STRING:
 			value = lit
-		case NUMBER:
+		case INTEGER:
 			v, err := strconv.ParseUint(lit, 10, 64)
 			if err != nil {
 				return nil, err
@@ -225,7 +225,7 @@ func (p *Parser) parseList() ([]interface{}, error) {
 			}
 		case STRING:
 			values = append(values, lit)
-		case NUMBER:
+		case INTEGER:
 			v, err := strconv.ParseUint(lit, 10, 64)
 			if err != nil {
 				return nil, err
