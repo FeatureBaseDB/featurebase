@@ -22,6 +22,7 @@ const (
 	AttrTypeString = 1
 	AttrTypeUint   = 2
 	AttrTypeBool   = 3
+	AttrTypeFloat  = 4
 )
 
 // AttrStore represents a storage layer for attributes.
@@ -265,11 +266,9 @@ func txUpdateAttrs(tx *bolt.Tx, id uint64, m map[string]interface{}) (map[string
 			attr[k] = uint64(v)
 		case uint:
 			attr[k] = uint64(v)
-		case float64:
-			attr[k] = uint64(v)
 		case int64:
 			attr[k] = uint64(v)
-		case string, uint64, bool:
+		case string, uint64, bool, float64:
 			attr[k] = v
 		default:
 			return nil, fmt.Errorf("invalid attr type: %T", v)
@@ -318,8 +317,8 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 		pb.Type = AttrTypeString
 		pb.StringValue = value
 	case float64:
-		pb.Type = AttrTypeUint
-		pb.UintValue = uint64(value)
+		pb.Type = AttrTypeFloat
+		pb.FloatValue = value
 	case uint64:
 		pb.Type = AttrTypeUint
 		pb.UintValue = value
@@ -342,6 +341,8 @@ func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 		return attr.Key, attr.UintValue
 	case AttrTypeBool:
 		return attr.Key, attr.BoolValue
+	case AttrTypeFloat:
+		return attr.Key, attr.FloatValue
 	default:
 		return attr.Key, nil
 	}
