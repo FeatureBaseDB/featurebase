@@ -182,7 +182,16 @@ func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.TopN, slic
 	other.BitmapIDs = Pairs(pairs).Keys()
 	sort.Sort(uint64Slice(other.BitmapIDs))
 
-	return e.executeTopNSlices(ctx, db, &other, slices, opt)
+	trimmedList, err := e.executeTopNSlices(ctx, db, &other, slices, opt)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.N != 0 && int(c.N) < len(trimmedList) {
+		trimmedList = trimmedList[0:c.N]
+	}
+	return trimmedList, nil
+
 }
 
 func (e *Executor) executeTopNSlices(ctx context.Context, db string, c *pql.TopN, slices []uint64, opt *ExecOptions) ([]Pair, error) {
@@ -205,11 +214,6 @@ func (e *Executor) executeTopNSlices(ctx context.Context, db string, c *pql.TopN
 
 	// Sort final merged results.
 	sort.Sort(Pairs(results))
-
-	// Only keep the top n after sorting.
-	if c.N > 0 && len(results) > c.N {
-		results = results[0:c.N]
-	}
 
 	return results, nil
 }
