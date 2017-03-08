@@ -1,6 +1,7 @@
-.PHONY: glide vendor-update docker pilosa pilosactl crossbuild install
+.PHONY: glide vendor-update docker pilosa pilosactl crossbuild install generate
 
 GLIDE := $(shell command -v glide 2>/dev/null)
+PROTOC := $(shell command -v protoc 2>/dev/null)
 VERSION := $(shell git describe --tags)
 IDENTIFIER := $(VERSION)-$(GOOS)-$(GOARCH)
 CLONE_URL=github.com/pilosa/pilosa
@@ -42,6 +43,16 @@ crossbuild: vendor
 install: vendor
 	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosactl
+
+.protoc-gen-gofast: vendor
+ifndef PROTOC
+	$(error "protoc is not available please install protoc from https://github.com/google/protobuf/releases")
+endif
+	go build -o .protoc-gen-gofast ./vendor/github.com/gogo/protobuf/protoc-gen-gofast
+	cp ./.protoc-gen-gofast $(GOPATH)/bin/protoc-gen-gofast
+
+generate: .protoc-gen-gofast
+	go generate github.com/pilosa/pilosa/internal
 
 docker:
 	docker build -t pilosa:latest .
