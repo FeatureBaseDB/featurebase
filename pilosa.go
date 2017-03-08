@@ -29,7 +29,7 @@ var (
 
 // Regular expression to valuate db and frame's name
 // Todo: remove . when frame doesn't require . for topN
-var nameRegexp = regexp.MustCompile(`^([^.][a-z0-9._-]{1,64}$)`)
+var nameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,64}$`)
 
 // Profile represents vertical column in a database.
 // A profile can have a set of attributes attached to it.
