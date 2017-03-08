@@ -28,7 +28,7 @@ func createCluster(c *pilosa.Cluster) ([]*Server, []*Index) {
 	return server, idx
 }
 
-// Test distributed TopN Bitmap count across 3 nodes
+// Test distributed TopN Bitmap count across 3 nodes.
 func TestClient_MultiNode(t *testing.T) {
 	cluster := NewCluster(3)
 	s, idx := createCluster(cluster)
@@ -60,7 +60,7 @@ func TestClient_MultiNode(t *testing.T) {
 		return e.Execute(ctx, db, query, slices, opt)
 	}
 
-	// create a dispersed set of bitmaps across 3 nodes such that each individual node and slice width increment would reveal an different TopN
+	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and slice width increment would reveal a different TopN.
 	idx[0].MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(99, 1, 2, 3, 4)
 	idx[0].MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 	idx[0].MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(98, 1, 2, 3, 4, 5, 6)
@@ -82,16 +82,13 @@ func TestClient_MultiNode(t *testing.T) {
 	idx[2].MustCreateFragmentIfNotExists("d", "f", 6).MustSetBits(98, (SliceWidth*6)+10, (SliceWidth*6)+11)
 	idx[2].MustCreateFragmentIfNotExists("d", "f", 6).MustSetBits(22, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12)
 
-	// Connect to each node to compare results
+	// Connect to each node to compare results.
 	client := make([]*Client, 3)
 	client[0] = MustNewClient(s[0].Host())
 	client[1] = MustNewClient(s[0].Host())
 	client[2] = MustNewClient(s[0].Host())
 
 	topN := 4
-	// q := fmt.Sprintf(`SetBit(id=%d, frame="%s", profileID=%d)`, 3, "f", 0)
-	// q := fmt.Sprintf(`Bitmap(id=100, frame="f")`)
-	// q := fmt.Sprintf(`Count(Bitmap(id=200, frame="f"))`)
 	q := fmt.Sprintf(`TopN(frame="%s", n=%d)`, "f", topN)
 
 	result, err := client[0].ExecuteQuery(context.Background(), "d", q, true)
@@ -99,7 +96,7 @@ func TestClient_MultiNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check the results before every node has the correct max slice value
+	// Check the results before every node has the correct max slice value.
 	pairs := result.(internal.QueryResponse).Results[0].Pairs
 	for _, pair := range pairs {
 		if pair.Key == 22 && pair.Count != 5 {
@@ -107,7 +104,7 @@ func TestClient_MultiNode(t *testing.T) {
 		}
 	}
 
-	// Set max slice to correct value
+	// Set max slice to correct value.
 	idx[0].DB("d").SetRemoteMaxSlice(10)
 	idx[1].DB("d").SetRemoteMaxSlice(10)
 	idx[2].DB("d").SetRemoteMaxSlice(10)
@@ -117,7 +114,7 @@ func TestClient_MultiNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// test must retun exactly N results
+	// Test must return exactly N results.
 	if len(result.(internal.QueryResponse).Results[0].Pairs) != topN {
 		t.Fatalf("unexpected number of TopN results: %s", spew.Sdump(result))
 	}
@@ -127,7 +124,7 @@ func TestClient_MultiNode(t *testing.T) {
 		{Key: 98, Count: 8},
 		{Key: 99, Count: 7}}
 
-	// Valdidate the Top 4 result counts
+	// Valdidate the Top 4 result counts.
 	if !reflect.DeepEqual(result.(internal.QueryResponse).Results[0].Pairs, p) {
 		t.Fatalf("Invalid TopN result set: %s", spew.Sdump(result))
 	}
@@ -141,13 +138,13 @@ func TestClient_MultiNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Compare TopN results across all nodes in the cluster
+	// Compare TopN results across all nodes in the cluster.
 	if !reflect.DeepEqual(result, result1) {
-		t.Fatalf("TopN result should be the same across all nodes: %s", spew.Sdump(result1))
+		t.Fatalf("TopN result should be the same on node0 and node1: %s", spew.Sdump(result1))
 	}
 
 	if !reflect.DeepEqual(result, result2) {
-		t.Fatalf("TopN result should be the same across all nodes: %s", spew.Sdump(result2))
+		t.Fatalf("TopN result should be the same on node0 and node2: %s", spew.Sdump(result2))
 	}
 }
 
