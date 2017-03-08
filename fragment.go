@@ -476,6 +476,11 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 	// Retrieve pairs. If no bitmap ids specified then return from cache.
 	pairs := f.topBitmapPairs(opt.BitmapIDs)
 
+	// If BitmapIDs are provided, we don't want to truncate the result set
+	if len(opt.BitmapIDs) > 0 {
+		opt.N = 0
+	}
+
 	// Create a fast lookup of filter values.
 	var filters map[interface{}]struct{}
 	if opt.FilterField != "" && len(opt.FilterValues) > 0 {
@@ -489,10 +494,10 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 	//results := make(PairHeap, 0, opt.N)
 	results := &PairHeap{}
 	for _, pair := range pairs {
-		bitmapID, n := pair.ID, pair.Count
+		bitmapID, cnt := pair.ID, pair.Count
 
 		// Ignore empty bitmaps.
-		if n <= 0 {
+		if cnt <= 0 {
 			continue
 		}
 
@@ -513,7 +518,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		// The initial n pairs should simply be added to the results.
 		if opt.N == 0 || results.Len() < opt.N {
 			// Calculate count and append.
-			count := n
+			count := cnt
 			if opt.Src != nil {
 				count = opt.Src.IntersectionCount(f.Bitmap(bitmapID))
 			}
@@ -530,6 +535,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 					break
 				}
 			}
+
 			continue
 		}
 
@@ -538,14 +544,13 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		threshold := results.Pairs[0].Count
 
 		// If the bitmap doesn't have enough bits set before the intersection
-		// then we can assume that any remaing bitmaps also have a count too low.
-		if n < threshold {
+		// then we can assume that any remaining bitmaps also have a count too low.
+		if cnt < threshold {
 			break
 		}
 
 		// Calculate the intersecting bit count and skip if it's below our
 		// last bitmap in our current result set.
-
 		count := opt.Src.IntersectionCount(f.Bitmap(bitmapID))
 		if count < threshold {
 			continue
@@ -569,6 +574,7 @@ func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.cache.Invalidate()
+		// TODO: make sure this is just returning a reference to the entire cache
 		return f.cache.Top()
 	}
 
