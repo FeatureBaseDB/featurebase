@@ -574,7 +574,6 @@ func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.cache.Invalidate()
-		// TODO: make sure this is just returning a reference to the entire cache
 		return f.cache.Top()
 	}
 
