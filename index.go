@@ -79,9 +79,11 @@ func (i *Index) Open() error {
 		i.logger().Printf("opening database: %s", filepath.Base(fi.Name()))
 
 		db, err := i.newDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
-		if err != nil {
+		if err == ErrName {
 			i.logger().Printf("ERROR opening database: %s, err=%s", fi.Name(), err)
 			continue
+		} else if err != nil {
+			return err
 		}
 		if err := db.Open(); err != nil {
 			if err == ErrName {
