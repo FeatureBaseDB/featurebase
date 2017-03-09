@@ -189,10 +189,6 @@ func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slic
 	// Only the original caller should refetch the full counts.
 	other := c.Clone()
 
-	// Double the size of n for other calls in order to...
-	// TODO: travis review
-	other.Args["n"] = len(bitmapIDs) * 2
-
 	ids := Pairs(pairs).Keys()
 	sort.Sort(uint64Slice(ids))
 	other.Args["ids"] = ids
