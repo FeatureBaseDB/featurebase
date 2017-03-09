@@ -241,7 +241,7 @@ func TestExecutor_Execute_TopN_fill(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
-	// Set bits for bitmaps 0, 10, & 20 across two slices.
+	// Set bits for bitmaps 0 & 1 across two slices.
 	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0)
 	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1)
 	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 2)
@@ -601,7 +601,7 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 				t.Fatalf("unexpected query(0): %s", query.String())
 			}
 		case 1:
-			if query.String() != `TopN(frame="f", ids=[0,10,30], n=0)` {
+			if query.String() != `TopN(frame="f", ids=[0,10,30], n=3)` {
 				t.Fatalf("unexpected query(1): %s", query.String())
 			}
 		default:
