@@ -1,4 +1,4 @@
-.PHONY: glide vendor-update docker pilosa pilosactl crossbuild install generate
+.PHONY: glide vendor-update docker pilosa crossbuild install generate
 
 GLIDE := $(shell command -v glide 2>/dev/null)
 PROTOC := $(shell command -v protoc 2>/dev/null)
@@ -8,7 +8,7 @@ CLONE_URL=github.com/pilosa/pilosa
 BUILD_TIME=`date -u +%FT%T%z`
 LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
 
-default: test pilosa pilosactl
+default: test pilosa
 
 $(GOPATH)/bin:
 	mkdir $(GOPATH)/bin
@@ -32,17 +32,12 @@ test: vendor
 pilosa: vendor
 	go build $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
-pilosactl: vendor
-	go build $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosactl
-
 crossbuild: vendor
 	mkdir -p build/pilosa-$(IDENTIFIER)
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
-	make pilosactl FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosactl"
 
 install: vendor
 	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
-	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosactl
 
 .protoc-gen-gofast: vendor
 ifndef PROTOC
@@ -55,4 +50,6 @@ generate: .protoc-gen-gofast
 	go generate github.com/pilosa/pilosa/internal
 
 docker:
-	docker build -t pilosa:latest .
+	docker build -t "pilosa:$(VERSION)" \
+		--build-arg ldflags="-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)" .
+	@echo "Created image: pilosa:$(VERSION)"
