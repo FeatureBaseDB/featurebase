@@ -266,14 +266,8 @@ Returns the top 20 Bitmaps from `geo` sorted by the count of bits in the interse
 ```
 TopN(Bitmap(project=10, frame="collaboration"), frame="geo", n=20, field="category", [81,82])
 ```
-<<<<<<< HEAD
-
 Returns the top 20 Bitmaps from `geo`in attribute `category` with values `81 or
 82` sorted by the count of bits in the intersection with `Bitmap(project=10)`.
-=======
-Returns the top 20 Bitmaps from `bar`in attribute `category` with values `81 or
-82` sorted by the count of bits in the intersection with `Bitmap(id=10)`.
->>>>>>> master
 
 ## Development
 
