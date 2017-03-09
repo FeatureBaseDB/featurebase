@@ -2,9 +2,9 @@ package pilosa
 
 import (
 	"errors"
+	"regexp"
 
 	"github.com/pilosa/pilosa/internal"
-	"regexp"
 )
 
 // System errors.

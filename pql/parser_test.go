@@ -80,6 +80,26 @@ func TestParser_Parse(t *testing.T) {
 		}
 	})
 
+	// Parse with float arguments.
+	t.Run("WithFloatArgs", func(t *testing.T) {
+		q, err := pql.ParseString(`MyCall( key=12.25, foo= 13.167, bar=2., baz=0.9)`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "MyCall",
+				Args: map[string]interface{}{
+					"key": 12.25,
+					"foo": 13.167,
+					"bar": 2.,
+					"baz": 0.9,
+				},
+			},
+		) {
+			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+	})
+
 	// Parse with both child calls and arguments.
 	t.Run("ChildrenAndArguments", func(t *testing.T) {
 		q, err := pql.ParseString(`TopN(Bitmap(id=100, frame=other), frame=f, n=3)`)
