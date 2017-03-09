@@ -25,8 +25,8 @@ It will load existing data from the configured
 directory, and start listening client connections
 on the configured port.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		serve.Server.Handler.Version = server.Version
-		fmt.Fprintf(serve.Stderr, "Pilosa %s, build time %s\n", server.Version, server.BuildTime)
+		serve.Server.Handler.Version = Version
+		fmt.Fprintf(serve.Stderr, "Pilosa %s, build time %s\n", Version, BuildTime)
 
 		// Parse command line arguments.
 		if err := serve.SetupConfig(args); err != nil {
