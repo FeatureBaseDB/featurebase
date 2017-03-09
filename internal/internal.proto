@@ -39,6 +39,7 @@ message Attr {
 	string StringValue = 3;
 	uint64 UintValue = 4;
 	bool BoolValue = 5;
+	double FloatValue = 6;
 }
 
 message AttrMap {

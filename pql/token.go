@@ -15,7 +15,8 @@ const (
 	IDENT     // main
 	STRING    // "foo"
 	BADSTRING // bad escape or unclosed string
-	NUMBER    // 12345
+	INTEGER   // 12345
+	FLOAT     // 100.2
 	literal_end
 
 	keyword_beg
@@ -35,8 +36,9 @@ var tokens = [...]string{
 	EOF:     "EOF",
 	WS:      "WS",
 
-	IDENT:  "IDENT",
-	NUMBER: "NUMBER",
+	IDENT:   "IDENT",
+	INTEGER: "INTEGER",
+	FLOAT:   "FLOAT",
 
 	ALL: "ALL",
 
