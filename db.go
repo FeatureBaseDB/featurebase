@@ -188,7 +188,6 @@ func (db *DB) loadMeta() error {
 // saveMeta writes meta data for the database.
 func (db *DB) saveMeta() error {
 	// Marshal metadata.
-
 	buf, err := proto.Marshal(&internal.DB{
 		TimeQuantum: string(db.timeQuantum),
 		ColumnLabel: db.columnLabel,
