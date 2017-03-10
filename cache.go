@@ -25,6 +25,9 @@ type Cache interface {
 	// Updates the cache, if necessary.
 	Invalidate()
 
+	// Rebuilds the cache
+	Recalculate()
+
 	// Returns an ordered list of the top ranked bitmaps.
 	Top() []BitmapPair
 }
@@ -67,6 +70,9 @@ func (c *LRUCache) Len() int { return c.cache.Len() }
 
 // Invalidate is a no-op.
 func (c *LRUCache) Invalidate() {}
+
+// Recalculate is a no-op.
+func (c *LRUCache) Recalculate() {}
 
 // BitmapIDs returns a list of all bitmap IDs in the cache.
 func (c *LRUCache) BitmapIDs() []uint64 {
@@ -168,19 +174,29 @@ func (c *RankCache) BitmapIDs() []uint64 {
 	return a
 }
 
-// update reorders the entries by rank.
+// Invalidate recalculates the the entries by rank.
 func (c *RankCache) Invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.invalidate()
-
 }
+
+func (c *RankCache) Recalculate() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.recalculate()
+}
+
 func (c *RankCache) invalidate() {
 	// Don't invalidate more than once every X seconds.
 	// TODO: consider making this configurable.
 	if time.Now().Sub(c.updateTime).Seconds() < 10 {
 		return
 	}
+	c.recalculate()
+}
+
+func (c *RankCache) recalculate() {
 	// Convert cache to a sorted list.
 	rankings := make([]BitmapPair, 0, len(c.entries))
 	for id, cnt := range c.entries {

@@ -997,6 +997,13 @@ func (f *Fragment) snapshot() error {
 	return nil
 }
 
+// RecalculateCache rebuilds the cache regardless of invalidate time delay.
+func (f *Fragment) RecalculateCache() {
+	f.mu.Lock()
+	f.cache.Recalculate()
+	f.mu.Unlock()
+}
+
 // FlushCache writes the cache data to disk.
 func (f *Fragment) FlushCache() error {
 	f.mu.Lock()
