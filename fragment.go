@@ -488,6 +488,17 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		}
 	}
 
+	// Use `tanimotoThreshold > 0` to indicate whether or not we are considering Tanimoto.
+	var tanimotoThreshold uint64
+	var minTanimoto, maxTanimoto float64
+	var srcCount uint64
+	if opt.TanimotoThreshold > 0 && opt.Src != nil {
+		tanimotoThreshold = opt.TanimotoThreshold
+		srcCount = opt.Src.Count()
+		minTanimoto = float64(srcCount*tanimotoThreshold) / 100
+		maxTanimoto = float64(srcCount*100) / float64(tanimotoThreshold)
+	}
+
 	// Iterate over rankings and add to results until we have enough.
 	results := &PairHeap{}
 	for _, pair := range pairs {
@@ -498,15 +509,14 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 			continue
 		}
 
-		if opt.TanimotoThreshold > 0 && opt.Src != nil {
-			minTanimoto := float64(opt.Src.Count() * opt.TanimotoThreshold / 100)
-			maxTanimoto := float64(opt.Src.Count() * 100 / opt.TanimotoThreshold)
-			if float64(n) <= minTanimoto || float64(n) >= float64(maxTanimoto) {
+		// Check against either Tanimoto threshold or minimum threshold.
+		if tanimotoThreshold > 0 {
+			// Ignore counts outside of the Tanimoto min/max values.
+			if float64(cnt) <= minTanimoto || float64(cnt) >= maxTanimoto {
 				continue
 			}
-
 		} else {
-			// Ignore count that less than MinThreshold.
+			// Ignore counts less than MinThreshold.
 			if cnt < opt.MinThreshold {
 				continue
 			}
@@ -532,23 +542,23 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 			count := cnt
 			if opt.Src != nil {
 				count = opt.Src.IntersectionCount(f.Bitmap(bitmapID))
-
 			}
 			if count == 0 {
 				continue
 			}
 
-			if opt.TanimotoThreshold > 0 {
-				tanimoto := math.Ceil(float64(count * 100 / (cnt + opt.Src.Count() - count)))
-				if tanimoto <= float64(opt.TanimotoThreshold) {
+			// Check against either Tanimoto threshold or minimum threshold.
+			if tanimotoThreshold > 0 {
+				tanimoto := math.Ceil(float64(count*100) / float64(cnt+srcCount-count))
+				if tanimoto <= float64(tanimotoThreshold) {
 					continue
 				}
-
 			} else {
 				if count < opt.MinThreshold {
 					continue
 				}
 			}
+
 			heap.Push(results, Pair{Key: bitmapID, Count: count})
 
 			// If we reach the requested number of pairs and we are not computing
