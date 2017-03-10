@@ -27,7 +27,10 @@ It will load existing data from the configured
 directory, and start listening client connections
 on the configured port.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		setupViper(cmd.Flags())
+		err := setAllConfig(cmd.Flags(), "PILOSA")
+		if err != nil {
+			return err
+		}
 		fmt.Println(viper.AllSettings())
 		serve.Server.Handler.Version = Version
 		fmt.Fprintf(serve.Stderr, "Pilosa %s, build time %s\n", Version, BuildTime)
@@ -85,14 +88,24 @@ func init() {
 	RootCmd.AddCommand(serveCmd)
 }
 
-func setupViper(flags *flag.FlagSet) {
+// setAllConfig takes a FlagSet to be the definition of all configuration
+// options, as well as their defaults. It then reads from the command line, the
+// environment, and a config file (if specified), and applies the configuration
+// in that priority order. Since each flag in the set contains a pointer to
+// where its value should be stored, setAllConfig can directly modify the value
+// of each config variable.
+//
+// setAllConfig looks for environment variables which are capitalized versions
+// of the flag names with dashes replaced by underscores, and prefixed with
+// envPrefix plus an underscore.
+func setAllConfig(flags *flag.FlagSet, envPrefix string) error {
 	// add cmd line flag def to viper
 	err := viper.BindPFlags(flags)
 	if err != nil {
-		log.Fatalf("Error binding server flags: %v", err)
+		return err
 	}
 	// add env to viper
-	viper.SetEnvPrefix("PILOSA")
+	viper.SetEnvPrefix(envPrefix)
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	viper.AutomaticEnv()
 
@@ -103,16 +116,18 @@ func setupViper(flags *flag.FlagSet) {
 		viper.AddConfigPath(c)
 		err := viper.ReadInConfig()
 		if err != nil {
-			log.Printf("Couldn't read config from '%s'", c)
+			return fmt.Errorf("error reading configuration file '%s': %v", c, err)
 		}
 	}
+	var flagErr error
 	flags.VisitAll(func(f *flag.Flag) {
+		if flagErr != nil {
+			return
+		}
 		log.Printf("Now visiting: %v with value '%s'", f.Name, f.Value)
 		value := viper.GetString(f.Name)
 		log.Printf("Setting to value: '%v'", value)
-		err := f.Value.Set(value)
-		if err != nil {
-			log.Printf("Error setting %s to '%s': %v", f.Name, value, err)
-		}
+		flagErr = f.Value.Set(value)
 	})
+	return flagErr
 }
