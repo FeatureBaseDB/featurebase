@@ -61,26 +61,33 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 
 	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and slice width increment would reveal a different TopN.
-	idx[0].MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(99, 1, 2, 3, 4)
-	idx[0].MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-	idx[0].MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(98, 1, 2, 3, 4, 5, 6)
-	idx[0].MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(1, 4)
-	idx[0].MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(22, 1, 2, 3, 4, 5)
+	idx[0].MustCreateFragmentIfNotExists("d", "f.n", 0).MustSetBits(99, 1, 2, 3, 4)
+	idx[0].MustCreateFragmentIfNotExists("d", "f.n", 0).MustSetBits(100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+	idx[0].MustCreateFragmentIfNotExists("d", "f.n", 0).MustSetBits(98, 1, 2, 3, 4, 5, 6)
+	idx[0].MustCreateFragmentIfNotExists("d", "f.n", 0).MustSetBits(1, 4)
+	idx[0].MustCreateFragmentIfNotExists("d", "f.n", 0).MustSetBits(22, 1, 2, 3, 4, 5)
 
-	idx[1].MustCreateFragmentIfNotExists("d", "f", 10).MustSetBits(100, (SliceWidth*10)+10)
-	idx[1].MustCreateFragmentIfNotExists("d", "f", 10).MustSetBits(4, (SliceWidth*10)+10, (SliceWidth*10)+11, (SliceWidth*10)+12)
-	idx[1].MustCreateFragmentIfNotExists("d", "f", 10).MustSetBits(4, (SliceWidth*10)+10, (SliceWidth*10)+11, (SliceWidth*10)+12, (SliceWidth*10)+13, (SliceWidth*10)+14, (SliceWidth*10)+15)
-	idx[1].MustCreateFragmentIfNotExists("d", "f", 10).MustSetBits(2, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+3, (SliceWidth*10)+4)
-	idx[1].MustCreateFragmentIfNotExists("d", "f", 10).MustSetBits(3, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+3, (SliceWidth*10)+4, (SliceWidth*10)+5)
-	idx[1].MustCreateFragmentIfNotExists("d", "f", 10).MustSetBits(22, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+10)
+	idx[1].MustCreateFragmentIfNotExists("d", "f.n", 10).MustSetBits(100, (SliceWidth*10)+10)
+	idx[1].MustCreateFragmentIfNotExists("d", "f.n", 10).MustSetBits(4, (SliceWidth*10)+10, (SliceWidth*10)+11, (SliceWidth*10)+12)
+	idx[1].MustCreateFragmentIfNotExists("d", "f.n", 10).MustSetBits(4, (SliceWidth*10)+10, (SliceWidth*10)+11, (SliceWidth*10)+12, (SliceWidth*10)+13, (SliceWidth*10)+14, (SliceWidth*10)+15)
+	idx[1].MustCreateFragmentIfNotExists("d", "f.n", 10).MustSetBits(2, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+3, (SliceWidth*10)+4)
+	idx[1].MustCreateFragmentIfNotExists("d", "f.n", 10).MustSetBits(3, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+3, (SliceWidth*10)+4, (SliceWidth*10)+5)
+	idx[1].MustCreateFragmentIfNotExists("d", "f.n", 10).MustSetBits(22, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+10)
 
-	idx[2].MustCreateFragmentIfNotExists("d", "f", 6).MustSetBits(24, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12, (SliceWidth*6)+13, (SliceWidth*6)+14)
-	idx[2].MustCreateFragmentIfNotExists("d", "f", 6).MustSetBits(20, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12, (SliceWidth*6)+13)
-	idx[2].MustCreateFragmentIfNotExists("d", "f", 6).MustSetBits(21, (SliceWidth*6)+10)
-	idx[2].MustCreateFragmentIfNotExists("d", "f", 6).MustSetBits(100, (SliceWidth*6)+10)
-	idx[2].MustCreateFragmentIfNotExists("d", "f", 6).MustSetBits(99, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12)
-	idx[2].MustCreateFragmentIfNotExists("d", "f", 6).MustSetBits(98, (SliceWidth*6)+10, (SliceWidth*6)+11)
-	idx[2].MustCreateFragmentIfNotExists("d", "f", 6).MustSetBits(22, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12)
+	idx[2].MustCreateFragmentIfNotExists("d", "f.n", 6).MustSetBits(24, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12, (SliceWidth*6)+13, (SliceWidth*6)+14)
+	idx[2].MustCreateFragmentIfNotExists("d", "f.n", 6).MustSetBits(20, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12, (SliceWidth*6)+13)
+	idx[2].MustCreateFragmentIfNotExists("d", "f.n", 6).MustSetBits(21, (SliceWidth*6)+10)
+	idx[2].MustCreateFragmentIfNotExists("d", "f.n", 6).MustSetBits(100, (SliceWidth*6)+10)
+	idx[2].MustCreateFragmentIfNotExists("d", "f.n", 6).MustSetBits(99, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12)
+	idx[2].MustCreateFragmentIfNotExists("d", "f.n", 6).MustSetBits(98, (SliceWidth*6)+10, (SliceWidth*6)+11)
+	idx[2].MustCreateFragmentIfNotExists("d", "f.n", 6).MustSetBits(22, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12)
+
+	// Rebuild the RankCache.
+	// We have to do this to avoid the 10-second cache invalidation delay
+	// built into cache.Invalidate()
+	idx[0].MustCreateFragmentIfNotExists("d", "f.n", 0).RecalculateCache()
+	idx[1].MustCreateFragmentIfNotExists("d", "f.n", 10).RecalculateCache()
+	idx[2].MustCreateFragmentIfNotExists("d", "f.n", 6).RecalculateCache()
 
 	// Connect to each node to compare results.
 	client := make([]*Client, 3)
@@ -89,7 +96,7 @@ func TestClient_MultiNode(t *testing.T) {
 	client[2] = MustNewClient(s[0].Host())
 
 	topN := 4
-	q := fmt.Sprintf(`TopN(frame="%s", n=%d)`, "f", topN)
+	q := fmt.Sprintf(`TopN(frame="%s", n=%d)`, "f.n", topN)
 
 	result, err := client[0].ExecuteQuery(context.Background(), "d", q, true)
 	if err != nil {
