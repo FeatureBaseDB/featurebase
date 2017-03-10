@@ -2,7 +2,7 @@
 
 GLIDE := $(shell command -v glide 2>/dev/null)
 PROTOC := $(shell command -v protoc 2>/dev/null)
-VERSION := $(shell git describe --tags)
+VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
 IDENTIFIER := $(VERSION)-$(GOOS)-$(GOARCH)
 CLONE_URL=github.com/pilosa/pilosa
 BUILD_TIME=`date -u +%FT%T%z`
