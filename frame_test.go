@@ -106,7 +106,7 @@ func (f *Frame) Reopen() error {
 	return nil
 }
 
-// NewFrame doesnot return with invalid name
+// NewFrame does not return a frame when name is invalid.
 func TestFrame_NameRestriction(t *testing.T) {
 	path, err := ioutil.TempDir("", "pilosa-frame-")
 	if err != nil {
