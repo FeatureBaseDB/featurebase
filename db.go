@@ -60,7 +60,7 @@ func NewDB(path, name string) (*DB, error) {
 		frames:         make(map[string]*Frame),
 		remoteMaxSlice: 0,
 
-		profileAttrStore: NewAttrStore(filepath.Join(path, "data")),
+		profileAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
 		columnLabel: DefaultColumnLabel,
 
@@ -165,7 +165,7 @@ func (db *DB) loadMeta() error {
 	var pb internal.DB
 
 	// Read data from meta file.
-	buf, err := ioutil.ReadFile(filepath.Join(db.path, "meta"))
+	buf, err := ioutil.ReadFile(filepath.Join(db.path, ".meta"))
 	if os.IsNotExist(err) {
 		db.timeQuantum = ""
 		db.columnLabel = DefaultColumnLabel
@@ -197,7 +197,7 @@ func (db *DB) saveMeta() error {
 	}
 
 	// Write to meta file.
-	if err := ioutil.WriteFile(filepath.Join(db.path, "meta"), buf, 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(db.path, ".meta"), buf, 0666); err != nil {
 		return err
 	}
 

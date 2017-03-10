@@ -605,7 +605,7 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 
 	// Set attributes on the database.
 	d := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
-	f, err := d.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
+	f, err := d.CreateFrameIfNotExists("meta", pilosa.FrameOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -631,7 +631,7 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 	resp, err := http.Post(
 		s.URL+"/frame/attr/diff?db=d",
 		"application/json",
-		strings.NewReader(`{"db":"d", "frame":"f", "blocks":`+string(MustMarshalJSON(blks))+`}`),
+		strings.NewReader(`{"db":"d", "frame":"meta", "blocks":`+string(MustMarshalJSON(blks))+`}`),
 	)
 	if err != nil {
 		t.Fatal(err)
