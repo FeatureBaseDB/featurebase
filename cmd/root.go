@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"strings"
 
@@ -15,36 +16,48 @@ var (
 	BuildTime string
 )
 
-var RootCmd = &cobra.Command{
-	Use:   "pilosa",
-	Short: "Pilosa - A Distributed In-memory Binary Bitmap Index.",
-	// TODO - is documentation actually there?
-	Long: `Pilosa is a fast index to turbocharge your database.
+// TODO maybe give this an Add method which will ensure two command
+// with same name aren't added
+var subcommandFns = map[string]func(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command{}
+
+func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	setupVersionBuild()
+	rc := &cobra.Command{
+		Use:   "pilosa",
+		Short: "Pilosa - A Distributed In-memory Binary Bitmap Index.",
+		// TODO - is documentation actually there?
+		Long: `Pilosa is a fast index to turbocharge your database.
 
 This binary contains Pilosa itself, as well as common
 tools for administering pilosa, importing/exporting data,
 backing up, and more. Complete documentation is available
 at http://pilosa.com/docs
 
-`,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		err := setAllConfig(cmd.Flags(), "PILOSA")
-		if err != nil {
-			return err
-		}
-		return nil
-	},
+Version: ` + Version + `
+Build Time: ` + BuildTime + "\n",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			v := viper.New()
+			err := setAllConfig(v, cmd.Flags(), "PILOSA")
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	for _, subcomFn := range subcommandFns {
+		rc.AddCommand(subcomFn(stdin, stdout, stderr))
+	}
+	rc.SetOutput(stderr)
+	return rc
 }
 
-func init() {
+func setupVersionBuild() {
 	if Version == "" {
 		Version = "v0.0.0"
 	}
 	if BuildTime == "" {
 		BuildTime = "not recorded"
 	}
-
-	RootCmd.Long = RootCmd.Long + "Version: " + Version + "\nBuild Time: " + BuildTime + "\n"
 }
 
 // setAllConfig takes a FlagSet to be the definition of all configuration
@@ -57,24 +70,24 @@ func init() {
 // setAllConfig looks for environment variables which are capitalized versions
 // of the flag names with dashes replaced by underscores, and prefixed with
 // envPrefix plus an underscore.
-func setAllConfig(flags *flag.FlagSet, envPrefix string) error {
+func setAllConfig(v *viper.Viper, flags *flag.FlagSet, envPrefix string) error {
 	// add cmd line flag def to viper
-	err := viper.BindPFlags(flags)
+	err := v.BindPFlags(flags)
 	if err != nil {
 		return err
 	}
 
 	// add env to viper
-	viper.SetEnvPrefix(envPrefix)
-	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
-	viper.AutomaticEnv()
+	v.SetEnvPrefix(envPrefix)
+	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	v.AutomaticEnv()
 
-	c := viper.GetString("config")
+	c := v.GetString("config")
 
 	// add config file to viper
 	if c != "" {
-		viper.AddConfigPath(c)
-		err := viper.ReadInConfig()
+		v.AddConfigPath(c)
+		err := v.ReadInConfig()
 		if err != nil {
 			return fmt.Errorf("error reading configuration file '%s': %v", c, err)
 		}
@@ -87,12 +100,12 @@ func setAllConfig(flags *flag.FlagSet, envPrefix string) error {
 			return
 		}
 		log.Printf("Now visiting: %v with value '%s'", f.Name, f.Value)
-		value := viper.GetString(f.Name)
+		value := v.GetString(f.Name)
 		log.Printf("Setting to value: '%v'", value)
 		flagErr = f.Value.Set(value)
 	})
 	if flagErr == nil {
-		fmt.Println(viper.AllSettings())
+		fmt.Println(v.AllSettings())
 	}
 	return flagErr
 }
