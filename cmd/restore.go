@@ -3,40 +3,38 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/pilosa/pilosa/ctl"
 )
 
-var restorer = ctl.NewRestoreCommand(os.Stdin, os.Stdout, os.Stderr)
+func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	restorer := ctl.NewRestoreCommand(os.Stdin, os.Stdout, os.Stderr)
 
-var restoreCmd = &cobra.Command{
-	Use:   "restore",
-	Short: "Restore data to pilosa from a backup file.",
-	Long: `
+	restoreCmd := &cobra.Command{
+		Use:   "restore",
+		Short: "Restore data to pilosa from a backup file.",
+		Long: `
 Restores a frame to the cluster from a backup file.
 `,
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := restorer.Run(context.Background()); err != nil {
-			fmt.Println(err)
-		}
-	},
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := restorer.Run(context.Background()); err != nil {
+				fmt.Println(err)
+			}
+		},
+	}
+	flags := restoreCmd.Flags()
+	flags.StringVarP(&restorer.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
+	flags.StringVarP(&restorer.Database, "database", "d", "", "Pilosa database to restore into.")
+	flags.StringVarP(&restorer.Frame, "frame", "f", "", "Frame to restore into.")
+	flags.StringVarP(&restorer.Path, "input-file", "i", "", "File to restore from.")
+
+	return restoreCmd
 }
 
 func init() {
-	restoreCmd.Flags().StringVarP(&restorer.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
-	restoreCmd.Flags().StringVarP(&restorer.Database, "database", "d", "", "Pilosa database to restore into.")
-	restoreCmd.Flags().StringVarP(&restorer.Frame, "frame", "f", "", "Frame to restore into.")
-	restoreCmd.Flags().StringVarP(&restorer.Path, "input-file", "i", "", "File to restore from.")
-
-	err := viper.BindPFlags(restoreCmd.Flags())
-	if err != nil {
-		log.Fatalf("Error binding restore flags: %v", err)
-	}
-
-	RootCmd.AddCommand(restoreCmd)
+	subcommandFns["restore"] = NewRestoreCommand
 }

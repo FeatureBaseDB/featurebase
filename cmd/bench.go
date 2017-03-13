@@ -3,41 +3,38 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/pilosa/pilosa/ctl"
 )
 
-var bencher = ctl.NewBenchCommand(os.Stdin, os.Stdout, os.Stderr)
-
-var benchCmd = &cobra.Command{
-	Use:   "bench",
-	Short: "Benchmark operations.",
-	Long: `
+func NewBenchCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	bencher := ctl.NewBenchCommand(os.Stdin, os.Stdout, os.Stderr)
+	benchCmd := &cobra.Command{
+		Use:   "bench",
+		Short: "Benchmark operations.",
+		Long: `
 Executes a benchmark for a given operation against the database.
 `,
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := bencher.Run(context.Background()); err != nil {
-			fmt.Println(err)
-		}
-	},
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := bencher.Run(context.Background()); err != nil {
+				fmt.Println(err)
+			}
+		},
+	}
+	flags := benchCmd.Flags()
+	flags.StringVarP(&bencher.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
+	flags.StringVarP(&bencher.Database, "database", "d", "", "Pilosa database to benchmark.")
+	flags.StringVarP(&bencher.Frame, "frame", "f", "", "Frame to benchmark.")
+	flags.StringVarP(&bencher.Op, "operation", "o", "set-bit", "Operation to perform: choose from [set-bit]")
+	flags.IntVarP(&bencher.N, "num", "n", 0, "Number of operations to perform.")
+
+	return benchCmd
 }
 
 func init() {
-	benchCmd.Flags().StringVarP(&bencher.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
-	benchCmd.Flags().StringVarP(&bencher.Database, "database", "d", "", "Pilosa database to benchmark.")
-	benchCmd.Flags().StringVarP(&bencher.Frame, "frame", "f", "", "Frame to benchmark.")
-	benchCmd.Flags().StringVarP(&bencher.Op, "operation", "o", "set-bit", "Operation to perform: choose from [set-bit]")
-	benchCmd.Flags().IntVarP(&bencher.N, "num", "n", 0, "Number of operations to perform.")
-
-	err := viper.BindPFlags(benchCmd.Flags())
-	if err != nil {
-		log.Fatalf("Error binding bench flags: %v", err)
-	}
-
-	RootCmd.AddCommand(benchCmd)
+	subcommandFns["bench"] = NewBenchCommand
 }
