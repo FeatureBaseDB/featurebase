@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
 )
 
@@ -55,9 +54,13 @@ func NewCommand() *Command {
 
 // Run executes the pilosa server.
 func (m *Command) Run(args ...string) error {
-	// Notify user of config file.
-	if m.ConfigPath != "" {
-		fmt.Fprintf(m.Stdout, "Using config: %s\n", m.ConfigPath)
+	prefix := "~" + string(filepath.Separator)
+	if strings.HasPrefix(m.Config.DataDir, prefix) {
+		HomeDir := os.Getenv("HOME")
+		if HomeDir == "" {
+			return errors.New("data directory not specified and no home dir available")
+		}
+		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
 	}
 
 	// Setup logging output.
@@ -79,40 +82,11 @@ func (m *Command) Run(args ...string) error {
 	if err := m.Server.Open(); err != nil {
 		return err
 	}
-
 	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Server.Host)
-
 	return nil
 }
 
 // Close shuts down the server.
 func (m *Command) Close() error {
 	return m.Server.Close()
-}
-
-// SetupConfig loads the config file if specified and sets state on the Command.
-func (m *Command) SetupConfig(args []string) error {
-	// Load config, if specified.
-	if m.ConfigPath != "" {
-		if _, err := toml.DecodeFile(m.ConfigPath, &m.Config); err != nil {
-			return err
-		}
-	}
-
-	// Use default data directory if one is not specified.
-	if m.Config.DataDir == "" {
-		m.Config.DataDir = DefaultDataDir
-	}
-
-	// Expand home directory.
-	prefix := "~" + string(filepath.Separator)
-	if strings.HasPrefix(m.Config.DataDir, prefix) {
-		HomeDir := os.Getenv("HOME")
-		if HomeDir == "" {
-			return errors.New("data directory not specified and no home dir available")
-		}
-		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
-	}
-
-	return nil
 }

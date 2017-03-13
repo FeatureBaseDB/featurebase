@@ -26,11 +26,6 @@ on the configured port.`,
 		serve.Server.Handler.Version = Version
 		fmt.Fprintf(serve.Stderr, "Pilosa %s, build time %s\n", Version, BuildTime)
 
-		// Parse command line arguments.
-		if err := serve.SetupConfig(args); err != nil {
-			return err
-		}
-
 		// Start CPU profiling.
 		if serve.CPUProfile != "" {
 			f, err := os.Create(serve.CPUProfile)
@@ -72,9 +67,10 @@ on the configured port.`,
 func init() {
 	flags := serveCmd.Flags()
 
-	flags.StringVarP(&serve.ConfigPath, "config", "c", "", "Configuration file to read from")
-	flags.StringVarP(&serve.CPUProfile, "cpu-profile", "", "", "Where to store CPU profile")
-	flags.DurationVarP(&serve.CPUTime, "cpu-time", "", 30*time.Second, "CPU profile duration")
+	flags.StringVarP(&serve.ConfigPath, "config", "c", "", "Configuration file to read from.")
+	flags.StringVarP(&serve.Config.DataDir, "data-dir", "d", "~/.pilosa", "Directory to store pilosa data files.")
+	flags.StringVarP(&serve.CPUProfile, "cpu-profile", "", "", "Where to store CPU profile.")
+	flags.DurationVarP(&serve.CPUTime, "cpu-time", "", 30*time.Second, "CPU profile duration.")
 
 	RootCmd.AddCommand(serveCmd)
 }
