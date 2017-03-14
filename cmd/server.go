@@ -75,8 +75,9 @@ on the configured port.`,
 	flags := serveCmd.Flags()
 
 	flags.StringVarP(&Serve.ConfigPath, "config", "c", "", "Configuration file to read from.")
-	flags.StringVarP(&Serve.Config.Host, "host", "", ":10101", "Default URI on which pilosa should listen.")
 	flags.StringVarP(&Serve.Config.DataDir, "data-dir", "d", "~/.pilosa", "Directory to store pilosa data files.")
+	flags.StringVarP(&Serve.Config.Host, "bind", "", ":10101", "Default URI on which pilosa should listen.")
+	flags.IntVarP(&Serve.Config.Cluster.ReplicaN, "cluster.replicas", "", 1, "Number hosts each piece of data should be stored on.")
 	flags.StringVarP(&Serve.CPUProfile, "cpu-profile", "", "", "Where to store CPU profile.")
 	flags.DurationVarP(&Serve.CPUTime, "cpu-time", "", 30*time.Second, "CPU profile duration.")
 

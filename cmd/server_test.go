@@ -51,12 +51,16 @@ func TestServerConfig(t *testing.T) {
 			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir"},
 			cfgFileContent: `
 data-dir = "/tmp/myFileDatadir"
-host = "localhost:0"
+bind = "localhost:0"
+
+[cluster]
+  replicas = 2
 `,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Serve.Config.DataDir, actualDataDir)
 				v.Check(cmd.Serve.Config.Host, "localhost:0")
+				v.Check(cmd.Serve.Config.Cluster.ReplicaN, 2)
 				return v.Error()
 			},
 		},
