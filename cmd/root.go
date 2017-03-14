@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"log"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -86,7 +85,8 @@ func setAllConfig(v *viper.Viper, flags *flag.FlagSet, envPrefix string) error {
 
 	// add config file to viper
 	if c != "" {
-		v.AddConfigPath(c)
+		v.SetConfigFile(c)
+		v.SetConfigType("toml")
 		err := v.ReadInConfig()
 		if err != nil {
 			return fmt.Errorf("error reading configuration file '%s': %v", c, err)
@@ -99,13 +99,8 @@ func setAllConfig(v *viper.Viper, flags *flag.FlagSet, envPrefix string) error {
 		if flagErr != nil {
 			return
 		}
-		log.Printf("Now visiting: %v with value '%s'", f.Name, f.Value)
 		value := v.GetString(f.Name)
-		log.Printf("Setting to value: '%v'", value)
 		flagErr = f.Value.Set(value)
 	})
-	if flagErr == nil {
-		fmt.Println(v.AllSettings())
-	}
 	return flagErr
 }
