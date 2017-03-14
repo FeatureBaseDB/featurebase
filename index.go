@@ -187,12 +187,14 @@ func (i *Index) DBs() []*DB {
 }
 
 // CreateDB creates a database.
+// An error is returned if the database already exists.
 func (i *Index) CreateDB(name string, opt DBOptions) (*DB, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
 	// Ensure db doesn't already exist.
 	if i.dbs[name] != nil {
+		fmt.Println("ErrDatabaseExists: 2")
 		return nil, ErrDatabaseExists
 	}
 	return i.createDB(name, opt)
@@ -204,7 +206,7 @@ func (i *Index) CreateDBIfNotExists(name string, opt DBOptions) (*DB, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Find frame in cache first.
+	// Find database in cache first.
 	if db := i.dbs[name]; db != nil {
 		return db, nil
 	}
@@ -238,6 +240,13 @@ func (i *Index) createDB(name string, opt DBOptions) (*DB, error) {
 	i.dbs[db.Name()] = db
 
 	i.Stats.Count("dbN", 1)
+
+	// Send a CreateDB message
+	i.Messenger.SendMessage(
+		&internal.CreateDBMessage{
+			DB:          name,
+			ColumnLabel: opt.ColumnLabel,
+		})
 
 	return db, nil
 }
@@ -357,6 +366,12 @@ func (i *Index) HandleMessage(pb proto.Message) error {
 		d.SetRemoteMaxSlice(obj.Slice)
 	case *internal.DeleteDBMessage:
 		err := i.DeleteDB(obj.DB)
+		if err != nil {
+			return err
+		}
+	case *internal.CreateDBMessage:
+		opt := DBOptions{ColumnLabel: obj.ColumnLabel}
+		_, err := i.CreateDB(obj.DB, opt)
 		if err != nil {
 			return err
 		}

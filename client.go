@@ -160,6 +160,7 @@ func (c *Client) CreateDB(ctx context.Context, db string, opt DBOptions) error {
 	case http.StatusOK:
 		return nil // ok
 	case http.StatusConflict:
+		fmt.Println("ErrDatabaseExists: 1")
 		return ErrDatabaseExists
 	default:
 		return errors.New(string(body))
