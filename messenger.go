@@ -34,6 +34,7 @@ type Messenger interface {
 const (
 	MessageTypeCreateSlice = 1
 	MessageTypeDeleteDB    = 2
+	MessageTypeCreateDB    = 3
 )
 
 func MarshalMessage(m proto.Message) ([]byte, error) {
@@ -43,6 +44,8 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeCreateSlice
 	case *internal.DeleteDBMessage:
 		typ = MessageTypeDeleteDB
+	case *internal.CreateDBMessage:
+		typ = MessageTypeCreateDB
 	default:
 		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
 	}
@@ -62,6 +65,8 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.CreateSliceMessage{}
 	case MessageTypeDeleteDB:
 		m = &internal.DeleteDBMessage{}
+	case MessageTypeCreateDB:
+		m = &internal.CreateDBMessage{}
 	default:
 		return nil, fmt.Errorf("invalid message type: %d", typ)
 	}
