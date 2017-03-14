@@ -285,6 +285,7 @@ func (h *HTTPNodeSet) ReceiveMessage(pb proto.Message) error {
 }
 
 func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {
+	fmt.Println("sendNodeMessage:", node.Host)
 	var client *http.Client
 	client = http.DefaultClient
 
@@ -302,7 +303,9 @@ func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {
 	req.Header.Set("Content-Type", "application/x-protobuf")
 
 	// Send request to remote node.
+	fmt.Println("Send")
 	resp, err := client.Do(req)
+	fmt.Println("Got back")
 	if err != nil {
 		return err
 	}
@@ -314,6 +317,7 @@ func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("code:", resp.StatusCode)
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
