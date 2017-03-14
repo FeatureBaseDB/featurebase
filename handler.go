@@ -376,6 +376,7 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 	// Create database.
 	_, err := h.Index.CreateDB(req.DB, req.Options)
 	if err == ErrDatabaseExists {
+		fmt.Println("ErrDatabaseExists: 3")
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	} else if err != nil {
