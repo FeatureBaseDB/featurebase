@@ -3,6 +3,7 @@ package cmd_test
 import (
 	"fmt"
 	"io/ioutil"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -29,7 +30,7 @@ func (v *validator) Check(actual, expected interface{}) {
 	if v.err != nil {
 		return
 	}
-	if actual != expected {
+	if !reflect.DeepEqual(actual, expected) {
 		v.err = fmt.Errorf("Actual: '%v' is not equal to '%v'", actual, expected)
 	}
 }
@@ -47,7 +48,7 @@ func TestServerConfig(t *testing.T) {
 	failErr(t, err, "making data dir")
 	tests := []commandTest{
 		{
-			args: []string{"server", "--data-dir", actualDataDir},
+			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "example.com:10101,example.com:10110"},
 			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir"},
 			cfgFileContent: `
 data-dir = "/tmp/myFileDatadir"
@@ -55,18 +56,54 @@ bind = "localhost:0"
 
 [cluster]
   replicas = 2
+  hosts = [
+   "localhost:19444",
+   ]
 `,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Serve.Config.DataDir, actualDataDir)
 				v.Check(cmd.Serve.Config.Host, "localhost:0")
 				v.Check(cmd.Serve.Config.Cluster.ReplicaN, 2)
+				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"example.com:10101", "example.com:10110"})
+				return v.Error()
+			},
+		},
+		{
+			args: []string{"server"},
+			env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "example.com:1110,example.com:1111"},
+			cfgFileContent: `
+[cluster]
+  hosts = [
+   "localhost:19444",
+   ]
+`,
+			validation: func() error {
+				v := validator{}
+				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"example.com:1110", "example.com:1111"})
+				return v.Error()
+			},
+		},
+		{
+			args: []string{"server"},
+			env:  map[string]string{},
+			cfgFileContent: `
+[cluster]
+  hosts = [
+   "localhost:19444",
+   ]
+
+`,
+			validation: func() error {
+				v := validator{}
+				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"localhost:19444"})
 				return v.Error()
 			},
 		},
 	}
+
 	for i, test := range tests {
-		com := setupCommand(t, test.args, test.env, test.cfgFileContent)
+		com := test.setupCommand(t)
 		wait := sync.Mutex{}
 		wait.Lock()
 		var execErr error
@@ -84,32 +121,39 @@ bind = "localhost:0"
 		if err := test.validation(); err != nil {
 			t.Fatalf("Failed test %d due to: %v", i, err)
 		}
+		test.reset()
 	}
 }
 
-func setupCommand(t *testing.T, args []string, env map[string]string, cfgFileContent string) *cobra.Command {
+func (ct commandTest) setupCommand(t *testing.T) *cobra.Command {
 	// make config file
 	cfgFile, err := ioutil.TempFile("", "")
 	failErr(t, err, "making temp file")
-	_, err = cfgFile.WriteString(cfgFileContent)
+	_, err = cfgFile.WriteString(ct.cfgFileContent)
 	failErr(t, err, "writing config to temp file")
 
 	// set up config file args/env
-	env["PILOSA_CONFIG"] = cfgFile.Name()
-	args = append(args[:1], append([]string{"--config=" + cfgFile.Name()}, args[1:]...)...)
+	ct.env["PILOSA_CONFIG"] = cfgFile.Name()
+	ct.args = append(ct.args[:1], append([]string{"--config=" + cfgFile.Name()}, ct.args[1:]...)...)
 
 	// set up env
-	for name, val := range env {
+	for name, val := range ct.env {
 		err = os.Setenv(name, val)
 		failErr(t, err, fmt.Sprintf("setting environment variable '%s' to '%s'", name, val))
 	}
 
 	// make command and set args
 	rc := cmd.NewRootCommand(strings.NewReader(""), ioutil.Discard, ioutil.Discard)
-	rc.SetArgs(args)
+	rc.SetArgs(ct.args)
 
 	err = cfgFile.Close()
 	failErr(t, err, "closing config file")
 
 	return rc
+}
+
+func (ct commandTest) reset() {
+	for name, _ := range ct.env {
+		os.Setenv(name, "")
+	}
 }
