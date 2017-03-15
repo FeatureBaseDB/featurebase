@@ -79,6 +79,7 @@ on the configured port.`,
 	flags.StringVarP(&Serve.Config.Host, "bind", "", ":10101", "Default URI on which pilosa should listen.")
 	flags.IntVarP(&Serve.Config.Cluster.ReplicaN, "cluster.replicas", "", 1, "Number hosts each piece of data should be stored on.")
 	flags.StringSliceVarP(&Serve.Config.Cluster.Nodes, "cluster.hosts", "", []string{}, "Comma separated list of hosts in cluster.")
+	flags.DurationVarP((*time.Duration)(&Serve.Config.Cluster.PollingInterval), "cluster.poll-interval", "", time.Minute, "Polling interval for cluster.") // TODO what actually is this?
 	flags.StringVarP(&Serve.CPUProfile, "cpu-profile", "", "", "Where to store CPU profile.")
 	flags.DurationVarP(&Serve.CPUTime, "cpu-time", "", 30*time.Second, "CPU profile duration.")
 
