@@ -13,9 +13,9 @@ type Config struct {
 	Host    string `toml:"host"`
 
 	Cluster struct {
-		ReplicaN        int           `toml:"replicas"`
-		Nodes           []*ConfigNode `toml:"node"`
-		PollingInterval Duration      `toml:"polling-interval"`
+		ReplicaN        int      `toml:"replicas"`
+		Nodes           []string `toml:"hosts"`
+		PollingInterval Duration `toml:"polling-interval"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -27,10 +27,6 @@ type Config struct {
 	} `toml:"anti-entropy"`
 }
 
-type ConfigNode struct {
-	Host string `toml:"host"`
-}
-
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
@@ -38,6 +34,7 @@ func NewConfig() *Config {
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
+	c.Cluster.Nodes = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	return c
 }
@@ -45,7 +42,7 @@ func NewConfig() *Config {
 func NewConfigForHosts(hosts []string) *Config {
 	conf := NewConfig()
 	for _, hostport := range hosts {
-		conf.Cluster.Nodes = append(conf.Cluster.Nodes, &ConfigNode{Host: hostport})
+		conf.Cluster.Nodes = append(conf.Cluster.Nodes, hostport)
 	}
 	return conf
 }
@@ -55,8 +52,8 @@ func (c *Config) PilosaCluster() *Cluster {
 	cluster := NewCluster()
 	cluster.ReplicaN = c.Cluster.ReplicaN
 
-	for _, n := range c.Cluster.Nodes {
-		cluster.Nodes = append(cluster.Nodes, &Node{Host: n.Host})
+	for _, hostport := range c.Cluster.Nodes {
+		cluster.Nodes = append(cluster.Nodes, &Node{Host: hostport})
 	}
 
 	return cluster

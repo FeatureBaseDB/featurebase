@@ -99,7 +99,27 @@ func setAllConfig(v *viper.Viper, flags *flag.FlagSet, envPrefix string) error {
 		if flagErr != nil {
 			return
 		}
-		value := v.GetString(f.Name)
+		var value string
+		if f.Value.Type() == "stringSlice" {
+			// special handling is needed for stringSlice as v.GetString will
+			// always return "" in the case that the value is an actual string
+			// slice from a config file rather than a comma separated string
+			// from a flag or env var.
+			vss := v.GetStringSlice(f.Name)
+			value = strings.Join(vss, ",")
+		} else {
+			value = v.GetString(f.Name)
+		}
+		fmt.Printf("Visiting '%v' with value '%v', changed: '%v', new value: '%v'\n", f.Name, f.Value, f.Changed, value)
+		if f.Changed {
+			// If f.Changed is true, that means the value has already been set
+			// by a flag, and we don't need to ask viper for it since the flag
+			// is the highest priority. This works around a problem with string
+			// slices where f.Value.Set(csvString) would cause the elements of
+			// csvString to be appended to the existing value rather than
+			// replacing it.
+			return
+		}
 		flagErr = f.Value.Set(value)
 	})
 	return flagErr
