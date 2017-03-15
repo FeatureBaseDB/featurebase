@@ -7,9 +7,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"os"
 
+	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/cmd"
 	"github.com/spf13/cobra"
 )
@@ -47,14 +49,16 @@ func TestServerConfig(t *testing.T) {
 	actualDataDir, err := ioutil.TempDir("", "")
 	failErr(t, err, "making data dir")
 	tests := []commandTest{
+		// TEST 0
 		{
 			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "example.com:10101,example.com:10110"},
-			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir"},
+			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER.POLL_INTERVAL": "3m2s"},
 			cfgFileContent: `
 data-dir = "/tmp/myFileDatadir"
 bind = "localhost:0"
 
 [cluster]
+  poll-interval = "45s"
   replicas = 2
   hosts = [
    "localhost:19444",
@@ -66,9 +70,11 @@ bind = "localhost:0"
 				v.Check(cmd.Serve.Config.Host, "localhost:0")
 				v.Check(cmd.Serve.Config.Cluster.ReplicaN, 2)
 				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"example.com:10101", "example.com:10110"})
+				v.Check(cmd.Serve.Config.Cluster.PollingInterval, pilosa.Duration(time.Second*182))
 				return v.Error()
 			},
 		},
+		// TEST 1
 		{
 			args: []string{"server"},
 			env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "example.com:1110,example.com:1111"},
@@ -84,11 +90,13 @@ bind = "localhost:0"
 				return v.Error()
 			},
 		},
+		// TEST 2
 		{
 			args: []string{"server"},
 			env:  map[string]string{},
 			cfgFileContent: `
 [cluster]
+  poll-interval = "2m0s"
   hosts = [
    "localhost:19444",
    ]
@@ -97,6 +105,7 @@ bind = "localhost:0"
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"localhost:19444"})
+				v.Check(cmd.Serve.Config.Cluster.PollingInterval, pilosa.Duration(time.Minute*2))
 				return v.Error()
 			},
 		},
