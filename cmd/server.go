@@ -82,8 +82,8 @@ on the configured port.`,
 	flags.DurationVarP((*time.Duration)(&Serve.Config.Cluster.PollingInterval), "cluster.poll-interval", "", time.Minute, "Polling interval for cluster.") // TODO what actually is this?
 	flags.StringVarP(&Serve.Config.Plugins.Path, "plugins.path", "", "", "Path to plugin directory.")
 	flags.DurationVarP((*time.Duration)(&Serve.Config.AntiEntropy.Interval), "anti-entropy.interval", "", time.Minute*10, "Interval at which to run anti-entropy routine.")
-	flags.StringVarP(&Serve.CPUProfile, "cpu-profile", "", "", "Where to store CPU profile.")
-	flags.DurationVarP(&Serve.CPUTime, "cpu-time", "", 30*time.Second, "CPU profile duration.")
+	flags.StringVarP(&Serve.CPUProfile, "profile.cpu", "", "", "Where to store CPU profile.")
+	flags.DurationVarP(&Serve.CPUTime, "profile.cpu-time", "", 30*time.Second, "CPU profile duration.")
 
 	return serveCmd
 }

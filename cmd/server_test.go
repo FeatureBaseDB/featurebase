@@ -47,6 +47,8 @@ type commandTest struct {
 func TestServerConfig(t *testing.T) {
 	actualDataDir, err := ioutil.TempDir("", "")
 	failErr(t, err, "making data dir")
+	profFile, err := ioutil.TempFile("", "")
+	failErr(t, err, "making temp file")
 	tests := []commandTest{
 		// TEST 0
 		{
@@ -96,7 +98,7 @@ bind = "localhost:0"
 		// TEST 2
 		{
 			args: []string{"server"},
-			env:  map[string]string{},
+			env:  map[string]string{"PILOSA_PROFILE.CPU_TIME": "1m"},
 			cfgFileContent: `
 [cluster]
   poll-interval = "2m0s"
@@ -105,12 +107,17 @@ bind = "localhost:0"
    ]
 [anti-entropy]
   interval = "11m0s"
+[profile]
+  cpu = "` + profFile.Name() + `"
+  cpu-time = "35s"
 `,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"localhost:19444"})
 				v.Check(cmd.Serve.Config.Cluster.PollingInterval, pilosa.Duration(time.Minute*2))
 				v.Check(cmd.Serve.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*11))
+				v.Check(cmd.Serve.CPUProfile, profFile.Name())
+				v.Check(cmd.Serve.CPUTime, time.Minute)
 				return v.Error()
 			},
 		},
