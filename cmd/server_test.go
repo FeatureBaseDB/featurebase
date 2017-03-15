@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -83,10 +82,13 @@ bind = "localhost:0"
   hosts = [
    "localhost:19444",
    ]
+[plugins]
+  path = "/var/sloth"
 `,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"example.com:1110", "example.com:1111"})
+				v.Check(cmd.Serve.Config.Plugins.Path, "/var/sloth")
 				return v.Error()
 			},
 		},
@@ -113,18 +115,19 @@ bind = "localhost:0"
 
 	for i, test := range tests {
 		com := test.setupCommand(t)
-		wait := sync.Mutex{}
-		wait.Lock()
+		executed := make(chan struct{})
 		var execErr error
 		go func() {
 			execErr = com.Execute()
-			wait.Unlock()
+			close(executed)
 		}()
-		// Serve.Close automatically waits for Serve.Run() to finish starting
-		// the server.
+		select {
+		case <-cmd.Serve.Started:
+		case <-executed:
+		}
 		err := cmd.Serve.Close()
 		failErr(t, err, "closing pilosa server command")
-		wait.Lock() // make sure com.Execute finishes
+		<-executed
 		failErr(t, execErr, "executing command")
 
 		if err := test.validation(); err != nil {

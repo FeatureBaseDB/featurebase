@@ -40,7 +40,7 @@ type Command struct {
 	Stderr io.Writer
 
 	// running will be closed once Command.Run is finished.
-	running chan struct{}
+	Started chan struct{}
 	// Done will be closed when Command.Close() is called
 	Done chan struct{}
 }
@@ -55,14 +55,14 @@ func NewCommand() *Command {
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 
-		running: make(chan struct{}),
+		Started: make(chan struct{}),
 		Done:    make(chan struct{}),
 	}
 }
 
 // Run executes the pilosa server.
 func (m *Command) Run(args ...string) error {
-	defer close(m.running)
+	defer close(m.Started)
 	prefix := "~" + string(filepath.Separator)
 	if strings.HasPrefix(m.Config.DataDir, prefix) {
 		HomeDir := os.Getenv("HOME")
@@ -97,8 +97,6 @@ func (m *Command) Run(args ...string) error {
 
 // Close shuts down the server.
 func (m *Command) Close() error {
-	// must be running before it can be closed
-	<-m.running
 	err := m.Server.Close()
 	close(m.Done)
 	return err
