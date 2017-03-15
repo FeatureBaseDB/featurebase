@@ -75,7 +75,7 @@ bind = "localhost:0"
 		},
 		// TEST 1
 		{
-			args: []string{"server"},
+			args: []string{"server", "--anti-entropy.interval", "9m0s"},
 			env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "example.com:1110,example.com:1111"},
 			cfgFileContent: `
 [cluster]
@@ -89,6 +89,7 @@ bind = "localhost:0"
 				v := validator{}
 				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"example.com:1110", "example.com:1111"})
 				v.Check(cmd.Serve.Config.Plugins.Path, "/var/sloth")
+				v.Check(cmd.Serve.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*9))
 				return v.Error()
 			},
 		},
@@ -102,12 +103,14 @@ bind = "localhost:0"
   hosts = [
    "localhost:19444",
    ]
-
+[anti-entropy]
+  interval = "11m0s"
 `,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"localhost:19444"})
 				v.Check(cmd.Serve.Config.Cluster.PollingInterval, pilosa.Duration(time.Minute*2))
+				v.Check(cmd.Serve.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*11))
 				return v.Error()
 			},
 		},
