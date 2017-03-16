@@ -32,7 +32,6 @@ func tExec(t *testing.T, cmd *cobra.Command, out io.Reader, w io.WriteCloser) (o
 		output, readErr = ioutil.ReadAll(out)
 		close(done)
 	}()
-	fmt.Println("executing")
 	err = cmd.Execute()
 	if err != nil {
 		return output, err

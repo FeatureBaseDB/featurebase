@@ -123,7 +123,7 @@ func setAllConfig(v *viper.Viper, flags *flag.FlagSet, envPrefix string) error {
 		} else {
 			value = v.GetString(f.Name)
 		}
-		fmt.Printf("Visiting '%v' with value '%v', changed: '%v', new value: '%v'\n", f.Name, f.Value, f.Changed, value)
+
 		if f.Changed {
 			// If f.Changed is true, that means the value has already been set
 			// by a flag, and we don't need to ask viper for it since the flag
