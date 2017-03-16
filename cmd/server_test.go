@@ -67,11 +67,11 @@ bind = "localhost:0"
 `,
 			validation: func() error {
 				v := validator{}
-				v.Check(cmd.Serve.Config.DataDir, actualDataDir)
-				v.Check(cmd.Serve.Config.Host, "localhost:0")
-				v.Check(cmd.Serve.Config.Cluster.ReplicaN, 2)
-				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"example.com:10101", "example.com:10110"})
-				v.Check(cmd.Serve.Config.Cluster.PollingInterval, pilosa.Duration(time.Second*182))
+				v.Check(cmd.Server.Config.DataDir, actualDataDir)
+				v.Check(cmd.Server.Config.Host, "localhost:0")
+				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
+				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:10101", "example.com:10110"})
+				v.Check(cmd.Server.Config.Cluster.PollingInterval, pilosa.Duration(time.Second*182))
 				return v.Error()
 			},
 		},
@@ -89,9 +89,9 @@ bind = "localhost:0"
 `,
 			validation: func() error {
 				v := validator{}
-				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"example.com:1110", "example.com:1111"})
-				v.Check(cmd.Serve.Config.Plugins.Path, "/var/sloth")
-				v.Check(cmd.Serve.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*9))
+				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:1110", "example.com:1111"})
+				v.Check(cmd.Server.Config.Plugins.Path, "/var/sloth")
+				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*9))
 				return v.Error()
 			},
 		},
@@ -113,11 +113,11 @@ bind = "localhost:0"
 `,
 			validation: func() error {
 				v := validator{}
-				v.Check(cmd.Serve.Config.Cluster.Nodes, []string{"localhost:19444"})
-				v.Check(cmd.Serve.Config.Cluster.PollingInterval, pilosa.Duration(time.Minute*2))
-				v.Check(cmd.Serve.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*11))
-				v.Check(cmd.Serve.CPUProfile, profFile.Name())
-				v.Check(cmd.Serve.CPUTime, time.Minute)
+				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"localhost:19444"})
+				v.Check(cmd.Server.Config.Cluster.PollingInterval, pilosa.Duration(time.Minute*2))
+				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*11))
+				v.Check(cmd.Server.CPUProfile, profFile.Name())
+				v.Check(cmd.Server.CPUTime, time.Minute)
 				return v.Error()
 			},
 		},
@@ -132,10 +132,10 @@ bind = "localhost:0"
 			close(executed)
 		}()
 		select {
-		case <-cmd.Serve.Started:
+		case <-cmd.Server.Started:
 		case <-executed:
 		}
-		err := cmd.Serve.Close()
+		err := cmd.Server.Close()
 		failErr(t, err, "closing pilosa server command")
 		<-executed
 		failErr(t, execErr, "executing command")
