@@ -112,6 +112,21 @@ func (ct *commandTest) reset() {
 	}
 }
 
+func executeDry(t *testing.T, tests []commandTest) {
+	for i, test := range tests {
+		test.args = append(test.args[:1], append([]string{"--dry-run"}, test.args[1:]...)...)
+		com := test.setupCommand(t)
+		err := com.Execute()
+		if err.Error() != "dry run" {
+			t.Fatalf("Problem with test %d, err: '%v'", i, err)
+		}
+		if err := test.validation(); err != nil {
+			t.Fatalf("Failed test %d due to: %v", i, err)
+		}
+		test.reset()
+	}
+}
+
 func TestRootCommand(t *testing.T) {
 	outStr, err := ExecNewRootCommand(t, "--help")
 	if !strings.Contains(outStr, "Usage:") ||
