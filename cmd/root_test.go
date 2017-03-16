@@ -80,7 +80,7 @@ type commandTest struct {
 	validation     func() error
 }
 
-func (ct commandTest) setupCommand(t *testing.T) *cobra.Command {
+func (ct *commandTest) setupCommand(t *testing.T) *cobra.Command {
 	// make config file
 	cfgFile, err := ioutil.TempFile("", "")
 	failErr(t, err, "making temp file")
@@ -106,7 +106,7 @@ func (ct commandTest) setupCommand(t *testing.T) *cobra.Command {
 	return rc
 }
 
-func (ct commandTest) reset() {
+func (ct *commandTest) reset() {
 	for name, _ := range ct.env {
 		os.Setenv(name, "")
 	}
