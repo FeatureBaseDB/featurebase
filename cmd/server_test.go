@@ -54,6 +54,7 @@ bind = "localhost:0"
 			args: []string{"server", "--anti-entropy.interval", "9m0s"},
 			env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "example.com:1110,example.com:1111"},
 			cfgFileContent: `
+bind = "localhost:0"
 [cluster]
   hosts = [
    "localhost:19444",
@@ -74,6 +75,7 @@ bind = "localhost:0"
 			args: []string{"server"},
 			env:  map[string]string{"PILOSA_PROFILE.CPU_TIME": "1m"},
 			cfgFileContent: `
+bind = "localhost:0"
 [cluster]
   poll-interval = "2m0s"
   hosts = [
