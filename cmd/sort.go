@@ -11,9 +11,11 @@ import (
 	"github.com/pilosa/pilosa/ctl"
 )
 
+var Sorter *ctl.SortCommand
+
 func NewSortCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 
-	sorter := ctl.NewSortCommand(os.Stdin, os.Stdout, os.Stderr)
+	Sorter = ctl.NewSortCommand(os.Stdin, os.Stdout, os.Stderr)
 
 	sortCmd := &cobra.Command{
 		Use:   "sort <path>",
@@ -27,18 +29,17 @@ The format of the CSV file is:
 
 The file should contain no headers.
 `,
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				fmt.Println("path required")
-				return
+				return fmt.Errorf("path required")
 			} else if len(args) > 1 {
-				fmt.Println("only one path supported")
-				return
+				return fmt.Errorf("only one path supported")
 			}
-			sorter.Path = args[0]
-			if err := sorter.Run(context.Background()); err != nil {
-				fmt.Println(err)
+			Sorter.Path = args[0]
+			if err := Sorter.Run(context.Background()); err != nil {
+				return err
 			}
+			return nil
 		},
 	}
 	return sortCmd

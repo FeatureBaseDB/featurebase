@@ -9,8 +9,10 @@ import (
 	"github.com/pilosa/pilosa/ctl"
 )
 
+var Importer *ctl.ImportCommand
+
 func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	importer := ctl.NewImportCommand(stdin, stdout, stderr)
+	Importer := ctl.NewImportCommand(stdin, stdout, stderr)
 	importCmd := &cobra.Command{
 		Use:   "import",
 		Short: "Bulk load data into pilosa.",
@@ -25,18 +27,18 @@ The file should contain no headers. The TIME column is optional and can be
 omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			importer.Paths = args
-			if err := importer.Run(context.Background()); err != nil {
+			Importer.Paths = args
+			if err := Importer.Run(context.Background()); err != nil {
 				return err
 			}
 			return nil
 		},
 	}
 	flags := importCmd.Flags()
-	flags.StringVarP(&importer.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
-	flags.StringVarP(&importer.Database, "database", "d", "", "Pilosa database to import into.")
-	flags.StringVarP(&importer.Frame, "frame", "f", "", "Frame to import into.")
-	flags.IntVarP(&importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
+	flags.StringVarP(&Importer.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
+	flags.StringVarP(&Importer.Database, "database", "d", "", "Pilosa database to import into.")
+	flags.StringVarP(&Importer.Frame, "frame", "f", "", "Frame to import into.")
+	flags.IntVarP(&Importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
 
 	return importCmd
 }
