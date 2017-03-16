@@ -12,7 +12,7 @@ import (
 var Importer *ctl.ImportCommand
 
 func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	Importer := ctl.NewImportCommand(stdin, stdout, stderr)
+	Importer = ctl.NewImportCommand(stdin, stdout, stderr)
 	importCmd := &cobra.Command{
 		Use:   "import",
 		Short: "Bulk load data into pilosa.",

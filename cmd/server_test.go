@@ -55,6 +55,7 @@ bind = "localhost:0"
 			env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "example.com:1110,example.com:1111"},
 			cfgFileContent: `
 bind = "localhost:0"
+data-dir = "` + actualDataDir + `"
 [cluster]
   hosts = [
    "localhost:19444",
@@ -76,6 +77,7 @@ bind = "localhost:0"
 			env:  map[string]string{"PILOSA_PROFILE.CPU_TIME": "1m"},
 			cfgFileContent: `
 bind = "localhost:0"
+data-dir = "` + actualDataDir + `"
 [cluster]
   poll-interval = "2m0s"
   hosts = [
