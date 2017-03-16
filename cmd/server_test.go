@@ -1,47 +1,21 @@
 package cmd_test
 
 import (
-	"fmt"
 	"io/ioutil"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"os"
-
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/cmd"
-	"github.com/spf13/cobra"
 )
 
 func TestServerHelp(t *testing.T) {
-	output := ExecNewRootCommand(t, "server", "--help")
+	output, err := ExecNewRootCommand(t, "server", "--help")
 	if !strings.Contains(output, "Usage:") ||
-		!strings.Contains(output, "Flags:") {
-		t.Fatalf("Command 'server --help' not working, got: %s", output)
+		!strings.Contains(output, "Flags:") || err != nil {
+		t.Fatalf("Command 'server --help' not working, err: '%v', output: '%s'", err, output)
 	}
-}
-
-type validator struct {
-	err error
-}
-
-func (v *validator) Check(actual, expected interface{}) {
-	if v.err != nil {
-		return
-	}
-	if !reflect.DeepEqual(actual, expected) {
-		v.err = fmt.Errorf("Actual: '%v' is not equal to '%v'", actual, expected)
-	}
-}
-func (v *validator) Error() error { return v.err }
-
-type commandTest struct {
-	args           []string
-	env            map[string]string
-	cfgFileContent string
-	validation     func() error
 }
 
 func TestServerConfig(t *testing.T) {
@@ -123,6 +97,7 @@ bind = "localhost:0"
 		},
 	}
 
+	// run server tests
 	for i, test := range tests {
 		com := test.setupCommand(t)
 		executed := make(chan struct{})
@@ -144,38 +119,5 @@ bind = "localhost:0"
 			t.Fatalf("Failed test %d due to: %v", i, err)
 		}
 		test.reset()
-	}
-}
-
-func (ct commandTest) setupCommand(t *testing.T) *cobra.Command {
-	// make config file
-	cfgFile, err := ioutil.TempFile("", "")
-	failErr(t, err, "making temp file")
-	_, err = cfgFile.WriteString(ct.cfgFileContent)
-	failErr(t, err, "writing config to temp file")
-
-	// set up config file args/env
-	ct.env["PILOSA_CONFIG"] = cfgFile.Name()
-	ct.args = append(ct.args[:1], append([]string{"--config=" + cfgFile.Name()}, ct.args[1:]...)...)
-
-	// set up env
-	for name, val := range ct.env {
-		err = os.Setenv(name, val)
-		failErr(t, err, fmt.Sprintf("setting environment variable '%s' to '%s'", name, val))
-	}
-
-	// make command and set args
-	rc := cmd.NewRootCommand(strings.NewReader(""), ioutil.Discard, ioutil.Discard)
-	rc.SetArgs(ct.args)
-
-	err = cfgFile.Close()
-	failErr(t, err, "closing config file")
-
-	return rc
-}
-
-func (ct commandTest) reset() {
-	for name, _ := range ct.env {
-		os.Setenv(name, "")
 	}
 }
