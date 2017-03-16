@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 
@@ -11,8 +10,10 @@ import (
 	"github.com/pilosa/pilosa/ctl"
 )
 
+var Exporter *ctl.ExportCommand
+
 func NewExportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	exporter := ctl.NewExportCommand(os.Stdin, os.Stdout, os.Stderr)
+	Exporter = ctl.NewExportCommand(os.Stdin, os.Stdout, os.Stderr)
 	exportCmd := &cobra.Command{
 		Use:   "export",
 		Short: "Export data from pilosa.",
@@ -26,18 +27,19 @@ The format of the CSV file is:
 
 The file does not contain any headers.
 `,
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := exporter.Run(context.Background()); err != nil {
-				fmt.Println(err)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := Exporter.Run(context.Background()); err != nil {
+				return err
 			}
+			return nil
 		},
 	}
 	flags := exportCmd.Flags()
 
-	flags.StringVarP(&exporter.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
-	flags.StringVarP(&exporter.Database, "database", "d", "", "Pilosa database to export into.")
-	flags.StringVarP(&exporter.Frame, "frame", "f", "", "Frame to export into.")
-	flags.StringVarP(&exporter.Path, "output-file", "o", "", "File to write export to - default stdout")
+	flags.StringVarP(&Exporter.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
+	flags.StringVarP(&Exporter.Database, "database", "d", "", "Pilosa database to export into.")
+	flags.StringVarP(&Exporter.Frame, "frame", "f", "", "Frame to export into.")
+	flags.StringVarP(&Exporter.Path, "output-file", "o", "", "File to write export to - default stdout")
 
 	return exportCmd
 }
