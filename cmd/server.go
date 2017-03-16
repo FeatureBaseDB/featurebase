@@ -74,7 +74,6 @@ on the configured port.`,
 	}
 	flags := serveCmd.Flags()
 
-	flags.StringVarP(&Server.ConfigPath, "config", "c", "", "Configuration file to read from.")
 	flags.StringVarP(&Server.Config.DataDir, "data-dir", "d", "~/.pilosa", "Directory to store pilosa data files.")
 	flags.StringVarP(&Server.Config.Host, "bind", "", ":10101", "Default URI on which pilosa should listen.")
 	flags.IntVarP(&Server.Config.Cluster.ReplicaN, "cluster.replicas", "", 1, "Number hosts each piece of data should be stored on.")
