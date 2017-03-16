@@ -40,9 +40,21 @@ Build Time: ` + BuildTime + "\n",
 			if err != nil {
 				return err
 			}
+
+			// return "dry run" error if "dry-run" flag is set
+			if ret, err := cmd.Flags().GetBool("dry-run"); ret && err == nil {
+				if cmd.Parent() != nil {
+					return fmt.Errorf("dry run")
+				} else if err != nil {
+					return fmt.Errorf("problem getting dry-run flag: %v", err)
+				}
+			}
+
 			return nil
 		},
 	}
+	rc.PersistentFlags().Bool("dry-run", false, "stop before executing")
+	rc.PersistentFlags().StringP("config", "c", "", "Configuration file to read from.")
 	for _, subcomFn := range subcommandFns {
 		rc.AddCommand(subcomFn(stdin, stdout, stderr))
 	}

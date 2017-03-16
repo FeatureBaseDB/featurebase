@@ -89,7 +89,6 @@ func (ct commandTest) setupCommand(t *testing.T) *cobra.Command {
 
 	// set up config file args/env
 	ct.env["PILOSA_CONFIG"] = cfgFile.Name()
-	ct.args = append(ct.args[:1], append([]string{"--config=" + cfgFile.Name()}, ct.args[1:]...)...)
 
 	// set up env
 	for name, val := range ct.env {
