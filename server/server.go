@@ -26,9 +26,8 @@ const (
 type Command struct {
 	Server *pilosa.Server
 
-	// Configuration options.
-	ConfigPath string
-	Config     *pilosa.Config
+	// Configuration.
+	Config *pilosa.Config
 
 	// Profiling options.
 	CPUProfile string
