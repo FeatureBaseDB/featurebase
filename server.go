@@ -1,7 +1,6 @@
 package pilosa
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -74,7 +73,7 @@ func (s *Server) Open() error {
 	if err != nil {
 		return err
 	} else if port == "" {
-		return errors.New("port must be specified in config host")
+		port = DefaultPort
 	}
 
 	// Open HTTP listener to determine port (if specified as :0).

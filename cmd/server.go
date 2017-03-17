@@ -50,7 +50,7 @@ on the configured port.`,
 
 			// Execute the program.
 			if err := Server.Run(); err != nil {
-				return err
+				return fmt.Errorf("error running server: %v", err)
 			}
 
 			// First SIGKILL causes server to shut down gracefully.

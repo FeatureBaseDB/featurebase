@@ -54,7 +54,7 @@ Build Time: ` + BuildTime + "\n",
 		},
 	}
 	rc.PersistentFlags().Bool("dry-run", false, "stop before executing")
-	rc.PersistentFlags().MarkHidden("dry-run")
+	_ = rc.PersistentFlags().MarkHidden("dry-run")
 	rc.PersistentFlags().StringP("config", "c", "", "Configuration file to read from.")
 	for _, subcomFn := range subcommandFns {
 		rc.AddCommand(subcomFn(stdin, stdout, stderr))
