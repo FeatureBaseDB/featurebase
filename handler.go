@@ -11,13 +11,14 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/http/pprof"
+	_ "net/http/pprof"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
@@ -29,6 +30,8 @@ type Handler struct {
 	// Local hostname & cluster configuration.
 	Host    string
 	Cluster *Cluster
+
+	Router *mux.Router
 
 	// The execution engine for running queries.
 	Executor interface {
@@ -44,178 +47,56 @@ type Handler struct {
 
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler() *Handler {
-	return &Handler{
+	handler := &Handler{
 		LogOutput: os.Stderr,
 	}
+	handler.Router = NewRouter(handler)
+	return handler
+}
+
+func NewRouter(handler *Handler) *mux.Router {
+	router := mux.NewRouter()
+	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
+	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
+	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
+	router.HandleFunc("/query", handler.handlePostQuery).Methods("POST")
+	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
+	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
+	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
+	router.HandleFunc("/db", handler.handlePostDB).Methods("POST")
+	router.HandleFunc("/db", handler.handleDeleteDB).Methods("DELETE")
+	router.HandleFunc("/db/time_quantum", handler.handlePatchDBTimeQuantum).Methods("PATCH")
+	router.HandleFunc("/db/attr/diff", handler.handlePostDBAttrDiff).Methods("POST")
+	router.HandleFunc("/frame", handler.handlePostFrame).Methods("POST")
+	router.HandleFunc("/frame", handler.handleDeleteFrame).Methods("DELETE")
+	router.HandleFunc("/frame/time_quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
+	router.HandleFunc("/frame/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
+	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
+	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET")
+	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
+	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET")
+	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
+	router.HandleFunc("/frame/restore", handler.handlePostFrameRestore).Methods("POST")
+	router.HandleFunc("/nodes", handler.handleGetNodes).Methods("GET")
+	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
+	router.HandleFunc("/frame/views", handler.handleGetFrameViews).Methods("GET")
+
+	// TODO: Apply MethodNotAllowed statuses to all endpoints.
+	// Ideally this would be automatic, as described in this (wontfix) ticket:
+	// https://github.com/gorilla/mux/issues/6
+	// For now we just do it for the most commonly used handler, /query
+	router.HandleFunc("/query", handler.methodNotAllowedHandler).Methods("GET")
+
+	return router
+}
+
+func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Handle pprof requests separately.
-	if strings.HasPrefix(r.URL.Path, "/debug/pprof") {
-		switch r.URL.Path {
-		case "/debug/pprof/cmdline":
-			pprof.Cmdline(w, r)
-		case "/debug/pprof/profile":
-			pprof.Profile(w, r)
-		case "/debug/pprof/symbol":
-			pprof.Symbol(w, r)
-		case "/debug/pprof/trace":
-			pprof.Trace(w, r)
-		default:
-			pprof.Index(w, r)
-		}
-		return
-	}
-
-	// Route API calls to appropriate handler functions.
-	t := time.Now()
-	switch r.URL.Path {
-	case "/schema":
-		switch r.Method {
-		case "GET":
-			h.handleGetSchema(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/query":
-		switch r.Method {
-		case "POST":
-			h.handlePostQuery(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/import":
-		switch r.Method {
-		case "POST":
-			h.handlePostImport(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/export":
-		switch r.Method {
-		case "GET":
-			h.handleGetExport(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/slices/max":
-		switch r.Method {
-		case "GET":
-			h.handleGetSliceMax(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/db":
-		switch r.Method {
-		case "POST":
-			h.handlePostDB(w, r)
-		case "DELETE":
-			h.handleDeleteDB(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/db/time_quantum":
-		switch r.Method {
-		case "PATCH":
-			h.handlePatchDBTimeQuantum(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/db/attr/diff":
-		switch r.Method {
-		case "POST":
-			h.handlePostDBAttrDiff(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/frame":
-		switch r.Method {
-		case "POST":
-			h.handlePostFrame(w, r)
-		case "DELETE":
-			h.handleDeleteFrame(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/frame/time_quantum":
-		switch r.Method {
-		case "PATCH":
-			h.handlePatchFrameTimeQuantum(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/frame/views":
-		switch r.Method {
-		case "GET":
-			h.handleGetFrameViews(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/frame/attr/diff":
-		switch r.Method {
-		case "POST":
-			h.handlePostFrameAttrDiff(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/fragment/nodes":
-		switch r.Method {
-		case "GET":
-			h.handleGetFragmentNodes(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/fragment/data":
-		switch r.Method {
-		case "GET":
-			h.handleGetFragmentData(w, r)
-		case "POST":
-			h.handlePostFragmentData(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/fragment/blocks":
-		switch r.Method {
-		case "GET":
-			h.handleGetFragmentBlocks(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/fragment/block/data":
-		switch r.Method {
-		case "GET":
-			h.handleGetFragmentBlockData(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/frame/restore":
-		switch r.Method {
-		case "POST":
-			h.handlePostFrameRestore(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/nodes":
-		switch r.Method {
-		case "GET":
-			h.handleGetNodes(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/version":
-		h.handleVersion(w, r)
-
-	case "/debug/vars":
-		h.handleExpvar(w, r)
-	default:
-		http.NotFound(w, r)
-	}
-
-	dif := time.Since(t).Seconds()
-	if dif > 90 {
-		h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), dif)
-	}
+	h.Router.ServeHTTP(w, r)
 }
 
 // handleGetSchema handles GET /schema requests.
@@ -291,26 +172,24 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) error {
+func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
 	var ms map[string]uint64
 	if inverse, _ := strconv.ParseBool(r.URL.Query().Get("inverse")); inverse {
 		ms = h.Index.MaxInverseSlices()
 	} else {
 		ms = h.Index.MaxSlices()
 	}
-
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
 		pb := &internal.MaxSlicesResponse{
 			MaxSlices: ms,
 		}
 		if buf, err := proto.Marshal(pb); err != nil {
-			return err
+			h.logger().Printf("protobuf marshal error: %s", err)
 		} else if _, err := w.Write(buf); err != nil {
-			return err
+			h.logger().Printf("stream write error: %s", err)
 		}
-		return nil
 	}
-	return json.NewEncoder(w).Encode(sliceMaxResponse{
+	json.NewEncoder(w).Encode(sliceMaxResponse{
 		MaxSlices: ms,
 	})
 }
@@ -1275,7 +1154,7 @@ func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetVersion handles /version requests.
-func (h *Handler) handleVersion(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{

@@ -1,5 +1,5 @@
-hash: 7de62dbaf3cc1dc4959f4f6d8213102cb182b4dd7a87b3ac29260ad6bc1b0cef
-updated: 2017-03-03T12:25:48.088390296-06:00
+hash: 743e8f978eb4ad8f80a2ab71b05caebbf50b6769b71aa457bc4f144fef8c6595
+updated: 2017-03-15T15:39:07.186226037-05:00
 imports:
 - name: github.com/boltdb/bolt
   version: 4b1ebc1869ad66568b313d0dc410e2be72670dda
@@ -27,6 +27,10 @@ imports:
   version: 888eb0692c857ec880338addf316bd662d5e630e
   subpackages:
   - proto
+- name: github.com/gorilla/context
+  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
+- name: github.com/gorilla/mux
+  version: 392c28fe23e1c45ddba891b0320b3b5df220beea
 - name: github.com/hashicorp/hcl
   version: 630949a3c5fa3c613328e1b8256052cbc2327c9b
   subpackages:
@@ -48,6 +52,10 @@ imports:
   version: c37440a7cf42ac63b919c752ca73a85067e05992
 - name: github.com/pelletier/go-toml
   version: 13d49d4606eb801b8f01ae542b4afc4c6ee3d84a
+- name: github.com/rakyll/statik
+  version: a2b9c3533409cccb4bb188346bcfc789629a424d
+  subpackages:
+  - fs
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/spf13/afero
