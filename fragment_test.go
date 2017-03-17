@@ -288,7 +288,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	file.Close()
 
 	f := &Fragment{
-		Fragment:        pilosa.NewFragment(file.Name(), "d", "f", slice, cacheLimit),
+		Fragment:        pilosa.NewFragment(file.Name(), "d", "f.n", slice, cacheLimit),
 		BitmapAttrStore: MustOpenAttrStore(),
 	}
 	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
@@ -305,13 +305,24 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	f.MustSetBits(104, 8, 9, 10, 11, 12, 13, 14)
 	f.MustSetBits(105, 10, 11)
 
+	f.RecalculateCache()
+
+	p := []pilosa.Pair{
+		{Key: 104, Count: 7},
+		{Key: 103, Count: 6},
+		{Key: 102, Count: 5}}
+	// {Key: 101, Count: 4},
+	// {Key: 100, Count: 3}}
+
 	// Retrieve top bitmaps.
 	if pairs, err := f.Top(pilosa.TopOptions{N: 5}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != cacheLimit {
 		t.Fatalf("TopN count cannot exceed cache size: %d", len(pairs))
 	} else if pairs[0] != (pilosa.Pair{Key: 104, Count: 7}) {
-		t.Fatalf("unexpected pair(0): %v", pairs[0])
+		t.Fatalf("unexpected pair(0): %v", pairs)
+	} else if !reflect.DeepEqual(pairs, p) {
+		t.Fatalf("Invalid TopN result set: %s", spew.Sdump(pairs))
 	}
 }
 
