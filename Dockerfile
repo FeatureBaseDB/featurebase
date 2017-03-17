@@ -4,7 +4,7 @@ MAINTAINER Pilosa Corp. <dev@pilosa.com>
 
 ARG ldflags=''
 
-EXPOSE 15000
+EXPOSE 10101
 VOLUME /data
 
 RUN echo 'data-dir = "/data"' > /config

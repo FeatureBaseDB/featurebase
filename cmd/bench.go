@@ -28,7 +28,7 @@ Executes a benchmark for a given operation against the database.
 		},
 	}
 	flags := benchCmd.Flags()
-	flags.StringVarP(&Bencher.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
+	flags.StringVarP(&Bencher.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Bencher.Database, "database", "d", "", "Pilosa database to benchmark.")
 	flags.StringVarP(&Bencher.Frame, "frame", "f", "", "Frame to benchmark.")
 	flags.StringVarP(&Bencher.Op, "operation", "o", "set-bit", "Operation to perform: choose from [set-bit]")

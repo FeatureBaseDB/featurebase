@@ -36,7 +36,7 @@ The file does not contain any headers.
 	}
 	flags := exportCmd.Flags()
 
-	flags.StringVarP(&Exporter.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
+	flags.StringVarP(&Exporter.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Exporter.Database, "database", "d", "", "Pilosa database to export into.")
 	flags.StringVarP(&Exporter.Frame, "frame", "f", "", "Frame to export into.")
 	flags.StringVarP(&Exporter.Path, "output-file", "o", "", "File to write export to - default stdout")

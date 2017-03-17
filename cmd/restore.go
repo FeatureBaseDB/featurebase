@@ -29,7 +29,7 @@ Restores a frame to the cluster from a backup file.
 		},
 	}
 	flags := restoreCmd.Flags()
-	flags.StringVarP(&Restorer.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
+	flags.StringVarP(&Restorer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Restorer.Database, "database", "d", "", "Pilosa database to restore into.")
 	flags.StringVarP(&Restorer.Frame, "frame", "f", "", "Frame to restore into.")
 	flags.StringVarP(&Restorer.Path, "input-file", "i", "", "File to restore from.")
