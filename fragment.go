@@ -612,6 +612,7 @@ type TopOptions struct {
 
 	// Specific bitmaps to filter against.
 	BitmapIDs []uint64
+	MinThreshold uint64
 
 	// Filter field name & values.
 	FilterField  string
