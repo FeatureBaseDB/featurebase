@@ -60,7 +60,7 @@ func NewCommand() *Command {
 }
 
 // Run executes the pilosa server.
-func (m *Command) Run(args ...string) error {
+func (m *Command) Run(args ...string) (err error) {
 	defer close(m.Started)
 	prefix := "~" + string(filepath.Separator)
 	if strings.HasPrefix(m.Config.DataDir, prefix) {
@@ -80,18 +80,34 @@ func (m *Command) Run(args ...string) error {
 	m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
 
 	// Build cluster from config file.
-	m.Server.Host = m.Config.Host
+	m.Server.Host, err = normalizeHost(m.Config.Host)
+	if err != nil {
+		return err
+	}
 	m.Server.Cluster = m.Config.PilosaCluster()
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
 
 	// Initialize server.
-	if err := m.Server.Open(); err != nil {
-		return err
+	if err = m.Server.Open(); err != nil {
+		return fmt.Errorf("server.Open: %v", err)
 	}
 	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Server.Host)
 	return nil
+}
+
+func normalizeHost(host string) (string, error) {
+	if !strings.Contains(host, ":") {
+		host = host + ":"
+	} else if strings.Contains(host, "://") {
+		if strings.HasPrefix(host, "http://") {
+			host = host[7:]
+		} else {
+			return "", fmt.Errorf("invalid scheme or host: '%s'. use the format [http://]<host>:<port>", host)
+		}
+	}
+	return host, nil
 }
 
 // Close shuts down the server.

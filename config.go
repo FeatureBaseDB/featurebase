@@ -4,7 +4,8 @@ import "time"
 
 const (
 	// DefaultHost is the default hostname and port to use.
-	DefaultHost = "localhost:15000"
+	DefaultHost = "localhost"
+	DefaultPort = "10101"
 )
 
 // Config represents the configuration for the command.
@@ -30,7 +31,7 @@ type Config struct {
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Host: DefaultHost,
+		Host: DefaultHost + ":" + DefaultPort,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
