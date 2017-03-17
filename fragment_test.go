@@ -309,16 +309,13 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 
 	p := []pilosa.Pair{
 		{Key: 104, Count: 7},
-		{Key: 103, Count: 6},
-		{Key: 102, Count: 5}}
-	// {Key: 101, Count: 4},
-	// {Key: 100, Count: 3}}
+		{Key: 103, Count: 6}}
 
 	// Retrieve top bitmaps.
 	if pairs, err := f.Top(pilosa.TopOptions{N: 5}); err != nil {
 		t.Fatal(err)
-	} else if len(pairs) != cacheLimit {
-		t.Fatalf("TopN count cannot exceed cache size: %d", len(pairs))
+	} else if len(pairs) > cacheLimit {
+		t.Fatalf("TopN count cannot exceed cache size: %d", cacheLimit)
 	} else if pairs[0] != (pilosa.Pair{Key: 104, Count: 7}) {
 		t.Fatalf("unexpected pair(0): %v", pairs)
 	} else if !reflect.DeepEqual(pairs, p) {
