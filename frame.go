@@ -264,7 +264,7 @@ func (f *Frame) openViews() error {
 
 // loadMeta reads meta data for the frame, if any.
 func (f *Frame) loadMeta() error {
-	var pb internal.Frame
+	var pb internal.FrameMeta
 
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
@@ -413,17 +413,12 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 
 	// TODO: this needs to be refactored for views
 	/*
-		// Send a MaxSlice message
-		f.messenger.SendMessage(
-			&internal.CreateSliceMessage{
-				DB:    f.db,
-				Slice: slice,
-			})
-
-		frag.BitmapAttrStore = f.bitmapAttrStore
-
-		// Save to lookup.
-		f.fragments[slice] = frag
+	   // Send a MaxSlice message
+	   f.messenger.SendMessage(
+	       &internal.CreateSliceMessage{
+	           DB:    f.db,
+	           Slice: slice,
+	       }, "gossip")
 	*/
 
 	return view, nil
@@ -591,6 +586,26 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 	return nil
 }
 
+// encodeFrames converts a into its internal representation.
+func encodeFrames(a []*Frame) []*internal.Frame {
+	other := make([]*internal.Frame, len(a))
+	for i := range a {
+		other[i] = encodeFrame(a[i])
+	}
+	return other
+}
+
+// encodeFrame converts f into its internal representation.
+func encodeFrame(f *Frame) *internal.Frame {
+	return &internal.Frame{
+		Name: f.name,
+		Meta: &internal.FrameMeta{
+			TimeQuantum: string(f.timeQuantum),
+			RowLabel:    f.rowLabel,
+		},
+	}
+}
+
 type frameSlice []*Frame
 
 func (p frameSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
@@ -611,10 +626,11 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
-	RowLabel       string `json:"rowLabel,omitempty"`
-	InverseEnabled bool   `json:"inverseEnabled,omitempty"`
-	CacheType      string `json:"cacheType,omitempty"`
-	CacheSize      int    `json:"cacheSize,omitempty"`
+	RowLabel       string      `json:"rowLabel,omitempty"`
+	InverseEnabled bool        `json:"inverseEnabled,omitempty"`
+	CacheType      string      `json:"cacheType,omitempty"`
+	CacheSize      int         `json:"cacheSize,omitempty"`
+	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
 // importBitSet represents slices of row and column ids.

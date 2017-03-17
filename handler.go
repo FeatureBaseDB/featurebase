@@ -370,11 +370,13 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the delete message to all nodes.
-	// NOTE: this calls a second DeleteDB on the local node
-	h.Messenger.SendMessage(
+	err := h.Messenger.SendMessage(
 		&internal.DeleteDBMessage{
 			DB: req.DB,
-		})
+		}, "broadcast")
+	if err != nil {
+		h.logger().Printf("problem sending DeleteDB message: %s", err)
+	}
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postDBResponse{}); err != nil {
@@ -511,6 +513,20 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send the create message to all nodes.
+	err = h.Messenger.SendMessage(
+		&internal.CreateFrameMessage{
+			DB:    req.DB,
+			Frame: req.Frame,
+			Meta: &internal.FrameMeta{
+				RowLabel:    req.Options.RowLabel,
+				TimeQuantum: string(req.Options.TimeQuantum),
+			},
+		}, "broadcast")
+	if err != nil {
+		h.logger().Printf("problem sending CreateFrame message: %s", err)
+	}
+
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
@@ -567,6 +583,16 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	if err := db.DeleteFrame(frameName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Send the delete message to all nodes.
+	err := h.Messenger.SendMessage(
+		&internal.DeleteFrameMessage{
+			DB:    req.DB,
+			Frame: req.Frame,
+		}, "broadcast")
+	if err != nil {
+		h.logger().Printf("problem sending DeleteFrame message: %s", err)
 	}
 
 	// Encode response.

@@ -1,38 +1,44 @@
 package pilosa
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/hashicorp/memberlist"
+	"github.com/pilosa/pilosa/internal"
 )
 
 // GossipNodeSet represents a gossip implementation of NodeSet using memberlist
 // GossipNodeSet also represents an implementation of memberlist.Delegate
 type GossipNodeSet struct {
-	Memberlist *memberlist.Memberlist
-	Broadcasts *memberlist.TransmitLimitedQueue
+	memberlist *memberlist.Memberlist
+	broadcasts *memberlist.TransmitLimitedQueue
 
 	config *GossipConfig
 
-	messageHandler func(m proto.Message) error
+	messageHandler     func(m proto.Message) error
+	remoteStateHandler func(m proto.Message) error
+	localStateSource   func() (proto.Message, error)
 
 	// The writer for any logging.
 	LogOutput io.Writer
 }
 
 func (g *GossipNodeSet) Nodes() []*Node {
-	a := make([]*Node, 0, g.Memberlist.NumMembers())
-	for _, n := range g.Memberlist.Members() {
+	a := make([]*Node, 0, g.memberlist.NumMembers())
+	for _, n := range g.memberlist.Members() {
 		a = append(a, &Node{Host: n.Name})
 	}
 	return a
 }
 
 func (g *GossipNodeSet) Join(nodes []*Node) (int, error) {
-	return g.Memberlist.Join(Nodes(nodes).Hosts())
+	return g.memberlist.Join(Nodes(nodes).Hosts())
 }
 
 func (g *GossipNodeSet) Open() error {
@@ -40,14 +46,14 @@ func (g *GossipNodeSet) Open() error {
 	if err != nil {
 		return err
 	}
-	g.Memberlist = ml
+	g.memberlist = ml
 
 	// attach to gossip seed node
 	g.Join([]*Node{&Node{Host: g.config.gossipSeed}}) //TODO: support a list of seeds
 
-	g.Broadcasts = &memberlist.TransmitLimitedQueue{
+	g.broadcasts = &memberlist.TransmitLimitedQueue{
 		NumNodes: func() int {
-			return g.Memberlist.NumMembers()
+			return g.memberlist.NumMembers()
 		},
 		RetransmitMult: 3,
 	}
@@ -58,18 +64,49 @@ func (g *GossipNodeSet) SetMessageHandler(f func(proto.Message) error) {
 	g.messageHandler = f
 }
 
+func (g *GossipNodeSet) SetRemoteStateHandler(f func(proto.Message) error) {
+	g.remoteStateHandler = f
+}
+
+func (g *GossipNodeSet) SetLocalStateSource(f func() (proto.Message, error)) {
+	g.localStateSource = f
+}
+
 // implementation of the messenger.Messenger interface
-func (g *GossipNodeSet) SendMessage(pb proto.Message) error {
+func (g *GossipNodeSet) SendMessage(pb proto.Message, method string) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
 		return err
 	}
 
-	b := &broadcast{
-		msg:    msg,
-		notify: nil,
+	// Broadcast asyncronously sends the message directly to each node.
+	// An error from any node raises an error on the entire operation.
+	// This is a blocking operation.
+	//
+	// Gossip uses the gossip protocol to eventually deliver the message
+	// to every node.
+	switch method {
+	case "broadcast":
+		var eg errgroup.Group
+		for _, n := range g.memberlist.Members() {
+			// Don't send the message to the local node.
+			if n == g.memberlist.LocalNode() {
+				continue
+			}
+			node := n
+			eg.Go(func() error {
+				return g.memberlist.SendToTCP(node, msg)
+			})
+		}
+		return eg.Wait()
+	case "gossip":
+		b := &broadcast{
+			msg:    msg,
+			notify: nil,
+		}
+		g.broadcasts.QueueBroadcast(b)
 	}
-	g.Broadcasts.QueueBroadcast(b)
+
 	return nil
 }
 
@@ -87,6 +124,8 @@ func (g *GossipNodeSet) NodeMeta(limit int) []byte {
 }
 
 func (g *GossipNodeSet) NotifyMsg(b []byte) {
+	loc := g.memberlist.LocalNode()
+	fmt.Println("Received Msg:", loc)
 	m, err := UnmarshalMessage(b)
 	if err != nil {
 		g.logger().Printf("unmarshal message error: %s", err)
@@ -99,14 +138,37 @@ func (g *GossipNodeSet) NotifyMsg(b []byte) {
 }
 
 func (g *GossipNodeSet) GetBroadcasts(overhead, limit int) [][]byte {
-	return g.Broadcasts.GetBroadcasts(overhead, limit)
+	return g.broadcasts.GetBroadcasts(overhead, limit)
 }
 
 func (g *GossipNodeSet) LocalState(join bool) []byte {
-	return []byte{}
+
+	pb, err := g.localStateSource()
+	if err != nil {
+		g.logger().Printf("error getting local state, err=%s", err)
+		return []byte{}
+	}
+
+	// Marshal nodestate data to bytes.
+	buf, err := proto.Marshal(pb)
+	if err != nil {
+		g.logger().Printf("error marshaling nodestate data, err=%s", err)
+		return []byte{}
+	}
+	return buf
 }
 
 func (g *GossipNodeSet) MergeRemoteState(buf []byte, join bool) {
+	// Unmarshal nodestate data.
+	var pb internal.NodeState
+	if err := proto.Unmarshal(buf, &pb); err != nil {
+		g.logger().Printf("error unmarshaling nodestate data, err=%s", err)
+		return
+	}
+	err := g.remoteStateHandler(&pb)
+	if err != nil {
+		g.logger().Printf("merge state error: %s", err)
+	}
 	return
 }
 
@@ -158,7 +220,6 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	g.config.memberlistConfig.BindPort = gossipPort
 	g.config.memberlistConfig.AdvertiseAddr = gossipHost
 	g.config.memberlistConfig.AdvertisePort = gossipPort
-	g.config.memberlistConfig.GossipNodes = 1
 	g.config.memberlistConfig.Delegate = g
 
 	return g
