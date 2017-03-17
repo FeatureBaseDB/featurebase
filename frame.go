@@ -64,7 +64,7 @@ func NewFrame(path, db, name string) (*Frame, error) {
 		name: name,
 
 		fragments:       make(map[uint64]*Fragment),
-		bitmapAttrStore: NewAttrStore(filepath.Join(path, "data")),
+		bitmapAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
 		stats: NopStatsClient,
 
@@ -238,7 +238,7 @@ func (f *Frame) loadMeta() error {
 	var pb internal.Frame
 
 	// Read data from meta file.
-	buf, err := ioutil.ReadFile(filepath.Join(f.path, "meta"))
+	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
 	if os.IsNotExist(err) {
 		f.timeQuantum = ""
 		f.rowLabel = DefaultRowLabel
@@ -270,7 +270,7 @@ func (f *Frame) saveMeta() error {
 	}
 
 	// Write to meta file.
-	if err := ioutil.WriteFile(filepath.Join(f.path, "meta"), buf, 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(f.path, ".meta"), buf, 0666); err != nil {
 		return err
 	}
 
