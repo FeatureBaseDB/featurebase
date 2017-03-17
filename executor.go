@@ -83,6 +83,11 @@ func (e *Executor) Execute(ctx context.Context, db string, q *pql.Query, slices 
 
 // executeCall executes a call.
 func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
+
+	if err := e.validateCallArgs(c); err != nil {
+		return nil, err
+	}
+
 	// Special handling for mutation and top-n calls.
 	switch c.Name {
 	case "ClearBit":
@@ -102,6 +107,25 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 	default:
 		return e.executeBitmapCall(ctx, db, c, slices, opt)
 	}
+}
+
+// validateCallArgs ensures that the value types in call.Args are expected.
+func (e *Executor) validateCallArgs(c *pql.Call) error {
+	if _, ok := c.Args["ids"]; ok {
+		switch v := c.Args["ids"].(type) {
+		case []uint64:
+			// noop
+		case []interface{}:
+			b := make([]uint64, len(v), len(v))
+			for i := range v {
+				b[i] = v[i].(uint64)
+			}
+			c.Args["ids"] = b
+		default:
+			return fmt.Errorf("invalid call.Args[ids]: %s", v)
+		}
+	}
+	return nil
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
@@ -188,10 +212,6 @@ func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slic
 	}
 	// Only the original caller should refetch the full counts.
 	other := c.Clone()
-
-	// Double the size of n for other calls in order to...
-	// TODO: travis review
-	other.Args["n"] = len(bitmapIDs) * 2
 
 	ids := Pairs(pairs).Keys()
 	sort.Sort(uint64Slice(ids))

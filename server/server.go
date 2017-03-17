@@ -14,20 +14,7 @@ import (
 	"github.com/pilosa/pilosa"
 )
 
-// Version and BuildTime hold the version/build time information passed in at compile time.
-var (
-	Version   string
-	BuildTime string
-)
-
 func init() {
-	if Version == "" {
-		Version = "v0.0.0"
-	}
-	if BuildTime == "" {
-		BuildTime = "not recorded"
-	}
-
 	rand.Seed(time.Now().UTC().UnixNano())
 }
 
