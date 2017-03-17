@@ -88,8 +88,10 @@ func (m *Command) Run(args ...string) (err error) {
 	m.Server.Handler.Messenger = m.Server.Messenger
 	m.Server.Index.Messenger = m.Server.Messenger
 
-	// Set message handler.
+	// Set message and state handlers.
 	m.Server.Cluster.NodeSet.SetMessageHandler(m.Server.Index.HandleMessage)
+	m.Server.Cluster.NodeSet.SetRemoteStateHandler(m.Server.HandleRemoteState)
+	m.Server.Cluster.NodeSet.SetLocalStateSource(m.Server.LocalState)
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
