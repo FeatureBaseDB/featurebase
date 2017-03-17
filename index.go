@@ -194,7 +194,6 @@ func (i *Index) CreateDB(name string, opt DBOptions) (*DB, error) {
 
 	// Ensure db doesn't already exist.
 	if i.dbs[name] != nil {
-		fmt.Println("ErrDatabaseExists: 2")
 		return nil, ErrDatabaseExists
 	}
 	return i.createDB(name, opt)
@@ -236,17 +235,11 @@ func (i *Index) createDB(name string, opt DBOptions) (*DB, error) {
 
 	// Update options.
 	db.SetColumnLabel(opt.ColumnLabel)
+	db.SetTimeQuantum(opt.TimeQuantum)
 
 	i.dbs[db.Name()] = db
 
 	i.Stats.Count("dbN", 1)
-
-	// Send a CreateDB message
-	i.Messenger.SendMessage(
-		&internal.CreateDBMessage{
-			DB:          name,
-			ColumnLabel: opt.ColumnLabel,
-		})
 
 	return db, nil
 }
@@ -364,15 +357,26 @@ func (i *Index) HandleMessage(pb proto.Message) error {
 			return fmt.Errorf("Local DB not found: %s", obj.DB)
 		}
 		d.SetRemoteMaxSlice(obj.Slice)
-	case *internal.DeleteDBMessage:
-		err := i.DeleteDB(obj.DB)
+	case *internal.CreateDBMessage:
+		opt := DBOptions{ColumnLabel: obj.Meta.ColumnLabel}
+		_, err := i.CreateDB(obj.DB, opt)
 		if err != nil {
 			return err
 		}
-	case *internal.CreateDBMessage:
-		opt := DBOptions{ColumnLabel: obj.ColumnLabel}
-		_, err := i.CreateDB(obj.DB, opt)
+	case *internal.DeleteDBMessage:
+		if err := i.DeleteDB(obj.DB); err != nil {
+			return err
+		}
+	case *internal.CreateFrameMessage:
+		db := i.DB(obj.DB)
+		opt := FrameOptions{RowLabel: obj.Meta.RowLabel}
+		_, err := db.CreateFrame(obj.Frame, opt)
 		if err != nil {
+			return err
+		}
+	case *internal.DeleteFrameMessage:
+		db := i.DB(obj.DB)
+		if err := db.DeleteFrame(obj.Frame); err != nil {
 			return err
 		}
 	}

@@ -2,12 +2,12 @@ syntax = "proto3";
 
 package internal;
 
-message DB {
+message DBMeta {
 	string TimeQuantum = 1;
 	string ColumnLabel = 2;
 }
 
-message Frame {
+message FrameMeta {
 	string TimeQuantum = 1;
 	string RowLabel = 2;
 }
@@ -113,5 +113,34 @@ message DeleteDBMessage {
 
 message CreateDBMessage {
     string DB = 1;
-    string ColumnLabel = 2;
+    DBMeta Meta = 2;
+}
+
+message CreateFrameMessage {
+    string DB = 1;
+    string Frame = 2;
+    FrameMeta Meta = 3;
+}
+
+message DeleteFrameMessage {
+    string DB = 1;
+    string Frame = 2;
+}
+
+message Frame {
+	string Name = 1;
+    FrameMeta Meta = 2;
+}
+
+message DB {
+	string Name = 1;
+    DBMeta Meta = 2;
+    uint64 MaxSlice = 3;
+	repeated Frame Frames = 4;
+}
+
+message NodeState {
+    string Host = 1;
+    string State = 2;
+	repeated DB DBs = 3;
 }
