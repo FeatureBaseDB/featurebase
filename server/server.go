@@ -34,9 +34,7 @@ type Command struct {
 	CPUTime    time.Duration
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 
 	// running will be closed once Command.Run is finished.
 	Started chan struct{}
@@ -45,14 +43,12 @@ type Command struct {
 }
 
 // NewMain returns a new instance of Main.
-func NewCommand() *Command {
+func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 	return &Command{
 		Server: pilosa.NewServer(),
 		Config: pilosa.NewConfig(),
 
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 
 		Started: make(chan struct{}),
 		Done:    make(chan struct{}),

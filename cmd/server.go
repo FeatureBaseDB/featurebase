@@ -17,8 +17,7 @@ import (
 var Server *server.Command
 
 func NewServeCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	Server = server.NewCommand()
-	Server.Stdin, Server.Stdout, Server.Stderr = stdin, stdout, stderr
+	Server = server.NewCommand(stdin, stdout, stderr)
 	serveCmd := &cobra.Command{
 		Use:   "server",
 		Short: "Run Pilosa.",
