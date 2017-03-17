@@ -40,13 +40,13 @@ and should look like:
 
 ```
 data-dir = "/tmp/pil0"
-host = "127.0.0.1:15000"
+host = "127.0.0.1:10101"
 
 [cluster]
 replicas = 2
 
 [[cluster.node]]
-host = "127.0.0.1:15000"
+host = "127.0.0.1:10101"
 
 [[cluster.node]]
 host = "127.0.0.1:15001"
@@ -79,7 +79,7 @@ docker build -t pilosa:latest .
 
 You can run a temporary container using:
 ```
-docker run -it --rm --name pilosa -p 15000:15000 pilosa:latest
+docker run -it --rm --name pilosa -p 10101:10101 pilosa:latest
 ```
 
 When you click `Ctrl+C` to stop the container, the container and the data in the container will be erased. You can leave out `--rm` flag to keep the data in the container. See [Docker documentation](https://docs.docker.com) for other options.
@@ -88,16 +88,16 @@ When you click `Ctrl+C` to stop the container, the container and the data in the
 
 You can interact with Pilosa via HTTP requests to the host:port on which you have Pilosa running.
 The following examples illustrate how to do this using `curl` with a Pilosa cluster running on
-127.0.0.1 port 15000.
+127.0.0.1 port 10101.
 
 Return the version of Pilosa:
 ```sh
-$ curl "http://127.0.0.1:15000/version"
+$ curl "http://127.0.0.1:10101/version"
 ```
 
 Return a list of all databases and frames in the index:
 ```sh
-$ curl "http://127.0.0.1:15000/schema"
+$ curl "http://127.0.0.1:10101/schema"
 ```
 
 ### Database and Frame Schema
@@ -107,28 +107,28 @@ Before running a query, the corresponding database and frame must be created. No
 You can create the database `sample-db` using:
 
 ```sh
-$ curl -XPOST "http://127.0.0.1:15000/db" \
+$ curl -XPOST "http://127.0.0.1:10101/db" \
     -d '{"db": "sample-db"}'
 ```
 
 Optionally, you can specify the column label on database creation:
 
 ```sh
-$ curl -XPOST "http://127.0.0.1:15000/db" \
+$ curl -XPOST "http://127.0.0.1:10101/db" \
     -d '{"db": "sample-db", "columnLabel": "user"}'
 ```
 
 The frame `collaboration` may be created using the following call:
 
 ```sh
-$ curl -XPOST "http://127.0.0.1:15000/frame" \
+$ curl -XPOST "http://127.0.0.1:10101/frame" \
     -d '{"db": "sample-db", "frame": "collaboration"}'
 ```
 
 It is possible to specify the frame row label on frame creation:
 
 ```sh
-$ curl -XPOST "http://127.0.0.1:15000/frame" \
+$ curl -XPOST "http://127.0.0.1:10101/frame" \
     -d '{"db": "sample-db", "frame": "collaboration"}, "options": {"rowLabel": "project"}}'
 ```
 
@@ -142,13 +142,13 @@ In this section, we assume both the database `sample-db` with column label `user
 A query sent to database `sample-db` will have the following format:
 
 ```sh
-$ curl -X POST "http://127.0.0.1:15000/query?db=sample-db" -d 'Query()'
+$ curl -X POST "http://127.0.0.1:10101/query?db=sample-db" -d 'Query()'
 ```
 
 The `Query()` object referenced above should be made up of one or more of the query types listed below.
 So for example, a SetBit() query would look like this:
 ```sh
-$ curl -X POST "http://127.0.0.1:15000/query?db=sample-db" -d 'SetBit(project=10, frame="collaboration", user=1)'
+$ curl -X POST "http://127.0.0.1:10101/query?db=sample-db" -d 'SetBit(project=10, frame="collaboration", user=1)'
 ```
 
 Query results have the format `{"results":[]}`, where `results` is a list of results for each `Query()`. This
@@ -156,7 +156,7 @@ means that you can provide multiple `Query()` objects with each HTTP request and
 the results of all of the queries.
 
 ```sh
-$ curl -X POST "http://127.0.0.1:15000/query?db=sample-db" -d 'Query() Query() Query()'
+$ curl -X POST "http://127.0.0.1:10101/query?db=sample-db" -d 'Query() Query() Query()'
 ```
 
 ---

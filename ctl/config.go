@@ -25,13 +25,13 @@ func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *ConfigCommand 
 func (cmd *ConfigCommand) Run(ctx context.Context) error {
 	fmt.Fprintln(cmd.Stdout, strings.TrimSpace(`
 data-dir = "~/.pilosa"
-host = "localhost:15000"
+host = "localhost:10101"
 
 [cluster]
 replicas = 1
 
 [[cluster.node]]
-host = "localhost:15000"
+host = "localhost:10101"
 
 [plugins]
 path = ""

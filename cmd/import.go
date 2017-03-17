@@ -35,7 +35,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 		},
 	}
 	flags := importCmd.Flags()
-	flags.StringVarP(&Importer.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
+	flags.StringVarP(&Importer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Importer.Database, "database", "d", "", "Pilosa database to import into.")
 	flags.StringVarP(&Importer.Frame, "frame", "f", "", "Frame to import into.")
 	flags.IntVarP(&Importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
