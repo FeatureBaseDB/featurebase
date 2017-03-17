@@ -318,7 +318,7 @@ func NewMain() *Main {
 		panic(err)
 	}
 
-	m := &Main{Command: server.NewCommand()}
+	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
 	m.Config.DataDir = path
 	m.Config.Host = "localhost:0"
 	m.Command.Stdin = &m.Stdin
@@ -356,7 +356,7 @@ func (m *Main) Reopen() error {
 
 	// Create new main with the same config.
 	config := m.Config
-	m.Command = server.NewCommand()
+	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
 	m.Config = config
 
 	// Run new program.

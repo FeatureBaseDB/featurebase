@@ -5,22 +5,19 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/pilosa/pilosa"
 )
 
 // ConfigCommand represents a command for printing a default config.
 type ConfigCommand struct {
-	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 }
 
 // NewConfigCommand returns a new instance of ConfigCommand.
 func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *ConfigCommand {
 	return &ConfigCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 

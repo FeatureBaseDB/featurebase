@@ -22,17 +22,13 @@ type BackupCommand struct {
 	Path string
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 }
 
 // NewBackupCommand returns a new instance of BackupCommand.
 func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand {
 	return &BackupCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 
