@@ -17,7 +17,7 @@ var NopMessenger Messenger
 // nopMessenger represents a Messenger that doesn't do anything.
 type nopMessenger struct{}
 
-func (c *nopMessenger) SendMessage(pb proto.Message) error {
+func (c *nopMessenger) SendMessage(pb proto.Message, method string) error {
 	fmt.Println("NOPMessenger: Send")
 	return nil
 }
@@ -27,14 +27,16 @@ func (c *nopMessenger) ReceiveMessage(pb proto.Message) error {
 }
 
 type Messenger interface {
-	SendMessage(pb proto.Message) error
+	SendMessage(pb proto.Message, method string) error
 	ReceiveMessage(pb proto.Message) error
 }
 
 const (
 	MessageTypeCreateSlice = 1
-	MessageTypeDeleteDB    = 2
-	MessageTypeCreateDB    = 3
+	MessageTypeCreateDB    = 2
+	MessageTypeDeleteDB    = 3
+	MessageTypeCreateFrame = 4
+	MessageTypeDeleteFrame = 5
 )
 
 func MarshalMessage(m proto.Message) ([]byte, error) {
@@ -42,10 +44,14 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 	switch obj := m.(type) {
 	case *internal.CreateSliceMessage:
 		typ = MessageTypeCreateSlice
-	case *internal.DeleteDBMessage:
-		typ = MessageTypeDeleteDB
 	case *internal.CreateDBMessage:
 		typ = MessageTypeCreateDB
+	case *internal.DeleteDBMessage:
+		typ = MessageTypeDeleteDB
+	case *internal.CreateFrameMessage:
+		typ = MessageTypeCreateFrame
+	case *internal.DeleteFrameMessage:
+		typ = MessageTypeDeleteFrame
 	default:
 		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
 	}
@@ -63,10 +69,14 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 	switch typ {
 	case MessageTypeCreateSlice:
 		m = &internal.CreateSliceMessage{}
-	case MessageTypeDeleteDB:
-		m = &internal.DeleteDBMessage{}
 	case MessageTypeCreateDB:
 		m = &internal.CreateDBMessage{}
+	case MessageTypeDeleteDB:
+		m = &internal.DeleteDBMessage{}
+	case MessageTypeCreateFrame:
+		m = &internal.CreateFrameMessage{}
+	case MessageTypeDeleteFrame:
+		m = &internal.DeleteFrameMessage{}
 	default:
 		return nil, fmt.Errorf("invalid message type: %d", typ)
 	}

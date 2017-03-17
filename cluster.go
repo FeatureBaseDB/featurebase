@@ -211,6 +211,12 @@ type NodeSet interface {
 
 	// SetMessageHandler provides the NodeSet with a function to call on ReceiveMessage
 	SetMessageHandler(f func(proto.Message) error)
+
+	// SetRemoteStateHandler provides the function to call on MergeRemoteState
+	SetRemoteStateHandler(f func(proto.Message) error)
+
+	// SetLocalStateSource provides the function to get the current node's local state.
+	SetLocalStateSource(f func() (proto.Message, error))
 }
 
 // Hasher represents an interface to hash integers into buckets.
@@ -240,6 +246,8 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 type HTTPNodeSet struct {
 	nodes          []*Node
 	messageHandler func(m proto.Message) error
+	// remoteStateHandler func(m proto.Message) error
+	// localStateSource   func() (proto.Message, error)
 }
 
 // NewHTTPNodeSet returns a new instance of HTTPNodeSet.
@@ -261,7 +269,7 @@ func (h *HTTPNodeSet) Open() error {
 }
 
 // SendMessage asyncronously broadcasts a protobuf message to all nodes.
-func (h *HTTPNodeSet) SendMessage(pb proto.Message) error {
+func (h *HTTPNodeSet) SendMessage(pb proto.Message, method string) error {
 
 	// Marshal the pb to []byte
 	buf, err := MarshalMessage(pb)
@@ -279,13 +287,12 @@ func (h *HTTPNodeSet) SendMessage(pb proto.Message) error {
 	return g.Wait()
 }
 
-// ReceiveMessage is called when a node recieves a message.
+// ReceiveMessage is called when a node receives a message.
 func (h *HTTPNodeSet) ReceiveMessage(pb proto.Message) error {
 	return h.messageHandler(pb)
 }
 
 func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {
-	fmt.Println("sendNodeMessage:", node.Host)
 	var client *http.Client
 	client = http.DefaultClient
 
@@ -303,9 +310,7 @@ func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {
 	req.Header.Set("Content-Type", "application/x-protobuf")
 
 	// Send request to remote node.
-	fmt.Println("Send")
 	resp, err := client.Do(req)
-	fmt.Println("Got back")
 	if err != nil {
 		return err
 	}
@@ -317,7 +322,6 @@ func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("code:", resp.StatusCode)
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
@@ -330,6 +334,18 @@ func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {
 // SetMessageHandler provides the Messenger with a function to handle incoming messages.
 func (h *HTTPNodeSet) SetMessageHandler(f func(proto.Message) error) {
 	h.messageHandler = f
+}
+
+// SetRemoteStateHandler provides the Messenger with a function to merge remote state.
+func (h *HTTPNodeSet) SetRemoteStateHandler(f func(proto.Message) error) {
+	// not implemented
+	// h.remoteStateHandler = f
+}
+
+// SetLocalStateSource currently no-ops.
+func (h *HTTPNodeSet) SetLocalStateSource(f func() (proto.Message, error)) {
+	// not implemented
+	// h.localStateSource = f
 }
 
 // StaticNodeSet represents a basic NodeSet for testing
@@ -359,7 +375,15 @@ func (s *StaticNodeSet) SetMessageHandler(f func(proto.Message) error) {
 	return
 }
 
-func (s *StaticNodeSet) SendMessage(pb proto.Message) error {
+func (s *StaticNodeSet) SetRemoteStateHandler(f func(proto.Message) error) {
+	return
+}
+
+func (s *StaticNodeSet) SetLocalStateSource(f func() (proto.Message, error)) {
+	return
+}
+
+func (s *StaticNodeSet) SendMessage(pb proto.Message, method string) error {
 	return nil
 }
 func (s *StaticNodeSet) ReceiveMessage(pb proto.Message) error {
