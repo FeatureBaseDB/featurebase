@@ -18,11 +18,11 @@ type Config struct {
 	Host    string `toml:"host"`
 
 	Cluster struct {
-		ReplicaN        int           `toml:"replicas"`
-		MessengerType   string        `toml:"messenger-type"`
-		Nodes           []string      `toml:"hosts"`
-		PollingInterval Duration      `toml:"polling-interval"`
-		Gossip          *ConfigGossip `toml:"gossip"`
+		ReplicaN        int          `toml:"replicas"`
+		MessengerType   string       `toml:"messenger-type"`
+		Nodes           []string     `toml:"hosts"`
+		PollingInterval Duration     `toml:"polling-interval"`
+		Gossip          ConfigGossip `toml:"gossip"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -32,10 +32,6 @@ type Config struct {
 	AntiEntropy struct {
 		Interval Duration `toml:"interval"`
 	} `toml:"anti-entropy"`
-}
-
-type ConfigNode struct {
-	Host string `toml:"host"`
 }
 
 type ConfigGossip struct {
@@ -76,7 +72,7 @@ func (c *Config) PilosaCluster() *Cluster {
 	if c.Cluster.MessengerType == "broadcast" {
 		cluster.NodeSet = NewHTTPNodeSet()
 		cluster.NodeSet.Join(cluster.Nodes)
-	} else if (c.Cluster.MessengerType == "gossip") && (c.Cluster.Gossip != nil) {
+	} else if c.Cluster.MessengerType == "gossip" {
 		gossipPort := DefaultGossipPort
 		gossipSeed := DefaultHost
 		if c.Cluster.Gossip.Port != 0 {
