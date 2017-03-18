@@ -40,16 +40,22 @@ and should look like:
 
 ```
 data-dir = "/tmp/pil0"
-host = "127.0.0.1:10101"
+bind = "127.0.0.1:10101"
 
 [cluster]
-replicas = 2
+  poll-interval = "2m0s"
+  replicas = 2
+  hosts = [
+    "127.0.0.1:10101",
+    "127.0.0.1:10102",
+  ]
 
-[[cluster.node]]
-host = "127.0.0.1:10101"
+[anti-entropy]
+  interval = "10m0s"
 
-[[cluster.node]]
-host = "127.0.0.1:15001"
+[profile]
+  cpu = "/home/mycpuprofile"
+  cpu-time = "30s"
 ```
 
 You can generate a template config file with default values with:
@@ -62,13 +68,21 @@ The first two configuration options will be unique to each node in the cluster:
 
 `data-dir`: directory in which data is stored to disk
 
-`host`: IP and port of the pilosa node
+`bind`: IP and port that pilosa will listen on
 
 The remaining configuration options should be the same on every node in the cluster.
 
 `replicas`: the number of replicas within the cluster
 
-`[[cluster.node]]`: specifies each node within the cluster
+`[cluster] hosts`: specifies each node within the cluster
+
+`[cluster] poll-interval`: TODO
+
+`[anti-entropy] interval`: TODO
+
+`[profile] cpu`: Path at which to store cpu profiling data which will be taken when pilosa starts.
+
+`[profile] cpu-time`: Amount of time for which to collect cpu profiling data at startup.
 
 ## Docker
 
