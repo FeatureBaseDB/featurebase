@@ -22,17 +22,13 @@ type ExportCommand struct {
 	Path string
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 }
 
 // NewExportCommand returns a new instance of ExportCommand.
 func NewExportCommand(stdin io.Reader, stdout, stderr io.Writer) *ExportCommand {
 	return &ExportCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 

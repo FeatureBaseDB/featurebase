@@ -2,41 +2,41 @@ package cmd
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/pilosa/pilosa/ctl"
 )
 
-var restorer = ctl.NewRestoreCommand(os.Stdin, os.Stdout, os.Stderr)
+var Restorer *ctl.RestoreCommand
 
-var restoreCmd = &cobra.Command{
-	Use:   "restore",
-	Short: "Restore data to pilosa from a backup file.",
-	Long: `
+func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	Restorer = ctl.NewRestoreCommand(os.Stdin, os.Stdout, os.Stderr)
+
+	restoreCmd := &cobra.Command{
+		Use:   "restore",
+		Short: "Restore data to pilosa from a backup file.",
+		Long: `
 Restores a frame to the cluster from a backup file.
 `,
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := restorer.Run(context.Background()); err != nil {
-			fmt.Println(err)
-		}
-	},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := Restorer.Run(context.Background()); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	flags := restoreCmd.Flags()
+	flags.StringVarP(&Restorer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
+	flags.StringVarP(&Restorer.Database, "database", "d", "", "Pilosa database to restore into.")
+	flags.StringVarP(&Restorer.Frame, "frame", "f", "", "Frame to restore into.")
+	flags.StringVarP(&Restorer.Path, "input-file", "i", "", "File to restore from.")
+
+	return restoreCmd
 }
 
 func init() {
-	restoreCmd.Flags().StringVarP(&restorer.Host, "host", "", "localhost:15000", "host:port of Pilosa.")
-	restoreCmd.Flags().StringVarP(&restorer.Database, "database", "d", "", "Pilosa database to restore into.")
-	restoreCmd.Flags().StringVarP(&restorer.Frame, "frame", "f", "", "Frame to restore into.")
-	restoreCmd.Flags().StringVarP(&restorer.Path, "input-file", "i", "", "File to restore from.")
-
-	err := viper.BindPFlags(restoreCmd.Flags())
-	if err != nil {
-		log.Fatalf("Error binding restore flags: %v", err)
-	}
-
-	RootCmd.AddCommand(restoreCmd)
+	subcommandFns["restore"] = NewRestoreCommand
 }
