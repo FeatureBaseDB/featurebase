@@ -126,3 +126,24 @@ func (f *Frame) MustSetBit(view string, bitmapID, profileID uint64, t *time.Time
 	}
 	return changed
 }
+
+// Ensure frame can set its cache
+func TestFrame_SetCacheSize(t *testing.T) {
+	f := MustOpenFrame()
+	defer f.Close()
+	cacheSize := 100
+
+	// Set & retrieve frame cache size.
+	if err := f.SetRankedCacheSize(cacheSize); err != nil {
+		t.Fatal(err)
+	} else if q := f.RankedCacheSize(); q != cacheSize {
+		t.Fatalf("unexpected frame cache size: %d", q)
+	}
+
+	// Reload frame and verify that it is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if q := f.RankedCacheSize(); q != cacheSize {
+		t.Fatalf("unexpected frame cache size (reopen): %d", q)
+	}
+}
