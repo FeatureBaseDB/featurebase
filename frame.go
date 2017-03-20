@@ -273,6 +273,7 @@ func (f *Frame) loadMeta() error {
 		f.rowLabel = DefaultRowLabel
 		f.cacheType = DefaultCacheType
 		f.inverseEnabled = DefaultInverseEnabled
+		f.rankedCacheSize = DefaultFrameCache
 		return nil
 	} else if err != nil {
 		return err
@@ -286,6 +287,7 @@ func (f *Frame) loadMeta() error {
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
 	f.inverseEnabled = pb.InverseEnabled
+	f.rankedCacheSize = int(pb.CacheSize)
 
 	// Copy cache type.
 	f.cacheType = pb.CacheType
@@ -304,6 +306,7 @@ func (f *Frame) saveMeta() error {
 		RowLabel:       f.rowLabel,
 		CacheType:      f.cacheType,
 		InverseEnabled: f.inverseEnabled,
+		CacheSize:      int64(f.rankedCacheSize),
 	})
 	if err != nil {
 		return err
@@ -602,6 +605,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 		Meta: &internal.FrameMeta{
 			TimeQuantum: string(f.timeQuantum),
 			RowLabel:    f.rowLabel,
+			CacheSize:   int64(f.rankedCacheSize),
 		},
 	}
 }
