@@ -9,14 +9,15 @@ import (
 	"github.com/pilosa/pilosa"
 )
 
-// BackupCommand represents a command for backing up a frame.
+// BackupCommand represents a command for backing up a view.
 type BackupCommand struct {
 	// Destination host and port.
 	Host string
 
-	// Name of the database & frame to backup.
+	// Name of the database, frame, view to backup.
 	Database string
 	Frame    string
+	View     string
 
 	// Output file to write to.
 	Path string
@@ -53,7 +54,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) error {
 	defer f.Close()
 
 	// Begin streaming backup.
-	if err := client.BackupTo(ctx, f, cmd.Database, cmd.Frame); err != nil {
+	if err := client.BackupTo(ctx, f, cmd.Database, cmd.Frame, cmd.View); err != nil {
 		return err
 	}
 

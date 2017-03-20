@@ -4,33 +4,34 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa"
 )
 
-// Ensure frame can open and retrieve a fragment.
-func TestFrame_CreateFragmentIfNotExists(t *testing.T) {
+// Ensure frame can open and retrieve a view.
+func TestFrame_CreateViewIfNotExists(t *testing.T) {
 	f := MustOpenFrame()
 	defer f.Close()
 
-	// Create fragment.
-	frag, err := f.CreateFragmentIfNotExists(100)
+	// Create view.
+	view, err := f.CreateViewIfNotExists("v")
 	if err != nil {
 		t.Fatal(err)
-	} else if frag == nil {
-		t.Fatal("expected fragment")
+	} else if view == nil {
+		t.Fatal("expected view")
 	}
 
-	// Retrieve existing fragment.
-	frag2, err := f.CreateFragmentIfNotExists(100)
+	// Retrieve existing view.
+	view2, err := f.CreateViewIfNotExists("v")
 	if err != nil {
 		t.Fatal(err)
-	} else if frag != frag2 {
-		t.Fatal("fragment mismatch")
+	} else if view != view2 {
+		t.Fatal("view mismatch")
 	}
 
-	if frag != f.Fragment(100) {
-		t.Fatal("fragment mismatch")
+	if view != f.View("v") {
+		t.Fatal("view mismatch")
 	}
 }
 
@@ -51,6 +52,17 @@ func TestFrame_SetTimeQuantum(t *testing.T) {
 		t.Fatal(err)
 	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
 		t.Fatalf("unexpected quantum (reopen): %s", q)
+	}
+}
+
+func TestFrame_NameRestriction(t *testing.T) {
+	path, err := ioutil.TempDir("", "pilosa-frame-")
+	if err != nil {
+		panic(err)
+	}
+	frame, err := pilosa.NewFrame(path, "d", ".meta")
+	if frame != nil {
+		t.Fatalf("unexpected frame name %s", err)
 	}
 }
 
@@ -106,14 +118,11 @@ func (f *Frame) Reopen() error {
 	return nil
 }
 
-// NewFrame does not return a frame when name is invalid.
-func TestFrame_NameRestriction(t *testing.T) {
-	path, err := ioutil.TempDir("", "pilosa-frame-")
+// MustSetBit sets a bit on the frame. Panic on error.
+func (f *Frame) MustSetBit(bitmapID, profileID uint64, t *time.Time) (changed bool) {
+	changed, err := f.SetBit(bitmapID, profileID, t)
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "d", ".meta")
-	if frame != nil {
-		t.Fatalf("unexpected frame name %s", err)
-	}
+	return changed
 }

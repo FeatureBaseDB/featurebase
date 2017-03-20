@@ -17,6 +17,7 @@ type RestoreCommand struct {
 	// Name of the database & frame to backup.
 	Database string
 	Frame    string
+	View     string
 
 	// Import file to read from.
 	Path string
@@ -53,7 +54,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	defer f.Close()
 
 	// Restore backup file to the cluster.
-	if err := client.RestoreFrom(ctx, f, cmd.Database, cmd.Frame); err != nil {
+	if err := client.RestoreFrom(ctx, f, cmd.Database, cmd.Frame, cmd.View); err != nil {
 		return err
 	}
 

@@ -18,7 +18,7 @@ func NewBackupCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Use:   "backup",
 		Short: "Backup data from pilosa.",
 		Long: `
-Backs up the database and frame from across the cluster into a single file.
+Backs up the view from across the cluster into a single file.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := Backuper.Run(context.Background()); err != nil {
@@ -31,6 +31,7 @@ Backs up the database and frame from across the cluster into a single file.
 	flags.StringVarP(&Backuper.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Backuper.Database, "database", "d", "", "Pilosa database to backup into.")
 	flags.StringVarP(&Backuper.Frame, "frame", "f", "", "Frame to backup into.")
+	flags.StringVarP(&Backuper.View, "view", "v", "", "View to backup into.")
 	flags.StringVarP(&Backuper.Path, "output-file", "o", "", "File to write backup to - default stdout")
 
 	return backupCmd

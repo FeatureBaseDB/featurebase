@@ -386,6 +386,7 @@ func (db *DB) DeleteFrame(name string) error {
 	return nil
 }
 
+/*
 // SetBit sets a bit for a given profile & bitmap.
 // If a timestamp is specified then set all bits for the different quantum units.
 func (db *DB) SetBit(name string, bitmapID, profileID uint64, t *time.Time) (changed bool, err error) {
@@ -411,7 +412,7 @@ func (db *DB) SetBit(name string, bitmapID, profileID uint64, t *time.Time) (cha
 
 	// If a timestamp is specified then set bits across all frames for the quantum.
 	opt := f.Options()
-	for _, subname := range FramesByTime(name, *t, q) {
+	for _, subname := range ViewsByTime(name, *t, q) {
 		f, err := db.CreateFrameIfNotExists(subname, opt)
 		if err != nil {
 			return changed, err
@@ -425,67 +426,7 @@ func (db *DB) SetBit(name string, bitmapID, profileID uint64, t *time.Time) (cha
 	}
 	return changed, nil
 }
-
-// Import bulk imports data.
-func (db *DB) Import(name string, bitmapIDs, profileIDs []uint64, timestamps []*time.Time) error {
-	// Read frame.
-	f := db.Frame(name)
-	if f == nil {
-		return ErrFrameNotFound
-	}
-
-	// Determine quantum if timestamps are set.
-	var q TimeQuantum
-	if hasTime(timestamps) {
-		if q = f.TimeQuantum(); q == "" {
-			q = db.TimeQuantum()
-			if err := f.SetTimeQuantum(q); err != nil {
-				return err
-			}
-		}
-
-		if q == "" {
-			return errors.New("time quantum not set in either database or frame")
-		}
-	}
-
-	// Split import data by fragment.
-	dataByFragment := make(map[importKey]importData)
-	for i := range bitmapIDs {
-		bitmapID, profileID, timestamp := bitmapIDs[i], profileIDs[i], timestamps[i]
-		slice := profileID / SliceWidth
-
-		var names []string
-		if timestamp == nil {
-			names = []string{name}
-		} else {
-			names = FramesByTime(name, *timestamp, q)
-		}
-
-		// Attach bit to each frame.
-		for _, name := range names {
-			key := importKey{Frame: name, Slice: slice}
-			data := dataByFragment[key]
-			data.BitmapIDs = append(data.BitmapIDs, bitmapID)
-			data.ProfileIDs = append(data.ProfileIDs, profileID)
-			dataByFragment[key] = data
-		}
-	}
-
-	// Import into each fragment.
-	for key, data := range dataByFragment {
-		frag, err := f.CreateFragmentIfNotExists(key.Slice)
-		if err != nil {
-			return err
-		}
-
-		if err := frag.Import(data.BitmapIDs, data.ProfileIDs); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
+*/
 
 type dbSlice []*DB
 
@@ -508,14 +449,19 @@ func (p dbInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 // MergeSchemas combines databases and frames from a and b into one schema.
 func MergeSchemas(a, b []*DBInfo) []*DBInfo {
 	// Generate a map from both schemas.
-	m := make(map[string]map[string]struct{})
+	m := make(map[string]map[string]map[string]struct{})
 	for _, dbs := range [][]*DBInfo{a, b} {
 		for _, db := range dbs {
 			if m[db.Name] == nil {
-				m[db.Name] = make(map[string]struct{})
+				m[db.Name] = make(map[string]map[string]struct{})
 			}
 			for _, frame := range db.Frames {
-				m[db.Name][frame.Name] = struct{}{}
+				if m[db.Name][frame.Name] == nil {
+					m[db.Name][frame.Name] = make(map[string]struct{})
+				}
+				for _, view := range frame.Views {
+					m[db.Name][frame.Name][view.Name] = struct{}{}
+				}
 			}
 		}
 	}
@@ -524,8 +470,13 @@ func MergeSchemas(a, b []*DBInfo) []*DBInfo {
 	dbs := make([]*DBInfo, 0, len(m))
 	for db, frames := range m {
 		di := &DBInfo{Name: db}
-		for frame := range frames {
-			di.Frames = append(di.Frames, &FrameInfo{Name: frame})
+		for frame, views := range frames {
+			fi := &FrameInfo{Name: frame}
+			for view := range views {
+				fi.Views = append(fi.Views, &ViewInfo{Name: view})
+			}
+			sort.Sort(viewInfoSlice(fi.Views))
+			di.Frames = append(di.Frames, fi)
 		}
 		sort.Sort(frameInfoSlice(di.Frames))
 		dbs = append(dbs, di)
@@ -557,7 +508,7 @@ func hasTime(a []*time.Time) bool {
 }
 
 type importKey struct {
-	Frame string
+	View  string
 	Slice uint64
 }
 
