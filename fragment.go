@@ -46,6 +46,9 @@ const (
 
 	// HashBlockSize is the number of bitmaps in a merkle hash block.
 	HashBlockSize = 100
+
+	// ThresholdBufferPct is the percentage of the ThresholdLength for which to maintain a sorted, ranked list.
+	ThresholdBufferPct = 0.9
 )
 
 const (
@@ -70,7 +73,8 @@ type Fragment struct {
 	opN         int // number of ops since snapshot
 
 	// Cache for bitmap counts.
-	cache Cache
+	cache     Cache
+	cacheSize int
 
 	// Cache containing full bitmaps (not just counts).
 	bitmapCache BitmapCache
@@ -94,12 +98,13 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, db, frame string, slice uint64) *Fragment {
+func NewFragment(path, db, frame string, slice uint64, cacheSize int) *Fragment {
 	return &Fragment{
-		path:  path,
-		db:    db,
-		frame: frame,
-		slice: slice,
+		path:      path,
+		db:        db,
+		frame:     frame,
+		slice:     slice,
+		cacheSize: cacheSize,
 
 		LogOutput: ioutil.Discard,
 		MaxOpN:    DefaultFragmentMaxOpN,
@@ -218,11 +223,11 @@ func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
 	if strings.HasSuffix(f.frame, FrameSuffixRank) {
 		c := NewRankCache()
-		c.ThresholdLength = 50000
-		c.ThresholdIndex = 45000
+		c.ThresholdLength = f.cacheSize
+		c.ThresholdIndex = int(float64(f.cacheSize) * ThresholdBufferPct)
 		f.cache = c
 	} else {
-		f.cache = NewLRUCache(50000)
+		f.cache = NewLRUCache(f.cacheSize)
 	}
 
 	// Read cache data from disk.
