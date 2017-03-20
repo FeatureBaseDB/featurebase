@@ -44,7 +44,7 @@ const (
 	// HashBlockSize is the number of bitmaps in a merkle hash block.
 	HashBlockSize = 100
 
-	// Percentage of the ThresholdLength size to resort the cache at
+	// ThresholdBufferPct is the percentage of the ThresholdLength size to resort the cache at
 	ThresholdBufferPct = 0.9
 )
 
