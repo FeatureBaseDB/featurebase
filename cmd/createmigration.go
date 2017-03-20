@@ -25,9 +25,9 @@ func NewMigrationCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	}
 	flags := migrationCmd.Flags()
 	flags.StringVarP(&MigrationPlanner.Host, "host", "p", "localhost:15000", "host:port of Pilosa providing the schema.")
-	flags.StringVarP(&MigrationPlanner.SrcConfig, "srcConfig", "s", "", "Original Cluster Node Configuration File")
-	flags.StringVarP(&MigrationPlanner.DestConfig, "destConfig", "d", "", "Proposed Cluster Node Configuration File")
-	flags.StringVarP(&MigrationPlanner.DestFileName, "output", "o", "-", "filename to store the plan")
+	flags.StringVarP(&MigrationPlanner.SrcConfig, "src-config", "s", "", "Original Cluster Node Configuration File")
+	flags.StringVarP(&MigrationPlanner.DestConfig, "dest-config", "d", "", "Proposed Cluster Node Configuration File")
+	flags.StringVarP(&MigrationPlanner.DestFileName, "output-file", "o", "-", "filename to store the plan")
 	return migrationCmd
 }
 
