@@ -22,7 +22,7 @@ const (
 	DefaultInverseEnabled = false
 
 	// Default ranked frame cache
-	DefaultFrameCache = 50000
+	DefaultCacheSize = 50000
 )
 
 // Frame represents a container for views.
@@ -47,7 +47,7 @@ type Frame struct {
 	inverseEnabled bool
 
 	// Cache size for ranked frames
-	rankedCacheSize int
+	cacheSize int
 
 	LogOutput io.Writer
 }
@@ -70,10 +70,10 @@ func NewFrame(path, db, name string) (*Frame, error) {
 		messenger: NopMessenger,
 		stats:     NopStatsClient,
 
-		rowLabel:        DefaultRowLabel,
-		cacheType:       DefaultCacheType,
-		inverseEnabled:  DefaultInverseEnabled,
-		rankedCacheSize: DefaultFrameCache,
+		rowLabel:       DefaultRowLabel,
+		inverseEnabled: DefaultInverseEnabled,
+		cacheType:      DefaultCacheType,
+		cacheSize:      DefaultCacheSize,
 
 		LogOutput: ioutil.Discard,
 	}, nil
@@ -158,19 +158,19 @@ func (f *Frame) InverseEnabled() bool {
 	return f.inverseEnabled
 }
 
-// SetRankedCacheSize sets the cache size for ranked fames. Persists to meta file on update.
-// defaults to DefaultFrameCache 50000
-func (f *Frame) SetRankedCacheSize(v int) error {
+// SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
+// defaults to DefaultCacheSize 50000
+func (f *Frame) SetCacheSize(v int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Ignore if no change occurred.
-	if v == 0 || f.rankedCacheSize == v {
+	if v == 0 || f.cacheSize == v {
 		return nil
 	}
 
 	// Persist meta data to disk on change.
-	f.rankedCacheSize = v
+	f.cacheSize = v
 	if err := f.saveMeta(); err != nil {
 		return err
 	}
@@ -178,10 +178,10 @@ func (f *Frame) SetRankedCacheSize(v int) error {
 	return nil
 }
 
-// RankedCacheSize returns the ranked frame cache size.
-func (f *Frame) RankedCacheSize() int {
+// CacheSize returns the ranked frame cache size.
+func (f *Frame) CacheSize() int {
 	f.mu.Lock()
-	v := f.rankedCacheSize
+	v := f.cacheSize
 	f.mu.Unlock()
 	return v
 }
@@ -193,7 +193,7 @@ func (f *Frame) Options() FrameOptions {
 		RowLabel:       f.rowLabel,
 		InverseEnabled: f.inverseEnabled,
 		CacheType:      f.cacheType,
-		CacheSize:      f.rankedCacheSize,
+		CacheSize:      f.cacheSize,
 	}
 	f.mu.Unlock()
 	return opt
@@ -273,7 +273,7 @@ func (f *Frame) loadMeta() error {
 		f.rowLabel = DefaultRowLabel
 		f.cacheType = DefaultCacheType
 		f.inverseEnabled = DefaultInverseEnabled
-		f.rankedCacheSize = DefaultFrameCache
+		f.cacheSize = DefaultCacheSize
 		return nil
 	} else if err != nil {
 		return err
@@ -287,7 +287,7 @@ func (f *Frame) loadMeta() error {
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
 	f.inverseEnabled = pb.InverseEnabled
-	f.rankedCacheSize = int(pb.CacheSize)
+	f.cacheSize = int(pb.CacheSize)
 
 	// Copy cache type.
 	f.cacheType = pb.CacheType
@@ -306,7 +306,7 @@ func (f *Frame) saveMeta() error {
 		RowLabel:       f.rowLabel,
 		CacheType:      f.cacheType,
 		InverseEnabled: f.inverseEnabled,
-		CacheSize:      int64(f.rankedCacheSize),
+		CacheSize:      int64(f.cacheSize),
 	})
 	if err != nil {
 		return err
@@ -605,7 +605,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 		Meta: &internal.FrameMeta{
 			TimeQuantum: string(f.timeQuantum),
 			RowLabel:    f.rowLabel,
-			CacheSize:   int64(f.rankedCacheSize),
+			CacheSize:   int64(f.cacheSize),
 		},
 	}
 }
