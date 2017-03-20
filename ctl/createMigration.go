@@ -50,7 +50,7 @@ func (cmd *CreateMigrationCommand) Run(ctx context.Context) error {
 	if cmd.DestFileName == "-" {
 		json.NewEncoder(os.Stdout).Encode(plan)
 	} else {
-		f, err := os.Open(cmd.DestFileName)
+		f, err := os.Create(cmd.DestFileName)
 		if err != nil {
 			log.Fatal("Error:", err)
 		}
