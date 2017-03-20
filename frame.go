@@ -21,6 +21,9 @@ const (
 // Default frame settings.
 const (
 	DefaultRowLabel = "id"
+
+	// Default ranked frame cache
+	DefaultCacheSize = 50000
 )
 
 // Frame represents a container for fragments.
@@ -43,6 +46,9 @@ type Frame struct {
 	// Label used for referring to a row.
 	rowLabel string
 
+	// Cache size for ranked frames
+	cacheSize int
+
 	LogOutput io.Writer
 }
 
@@ -64,7 +70,8 @@ func NewFrame(path, db, name string) (*Frame, error) {
 		messenger: NopMessenger,
 		stats:     NopStatsClient,
 
-		rowLabel: DefaultRowLabel,
+		rowLabel:  DefaultRowLabel,
+		cacheSize: DefaultCacheSize,
 
 		LogOutput: ioutil.Discard,
 	}, nil
@@ -123,11 +130,40 @@ func (f *Frame) RowLabel() string {
 	return v
 }
 
+// SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
+// defaults to DefaultCacheSize 50000
+func (f *Frame) SetCacheSize(v int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Ignore if no change occurred.
+	if v == 0 || f.cacheSize == v {
+		return nil
+	}
+
+	// Persist meta data to disk on change.
+	f.cacheSize = v
+	if err := f.saveMeta(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// CacheSize returns the ranked frame cache size.
+func (f *Frame) CacheSize() int {
+	f.mu.Lock()
+	v := f.cacheSize
+	f.mu.Unlock()
+	return v
+}
+
 // Options returns all options for this frame.
 func (f *Frame) Options() FrameOptions {
 	f.mu.Lock()
 	opt := FrameOptions{
-		RowLabel: f.rowLabel,
+		RowLabel:  f.rowLabel,
+		CacheSize: f.cacheSize,
 	}
 	f.mu.Unlock()
 	return opt
@@ -208,6 +244,7 @@ func (f *Frame) loadMeta() error {
 	if os.IsNotExist(err) {
 		f.timeQuantum = ""
 		f.rowLabel = DefaultRowLabel
+		f.cacheSize = DefaultCacheSize
 		return nil
 	} else if err != nil {
 		return err
@@ -220,7 +257,7 @@ func (f *Frame) loadMeta() error {
 	// Copy metadata fields.
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
-
+	f.cacheSize = int(pb.CacheSize)
 	return nil
 }
 
@@ -230,6 +267,7 @@ func (f *Frame) saveMeta() error {
 	buf, err := proto.Marshal(&internal.FrameMeta{
 		TimeQuantum: string(f.timeQuantum),
 		RowLabel:    f.rowLabel,
+		CacheSize:   int64(f.cacheSize),
 	})
 	if err != nil {
 		return err
@@ -353,7 +391,7 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 }
 
 func (f *Frame) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, f.db, f.name, slice)
+	frag := NewFragment(path, f.db, f.name, slice, f.cacheSize)
 	frag.LogOutput = f.LogOutput
 	frag.stats = f.stats.WithTags(fmt.Sprintf("slice:%d", slice))
 	return frag
@@ -385,6 +423,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 		Meta: &internal.FrameMeta{
 			TimeQuantum: string(f.timeQuantum),
 			RowLabel:    f.rowLabel,
+			CacheSize:   int64(f.cacheSize),
 		},
 	}
 }
@@ -409,5 +448,6 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
 	RowLabel    string      `json:"rowLabel,omitempty"`
+	CacheSize   int         `json:"cacheSize,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
