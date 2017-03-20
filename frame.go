@@ -244,6 +244,7 @@ func (f *Frame) loadMeta() error {
 	if os.IsNotExist(err) {
 		f.timeQuantum = ""
 		f.rowLabel = DefaultRowLabel
+		f.rankedCacheSize = DefaultFrameCache
 		return nil
 	} else if err != nil {
 		return err
@@ -256,7 +257,7 @@ func (f *Frame) loadMeta() error {
 	// Copy metadata fields.
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
-
+	f.rankedCacheSize = int(pb.CacheSize)
 	return nil
 }
 
@@ -266,6 +267,7 @@ func (f *Frame) saveMeta() error {
 	buf, err := proto.Marshal(&internal.FrameMeta{
 		TimeQuantum: string(f.timeQuantum),
 		RowLabel:    f.rowLabel,
+		CacheSize:   int64(f.rankedCacheSize),
 	})
 	if err != nil {
 		return err
@@ -421,6 +423,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 		Meta: &internal.FrameMeta{
 			TimeQuantum: string(f.timeQuantum),
 			RowLabel:    f.rowLabel,
+			CacheSize:   int64(f.rankedCacheSize),
 		},
 	}
 }
@@ -444,7 +447,7 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
-	RowLabel string `json:"rowLabel,omitempty"`
-	CacheSize int    `json:"cacheSize,omitempty"`
+	RowLabel    string      `json:"rowLabel,omitempty"`
+	CacheSize   int         `json:"cacheSize,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
