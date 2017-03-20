@@ -24,7 +24,8 @@ import (
 
 // Handler represents an HTTP handler.
 type Handler struct {
-	Index *Index
+	Index     *Index
+	Messenger Messenger
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -46,6 +47,7 @@ type Handler struct {
 func NewHandler() *Handler {
 	return &Handler{
 		LogOutput: os.Stderr,
+		Messenger: NopMessenger,
 	}
 }
 
@@ -78,10 +80,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/status":
+		switch r.Method {
+		case "GET":
+			h.handleGetStatus(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/query":
 		switch r.Method {
 		case "POST":
 			h.handlePostQuery(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	case "/message":
+		switch r.Method {
+		case "POST":
+			h.handlePostMessage(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -198,7 +214,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case "/version":
 		h.handleVersion(w, r)
-
 	case "/debug/vars":
 		h.handleExpvar(w, r)
 	default:
@@ -213,15 +228,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
-	if err := json.NewEncoder(w).Encode(getSchemaResponse{
-		DBs: h.Index.Schema(),
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(encodeDBs(h.Index.DBs())); err != nil {
 		h.logger().Printf("write schema response error: %s", err)
+	}
+}
+
+// handleGetStatus handles GET /status requests.
+func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+	if err := json.NewEncoder(w).Encode(getStatusResponse{
+		Health: h.Cluster.Health(),
+	}); err != nil {
+		h.logger().Printf("write status response error: %s", err)
 	}
 }
 
 type getSchemaResponse struct {
 	DBs []*DBInfo `json:"dbs"`
+}
+
+type getStatusResponse struct {
+	Health map[string]string `json:"health"`
 }
 
 // handlePostQuery handles /query requests.
@@ -284,6 +310,36 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handlePostMessage handles /message requests.
+func (h *Handler) handlePostMessage(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Unmarshal message to specific proto type.
+	m, err := UnmarshalMessage(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Messenger.ReceiveMessage(m); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	return
+}
+
 func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) error {
 	ms := h.Index.MaxSlices()
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
@@ -325,6 +381,19 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send the create message to all nodes.
+	err = h.Messenger.SendMessage(
+		&internal.CreateDBMessage{
+			DB: req.DB,
+			Meta: &internal.DBMeta{
+				ColumnLabel: req.Options.ColumnLabel,
+				TimeQuantum: string(req.Options.TimeQuantum),
+			},
+		}, "broadcast")
+	if err != nil {
+		h.logger().Printf("problem sending CreateDB message: %s", err)
+	}
+
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postDBResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
@@ -351,6 +420,15 @@ func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 	if err := h.Index.DeleteDB(req.DB); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Send the delete message to all nodes.
+	err := h.Messenger.SendMessage(
+		&internal.DeleteDBMessage{
+			DB: req.DB,
+		}, "broadcast")
+	if err != nil {
+		h.logger().Printf("problem sending DeleteDB message: %s", err)
 	}
 
 	// Encode response.
@@ -489,6 +567,20 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send the create message to all nodes.
+	err = h.Messenger.SendMessage(
+		&internal.CreateFrameMessage{
+			DB:    req.DB,
+			Frame: req.Frame,
+			Meta: &internal.FrameMeta{
+				RowLabel:    req.Options.RowLabel,
+				TimeQuantum: string(req.Options.TimeQuantum),
+			},
+		}, "broadcast")
+	if err != nil {
+		h.logger().Printf("problem sending CreateFrame message: %s", err)
+	}
+
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
@@ -525,6 +617,16 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	if err := db.DeleteFrame(req.Frame); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Send the delete message to all nodes.
+	err := h.Messenger.SendMessage(
+		&internal.DeleteFrameMessage{
+			DB:    req.DB,
+			Frame: req.Frame,
+		}, "broadcast")
+	if err != nil {
+		h.logger().Printf("problem sending DeleteFrame message: %s", err)
 	}
 
 	// Encode response.
@@ -1051,7 +1153,6 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Loop over each slice and import it if this node owns it.
-	//travis
 	for slice := uint64(0); slice <= maxSlices[db]; slice++ {
 		// Ignore this slice if we don't own it.
 		if !h.Cluster.OwnsFragment(h.Host, db, slice) {
