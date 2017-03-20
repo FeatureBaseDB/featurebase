@@ -19,7 +19,7 @@ func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command
 		Use:   "restore",
 		Short: "Restore data to pilosa from a backup file.",
 		Long: `
-Restores a frame to the cluster from a backup file.
+Restores a view to the cluster from a backup file.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := Restorer.Run(context.Background()); err != nil {
@@ -32,6 +32,7 @@ Restores a frame to the cluster from a backup file.
 	flags.StringVarP(&Restorer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Restorer.Database, "database", "d", "", "Pilosa database to restore into.")
 	flags.StringVarP(&Restorer.Frame, "frame", "f", "", "Frame to restore into.")
+	flags.StringVarP(&Restorer.View, "view", "v", "", "View to restore into.")
 	flags.StringVarP(&Restorer.Path, "input-file", "i", "", "File to restore from.")
 
 	return restoreCmd

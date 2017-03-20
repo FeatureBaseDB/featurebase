@@ -430,7 +430,7 @@ func (c *Client) exportNodeCSV(ctx context.Context, node *Node, db, frame string
 }
 
 // BackupTo backs up an entire frame from a cluster to w.
-func (c *Client) BackupTo(ctx context.Context, w io.Writer, db, frame string) error {
+func (c *Client) BackupTo(ctx context.Context, w io.Writer, db, frame, view string) error {
 	if db == "" {
 		return ErrDatabaseRequired
 	} else if frame == "" {
@@ -448,7 +448,7 @@ func (c *Client) BackupTo(ctx context.Context, w io.Writer, db, frame string) er
 
 	// Backup every slice to the tar file.
 	for i := uint64(0); i <= maxSlices[db]; i++ {
-		if err := c.backupSliceTo(ctx, tw, db, frame, i); err != nil {
+		if err := c.backupSliceTo(ctx, tw, db, frame, view, i); err != nil {
 			return err
 		}
 	}
@@ -462,9 +462,9 @@ func (c *Client) BackupTo(ctx context.Context, w io.Writer, db, frame string) er
 }
 
 // backupSliceTo backs up a single slice to tw.
-func (c *Client) backupSliceTo(ctx context.Context, tw *tar.Writer, db, frame string, slice uint64) error {
+func (c *Client) backupSliceTo(ctx context.Context, tw *tar.Writer, db, frame, view string, slice uint64) error {
 	// Return error if unable to backup from any slice.
-	r, err := c.BackupSlice(ctx, db, frame, slice)
+	r, err := c.BackupSlice(ctx, db, frame, view, slice)
 	if err != nil {
 		return fmt.Errorf("backup slice: slice=%d, err=%s", slice, err)
 	} else if r == nil {
@@ -500,7 +500,7 @@ func (c *Client) backupSliceTo(ctx context.Context, tw *tar.Writer, db, frame st
 
 // BackupSlice retrieves a streaming backup from a single slice.
 // This function tries slice owners until one succeeds.
-func (c *Client) BackupSlice(ctx context.Context, db, frame string, slice uint64) (io.ReadCloser, error) {
+func (c *Client) BackupSlice(ctx context.Context, db, frame, view string, slice uint64) (io.ReadCloser, error) {
 	// Retrieve a list of nodes that own the slice.
 	nodes, err := c.FragmentNodes(ctx, db, slice)
 	if err != nil {
@@ -509,7 +509,7 @@ func (c *Client) BackupSlice(ctx context.Context, db, frame string, slice uint64
 
 	// Try to backup slice from each one until successful.
 	for _, i := range rand.Perm(len(nodes)) {
-		r, err := c.backupSliceNode(ctx, db, frame, slice, nodes[i])
+		r, err := c.backupSliceNode(ctx, db, frame, view, slice, nodes[i])
 		if err == nil {
 			return r, nil // successfully attached
 		} else if err == ErrFragmentNotFound {
@@ -523,7 +523,7 @@ func (c *Client) BackupSlice(ctx context.Context, db, frame string, slice uint64
 	return nil, fmt.Errorf("unable to connect to any owner")
 }
 
-func (c *Client) backupSliceNode(ctx context.Context, db, frame string, slice uint64, node *Node) (io.ReadCloser, error) {
+func (c *Client) backupSliceNode(ctx context.Context, db, frame, view string, slice uint64, node *Node) (io.ReadCloser, error) {
 	u := url.URL{
 		Scheme: "http",
 		Host:   node.Host,
@@ -531,6 +531,7 @@ func (c *Client) backupSliceNode(ctx context.Context, db, frame string, slice ui
 		RawQuery: url.Values{
 			"db":    {db},
 			"frame": {frame},
+			"view":  {view},
 			"slice": {strconv.FormatUint(slice, 10)},
 		}.Encode(),
 	}
@@ -560,7 +561,7 @@ func (c *Client) backupSliceNode(ctx context.Context, db, frame string, slice ui
 }
 
 // RestoreFrom restores a frame from a backup file to an entire cluster.
-func (c *Client) RestoreFrom(ctx context.Context, r io.Reader, db, frame string) error {
+func (c *Client) RestoreFrom(ctx context.Context, r io.Reader, db, frame, view string) error {
 	if db == "" {
 		return ErrDatabaseRequired
 	} else if frame == "" {
@@ -592,14 +593,14 @@ func (c *Client) RestoreFrom(ctx context.Context, r io.Reader, db, frame string)
 		}
 
 		// Restore file to all nodes that own it.
-		if err := c.restoreSliceFrom(ctx, buf.Bytes(), db, frame, slice); err != nil {
+		if err := c.restoreSliceFrom(ctx, buf.Bytes(), db, frame, view, slice); err != nil {
 			return err
 		}
 	}
 }
 
 // restoreSliceFrom restores a single slice to all owning nodes.
-func (c *Client) restoreSliceFrom(ctx context.Context, buf []byte, db, frame string, slice uint64) error {
+func (c *Client) restoreSliceFrom(ctx context.Context, buf []byte, db, frame, view string, slice uint64) error {
 	// Retrieve a list of nodes that own the slice.
 	nodes, err := c.FragmentNodes(ctx, db, slice)
 	if err != nil {
@@ -615,6 +616,7 @@ func (c *Client) restoreSliceFrom(ctx context.Context, buf []byte, db, frame str
 			RawQuery: url.Values{
 				"db":    {db},
 				"frame": {frame},
+				"view":  {view},
 				"slice": {strconv.FormatUint(slice, 10)},
 			}.Encode(),
 		}
@@ -726,9 +728,52 @@ func (c *Client) RestoreFrame(ctx context.Context, host, db, frame string) error
 	return nil
 }
 
+// FrameViews returns a list of view names for a frame.
+func (c *Client) FrameViews(ctx context.Context, db, frame string) ([]string, error) {
+	// Create URL & HTTP request.
+	u := url.URL{
+		Scheme: "http",
+		Host:   c.host,
+		Path:   "/frame/views",
+		RawQuery: (&url.Values{
+			"db":    {db},
+			"frame": {frame},
+		}).Encode(),
+	}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request against the host.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Handle response based on status code.
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return nil, ErrFrameNotFound
+	default:
+		body, _ := ioutil.ReadAll(resp.Body)
+		return nil, errors.New(string(body))
+	}
+
+	// Decode response.
+	var rsp getFrameViewsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return nil, err
+	}
+	return rsp.Views, nil
+}
+
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
-func (c *Client) FragmentBlocks(ctx context.Context, db, frame string, slice uint64) ([]FragmentBlock, error) {
+func (c *Client) FragmentBlocks(ctx context.Context, db, frame, view string, slice uint64) ([]FragmentBlock, error) {
 	u := url.URL{
 		Scheme: "http",
 		Host:   c.host,
@@ -736,6 +781,7 @@ func (c *Client) FragmentBlocks(ctx context.Context, db, frame string, slice uin
 		RawQuery: url.Values{
 			"db":    {db},
 			"frame": {frame},
+			"view":  {view},
 			"slice": {strconv.FormatUint(slice, 10)},
 		}.Encode(),
 	}
@@ -771,10 +817,11 @@ func (c *Client) FragmentBlocks(ctx context.Context, db, frame string, slice uin
 }
 
 // BlockData returns bitmap/profile id pairs for a block.
-func (c *Client) BlockData(ctx context.Context, db, frame string, slice uint64, block int) ([]uint64, []uint64, error) {
+func (c *Client) BlockData(ctx context.Context, db, frame, view string, slice uint64, block int) ([]uint64, []uint64, error) {
 	buf, err := proto.Marshal(&internal.BlockDataRequest{
 		DB:    db,
 		Frame: frame,
+		View:  view,
 		Slice: slice,
 		Block: uint64(block),
 	})

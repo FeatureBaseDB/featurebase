@@ -1,13 +1,14 @@
 package pilosa
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
@@ -23,7 +24,7 @@ const (
 	DefaultRowLabel = "id"
 )
 
-// Frame represents a container for fragments.
+// Frame represents a container for views.
 type Frame struct {
 	mu          sync.Mutex
 	path        string
@@ -31,8 +32,7 @@ type Frame struct {
 	name        string
 	timeQuantum TimeQuantum
 
-	// Fragments by slice.
-	fragments map[uint64]*Fragment
+	views map[string]*View
 
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
@@ -57,7 +57,7 @@ func NewFrame(path, db, name string) (*Frame, error) {
 		db:   db,
 		name: name,
 
-		fragments:       make(map[uint64]*Fragment),
+		views:           make(map[string]*View),
 		bitmapAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
 		stats: NopStatsClient,
@@ -86,8 +86,8 @@ func (f *Frame) MaxSlice() uint64 {
 	defer f.mu.Unlock()
 
 	var max uint64
-	for slice := range f.fragments {
-		if slice > max {
+	for _, view := range f.views {
+		if slice := view.MaxSlice(); slice > max {
 			max = slice
 		}
 	}
@@ -143,7 +143,7 @@ func (f *Frame) Open() error {
 			return err
 		}
 
-		if err := f.openFragments(); err != nil {
+		if err := f.openViews(); err != nil {
 			return err
 		}
 
@@ -160,10 +160,12 @@ func (f *Frame) Open() error {
 	return nil
 }
 
-// openFragments opens and initializes the fragments inside the frame.
-func (f *Frame) openFragments() error {
-	file, err := os.Open(f.path)
-	if err != nil {
+// openViews opens and initializes the views inside the frame.
+func (f *Frame) openViews() error {
+	file, err := os.Open(filepath.Join(f.path, "views"))
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
 		return err
 	}
 	defer file.Close()
@@ -174,22 +176,17 @@ func (f *Frame) openFragments() error {
 	}
 
 	for _, fi := range fis {
-		if fi.IsDir() {
+		if !fi.IsDir() {
 			continue
 		}
 
-		// Parse filename into integer.
-		slice, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
-		if err != nil {
-			continue
+		name := filepath.Base(fi.Name())
+		view := f.newView(f.ViewPath(name), name)
+		if err := view.Open(); err != nil {
+			return fmt.Errorf("open view: view=%s, err=%s", view.Name(), err)
 		}
-
-		frag := f.newFragment(f.FragmentPath(slice), slice)
-		if err := frag.Open(); err != nil {
-			return fmt.Errorf("open fragment: slice=%s, err=%s", frag.Slice(), err)
-		}
-		frag.BitmapAttrStore = f.bitmapAttrStore
-		f.fragments[frag.Slice()] = frag
+		view.BitmapAttrStore = f.bitmapAttrStore
+		f.views[view.Name()] = view
 
 		f.stats.Count("maxSlice", 1)
 	}
@@ -241,7 +238,7 @@ func (f *Frame) saveMeta() error {
 	return nil
 }
 
-// Close closes the frame and its fragments.
+// Close closes the frame and its views.
 func (f *Frame) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -251,11 +248,11 @@ func (f *Frame) Close() error {
 		_ = f.bitmapAttrStore.Close()
 	}
 
-	// Close all fragments.
-	for _, frag := range f.fragments {
-		_ = frag.Close()
+	// Close all views.
+	for _, view := range f.views {
+		_ = view.Close()
 	}
-	f.fragments = make(map[uint64]*Fragment)
+	f.views = make(map[string]*View)
 
 	return nil
 }
@@ -288,75 +285,232 @@ func (f *Frame) SetTimeQuantum(q TimeQuantum) error {
 	return nil
 }
 
-// FragmentPath returns the path to a fragment in the frame.
-func (f *Frame) FragmentPath(slice uint64) string {
-	return filepath.Join(f.path, strconv.FormatUint(slice, 10))
+// ViewPath returns the path to a view in the frame.
+func (f *Frame) ViewPath(name string) string {
+	return filepath.Join(f.path, "views", name)
 }
 
-// Fragment returns a fragment in the frame by slice.
-func (f *Frame) Fragment(slice uint64) *Fragment {
+// View returns a view in the frame by name.
+func (f *Frame) View(name string) *View {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.fragment(slice)
+	return f.view(name)
 }
 
-func (f *Frame) fragment(slice uint64) *Fragment { return f.fragments[slice] }
+func (f *Frame) view(name string) *View { return f.views[name] }
 
-// Fragments returns a list of all fragments in the frame.
-func (f *Frame) Fragments() []*Fragment {
+// Views returns a list of all views in the frame.
+func (f *Frame) Views() []*View {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	other := make([]*Fragment, 0, len(f.fragments))
-	for _, fragment := range f.fragments {
-		other = append(other, fragment)
+	other := make([]*View, 0, len(f.views))
+	for _, view := range f.views {
+		other = append(other, view)
 	}
 	return other
 }
 
-// CreateFragmentIfNotExists returns a fragment in the frame by slice.
-func (f *Frame) CreateFragmentIfNotExists(slice uint64) (*Fragment, error) {
+func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.createFragmentIfNotExists(slice)
-}
 
-func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
-	// Find fragment in cache first.
-	if frag := f.fragments[slice]; frag != nil {
-		return frag, nil
+	if view := f.views[name]; view != nil {
+		return view, nil
 	}
 
-	// Initialize and open fragment.
-	frag := f.newFragment(f.FragmentPath(slice), slice)
-	if err := frag.Open(); err != nil {
+	view := f.newView(f.ViewPath(name), name)
+	if err := view.Open(); err != nil {
 		return nil, err
 	}
-	frag.BitmapAttrStore = f.bitmapAttrStore
+	view.BitmapAttrStore = f.bitmapAttrStore
+	f.views[view.Name()] = view
 
-	// Save to lookup.
-	f.fragments[slice] = frag
-
-	f.stats.Count("maxSlice", 1)
-
-	return frag, nil
+	return view, nil
 }
 
-func (f *Frame) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, f.db, f.name, slice)
-	frag.LogOutput = f.LogOutput
-	frag.stats = f.stats.WithTags(fmt.Sprintf("slice:%d", slice))
-	return frag
+func (f *Frame) newView(path, name string) *View {
+	view := NewView(path, f.db, f.name, name)
+	view.LogOutput = f.LogOutput
+	view.BitmapAttrStore = f.bitmapAttrStore
+	view.stats = f.stats.WithTags(fmt.Sprintf("slice:%s", name))
+	return view
 }
 
 // SetBit sets a bit within the frame.
-func (f *Frame) SetBit(bitmapID, profileID uint64) (changed bool, err error) {
-	slice := profileID / SliceWidth
-	frag, err := f.CreateFragmentIfNotExists(slice)
+func (f *Frame) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	// Set standard layout bits.
+	if v, err := f.setBit(ViewStandard, rowID, colID, t); err != nil {
+		return changed, err
+	} else if v {
+		changed = v
+	}
+
+	// Set inverse layout bits.
+	// NOTE: The row & col are transposed for the inverted view.
+	if v, err := f.setBit(ViewInverse, colID, rowID, t); err != nil {
+		return changed, err
+	} else if v {
+		changed = v
+	}
+
+	return changed, nil
+}
+
+// setBit sets a bit for a given layout (default or inverted).
+func (f *Frame) setBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	// Retrieve view. Exit if it doesn't exist.
+	view, err := f.CreateViewIfNotExists(name)
 	if err != nil {
 		return changed, err
 	}
-	return frag.SetBit(bitmapID, profileID)
+
+	// Set non-time bit.
+	if v, err := view.SetBit(rowID, colID); err != nil {
+		return changed, err
+	} else if v {
+		changed = v
+	}
+
+	// Exit early if no timestamp is specified.
+	if t == nil {
+		return changed, nil
+	}
+
+	// If a timestamp is specified then set bits across all views for the quantum.
+	for _, subname := range ViewsByTime(name, *t, f.TimeQuantum()) {
+		view, err := f.CreateViewIfNotExists(subname)
+		if err != nil {
+			return changed, err
+		}
+
+		if c, err := view.SetBit(rowID, colID); err != nil {
+			return changed, err
+		} else if c {
+			changed = true
+		}
+	}
+
+	return changed, nil
+}
+
+// ClearBit clears a bit within the frame.
+func (f *Frame) ClearBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	// Clear standard layout bits.
+	if v, err := f.clearBit(ViewStandard, rowID, colID, t); err != nil {
+		return changed, err
+	} else if v {
+		changed = v
+	}
+
+	// Clear inverse layout bits.
+	// NOTE: The row & col are transposed for the inverted view.
+	if v, err := f.clearBit(ViewInverse, colID, rowID, t); err != nil {
+		return changed, err
+	} else if v {
+		changed = v
+	}
+
+	return changed, nil
+}
+
+// clearBit clears a bit for a given layout (default or inverted).
+func (f *Frame) clearBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	// Retrieve view. Exit if it doesn't exist.
+	view, err := f.CreateViewIfNotExists(name)
+	if err != nil {
+		return changed, err
+	}
+
+	// Clear non-time bit.
+	if v, err := view.ClearBit(rowID, colID); err != nil {
+		return changed, err
+	} else if v {
+		changed = v
+	}
+
+	// Exit early if no timestamp is specified.
+	if t == nil {
+		return changed, nil
+	}
+
+	// If a timestamp is specified then clear bits across all views for the quantum.
+	for _, subname := range ViewsByTime(name, *t, f.TimeQuantum()) {
+		view, err := f.CreateViewIfNotExists(subname)
+		if err != nil {
+			return changed, err
+		}
+
+		if c, err := view.ClearBit(rowID, colID); err != nil {
+			return changed, err
+		} else if c {
+			changed = true
+		}
+	}
+
+	return changed, nil
+}
+
+// Import bulk imports data.
+func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) error {
+	// Determine quantum if timestamps are set.
+	q := f.TimeQuantum()
+	if hasTime(timestamps) && q == "" {
+		return errors.New("time quantum not set in either database or frame")
+	}
+
+	// Split import data by fragment.
+	dataByFragment := make(map[importKey]importData)
+	for i := range bitmapIDs {
+		bitmapID, profileID, timestamp := bitmapIDs[i], profileIDs[i], timestamps[i]
+		slice := profileID / SliceWidth
+
+		var standard, inverse []string
+		if timestamp == nil {
+			standard = []string{ViewStandard}
+			inverse = []string{ViewInverse}
+		} else {
+			standard = ViewsByTime(ViewStandard, *timestamp, q)
+			inverse = ViewsByTime(ViewInverse, *timestamp, q)
+		}
+
+		// Attach bit to each standard view.
+		for _, name := range standard {
+			key := importKey{View: name, Slice: slice}
+			data := dataByFragment[key]
+			data.BitmapIDs = append(data.BitmapIDs, bitmapID)
+			data.ProfileIDs = append(data.ProfileIDs, profileID)
+			dataByFragment[key] = data
+		}
+
+		// Attach reversed bits to each inverse view.
+		for _, name := range inverse {
+			key := importKey{View: name, Slice: slice}
+			data := dataByFragment[key]
+			data.BitmapIDs = append(data.BitmapIDs, profileID)  // reversed
+			data.ProfileIDs = append(data.ProfileIDs, bitmapID) // reversed
+			dataByFragment[key] = data
+		}
+	}
+
+	// Import into each fragment.
+	for key, data := range dataByFragment {
+		view, err := f.CreateViewIfNotExists(key.View)
+		if err != nil {
+			return err
+		}
+
+		frag, err := view.CreateFragmentIfNotExists(key.Slice)
+		if err != nil {
+			return err
+		}
+
+		if err := frag.Import(data.BitmapIDs, data.ProfileIDs); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type frameSlice []*Frame
@@ -367,7 +521,8 @@ func (p frameSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // FrameInfo represents schema information for a frame.
 type FrameInfo struct {
-	Name string `json:"name"`
+	Name  string      `json:"name"`
+	Views []*ViewInfo `json:"views,omitempty"`
 }
 
 type frameInfoSlice []*FrameInfo

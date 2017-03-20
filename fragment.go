@@ -58,6 +58,7 @@ type Fragment struct {
 	// Composite identifiers
 	db    string
 	frame string
+	view  string
 	slice uint64
 
 	// File-backed storage
@@ -92,11 +93,12 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, db, frame string, slice uint64) *Fragment {
+func NewFragment(path, db, frame, view string, slice uint64) *Fragment {
 	return &Fragment{
 		path:  path,
 		db:    db,
 		frame: frame,
+		view:  view,
 		slice: slice,
 
 		LogOutput: ioutil.Discard,
@@ -117,6 +119,9 @@ func (f *Fragment) DB() string { return f.db }
 
 // Frame returns the frame the fragment was initialized with.
 func (f *Fragment) Frame() string { return f.frame }
+
+// View returns the view the fragment was initialized with.
+func (f *Fragment) View() string { return f.view }
 
 // Slice returns the slice the fragment was initialized with.
 func (f *Fragment) Slice() uint64 { return f.slice }
@@ -362,7 +367,6 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, err error) 
 	}
 
 	// Write to storage.
-
 	if changed, err = f.storage.Add(pos); err != nil {
 		return false, err
 	}
@@ -995,8 +999,8 @@ func track(start time.Time, name string, logger *log.Logger) {
 
 func (f *Fragment) snapshot() error {
 	logger := f.logger()
-	logger.Printf("fragment: snapshotting %s/%s/%d", f.db, f.frame, f.slice)
-	defer track(time.Now(), fmt.Sprintf("fragment: snapshot complete %s/%s/%d", f.db, f.frame, f.slice), logger)
+	logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.db, f.frame, f.view, f.slice)
+	defer track(time.Now(), fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.db, f.frame, f.view, f.slice), logger)
 
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + SnapshotExt
@@ -1322,7 +1326,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		if err != nil {
 			return err
 		}
-		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.Slice())
+		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return err
 		}
@@ -1403,7 +1407,8 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		}
 		clients = append(clients, client)
 
-		bitmapIDs, profileIDs, err := client.BlockData(context.Background(), f.DB(), f.Frame(), f.Slice(), id)
+		// Only sync the standard block.
+		bitmapIDs, profileIDs, err := client.BlockData(context.Background(), f.DB(), f.Frame(), ViewStandard, f.Slice(), id)
 		if err != nil {
 			return err
 		}
@@ -1436,6 +1441,8 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 		// Generate query with sets & clears.
 		var buf bytes.Buffer
+
+		// Only sync the standard block.
 		for j := 0; j < len(set.ProfileIDs); j++ {
 			fmt.Fprintf(&buf, "SetBit(frame=%q, id=%d, profileID=%d)\n", f.Frame(), set.BitmapIDs[j], (f.Slice()*SliceWidth)+set.ProfileIDs[j])
 		}

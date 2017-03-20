@@ -18,11 +18,11 @@ func TestIndex_DeleteDB(t *testing.T) {
 	defer idx.Close()
 
 	// Write bits to separate databases.
-	f0 := idx.MustCreateFragmentIfNotExists("d0", "f", 0)
+	f0 := idx.MustCreateFragmentIfNotExists("d0", "f", pilosa.ViewStandard, 0)
 	if _, err := f0.SetBit(100, 200); err != nil {
 		t.Fatal(err)
 	}
-	f1 := idx.MustCreateFragmentIfNotExists("d1", "f", 0)
+	f1 := idx.MustCreateFragmentIfNotExists("d1", "f", pilosa.ViewStandard, 0)
 	if _, err := f1.SetBit(100, 200); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	}
 
 	// Set data on the local index.
-	f := idx0.MustCreateFragmentIfNotExists("d", "f", 0)
+	f := idx0.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
 	if _, err := f.SetBit(0, 10); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(2, 20); err != nil {
@@ -91,15 +91,15 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f = idx0.MustCreateFragmentIfNotExists("d", "f0", 1)
+	f = idx0.MustCreateFragmentIfNotExists("d", "f0", pilosa.ViewStandard, 1)
 	if _, err := f.SetBit(9, SliceWidth+5); err != nil {
 		t.Fatal(err)
 	}
 
-	idx0.MustCreateFragmentIfNotExists("y", "z", 0)
+	idx0.MustCreateFragmentIfNotExists("y", "z", pilosa.ViewStandard, 0)
 
 	// Set data on the remote index.
-	f = idx1.MustCreateFragmentIfNotExists("d", "f", 0)
+	f = idx1.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
 	if _, err := f.SetBit(0, 4000); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(3, 10); err != nil {
@@ -108,7 +108,7 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f = idx1.MustCreateFragmentIfNotExists("y", "z", 3)
+	f = idx1.MustCreateFragmentIfNotExists("y", "z", pilosa.ViewStandard, 3)
 	if _, err := f.SetBit(10, (3*SliceWidth)+4); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(10, (3*SliceWidth)+5); err != nil {
@@ -134,7 +134,7 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 
 	// Verify data is the same on both nodes.
 	for i, idx := range []*Index{idx0, idx1} {
-		f := idx.Fragment("d", "f", 0)
+		f := idx.Fragment("d", "f", pilosa.ViewStandard, 0)
 		if a := f.Bitmap(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
 			t.Fatalf("unexpected bits(%d/0): %+v", i, a)
 		} else if a := f.Bitmap(2).Bits(); !reflect.DeepEqual(a, []uint64{20}) {
@@ -147,7 +147,7 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 			t.Fatalf("unexpected bits(%d/200): %+v", i, a)
 		}
 
-		f = idx.Fragment("d", "f0", 1)
+		f = idx.Fragment("d", "f0", pilosa.ViewStandard, 1)
 		a := f.Bitmap(9).Bits()
 		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
@@ -155,7 +155,7 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 		if a := f.Bitmap(9).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
 		}
-		f = idx.Fragment("y", "z", 3)
+		f = idx.Fragment("y", "z", pilosa.ViewStandard, 3)
 		if a := f.Bitmap(10).Bits(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
 			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
 		}
@@ -212,17 +212,21 @@ func (i *Index) MustCreateFrameIfNotExists(db, frame string) *Frame {
 	if err != nil {
 		panic(err)
 	}
-	return &Frame{Frame: f}
+	return f
 }
 
 // MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
-func (i *Index) MustCreateFragmentIfNotExists(db, frame string, slice uint64) *Fragment {
+func (i *Index) MustCreateFragmentIfNotExists(db, frame, view string, slice uint64) *Fragment {
 	d := i.MustCreateDBIfNotExists(db, pilosa.DBOptions{})
 	f, err := d.CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
 	if err != nil {
 		panic(err)
 	}
-	frag, err := f.CreateFragmentIfNotExists(slice)
+	v, err := f.CreateViewIfNotExists(view)
+	if err != nil {
+		panic(err)
+	}
+	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		panic(err)
 	}

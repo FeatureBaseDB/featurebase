@@ -4,7 +4,6 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/pilosa/pilosa"
 )
@@ -26,11 +25,11 @@ func TestDB_CreateFrameIfNotExists(t *testing.T) {
 	other, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 	if err != nil {
 		t.Fatal(err)
-	} else if f != other {
+	} else if f.Frame != other.Frame {
 		t.Fatal("frame mismatch")
 	}
 
-	if f != db.Frame("f") {
+	if f.Frame != db.Frame("f") {
 		t.Fatal("frame mismatch")
 	}
 }
@@ -130,13 +129,22 @@ func (db *DB) Reopen() error {
 	return nil
 }
 
-// MustSetBit sets a bit on the database. Panic on error.
-func (db *DB) MustSetBit(name string, bitmapID, profileID uint64, t *time.Time) (changed bool) {
-	changed, err := db.SetBit(name, bitmapID, profileID, t)
+// CreateFrame creates a frame with the given options.
+func (db *DB) CreateFrame(name string, opt pilosa.FrameOptions) (*Frame, error) {
+	f, err := db.DB.CreateFrame(name, opt)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return changed
+	return &Frame{Frame: f}, nil
+}
+
+// CreateFrameIfNotExists creates a frame with the given options if it doesn't exist.
+func (db *DB) CreateFrameIfNotExists(name string, opt pilosa.FrameOptions) (*Frame, error) {
+	f, err := db.DB.CreateFrameIfNotExists(name, opt)
+	if err != nil {
+		return nil, err
+	}
+	return &Frame{Frame: f}, nil
 }
 
 // Ensure database can delete a frame.

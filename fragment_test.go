@@ -23,7 +23,7 @@ const SliceWidth = pilosa.SliceWidth
 
 // Ensure a fragment can set a bit and retrieve it.
 func TestFragment_SetBit(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -54,7 +54,7 @@ func TestFragment_SetBit(t *testing.T) {
 
 // Ensure a fragment can clear a set bit.
 func TestFragment_ClearBit(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
@@ -81,7 +81,7 @@ func TestFragment_ClearBit(t *testing.T) {
 
 // Ensure a fragment can snapshot correctly.
 func TestFragment_Snapshot(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
@@ -110,7 +110,7 @@ func TestFragment_Snapshot(t *testing.T) {
 
 // Ensure a fragment can iterate over all bits in order.
 func TestFragment_ForEachBit(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -139,7 +139,7 @@ func TestFragment_ForEachBit(t *testing.T) {
 
 // Ensure a fragment can return the top n results.
 func TestFragment_Top(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Set bits on the bitmaps 100, 101, & 102.
@@ -161,7 +161,7 @@ func TestFragment_Top(t *testing.T) {
 
 // Ensure a fragment can filter bitmaps when retrieving the top n bitmaps.
 func TestFragment_Top_Filter(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Set bits on the bitmaps 100, 101, & 102.
@@ -191,7 +191,7 @@ func TestFragment_Top_Filter(t *testing.T) {
 
 // Ensure a fragment can return top bitmaps that intersect with an input bitmap.
 func TestFragment_TopN_Intersect(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Create an intersecting input bitmap.
@@ -221,7 +221,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 		t.Skip("short mode")
 	}
 
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Create an intersecting input bitmap.
@@ -258,7 +258,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 
 // Ensure a fragment can return top bitmaps when specified by ID.
 func TestFragment_TopN_BitmapIDs(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Set bits on various bitmaps.
@@ -279,7 +279,7 @@ func TestFragment_TopN_BitmapIDs(t *testing.T) {
 
 // Ensure fragment can return a checksum for its blocks.
 func TestFragment_Checksum(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Retrieve checksum and set bits.
@@ -298,7 +298,7 @@ func TestFragment_Checksum(t *testing.T) {
 
 // Ensure fragment can return a checksum for a given block.
 func TestFragment_Blocks(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Retrieve initial checksum.
@@ -336,7 +336,7 @@ func TestFragment_Blocks(t *testing.T) {
 
 // Ensure fragment returns an empty checksum if no data exists for a block.
 func TestFragment_Blocks_Empty(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Set bits on a different block.
@@ -354,7 +354,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_LRUCache_Persistence(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -386,7 +386,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_RankCache_Persistence(t *testing.T) {
-	f := MustOpenFragment("d", "f.n", 0)
+	f := MustOpenFragment("d", "f.n", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -418,7 +418,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 
 // Ensure a fragment can be copied to another fragment.
 func TestFragment_WriteTo_ReadFrom(t *testing.T) {
-	f0 := MustOpenFragment("d", "f", 0)
+	f0 := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f0.Close()
 
 	// Set and then clear bits on the fragment.
@@ -443,7 +443,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Read into another fragment.
-	f1 := MustOpenFragment("d", "f", 0)
+	f1 := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	if rn, err := f1.ReadFrom(&buf); err != nil {
 		t.Fatal(err)
 	} else if wn != rn {
@@ -476,7 +476,7 @@ func BenchmarkFragment_BlockChecksum_Fill10(b *testing.B) { benchmarkFragmentBlo
 func BenchmarkFragment_BlockChecksum_Fill50(b *testing.B) { benchmarkFragmentBlockChecksum(b, 0.50) }
 
 func benchmarkFragmentBlockChecksum(b *testing.B, fillPercent float64) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	// Fill fragment.
@@ -505,7 +505,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	}
 
 	// Open the fragment specified by the path.
-	f := pilosa.NewFragment(*FragmentPath, "d", "f", 0)
+	f := pilosa.NewFragment(*FragmentPath, "d", "f", pilosa.ViewStandard, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -521,7 +521,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 }
 
 func BenchmarkFragment_IntersectionCount(b *testing.B) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 	f.MaxOpN = math.MaxInt32
 
@@ -558,7 +558,7 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment with a temporary path.
-func NewFragment(db, frame string, slice uint64) *Fragment {
+func NewFragment(db, frame, view string, slice uint64) *Fragment {
 	file, err := ioutil.TempFile("", "pilosa-fragment-")
 	if err != nil {
 		panic(err)
@@ -566,7 +566,7 @@ func NewFragment(db, frame string, slice uint64) *Fragment {
 	file.Close()
 
 	f := &Fragment{
-		Fragment:        pilosa.NewFragment(file.Name(), db, frame, slice),
+		Fragment:        pilosa.NewFragment(file.Name(), db, frame, view, slice),
 		BitmapAttrStore: MustOpenAttrStore(),
 	}
 	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
@@ -574,8 +574,8 @@ func NewFragment(db, frame string, slice uint64) *Fragment {
 }
 
 // MustOpenFragment creates and opens an fragment at a temporary path. Panic on error.
-func MustOpenFragment(db, frame string, slice uint64) *Fragment {
-	f := NewFragment(db, frame, slice)
+func MustOpenFragment(db, frame, view string, slice uint64) *Fragment {
+	f := NewFragment(db, frame, view, slice)
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
@@ -597,7 +597,7 @@ func (f *Fragment) Reopen() error {
 		return err
 	}
 
-	f.Fragment = pilosa.NewFragment(path, f.DB(), f.Frame(), f.Slice())
+	f.Fragment = pilosa.NewFragment(path, f.DB(), f.Frame(), f.View(), f.Slice())
 	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
 	if err := f.Open(); err != nil {
 		return err
