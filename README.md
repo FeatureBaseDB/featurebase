@@ -28,7 +28,19 @@ pilosa server
 
 ## Configuration
 
-You can specify a configuration by setting the `-config` flag when running `pilosa`.
+Running just `pilosa` will show a list of available subcommands. `pilosa help
+<command>` will show usage information and the available flags for the command.
+
+Any flag can be specified at the command line, in an environment variables,
+and/or in a toml config file. The environment variable for any flag is that
+flag, upper cased, prefixed with `PILOSA_`, and with any dashes converted to
+underscores. For example, if you would specify `--cluster.poll-interval=30s` at
+the command line, you would set `PILOSA_CLUSTER.POLL_INTERVAL=30s` in the
+environment. For the configuration file, a dot in a flag denotes nesting with in
+the config file. See the example config file below for examples of this.
+
+You can specify a configuration by setting the `--config` flag when running
+`pilosa`.
 
 
 ```sh
@@ -72,13 +84,15 @@ The first two configuration options will be unique to each node in the cluster:
 
 The remaining configuration options should be the same on every node in the cluster.
 
-`replicas`: the number of replicas within the cluster
+`[cluster] replicas`: the number of replicas within the cluster
 
 `[cluster] hosts`: specifies each node within the cluster
 
 `[cluster] poll-interval`: TODO
 
 `[anti-entropy] interval`: TODO
+
+There are also some profiling options for debugging and performance tuning - these don't need to be the same across the cluster and are mostly useful for doing Pilosa development.
 
 `[profile] cpu`: Path at which to store cpu profiling data which will be taken when pilosa starts.
 
