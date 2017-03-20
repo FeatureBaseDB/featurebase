@@ -1,7 +1,6 @@
 package pilosa
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -33,8 +32,9 @@ type Server struct {
 	closing chan struct{}
 
 	// Data storage and HTTP interface.
-	Index   *Index
-	Handler *Handler
+	Index     *Index
+	Handler   *Handler
+	Messenger Messenger
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
@@ -53,8 +53,9 @@ func NewServer() *Server {
 	s := &Server{
 		closing: make(chan struct{}),
 
-		Index:   NewIndex(),
-		Handler: NewHandler(),
+		Index:     NewIndex(),
+		Handler:   NewHandler(),
+		Messenger: NopMessenger,
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
@@ -74,7 +75,7 @@ func (s *Server) Open() error {
 	if err != nil {
 		return err
 	} else if port == "" {
-		return errors.New("port must be specified in config host")
+		port = DefaultPort
 	}
 
 	// Open HTTP listener to determine port (if specified as :0).
@@ -97,6 +98,11 @@ func (s *Server) Open() error {
 		return err
 	}
 
+	// Open NodeSet communication
+	if err := s.Cluster.NodeSet.Open(); err != nil {
+		return err
+	}
+
 	// Create executor for executing queries.
 	e := NewExecutor()
 	e.Index = s.Index
@@ -114,9 +120,11 @@ func (s *Server) Open() error {
 	go func() { http.Serve(ln, s.Handler) }()
 
 	// Start background monitoring.
-	s.wg.Add(2)
-	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
-	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
+	/*
+		s.wg.Add(2)
+		go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
+		go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
+	*/
 
 	return nil
 }
@@ -143,6 +151,49 @@ func (s *Server) Addr() net.Addr {
 		return nil
 	}
 	return s.ln.Addr()
+}
+
+// LocalState returns the state of the local node as well as the
+// index (dbs/frames) according to the local node.
+func (s *Server) LocalState() (proto.Message, error) {
+	// TODO: are there errors to handle?
+	pb := encodeLocalState(s)
+	return pb, nil
+}
+
+// HandleRemoteState provides the current, local state.
+// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
+func (s *Server) HandleRemoteState(pb proto.Message) error {
+	return s.mergeRemoteState(pb.(*internal.NodeState))
+}
+
+func (s *Server) mergeRemoteState(ns *internal.NodeState) error {
+	// TODO: update some node state value in the cluster (it should be in cluster.node i guess)
+
+	// Create databases that don't exist.
+	for _, db := range ns.DBs {
+		opt := DBOptions{
+			ColumnLabel: db.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(db.Meta.TimeQuantum),
+		}
+		d, err := s.Index.CreateDBIfNotExists(db.Name, opt)
+		if err != nil {
+			return err
+		}
+		// Create frames that don't exist.
+		for _, f := range db.Frames {
+			opt := FrameOptions{
+				RowLabel:    f.Meta.RowLabel,
+				TimeQuantum: TimeQuantum(f.Meta.TimeQuantum),
+			}
+			_, err := d.CreateFrameIfNotExists(f.Name, opt)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *Server) logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
@@ -181,6 +232,15 @@ func (s *Server) monitorAntiEntropy() {
 	}
 }
 
+// encodeLocalState converts s into its internal representation.
+func encodeLocalState(s *Server) *internal.NodeState {
+	return &internal.NodeState{
+		Host:  s.Host,
+		State: "OK", // TODO: make this work, pull from cluster.Node
+		DBs:   encodeDBs(s.Index.DBs()),
+	}
+}
+
 // monitorMaxSlices periodically pulls the highest slice from each node in the cluster.
 func (s *Server) monitorMaxSlices() {
 	// Ignore if only one node in the cluster.
@@ -203,21 +263,15 @@ func (s *Server) monitorMaxSlices() {
 			if s.Host != node.Host {
 				maxSlices, _ := checkMaxSlices(node.Host)
 				for db, newmax := range maxSlices {
-					// if we don't know about a db locally, create it
-					// so that the /schema endpoint can report it
+					// if we don't know about a db locally, log an error because
+					// db's should be created and synced prior to slice creation
 					if localdb := s.Index.DB(db); localdb != nil {
 						if newmax > oldmaxslices[db] {
 							oldmaxslices[db] = newmax
 							localdb.SetRemoteMaxSlice(newmax)
 						}
 					} else {
-						d := s.Index.DB(db)
-						if d == nil {
-							s.logger().Printf("Local DB not found: %s", db)
-							return
-						}
-						oldmaxslices[db] = newmax
-						d.SetRemoteMaxSlice(newmax)
+						s.logger().Printf("Local DB not found: %s", db)
 					}
 				}
 			}

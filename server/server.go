@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
 )
 
@@ -27,37 +26,45 @@ const (
 type Command struct {
 	Server *pilosa.Server
 
-	// Configuration options.
-	ConfigPath string
-	Config     *pilosa.Config
+	// Configuration.
+	Config *pilosa.Config
 
 	// Profiling options.
 	CPUProfile string
 	CPUTime    time.Duration
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
+
+	// running will be closed once Command.Run is finished.
+	Started chan struct{}
+	// Done will be closed when Command.Close() is called
+	Done chan struct{}
 }
 
 // NewMain returns a new instance of Main.
-func NewCommand() *Command {
+func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 	return &Command{
 		Server: pilosa.NewServer(),
 		Config: pilosa.NewConfig(),
 
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+
+		Started: make(chan struct{}),
+		Done:    make(chan struct{}),
 	}
 }
 
 // Run executes the pilosa server.
-func (m *Command) Run(args ...string) error {
-	// Notify user of config file.
-	if m.ConfigPath != "" {
-		fmt.Fprintf(m.Stdout, "Using config: %s\n", m.ConfigPath)
+func (m *Command) Run(args ...string) (err error) {
+	defer close(m.Started)
+	prefix := "~" + string(filepath.Separator)
+	if strings.HasPrefix(m.Config.DataDir, prefix) {
+		HomeDir := os.Getenv("HOME")
+		if HomeDir == "" {
+			return errors.New("data directory not specified and no home dir available")
+		}
+		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
 	}
 
 	// Setup logging output.
@@ -69,50 +76,50 @@ func (m *Command) Run(args ...string) error {
 	m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
 
 	// Build cluster from config file.
-	m.Server.Host = m.Config.Host
+	m.Server.Host, err = normalizeHost(m.Config.Host)
+	if err != nil {
+		return err
+	}
 	m.Server.Cluster = m.Config.PilosaCluster()
+
+	// Setup Messenger.
+	fmt.Fprintf(m.Stderr, "Using Messenger type: %s\n", m.Config.Cluster.MessengerType)
+	m.Server.Messenger = m.Server.Cluster.NodeSet.(pilosa.Messenger)
+	m.Server.Handler.Messenger = m.Server.Messenger
+	m.Server.Index.Messenger = m.Server.Messenger
+
+	// Set message and state handlers.
+	m.Server.Cluster.NodeSet.SetMessageHandler(m.Server.Index.HandleMessage)
+	m.Server.Cluster.NodeSet.SetRemoteStateHandler(m.Server.HandleRemoteState)
+	m.Server.Cluster.NodeSet.SetLocalStateSource(m.Server.LocalState)
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
 
 	// Initialize server.
-	if err := m.Server.Open(); err != nil {
-		return err
+	if err = m.Server.Open(); err != nil {
+		return fmt.Errorf("server.Open: %v", err)
 	}
-
 	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Server.Host)
-
 	return nil
+}
+
+func normalizeHost(host string) (string, error) {
+	if !strings.Contains(host, ":") {
+		host = host + ":"
+	} else if strings.Contains(host, "://") {
+		if strings.HasPrefix(host, "http://") {
+			host = host[7:]
+		} else {
+			return "", fmt.Errorf("invalid scheme or host: '%s'. use the format [http://]<host>:<port>", host)
+		}
+	}
+	return host, nil
 }
 
 // Close shuts down the server.
 func (m *Command) Close() error {
-	return m.Server.Close()
-}
-
-// SetupConfig loads the config file if specified and sets state on the Command.
-func (m *Command) SetupConfig(args []string) error {
-	// Load config, if specified.
-	if m.ConfigPath != "" {
-		if _, err := toml.DecodeFile(m.ConfigPath, &m.Config); err != nil {
-			return err
-		}
-	}
-
-	// Use default data directory if one is not specified.
-	if m.Config.DataDir == "" {
-		m.Config.DataDir = DefaultDataDir
-	}
-
-	// Expand home directory.
-	prefix := "~" + string(filepath.Separator)
-	if strings.HasPrefix(m.Config.DataDir, prefix) {
-		HomeDir := os.Getenv("HOME")
-		if HomeDir == "" {
-			return errors.New("data directory not specified and no home dir available")
-		}
-		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
-	}
-
-	return nil
+	err := m.Server.Close()
+	close(m.Done)
+	return err
 }

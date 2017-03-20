@@ -25,17 +25,13 @@ type BenchCommand struct {
 	N  int
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 }
 
 // NewBenchCommand returns a new instance of BenchCommand.
 func NewBenchCommand(stdin io.Reader, stdout, stderr io.Writer) *BenchCommand {
 	return &BenchCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 

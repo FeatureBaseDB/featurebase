@@ -40,7 +40,8 @@ type Frame struct {
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
 
-	stats StatsClient
+	messenger Messenger
+	stats     StatsClient
 
 	// Label used for referring to a row.
 	rowLabel string
@@ -66,7 +67,8 @@ func NewFrame(path, db, name string) (*Frame, error) {
 		fragments:       make(map[uint64]*Fragment),
 		bitmapAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
-		stats: NopStatsClient,
+		messenger: NopMessenger,
+		stats:     NopStatsClient,
 
 		rowLabel:        DefaultRowLabel,
 		rankedCacheSize: DefaultFrameCache,
@@ -235,7 +237,7 @@ func (f *Frame) openFragments() error {
 
 // loadMeta reads meta data for the frame, if any.
 func (f *Frame) loadMeta() error {
-	var pb internal.Frame
+	var pb internal.FrameMeta
 
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
@@ -261,7 +263,7 @@ func (f *Frame) loadMeta() error {
 // saveMeta writes meta data for the frame.
 func (f *Frame) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.Frame{
+	buf, err := proto.Marshal(&internal.FrameMeta{
 		TimeQuantum: string(f.timeQuantum),
 		RowLabel:    f.rowLabel,
 	})
@@ -368,6 +370,14 @@ func (f *Frame) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	if err := frag.Open(); err != nil {
 		return nil, err
 	}
+
+	// Send a MaxSlice message
+	f.messenger.SendMessage(
+		&internal.CreateSliceMessage{
+			DB:    f.db,
+			Slice: slice,
+		}, "gossip")
+
 	frag.BitmapAttrStore = f.bitmapAttrStore
 
 	// Save to lookup.
@@ -395,6 +405,26 @@ func (f *Frame) SetBit(bitmapID, profileID uint64) (changed bool, err error) {
 	return frag.SetBit(bitmapID, profileID)
 }
 
+// encodeFrames converts a into its internal representation.
+func encodeFrames(a []*Frame) []*internal.Frame {
+	other := make([]*internal.Frame, len(a))
+	for i := range a {
+		other[i] = encodeFrame(a[i])
+	}
+	return other
+}
+
+// encodeFrame converts f into its internal representation.
+func encodeFrame(f *Frame) *internal.Frame {
+	return &internal.Frame{
+		Name: f.name,
+		Meta: &internal.FrameMeta{
+			TimeQuantum: string(f.timeQuantum),
+			RowLabel:    f.rowLabel,
+		},
+	}
+}
+
 type frameSlice []*Frame
 
 func (p frameSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
@@ -414,6 +444,7 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
-	RowLabel  string `json:"rowLabel,omitempty"`
+	RowLabel string `json:"rowLabel,omitempty"`
 	CacheSize int    `json:"cacheSize,omitempty"`
+	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
