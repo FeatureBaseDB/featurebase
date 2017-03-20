@@ -1,8 +1,10 @@
-FROM golang:1.7.5
+FROM golang:1.8.0
 
 MAINTAINER Pilosa Corp. <dev@pilosa.com>
 
-EXPOSE 15000
+ARG ldflags=''
+
+EXPOSE 10101
 VOLUME /data
 
 RUN echo 'data-dir = "/data"' > /config
@@ -20,7 +22,8 @@ COPY . /go/src/github.com/pilosa/pilosa
 
 RUN cd /go/src/github.com/pilosa/pilosa \
     && make vendor \
-    && CGO_ENABLED=0 go install -a github.com/pilosa/pilosa/cmd/pilosa
+    && CGO_ENABLED=0 go install -a -ldflags "$ldflags" github.com/pilosa/pilosa/cmd/pilosa \
+    && rm -rf /go/src /go/pkg
 
 ENTRYPOINT ["/go/bin/pilosa"]
-CMD ["-config", "/config"]
+CMD ["server", "--config", "/config"]

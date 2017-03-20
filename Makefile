@@ -1,13 +1,14 @@
-.PHONY: glide vendor-update docker pilosa pilosactl crossbuild install
+.PHONY: glide vendor-update docker pilosa crossbuild install generate
 
 GLIDE := $(shell command -v glide 2>/dev/null)
-VERSION := $(shell git describe --tags)
+PROTOC := $(shell command -v protoc 2>/dev/null)
+VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
 IDENTIFIER := $(VERSION)-$(GOOS)-$(GOARCH)
 CLONE_URL=github.com/pilosa/pilosa
 BUILD_TIME=`date -u +%FT%T%z`
-LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
+LDFLAGS=-ldflags "-X github.com/pilosa/pilosa/cmd.Version=$(VERSION) -X github.com/pilosa/pilosa/cmd.BuildTime=$(BUILD_TIME)"
 
-default: test pilosa pilosactl
+default: test pilosa
 
 $(GOPATH)/bin:
 	mkdir $(GOPATH)/bin
@@ -31,17 +32,24 @@ test: vendor
 pilosa: vendor
 	go build $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
-pilosactl: vendor
-	go build $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosactl
-
 crossbuild: vendor
 	mkdir -p build/pilosa-$(IDENTIFIER)
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
-	make pilosactl FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosactl"
 
 install: vendor
 	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
-	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosactl
+
+.protoc-gen-gofast: vendor
+ifndef PROTOC
+	$(error "protoc is not available please install protoc from https://github.com/google/protobuf/releases")
+endif
+	go build -o .protoc-gen-gofast ./vendor/github.com/gogo/protobuf/protoc-gen-gofast
+	cp ./.protoc-gen-gofast $(GOPATH)/bin/protoc-gen-gofast
+
+generate: .protoc-gen-gofast
+	go generate github.com/pilosa/pilosa/internal
 
 docker:
-	docker build -t pilosa:latest .
+	docker build -t "pilosa:$(VERSION)" \
+		--build-arg ldflags="-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)" .
+	@echo "Created image: pilosa:$(VERSION)"

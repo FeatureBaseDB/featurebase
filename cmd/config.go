@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"context"
-	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -10,20 +10,26 @@ import (
 	"github.com/pilosa/pilosa/ctl"
 )
 
-var conf = ctl.NewConfigCommand(os.Stdin, os.Stdout, os.Stderr)
+var Conf *ctl.ConfigCommand
 
-var confCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Print the default configuration.",
-	Long: `config prints the default configuration to stdout
+func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	Conf = ctl.NewConfigCommand(os.Stdin, os.Stdout, os.Stderr)
+	confCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Print the default configuration.",
+		Long: `config prints the default configuration to stdout
 `,
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := conf.Run(context.Background()); err != nil {
-			fmt.Println(err)
-		}
-	},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := Conf.Run(context.Background()); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+
+	return confCmd
 }
 
 func init() {
-	RootCmd.AddCommand(confCmd)
+	subcommandFns["config"] = NewConfigCommand
 }

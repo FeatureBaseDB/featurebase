@@ -33,17 +33,13 @@ type ImportCommand struct {
 	Client *pilosa.Client `json:"-"`
 
 	// Standard input/output
-	Stdin  io.Reader `json:"-"`
-	Stdout io.Writer `json:"-"`
-	Stderr io.Writer `json:"-"`
+	*pilosa.CmdIO
 }
 
 // NewImportCommand returns a new instance of ImportCommand.
 func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand {
 	return &ImportCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 
 		BufferSize: 10000000,
 	}

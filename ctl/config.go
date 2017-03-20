@@ -5,22 +5,19 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/pilosa/pilosa"
 )
 
 // ConfigCommand represents a command for printing a default config.
 type ConfigCommand struct {
-	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 }
 
 // NewConfigCommand returns a new instance of ConfigCommand.
 func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *ConfigCommand {
 	return &ConfigCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 
@@ -28,13 +25,13 @@ func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *ConfigCommand 
 func (cmd *ConfigCommand) Run(ctx context.Context) error {
 	fmt.Fprintln(cmd.Stdout, strings.TrimSpace(`
 data-dir = "~/.pilosa"
-host = "localhost:15000"
+host = "localhost:10101"
 
 [cluster]
 replicas = 1
 
 [[cluster.node]]
-host = "localhost:15000"
+host = "localhost:10101"
 
 [plugins]
 path = ""

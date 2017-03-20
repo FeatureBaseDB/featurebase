@@ -2,9 +2,9 @@ package pilosa
 
 import (
 	"errors"
+	"regexp"
 
 	"github.com/pilosa/pilosa/internal"
-	"regexp"
 )
 
 // System errors.
@@ -15,12 +15,12 @@ var (
 	ErrDatabaseExists   = errors.New("database already exists")
 	ErrDatabaseNotFound = errors.New("database not found")
 
+	// ErrFrameRequired is returned when no frame is specified.
 	ErrFrameRequired = errors.New("frame required")
 	ErrFrameExists   = errors.New("frame already exists")
 	ErrFrameNotFound = errors.New("frame not found")
 
-	// ErrFrameRequired is returned when no frame is specified.
-	ErrName = errors.New("name restricted to [a-z0-9_-]")
+	ErrName = errors.New("invalid database or frame's name, must match [a-z0-9_-]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
@@ -29,7 +29,7 @@ var (
 
 // Regular expression to valuate db and frame's name
 // Todo: remove . when frame doesn't require . for topN
-var nameRegexp = regexp.MustCompile(`^([a-z0-9._-]{1,64}$)`)
+var nameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,64}$`)
 
 // Profile represents vertical column in a database.
 // A profile can have a set of attributes attached to it.
@@ -84,11 +84,10 @@ func decodeProfile(pb *internal.Profile) *Profile {
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
 
-
 // Restrict name using regex
 func ValidateName(name string) error {
 	validName := nameRegexp.Match([]byte(name))
-	if validName == false{
+	if validName == false {
 		return ErrName
 	}
 	return nil

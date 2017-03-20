@@ -21,17 +21,13 @@ type SortCommand struct {
 	Path string
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 }
 
 // NewSortCommand returns a new instance of SortCommand.
 func NewSortCommand(stdin io.Reader, stdout, stderr io.Writer) *SortCommand {
 	return &SortCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 

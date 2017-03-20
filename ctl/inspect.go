@@ -10,6 +10,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/roaring"
 )
 
@@ -19,17 +20,13 @@ type InspectCommand struct {
 	Path string
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 }
 
 // NewInspectCommand returns a new instance of InspectCommand.
 func NewInspectCommand(stdin io.Reader, stdout, stderr io.Writer) *InspectCommand {
 	return &InspectCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 
