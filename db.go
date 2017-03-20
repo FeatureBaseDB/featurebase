@@ -372,7 +372,7 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 
 	// Update options.
 	f.SetRowLabel(opt.RowLabel)
-	f.SetRankedCacheSize(opt.CacheSize)
+	f.SetCacheSize(opt.CacheSize)
 	f.SetTimeQuantum(opt.TimeQuantum)
 
 	// Add to database's frame lookup.

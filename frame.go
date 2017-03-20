@@ -25,7 +25,7 @@ const (
 	DefaultRowLabel = "id"
 
 	// Default ranked frame cache
-	DefaultFrameCache = 50000
+	DefaultCacheSize = 50000
 )
 
 // Frame represents a container for views.
@@ -48,7 +48,7 @@ type Frame struct {
 	rowLabel string
 
 	// Cache size for ranked frames
-	rankedCacheSize int
+	cacheSize int
 
 	LogOutput io.Writer
 }
@@ -71,8 +71,8 @@ func NewFrame(path, db, name string) (*Frame, error) {
 		messenger: NopMessenger,
 		stats:     NopStatsClient,
 
-		rowLabel:        DefaultRowLabel,
-		rankedCacheSize: DefaultFrameCache,
+		rowLabel:  DefaultRowLabel,
+		cacheSize: DefaultCacheSize,
 
 		LogOutput: ioutil.Discard,
 	}, nil
@@ -141,19 +141,19 @@ func (f *Frame) RowLabel() string {
 	return v
 }
 
-// SetRankedCacheSize sets the cache size for ranked fames. Persists to meta file on update.
-// defaults to DefaultFrameCache 50000
-func (f *Frame) SetRankedCacheSize(v int) error {
+// SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
+// defaults to DefaultCacheSize 50000
+func (f *Frame) SetCacheSize(v int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Ignore if no change occurred.
-	if v == 0 || f.rankedCacheSize == v {
+	if v == 0 || f.cacheSize == v {
 		return nil
 	}
 
 	// Persist meta data to disk on change.
-	f.rankedCacheSize = v
+	f.cacheSize = v
 	if err := f.saveMeta(); err != nil {
 		return err
 	}
@@ -161,10 +161,10 @@ func (f *Frame) SetRankedCacheSize(v int) error {
 	return nil
 }
 
-// RankedCacheSize returns the ranked frame cache size.
-func (f *Frame) RankedCacheSize() int {
+// CacheSize returns the ranked frame cache size.
+func (f *Frame) CacheSize() int {
 	f.mu.Lock()
-	v := f.rankedCacheSize
+	v := f.cacheSize
 	f.mu.Unlock()
 	return v
 }
@@ -174,7 +174,7 @@ func (f *Frame) Options() FrameOptions {
 	f.mu.Lock()
 	opt := FrameOptions{
 		RowLabel:  f.rowLabel,
-		CacheSize: f.rankedCacheSize,
+		CacheSize: f.cacheSize,
 	}
 	f.mu.Unlock()
 	return opt
@@ -252,7 +252,7 @@ func (f *Frame) loadMeta() error {
 	if os.IsNotExist(err) {
 		f.timeQuantum = ""
 		f.rowLabel = DefaultRowLabel
-		f.rankedCacheSize = DefaultFrameCache
+		f.cacheSize = DefaultCacheSize
 		return nil
 	} else if err != nil {
 		return err
@@ -265,7 +265,7 @@ func (f *Frame) loadMeta() error {
 	// Copy metadata fields.
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
-	f.rankedCacheSize = int(pb.CacheSize)
+	f.cacheSize = int(pb.CacheSize)
 	return nil
 }
 
@@ -275,7 +275,7 @@ func (f *Frame) saveMeta() error {
 	buf, err := proto.Marshal(&internal.FrameMeta{
 		TimeQuantum: string(f.timeQuantum),
 		RowLabel:    f.rowLabel,
-		CacheSize:   int64(f.rankedCacheSize),
+		CacheSize:   int64(f.cacheSize),
 	})
 	if err != nil {
 		return err
@@ -567,7 +567,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 		Meta: &internal.FrameMeta{
 			TimeQuantum: string(f.timeQuantum),
 			RowLabel:    f.rowLabel,
-			CacheSize:   int64(f.rankedCacheSize),
+			CacheSize:   int64(f.cacheSize),
 		},
 	}
 }

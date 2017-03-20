@@ -134,16 +134,16 @@ func TestFrame_SetCacheSize(t *testing.T) {
 	cacheSize := 100
 
 	// Set & retrieve frame cache size.
-	if err := f.SetRankedCacheSize(cacheSize); err != nil {
+	if err := f.SetCacheSize(cacheSize); err != nil {
 		t.Fatal(err)
-	} else if q := f.RankedCacheSize(); q != cacheSize {
+	} else if q := f.CacheSize(); q != cacheSize {
 		t.Fatalf("unexpected frame cache size: %d", q)
 	}
 
 	// Reload frame and verify that it is persisted.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
-	} else if q := f.RankedCacheSize(); q != cacheSize {
+	} else if q := f.CacheSize(); q != cacheSize {
 		t.Fatalf("unexpected frame cache size (reopen): %d", q)
 	}
 }
