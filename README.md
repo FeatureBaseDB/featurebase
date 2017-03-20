@@ -39,7 +39,7 @@ the command line, you would set `PILOSA_CLUSTER.POLL_INTERVAL=30s` in the
 environment. For the configuration file, a dot in a flag denotes nesting with in
 the config file. See the example config file below for examples of this.
 
-You can specify a configuration by setting the `-config` flag when running
+You can specify a configuration by setting the `--config` flag when running
 `pilosa`.
 
 
