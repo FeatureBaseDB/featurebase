@@ -2,39 +2,35 @@ package cmd
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/pilosa/pilosa/ctl"
 )
 
-var migrationPlanner = ctl.NewCreateMigrationCommand(os.Stdin, os.Stdout, os.Stderr)
+var MigrationPlanner *ctl.CreateMigrationCommand
 
-var createMigrationPlanCmd = &cobra.Command{
-	Use:   "create-migration",
-	Short: "Create a migration plan file for cluster topology changes",
-	Long: `This command produces a file used as input for the run-migration command .
+func NewMigrationCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	MigrationPlanner = ctl.NewCreateMigrationCommand(os.Stdin, os.Stdout, os.Stderr)
+	migrationCmd := &cobra.Command{
+		Use:   "create-migration",
+		Short: "Create a migration plan file for cluster topology changes",
+		Long: `This command produces a file used as input for the run-migration command .
 `,
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := migrationPlanner.Run(context.Background()); err != nil {
-			fmt.Println(err)
-		}
-	},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return MigrationPlanner.Run(context.Background())
+		},
+	}
+	flags := migrationCmd.Flags()
+	flags.StringVarP(&MigrationPlanner.Host, "host", "p", "localhost:15000", "host:port of Pilosa providing the schema.")
+	flags.StringVarP(&MigrationPlanner.SrcConfig, "srcConfig", "s", "", "Original Cluster Node Configuration File")
+	flags.StringVarP(&MigrationPlanner.DestConfig, "destConfig", "d", "", "Proposed Cluster Node Configuration File")
+	flags.StringVarP(&MigrationPlanner.DestFileName, "output", "o", "-", "filename to store the plan")
+	return migrationCmd
 }
 
 func init() {
-	createMigrationPlanCmd.Flags().StringVarP(&migrationPlanner.Host, "host", "", "localhost:15000", "host:port of Pilosa providing the schema.")
-	createMigrationPlanCmd.Flags().StringVarP(&migrationPlanner.SrcConfig, "srcConfig", "", "", "Original Cluster Node Configuration File")
-	createMigrationPlanCmd.Flags().StringVarP(&migrationPlanner.DestConfig, "destConfig", "", "", "Proposed Cluster Node Configuration File")
-
-	err := viper.BindPFlags(createMigrationPlanCmd.Flags())
-	if err != nil {
-		log.Fatalf("Error binding backup flags: %v", err)
-	}
-
-	RootCmd.AddCommand(createMigrationPlanCmd)
+	subcommandFns["create-migration"] = NewMigrationCmd
 }
