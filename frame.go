@@ -252,6 +252,7 @@ func (f *Frame) loadMeta() error {
 	if os.IsNotExist(err) {
 		f.timeQuantum = ""
 		f.rowLabel = DefaultRowLabel
+		f.rankedCacheSize = DefaultFrameCache
 		return nil
 	} else if err != nil {
 		return err
@@ -264,7 +265,7 @@ func (f *Frame) loadMeta() error {
 	// Copy metadata fields.
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
-
+	f.rankedCacheSize = int(pb.CacheSize)
 	return nil
 }
 
@@ -274,6 +275,7 @@ func (f *Frame) saveMeta() error {
 	buf, err := proto.Marshal(&internal.FrameMeta{
 		TimeQuantum: string(f.timeQuantum),
 		RowLabel:    f.rowLabel,
+		CacheSize:   int64(f.rankedCacheSize),
 	})
 	if err != nil {
 		return err
@@ -565,6 +567,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 		Meta: &internal.FrameMeta{
 			TimeQuantum: string(f.timeQuantum),
 			RowLabel:    f.rowLabel,
+			CacheSize:   int64(f.rankedCacheSize),
 		},
 	}
 }

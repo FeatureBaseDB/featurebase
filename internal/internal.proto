@@ -10,6 +10,7 @@ message DBMeta {
 message FrameMeta {
 	string TimeQuantum = 1;
 	string RowLabel = 2;
+	int64 CacheSize = 3;
 }
 
 message Bitmap {
