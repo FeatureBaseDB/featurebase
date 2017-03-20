@@ -228,9 +228,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
-	if err := json.NewEncoder(w).Encode(getSchemaResponse{
-		DBs: h.Index.Schema(),
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(encodeDBs(h.Index.DBs())); err != nil {
 		h.logger().Printf("write schema response error: %s", err)
 	}
 }
