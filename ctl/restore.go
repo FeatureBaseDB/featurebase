@@ -22,17 +22,13 @@ type RestoreCommand struct {
 	Path string
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 }
 
 // NewRestoreCommand returns a new instance of RestoreCommand.
 func NewRestoreCommand(stdin io.Reader, stdout, stderr io.Writer) *RestoreCommand {
 	return &RestoreCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/roaring"
 )
 
@@ -17,17 +18,13 @@ type CheckCommand struct {
 	Paths []string
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 }
 
 // NewCheckCommand returns a new instance of CheckCommand.
 func NewCheckCommand(stdin io.Reader, stdout, stderr io.Writer) *CheckCommand {
 	return &CheckCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 
