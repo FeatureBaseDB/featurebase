@@ -868,3 +868,93 @@ func MustReadAll(r io.Reader) []byte {
 	}
 	return buf
 }
+
+type MessageBin struct {
+	Cluster         *pilosa.Cluster
+	messageReceived proto.Message
+}
+
+func NewMessageBin() *MessageBin {
+	return &MessageBin{}
+}
+
+func (m *MessageBin) messageHandler(pb proto.Message) error {
+	m.messageReceived = pb
+	return nil
+}
+
+func NewHTTPMessageBin(s *Server, nodes []*pilosa.Node) (*MessageBin, error) {
+	ns := pilosa.NewHTTPNodeSet()
+	mb := NewMessageBin()
+	ns.SetMessageHandler(mb.messageHandler)
+	c := pilosa.Cluster{
+		Nodes:   nodes,
+		NodeSet: ns,
+	}
+	mb.Cluster = &c
+	s.Handler.Cluster = &c
+	s.Handler.Messenger = ns
+
+	i, err := c.NodeSet.Join(c.Nodes)
+	if i != int(0) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return mb, nil
+}
+
+// Ensure that an HTTP message sent to the cluster reaches all nodes.
+func TestHTTPNodeSet_Base(t *testing.T) {
+
+	// servers
+	s1 := NewServer()
+	s2 := NewServer()
+	s3 := NewServer()
+	nodes := []*pilosa.Node{
+		{Host: s1.Host()},
+		{Host: s2.Host()},
+		{Host: s3.Host()},
+	}
+
+	// node 1
+	mb1, err := NewHTTPMessageBin(s1, nodes)
+	if err != nil {
+		t.Fatalf("unable to create message bin: %s", err)
+	}
+
+	// node2
+	mb2, err := NewHTTPMessageBin(s2, nodes)
+	if err != nil {
+		t.Fatalf("unable to create message bin: %s", err)
+	}
+
+	// node3
+	mb3, err := NewHTTPMessageBin(s3, nodes)
+	if err != nil {
+		t.Fatalf("unable to create message bin: %s", err)
+	}
+
+	// message
+	msg := &internal.CreateSliceMessage{
+		DB:    "d",
+		Slice: 8,
+	}
+
+	// send message
+	if err := mb1.Cluster.NodeSet.(pilosa.Messenger).SendMessage(msg, ""); err != nil {
+		t.Fatalf("failure sending message: %s", err)
+	}
+
+	if !reflect.DeepEqual(mb1.messageReceived, msg) {
+		t.Fatalf("unexpected message received by node1: %s", mb1.messageReceived)
+	}
+	if !reflect.DeepEqual(mb2.messageReceived, msg) {
+		t.Fatalf("unexpected message received by node2: %s", mb2.messageReceived)
+	}
+	if !reflect.DeepEqual(mb3.messageReceived, msg) {
+		t.Fatalf("unexpected message received by node3: %s", mb3.messageReceived)
+	}
+}

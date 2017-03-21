@@ -109,9 +109,9 @@ func TestCluster_Health(t *testing.T) {
 
 	// Verify a DOWN node is reported, and extraneous nodes are ignored
 	if a := c.Health(); !reflect.DeepEqual(a, map[string]string{
-		"serverA:1000": "UP",
-		"serverB:1000": "DOWN",
-		"serverC:1000": "UP",
+		"serverA:1000": pilosa.HealthStatusUp,
+		"serverB:1000": pilosa.HealthStatusDown,
+		"serverC:1000": pilosa.HealthStatusUp,
 	}) {
 		t.Fatalf("unexpected health: %s", spew.Sdump(a))
 	}
