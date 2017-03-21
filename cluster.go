@@ -289,7 +289,11 @@ func (h *HTTPNodeSet) SendMessage(pb proto.Message, method string) error {
 
 // ReceiveMessage is called when a node receives a message.
 func (h *HTTPNodeSet) ReceiveMessage(pb proto.Message) error {
-	return h.messageHandler(pb)
+	if h.messageHandler != nil {
+		return h.messageHandler(pb)
+	}
+	// The messageHandler has not been set.
+	return nil
 }
 
 func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {
