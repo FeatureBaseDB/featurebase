@@ -27,17 +27,14 @@ type CreateMigrationCommand struct {
 	OutputFileName string
 
 	// Standard input/output
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	*pilosa.CmdIO
 }
 
 // NewBackupCommand returns a new instance of BackupCommand.
 func NewCreateMigrationCommand(stdin io.Reader, stdout, stderr io.Writer) *CreateMigrationCommand {
 	return &CreateMigrationCommand{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr}
+		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
+	}
 }
 
 func (cmd *CreateMigrationCommand) Run(ctx context.Context) error {
@@ -70,10 +67,10 @@ func (cmd *CreateMigrationCommand) Run(ctx context.Context) error {
 	BuildPlan(schema, srcCluster, destCluster, plan)
 
 	//either write it to a file or stdout
-	if cmd.DestFileName == "-" {
+	if cmd.OutputFileName == "-" {
 		json.NewEncoder(os.Stdout).Encode(plan)
 	} else {
-		f, err := os.Create(cmd.DestFileName)
+		f, err := os.Create(cmd.OutputFileName)
 		if err != nil {
 			log.Fatal("Error:", err)
 		}
