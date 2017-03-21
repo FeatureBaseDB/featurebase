@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// failErr calls t.Fatal if err != nil and adds the optional context to the
+// error message.
 func failErr(t *testing.T, err error, context ...string) {
 	ctx := strings.Join(context, "; ")
 	if err != nil {
@@ -58,10 +60,16 @@ func ExecNewRootCommand(t *testing.T, args ...string) (string, error) {
 	return string(output), err
 }
 
+// validator is a simple helper to avoid repeated `if err != nil` checks in
+// validation code. One can use it to check that several pairs of things are
+// equal, and at the end access an informative error message about the first
+// non-equal pair encountered (or nil if all were equal)
 type validator struct {
 	err error
 }
 
+// Check that two things are equal, and if not set v.err to a descriptive error
+// message.
 func (v *validator) Check(actual, expected interface{}) {
 	if v.err != nil {
 		return
@@ -70,8 +78,14 @@ func (v *validator) Check(actual, expected interface{}) {
 		v.err = fmt.Errorf("Actual: '%v' is not equal to '%v'", actual, expected)
 	}
 }
+
+// Error returns the validator's error value if any v.Check call found an error.
 func (v *validator) Error() error { return v.err }
 
+// commandTest represents all possible ways to configure a a pilosa command, as
+// well as a function for validating whether the command worked as expected.
+// args should be set to everything that comes after "pilosa" on the comand
+// line. See tests like backup_test.go for examples.
 type commandTest struct {
 	args           []string
 	env            map[string]string
@@ -79,6 +93,29 @@ type commandTest struct {
 	validation     func() error
 }
 
+// executeDry sets up and executes each commandTest with the --dry-run flag set
+// to true, and then executes the tests validation function. This stops
+// execution after PersistentPreRunE (and so before the command's Run or RunE
+// function is called). This is useful for verifying that configuration happened
+// properly.
+func executeDry(t *testing.T, tests []commandTest) {
+	for i, test := range tests {
+		test.args = append(test.args[:1], append([]string{"--dry-run"}, test.args[1:]...)...)
+		com := test.setupCommand(t)
+		err := com.Execute()
+		if err.Error() != "dry run" {
+			t.Fatalf("Problem with test %d, err: '%v'", i, err)
+		}
+		if err := test.validation(); err != nil {
+			t.Fatalf("Failed test %d due to: %v", i, err)
+		}
+		test.reset()
+	}
+}
+
+// setupCommand sets up all the configuration specified in the commandTest so
+// that it can be run. This includes setting environment variables, and creating
+// a temp config file with the cfgFileContent string as its content.
 func (ct *commandTest) setupCommand(t *testing.T) *cobra.Command {
 	// make config file
 	cfgFile, err := ioutil.TempFile("", "")
@@ -105,24 +142,10 @@ func (ct *commandTest) setupCommand(t *testing.T) *cobra.Command {
 	return rc
 }
 
+// reset the environment after setup/run of a commandTest.
 func (ct *commandTest) reset() {
 	for name, _ := range ct.env {
 		os.Setenv(name, "")
-	}
-}
-
-func executeDry(t *testing.T, tests []commandTest) {
-	for i, test := range tests {
-		test.args = append(test.args[:1], append([]string{"--dry-run"}, test.args[1:]...)...)
-		com := test.setupCommand(t)
-		err := com.Execute()
-		if err.Error() != "dry run" {
-			t.Fatalf("Problem with test %d, err: '%v'", i, err)
-		}
-		if err := test.validation(); err != nil {
-			t.Fatalf("Failed test %d due to: %v", i, err)
-		}
-		test.reset()
 	}
 }
 
