@@ -245,6 +245,7 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 // HTTPNodeSet represents a NodeSet that broadcasts messages over HTTP.
 type HTTPNodeSet struct {
 	nodes          []*Node
+	localNode      *Node // TODO: this needs to be set somewhere
 	messageHandler func(m proto.Message) error
 	// remoteStateHandler func(m proto.Message) error
 	// localStateSource   func() (proto.Message, error)
@@ -279,6 +280,10 @@ func (h *HTTPNodeSet) SendMessage(pb proto.Message, method string) error {
 
 	var g errgroup.Group
 	for _, n := range h.nodes {
+		// Don't send the message to the local node.
+		if n == h.localNode {
+			continue
+		}
 		node := n
 		g.Go(func() error {
 			return h.sendNodeMessage(node, buf)
