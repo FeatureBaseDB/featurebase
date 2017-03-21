@@ -1,7 +1,6 @@
 package pilosa
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -124,8 +123,6 @@ func (g *GossipNodeSet) NodeMeta(limit int) []byte {
 }
 
 func (g *GossipNodeSet) NotifyMsg(b []byte) {
-	loc := g.memberlist.LocalNode()
-	fmt.Println("Received Msg:", loc)
 	m, err := UnmarshalMessage(b)
 	if err != nil {
 		g.logger().Printf("unmarshal message error: %s", err)
