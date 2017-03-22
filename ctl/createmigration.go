@@ -148,7 +148,7 @@ func BuildPlan(schema []*internal.DB, srcCluster, destCluster *pilosa.Cluster, p
 					_, found := srcLookup[key]
 					if !found {
 						for _, frame := range dbinfo.Frames {
-							plan.Actions[src.Host] = append(plan.Actions[src.Host],
+							plan.Actions[clean(src.Host)] = append(plan.Actions[clean(src.Host)],
 								&Destination{
 									Db:    dbinfo.Name,
 									Frame: frame.Name,
