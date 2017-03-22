@@ -19,13 +19,15 @@ func TestCreateMigrationHelp(t *testing.T) {
 func TestCreateMigrationConfig(t *testing.T) {
 	tests := []commandTest{
 		{
-			args: []string{"create-migration", "--host", "127.0.0.1:15000", "--src-config", "a.toml", "--dest-config", "b.toml", "--output-file", "somefile.json"},
+			args:           []string{"create-migration", "--host", "127.0.0.1:15000", "--src-config", "a.toml", "--dest-config", "b.toml", "--output-file", "somefile.json"},
+			env:            map[string]string{},
+			cfgFileContent: "",
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.MigrationPlanner.Host, "127.0.0.1:15000")
 				v.Check(cmd.MigrationPlanner.SrcConfig, "a.toml")
 				v.Check(cmd.MigrationPlanner.DestConfig, "b.toml")
-				v.Check(cmd.MigrationPlanner.OutputFileName, "/somefile.json")
+				v.Check(cmd.MigrationPlanner.OutputFileName, "somefile.json")
 				return v.Error()
 			},
 		},
