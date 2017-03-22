@@ -15,7 +15,7 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// BackupCommand represents a command for backing up a frame.
+//CreateMigrationCommand represents a command for preparing a plan file for cluster changes .
 type CreateMigrationCommand struct {
 	// host/port for pilosa server providing the schema needing to be migrated
 	Host string
@@ -24,6 +24,7 @@ type CreateMigrationCommand struct {
 	SrcConfig  string
 	DestConfig string
 
+	//Resultant Plan File location (stdio by default)
 	OutputFileName string
 
 	// Standard input/output
@@ -81,6 +82,7 @@ func (cmd *CreateMigrationCommand) Run(ctx context.Context) error {
 	return nil
 }
 
+//
 type Plan struct {
 	Actions     map[string][]*Destination
 	SrcDataDir  string
@@ -104,6 +106,7 @@ func make_key(db string, slice uint64, host string) string {
 	return buffer.String()
 }
 
+//The Ending location of the migrated pilosa slice data
 type Destination struct {
 	Db    string `json:"db"`
 	Frame string `json:"frame"`
@@ -111,6 +114,7 @@ type Destination struct {
 	Host  string `json:"host"`
 }
 
+//removes the port
 func clean(host string) string {
 	parts := strings.Split(host, ":")
 	if len(parts) > 1 {
@@ -119,11 +123,12 @@ func clean(host string) string {
 	return host
 }
 
+//Populates the plan with the copy targets
 func BuildPlan(schema []*internal.DB, srcCluster, destCluster *pilosa.Cluster, plan *Plan) {
 
 	srcLookup := make(map[string]struct{})
 	destLookup := make(map[string]struct{})
-
+	//figure out starting state
 	for _, dbinfo := range schema {
 		for slice := uint64(0); slice <= dbinfo.MaxSlice; slice++ {
 			for _, src := range srcCluster.FragmentNodes(dbinfo.Name, slice) {
@@ -132,6 +137,8 @@ func BuildPlan(schema []*internal.DB, srcCluster, destCluster *pilosa.Cluster, p
 			}
 		}
 	}
+
+	//calculate and record the differences
 	for _, dbinfo := range schema {
 		for slice := uint64(0); slice <= dbinfo.MaxSlice; slice++ {
 			for _, src := range srcCluster.FragmentNodes(dbinfo.Name, slice) {

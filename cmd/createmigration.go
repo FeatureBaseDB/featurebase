@@ -17,7 +17,9 @@ func NewMigrationCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	migrationCmd := &cobra.Command{
 		Use:   "create-migration",
 		Short: "Create a migration plan file for cluster topology changes",
-		Long: `This command produces a file used as input for the run-migration command .
+		Long: ` This command produces a file used as input for the run-migration command. It
+assumes the destination cluster nodes are all on uniq hosts and that each have
+the same data-dir.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return MigrationPlanner.Run(context.Background())
