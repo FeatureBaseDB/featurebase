@@ -68,7 +68,16 @@ func (m *Command) Run(args ...string) (err error) {
 	}
 
 	// Setup logging output.
-	m.Server.LogOutput = m.Stderr
+	if m.Config.LogPath == "" {
+		m.Server.LogOutput = m.Stderr
+	} else {
+		logFile, err := os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		if err != nil {
+			return err
+		}
+		m.Server.LogOutput = logFile
+		defer logFile.Close()
+	}
 
 	// Configure index.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
