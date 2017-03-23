@@ -231,8 +231,8 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 	if result, err := e.Execute(context.Background(), "d", MustParse(`TopN(frame=f, n=2)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result[0], []pilosa.Pair{
-		{Key: 0, Count: 5},
-		{Key: 10, Count: 2},
+		{ID: 0, Count: 5},
+		{ID: 10, Count: 2},
 	}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -254,7 +254,7 @@ func TestExecutor_Execute_TopN_fill(t *testing.T) {
 	if result, err := e.Execute(context.Background(), "d", MustParse(`TopN(frame=f, n=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
-		{Key: 0, Count: 4},
+		{ID: 0, Count: 4},
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -288,7 +288,7 @@ func TestExecutor_Execute_TopN_fill_small(t *testing.T) {
 	if result, err := e.Execute(context.Background(), "d", MustParse(`TopN(frame=f, n=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
-		{Key: 0, Count: 5},
+		{ID: 0, Count: 5},
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -319,9 +319,9 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	if result, err := e.Execute(context.Background(), "d", MustParse(`TopN(Bitmap(id=100, frame=other), frame=f, n=3)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
-		{Key: 20, Count: 3},
-		{Key: 10, Count: 2},
-		{Key: 0, Count: 1},
+		{ID: 20, Count: 3},
+		{ID: 10, Count: 2},
+		{ID: 0, Count: 1},
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -343,7 +343,7 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 	if result, err := e.Execute(context.Background(), "d", MustParse(`TopN(frame="f", n=1, field="category", filters=[123])`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
-		{Key: 10, Count: 1},
+		{ID: 10, Count: 1},
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -366,7 +366,7 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	if result, err := e.Execute(context.Background(), "d", MustParse(`TopN(Bitmap(id=10,frame=f),frame="f", n=1, field="category", filters=[123])`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
-		{Key: 10, Count: 1},
+		{ID: 10, Count: 1},
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -611,9 +611,9 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 
 		// Return pair counts.
 		return []interface{}{[]pilosa.Pair{
-			{Key: 0, Count: 5},
-			{Key: 10, Count: 2},
-			{Key: 30, Count: 2},
+			{ID: 0, Count: 5},
+			{ID: 10, Count: 2},
+			{ID: 30, Count: 2},
 		}}, nil
 	}
 
@@ -627,9 +627,9 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	if res, err := e.Execute(context.Background(), "d", MustParse(`TopN(frame=f, n=3)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(res, []interface{}{[]pilosa.Pair{
-		{Key: 0, Count: 5},
-		{Key: 30, Count: 4},
-		{Key: 10, Count: 2},
+		{ID: 0, Count: 5},
+		{ID: 30, Count: 4},
+		{ID: 10, Count: 2},
 	}}) {
 		t.Fatalf("unexpected results: %s", spew.Sdump(res))
 	}

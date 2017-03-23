@@ -559,7 +559,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 				}
 			}
 
-			heap.Push(results, Pair{Key: bitmapID, Count: count})
+			heap.Push(results, Pair{ID: bitmapID, Count: count})
 
 			// If we reach the requested number of pairs and we are not computing
 			// intersections then simply exit. If we are intersecting then sort
@@ -590,7 +590,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 			continue
 		}
 
-		heap.Push(results, Pair{Key: bitmapID, Count: count})
+		heap.Push(results, Pair{ID: bitmapID, Count: count})
 	}
 
 	//Pop first opt.N elements out of heap
