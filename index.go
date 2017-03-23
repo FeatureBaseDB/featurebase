@@ -11,6 +11,9 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/internal"
 )
 
 // DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
@@ -22,6 +25,8 @@ type Index struct {
 
 	// Databases by name.
 	dbs map[string]*DB
+
+	Messenger Messenger
 
 	// Close management
 	wg      sync.WaitGroup
@@ -45,7 +50,8 @@ func NewIndex() *Index {
 		dbs:     make(map[string]*DB),
 		closing: make(chan struct{}, 0),
 
-		Stats: NopStatsClient,
+		Messenger: NopMessenger,
+		Stats:     NopStatsClient,
 
 		CacheFlushInterval: DefaultCacheFlushInterval,
 
@@ -167,6 +173,7 @@ func (i *Index) DBs() []*DB {
 }
 
 // CreateDB creates a database.
+// An error is returned if the database already exists.
 func (i *Index) CreateDB(name string, opt DBOptions) (*DB, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -184,7 +191,7 @@ func (i *Index) CreateDBIfNotExists(name string, opt DBOptions) (*DB, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Find frame in cache first.
+	// Find database in cache first.
 	if db := i.dbs[name]; db != nil {
 		return db, nil
 	}
@@ -214,6 +221,7 @@ func (i *Index) createDB(name string, opt DBOptions) (*DB, error) {
 
 	// Update options.
 	db.SetColumnLabel(opt.ColumnLabel)
+	db.SetTimeQuantum(opt.TimeQuantum)
 
 	i.dbs[db.Name()] = db
 
@@ -229,6 +237,7 @@ func (i *Index) newDB(path, name string) (*DB, error) {
 	}
 	db.LogOutput = i.LogOutput
 	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
+	db.messenger = i.Messenger
 	return db, nil
 }
 
@@ -311,6 +320,42 @@ func (i *Index) flushCaches() {
 			}
 		}
 	}
+}
+
+// HandleMessage handles protobuf Messages broadcasted to nodes in the
+// cluster from the Cluster's NodeSet.
+func (i *Index) HandleMessage(pb proto.Message) error {
+	switch obj := pb.(type) {
+	case *internal.CreateSliceMessage:
+		d := i.DB(obj.DB)
+		if d == nil {
+			return fmt.Errorf("Local DB not found: %s", obj.DB)
+		}
+		d.SetRemoteMaxSlice(obj.Slice)
+	case *internal.CreateDBMessage:
+		opt := DBOptions{ColumnLabel: obj.Meta.ColumnLabel}
+		_, err := i.CreateDB(obj.DB, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteDBMessage:
+		if err := i.DeleteDB(obj.DB); err != nil {
+			return err
+		}
+	case *internal.CreateFrameMessage:
+		db := i.DB(obj.DB)
+		opt := FrameOptions{RowLabel: obj.Meta.RowLabel}
+		_, err := db.CreateFrame(obj.Frame, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteFrameMessage:
+		db := i.DB(obj.DB)
+		if err := db.DeleteFrame(obj.Frame); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (i *Index) logger() *log.Logger { return log.New(i.LogOutput, "", log.LstdFlags) }

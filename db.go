@@ -42,7 +42,8 @@ type DB struct {
 	// Profile attribute storage and cache
 	profileAttrStore *AttrStore
 
-	stats StatsClient
+	messenger Messenger
+	stats     StatsClient
 
 	LogOutput io.Writer
 }
@@ -64,6 +65,7 @@ func NewDB(path, name string) (*DB, error) {
 
 		columnLabel: DefaultColumnLabel,
 
+		messenger: NopMessenger,
 		stats:     NopStatsClient,
 		LogOutput: ioutil.Discard,
 	}, nil
@@ -162,7 +164,7 @@ func (db *DB) openFrames() error {
 
 // loadMeta reads meta data for the database, if any.
 func (db *DB) loadMeta() error {
-	var pb internal.DB
+	var pb internal.DBMeta
 
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(db.path, ".meta"))
@@ -188,7 +190,7 @@ func (db *DB) loadMeta() error {
 // saveMeta writes meta data for the database.
 func (db *DB) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.DB{
+	buf, err := proto.Marshal(&internal.DBMeta{
 		TimeQuantum: string(db.timeQuantum),
 		ColumnLabel: db.columnLabel,
 	})
@@ -338,6 +340,8 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 
 	// Update options.
 	f.SetRowLabel(opt.RowLabel)
+	f.SetRankedCacheSize(opt.CacheSize)
+	f.SetTimeQuantum(opt.TimeQuantum)
 
 	// Add to database's frame lookup.
 	db.frames[name] = f
@@ -354,6 +358,7 @@ func (db *DB) newFrame(path, name string) (*Frame, error) {
 	}
 	f.LogOutput = db.LogOutput
 	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.messenger = db.messenger
 	return f, nil
 }
 
@@ -541,9 +546,32 @@ func (db *DB) SetRemoteMaxSlice(newmax uint64) {
 	db.remoteMaxSlice = newmax
 }
 
+// encodeDBs converts a into its internal representation.
+func encodeDBs(a []*DB) []*internal.DB {
+	other := make([]*internal.DB, len(a))
+	for i := range a {
+		other[i] = encodeDB(a[i])
+	}
+	return other
+}
+
+// encodeDB converts d into its internal representation.
+func encodeDB(d *DB) *internal.DB {
+	return &internal.DB{
+		Name: d.name,
+		Meta: &internal.DBMeta{
+			ColumnLabel: d.columnLabel,
+			TimeQuantum: string(d.timeQuantum),
+		},
+		MaxSlice: d.remoteMaxSlice,
+		Frames:   encodeFrames(d.Frames()),
+	}
+}
+
 // DBOptions represents options to set when initializing a db.
 type DBOptions struct {
-	ColumnLabel string `json:"columnLabel,omitempty"`
+	ColumnLabel string      `json:"columnLabel,omitempty"`
+	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
 // hasTime returns true if a contains a non-nil time.
