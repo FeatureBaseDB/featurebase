@@ -211,6 +211,7 @@ func (c *RankCache) recalculate() {
 	c.rankings = rankings
 	if len(c.rankings) > c.ThresholdIndex {
 		c.ThresholdValue = rankings[c.ThresholdIndex].Count
+		c.rankings = c.rankings[0:c.ThresholdIndex]
 	} else {
 		c.ThresholdValue = 1
 	}

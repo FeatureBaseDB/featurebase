@@ -78,7 +78,7 @@ func (c *Client) MaxSliceByDatabase(ctx context.Context) (map[string]uint64, err
 }
 
 // Schema returns all database and frame schema information.
-func (c *Client) Schema(ctx context.Context) ([]*DBInfo, error) {
+func (c *Client) Schema(ctx context.Context) ([]*internal.DB, error) {
 	// Execute request against the host.
 	u := url.URL{
 		Scheme: "http",
@@ -99,13 +99,13 @@ func (c *Client) Schema(ctx context.Context) ([]*DBInfo, error) {
 	}
 	defer resp.Body.Close()
 
-	var rsp getSchemaResponse
+	var rsp []*internal.DB
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
 	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
-	return rsp.DBs, nil
+	return rsp, nil
 }
 
 // CreateDB creates a new database on the server.
@@ -147,6 +147,7 @@ func (c *Client) CreateDB(ctx context.Context, db string, opt DBOptions) error {
 	case http.StatusOK:
 		return nil // ok
 	case http.StatusConflict:
+		fmt.Println("ErrDatabaseExists: 1")
 		return ErrDatabaseExists
 	default:
 		return errors.New(string(body))
