@@ -152,9 +152,9 @@ func TestFragment_Top(t *testing.T) {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
-	} else if pairs[0] != (pilosa.Pair{Key: 100, Count: 3}) {
+	} else if pairs[0] != (pilosa.Pair{ID: 100, Count: 3}) {
 		t.Fatalf("unexpected pair(0): %v", pairs[0])
-	} else if pairs[1] != (pilosa.Pair{Key: 102, Count: 2}) {
+	} else if pairs[1] != (pilosa.Pair{ID: 102, Count: 2}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[1])
 	}
 }
@@ -182,9 +182,9 @@ func TestFragment_Top_Filter(t *testing.T) {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
-	} else if pairs[0] != (pilosa.Pair{Key: 102, Count: 2}) {
+	} else if pairs[0] != (pilosa.Pair{ID: 102, Count: 2}) {
 		t.Fatalf("unexpected pair(0): %v", pairs[0])
-	} else if pairs[1] != (pilosa.Pair{Key: 101, Count: 1}) {
+	} else if pairs[1] != (pilosa.Pair{ID: 101, Count: 1}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[1])
 	}
 }
@@ -207,9 +207,9 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 	if pairs, err := f.Top(pilosa.TopOptions{N: 3, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
-		{Key: 101, Count: 3},
-		{Key: 102, Count: 2},
-		{Key: 100, Count: 1},
+		{ID: 101, Count: 3},
+		{ID: 102, Count: 2},
+		{ID: 100, Count: 1},
 	}) {
 		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
 	}
@@ -241,16 +241,16 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	if pairs, err := f.Top(pilosa.TopOptions{N: 10, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
-		{Key: 999, Count: 19},
-		{Key: 998, Count: 18},
-		{Key: 997, Count: 17},
-		{Key: 996, Count: 16},
-		{Key: 995, Count: 15},
-		{Key: 994, Count: 14},
-		{Key: 993, Count: 13},
-		{Key: 992, Count: 12},
-		{Key: 991, Count: 11},
-		{Key: 990, Count: 10},
+		{ID: 999, Count: 19},
+		{ID: 998, Count: 18},
+		{ID: 997, Count: 17},
+		{ID: 996, Count: 16},
+		{ID: 995, Count: 15},
+		{ID: 994, Count: 14},
+		{ID: 993, Count: 13},
+		{ID: 992, Count: 12},
+		{ID: 991, Count: 11},
+		{ID: 990, Count: 10},
 	}) {
 		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
 	}
@@ -270,8 +270,8 @@ func TestFragment_TopN_BitmapIDs(t *testing.T) {
 	if pairs, err := f.Top(pilosa.TopOptions{BitmapIDs: []uint64{100, 101, 200}}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
-		{Key: 101, Count: 4},
-		{Key: 100, Count: 3},
+		{ID: 101, Count: 4},
+		{ID: 100, Count: 3},
 	}) {
 		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
 	}
@@ -675,9 +675,9 @@ func TestFragment_Tanimoto(t *testing.T) {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
-	} else if pairs[0] != (pilosa.Pair{Key: 100, Count: 3}) {
+	} else if pairs[0] != (pilosa.Pair{ID: 100, Count: 3}) {
 		t.Fatalf("unexpected pair(0): %v", pairs[0])
-	} else if pairs[1] != (pilosa.Pair{Key: 101, Count: 2}) {
+	} else if pairs[1] != (pilosa.Pair{ID: 101, Count: 2}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[1])
 	}
 }
@@ -697,11 +697,11 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 		t.Fatal(err)
 	} else if len(pairs) != 3 {
 		t.Fatalf("unexpected count: %d", len(pairs))
-	} else if pairs[0] != (pilosa.Pair{Key: 100, Count: 3}) {
+	} else if pairs[0] != (pilosa.Pair{ID: 100, Count: 3}) {
 		t.Fatalf("unexpected pair(0): %v", pairs[0])
-	} else if pairs[1] != (pilosa.Pair{Key: 101, Count: 2}) {
+	} else if pairs[1] != (pilosa.Pair{ID: 101, Count: 2}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[1])
-	} else if pairs[2] != (pilosa.Pair{Key: 102, Count: 2}) {
+	} else if pairs[2] != (pilosa.Pair{ID: 102, Count: 2}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[2])
 	}
 }
