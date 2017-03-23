@@ -258,7 +258,7 @@ func (p BitmapPairs) Len() int           { return len(p) }
 func (p BitmapPairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
 type Pair struct {
-	Key   uint64 `json:"key"`
+	Key   uint64 `json:"id"`
 	Count uint64 `json:"count"`
 }
 
