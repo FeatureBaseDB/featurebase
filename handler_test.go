@@ -345,8 +345,8 @@ func TestHandler_Query_Pairs_JSON(t *testing.T) {
 	h := NewHandler()
 	h.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return []interface{}{[]pilosa.Pair{
-			{Key: 1, Count: 2},
-			{Key: 3, Count: 4},
+			{ID: 1, Count: 2},
+			{ID: 3, Count: 4},
 		}}, nil
 	}
 
@@ -364,8 +364,8 @@ func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 	h := NewHandler()
 	h.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return []interface{}{[]pilosa.Pair{
-			{Key: 1, Count: 2},
-			{Key: 3, Count: 4},
+			{ID: 1, Count: 2},
+			{ID: 3, Count: 4},
 		}}, nil
 	}
 

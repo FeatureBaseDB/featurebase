@@ -258,20 +258,20 @@ func (p BitmapPairs) Len() int           { return len(p) }
 func (p BitmapPairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
 type Pair struct {
-	Key   uint64 `json:"id"`
+	ID    uint64 `json:"id"`
 	Count uint64 `json:"count"`
 }
 
 func encodePair(p Pair) *internal.Pair {
 	return &internal.Pair{
-		Key:   p.Key,
+		Key:   p.ID,
 		Count: p.Count,
 	}
 }
 
 func decodePair(pb *internal.Pair) Pair {
 	return Pair{
-		Key:   pb.Key,
+		ID:   pb.Key,
 		Count: pb.Count,
 	}
 }
@@ -307,18 +307,18 @@ func (p Pairs) Add(other []Pair) []Pair {
 	// Create lookup of key/counts.
 	m := make(map[uint64]uint64, len(p))
 	for _, pair := range p {
-		m[pair.Key] = pair.Count
+		m[pair.ID] = pair.Count
 	}
 
 	// Add/merge from other.
 	for _, pair := range other {
-		m[pair.Key] += pair.Count
+		m[pair.ID] += pair.Count
 	}
 
 	// Convert back to slice.
 	a := make([]Pair, 0, len(m))
 	for k, v := range m {
-		a = append(a, Pair{Key: k, Count: v})
+		a = append(a, Pair{ID: k, Count: v})
 	}
 	return a
 }
@@ -327,7 +327,7 @@ func (p Pairs) Add(other []Pair) []Pair {
 func (p Pairs) Keys() []uint64 {
 	a := make([]uint64, len(p))
 	for i := range p {
-		a[i] = p[i].Key
+		a[i] = p[i].ID
 	}
 	return a
 }
@@ -336,7 +336,7 @@ func (p Pairs) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("Pairs(")
 	for i := range p {
-		fmt.Fprintf(&buf, "%d/%d", p[i].Key, p[i].Count)
+		fmt.Fprintf(&buf, "%d/%d", p[i].ID, p[i].Count)
 		if i < len(p)-1 {
 			buf.WriteString(", ")
 		}
