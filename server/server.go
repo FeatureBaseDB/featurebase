@@ -76,7 +76,6 @@ func (m *Command) Run(args ...string) (err error) {
 			return err
 		}
 		m.Server.LogOutput = logFile
-		defer logFile.Close()
 	}
 
 	// Configure index.
@@ -118,6 +117,12 @@ func normalizeHost(host string) (string, error) {
 // Close shuts down the server.
 func (m *Command) Close() error {
 	err := m.Server.Close()
+	logOutput := m.Server.LogOutput
+	if logOutput != m.Stderr {
+		if file, ok := logOutput.(*os.File); ok {
+			file.Close()
+		}
+	}
 	close(m.Done)
 	return err
 }
