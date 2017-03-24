@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -229,6 +230,11 @@ func (v *View) ClearBit(bitmapID, profileID uint64) (changed bool, err error) {
 		return changed, err
 	}
 	return frag.ClearBit(bitmapID, profileID)
+}
+
+// IsViewInverted returns true if the view is used for storing an inverted representation.
+func IsViewInverted(name string) bool {
+	return strings.HasPrefix(name, ViewInverse)
 }
 
 type viewSlice []*View
