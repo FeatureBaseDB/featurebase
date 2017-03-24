@@ -145,6 +145,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	case "/frame/views":
+		switch r.Method {
+		case "GET":
+			h.handleGetFrameViews(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	case "/frame/attr/diff":
 		switch r.Method {
 		case "POST":
@@ -583,6 +590,35 @@ type patchFrameTimeQuantumRequest struct {
 
 type patchFrameTimeQuantumResponse struct{}
 
+// handleGetFrameViews handles GET /frame/views request.
+func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	db, frame := q.Get("db"), q.Get("frame")
+
+	// Retrieve views.
+	f := h.Index.Frame(db, frame)
+	if f == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Fetch views.
+	views := f.Views()
+	names := make([]string, len(views))
+	for i := range views {
+		names[i] = views[i].Name()
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(getFrameViewsResponse{Views: names}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type getFrameViewsResponse struct {
+	Views []string `json:"views,omitempty"`
+}
+
 // handlePostFrameAttrDiff handles POST /frame/attr/diff requests.
 func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request) {
 	// Decode request.
@@ -791,7 +827,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find the correct fragment.
+	// Find the DB.
 	h.logger().Println("importing:", req.DB, req.Frame, req.Slice)
 	db := h.Index.DB(req.DB)
 	if db == nil {
@@ -800,8 +836,16 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Retrieve frame.
+	f := db.Frame(req.Frame)
+	if f == nil {
+		h.logger().Printf("frame error: db=%s, frame=%s, slice=%d, err=%s", req.DB, req.Frame, req.Slice, ErrFrameNotFound.Error())
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
 	// Import into fragment.
-	err = db.Import(req.Frame, req.BitmapIDs, req.ProfileIDs, timestamps)
+	err = f.Import(req.BitmapIDs, req.ProfileIDs, timestamps)
 	if err != nil {
 		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", req.DB, req.Frame, req.Slice, len(req.ProfileIDs), err)
 		return
@@ -834,7 +878,7 @@ func (h *Handler) handleGetExport(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters.
 	q := r.URL.Query()
-	db, frame := q.Get("db"), q.Get("frame")
+	db, frame, view := q.Get("db"), q.Get("frame"), q.Get("view")
 
 	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
 	if err != nil {
@@ -850,7 +894,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the fragment.
-	f := h.Index.Fragment(db, frame, slice)
+	f := h.Index.Fragment(db, frame, view, slice)
 	if f == nil {
 		return
 	}
@@ -905,7 +949,7 @@ func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Retrieve fragment from index.
-	f := h.Index.Fragment(q.Get("db"), q.Get("frame"), slice)
+	f := h.Index.Fragment(q.Get("db"), q.Get("frame"), q.Get("view"), slice)
 	if f == nil {
 		http.Error(w, "fragment not found", http.StatusNotFound)
 		return
@@ -934,8 +978,15 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Retrieve view.
+	view, err := f.CreateViewIfNotExists(q.Get("view"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	// Retrieve fragment from frame.
-	frag, err := f.CreateFragmentIfNotExists(slice)
+	frag, err := view.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -961,7 +1012,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Retrieve fragment from index.
-	f := h.Index.Fragment(req.DB, req.Frame, req.Slice)
+	f := h.Index.Fragment(req.DB, req.Frame, req.View, req.Slice)
 	if f == nil {
 		http.Error(w, ErrFragmentNotFound.Error(), http.StatusNotFound)
 		return
@@ -997,7 +1048,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 	}
 
 	// Retrieve fragment from index.
-	f := h.Index.Fragment(q.Get("db"), q.Get("frame"), slice)
+	f := h.Index.Fragment(q.Get("db"), q.Get("frame"), q.Get("view"), slice)
 	if f == nil {
 		http.Error(w, "fragment not found", http.StatusNotFound)
 		return
@@ -1050,6 +1101,24 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Retrieve frame.
+	f := h.Index.Frame(db, frame)
+	if f == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Retrieve list of all views.
+	views, err := client.FrameViews(r.Context(), db, frame)
+	if err != nil {
+		http.Error(w, "cannot retrieve frame views: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, view := range views {
+		println("dbg/views", view)
+	}
+
 	// Loop over each slice and import it if this node owns it.
 	//travis
 	for slice := uint64(0); slice <= maxSlices[db]; slice++ {
@@ -1058,39 +1127,42 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 			continue
 		}
 
-		// Retrieve frame.
-		f := h.Index.Frame(db, frame)
-		if f == nil {
-			http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
-			return
-		}
-
-		// Otherwise retrieve the local fragment.
-		frag, err := f.CreateFragmentIfNotExists(slice)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// Stream backup from remote node.
-		rd, err := client.BackupSlice(r.Context(), db, frame, slice)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		} else if rd == nil {
-			continue // slice doesn't exist
-		}
-
-		// Restore to local frame and always close reader.
-		if err := func() error {
-			defer rd.Close()
-			if _, err := frag.ReadFrom(rd); err != nil {
-				return err
+		// Loop over view names.
+		for _, view := range views {
+			// Create view.
+			v, err := f.CreateViewIfNotExists(view)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
 			}
-			return nil
-		}(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+
+			// Otherwise retrieve the local fragment.
+			frag, err := v.CreateFragmentIfNotExists(slice)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			// Stream backup from remote node.
+			rd, err := client.BackupSlice(r.Context(), db, frame, view, slice)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			} else if rd == nil {
+				continue // slice doesn't exist
+			}
+
+			// Restore to local frame and always close reader.
+			if err := func() error {
+				defer rd.Close()
+				if _, err := frag.ReadFrom(rd); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 }

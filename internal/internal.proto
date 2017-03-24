@@ -84,8 +84,9 @@ message ImportResponse {
 message BlockDataRequest {
 	string DB = 1;
 	string Frame = 2;
-	uint64 Slice = 3;
-	uint64 Block = 4;
+	string View = 5;
+	uint64 Slice = 4;
+	uint64 Block = 3;
 }
 
 message BlockDataResponse {

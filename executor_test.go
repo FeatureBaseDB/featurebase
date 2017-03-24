@@ -15,8 +15,8 @@ import (
 func TestExecutor_Execute_Bitmap(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(10, 3)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBits(10, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).MustSetBits(10, 3)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
 
 	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"foo": "bar", "baz": uint64(123)}); err != nil {
 		t.Fatal(err)
@@ -36,11 +36,11 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 func TestExecutor_Execute_Difference(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 1)
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 2)
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 3)
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(11, 2)
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(11, 4)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(10, 1)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(10, 2)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(10, 3)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(11, 2)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(11, 4)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Difference(Bitmap(id=10), Bitmap(id=11))`), nil, nil); err != nil {
@@ -54,7 +54,7 @@ func TestExecutor_Execute_Difference(t *testing.T) {
 func TestExecutor_Execute_Empty_Difference(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 1)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(10, 1)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Difference()`), nil, nil); err == nil {
@@ -66,13 +66,13 @@ func TestExecutor_Execute_Empty_Difference(t *testing.T) {
 func TestExecutor_Execute_Intersect(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 1)
-	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBits(10, SliceWidth+1)
-	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBits(10, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(10, 1)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+2)
 
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(11, 1)
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(11, 2)
-	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBits(11, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(11, 1)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(11, 2)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 1).MustSetBits(11, SliceWidth+2)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Intersect(Bitmap(id=10), Bitmap(id=11))`), nil, nil); err != nil {
@@ -97,12 +97,12 @@ func TestExecutor_Execute_Empty_Intersect(t *testing.T) {
 func TestExecutor_Execute_Union(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 0)
-	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBits(10, SliceWidth+1)
-	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBits(10, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(10, 0)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+2)
 
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(11, 2)
-	idx.MustCreateFragmentIfNotExists("d", "general", 1).MustSetBits(11, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(11, 2)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 1).MustSetBits(11, SliceWidth+2)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Union(Bitmap(id=10), Bitmap(id=11))`), nil, nil); err != nil {
@@ -116,7 +116,7 @@ func TestExecutor_Execute_Union(t *testing.T) {
 func TestExecutor_Execute_Empty_Union(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "general", 0).MustSetBits(10, 0)
+	idx.MustCreateFragmentIfNotExists("d", "general", pilosa.ViewStandard, 0).MustSetBits(10, 0)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Union()`), nil, nil); err != nil {
@@ -130,9 +130,9 @@ func TestExecutor_Execute_Empty_Union(t *testing.T) {
 func TestExecutor_Execute_Count(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).MustSetBits(10, 3)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBits(10, SliceWidth+1)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBits(10, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).MustSetBits(10, 3)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+2)
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Count(Bitmap(id=10, frame=f))`), nil, nil); err != nil {
@@ -148,7 +148,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 	defer idx.Close()
 
 	e := NewExecutor(idx.Index, NewCluster(1))
-	f := idx.MustCreateFragmentIfNotExists("d", "f", 0)
+	f := idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
 	if n := f.Bitmap(11).Count(); n != 0 {
 		t.Fatalf("unexpected bitmap count: %d", n)
 	}
@@ -216,15 +216,15 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 	defer idx.Close()
 
 	// Set bits for bitmaps 0, 10, & 20 across two slices.
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0)
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(0, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(0, SliceWidth+2)
-	idx.MustCreateFragmentIfNotExists("d", "f", 5).SetBit(0, (5*SliceWidth)+100)
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(10, 0)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(10, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(20, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "other", 0).SetBit(0, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 5).SetBit(0, (5*SliceWidth)+100)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(20, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "other", pilosa.ViewStandard, 0).SetBit(0, 0)
 
 	// Execute query.
 	e := NewExecutor(idx.Index, NewCluster(1))
@@ -241,13 +241,13 @@ func TestExecutor_Execute_TopN_fill(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
-	// Set bits for bitmaps 0 & 1 across two slices.
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0)
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1)
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 2)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(0, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(1, SliceWidth+2)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(1, SliceWidth)
+	// Set bits for bitmaps 0, 10, & 20 across two slices.
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 2)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(1, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(1, SliceWidth)
 
 	// Execute query.
 	e := NewExecutor(idx.Index, NewCluster(1))
@@ -265,23 +265,23 @@ func TestExecutor_Execute_TopN_fill_small(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(0, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 2).SetBit(0, 2*SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 3).SetBit(0, 3*SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 4).SetBit(0, 4*SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 2).SetBit(0, 2*SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 3).SetBit(0, 3*SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 4).SetBit(0, 4*SliceWidth)
 
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(1, 0)
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(1, 1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(1, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(1, 1)
 
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(2, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(2, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(2, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(2, SliceWidth+1)
 
-	idx.MustCreateFragmentIfNotExists("d", "f", 2).SetBit(3, 2*SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 2).SetBit(3, 2*SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 2).SetBit(3, 2*SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 2).SetBit(3, 2*SliceWidth+1)
 
-	idx.MustCreateFragmentIfNotExists("d", "f", 3).SetBit(4, 3*SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 3).SetBit(4, 3*SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 3).SetBit(4, 3*SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 3).SetBit(4, 3*SliceWidth+1)
 
 	// Execute query.
 	e := NewExecutor(idx.Index, NewCluster(1))
@@ -300,19 +300,19 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	defer idx.Close()
 
 	// Set bits for bitmaps 0, 10, & 20 across two slices.
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0)
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(0, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(10, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(10, SliceWidth+1)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(20, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(20, SliceWidth+1)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(20, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth+2)
 
 	// Create an intersecting bitmap.
-	idx.MustCreateFragmentIfNotExists("d", "other", 1).SetBit(100, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "other", 1).SetBit(100, SliceWidth+1)
-	idx.MustCreateFragmentIfNotExists("d", "other", 1).SetBit(100, SliceWidth+2)
+	idx.MustCreateFragmentIfNotExists("d", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth+1)
+	idx.MustCreateFragmentIfNotExists("d", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth+2)
 
 	// Execute query.
 	e := NewExecutor(idx.Index, NewCluster(1))
@@ -332,9 +332,9 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 	//
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0)
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(10, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
 
 	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
 		t.Fatal(err)
@@ -355,9 +355,9 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	//
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 0)
-	idx.MustCreateFragmentIfNotExists("d", "f", 0).SetBit(0, 1)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).SetBit(10, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
 
 	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
 		t.Fatal(err)
@@ -380,24 +380,26 @@ func TestExecutor_Execute_Range(t *testing.T) {
 
 	// Create database.
 	db := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
-	db.SetTimeQuantum(pilosa.TimeQuantum("YMDH"))
 
 	// Create frame.
-	if _, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
+	f, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
+	if err != nil {
+		t.Fatal(err)
+	} else if err := f.SetTimeQuantum(pilosa.TimeQuantum("YMDH")); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set bits.
-	db.MustSetBit("f", 1, 2, MustParseTimePtr("1999-12-31 00:00"))
-	db.MustSetBit("f", 1, 3, MustParseTimePtr("2000-01-01 00:00"))
-	db.MustSetBit("f", 1, 4, MustParseTimePtr("2000-01-02 00:00"))
-	db.MustSetBit("f", 1, 5, MustParseTimePtr("2000-02-01 00:00"))
-	db.MustSetBit("f", 1, 6, MustParseTimePtr("2001-01-01 00:00"))
-	db.MustSetBit("f", 1, 7, MustParseTimePtr("2002-01-01 02:00"))
+	f.MustSetBit(1, 2, MustParseTimePtr("1999-12-31 00:00"))
+	f.MustSetBit(1, 3, MustParseTimePtr("2000-01-01 00:00"))
+	f.MustSetBit(1, 4, MustParseTimePtr("2000-01-02 00:00"))
+	f.MustSetBit(1, 5, MustParseTimePtr("2000-02-01 00:00"))
+	f.MustSetBit(1, 6, MustParseTimePtr("2001-01-01 00:00"))
+	f.MustSetBit(1, 7, MustParseTimePtr("2002-01-01 02:00"))
 
-	db.MustSetBit("f", 1, 2, MustParseTimePtr("1999-12-30 00:00"))  // too early
-	db.MustSetBit("f", 1, 2, MustParseTimePtr("2002-02-01 00:00"))  // too late
-	db.MustSetBit("f", 10, 2, MustParseTimePtr("2001-01-01 00:00")) // different bitmap
+	f.MustSetBit(1, 2, MustParseTimePtr("1999-12-30 00:00"))  // too early
+	f.MustSetBit(1, 2, MustParseTimePtr("2002-02-01 00:00"))  // too late
+	f.MustSetBit(10, 2, MustParseTimePtr("2001-01-01 00:00")) // different bitmap
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Range(id=1, frame=f, start="1999-12-31T00:00", end="2002-01-01T03:00")`), nil, nil); err != nil {
@@ -439,7 +441,7 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	// The local node owns slice 1.
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBits(10, (1*SliceWidth)+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(10, (1*SliceWidth)+1)
 
 	e := NewExecutor(idx.Index, c)
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Bitmap(id=10, frame=f)`), nil, nil); err != nil {
@@ -466,8 +468,8 @@ func TestExecutor_Execute_Remote_Count(t *testing.T) {
 	// Create local executor data. The local node owns slice 1.
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBits(10, (1*SliceWidth)+1)
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBits(10, (1*SliceWidth)+2)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(10, (1*SliceWidth)+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(10, (1*SliceWidth)+2)
 
 	e := NewExecutor(idx.Index, c)
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Count(Bitmap(id=10, frame=f))`), nil, nil); err != nil {
@@ -514,7 +516,7 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	}
 
 	// Verify that one bit is set on both node's index.
-	if n := idx.MustCreateFragmentIfNotExists("d", "f", 0).Bitmap(10).Count(); n != 1 {
+	if n := idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).Bitmap(10).Count(); n != 1 {
 		t.Fatalf("unexpected local count: %d", n)
 	}
 	if !remoteCalled {
@@ -547,17 +549,11 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	// Create local executor data.
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
-	oldQuantum := idx.DB("d").TimeQuantum()
-	defer func() {
-		// restore db quantum
-		idx.DB("d").SetTimeQuantum(oldQuantum)
-	}()
-	// need to set the quantum otherwise SetBit fails silently
-	idx.DB("d").SetTimeQuantum("Y")
 
 	// Create frame.
-	if _, err := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{}).CreateFrame("f", pilosa.FrameOptions{}); err != nil {
+	if f, err := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{}).CreateFrame("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	} else if err := f.SetTimeQuantum("Y"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -567,7 +563,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	}
 
 	// Verify that one bit is set on both node's index.
-	if n := idx.MustCreateFragmentIfNotExists("d", "f_2016", 0).Bitmap(10).Count(); n != 1 {
+	if n := idx.MustCreateFragmentIfNotExists("d", "f", "standard_2016", 0).Bitmap(10).Count(); n != 1 {
 		t.Fatalf("unexpected local count: %d", n)
 	}
 	if !remoteCalled {
@@ -620,8 +616,8 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	// Create local executor data on slice 1 & 3.
 	idx := MustOpenIndex()
 	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "f", 1).MustSetBits(30, (1*SliceWidth)+1)
-	idx.MustCreateFragmentIfNotExists("d", "f", 3).MustSetBits(30, (3*SliceWidth)+2)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(30, (1*SliceWidth)+1)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 3).MustSetBits(30, (3*SliceWidth)+2)
 
 	e := NewExecutor(idx.Index, c)
 	if res, err := e.Execute(context.Background(), "d", MustParse(`TopN(frame=f, n=3)`), nil, nil); err != nil {

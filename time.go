@@ -48,8 +48,8 @@ func ParseTimeQuantum(v string) (TimeQuantum, error) {
 	return q, nil
 }
 
-// FrameByTimeUnit returns the frame name for time with a given quantum unit.
-func FrameByTimeUnit(name string, t time.Time, unit rune) string {
+// ViewByTimeUnit returns the view name for time with a given quantum unit.
+func ViewByTimeUnit(name string, t time.Time, unit rune) string {
 	switch unit {
 	case 'Y':
 		return fmt.Sprintf("%s_%s", name, t.Format("2006"))
@@ -64,21 +64,21 @@ func FrameByTimeUnit(name string, t time.Time, unit rune) string {
 	}
 }
 
-// FramesByTime returns a list of frames for a given timestamp.
-func FramesByTime(name string, t time.Time, q TimeQuantum) []string {
+// ViewsByTime returns a list of views for a given timestamp.
+func ViewsByTime(name string, t time.Time, q TimeQuantum) []string {
 	a := make([]string, 0, len(q))
 	for _, unit := range q {
-		frame := FrameByTimeUnit(name, t, unit)
-		if frame == "" {
+		view := ViewByTimeUnit(name, t, unit)
+		if view == "" {
 			continue
 		}
-		a = append(a, frame)
+		a = append(a, view)
 	}
 	return a
 }
 
-// FramesByTimeRange returns a list of frames to traverse to query a time range.
-func FramesByTimeRange(name string, start, end time.Time, q TimeQuantum) []string {
+// ViewsByTimeRange returns a list of views to traverse to query a time range.
+func ViewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string {
 	t := start
 
 	// Save flags for performance.
@@ -96,7 +96,7 @@ func FramesByTimeRange(name string, start, end time.Time, q TimeQuantum) []strin
 				if !nextDayGTE(t, end) {
 					break
 				} else if t.Hour() != 0 {
-					results = append(results, FrameByTimeUnit(name, t, 'H'))
+					results = append(results, ViewByTimeUnit(name, t, 'H'))
 					t = t.Add(time.Hour)
 					continue
 				}
@@ -107,7 +107,7 @@ func FramesByTimeRange(name string, start, end time.Time, q TimeQuantum) []strin
 				if !nextMonthGTE(t, end) {
 					break
 				} else if t.Day() != 1 {
-					results = append(results, FrameByTimeUnit(name, t, 'D'))
+					results = append(results, ViewByTimeUnit(name, t, 'D'))
 					t = t.AddDate(0, 0, 1)
 					continue
 				}
@@ -117,7 +117,7 @@ func FramesByTimeRange(name string, start, end time.Time, q TimeQuantum) []strin
 				if !nextYearGTE(t, end) {
 					break
 				} else if t.Month() != 1 {
-					results = append(results, FrameByTimeUnit(name, t, 'M'))
+					results = append(results, ViewByTimeUnit(name, t, 'M'))
 					t = t.AddDate(0, 1, 0)
 					continue
 				}
@@ -133,16 +133,16 @@ func FramesByTimeRange(name string, start, end time.Time, q TimeQuantum) []strin
 	// Walk back down from largest units to smallest units.
 	for t.Before(end) {
 		if hasYear && nextYearGTE(t, end) {
-			results = append(results, FrameByTimeUnit(name, t, 'Y'))
+			results = append(results, ViewByTimeUnit(name, t, 'Y'))
 			t = t.AddDate(1, 0, 0)
 		} else if hasMonth && nextMonthGTE(t, end) {
-			results = append(results, FrameByTimeUnit(name, t, 'M'))
+			results = append(results, ViewByTimeUnit(name, t, 'M'))
 			t = t.AddDate(0, 1, 0)
 		} else if hasDay && nextDayGTE(t, end) {
-			results = append(results, FrameByTimeUnit(name, t, 'D'))
+			results = append(results, ViewByTimeUnit(name, t, 'D'))
 			t = t.AddDate(0, 0, 1)
 		} else if hasHour {
-			results = append(results, FrameByTimeUnit(name, t, 'H'))
+			results = append(results, ViewByTimeUnit(name, t, 'H'))
 			t = t.Add(time.Hour)
 		} else {
 			break
