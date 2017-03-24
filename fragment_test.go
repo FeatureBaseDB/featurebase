@@ -661,7 +661,7 @@ func GenerateImportFill(bitmapN int, pct float64) (bitmapIDs, profileIDs []uint6
 }
 
 func TestFragment_Tanimoto(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	src := pilosa.NewBitmap(1, 2, 3)
@@ -683,7 +683,7 @@ func TestFragment_Tanimoto(t *testing.T) {
 }
 
 func TestFragment_Zero_Tanimoto(t *testing.T) {
-	f := MustOpenFragment("d", "f", 0)
+	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
 	src := pilosa.NewBitmap(1, 2, 3)
