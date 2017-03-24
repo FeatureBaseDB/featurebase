@@ -37,10 +37,14 @@ func TestHandler_Schema(t *testing.T) {
 	d0 := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
 	d1 := idx.MustCreateDBIfNotExists("d1", pilosa.DBOptions{})
 
-	if _, err := d0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
+	if f, err := d0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d1.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
+	if f, err := d1.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d0.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
@@ -53,7 +57,7 @@ func TestHandler_Schema(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/schema", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"dbs":[{"name":"d0","frames":[{"name":"f0"},{"name":"f1"}]},{"name":"d1","frames":[{"name":"f0"}]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"dbs":[{"name":"d0","frames":[{"name":"f0"},{"name":"f1","views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"d1","frames":[{"name":"f0","views":[{"name":"inverse"},{"name":"standard"}]}]}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -63,13 +67,13 @@ func TestHandler_MaxSlices(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
-	idx.MustCreateFragmentIfNotExists("d0", "f0", 1).MustSetBits(30, (1*SliceWidth)+1)
-	idx.MustCreateFragmentIfNotExists("d0", "f0", 1).MustSetBits(30, (1*SliceWidth)+2)
-	idx.MustCreateFragmentIfNotExists("d0", "f0", 3).MustSetBits(30, (3*SliceWidth)+4)
+	idx.MustCreateFragmentIfNotExists("d0", "f0", pilosa.ViewStandard, 1).MustSetBits(30, (1*SliceWidth)+1)
+	idx.MustCreateFragmentIfNotExists("d0", "f0", pilosa.ViewStandard, 1).MustSetBits(30, (1*SliceWidth)+2)
+	idx.MustCreateFragmentIfNotExists("d0", "f0", pilosa.ViewStandard, 3).MustSetBits(30, (3*SliceWidth)+4)
 
-	idx.MustCreateFragmentIfNotExists("d1", "f1", 0).MustSetBits(40, (0*SliceWidth)+1)
-	idx.MustCreateFragmentIfNotExists("d1", "f1", 0).MustSetBits(40, (0*SliceWidth)+2)
-	idx.MustCreateFragmentIfNotExists("d1", "f1", 0).MustSetBits(40, (0*SliceWidth)+8)
+	idx.MustCreateFragmentIfNotExists("d1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+1)
+	idx.MustCreateFragmentIfNotExists("d1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+2)
+	idx.MustCreateFragmentIfNotExists("d1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+8)
 
 	h := NewHandler()
 	h.Index = idx.Index
@@ -654,11 +658,11 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	defer s.Close()
 
 	// Set bits in the index.
-	f0 := idx.MustCreateFragmentIfNotExists("d", "f", 0)
+	f0 := idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
 	f0.MustSetBits(100, 1, 2, 3)
 
 	// Begin backing up from slice d/f/0.
-	resp, err := http.Get(s.URL + "/fragment/data?db=d&frame=f&slice=0")
+	resp, err := http.Get(s.URL + "/fragment/data?db=d&frame=f&view=standard&slice=0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -675,7 +679,7 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	}
 
 	// Restore backup to slice x/y/0.
-	if resp, err := http.Post(s.URL+"/fragment/data?db=x&frame=y&slice=0", "application/octet-stream", resp.Body); err != nil {
+	if resp, err := http.Post(s.URL+"/fragment/data?db=x&frame=y&view=standard&slice=0", "application/octet-stream", resp.Body); err != nil {
 		t.Fatal(err)
 	} else if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
@@ -685,9 +689,9 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	}
 
 	// Verify data is correctly restored.
-	f1 := idx.Fragment("x", "y", 0)
+	f1 := idx.Fragment("x", "y", pilosa.ViewStandard, 0)
 	if f1 == nil {
-		t.Fatal("fragment x/y/0 not created")
+		t.Fatal("fragment x/y/standard/0 not created")
 	} else if bits := f1.Bitmap(100).Bits(); !reflect.DeepEqual(bits, []uint64{1, 2, 3}) {
 		t.Fatalf("unexpected restored bits: %+v", bits)
 	}

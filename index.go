@@ -131,12 +131,17 @@ func (i *Index) Schema() []*DBInfo {
 	for _, db := range i.DBs() {
 		di := &DBInfo{Name: db.Name()}
 		for _, frame := range db.Frames() {
-			di.Frames = append(di.Frames, &FrameInfo{
-				Name: frame.Name(),
-			})
+			fi := &FrameInfo{Name: frame.Name()}
+			for _, view := range frame.Views() {
+				fi.Views = append(fi.Views, &ViewInfo{Name: view.Name()})
+			}
+			sort.Sort(viewInfoSlice(fi.Views))
+			di.Frames = append(di.Frames, fi)
 		}
+		sort.Sort(frameInfoSlice(di.Frames))
 		a = append(a, di)
 	}
+	sort.Sort(dbInfoSlice(a))
 	return a
 }
 
@@ -270,13 +275,22 @@ func (i *Index) Frame(db, name string) *Frame {
 	return d.Frame(name)
 }
 
-// Fragment returns the fragment for a database, frame & slice.
-func (i *Index) Fragment(db, frame string, slice uint64) *Fragment {
+// View returns the view for a database, frame, and name.
+func (i *Index) View(db, frame, name string) *View {
 	f := i.Frame(db, frame)
 	if f == nil {
 		return nil
 	}
-	return f.Fragment(slice)
+	return f.View(name)
+}
+
+// Fragment returns the fragment for a database, frame & slice.
+func (i *Index) Fragment(db, frame, view string, slice uint64) *Fragment {
+	v := i.View(db, frame, view)
+	if v == nil {
+		return nil
+	}
+	return v.Fragment(slice)
 }
 
 // monitorCacheFlush periodically flushes all fragment caches sequentially.
@@ -298,15 +312,17 @@ func (i *Index) monitorCacheFlush() {
 func (i *Index) flushCaches() {
 	for _, db := range i.DBs() {
 		for _, frame := range db.Frames() {
-			for _, fragment := range frame.Fragments() {
-				select {
-				case <-i.closing:
-					return
-				default:
-				}
+			for _, view := range frame.Views() {
+				for _, fragment := range view.Fragments() {
+					select {
+					case <-i.closing:
+						return
+					default:
+					}
 
-				if err := fragment.FlushCache(); err != nil {
-					i.logger().Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
+					if err := fragment.FlushCache(); err != nil {
+						i.logger().Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
+					}
 				}
 			}
 		}
@@ -362,20 +378,27 @@ func (s *IndexSyncer) SyncIndex() error {
 				return fmt.Errorf("frame sync error: db=%s, frame=%s, err=%s", di.Name, fi.Name, err)
 			}
 
-			for slice := uint64(0); slice <= s.Index.DB(di.Name).MaxSlice(); slice++ {
-				// Ignore slices that this host doesn't own.
-				if !s.Cluster.OwnsFragment(s.Host, di.Name, slice) {
-					continue
-				}
-
+			for _, vi := range fi.Views {
 				// Verify syncer has not closed.
 				if s.IsClosing() {
 					return nil
 				}
 
-				// Sync fragment if own it.
-				if err := s.syncFragment(di.Name, fi.Name, slice); err != nil {
-					return fmt.Errorf("fragment sync error: db=%s, frame=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
+				for slice := uint64(0); slice <= s.Index.DB(di.Name).MaxSlice(); slice++ {
+					// Ignore slices that this host doesn't own.
+					if !s.Cluster.OwnsFragment(s.Host, di.Name, slice) {
+						continue
+					}
+
+					// Verify syncer has not closed.
+					if s.IsClosing() {
+						return nil
+					}
+
+					// Sync fragment if own it.
+					if err := s.syncFragment(di.Name, fi.Name, vi.Name, slice); err != nil {
+						return fmt.Errorf("fragment sync error: db=%s, frame=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
+					}
 				}
 			}
 		}
@@ -477,15 +500,21 @@ func (s *IndexSyncer) syncFrame(db, name string) error {
 }
 
 // syncFragment synchronizes a fragment with the rest of the cluster.
-func (s *IndexSyncer) syncFragment(db, frame string, slice uint64) error {
+func (s *IndexSyncer) syncFragment(db, frame, view string, slice uint64) error {
 	// Retrieve local frame.
 	f := s.Index.Frame(db, frame)
 	if f == nil {
 		return ErrFrameNotFound
 	}
 
+	// Ensure view exists locally.
+	v, err := f.CreateViewIfNotExists(view)
+	if err != nil {
+		return err
+	}
+
 	// Ensure fragment exists locally.
-	frag, err := f.CreateFragmentIfNotExists(slice)
+	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return err
 	}
