@@ -143,7 +143,7 @@ Optionally, you can specify the column label on database creation:
 
 ```sh
 $ curl -XPOST "http://127.0.0.1:10101/db" \
-    -d '{"db": "sample-db", "columnLabel": "user"}'
+    -d '{"db": "sample-db", "options": {"columnLabel": "user"}}'
 ```
 
 The frame `collaboration` may be created using the following call:
@@ -157,7 +157,7 @@ It is possible to specify the frame row label on frame creation:
 
 ```sh
 $ curl -XPOST "http://127.0.0.1:10101/frame" \
-    -d '{"db": "sample-db", "frame": "collaboration"}, "options": {"rowLabel": "project"}}'
+    -d '{"db": "sample-db", "frame": "collaboration", "options": {"rowLabel": "project"}}'
 ```
 
 ### Queries
