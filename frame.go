@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -85,13 +86,11 @@ func (f *Frame) MaxSlice() uint64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	var max uint64
-	for _, view := range f.views {
-		if slice := view.MaxSlice(); slice > max {
-			max = slice
-		}
+	view := f.views[ViewStandard]
+	if view == nil {
+		return 0
 	}
-	return max
+	return view.MaxSlice()
 }
 
 // SetRowLabel sets the row labels. Persists to meta file on update.
@@ -463,7 +462,6 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 	dataByFragment := make(map[importKey]importData)
 	for i := range bitmapIDs {
 		bitmapID, profileID, timestamp := bitmapIDs[i], profileIDs[i], timestamps[i]
-		slice := profileID / SliceWidth
 
 		var standard, inverse []string
 		if timestamp == nil {
@@ -476,7 +474,7 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 
 		// Attach bit to each standard view.
 		for _, name := range standard {
-			key := importKey{View: name, Slice: slice}
+			key := importKey{View: name, Slice: profileID / SliceWidth}
 			data := dataByFragment[key]
 			data.BitmapIDs = append(data.BitmapIDs, bitmapID)
 			data.ProfileIDs = append(data.ProfileIDs, profileID)
@@ -485,7 +483,7 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 
 		// Attach reversed bits to each inverse view.
 		for _, name := range inverse {
-			key := importKey{View: name, Slice: slice}
+			key := importKey{View: name, Slice: bitmapID / SliceWidth}
 			data := dataByFragment[key]
 			data.BitmapIDs = append(data.BitmapIDs, profileID)  // reversed
 			data.ProfileIDs = append(data.ProfileIDs, bitmapID) // reversed
@@ -495,6 +493,14 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 
 	// Import into each fragment.
 	for key, data := range dataByFragment {
+		// Re-sort data for inverse views.
+		if IsViewInverted(key.View) {
+			sort.Sort(importBitSet{
+				bitmapIDs:  data.BitmapIDs,
+				profileIDs: data.ProfileIDs,
+			})
+		}
+
 		view, err := f.CreateViewIfNotExists(key.View)
 		if err != nil {
 			return err
@@ -535,3 +541,16 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 type FrameOptions struct {
 	RowLabel string `json:"rowLabel,omitempty"`
 }
+
+// importBitSet represents slices of row and column ids.
+// This is used to sort data during import.
+type importBitSet struct {
+	bitmapIDs, profileIDs []uint64
+}
+
+func (p importBitSet) Swap(i, j int) {
+	p.bitmapIDs[i], p.bitmapIDs[j] = p.bitmapIDs[j], p.bitmapIDs[i]
+	p.profileIDs[i], p.profileIDs[j] = p.profileIDs[j], p.profileIDs[i]
+}
+func (p importBitSet) Len() int           { return len(p.bitmapIDs) }
+func (p importBitSet) Less(i, j int) bool { return p.bitmapIDs[i] < p.bitmapIDs[j] }
