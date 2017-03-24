@@ -778,6 +778,7 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 		return ErrDatabaseNotFound
 	}
 
+	var colName string
 	id, ok := c.Args["id"].(uint64)
 	if !ok {
 		// Retrieve columnLabel
@@ -787,11 +788,14 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 			return errors.New("SetProfileAttrs() id required")
 		}
 		id = col
+		colName = columnLabel
+	} else {
+		colName = "id"
 	}
 
 	// Copy args and remove reserved fields.
 	attrs := pql.CopyArgs(c.Args)
-	delete(attrs, "id")
+	delete(attrs, colName)
 
 	// Set attributes.
 	if err := d.ProfileAttrStore().SetAttrs(id, attrs); err != nil {
