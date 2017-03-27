@@ -205,6 +205,40 @@ func TestMain_SetProfileAttrs(t *testing.T) {
 	}
 }
 
+// Ensure program can set profile attributes with columnLabel option.
+func TestMain_SetProfileAttrsWithColumnOption(t *testing.T) {
+	m := MustRunMain()
+	defer m.Close()
+
+	// Create frames.
+	client := m.Client()
+	if err := client.CreateDB(context.Background(), "d", pilosa.DBOptions{ColumnLabel: "col"}); err != nil && err != pilosa.ErrDatabaseExists {
+		t.Fatal(err)
+	} else if err := client.CreateFrame(context.Background(), "d", "x.n", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set bits on bitmap.
+	if _, err := m.Query("db=d", `SetBit(id=1, frame="x.n", col=100)`); err != nil {
+		t.Fatal(err)
+	} else if _, err := m.Query("db=d", `SetBit(id=1, frame="x.n", col=101)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set profile attributes.
+	if _, err := m.Query("db=d", `SetProfileAttrs(col=100, foo="bar")`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query bitmap.
+	if res, err := m.Query("db=d&profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+		t.Fatalf("unexpected result: %s", res)
+	}
+
+}
+
 // Ensure program can set bits on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
 	m0 := MustRunMain()

@@ -762,20 +762,30 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 
 // executeSetProfileAttrs executes a SetProfileAttrs() call.
 func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) error {
-	id, ok := c.Args["id"].(uint64)
-	if !ok {
-		return errors.New("SetProfileAttrs() id required")
-	}
-
-	// Copy args and remove reserved fields.
-	attrs := pql.CopyArgs(c.Args)
-	delete(attrs, "id")
-
 	// Retrieve database.
 	d := e.Index.DB(db)
 	if d == nil {
 		return ErrDatabaseNotFound
 	}
+
+	var colName string
+	id, ok := c.Args["id"].(uint64)
+	if !ok {
+		// Retrieve columnLabel
+		columnLabel := d.columnLabel
+		col, ok := c.Args[columnLabel].(uint64)
+		if !ok {
+			return errors.New("SetProfileAttrs() id required")
+		}
+		id = col
+		colName = columnLabel
+	} else {
+		colName = "id"
+	}
+
+	// Copy args and remove reserved fields.
+	attrs := pql.CopyArgs(c.Args)
+	delete(attrs, colName)
 
 	// Set attributes.
 	if err := d.ProfileAttrStore().SetAttrs(id, attrs); err != nil {
