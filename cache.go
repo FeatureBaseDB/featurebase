@@ -271,7 +271,7 @@ func encodePair(p Pair) *internal.Pair {
 
 func decodePair(pb *internal.Pair) Pair {
 	return Pair{
-		ID:   pb.Key,
+		ID:    pb.Key,
 		Count: pb.Count,
 	}
 }
