@@ -47,11 +47,24 @@ func (c *Client) Host() string { return c.host }
 
 // MaxSliceByDatabase returns the number of slices on a server by database.
 func (c *Client) MaxSliceByDatabase(ctx context.Context) (map[string]uint64, error) {
+	return c.maxSliceByDatabase(ctx, false)
+}
+
+// MaxInverseSliceByDatabase returns the number of inverse slices on a server by database.
+func (c *Client) MaxInverseSliceByDatabase(ctx context.Context) (map[string]uint64, error) {
+	return c.maxSliceByDatabase(ctx, true)
+}
+
+// maxSliceByDatabase returns the number of slices on a server by database.
+func (c *Client) maxSliceByDatabase(ctx context.Context, inverse bool) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := url.URL{
 		Scheme: "http",
 		Host:   c.host,
 		Path:   "/slices/max",
+		RawQuery: (&url.Values{
+			"inverse": {strconv.FormatBool(inverse)},
+		}).Encode(),
 	}
 
 	// Build request.
