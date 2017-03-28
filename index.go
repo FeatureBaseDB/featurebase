@@ -125,6 +125,15 @@ func (i *Index) MaxSlices() map[string]uint64 {
 	return a
 }
 
+// MaxInverseSlices returns MaxInverseSlice map for all databases.
+func (i *Index) MaxInverseSlices() map[string]uint64 {
+	a := make(map[string]uint64)
+	for _, db := range i.DBs() {
+		a[db.Name()] = db.MaxInverseSlice()
+	}
+	return a
+}
+
 // Schema returns schema data for all databases and frames.
 func (i *Index) Schema() []*DBInfo {
 	var a []*DBInfo
