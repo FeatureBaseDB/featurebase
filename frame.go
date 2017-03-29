@@ -93,6 +93,18 @@ func (f *Frame) MaxSlice() uint64 {
 	return view.MaxSlice()
 }
 
+// MaxInverseSlice returns the max inverse slice in the frame.
+func (f *Frame) MaxInverseSlice() uint64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	view := f.views[ViewInverse]
+	if view == nil {
+		return 0
+	}
+	return view.MaxSlice()
+}
+
 // SetRowLabel sets the row labels. Persists to meta file on update.
 func (f *Frame) SetRowLabel(v string) error {
 	f.mu.Lock()

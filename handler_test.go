@@ -86,6 +86,46 @@ func TestHandler_MaxSlices(t *testing.T) {
 	}
 }
 
+// Ensure the handler can return the maxslice map for the inverse views.
+func TestHandler_MaxSlices_Inverse(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	f0, err := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{}).CreateFrame("f0", pilosa.FrameOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f0.SetBit((1*SliceWidth)+1, 30, nil); err != nil {
+		t.Fatal(err)
+	} else if _, err := f0.SetBit((1*SliceWidth)+2, 30, nil); err != nil {
+		t.Fatal(err)
+	} else if _, err := f0.SetBit((3*SliceWidth)+4, 30, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	f1, err := idx.MustCreateDBIfNotExists("d1", pilosa.DBOptions{}).CreateFrame("f1", pilosa.FrameOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f1.SetBit((0*SliceWidth)+1, 40, nil); err != nil {
+		t.Fatal(err)
+	} else if _, err := f1.SetBit((0*SliceWidth)+2, 40, nil); err != nil {
+		t.Fatal(err)
+	} else if _, err := f1.SetBit((0*SliceWidth)+4, 40, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewHandler()
+	h.Index = idx.Index
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/slices/max?inverse=true", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{"MaxSlices":{"d0":3,"d1":0}}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
 // Ensure the handler can accept URL arguments.
 func TestHandler_Query_Args_URL(t *testing.T) {
 	h := NewHandler()

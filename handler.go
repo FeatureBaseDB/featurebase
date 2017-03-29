@@ -292,7 +292,13 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) error {
-	ms := h.Index.MaxSlices()
+	var ms map[string]uint64
+	if inverse, _ := strconv.ParseBool(r.URL.Query().Get("inverse")); inverse {
+		ms = h.Index.MaxInverseSlices()
+	} else {
+		ms = h.Index.MaxSlices()
+	}
+
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
 		pb := &internal.MaxSlicesResponse{
 			MaxSlices: ms,
