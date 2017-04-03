@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"fmt"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
@@ -867,4 +868,89 @@ func MustReadAll(r io.Reader) []byte {
 		panic(err)
 	}
 	return buf
+}
+
+// Ensure that options needs to be provided to set columnLabel when create DB
+func TestHandler_DB_Options(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	s := NewServer()
+	s.Handler.Index = idx.Index
+	defer s.Close()
+
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/db", strings.NewReader(`{"db": "sample-db", "columnLabel": "location"}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Verify body response.
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	} else if buf, err := ioutil.ReadAll(resp.Body); err != nil {
+		t.Fatal(err)
+	} else if string(buf) != "options needs to be provided"+"\n" {
+		fmt.Println(string(buf) == "options needs to be provided")
+		t.Fatalf("unexpected response body: %s", buf)
+	}
+
+}
+
+// Ensure that rowLabel is provided as an options when create frame
+func TestHandler_Frame_Options(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	s := NewServer()
+	s.Handler.Index = idx.Index
+	defer s.Close()
+
+	// Create database.
+	if _, err := idx.CreateDBIfNotExists("sample-db", pilosa.DBOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/frame", strings.NewReader(`{"db": "sample-db", "frame": "test", "options": {"columnLabel": "location"}}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Verify body response.
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	} else if buf, err := ioutil.ReadAll(resp.Body); err != nil {
+		t.Fatal(err)
+	} else if string(buf) != "invalid options: map[columnLabel:location]"+"\n" {
+		t.Fatalf("unexpected response body: %s", buf)
+	}
+}
+
+// Ensure that rowLabel is provided as an options when create frame
+func TestHandler_OptionsValue(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	s := NewServer()
+	s.Handler.Index = idx.Index
+	defer s.Close()
+
+	// Create database.
+	if _, err := idx.CreateDBIfNotExists("sample-db", pilosa.DBOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/frame", strings.NewReader(`{"db": "sample-db", "options": {"rowLabel": "///"}}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Verify body response.
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	} else if buf, err := ioutil.ReadAll(resp.Body); err != nil {
+		t.Fatal(err)
+	} else if string(buf) != "invalid options: map[rowLabel:///]"+"\n" {
+		t.Fatalf("unexpected response body: %s", buf)
+	}
 }
