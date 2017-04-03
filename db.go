@@ -478,7 +478,7 @@ func MergeSchemas(a, b []*DBInfo) []*DBInfo {
 
 // DBOptions represents options to set when initializing a db.
 type DBOptions struct {
-	ColumnLabel string `json:"columnLabel,omitempty"`
+	ColumnLabel string `json:"columnLabel,omitempty" valid:"required,string"`
 }
 
 // hasTime returns true if a contains a non-nil time.
