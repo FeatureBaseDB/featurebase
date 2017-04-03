@@ -412,7 +412,7 @@ func (h Handler) validateOptions(path string, options map[string]interface{}) er
 
 type postDBRequest struct {
 	DB      string    `json:"db"`
-	Options DBOptions `json:"options" valid:"json"`
+	Options DBOptions `json:"options"`
 }
 
 type postDBResponse struct{}
