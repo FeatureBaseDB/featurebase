@@ -20,6 +20,8 @@ var (
 	ErrFrameExists   = errors.New("frame already exists")
 	ErrFrameNotFound = errors.New("frame not found")
 
+	ErrInvalidView = errors.New("invalid veiw")
+
 	ErrName = errors.New("invalid database or frame's name, must match [a-z0-9_-]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.

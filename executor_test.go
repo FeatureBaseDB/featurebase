@@ -390,16 +390,16 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	}
 
 	// Set bits.
-	f.MustSetBit(1, 2, MustParseTimePtr("1999-12-31 00:00"))
-	f.MustSetBit(1, 3, MustParseTimePtr("2000-01-01 00:00"))
-	f.MustSetBit(1, 4, MustParseTimePtr("2000-01-02 00:00"))
-	f.MustSetBit(1, 5, MustParseTimePtr("2000-02-01 00:00"))
-	f.MustSetBit(1, 6, MustParseTimePtr("2001-01-01 00:00"))
-	f.MustSetBit(1, 7, MustParseTimePtr("2002-01-01 02:00"))
+	f.MustSetBit(pilosa.ViewStandard, 1, 2, MustParseTimePtr("1999-12-31 00:00"))
+	f.MustSetBit(pilosa.ViewStandard, 1, 3, MustParseTimePtr("2000-01-01 00:00"))
+	f.MustSetBit(pilosa.ViewStandard, 1, 4, MustParseTimePtr("2000-01-02 00:00"))
+	f.MustSetBit(pilosa.ViewStandard, 1, 5, MustParseTimePtr("2000-02-01 00:00"))
+	f.MustSetBit(pilosa.ViewStandard, 1, 6, MustParseTimePtr("2001-01-01 00:00"))
+	f.MustSetBit(pilosa.ViewStandard, 1, 7, MustParseTimePtr("2002-01-01 02:00"))
 
-	f.MustSetBit(1, 2, MustParseTimePtr("1999-12-30 00:00"))  // too early
-	f.MustSetBit(1, 2, MustParseTimePtr("2002-02-01 00:00"))  // too late
-	f.MustSetBit(10, 2, MustParseTimePtr("2001-01-01 00:00")) // different bitmap
+	f.MustSetBit(pilosa.ViewStandard, 1, 2, MustParseTimePtr("1999-12-30 00:00"))  // too early
+	f.MustSetBit(pilosa.ViewStandard, 1, 2, MustParseTimePtr("2002-02-01 00:00"))  // too late
+	f.MustSetBit(pilosa.ViewStandard, 10, 2, MustParseTimePtr("2001-01-01 00:00")) // different bitmap
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Range(id=1, frame=f, start="1999-12-31T00:00", end="2002-01-01T03:00")`), nil, nil); err != nil {
