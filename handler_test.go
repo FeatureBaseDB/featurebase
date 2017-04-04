@@ -14,7 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	"fmt"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
@@ -890,8 +889,7 @@ func TestHandler_DB_Options(t *testing.T) {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	} else if buf, err := ioutil.ReadAll(resp.Body); err != nil {
 		t.Fatal(err)
-	} else if string(buf) != "options needs to be provided"+"\n" {
-		fmt.Println(string(buf) == "options needs to be provided")
+	} else if string(buf) != "options required"+"\n" {
 		t.Fatalf("unexpected response body: %s", buf)
 	}
 
@@ -921,7 +919,7 @@ func TestHandler_Frame_Options(t *testing.T) {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	} else if buf, err := ioutil.ReadAll(resp.Body); err != nil {
 		t.Fatal(err)
-	} else if string(buf) != "invalid options: map[columnLabel:location]"+"\n" {
+	} else if string(buf) != "rowLabel required"+"\n" {
 		t.Fatalf("unexpected response body: %s", buf)
 	}
 }
@@ -939,7 +937,7 @@ func TestHandler_OptionsValue(t *testing.T) {
 	if _, err := idx.CreateDBIfNotExists("sample-db", pilosa.DBOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/frame", strings.NewReader(`{"db": "sample-db", "options": {"rowLabel": "///"}}`)))
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/frame", strings.NewReader(`{"db": "sample-db", "frame": "test", "options": {"rowLabel": "///"}}`)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -950,7 +948,7 @@ func TestHandler_OptionsValue(t *testing.T) {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	} else if buf, err := ioutil.ReadAll(resp.Body); err != nil {
 		t.Fatal(err)
-	} else if string(buf) != "invalid options: map[rowLabel:///]"+"\n" {
+	} else if string(buf) != "invalid rowLabel"+"\n" {
 		t.Fatalf("unexpected response body: %s", buf)
 	}
 }

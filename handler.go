@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"bytes"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
@@ -322,16 +321,6 @@ type sliceMaxResponse struct {
 
 // handlePostDB handles POST /db request.
 func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
-	var err error
-	// Copy request body for validation
-	buf, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	rdr2 := ioutil.NopCloser(bytes.NewBuffer(buf))
-	r.Body = rdr2
-
 	// Decode request.
 	var req postDBRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -339,15 +328,8 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate request
-	err = h.validateRequest(buf, r.URL.Path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
 	// Create database.
-	_, err = h.Index.CreateDB(req.DB, req.Options)
+	_, err := h.Index.CreateDB(req.DB, req.Options)
 	if err == ErrDatabaseExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -362,50 +344,34 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Validate request body for db/frame creation
-func (h *Handler) validateRequest(r []byte, path string) error {
+// Custom Unmarshal JSON to validate request body when creating a new database
+func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 	var data map[string]interface{}
-
-	err := json.Unmarshal(r, &data)
-	if err != nil {
+	if err := json.Unmarshal(b, &data); err != nil {
 		return err
 	}
-
-	option, ok := data["options"]
-	if len(data) >= 2 && !ok {
-		return errors.New("options needs to be provided")
-	} else if ok {
-		err = h.validateOptions(path, option.(map[string]interface{}))
-		if err != nil {
-			return fmt.Errorf("invalid options: %s", option.(map[string]interface{}))
-		}
+	f := func(key string, m map[string]interface{}) bool { _, ok := m[key]; return ok }
+	if !f("db", data) {
+		return errors.New("db required")
 	}
+	p.DB = data["db"].(string)
 
-	return nil
-
-}
-
-// Validate options in request body for db/frame creation, make sure key and value for columnLabel/rowLable is correct
-func (h Handler) validateOptions(path string, options map[string]interface{}) error {
-	switch path {
-	case "/db":
-		if _, ok := options["columnLabel"]; !ok && len(options) > 0 {
-			return errors.New("columnLabel is not provided")
-		} else if ok {
+	if f("options", data) {
+		options := data["options"].(map[string]interface{})
+		if len(options) == 0 {
+			return nil
+		} else if f("columnLabel", options) {
 			err := ValidateName(options["columnLabel"].(string))
 			if err != nil {
-				return err
+				return errors.New("invalid columnLabel")
 			}
+			p.Options = DBOptions{ColumnLabel: options["columnLabel"].(string)}
+		} else {
+			return errors.New("columnLabel required")
 		}
-	case "/frame":
-		if _, ok := options["rowLabel"]; !ok && len(options) > 0 {
-			return errors.New("rowLabel is not provided")
-		} else if ok {
-			err := ValidateName(options["rowLabel"].(string))
-			if err != nil {
-				return err
-			}
-		}
+
+	} else if len(data) > 1 {
+		return errors.New("options required")
 	}
 	return nil
 }
@@ -544,22 +510,6 @@ type postDBAttrDiffResponse struct {
 
 // handlePostFrame handles POST /frame request.
 func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
-	var err error
-	// Copy request body for validation
-	buf, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	rdr2 := ioutil.NopCloser(bytes.NewBuffer(buf))
-	r.Body = rdr2
-
-	// Validate request
-	err = h.validateRequest(buf, r.URL.Path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 
 	// Decode request.
 	var req postFrameRequest
@@ -576,7 +526,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create frame.
-	_, err = db.CreateFrame(req.Frame, req.Options)
+	_, err := db.CreateFrame(req.Frame, req.Options)
 	if err == ErrFrameExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -589,6 +539,43 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+}
+
+// Custom Unmarshal JSON to validate request body when creating a new frame
+func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
+	var data map[string]interface{}
+	if err := json.Unmarshal(b, &data); err != nil {
+		return err
+	}
+	f := func(key string, m map[string]interface{}) bool { _, ok := m[key]; return ok }
+	if !f("db", data) {
+		return errors.New("db required")
+	}
+	p.DB = data["db"].(string)
+
+	if !f("frame", data) {
+		return errors.New("frame required")
+	}
+	p.Frame = data["frame"].(string)
+
+	if f("options", data) {
+		options := data["options"].(map[string]interface{})
+		if len(options) == 0 {
+			return nil
+		} else if f("rowLabel", options) {
+			err := ValidateName(options["rowLabel"].(string))
+			if err != nil {
+				return errors.New("invalid rowLabel")
+			}
+			p.Options = FrameOptions{RowLabel: options["rowLabel"].(string)}
+		} else {
+			return errors.New("rowLabel required")
+		}
+
+	} else if len(data) > 2 {
+		return errors.New("options required")
+	}
+	return nil
 }
 
 type postFrameRequest struct {
