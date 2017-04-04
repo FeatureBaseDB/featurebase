@@ -119,8 +119,8 @@ func (f *Frame) Reopen() error {
 }
 
 // MustSetBit sets a bit on the frame. Panic on error.
-func (f *Frame) MustSetBit(bitmapID, profileID uint64, t *time.Time) (changed bool) {
-	changed, err := f.SetBit(bitmapID, profileID, t)
+func (f *Frame) MustSetBit(view string, bitmapID, profileID uint64, t *time.Time) (changed bool) {
+	changed, err := f.SetBit(view, bitmapID, profileID, t)
 	if err != nil {
 		panic(err)
 	}
