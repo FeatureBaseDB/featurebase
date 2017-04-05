@@ -116,13 +116,17 @@ func normalizeHost(host string) (string, error) {
 
 // Close shuts down the server.
 func (m *Command) Close() error {
-	err := m.Server.Close()
+	var logErr error
+	serveErr := m.Server.Close()
 	logOutput := m.Server.LogOutput
-	if logOutput != m.Stderr {
-		if file, ok := logOutput.(*os.File); ok {
-			file.Close()
-		}
+	if closer, ok := logOutput.(io.Closer); ok {
+		logErr = closer.Close()
 	}
 	close(m.Done)
-	return err
+	if serveErr != nil && logErr != nil {
+		return fmt.Errorf("closing server: '%v', closing logs: '%v'", serveErr, logErr)
+	} else if logErr != nil {
+		return logErr
+	}
+	return serveErr
 }
