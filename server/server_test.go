@@ -336,6 +336,17 @@ path = "/path/to/plugins"
 	}
 }
 
+// Ensure the "log-path" config can be parsed.
+func TestConfig_Parse_LogPath(t *testing.T) {
+	if c, err := ParseConfig(`
+log-path = "/log/path"
+`); err != nil {
+		t.Fatal(err)
+	} else if c.LogPath != "/log/path" {
+		t.Fatalf("unexpected path: %s", c.LogPath)
+	}
+}
+
 // Main represents a test wrapper for main.Main.
 type Main struct {
 	*server.Command
