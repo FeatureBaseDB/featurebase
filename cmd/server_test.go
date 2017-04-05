@@ -75,7 +75,7 @@ data-dir = "` + actualDataDir + `"
 		},
 		// TEST 2
 		{
-			args: []string{"server"},
+			args: []string{"server", "--log-path", logFile.Name()},
 			env:  map[string]string{"PILOSA_PROFILE.CPU_TIME": "1m"},
 			cfgFileContent: `
 bind = "localhost:0"
@@ -98,25 +98,8 @@ data-dir = "` + actualDataDir + `"
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*11))
 				v.Check(cmd.Server.CPUProfile, profFile.Name())
 				v.Check(cmd.Server.CPUTime, time.Minute)
-				return v.Error()
-			},
-		},
-		// TEST 3 - test log path can be read from command line and it's priority is highest
-		{
-			args: []string{"server", "--log-path", logFile.Name()},
-			env:  map[string]string{"PILOSA_LOG_PATH": "/tmp/mylog_env"},
-			cfgFileContent: `
-log-path = "/tmp/mylog_cfg"
-`,
-			validation: func() error {
-				v := validator{}
 				v.Check(cmd.Server.Config.LogPath, logFile.Name())
-				if err := v.Error(); err != nil {
-					return v.Error()
-				}
-				// check that the log file was created
-				_, err = logFile.Stat()
-				return err
+				return v.Error()
 			},
 		},
 	}
