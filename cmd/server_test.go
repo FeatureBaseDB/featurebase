@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"errors"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -23,6 +24,8 @@ func TestServerConfig(t *testing.T) {
 	failErr(t, err, "making data dir")
 	profFile, err := ioutil.TempFile("", "")
 	failErr(t, err, "making temp file")
+	logFile, err := ioutil.TempFile("", "")
+	failErr(t, err, "making log file")
 	tests := []commandTest{
 		// TEST 0
 		{
@@ -73,7 +76,7 @@ data-dir = "` + actualDataDir + `"
 		},
 		// TEST 2
 		{
-			args: []string{"server"},
+			args: []string{"server", "--log-path", logFile.Name()},
 			env:  map[string]string{"PILOSA_PROFILE.CPU_TIME": "1m"},
 			cfgFileContent: `
 bind = "localhost:0"
@@ -96,7 +99,16 @@ data-dir = "` + actualDataDir + `"
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*11))
 				v.Check(cmd.Server.CPUProfile, profFile.Name())
 				v.Check(cmd.Server.CPUTime, time.Minute)
-				return v.Error()
+				v.Check(cmd.Server.Config.LogPath, logFile.Name())
+				if v.Error() != nil {
+					return v.Error()
+				}
+				// confirm log file was written
+				info, err := logFile.Stat()
+				if err != nil || info.Size() == 0 {
+					return errors.New("Log file was not written!")
+				}
+				return nil
 			},
 		},
 	}
