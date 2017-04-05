@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"errors"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -99,7 +100,15 @@ data-dir = "` + actualDataDir + `"
 				v.Check(cmd.Server.CPUProfile, profFile.Name())
 				v.Check(cmd.Server.CPUTime, time.Minute)
 				v.Check(cmd.Server.Config.LogPath, logFile.Name())
-				return v.Error()
+				if v.Error() != nil {
+					return v.Error()
+				}
+				// confirm log file was written
+				info, err := logFile.Stat()
+				if err != nil || info.Size() == 0 {
+					return errors.New("Log file was not written!")
+				}
+				return nil
 			},
 		},
 	}
