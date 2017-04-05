@@ -350,28 +350,50 @@ func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &data); err != nil {
 		return err
 	}
-	f := func(key string, m map[string]interface{}) bool { _, ok := m[key]; return ok }
-	if !f("db", data) {
-		return errors.New("db required")
-	}
-	p.DB = data["db"].(string)
-
-	if f("options", data) {
-		options := data["options"].(map[string]interface{})
-		if len(options) == 0 {
-			return nil
-		} else if f("columnLabel", options) {
-			err := ValidateName(options["columnLabel"].(string))
-			if err != nil {
-				return errors.New("invalid columnLabel")
+	for key, value := range data {
+		switch key {
+		case "db":
+			if val, ok := data["db"].(string); !ok {
+				return errors.New("db required and must be a string")
+			} else {
+				p.DB = val
 			}
-			p.Options = DBOptions{ColumnLabel: options["columnLabel"].(string)}
-		} else {
-			return errors.New("columnLabel required")
+		case "options":
+			options, ok := data["options"].(map[string]interface{})
+			if !ok {
+				return errors.New("options is not map[string]interface{}")
+			}
+			if len(options) == 0 {
+				return nil
+			}
+			err := validateOptions(options, "columnLabel")
+			if err != nil {
+				return err
+			} else {
+				p.Options = DBOptions{ColumnLabel: options["columnLabel"].(string)}
+			}
+		default:
+			return fmt.Errorf("Unknown key: %v:%v", key, value)
 		}
+	}
+	return nil
+}
 
-	} else if len(data) > 1 {
-		return errors.New("options required")
+func validateOptions(options map[string]interface{}, field string) error {
+	for k, v := range options {
+		switch k {
+		case field:
+			if colValue, ok := options[field].(string); !ok {
+				return fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
+			} else {
+				err := ValidateName(colValue)
+				if err != nil {
+					return fmt.Errorf("invalid %v value: %v", field, v)
+				}
+			}
+		default:
+			return fmt.Errorf("invalid key for options {%v:%v}", k, v)
+		}
 	}
 	return nil
 }
@@ -547,35 +569,41 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &data); err != nil {
 		return err
 	}
-	f := func(key string, m map[string]interface{}) bool { _, ok := m[key]; return ok }
-	if !f("db", data) {
-		return errors.New("db required")
-	}
-	p.DB = data["db"].(string)
-
-	if !f("frame", data) {
-		return errors.New("frame required")
-	}
-	p.Frame = data["frame"].(string)
-
-	if f("options", data) {
-		options := data["options"].(map[string]interface{})
-		if len(options) == 0 {
-			return nil
-		} else if f("rowLabel", options) {
-			err := ValidateName(options["rowLabel"].(string))
-			if err != nil {
-				return errors.New("invalid rowLabel")
+	for key, value := range data {
+		switch key {
+		case "db":
+			if val, ok := data["db"].(string); !ok {
+				return errors.New("db required and must be a string")
+			} else {
+				p.DB = val
 			}
-			p.Options = FrameOptions{RowLabel: options["rowLabel"].(string)}
-		} else {
-			return errors.New("rowLabel required")
-		}
+		case "frame":
+			if val, ok := data["frame"].(string); !ok {
+				return errors.New("frame required and must be a string")
+			} else {
+				p.Frame = val
+			}
 
-	} else if len(data) > 2 {
-		return errors.New("options required")
+		case "options":
+			options, ok := data["options"].(map[string]interface{})
+			if !ok {
+				return errors.New("options is not map[string]interface{}")
+			}
+			if len(options) == 0 {
+				return nil
+			}
+			err := validateOptions(options, "rowLabel")
+			if err != nil {
+				return err
+			} else {
+				p.Options = FrameOptions{RowLabel: options["rowLabel"].(string)}
+			}
+		default:
+			return fmt.Errorf("Unknown key: {%v:%v}", key, value)
+		}
 	}
 	return nil
+
 }
 
 type postFrameRequest struct {

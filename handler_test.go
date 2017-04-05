@@ -889,7 +889,7 @@ func TestHandler_DB_Options(t *testing.T) {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	} else if buf, err := ioutil.ReadAll(resp.Body); err != nil {
 		t.Fatal(err)
-	} else if string(buf) != "options required"+"\n" {
+	} else if string(buf) != "Unknown key: columnLabel:location"+"\n" {
 		t.Fatalf("unexpected response body: %s", buf)
 	}
 
@@ -919,7 +919,7 @@ func TestHandler_Frame_Options(t *testing.T) {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	} else if buf, err := ioutil.ReadAll(resp.Body); err != nil {
 		t.Fatal(err)
-	} else if string(buf) != "rowLabel required"+"\n" {
+	} else if string(buf) != "invalid key for options {columnLabel:location}"+"\n" {
 		t.Fatalf("unexpected response body: %s", buf)
 	}
 }
@@ -948,7 +948,7 @@ func TestHandler_OptionsValue(t *testing.T) {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	} else if buf, err := ioutil.ReadAll(resp.Body); err != nil {
 		t.Fatal(err)
-	} else if string(buf) != "invalid rowLabel"+"\n" {
+	} else if string(buf) != "invalid rowLabel value: ///"+"\n" {
 		t.Fatalf("unexpected response body: %s", buf)
 	}
 }
