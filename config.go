@@ -26,6 +26,8 @@ type Config struct {
 	AntiEntropy struct {
 		Interval Duration `toml:"interval"`
 	} `toml:"anti-entropy"`
+
+	LogPath string `toml:"log-path"`
 }
 
 // NewConfig returns an instance of Config with default options.
