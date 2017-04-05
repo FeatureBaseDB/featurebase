@@ -68,7 +68,15 @@ func (m *Command) Run(args ...string) (err error) {
 	}
 
 	// Setup logging output.
-	m.Server.LogOutput = m.Stderr
+	if m.Config.LogPath == "" {
+		m.Server.LogOutput = m.Stderr
+	} else {
+		logFile, err := os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		if err != nil {
+			return err
+		}
+		m.Server.LogOutput = logFile
+	}
 
 	// Configure index.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
@@ -109,6 +117,12 @@ func normalizeHost(host string) (string, error) {
 // Close shuts down the server.
 func (m *Command) Close() error {
 	err := m.Server.Close()
+	logOutput := m.Server.LogOutput
+	if logOutput != m.Stderr {
+		if file, ok := logOutput.(*os.File); ok {
+			file.Close()
+		}
+	}
 	close(m.Done)
 	return err
 }
