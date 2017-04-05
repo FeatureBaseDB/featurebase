@@ -353,25 +353,28 @@ func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 	for key, value := range data {
 		switch key {
 		case "db":
-			if val, ok := data["db"].(string); !ok {
+			val, ok := data["db"].(string)
+			if !ok {
 				return errors.New("db required and must be a string")
-			} else {
-				p.DB = val
 			}
+			p.DB = val
 		case "options":
 			options, ok := data["options"].(map[string]interface{})
 			if !ok {
 				return errors.New("options is not map[string]interface{}")
 			}
+
 			if len(options) == 0 {
-				return nil
-			}
-			err := validateOptions(options, "columnLabel")
-			if err != nil {
-				return err
+				p.Options = DBOptions{}
 			} else {
-				p.Options = DBOptions{ColumnLabel: options["columnLabel"].(string)}
+				err := validateOptions(options, "columnLabel")
+				if err != nil {
+					return err
+				} else {
+					p.Options = DBOptions{ColumnLabel: options["columnLabel"].(string)}
+				}
 			}
+
 		default:
 			return fmt.Errorf("Unknown key: %v:%v", key, value)
 		}
@@ -590,14 +593,16 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 				return errors.New("options is not map[string]interface{}")
 			}
 			if len(options) == 0 {
-				return nil
-			}
-			err := validateOptions(options, "rowLabel")
-			if err != nil {
-				return err
+				p.Options = FrameOptions{}
 			} else {
-				p.Options = FrameOptions{RowLabel: options["rowLabel"].(string)}
+				err := validateOptions(options, "rowLabel")
+				if err != nil {
+					return err
+				} else {
+					p.Options = FrameOptions{RowLabel: options["rowLabel"].(string)}
+				}
 			}
+
 		default:
 			return fmt.Errorf("Unknown key: {%v:%v}", key, value)
 		}
