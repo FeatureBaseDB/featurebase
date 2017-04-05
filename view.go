@@ -17,6 +17,11 @@ const (
 	ViewInverse  = "inverse"
 )
 
+// IsValidView returns true if name is valid.
+func IsValidView(name string) bool {
+	return name == ViewStandard || name == ViewInverse
+}
+
 // View represents a container for frame data.
 type View struct {
 	mu    sync.Mutex

@@ -348,28 +348,13 @@ func (f *Frame) newView(path, name string) *View {
 	return view
 }
 
-// SetBit sets a bit within the frame.
-func (f *Frame) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
-	// Set standard layout bits.
-	if v, err := f.setBit(ViewStandard, rowID, colID, t); err != nil {
-		return changed, err
-	} else if v {
-		changed = v
+// SetBit sets a bit on a view within the frame.
+func (f *Frame) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	// Validate view name.
+	if !IsValidView(name) {
+		return false, ErrInvalidView
 	}
 
-	// Set inverse layout bits.
-	// NOTE: The row & col are transposed for the inverted view.
-	if v, err := f.setBit(ViewInverse, colID, rowID, t); err != nil {
-		return changed, err
-	} else if v {
-		changed = v
-	}
-
-	return changed, nil
-}
-
-// setBit sets a bit for a given layout (default or inverted).
-func (f *Frame) setBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Retrieve view. Exit if it doesn't exist.
 	view, err := f.CreateViewIfNotExists(name)
 	if err != nil {
@@ -406,27 +391,12 @@ func (f *Frame) setBit(name string, rowID, colID uint64, t *time.Time) (changed 
 }
 
 // ClearBit clears a bit within the frame.
-func (f *Frame) ClearBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
-	// Clear standard layout bits.
-	if v, err := f.clearBit(ViewStandard, rowID, colID, t); err != nil {
-		return changed, err
-	} else if v {
-		changed = v
+func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	// Validate view name.
+	if !IsValidView(name) {
+		return false, ErrInvalidView
 	}
 
-	// Clear inverse layout bits.
-	// NOTE: The row & col are transposed for the inverted view.
-	if v, err := f.clearBit(ViewInverse, colID, rowID, t); err != nil {
-		return changed, err
-	} else if v {
-		changed = v
-	}
-
-	return changed, nil
-}
-
-// clearBit clears a bit for a given layout (default or inverted).
-func (f *Frame) clearBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Retrieve view. Exit if it doesn't exist.
 	view, err := f.CreateViewIfNotExists(name)
 	if err != nil {
