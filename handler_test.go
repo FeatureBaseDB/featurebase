@@ -39,12 +39,14 @@ func TestHandler_Schema(t *testing.T) {
 
 	if f, err := d0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(pilosa.ViewInverse, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if f, err := d1.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d0.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
@@ -57,7 +59,7 @@ func TestHandler_Schema(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/schema", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"dbs":[{"name":"d0","frames":[{"name":"f0"},{"name":"f1","views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"d1","frames":[{"name":"f0","views":[{"name":"inverse"},{"name":"standard"}]}]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"dbs":[{"name":"d0","frames":[{"name":"f0"},{"name":"f1","views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"d1","frames":[{"name":"f0","views":[{"name":"standard"}]}]}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -95,11 +97,11 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f0.SetBit((1*SliceWidth)+1, 30, nil); err != nil {
+	if _, err := f0.SetBit(pilosa.ViewInverse, 30, (1*SliceWidth)+1, nil); err != nil {
 		t.Fatal(err)
-	} else if _, err := f0.SetBit((1*SliceWidth)+2, 30, nil); err != nil {
+	} else if _, err := f0.SetBit(pilosa.ViewInverse, 30, (1*SliceWidth)+2, nil); err != nil {
 		t.Fatal(err)
-	} else if _, err := f0.SetBit((3*SliceWidth)+4, 30, nil); err != nil {
+	} else if _, err := f0.SetBit(pilosa.ViewInverse, 30, (3*SliceWidth)+4, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -107,11 +109,11 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f1.SetBit((0*SliceWidth)+1, 40, nil); err != nil {
+	if _, err := f1.SetBit(pilosa.ViewStandard, 40, (0*SliceWidth)+1, nil); err != nil {
 		t.Fatal(err)
-	} else if _, err := f1.SetBit((0*SliceWidth)+2, 40, nil); err != nil {
+	} else if _, err := f1.SetBit(pilosa.ViewInverse, 40, (0*SliceWidth)+2, nil); err != nil {
 		t.Fatal(err)
-	} else if _, err := f1.SetBit((0*SliceWidth)+4, 40, nil); err != nil {
+	} else if _, err := f1.SetBit(pilosa.ViewInverse, 40, (0*SliceWidth)+4, nil); err != nil {
 		t.Fatal(err)
 	}
 
