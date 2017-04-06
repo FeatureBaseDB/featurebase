@@ -428,7 +428,7 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 }
 
 func (f *Frame) newView(path, name string) *View {
-	view := NewView(path, f.db, f.name, name)
+	view := NewView(path, f.db, f.name, name, f.cacheSize)
 	view.cacheType = f.cacheType
 	view.LogOutput = f.LogOutput
 	view.BitmapAttrStore = f.bitmapAttrStore

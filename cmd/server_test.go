@@ -106,6 +106,8 @@ data-dir = "` + actualDataDir + `"
 				// confirm log file was written
 				info, err := logFile.Stat()
 				if err != nil || info.Size() == 0 {
+					// NOTE: this test assumes that something is being written to the log
+					// currently, that is relying on log: "index sync monitor initializing"
 					return errors.New("Log file was not written!")
 				}
 				return nil
