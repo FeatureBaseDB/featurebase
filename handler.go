@@ -363,17 +363,26 @@ func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 			if !ok {
 				return errors.New("options is not map[string]interface{}")
 			}
-
-			if len(options) == 0 {
+			value, err := validateOptions(options, "columnLabel")
+			if err != nil {
+				return err
+			}
+			if value == "" {
 				p.Options = DBOptions{}
 			} else {
-				err := validateOptions(options, "columnLabel")
-				if err != nil {
-					return err
-				} else {
-					p.Options = DBOptions{ColumnLabel: options["columnLabel"].(string)}
-				}
+				p.Options = DBOptions{ColumnLabel: value}
 			}
+
+			//if len(options) == 0 {
+			//	p.Options = DBOptions{}
+			//} else {
+			//	err := validateOptions(options, "columnLabel")
+			//	if err != nil {
+			//		return err
+			//	} else {
+			//		p.Options = DBOptions{ColumnLabel: options["columnLabel"].(string)}
+			//	}
+			//}
 
 		default:
 			return fmt.Errorf("Unknown key: %v:%v", key, value)
@@ -382,23 +391,30 @@ func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func validateOptions(options map[string]interface{}, field string) error {
-	for k, v := range options {
-		switch k {
-		case field:
-			if colValue, ok := options[field].(string); !ok {
-				return fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
-			} else {
-				err := ValidateName(colValue)
-				if err != nil {
-					return fmt.Errorf("invalid %v value: %v", field, v)
+func validateOptions(options map[string]interface{}, field string) (string, error) {
+	var optionValue string
+	if len(options) == 0 {
+		optionValue = ""
+	} else {
+		for k, v := range options {
+			switch k {
+			case field:
+				val, ok := options[field].(string)
+				if !ok {
+					return "", fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
 				}
+				err := ValidateName(val)
+				if err != nil {
+					return "", fmt.Errorf("invalid %v value: %v", field, v)
+
+				}
+				optionValue = options[field].(string)
+			default:
+				return "", fmt.Errorf("invalid key for options {%v:%v}", k, v)
 			}
-		default:
-			return fmt.Errorf("invalid key for options {%v:%v}", k, v)
 		}
 	}
-	return nil
+	return optionValue, nil
 }
 
 type postDBRequest struct {
@@ -575,32 +591,31 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 	for key, value := range data {
 		switch key {
 		case "db":
-			if val, ok := data["db"].(string); !ok {
+			val, ok := data["db"].(string)
+			if !ok {
 				return errors.New("db required and must be a string")
-			} else {
-				p.DB = val
 			}
+			p.DB = val
 		case "frame":
-			if val, ok := data["frame"].(string); !ok {
+			val, ok := data["frame"].(string)
+			if !ok {
 				return errors.New("frame required and must be a string")
-			} else {
-				p.Frame = val
 			}
+			p.Frame = val
 
 		case "options":
 			options, ok := data["options"].(map[string]interface{})
 			if !ok {
 				return errors.New("options is not map[string]interface{}")
 			}
-			if len(options) == 0 {
+			value, err := validateOptions(options, "rowLabel")
+			if err != nil {
+				return err
+			}
+			if value == "" {
 				p.Options = FrameOptions{}
 			} else {
-				err := validateOptions(options, "rowLabel")
-				if err != nil {
-					return err
-				} else {
-					p.Options = FrameOptions{RowLabel: options["rowLabel"].(string)}
-				}
+				p.Options = FrameOptions{RowLabel: value}
 			}
 
 		default:
