@@ -373,17 +373,6 @@ func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 				p.Options = DBOptions{ColumnLabel: value}
 			}
 
-			//if len(options) == 0 {
-			//	p.Options = DBOptions{}
-			//} else {
-			//	err := validateOptions(options, "columnLabel")
-			//	if err != nil {
-			//		return err
-			//	} else {
-			//		p.Options = DBOptions{ColumnLabel: options["columnLabel"].(string)}
-			//	}
-			//}
-
 		default:
 			return fmt.Errorf("Unknown key: %v:%v", key, value)
 		}
