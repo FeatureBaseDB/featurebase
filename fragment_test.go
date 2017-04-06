@@ -288,7 +288,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	file.Close()
 
 	f := &Fragment{
-		Fragment:        pilosa.NewFragment(file.Name(), "d", "f.n", slice, cacheLimit),
+		Fragment:        pilosa.NewFragment(file.Name(), "d", "f.n", pilosa.ViewStandard, slice, cacheLimit),
 		BitmapAttrStore: MustOpenAttrStore(),
 	}
 	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
@@ -308,15 +308,15 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	f.RecalculateCache()
 
 	p := []pilosa.Pair{
-		{Key: 104, Count: 7},
-		{Key: 103, Count: 6}}
+		{ID: 104, Count: 7},
+		{ID: 103, Count: 6}}
 
 	// Retrieve top bitmaps.
 	if pairs, err := f.Top(pilosa.TopOptions{N: 5}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) > cacheLimit {
 		t.Fatalf("TopN count cannot exceed cache size: %d", cacheLimit)
-	} else if pairs[0] != (pilosa.Pair{Key: 104, Count: 7}) {
+	} else if pairs[0] != (pilosa.Pair{ID: 104, Count: 7}) {
 		t.Fatalf("unexpected pair(0): %v", pairs)
 	} else if !reflect.DeepEqual(pairs, p) {
 		t.Fatalf("Invalid TopN result set: %s", spew.Sdump(pairs))
@@ -551,7 +551,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	}
 
 	// Open the fragment specified by the path.
-	f := pilosa.NewFragment(*FragmentPath, "d", "f", pilosa.ViewStandard, 0, pilosa.DefaultFrameCache)
+	f := pilosa.NewFragment(*FragmentPath, "d", "f", pilosa.ViewStandard, 0, pilosa.DefaultCacheSize)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -612,7 +612,7 @@ func NewFragment(db, frame, view string, slice uint64) *Fragment {
 	file.Close()
 
 	f := &Fragment{
-		Fragment:        pilosa.NewFragment(file.Name(), db, frame, view, slice, pilosa.DefaultFrameCache),
+		Fragment:        pilosa.NewFragment(file.Name(), db, frame, view, slice, pilosa.DefaultCacheSize),
 		BitmapAttrStore: MustOpenAttrStore(),
 	}
 	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
@@ -643,7 +643,7 @@ func (f *Fragment) Reopen() error {
 		return err
 	}
 
-	f.Fragment = pilosa.NewFragment(path, f.DB(), f.Frame(), f.View(), f.Slice(), pilosa.DefaultFrameCache)
+	f.Fragment = pilosa.NewFragment(path, f.DB(), f.Frame(), f.View(), f.Slice(), pilosa.DefaultCacheSize)
 	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
 	if err := f.Open(); err != nil {
 		return err

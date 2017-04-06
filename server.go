@@ -120,11 +120,9 @@ func (s *Server) Open() error {
 	go func() { http.Serve(ln, s.Handler) }()
 
 	// Start background monitoring.
-	/*
-		s.wg.Add(2)
-		go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
-		go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
-	*/
+	s.wg.Add(2)
+	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
+	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
 
 	return nil
 }
