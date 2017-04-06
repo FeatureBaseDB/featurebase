@@ -14,6 +14,7 @@ func TestPostDBRequestUnmarshalJSON(t *testing.T) {
 		err      string
 	}{
 		{json: `{"db": "d", "options": {}}`, expected: postDBRequest{DB: "d", Options: DBOptions{}}},
+		{json: `{"db": 1, "options": {}}`, err: "db required and must be a string"},
 		{json: `{"db": "d", "options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"db": "d", "option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"db": "d", "options": {"columnLabel": "test"}}`, expected: postDBRequest{DB: "d", Options: DBOptions{ColumnLabel: "test"}}},
@@ -23,9 +24,14 @@ func TestPostDBRequestUnmarshalJSON(t *testing.T) {
 	for _, test := range tests {
 		actual := &postDBRequest{}
 		err := json.Unmarshal([]byte(test.json), actual)
+
 		if err != nil {
 			if test.err == "" || test.err != err.Error() {
 				t.Errorf("expected error: %v, but got result: %v", test.err, err)
+			}
+		} else {
+			if test.err != "" {
+				t.Errorf("expected error: %v, but got no error", test.err)
 			}
 		}
 
@@ -46,6 +52,7 @@ func TestPostFrameRequestUnmarshalJSON(t *testing.T) {
 		err      string
 	}{
 		{json: `{"db": "d", "frame":"f",  "options": {}}`, expected: postFrameRequest{DB: "d", Frame: "f", Options: FrameOptions{}}},
+		{json: `{"db": "d", "options": {}}`, err: "db required and must be a string"},
 		{json: `{"db": "d", "frame":"f", "options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"db": "d", "frame":"f", "option": {}}`, err: "Unknown key: {option:map[]}"},
 		{json: `{"db": "d", "frame":"f", "options": {"rowLabel": "test"}}`, expected: postFrameRequest{DB: "d", Frame: "f", Options: FrameOptions{RowLabel: "test"}}},
