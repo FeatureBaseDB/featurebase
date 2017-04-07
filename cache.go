@@ -116,7 +116,7 @@ type RankCache struct {
 	updateN    int
 	updateTime time.Time
 
-	// CacheLimit is the user defined size of the cache
+	// maxEntries is the user defined size of the cache
 	maxEntries int
 
 	// thresholdBuffer is used the calculate the lowest cached threshold value
