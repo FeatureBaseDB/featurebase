@@ -309,7 +309,9 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 
 	p := []pilosa.Pair{
 		{ID: 104, Count: 7},
-		{ID: 103, Count: 6}}
+		{ID: 103, Count: 6},
+		{ID: 102, Count: 5},
+	}
 
 	// Retrieve top bitmaps.
 	if pairs, err := f.Top(pilosa.TopOptions{N: 5}); err != nil {

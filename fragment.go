@@ -43,9 +43,6 @@ const (
 
 	// HashBlockSize is the number of bitmaps in a merkle hash block.
 	HashBlockSize = 100
-
-	// ThresholdBufferPct is the percentage of the ThresholdLength for which to maintain a sorted, ranked list.
-	ThresholdBufferPct = 0.9
 )
 
 const (
@@ -227,10 +224,7 @@ func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
 	switch f.cacheType {
 	case CacheTypeRanked:
-		c := NewRankCache()
-		c.ThresholdLength = f.cacheSize
-		c.ThresholdIndex = int(float64(f.cacheSize) * ThresholdBufferPct)
-		f.cache = c
+		f.cache = NewRankCache(f.cacheSize)
 	case CacheTypeLRU:
 		f.cache = NewLRUCache(f.cacheSize)
 	default:
