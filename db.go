@@ -86,6 +86,11 @@ func (db *DB) SetColumnLabel(v string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	// Make sure columnLabel is valid name
+	err := ValidateName(v)
+	if err != nil {
+		return err
+	}
 	// Ignore if no change occurred.
 	if v == "" || db.columnLabel == v {
 		return nil
@@ -369,6 +374,12 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 
 	// Update options.
+	if opt.RowLabel != "" {
+		err := ValidateName(opt.RowLabel)
+		if err != nil {
+			return nil, err
+		}
+	}
 	f.SetRowLabel(opt.RowLabel)
 
 	// Add to database's frame lookup.
