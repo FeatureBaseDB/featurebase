@@ -19,7 +19,6 @@ func TestPostDBRequestUnmarshalJSON(t *testing.T) {
 		{json: `{"db": "d", "option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"db": "d", "options": {"columnLabel": "test"}}`, expected: postDBRequest{DB: "d", Options: DBOptions{ColumnLabel: "test"}}},
 		{json: `{"db": "d", "options": {"columnLabl": "test"}}`, err: "invalid key for options {columnLabl:test}"},
-		{json: `{"db": "d", "options": {"columnLabel": "////"}}`, err: "invalid columnLabel value: ////"},
 	}
 	for _, test := range tests {
 		actual := &postDBRequest{}
@@ -52,12 +51,11 @@ func TestPostFrameRequestUnmarshalJSON(t *testing.T) {
 		err      string
 	}{
 		{json: `{"db": "d", "frame":"f",  "options": {}}`, expected: postFrameRequest{DB: "d", Frame: "f", Options: FrameOptions{}}},
-		{json: `{"db": "d", "options": {}}`, err: "db required and must be a string"},
+		{json: `{"db": "d", "options": {}}`, err: "frame required and must be a string"},
 		{json: `{"db": "d", "frame":"f", "options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"db": "d", "frame":"f", "option": {}}`, err: "Unknown key: {option:map[]}"},
 		{json: `{"db": "d", "frame":"f", "options": {"rowLabel": "test"}}`, expected: postFrameRequest{DB: "d", Frame: "f", Options: FrameOptions{RowLabel: "test"}}},
 		{json: `{"db": "d", "frame":"f", "options": {"rowLabl": "test"}}`, err: "invalid key for options {rowLabl:test}"},
-		{json: `{"db": "d", "frame":"f", "options": {"rowLabel": "////"}}`, err: "invalid rowLabel value: ////"},
 	}
 	for _, test := range tests {
 		actual := &postFrameRequest{}

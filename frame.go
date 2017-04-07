@@ -110,6 +110,11 @@ func (f *Frame) SetRowLabel(v string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	// Make sure rowLabel is valid name
+	err := ValidateName(v)
+	if err != nil {
+		return err
+	}
 	// Ignore if no change occurred.
 	if v == "" || f.rowLabel == v {
 		return nil
