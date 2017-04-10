@@ -34,6 +34,25 @@ func TestDB_CreateFrameIfNotExists(t *testing.T) {
 	}
 }
 
+// Ensure database defaults the time quantum on new frames.
+func TestDB_CreateFrame_TimeQuantum(t *testing.T) {
+	db := MustOpenDB()
+	defer db.Close()
+
+	// Set database time quantum.
+	if err := db.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create frame.
+	f, err := db.CreateFrame("f", pilosa.FrameOptions{})
+	if err != nil {
+		t.Fatal(err)
+	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YM") {
+		t.Fatalf("unexpected frame time quantum: %s", q)
+	}
+}
+
 // Ensure database can delete a frame.
 func TestDB_DeleteFrame(t *testing.T) {
 	db := MustOpenDB()

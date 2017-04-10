@@ -368,8 +368,17 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, err
 	}
 
-	// Update options.
-	f.SetRowLabel(opt.RowLabel)
+	// Default the time quantum to what is set on the DB.
+	if err := f.SetTimeQuantum(db.timeQuantum); err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	// Set options.
+	if err := f.SetRowLabel(opt.RowLabel); err != nil {
+		f.Close()
+		return nil, err
+	}
 
 	// Add to database's frame lookup.
 	db.frames[name] = f
