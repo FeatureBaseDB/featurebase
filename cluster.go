@@ -146,6 +146,16 @@ func (c *Cluster) NodeByHost(host string) *Node {
 	return nil
 }
 
+// NodeIndex returns the node index in the cluster by host.
+func (c *Cluster) NodeIndex(host string) (int, error) {
+	for i, n := range c.Nodes {
+		if n.Host == host {
+			return i, nil
+		}
+	}
+	return -1, fmt.Errorf("Node not in cluster: ", host)
+}
+
 // Partition returns the partition that a slice belongs to.
 func (c *Cluster) Partition(db string, slice uint64) int {
 	var buf [8]byte

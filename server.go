@@ -104,6 +104,13 @@ func (s *Server) Open() error {
 		return err
 	}
 
+	// Add Node ID tag to stats
+	nodeID, err := s.Cluster.NodeIndex(s.Host)
+	if err != nil {
+		return err
+	}
+	s.Index.Stats.WithTags(fmt.Sprintf("NodeID:%d", nodeID))
+
 	// Create executor for executing queries.
 	e := NewExecutor()
 	e.Index = s.Index
