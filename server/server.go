@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jaffee/pilosa/datadog"
 	"github.com/pilosa/pilosa"
 )
 
@@ -81,7 +82,11 @@ func (m *Command) Run(args ...string) (err error) {
 	// Configure index.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
 	m.Server.Index.Path = m.Config.DataDir
-	m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
+	// m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
+	m.Server.Index.Stats, err = datadog.NewStatsClient()
+	if err != nil {
+		return err
+	}
 
 	// Build cluster from config file.
 	m.Server.Host, err = normalizeHost(m.Config.Host)
