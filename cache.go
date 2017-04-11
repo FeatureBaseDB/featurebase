@@ -80,12 +80,12 @@ func (c *LRUCache) Len() int { return c.cache.Len() }
 
 // Invalidate is a no-op.
 func (c *LRUCache) Invalidate() {
-	c.stats.Gauge("RankCache", float64(c.cache.Len()))
+	c.stats.Gauge("LRUCache", float64(c.cache.Len()))
 }
 
 // Recalculate is a no-op.
 func (c *LRUCache) Recalculate() {
-	c.stats.Gauge("RankCache", float64(c.cache.Len()))
+	c.stats.Gauge("LRUCache", float64(c.cache.Len()))
 }
 
 // BitmapIDs returns a list of all bitmap IDs in the cache.
