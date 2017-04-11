@@ -227,6 +227,7 @@ func (f *Fragment) openCache() error {
 		f.cache = NewLRUCache(f.cacheSize)
 	}
 
+	f.cache.SetStats(f.stats)
 	// Read cache data from disk.
 	path := f.CachePath()
 	buf, err := ioutil.ReadFile(path)
