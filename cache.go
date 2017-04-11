@@ -35,12 +35,16 @@ type Cache interface {
 
 	// Returns an ordered list of the top ranked bitmaps.
 	Top() []BitmapPair
+
+	// SetStats defines the stats client used in the cache
+	SetStats(s StatsClient)
 }
 
 // LRUCache represents a least recently used Cache implemenation.
 type LRUCache struct {
 	cache  *lru.Cache
 	counts map[uint64]uint64
+	stats  StatsClient
 }
 
 // NewLRUCache returns a new instance of LRUCache.
@@ -48,6 +52,7 @@ func NewLRUCache(maxEntries int) *LRUCache {
 	c := &LRUCache{
 		cache:  lru.New(maxEntries),
 		counts: make(map[uint64]uint64),
+		stats:  NopStatsClient,
 	}
 	c.cache.OnEvicted = c.onEvicted
 	return c
@@ -74,10 +79,14 @@ func (c *LRUCache) Get(bitmapID uint64) uint64 {
 func (c *LRUCache) Len() int { return c.cache.Len() }
 
 // Invalidate is a no-op.
-func (c *LRUCache) Invalidate() {}
+func (c *LRUCache) Invalidate() {
+	c.stats.Gauge("RankCache", float64(c.cache.Len()))
+}
 
 // Recalculate is a no-op.
-func (c *LRUCache) Recalculate() {}
+func (c *LRUCache) Recalculate() {
+	c.stats.Gauge("RankCache", float64(c.cache.Len()))
+}
 
 // BitmapIDs returns a list of all bitmap IDs in the cache.
 func (c *LRUCache) BitmapIDs() []uint64 {
@@ -100,6 +109,11 @@ func (c *LRUCache) Top() []BitmapPair {
 	}
 	sort.Sort(BitmapPairs(a))
 	return a
+}
+
+// SetStats passes the stats client used the the frame that owns the cache
+func (c *LRUCache) SetStats(s StatsClient) {
+	c.stats = s
 }
 
 func (c *LRUCache) onEvicted(key lru.Key, _ interface{}) { delete(c.counts, key.(uint64)) }
@@ -125,6 +139,8 @@ type RankCache struct {
 
 	// thresholdValue is the value of the last item in the cache
 	thresholdValue uint64
+
+	stats StatsClient
 }
 
 // NewRankCache returns a new instance of RankCache.
@@ -133,6 +149,7 @@ func NewRankCache(maxEntries int) *RankCache {
 		maxEntries:      maxEntries,
 		thresholdBuffer: int(ThresholdFactor * float64(maxEntries)),
 		entries:         make(map[uint64]uint64),
+		stats:           NopStatsClient,
 	}
 }
 
@@ -222,7 +239,10 @@ func (c *RankCache) recalculate() {
 
 	// Store the count of the item at the threshold index.
 	c.rankings = rankings
-	if len(c.rankings) > c.maxEntries {
+	length := len(c.rankings)
+	c.stats.Gauge("RankCache", float64(length))
+
+	if length > c.maxEntries {
 		c.thresholdValue = rankings[c.maxEntries].Count
 		c.rankings = c.rankings[0:c.maxEntries]
 	} else {
@@ -244,6 +264,11 @@ func (c *RankCache) recalculate() {
 
 // Top returns an ordered list of bitmaps.
 func (c *RankCache) Top() []BitmapPair { return c.rankings }
+
+// SetStats passes the stats client used the the frame that owns the cache
+func (c *RankCache) SetStats(s StatsClient) {
+	c.stats = s
+}
 
 // WriteTo writes the cache to w.
 func (c *RankCache) WriteTo(w io.Writer) (n int64, err error) {
