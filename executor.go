@@ -117,12 +117,12 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 func (e *Executor) validateCallArgs(c *pql.Call) error {
 	if _, ok := c.Args["ids"]; ok {
 		switch v := c.Args["ids"].(type) {
-		case []uint64:
+		case []int64, []uint64:
 			// noop
 		case []interface{}:
-			b := make([]uint64, len(v), len(v))
+			b := make([]int64, len(v), len(v))
 			for i := range v {
-				b[i] = v[i].(uint64)
+				b[i] = v[i].(int64)
 			}
 			c.Args["ids"] = b
 		default:
@@ -159,20 +159,26 @@ func (e *Executor) executeBitmapCall(ctx context.Context, db string, c *pql.Call
 	// If the row label is used then return bitmap attributes.
 	bm, _ := other.(*Bitmap)
 	if c.Name == "Bitmap" {
+
 		d := e.Index.DB(db)
 		if d != nil {
 			columnLabel := d.ColumnLabel()
-			if columnID, ok := c.Args[columnLabel].(uint64); ok {
+			if columnID, ok, err := c.UintArg(columnLabel); ok && err == nil {
 				attrs, err := d.ProfileAttrStore().Attrs(columnID)
 				if err != nil {
 					return nil, err
 				}
 				bm.Attrs = attrs
+			} else if err != nil {
+				return nil, err
 			} else {
 				frame, _ := c.Args["frame"].(string)
 				if fr := d.Frame(frame); fr != nil {
 					rowLabel := fr.RowLabel()
-					rowID, _ := c.Args[rowLabel].(uint64)
+					rowID, _, err := c.UintArg(rowLabel)
+					if err != nil {
+						return nil, err
+					}
 					attrs, err := fr.BitmapAttrStore().Attrs(rowID)
 					if err != nil {
 						return nil, err
@@ -208,10 +214,13 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, db string, c *pql
 // This first performs the TopN() to determine the top results and then
 // requeries to retrieve the full counts for each of the top results.
 func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
-	bitmapIDs, _ := c.Args["ids"].([]uint64)
-	var n uint64
-	if nval, ok := c.Args["n"]; ok {
-		n = nval.(uint64)
+	bitmapIDs, _, err := c.UintSliceArg("ids")
+	if err != nil {
+		return nil, fmt.Errorf("executeTopN: %v", err)
+	}
+	n, _, err := c.UintArg("n")
+	if err != nil {
+		return nil, fmt.Errorf("executeTopN: %v", err)
 	}
 
 	// Execute original query.
@@ -270,12 +279,25 @@ func (e *Executor) executeTopNSlices(ctx context.Context, db string, c *pql.Call
 // executeTopNSlice executes a TopN call for a single slice.
 func (e *Executor) executeTopNSlice(ctx context.Context, db string, c *pql.Call, slice uint64) ([]Pair, error) {
 	frame, _ := c.Args["frame"].(string)
-	n, _ := c.Args["n"].(uint64)
+	n, _, err := c.UintArg("n")
+	if err != nil {
+		return nil, fmt.Errorf("executeTopNSlice: %v", err)
+	}
 	field, _ := c.Args["field"].(string)
-	bitmapIDs, _ := c.Args["ids"].([]uint64)
-	minThreshold, _ := c.Args["threshold"].(uint64)
+	bitmapIDs, _, err := c.UintSliceArg("ids")
+	if err != nil {
+		return nil, fmt.Errorf("executeTopNSlice: %v", err)
+	}
+	minThreshold, _, err := c.UintArg("threshold")
+	if err != nil {
+		return nil, fmt.Errorf("executeTopNSlice: %v", err)
+	}
 	filters, _ := c.Args["filters"].([]interface{})
-	tanimotoThreshold, _ := c.Args["tanimotoThreshold"].(uint64)
+	tanimotoThreshold, _, err := c.UintArg("tanimotoThreshold")
+	if err != nil {
+		return nil, fmt.Errorf("executeTopNSlice: %v", err)
+	}
+
 	// Retrieve bitmap used to intersect.
 	var src *Bitmap
 	if len(c.Children) == 1 {
@@ -358,8 +380,11 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, db string, c *pql.Cal
 	rowLabel := f.RowLabel()
 
 	// Return an error if both the row and column label are specified.
-	rowID, rowOK := c.Args[rowLabel].(uint64)
-	columnID, columnOK := c.Args[columnLabel].(uint64)
+	rowID, rowOK, rowErr := c.UintArg(rowLabel)
+	columnID, columnOK, columnErr := c.UintArg(columnLabel)
+	if rowErr != nil || columnErr != nil {
+		return nil, fmt.Errorf("Bitmap() error with arg for col: %v or row: %v", columnErr, rowErr)
+	}
 	if rowOK && columnOK {
 		return nil, fmt.Errorf("Bitmap() cannot specify both %s and %s values", rowLabel, columnLabel)
 	} else if !rowOK && !columnOK {
@@ -420,7 +445,10 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call
 	rowLabel := f.RowLabel()
 
 	// Read row id.
-	rowID, _ := c.Args[rowLabel].(uint64)
+	rowID, _, err := c.UintArg(rowLabel) // TODO: why are we ignoring missing rowID?
+	if err != nil {
+		return nil, fmt.Errorf("executeRangeSlice - reading row: %v", err)
+	}
 
 	// Parse start time.
 	startTimeStr, ok := c.Args["start"].(string)
@@ -534,14 +562,18 @@ func (e *Executor) executeClearBit(ctx context.Context, db string, c *pql.Call, 
 	rowLabel := f.RowLabel()
 
 	// Read fields using labels.
-	rowID, ok := c.Args[rowLabel].(uint64)
-	if !ok {
-		return false, fmt.Errorf("ClearBit() field required: %s", rowLabel)
+	rowID, ok, err := c.UintArg(rowLabel)
+	if err != nil {
+		return false, fmt.Errorf("reading ClearBit() row: %v", err)
+	} else if !ok {
+		return false, fmt.Errorf("ClearBit() row field '%v' required", rowLabel)
 	}
 
-	colID, ok := c.Args[columnLabel].(uint64)
-	if !ok {
-		return false, fmt.Errorf("ClearBit() field required: %s", columnLabel)
+	colID, ok, err := c.UintArg(columnLabel)
+	if err != nil {
+		return false, fmt.Errorf("reading ClearBit() column: %v", err)
+	} else if !ok {
+		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
 	}
 
 	// Clear bits for each view.
@@ -624,14 +656,18 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, op
 	rowLabel := f.RowLabel()
 
 	// Read fields using labels.
-	rowID, ok := c.Args[rowLabel].(uint64)
-	if !ok {
-		return false, fmt.Errorf("SetBit() field required: %s", rowLabel)
+	rowID, ok, err := c.UintArg(rowLabel)
+	if err != nil {
+		return false, fmt.Errorf("reading SetBit() row: %v", err)
+	} else if !ok {
+		return false, fmt.Errorf("SetBit() row field '%v' required", rowLabel)
 	}
 
-	colID, ok := c.Args[columnLabel].(uint64)
-	if !ok {
-		return false, fmt.Errorf("SetBit() field required: %s", columnLabel)
+	colID, ok, err := c.UintArg(columnLabel)
+	if err != nil {
+		return false, fmt.Errorf("reading SetBit() column: %v", err)
+	} else if !ok {
+		return false, fmt.Errorf("SetBit() column field '%v' required", columnLabel)
 	}
 
 	var timestamp *time.Time
@@ -718,9 +754,11 @@ func (e *Executor) executeSetBitmapAttrs(ctx context.Context, db string, c *pql.
 	rowLabel := frame.RowLabel()
 
 	// Parse labels.
-	rowID, ok := c.Args[rowLabel].(uint64)
-	if !ok {
-		return fmt.Errorf("SetBitmapAttrs() field required: %s", rowLabel)
+	rowID, ok, err := c.UintArg(rowLabel)
+	if err != nil {
+		return fmt.Errorf("reading SetBitmapAttrs() row: %v", err)
+	} else if !ok {
+		return fmt.Errorf("SetBitmapAttrs() row field '%v' required.", rowLabel)
 	}
 
 	// Copy args and remove reserved fields.
@@ -775,9 +813,11 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 		}
 		rowLabel := f.RowLabel()
 
-		rowID, ok := c.Args[rowLabel].(uint64)
-		if !ok {
-			return nil, fmt.Errorf("SetBitmapAttrs() field required: %s", rowLabel)
+		rowID, ok, err := c.UintArg(rowLabel)
+		if err != nil {
+			return nil, fmt.Errorf("reading SetBitmapAttrs() row: %v", rowLabel)
+		} else if !ok {
+			return nil, fmt.Errorf("SetBitmapAttrs row field '%v' required.", rowLabel)
 		}
 
 		// Copy args and remove reserved fields.
@@ -852,13 +892,13 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 	}
 
 	var colName string
-	id, ok := c.Args["id"].(uint64)
-	if !ok {
+	id, okID, errID := c.UintArg("id")
+	if errID != nil || !okID {
 		// Retrieve columnLabel
 		columnLabel := d.columnLabel
-		col, ok := c.Args[columnLabel].(uint64)
-		if !ok {
-			return errors.New("SetProfileAttrs() id required")
+		col, okCol, errCol := c.UintArg(columnLabel)
+		if errCol != nil || !okCol {
+			return fmt.Errorf("reading SetProfileAttrs() id/columnLabel errs: %v/%v found %v/%v", errID, errCol, okID, okCol)
 		}
 		id = col
 		colName = columnLabel

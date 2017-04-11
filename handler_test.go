@@ -312,7 +312,7 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
 	} else if k, v := attrs[0].Key, attrs[0].StringValue; k != "a" || v != "b" {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
-	} else if k, v := attrs[1].Key, attrs[1].UintValue; k != "c" || v != uint64(1) {
+	} else if k, v := attrs[1].Key, attrs[1].IntValue; k != "c" || v != int64(1) {
 		t.Fatalf("unexpected attr[1]: %s=%v", k, v)
 	} else if k, v := attrs[2].Key, attrs[2].BoolValue; k != "d" || v != true {
 		t.Fatalf("unexpected attr[2]: %s=%v", k, v)
@@ -369,7 +369,7 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
 	} else if k, v := attrs[0].Key, attrs[0].StringValue; k != "a" || v != "b" {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
-	} else if k, v := attrs[1].Key, attrs[1].UintValue; k != "c" || v != uint64(1) {
+	} else if k, v := attrs[1].Key, attrs[1].IntValue; k != "c" || v != int64(1) {
 		t.Fatalf("unexpected attr[1]: %s=%v", k, v)
 	} else if k, v := attrs[2].Key, attrs[2].BoolValue; k != "d" || v != true {
 		t.Fatalf("unexpected attr[2]: %s=%v", k, v)

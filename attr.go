@@ -20,7 +20,7 @@ const AttrBlockSize = 100
 // Attribute data type enum.
 const (
 	AttrTypeString = 1
-	AttrTypeUint   = 2
+	AttrTypeInt    = 2
 	AttrTypeBool   = 3
 	AttrTypeFloat  = 4
 )
@@ -263,12 +263,12 @@ func txUpdateAttrs(tx *bolt.Tx, id uint64, m map[string]interface{}) (map[string
 
 		switch v := v.(type) {
 		case int:
-			attr[k] = uint64(v)
+			attr[k] = int64(v)
 		case uint:
-			attr[k] = uint64(v)
-		case int64:
-			attr[k] = uint64(v)
-		case string, uint64, bool, float64:
+			attr[k] = int64(v)
+		case uint64:
+			attr[k] = int64(v)
+		case string, int64, bool, float64:
 			attr[k] = v
 		default:
 			return nil, fmt.Errorf("invalid attr type: %T", v)
@@ -320,11 +320,11 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 		pb.Type = AttrTypeFloat
 		pb.FloatValue = value
 	case uint64:
-		pb.Type = AttrTypeUint
-		pb.UintValue = value
+		pb.Type = AttrTypeInt
+		pb.IntValue = int64(value)
 	case int64:
-		pb.Type = AttrTypeUint
-		pb.UintValue = uint64(value)
+		pb.Type = AttrTypeInt
+		pb.IntValue = value
 	case bool:
 		pb.Type = AttrTypeBool
 		pb.BoolValue = value
@@ -337,8 +337,8 @@ func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 	switch attr.Type {
 	case AttrTypeString:
 		return attr.Key, attr.StringValue
-	case AttrTypeUint:
-		return attr.Key, attr.UintValue
+	case AttrTypeInt:
+		return attr.Key, attr.IntValue
 	case AttrTypeBool:
 		return attr.Key, attr.BoolValue
 	case AttrTypeFloat:

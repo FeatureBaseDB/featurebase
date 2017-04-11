@@ -177,7 +177,7 @@ func TestFragment_Top_Filter(t *testing.T) {
 	if pairs, err := f.Top(pilosa.TopOptions{
 		N:            2,
 		FilterField:  "x",
-		FilterValues: []interface{}{uint64(10), uint64(15), uint64(20)},
+		FilterValues: []interface{}{int64(10), int64(15), int64(20)},
 	}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
