@@ -15,7 +15,7 @@ func TestAttrStore_Attrs(t *testing.T) {
 	defer s.Close()
 
 	// Set attributes.
-	if err := s.SetAttrs(1, map[string]interface{}{"A": uint64(100)}); err != nil {
+	if err := s.SetAttrs(1, map[string]interface{}{"A": 100, "C": -27}); err != nil {
 		t.Fatal(err)
 	} else if err := s.SetAttrs(2, map[string]interface{}{"A": uint64(200)}); err != nil {
 		t.Fatal(err)
@@ -26,14 +26,14 @@ func TestAttrStore_Attrs(t *testing.T) {
 	// Retrieve attributes for profile #1.
 	if m, err := s.Attrs(1); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(m, map[string]interface{}{"A": uint64(100), "B": "VALUE"}) {
+	} else if !reflect.DeepEqual(m, map[string]interface{}{"A": int64(100), "B": "VALUE", "C": int64(-27)}) {
 		t.Fatalf("unexpected attrs(1): %#v", m)
 	}
 
 	// Retrieve attributes for profile #2.
 	if m, err := s.Attrs(2); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(m, map[string]interface{}{"A": uint64(200)}) {
+	} else if !reflect.DeepEqual(m, map[string]interface{}{"A": int64(200)}) {
 		t.Fatalf("unexpected attrs(2): %#v", m)
 	}
 }

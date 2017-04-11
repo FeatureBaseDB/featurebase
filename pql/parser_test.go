@@ -50,7 +50,7 @@ func TestParser_Parse(t *testing.T) {
 			&pql.Call{
 				Name: "Count",
 				Children: []*pql.Call{
-					{Name: "Bitmap", Args: map[string]interface{}{"id": uint64(100)}},
+					{Name: "Bitmap", Args: map[string]interface{}{"id": int64(100)}},
 				},
 			},
 		) {
@@ -69,7 +69,7 @@ func TestParser_Parse(t *testing.T) {
 				Args: map[string]interface{}{
 					"key":   "value",
 					"foo":   "bar",
-					"age":   uint64(12),
+					"age":   int64(12),
 					"bool0": true,
 					"bool1": false,
 					"x":     nil,
@@ -100,6 +100,24 @@ func TestParser_Parse(t *testing.T) {
 		}
 	})
 
+	// Parse with float arguments.
+	t.Run("WithNegativeArgs", func(t *testing.T) {
+		q, err := pql.ParseString(`MyCall( key=-12.25, foo= -13)`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "MyCall",
+				Args: map[string]interface{}{
+					"key": -12.25,
+					"foo": int64(-13),
+				},
+			},
+		) {
+			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+	})
+
 	// Parse with both child calls and arguments.
 	t.Run("ChildrenAndArguments", func(t *testing.T) {
 		q, err := pql.ParseString(`TopN(Bitmap(id=100, frame=other), frame=f, n=3)`)
@@ -110,9 +128,9 @@ func TestParser_Parse(t *testing.T) {
 				Name: "TopN",
 				Children: []*pql.Call{{
 					Name: "Bitmap",
-					Args: map[string]interface{}{"id": uint64(100), "frame": "other"},
+					Args: map[string]interface{}{"id": int64(100), "frame": "other"},
 				}},
-				Args: map[string]interface{}{"n": uint64(3), "frame": "f"},
+				Args: map[string]interface{}{"n": int64(3), "frame": "f"},
 			},
 		) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
@@ -129,7 +147,7 @@ func TestParser_Parse(t *testing.T) {
 				Name: "TopN",
 				Args: map[string]interface{}{
 					"frame": "f",
-					"ids":   []interface{}{uint64(0), uint64(10), uint64(30)},
+					"ids":   []interface{}{int64(0), int64(10), int64(30)},
 				},
 			},
 		) {
