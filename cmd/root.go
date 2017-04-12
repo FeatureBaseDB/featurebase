@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	flag "github.com/spf13/pflag"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -82,7 +82,7 @@ func setupVersionBuild() {
 // setAllConfig looks for environment variables which are capitalized versions
 // of the flag names with dashes replaced by underscores, and prefixed with
 // envPrefix plus an underscore.
-func setAllConfig(v *viper.Viper, flags *flag.FlagSet, envPrefix string) error {
+func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error {
 	// add cmd line flag def to viper
 	err := v.BindPFlags(flags)
 	if err != nil {
@@ -108,7 +108,7 @@ func setAllConfig(v *viper.Viper, flags *flag.FlagSet, envPrefix string) error {
 
 	// set all values from viper
 	var flagErr error
-	flags.VisitAll(func(f *flag.Flag) {
+	flags.VisitAll(func(f *pflag.Flag) {
 		if flagErr != nil {
 			return
 		}

@@ -86,14 +86,15 @@ func (db *DB) SetColumnLabel(v string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	// Ignore if no change occurred.
+	if v == "" || db.columnLabel == v {
+		return nil
+	}
+
 	// Make sure columnLabel is valid name
 	err := ValidateName(v)
 	if err != nil {
 		return err
-	}
-	// Ignore if no change occurred.
-	if v == "" || db.columnLabel == v {
-		return nil
 	}
 
 	// Persist meta data to disk on change.
@@ -373,14 +374,17 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, err
 	}
 
-	// Update options.
-	if opt.RowLabel != "" {
-		err := ValidateName(opt.RowLabel)
-		if err != nil {
-			return nil, err
-		}
+	// Default the time quantum to what is set on the DB.
+	if err := f.SetTimeQuantum(db.timeQuantum); err != nil {
+		f.Close()
+		return nil, err
 	}
-	f.SetRowLabel(opt.RowLabel)
+
+	// Set options.
+	if err := f.SetRowLabel(opt.RowLabel); err != nil {
+		f.Close()
+		return nil, err
+	}
 
 	// Add to database's frame lookup.
 	db.frames[name] = f
