@@ -91,6 +91,12 @@ func (db *DB) SetColumnLabel(v string) error {
 		return nil
 	}
 
+	// Make sure columnLabel is valid name
+	err := ValidateName(v)
+	if err != nil {
+		return err
+	}
+
 	// Persist meta data to disk on change.
 	db.columnLabel = v
 	if err := db.saveMeta(); err != nil {
