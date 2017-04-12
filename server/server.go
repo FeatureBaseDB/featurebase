@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jaffee/pilosa/datadog"
+	"github.com/pilosa/pilosa/datadog"
 	"github.com/pilosa/pilosa"
 )
 
