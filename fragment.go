@@ -73,7 +73,7 @@ type Fragment struct {
 
 	// Cache for bitmap counts.
 	cache     Cache
-	cacheSize int
+	cacheSize uint32
 
 	// Cache containing full bitmaps (not just counts).
 	bitmapCache BitmapCache
@@ -97,7 +97,7 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, db, frame, view string, slice uint64, cacheSize int) *Fragment {
+func NewFragment(path, db, frame, view string, slice uint64, cacheSize uint32) *Fragment {
 	return &Fragment{
 		path:      path,
 		db:        db,
@@ -226,7 +226,7 @@ func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
 	if strings.HasSuffix(f.frame, FrameSuffixRank) {
 		c := NewRankCache()
-		c.ThresholdLength = f.cacheSize
+		c.ThresholdLength = int(f.cacheSize)
 		c.ThresholdIndex = int(float64(f.cacheSize) * ThresholdBufferPct)
 		f.cache = c
 	} else {

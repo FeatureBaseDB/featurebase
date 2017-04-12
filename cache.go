@@ -39,9 +39,9 @@ type LRUCache struct {
 }
 
 // NewLRUCache returns a new instance of LRUCache.
-func NewLRUCache(maxEntries int) *LRUCache {
+func NewLRUCache(maxEntries uint32) *LRUCache {
 	c := &LRUCache{
-		cache:  lru.New(maxEntries),
+		cache:  lru.New(int(maxEntries)),
 		counts: make(map[uint64]uint64),
 	}
 	c.cache.OnEvicted = c.onEvicted

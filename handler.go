@@ -25,7 +25,7 @@ import (
 // Handler represents an HTTP handler.
 type Handler struct {
 	Index     *Index
-	Messenger Messenger
+	Messenger *Messenger
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -47,7 +47,6 @@ type Handler struct {
 func NewHandler() *Handler {
 	return &Handler{
 		LogOutput: os.Stderr,
-		Messenger: NopMessenger,
 	}
 }
 
@@ -341,7 +340,7 @@ func (h *Handler) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Messenger.ReceiveMessage(m); err != nil {
+	if err := h.Messenger.Broker.Receive(m); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -404,7 +403,7 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 				ColumnLabel: req.Options.ColumnLabel,
 				TimeQuantum: string(req.Options.TimeQuantum),
 			},
-		}, "broadcast")
+		}, "direct")
 	if err != nil {
 		h.logger().Printf("problem sending CreateDB message: %s", err)
 	}
@@ -441,7 +440,7 @@ func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 	err := h.Messenger.SendMessage(
 		&internal.DeleteDBMessage{
 			DB: req.DB,
-		}, "broadcast")
+		}, "direct")
 	if err != nil {
 		h.logger().Printf("problem sending DeleteDB message: %s", err)
 	}
@@ -591,7 +590,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 				RowLabel:    req.Options.RowLabel,
 				TimeQuantum: string(req.Options.TimeQuantum),
 			},
-		}, "broadcast")
+		}, "direct")
 	if err != nil {
 		h.logger().Printf("problem sending CreateFrame message: %s", err)
 	}
@@ -639,7 +638,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 		&internal.DeleteFrameMessage{
 			DB:    req.DB,
 			Frame: req.Frame,
-		}, "broadcast")
+		}, "direct")
 	if err != nil {
 		h.logger().Printf("problem sending DeleteFrame message: %s", err)
 	}
