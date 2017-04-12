@@ -22,7 +22,8 @@ const (
 
 // Default frame settings.
 const (
-	DefaultRowLabel = "id"
+	DefaultRowLabel       = "id"
+	DefaultInverseEnabled = false
 )
 
 // Frame represents a container for views.
@@ -40,8 +41,9 @@ type Frame struct {
 
 	stats StatsClient
 
-	// Label used for referring to a row.
-	rowLabel string
+	// Frame settings.
+	inverseEnabled bool
+	rowLabel       string
 
 	LogOutput io.Writer
 }
@@ -63,7 +65,8 @@ func NewFrame(path, db, name string) (*Frame, error) {
 
 		stats: NopStatsClient,
 
-		rowLabel: DefaultRowLabel,
+		inverseEnabled: DefaultInverseEnabled,
+		rowLabel:       DefaultRowLabel,
 
 		LogOutput: ioutil.Discard,
 	}, nil
@@ -132,11 +135,17 @@ func (f *Frame) RowLabel() string {
 	return v
 }
 
+// InverseEnabled returns true if an inverse view is available.
+func (f *Frame) InverseEnabled() bool {
+	return f.inverseEnabled
+}
+
 // Options returns all options for this frame.
 func (f *Frame) Options() FrameOptions {
 	f.mu.Lock()
 	opt := FrameOptions{
-		RowLabel: f.rowLabel,
+		InverseEnabled: f.inverseEnabled,
+		RowLabel:       f.rowLabel,
 	}
 	f.mu.Unlock()
 	return opt
@@ -214,6 +223,7 @@ func (f *Frame) loadMeta() error {
 	if os.IsNotExist(err) {
 		f.timeQuantum = ""
 		f.rowLabel = DefaultRowLabel
+		f.inverseEnabled = DefaultInverseEnabled
 		return nil
 	} else if err != nil {
 		return err
@@ -226,6 +236,7 @@ func (f *Frame) loadMeta() error {
 	// Copy metadata fields.
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
+	f.inverseEnabled = pb.InverseEnabled
 
 	return nil
 }
@@ -234,8 +245,9 @@ func (f *Frame) loadMeta() error {
 func (f *Frame) saveMeta() error {
 	// Marshal metadata.
 	buf, err := proto.Marshal(&internal.Frame{
-		TimeQuantum: string(f.timeQuantum),
-		RowLabel:    f.rowLabel,
+		TimeQuantum:    string(f.timeQuantum),
+		RowLabel:       f.rowLabel,
+		InverseEnabled: f.inverseEnabled,
 	})
 	if err != nil {
 		return err
@@ -323,6 +335,11 @@ func (f *Frame) Views() []*View {
 }
 
 func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
+	// Don't create inverse views if they are not enabled.
+	if !f.InverseEnabled() && IsInverseView(name) {
+		return nil, ErrFrameInverseDisabled
+	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -476,7 +493,7 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 	// Import into each fragment.
 	for key, data := range dataByFragment {
 		// Re-sort data for inverse views.
-		if IsViewInverted(key.View) {
+		if IsInverseView(key.View) {
 			sort.Sort(importBitSet{
 				bitmapIDs:  data.BitmapIDs,
 				profileIDs: data.ProfileIDs,
@@ -521,7 +538,8 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
-	RowLabel string `json:"rowLabel,omitempty"`
+	RowLabel       string `json:"rowLabel,omitempty"`
+	InverseEnabled bool   `json:"inverseEnabled,omitempty"`
 }
 
 // importBitSet represents slices of row and column ids.

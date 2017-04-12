@@ -534,10 +534,13 @@ func (e *Executor) executeClearBit(ctx context.Context, db string, c *pql.Call, 
 		} else if changed {
 			ret = true
 		}
-		if changed, err := e.executeClearBitView(ctx, db, c, f, ViewInverse, rowID, colID, opt); err != nil {
-			return ret, err
-		} else if changed {
-			ret = true
+
+		if f.InverseEnabled() {
+			if changed, err := e.executeClearBitView(ctx, db, c, f, ViewInverse, rowID, colID, opt); err != nil {
+				return ret, err
+			} else if changed {
+				ret = true
+			}
 		}
 		return ret, nil
 	default:
@@ -631,10 +634,13 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, op
 		} else if changed {
 			ret = true
 		}
-		if changed, err := e.executeSetBitView(ctx, db, c, f, ViewInverse, rowID, colID, timestamp, opt); err != nil {
-			return ret, err
-		} else if changed {
-			ret = true
+
+		if f.InverseEnabled() {
+			if changed, err := e.executeSetBitView(ctx, db, c, f, ViewInverse, rowID, colID, timestamp, opt); err != nil {
+				return ret, err
+			} else if changed {
+				ret = true
+			}
 		}
 		return ret, nil
 	default:

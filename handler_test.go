@@ -37,7 +37,7 @@ func TestHandler_Schema(t *testing.T) {
 	d0 := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
 	d1 := idx.MustCreateDBIfNotExists("d1", pilosa.DBOptions{})
 
-	if f, err := d0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
+	if f, err := d0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
-	f0, err := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{}).CreateFrame("f0", pilosa.FrameOptions{})
+	f0, err := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{}).CreateFrame("f0", pilosa.FrameOptions{InverseEnabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f1, err := idx.MustCreateDBIfNotExists("d1", pilosa.DBOptions{}).CreateFrame("f1", pilosa.FrameOptions{})
+	f1, err := idx.MustCreateDBIfNotExists("d1", pilosa.DBOptions{}).CreateFrame("f1", pilosa.FrameOptions{InverseEnabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
