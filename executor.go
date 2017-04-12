@@ -490,26 +490,27 @@ func (e *Executor) executeProfile(ctx context.Context, db string, c *pql.Call, o
 
 // executeClearBit executes a ClearBit() call.
 func (e *Executor) executeClearBit(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) (bool, error) {
+	view, _ := c.Args["view"].(string)
 	frame, ok := c.Args["frame"].(string)
 	if !ok {
 		return false, errors.New("ClearBit() frame required")
 	}
 
-	// Lookup column label.
+	// Retrieve frame.
 	d := e.Index.DB(db)
 	if d == nil {
-		return false, nil
+		return false, ErrDatabaseNotFound
 	}
-	columnLabel := d.ColumnLabel()
-
-	// Lookup row label.
-	f := e.Index.Frame(db, frame)
+	f := d.Frame(frame)
 	if f == nil {
-		return false, nil
+		return false, ErrFrameNotFound
 	}
+
+	// Retrieve labels.
+	columnLabel := d.ColumnLabel()
 	rowLabel := f.RowLabel()
 
-	// Read row & column ids.
+	// Read fields using labels.
 	rowID, ok := c.Args[rowLabel].(uint64)
 	if !ok {
 		return false, fmt.Errorf("ClearBit() field required: %s", rowLabel)
@@ -520,12 +521,38 @@ func (e *Executor) executeClearBit(ctx context.Context, db string, c *pql.Call, 
 		return false, fmt.Errorf("ClearBit() field required: %s", columnLabel)
 	}
 
+	// Clear bits for each view.
+	switch view {
+	case ViewStandard:
+		return e.executeClearBitView(ctx, db, c, f, view, colID, rowID, opt)
+	case ViewInverse:
+		return e.executeClearBitView(ctx, db, c, f, view, rowID, colID, opt)
+	case "":
+		var ret bool
+		if changed, err := e.executeClearBitView(ctx, db, c, f, ViewStandard, colID, rowID, opt); err != nil {
+			return ret, err
+		} else if changed {
+			ret = true
+		}
+		if changed, err := e.executeClearBitView(ctx, db, c, f, ViewInverse, rowID, colID, opt); err != nil {
+			return ret, err
+		} else if changed {
+			ret = true
+		}
+		return ret, nil
+	default:
+		return false, fmt.Errorf("invalid view: %s", view)
+	}
+}
+
+// executeClearBitView executes a ClearBit() call for a single view.
+func (e *Executor) executeClearBitView(ctx context.Context, db string, c *pql.Call, f *Frame, view string, colID, rowID uint64, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
 	for _, node := range e.Cluster.FragmentNodes(db, slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
-			val, err := f.ClearBit(rowID, colID, nil)
+			val, err := f.ClearBit(view, rowID, colID, nil)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -550,6 +577,7 @@ func (e *Executor) executeClearBit(ctx context.Context, db string, c *pql.Call, 
 
 // executeSetBit executes a SetBit() call.
 func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) (bool, error) {
+	view, _ := c.Args["view"].(string)
 	frame, ok := c.Args["frame"].(string)
 	if !ok {
 		return false, errors.New("SetBit() field required: frame")
@@ -558,7 +586,7 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, op
 	// Retrieve frame.
 	d := e.Index.DB(db)
 	if d == nil {
-		return false, ErrFrameNotFound
+		return false, ErrDatabaseNotFound
 	}
 	f := d.Frame(frame)
 	if f == nil {
@@ -590,13 +618,39 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, op
 		timestamp = &t
 	}
 
+	// Set bits for each view.
+	switch view {
+	case ViewStandard:
+		return e.executeSetBitView(ctx, db, c, f, view, colID, rowID, timestamp, opt)
+	case ViewInverse:
+		return e.executeSetBitView(ctx, db, c, f, view, rowID, colID, timestamp, opt)
+	case "":
+		var ret bool
+		if changed, err := e.executeSetBitView(ctx, db, c, f, ViewStandard, colID, rowID, timestamp, opt); err != nil {
+			return ret, err
+		} else if changed {
+			ret = true
+		}
+		if changed, err := e.executeSetBitView(ctx, db, c, f, ViewInverse, rowID, colID, timestamp, opt); err != nil {
+			return ret, err
+		} else if changed {
+			ret = true
+		}
+		return ret, nil
+	default:
+		return false, fmt.Errorf("invalid view: %s", view)
+	}
+}
+
+// executeSetBitView executes a SetBit() call for a specific view.
+func (e *Executor) executeSetBitView(ctx context.Context, db string, c *pql.Call, f *Frame, view string, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
 
 	for _, node := range e.Cluster.FragmentNodes(db, slice) {
 		// Update locally if host matches.
 		if node.Host == e.Host {
-			val, err := f.SetBit(rowID, colID, timestamp)
+			val, err := f.SetBit(view, rowID, colID, timestamp)
 			if err != nil {
 				return false, err
 			} else if val {
