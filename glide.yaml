@@ -35,4 +35,3 @@ import:
   version: ^1.6.10
 - package: github.com/hashicorp/memberlist
 - package: golang.org/x/sync
-- package: golang.org/x/net

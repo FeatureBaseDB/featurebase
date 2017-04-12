@@ -34,7 +34,7 @@ type Server struct {
 	// Data storage and HTTP interface.
 	Index     *Index
 	Handler   *Handler
-	Messenger Messenger
+	Messenger *Messenger
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
@@ -55,7 +55,7 @@ func NewServer() *Server {
 
 		Index:     NewIndex(),
 		Handler:   NewHandler(),
-		Messenger: NopMessenger,
+		Messenger: NewMessenger(),
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
@@ -64,6 +64,7 @@ func NewServer() *Server {
 	}
 
 	s.Handler.Index = s.Index
+	s.Messenger.Index = s.Index
 
 	return s
 }
@@ -109,11 +110,21 @@ func (s *Server) Open() error {
 	e.Host = s.Host
 	e.Cluster = s.Cluster
 
+	// Initialize Messenger.
+	s.Messenger.Index = s.Index
+	s.Messenger.Host = s.Host
+	s.Messenger.Cluster = s.Cluster
+	s.Messenger.LogOutput = s.LogOutput
+
 	// Initialize HTTP handler.
+	s.Handler.Messenger = s.Messenger
 	s.Handler.Host = s.Host
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
+
+	// Initialize Index.
+	s.Index.Messenger = s.Messenger
 	s.Index.LogOutput = s.LogOutput
 
 	// Serve HTTP.
@@ -151,49 +162,6 @@ func (s *Server) Addr() net.Addr {
 	return s.ln.Addr()
 }
 
-// LocalState returns the state of the local node as well as the
-// index (dbs/frames) according to the local node.
-func (s *Server) LocalState() (proto.Message, error) {
-	// TODO: are there errors to handle?
-	pb := encodeLocalState(s)
-	return pb, nil
-}
-
-// HandleRemoteState provides the current, local state.
-// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
-func (s *Server) HandleRemoteState(pb proto.Message) error {
-	return s.mergeRemoteState(pb.(*internal.NodeState))
-}
-
-func (s *Server) mergeRemoteState(ns *internal.NodeState) error {
-	// TODO: update some node state value in the cluster (it should be in cluster.node i guess)
-
-	// Create databases that don't exist.
-	for _, db := range ns.DBs {
-		opt := DBOptions{
-			ColumnLabel: db.Meta.ColumnLabel,
-			TimeQuantum: TimeQuantum(db.Meta.TimeQuantum),
-		}
-		d, err := s.Index.CreateDBIfNotExists(db.Name, opt)
-		if err != nil {
-			return err
-		}
-		// Create frames that don't exist.
-		for _, f := range db.Frames {
-			opt := FrameOptions{
-				RowLabel:    f.Meta.RowLabel,
-				TimeQuantum: TimeQuantum(f.Meta.TimeQuantum),
-			}
-			_, err := d.CreateFrameIfNotExists(f.Name, opt)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 func (s *Server) logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
 
 func (s *Server) monitorAntiEntropy() {
@@ -227,15 +195,6 @@ func (s *Server) monitorAntiEntropy() {
 
 		// Record successful sync in log.
 		s.logger().Printf("index sync complete")
-	}
-}
-
-// encodeLocalState converts s into its internal representation.
-func encodeLocalState(s *Server) *internal.NodeState {
-	return &internal.NodeState{
-		Host:  s.Host,
-		State: "OK", // TODO: make this work, pull from cluster.Node
-		DBs:   encodeDBs(s.Index.DBs()),
 	}
 }
 

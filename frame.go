@@ -38,7 +38,7 @@ type Frame struct {
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
 
-	messenger Messenger
+	messenger *Messenger
 	stats     StatsClient
 
 	// Frame settings.
@@ -47,7 +47,7 @@ type Frame struct {
 	inverseEnabled bool
 
 	// Cache size for ranked frames
-	cacheSize int
+	cacheSize uint32
 
 	LogOutput io.Writer
 }
@@ -67,8 +67,7 @@ func NewFrame(path, db, name string) (*Frame, error) {
 		views:           make(map[string]*View),
 		bitmapAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
-		messenger: NopMessenger,
-		stats:     NopStatsClient,
+		stats: NopStatsClient,
 
 		rowLabel:       DefaultRowLabel,
 		inverseEnabled: DefaultInverseEnabled,
@@ -160,7 +159,7 @@ func (f *Frame) InverseEnabled() bool {
 
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
 // defaults to DefaultCacheSize 50000
-func (f *Frame) SetCacheSize(v int) error {
+func (f *Frame) SetCacheSize(v uint32) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -179,7 +178,7 @@ func (f *Frame) SetCacheSize(v int) error {
 }
 
 // CacheSize returns the ranked frame cache size.
-func (f *Frame) CacheSize() int {
+func (f *Frame) CacheSize() uint32 {
 	f.mu.Lock()
 	v := f.cacheSize
 	f.mu.Unlock()
@@ -194,6 +193,7 @@ func (f *Frame) Options() FrameOptions {
 		InverseEnabled: f.inverseEnabled,
 		CacheType:      f.cacheType,
 		CacheSize:      f.cacheSize,
+		TimeQuantum:    f.timeQuantum,
 	}
 	f.mu.Unlock()
 	return opt
@@ -287,7 +287,7 @@ func (f *Frame) loadMeta() error {
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
 	f.inverseEnabled = pb.InverseEnabled
-	f.cacheSize = int(pb.CacheSize)
+	f.cacheSize = pb.CacheSize
 
 	// Copy cache type.
 	f.cacheType = pb.CacheType
@@ -301,12 +301,12 @@ func (f *Frame) loadMeta() error {
 // saveMeta writes meta data for the frame.
 func (f *Frame) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.Frame{
+	buf, err := proto.Marshal(&internal.FrameMeta{
 		TimeQuantum:    string(f.timeQuantum),
 		RowLabel:       f.rowLabel,
 		CacheType:      f.cacheType,
 		InverseEnabled: f.inverseEnabled,
-		CacheSize:      int64(f.cacheSize),
+		CacheSize:      f.cacheSize,
 	})
 	if err != nil {
 		return err
@@ -413,16 +413,6 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 	}
 	view.BitmapAttrStore = f.bitmapAttrStore
 	f.views[view.Name()] = view
-
-	// TODO: this needs to be refactored for views
-	/*
-	   // Send a MaxSlice message
-	   f.messenger.SendMessage(
-	       &internal.CreateSliceMessage{
-	           DB:    f.db,
-	           Slice: slice,
-	       }, "gossip")
-	*/
 
 	return view, nil
 }
@@ -605,7 +595,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 		Meta: &internal.FrameMeta{
 			TimeQuantum: string(f.timeQuantum),
 			RowLabel:    f.rowLabel,
-			CacheSize:   int64(f.cacheSize),
+			CacheSize:   f.cacheSize,
 		},
 	}
 }
@@ -633,7 +623,7 @@ type FrameOptions struct {
 	RowLabel       string      `json:"rowLabel,omitempty"`
 	InverseEnabled bool        `json:"inverseEnabled,omitempty"`
 	CacheType      string      `json:"cacheType,omitempty"`
-	CacheSize      int         `json:"cacheSize,omitempty"`
+	CacheSize      uint32      `json:"cacheSize,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
 }
 

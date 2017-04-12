@@ -2,14 +2,16 @@ package pilosa
 
 import (
 	"net"
+	"strconv"
 	"time"
 )
 
 const (
 	// DefaultHost is the default hostname and port to use.
-	DefaultHost       = "localhost"
-	DefaultPort       = "10101"
-	DefaultGossipPort = 14000
+	DefaultHost          = "localhost"
+	DefaultPort          = "10101"
+	DefaultMessengerType = "static"
+	DefaultGossipPort    = "14000"
 )
 
 // Config represents the configuration for the command.
@@ -47,6 +49,7 @@ func NewConfig() *Config {
 		Host: DefaultHost + ":" + DefaultPort,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
+	c.Cluster.MessengerType = DefaultMessengerType
 	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
 	c.Cluster.Nodes = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
@@ -63,6 +66,24 @@ func NewConfigForHosts(hosts []string) *Config {
 	return conf
 }
 
+// PilosaMessenger returns a new instance of Messenger based on the config.
+func (c *Config) PilosaMessenger() *Messenger {
+	messenger := NewMessenger()
+	switch c.Cluster.MessengerType {
+	case "broadcast":
+		n := NewHTTPMessageBroker()
+		n.messenger = messenger
+		messenger.Broker = n
+	case "gossip":
+		n := NewGossipMessageBroker()
+		n.messenger = messenger
+		messenger.Broker = n
+	case "static":
+		// nop
+	}
+	return messenger
+}
+
 // PilosaCluster returns a new instance of Cluster based on the config.
 func (c *Config) PilosaCluster() *Cluster {
 	cluster := NewCluster()
@@ -73,11 +94,16 @@ func (c *Config) PilosaCluster() *Cluster {
 	}
 
 	// Setup a Broadcast (over HTTP) or Gossip NodeSet based on config.
-	if c.Cluster.MessengerType == "broadcast" {
+	switch c.Cluster.MessengerType {
+	case "broadcast":
 		cluster.NodeSet = NewHTTPNodeSet()
-		cluster.NodeSet.Join(cluster.Nodes)
-	} else if c.Cluster.MessengerType == "gossip" {
-		gossipPort := DefaultGossipPort
+		cluster.NodeSet.(*HTTPNodeSet).Join(cluster.Nodes)
+	case "gossip":
+		gport, err := strconv.Atoi(DefaultGossipPort)
+		if err != nil {
+			// what?
+		}
+		gossipPort := gport
 		gossipSeed := DefaultHost
 		if c.Cluster.Gossip.Port != 0 {
 			gossipPort = c.Cluster.Gossip.Port
@@ -91,11 +117,26 @@ func (c *Config) PilosaCluster() *Cluster {
 			gossipHost = c.Host
 		}
 		cluster.NodeSet = NewGossipNodeSet(c.Host, gossipHost, gossipPort, gossipSeed)
-	} else {
+	case "static":
+		cluster.NodeSet = NewStaticNodeSet()
+	default:
 		cluster.NodeSet = NewStaticNodeSet()
 	}
 
 	return cluster
+}
+
+// AssociateMessageBroker allows an implementation to associate objects to the MessageBroker
+// after cluster configuration.
+func (c *Config) AssociateMessageBroker(s *Server) {
+	switch c.Cluster.MessengerType {
+	case "broadcast":
+		// nop
+	case "gossip":
+		s.Cluster.NodeSet.(*GossipNodeSet).config.memberlistConfig.Delegate = s.Messenger.Broker.(*GossipMessageBroker)
+	case "static":
+		// nop
+	}
 }
 
 // Duration is a TOML wrapper type for time.Duration.

@@ -70,7 +70,7 @@ type Fragment struct {
 	// Cache for bitmap counts.
 	cacheType string // passed in by frame
 	cache     Cache
-	cacheSize int
+	cacheSize uint32
 
 	// Cache containing full bitmaps (not just counts).
 	bitmapCache BitmapCache
@@ -94,7 +94,7 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, db, frame, view string, slice uint64, cacheSize int) *Fragment {
+func NewFragment(path, db, frame, view string, slice uint64, cacheSize uint32) *Fragment {
 	return &Fragment{
 		path:      path,
 		db:        db,

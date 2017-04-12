@@ -3,8 +3,6 @@ updated: 2017-04-18T15:33:39.035615802-05:00
 imports:
 - name: github.com/armon/go-metrics
   version: 97c69685293dce4c0a2d0b19535179bbc976e4d2
-- name: github.com/aws/aws-sdk-go
-  version: 819b71cf8430e434c1eee7e7e8b0f2b8870be899
 - name: github.com/boltdb/bolt
   version: 4b1ebc1869ad66568b313d0dc410e2be72670dda
 - name: github.com/BurntSushi/toml

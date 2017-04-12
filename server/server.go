@@ -92,18 +92,11 @@ func (m *Command) Run(args ...string) (err error) {
 	if err != nil {
 		return err
 	}
+	m.Server.Messenger = m.Config.PilosaMessenger()
 	m.Server.Cluster = m.Config.PilosaCluster()
 
-	// Setup Messenger.
-	fmt.Fprintf(m.Stderr, "Using Messenger type: %s\n", m.Config.Cluster.MessengerType)
-	m.Server.Messenger = m.Server.Cluster.NodeSet.(pilosa.Messenger)
-	m.Server.Handler.Messenger = m.Server.Messenger
-	m.Server.Index.Messenger = m.Server.Messenger
-
-	// Set message and state handlers.
-	m.Server.Cluster.NodeSet.SetMessageHandler(m.Server.Index.HandleMessage)
-	m.Server.Cluster.NodeSet.SetRemoteStateHandler(m.Server.HandleRemoteState)
-	m.Server.Cluster.NodeSet.SetLocalStateSource(m.Server.LocalState)
+	// Associate objects to the MessageBroker based on config.
+	m.Config.AssociateMessageBroker(m.Server)
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)

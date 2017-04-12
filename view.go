@@ -30,7 +30,7 @@ type View struct {
 	frame string
 	name  string
 
-	cacheSize int
+	cacheSize uint32
 
 	// Fragments by slice.
 	cacheType string // passed in by frame
@@ -43,7 +43,7 @@ type View struct {
 }
 
 // NewView returns a new instance of View.
-func NewView(path, db, frame, name string, cacheSize int) *View {
+func NewView(path, db, frame, name string, cacheSize uint32) *View {
 	return &View{
 		path:      path,
 		db:        db,
