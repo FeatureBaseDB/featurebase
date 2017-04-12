@@ -131,7 +131,7 @@ func (f *Frame) MustSetBit(view string, bitmapID, profileID uint64, t *time.Time
 func TestFrame_SetCacheSize(t *testing.T) {
 	f := MustOpenFrame()
 	defer f.Close()
-	cacheSize := 100
+	cacheSize := uint32(100)
 
 	// Set & retrieve frame cache size.
 	if err := f.SetCacheSize(cacheSize); err != nil {

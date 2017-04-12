@@ -44,9 +44,9 @@ type LRUCache struct {
 }
 
 // NewLRUCache returns a new instance of LRUCache.
-func NewLRUCache(maxEntries int) *LRUCache {
+func NewLRUCache(maxEntries uint32) *LRUCache {
 	c := &LRUCache{
-		cache:  lru.New(maxEntries),
+		cache:  lru.New(int(maxEntries)),
 		counts: make(map[uint64]uint64),
 	}
 	c.cache.OnEvicted = c.onEvicted
@@ -117,7 +117,7 @@ type RankCache struct {
 	updateTime time.Time
 
 	// maxEntries is the user defined size of the cache
-	maxEntries int
+	maxEntries uint32
 
 	// thresholdBuffer is used the calculate the lowest cached threshold value
 	// This threshold determines what new items are added to the cache
@@ -128,7 +128,7 @@ type RankCache struct {
 }
 
 // NewRankCache returns a new instance of RankCache.
-func NewRankCache(maxEntries int) *RankCache {
+func NewRankCache(maxEntries uint32) *RankCache {
 	return &RankCache{
 		maxEntries:      maxEntries,
 		thresholdBuffer: int(ThresholdFactor * float64(maxEntries)),
@@ -222,7 +222,7 @@ func (c *RankCache) recalculate() {
 
 	// Store the count of the item at the threshold index.
 	c.rankings = rankings
-	if len(c.rankings) > c.maxEntries {
+	if len(c.rankings) > int(c.maxEntries) {
 		c.thresholdValue = rankings[c.maxEntries].Count
 		c.rankings = c.rankings[0:c.maxEntries]
 	} else {

@@ -1,10 +1,8 @@
-hash: c224501b90f18cb561616c3694ebccf6d5a0fea2cae2a798b049d28f76ba858d
-updated: 2017-03-13T13:28:58.170714348-05:00
+hash: c52182997592ef7be139de6a2388fa3a504574dcc5976b053f6c49396b3aaff5
+updated: 2017-04-12T13:14:38.959156511-05:00
 imports:
 - name: github.com/armon/go-metrics
   version: 97c69685293dce4c0a2d0b19535179bbc976e4d2
-- name: github.com/aws/aws-sdk-go
-  version: 819b71cf8430e434c1eee7e7e8b0f2b8870be899
 - name: github.com/boltdb/bolt
   version: 4b1ebc1869ad66568b313d0dc410e2be72670dda
 - name: github.com/BurntSushi/toml

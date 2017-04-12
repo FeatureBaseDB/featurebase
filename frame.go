@@ -41,14 +41,14 @@ type Frame struct {
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
 
-	messenger Messenger
+	messenger *Messenger
 	stats     StatsClient
 
 	// Label used for referring to a row.
 	rowLabel string
 
 	// Cache size for ranked frames
-	cacheSize int
+	cacheSize uint32
 
 	LogOutput io.Writer
 }
@@ -68,8 +68,7 @@ func NewFrame(path, db, name string) (*Frame, error) {
 		views:           make(map[string]*View),
 		bitmapAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
-		messenger: NopMessenger,
-		stats:     NopStatsClient,
+		stats: NopStatsClient,
 
 		rowLabel:  DefaultRowLabel,
 		cacheSize: DefaultCacheSize,
@@ -143,7 +142,7 @@ func (f *Frame) RowLabel() string {
 
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
 // defaults to DefaultCacheSize 50000
-func (f *Frame) SetCacheSize(v int) error {
+func (f *Frame) SetCacheSize(v uint32) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -162,7 +161,7 @@ func (f *Frame) SetCacheSize(v int) error {
 }
 
 // CacheSize returns the ranked frame cache size.
-func (f *Frame) CacheSize() int {
+func (f *Frame) CacheSize() uint32 {
 	f.mu.Lock()
 	v := f.cacheSize
 	f.mu.Unlock()
@@ -265,7 +264,7 @@ func (f *Frame) loadMeta() error {
 	// Copy metadata fields.
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
-	f.cacheSize = int(pb.CacheSize)
+	f.cacheSize = pb.CacheSize
 	return nil
 }
 
@@ -275,7 +274,7 @@ func (f *Frame) saveMeta() error {
 	buf, err := proto.Marshal(&internal.FrameMeta{
 		TimeQuantum: string(f.timeQuantum),
 		RowLabel:    f.rowLabel,
-		CacheSize:   int64(f.cacheSize),
+		CacheSize:   f.cacheSize,
 	})
 	if err != nil {
 		return err
@@ -376,16 +375,6 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 	}
 	view.BitmapAttrStore = f.bitmapAttrStore
 	f.views[view.Name()] = view
-
-	// TODO: this needs to be refactored for views
-	/*
-	   // Send a MaxSlice message
-	   f.messenger.SendMessage(
-	       &internal.CreateSliceMessage{
-	           DB:    f.db,
-	           Slice: slice,
-	       }, "gossip")
-	*/
 
 	return view, nil
 }
@@ -567,7 +556,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 		Meta: &internal.FrameMeta{
 			TimeQuantum: string(f.timeQuantum),
 			RowLabel:    f.rowLabel,
-			CacheSize:   int64(f.cacheSize),
+			CacheSize:   f.cacheSize,
 		},
 	}
 }
@@ -593,7 +582,7 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
 	RowLabel    string      `json:"rowLabel,omitempty"`
-	CacheSize   int         `json:"cacheSize,omitempty"`
+	CacheSize   uint32      `json:"cacheSize,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
 

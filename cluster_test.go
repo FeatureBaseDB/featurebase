@@ -95,16 +95,16 @@ func TestCluster_Health(t *testing.T) {
 			{Host: "serverB:1000"},
 			{Host: "serverC:1000"},
 		},
-		NodeSet: &pilosa.StaticNodeSet{},
+		NodeSet: &pilosa.HTTPNodeSet{},
 	}
 
-	j, err := c.NodeSet.Join([]*pilosa.Node{
+	err := c.NodeSet.(*pilosa.HTTPNodeSet).Join([]*pilosa.Node{
 		&pilosa.Node{Host: "serverA:1000"},
 		&pilosa.Node{Host: "serverC:1000"},
 		&pilosa.Node{Host: "serverD:1000"},
 	})
 	if err != nil {
-		t.Fatalf("unexpected gossiper nodes: %s", j)
+		t.Fatalf("unexpected gossiper nodes: %s", err)
 	}
 
 	// Verify a DOWN node is reported, and extraneous nodes are ignored
