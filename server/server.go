@@ -82,8 +82,7 @@ func (m *Command) Run(args ...string) (err error) {
 	// Configure index.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
 	m.Server.Index.Path = m.Config.DataDir
-	// m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
-	m.Server.Index.Stats, err = datadog.NewStatsClient()
+	m.Server.Index.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
 	if err != nil {
 		return err
 	}
@@ -145,4 +144,16 @@ func (m *Command) Close() error {
 		return logErr
 	}
 	return serveErr
+}
+
+// NewStatsClient creates a stats client from the config
+func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
+	switch name {
+	case "expvar":
+		return pilosa.NewExpvarStatsClient(), nil
+	case "statsd":
+		return datadog.NewStatsClient(host)
+	default:
+		return pilosa.NopStatsClient, nil
+	}
 }
