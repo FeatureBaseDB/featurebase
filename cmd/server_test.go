@@ -29,7 +29,7 @@ func TestServerConfig(t *testing.T) {
 	tests := []commandTest{
 		// TEST 0
 		{
-			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "example.com:10101,example.com:10110", "--bind", "example.com:10101"},
+			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "example.com:10111,example.com:10110", "--bind", "example.com:10111"},
 			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER.POLL_INTERVAL": "3m2s"},
 			cfgFileContent: `
 		data-dir = "/tmp/myFileDatadir"
@@ -45,9 +45,9 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.DataDir, actualDataDir)
-				v.Check(cmd.Server.Config.Host, "example.com:10101")
+				v.Check(cmd.Server.Config.Host, "example.com:10111")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
-				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:10101", "example.com:10110"})
+				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:10111", "example.com:10110"})
 				v.Check(cmd.Server.Config.Cluster.PollingInterval, pilosa.Duration(time.Second*182))
 				return v.Error()
 			},
@@ -91,6 +91,9 @@ func TestServerConfig(t *testing.T) {
 	[profile]
 	  cpu = "` + profFile.Name() + `"
 	  cpu-time = "35s"
+	[metric]
+  	  service = "statsd"
+      host = "127.0.0.1:8125"
 	`,
 			validation: func() error {
 				v := validator{}
@@ -100,6 +103,8 @@ func TestServerConfig(t *testing.T) {
 				v.Check(cmd.Server.CPUProfile, profFile.Name())
 				v.Check(cmd.Server.CPUTime, time.Minute)
 				v.Check(cmd.Server.Config.LogPath, logFile.Name())
+				v.Check(cmd.Server.Config.Metric.Service, "statsd")
+				v.Check(cmd.Server.Config.Metric.Host, "127.0.0.1:8125")
 				if v.Error() != nil {
 					return v.Error()
 				}
