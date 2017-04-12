@@ -115,6 +115,13 @@ func (f *Frame) SetRowLabel(v string) error {
 		return nil
 	}
 
+
+	// Make sure rowLabel is valid name
+	err := ValidateName(v)
+	if err != nil {
+		return err
+	}
+
 	// Persist meta data to disk on change.
 	f.rowLabel = v
 	if err := f.saveMeta(); err != nil {

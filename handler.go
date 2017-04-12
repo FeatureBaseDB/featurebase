@@ -344,6 +344,63 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Custom Unmarshal JSON to validate request body when creating a new database
+func (p *postDBRequest) UnmarshalJSON(b []byte) error {
+	var data map[string]interface{}
+	if err := json.Unmarshal(b, &data); err != nil {
+		return err
+	}
+	for key, value := range data {
+		switch key {
+		case "db":
+			val, ok := data["db"].(string)
+			if !ok {
+				return errors.New("db required and must be a string")
+			}
+			p.DB = val
+		case "options":
+			value, err := validateOptions(data, "columnLabel")
+			if err != nil {
+				return err
+			}
+			if value == "" {
+				p.Options = DBOptions{}
+			} else {
+				p.Options = DBOptions{ColumnLabel: value}
+			}
+
+		default:
+			return fmt.Errorf("Unknown key: %v:%v", key, value)
+		}
+	}
+	return nil
+}
+
+func validateOptions(data map[string]interface{}, field string) (string, error) {
+	options, ok := data["options"].(map[string]interface{})
+	if !ok {
+		return "", errors.New("options is not map[string]interface{}")
+	}
+	var optionValue string
+	if len(options) == 0 {
+		optionValue = ""
+	} else {
+		for k, v := range options {
+			switch k {
+			case field:
+				val, ok := options[field].(string)
+				if !ok {
+					return "", fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
+				}
+				optionValue = val
+			default:
+				return "", fmt.Errorf("invalid key for options {%v:%v}", k, v)
+			}
+		}
+	}
+	return optionValue, nil
+}
+
 type postDBRequest struct {
 	DB      string    `json:"db"`
 	Options DBOptions `json:"options"`
@@ -478,6 +535,7 @@ type postDBAttrDiffResponse struct {
 
 // handlePostFrame handles POST /frame request.
 func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
+
 	// Decode request.
 	var req postFrameRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -506,6 +564,46 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+}
+
+// Custom Unmarshal JSON to validate request body when creating a new frame
+func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
+	var data map[string]interface{}
+	if err := json.Unmarshal(b, &data); err != nil {
+		return err
+	}
+	for key, value := range data {
+		switch key {
+		case "db":
+			val, ok := data["db"].(string)
+			if !ok {
+				return errors.New("db required and must be a string")
+			}
+			p.DB = val
+		case "frame":
+			val, ok := data["frame"].(string)
+			if !ok {
+				return errors.New("frame required and must be a string")
+			}
+			p.Frame = val
+
+		case "options":
+			value, err := validateOptions(data, "rowLabel")
+			if err != nil {
+				return err
+			}
+			if value == "" {
+				p.Options = FrameOptions{}
+			} else {
+				p.Options = FrameOptions{RowLabel: value}
+			}
+
+		default:
+			return fmt.Errorf("Unknown key: {%v:%v}", key, value)
+		}
+	}
+	return nil
+
 }
 
 type postFrameRequest struct {
