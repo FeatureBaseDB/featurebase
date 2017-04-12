@@ -29,12 +29,11 @@ func TestServerConfig(t *testing.T) {
 	tests := []commandTest{
 		// TEST 0
 		{
-			// args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "example.com:10101,example.com:10110"},
-			args: []string{"server", "--data-dir", actualDataDir},
+			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "example.com:10101,example.com:10110", "--bind", "example.com:10101"},
 			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER.POLL_INTERVAL": "3m2s"},
 			cfgFileContent: `
 		data-dir = "/tmp/myFileDatadir"
-		bind = "localhost:19444"
+		bind = "localhost:0"
 
 		[cluster]
 		  poll-interval = "45s"
@@ -46,35 +45,35 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.DataDir, actualDataDir)
-				v.Check(cmd.Server.Config.Host, "localhost:19444")
+				v.Check(cmd.Server.Config.Host, "example.com:10101")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
-				// v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:10101", "example.com:10110"})
+				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:10101", "example.com:10110"})
 				v.Check(cmd.Server.Config.Cluster.PollingInterval, pilosa.Duration(time.Second*182))
 				return v.Error()
 			},
 		},
 		// TEST 1
-		// {
-		// 	args: []string{"server", "--anti-entropy.interval", "9m0s"},
-		// 	env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "example.com:1110,example.com:1111"},
-		// 	cfgFileContent: `
-		// bind = "localhost:0"
-		// data-dir = "` + actualDataDir + `"
-		// [cluster]
-		//   hosts = [
-		//    "localhost:19444",
-		//    ]
-		// [plugins]
-		//   path = "/var/sloth"
-		// `,
-		// 	validation: func() error {
-		// 		v := validator{}
-		// 		v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:1110", "example.com:1111"})
-		// 		v.Check(cmd.Server.Config.Plugins.Path, "/var/sloth")
-		// 		v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*9))
-		// 		return v.Error()
-		// 	},
-		// },
+		{
+			args: []string{"server", "--anti-entropy.interval", "9m0s"},
+			env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "example.com:1110,example.com:1111", "PILOSA_BIND": "example.com:1110"},
+			cfgFileContent: `
+		bind = "localhost:0"
+		data-dir = "` + actualDataDir + `"
+		[cluster]
+		  hosts = [
+		   "localhost:19444",
+		   ]
+		[plugins]
+		  path = "/var/sloth"
+		`,
+			validation: func() error {
+				v := validator{}
+				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:1110", "example.com:1111"})
+				v.Check(cmd.Server.Config.Plugins.Path, "/var/sloth")
+				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*9))
+				return v.Error()
+			},
+		},
 		// TEST 2
 		{
 			args: []string{"server", "--log-path", logFile.Name()},
