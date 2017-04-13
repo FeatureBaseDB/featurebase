@@ -381,7 +381,11 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 
 	// Set options.
-	if err := f.SetRowLabel(opt.RowLabel); err != nil {
+	if opt.RowLabel != "" {
+		f.rowLabel = opt.RowLabel
+	}
+	f.inverseEnabled = opt.InverseEnabled
+	if err := f.saveMeta(); err != nil {
 		f.Close()
 		return nil, err
 	}

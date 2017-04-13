@@ -237,8 +237,8 @@ func (v *View) ClearBit(bitmapID, profileID uint64) (changed bool, err error) {
 	return frag.ClearBit(bitmapID, profileID)
 }
 
-// IsViewInverted returns true if the view is used for storing an inverted representation.
-func IsViewInverted(name string) bool {
+// IsInverseView returns true if the view is used for storing an inverted representation.
+func IsInverseView(name string) bool {
 	return strings.HasPrefix(name, ViewInverse)
 }
 
