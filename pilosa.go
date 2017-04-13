@@ -16,11 +16,12 @@ var (
 	ErrDatabaseNotFound = errors.New("database not found")
 
 	// ErrFrameRequired is returned when no frame is specified.
-	ErrFrameRequired = errors.New("frame required")
-	ErrFrameExists   = errors.New("frame already exists")
-	ErrFrameNotFound = errors.New("frame not found")
+	ErrFrameRequired        = errors.New("frame required")
+	ErrFrameExists          = errors.New("frame already exists")
+	ErrFrameNotFound        = errors.New("frame not found")
+	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
 
-	ErrInvalidView = errors.New("invalid veiw")
+	ErrInvalidView = errors.New("invalid view")
 
 	ErrName = errors.New("invalid database or frame's name, must match [a-z0-9_-]")
 
