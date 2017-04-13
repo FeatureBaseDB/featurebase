@@ -86,8 +86,8 @@ on the configured port.`,
 	flags.StringVarP(&Server.Config.Cluster.MessengerType, "cluster.messenger-type", "", "static", "Type of Messenger to use for inter-host messaging. Choose from [static, broadcast, gossip]")
 	flags.StringVarP(&Server.Config.Cluster.Gossip.Seed, "cluster.gossip.seed", "", "", "Host with which to seed the gossip membership.")
 	flags.IntVarP(&Server.Config.Cluster.Gossip.Port, "cluster.gossip.port", "", 0, "Port to which pilosa should bind for gossip.")
-	flags.StringVarP(&Server.Config.Metric.Service, "metric.service", "", "noop", "Default URI on which pilosa should listen.")
-	flags.StringVarP(&Server.Config.Metric.Host, "metric.host", "", "", "Default URI to send metrics.")
+	flags.StringVarP(&Server.Config.Metric.Service, "metric.service", "", "statsd", "Default URI on which pilosa should listen.")
+	flags.StringVarP(&Server.Config.Metric.Host, "metric.host", "", "127.0.0.1:8125", "Default URI to send metrics.")
 
 	return serveCmd
 }

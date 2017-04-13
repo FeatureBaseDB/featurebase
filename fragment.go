@@ -935,7 +935,7 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			if err != nil {
 				return err
 			}
-
+			f.stats.Count("importBit", 1)
 			// import optimization to avoid linear foreach calls
 			// slight risk of concurrent cache counter being off but
 			// no real danger
