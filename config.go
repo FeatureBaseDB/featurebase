@@ -12,7 +12,7 @@ const (
 	DefaultPort          = "10101"
 	DefaultMessengerType = "static"
 	DefaultGossipPort    = "14000"
-	DefaultMetrics    	 = "noop"
+	DefaultMetrics       = "noop"
 )
 
 // Config represents the configuration for the command.
@@ -39,8 +39,9 @@ type Config struct {
 	LogPath string `toml:"log-path"`
 
 	Metric struct {
-		Service string `toml:"service"`
-		Host    string `toml:"host"`
+		Service         string   `toml:"service"`
+		Host            string   `toml:"host"`
+		PollingInterval Duration `toml:"interval"`
 	} `toml:"metrics"`
 }
 
