@@ -358,9 +358,10 @@ func (db *DB) CreateFrameIfNotExists(name string, opt FrameOptions) (*Frame, err
 }
 
 func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
-
 	if name == "" {
 		return nil, errors.New("frame name required")
+	} else if opt.CacheType != "" && !IsValidCacheType(opt.CacheType) {
+		return nil, ErrInvalidCacheType
 	}
 
 	// Initialize frame.
@@ -379,6 +380,12 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		f.Close()
 		return nil, err
 	}
+
+	// Set cache type.
+	if opt.CacheType == "" {
+		opt.CacheType = DefaultCacheType
+	}
+	f.cacheType = opt.CacheType
 
 	// Set options.
 	if opt.RowLabel != "" {

@@ -1219,10 +1219,6 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	for _, view := range views {
-		println("dbg/views", view)
-	}
-
 	// Loop over each slice and import it if this node owns it.
 	//travis
 	for slice := uint64(0); slice <= maxSlices[db]; slice++ {

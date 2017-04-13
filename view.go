@@ -31,6 +31,7 @@ type View struct {
 	name  string
 
 	// Fragments by slice.
+	cacheType string // passed in by frame
 	fragments map[uint64]*Fragment
 
 	stats StatsClient
@@ -47,6 +48,7 @@ func NewView(path, db, frame, name string) *View {
 		frame: frame,
 		name:  name,
 
+		cacheType: DefaultCacheType,
 		fragments: make(map[uint64]*Fragment),
 
 		stats:     NopStatsClient,
@@ -212,6 +214,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 
 func (v *View) newFragment(path string, slice uint64) *Fragment {
 	frag := NewFragment(path, v.db, v.frame, v.name, slice)
+	frag.cacheType = v.cacheType
 	frag.LogOutput = v.LogOutput
 	frag.stats = v.stats.WithTags(fmt.Sprintf("slice:%d", slice))
 	return frag

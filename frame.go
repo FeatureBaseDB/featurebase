@@ -15,14 +15,10 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-const (
-	// FrameSuffixRank is the suffix used for rank-based frames.
-	FrameSuffixRank = ".n"
-)
-
 // Default frame settings.
 const (
 	DefaultRowLabel       = "id"
+	DefaultCacheType      = CacheTypeLRU
 	DefaultInverseEnabled = false
 )
 
@@ -42,8 +38,9 @@ type Frame struct {
 	stats StatsClient
 
 	// Frame settings.
-	inverseEnabled bool
 	rowLabel       string
+	cacheType      string
+	inverseEnabled bool
 
 	LogOutput io.Writer
 }
@@ -65,8 +62,9 @@ func NewFrame(path, db, name string) (*Frame, error) {
 
 		stats: NopStatsClient,
 
-		inverseEnabled: DefaultInverseEnabled,
 		rowLabel:       DefaultRowLabel,
+		cacheType:      DefaultCacheType,
+		inverseEnabled: DefaultInverseEnabled,
 
 		LogOutput: ioutil.Discard,
 	}, nil
@@ -118,7 +116,6 @@ func (f *Frame) SetRowLabel(v string) error {
 		return nil
 	}
 
-
 	// Make sure rowLabel is valid name
 	err := ValidateName(v)
 	if err != nil {
@@ -142,6 +139,11 @@ func (f *Frame) RowLabel() string {
 	return v
 }
 
+// CacheType returns the caching mode for the frame.
+func (f *Frame) CacheType() string {
+	return f.cacheType
+}
+
 // InverseEnabled returns true if an inverse view is available.
 func (f *Frame) InverseEnabled() bool {
 	return f.inverseEnabled
@@ -151,8 +153,9 @@ func (f *Frame) InverseEnabled() bool {
 func (f *Frame) Options() FrameOptions {
 	f.mu.Lock()
 	opt := FrameOptions{
-		InverseEnabled: f.inverseEnabled,
 		RowLabel:       f.rowLabel,
+		CacheType:      f.cacheType,
+		InverseEnabled: f.inverseEnabled,
 	}
 	f.mu.Unlock()
 	return opt
@@ -230,6 +233,7 @@ func (f *Frame) loadMeta() error {
 	if os.IsNotExist(err) {
 		f.timeQuantum = ""
 		f.rowLabel = DefaultRowLabel
+		f.cacheType = DefaultCacheType
 		f.inverseEnabled = DefaultInverseEnabled
 		return nil
 	} else if err != nil {
@@ -245,6 +249,12 @@ func (f *Frame) loadMeta() error {
 	f.rowLabel = pb.RowLabel
 	f.inverseEnabled = pb.InverseEnabled
 
+	// Copy cache type.
+	f.cacheType = pb.CacheType
+	if f.cacheType == "" {
+		f.cacheType = DefaultCacheType
+	}
+
 	return nil
 }
 
@@ -254,6 +264,7 @@ func (f *Frame) saveMeta() error {
 	buf, err := proto.Marshal(&internal.Frame{
 		TimeQuantum:    string(f.timeQuantum),
 		RowLabel:       f.rowLabel,
+		CacheType:      f.cacheType,
 		InverseEnabled: f.inverseEnabled,
 	})
 	if err != nil {
@@ -366,6 +377,7 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 
 func (f *Frame) newView(path, name string) *View {
 	view := NewView(path, f.db, f.name, name)
+	view.cacheType = f.cacheType
 	view.LogOutput = f.LogOutput
 	view.BitmapAttrStore = f.bitmapAttrStore
 	view.stats = f.stats.WithTags(fmt.Sprintf("slice:%s", name))
@@ -546,6 +558,7 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
 	RowLabel       string `json:"rowLabel,omitempty"`
+	CacheType      string `json:"cacheType,omitempty"`
 	InverseEnabled bool   `json:"inverseEnabled,omitempty"`
 }
 
@@ -561,3 +574,19 @@ func (p importBitSet) Swap(i, j int) {
 }
 func (p importBitSet) Len() int           { return len(p.bitmapIDs) }
 func (p importBitSet) Less(i, j int) bool { return p.bitmapIDs[i] < p.bitmapIDs[j] }
+
+// Cache types.
+const (
+	CacheTypeLRU    = "lru"
+	CacheTypeRanked = "ranked"
+)
+
+// IsValidCacheType returns true if v is a valid cache type.
+func IsValidCacheType(v string) bool {
+	switch v {
+	case CacheTypeLRU, CacheTypeRanked:
+		return true
+	default:
+		return false
+	}
+}
