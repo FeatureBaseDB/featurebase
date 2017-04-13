@@ -88,6 +88,7 @@ on the configured port.`,
 	flags.IntVarP(&Server.Config.Cluster.Gossip.Port, "cluster.gossip.port", "", 0, "Port to which pilosa should bind for gossip.")
 	flags.StringVarP(&Server.Config.Metric.Service, "metric.service", "", "noop", "Default URI on which pilosa should listen.")
 	flags.StringVarP(&Server.Config.Metric.Host, "metric.host", "", "", "Default URI to send metrics.")
+	flags.DurationVarP((*time.Duration)(&Server.Config.Metric.PollingInterval), "metric.poll-interval", "", time.Minute*0, "Polling interval metrics.")
 
 	return serveCmd
 }

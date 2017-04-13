@@ -83,6 +83,8 @@ func (m *Command) Run(args ...string) (err error) {
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
 	m.Server.Index.Path = m.Config.DataDir
 	m.Server.Index.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollingInterval)
+
 	if err != nil {
 		return err
 	}
