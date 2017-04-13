@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"runtime"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -141,6 +143,7 @@ func (s *Server) Open() error {
 	s.wg.Add(2)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
+	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 
 	return nil
 }
@@ -285,4 +288,29 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	}
 
 	return pb.MaxSlices, nil
+}
+
+// monitorRuntime periodically polls the Go runtime metrics.
+func (s *Server) monitorRuntime() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	s.logger().Printf("runtime stats initializing (%s interval)", 10*time.Second)
+
+	for {
+		// Wait for tick or a close.
+		select {
+		case <-s.closing:
+			return
+		case <-ticker.C:
+		}
+
+		s.logger().Printf("runtime stats  beginning")
+
+		// TODO
+		s.Index.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()))
+
+		// Record successful sync in log.
+		s.logger().Printf("runtime stats  complete")
+	}
 }
