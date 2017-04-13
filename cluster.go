@@ -2,6 +2,7 @@ package pilosa
 
 import (
 	"encoding/binary"
+	"fmt"
 	"hash/fnv"
 
 	"github.com/gogo/protobuf/proto"
