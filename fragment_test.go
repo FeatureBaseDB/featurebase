@@ -280,7 +280,7 @@ func TestFragment_TopN_BitmapIDs(t *testing.T) {
 // Ensure the fragment cache limit works
 func TestFragment_TopN_CacheSize(t *testing.T) {
 	slice := uint64(0)
-	cacheLimit := 3
+	cacheLimit := uint32(3)
 	file, err := ioutil.TempFile("", "pilosa-fragment-")
 	if err != nil {
 		panic(err)
@@ -316,7 +316,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	// Retrieve top bitmaps.
 	if pairs, err := f.Top(pilosa.TopOptions{N: 5}); err != nil {
 		t.Fatal(err)
-	} else if len(pairs) > cacheLimit {
+	} else if len(pairs) > int(cacheLimit) {
 		t.Fatalf("TopN count cannot exceed cache size: %d", cacheLimit)
 	} else if pairs[0] != (pilosa.Pair{ID: 104, Count: 7}) {
 		t.Fatalf("unexpected pair(0): %v", pairs)

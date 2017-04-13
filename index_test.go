@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
 
@@ -163,6 +162,7 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	}
 }
 
+/* TODO: move this to messenger.go
 // Ensure index can handle Messenger messages.
 func TestIndex_HandleMessage(t *testing.T) {
 	// Create a local index.
@@ -188,6 +188,7 @@ func TestIndex_HandleMessage(t *testing.T) {
 		t.Fatalf("unexpected delete db: %s", ms)
 	}
 }
+*/
 
 // Index is a test wrapper for pilosa.Index.
 type Index struct {

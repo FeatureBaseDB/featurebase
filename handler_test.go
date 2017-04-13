@@ -794,6 +794,10 @@ func NewHandler() *Handler {
 	}
 	h.Handler.Executor = &h.Executor
 	h.Handler.LogOutput = ioutil.Discard
+
+	// Handler test messages can no-op.
+	h.Messenger = pilosa.NewMessenger()
+
 	return h
 }
 
@@ -824,6 +828,9 @@ func NewServer() *Server {
 
 	// Update handler to use hostname.
 	s.Handler.Host = s.Host()
+
+	// Handler test messages can no-op.
+	s.Handler.Messenger = pilosa.NewMessenger()
 
 	// Create a default cluster on the handler
 	s.Handler.Cluster = NewCluster(1)
@@ -871,72 +878,35 @@ func MustReadAll(r io.Reader) []byte {
 	return buf
 }
 
-type MessageBin struct {
-	Cluster         *pilosa.Cluster
-	messageReceived proto.Message
-}
-
-func NewMessageBin() *MessageBin {
-	return &MessageBin{}
-}
-
-func (m *MessageBin) messageHandler(pb proto.Message) error {
-	m.messageReceived = pb
-	return nil
-}
-
-func NewHTTPMessageBin(s *Server, nodes []*pilosa.Node) (*MessageBin, error) {
-	ns := pilosa.NewHTTPNodeSet()
-	mb := NewMessageBin()
-	ns.SetMessageHandler(mb.messageHandler)
-	c := pilosa.Cluster{
-		Nodes:   nodes,
-		NodeSet: ns,
-	}
-	mb.Cluster = &c
-	s.Handler.Cluster = &c
-	s.Handler.Messenger = ns
-
-	i, err := c.NodeSet.Join(c.Nodes)
-	if i != int(0) {
-		return nil, err
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return mb, nil
-}
+/*
+// TODO: move this test to messenger.go (with NewServer())
 
 // Ensure that an HTTP message sent to the cluster reaches all nodes.
 func TestHTTPNodeSet_Base(t *testing.T) {
 
 	// servers
 	s1 := NewServer()
+	s1.Messenger = pilosa.NewMessenger()
+	n1 := NewHTTPMessageBroker()
+	n1.messenger = s1.Messenger
+	s1.Messenger.Broker = n1
+
 	s2 := NewServer()
+	s2.Messenger = pilosa.NewMessenger()
+	n2 := NewHTTPMessageBroker()
+	n2.messenger = s2.Messenger
+	s2.Messenger.Broker = n2
+
 	s3 := NewServer()
+	s3.Messenger = pilosa.NewMessenger()
+	n3 := NewHTTPMessageBroker()
+	n3.messenger = s3.Messenger
+	s3.Messenger.Broker = n3
+
 	nodes := []*pilosa.Node{
 		{Host: s1.Host()},
 		{Host: s2.Host()},
 		{Host: s3.Host()},
-	}
-
-	// node 1
-	mb1, err := NewHTTPMessageBin(s1, nodes)
-	if err != nil {
-		t.Fatalf("unable to create message bin: %s", err)
-	}
-
-	// node2
-	mb2, err := NewHTTPMessageBin(s2, nodes)
-	if err != nil {
-		t.Fatalf("unable to create message bin: %s", err)
-	}
-
-	// node3
-	mb3, err := NewHTTPMessageBin(s3, nodes)
-	if err != nil {
-		t.Fatalf("unable to create message bin: %s", err)
 	}
 
 	// message
@@ -946,7 +916,7 @@ func TestHTTPNodeSet_Base(t *testing.T) {
 	}
 
 	// send message
-	if err := mb1.Cluster.NodeSet.(pilosa.Messenger).SendMessage(msg, ""); err != nil {
+	if err := s1.Messenger.SendMessage(msg, ""); err != nil {
 		t.Fatalf("failure sending message: %s", err)
 	}
 
@@ -960,3 +930,4 @@ func TestHTTPNodeSet_Base(t *testing.T) {
 		t.Fatalf("unexpected message received by node3: %s", mb3.messageReceived)
 	}
 }
+*/

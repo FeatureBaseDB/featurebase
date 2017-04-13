@@ -1,15 +1,8 @@
 package pilosa
 
 import (
-	"bytes"
 	"encoding/binary"
-	"fmt"
 	"hash/fnv"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/gogo/protobuf/proto"
 )
@@ -208,25 +201,13 @@ func (c *Cluster) PartitionNodes(partitionID int) []*Node {
 	return nodes
 }
 
-// NodeSet represents an interface to maintaining Node state.
+// NodeSet represents an interface for Node membership and inter-node communication.
 type NodeSet interface {
 	// Returns a list of all Nodes in the cluster
 	Nodes() []*Node
 
-	// Attempts to join a cluster having `nodes` as its existing members
-	Join(nodes []*Node) (int, error)
-
 	// Open starts any network activity implemented by the NodeSet
 	Open() error
-
-	// SetMessageHandler provides the NodeSet with a function to call on ReceiveMessage
-	SetMessageHandler(f func(proto.Message) error)
-
-	// SetRemoteStateHandler provides the function to call on MergeRemoteState
-	SetRemoteStateHandler(f func(proto.Message) error)
-
-	// SetLocalStateSource provides the function to get the current node's local state.
-	SetLocalStateSource(f func() (proto.Message, error))
 }
 
 // Hasher represents an interface to hash integers into buckets.
@@ -254,11 +235,7 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 
 // HTTPNodeSet represents a NodeSet that broadcasts messages over HTTP.
 type HTTPNodeSet struct {
-	nodes          []*Node
-	localNode      *Node // TODO: this needs to be set somewhere
-	messageHandler func(m proto.Message) error
-	// remoteStateHandler func(m proto.Message) error
-	// localStateSource   func() (proto.Message, error)
+	nodes []*Node
 }
 
 // NewHTTPNodeSet returns a new instance of HTTPNodeSet.
@@ -270,101 +247,13 @@ func (h *HTTPNodeSet) Nodes() []*Node {
 	return h.nodes
 }
 
-func (h *HTTPNodeSet) Join(nodes []*Node) (int, error) {
-	h.nodes = nodes
-	return 0, nil
-}
-
 func (h *HTTPNodeSet) Open() error {
 	return nil
 }
 
-// SendMessage asyncronously broadcasts a protobuf message to all nodes.
-func (h *HTTPNodeSet) SendMessage(pb proto.Message, method string) error {
-
-	// Marshal the pb to []byte
-	buf, err := MarshalMessage(pb)
-	if err != nil {
-		return err
-	}
-
-	var g errgroup.Group
-	for _, n := range h.nodes {
-		// Don't send the message to the local node.
-		if n == h.localNode {
-			continue
-		}
-		node := n
-		g.Go(func() error {
-			return h.sendNodeMessage(node, buf)
-		})
-	}
-	return g.Wait()
-}
-
-// ReceiveMessage is called when a node receives a message.
-func (h *HTTPNodeSet) ReceiveMessage(pb proto.Message) error {
-	if h.messageHandler != nil {
-		return h.messageHandler(pb)
-	}
-	// The messageHandler has not been set.
+func (h *HTTPNodeSet) Join(nodes []*Node) error {
+	h.nodes = nodes
 	return nil
-}
-
-func (h *HTTPNodeSet) sendNodeMessage(node *Node, msg []byte) error {
-	var client *http.Client
-	client = http.DefaultClient
-
-	// Create HTTP request.
-	req, err := http.NewRequest("POST", (&url.URL{
-		Scheme: "http",
-		Host:   node.Host,
-		Path:   "/message",
-	}).String(), bytes.NewReader(msg))
-	if err != nil {
-		return err
-	}
-
-	// Require protobuf encoding.
-	req.Header.Set("Content-Type", "application/x-protobuf")
-
-	// Send request to remote node.
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Read response into buffer.
-	body, err := ioutil.ReadAll(resp.Body)
-
-	if err != nil {
-		return err
-	}
-
-	// Check status code.
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
-	}
-
-	return nil
-}
-
-// SetMessageHandler provides the Messenger with a function to handle incoming messages.
-func (h *HTTPNodeSet) SetMessageHandler(f func(proto.Message) error) {
-	h.messageHandler = f
-}
-
-// SetRemoteStateHandler provides the Messenger with a function to merge remote state.
-func (h *HTTPNodeSet) SetRemoteStateHandler(f func(proto.Message) error) {
-	// not implemented
-	// h.remoteStateHandler = f
-}
-
-// SetLocalStateSource currently no-ops.
-func (h *HTTPNodeSet) SetLocalStateSource(f func() (proto.Message, error)) {
-	// not implemented
-	// h.localStateSource = f
 }
 
 // StaticNodeSet represents a basic NodeSet for testing
@@ -379,11 +268,6 @@ func NewStaticNodeSet() *StaticNodeSet {
 
 func (s *StaticNodeSet) Nodes() []*Node {
 	return s.nodes
-}
-
-func (s *StaticNodeSet) Join(nodes []*Node) (int, error) {
-	s.nodes = nodes
-	return 0, nil
 }
 
 func (s *StaticNodeSet) Open() error {

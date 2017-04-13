@@ -29,8 +29,5 @@ import:
   version: ^1.1.0
 - package: github.com/spf13/cobra
 - package: github.com/spf13/viper
-- package: github.com/aws/aws-sdk-go
-  version: ^1.6.10
 - package: github.com/hashicorp/memberlist
 - package: golang.org/x/sync
-- package: golang.org/x/net
