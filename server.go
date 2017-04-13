@@ -15,6 +15,7 @@ import (
 
 	"runtime"
 
+	"github.com/CAFxX/gcnotifier"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -46,6 +47,7 @@ type Server struct {
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
 	PollingInterval     time.Duration
+	MetricInterval      time.Duration
 
 	LogOutput io.Writer
 }
@@ -61,6 +63,7 @@ func NewServer() *Server {
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
+		MetricInterval:      0,
 
 		LogOutput: os.Stderr,
 	}
@@ -292,16 +295,23 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 
 // monitorRuntime periodically polls the Go runtime metrics.
 func (s *Server) monitorRuntime() {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(s.MetricInterval)
 	defer ticker.Stop()
 
-	s.logger().Printf("runtime stats initializing (%s interval)", 10*time.Second)
+	gcn := gcnotifier.New()
+	defer gcn.Close()
+
+	s.logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
 
 	for {
 		// Wait for tick or a close.
 		select {
 		case <-s.closing:
 			return
+		case <-gcn.AfterGC():
+			// GC just ran
+			s.Index.Stats.Count("garbage_collection", 1)
+			s.logger().Printf("garbage collection complete")
 		case <-ticker.C:
 		}
 
