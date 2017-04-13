@@ -32,16 +32,16 @@ func TestServerConfig(t *testing.T) {
 			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "example.com:10111,example.com:10110", "--bind", "example.com:10111"},
 			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER.POLL_INTERVAL": "3m2s"},
 			cfgFileContent: `
-		data-dir = "/tmp/myFileDatadir"
-		bind = "localhost:0"
+data-dir = "/tmp/myFileDatadir"
+bind = "localhost:0"
 
-		[cluster]
-		  poll-interval = "45s"
-		  replicas = 2
-		  hosts = [
-		   "localhost:19444",
-		   ]
-		`,
+[cluster]
+	poll-interval = "45s"
+	replicas = 2
+	hosts = [
+	"localhost:19444",
+	]
+`,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.DataDir, actualDataDir)
@@ -57,15 +57,15 @@ func TestServerConfig(t *testing.T) {
 			args: []string{"server", "--anti-entropy.interval", "9m0s"},
 			env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "example.com:1110,example.com:1111", "PILOSA_BIND": "example.com:1110"},
 			cfgFileContent: `
-		bind = "localhost:0"
-		data-dir = "` + actualDataDir + `"
-		[cluster]
-		  hosts = [
-		   "localhost:19444",
-		   ]
-		[plugins]
-		  path = "/var/sloth"
-		`,
+bind = "localhost:0"
+data-dir = "` + actualDataDir + `"
+[cluster]
+	hosts = [
+	"localhost:19444",
+	]
+[plugins]
+	path = "/var/sloth"
+`,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:1110", "example.com:1111"})
@@ -79,22 +79,22 @@ func TestServerConfig(t *testing.T) {
 			args: []string{"server", "--log-path", logFile.Name()},
 			env:  map[string]string{"PILOSA_PROFILE.CPU_TIME": "1m"},
 			cfgFileContent: `
-	bind = "localhost:19444"
-	data-dir = "` + actualDataDir + `"
-	[cluster]
-	  poll-interval = "2m0s"
-	  hosts = [
-	   "localhost:19444",
-	   ]
-	[anti-entropy]
-	  interval = "11m0s"
-	[profile]
-	  cpu = "` + profFile.Name() + `"
-	  cpu-time = "35s"
-	[metric]
-  	  service = "statsd"
-      host = "127.0.0.1:8125"
-	`,
+bind = "localhost:19444"
+data-dir = "` + actualDataDir + `"
+[cluster]
+	poll-interval = "2m0s"
+	hosts = [
+	"localhost:19444",
+	]
+[anti-entropy]
+	interval = "11m0s"
+[profile]
+	cpu = "` + profFile.Name() + `"
+	cpu-time = "35s"
+[metric]
+	service = "statsd"
+	host = "127.0.0.1:8125"
+`,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"localhost:19444"})
