@@ -23,6 +23,10 @@ type GossipNodeSet struct {
 	LogOutput io.Writer
 }
 
+func (g *GossipNodeSet) AttachBroker(mb *GossipMessageBroker) {
+	g.config.memberlistConfig.Delegate = mb
+}
+
 func (g *GossipNodeSet) Nodes() []*Node {
 	a := make([]*Node, 0, g.memberlist.NumMembers())
 	for _, n := range g.memberlist.Members() {
@@ -196,9 +200,10 @@ func (g *GossipMessageBroker) logger() *log.Logger {
 ////////////////////////////////////////////////////////////////
 
 // NewGossipMessageBroker returns a new instance of GossipMessageBroker.
-func NewGossipMessageBroker() *GossipMessageBroker {
+func NewGossipMessageBroker(m *Messenger) *GossipMessageBroker {
 	g := &GossipMessageBroker{
 		LogOutput: os.Stderr,
+		messenger: m,
 	}
 
 	g.broadcasts = &memberlist.TransmitLimitedQueue{

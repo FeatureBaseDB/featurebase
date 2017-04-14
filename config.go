@@ -1,10 +1,6 @@
 package pilosa
 
-import (
-	"net"
-	"strconv"
-	"time"
-)
+import "time"
 
 const (
 	// DefaultHost is the default hostname and port to use.
@@ -64,79 +60,6 @@ func NewConfigForHosts(hosts []string) *Config {
 		conf.Cluster.Nodes = append(conf.Cluster.Nodes, hostport)
 	}
 	return conf
-}
-
-// PilosaMessenger returns a new instance of Messenger based on the config.
-func (c *Config) PilosaMessenger() *Messenger {
-	messenger := NewMessenger()
-	switch c.Cluster.MessengerType {
-	case "broadcast":
-		n := NewHTTPMessageBroker()
-		n.messenger = messenger
-		messenger.Broker = n
-	case "gossip":
-		n := NewGossipMessageBroker()
-		n.messenger = messenger
-		messenger.Broker = n
-	case "static":
-		// nop
-	}
-	return messenger
-}
-
-// PilosaCluster returns a new instance of Cluster based on the config.
-func (c *Config) PilosaCluster() *Cluster {
-	cluster := NewCluster()
-	cluster.ReplicaN = c.Cluster.ReplicaN
-
-	for _, hostport := range c.Cluster.Nodes {
-		cluster.Nodes = append(cluster.Nodes, &Node{Host: hostport})
-	}
-
-	// Setup a Broadcast (over HTTP) or Gossip NodeSet based on config.
-	switch c.Cluster.MessengerType {
-	case "broadcast":
-		cluster.NodeSet = NewHTTPNodeSet()
-		cluster.NodeSet.(*HTTPNodeSet).Join(cluster.Nodes)
-	case "gossip":
-		gport, err := strconv.Atoi(DefaultGossipPort)
-		if err != nil {
-			// what?
-		}
-		gossipPort := gport
-		gossipSeed := DefaultHost
-		if c.Cluster.Gossip.Port != 0 {
-			gossipPort = c.Cluster.Gossip.Port
-		}
-		if c.Cluster.Gossip.Seed != "" {
-			gossipSeed = c.Cluster.Gossip.Seed
-		}
-		// get the host portion of addr to use for binding
-		gossipHost, _, err := net.SplitHostPort(c.Host)
-		if err != nil {
-			gossipHost = c.Host
-		}
-		cluster.NodeSet = NewGossipNodeSet(c.Host, gossipHost, gossipPort, gossipSeed)
-	case "static":
-		cluster.NodeSet = NewStaticNodeSet()
-	default:
-		cluster.NodeSet = NewStaticNodeSet()
-	}
-
-	return cluster
-}
-
-// AssociateMessageBroker allows an implementation to associate objects to the MessageBroker
-// after cluster configuration.
-func (c *Config) AssociateMessageBroker(s *Server) {
-	switch c.Cluster.MessengerType {
-	case "broadcast":
-		// nop
-	case "gossip":
-		s.Cluster.NodeSet.(*GossipNodeSet).config.memberlistConfig.Delegate = s.Messenger.Broker.(*GossipMessageBroker)
-	case "static":
-		// nop
-	}
 }
 
 // Duration is a TOML wrapper type for time.Duration.

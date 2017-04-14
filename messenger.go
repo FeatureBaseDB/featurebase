@@ -175,8 +175,8 @@ type HTTPMessageBroker struct {
 }
 
 // NewHTTPMessageBroker returns a new instance of HTTPMessageBroker.
-func NewHTTPMessageBroker() *HTTPMessageBroker {
-	return &HTTPMessageBroker{}
+func NewHTTPMessageBroker(m *Messenger) *HTTPMessageBroker {
+	return &HTTPMessageBroker{messenger: m}
 }
 
 // Send sends a protobuf message to all nodes simultaneously.

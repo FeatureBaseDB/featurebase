@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -92,11 +94,11 @@ func (m *Command) Run(args ...string) (err error) {
 	if err != nil {
 		return err
 	}
-	m.Server.Messenger = m.Config.PilosaMessenger()
-	m.Server.Cluster = m.Config.PilosaCluster()
+	m.Server.Messenger = PilosaMessenger(m.Config)
+	m.Server.Cluster = PilosaCluster(m.Config)
 
 	// Associate objects to the MessageBroker based on config.
-	m.Config.AssociateMessageBroker(m.Server)
+	AssociateMessageBroker(m.Server, m.Config)
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
@@ -107,6 +109,77 @@ func (m *Command) Run(args ...string) (err error) {
 	}
 	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Server.Host)
 	return nil
+}
+
+// PilosaMessenger returns a new instance of Messenger based on the config.
+func PilosaMessenger(c *pilosa.Config) *pilosa.Messenger {
+	messenger := pilosa.NewMessenger()
+	switch c.Cluster.MessengerType {
+	case "broadcast":
+		n := pilosa.NewHTTPMessageBroker(messenger)
+		messenger.Broker = n
+	case "gossip":
+		n := pilosa.NewGossipMessageBroker(messenger)
+		messenger.Broker = n
+	case "static":
+		// nop
+	}
+	return messenger
+}
+
+// PilosaCluster returns a new instance of Cluster based on the config.
+func PilosaCluster(c *pilosa.Config) *pilosa.Cluster {
+	cluster := pilosa.NewCluster()
+	cluster.ReplicaN = c.Cluster.ReplicaN
+
+	for _, hostport := range c.Cluster.Nodes {
+		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
+	}
+
+	// Setup a Broadcast (over HTTP) or Gossip NodeSet based on config.
+	switch c.Cluster.MessengerType {
+	case "broadcast":
+		cluster.NodeSet = pilosa.NewHTTPNodeSet()
+		cluster.NodeSet.(*pilosa.HTTPNodeSet).Join(cluster.Nodes)
+	case "gossip":
+		gport, err := strconv.Atoi(pilosa.DefaultGossipPort)
+		if err != nil {
+			// what?
+		}
+		gossipPort := gport
+		gossipSeed := pilosa.DefaultHost
+		if c.Cluster.Gossip.Port != 0 {
+			gossipPort = c.Cluster.Gossip.Port
+		}
+		if c.Cluster.Gossip.Seed != "" {
+			gossipSeed = c.Cluster.Gossip.Seed
+		}
+		// get the host portion of addr to use for binding
+		gossipHost, _, err := net.SplitHostPort(c.Host)
+		if err != nil {
+			gossipHost = c.Host
+		}
+		cluster.NodeSet = pilosa.NewGossipNodeSet(c.Host, gossipHost, gossipPort, gossipSeed)
+	case "static":
+		cluster.NodeSet = pilosa.NewStaticNodeSet()
+	default:
+		cluster.NodeSet = pilosa.NewStaticNodeSet()
+	}
+
+	return cluster
+}
+
+// AssociateMessageBroker allows an implementation to associate objects to the MessageBroker
+// after cluster configuration.
+func AssociateMessageBroker(s *pilosa.Server, c *pilosa.Config) {
+	switch c.Cluster.MessengerType {
+	case "broadcast":
+		// nop
+	case "gossip":
+		s.Cluster.NodeSet.(*pilosa.GossipNodeSet).AttachBroker(s.Messenger.Broker.(*pilosa.GossipMessageBroker))
+	case "static":
+		// nop
+	}
 }
 
 func normalizeHost(host string) (string, error) {
