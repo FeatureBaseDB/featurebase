@@ -138,10 +138,6 @@ func (g *GossipMessageBroker) Receive(pb proto.Message) error {
 	return nil
 }
 
-func (g *GossipMessageBroker) SetMessenger(m *Messenger) {
-	g.messenger = m
-}
-
 // implementation of the memberlist.Delegate interface
 func (g *GossipMessageBroker) NodeMeta(limit int) []byte {
 	return []byte{}

@@ -145,7 +145,6 @@ func (m *Messenger) mergeRemoteState(ns *internal.NodeState) error {
 type MessageBroker interface {
 	Send(pb proto.Message, method string) error
 	Receive(pb proto.Message) error
-	SetMessenger(m *Messenger)
 }
 
 //////////////////////////////////////////////////////////////////
@@ -167,7 +166,6 @@ func (c *nopMessageBroker) Receive(pb proto.Message) error {
 	fmt.Println("NOPMessageBroker: Receive")
 	return nil
 }
-func (c *nopMessageBroker) SetMessenger(m *Messenger) {}
 
 //////////////////////////////////////////////////////////////////
 
@@ -216,8 +214,6 @@ func (h *HTTPMessageBroker) Receive(pb proto.Message) error {
 	}
 	return nil
 }
-
-func (h *HTTPMessageBroker) SetMessenger(m *Messenger) {}
 
 func (h *HTTPMessageBroker) nodes() ([]*Node, error) {
 	if h.messenger == nil {
