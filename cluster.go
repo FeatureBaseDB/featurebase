@@ -264,18 +264,6 @@ func (s *StaticNodeSet) Open() error {
 	return nil
 }
 
-func (s *StaticNodeSet) SetMessageHandler(f func(proto.Message) error) {
-	return
-}
-
-func (s *StaticNodeSet) SetRemoteStateHandler(f func(proto.Message) error) {
-	return
-}
-
-func (s *StaticNodeSet) SetLocalStateSource(f func() (proto.Message, error)) {
-	return
-}
-
 func (s *StaticNodeSet) SendMessage(pb proto.Message, method string) error {
 	return nil
 }
