@@ -121,7 +121,7 @@ func (c *Cluster) NodeSetHosts() []string {
 	return a
 }
 
-// Health returns a list of nodes in the cluster along with each node's state (UP/DOWN).
+// Health returns a map of nodes in the cluster with each node's state (UP/DOWN) as the value.
 func (c *Cluster) Health() map[string]string {
 	h := make(map[string]string)
 	for _, n := range c.Nodes {
