@@ -100,8 +100,6 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 		return e.executeClearBit(ctx, db, c, opt)
 	case "Count":
 		return e.executeCount(ctx, db, c, slices, opt)
-	case "Profile":
-		return e.executeProfile(ctx, db, c, opt)
 	case "SetBit":
 		return e.executeSetBit(ctx, db, c, opt)
 	case "SetBitmapAttrs":
@@ -156,21 +154,32 @@ func (e *Executor) executeBitmapCall(ctx context.Context, db string, c *pql.Call
 		return nil, err
 	}
 
-	// Attach bitmap attributes for Bitmap() calls.
+	// Attach attributes for Bitmap() calls.
+	// If the column label is used then return profile attributes.
+	// If the row label is used then return bitmap attributes.
 	bm, _ := other.(*Bitmap)
 	if c.Name == "Bitmap" {
-		frame, _ := c.Args["frame"].(string)
-
-		fr := e.Index.Frame(db, frame)
-		if fr != nil {
-			rowLabel := fr.RowLabel()
-			rowID, _ := c.Args[rowLabel].(uint64)
-
-			attrs, err := fr.BitmapAttrStore().Attrs(rowID)
-			if err != nil {
-				return nil, err
+		d := e.Index.DB(db)
+		if d != nil {
+			columnLabel := d.ColumnLabel()
+			if columnID, ok := c.Args[columnLabel].(uint64); ok {
+				attrs, err := d.ProfileAttrStore().Attrs(columnID)
+				if err != nil {
+					return nil, err
+				}
+				bm.Attrs = attrs
+			} else {
+				frame, _ := c.Args["frame"].(string)
+				if fr := d.Frame(frame); fr != nil {
+					rowLabel := fr.RowLabel()
+					rowID, _ := c.Args[rowLabel].(uint64)
+					attrs, err := fr.BitmapAttrStore().Attrs(rowID)
+					if err != nil {
+						return nil, err
+					}
+					bm.Attrs = attrs
+				}
 			}
-			bm.Attrs = attrs
 		}
 	}
 
@@ -330,27 +339,47 @@ func (e *Executor) executeDifferenceSlice(ctx context.Context, db string, c *pql
 }
 
 func (e *Executor) executeBitmapSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (*Bitmap, error) {
+	// Fetch column label from database.
+	d := e.Index.DB(db)
+	if d == nil {
+		return nil, ErrDatabaseNotFound
+	}
+	columnLabel := d.ColumnLabel()
+
+	// Fetch frame & row label based on argument.
 	frame, _ := c.Args["frame"].(string)
 	if frame == "" {
 		frame = DefaultFrame
 	}
-
 	f := e.Index.Frame(db, frame)
 	if f == nil {
 		return nil, ErrFrameNotFound
 	}
 	rowLabel := f.RowLabel()
 
-	rowID, ok := c.Args[rowLabel].(uint64)
-	if !ok {
-		return nil, fmt.Errorf("Bitmap() field required: %s", rowLabel)
+	// Return an error if both the row and column label are specified.
+	rowID, rowOK := c.Args[rowLabel].(uint64)
+	columnID, columnOK := c.Args[columnLabel].(uint64)
+	if rowOK && columnOK {
+		return nil, fmt.Errorf("Bitmap() cannot specify both %s and %s values", rowLabel, columnLabel)
+	} else if !rowOK && !columnOK {
+		return nil, fmt.Errorf("Bitmap() must specify either %s or %s values", rowLabel, columnLabel)
 	}
 
-	frag := e.Index.Fragment(db, frame, ViewStandard, slice)
+	// Determine row or column orientation.
+	view, id := ViewStandard, rowID
+	if columnOK {
+		view, id = ViewInverse, columnID
+		if !f.InverseEnabled() {
+			return nil, fmt.Errorf("Bitmap() cannot retrieve columns unless inverse storage enabled")
+		}
+	}
+
+	frag := e.Index.Fragment(db, frame, view, slice)
 	if frag == nil {
 		return NewBitmap(), nil
 	}
-	return frag.Bitmap(rowID), nil
+	return frag.Bitmap(id), nil
 }
 
 // executeIntersectSlice executes a intersect() call for a local slice.
@@ -480,12 +509,6 @@ func (e *Executor) executeCount(ctx context.Context, db string, c *pql.Call, sli
 	n, _ := result.(uint64)
 
 	return n, nil
-}
-
-// executeProfile executes a Profile() call.
-// This call only executes locally since the profile attibutes are stored locally.
-func (e *Executor) executeProfile(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) (*Profile, error) {
-	panic("FIXME: impl: e.Index.ProfileAttr(c.ID)")
 }
 
 // executeClearBit executes a ClearBit() call.
@@ -1165,7 +1188,7 @@ func needsSlices(calls []*pql.Call) bool {
 	}
 	for _, call := range calls {
 		switch call.Name {
-		case "ClearBit", "Profile", "SetBit", "SetBitmapAttrs", "SetProfileAttrs":
+		case "ClearBit", "SetBit", "SetBitmapAttrs", "SetProfileAttrs":
 			continue
 		case "Count", "TopN":
 			return true
