@@ -2,17 +2,6 @@ syntax = "proto3";
 
 package internal;
 
-message DB {
-	string TimeQuantum = 1;
-	string ColumnLabel = 2;
-}
-
-message Frame {
-	string TimeQuantum = 1;
-	string RowLabel = 2;
-	bool InverseEnabled = 3;
-}
-
 message Bitmap {
 	repeated uint64 Bits = 1;
 	repeated Attr Attrs = 2;
@@ -44,7 +33,7 @@ message Attr {
 }
 
 message AttrMap {
-	repeated Attr Attrs = 1;
+    repeated Attr Attrs = 1;
 }
 
 message QueryRequest {
@@ -77,29 +66,3 @@ message ImportRequest {
 	repeated uint64 ProfileIDs = 5;
 	repeated int64 Timestamps = 6;
 }
-
-message ImportResponse {
-	string Err = 1;
-}
-
-message BlockDataRequest {
-	string DB = 1;
-	string Frame = 2;
-	string View = 5;
-	uint64 Slice = 4;
-	uint64 Block = 3;
-}
-
-message BlockDataResponse {
-	repeated uint64 BitmapIDs = 1;
-	repeated uint64 ProfileIDs = 2;
-}
-
-message Cache {
-	repeated uint64 BitmapIDs = 1;
-}
-
-message MaxSlicesResponse {
-    map<string, uint64> MaxSlices = 1;
-}
-
