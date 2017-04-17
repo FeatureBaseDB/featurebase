@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -13,18 +14,20 @@ import (
 )
 
 // GossipNodeSet represents a gossip implementation of NodeSet using memberlist
+// GossipNodeSet also represents a gossip implementation of pilosa.Broadcaster
 // GossipNodeSet also represents an implementation of memberlist.Delegate
 type GossipNodeSet struct {
 	memberlist *memberlist.Memberlist
+	handler    BroadcastHandler
+
+	broadcasts *memberlist.TransmitLimitedQueue
+
+	server *Server
 
 	config *GossipConfig
 
 	// The writer for any logging.
 	LogOutput io.Writer
-}
-
-func (g *GossipNodeSet) AttachBroadcaster(mb *GossipBroadcaster) {
-	g.config.memberlistConfig.Delegate = mb
 }
 
 func (g *GossipNodeSet) Nodes() []*Node {
@@ -35,7 +38,15 @@ func (g *GossipNodeSet) Nodes() []*Node {
 	return a
 }
 
+func (g *GossipNodeSet) Start(h BroadcastHandler) error {
+	g.handler = h
+	return nil
+}
+
 func (g *GossipNodeSet) Open() error {
+	if g.handler == nil {
+		return fmt.Errorf("opening GossipNodeSet: you must call Start(pilosa.BroadcastHandler) before calling Open()")
+	}
 	ml, err := memberlist.Create(g.config.memberlistConfig)
 	if err != nil {
 		return err
@@ -47,6 +58,12 @@ func (g *GossipNodeSet) Open() error {
 	_, err = g.memberlist.Join(Nodes(nodes).Hosts())
 	if err != nil {
 		return err
+	}
+	g.broadcasts = &memberlist.TransmitLimitedQueue{
+		NumNodes: func() int {
+			return ml.NumMembers()
+		},
+		RetransmitMult: 3,
 	}
 	return nil
 }
@@ -64,7 +81,7 @@ type GossipConfig struct {
 }
 
 // NewGossipNodeSet returns a new instance of GossipNodeSet.
-func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string) *GossipNodeSet {
+func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, s *Server) *GossipNodeSet {
 	g := &GossipNodeSet{
 		LogOutput: os.Stderr,
 	}
@@ -79,25 +96,15 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	g.config.memberlistConfig.BindPort = gossipPort
 	g.config.memberlistConfig.AdvertiseAddr = gossipHost
 	g.config.memberlistConfig.AdvertisePort = gossipPort
+	g.config.memberlistConfig.Delegate = g
+
+	g.server = s
 
 	return g
 }
 
-////////////////////////////////////////////////////////////////
-
-// GossipBroadcaster represents a gossip implementation of pilosa.Broadcaster
-// GossipBroadcaster also represents an implementation of memberlist.Delegate
-type GossipBroadcaster struct {
-	broadcasts *memberlist.TransmitLimitedQueue
-
-	server *Server
-
-	// The writer for any logging.
-	LogOutput io.Writer
-}
-
 // SendSync implementation of the Broadcaster interface
-func (g *GossipBroadcaster) SendSync(pb proto.Message) error {
+func (g *GossipNodeSet) SendSync(pb proto.Message) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
 		return err
@@ -125,7 +132,7 @@ func (g *GossipBroadcaster) SendSync(pb proto.Message) error {
 }
 
 // SendAsync implementation of the Broadcaster interface
-func (g *GossipBroadcaster) SendAsync(pb proto.Message) error {
+func (g *GossipNodeSet) SendAsync(pb proto.Message) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
 		return err
@@ -139,19 +146,19 @@ func (g *GossipBroadcaster) SendAsync(pb proto.Message) error {
 	return nil
 }
 
-func (g *GossipBroadcaster) Receive(pb proto.Message) error {
-	if err := g.server.ReceiveMessage(pb); err != nil {
+func (g *GossipNodeSet) Receive(pb proto.Message) error {
+	if err := g.handler.ReceiveMessage(pb); err != nil {
 		return err
 	}
 	return nil
 }
 
 // implementation of the memberlist.Delegate interface
-func (g *GossipBroadcaster) NodeMeta(limit int) []byte {
+func (g *GossipNodeSet) NodeMeta(limit int) []byte {
 	return []byte{}
 }
 
-func (g *GossipBroadcaster) NotifyMsg(b []byte) {
+func (g *GossipNodeSet) NotifyMsg(b []byte) {
 	m, err := UnmarshalMessage(b)
 	if err != nil {
 		g.logger().Printf("unmarshal message error: %s", err)
@@ -163,11 +170,11 @@ func (g *GossipBroadcaster) NotifyMsg(b []byte) {
 	}
 }
 
-func (g *GossipBroadcaster) GetBroadcasts(overhead, limit int) [][]byte {
+func (g *GossipNodeSet) GetBroadcasts(overhead, limit int) [][]byte {
 	return g.broadcasts.GetBroadcasts(overhead, limit)
 }
 
-func (g *GossipBroadcaster) LocalState(join bool) []byte {
+func (g *GossipNodeSet) LocalState(join bool) []byte {
 	pb, err := g.server.LocalState()
 	if err != nil {
 		g.logger().Printf("error getting local state, err=%s", err)
@@ -183,7 +190,7 @@ func (g *GossipBroadcaster) LocalState(join bool) []byte {
 	return buf
 }
 
-func (g *GossipBroadcaster) MergeRemoteState(buf []byte, join bool) {
+func (g *GossipNodeSet) MergeRemoteState(buf []byte, join bool) {
 	// Unmarshal nodestate data.
 	var pb internal.NodeState
 	if err := proto.Unmarshal(buf, &pb); err != nil {
@@ -195,32 +202,6 @@ func (g *GossipBroadcaster) MergeRemoteState(buf []byte, join bool) {
 		g.logger().Printf("merge state error: %s", err)
 	}
 }
-
-// logger returns a logger for the GossipBroadcaster
-func (g *GossipBroadcaster) logger() *log.Logger {
-	return log.New(g.LogOutput, "", log.LstdFlags)
-}
-
-////////////////////////////////////////////////////////////////
-
-// NewGossipBroadcaster returns a new instance of GossipBroadcaster.
-func NewGossipBroadcaster(s *Server) *GossipBroadcaster {
-	g := &GossipBroadcaster{
-		LogOutput: os.Stderr,
-		server:    s,
-	}
-
-	g.broadcasts = &memberlist.TransmitLimitedQueue{
-		NumNodes: func() int {
-			return g.server.Cluster.NodeSet.(*GossipNodeSet).memberlist.NumMembers()
-		},
-		RetransmitMult: 3,
-	}
-
-	return g
-}
-
-////////////////////////////////////////////////////////////////
 
 // broadcast represents an implementation of memberlist.Broadcast
 type broadcast struct {

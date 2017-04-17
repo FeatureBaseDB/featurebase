@@ -192,36 +192,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handlePostMessage handles /message requests.
-func (h *Handler) handlePostMessage(w http.ResponseWriter, r *http.Request) {
-	// Verify that request is only communicating over protobufs.
-	if r.Header.Get("Content-Type") != "application/x-protobuf" {
-		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
-		return
-	}
-
-	// Read entire body.
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Unmarshal message to specific proto type.
-	m, err := UnmarshalMessage(body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := h.Server.ReceiveMessage(m); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	return
-}
-
 func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
 	var ms map[string]uint64
 	if inverse, _ := strconv.ParseBool(r.URL.Query().Get("inverse")); inverse {

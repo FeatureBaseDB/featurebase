@@ -11,6 +11,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"net"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -46,11 +48,12 @@ func (c *nopBroadcaster) SendAsync(pb proto.Message) error {
 
 // HTTPBroadcaster represents a NodeSet that broadcasts messages over HTTP.
 type HTTPBroadcaster struct {
-	server *Server
+	server       *Server
+	internalPort string
 }
 
 // NewHTTPBroadcaster returns a new instance of HTTPBroadcaster.
-func NewHTTPBroadcaster(s *Server) *HTTPBroadcaster {
+func NewHTTPBroadcaster(s *Server, internalPort string) *HTTPBroadcaster {
 	return &HTTPBroadcaster{server: s}
 }
 
@@ -103,11 +106,12 @@ func (h *HTTPBroadcaster) sendNodeMessage(node *Node, msg []byte) error {
 	var client *http.Client
 	client = http.DefaultClient
 
+	host, _, err := net.SplitHostPort(node.Host)
+
 	// Create HTTP request.
 	req, err := http.NewRequest("POST", (&url.URL{
 		Scheme: "http",
-		Host:   node.Host,
-		Path:   "/message",
+		Host:   host + ":" + h.internalPort,
 	}).String(), bytes.NewReader(msg))
 	if err != nil {
 		return err

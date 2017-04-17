@@ -73,6 +73,29 @@ func (m *Command) Run(args ...string) (err error) {
 		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
 	}
 
+	// SetupServer
+	err = m.SetupServer()
+	if err != nil {
+		return err
+	}
+
+	// Initialize server.
+	if err = m.Server.Open(); err != nil {
+		return fmt.Errorf("server.Open: %v", err)
+	}
+	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Server.Host)
+	return nil
+}
+
+func (m *Command) SetupServer() error {
+	cluster := pilosa.NewCluster()
+	cluster.ReplicaN = m.Config.Cluster.ReplicaN
+
+	for _, hostport := range m.Config.Cluster.Nodes {
+		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
+	}
+	m.Server.Cluster = cluster
+
 	// Setup logging output.
 	if m.Config.LogPath == "" {
 		m.Server.LogOutput = m.Stderr
@@ -90,93 +113,51 @@ func (m *Command) Run(args ...string) (err error) {
 	m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
 
 	// Build cluster from config file.
+	var err error
 	m.Server.Host, err = normalizeHost(m.Config.Host)
 	if err != nil {
 		return err
 	}
-	m.Server.Broadcaster = PilosaBroadcaster(m.Config, m.Server)
-	m.Server.Cluster = PilosaCluster(m.Config)
 
-	// Associate objects to the Broadcaster based on config.
-	AssociateBroadcaster(m.Server, m.Config)
-
-	// Set configuration options.
-	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
-
-	// Initialize server.
-	if err = m.Server.Open(); err != nil {
-		return fmt.Errorf("server.Open: %v", err)
-	}
-	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Server.Host)
-	return nil
-}
-
-// PilosaBroadcaster returns a new instance of Broadcaster based on the config.
-func PilosaBroadcaster(c *pilosa.Config, server *pilosa.Server) (broadcaster pilosa.Broadcaster) {
-	switch c.Cluster.BroadcasterType {
+	switch m.Config.Cluster.BroadcasterType { // TODO change name to something that encompasses broadcasting, receiving broadcasts, and tracking cluster membership
 	case "http":
-		broadcaster = pilosa.NewHTTPBroadcaster(server)
+		port := strconv.Itoa(m.Config.Cluster.Gossip.Port)
+		m.Server.Broadcaster = pilosa.NewHTTPBroadcaster(m.Server, port)
+		m.Server.BroadcastReceiver = pilosa.NewHTTPBroadcastReceiver(port, m.Stderr)
+		m.Server.Cluster.NodeSet = pilosa.NewHTTPNodeSet()
+		m.Server.Cluster.NodeSet.(*pilosa.HTTPNodeSet).Join(m.Server.Cluster.Nodes)
 	case "gossip":
-		broadcaster = pilosa.NewGossipBroadcaster(server)
-	case "static":
-		broadcaster = pilosa.NopBroadcaster
-	}
-	return broadcaster
-}
-
-// PilosaCluster returns a new instance of Cluster based on the config.
-func PilosaCluster(c *pilosa.Config) *pilosa.Cluster {
-	cluster := pilosa.NewCluster()
-	cluster.ReplicaN = c.Cluster.ReplicaN
-
-	for _, hostport := range c.Cluster.Nodes {
-		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
-	}
-
-	// Setup a Broadcast (over HTTP) or Gossip NodeSet based on config.
-	switch c.Cluster.BroadcasterType {
-	case "http":
-		cluster.NodeSet = pilosa.NewHTTPNodeSet()
-		cluster.NodeSet.(*pilosa.HTTPNodeSet).Join(cluster.Nodes)
-	case "gossip":
-		gport, err := strconv.Atoi(pilosa.DefaultGossipPort)
+		gossipPort, err := strconv.Atoi(pilosa.DefaultGossipPort)
 		if err != nil {
 			panic(err) // Atoi on a compile-time constant should never fail.
 		}
-		gossipPort := gport
 		gossipSeed := pilosa.DefaultHost
-		if c.Cluster.Gossip.Port != 0 {
-			gossipPort = c.Cluster.Gossip.Port
+		if m.Config.Cluster.Gossip.Port != 0 {
+			gossipPort = m.Config.Cluster.Gossip.Port
 		}
-		if c.Cluster.Gossip.Seed != "" {
-			gossipSeed = c.Cluster.Gossip.Seed
+		if m.Config.Cluster.Gossip.Seed != "" {
+			gossipSeed = m.Config.Cluster.Gossip.Seed
 		}
 		// get the host portion of addr to use for binding
-		gossipHost, _, err := net.SplitHostPort(c.Host)
+		gossipHost, _, err := net.SplitHostPort(m.Config.Host)
 		if err != nil {
-			gossipHost = c.Host
+			gossipHost = m.Config.Host
 		}
-		cluster.NodeSet = pilosa.NewGossipNodeSet(c.Host, gossipHost, gossipPort, gossipSeed)
-	case "static":
-		cluster.NodeSet = pilosa.NewStaticNodeSet()
+		gossipNodeSet := pilosa.NewGossipNodeSet(m.Config.Host, gossipHost, gossipPort, gossipSeed, m.Server)
+		m.Server.Cluster.NodeSet = gossipNodeSet
+		m.Server.Broadcaster = gossipNodeSet
+		m.Server.BroadcastReceiver = gossipNodeSet
+	case "static", "":
+		m.Server.Broadcaster = pilosa.NopBroadcaster
+		m.Server.Cluster.NodeSet = pilosa.NewStaticNodeSet()
+		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
 	default:
-		cluster.NodeSet = pilosa.NewStaticNodeSet()
+		return fmt.Errorf("'%v' is not a supported value for broadcaster type.", m.Config.Cluster.BroadcasterType)
 	}
 
-	return cluster
-}
-
-// AssociateBroadcaster allows an implementation to associate objects to the Broadcaster
-// after cluster configuration.
-func AssociateBroadcaster(s *pilosa.Server, c *pilosa.Config) {
-	switch c.Cluster.BroadcasterType {
-	case "http":
-		// nop
-	case "gossip":
-		s.Cluster.NodeSet.(*pilosa.GossipNodeSet).AttachBroadcaster(s.Broadcaster.(*pilosa.GossipBroadcaster))
-	case "static":
-		// nop
-	}
+	// Set configuration options.
+	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
+	return nil
 }
 
 func normalizeHost(host string) (string, error) {
