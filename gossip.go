@@ -90,7 +90,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 type GossipMessageBroker struct {
 	broadcasts *memberlist.TransmitLimitedQueue
 
-	messenger *Messenger
+	server *Server
 
 	// The writer for any logging.
 	LogOutput io.Writer
@@ -103,7 +103,7 @@ func (g *GossipMessageBroker) Send(pb proto.Message, method string) error {
 		return err
 	}
 
-	mlist := g.messenger.Cluster.NodeSet.(*GossipNodeSet).memberlist
+	mlist := g.server.Cluster.NodeSet.(*GossipNodeSet).memberlist
 
 	// Direct sends the message directly to every node.
 	// An error from any node raises an error on the entire operation.
@@ -136,7 +136,7 @@ func (g *GossipMessageBroker) Send(pb proto.Message, method string) error {
 }
 
 func (g *GossipMessageBroker) Receive(pb proto.Message) error {
-	if err := g.messenger.ReceiveMessage(pb); err != nil {
+	if err := g.server.ReceiveMessage(pb); err != nil {
 		return err
 	}
 	return nil
@@ -164,7 +164,7 @@ func (g *GossipMessageBroker) GetBroadcasts(overhead, limit int) [][]byte {
 }
 
 func (g *GossipMessageBroker) LocalState(join bool) []byte {
-	pb, err := g.messenger.LocalState()
+	pb, err := g.server.LocalState()
 	if err != nil {
 		g.logger().Printf("error getting local state, err=%s", err)
 		return []byte{}
@@ -186,7 +186,7 @@ func (g *GossipMessageBroker) MergeRemoteState(buf []byte, join bool) {
 		g.logger().Printf("error unmarshalling nodestate data, err=%s", err)
 		return
 	}
-	err := g.messenger.HandleRemoteState(&pb)
+	err := g.server.HandleRemoteState(&pb)
 	if err != nil {
 		g.logger().Printf("merge state error: %s", err)
 	}
@@ -200,15 +200,15 @@ func (g *GossipMessageBroker) logger() *log.Logger {
 ////////////////////////////////////////////////////////////////
 
 // NewGossipMessageBroker returns a new instance of GossipMessageBroker.
-func NewGossipMessageBroker(m *Messenger) *GossipMessageBroker {
+func NewGossipMessageBroker(s *Server) *GossipMessageBroker {
 	g := &GossipMessageBroker{
 		LogOutput: os.Stderr,
-		messenger: m,
+		server:    s,
 	}
 
 	g.broadcasts = &memberlist.TransmitLimitedQueue{
 		NumNodes: func() int {
-			return g.messenger.Cluster.NodeSet.(*GossipNodeSet).memberlist.NumMembers()
+			return g.server.Cluster.NodeSet.(*GossipNodeSet).memberlist.NumMembers()
 		},
 		RetransmitMult: 3,
 	}

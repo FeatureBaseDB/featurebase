@@ -94,7 +94,7 @@ func (m *Command) Run(args ...string) (err error) {
 	if err != nil {
 		return err
 	}
-	m.Server.Messenger = PilosaMessenger(m.Config)
+	m.Server.Messenger = PilosaMessenger(m.Config, m.Server)
 	m.Server.Cluster = PilosaCluster(m.Config)
 
 	// Associate objects to the MessageBroker based on config.
@@ -112,15 +112,13 @@ func (m *Command) Run(args ...string) (err error) {
 }
 
 // PilosaMessenger returns a new instance of Messenger based on the config.
-func PilosaMessenger(c *pilosa.Config) *pilosa.Messenger {
+func PilosaMessenger(c *pilosa.Config, server *pilosa.Server) *pilosa.Messenger {
 	messenger := pilosa.NewMessenger()
 	switch c.Cluster.MessengerType {
 	case "broadcast":
-		n := pilosa.NewHTTPMessageBroker(messenger)
-		messenger.Broker = n
+		messenger.Broker = pilosa.NewHTTPMessageBroker(server)
 	case "gossip":
-		n := pilosa.NewGossipMessageBroker(messenger)
-		messenger.Broker = n
+		messenger.Broker = pilosa.NewGossipMessageBroker(server)
 	case "static":
 		// nop
 	}

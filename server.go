@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -64,7 +65,7 @@ func NewServer() *Server {
 	}
 
 	s.Handler.Index = s.Index
-	s.Messenger.Index = s.Index
+	s.Handler.Server = s // TODO remove
 
 	return s
 }
@@ -111,9 +112,6 @@ func (s *Server) Open() error {
 	e.Cluster = s.Cluster
 
 	// Initialize Messenger.
-	s.Messenger.Index = s.Index
-	s.Messenger.Host = s.Host
-	s.Messenger.Cluster = s.Cluster
 	s.Messenger.LogOutput = s.LogOutput
 
 	// Initialize HTTP handler.
@@ -234,6 +232,90 @@ func (s *Server) monitorMaxSlices() {
 			}
 		}
 	}
+}
+
+// LocalState returns the state of the local node as well as the
+// index (dbs/frames) according to the local node.
+// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
+func (s *Server) LocalState() (proto.Message, error) {
+	if s.Index == nil {
+		return nil, errors.New("Messenger.Index is nil.")
+	}
+	return &internal.NodeState{
+		Host:  s.Host,
+		State: "OK", // TODO: make this work, pull from s.Cluster.Node
+		DBs:   encodeDBs(s.Index.DBs()),
+	}, nil
+}
+
+func (s *Server) ReceiveMessage(pb proto.Message) error {
+	switch obj := pb.(type) {
+	case *internal.CreateSliceMessage:
+		d := s.Index.DB(obj.DB)
+		if d == nil {
+			return fmt.Errorf("Local DB not found: %s", obj.DB)
+		}
+		d.SetRemoteMaxSlice(obj.Slice)
+	case *internal.CreateDBMessage:
+		opt := DBOptions{ColumnLabel: obj.Meta.ColumnLabel}
+		_, err := s.Index.CreateDB(obj.DB, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteDBMessage:
+		fmt.Println("DELETE:", obj.DB)
+		if err := s.Index.DeleteDB(obj.DB); err != nil {
+			return err
+		}
+	case *internal.CreateFrameMessage:
+		db := s.Index.DB(obj.DB)
+		opt := FrameOptions{RowLabel: obj.Meta.RowLabel}
+		_, err := db.CreateFrame(obj.Frame, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteFrameMessage:
+		db := s.Index.DB(obj.DB)
+		if err := db.DeleteFrame(obj.Frame); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// HandleRemoteState receives incoming NodeState from remote nodes.
+func (s *Server) HandleRemoteState(pb proto.Message) error {
+	return s.mergeRemoteState(pb.(*internal.NodeState))
+}
+
+func (s *Server) mergeRemoteState(ns *internal.NodeState) error {
+	// TODO: update some node state value in the cluster (it should be in cluster.node i guess)
+
+	// Create databases that don't exist.
+	for _, db := range ns.DBs {
+		opt := DBOptions{
+			ColumnLabel: db.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(db.Meta.TimeQuantum),
+		}
+		d, err := s.Index.CreateDBIfNotExists(db.Name, opt)
+		if err != nil {
+			return err
+		}
+		// Create frames that don't exist.
+		for _, f := range db.Frames {
+			opt := FrameOptions{
+				RowLabel:    f.Meta.RowLabel,
+				TimeQuantum: TimeQuantum(f.Meta.TimeQuantum),
+				CacheSize:   f.Meta.CacheSize,
+			}
+			_, err := d.CreateFrameIfNotExists(f.Name, opt)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func checkMaxSlices(hostport string) (map[string]uint64, error) {

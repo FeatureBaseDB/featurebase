@@ -20,14 +20,8 @@ import (
 // Messenger represents an internal message handler.
 type Messenger struct {
 
-	// Broker handles Send/Receive Messages.
+	// Broker handles Send
 	Broker MessageBroker
-
-	Index *Index
-
-	// Local hostname & cluster configuration.
-	Host    string
-	Cluster *Cluster
 
 	// The writer for any logging.
 	LogOutput io.Writer
@@ -47,104 +41,12 @@ func (m *Messenger) SendMessage(pb proto.Message, method string) error {
 	}
 	return m.Broker.Send(pb, method)
 }
-func (m *Messenger) ReceiveMessage(pb proto.Message) error {
-	return m.handleMessage(pb)
-}
-
-// handleMessage handles protobuf Messages sent to nodes in the cluster.
-func (m *Messenger) handleMessage(pb proto.Message) error {
-	switch obj := pb.(type) {
-	case *internal.CreateSliceMessage:
-		d := m.Index.DB(obj.DB)
-		if d == nil {
-			return fmt.Errorf("Local DB not found: %s", obj.DB)
-		}
-		d.SetRemoteMaxSlice(obj.Slice)
-	case *internal.CreateDBMessage:
-		opt := DBOptions{ColumnLabel: obj.Meta.ColumnLabel}
-		_, err := m.Index.CreateDB(obj.DB, opt)
-		if err != nil {
-			return err
-		}
-	case *internal.DeleteDBMessage:
-		fmt.Println("DELETE:", obj.DB)
-		if err := m.Index.DeleteDB(obj.DB); err != nil {
-			return err
-		}
-	case *internal.CreateFrameMessage:
-		db := m.Index.DB(obj.DB)
-		opt := FrameOptions{RowLabel: obj.Meta.RowLabel}
-		_, err := db.CreateFrame(obj.Frame, opt)
-		if err != nil {
-			return err
-		}
-	case *internal.DeleteFrameMessage:
-		db := m.Index.DB(obj.DB)
-		if err := db.DeleteFrame(obj.Frame); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// LocalState returns the state of the local node as well as the
-// index (dbs/frames) according to the local node.
-// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
-// It seems odd to have this as part of Messenger, but with the
-// exception of Server, it's currenntly the only object with access
-// to the necessary information (Host, Index, Cluster).
-func (m *Messenger) LocalState() (proto.Message, error) {
-	if m.Index == nil {
-		return nil, errors.New("Messenger.Index is nil.")
-	}
-	return &internal.NodeState{
-		Host:  m.Host,
-		State: "OK", // TODO: make this work, pull from m.Cluster.Node
-		DBs:   encodeDBs(m.Index.DBs()),
-	}, nil
-}
-
-// HandleRemoteState receives incoming NodeState from remote nodes.
-func (m *Messenger) HandleRemoteState(pb proto.Message) error {
-	return m.mergeRemoteState(pb.(*internal.NodeState))
-}
-
-func (m *Messenger) mergeRemoteState(ns *internal.NodeState) error {
-	// TODO: update some node state value in the cluster (it should be in cluster.node i guess)
-
-	// Create databases that don't exist.
-	for _, db := range ns.DBs {
-		opt := DBOptions{
-			ColumnLabel: db.Meta.ColumnLabel,
-			TimeQuantum: TimeQuantum(db.Meta.TimeQuantum),
-		}
-		d, err := m.Index.CreateDBIfNotExists(db.Name, opt)
-		if err != nil {
-			return err
-		}
-		// Create frames that don't exist.
-		for _, f := range db.Frames {
-			opt := FrameOptions{
-				RowLabel:    f.Meta.RowLabel,
-				TimeQuantum: TimeQuantum(f.Meta.TimeQuantum),
-				CacheSize:   f.Meta.CacheSize,
-			}
-			_, err := d.CreateFrameIfNotExists(f.Name, opt)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
 
 //////////////////////////////////////////////////////////////////
 
 // MessageBroker is an interface for handling incoming/outgoing messages.
 type MessageBroker interface {
 	Send(pb proto.Message, method string) error
-	Receive(pb proto.Message) error
 }
 
 //////////////////////////////////////////////////////////////////
@@ -162,21 +64,17 @@ func (c *nopMessageBroker) Send(pb proto.Message, method string) error {
 	fmt.Println("NOPMessageBroker: Send")
 	return nil
 }
-func (c *nopMessageBroker) Receive(pb proto.Message) error {
-	fmt.Println("NOPMessageBroker: Receive")
-	return nil
-}
 
 //////////////////////////////////////////////////////////////////
 
 // HTTPMessageBroker represents a NodeSet that broadcasts messages over HTTP.
 type HTTPMessageBroker struct {
-	messenger *Messenger
+	server *Server
 }
 
 // NewHTTPMessageBroker returns a new instance of HTTPMessageBroker.
-func NewHTTPMessageBroker(m *Messenger) *HTTPMessageBroker {
-	return &HTTPMessageBroker{messenger: m}
+func NewHTTPMessageBroker(s *Server) *HTTPMessageBroker {
+	return &HTTPMessageBroker{server: s}
 }
 
 // Send sends a protobuf message to all nodes simultaneously.
@@ -196,7 +94,7 @@ func (h *HTTPMessageBroker) Send(pb proto.Message, method string) error {
 	var g errgroup.Group
 	for _, n := range nodes {
 		// Don't send the message to the local node.
-		if n.Host == h.messenger.Host {
+		if n.Host == h.server.Host {
 			continue
 		}
 		node := n
@@ -207,19 +105,11 @@ func (h *HTTPMessageBroker) Send(pb proto.Message, method string) error {
 	return g.Wait()
 }
 
-// Receive is called when a node receives a message.
-func (h *HTTPMessageBroker) Receive(pb proto.Message) error {
-	if err := h.messenger.ReceiveMessage(pb); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (h *HTTPMessageBroker) nodes() ([]*Node, error) {
-	if h.messenger == nil {
-		return nil, errors.New("HTTPMessageBroker has no reference to Messenger.")
+	if h.server == nil {
+		return nil, errors.New("HTTPMessageBroker has no reference to Server.")
 	}
-	nodeset, ok := h.messenger.Cluster.NodeSet.(*HTTPNodeSet)
+	nodeset, ok := h.server.Cluster.NodeSet.(*HTTPNodeSet)
 	if !ok {
 		return nil, errors.New("NodeSet cannot be caste to HTTPNodeSet.")
 	}

@@ -27,6 +27,7 @@ import (
 type Handler struct {
 	Index     *Index
 	Messenger *Messenger
+	Server    *Server
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -213,7 +214,7 @@ func (h *Handler) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Messenger.Broker.Receive(m); err != nil {
+	if err := h.Server.ReceiveMessage(m); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
