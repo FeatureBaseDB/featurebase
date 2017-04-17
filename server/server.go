@@ -141,7 +141,7 @@ func PilosaCluster(c *pilosa.Config) *pilosa.Cluster {
 	case "gossip":
 		gport, err := strconv.Atoi(pilosa.DefaultGossipPort)
 		if err != nil {
-			// what?
+			panic(err) // Atoi on a compile-time constant should never fail.
 		}
 		gossipPort := gport
 		gossipSeed := pilosa.DefaultHost
