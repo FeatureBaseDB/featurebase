@@ -143,7 +143,7 @@ func (s *Server) Open() error {
 	go func() { http.Serve(ln, s.Handler) }()
 
 	// Start background monitoring.
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
@@ -295,32 +295,34 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 
 // monitorRuntime periodically polls the Go runtime metrics.
 func (s *Server) monitorRuntime() {
-	ticker := time.NewTicker(s.MetricInterval)
-	defer ticker.Stop()
+	if s.MetricInterval > 0 {
+		ticker := time.NewTicker(s.MetricInterval)
+		defer ticker.Stop()
 
-	gcn := gcnotifier.New()
-	defer gcn.Close()
+		gcn := gcnotifier.New()
+		defer gcn.Close()
 
-	s.logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
+		s.logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
 
-	for {
-		// Wait for tick or a close.
-		select {
-		case <-s.closing:
-			return
-		case <-gcn.AfterGC():
-			// GC just ran
-			s.Index.Stats.Count("garbage_collection", 1)
-			s.logger().Printf("garbage collection complete")
-		case <-ticker.C:
+		for {
+			// Wait for tick or a close.
+			select {
+			case <-s.closing:
+				return
+			case <-gcn.AfterGC():
+				// GC just ran
+				s.Index.Stats.Count("garbage_collection", 1)
+				s.logger().Printf("garbage collection complete")
+			case <-ticker.C:
+			}
+
+			s.logger().Printf("runtime stats  beginning")
+
+			// TODO
+			s.Index.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()))
+
+			// Record successful sync in log.
+			s.logger().Printf("runtime stats  complete")
 		}
-
-		s.logger().Printf("runtime stats  beginning")
-
-		// TODO
-		s.Index.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()))
-
-		// Record successful sync in log.
-		s.logger().Printf("runtime stats  complete")
 	}
 }
