@@ -31,3 +31,4 @@ import:
 - package: github.com/spf13/viper
 - package: github.com/hashicorp/memberlist
 - package: golang.org/x/sync
+- package: github.com/CAFxX/gcnotifier

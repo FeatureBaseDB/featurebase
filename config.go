@@ -39,8 +39,9 @@ type Config struct {
 	LogPath string `toml:"log-path"`
 
 	Metric struct {
-		Service string `toml:"service"`
-		Host    string `toml:"host"`
+		Service         string   `toml:"service"`
+		Host            string   `toml:"host"`
+		PollingInterval Duration `toml:"interval"`
 	} `toml:"metrics"`
 }
 
