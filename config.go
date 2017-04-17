@@ -12,7 +12,7 @@ const (
 	DefaultPort          = "10101"
 	DefaultMessengerType = "static"
 	DefaultGossipPort    = "14000"
-	DefaultMetrics    	 = "noop"
+	DefaultMetrics       = "noop"
 )
 
 // Config represents the configuration for the command.

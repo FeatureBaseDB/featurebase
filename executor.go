@@ -94,11 +94,13 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 		return nil, err
 	}
 
+	dbTag := fmt.Sprintf("db:%s", db)
 	// Special handling for mutation and top-n calls.
 	switch c.Name {
 	case "ClearBit":
 		return e.executeClearBit(ctx, db, c, opt)
 	case "Count":
+		e.Index.Stats.CountWithCustomTags(c.Name, 1, []string{dbTag})
 		return e.executeCount(ctx, db, c, slices, opt)
 	case "Profile":
 		return e.executeProfile(ctx, db, c, opt)
@@ -109,8 +111,10 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 	case "SetProfileAttrs":
 		return nil, e.executeSetProfileAttrs(ctx, db, c, opt)
 	case "TopN":
+		e.Index.Stats.CountWithCustomTags(c.Name, 1, []string{dbTag})
 		return e.executeTopN(ctx, db, c, slices, opt)
 	default:
+		e.Index.Stats.CountWithCustomTags(c.Name, 1, []string{dbTag})
 		return e.executeBitmapCall(ctx, db, c, slices, opt)
 	}
 }
@@ -429,6 +433,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call
 		}
 		bm = bm.Union(f.Bitmap(rowID))
 	}
+	f.stats.Count("range", 1)
 	return bm, nil
 }
 

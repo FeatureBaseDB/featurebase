@@ -70,6 +70,14 @@ func (c *StatsClient) Count(name string, value int64) {
 	}
 }
 
+// Count tracks the number of times something occurs per second with custom tags.
+func (c *StatsClient) CountWithCustomTags(name string, value int64, t []string) {
+	tags := append(c.tags, t...)
+	if err := c.client.Count(name, value, tags, Rate); err != nil {
+		c.logger().Printf("datadog.StatsClient.Count error: %s", err)
+	}
+}
+
 // Gauge sets the value of a metric.
 func (c *StatsClient) Gauge(name string, value float64) {
 	if err := c.client.Gauge(name, value, c.tags, Rate); err != nil {
