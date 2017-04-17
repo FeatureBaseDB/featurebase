@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"reflect"
 
 	"golang.org/x/sync/errgroup"
@@ -17,39 +15,10 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// Messenger represents an internal message handler.
-type Messenger struct {
-
-	// Broker handles Send
-	Broker MessageBroker
-
-	// The writer for any logging.
-	LogOutput io.Writer
-}
-
-// NewMessenger returns a new instance of Messenger with a default logger.
-func NewMessenger() *Messenger {
-	return &Messenger{
-		Broker:    NopMessageBroker,
-		LogOutput: os.Stderr,
-	}
-}
-
-func (m *Messenger) SendMessage(pb proto.Message, method string) error {
-	if m.Broker == nil {
-		return errors.New("Messenger.Broker is not defined.")
-	}
-	return m.Broker.Send(pb, method)
-}
-
-//////////////////////////////////////////////////////////////////
-
 // MessageBroker is an interface for handling incoming/outgoing messages.
 type MessageBroker interface {
 	Send(pb proto.Message, method string) error
 }
-
-//////////////////////////////////////////////////////////////////
 
 func init() {
 	NopMessageBroker = &nopMessageBroker{}
@@ -61,7 +30,7 @@ var NopMessageBroker MessageBroker
 type nopMessageBroker struct{}
 
 func (c *nopMessageBroker) Send(pb proto.Message, method string) error {
-	fmt.Println("NOPMessageBroker: Send")
+	fmt.Println("NOPMessageBroker: Send") // TODO remove or log properly?
 	return nil
 }
 

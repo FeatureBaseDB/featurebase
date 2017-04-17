@@ -248,7 +248,6 @@ func (h *HTTPNodeSet) Join(nodes []*Node) error {
 
 // StaticNodeSet represents a basic NodeSet for testing
 type StaticNodeSet struct {
-	Messenger
 	nodes []*Node
 }
 
@@ -264,9 +263,6 @@ func (s *StaticNodeSet) Open() error {
 	return nil
 }
 
-func (s *StaticNodeSet) SendMessage(pb proto.Message, method string) error {
-	return nil
-}
-func (s *StaticNodeSet) ReceiveMessage(pb proto.Message) error {
+func (s *StaticNodeSet) Send(pb proto.Message, method string) error {
 	return nil
 }

@@ -26,7 +26,7 @@ import (
 // Handler represents an HTTP handler.
 type Handler struct {
 	Index     *Index
-	Messenger *Messenger
+	MsgBroker MessageBroker
 	Server    *Server
 
 	// Local hostname & cluster configuration.
@@ -370,7 +370,7 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the delete message to all nodes.
-	err := h.Messenger.SendMessage(
+	err := h.MsgBroker.Send(
 		&internal.DeleteDBMessage{
 			DB: req.DB,
 		}, "direct")
@@ -514,7 +514,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the create message to all nodes.
-	err = h.Messenger.SendMessage(
+	err = h.MsgBroker.Send(
 		&internal.CreateFrameMessage{
 			DB:    req.DB,
 			Frame: req.Frame,
@@ -586,7 +586,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the delete message to all nodes.
-	err := h.Messenger.SendMessage(
+	err := h.MsgBroker.Send(
 		&internal.DeleteFrameMessage{
 			DB:    req.DB,
 			Frame: req.Frame,

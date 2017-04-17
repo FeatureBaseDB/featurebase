@@ -794,7 +794,7 @@ func NewHandler() *Handler {
 	h.Handler.LogOutput = ioutil.Discard
 
 	// Handler test messages can no-op.
-	h.Messenger = pilosa.NewMessenger()
+	h.MsgBroker = pilosa.NopMessageBroker
 
 	return h
 }
@@ -828,8 +828,7 @@ func NewServer() *Server {
 	s.Handler.Host = s.Host()
 
 	// Handler test messages can no-op.
-	s.Handler.Messenger = pilosa.NewMessenger()
-
+	s.Handler.MsgBroker = pilosa.NopMessageBroker
 	// Create a default cluster on the handler
 	s.Handler.Cluster = NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()

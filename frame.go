@@ -38,7 +38,7 @@ type Frame struct {
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
 
-	messenger *Messenger
+	msgbroker MessageBroker
 	stats     StatsClient
 
 	// Frame settings.

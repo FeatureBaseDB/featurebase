@@ -94,7 +94,7 @@ func (m *Command) Run(args ...string) (err error) {
 	if err != nil {
 		return err
 	}
-	m.Server.Messenger = PilosaMessenger(m.Config, m.Server)
+	m.Server.MsgBroker = PilosaMessageBroker(m.Config, m.Server)
 	m.Server.Cluster = PilosaCluster(m.Config)
 
 	// Associate objects to the MessageBroker based on config.
@@ -111,18 +111,17 @@ func (m *Command) Run(args ...string) (err error) {
 	return nil
 }
 
-// PilosaMessenger returns a new instance of Messenger based on the config.
-func PilosaMessenger(c *pilosa.Config, server *pilosa.Server) *pilosa.Messenger {
-	messenger := pilosa.NewMessenger()
+// PilosaMessageBroker returns a new instance of MessageBroker based on the config.
+func PilosaMessageBroker(c *pilosa.Config, server *pilosa.Server) (broker pilosa.MessageBroker) {
 	switch c.Cluster.MessengerType {
 	case "broadcast":
-		messenger.Broker = pilosa.NewHTTPMessageBroker(server)
+		broker = pilosa.NewHTTPMessageBroker(server)
 	case "gossip":
-		messenger.Broker = pilosa.NewGossipMessageBroker(server)
+		broker = pilosa.NewGossipMessageBroker(server)
 	case "static":
-		// nop
+		broker = pilosa.NopMessageBroker
 	}
-	return messenger
+	return broker
 }
 
 // PilosaCluster returns a new instance of Cluster based on the config.
@@ -174,7 +173,7 @@ func AssociateMessageBroker(s *pilosa.Server, c *pilosa.Config) {
 	case "broadcast":
 		// nop
 	case "gossip":
-		s.Cluster.NodeSet.(*pilosa.GossipNodeSet).AttachBroker(s.Messenger.Broker.(*pilosa.GossipMessageBroker))
+		s.Cluster.NodeSet.(*pilosa.GossipNodeSet).AttachBroker(s.MsgBroker.(*pilosa.GossipMessageBroker))
 	case "static":
 		// nop
 	}

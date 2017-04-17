@@ -35,7 +35,7 @@ type Server struct {
 	// Data storage and HTTP interface.
 	Index     *Index
 	Handler   *Handler
-	Messenger *Messenger
+	MsgBroker MessageBroker
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
@@ -56,7 +56,7 @@ func NewServer() *Server {
 
 		Index:     NewIndex(),
 		Handler:   NewHandler(),
-		Messenger: NewMessenger(),
+		MsgBroker: NopMessageBroker,
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
@@ -111,18 +111,15 @@ func (s *Server) Open() error {
 	e.Host = s.Host
 	e.Cluster = s.Cluster
 
-	// Initialize Messenger.
-	s.Messenger.LogOutput = s.LogOutput
-
 	// Initialize HTTP handler.
-	s.Handler.Messenger = s.Messenger
+	s.Handler.MsgBroker = s.MsgBroker
 	s.Handler.Host = s.Host
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
 
 	// Initialize Index.
-	s.Index.Messenger = s.Messenger
+	s.Index.MsgBroker = s.MsgBroker
 	s.Index.LogOutput = s.LogOutput
 
 	// Serve HTTP.
@@ -239,7 +236,7 @@ func (s *Server) monitorMaxSlices() {
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 func (s *Server) LocalState() (proto.Message, error) {
 	if s.Index == nil {
-		return nil, errors.New("Messenger.Index is nil.")
+		return nil, errors.New("Server.Index is nil.")
 	}
 	return &internal.NodeState{
 		Host:  s.Host,

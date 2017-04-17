@@ -96,7 +96,7 @@ type GossipMessageBroker struct {
 	LogOutput io.Writer
 }
 
-// implementation of the messenger.Messenger interface
+// implementation of the messenger.MessageBroker interface
 func (g *GossipMessageBroker) Send(pb proto.Message, method string) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
