@@ -263,6 +263,10 @@ func (s *StaticNodeSet) Open() error {
 	return nil
 }
 
-func (s *StaticNodeSet) Send(pb proto.Message, method string) error {
+func (s *StaticNodeSet) SendSync(pb proto.Message) error {
+	return nil
+}
+
+func (s *StaticNodeSet) SendAsync(pb proto.Message) error {
 	return nil
 }

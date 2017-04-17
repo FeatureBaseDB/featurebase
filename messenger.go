@@ -17,7 +17,8 @@ import (
 
 // MessageBroker is an interface for handling incoming/outgoing messages.
 type MessageBroker interface {
-	Send(pb proto.Message, method string) error
+	SendSync(pb proto.Message) error
+	SendAsync(pb proto.Message) error
 }
 
 func init() {
@@ -29,8 +30,15 @@ var NopMessageBroker MessageBroker
 // nopMessageBroker represents a MessageBroker that doesn't do anything.
 type nopMessageBroker struct{}
 
-func (c *nopMessageBroker) Send(pb proto.Message, method string) error {
-	fmt.Println("NOPMessageBroker: Send") // TODO remove or log properly?
+// SendSync A no-op implemenetation of MessageBroker SendSync method.
+func (c *nopMessageBroker) SendSync(pb proto.Message) error {
+	fmt.Println("NOPMessageBroker: SendSync") // TODO remove or log properly?
+	return nil
+}
+
+// SendAsync A no-op implemenetation of MessageBroker SendAsync method.
+func (c *nopMessageBroker) SendAsync(pb proto.Message) error {
+	fmt.Println("NOPMessageBroker: SendAsync") // TODO remove or log properly?
 	return nil
 }
 
@@ -46,9 +54,9 @@ func NewHTTPMessageBroker(s *Server) *HTTPMessageBroker {
 	return &HTTPMessageBroker{server: s}
 }
 
-// Send sends a protobuf message to all nodes simultaneously.
+// SendSync sends a protobuf message to all nodes simultaneously.
 // It waits for all nodes to respond before the function returns (and returns any errors).
-func (h *HTTPMessageBroker) Send(pb proto.Message, method string) error {
+func (h *HTTPMessageBroker) SendSync(pb proto.Message) error {
 	// Marshal the pb to []byte
 	buf, err := MarshalMessage(pb)
 	if err != nil {
@@ -72,6 +80,12 @@ func (h *HTTPMessageBroker) Send(pb proto.Message, method string) error {
 		})
 	}
 	return g.Wait()
+}
+
+// SendAsync exists to implement the MessageBroker interface, but just calls
+// SendSync.
+func (h *HTTPMessageBroker) SendAsync(pb proto.Message) error {
+	return h.SendSync(pb)
 }
 
 func (h *HTTPMessageBroker) nodes() ([]*Node, error) {

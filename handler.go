@@ -370,10 +370,10 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the delete message to all nodes.
-	err := h.MsgBroker.Send(
+	err := h.MsgBroker.SendSync(
 		&internal.DeleteDBMessage{
 			DB: req.DB,
-		}, "direct")
+		})
 	if err != nil {
 		h.logger().Printf("problem sending DeleteDB message: %s", err)
 	}
@@ -514,7 +514,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the create message to all nodes.
-	err = h.MsgBroker.Send(
+	err = h.MsgBroker.SendSync(
 		&internal.CreateFrameMessage{
 			DB:    req.DB,
 			Frame: req.Frame,
@@ -522,7 +522,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 				RowLabel:    req.Options.RowLabel,
 				TimeQuantum: string(req.Options.TimeQuantum),
 			},
-		}, "direct")
+		})
 	if err != nil {
 		h.logger().Printf("problem sending CreateFrame message: %s", err)
 	}
@@ -586,11 +586,11 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the delete message to all nodes.
-	err := h.MsgBroker.Send(
+	err := h.MsgBroker.SendSync(
 		&internal.DeleteFrameMessage{
 			DB:    req.DB,
 			Frame: req.Frame,
-		}, "direct")
+		})
 	if err != nil {
 		h.logger().Printf("problem sending DeleteFrame message: %s", err)
 	}

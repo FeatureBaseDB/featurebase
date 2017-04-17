@@ -96,8 +96,8 @@ type GossipMessageBroker struct {
 	LogOutput io.Writer
 }
 
-// implementation of the messenger.MessageBroker interface
-func (g *GossipMessageBroker) Send(pb proto.Message, method string) error {
+// SendSync implementation of the messenger.MessageBroker interface
+func (g *GossipMessageBroker) SendSync(pb proto.Message) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
 		return err
@@ -110,28 +110,32 @@ func (g *GossipMessageBroker) Send(pb proto.Message, method string) error {
 	//
 	// Gossip uses the gossip protocol to eventually deliver the message
 	// to every node.
-	switch method {
-	case "direct":
-		var eg errgroup.Group
-		for _, n := range mlist.Members() {
-			// Don't send the message to the local node.
-			if n == mlist.LocalNode() {
-				continue
-			}
-			node := n
-			eg.Go(func() error {
-				return mlist.SendToTCP(node, msg)
-			})
+	var eg errgroup.Group
+	for _, n := range mlist.Members() {
+		// Don't send the message to the local node.
+		if n == mlist.LocalNode() {
+			continue
 		}
-		return eg.Wait()
-	case "gossip":
-		b := &broadcast{
-			msg:    msg,
-			notify: nil,
-		}
-		g.broadcasts.QueueBroadcast(b)
+		node := n
+		eg.Go(func() error {
+			return mlist.SendToTCP(node, msg)
+		})
+	}
+	return eg.Wait()
+}
+
+// SendAsync implementation of the messenger.MessageBroker interface
+func (g *GossipMessageBroker) SendAsync(pb proto.Message) error {
+	msg, err := MarshalMessage(pb)
+	if err != nil {
+		return err
 	}
 
+	b := &broadcast{
+		msg:    msg,
+		notify: nil,
+	}
+	g.broadcasts.QueueBroadcast(b)
 	return nil
 }
 
