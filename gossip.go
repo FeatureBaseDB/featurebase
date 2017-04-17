@@ -23,7 +23,7 @@ type GossipNodeSet struct {
 	LogOutput io.Writer
 }
 
-func (g *GossipNodeSet) AttachBroker(mb *GossipMessageBroker) {
+func (g *GossipNodeSet) AttachBroadcaster(mb *GossipBroadcaster) {
 	g.config.memberlistConfig.Delegate = mb
 }
 
@@ -85,9 +85,9 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 
 ////////////////////////////////////////////////////////////////
 
-// GossipMessageBroker represents a gossip implementation of pilosa.MessageBroker
-// GossipMessageBroker also represents an implementation of memberlist.Delegate
-type GossipMessageBroker struct {
+// GossipBroadcaster represents a gossip implementation of pilosa.Broadcaster
+// GossipBroadcaster also represents an implementation of memberlist.Delegate
+type GossipBroadcaster struct {
 	broadcasts *memberlist.TransmitLimitedQueue
 
 	server *Server
@@ -96,8 +96,8 @@ type GossipMessageBroker struct {
 	LogOutput io.Writer
 }
 
-// SendSync implementation of the messenger.MessageBroker interface
-func (g *GossipMessageBroker) SendSync(pb proto.Message) error {
+// SendSync implementation of the Broadcaster interface
+func (g *GossipBroadcaster) SendSync(pb proto.Message) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
 		return err
@@ -124,8 +124,8 @@ func (g *GossipMessageBroker) SendSync(pb proto.Message) error {
 	return eg.Wait()
 }
 
-// SendAsync implementation of the messenger.MessageBroker interface
-func (g *GossipMessageBroker) SendAsync(pb proto.Message) error {
+// SendAsync implementation of the Broadcaster interface
+func (g *GossipBroadcaster) SendAsync(pb proto.Message) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
 		return err
@@ -139,7 +139,7 @@ func (g *GossipMessageBroker) SendAsync(pb proto.Message) error {
 	return nil
 }
 
-func (g *GossipMessageBroker) Receive(pb proto.Message) error {
+func (g *GossipBroadcaster) Receive(pb proto.Message) error {
 	if err := g.server.ReceiveMessage(pb); err != nil {
 		return err
 	}
@@ -147,11 +147,11 @@ func (g *GossipMessageBroker) Receive(pb proto.Message) error {
 }
 
 // implementation of the memberlist.Delegate interface
-func (g *GossipMessageBroker) NodeMeta(limit int) []byte {
+func (g *GossipBroadcaster) NodeMeta(limit int) []byte {
 	return []byte{}
 }
 
-func (g *GossipMessageBroker) NotifyMsg(b []byte) {
+func (g *GossipBroadcaster) NotifyMsg(b []byte) {
 	m, err := UnmarshalMessage(b)
 	if err != nil {
 		g.logger().Printf("unmarshal message error: %s", err)
@@ -163,11 +163,11 @@ func (g *GossipMessageBroker) NotifyMsg(b []byte) {
 	}
 }
 
-func (g *GossipMessageBroker) GetBroadcasts(overhead, limit int) [][]byte {
+func (g *GossipBroadcaster) GetBroadcasts(overhead, limit int) [][]byte {
 	return g.broadcasts.GetBroadcasts(overhead, limit)
 }
 
-func (g *GossipMessageBroker) LocalState(join bool) []byte {
+func (g *GossipBroadcaster) LocalState(join bool) []byte {
 	pb, err := g.server.LocalState()
 	if err != nil {
 		g.logger().Printf("error getting local state, err=%s", err)
@@ -183,7 +183,7 @@ func (g *GossipMessageBroker) LocalState(join bool) []byte {
 	return buf
 }
 
-func (g *GossipMessageBroker) MergeRemoteState(buf []byte, join bool) {
+func (g *GossipBroadcaster) MergeRemoteState(buf []byte, join bool) {
 	// Unmarshal nodestate data.
 	var pb internal.NodeState
 	if err := proto.Unmarshal(buf, &pb); err != nil {
@@ -196,16 +196,16 @@ func (g *GossipMessageBroker) MergeRemoteState(buf []byte, join bool) {
 	}
 }
 
-// logger returns a logger for the GossipMessageBroker.
-func (g *GossipMessageBroker) logger() *log.Logger {
+// logger returns a logger for the GossipBroadcaster
+func (g *GossipBroadcaster) logger() *log.Logger {
 	return log.New(g.LogOutput, "", log.LstdFlags)
 }
 
 ////////////////////////////////////////////////////////////////
 
-// NewGossipMessageBroker returns a new instance of GossipMessageBroker.
-func NewGossipMessageBroker(s *Server) *GossipMessageBroker {
-	g := &GossipMessageBroker{
+// NewGossipBroadcaster returns a new instance of GossipBroadcaster.
+func NewGossipBroadcaster(s *Server) *GossipBroadcaster {
+	g := &GossipBroadcaster{
 		LogOutput: os.Stderr,
 		server:    s,
 	}

@@ -4,10 +4,10 @@ import "time"
 
 const (
 	// DefaultHost is the default hostname and port to use.
-	DefaultHost          = "localhost"
-	DefaultPort          = "10101"
-	DefaultMessengerType = "static"
-	DefaultGossipPort    = "14000"
+	DefaultHost            = "localhost"
+	DefaultPort            = "10101"
+	DefaultBroadcasterType = "static"
+	DefaultGossipPort      = "14000"
 )
 
 // Config represents the configuration for the command.
@@ -17,7 +17,7 @@ type Config struct {
 
 	Cluster struct {
 		ReplicaN        int          `toml:"replicas"`
-		MessengerType   string       `toml:"messenger-type"`
+		BroadcasterType string       `toml:"broadcaster-type"`
 		Nodes           []string     `toml:"hosts"`
 		PollingInterval Duration     `toml:"polling-interval"`
 		Gossip          ConfigGossip `toml:"gossip"`
@@ -45,7 +45,7 @@ func NewConfig() *Config {
 		Host: DefaultHost + ":" + DefaultPort,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
-	c.Cluster.MessengerType = DefaultMessengerType
+	c.Cluster.BroadcasterType = DefaultBroadcasterType
 	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
 	c.Cluster.Nodes = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)

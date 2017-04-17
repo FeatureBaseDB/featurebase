@@ -38,8 +38,8 @@ type Frame struct {
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
 
-	msgbroker MessageBroker
-	stats     StatsClient
+	broadcaster Broadcaster
+	stats       StatsClient
 
 	// Frame settings.
 	rowLabel       string

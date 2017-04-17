@@ -43,8 +43,8 @@ type DB struct {
 	// Profile attribute storage and cache
 	profileAttrStore *AttrStore
 
-	msgbroker MessageBroker
-	stats     StatsClient
+	broadcaster Broadcaster
+	stats       StatsClient
 
 	LogOutput io.Writer
 }
@@ -417,7 +417,7 @@ func (db *DB) newFrame(path, name string) (*Frame, error) {
 	}
 	f.LogOutput = db.LogOutput
 	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
-	f.msgbroker = db.msgbroker
+	f.broadcaster = db.broadcaster
 	return f, nil
 }
 

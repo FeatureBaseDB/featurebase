@@ -15,48 +15,48 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// MessageBroker is an interface for handling incoming/outgoing messages.
-type MessageBroker interface {
+// Broadcaster is an interface for handling incoming/outgoing messages.
+type Broadcaster interface {
 	SendSync(pb proto.Message) error
 	SendAsync(pb proto.Message) error
 }
 
 func init() {
-	NopMessageBroker = &nopMessageBroker{}
+	NopBroadcaster = &nopBroadcaster{}
 }
 
-var NopMessageBroker MessageBroker
+var NopBroadcaster Broadcaster
 
-// nopMessageBroker represents a MessageBroker that doesn't do anything.
-type nopMessageBroker struct{}
+// nopBroadcaster represents a Broadcaster that doesn't do anything.
+type nopBroadcaster struct{}
 
-// SendSync A no-op implemenetation of MessageBroker SendSync method.
-func (c *nopMessageBroker) SendSync(pb proto.Message) error {
-	fmt.Println("NOPMessageBroker: SendSync") // TODO remove or log properly?
+// SendSync A no-op implemenetation of Broadcaster SendSync method.
+func (c *nopBroadcaster) SendSync(pb proto.Message) error {
+	fmt.Println("NOPBroadcaster: SendSync") // TODO remove or log properly?
 	return nil
 }
 
-// SendAsync A no-op implemenetation of MessageBroker SendAsync method.
-func (c *nopMessageBroker) SendAsync(pb proto.Message) error {
-	fmt.Println("NOPMessageBroker: SendAsync") // TODO remove or log properly?
+// SendAsync A no-op implemenetation of Broadcaster SendAsync method.
+func (c *nopBroadcaster) SendAsync(pb proto.Message) error {
+	fmt.Println("NOPBroadcaster: SendAsync") // TODO remove or log properly?
 	return nil
 }
 
 //////////////////////////////////////////////////////////////////
 
-// HTTPMessageBroker represents a NodeSet that broadcasts messages over HTTP.
-type HTTPMessageBroker struct {
+// HTTPBroadcaster represents a NodeSet that broadcasts messages over HTTP.
+type HTTPBroadcaster struct {
 	server *Server
 }
 
-// NewHTTPMessageBroker returns a new instance of HTTPMessageBroker.
-func NewHTTPMessageBroker(s *Server) *HTTPMessageBroker {
-	return &HTTPMessageBroker{server: s}
+// NewHTTPBroadcaster returns a new instance of HTTPBroadcaster.
+func NewHTTPBroadcaster(s *Server) *HTTPBroadcaster {
+	return &HTTPBroadcaster{server: s}
 }
 
 // SendSync sends a protobuf message to all nodes simultaneously.
 // It waits for all nodes to respond before the function returns (and returns any errors).
-func (h *HTTPMessageBroker) SendSync(pb proto.Message) error {
+func (h *HTTPBroadcaster) SendSync(pb proto.Message) error {
 	// Marshal the pb to []byte
 	buf, err := MarshalMessage(pb)
 	if err != nil {
@@ -82,15 +82,15 @@ func (h *HTTPMessageBroker) SendSync(pb proto.Message) error {
 	return g.Wait()
 }
 
-// SendAsync exists to implement the MessageBroker interface, but just calls
+// SendAsync exists to implement the Broadcaster interface, but just calls
 // SendSync.
-func (h *HTTPMessageBroker) SendAsync(pb proto.Message) error {
+func (h *HTTPBroadcaster) SendAsync(pb proto.Message) error {
 	return h.SendSync(pb)
 }
 
-func (h *HTTPMessageBroker) nodes() ([]*Node, error) {
+func (h *HTTPBroadcaster) nodes() ([]*Node, error) {
 	if h.server == nil {
-		return nil, errors.New("HTTPMessageBroker has no reference to Server.")
+		return nil, errors.New("HTTPBroadcaster has no reference to Server.")
 	}
 	nodeset, ok := h.server.Cluster.NodeSet.(*HTTPNodeSet)
 	if !ok {
@@ -99,7 +99,7 @@ func (h *HTTPMessageBroker) nodes() ([]*Node, error) {
 	return nodeset.Nodes(), nil
 }
 
-func (h *HTTPMessageBroker) sendNodeMessage(node *Node, msg []byte) error {
+func (h *HTTPBroadcaster) sendNodeMessage(node *Node, msg []byte) error {
 	var client *http.Client
 	client = http.DefaultClient
 

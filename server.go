@@ -33,9 +33,9 @@ type Server struct {
 	closing chan struct{}
 
 	// Data storage and HTTP interface.
-	Index     *Index
-	Handler   *Handler
-	MsgBroker MessageBroker
+	Index       *Index
+	Handler     *Handler
+	Broadcaster Broadcaster
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
@@ -54,9 +54,9 @@ func NewServer() *Server {
 	s := &Server{
 		closing: make(chan struct{}),
 
-		Index:     NewIndex(),
-		Handler:   NewHandler(),
-		MsgBroker: NopMessageBroker,
+		Index:       NewIndex(),
+		Handler:     NewHandler(),
+		Broadcaster: NopBroadcaster,
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
@@ -112,14 +112,14 @@ func (s *Server) Open() error {
 	e.Cluster = s.Cluster
 
 	// Initialize HTTP handler.
-	s.Handler.MsgBroker = s.MsgBroker
+	s.Handler.Broadcaster = s.Broadcaster
 	s.Handler.Host = s.Host
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
 
 	// Initialize Index.
-	s.Index.MsgBroker = s.MsgBroker
+	s.Index.Broadcaster = s.Broadcaster
 	s.Index.LogOutput = s.LogOutput
 
 	// Serve HTTP.

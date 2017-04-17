@@ -23,7 +23,7 @@ type Index struct {
 	// Databases by name.
 	dbs map[string]*DB
 
-	MsgBroker MessageBroker
+	Broadcaster Broadcaster
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
@@ -246,7 +246,7 @@ func (i *Index) newDB(path, name string) (*DB, error) {
 	}
 	db.LogOutput = i.LogOutput
 	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
-	db.msgbroker = i.MsgBroker
+	db.broadcaster = i.Broadcaster
 	return db, nil
 }
 

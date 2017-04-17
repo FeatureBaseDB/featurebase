@@ -94,11 +94,11 @@ func (m *Command) Run(args ...string) (err error) {
 	if err != nil {
 		return err
 	}
-	m.Server.MsgBroker = PilosaMessageBroker(m.Config, m.Server)
+	m.Server.Broadcaster = PilosaBroadcaster(m.Config, m.Server)
 	m.Server.Cluster = PilosaCluster(m.Config)
 
-	// Associate objects to the MessageBroker based on config.
-	AssociateMessageBroker(m.Server, m.Config)
+	// Associate objects to the Broadcaster based on config.
+	AssociateBroadcaster(m.Server, m.Config)
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
@@ -111,17 +111,17 @@ func (m *Command) Run(args ...string) (err error) {
 	return nil
 }
 
-// PilosaMessageBroker returns a new instance of MessageBroker based on the config.
-func PilosaMessageBroker(c *pilosa.Config, server *pilosa.Server) (broker pilosa.MessageBroker) {
-	switch c.Cluster.MessengerType {
-	case "broadcast":
-		broker = pilosa.NewHTTPMessageBroker(server)
+// PilosaBroadcaster returns a new instance of Broadcaster based on the config.
+func PilosaBroadcaster(c *pilosa.Config, server *pilosa.Server) (broadcaster pilosa.Broadcaster) {
+	switch c.Cluster.BroadcasterType {
+	case "http":
+		broadcaster = pilosa.NewHTTPBroadcaster(server)
 	case "gossip":
-		broker = pilosa.NewGossipMessageBroker(server)
+		broadcaster = pilosa.NewGossipBroadcaster(server)
 	case "static":
-		broker = pilosa.NopMessageBroker
+		broadcaster = pilosa.NopBroadcaster
 	}
-	return broker
+	return broadcaster
 }
 
 // PilosaCluster returns a new instance of Cluster based on the config.
@@ -134,8 +134,8 @@ func PilosaCluster(c *pilosa.Config) *pilosa.Cluster {
 	}
 
 	// Setup a Broadcast (over HTTP) or Gossip NodeSet based on config.
-	switch c.Cluster.MessengerType {
-	case "broadcast":
+	switch c.Cluster.BroadcasterType {
+	case "http":
 		cluster.NodeSet = pilosa.NewHTTPNodeSet()
 		cluster.NodeSet.(*pilosa.HTTPNodeSet).Join(cluster.Nodes)
 	case "gossip":
@@ -166,14 +166,14 @@ func PilosaCluster(c *pilosa.Config) *pilosa.Cluster {
 	return cluster
 }
 
-// AssociateMessageBroker allows an implementation to associate objects to the MessageBroker
+// AssociateBroadcaster allows an implementation to associate objects to the Broadcaster
 // after cluster configuration.
-func AssociateMessageBroker(s *pilosa.Server, c *pilosa.Config) {
-	switch c.Cluster.MessengerType {
-	case "broadcast":
+func AssociateBroadcaster(s *pilosa.Server, c *pilosa.Config) {
+	switch c.Cluster.BroadcasterType {
+	case "http":
 		// nop
 	case "gossip":
-		s.Cluster.NodeSet.(*pilosa.GossipNodeSet).AttachBroker(s.MsgBroker.(*pilosa.GossipMessageBroker))
+		s.Cluster.NodeSet.(*pilosa.GossipNodeSet).AttachBroadcaster(s.Broadcaster.(*pilosa.GossipBroadcaster))
 	case "static":
 		// nop
 	}
