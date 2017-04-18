@@ -27,7 +27,7 @@ message Attr {
 	string Key = 1;
 	uint64 Type = 2;
 	string StringValue = 3;
-	uint64 UintValue = 4;
+	int64 IntValue = 4;
 	bool BoolValue = 5;
 	double FloatValue = 6;
 }

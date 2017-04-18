@@ -34,7 +34,7 @@ func (s *Scanner) Scan() (tok Token, pos Pos, lit string) {
 	} else if isIdentFirstChar(ch) {
 		s.unread()
 		return s.scanIdent()
-	} else if isDigit(ch) {
+	} else if isDigit(ch) || ch == '-' {
 		s.unread()
 		return s.scanNumber()
 	} else if ch == '"' || ch == '\'' {
@@ -140,16 +140,17 @@ func (s *Scanner) scanIdent() (tok Token, pos Pos, lit string) {
 	return IDENT, pos, lit
 }
 
-// scanNumber consumes consecutive digits and up to one '.' character.
+// scanNumber consumes consecutive digits, optionally starting with a minus sign and up to one '.' character.
 func (s *Scanner) scanNumber() (tok Token, pos Pos, lit string) {
 	pos = s.pos
 	tok = INTEGER
 
 	var buf bytes.Buffer
 	var seenDot bool
+	first := true
 	for {
 		ch := s.read()
-		if !isDigit(ch) && (seenDot || ch != '.') {
+		if !isDigit(ch) && !(first && ch == '-') && (seenDot || ch != '.') {
 			s.unread()
 			break
 		}
@@ -158,6 +159,7 @@ func (s *Scanner) scanNumber() (tok Token, pos Pos, lit string) {
 			tok = FLOAT
 		}
 		buf.WriteRune(ch)
+		first = false
 	}
 	return tok, pos, buf.String()
 }
