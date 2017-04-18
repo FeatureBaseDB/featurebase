@@ -174,13 +174,16 @@ func (b *Bitmap) InvalidateCount() {
 	}
 }
 
-//increment the bitmap cached counter, note this is an optimization that assumes that the caller is aware the size increased
+// IncrementCount increments the bitmap cached counter, note this is an optimization that assumes that the caller is aware the size increased.
 func (b *Bitmap) IncrementCount(i uint64) {
 	seg := b.segment(i / SliceWidth)
 	if seg != nil {
 		seg.n++
 	}
+
 }
+
+// DecrementCount decrements the bitmap cached counter.
 func (b *Bitmap) DecrementCount(i uint64) {
 	seg := b.segment(i / SliceWidth)
 	if seg != nil {

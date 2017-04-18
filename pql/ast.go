@@ -30,9 +30,11 @@ type Call struct {
 	Children []*Call
 }
 
-// UintArg is for reading the value at key from call.Args as a uint64. The value
-// is assumed to be an int64 and then cast to a uint64. An error is returned if
-// the value is not found, or not an int64.
+// UintArg is for reading the value at key from call.Args as a uint64. If the
+// key is not in Call.Args, the value of the returned bool will be false, and
+// the error will be nil. The value is assumed to be a uint64 or an int64 and
+// then cast to a uint64. An error is returned if the value is not an int64 or
+// uint64.
 func (c *Call) UintArg(key string) (uint64, bool, error) {
 	val, ok := c.Args[key]
 	if !ok {
@@ -48,6 +50,10 @@ func (c *Call) UintArg(key string) (uint64, bool, error) {
 	}
 }
 
+// UintSliceArg reads the value at key from call.Args as a slice of uint64. If
+// the key is not in Call.Args, the value of the returned bool will be false,
+// and the error will be nil. If the value is a slice of int64 it will convert
+// it to []uint64. Otherwise, if it is not a []uint64 it will return an error.
 func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
 	val, ok := c.Args[key]
 	if !ok {

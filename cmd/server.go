@@ -13,7 +13,7 @@ import (
 	"github.com/pilosa/pilosa/server"
 )
 
-// Serve is global so that tests can control and verify it.
+// Server is global so that tests can control and verify it.
 var Server *server.Command
 
 func NewServeCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
