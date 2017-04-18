@@ -2,6 +2,7 @@ package pilosa_test
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,23 +14,68 @@ import (
 
 // Ensure a bitmap query can be executed.
 func TestExecutor_Execute_Bitmap(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
-	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).MustSetBits(10, 3)
-	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
+	t.Run("Row", func(t *testing.T) {
+		idx := MustOpenIndex()
+		defer idx.Close()
+		db := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
+		f, err := db.CreateFrame("f", pilosa.FrameOptions{InverseEnabled: true})
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"foo": "bar", "baz": uint64(123)}); err != nil {
-		t.Fatal(err)
-	}
+		e := NewExecutor(idx.Index, NewCluster(1))
 
-	e := NewExecutor(idx.Index, NewCluster(1))
-	if res, err := e.Execute(context.Background(), "d", MustParse(`Bitmap(id=10, frame=f)`), nil, nil); err != nil {
-		t.Fatal(err)
-	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
-		t.Fatalf("unexpected bits: %+v", bits)
-	} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": uint64(123)}) {
-		t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
-	}
+		// Set bits.
+		if _, err := e.Execute(context.Background(), "d", MustParse(``+
+			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 10, 3)+
+			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 10, SliceWidth+1)+
+			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 20, SliceWidth+1),
+		), nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.BitmapAttrStore().SetAttrs(10, map[string]interface{}{"foo": "bar", "baz": uint64(123)}); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := e.Execute(context.Background(), "d", MustParse(`Bitmap(id=10, frame=f)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
+			t.Fatalf("unexpected bits: %+v", bits)
+		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": uint64(123)}) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		}
+	})
+
+	t.Run("Column", func(t *testing.T) {
+		idx := MustOpenIndex()
+		defer idx.Close()
+		db := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
+		if _, err := db.CreateFrame("f", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
+			t.Fatal(err)
+		}
+
+		e := NewExecutor(idx.Index, NewCluster(1))
+
+		// Set bits.
+		if _, err := e.Execute(context.Background(), "d", MustParse(``+
+			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 10, 3)+
+			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 10, SliceWidth+1)+
+			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 20, SliceWidth+1),
+		), nil, nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.ProfileAttrStore().SetAttrs(SliceWidth+1, map[string]interface{}{"foo": "bar", "baz": uint64(123)}); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := e.Execute(context.Background(), "d", MustParse(fmt.Sprintf(`Bitmap(profileID=%d, frame=f)`, SliceWidth+1)), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{10, 20}) {
+			t.Fatalf("unexpected bits: %+v", bits)
+		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": uint64(123)}) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		}
+	})
 }
 
 // Ensure a difference query can be executed.
