@@ -27,7 +27,6 @@ import (
 type Handler struct {
 	Index       *Index
 	Broadcaster Broadcaster
-	Server      *Server
 
 	// Local hostname & cluster configuration.
 	Host    string

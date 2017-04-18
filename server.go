@@ -67,7 +67,6 @@ func NewServer() *Server {
 	}
 
 	s.Handler.Index = s.Index
-	s.Handler.Server = s // TODO remove
 
 	return s
 }
