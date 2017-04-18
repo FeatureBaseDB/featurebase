@@ -120,7 +120,7 @@ func (m *Command) SetupServer() error {
 		return err
 	}
 
-	switch m.Config.Cluster.Type { // TODO change name to something that encompasses broadcasting, receiving broadcasts, and tracking cluster membership
+	switch m.Config.Cluster.Type {
 	case "http":
 		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, m.Config.Cluster.InternalPort)
 		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(m.Config.Cluster.InternalPort, m.Stderr)
