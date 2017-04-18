@@ -16,11 +16,12 @@ type Config struct {
 	Host    string `toml:"host"`
 
 	Cluster struct {
-		ReplicaN        int          `toml:"replicas"`
-		Type            string       `toml:"type"`
-		Nodes           []string     `toml:"hosts"`
-		PollingInterval Duration     `toml:"polling-interval"`
-		Gossip          ConfigGossip `toml:"gossip"`
+		ReplicaN        int      `toml:"replicas"`
+		Type            string   `toml:"type"`
+		Nodes           []string `toml:"hosts"`
+		PollingInterval Duration `toml:"polling-interval"`
+		InternalPort    string   `toml:"internal-port"`
+		GossipSeed      string   `toml:"gossip-seed"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -32,11 +33,6 @@ type Config struct {
 	} `toml:"anti-entropy"`
 
 	LogPath string `toml:"log-path"`
-}
-
-type ConfigGossip struct {
-	Port int    `toml:"port"`
-	Seed string `toml:"seed"`
 }
 
 // NewConfig returns an instance of Config with default options.

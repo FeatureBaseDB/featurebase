@@ -122,25 +122,25 @@ func (m *Command) SetupServer() error {
 
 	switch m.Config.Cluster.Type { // TODO change name to something that encompasses broadcasting, receiving broadcasts, and tracking cluster membership
 	case "http":
-		port := strconv.Itoa(m.Config.Cluster.Gossip.Port)
-		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, port)
-		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(port, m.Stderr)
+		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, m.Config.Cluster.InternalPort)
+		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(m.Config.Cluster.InternalPort, m.Stderr)
 		m.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
 		err := m.Server.Cluster.NodeSet.(*httpbroadcast.HTTPNodeSet).Join(m.Server.Cluster.Nodes)
 		if err != nil {
 			return err
 		}
 	case "gossip":
-		gossipPort, err := strconv.Atoi(pilosa.DefaultGossipPort)
+		gossipPortStr := pilosa.DefaultGossipPort
+		if m.Config.Cluster.InternalPort != "" {
+			gossipPortStr = m.Config.Cluster.InternalPort
+		}
+		gossipPort, err := strconv.Atoi(gossipPortStr)
 		if err != nil {
-			panic(err) // Atoi on a compile-time constant should never fail.
+			return err
 		}
 		gossipSeed := pilosa.DefaultHost
-		if m.Config.Cluster.Gossip.Port != 0 {
-			gossipPort = m.Config.Cluster.Gossip.Port
-		}
-		if m.Config.Cluster.Gossip.Seed != "" {
-			gossipSeed = m.Config.Cluster.Gossip.Seed
+		if m.Config.Cluster.GossipSeed != "" {
+			gossipSeed = m.Config.Cluster.GossipSeed
 		}
 		// get the host portion of addr to use for binding
 		gossipHost, _, err := net.SplitHostPort(m.Config.Host)
