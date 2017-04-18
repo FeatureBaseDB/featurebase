@@ -4,47 +4,17 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"reflect"
 
 	"golang.org/x/sync/errgroup"
 
 	"net"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
 )
-
-// Broadcaster is an interface for handling incoming/outgoing messages.
-type Broadcaster interface {
-	SendSync(pb proto.Message) error
-	SendAsync(pb proto.Message) error
-}
-
-func init() {
-	NopBroadcaster = &nopBroadcaster{}
-}
-
-var NopBroadcaster Broadcaster
-
-// nopBroadcaster represents a Broadcaster that doesn't do anything.
-type nopBroadcaster struct{}
-
-// SendSync A no-op implemenetation of Broadcaster SendSync method.
-func (c *nopBroadcaster) SendSync(pb proto.Message) error {
-	fmt.Println("NOPBroadcaster: SendSync") // TODO remove or log properly?
-	return nil
-}
-
-// SendAsync A no-op implemenetation of Broadcaster SendAsync method.
-func (c *nopBroadcaster) SendAsync(pb proto.Message) error {
-	fmt.Println("NOPBroadcaster: SendAsync") // TODO remove or log properly?
-	return nil
-}
-
-//////////////////////////////////////////////////////////////////
 
 // HTTPBroadcaster represents a NodeSet that broadcasts messages over HTTP.
 type HTTPBroadcaster struct {
@@ -142,60 +112,52 @@ func (h *HTTPBroadcaster) sendNodeMessage(node *Node, msg []byte) error {
 	return nil
 }
 
-//////////////////////////////////////////////////////////////////
-
-const (
-	MessageTypeCreateSlice = 1
-	MessageTypeCreateDB    = 2
-	MessageTypeDeleteDB    = 3
-	MessageTypeCreateFrame = 4
-	MessageTypeDeleteFrame = 5
-)
-
-func MarshalMessage(m proto.Message) ([]byte, error) {
-	var typ uint8
-	switch obj := m.(type) {
-	case *internal.CreateSliceMessage:
-		typ = MessageTypeCreateSlice
-	case *internal.CreateDBMessage:
-		typ = MessageTypeCreateDB
-	case *internal.DeleteDBMessage:
-		typ = MessageTypeDeleteDB
-	case *internal.CreateFrameMessage:
-		typ = MessageTypeCreateFrame
-	case *internal.DeleteFrameMessage:
-		typ = MessageTypeDeleteFrame
-	default:
-		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
-	}
-	buf, err := proto.Marshal(m)
-	if err != nil {
-		return nil, err
-	}
-	return append([]byte{typ}, buf...), nil
+type HTTPBroadcastReceiver struct {
+	port      string
+	handler   BroadcastHandler
+	logOutput io.Writer
 }
 
-func UnmarshalMessage(buf []byte) (proto.Message, error) {
-	typ, buf := buf[0], buf[1:]
+func NewHTTPBroadcastReceiver(port string, logOutput io.Writer) *HTTPBroadcastReceiver {
+	return &HTTPBroadcastReceiver{
+		port:      port,
+		logOutput: logOutput,
+	}
+}
 
-	var m proto.Message
-	switch typ {
-	case MessageTypeCreateSlice:
-		m = &internal.CreateSliceMessage{}
-	case MessageTypeCreateDB:
-		m = &internal.CreateDBMessage{}
-	case MessageTypeDeleteDB:
-		m = &internal.DeleteDBMessage{}
-	case MessageTypeCreateFrame:
-		m = &internal.CreateFrameMessage{}
-	case MessageTypeDeleteFrame:
-		m = &internal.DeleteFrameMessage{}
-	default:
-		return nil, fmt.Errorf("invalid message type: %d", typ)
+func (rec *HTTPBroadcastReceiver) Start(b BroadcastHandler) error {
+	rec.handler = b
+	go func() {
+		err := http.ListenAndServe(":"+rec.port, rec)
+		if err != nil {
+			fmt.Fprintf(rec.logOutput, "Error listening on %v for HTTPBroadcastReceiver: %v\n", ":"+rec.port, err)
+		}
+	}()
+	return nil
+}
+
+func (rec *HTTPBroadcastReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
 	}
 
-	if err := proto.Unmarshal(buf, m); err != nil {
-		return nil, err
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
-	return m, nil
+
+	// Unmarshal message to specific proto type.
+	m, err := UnmarshalMessage(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := rec.handler.ReceiveMessage(m); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 }
