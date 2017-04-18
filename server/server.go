@@ -114,14 +114,13 @@ func (m *Command) SetupServer() error {
 	m.Server.Index.Path = m.Config.DataDir
 	m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
 
-	// Build cluster from config file.
 	var err error
 	m.Server.Host, err = normalizeHost(m.Config.Host)
 	if err != nil {
 		return err
 	}
 
-	switch m.Config.Cluster.BroadcasterType { // TODO change name to something that encompasses broadcasting, receiving broadcasts, and tracking cluster membership
+	switch m.Config.Cluster.Type { // TODO change name to something that encompasses broadcasting, receiving broadcasts, and tracking cluster membership
 	case "http":
 		port := strconv.Itoa(m.Config.Cluster.Gossip.Port)
 		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, port)
@@ -157,7 +156,7 @@ func (m *Command) SetupServer() error {
 		m.Server.Cluster.NodeSet = pilosa.NewStaticNodeSet()
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
 	default:
-		return fmt.Errorf("'%v' is not a supported value for broadcaster type.", m.Config.Cluster.BroadcasterType)
+		return fmt.Errorf("'%v' is not a supported value for broadcaster type.", m.Config.Cluster.Type)
 	}
 
 	// Set configuration options.

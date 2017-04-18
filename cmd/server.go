@@ -83,7 +83,7 @@ on the configured port.`,
 	flags.DurationVarP((*time.Duration)(&Server.Config.AntiEntropy.Interval), "anti-entropy.interval", "", time.Minute*10, "Interval at which to run anti-entropy routine.")
 	flags.StringVarP(&Server.CPUProfile, "profile.cpu", "", "", "Where to store CPU profile.")
 	flags.DurationVarP(&Server.CPUTime, "profile.cpu-time", "", 30*time.Second, "CPU profile duration.")
-	flags.StringVarP(&Server.Config.Cluster.BroadcasterType, "cluster.broadcaster-type", "", "static", "Type of Broadcaster to use for inter-host messaging. Choose from [static, http, gossip]")
+	flags.StringVarP(&Server.Config.Cluster.Type, "cluster.type", "", "static", "Determine how the cluster handles membership and state sharing. Choose from [static, http, gossip]")
 	flags.StringVarP(&Server.Config.Cluster.Gossip.Seed, "cluster.gossip.seed", "", "", "Host with which to seed the gossip membership.")
 	flags.IntVarP(&Server.Config.Cluster.Gossip.Port, "cluster.gossip.port", "", 0, "Port to which pilosa should bind for gossip.")
 
