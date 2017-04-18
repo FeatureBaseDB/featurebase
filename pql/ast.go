@@ -30,6 +30,44 @@ type Call struct {
 	Children []*Call
 }
 
+// UintArg is for reading the value at key from call.Args as a uint64. The value
+// is assumed to be an int64 and then cast to a uint64. An error is returned if
+// the value is not found, or not an int64.
+func (c *Call) UintArg(key string) (uint64, bool, error) {
+	val, ok := c.Args[key]
+	if !ok {
+		return 0, false, nil
+	}
+	switch tval := val.(type) {
+	case int64:
+		return uint64(tval), true, nil
+	case uint64:
+		return tval, true, nil
+	default:
+		return 0, true, fmt.Errorf("could not convert %v of type %T to uint64 in Calll.UintArg", tval, tval)
+	}
+}
+
+func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
+	val, ok := c.Args[key]
+	if !ok {
+		return nil, false, nil
+	}
+
+	switch tval := val.(type) {
+	case []uint64:
+		return tval, true, nil
+	case []int64:
+		ret := make([]uint64, len(tval))
+		for i, v := range tval {
+			ret[i] = uint64(v)
+		}
+		return ret, true, nil
+	default:
+		return nil, true, fmt.Errorf("unexpected type %T in UintSliceArg, val %v", tval, tval)
+	}
+}
+
 // Keys returns a list of argument keys in sorted order.
 func (c *Call) Keys() []string {
 	a := make([]string, 0, len(c.Args))

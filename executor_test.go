@@ -41,7 +41,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 			t.Fatal(err)
 		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
 			t.Fatalf("unexpected bits: %+v", bits)
-		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": uint64(123)}) {
+		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
 	})
@@ -72,7 +72,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 			t.Fatal(err)
 		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{10, 20}) {
 			t.Fatalf("unexpected bits: %+v", bits)
-		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": uint64(123)}) {
+		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
 	})
@@ -251,7 +251,7 @@ func TestExecutor_Execute_SetBitmapAttrs(t *testing.T) {
 	f := idx.Frame("d", "f")
 	if m, err := f.BitmapAttrStore().Attrs(10); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(m, map[string]interface{}{"foo": "bar", "baz": uint64(123), "bat": true}) {
+	} else if !reflect.DeepEqual(m, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
 		t.Fatalf("unexpected bitmap attr: %#v", m)
 	}
 }
@@ -269,7 +269,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 5).SetBit(0, (5*SliceWidth)+100)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
-	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(20, SliceWidth)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth)
 	idx.MustCreateFragmentIfNotExists("d", "other", pilosa.ViewStandard, 0).SetBit(0, 0)
 
 	// Execute query.
@@ -382,7 +382,7 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
 
-	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
+	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"category": int64(123)}); err != nil {
 		t.Fatal(err)
 	}
 	e := NewExecutor(idx.Index, NewCluster(1))

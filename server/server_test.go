@@ -115,6 +115,8 @@ func TestMain_SetBitmapAttrs(t *testing.T) {
 		t.Fatal(err)
 	} else if err := client.CreateFrame(context.Background(), "d", "z", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
+	} else if err := client.CreateFrame(context.Background(), "d", "neg", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
 	}
 
 	// Set bits on different bitmaps in different frames.
@@ -124,14 +126,18 @@ func TestMain_SetBitmapAttrs(t *testing.T) {
 		t.Fatal(err)
 	} else if _, err := m.Query("db=d", `SetBit(id=2, frame="z", profileID=100)`); err != nil {
 		t.Fatal(err)
+	} else if _, err := m.Query("db=d", `SetBit(id=3, frame="neg", profileID=100)`); err != nil {
+		t.Fatal(err)
 	}
 
 	// Set bitmap attributes.
 	if _, err := m.Query("db=d", `SetBitmapAttrs(id=1, frame="x.n", x=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("db=d", `SetBitmapAttrs(id=2, frame="x.n", x=200)`); err != nil {
+	} else if _, err := m.Query("db=d", `SetBitmapAttrs(id=2, frame="x.n", x=-200)`); err != nil {
 		t.Fatal(err)
 	} else if _, err := m.Query("db=d", `SetBitmapAttrs(id=2, frame="z", x=300)`); err != nil {
+		t.Fatal(err)
+	} else if _, err := m.Query("db=d", `SetBitmapAttrs(id=3, frame="neg", x=-0.44)`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -145,7 +151,7 @@ func TestMain_SetBitmapAttrs(t *testing.T) {
 	// Query bitmap x.n/2.
 	if res, err := m.Query("db=d", `Bitmap(id=2, frame="x.n")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":200},"bits":[100]}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{"x":-200},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
@@ -153,11 +159,23 @@ func TestMain_SetBitmapAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Query bitmap after reopening.
+	// Query bitmaps after reopening.
 	if res, err := m.Query("db=d&profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
+	}
+
+	if res, err := m.Query("db=d&profiles=true", `Bitmap(id=3, frame="neg")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"results":[{"attrs":{"x":-0.44},"bits":[100]}]}`+"\n" {
+		t.Fatalf("unexpected result(reopen): %s", res)
+	}
+	// Query bitmap x.n/2.
+	if res, err := m.Query("db=d", `Bitmap(id=2, frame="x.n")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"results":[{"attrs":{"x":-200},"bits":[100]}]}`+"\n" {
+		t.Fatalf("unexpected result: %s", res)
 	}
 }
 
