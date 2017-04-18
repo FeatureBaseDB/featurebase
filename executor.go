@@ -944,7 +944,6 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 func (e *Executor) exec(ctx context.Context, node *Node, db string, q *pql.Query, slices []uint64, opt *ExecOptions) (results []interface{}, err error) {
 	// Encode request object.
 	pbreq := &internal.QueryRequest{
-		DB:     db,
 		Query:  q.String(),
 		Slices: slices,
 		Remote: true,
@@ -958,7 +957,7 @@ func (e *Executor) exec(ctx context.Context, node *Node, db string, q *pql.Query
 	req, err := http.NewRequest("POST", (&url.URL{
 		Scheme: "http",
 		Host:   node.Host,
-		Path:   "/query",
+		Path:   fmt.Sprintf("/db/%s/query", db),
 	}).String(), bytes.NewReader(buf))
 	if err != nil {
 		return nil, err

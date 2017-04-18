@@ -56,24 +56,23 @@ func NewHandler() *Handler {
 
 func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
-	router.HandleFunc("/db", handler.handleGetDB).Methods("GET")
-	router.HandleFunc("/db", handler.handlePostDB).Methods("POST")
-	router.HandleFunc("/db", handler.handleDeleteDB).Methods("DELETE")
-	router.HandleFunc("/db/{db}", handler.handleGetSingleDB).Methods("GET")
+	router.HandleFunc("/db", handler.handleGetDBs).Methods("GET")
+	router.HandleFunc("/db/{db}", handler.handleGetDB).Methods("GET")
+	router.HandleFunc("/db/{db}", handler.handlePostDB).Methods("POST")
 	router.HandleFunc("/db/{db}", handler.handleDeleteDB).Methods("DELETE")
+	router.HandleFunc("/db/{db}/attr/diff", handler.handlePostDBAttrDiff).Methods("POST")
+	//router.HandleFunc("/db/{db}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
+	router.HandleFunc("/db/{db}/frame/{frame}", handler.handlePostFrame).Methods("POST")
+	router.HandleFunc("/db/{db}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/db/{db}/query", handler.handlePostQuery).Methods("POST")
-	router.HandleFunc("/db/time_quantum", handler.handlePatchDBTimeQuantum).Methods("PATCH")
+	router.HandleFunc("/db/{db}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
+	router.HandleFunc("/db/{db}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
+	router.HandleFunc("/db/{db}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
+	router.HandleFunc("/db/{db}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
 	router.HandleFunc("/db/{db}/time-quantum", handler.handlePatchDBTimeQuantum).Methods("PATCH")
-	router.HandleFunc("/db/attr/diff", handler.handlePostDBAttrDiff).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
-	router.HandleFunc("/frame", handler.handlePostFrame).Methods("POST")
-	router.HandleFunc("/frame", handler.handleDeleteFrame).Methods("DELETE")
-	router.HandleFunc("/frame/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/frame/restore", handler.handlePostFrameRestore).Methods("POST")
-	router.HandleFunc("/frame/time_quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
-	router.HandleFunc("/frame/views", handler.handleGetFrameViews).Methods("GET")
 	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
 	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET")
 	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET")
@@ -81,7 +80,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
 	router.HandleFunc("/nodes", handler.handleGetNodes).Methods("GET")
-	router.HandleFunc("/query", handler.handlePostQuery).Methods("POST")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
@@ -90,7 +88,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
 	// https://github.com/gorilla/mux/issues/6
 	// For now we just do it for the most commonly used handler, /query
-	router.HandleFunc("/query", handler.methodNotAllowedHandler).Methods("GET")
+	router.HandleFunc("/db/{db}/query", handler.methodNotAllowedHandler).Methods("GET")
 
 	return router
 }
@@ -119,6 +117,8 @@ type getSchemaResponse struct {
 
 // handlePostQuery handles /query requests.
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+
 	// Parse incoming request.
 	req, err := h.readQueryRequest(r)
 	if err != nil {
@@ -141,7 +141,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute the query.
-	results, err := h.Executor.Execute(r.Context(), req.DB, q, req.Slices, opt)
+	results, err := h.Executor.Execute(r.Context(), dbName, q, req.Slices, opt)
 	resp := &QueryResponse{Results: results, Err: err}
 
 	// Fill profile attributes if requested.
@@ -157,7 +157,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Retrieve profile attributes across all calls.
-		profiles, err := h.readProfiles(h.Index.DB(req.DB), profileIDs)
+		profiles, err := h.readProfiles(h.Index.DB(dbName), profileIDs)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			h.writeQueryResponse(w, r, &QueryResponse{Err: err})
@@ -203,71 +203,33 @@ type sliceMaxResponse struct {
 	MaxSlices map[string]uint64 `json:"MaxSlices"`
 }
 
-// handleGetDB handles GET /db request.
+// handleGetDBs handles GET /db request.
+func (h *Handler) handleGetDBs(w http.ResponseWriter, r *http.Request) {
+	h.handleGetSchema(w, r)
+}
+
+// handleGetDB handles GET /db/<dbname> requests.
 func (h *Handler) handleGetDB(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("schema") != "" {
-		h.handleGetSchema(w, r)
-		return
-	}
-	var dbs []map[string]string
-	for _, db := range h.Index.DBs() {
-		dbs = append(dbs, map[string]string{"name": db.Name()})
-	}
-	if err := json.NewEncoder(w).Encode(getDBResponse{
-		DBs: dbs,
-	}); err != nil {
-		h.logger().Printf("write schema response error: %s", err)
-	}
-}
-
-type getDBResponse struct {
-	DBs []map[string]string `json:"dbs"`
-}
-
-// handleGetSingleDB handles GET /db/<dbname> requests.
-func (h *Handler) handleGetSingleDB(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	dbName := vars["db"]
+	dbName := mux.Vars(r)["db"]
 	db := h.Index.DB(dbName)
 	if db == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(getSingleDBResponse{
+	if err := json.NewEncoder(w).Encode(getDBResponse{
 		map[string]string{"name": db.Name()},
 	}); err != nil {
 		h.logger().Printf("write response error: %s", err)
 	}
 }
 
-type getSingleDBResponse struct {
-	Db map[string]string `json:"db"`
+type getDBResponse struct {
+	DB map[string]string `json:"db"`
 }
 
-// handlePostDB handles POST /db request.
-func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
-	// Decode request.
-	var req postDBRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Create database.
-	_, err := h.Index.CreateDB(req.DB, req.Options)
-	if err == ErrDatabaseExists {
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
-	} else if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(postDBResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
-	}
+type postDBRequest struct {
+	Options DBOptions `json:"options"`
 }
 
 // Custom Unmarshal JSON to validate request body when creating a new database
@@ -278,12 +240,6 @@ func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 	}
 	for key, value := range data {
 		switch key {
-		case "db":
-			val, ok := data["db"].(string)
-			if !ok {
-				return errors.New("db required and must be a string")
-			}
-			p.DB = val
 		case "options":
 			value, err := validateOptions(data, "columnLabel")
 			if err != nil {
@@ -327,29 +283,14 @@ func validateOptions(data map[string]interface{}, field string) (string, error) 
 	return optionValue, nil
 }
 
-type postDBRequest struct {
-	DB      string    `json:"db"`
-	Options DBOptions `json:"options"`
-}
-
 type postDBResponse struct{}
 
 // handleDeleteDB handles DELETE /db request.
 func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
-	// Get db name from URL or Querystring if does not exist
-	var db string
-	if db = mux.Vars(r)["db"]; db == "" {
-		// Decode request.
-		var req deleteDBRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		db = req.DB
-	}
+	dbName := mux.Vars(r)["db"]
 
 	// Delete database from the index.
-	if err := h.Index.DeleteDB(db); err != nil {
+	if err := h.Index.DeleteDB(dbName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -360,48 +301,55 @@ func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type deleteDBRequest struct {
-	DB string `json:"db"`
-}
-
 type deleteDBResponse struct{}
+
+// handlePostDB handles POST /db request.
+func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+
+	// Decode request.
+	var req postDBRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Create database.
+	_, err := h.Index.CreateDB(dbName, req.Options)
+	if err == ErrDatabaseExists {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(postDBResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
 
 // handlePatchDBTimeQuantum handles PATCH /db/time_quantum request.
 func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Request) {
-	// Get db name from URL or Querystring if does not exist
-	var db string
-	var timeQuantum string
-	if db = mux.Vars(r)["db"]; db == "" {
-		// Decode request.
-		var req deprecatedPatchDBTimeQuantumRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		db = req.DB
-		timeQuantum = req.TimeQuantum
-	} else {
-		// Decode request.
-		var req patchDBTimeQuantumRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		timeQuantum = req.TimeQuantum
+	dbName := mux.Vars(r)["db"]
+
+	// Decode request.
+	var req patchDBTimeQuantumRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	log.Println(db)
-	log.Println(timeQuantum)
-
 	// Validate quantum.
-	tq, err := ParseTimeQuantum(timeQuantum)
+	tq, err := ParseTimeQuantum(req.TimeQuantum)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Retrieve database by name.
-	database := h.Index.DB(db)
+	database := h.Index.DB(dbName)
 	if database == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
@@ -419,19 +367,16 @@ func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-type deprecatedPatchDBTimeQuantumRequest struct {
-	DB          string `json:"db"`
-	TimeQuantum string `json:"time_quantum"`
-}
-
 type patchDBTimeQuantumRequest struct {
-	TimeQuantum string `json:"time-quantum"`
+	TimeQuantum string `json:"time_quantum"`
 }
 
 type patchDBTimeQuantumResponse struct{}
 
 // handlePostDBAttrDiff handles POST /db/attr/diff requests.
 func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+
 	// Decode request.
 	var req postDBAttrDiffRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -440,7 +385,7 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Retrieve database from index.
-	db := h.Index.DB(req.DB)
+	db := h.Index.DB(dbName)
 	if db == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
@@ -478,7 +423,6 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 }
 
 type postDBAttrDiffRequest struct {
-	DB     string      `json:"db"`
 	Blocks []AttrBlock `json:"blocks"`
 }
 
@@ -488,6 +432,8 @@ type postDBAttrDiffResponse struct {
 
 // handlePostFrame handles POST /frame request.
 func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
 
 	// Decode request.
 	var req postFrameRequest
@@ -497,14 +443,14 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find database.
-	db := h.Index.DB(req.DB)
+	db := h.Index.DB(dbName)
 	if db == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Create frame.
-	_, err := db.CreateFrame(req.Frame, req.Options)
+	_, err := db.CreateFrame(frameName, req.Options)
 	if err == ErrFrameExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -527,19 +473,6 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 	}
 	for key, value := range data {
 		switch key {
-		case "db":
-			val, ok := data["db"].(string)
-			if !ok {
-				return errors.New("db required and must be a string")
-			}
-			p.DB = val
-		case "frame":
-			val, ok := data["frame"].(string)
-			if !ok {
-				return errors.New("frame required and must be a string")
-			}
-			p.Frame = val
-
 		case "options":
 			value, err := validateOptions(data, "rowLabel")
 			if err != nil {
@@ -550,7 +483,6 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 			} else {
 				p.Options = FrameOptions{RowLabel: value}
 			}
-
 		default:
 			return fmt.Errorf("Unknown key: {%v:%v}", key, value)
 		}
@@ -560,8 +492,6 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 }
 
 type postFrameRequest struct {
-	DB      string       `json:"db"`
-	Frame   string       `json:"frame"`
 	Options FrameOptions `json:"options"`
 }
 
@@ -569,15 +499,11 @@ type postFrameResponse struct{}
 
 // handleDeleteFrame handles DELETE /frame request.
 func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
-	// Decode request.
-	var req deleteFrameRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
 
 	// Find database.
-	db := h.Index.DB(req.DB)
+	db := h.Index.DB(dbName)
 	if db == nil {
 		if err := json.NewEncoder(w).Encode(deleteDBResponse{}); err != nil {
 			h.logger().Printf("response encoding error: %s", err)
@@ -586,7 +512,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete frame from the database.
-	if err := db.DeleteFrame(req.Frame); err != nil {
+	if err := db.DeleteFrame(frameName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -597,15 +523,13 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type deleteFrameRequest struct {
-	DB    string `json:"db"`
-	Frame string `json:"frame"`
-}
-
 type deleteFrameResponse struct{}
 
 // handlePatchFrameTimeQuantum handles PATCH /frame/time_quantum request.
 func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
+
 	// Decode request.
 	var req patchFrameTimeQuantumRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -621,7 +545,7 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 	}
 
 	// Retrieve database by name.
-	f := h.Index.Frame(req.DB, req.Frame)
+	f := h.Index.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -640,8 +564,6 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 }
 
 type patchFrameTimeQuantumRequest struct {
-	DB          string `json:"db"`
-	Frame       string `json:"frame"`
 	TimeQuantum string `json:"time_quantum"`
 }
 
@@ -649,11 +571,11 @@ type patchFrameTimeQuantumResponse struct{}
 
 // handleGetFrameViews handles GET /frame/views request.
 func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	db, frame := q.Get("db"), q.Get("frame")
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
 
 	// Retrieve views.
-	f := h.Index.Frame(db, frame)
+	f := h.Index.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -678,6 +600,9 @@ type getFrameViewsResponse struct {
 
 // handlePostFrameAttrDiff handles POST /frame/attr/diff requests.
 func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
+
 	// Decode request.
 	var req postFrameAttrDiffRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -686,7 +611,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 	}
 
 	// Retrieve database from index.
-	f := h.Index.Frame(req.DB, req.Frame)
+	f := h.Index.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -724,8 +649,6 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 }
 
 type postFrameAttrDiffRequest struct {
-	DB     string      `json:"db"`
-	Frame  string      `json:"frame"`
 	Blocks []AttrBlock `json:"blocks"`
 }
 
@@ -810,14 +733,7 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 		quantum = v
 	}
 
-	// Get db name from URL or Querystring if does not exist
-	var db string
-	if db = mux.Vars(r)["db"]; db == "" {
-		db = q.Get("db")
-	}
-
 	return &QueryRequest{
-		DB:       db,
 		Query:    query,
 		Slices:   slices,
 		Profiles: q.Get("profiles") == "true",
@@ -1134,19 +1050,15 @@ type getFragmentBlocksResponse struct {
 
 // handlePostFrameRestore handles POST /frame/restore requests.
 func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
+
 	q := r.URL.Query()
 	host := q.Get("host")
-	db, frame := q.Get("db"), q.Get("frame")
 
 	// Validate query parameters.
 	if host == "" {
 		http.Error(w, "host required", http.StatusBadRequest)
-		return
-	} else if db == "" {
-		http.Error(w, "db required", http.StatusBadRequest)
-		return
-	} else if frame == "" {
-		http.Error(w, "frame required", http.StatusBadRequest)
 		return
 	}
 
@@ -1165,24 +1077,23 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve frame.
-	f := h.Index.Frame(db, frame)
+	f := h.Index.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Retrieve list of all views.
-	views, err := client.FrameViews(r.Context(), db, frame)
+	views, err := client.FrameViews(r.Context(), dbName, frameName)
 	if err != nil {
 		http.Error(w, "cannot retrieve frame views: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Loop over each slice and import it if this node owns it.
-	//travis
-	for slice := uint64(0); slice <= maxSlices[db]; slice++ {
+	for slice := uint64(0); slice <= maxSlices[dbName]; slice++ {
 		// Ignore this slice if we don't own it.
-		if !h.Cluster.OwnsFragment(h.Host, db, slice) {
+		if !h.Cluster.OwnsFragment(h.Host, dbName, slice) {
 			continue
 		}
 
@@ -1203,7 +1114,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 			}
 
 			// Stream backup from remote node.
-			rd, err := client.BackupSlice(r.Context(), db, frame, view, slice)
+			rd, err := client.BackupSlice(r.Context(), dbName, frameName, view, slice)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -1290,7 +1201,6 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		DB:       pb.DB,
 		Query:    pb.Query,
 		Slices:   pb.Slices,
 		Profiles: pb.Profiles,
