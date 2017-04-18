@@ -21,7 +21,8 @@ var (
 	ErrFrameNotFound        = errors.New("frame not found")
 	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
 
-	ErrInvalidView = errors.New("invalid view")
+	ErrInvalidView      = errors.New("invalid view")
+	ErrInvalidCacheType = errors.New("invalid cache type")
 
 	ErrName = errors.New("invalid database or frame's name, must match [a-z0-9_-]")
 

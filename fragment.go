@@ -16,7 +16,6 @@ import (
 	"log"
 	"os"
 	"sort"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -69,7 +68,8 @@ type Fragment struct {
 	opN         int // number of ops since snapshot
 
 	// Cache for bitmap counts.
-	cache Cache
+	cacheType string // passed in by frame
+	cache     Cache
 
 	// Cache containing full bitmaps (not just counts).
 	bitmapCache BitmapCache
@@ -95,11 +95,12 @@ type Fragment struct {
 // NewFragment returns a new instance of Fragment.
 func NewFragment(path, db, frame, view string, slice uint64) *Fragment {
 	return &Fragment{
-		path:  path,
-		db:    db,
-		frame: frame,
-		view:  view,
-		slice: slice,
+		path:      path,
+		db:        db,
+		frame:     frame,
+		view:      view,
+		slice:     slice,
+		cacheType: DefaultCacheType,
 
 		LogOutput: ioutil.Discard,
 		MaxOpN:    DefaultFragmentMaxOpN,
@@ -219,13 +220,16 @@ func (f *Fragment) openStorage() error {
 // openCache initializes the cache from bitmap ids persisted to disk.
 func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
-	if strings.HasSuffix(f.frame, FrameSuffixRank) {
+	switch f.cacheType {
+	case CacheTypeRanked:
 		c := NewRankCache()
 		c.ThresholdLength = 50000
 		c.ThresholdIndex = 45000
 		f.cache = c
-	} else {
+	case CacheTypeLRU:
 		f.cache = NewLRUCache(50000)
+	default:
+		return ErrInvalidCacheType
 	}
 
 	// Read cache data from disk.
