@@ -161,3 +161,26 @@ func (rec *HTTPBroadcastReceiver) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		return
 	}
 }
+
+// HTTPNodeSet represents a NodeSet that broadcasts messages over HTTP.
+type HTTPNodeSet struct {
+	nodes []*Node
+}
+
+// NewHTTPNodeSet returns a new instance of HTTPNodeSet.
+func NewHTTPNodeSet() *HTTPNodeSet {
+	return &HTTPNodeSet{}
+}
+
+func (h *HTTPNodeSet) Nodes() []*Node {
+	return h.nodes
+}
+
+func (h *HTTPNodeSet) Open() error {
+	return nil
+}
+
+func (h *HTTPNodeSet) Join(nodes []*Node) error {
+	h.nodes = nodes
+	return nil
+}

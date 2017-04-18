@@ -8,6 +8,32 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
+// NodeSet represents an interface for Node membership and inter-node communication.
+type NodeSet interface {
+	// Returns a list of all Nodes in the cluster
+	Nodes() []*Node
+
+	// Open starts any network activity implemented by the NodeSet
+	Open() error
+}
+
+// StaticNodeSet represents a basic NodeSet for testing
+type StaticNodeSet struct {
+	nodes []*Node
+}
+
+func NewStaticNodeSet() *StaticNodeSet {
+	return &StaticNodeSet{}
+}
+
+func (s *StaticNodeSet) Nodes() []*Node {
+	return s.nodes
+}
+
+func (s *StaticNodeSet) Open() error {
+	return nil
+}
+
 // Broadcaster is an interface for broadcasting messages.
 type Broadcaster interface {
 	SendSync(pb proto.Message) error

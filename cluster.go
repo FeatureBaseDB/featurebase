@@ -3,8 +3,6 @@ package pilosa
 import (
 	"encoding/binary"
 	"hash/fnv"
-
-	"github.com/gogo/protobuf/proto"
 )
 
 const (
@@ -191,15 +189,6 @@ func (c *Cluster) PartitionNodes(partitionID int) []*Node {
 	return nodes
 }
 
-// NodeSet represents an interface for Node membership and inter-node communication.
-type NodeSet interface {
-	// Returns a list of all Nodes in the cluster
-	Nodes() []*Node
-
-	// Open starts any network activity implemented by the NodeSet
-	Open() error
-}
-
 // Hasher represents an interface to hash integers into buckets.
 type Hasher interface {
 	// Hashes the key into a number between [0,N).
@@ -221,52 +210,4 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 		j = int64(float64(b+1) * (float64(int64(1)<<31) / float64((key>>33)+1)))
 	}
 	return int(b)
-}
-
-// HTTPNodeSet represents a NodeSet that broadcasts messages over HTTP.
-type HTTPNodeSet struct {
-	nodes []*Node
-}
-
-// NewHTTPNodeSet returns a new instance of HTTPNodeSet.
-func NewHTTPNodeSet() *HTTPNodeSet {
-	return &HTTPNodeSet{}
-}
-
-func (h *HTTPNodeSet) Nodes() []*Node {
-	return h.nodes
-}
-
-func (h *HTTPNodeSet) Open() error {
-	return nil
-}
-
-func (h *HTTPNodeSet) Join(nodes []*Node) error {
-	h.nodes = nodes
-	return nil
-}
-
-// StaticNodeSet represents a basic NodeSet for testing
-type StaticNodeSet struct {
-	nodes []*Node
-}
-
-func NewStaticNodeSet() *StaticNodeSet {
-	return &StaticNodeSet{}
-}
-
-func (s *StaticNodeSet) Nodes() []*Node {
-	return s.nodes
-}
-
-func (s *StaticNodeSet) Open() error {
-	return nil
-}
-
-func (s *StaticNodeSet) SendSync(pb proto.Message) error {
-	return nil
-}
-
-func (s *StaticNodeSet) SendAsync(pb proto.Message) error {
-	return nil
 }
