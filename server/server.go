@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/gossip"
 )
 
 func init() {
@@ -143,7 +144,7 @@ func (m *Command) SetupServer() error {
 		if err != nil {
 			gossipHost = m.Config.Host
 		}
-		gossipNodeSet := pilosa.NewGossipNodeSet(m.Config.Host, gossipHost, gossipPort, gossipSeed, m.Server)
+		gossipNodeSet := gossip.NewGossipNodeSet(m.Config.Host, gossipHost, gossipPort, gossipSeed, m.Server)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet

@@ -1,4 +1,4 @@
-package pilosa
+package gossip
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/hashicorp/memberlist"
+	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 )
 
@@ -26,7 +27,7 @@ type StateHandler interface {
 // GossipNodeSet also represents an implementation of memberlist.Delegate
 type GossipNodeSet struct {
 	memberlist *memberlist.Memberlist
-	handler    BroadcastHandler
+	handler    pilosa.BroadcastHandler
 
 	broadcasts *memberlist.TransmitLimitedQueue
 
@@ -37,15 +38,15 @@ type GossipNodeSet struct {
 	LogOutput io.Writer
 }
 
-func (g *GossipNodeSet) Nodes() []*Node {
-	a := make([]*Node, 0, g.memberlist.NumMembers())
+func (g *GossipNodeSet) Nodes() []*pilosa.Node {
+	a := make([]*pilosa.Node, 0, g.memberlist.NumMembers())
 	for _, n := range g.memberlist.Members() {
-		a = append(a, &Node{Host: n.Name})
+		a = append(a, &pilosa.Node{Host: n.Name})
 	}
 	return a
 }
 
-func (g *GossipNodeSet) Start(h BroadcastHandler) error {
+func (g *GossipNodeSet) Start(h pilosa.BroadcastHandler) error {
 	g.handler = h
 	return nil
 }
@@ -61,8 +62,8 @@ func (g *GossipNodeSet) Open() error {
 	g.memberlist = ml
 
 	// attach to gossip seed node
-	nodes := []*Node{&Node{Host: g.config.gossipSeed}} //TODO: support a list of seeds
-	_, err = g.memberlist.Join(Nodes(nodes).Hosts())
+	nodes := []*pilosa.Node{&pilosa.Node{Host: g.config.gossipSeed}} //TODO: support a list of seeds
+	_, err = g.memberlist.Join(pilosa.Nodes(nodes).Hosts())
 	if err != nil {
 		return err
 	}
@@ -112,7 +113,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 
 // SendSync implementation of the Broadcaster interface
 func (g *GossipNodeSet) SendSync(pb proto.Message) error {
-	msg, err := MarshalMessage(pb)
+	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
 		return err
 	}
@@ -140,7 +141,7 @@ func (g *GossipNodeSet) SendSync(pb proto.Message) error {
 
 // SendAsync implementation of the Broadcaster interface
 func (g *GossipNodeSet) SendAsync(pb proto.Message) error {
-	msg, err := MarshalMessage(pb)
+	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
 		return err
 	}
@@ -166,7 +167,7 @@ func (g *GossipNodeSet) NodeMeta(limit int) []byte {
 }
 
 func (g *GossipNodeSet) NotifyMsg(b []byte) {
-	m, err := UnmarshalMessage(b)
+	m, err := pilosa.UnmarshalMessage(b)
 	if err != nil {
 		g.logger().Printf("unmarshal message error: %s", err)
 		return
