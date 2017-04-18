@@ -386,8 +386,26 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_RankCache_Persistence(t *testing.T) {
-	f := MustOpenFragment("d", "f.n", pilosa.ViewStandard, 0)
-	defer f.Close()
+	db := MustOpenDB()
+	defer db.Close()
+
+	// Create frame.
+	frame, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{CacheType: pilosa.CacheTypeRanked})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create view.
+	view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create fragment.
+	f, err := view.CreateFragmentIfNotExists(0)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
@@ -403,10 +421,13 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
 
-	// Reopen the fragment.
-	if err := f.Reopen(); err != nil {
+	// Reopen the database.
+	if err := db.Reopen(); err != nil {
 		t.Fatal(err)
 	}
+
+	// Re-fetch fragment.
+	f = db.Frame("f").View(pilosa.ViewStandard).Fragment(0)
 
 	// Re-verify correct cache type and size.
 	if cache, ok := f.Cache().(*pilosa.RankCache); !ok {
