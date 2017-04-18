@@ -257,6 +257,7 @@ func (p BitmapPairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p BitmapPairs) Len() int           { return len(p) }
 func (p BitmapPairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
+// Pair holds a bitmap id and its count.
 type Pair struct {
 	ID    uint64 `json:"id"`
 	Count uint64 `json:"count"`
@@ -276,12 +277,14 @@ func decodePair(pb *internal.Pair) Pair {
 	}
 }
 
+// Pairs is a sortable slice of Pair objects.
 type Pairs []Pair
 
 func (p Pairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p Pairs) Len() int           { return len(p) }
 func (p Pairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
+// PairHeap is a heap implementation over a group of Pairs.
 type PairHeap struct {
 	Pairs
 }
@@ -412,11 +415,13 @@ type SimpleCache struct {
 	cache map[uint64]*Bitmap
 }
 
+// Fetch retrieves the bitmap at the id in the cache.
 func (s *SimpleCache) Fetch(id uint64) (*Bitmap, bool) {
 	m, ok := s.cache[id]
 	return m, ok
 }
 
+// Add adds the bitmap to the cache, keyed on the id.
 func (s *SimpleCache) Add(id uint64, b *Bitmap) {
 	s.cache[id] = b
 }

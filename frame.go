@@ -352,6 +352,7 @@ func (f *Frame) Views() []*View {
 	return other
 }
 
+// CreateViewIfNotExists returns the named view, creating it if necessary.
 func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 	// Don't create inverse views if they are not enabled.
 	if !f.InverseEnabled() && IsInverseView(name) {
