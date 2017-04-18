@@ -1,3 +1,6 @@
+/*
+This is the entrypoint for the Pilosa binary.
+*/
 package main
 
 import (

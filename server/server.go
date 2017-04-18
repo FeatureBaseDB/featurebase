@@ -1,3 +1,7 @@
+// package server contains the `pilosa server` subcommand which runs Pilosa
+// itself. The purpose of this package is to define an easily tested Command
+// object which handles interpreting configuration and setting up all the
+// objects that Pilosa needs.
 package server
 
 import (
