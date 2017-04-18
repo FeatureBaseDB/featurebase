@@ -1,4 +1,4 @@
-package pilosa
+package httpbroadcast
 
 import (
 	"bytes"
@@ -14,16 +14,17 @@ import (
 	"net"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa"
 )
 
 // HTTPBroadcaster represents a NodeSet that broadcasts messages over HTTP.
 type HTTPBroadcaster struct {
-	server       *Server
+	server       *pilosa.Server
 	internalPort string
 }
 
 // NewHTTPBroadcaster returns a new instance of HTTPBroadcaster.
-func NewHTTPBroadcaster(s *Server, internalPort string) *HTTPBroadcaster {
+func NewHTTPBroadcaster(s *pilosa.Server, internalPort string) *HTTPBroadcaster {
 	return &HTTPBroadcaster{server: s}
 }
 
@@ -31,7 +32,7 @@ func NewHTTPBroadcaster(s *Server, internalPort string) *HTTPBroadcaster {
 // It waits for all nodes to respond before the function returns (and returns any errors).
 func (h *HTTPBroadcaster) SendSync(pb proto.Message) error {
 	// Marshal the pb to []byte
-	buf, err := MarshalMessage(pb)
+	buf, err := pilosa.MarshalMessage(pb)
 	if err != nil {
 		return err
 	}
@@ -61,7 +62,7 @@ func (h *HTTPBroadcaster) SendAsync(pb proto.Message) error {
 	return h.SendSync(pb)
 }
 
-func (h *HTTPBroadcaster) nodes() ([]*Node, error) {
+func (h *HTTPBroadcaster) nodes() ([]*pilosa.Node, error) {
 	if h.server == nil {
 		return nil, errors.New("HTTPBroadcaster has no reference to Server.")
 	}
@@ -72,7 +73,7 @@ func (h *HTTPBroadcaster) nodes() ([]*Node, error) {
 	return nodeset.Nodes(), nil
 }
 
-func (h *HTTPBroadcaster) sendNodeMessage(node *Node, msg []byte) error {
+func (h *HTTPBroadcaster) sendNodeMessage(node *pilosa.Node, msg []byte) error {
 	var client *http.Client
 	client = http.DefaultClient
 
@@ -114,7 +115,7 @@ func (h *HTTPBroadcaster) sendNodeMessage(node *Node, msg []byte) error {
 
 type HTTPBroadcastReceiver struct {
 	port      string
-	handler   BroadcastHandler
+	handler   pilosa.BroadcastHandler
 	logOutput io.Writer
 }
 
@@ -125,7 +126,7 @@ func NewHTTPBroadcastReceiver(port string, logOutput io.Writer) *HTTPBroadcastRe
 	}
 }
 
-func (rec *HTTPBroadcastReceiver) Start(b BroadcastHandler) error {
+func (rec *HTTPBroadcastReceiver) Start(b pilosa.BroadcastHandler) error {
 	rec.handler = b
 	go func() {
 		err := http.ListenAndServe(":"+rec.port, rec)
@@ -150,7 +151,7 @@ func (rec *HTTPBroadcastReceiver) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Unmarshal message to specific proto type.
-	m, err := UnmarshalMessage(body)
+	m, err := pilosa.UnmarshalMessage(body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -164,7 +165,7 @@ func (rec *HTTPBroadcastReceiver) ServeHTTP(w http.ResponseWriter, r *http.Reque
 
 // HTTPNodeSet represents a NodeSet that broadcasts messages over HTTP.
 type HTTPNodeSet struct {
-	nodes []*Node
+	nodes []*pilosa.Node
 }
 
 // NewHTTPNodeSet returns a new instance of HTTPNodeSet.
@@ -172,7 +173,7 @@ func NewHTTPNodeSet() *HTTPNodeSet {
 	return &HTTPNodeSet{}
 }
 
-func (h *HTTPNodeSet) Nodes() []*Node {
+func (h *HTTPNodeSet) Nodes() []*pilosa.Node {
 	return h.nodes
 }
 
@@ -180,7 +181,7 @@ func (h *HTTPNodeSet) Open() error {
 	return nil
 }
 
-func (h *HTTPNodeSet) Join(nodes []*Node) error {
+func (h *HTTPNodeSet) Join(nodes []*pilosa.Node) error {
 	h.nodes = nodes
 	return nil
 }

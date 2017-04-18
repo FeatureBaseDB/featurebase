@@ -18,6 +18,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
+	"github.com/pilosa/pilosa/httpbroadcast"
 )
 
 func init() {
@@ -123,10 +124,13 @@ func (m *Command) SetupServer() error {
 	switch m.Config.Cluster.BroadcasterType { // TODO change name to something that encompasses broadcasting, receiving broadcasts, and tracking cluster membership
 	case "http":
 		port := strconv.Itoa(m.Config.Cluster.Gossip.Port)
-		m.Server.Broadcaster = pilosa.NewHTTPBroadcaster(m.Server, port)
-		m.Server.BroadcastReceiver = pilosa.NewHTTPBroadcastReceiver(port, m.Stderr)
-		m.Server.Cluster.NodeSet = pilosa.NewHTTPNodeSet()
-		m.Server.Cluster.NodeSet.(*pilosa.HTTPNodeSet).Join(m.Server.Cluster.Nodes)
+		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, port)
+		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(port, m.Stderr)
+		m.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
+		err := m.Server.Cluster.NodeSet.(*httpbroadcast.HTTPNodeSet).Join(m.Server.Cluster.Nodes)
+		if err != nil {
+			return err
+		}
 	case "gossip":
 		gossipPort, err := strconv.Atoi(pilosa.DefaultGossipPort)
 		if err != nil {

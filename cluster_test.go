@@ -9,6 +9,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/httpbroadcast"
 )
 
 // Ensure the cluster can fairly distribute partitions across the nodes.
@@ -95,10 +96,10 @@ func TestCluster_Health(t *testing.T) {
 			{Host: "serverB:1000"},
 			{Host: "serverC:1000"},
 		},
-		NodeSet: &pilosa.HTTPNodeSet{},
+		NodeSet: &httpbroadcast.HTTPNodeSet{},
 	}
 
-	err := c.NodeSet.(*pilosa.HTTPNodeSet).Join([]*pilosa.Node{
+	err := c.NodeSet.(*httpbroadcast.HTTPNodeSet).Join([]*pilosa.Node{
 		&pilosa.Node{Host: "serverA:1000"},
 		&pilosa.Node{Host: "serverC:1000"},
 		&pilosa.Node{Host: "serverD:1000"},
