@@ -143,7 +143,7 @@ func TestHandler_Query_Args_URL(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=0,1", strings.NewReader("Count( Bitmap( id=100))")))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/db/db0/query?slices=0,1", strings.NewReader("Count( Bitmap( id=100))")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code, w.Body.String())
 	} else if body := w.Body.String(); body != `{"results":[100]}`+"\n" {
@@ -167,7 +167,6 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 
 	// Generate request body.
 	reqBody, err := proto.Marshal(&internal.QueryRequest{
-		DB:     "db0",
 		Query:  "Count(Bitmap(id=100))",
 		Slices: []uint64{0, 1},
 	})
@@ -176,7 +175,7 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 	}
 
 	// Generate protobuf request.
-	req := MustNewHTTPRequest("POST", "/query", bytes.NewReader(reqBody))
+	req := MustNewHTTPRequest("POST", "/db/db0/query", bytes.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/x-protobuf")
 
 	w := httptest.NewRecorder()
@@ -189,7 +188,7 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 // Ensure the handler returns an error when parsing bad arguments.
 func TestHandler_Query_Args_Err(t *testing.T) {
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=a,b", strings.NewReader("Bitmap(id=100)")))
+	NewHandler().ServeHTTP(w, MustNewHTTPRequest("POST", "/db/db0/query?slices=a,b", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"invalid slice argument"}`+"\n" {
@@ -205,7 +204,7 @@ func TestHandler_Query_Uint64_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=0,1", strings.NewReader("Count( Bitmap( id=100))")))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/db/db0/query?slices=0,1", strings.NewReader("Count( Bitmap( id=100))")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[100]}`+"\n" {
@@ -221,7 +220,7 @@ func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := MustNewHTTPRequest("POST", "/query", strings.NewReader("Count(Bitmap(id=100))"))
+	r := MustNewHTTPRequest("POST", "/db/d/query", strings.NewReader("Count(Bitmap(id=100))"))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
@@ -246,7 +245,7 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=d", strings.NewReader("Bitmap(id=100)")))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/db/d/query", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,1048577]}]}`+"\n" {
@@ -278,7 +277,7 @@ func TestHandler_Query_Bitmap_Profiles_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=d&profiles=true", strings.NewReader("Bitmap(id=100)")))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/db/d/query?profiles=true", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,1048577]}],"profiles":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
@@ -296,7 +295,7 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := MustNewHTTPRequest("POST", "/query", strings.NewReader("Bitmap(id=100)"))
+	r := MustNewHTTPRequest("POST", "/db/d/query", strings.NewReader("Bitmap(id=100)"))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
@@ -342,7 +341,6 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 
 	// Encode request body.
 	buf, err := proto.Marshal(&internal.QueryRequest{
-		DB:       "d",
 		Query:    "Bitmap(id=100)",
 		Profiles: true,
 	})
@@ -351,7 +349,7 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := MustNewHTTPRequest("POST", "/query", bytes.NewReader(buf))
+	r := MustNewHTTPRequest("POST", "/db/d/query", bytes.NewReader(buf))
 	r.Header.Set("Content-Type", "application/x-protobuf")
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
@@ -397,7 +395,7 @@ func TestHandler_Query_Pairs_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query", strings.NewReader(`TopN(frame=x, n=2)`)))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/db/d/query", strings.NewReader(`TopN(frame=x, n=2)`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[[{"id":1,"count":2},{"id":3,"count":4}]]}`+"\n" {
@@ -416,7 +414,7 @@ func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := MustNewHTTPRequest("POST", "/query", strings.NewReader(`TopN(frame=x, n=2)`))
+	r := MustNewHTTPRequest("POST", "/db/d/query", strings.NewReader(`TopN(frame=x, n=2)`))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
@@ -439,7 +437,7 @@ func TestHandler_Query_Err_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query", strings.NewReader(`Bitmap(id=100)`)))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/db/d/query", strings.NewReader(`Bitmap(id=100)`)))
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"marker"}`+"\n" {
@@ -455,7 +453,7 @@ func TestHandler_Query_Err_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := MustNewHTTPRequest("POST", "/query", strings.NewReader(`TopN(frame=x, n=2)`))
+	r := MustNewHTTPRequest("POST", "/db/d/query", strings.NewReader(`TopN(frame=x, n=2)`))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusInternalServerError {
@@ -473,7 +471,7 @@ func TestHandler_Query_Err_Protobuf(t *testing.T) {
 // Ensure the handler returns "method not allowed" for non-POST queries.
 func TestHandler_Query_MethodNotAllowed(t *testing.T) {
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, MustNewHTTPRequest("GET", "/query", nil))
+	NewHandler().ServeHTTP(w, MustNewHTTPRequest("GET", "/db/d/query", nil))
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("invalid status: %d", w.Code)
 	}
@@ -483,7 +481,7 @@ func TestHandler_Query_MethodNotAllowed(t *testing.T) {
 func TestHandler_Query_ErrParse(t *testing.T) {
 	h := NewHandler()
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/query?db=db0&slices=0,1", strings.NewReader("bad_fn(")))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/db/db0/query?slices=0,1", strings.NewReader("bad_fn(")))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"expected comma, right paren, or identifier, found \"\" occurred at line 1, char 8"}`+"\n" {
@@ -506,7 +504,7 @@ func TestHandler_DB_Delete(t *testing.T) {
 	}
 
 	// Send request to delete database.
-	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("DELETE", s.URL+"/db", strings.NewReader(`{"db":"d"}`)))
+	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("DELETE", s.URL+"/db/d", strings.NewReader("")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,7 +537,7 @@ func TestHandler_DeleteFrame(t *testing.T) {
 	h := NewHandler()
 	h.Index = idx.Index
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/frame", strings.NewReader(`{"db":"d0","frame":"f1"}`)))
+	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/db/d0/frame/f1", strings.NewReader("")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
@@ -558,7 +556,7 @@ func TestHandler_SetDBTimeQuantum(t *testing.T) {
 	h := NewHandler()
 	h.Index = idx.Index
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/time_quantum", strings.NewReader(`{"db":"d0","time_quantum":"ymdh"}`)))
+	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/time-quantum", strings.NewReader(`{"time_quantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
@@ -581,7 +579,7 @@ func TestHandler_SetFrameTimeQuantum(t *testing.T) {
 	h := NewHandler()
 	h.Index = idx.Index
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/frame/time_quantum", strings.NewReader(`{"db":"d0","frame":"f1","time_quantum":"ymdh"}`)))
+	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/frame/f1/time-quantum", strings.NewReader(`{"time_quantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
@@ -625,9 +623,9 @@ func TestHandler_DB_AttrStore_Diff(t *testing.T) {
 
 	// Send block checksums to determine diff.
 	resp, err := http.Post(
-		s.URL+"/db/attr/diff?db=d",
+		s.URL+"/db/d/attr/diff",
 		"application/json",
-		strings.NewReader(`{"db":"d", "blocks":`+string(MustMarshalJSON(blks))+`}`),
+		strings.NewReader(`{"blocks":`+string(MustMarshalJSON(blks))+`}`),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -675,9 +673,9 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 
 	// Send block checksums to determine diff.
 	resp, err := http.Post(
-		s.URL+"/frame/attr/diff?db=d",
+		s.URL+"/db/d/frame/meta/attr/diff",
 		"application/json",
-		strings.NewReader(`{"db":"d", "frame":"meta", "blocks":`+string(MustMarshalJSON(blks))+`}`),
+		strings.NewReader(`{"blocks":`+string(MustMarshalJSON(blks))+`}`),
 	)
 	if err != nil {
 		t.Fatal(err)

@@ -37,12 +37,11 @@ message AttrMap {
 }
 
 message QueryRequest {
-	string DB = 1;
-	string Query = 2;
-	repeated uint64 Slices = 3;
-	bool Profiles = 4;
-	string Quantum = 5;
-	bool Remote = 6;
+	string Query = 1;
+	repeated uint64 Slices = 2;
+	bool Profiles = 3;
+	string Quantum = 4;
+	bool Remote = 5;
 }
 
 message QueryResponse {

@@ -11,13 +11,14 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/http/pprof"
+	_ "net/http/pprof"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
@@ -29,6 +30,8 @@ type Handler struct {
 	// Local hostname & cluster configuration.
 	Host    string
 	Cluster *Cluster
+
+	Router *mux.Router
 
 	// The execution engine for running queries.
 	Executor interface {
@@ -44,178 +47,59 @@ type Handler struct {
 
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler() *Handler {
-	return &Handler{
+	handler := &Handler{
 		LogOutput: os.Stderr,
 	}
+	handler.Router = NewRouter(handler)
+	return handler
+}
+
+func NewRouter(handler *Handler) *mux.Router {
+	router := mux.NewRouter()
+	router.HandleFunc("/db", handler.handleGetDBs).Methods("GET")
+	router.HandleFunc("/db/{db}", handler.handleGetDB).Methods("GET")
+	router.HandleFunc("/db/{db}", handler.handlePostDB).Methods("POST")
+	router.HandleFunc("/db/{db}", handler.handleDeleteDB).Methods("DELETE")
+	router.HandleFunc("/db/{db}/attr/diff", handler.handlePostDBAttrDiff).Methods("POST")
+	//router.HandleFunc("/db/{db}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
+	router.HandleFunc("/db/{db}/frame/{frame}", handler.handlePostFrame).Methods("POST")
+	router.HandleFunc("/db/{db}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
+	router.HandleFunc("/db/{db}/query", handler.handlePostQuery).Methods("POST")
+	router.HandleFunc("/db/{db}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
+	router.HandleFunc("/db/{db}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
+	router.HandleFunc("/db/{db}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
+	router.HandleFunc("/db/{db}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
+	router.HandleFunc("/db/{db}/time-quantum", handler.handlePatchDBTimeQuantum).Methods("PATCH")
+	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
+	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
+	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
+	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
+	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET")
+	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET")
+	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
+	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
+	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
+	router.HandleFunc("/nodes", handler.handleGetNodes).Methods("GET")
+	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
+	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
+	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
+
+	// TODO: Apply MethodNotAllowed statuses to all endpoints.
+	// Ideally this would be automatic, as described in this (wontfix) ticket:
+	// https://github.com/gorilla/mux/issues/6
+	// For now we just do it for the most commonly used handler, /query
+	router.HandleFunc("/db/{db}/query", handler.methodNotAllowedHandler).Methods("GET")
+
+	return router
+}
+
+func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Handle pprof requests separately.
-	if strings.HasPrefix(r.URL.Path, "/debug/pprof") {
-		switch r.URL.Path {
-		case "/debug/pprof/cmdline":
-			pprof.Cmdline(w, r)
-		case "/debug/pprof/profile":
-			pprof.Profile(w, r)
-		case "/debug/pprof/symbol":
-			pprof.Symbol(w, r)
-		case "/debug/pprof/trace":
-			pprof.Trace(w, r)
-		default:
-			pprof.Index(w, r)
-		}
-		return
-	}
-
-	// Route API calls to appropriate handler functions.
-	t := time.Now()
-	switch r.URL.Path {
-	case "/schema":
-		switch r.Method {
-		case "GET":
-			h.handleGetSchema(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/query":
-		switch r.Method {
-		case "POST":
-			h.handlePostQuery(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/import":
-		switch r.Method {
-		case "POST":
-			h.handlePostImport(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/export":
-		switch r.Method {
-		case "GET":
-			h.handleGetExport(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/slices/max":
-		switch r.Method {
-		case "GET":
-			h.handleGetSliceMax(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/db":
-		switch r.Method {
-		case "POST":
-			h.handlePostDB(w, r)
-		case "DELETE":
-			h.handleDeleteDB(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/db/time_quantum":
-		switch r.Method {
-		case "PATCH":
-			h.handlePatchDBTimeQuantum(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/db/attr/diff":
-		switch r.Method {
-		case "POST":
-			h.handlePostDBAttrDiff(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/frame":
-		switch r.Method {
-		case "POST":
-			h.handlePostFrame(w, r)
-		case "DELETE":
-			h.handleDeleteFrame(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/frame/time_quantum":
-		switch r.Method {
-		case "PATCH":
-			h.handlePatchFrameTimeQuantum(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/frame/views":
-		switch r.Method {
-		case "GET":
-			h.handleGetFrameViews(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/frame/attr/diff":
-		switch r.Method {
-		case "POST":
-			h.handlePostFrameAttrDiff(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/fragment/nodes":
-		switch r.Method {
-		case "GET":
-			h.handleGetFragmentNodes(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/fragment/data":
-		switch r.Method {
-		case "GET":
-			h.handleGetFragmentData(w, r)
-		case "POST":
-			h.handlePostFragmentData(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/fragment/blocks":
-		switch r.Method {
-		case "GET":
-			h.handleGetFragmentBlocks(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/fragment/block/data":
-		switch r.Method {
-		case "GET":
-			h.handleGetFragmentBlockData(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/frame/restore":
-		switch r.Method {
-		case "POST":
-			h.handlePostFrameRestore(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/nodes":
-		switch r.Method {
-		case "GET":
-			h.handleGetNodes(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	case "/version":
-		h.handleVersion(w, r)
-
-	case "/debug/vars":
-		h.handleExpvar(w, r)
-	default:
-		http.NotFound(w, r)
-	}
-
-	dif := time.Since(t).Seconds()
-	if dif > 90 {
-		h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), dif)
-	}
+	h.Router.ServeHTTP(w, r)
 }
 
 // handleGetSchema handles GET /schema requests.
@@ -233,6 +117,8 @@ type getSchemaResponse struct {
 
 // handlePostQuery handles /query requests.
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+
 	// Parse incoming request.
 	req, err := h.readQueryRequest(r)
 	if err != nil {
@@ -255,7 +141,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute the query.
-	results, err := h.Executor.Execute(r.Context(), req.DB, q, req.Slices, opt)
+	results, err := h.Executor.Execute(r.Context(), dbName, q, req.Slices, opt)
 	resp := &QueryResponse{Results: results, Err: err}
 
 	// Fill profile attributes if requested.
@@ -271,7 +157,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Retrieve profile attributes across all calls.
-		profiles, err := h.readProfiles(h.Index.DB(req.DB), profileIDs)
+		profiles, err := h.readProfiles(h.Index.DB(dbName), profileIDs)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			h.writeQueryResponse(w, r, &QueryResponse{Err: err})
@@ -291,26 +177,24 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) error {
+func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
 	var ms map[string]uint64
 	if inverse, _ := strconv.ParseBool(r.URL.Query().Get("inverse")); inverse {
 		ms = h.Index.MaxInverseSlices()
 	} else {
 		ms = h.Index.MaxSlices()
 	}
-
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
 		pb := &internal.MaxSlicesResponse{
 			MaxSlices: ms,
 		}
 		if buf, err := proto.Marshal(pb); err != nil {
-			return err
+			h.logger().Printf("protobuf marshal error: %s", err)
 		} else if _, err := w.Write(buf); err != nil {
-			return err
+			h.logger().Printf("stream write error: %s", err)
 		}
-		return nil
 	}
-	return json.NewEncoder(w).Encode(sliceMaxResponse{
+	json.NewEncoder(w).Encode(sliceMaxResponse{
 		MaxSlices: ms,
 	})
 }
@@ -319,29 +203,33 @@ type sliceMaxResponse struct {
 	MaxSlices map[string]uint64 `json:"MaxSlices"`
 }
 
-// handlePostDB handles POST /db request.
-func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
-	// Decode request.
-	var req postDBRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+// handleGetDBs handles GET /db request.
+func (h *Handler) handleGetDBs(w http.ResponseWriter, r *http.Request) {
+	h.handleGetSchema(w, r)
+}
+
+// handleGetDB handles GET /db/<dbname> requests.
+func (h *Handler) handleGetDB(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+	db := h.Index.DB(dbName)
+	if db == nil {
+		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
-	// Create database.
-	_, err := h.Index.CreateDB(req.DB, req.Options)
-	if err == ErrDatabaseExists {
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
-	} else if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	if err := json.NewEncoder(w).Encode(getDBResponse{
+		map[string]string{"name": db.Name()},
+	}); err != nil {
+		h.logger().Printf("write response error: %s", err)
 	}
+}
 
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(postDBResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
-	}
+type getDBResponse struct {
+	DB map[string]string `json:"db"`
+}
+
+type postDBRequest struct {
+	Options DBOptions `json:"options"`
 }
 
 // Custom Unmarshal JSON to validate request body when creating a new database
@@ -352,12 +240,6 @@ func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 	}
 	for key, value := range data {
 		switch key {
-		case "db":
-			val, ok := data["db"].(string)
-			if !ok {
-				return errors.New("db required and must be a string")
-			}
-			p.DB = val
 		case "options":
 			value, err := validateOptions(data, "columnLabel")
 			if err != nil {
@@ -401,24 +283,14 @@ func validateOptions(data map[string]interface{}, field string) (string, error) 
 	return optionValue, nil
 }
 
-type postDBRequest struct {
-	DB      string    `json:"db"`
-	Options DBOptions `json:"options"`
-}
-
 type postDBResponse struct{}
 
 // handleDeleteDB handles DELETE /db request.
 func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
-	// Decode request.
-	var req deleteDBRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	dbName := mux.Vars(r)["db"]
 
 	// Delete database from the index.
-	if err := h.Index.DeleteDB(req.DB); err != nil {
+	if err := h.Index.DeleteDB(dbName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -429,14 +301,39 @@ func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type deleteDBRequest struct {
-	DB string `json:"db"`
-}
-
 type deleteDBResponse struct{}
+
+// handlePostDB handles POST /db request.
+func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+
+	// Decode request.
+	var req postDBRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Create database.
+	_, err := h.Index.CreateDB(dbName, req.Options)
+	if err == ErrDatabaseExists {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(postDBResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
 
 // handlePatchDBTimeQuantum handles PATCH /db/time_quantum request.
 func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+
 	// Decode request.
 	var req patchDBTimeQuantumRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -452,14 +349,14 @@ func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Retrieve database by name.
-	db := h.Index.DB(req.DB)
-	if db == nil {
+	database := h.Index.DB(dbName)
+	if database == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Set default time quantum on database.
-	if err := db.SetTimeQuantum(tq); err != nil {
+	if err := database.SetTimeQuantum(tq); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -471,7 +368,6 @@ func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Reques
 }
 
 type patchDBTimeQuantumRequest struct {
-	DB          string `json:"db"`
 	TimeQuantum string `json:"time_quantum"`
 }
 
@@ -479,6 +375,8 @@ type patchDBTimeQuantumResponse struct{}
 
 // handlePostDBAttrDiff handles POST /db/attr/diff requests.
 func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+
 	// Decode request.
 	var req postDBAttrDiffRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -487,7 +385,7 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Retrieve database from index.
-	db := h.Index.DB(req.DB)
+	db := h.Index.DB(dbName)
 	if db == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
@@ -525,7 +423,6 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 }
 
 type postDBAttrDiffRequest struct {
-	DB     string      `json:"db"`
 	Blocks []AttrBlock `json:"blocks"`
 }
 
@@ -535,6 +432,8 @@ type postDBAttrDiffResponse struct {
 
 // handlePostFrame handles POST /frame request.
 func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
 
 	// Decode request.
 	var req postFrameRequest
@@ -544,14 +443,14 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find database.
-	db := h.Index.DB(req.DB)
+	db := h.Index.DB(dbName)
 	if db == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Create frame.
-	_, err := db.CreateFrame(req.Frame, req.Options)
+	_, err := db.CreateFrame(frameName, req.Options)
 	if err == ErrFrameExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -574,19 +473,6 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 	}
 	for key, value := range data {
 		switch key {
-		case "db":
-			val, ok := data["db"].(string)
-			if !ok {
-				return errors.New("db required and must be a string")
-			}
-			p.DB = val
-		case "frame":
-			val, ok := data["frame"].(string)
-			if !ok {
-				return errors.New("frame required and must be a string")
-			}
-			p.Frame = val
-
 		case "options":
 			value, err := validateOptions(data, "rowLabel")
 			if err != nil {
@@ -597,7 +483,6 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 			} else {
 				p.Options = FrameOptions{RowLabel: value}
 			}
-
 		default:
 			return fmt.Errorf("Unknown key: {%v:%v}", key, value)
 		}
@@ -607,8 +492,6 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 }
 
 type postFrameRequest struct {
-	DB      string       `json:"db"`
-	Frame   string       `json:"frame"`
 	Options FrameOptions `json:"options"`
 }
 
@@ -616,15 +499,11 @@ type postFrameResponse struct{}
 
 // handleDeleteFrame handles DELETE /frame request.
 func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
-	// Decode request.
-	var req deleteFrameRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
 
 	// Find database.
-	db := h.Index.DB(req.DB)
+	db := h.Index.DB(dbName)
 	if db == nil {
 		if err := json.NewEncoder(w).Encode(deleteDBResponse{}); err != nil {
 			h.logger().Printf("response encoding error: %s", err)
@@ -633,7 +512,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete frame from the database.
-	if err := db.DeleteFrame(req.Frame); err != nil {
+	if err := db.DeleteFrame(frameName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -644,15 +523,13 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type deleteFrameRequest struct {
-	DB    string `json:"db"`
-	Frame string `json:"frame"`
-}
-
 type deleteFrameResponse struct{}
 
 // handlePatchFrameTimeQuantum handles PATCH /frame/time_quantum request.
 func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
+
 	// Decode request.
 	var req patchFrameTimeQuantumRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -668,7 +545,7 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 	}
 
 	// Retrieve database by name.
-	f := h.Index.Frame(req.DB, req.Frame)
+	f := h.Index.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -687,8 +564,6 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 }
 
 type patchFrameTimeQuantumRequest struct {
-	DB          string `json:"db"`
-	Frame       string `json:"frame"`
 	TimeQuantum string `json:"time_quantum"`
 }
 
@@ -696,11 +571,11 @@ type patchFrameTimeQuantumResponse struct{}
 
 // handleGetFrameViews handles GET /frame/views request.
 func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	db, frame := q.Get("db"), q.Get("frame")
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
 
 	// Retrieve views.
-	f := h.Index.Frame(db, frame)
+	f := h.Index.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -725,6 +600,9 @@ type getFrameViewsResponse struct {
 
 // handlePostFrameAttrDiff handles POST /frame/attr/diff requests.
 func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
+
 	// Decode request.
 	var req postFrameAttrDiffRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -733,7 +611,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 	}
 
 	// Retrieve database from index.
-	f := h.Index.Frame(req.DB, req.Frame)
+	f := h.Index.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -771,8 +649,6 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 }
 
 type postFrameAttrDiffRequest struct {
-	DB     string      `json:"db"`
-	Frame  string      `json:"frame"`
 	Blocks []AttrBlock `json:"blocks"`
 }
 
@@ -858,7 +734,6 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		DB:       q.Get("db"),
 		Query:    query,
 		Slices:   slices,
 		Profiles: q.Get("profiles") == "true",
@@ -1175,19 +1050,15 @@ type getFragmentBlocksResponse struct {
 
 // handlePostFrameRestore handles POST /frame/restore requests.
 func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request) {
+	dbName := mux.Vars(r)["db"]
+	frameName := mux.Vars(r)["frame"]
+
 	q := r.URL.Query()
 	host := q.Get("host")
-	db, frame := q.Get("db"), q.Get("frame")
 
 	// Validate query parameters.
 	if host == "" {
 		http.Error(w, "host required", http.StatusBadRequest)
-		return
-	} else if db == "" {
-		http.Error(w, "db required", http.StatusBadRequest)
-		return
-	} else if frame == "" {
-		http.Error(w, "frame required", http.StatusBadRequest)
 		return
 	}
 
@@ -1206,24 +1077,23 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve frame.
-	f := h.Index.Frame(db, frame)
+	f := h.Index.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Retrieve list of all views.
-	views, err := client.FrameViews(r.Context(), db, frame)
+	views, err := client.FrameViews(r.Context(), dbName, frameName)
 	if err != nil {
 		http.Error(w, "cannot retrieve frame views: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Loop over each slice and import it if this node owns it.
-	//travis
-	for slice := uint64(0); slice <= maxSlices[db]; slice++ {
+	for slice := uint64(0); slice <= maxSlices[dbName]; slice++ {
 		// Ignore this slice if we don't own it.
-		if !h.Cluster.OwnsFragment(h.Host, db, slice) {
+		if !h.Cluster.OwnsFragment(h.Host, dbName, slice) {
 			continue
 		}
 
@@ -1244,7 +1114,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 			}
 
 			// Stream backup from remote node.
-			rd, err := client.BackupSlice(r.Context(), db, frame, view, slice)
+			rd, err := client.BackupSlice(r.Context(), dbName, frameName, view, slice)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -1275,7 +1145,7 @@ func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetVersion handles /version requests.
-func (h *Handler) handleVersion(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
@@ -1331,7 +1201,6 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		DB:       pb.DB,
 		Query:    pb.Query,
 		Slices:   pb.Slices,
 		Profiles: pb.Profiles,
