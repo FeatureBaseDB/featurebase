@@ -125,7 +125,6 @@ func (c *Client) Schema(ctx context.Context) ([]*DBInfo, error) {
 func (c *Client) CreateDB(ctx context.Context, db string, opt DBOptions) error {
 	// Encode query request.
 	buf, err := json.Marshal(&postDBRequest{
-		DB:      db,
 		Options: opt,
 	})
 	if err != nil {
@@ -133,7 +132,7 @@ func (c *Client) CreateDB(ctx context.Context, db string, opt DBOptions) error {
 	}
 
 	// Create URL & HTTP request.
-	u := url.URL{Scheme: "http", Host: c.host, Path: "/db"}
+	u := url.URL{Scheme: "http", Host: c.host, Path: fmt.Sprintf("/db/%s", db)}
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return err
@@ -209,7 +208,6 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 
 	// Encode query request.
 	buf, err := proto.Marshal(&internal.QueryRequest{
-		DB:     db,
 		Query:  query,
 		Remote: !allowRedirect,
 	})
@@ -218,7 +216,11 @@ func (c *Client) ExecuteQuery(ctx context.Context, db, query string, allowRedire
 	}
 
 	// Create URL & HTTP request.
-	u := url.URL{Scheme: "http", Host: c.host, Path: "/query"}
+	u := url.URL{
+		Scheme: "http",
+		Host:   c.host,
+		Path:   fmt.Sprintf("/db/%s/query", db),
+	}
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
@@ -664,8 +666,6 @@ func (c *Client) CreateFrame(ctx context.Context, db, frame string, opt FrameOpt
 
 	// Encode query request.
 	buf, err := json.Marshal(&postFrameRequest{
-		DB:      db,
-		Frame:   frame,
 		Options: opt,
 	})
 	if err != nil {
@@ -673,7 +673,7 @@ func (c *Client) CreateFrame(ctx context.Context, db, frame string, opt FrameOpt
 	}
 
 	// Create URL & HTTP request.
-	u := url.URL{Scheme: "http", Host: c.host, Path: "/frame"}
+	u := url.URL{Scheme: "http", Host: c.host, Path: fmt.Sprintf("/db/%s/frame/%s", db, frame)}
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return err
@@ -711,11 +711,9 @@ func (c *Client) RestoreFrame(ctx context.Context, host, db, frame string) error
 	u := url.URL{
 		Scheme: "http",
 		Host:   c.Host(),
-		Path:   "/frame/restore",
+		Path:   fmt.Sprintf("/db/%s/frame/%s/restore", db, frame),
 		RawQuery: url.Values{
-			"host":  {host},
-			"db":    {db},
-			"frame": {frame},
+			"host": {host},
 		}.Encode(),
 	}
 
@@ -747,11 +745,7 @@ func (c *Client) FrameViews(ctx context.Context, db, frame string) ([]string, er
 	u := url.URL{
 		Scheme: "http",
 		Host:   c.host,
-		Path:   "/frame/views",
-		RawQuery: (&url.Values{
-			"db":    {db},
-			"frame": {frame},
-		}).Encode(),
+		Path:   fmt.Sprintf("/db/%s/frame/%s/views", db, frame),
 	}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
@@ -879,14 +873,13 @@ func (c *Client) BlockData(ctx context.Context, db, frame, view string, slice ui
 // ProfileAttrDiff returns data from differing blocks on a remote host.
 func (c *Client) ProfileAttrDiff(ctx context.Context, db string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	u := url.URL{
-		Scheme:   "http",
-		Host:     c.host,
-		Path:     "/db/attr/diff",
-		RawQuery: url.Values{"db": {db}}.Encode(),
+		Scheme: "http",
+		Host:   c.host,
+		Path:   fmt.Sprintf("/db/%s/attr/diff", db),
 	}
 
 	// Encode request.
-	buf, err := json.Marshal(postDBAttrDiffRequest{DB: db, Blocks: blks})
+	buf, err := json.Marshal(postDBAttrDiffRequest{Blocks: blks})
 	if err != nil {
 		return nil, err
 	}
@@ -923,14 +916,13 @@ func (c *Client) ProfileAttrDiff(ctx context.Context, db string, blks []AttrBloc
 // BitmapAttrDiff returns data from differing blocks on a remote host.
 func (c *Client) BitmapAttrDiff(ctx context.Context, db, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	u := url.URL{
-		Scheme:   "http",
-		Host:     c.host,
-		Path:     "/frame/attr/diff",
-		RawQuery: url.Values{"db": {db}, "frame": {frame}}.Encode(),
+		Scheme: "http",
+		Host:   c.host,
+		Path:   fmt.Sprintf("/db/%s/frame/%s/attr/diff", db, frame),
 	}
 
 	// Encode request.
-	buf, err := json.Marshal(postFrameAttrDiffRequest{DB: db, Frame: frame, Blocks: blks})
+	buf, err := json.Marshal(postFrameAttrDiffRequest{Blocks: blks})
 	if err != nil {
 		return nil, err
 	}
