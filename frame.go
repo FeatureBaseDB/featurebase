@@ -500,18 +500,25 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 			dataByFragment[key] = data
 		}
 
-		// Attach reversed bits to each inverse view.
-		for _, name := range inverse {
-			key := importKey{View: name, Slice: bitmapID / SliceWidth}
-			data := dataByFragment[key]
-			data.BitmapIDs = append(data.BitmapIDs, profileID)  // reversed
-			data.ProfileIDs = append(data.ProfileIDs, bitmapID) // reversed
-			dataByFragment[key] = data
+		if f.inverseEnabled {
+			// Attach reversed bits to each inverse view.
+			for _, name := range inverse {
+				key := importKey{View: name, Slice: bitmapID / SliceWidth}
+				data := dataByFragment[key]
+				data.BitmapIDs = append(data.BitmapIDs, profileID)  // reversed
+				data.ProfileIDs = append(data.ProfileIDs, bitmapID) // reversed
+				dataByFragment[key] = data
+			}
 		}
 	}
 
 	// Import into each fragment.
 	for key, data := range dataByFragment {
+		// Skip inverse data if inverse is not enabled.
+		if !f.inverseEnabled && IsInverseView(key.View) {
+			continue
+		}
+
 		// Re-sort data for inverse views.
 		if IsInverseView(key.View) {
 			sort.Sort(importBitSet{
