@@ -709,7 +709,6 @@ func (e *Executor) executeSetBitmapAttrs(ctx context.Context, db string, c *pql.
 	if err := frame.BitmapAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
-	fmt.Printf("%+v\n", frame.Stats)
 	frame.Stats.Count("SetBitmapAttrs", 1)
 
 	// Do not forward call if this is already being forwarded.
@@ -795,7 +794,6 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 			return nil, err
 		}
 
-		fmt.Printf("%+v\n", frame.Stats)
 		frame.Stats.Count("SetBitmapAttrs", 1)
 
 	}
@@ -858,7 +856,7 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 		return err
 	}
 
-	d.Stats.Count("setProfileAttrs", 1)
+	d.Stats.Count("SetProfileAttrs", 1)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {

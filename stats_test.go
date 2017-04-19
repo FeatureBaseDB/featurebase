@@ -102,6 +102,38 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 	}
 }
 
+func TestStatsCount_SetProfileAttrs(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
+	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
+
+	called := false
+	e := NewExecutor(idx.Index, NewCluster(1))
+	db := e.Index.DB("d")
+	if db == nil {
+		t.Fatal("db not found")
+	}
+
+	db.Stats = &MockStats{
+		mockCount: func(name string, value int64) {
+			if name != "SetProfileAttrs" {
+				t.Errorf("Expected SetProfilepAttrs, Results %s", name)
+			}
+
+			called = true
+			return
+		},
+	}
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetProfileAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Error("Count isn't called")
+	}
+}
+
 type MockStats struct {
 	mockCount         func(name string, value int64)
 	mockCountWithTags func(name string, value int64, tags []string)
@@ -122,14 +154,10 @@ func (s *MockStats) CountWithCustomTags(name string, value int64, tags []string)
 	}
 	return
 }
-func (c *MockStats) Tags() []string {
-	return nil
-}
-func (c *MockStats) WithTags(tags ...string) pilosa.StatsClient {
-	return c
-}
 
-func (c *MockStats) Gauge(name string, value float64)        {}
-func (c *MockStats) Histogram(name string, value float64)    {}
-func (c *MockStats) Set(name string, value string)           {}
-func (c *MockStats) Timing(name string, value time.Duration) {}
+func (c *MockStats) Tags() []string                             { return nil }
+func (c *MockStats) WithTags(tags ...string) pilosa.StatsClient { return c }
+func (c *MockStats) Gauge(name string, value float64)           {}
+func (c *MockStats) Histogram(name string, value float64)       {}
+func (c *MockStats) Set(name string, value string)              {}
+func (c *MockStats) Timing(name string, value time.Duration)    {}
