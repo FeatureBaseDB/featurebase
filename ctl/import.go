@@ -27,7 +27,7 @@ type ImportCommand struct {
 	Paths []string `json:"paths"`
 
 	// Size of buffer used to chunk import.
-	BufferSize int `json:"buffer-size"`
+	BufferSize int `json:"bufferSize"`
 
 	// Reusable client.
 	Client *pilosa.Client `json:"-"`

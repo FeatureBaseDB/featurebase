@@ -214,7 +214,7 @@ func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
 }
 
 type sliceMaxResponse struct {
-	MaxSlices map[string]uint64 `json:"MaxSlices"`
+	MaxSlices map[string]uint64 `json:"maxSlices"`
 }
 
 // handleGetDBs handles GET /db request.
@@ -391,7 +391,7 @@ func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Reques
 }
 
 type patchDBTimeQuantumRequest struct {
-	TimeQuantum string `json:"time_quantum"`
+	TimeQuantum string `json:"timeQuantum"`
 }
 
 type patchDBTimeQuantumResponse struct{}
@@ -611,7 +611,7 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 }
 
 type patchFrameTimeQuantumRequest struct {
-	TimeQuantum string `json:"time_quantum"`
+	TimeQuantum string `json:"timeQuantum"`
 }
 
 type patchFrameTimeQuantumResponse struct{}
