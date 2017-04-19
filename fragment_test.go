@@ -280,15 +280,34 @@ func TestFragment_TopN_BitmapIDs(t *testing.T) {
 // Ensure the fragment cache limit works
 func TestFragment_TopN_CacheSize(t *testing.T) {
 	slice := uint64(0)
-	cacheLimit := uint32(3)
-	file, err := ioutil.TempFile("", "pilosa-fragment-")
+	cacheSize := uint32(3)
+
+	// Create DB.
+	db := MustOpenDB()
+	defer db.Close()
+
+	// Create frame.
+	frame, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: cacheSize})
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
-	file.Close()
+
+	// Create view.
+	view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create fragment.
+	frag, err := view.CreateFragmentIfNotExists(slice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Close the storage so we can re-open it without encountering a flock.
+	frag.Close()
 
 	f := &Fragment{
-		Fragment:        pilosa.NewFragment(file.Name(), "d", "f.n", pilosa.ViewStandard, slice, cacheLimit),
+		Fragment:        frag,
 		BitmapAttrStore: MustOpenAttrStore(),
 	}
 	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
@@ -316,8 +335,8 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	// Retrieve top bitmaps.
 	if pairs, err := f.Top(pilosa.TopOptions{N: 5}); err != nil {
 		t.Fatal(err)
-	} else if len(pairs) > int(cacheLimit) {
-		t.Fatalf("TopN count cannot exceed cache size: %d", cacheLimit)
+	} else if len(pairs) > int(cacheSize) {
+		t.Fatalf("TopN count cannot exceed cache size: %d", cacheSize)
 	} else if pairs[0] != (pilosa.Pair{ID: 104, Count: 7}) {
 		t.Fatalf("unexpected pair(0): %v", pairs)
 	} else if !reflect.DeepEqual(pairs, p) {
