@@ -83,7 +83,7 @@ func TestHandler_MaxSlices(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/slices/max", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"MaxSlices":{"d0":3,"d1":0}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"maxSlices":{"d0":3,"d1":0}}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -123,7 +123,7 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/slices/max?inverse=true", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"MaxSlices":{"d0":3,"d1":0}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"maxSlices":{"d0":3,"d1":0}}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -556,7 +556,7 @@ func TestHandler_SetDBTimeQuantum(t *testing.T) {
 	h := NewHandler()
 	h.Index = idx.Index
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/time-quantum", strings.NewReader(`{"time_quantum":"ymdh"}`)))
+	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
@@ -579,7 +579,7 @@ func TestHandler_SetFrameTimeQuantum(t *testing.T) {
 	h := NewHandler()
 	h.Index = idx.Index
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/frame/f1/time-quantum", strings.NewReader(`{"time_quantum":"ymdh"}`)))
+	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/frame/f1/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
@@ -763,7 +763,7 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if w.Body.String() != `[{"host":"host1","internal_host":""},{"host":"host2","internal_host":""}]`+"\n" {
+	} else if w.Body.String() != `[{"host":"host1","internalHost":""},{"host":"host2","internalHost":""}]`+"\n" {
 		t.Fatalf("unexpected body: %q", w.Body.String())
 	}
 }
