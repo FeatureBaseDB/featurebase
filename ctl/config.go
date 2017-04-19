@@ -37,6 +37,10 @@ bind = "localhost:10101"
 [anti-entropy]
   interval = "10m0s"
 
+[metrics]
+	service = "statsd"
+	host = "127.0.0.1:8125"
+
 [profile]
   cpu = ""
   cpu-time = "30s"

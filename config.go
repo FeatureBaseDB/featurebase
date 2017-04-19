@@ -8,6 +8,7 @@ const (
 	DefaultPort         = "10101"
 	DefaultClusterType  = "static"
 	DefaultInternalPort = "14000"
+	DefaultMetrics      = "noop"
 )
 
 // Config represents the configuration for the command.
@@ -34,6 +35,12 @@ type Config struct {
 	} `toml:"anti-entropy"`
 
 	LogPath string `toml:"log-path"`
+
+	Metric struct {
+		Service         string   `toml:"service"`
+		Host            string   `toml:"host"`
+		PollingInterval Duration `toml:"interval"`
+	} `toml:"metrics"`
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -47,6 +54,7 @@ func NewConfig() *Config {
 	c.Cluster.Hosts = []string{}
 	c.Cluster.InternalHosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
+	c.Metric.Service = DefaultMetrics
 	return c
 }
 
