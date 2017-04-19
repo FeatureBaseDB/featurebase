@@ -239,7 +239,10 @@ func (c *RankCache) recalculate() {
 
 	// Store the count of the item at the threshold index.
 	c.rankings = rankings
-	if len(c.rankings) > int(c.maxEntries) {
+	length := len(c.rankings)
+	c.stats.Gauge("RankCache", float64(length))
+
+	if length > int(c.maxEntries) {
 		c.thresholdValue = rankings[c.maxEntries].Count
 		c.rankings = c.rankings[0:c.maxEntries]
 	} else {
