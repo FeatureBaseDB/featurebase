@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/datadog"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/httpbroadcast"
 )
@@ -90,6 +91,7 @@ func (m *Command) Run(args ...string) (err error) {
 }
 
 func (m *Command) SetupServer() error {
+	var err error
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 
@@ -118,9 +120,12 @@ func (m *Command) SetupServer() error {
 	// Configure index.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
 	m.Server.Index.Path = m.Config.DataDir
-	m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
+	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollingInterval)
+	m.Server.Index.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	if err != nil {
+		return err
+	}
 
-	var err error
 	m.Server.Host, err = normalizeHost(m.Config.Host)
 	if err != nil {
 		return err
@@ -200,4 +205,16 @@ func (m *Command) Close() error {
 		return logErr
 	}
 	return serveErr
+}
+
+// NewStatsClient creates a stats client from the config
+func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
+	switch name {
+	case "expvar":
+		return pilosa.NewExpvarStatsClient(), nil
+	case "statsd":
+		return datadog.NewStatsClient(host)
+	default:
+		return pilosa.NopStatsClient, nil
+	}
 }
