@@ -18,8 +18,8 @@ type Config struct {
 	Cluster struct {
 		ReplicaN        int      `toml:"replicas"`
 		Type            string   `toml:"type"`
-		Nodes           []string `toml:"hosts"`
-		InternalNodes   []string `toml:"internal-hosts"`
+		Hosts           []string `toml:"hosts"`
+		InternalHosts   []string `toml:"internal-hosts"`
 		PollingInterval Duration `toml:"polling-interval"`
 		InternalPort    string   `toml:"internal-port"`
 		GossipSeed      string   `toml:"gossip-seed"`
@@ -44,8 +44,8 @@ func NewConfig() *Config {
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.Type = DefaultClusterType
 	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
-	c.Cluster.Nodes = []string{}
-	c.Cluster.InternalNodes = []string{}
+	c.Cluster.Hosts = []string{}
+	c.Cluster.InternalHosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	return c
 }

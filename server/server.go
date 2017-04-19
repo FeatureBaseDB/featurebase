@@ -93,10 +93,13 @@ func (m *Command) SetupServer() error {
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 
-	for _, hostport := range m.Config.Cluster.Nodes {
+	for _, hostport := range m.Config.Cluster.Hosts {
 		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
 	}
-	for i, internalhostport := range m.Config.Cluster.InternalNodes {
+	// TODO: if InternalHosts is not provided then pilosa.Node.InternalHost is empty.
+	// This will throw an error when trying to Broadcast messages over HTTP.
+	// One option may be to fall back to using host from hostport + config.InternalPort.
+	for i, internalhostport := range m.Config.Cluster.InternalHosts {
 		cluster.Nodes[i].InternalHost = internalhostport
 	}
 	m.Server.Cluster = cluster
