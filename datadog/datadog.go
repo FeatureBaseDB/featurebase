@@ -10,6 +10,9 @@ import (
 	"github.com/pilosa/pilosa"
 )
 
+// StatsD protocal wrapper using the DataDog library that added Tags to the StatsD protocal
+// statsD defailt host is "127.0.0.1:8125"
+
 const (
 	// Rate represents a metric rate of 1/sec.
 	Rate = 1
@@ -30,8 +33,8 @@ type StatsClient struct {
 }
 
 // NewStatsClient returns a new instance of StatsClient.
-func NewStatsClient() (*StatsClient, error) {
-	c, err := statsd.NewBuffered("127.0.0.1:8125", BufferLen)
+func NewStatsClient(host string) (*StatsClient, error) {
+	c, err := statsd.NewBuffered(host, BufferLen)
 	if err != nil {
 		return nil, err
 	}
