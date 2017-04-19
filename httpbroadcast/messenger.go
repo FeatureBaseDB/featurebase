@@ -11,8 +11,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"net"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 )
@@ -25,7 +23,7 @@ type HTTPBroadcaster struct {
 
 // NewHTTPBroadcaster returns a new instance of HTTPBroadcaster.
 func NewHTTPBroadcaster(s *pilosa.Server, internalPort string) *HTTPBroadcaster {
-	return &HTTPBroadcaster{server: s}
+	return &HTTPBroadcaster{server: s, internalPort: internalPort}
 }
 
 // SendSync sends a protobuf message to all nodes simultaneously.
@@ -77,16 +75,11 @@ func (h *HTTPBroadcaster) sendNodeMessage(node *pilosa.Node, msg []byte) error {
 	var client *http.Client
 	client = http.DefaultClient
 
-	host, _, err := net.SplitHostPort(node.Host)
-
 	// Create HTTP request.
 	req, err := http.NewRequest("POST", (&url.URL{
 		Scheme: "http",
-		Host:   host + ":" + h.internalPort,
+		Host:   node.InternalHost,
 	}).String(), bytes.NewReader(msg))
-	if err != nil {
-		return err
-	}
 
 	// Require protobuf encoding.
 	req.Header.Set("Content-Type", "application/x-protobuf")

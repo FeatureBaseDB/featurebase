@@ -51,13 +51,11 @@ type nopBroadcaster struct{}
 
 // SendSync A no-op implemenetation of Broadcaster SendSync method.
 func (c *nopBroadcaster) SendSync(pb proto.Message) error {
-	fmt.Println("NOPBroadcaster: SendSync") // TODO remove or log properly?
 	return nil
 }
 
 // SendAsync A no-op implemenetation of Broadcaster SendAsync method.
 func (c *nopBroadcaster) SendAsync(pb proto.Message) error {
-	fmt.Println("NOPBroadcaster: SendAsync") // TODO remove or log properly?
 	return nil
 }
 

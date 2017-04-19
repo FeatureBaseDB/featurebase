@@ -4,10 +4,10 @@ import "time"
 
 const (
 	// DefaultHost is the default hostname and port to use.
-	DefaultHost        = "localhost"
-	DefaultPort        = "10101"
-	DefaultClusterType = "static"
-	DefaultGossipPort  = "14000"
+	DefaultHost         = "localhost"
+	DefaultPort         = "10101"
+	DefaultClusterType  = "static"
+	DefaultInternalPort = "14000"
 )
 
 // Config represents the configuration for the command.
@@ -19,6 +19,7 @@ type Config struct {
 		ReplicaN        int      `toml:"replicas"`
 		Type            string   `toml:"type"`
 		Nodes           []string `toml:"hosts"`
+		InternalNodes   []string `toml:"internal-hosts"`
 		PollingInterval Duration `toml:"polling-interval"`
 		InternalPort    string   `toml:"internal-port"`
 		GossipSeed      string   `toml:"gossip-seed"`
@@ -44,18 +45,9 @@ func NewConfig() *Config {
 	c.Cluster.Type = DefaultClusterType
 	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
 	c.Cluster.Nodes = []string{}
+	c.Cluster.InternalNodes = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	return c
-}
-
-// NewConfigForHosts returns a Config object with Config.Cluster.Nodes already
-// set up.
-func NewConfigForHosts(hosts []string) *Config {
-	conf := NewConfig()
-	for _, hostport := range hosts {
-		conf.Cluster.Nodes = append(conf.Cluster.Nodes, hostport)
-	}
-	return conf
 }
 
 // Duration is a TOML wrapper type for time.Duration.

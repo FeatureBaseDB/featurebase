@@ -96,6 +96,9 @@ func (m *Command) SetupServer() error {
 	for _, hostport := range m.Config.Cluster.Nodes {
 		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
 	}
+	for i, internalhostport := range m.Config.Cluster.InternalNodes {
+		cluster.Nodes[i].InternalHost = internalhostport
+	}
 	m.Server.Cluster = cluster
 
 	// Setup logging output.
@@ -120,21 +123,23 @@ func (m *Command) SetupServer() error {
 		return err
 	}
 
+	// Set internal port (string).
+	internalPortStr := pilosa.DefaultInternalPort
+	if m.Config.Cluster.InternalPort != "" {
+		internalPortStr = m.Config.Cluster.InternalPort
+	}
+
 	switch m.Config.Cluster.Type {
 	case "http":
-		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, m.Config.Cluster.InternalPort)
-		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(m.Config.Cluster.InternalPort, m.Stderr)
+		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, internalPortStr)
+		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(internalPortStr, m.Stderr)
 		m.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
 		err := m.Server.Cluster.NodeSet.(*httpbroadcast.HTTPNodeSet).Join(m.Server.Cluster.Nodes)
 		if err != nil {
 			return err
 		}
 	case "gossip":
-		gossipPortStr := pilosa.DefaultGossipPort
-		if m.Config.Cluster.InternalPort != "" {
-			gossipPortStr = m.Config.Cluster.InternalPort
-		}
-		gossipPort, err := strconv.Atoi(gossipPortStr)
+		gossipPort, err := strconv.Atoi(internalPortStr)
 		if err != nil {
 			return err
 		}
