@@ -246,7 +246,7 @@ func (i *Index) newDB(path, name string) (*DB, error) {
 		return nil, err
 	}
 	db.LogOutput = i.LogOutput
-	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
+	db.Stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
 	db.messenger = i.Messenger
 	return db, nil
 }

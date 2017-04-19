@@ -35,7 +35,7 @@ type View struct {
 	// Fragments by slice.
 	fragments map[uint64]*Fragment
 
-	stats StatsClient
+	Stats StatsClient
 
 	BitmapAttrStore *AttrStore
 	LogOutput       io.Writer
@@ -52,7 +52,7 @@ func NewView(path, db, frame, name string, cacheSize uint32) *View {
 
 		fragments: make(map[uint64]*Fragment),
 
-		stats:     NopStatsClient,
+		Stats:     NopStatsClient,
 		LogOutput: ioutil.Discard,
 	}
 }
@@ -125,7 +125,7 @@ func (v *View) openFragments() error {
 		frag.BitmapAttrStore = v.BitmapAttrStore
 		v.fragments[frag.Slice()] = frag
 
-		v.stats.Count("maxSlice", 1)
+		v.Stats.Count("maxSlice", 1)
 	}
 
 	return nil
@@ -208,7 +208,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	// Save to lookup.
 	v.fragments[slice] = frag
 
-	v.stats.Count("maxSlice", 1)
+	v.Stats.Count("maxSlice", 1)
 
 	return frag, nil
 }
@@ -216,7 +216,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 func (v *View) newFragment(path string, slice uint64) *Fragment {
 	frag := NewFragment(path, v.db, v.frame, v.name, slice, v.cacheSize)
 	frag.LogOutput = v.LogOutput
-	frag.stats = v.stats.WithTags(fmt.Sprintf("slice:%d", slice))
+	frag.stats = v.Stats.WithTags(fmt.Sprintf("slice:%d", slice))
 	return frag
 }
 

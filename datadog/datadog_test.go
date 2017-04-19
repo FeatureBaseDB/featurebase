@@ -3,7 +3,6 @@ package datadog_test
 import (
 	"reflect"
 	"testing"
-
 	"github.com/pilosa/pilosa/datadog"
 )
 
@@ -27,3 +26,4 @@ func TestStatsClient_WithTags(t *testing.T) {
 		t.Fatalf("unexpected tags: %+v", tags)
 	}
 }
+

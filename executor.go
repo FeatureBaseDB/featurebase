@@ -433,7 +433,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call
 		}
 		bm = bm.Union(f.Bitmap(rowID))
 	}
-	f.stats.Count("range", 1)
+	f.Stats.Count("range", 1)
 	return bm, nil
 }
 
@@ -709,7 +709,8 @@ func (e *Executor) executeSetBitmapAttrs(ctx context.Context, db string, c *pql.
 	if err := frame.BitmapAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
-	frame.stats.Count("setBitmapAttrs", 1)
+	fmt.Printf("%+v\n", frame.Stats)
+	frame.Stats.Count("SetBitmapAttrs", 1)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
@@ -794,7 +795,8 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 			return nil, err
 		}
 
-		frame.stats.Count("setBitmapAttrs", 1)
+		fmt.Printf("%+v\n", frame.Stats)
+		frame.Stats.Count("SetBitmapAttrs", 1)
 
 	}
 
@@ -856,7 +858,7 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 		return err
 	}
 
-	d.stats.Count("setProfileAttrs", 1)
+	d.Stats.Count("setProfileAttrs", 1)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
