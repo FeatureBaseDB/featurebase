@@ -42,6 +42,8 @@ func NewConfig() *Config {
 	return c
 }
 
+// NewConfigForHosts returns a Config object with Config.Cluster.Nodes already
+// set up.
 func NewConfigForHosts(hosts []string) *Config {
 	conf := NewConfig()
 	for _, hostport := range hosts {
