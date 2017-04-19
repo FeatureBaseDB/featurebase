@@ -9,7 +9,7 @@ import (
 
 func TestStatsClient_WithTags(t *testing.T) {
 	// Create a new client.
-	c, err := datadog.NewStatsClient()
+	c, err := datadog.NewStatsClient("localhost:19444")
 	if err != nil {
 		t.Fatal(err)
 	}
