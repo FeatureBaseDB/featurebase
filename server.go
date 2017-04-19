@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/CAFxX/gcnotifier"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -46,6 +48,7 @@ type Server struct {
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
 	PollingInterval     time.Duration
+	MetricInterval      time.Duration
 
 	LogOutput io.Writer
 }
@@ -62,6 +65,7 @@ func NewServer() *Server {
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
+		MetricInterval:      0,
 
 		LogOutput: os.Stderr,
 	}
@@ -131,9 +135,10 @@ func (s *Server) Open() error {
 	go func() { http.Serve(ln, s.Handler) }()
 
 	// Start background monitoring.
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
+	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 
 	return nil
 }
@@ -362,4 +367,38 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	}
 
 	return pb.MaxSlices, nil
+}
+
+// monitorRuntime periodically polls the Go runtime metrics.
+func (s *Server) monitorRuntime() {
+	if s.MetricInterval > 0 {
+		ticker := time.NewTicker(s.MetricInterval)
+		defer ticker.Stop()
+
+		gcn := gcnotifier.New()
+		defer gcn.Close()
+
+		s.logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
+
+		for {
+			// Wait for tick or a close.
+			select {
+			case <-s.closing:
+				return
+			case <-gcn.AfterGC():
+				// GC just ran
+				s.Index.Stats.Count("garbage_collection", 1)
+				s.logger().Printf("garbage collection complete")
+			case <-ticker.C:
+			}
+
+			s.logger().Printf("runtime stats  beginning")
+
+			// TODO
+			s.Index.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()))
+
+			// Record successful sync in log.
+			s.logger().Printf("runtime stats  complete")
+		}
+	}
 }
