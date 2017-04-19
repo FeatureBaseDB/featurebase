@@ -190,6 +190,61 @@ func TestClient_Import(t *testing.T) {
 	}
 }
 
+// Ensure client can bulk import data to an inverse frame.
+func TestClient_ImportInverseEnabled(t *testing.T) {
+	idx := MustOpenIndex()
+	defer idx.Close()
+
+	d := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
+	frameOpts := pilosa.FrameOptions{
+		InverseEnabled: true,
+	}
+	frame, err := d.CreateFrameIfNotExists("f", frameOpts)
+	if err != nil {
+		panic(err)
+	}
+	v, err := frame.CreateViewIfNotExists(pilosa.ViewInverse)
+	if err != nil {
+		panic(err)
+	}
+	f, err := v.CreateFragmentIfNotExists(0)
+	if err != nil {
+		panic(err)
+	}
+
+	// Load bitmap into cache to ensure cache gets updated.
+	f.Bitmap(0)
+
+	s := NewServer()
+	defer s.Close()
+	s.Handler.Host = s.Host()
+	s.Handler.Cluster = NewCluster(1)
+	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Index = idx.Index
+
+	// Send import request.
+	c := MustNewClient(s.Host())
+	if err := c.Import(context.Background(), "d", "f", 0, []pilosa.Bit{
+		{BitmapID: 0, ProfileID: 1},
+		{BitmapID: 0, ProfileID: 5},
+		{BitmapID: 200, ProfileID: 5},
+		{BitmapID: 200, ProfileID: 6},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data.
+	if a := f.Bitmap(1).Bits(); !reflect.DeepEqual(a, []uint64{0}) {
+		t.Fatalf("unexpected bits: %+v", a)
+	}
+	if a := f.Bitmap(5).Bits(); !reflect.DeepEqual(a, []uint64{0, 200}) {
+		t.Fatalf("unexpected bits: %+v", a)
+	}
+	if a := f.Bitmap(6).Bits(); !reflect.DeepEqual(a, []uint64{200}) {
+		t.Fatalf("unexpected bits: %+v", a)
+	}
+}
+
 // Ensure client backup and restore a frame.
 func TestClient_BackupRestore(t *testing.T) {
 	idx := MustOpenIndex()
