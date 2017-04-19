@@ -265,7 +265,6 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.DeleteDBMessage:
-		fmt.Println("DELETE:", obj.DB)
 		if err := s.Index.DeleteDB(obj.DB); err != nil {
 			return err
 		}

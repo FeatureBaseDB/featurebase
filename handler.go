@@ -309,7 +309,7 @@ func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the delete message to all nodes.
+	// Send the delete database message to all nodes.
 	err := h.Broadcaster.SendSync(
 		&internal.DeleteDBMessage{
 			DB: dbName,
@@ -351,7 +351,7 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the delete message to all nodes.
+	// Send the create database message to all nodes.
 	err = h.Broadcaster.SendSync(
 		&internal.CreateDBMessage{
 			DB: dbName,
@@ -503,7 +503,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the create message to all nodes.
+	// Send the create frame message to all nodes.
 	err = h.Broadcaster.SendSync(
 		&internal.CreateFrameMessage{
 			DB:    dbName,
@@ -575,7 +575,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the delete message to all nodes.
+	// Send the delete frame message to all nodes.
 	err := h.Broadcaster.SendSync(
 		&internal.DeleteFrameMessage{
 			DB:    dbName,
