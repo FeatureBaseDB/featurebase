@@ -236,20 +236,7 @@ func (s *Server) monitorMaxSlices() {
 	}
 }
 
-// LocalState returns the state of the local node as well as the
-// index (dbs/frames) according to the local node.
-// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
-func (s *Server) LocalState() (proto.Message, error) {
-	if s.Index == nil {
-		return nil, errors.New("Server.Index is nil.")
-	}
-	return &internal.NodeState{
-		Host:  s.Host,
-		State: "OK", // TODO: make this work, pull from s.Cluster.Node
-		DBs:   encodeDBs(s.Index.DBs()),
-	}, nil
-}
-
+// ReceiveMessage represents an implementation of BroadcastHandler.
 func (s *Server) ReceiveMessage(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.CreateSliceMessage:
@@ -282,6 +269,21 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 	}
 	return nil
+}
+
+// Server implements gossip.StateHandler.
+// LocalState returns the state of the local node as well as the
+// index (dbs/frames) according to the local node.
+// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
+func (s *Server) LocalState() (proto.Message, error) {
+	if s.Index == nil {
+		return nil, errors.New("Server.Index is nil.")
+	}
+	return &internal.NodeState{
+		Host:  s.Host,
+		State: "OK", // TODO: make this work, pull from s.Cluster.Node
+		DBs:   encodeDBs(s.Index.DBs()),
+	}, nil
 }
 
 // HandleRemoteState receives incoming NodeState from remote nodes.
