@@ -1,4 +1,4 @@
-.PHONY: glide vendor-update docker pilosa crossbuild install generate
+.PHONY: glide vendor-update docker docker-micro pilosa crossbuild install generate
 
 GLIDE := $(shell command -v glide 2>/dev/null)
 PROTOC := $(shell command -v protoc 2>/dev/null)
@@ -51,5 +51,8 @@ generate: .protoc-gen-gofast
 
 docker:
 	docker build -t "pilosa:$(VERSION)" \
-		--build-arg ldflags="-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)" .
+		--build-arg ldflags="-X github.com/pilosa/pilosa/cmd.Version=$(VERSION) -X github.com/pilosa/pilosa/cmd.BuildTime=$(BUILD_TIME)" .
 	@echo "Created image: pilosa:$(VERSION)"
+
+docker-micro: docker
+	cd docker-micro && bash build.sh "pilosa:$(VERSION)"
