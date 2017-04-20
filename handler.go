@@ -23,18 +23,11 @@ import (
 	"github.com/pilosa/pilosa/pql"
 )
 
-// ServerHandler a method to update the local node's state information
-// this is used to handle the cluster status request and append the
-// local node's state with the cluster state gathered via Gossip
-type ServerHandler interface {
-	HandleStateRequest() error
-}
-
 // Handler represents an HTTP handler.
 type Handler struct {
 	Index         *Index
 	Broadcaster   Broadcaster
-	ServerHandler ServerHandler
+	ServerHandler StateHandler
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -124,7 +117,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	// Compute my local state
 	fmt.Println("Call interface")
-	h.ServerHandler.HandleStateRequest()
+	h.ServerHandler.LocalState()
 
 	if err := json.NewEncoder(w).Encode(getStatusResponse{
 		Health:   h.Cluster.NodeState,

@@ -26,6 +26,14 @@ const (
 	DefaultPollingInterval     = 60 * time.Second
 )
 
+// StateHandler specifies two methods which an object must implement to share
+// state in the cluster. These are used by the GossipNodeSet to implement the
+// LocalState and MergeRemoteState methods of memberlist.Delegate
+type StateHandler interface {
+	LocalState() (proto.Message, error)
+	HandleRemoteState(proto.Message) error
+}
+
 // Server represents an index wrapped by a running HTTP server.
 type Server struct {
 	ln net.Listener
@@ -242,11 +250,6 @@ func (s *Server) monitorMaxSlices() {
 	}
 }
 
-func (s *Server) HandleStateRequest() error {
-	_, err := s.LocalState()
-	return err
-}
-
 func (s *Server) ReceiveMessage(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.CreateSliceMessage:
@@ -281,13 +284,13 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 	return nil
 }
 
-// Server implements gossip.StateHandler.
 // LocalState returns the state of the local node as well as the
 // index (dbs/frames) according to the local node.
+// Server implements gossip.StateHandler.
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 func (s *Server) LocalState() (proto.Message, error) {
 	if s.Index == nil {
-		return nil, errors.New("Server.Index is nil.")
+		return nil, errors.New("Server.Index is nil")
 	}
 
 	// Get Node DB Slices
@@ -406,7 +409,6 @@ func (s *Server) monitorRuntime() {
 			case <-gcn.AfterGC():
 				// GC just ran
 				s.Index.Stats.Count("garbage_collection", 1)
-				s.logger().Printf("garbage collection complete")
 			case <-ticker.C:
 			}
 
