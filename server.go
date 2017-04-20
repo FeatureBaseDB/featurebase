@@ -247,6 +247,41 @@ func (s *Server) HandleStateRequest() error {
 	return err
 }
 
+func (s *Server) ReceiveMessage(pb proto.Message) error {
+	switch obj := pb.(type) {
+	case *internal.CreateSliceMessage:
+		d := s.Index.DB(obj.DB)
+		if d == nil {
+			return fmt.Errorf("Local DB not found: %s", obj.DB)
+		}
+		d.SetRemoteMaxSlice(obj.Slice)
+	case *internal.CreateDBMessage:
+		opt := DBOptions{ColumnLabel: obj.Meta.ColumnLabel}
+		_, err := s.Index.CreateDB(obj.DB, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteDBMessage:
+		if err := s.Index.DeleteDB(obj.DB); err != nil {
+			return err
+		}
+	case *internal.CreateFrameMessage:
+		db := s.Index.DB(obj.DB)
+		opt := FrameOptions{RowLabel: obj.Meta.RowLabel}
+		_, err := db.CreateFrame(obj.Frame, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteFrameMessage:
+		db := s.Index.DB(obj.DB)
+		if err := db.DeleteFrame(obj.Frame); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Server implements gossip.StateHandler.
 // LocalState returns the state of the local node as well as the
 // index (dbs/frames) according to the local node.
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
@@ -270,41 +305,6 @@ func (s *Server) LocalState() (proto.Message, error) {
 
 	s.Cluster.SetNodeState(&ns)
 	return &ns, nil
-}
-
-func (s *Server) ReceiveMessage(pb proto.Message) error {
-	switch obj := pb.(type) {
-	case *internal.CreateSliceMessage:
-		d := s.Index.DB(obj.DB)
-		if d == nil {
-			return fmt.Errorf("Local DB not found: %s", obj.DB)
-		}
-		d.SetRemoteMaxSlice(obj.Slice)
-	case *internal.CreateDBMessage:
-		opt := DBOptions{ColumnLabel: obj.Meta.ColumnLabel}
-		_, err := s.Index.CreateDB(obj.DB, opt)
-		if err != nil {
-			return err
-		}
-	case *internal.DeleteDBMessage:
-		fmt.Println("DELETE:", obj.DB)
-		if err := s.Index.DeleteDB(obj.DB); err != nil {
-			return err
-		}
-	case *internal.CreateFrameMessage:
-		db := s.Index.DB(obj.DB)
-		opt := FrameOptions{RowLabel: obj.Meta.RowLabel}
-		_, err := db.CreateFrame(obj.Frame, opt)
-		if err != nil {
-			return err
-		}
-	case *internal.DeleteFrameMessage:
-		db := s.Index.DB(obj.DB)
-		if err := db.DeleteFrame(obj.Frame); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // HandleRemoteState receives incoming NodeState from remote nodes.
