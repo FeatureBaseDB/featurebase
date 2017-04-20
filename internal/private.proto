@@ -3,8 +3,8 @@ syntax = "proto3";
 package internal;
 
 message DBMeta {
-	string TimeQuantum = 1;
-	string ColumnLabel = 2;
+	string ColumnLabel = 1;
+	string TimeQuantum = 2;
 }
 
 message FrameMeta {

@@ -302,11 +302,11 @@ func (f *Frame) loadMeta() error {
 func (f *Frame) saveMeta() error {
 	// Marshal metadata.
 	buf, err := proto.Marshal(&internal.FrameMeta{
-		TimeQuantum:    string(f.timeQuantum),
 		RowLabel:       f.rowLabel,
-		CacheType:      f.cacheType,
 		InverseEnabled: f.inverseEnabled,
+		CacheType:      f.cacheType,
 		CacheSize:      f.cacheSize,
+		TimeQuantum:    string(f.timeQuantum),
 	})
 	if err != nil {
 		return err
@@ -593,9 +593,11 @@ func encodeFrame(f *Frame) *internal.Frame {
 	return &internal.Frame{
 		Name: f.name,
 		Meta: &internal.FrameMeta{
-			TimeQuantum: string(f.timeQuantum),
-			RowLabel:    f.rowLabel,
-			CacheSize:   f.cacheSize,
+			RowLabel:       f.rowLabel,
+			InverseEnabled: f.inverseEnabled,
+			CacheType:      f.cacheType,
+			CacheSize:      f.cacheSize,
+			TimeQuantum:    string(f.timeQuantum),
 		},
 	}
 }
@@ -625,6 +627,17 @@ type FrameOptions struct {
 	CacheType      string      `json:"cacheType,omitempty"`
 	CacheSize      uint32      `json:"cacheSize,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
+}
+
+// Encode converts o into its internal representation.
+func (o *FrameOptions) Encode() *internal.FrameMeta {
+	return &internal.FrameMeta{
+		RowLabel:       o.RowLabel,
+		InverseEnabled: o.InverseEnabled,
+		CacheType:      o.CacheType,
+		CacheSize:      o.CacheSize,
+		TimeQuantum:    string(o.TimeQuantum),
+	}
 }
 
 // importBitSet represents slices of row and column ids.
