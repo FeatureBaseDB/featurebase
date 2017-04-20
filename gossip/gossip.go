@@ -154,13 +154,6 @@ func (g *GossipNodeSet) SendAsync(pb proto.Message) error {
 	return nil
 }
 
-func (g *GossipNodeSet) Receive(pb proto.Message) error {
-	if err := g.handler.ReceiveMessage(pb); err != nil {
-		return err
-	}
-	return nil
-}
-
 // implementation of the memberlist.Delegate interface
 func (g *GossipNodeSet) NodeMeta(limit int) []byte {
 	return []byte{}
@@ -172,7 +165,7 @@ func (g *GossipNodeSet) NotifyMsg(b []byte) {
 		g.logger().Printf("unmarshal message error: %s", err)
 		return
 	}
-	if err := g.Receive(m); err != nil {
+	if err := g.handler.ReceiveMessage(m); err != nil {
 		g.logger().Printf("receive message error: %s", err)
 		return
 	}
