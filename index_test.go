@@ -162,34 +162,6 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	}
 }
 
-/* TODO: move this to messenger.go
-// Ensure index can handle Messenger messages.
-func TestIndex_HandleMessage(t *testing.T) {
-	// Create a local index.
-	idx0 := MustOpenIndex()
-	defer idx0.Close()
-
-	idx0.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
-
-	msg0 := &internal.CreateSliceMessage{
-		DB:    "d",
-		Slice: 8,
-	}
-	idx0.HandleMessage(msg0)
-	if ms := idx0.MaxSlices(); !reflect.DeepEqual(ms, map[string]uint64{"d": 8}) {
-		t.Fatalf("unexpected max slice: %s", ms)
-	}
-
-	msg1 := &internal.DeleteDBMessage{
-		DB: "d",
-	}
-	idx0.HandleMessage(msg1)
-	if ms := idx0.MaxSlices(); !reflect.DeepEqual(ms, map[string]uint64{}) {
-		t.Fatalf("unexpected delete db: %s", ms)
-	}
-}
-*/
-
 // Index is a test wrapper for pilosa.Index.
 type Index struct {
 	*pilosa.Index

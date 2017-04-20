@@ -354,11 +354,8 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 	// Send the create database message to all nodes.
 	err = h.Broadcaster.SendSync(
 		&internal.CreateDBMessage{
-			DB: dbName,
-			Meta: &internal.DBMeta{
-				ColumnLabel: req.Options.ColumnLabel,
-				TimeQuantum: string(req.Options.TimeQuantum),
-			},
+			DB:   dbName,
+			Meta: req.Options.Encode(),
 		})
 	if err != nil {
 		h.logger().Printf("problem sending CreateDB message: %s", err)
@@ -508,10 +505,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		&internal.CreateFrameMessage{
 			DB:    dbName,
 			Frame: frameName,
-			Meta: &internal.FrameMeta{
-				RowLabel:    req.Options.RowLabel,
-				TimeQuantum: string(req.Options.TimeQuantum),
-			},
+			Meta:  req.Options.Encode(),
 		})
 	if err != nil {
 		h.logger().Printf("problem sending CreateFrame message: %s", err)

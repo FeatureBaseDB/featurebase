@@ -536,6 +536,14 @@ type DBOptions struct {
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
+// Encode converts o into its internal representation.
+func (o *DBOptions) Encode() *internal.DBMeta {
+	return &internal.DBMeta{
+		ColumnLabel: o.ColumnLabel,
+		TimeQuantum: string(o.TimeQuantum),
+	}
+}
+
 // hasTime returns true if a contains a non-nil time.
 func hasTime(a []*time.Time) bool {
 	for _, t := range a {
