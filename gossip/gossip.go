@@ -14,14 +14,6 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// StateHandler specifies two methods which an object must implement to share
-// state in the cluster. These are used by the GossipNodeSet to implement the
-// LocalState and MergeRemoteState methods of memberlist.Delegate
-type StateHandler interface {
-	LocalState() (proto.Message, error)
-	HandleRemoteState(proto.Message) error
-}
-
 // GossipNodeSet represents a gossip implementation of NodeSet using memberlist
 // GossipNodeSet also represents a gossip implementation of pilosa.Broadcaster
 // GossipNodeSet also represents an implementation of memberlist.Delegate
@@ -31,7 +23,7 @@ type GossipNodeSet struct {
 
 	broadcasts *memberlist.TransmitLimitedQueue
 
-	stateHandler StateHandler
+	stateHandler pilosa.StateHandler
 	config       *GossipConfig
 
 	// The writer for any logging.
@@ -89,7 +81,7 @@ type GossipConfig struct {
 }
 
 // NewGossipNodeSet returns a new instance of GossipNodeSet.
-func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, sh StateHandler) *GossipNodeSet {
+func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, sh pilosa.StateHandler) *GossipNodeSet {
 	g := &GossipNodeSet{
 		LogOutput: os.Stderr,
 	}
