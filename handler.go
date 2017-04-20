@@ -23,10 +23,18 @@ import (
 	"github.com/pilosa/pilosa/pql"
 )
 
+// ServerHandler a method to update the local node's state information
+// this is used to handle the cluster status request and append the
+// local node's state with the cluster state gathered via Gossip
+type ServerHandler interface {
+	HandleStateRequest() error
+}
+
 // Handler represents an HTTP handler.
 type Handler struct {
-	Index       *Index
-	Broadcaster Broadcaster
+	Index         *Index
+	Broadcaster   Broadcaster
+	ServerHandler ServerHandler
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -83,6 +91,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/nodes", handler.handleGetNodes).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
+	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
@@ -112,12 +121,17 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+	// Compute my local state
+	fmt.Println("Call interface")
+	h.ServerHandler.HandleStateRequest()
+
 	if err := json.NewEncoder(w).Encode(getStatusResponse{
-		Health: h.Cluster.Health(),
+		Health:   h.Cluster.NodeState,
+		Version:  h.Version,
+		Replicas: h.Cluster.ReplicaN,
 	}); err != nil {
-		h.logger().Printf("write status response error: %s", err)
+		h.logger().Printf("Node State Error: %s", err)
 	}
 }
 
@@ -126,7 +140,9 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	Health map[string]string `json:"health"`
+	Health   map[string]*internal.NodeState `json:"health"`
+	Version  string                         `json:"version"`
+	Replicas int
 }
 
 // handlePostQuery handles /query requests.

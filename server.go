@@ -71,6 +71,7 @@ func NewServer() *Server {
 	}
 
 	s.Handler.Index = s.Index
+	s.Handler.ServerHandler = s
 
 	return s
 }
@@ -241,6 +242,11 @@ func (s *Server) monitorMaxSlices() {
 	}
 }
 
+func (s *Server) HandleStateRequest() error {
+	_, err := s.LocalState()
+	return err
+}
+
 // LocalState returns the state of the local node as well as the
 // index (dbs/frames) according to the local node.
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
@@ -248,11 +254,22 @@ func (s *Server) LocalState() (proto.Message, error) {
 	if s.Index == nil {
 		return nil, errors.New("Server.Index is nil.")
 	}
-	return &internal.NodeState{
+
+	// Get Node DB Slices
+	for _, db := range s.Index.DBs() {
+		maxSlice := db.MaxSlice()
+		slices := s.Cluster.OwnsSlices(db.name, maxSlice, s.Host)
+		fmt.Println("Slices ", slices)
+	}
+
+	ns := internal.NodeState{
 		Host:  s.Host,
 		State: "OK", // TODO: make this work, pull from s.Cluster.Node
 		DBs:   encodeDBs(s.Index.DBs()),
-	}, nil
+	}
+
+	s.Cluster.SetNodeState(&ns)
+	return &ns, nil
 }
 
 func (s *Server) ReceiveMessage(pb proto.Message) error {
@@ -296,7 +313,8 @@ func (s *Server) HandleRemoteState(pb proto.Message) error {
 }
 
 func (s *Server) mergeRemoteState(ns *internal.NodeState) error {
-	// TODO: update some node state value in the cluster (it should be in cluster.node i guess)
+	// store this node's state in the cluster node map
+	s.Cluster.SetNodeState(ns)
 
 	// Create databases that don't exist.
 	for _, db := range ns.DBs {
@@ -392,13 +410,8 @@ func (s *Server) monitorRuntime() {
 			case <-ticker.C:
 			}
 
-			s.logger().Printf("runtime stats  beginning")
-
-			// TODO
+			// Record the number of go routines
 			s.Index.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()))
-
-			// Record successful sync in log.
-			s.logger().Printf("runtime stats  complete")
 		}
 	}
 }

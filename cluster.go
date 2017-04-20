@@ -3,6 +3,9 @@ package pilosa
 import (
 	"encoding/binary"
 	"hash/fnv"
+	"sync"
+
+	"github.com/pilosa/pilosa/internal"
 )
 
 const (
@@ -86,6 +89,7 @@ func (a Nodes) Clone() []*Node {
 
 // Cluster represents a collection of nodes.
 type Cluster struct {
+	mu      sync.Mutex
 	Nodes   []*Node
 	NodeSet NodeSet
 
@@ -97,6 +101,9 @@ type Cluster struct {
 
 	// The number of replicas a partition has.
 	ReplicaN int
+
+	// Current state of nodes in the cluster
+	NodeState map[string]*internal.NodeState
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
@@ -105,6 +112,7 @@ func NewCluster() *Cluster {
 		Hasher:     &jmphasher{},
 		PartitionN: DefaultPartitionN,
 		ReplicaN:   DefaultReplicaN,
+		NodeState:  make(map[string]*internal.NodeState),
 	}
 }
 
@@ -188,6 +196,37 @@ func (c *Cluster) PartitionNodes(partitionID int) []*Node {
 	}
 
 	return nodes
+}
+
+// OwnsSlices find the set of slices owned by the node per DB
+func (c *Cluster) OwnsSlices(db string, maxSlice uint64, host string) []uint64 {
+	var slices []uint64
+	for i := uint64(0); i <= maxSlice; i++ {
+		p := c.Partition(db, i)
+		// Determine primary owner node.
+		index := c.Hasher.Hash(uint64(p), len(c.Nodes))
+		if c.Nodes[index].Host == host {
+			slices = append(slices, i)
+		}
+
+	}
+	return slices
+}
+
+// SetNodeState stores the remote node states transmitted through gossip
+func (c *Cluster) SetNodeState(state *internal.NodeState) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.NodeState[state.Host] = state
+}
+
+// GetNodeState stores the remote node states transmitted through gossip
+func (c *Cluster) GetNodeState(host string) *internal.NodeState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.NodeState[host]
 }
 
 // Hasher represents an interface to hash integers into buckets.
