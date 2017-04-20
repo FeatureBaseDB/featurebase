@@ -234,23 +234,25 @@ type postDBRequest struct {
 
 // Custom Unmarshal JSON to validate request body when creating a new database
 func (p *postDBRequest) UnmarshalJSON(b []byte) error {
+	validDBOptions := []string{"columnLabel"}
 	var data map[string]interface{}
 	if err := json.Unmarshal(b, &data); err != nil {
 		return err
 	}
+	p.Options = DBOptions{}
 	for key, value := range data {
 		switch key {
 		case "options":
-			value, err := validateOptions(data, "columnLabel")
+			values, err := validateOptions(data, validDBOptions)
 			if err != nil {
 				return err
 			}
-			if value == "" {
-				p.Options = DBOptions{}
-			} else {
-				p.Options = DBOptions{ColumnLabel: value}
+			for k, v := range values {
+				switch k {
+				case "columnLabel":
+					p.Options.ColumnLabel = v
+				}
 			}
-
 		default:
 			return fmt.Errorf("Unknown key: %v:%v", key, value)
 		}
@@ -258,29 +260,37 @@ func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func validateOptions(data map[string]interface{}, field string) (string, error) {
+func validateOptions(data map[string]interface{}, field []string) (map[string]string, error) {
 	options, ok := data["options"].(map[string]interface{})
 	if !ok {
-		return "", errors.New("options is not map[string]interface{}")
+		return map[string]string{}, errors.New("options is not map[string]interface{}")
 	}
-	var optionValue string
+	optionValue := make(map[string]string)
 	if len(options) == 0 {
-		optionValue = ""
+		optionValue = map[string]string{}
 	} else {
 		for k, v := range options {
-			switch k {
-			case field:
-				val, ok := options[field].(string)
+			if foundItem(field, k) {
+				val, ok := options[k].(string)
 				if !ok {
-					return "", fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
+					return map[string]string{}, fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
 				}
-				optionValue = val
-			default:
-				return "", fmt.Errorf("invalid key for options {%v:%v}", k, v)
+				optionValue[k] = val
+			} else {
+				return map[string]string{}, fmt.Errorf("invalid key for options {%v:%v}", k, v)
 			}
 		}
 	}
 	return optionValue, nil
+}
+
+func foundItem(items []string, item string) bool {
+	for _, i := range items {
+		if item == i {
+			return true
+		}
+	}
+	return false
 }
 
 type postDBResponse struct{}
@@ -465,24 +475,37 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Custom Unmarshal JSON to validate request body when creating a new frame
+// Custom Unmarshal JSON to validate request body when creating a new frame. If there's new FrameOptions,
+// adding it to validFrameOptions to make sure the new option is validated, otherwise the request will be failed
 func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
+	validFrameOptions := []string{"rowLabel", "cacheType", "inverseEnabled"}
 	var data map[string]interface{}
 	if err := json.Unmarshal(b, &data); err != nil {
 		return err
 	}
+	p.Options = FrameOptions{}
 	for key, value := range data {
 		switch key {
 		case "options":
-			value, err := validateOptions(data, "rowLabel")
+			values, err := validateOptions(data, validFrameOptions)
 			if err != nil {
 				return err
 			}
-			if value == "" {
-				p.Options = FrameOptions{}
-			} else {
-				p.Options = FrameOptions{RowLabel: value}
+			for k, v := range values {
+				switch k {
+				case "rowLabel":
+					p.Options.RowLabel = v
+				case "cacheType":
+					p.Options.CacheType = v
+				case "inverseEnabled":
+					inverse, err := strconv.ParseBool(v)
+					if err != nil {
+						continue
+					}
+					p.Options.InverseEnabled = inverse
+				}
 			}
+
 		default:
 			return fmt.Errorf("Unknown key: {%v:%v}", key, value)
 		}
