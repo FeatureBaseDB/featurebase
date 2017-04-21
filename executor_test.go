@@ -489,6 +489,7 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	// The local node owns slice 1.
 	idx := MustOpenIndex()
 	defer idx.Close()
+	s.Handler.Index = idx.Index
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(10, (1*SliceWidth)+1)
 
 	e := NewExecutor(idx.Index, c)
@@ -516,6 +517,7 @@ func TestExecutor_Execute_Remote_Count(t *testing.T) {
 	// Create local executor data. The local node owns slice 1.
 	idx := MustOpenIndex()
 	defer idx.Close()
+	s.Handler.Index = idx.Index
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(10, (1*SliceWidth)+1)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(10, (1*SliceWidth)+2)
 
@@ -552,6 +554,7 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	// Create local executor data.
 	idx := MustOpenIndex()
 	defer idx.Close()
+	s.Handler.Index = idx.Index
 
 	// Create frame.
 	if _, err := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{}).CreateFrame("f", pilosa.FrameOptions{}); err != nil {
@@ -597,6 +600,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	// Create local executor data.
 	idx := MustOpenIndex()
 	defer idx.Close()
+	s.Handler.Index = idx.Index
 
 	// Create frame.
 	if f, err := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{}).CreateFrame("f", pilosa.FrameOptions{}); err != nil {
@@ -664,6 +668,7 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	// Create local executor data on slice 1 & 3.
 	idx := MustOpenIndex()
 	defer idx.Close()
+	s.Handler.Index = idx.Index
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(30, (1*SliceWidth)+1)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 3).MustSetBits(30, (3*SliceWidth)+2)
 
