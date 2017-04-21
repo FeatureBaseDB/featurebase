@@ -21,7 +21,7 @@ const (
 	DefaultFrame = "general"
 
 	// MinThreshold is the lowest count to use in a Top-N operation when
-	// looking for additional bitmap/count pairs.
+	// looking for additional id/count pairs.
 	MinThreshold = 1
 )
 
@@ -71,8 +71,8 @@ func (e *Executor) Execute(ctx context.Context, db string, q *pql.Query, slices 
 	}
 
 	// Optimize handling for bulk attribute insertion.
-	if hasOnlySetBitmapAttrs(q.Calls) {
-		return e.executeBulkSetBitmapAttrs(ctx, db, q.Calls, opt)
+	if hasOnlySetRowAttrs(q.Calls) {
+		return e.executeBulkSetRowAttrs(ctx, db, q.Calls, opt)
 	}
 
 	// Execute each call serially.
@@ -102,10 +102,10 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 		return e.executeCount(ctx, db, c, slices, opt)
 	case "SetBit":
 		return e.executeSetBit(ctx, db, c, opt)
-	case "SetBitmapAttrs":
-		return nil, e.executeSetBitmapAttrs(ctx, db, c, opt)
-	case "SetProfileAttrs":
-		return nil, e.executeSetProfileAttrs(ctx, db, c, opt)
+	case "SetRowAttrs":
+		return nil, e.executeSetRowAttrs(ctx, db, c, opt)
+	case "SetColumnAttrs":
+		return nil, e.executeSetColumnAttrs(ctx, db, c, opt)
 	case "TopN":
 		return e.executeTopN(ctx, db, c, slices, opt)
 	default:
@@ -155,7 +155,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, db string, c *pql.Call
 	}
 
 	// Attach attributes for Bitmap() calls.
-	// If the column label is used then return profile attributes.
+	// If the column label is used then return column attributes.
 	// If the row label is used then return bitmap attributes.
 	bm, _ := other.(*Bitmap)
 	if c.Name == "Bitmap" {
@@ -164,7 +164,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, db string, c *pql.Call
 		if d != nil {
 			columnLabel := d.ColumnLabel()
 			if columnID, ok, err := c.UintArg(columnLabel); ok && err == nil {
-				attrs, err := d.ProfileAttrStore().Attrs(columnID)
+				attrs, err := d.ColumnAttrStore().Attrs(columnID)
 				if err != nil {
 					return nil, err
 				}
@@ -179,7 +179,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, db string, c *pql.Call
 					if err != nil {
 						return nil, err
 					}
-					attrs, err := fr.BitmapAttrStore().Attrs(rowID)
+					attrs, err := fr.RowAttrStore().Attrs(rowID)
 					if err != nil {
 						return nil, err
 					}
@@ -214,7 +214,7 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, db string, c *pql
 // This first performs the TopN() to determine the top results and then
 // requeries to retrieve the full counts for each of the top results.
 func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
-	bitmapIDs, _, err := c.UintSliceArg("ids")
+	rowIDs, _, err := c.UintSliceArg("ids")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopN: %v", err)
 	}
@@ -231,7 +231,7 @@ func (e *Executor) executeTopN(ctx context.Context, db string, c *pql.Call, slic
 
 	// If this call is against specific ids, or we didn't get results,
 	// or we are part of a larger distributed query then don't refetch.
-	if len(pairs) == 0 || len(bitmapIDs) > 0 || opt.Remote {
+	if len(pairs) == 0 || len(rowIDs) > 0 || opt.Remote {
 		return pairs, nil
 	}
 	// Only the original caller should refetch the full counts.
@@ -284,7 +284,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, db string, c *pql.Call,
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
 	}
 	field, _ := c.Args["field"].(string)
-	bitmapIDs, _, err := c.UintSliceArg("ids")
+	rowIDs, _, err := c.UintSliceArg("ids")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
 	}
@@ -330,7 +330,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, db string, c *pql.Call,
 	return f.Top(TopOptions{
 		N:                 int(n),
 		Src:               src,
-		BitmapIDs:         bitmapIDs,
+		RowIDs:            rowIDs,
 		FilterField:       field,
 		FilterValues:      filters,
 		MinThreshold:      minThreshold,
@@ -404,7 +404,7 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, db string, c *pql.Cal
 	if frag == nil {
 		return NewBitmap(), nil
 	}
-	return frag.Bitmap(id), nil
+	return frag.Row(id), nil
 }
 
 // executeIntersectSlice executes a intersect() call for a local slice.
@@ -483,7 +483,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call
 		if f == nil {
 			continue
 		}
-		bm = bm.Union(f.Bitmap(rowID))
+		bm = bm.Union(f.Row(rowID))
 	}
 	return bm, nil
 }
@@ -739,11 +739,11 @@ func (e *Executor) executeSetBitView(ctx context.Context, db string, c *pql.Call
 	return ret, nil
 }
 
-// executeSetBitmapAttrs executes a SetBitmapAttrs() call.
-func (e *Executor) executeSetBitmapAttrs(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) error {
+// executeSetRowAttrs executes a SetRowAttrs() call.
+func (e *Executor) executeSetRowAttrs(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) error {
 	frameName, ok := c.Args["frame"].(string)
 	if !ok {
-		return errors.New("SetBitmapAttrs() frame required")
+		return errors.New("SetRowAttrs() frame required")
 	}
 
 	// Retrieve frame.
@@ -756,9 +756,9 @@ func (e *Executor) executeSetBitmapAttrs(ctx context.Context, db string, c *pql.
 	// Parse labels.
 	rowID, ok, err := c.UintArg(rowLabel)
 	if err != nil {
-		return fmt.Errorf("reading SetBitmapAttrs() row: %v", err)
+		return fmt.Errorf("reading SetRowAttrs() row: %v", err)
 	} else if !ok {
-		return fmt.Errorf("SetBitmapAttrs() row field '%v' required.", rowLabel)
+		return fmt.Errorf("SetRowAttrs() row field '%v' required.", rowLabel)
 	}
 
 	// Copy args and remove reserved fields.
@@ -767,7 +767,7 @@ func (e *Executor) executeSetBitmapAttrs(ctx context.Context, db string, c *pql.
 	delete(attrs, rowLabel)
 
 	// Set attributes.
-	if err := frame.BitmapAttrStore().SetAttrs(rowID, attrs); err != nil {
+	if err := frame.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
 
@@ -796,14 +796,14 @@ func (e *Executor) executeSetBitmapAttrs(ctx context.Context, db string, c *pql.
 	return nil
 }
 
-// executeBulkSetBitmapAttrs executes a set of SetBitmapAttrs() calls.
-func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, calls []*pql.Call, opt *ExecOptions) ([]interface{}, error) {
+// executeBulkSetRowAttrs executes a set of SetRowAttrs() calls.
+func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, db string, calls []*pql.Call, opt *ExecOptions) ([]interface{}, error) {
 	// Collect attributes by frame/id.
 	m := make(map[string]map[uint64]map[string]interface{})
 	for _, c := range calls {
 		frame, ok := c.Args["frame"].(string)
 		if !ok {
-			return nil, errors.New("SetBitmapAttrs() frame required")
+			return nil, errors.New("SetRowAttrs() frame required")
 		}
 
 		// Retrieve frame.
@@ -815,9 +815,9 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 
 		rowID, ok, err := c.UintArg(rowLabel)
 		if err != nil {
-			return nil, fmt.Errorf("reading SetBitmapAttrs() row: %v", rowLabel)
+			return nil, fmt.Errorf("reading SetRowAttrs() row: %v", rowLabel)
 		} else if !ok {
-			return nil, fmt.Errorf("SetBitmapAttrs row field '%v' required.", rowLabel)
+			return nil, fmt.Errorf("SetRowAttrs row field '%v' required.", rowLabel)
 		}
 
 		// Copy args and remove reserved fields.
@@ -852,7 +852,7 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 		}
 
 		// Set attributes.
-		if err := frame.BitmapAttrStore().SetBulkAttrs(frameMap); err != nil {
+		if err := frame.RowAttrStore().SetBulkAttrs(frameMap); err != nil {
 			return nil, err
 		}
 	}
@@ -883,8 +883,8 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 	return make([]interface{}, len(calls)), nil
 }
 
-// executeSetProfileAttrs executes a SetProfileAttrs() call.
-func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) error {
+// executeSetColumnAttrs executes a SetColumnAttrs() call.
+func (e *Executor) executeSetColumnAttrs(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) error {
 	// Retrieve database.
 	d := e.Index.DB(db)
 	if d == nil {
@@ -898,7 +898,7 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 		columnLabel := d.columnLabel
 		col, okCol, errCol := c.UintArg(columnLabel)
 		if errCol != nil || !okCol {
-			return fmt.Errorf("reading SetProfileAttrs() id/columnLabel errs: %v/%v found %v/%v", errID, errCol, okID, okCol)
+			return fmt.Errorf("reading SetColumnAttrs() id/columnLabel errs: %v/%v found %v/%v", errID, errCol, okID, okCol)
 		}
 		id = col
 		colName = columnLabel
@@ -911,7 +911,7 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 	delete(attrs, colName)
 
 	// Set attributes.
-	if err := d.ProfileAttrStore().SetAttrs(id, attrs); err != nil {
+	if err := d.ColumnAttrStore().SetAttrs(id, attrs); err != nil {
 		return err
 	}
 
@@ -1011,8 +1011,8 @@ func (e *Executor) exec(ctx context.Context, node *Node, db string, q *pql.Query
 			v, err = pb.Results[i].Changed, nil
 		case "ClearBit":
 			v, err = pb.Results[i].Changed, nil
-		case "SetBitmapAttrs":
-		case "SetProfileAttrs":
+		case "SetRowAttrs":
+		case "SetColumnAttrs":
 		default:
 			v, err = decodeBitmap(pb.Results[i].GetBitmap()), nil
 		}
@@ -1207,14 +1207,14 @@ func decodeError(s string) error {
 	return errors.New(s)
 }
 
-// hasOnlySetBitmapAttrs returns true if calls only contains SetBitmapAttrs() calls.
-func hasOnlySetBitmapAttrs(calls []*pql.Call) bool {
+// hasOnlySetRowAttrs returns true if calls only contains SetRowAttrs() calls.
+func hasOnlySetRowAttrs(calls []*pql.Call) bool {
 	if len(calls) == 0 {
 		return false
 	}
 
 	for _, call := range calls {
-		if call.Name != "SetBitmapAttrs" {
+		if call.Name != "SetRowAttrs" {
 			return false
 		}
 	}
@@ -1227,7 +1227,7 @@ func needsSlices(calls []*pql.Call) bool {
 	}
 	for _, call := range calls {
 		switch call.Name {
-		case "ClearBit", "SetBit", "SetBitmapAttrs", "SetProfileAttrs":
+		case "ClearBit", "SetBit", "SetRowAttrs", "SetColumnAttrs":
 			continue
 		case "Count", "TopN":
 			return true

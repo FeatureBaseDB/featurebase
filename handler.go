@@ -159,26 +159,26 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	results, err := h.Executor.Execute(r.Context(), dbName, q, req.Slices, opt)
 	resp := &QueryResponse{Results: results, Err: err}
 
-	// Fill profile attributes if requested.
-	if req.Profiles {
-		// Consolidate all profile ids across all calls.
-		var profileIDs []uint64
+	// Fill column attributes if requested.
+	if req.ColumnAttrs {
+		// Consolidate all column ids across all calls.
+		var columnIDs []uint64
 		for _, result := range results {
 			bm, ok := result.(*Bitmap)
 			if !ok {
 				continue
 			}
-			profileIDs = uint64Slice(profileIDs).merge(bm.Bits())
+			columnIDs = uint64Slice(columnIDs).merge(bm.Bits())
 		}
 
-		// Retrieve profile attributes across all calls.
-		profiles, err := h.readProfiles(h.Index.DB(dbName), profileIDs)
+		// Retrieve column attributes across all calls.
+		columnAttrSets, err := h.readColumnAttrSets(h.Index.DB(dbName), columnIDs)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 			return
 		}
-		resp.Profiles = profiles
+		resp.ColumnAttrSets = columnAttrSets
 	}
 
 	// Set appropriate status code, if there is an error.
@@ -437,7 +437,7 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Retrieve local blocks.
-	blks, err := db.ProfileAttrStore().Blocks()
+	blks, err := db.ColumnAttrStore().Blocks()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -447,7 +447,7 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 	attrs := make(map[uint64]map[string]interface{})
 	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
 		// Retrieve block data.
-		m, err := db.ProfileAttrStore().BlockData(blockID)
+		m, err := db.ColumnAttrStore().BlockData(blockID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -701,7 +701,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 	}
 
 	// Retrieve local blocks.
-	blks, err := f.BitmapAttrStore().Blocks()
+	blks, err := f.RowAttrStore().Blocks()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -711,7 +711,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 	attrs := make(map[uint64]map[string]interface{})
 	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
 		// Retrieve block data.
-		m, err := f.BitmapAttrStore().BlockData(blockID)
+		m, err := f.RowAttrStore().BlockData(blockID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -739,24 +739,24 @@ type postFrameAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
 
-// readProfiles returns a list of profile objects by id.
-func (h *Handler) readProfiles(db *DB, ids []uint64) ([]*Profile, error) {
+// readColumnAttrSets returns a list of column attribute objects by id.
+func (h *Handler) readColumnAttrSets(db *DB, ids []uint64) ([]*ColumnAttrSet, error) {
 	if db == nil {
 		return nil, nil
 	}
 
-	a := make([]*Profile, 0, len(ids))
+	a := make([]*ColumnAttrSet, 0, len(ids))
 	for _, id := range ids {
-		// Read attributes for profile. Skip profile if empty.
-		attrs, err := db.ProfileAttrStore().Attrs(id)
+		// Read attributes for column. Skip column if empty.
+		attrs, err := db.ColumnAttrStore().Attrs(id)
 		if err != nil {
 			return nil, err
 		} else if len(attrs) == 0 {
 			continue
 		}
 
-		// Append profile with attributes.
-		a = append(a, &Profile{ID: id, Attrs: attrs})
+		// Append column with attributes.
+		a = append(a, &ColumnAttrSet{ID: id, Attrs: attrs})
 	}
 
 	return a, nil
@@ -817,10 +817,10 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		Query:    query,
-		Slices:   slices,
-		Profiles: q.Get("profiles") == "true",
-		Quantum:  quantum,
+		Query:       query,
+		Slices:      slices,
+		ColumnAttrs: q.Get("columnAttrs") == "true",
+		Quantum:     quantum,
 	}, nil
 }
 
@@ -907,9 +907,9 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Import into fragment.
-	err = f.Import(req.BitmapIDs, req.ProfileIDs, timestamps)
+	err = f.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
-		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", req.DB, req.Frame, req.Slice, len(req.ProfileIDs), err)
+		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", req.DB, req.Frame, req.Slice, len(req.ColumnIDs), err)
 		return
 	}
 
@@ -965,10 +965,10 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	cw := csv.NewWriter(w)
 
 	// Iterate over each bit.
-	if err := f.ForEachBit(func(bitmapID, profileID uint64) error {
+	if err := f.ForEachBit(func(rowID, columnID uint64) error {
 		return cw.Write([]string{
-			strconv.FormatUint(bitmapID, 10),
-			strconv.FormatUint(profileID, 10),
+			strconv.FormatUint(rowID, 10),
+			strconv.FormatUint(columnID, 10),
 		})
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1083,7 +1083,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	// Read data
 	var resp internal.BlockDataResponse
 	if f != nil {
-		resp.BitmapIDs, resp.ProfileIDs = f.BlockData(int(req.Block))
+		resp.RowIDs, resp.ColumnIDs = f.BlockData(int(req.Block))
 	}
 
 	// Encode response.
@@ -1271,8 +1271,8 @@ type QueryRequest struct {
 	// If empty, all slices are included.
 	Slices []uint64
 
-	// Return profile attributes, if true.
-	Profiles bool
+	// Return column attributes, if true.
+	ColumnAttrs bool
 
 	// Time granularity to use with the timestamp.
 	Quantum TimeQuantum
@@ -1284,11 +1284,11 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		Query:    pb.Query,
-		Slices:   pb.Slices,
-		Profiles: pb.Profiles,
-		Quantum:  TimeQuantum(pb.Quantum),
-		Remote:   pb.Remote,
+		Query:       pb.Query,
+		Slices:      pb.Slices,
+		ColumnAttrs: pb.ColumnAttrs,
+		Quantum:     TimeQuantum(pb.Quantum),
+		Remote:      pb.Remote,
 	}
 
 	return req
@@ -1300,8 +1300,8 @@ type QueryResponse struct {
 	// Can be a Bitmap, Pairs, or uint64.
 	Results []interface{}
 
-	// Set of profiles matching IDs returned in Result.
-	Profiles []*Profile
+	// Set of column attribute objects matching IDs returned in Result.
+	ColumnAttrSets []*ColumnAttrSet
 
 	// Error during parsing or execution.
 	Err error
@@ -1309,12 +1309,12 @@ type QueryResponse struct {
 
 func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	var output struct {
-		Results  []interface{} `json:"results,omitempty"`
-		Profiles []*Profile    `json:"profiles,omitempty"`
-		Err      string        `json:"error,omitempty"`
+		Results        []interface{}    `json:"results,omitempty"`
+		ColumnAttrSets []*ColumnAttrSet `json:"columnAttrs,omitempty"`
+		Err            string           `json:"error,omitempty"`
 	}
 	output.Results = resp.Results
-	output.Profiles = resp.Profiles
+	output.ColumnAttrSets = resp.ColumnAttrSets
 
 	if resp.Err != nil {
 		output.Err = resp.Err.Error()
@@ -1324,8 +1324,8 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 
 func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 	pb := &internal.QueryResponse{
-		Results:  make([]*internal.QueryResult, len(resp.Results)),
-		Profiles: encodeProfiles(resp.Profiles),
+		Results:        make([]*internal.QueryResult, len(resp.Results)),
+		ColumnAttrSets: encodeColumnAttrSets(resp.ColumnAttrSets),
 	}
 
 	for i := range resp.Results {

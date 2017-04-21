@@ -28,12 +28,12 @@ message BlockDataRequest {
 }
 
 message BlockDataResponse {
-	repeated uint64 BitmapIDs = 1;
-	repeated uint64 ProfileIDs = 2;
+	repeated uint64 RowIDs = 1;
+	repeated uint64 ColumnIDs = 2;
 }
 
 message Cache {
-	repeated uint64 BitmapIDs = 1;
+	repeated uint64 IDs = 1;
 }
 
 message MaxSlicesResponse {

@@ -63,17 +63,17 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 		return pilosa.ErrFrameRequired
 	}
 
-	const maxBitmapID = 1000
-	const maxProfileID = 100000
+	const maxRowID = 1000
+	const maxColumnID = 100000
 
 	startTime := time.Now()
 
 	// Execute operation continuously.
 	for i := 0; i < cmd.N; i++ {
-		bitmapID := rand.Intn(maxBitmapID)
-		profileID := rand.Intn(maxProfileID)
+		rowID := rand.Intn(maxRowID)
+		columnID := rand.Intn(maxColumnID)
 
-		q := fmt.Sprintf(`SetBit(id=%d, frame="%s", profileID=%d)`, bitmapID, cmd.Frame, profileID)
+		q := fmt.Sprintf(`SetBit(id=%d, frame="%s", columnID=%d)`, rowID, cmd.Frame, columnID)
 
 		if _, err := client.ExecuteQuery(ctx, cmd.Database, q, true); err != nil {
 			return err

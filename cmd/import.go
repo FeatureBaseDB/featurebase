@@ -21,7 +21,7 @@ of the CSV file are grouped by slice for the most efficient import.
 
 The format of the CSV file is:
 
-	BITMAPID,PROFILEID,[TIME]
+	ROWID,COLUMNID,[TIME]
 
 The file should contain no headers. The TIME column is optional and can be
 omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.

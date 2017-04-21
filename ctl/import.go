@@ -123,19 +123,19 @@ func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
 
 		var bit pilosa.Bit
 
-		// Parse bitmap id.
-		bitmapID, err := strconv.ParseUint(record[0], 10, 64)
+		// Parse row id.
+		rowID, err := strconv.ParseUint(record[0], 10, 64)
 		if err != nil {
-			return fmt.Errorf("invalid bitmap id on row %d: %q", rnum, record[0])
+			return fmt.Errorf("invalid row id on row %d: %q", rnum, record[0])
 		}
-		bit.BitmapID = bitmapID
+		bit.RowID = rowID
 
-		// Parse bitmap id.
-		profileID, err := strconv.ParseUint(record[1], 10, 64)
+		// Parse column id.
+		columnID, err := strconv.ParseUint(record[1], 10, 64)
 		if err != nil {
-			return fmt.Errorf("invalid profile id on row %d: %q", rnum, record[1])
+			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[1])
 		}
-		bit.ProfileID = profileID
+		bit.ColumnID = columnID
 
 		// Parse time, if exists.
 		if len(record) > 2 && record[2] != "" {

@@ -13,12 +13,12 @@ message Pair {
 }
 
 message Bit {
-	uint64 BitmapID = 1;
-	uint64 ProfileID = 2;
+	uint64 RowID = 1;
+	uint64 ColumnID = 2;
 	int64 Timestamp = 3;
 }
 
-message Profile {
+message ColumnAttrSet {
 	uint64 ID = 1;
 	repeated Attr Attrs = 2;
 }
@@ -39,7 +39,7 @@ message AttrMap {
 message QueryRequest {
 	string Query = 1;
 	repeated uint64 Slices = 2;
-	bool Profiles = 3;
+	bool ColumnAttrs = 3;
 	string Quantum = 4;
 	bool Remote = 5;
 }
@@ -47,7 +47,7 @@ message QueryRequest {
 message QueryResponse {
 	string Err = 1;
 	repeated QueryResult Results = 2;
-	repeated Profile Profiles = 3;
+	repeated ColumnAttrSet ColumnAttrSets = 3;
 }
 
 message QueryResult {
@@ -61,7 +61,7 @@ message ImportRequest {
 	string DB = 1;
 	string Frame = 2;
 	uint64 Slice = 3;
-	repeated uint64 BitmapIDs = 4;
-	repeated uint64 ProfileIDs = 5;
+	repeated uint64 RowIDs = 4;
+	repeated uint64 ColumnIDs = 5;
 	repeated int64 Timestamps = 6;
 }

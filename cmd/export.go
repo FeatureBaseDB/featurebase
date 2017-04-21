@@ -23,7 +23,7 @@ the output is written to STDOUT.
 
 The format of the CSV file is:
 
-	BITMAPID,PROFILEID
+	ROWID,COLUMNID
 
 The file does not contain any headers.
 `,
