@@ -502,14 +502,14 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 }
 
 func getValidOptions(option interface{}) []string {
-	validFrameOptions := []string{}
+	validOptions := []string{}
 	val := reflect.ValueOf(option)
 	for i := 0; i < val.Type().NumField(); i++ {
 		jsonTag := val.Type().Field(i).Tag.Get("json")
 		s := strings.Split(jsonTag, ",")
-		validFrameOptions = append(validFrameOptions, s[0])
+		validOptions = append(validOptions, s[0])
 	}
-	return validFrameOptions
+	return validOptions
 }
 
 type postFrameRequest struct {
