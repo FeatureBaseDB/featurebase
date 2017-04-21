@@ -46,6 +46,18 @@ type Handler struct {
 	LogOutput io.Writer
 }
 
+// Endpoints that are intended to be exposed to clients
+var externalPrefixFlag = map[string]bool{
+	"schema":  true,
+	"query":   true,
+	"import":  true,
+	"export":  true,
+	"db":      true,
+	"frame":   true,
+	"nodes":   true,
+	"version": true,
+}
+
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler() *Handler {
 	handler := &Handler{
@@ -100,7 +112,31 @@ func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request
 
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t := time.Now()
 	h.Router.ServeHTTP(w, r)
+	dif := time.Since(t).Seconds()
+
+	// handle some stats tagging
+	statsTags := make([]string, 0, 3)
+
+	if dif > 90 {
+		h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), dif)
+		statsTags = append(statsTags, "longrunning")
+	}
+
+	pathParts := strings.Split(r.URL.Path, "/")
+	endpointName := strings.Join(pathParts, ".")
+
+	if externalPrefixFlag[pathParts[1]] {
+		statsTags = append(statsTags, "external")
+	}
+
+	// internal = useragent:pilosa
+	statsTags = append(statsTags, "useragent:"+r.UserAgent())
+
+	stats := h.Index.Stats.WithTags(statsTags...)
+	stats.Count("http.count"+endpointName, 1)
+	stats.Histogram("http.duration"+endpointName, dif)
 }
 
 // handleGetSchema handles GET /schema requests.
