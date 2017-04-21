@@ -43,7 +43,8 @@ type Handler struct {
 	LogOutput io.Writer
 }
 
-// Endpoints that are intended to be exposed to clients
+// externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
+// This is used for stats tagging.
 var externalPrefixFlag = map[string]bool{
 	"schema":  true,
 	"query":   true,
@@ -113,7 +114,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Router.ServeHTTP(w, r)
 	dif := time.Since(t).Seconds()
 
-	// handle some stats tagging
+	// Handle some stats tagging
 	statsTags := make([]string, 0, 3)
 
 	if dif > 90 {
@@ -128,7 +129,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		statsTags = append(statsTags, "external")
 	}
 
-	// internal = useragent:pilosa
+	// useragent tag identifies internal/external endpoints
 	statsTags = append(statsTags, "useragent:"+r.UserAgent())
 
 	stats := h.Index.Stats.WithTags(statsTags...)
