@@ -11,13 +11,18 @@ type Plugin interface {
 	Reduce(ctx context.Context, prev, v interface{}) interface{}
 }
 
+type Registry interface {
+	Register(name string, fn NewPluginFunc) error
+	Load(path string) error
+        NewPlugin(name string) (Plugin, error) 
+}
 // PluginRegistry holds a lookup of plugins.
 type PluginRegistry struct {
 	fns map[string]NewPluginFunc
 }
 
 // NewPluginRegistry returns a new instance of PluginRegistry.
-func NewPluginRegistry() *PluginRegistry {
+func NewPluginRegistry() Registry {
 	return &PluginRegistry{
 		fns: make(map[string]NewPluginFunc),
 	}

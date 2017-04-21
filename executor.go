@@ -31,7 +31,7 @@ type Executor struct {
 	HTTPClient *http.Client
 
 	// Lookup of registered plugins.
-	PluginRegistry *PluginRegistry
+	PluginRegistry Registry
 }
 
 // NewExecutor returns a new instance of Executor.

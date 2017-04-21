@@ -21,7 +21,7 @@ func (r *PluginRegistry) Load(path string) error {
 	}
 
 	// Execute registration.
-	if err := fn.(func(*PluginRegistry) error)(r); err != nil {
+	if err := fn.(func(Registry) error)(r); err != nil {
 		return err
 	}
 

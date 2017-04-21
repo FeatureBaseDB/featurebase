@@ -10,7 +10,7 @@ import (
 )
 
 // Init is the entry point into the shared object to register any plugins.
-func Init(r *pilosa.PluginRegistry) error {
+func Init(r pilosa.Registry) error {
 	if err := r.Register("Debug", NewDebugPlugin); err != nil {
 		return err
 	}

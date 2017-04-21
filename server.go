@@ -44,7 +44,7 @@ type Server struct {
 
 	// External plugins.
 	PluginPath     string
-	PluginRegistry *PluginRegistry
+	PluginRegistry Registry
 
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
