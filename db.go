@@ -22,31 +22,31 @@ const (
 
 // DB represents a container for frames.
 type DB struct {
-	mu                    sync.Mutex
-	path                  string
-	name                  string
+	mu   sync.Mutex
+	path string
+	name string
 
 	// Default time quantum for all frames in database.
 	// This can be overridden by individual frames.
-	timeQuantum           TimeQuantum
+	timeQuantum TimeQuantum
 
 	// Label used for referring to columns in database.
-	columnLabel           string
+	columnLabel string
 
 	// Frames by name.
-	frames                map[string]*Frame
+	frames map[string]*Frame
 
 	// Max Slice on any node in the cluster, according to this node
 	remoteMaxSlice        uint64
 	remoteMaxInverseSlice uint64
 
 	// Profile attribute storage and cache
-	profileAttrStore      *AttrStore
+	profileAttrStore *AttrStore
 
-	broadcaster           Broadcaster
-	Stats                 StatsClient
+	broadcaster Broadcaster
+	Stats       StatsClient
 
-	LogOutput             io.Writer
+	LogOutput io.Writer
 }
 
 // NewDB returns a new instance of DB.

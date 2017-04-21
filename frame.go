@@ -27,29 +27,29 @@ const (
 
 // Frame represents a container for views.
 type Frame struct {
-	mu              sync.Mutex
-	path            string
-	db              string
-	name            string
-	timeQuantum     TimeQuantum
+	mu          sync.Mutex
+	path        string
+	db          string
+	name        string
+	timeQuantum TimeQuantum
 
-	views           map[string]*View
+	views map[string]*View
 
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
 
-	broadcaster     Broadcaster
-	Stats           StatsClient
+	broadcaster Broadcaster
+	Stats       StatsClient
 
 	// Frame settings.
-	rowLabel        string
-	cacheType       string
-	inverseEnabled  bool
+	rowLabel       string
+	cacheType      string
+	inverseEnabled bool
 
 	// Cache size for ranked frames
-	cacheSize       uint32
+	cacheSize uint32
 
-	LogOutput       io.Writer
+	LogOutput io.Writer
 }
 
 // NewFrame returns a new instance of frame.

@@ -47,14 +47,14 @@ var NopStatsClient StatsClient
 // nopStatsClient represents a client that doesn't do anything.
 type nopStatsClient struct{}
 
-func (c *nopStatsClient) Tags() []string                          { return nil }
-func (c *nopStatsClient) WithTags(tags ...string) StatsClient     { return c }
-func (c *nopStatsClient) Count(name string, value int64)          {}
+func (c *nopStatsClient) Tags() []string                                              { return nil }
+func (c *nopStatsClient) WithTags(tags ...string) StatsClient                         { return c }
+func (c *nopStatsClient) Count(name string, value int64)                              {}
 func (c *nopStatsClient) CountWithCustomTags(name string, value int64, tags []string) {}
-func (c *nopStatsClient) Gauge(name string, value float64)        {}
-func (c *nopStatsClient) Histogram(name string, value float64)    {}
-func (c *nopStatsClient) Set(name string, value string)           {}
-func (c *nopStatsClient) Timing(name string, value time.Duration) {}
+func (c *nopStatsClient) Gauge(name string, value float64)                            {}
+func (c *nopStatsClient) Histogram(name string, value float64)                        {}
+func (c *nopStatsClient) Set(name string, value string)                               {}
+func (c *nopStatsClient) Timing(name string, value time.Duration)                     {}
 
 // ExpvarStatsClient writes stats out to expvars.
 type ExpvarStatsClient struct {
@@ -150,13 +150,11 @@ func (a MultiStatsClient) Count(name string, value int64) {
 	}
 }
 
-
 func (a MultiStatsClient) CountWithCustomTags(name string, value int64, tags []string) {
 	for _, c := range a {
 		c.CountWithCustomTags(name, value, tags)
 	}
 }
-
 
 // Gauge sets the value of a metric on all clients.
 func (a MultiStatsClient) Gauge(name string, value float64) {

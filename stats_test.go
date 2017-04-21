@@ -160,4 +160,4 @@ func (c *MockStats) WithTags(tags ...string) pilosa.StatsClient { return c }
 func (c *MockStats) Gauge(name string, value float64)           {}
 func (c *MockStats) Histogram(name string, value float64)       {}
 func (c *MockStats) Set(name string, value string)              {}
-func (c *MockStats) Timing(name string, value time.Duration) {}
+func (c *MockStats) Timing(name string, value time.Duration)    {}
