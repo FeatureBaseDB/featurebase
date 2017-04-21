@@ -11,11 +11,16 @@ const (
 
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
+
+	// HealthStatus is the return value of the /health endpoint for a node in the cluster.
+	HealthStatusUp   = "UP"
+	HealthStatusDown = "DOWN"
 )
 
 // Node represents a node in the cluster.
 type Node struct {
-	Host string `json:"host"`
+	Host         string `json:"host"`
+	InternalHost string `json:"internalHost"`
 }
 
 // Nodes represents a list of nodes.
@@ -81,7 +86,8 @@ func (a Nodes) Clone() []*Node {
 
 // Cluster represents a collection of nodes.
 type Cluster struct {
-	Nodes []*Node
+	Nodes   []*Node
+	NodeSet NodeSet
 
 	// Hashing algorithm used to assign partitions to nodes.
 	Hasher Hasher
@@ -100,6 +106,33 @@ func NewCluster() *Cluster {
 		PartitionN: DefaultPartitionN,
 		ReplicaN:   DefaultReplicaN,
 	}
+}
+
+// NodeSetHosts returns the list of host strings for NodeSet members
+func (c *Cluster) NodeSetHosts() []string {
+	if c.NodeSet == nil {
+		return []string{}
+	}
+	a := make([]string, 0, len(c.NodeSet.Nodes()))
+	for _, m := range c.NodeSet.Nodes() {
+		a = append(a, m.Host)
+	}
+	return a
+}
+
+// Health returns a map of nodes in the cluster with each node's state (UP/DOWN) as the value.
+func (c *Cluster) Health() map[string]string {
+	h := make(map[string]string)
+	for _, n := range c.Nodes {
+		h[n.Host] = HealthStatusDown
+	}
+	// we are assuming that NodeSetHosts is a subset of c.Nodes
+	for _, m := range c.NodeSetHosts() {
+		if _, ok := h[m]; ok {
+			h[m] = HealthStatusUp
+		}
+	}
+	return h
 }
 
 // NodeByHost returns a node reference by host.

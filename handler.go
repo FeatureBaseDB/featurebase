@@ -26,7 +26,8 @@ import (
 
 // Handler represents an HTTP handler.
 type Handler struct {
-	Index *Index
+	Index       *Index
+	Broadcaster Broadcaster
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -112,8 +113,21 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleGetStatus handles GET /status requests.
+func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+	if err := json.NewEncoder(w).Encode(getStatusResponse{
+		Health: h.Cluster.Health(),
+	}); err != nil {
+		h.logger().Printf("write status response error: %s", err)
+	}
+}
+
 type getSchemaResponse struct {
 	DBs []*DBInfo `json:"dbs"`
+}
+
+type getStatusResponse struct {
+	Health map[string]string `json:"health"`
 }
 
 // handlePostQuery handles /query requests.
@@ -201,7 +215,7 @@ func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
 }
 
 type sliceMaxResponse struct {
-	MaxSlices map[string]uint64 `json:"MaxSlices"`
+	MaxSlices map[string]uint64 `json:"maxSlices"`
 }
 
 // handleGetDBs handles GET /db request.
@@ -303,6 +317,15 @@ func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send the delete database message to all nodes.
+	err := h.Broadcaster.SendSync(
+		&internal.DeleteDBMessage{
+			DB: dbName,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending DeleteDB message: %s", err)
+	}
+
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteDBResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
@@ -317,19 +340,33 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 
 	// Decode request.
 	var req postDBRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err == io.EOF {
+		// If no data was provided (EOF), we still create the database
+		// with default values.
+	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Create database.
-	_, err := h.Index.CreateDB(dbName, req.Options)
+	_, err = h.Index.CreateDB(dbName, req.Options)
 	if err == ErrDatabaseExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Send the create database message to all nodes.
+	err = h.Broadcaster.SendSync(
+		&internal.CreateDBMessage{
+			DB:   dbName,
+			Meta: req.Options.Encode(),
+		})
+	if err != nil {
+		h.logger().Printf("problem sending CreateDB message: %s", err)
 	}
 
 	// Encode response.
@@ -376,7 +413,7 @@ func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Reques
 }
 
 type patchDBTimeQuantumRequest struct {
-	TimeQuantum string `json:"time_quantum"`
+	TimeQuantum string `json:"timeQuantum"`
 }
 
 type patchDBTimeQuantumResponse struct{}
@@ -445,7 +482,11 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 
 	// Decode request.
 	var req postFrameRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err == io.EOF {
+		// If no data was provided (EOF), we still create the frame
+		// with default values.
+	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -458,13 +499,24 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create frame.
-	_, err := db.CreateFrame(frameName, req.Options)
+	_, err = db.CreateFrame(frameName, req.Options)
 	if err == ErrFrameExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Send the create frame message to all nodes.
+	err = h.Broadcaster.SendSync(
+		&internal.CreateFrameMessage{
+			DB:    dbName,
+			Frame: frameName,
+			Meta:  req.Options.Encode(),
+		})
+	if err != nil {
+		h.logger().Printf("problem sending CreateFrame message: %s", err)
 	}
 
 	// Encode response.
@@ -538,6 +590,16 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send the delete frame message to all nodes.
+	err := h.Broadcaster.SendSync(
+		&internal.DeleteFrameMessage{
+			DB:    dbName,
+			Frame: frameName,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending DeleteFrame message: %s", err)
+	}
+
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
@@ -585,7 +647,7 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 }
 
 type patchFrameTimeQuantumRequest struct {
-	TimeQuantum string `json:"time_quantum"`
+	TimeQuantum string `json:"timeQuantum"`
 }
 
 type patchFrameTimeQuantumResponse struct{}

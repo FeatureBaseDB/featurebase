@@ -70,6 +70,7 @@ type Fragment struct {
 	// Cache for bitmap counts.
 	cacheType string // passed in by frame
 	cache     Cache
+	cacheSize uint32
 
 	// Cache containing full bitmaps (not just counts).
 	bitmapCache BitmapCache
@@ -101,6 +102,7 @@ func NewFragment(path, db, frame, view string, slice uint64) *Fragment {
 		view:      view,
 		slice:     slice,
 		cacheType: DefaultCacheType,
+		cacheSize: DefaultCacheSize,
 
 		LogOutput: ioutil.Discard,
 		MaxOpN:    DefaultFragmentMaxOpN,
@@ -222,12 +224,9 @@ func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
 	switch f.cacheType {
 	case CacheTypeRanked:
-		c := NewRankCache()
-		c.ThresholdLength = 50000
-		c.ThresholdIndex = 45000
-		f.cache = c
+		f.cache = NewRankCache(f.cacheSize)
 	case CacheTypeLRU:
-		f.cache = NewLRUCache(50000)
+		f.cache = NewLRUCache(f.cacheSize)
 	default:
 		return ErrInvalidCacheType
 	}

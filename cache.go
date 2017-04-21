@@ -12,6 +12,11 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
+const (
+	// ThresholdFactor is used to calculate the threshold for new items entering the cache
+	ThresholdFactor = 1.1
+)
+
 // Cache represents a cache for bitmap counts.
 type Cache interface {
 	Add(bitmapID uint64, n uint64)
@@ -39,9 +44,9 @@ type LRUCache struct {
 }
 
 // NewLRUCache returns a new instance of LRUCache.
-func NewLRUCache(maxEntries int) *LRUCache {
+func NewLRUCache(maxEntries uint32) *LRUCache {
 	c := &LRUCache{
-		cache:  lru.New(maxEntries),
+		cache:  lru.New(int(maxEntries)),
 		counts: make(map[uint64]uint64),
 	}
 	c.cache.OnEvicted = c.onEvicted
@@ -111,15 +116,23 @@ type RankCache struct {
 	updateN    int
 	updateTime time.Time
 
-	ThresholdLength int
-	ThresholdIndex  int
-	ThresholdValue  uint64
+	// maxEntries is the user defined size of the cache
+	maxEntries uint32
+
+	// thresholdBuffer is used the calculate the lowest cached threshold value
+	// This threshold determines what new items are added to the cache
+	thresholdBuffer int
+
+	// thresholdValue is the value of the last item in the cache
+	thresholdValue uint64
 }
 
 // NewRankCache returns a new instance of RankCache.
-func NewRankCache() *RankCache {
+func NewRankCache(maxEntries uint32) *RankCache {
 	return &RankCache{
-		entries: make(map[uint64]uint64),
+		maxEntries:      maxEntries,
+		thresholdBuffer: int(ThresholdFactor * float64(maxEntries)),
+		entries:         make(map[uint64]uint64),
 	}
 }
 
@@ -128,7 +141,7 @@ func (c *RankCache) Add(bitmapID uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// Ignore if the bit count on the bitmap is below the threshold.
-	if n < c.ThresholdValue {
+	if n < c.thresholdValue {
 		return
 	}
 
@@ -141,7 +154,7 @@ func (c *RankCache) Add(bitmapID uint64, n uint64) {
 func (c *RankCache) BulkAdd(bitmapID uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if n < c.ThresholdValue {
+	if n < c.thresholdValue {
 		return
 	}
 
@@ -209,19 +222,20 @@ func (c *RankCache) recalculate() {
 
 	// Store the count of the item at the threshold index.
 	c.rankings = rankings
-	if len(c.rankings) > c.ThresholdIndex {
-		c.ThresholdValue = rankings[c.ThresholdIndex].Count
+	if len(c.rankings) > int(c.maxEntries) {
+		c.thresholdValue = rankings[c.maxEntries].Count
+		c.rankings = c.rankings[0:c.maxEntries]
 	} else {
-		c.ThresholdValue = 1
+		c.thresholdValue = 1
 	}
 
 	// Reset counters.
 	c.updateTime, c.updateN = time.Now(), 0
 
 	// If size is larger than the threshold then trim it.
-	if len(c.entries) > c.ThresholdLength {
+	if len(c.entries) > c.thresholdBuffer {
 		for id, cnt := range c.entries {
-			if cnt <= c.ThresholdValue {
+			if cnt <= c.thresholdValue {
 				delete(c.entries, id)
 			}
 		}

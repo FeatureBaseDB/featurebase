@@ -47,7 +47,7 @@ bind = "localhost:0"
 				v.Check(cmd.Server.Config.DataDir, actualDataDir)
 				v.Check(cmd.Server.Config.Host, "localhost:0")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
-				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:10101", "example.com:10110"})
+				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"example.com:10101", "example.com:10110"})
 				v.Check(cmd.Server.Config.Cluster.PollingInterval, pilosa.Duration(time.Second*182))
 				return v.Error()
 			},
@@ -68,7 +68,7 @@ data-dir = "` + actualDataDir + `"
 `,
 			validation: func() error {
 				v := validator{}
-				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"example.com:1110", "example.com:1111"})
+				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"example.com:1110", "example.com:1111"})
 				v.Check(cmd.Server.Config.Plugins.Path, "/var/sloth")
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*9))
 				return v.Error()
@@ -94,7 +94,7 @@ data-dir = "` + actualDataDir + `"
 `,
 			validation: func() error {
 				v := validator{}
-				v.Check(cmd.Server.Config.Cluster.Nodes, []string{"localhost:19444"})
+				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:19444"})
 				v.Check(cmd.Server.Config.Cluster.PollingInterval, pilosa.Duration(time.Minute*2))
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*11))
 				v.Check(cmd.Server.CPUProfile, profFile.Name())
@@ -106,6 +106,8 @@ data-dir = "` + actualDataDir + `"
 				// confirm log file was written
 				info, err := logFile.Stat()
 				if err != nil || info.Size() == 0 {
+					// NOTE: this test assumes that something is being written to the log
+					// currently, that is relying on log: "index sync monitor initializing"
 					return errors.New("Log file was not written!")
 				}
 				return nil

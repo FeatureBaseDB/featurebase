@@ -277,6 +277,73 @@ func TestFragment_TopN_BitmapIDs(t *testing.T) {
 	}
 }
 
+// Ensure the fragment cache limit works
+func TestFragment_TopN_CacheSize(t *testing.T) {
+	slice := uint64(0)
+	cacheSize := uint32(3)
+
+	// Create DB.
+	db := MustOpenDB()
+	defer db.Close()
+
+	// Create frame.
+	frame, err := db.CreateFrameIfNotExists("f", pilosa.FrameOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: cacheSize})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create view.
+	view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create fragment.
+	frag, err := view.CreateFragmentIfNotExists(slice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Close the storage so we can re-open it without encountering a flock.
+	frag.Close()
+
+	f := &Fragment{
+		Fragment:        frag,
+		BitmapAttrStore: MustOpenAttrStore(),
+	}
+	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
+	if err := f.Open(); err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	// Set bits on various bitmaps.
+	f.MustSetBits(100, 1, 2, 3)
+	f.MustSetBits(101, 4, 5, 6, 7)
+	f.MustSetBits(102, 8, 9, 10, 11, 12)
+	f.MustSetBits(103, 8, 9, 10, 11, 12, 13)
+	f.MustSetBits(104, 8, 9, 10, 11, 12, 13, 14)
+	f.MustSetBits(105, 10, 11)
+
+	f.RecalculateCache()
+
+	p := []pilosa.Pair{
+		{ID: 104, Count: 7},
+		{ID: 103, Count: 6},
+		{ID: 102, Count: 5},
+	}
+
+	// Retrieve top bitmaps.
+	if pairs, err := f.Top(pilosa.TopOptions{N: 5}); err != nil {
+		t.Fatal(err)
+	} else if len(pairs) > int(cacheSize) {
+		t.Fatalf("TopN count cannot exceed cache size: %d", cacheSize)
+	} else if pairs[0] != (pilosa.Pair{ID: 104, Count: 7}) {
+		t.Fatalf("unexpected pair(0): %v", pairs)
+	} else if !reflect.DeepEqual(pairs, p) {
+		t.Fatalf("Invalid TopN result set: %s", spew.Sdump(pairs))
+	}
+}
+
 // Ensure fragment can return a checksum for its blocks.
 func TestFragment_Checksum(t *testing.T) {
 	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)

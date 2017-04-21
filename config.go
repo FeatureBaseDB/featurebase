@@ -4,8 +4,10 @@ import "time"
 
 const (
 	// DefaultHost is the default hostname and port to use.
-	DefaultHost = "localhost"
-	DefaultPort = "10101"
+	DefaultHost         = "localhost"
+	DefaultPort         = "10101"
+	DefaultClusterType  = "static"
+	DefaultInternalPort = "14000"
 )
 
 // Config represents the configuration for the command.
@@ -15,8 +17,12 @@ type Config struct {
 
 	Cluster struct {
 		ReplicaN        int      `toml:"replicas"`
-		Nodes           []string `toml:"hosts"`
+		Type            string   `toml:"type"`
+		Hosts           []string `toml:"hosts"`
+		InternalHosts   []string `toml:"internal-hosts"`
 		PollingInterval Duration `toml:"polling-interval"`
+		InternalPort    string   `toml:"internal-port"`
+		GossipSeed      string   `toml:"gossip-seed"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -36,32 +42,12 @@ func NewConfig() *Config {
 		Host: DefaultHost + ":" + DefaultPort,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
+	c.Cluster.Type = DefaultClusterType
 	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
-	c.Cluster.Nodes = []string{}
+	c.Cluster.Hosts = []string{}
+	c.Cluster.InternalHosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	return c
-}
-
-// NewConfigForHosts returns a Config object with Config.Cluster.Nodes already
-// set up.
-func NewConfigForHosts(hosts []string) *Config {
-	conf := NewConfig()
-	for _, hostport := range hosts {
-		conf.Cluster.Nodes = append(conf.Cluster.Nodes, hostport)
-	}
-	return conf
-}
-
-// PilosaCluster returns a new instance of Cluster based on the config.
-func (c *Config) PilosaCluster() *Cluster {
-	cluster := NewCluster()
-	cluster.ReplicaN = c.Cluster.ReplicaN
-
-	for _, hostport := range c.Cluster.Nodes {
-		cluster.Nodes = append(cluster.Nodes, &Node{Host: hostport})
-	}
-
-	return cluster
 }
 
 // Duration is a TOML wrapper type for time.Duration.

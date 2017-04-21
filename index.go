@@ -23,6 +23,7 @@ type Index struct {
 	// Databases by name.
 	dbs map[string]*DB
 
+	Broadcaster Broadcaster
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
@@ -181,6 +182,7 @@ func (i *Index) DBs() []*DB {
 }
 
 // CreateDB creates a database.
+// An error is returned if the database already exists.
 func (i *Index) CreateDB(name string, opt DBOptions) (*DB, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -198,7 +200,7 @@ func (i *Index) CreateDBIfNotExists(name string, opt DBOptions) (*DB, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Find frame in cache first.
+	// Find database in cache first.
 	if db := i.dbs[name]; db != nil {
 		return db, nil
 	}
@@ -228,6 +230,7 @@ func (i *Index) createDB(name string, opt DBOptions) (*DB, error) {
 
 	// Update options.
 	db.SetColumnLabel(opt.ColumnLabel)
+	db.SetTimeQuantum(opt.TimeQuantum)
 
 	i.dbs[db.Name()] = db
 
@@ -243,6 +246,7 @@ func (i *Index) newDB(path, name string) (*DB, error) {
 	}
 	db.LogOutput = i.LogOutput
 	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
+	db.broadcaster = i.Broadcaster
 	return db, nil
 }
 
