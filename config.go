@@ -13,8 +13,9 @@ const (
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir string `toml:"data-dir"`
-	Host    string `toml:"host"`
+	DataDir       string   `toml:"data-dir"`
+	Host          string   `toml:"host"`
+	LongQueryTime Duration `toml:"long-query-time"`
 
 	Cluster struct {
 		ReplicaN        int      `toml:"replicas"`

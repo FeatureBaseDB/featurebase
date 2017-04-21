@@ -41,6 +41,9 @@ type Handler struct {
 
 	// The writer for any logging.
 	LogOutput io.Writer
+
+	// Threshold for logging long-running queries
+	LongQueryTime time.Duration
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -112,14 +115,16 @@ func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	t := time.Now()
 	h.Router.ServeHTTP(w, r)
-	dif := time.Since(t).Seconds()
+	dif := time.Since(t)
 
 	// Handle some stats tagging
 	statsTags := make([]string, 0, 3)
 
-	if dif > 90 {
-		h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), dif)
-		statsTags = append(statsTags, "longrunning")
+	fmt.Printf("long query time: %v\n", h.LongQueryTime)
+
+	if h.LongQueryTime > 0 && dif > h.LongQueryTime {
+		h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), float64(dif))
+		statsTags = append(statsTags, "slow_query")
 	}
 
 	pathParts := strings.Split(r.URL.Path, "/")
@@ -133,7 +138,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	statsTags = append(statsTags, "useragent:"+r.UserAgent())
 
 	stats := h.Index.Stats.WithTags(statsTags...)
-	stats.Histogram("http_"+endpointName, dif)
+	stats.Histogram("http_"+endpointName, float64(dif))
 }
 
 // handleGetSchema handles GET /schema requests.

@@ -50,6 +50,9 @@ type Server struct {
 	PollingInterval     time.Duration
 	MetricInterval      time.Duration
 
+	// Threshold for logging long queries
+	LongQueryTime time.Duration
+
 	LogOutput io.Writer
 }
 
@@ -71,7 +74,6 @@ func NewServer() *Server {
 	}
 
 	s.Handler.Index = s.Index
-
 	return s
 }
 
