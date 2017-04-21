@@ -54,9 +54,9 @@ func TestPostFrameRequestUnmarshalJSON(t *testing.T) {
 		{json: `{"option": {}}`, err: "Unknown key: {option:map[]}"},
 		{json: `{"options": {"rowLabel": "test"}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test"}}},
 		{json: `{"options": {"rowLabl": "test"}}`, err: "invalid key for options {rowLabl:test}"},
-		{json: `{"options": {"rowLabel": "test", "inverseEnabled": "true"}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test", InverseEnabled: true}}},
-		{json: `{"options": {"rowLabel": "test", "inverseEnabled": "true", "cacheType": "type"}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test", InverseEnabled: true, CacheType: "type"}}},
-		{json: `{"options": {"rowLabel": "test", "inverse": "true", "cacheType": "type"}}`, err: "invalid key for options {inverse:true}"},
+		{json: `{"options": {"rowLabel": "test", "inverseEnabled": true}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test", InverseEnabled: true}}},
+		{json: `{"options": {"rowLabel": "test", "inverseEnabled": true, "cacheType": "type"}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test", InverseEnabled: true, CacheType: "type"}}},
+		{json: `{"options": {"rowLabel": "test", "inverse": true, "cacheType": "type"}}`, err: "invalid key for options {inverse:true}"},
 	}
 	for _, test := range tests {
 		actual := &postFrameRequest{}

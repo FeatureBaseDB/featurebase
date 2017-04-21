@@ -250,7 +250,7 @@ func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 			for k, v := range values {
 				switch k {
 				case "columnLabel":
-					p.Options.ColumnLabel = v
+					p.Options.ColumnLabel = v.(string)
 				}
 			}
 		default:
@@ -260,24 +260,35 @@ func (p *postDBRequest) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func validateOptions(data map[string]interface{}, field []string) (map[string]string, error) {
+func validateOptions(data map[string]interface{}, field []string) (map[string]interface{}, error) {
 	options, ok := data["options"].(map[string]interface{})
+	optionValue := make(map[string]interface{})
 	if !ok {
-		return map[string]string{}, errors.New("options is not map[string]interface{}")
+		return nil, errors.New("options is not map[string]interface{}")
 	}
-	optionValue := make(map[string]string)
+
 	if len(options) == 0 {
-		optionValue = map[string]string{}
+		optionValue = nil
 	} else {
 		for k, v := range options {
 			if foundItem(field, k) {
-				val, ok := options[k].(string)
-				if !ok {
-					return map[string]string{}, fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
+				switch k {
+				case "inverseEnabled":
+					val, ok := options[k].(bool)
+					if !ok {
+						return nil, fmt.Errorf("invalid option type %v: {%v:%v}", field, k, v)
+					}
+					optionValue[k] = val
+				default:
+					val, ok := options[k].(string)
+					if !ok {
+						return nil, fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
+					}
+					optionValue[k] = val
 				}
-				optionValue[k] = val
+
 			} else {
-				return map[string]string{}, fmt.Errorf("invalid key for options {%v:%v}", k, v)
+				return nil, fmt.Errorf("invalid key for options {%v:%v}", k, v)
 			}
 		}
 	}
@@ -494,15 +505,11 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 			for k, v := range values {
 				switch k {
 				case "rowLabel":
-					p.Options.RowLabel = v
+					p.Options.RowLabel = v.(string)
 				case "cacheType":
-					p.Options.CacheType = v
+					p.Options.CacheType = v.(string)
 				case "inverseEnabled":
-					inverse, err := strconv.ParseBool(v)
-					if err != nil {
-						continue
-					}
-					p.Options.InverseEnabled = inverse
+					p.Options.InverseEnabled = v.(bool)
 				}
 			}
 
