@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/server"
 )
 
@@ -27,8 +28,7 @@ It will load existing data from the configured
 directory, and start listening client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			Server.Server.Handler.Version = Version
-			fmt.Fprintf(Server.Stderr, "Pilosa %s, build time %s\n", Version, BuildTime)
+			fmt.Fprintf(Server.Stderr, "Pilosa %s, build time %s\n", pilosa.Version, pilosa.BuildTime)
 
 			// Start CPU profiling.
 			if Server.CPUProfile != "" {

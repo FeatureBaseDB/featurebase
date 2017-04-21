@@ -39,9 +39,6 @@ type Handler struct {
 		Execute(context context.Context, db string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
 	}
 
-	// The version to report on the /version endpoint.
-	Version string
-
 	// The writer for any logging.
 	LogOutput io.Writer
 }
@@ -1232,7 +1229,7 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
-		Version: h.Version,
+		Version: Version,
 	}); err != nil {
 		h.logger().Printf("write version response error: %s", err)
 	}

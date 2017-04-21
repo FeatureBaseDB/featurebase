@@ -5,14 +5,10 @@ import (
 	"io"
 	"strings"
 
+	"github.com/pilosa/pilosa"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-)
-
-var (
-	Version   string
-	BuildTime string
 )
 
 // TODO maybe give this an Add method which will ensure two command
@@ -20,7 +16,7 @@ var (
 var subcommandFns = map[string]func(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command{}
 
 func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	setupVersionBuild()
+	// pilosa.SetupVersionBuild()  // want to remove - see version.go
 	rc := &cobra.Command{
 		Use:   "pilosa",
 		Short: "Pilosa - A Distributed In-memory Binary Bitmap Index.",
@@ -32,8 +28,8 @@ tools for administering pilosa, importing/exporting data,
 backing up, and more. Complete documentation is available
 at http://pilosa.com/docs
 
-Version: ` + Version + `
-Build Time: ` + BuildTime + "\n",
+Version: ` + pilosa.Version + `
+Build Time: ` + pilosa.BuildTime + "\n",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
 			err := setAllConfig(v, cmd.Flags(), "PILOSA")
@@ -61,15 +57,6 @@ Build Time: ` + BuildTime + "\n",
 	}
 	rc.SetOutput(stderr)
 	return rc
-}
-
-func setupVersionBuild() {
-	if Version == "" {
-		Version = "v0.0.0"
-	}
-	if BuildTime == "" {
-		BuildTime = "not recorded"
-	}
 }
 
 // setAllConfig takes a FlagSet to be the definition of all configuration
