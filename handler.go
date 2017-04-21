@@ -122,7 +122,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pathParts := strings.Split(r.URL.Path, "/")
-	endpointName := strings.Join(pathParts, ".")
+	endpointName := strings.Join(pathParts, "_")
 
 	if externalPrefixFlag[pathParts[1]] {
 		statsTags = append(statsTags, "external")
@@ -132,8 +132,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	statsTags = append(statsTags, "useragent:"+r.UserAgent())
 
 	stats := h.Index.Stats.WithTags(statsTags...)
-	stats.Count("http.count"+endpointName, 1)
-	stats.Histogram("http.duration"+endpointName, dif)
+	stats.Histogram("http_"+endpointName, dif)
 }
 
 // handleGetSchema handles GET /schema requests.
