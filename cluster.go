@@ -3,6 +3,8 @@ package pilosa
 import (
 	"encoding/binary"
 	"hash/fnv"
+
+	"github.com/pilosa/pilosa/internal"
 )
 
 const (
@@ -12,15 +14,30 @@ const (
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
 
-	// HealthStatus is the return value of the /health endpoint for a node in the cluster.
-	HealthStatusUp   = "UP"
-	HealthStatusDown = "DOWN"
+	// NodeState represents node state returned in /status endpoint for a node in the cluster.
+	NodeStateUp   = "UP"
+	NodeStateDown = "DOWN"
 )
 
 // Node represents a node in the cluster.
 type Node struct {
 	Host         string `json:"host"`
 	InternalHost string `json:"internalHost"`
+
+	status *internal.NodeStatus `json:"state"`
+}
+
+// SetStatus sets the NodeStatus.
+func (n *Node) SetStatus(s *internal.NodeStatus) {
+	n.status = s
+}
+
+// SetState sets the Node.status.state.
+func (n *Node) SetState(s string) {
+	if n.status == nil {
+		n.status = &internal.NodeStatus{}
+	}
+	n.status.State = s
 }
 
 // Nodes represents a list of nodes.
@@ -120,19 +137,35 @@ func (c *Cluster) NodeSetHosts() []string {
 	return a
 }
 
-// Health returns a map of nodes in the cluster with each node's state (UP/DOWN) as the value.
-func (c *Cluster) Health() map[string]string {
+// NodeStates returns a map of nodes in the cluster with each node's state (UP/DOWN) as the value.
+func (c *Cluster) NodeStates() map[string]string {
 	h := make(map[string]string)
 	for _, n := range c.Nodes {
-		h[n.Host] = HealthStatusDown
+		h[n.Host] = NodeStateDown
 	}
 	// we are assuming that NodeSetHosts is a subset of c.Nodes
 	for _, m := range c.NodeSetHosts() {
 		if _, ok := h[m]; ok {
-			h[m] = HealthStatusUp
+			h[m] = NodeStateUp
 		}
 	}
 	return h
+}
+
+// State returns the internal ClusterState representation.
+func (c *Cluster) Status() *internal.ClusterStatus {
+	return &internal.ClusterStatus{
+		Nodes: encodeClusterStatus(c.Nodes),
+	}
+}
+
+// encodeClusterStatus converts a into its internal representation.
+func encodeClusterStatus(a []*Node) []*internal.NodeStatus {
+	other := make([]*internal.NodeStatus, len(a))
+	for i := range a {
+		other[i] = a[i].status
+	}
+	return other
 }
 
 // NodeByHost returns a node reference by host.

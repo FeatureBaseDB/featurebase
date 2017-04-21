@@ -27,8 +27,9 @@ import (
 
 // Handler represents an HTTP handler.
 type Handler struct {
-	Holder      *Holder
-	Broadcaster Broadcaster
+	Holder        *Holder
+	Broadcaster   Broadcaster
+	StatusHandler StatusHandler
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -85,6 +86,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/nodes", handler.handleGetNodes).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
+	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
@@ -116,8 +118,13 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 // handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := h.StatusHandler.ClusterStatus()
+	if err != nil {
+		h.logger().Printf("cluster status error: %s", err)
+		return
+	}
 	if err := json.NewEncoder(w).Encode(getStatusResponse{
-		Health: h.Cluster.Health(),
+		Status: status,
 	}); err != nil {
 		h.logger().Printf("write status response error: %s", err)
 	}
@@ -128,7 +135,7 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	Health map[string]string `json:"health"`
+	Status proto.Message `json:"status"`
 }
 
 // handlePostQuery handles /query requests.

@@ -77,8 +77,12 @@ message Index {
     repeated Frame Frames = 4;
 }
 
-message NodeState {
+message NodeStatus {
     string Host = 1;
     string State = 2;
     repeated Index Indexes = 3;
+}
+
+message ClusterStatus {
+    repeated NodeStatus Nodes = 1;
 }
