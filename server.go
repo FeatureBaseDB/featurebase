@@ -340,6 +340,7 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	// Require protobuf encoding.
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Send request to remote node.
 	resp, err := http.DefaultClient.Do(req)

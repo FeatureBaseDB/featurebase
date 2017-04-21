@@ -966,6 +966,7 @@ func (e *Executor) exec(ctx context.Context, node *Node, db string, q *pql.Query
 	// Require protobuf encoding.
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Send request to remote node.
 	resp, err := e.HTTPClient.Do(req)
