@@ -21,6 +21,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"reflect"
 )
 
 // Handler represents an HTTP handler.
@@ -232,67 +233,53 @@ type postDBRequest struct {
 	Options DBOptions `json:"options"`
 }
 
+//_postDBRequest is necessary to avoid recursion while decoding.
+type _postDBRequest postDBRequest
+
 // Custom Unmarshal JSON to validate request body when creating a new database
 func (p *postDBRequest) UnmarshalJSON(b []byte) error {
-	validDBOptions := []string{"columnLabel"}
-	var data map[string]interface{}
-	if err := json.Unmarshal(b, &data); err != nil {
+
+	// m is an overflow map used to capture additional, unexpected keys.
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(b, &m); err != nil {
 		return err
 	}
-	p.Options = DBOptions{}
-	for key, value := range data {
-		switch key {
-		case "options":
-			values, err := validateOptions(data, validDBOptions)
-			if err != nil {
-				return err
-			}
-			for k, v := range values {
-				switch k {
-				case "columnLabel":
-					p.Options.ColumnLabel = v.(string)
-				}
-			}
-		default:
-			return fmt.Errorf("Unknown key: %v:%v", key, value)
-		}
+
+	validDBOptions := getValidOptions(DBOptions{})
+	err := validateOptions(m, validDBOptions)
+	if err != nil {
+		return err
 	}
+	// Unmarshal expected values.
+	var _p _postDBRequest
+	if err := json.Unmarshal(b, &_p); err != nil {
+		return err
+	}
+
+	p.Options = _p.Options
+
 	return nil
 }
 
-func validateOptions(data map[string]interface{}, field []string) (map[string]interface{}, error) {
-	options, ok := data["options"].(map[string]interface{})
-	optionValue := make(map[string]interface{})
-	if !ok {
-		return nil, errors.New("options is not map[string]interface{}")
-	}
-
-	if len(options) == 0 {
-		optionValue = nil
-	} else {
-		for k, v := range options {
-			if foundItem(field, k) {
-				switch k {
-				case "inverseEnabled":
-					val, ok := options[k].(bool)
-					if !ok {
-						return nil, fmt.Errorf("invalid option type %v: {%v:%v}", field, k, v)
-					}
-					optionValue[k] = val
-				default:
-					val, ok := options[k].(string)
-					if !ok {
-						return nil, fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
-					}
-					optionValue[k] = val
-				}
-
-			} else {
-				return nil, fmt.Errorf("invalid key for options {%v:%v}", k, v)
+// Raise errors for any unknown key
+func validateOptions(data map[string]interface{}, validDBOptions []string) error {
+	for k, v := range data {
+		switch k {
+		case "options":
+			options, ok := v.(map[string]interface{})
+			if !ok {
+				return errors.New("options is not map[string]interface{}")
 			}
+			for kk, vv := range options {
+				if !foundItem(validDBOptions, kk) {
+					return fmt.Errorf("Unknown key: %v:%v", kk, vv)
+				}
+			}
+		default:
+			return fmt.Errorf("Unknown key: %v:%v", k, v)
 		}
 	}
-	return optionValue, nil
+	return nil
 }
 
 func foundItem(items []string, item string) bool {
@@ -486,39 +473,43 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type _postFrameRequest postFrameRequest
+
 // Custom Unmarshal JSON to validate request body when creating a new frame. If there's new FrameOptions,
 // adding it to validFrameOptions to make sure the new option is validated, otherwise the request will be failed
 func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
-	validFrameOptions := []string{"rowLabel", "cacheType", "inverseEnabled"}
-	var data map[string]interface{}
-	if err := json.Unmarshal(b, &data); err != nil {
+	// m is an overflow map used to capture additional, unexpected keys.
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(b, &m); err != nil {
 		return err
 	}
-	p.Options = FrameOptions{}
-	for key, value := range data {
-		switch key {
-		case "options":
-			values, err := validateOptions(data, validFrameOptions)
-			if err != nil {
-				return err
-			}
-			for k, v := range values {
-				switch k {
-				case "rowLabel":
-					p.Options.RowLabel = v.(string)
-				case "cacheType":
-					p.Options.CacheType = v.(string)
-				case "inverseEnabled":
-					p.Options.InverseEnabled = v.(bool)
-				}
-			}
 
-		default:
-			return fmt.Errorf("Unknown key: {%v:%v}", key, value)
-		}
+	validFrameOptions := getValidOptions(FrameOptions{})
+	err := validateOptions(m, validFrameOptions)
+	if err != nil {
+		return err
 	}
+
+	// Unmarshal expected values.
+	var _p _postFrameRequest
+	if err := json.Unmarshal(b, &_p); err != nil {
+		return err
+	}
+
+	p.Options = _p.Options
 	return nil
 
+}
+
+func getValidOptions(option interface{}) []string {
+	validFrameOptions := []string{}
+	val := reflect.ValueOf(option)
+	for i := 0; i < val.Type().NumField(); i++ {
+		jsonTag := val.Type().Field(i).Tag.Get("json")
+		s := strings.Split(jsonTag, ",")
+		validFrameOptions = append(validFrameOptions, s[0])
+	}
+	return validFrameOptions
 }
 
 type postFrameRequest struct {

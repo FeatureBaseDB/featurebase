@@ -17,7 +17,7 @@ func TestPostDBRequestUnmarshalJSON(t *testing.T) {
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"options": {"columnLabel": "test"}}`, expected: postDBRequest{Options: DBOptions{ColumnLabel: "test"}}},
-		{json: `{"options": {"columnLabl": "test"}}`, err: "invalid key for options {columnLabl:test}"},
+		{json: `{"options": {"columnLabl": "test"}}`, err: "Unknown key: columnLabl:test"},
 	}
 	for _, test := range tests {
 		actual := &postDBRequest{}
@@ -51,12 +51,12 @@ func TestPostFrameRequestUnmarshalJSON(t *testing.T) {
 	}{
 		{json: `{"options": {}}`, expected: postFrameRequest{Options: FrameOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
-		{json: `{"option": {}}`, err: "Unknown key: {option:map[]}"},
+		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"options": {"rowLabel": "test"}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test"}}},
-		{json: `{"options": {"rowLabl": "test"}}`, err: "invalid key for options {rowLabl:test}"},
+		{json: `{"options": {"rowLabl": "test"}}`, err: "Unknown key: rowLabl:test"},
 		{json: `{"options": {"rowLabel": "test", "inverseEnabled": true}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test", InverseEnabled: true}}},
 		{json: `{"options": {"rowLabel": "test", "inverseEnabled": true, "cacheType": "type"}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test", InverseEnabled: true, CacheType: "type"}}},
-		{json: `{"options": {"rowLabel": "test", "inverse": true, "cacheType": "type"}}`, err: "invalid key for options {inverse:true}"},
+		{json: `{"options": {"rowLabel": "test", "inverse": true, "cacheType": "type"}}`, err: "Unknown key: inverse:true"},
 	}
 	for _, test := range tests {
 		actual := &postFrameRequest{}
