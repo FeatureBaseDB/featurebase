@@ -1006,15 +1006,8 @@ func (f *Fragment) snapshot() error {
 	logger := f.logger()
 	logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.db, f.frame, f.view, f.slice)
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.db, f.frame, f.view, f.slice)
-	statsTags := []string{
-		"db:" + f.db,
-		"frame:" + f.frame,
-		"view:" + f.view,
-		fmt.Sprintf("slice:%d", f.slice),
-	}
-	stats := f.stats.WithTags(statsTags...)
 	start := time.Now()
-	defer track(start, completeMessage, stats, logger)
+	defer track(start, completeMessage, f.stats, logger)
 
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + SnapshotExt
