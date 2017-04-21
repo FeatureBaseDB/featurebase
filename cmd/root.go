@@ -16,7 +16,6 @@ import (
 var subcommandFns = map[string]func(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command{}
 
 func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	// pilosa.SetupVersionBuild()  // want to remove - see version.go
 	rc := &cobra.Command{
 		Use:   "pilosa",
 		Short: "Pilosa - A Distributed In-memory Binary Bitmap Index.",
