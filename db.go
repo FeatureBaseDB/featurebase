@@ -22,31 +22,31 @@ const (
 
 // DB represents a container for frames.
 type DB struct {
-	mu   sync.Mutex
-	path string
-	name string
+	mu                    sync.Mutex
+	path                  string
+	name                  string
 
 	// Default time quantum for all frames in database.
 	// This can be overridden by individual frames.
-	timeQuantum TimeQuantum
+	timeQuantum           TimeQuantum
 
 	// Label used for referring to columns in database.
-	columnLabel string
+	columnLabel           string
 
 	// Frames by name.
-	frames map[string]*Frame
+	frames                map[string]*Frame
 
 	// Max Slice on any node in the cluster, according to this node
 	remoteMaxSlice        uint64
 	remoteMaxInverseSlice uint64
 
 	// Profile attribute storage and cache
-	profileAttrStore *AttrStore
+	profileAttrStore      *AttrStore
 
-	broadcaster Broadcaster
-	stats       StatsClient
+	broadcaster           Broadcaster
+	Stats                 StatsClient
 
-	LogOutput io.Writer
+	LogOutput             io.Writer
 }
 
 // NewDB returns a new instance of DB.
@@ -68,7 +68,7 @@ func NewDB(path, name string) (*DB, error) {
 
 		columnLabel: DefaultColumnLabel,
 
-		stats:     NopStatsClient,
+		Stats:     NopStatsClient,
 		LogOutput: ioutil.Discard,
 	}, nil
 }
@@ -165,7 +165,7 @@ func (db *DB) openFrames() error {
 		}
 		db.frames[fr.Name()] = fr
 
-		db.stats.Count("frameN", 1)
+		db.Stats.Count("frameN", 1)
 	}
 	return nil
 }
@@ -405,7 +405,7 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	// Add to database's frame lookup.
 	db.frames[name] = f
 
-	db.stats.Count("frameN", 1)
+	db.Stats.Count("frameN", 1)
 
 	return f, nil
 }
@@ -416,7 +416,7 @@ func (db *DB) newFrame(path, name string) (*Frame, error) {
 		return nil, err
 	}
 	f.LogOutput = db.LogOutput
-	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.Stats = db.Stats.WithTags(fmt.Sprintf("frame:%s", name))
 	f.broadcaster = db.broadcaster
 	return f, nil
 }
@@ -445,7 +445,7 @@ func (db *DB) DeleteFrame(name string) error {
 	// Remove reference.
 	delete(db.frames, name)
 
-	db.stats.Count("frameN", -1)
+	db.Stats.Count("frameN", -1)
 
 	return nil
 }

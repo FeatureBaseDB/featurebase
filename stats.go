@@ -26,6 +26,9 @@ type StatsClient interface {
 	// Tracks the number of times something occurs per second.
 	Count(name string, value int64)
 
+	// Tracks the number of times something occurs per second with custom tags
+	CountWithCustomTags(name string, value int64, tags []string)
+
 	// Sets the value of a metric.
 	Gauge(name string, value float64)
 
@@ -47,6 +50,7 @@ type nopStatsClient struct{}
 func (c *nopStatsClient) Tags() []string                          { return nil }
 func (c *nopStatsClient) WithTags(tags ...string) StatsClient     { return c }
 func (c *nopStatsClient) Count(name string, value int64)          {}
+func (c *nopStatsClient) CountWithCustomTags(name string, value int64, tags []string) {}
 func (c *nopStatsClient) Gauge(name string, value float64)        {}
 func (c *nopStatsClient) Histogram(name string, value float64)    {}
 func (c *nopStatsClient) Set(name string, value string)           {}
@@ -86,6 +90,10 @@ func (c *ExpvarStatsClient) WithTags(tags ...string) StatsClient {
 
 // Count tracks the number of times something occurs.
 func (c *ExpvarStatsClient) Count(name string, value int64) {
+	c.m.Add(name, value)
+}
+
+func (c *ExpvarStatsClient) CountWithCustomTags(name string, value int64, tags []string) {
 	c.m.Add(name, value)
 }
 
@@ -141,6 +149,14 @@ func (a MultiStatsClient) Count(name string, value int64) {
 		c.Count(name, value)
 	}
 }
+
+
+func (a MultiStatsClient) CountWithCustomTags(name string, value int64, tags []string) {
+	for _, c := range a {
+		c.CountWithCustomTags(name, value, tags)
+	}
+}
+
 
 // Gauge sets the value of a metric on all clients.
 func (a MultiStatsClient) Gauge(name string, value float64) {

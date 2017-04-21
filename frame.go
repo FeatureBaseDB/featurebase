@@ -27,29 +27,29 @@ const (
 
 // Frame represents a container for views.
 type Frame struct {
-	mu          sync.Mutex
-	path        string
-	db          string
-	name        string
-	timeQuantum TimeQuantum
+	mu              sync.Mutex
+	path            string
+	db              string
+	name            string
+	timeQuantum     TimeQuantum
 
-	views map[string]*View
+	views           map[string]*View
 
 	// Bitmap attribute storage and cache
 	bitmapAttrStore *AttrStore
 
-	broadcaster Broadcaster
-	stats       StatsClient
+	broadcaster     Broadcaster
+	Stats           StatsClient
 
 	// Frame settings.
-	rowLabel       string
-	cacheType      string
-	inverseEnabled bool
+	rowLabel        string
+	cacheType       string
+	inverseEnabled  bool
 
 	// Cache size for ranked frames
-	cacheSize uint32
+	cacheSize       uint32
 
-	LogOutput io.Writer
+	LogOutput       io.Writer
 }
 
 // NewFrame returns a new instance of frame.
@@ -67,7 +67,7 @@ func NewFrame(path, db, name string) (*Frame, error) {
 		views:           make(map[string]*View),
 		bitmapAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
-		stats: NopStatsClient,
+		Stats: NopStatsClient,
 
 		rowLabel:       DefaultRowLabel,
 		inverseEnabled: DefaultInverseEnabled,
@@ -256,7 +256,7 @@ func (f *Frame) openViews() error {
 		view.BitmapAttrStore = f.bitmapAttrStore
 		f.views[view.Name()] = view
 
-		f.stats.Count("maxSlice", 1)
+		f.Stats.Count("maxSlice", 1)
 	}
 
 	return nil
@@ -422,7 +422,7 @@ func (f *Frame) newView(path, name string) *View {
 	view.cacheType = f.cacheType
 	view.LogOutput = f.LogOutput
 	view.BitmapAttrStore = f.bitmapAttrStore
-	view.stats = f.stats.WithTags(fmt.Sprintf("slice:%s", name))
+	view.stats = f.Stats.WithTags(fmt.Sprintf("slice:%s", name))
 	return view
 }
 
