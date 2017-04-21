@@ -93,12 +93,13 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 	if err := e.validateCallArgs(c); err != nil {
 		return nil, err
 	}
-
+	dbTag := fmt.Sprintf("db:%s", db)
 	// Special handling for mutation and top-n calls.
 	switch c.Name {
 	case "ClearBit":
 		return e.executeClearBit(ctx, db, c, opt)
 	case "Count":
+		e.Index.Stats.CountWithCustomTags(c.Name, 1, []string{dbTag})
 		return e.executeCount(ctx, db, c, slices, opt)
 	case "SetBit":
 		return e.executeSetBit(ctx, db, c, opt)
@@ -107,8 +108,10 @@ func (e *Executor) executeCall(ctx context.Context, db string, c *pql.Call, slic
 	case "SetProfileAttrs":
 		return nil, e.executeSetProfileAttrs(ctx, db, c, opt)
 	case "TopN":
+		e.Index.Stats.CountWithCustomTags(c.Name, 1, []string{dbTag})
 		return e.executeTopN(ctx, db, c, slices, opt)
 	default:
+		e.Index.Stats.CountWithCustomTags(c.Name, 1, []string{dbTag})
 		return e.executeBitmapCall(ctx, db, c, slices, opt)
 	}
 }
@@ -485,6 +488,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call
 		}
 		bm = bm.Union(f.Bitmap(rowID))
 	}
+	f.Stats.Count("range", 1)
 	return bm, nil
 }
 
@@ -770,6 +774,7 @@ func (e *Executor) executeSetBitmapAttrs(ctx context.Context, db string, c *pql.
 	if err := frame.BitmapAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
+	frame.Stats.Count("SetBitmapAttrs", 1)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
@@ -855,6 +860,7 @@ func (e *Executor) executeBulkSetBitmapAttrs(ctx context.Context, db string, cal
 		if err := frame.BitmapAttrStore().SetBulkAttrs(frameMap); err != nil {
 			return nil, err
 		}
+		frame.Stats.Count("SetBitmapAttrs", 1)
 	}
 
 	// Do not forward call if this is already being forwarded.
@@ -914,7 +920,7 @@ func (e *Executor) executeSetProfileAttrs(ctx context.Context, db string, c *pql
 	if err := d.ProfileAttrStore().SetAttrs(id, attrs); err != nil {
 		return err
 	}
-
+	d.Stats.Count("SetProfileAttrs", 1)
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
 		return nil

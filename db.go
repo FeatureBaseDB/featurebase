@@ -44,7 +44,7 @@ type DB struct {
 	profileAttrStore *AttrStore
 
 	broadcaster Broadcaster
-	stats       StatsClient
+	Stats       StatsClient
 
 	LogOutput io.Writer
 }
@@ -68,7 +68,7 @@ func NewDB(path, name string) (*DB, error) {
 
 		columnLabel: DefaultColumnLabel,
 
-		stats:     NopStatsClient,
+		Stats:     NopStatsClient,
 		LogOutput: ioutil.Discard,
 	}, nil
 }
@@ -165,7 +165,7 @@ func (db *DB) openFrames() error {
 		}
 		db.frames[fr.Name()] = fr
 
-		db.stats.Count("frameN", 1)
+		db.Stats.Count("frameN", 1)
 	}
 	return nil
 }
@@ -405,7 +405,7 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	// Add to database's frame lookup.
 	db.frames[name] = f
 
-	db.stats.Count("frameN", 1)
+	db.Stats.Count("frameN", 1)
 
 	return f, nil
 }
@@ -416,7 +416,7 @@ func (db *DB) newFrame(path, name string) (*Frame, error) {
 		return nil, err
 	}
 	f.LogOutput = db.LogOutput
-	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.Stats = db.Stats.WithTags(fmt.Sprintf("frame:%s", name))
 	f.broadcaster = db.broadcaster
 	return f, nil
 }
@@ -445,7 +445,7 @@ func (db *DB) DeleteFrame(name string) error {
 	// Remove reference.
 	delete(db.frames, name)
 
-	db.stats.Count("frameN", -1)
+	db.Stats.Count("frameN", -1)
 
 	return nil
 }
