@@ -1,3 +1,5 @@
+//go:generate statik -src=./webui
+
 package pilosa
 
 import (
@@ -21,6 +23,9 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+
+	_ "github.com/pilosa/pilosa/statik"
+	"github.com/rakyll/statik/fs"
 )
 
 // Handler represents an HTTP handler.
@@ -56,6 +61,8 @@ func NewHandler() *Handler {
 
 func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
+	router.HandleFunc("/", handler.handleWebUI).Methods("GET")
+	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/db", handler.handleGetDBs).Methods("GET")
 	router.HandleFunc("/db/{db}", handler.handleGetDB).Methods("GET")
 	router.HandleFunc("/db/{db}", handler.handlePostDB).Methods("POST")
@@ -100,6 +107,16 @@ func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Router.ServeHTTP(w, r)
+}
+
+func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
+	// If user is using curl, don't chuck HTML at them
+	if strings.HasPrefix(r.UserAgent(), "curl") {
+		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the web console by visiting this URL in your browser.", http.StatusNotFound)
+		return
+	}
+	statikFS, _ := fs.New()
+	http.FileServer(statikFS).ServeHTTP(w, r)
 }
 
 // handleGetSchema handles GET /schema requests.

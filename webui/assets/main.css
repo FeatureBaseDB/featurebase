@@ -1,0 +1,63 @@
+.output {
+  overflow: auto;
+  padding: 0 8px;
+}
+
+.output .query {
+  font-family: monospace;
+}
+
+.output .response {
+  font-family: monospace;
+}
+
+.input-bar {
+  padding-right: 2em;
+  background-color: #eeeeee;
+}
+
+.input-textarea {
+  font-family: monospace;
+  font-size: 14px;
+  background-color: #dddddd;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  margin: 1em;
+}
+
+body {
+  padding-top: 5rem;
+}
+
+.controls {
+    padding: 1em;
+}
+
+.output {
+    padding: 1em;
+}
+
+.result {
+    background-color: #eeeeee;
+    padding: 1em;
+    margin-top: 1em;
+}
+.result > .tab-content > .tab-pane {
+    padding: 1em;
+}
+
+.query {
+    background-color: #dddddd;
+    padding: 0.5em
+}
+
+#exTab3 .nav-pills > li > a {
+  border-radius: 4px 4px 0 0 ;
+}
+
+#exTab3 .tab-content {
+  color : white;
+  background-color: #428bca;
+  padding : 5px 15px;
+}

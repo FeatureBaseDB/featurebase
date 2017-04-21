@@ -2,3 +2,5 @@ default.etcd/
 *.test
 vendor
 .protoc-gen-gofast
+statik
+.DS_Store
