@@ -316,9 +316,9 @@ func (c *Client) Import(ctx context.Context, db, frame string, slice uint64, bit
 }
 
 func MarshalImportPayload(db, frame string, slice uint64, bits []Bit) ([]byte, error) {
-	// Separate bitmap and profile IDs to reduce allocations.
-	bitmapIDs := Bits(bits).BitmapIDs()
-	profileIDs := Bits(bits).ProfileIDs()
+	// Separate row and column IDs to reduce allocations.
+	rowIDs := Bits(bits).RowIDs()
+	columnIDs := Bits(bits).ColumnIDs()
 	timestamps := Bits(bits).Timestamps()
 
 	// Marshal bits to protobufs.
@@ -326,8 +326,8 @@ func MarshalImportPayload(db, frame string, slice uint64, bits []Bit) ([]byte, e
 		DB:         db,
 		Frame:      frame,
 		Slice:      slice,
-		BitmapIDs:  bitmapIDs,
-		ProfileIDs: profileIDs,
+		RowIDs:     rowIDs,
+		ColumnIDs:  columnIDs,
 		Timestamps: timestamps,
 	})
 	if err != nil {
@@ -823,7 +823,7 @@ func (c *Client) FragmentBlocks(ctx context.Context, db, frame, view string, sli
 	return rsp.Blocks, nil
 }
 
-// BlockData returns bitmap/profile id pairs for a block.
+// BlockData returns row/column id pairs for a block.
 func (c *Client) BlockData(ctx context.Context, db, frame, view string, slice uint64, block int) ([]uint64, []uint64, error) {
 	buf, err := proto.Marshal(&internal.BlockDataRequest{
 		DB:    db,
@@ -867,11 +867,11 @@ func (c *Client) BlockData(ctx context.Context, db, frame, view string, slice ui
 	} else if err := proto.Unmarshal(body, &rsp); err != nil {
 		return nil, nil, err
 	}
-	return rsp.BitmapIDs, rsp.ProfileIDs, nil
+	return rsp.RowIDs, rsp.ColumnIDs, nil
 }
 
-// ProfileAttrDiff returns data from differing blocks on a remote host.
-func (c *Client) ProfileAttrDiff(ctx context.Context, db string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+// ColumnAttrDiff returns data from differing blocks on a remote host.
+func (c *Client) ColumnAttrDiff(ctx context.Context, db string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	u := url.URL{
 		Scheme: "http",
 		Host:   c.host,
@@ -913,8 +913,8 @@ func (c *Client) ProfileAttrDiff(ctx context.Context, db string, blks []AttrBloc
 	return rsp.Attrs, nil
 }
 
-// BitmapAttrDiff returns data from differing blocks on a remote host.
-func (c *Client) BitmapAttrDiff(ctx context.Context, db, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+// RowAttrDiff returns data from differing blocks on a remote host.
+func (c *Client) RowAttrDiff(ctx context.Context, db, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	u := url.URL{
 		Scheme: "http",
 		Host:   c.host,
@@ -960,8 +960,8 @@ func (c *Client) BitmapAttrDiff(ctx context.Context, db, frame string, blks []At
 
 // Bit represents the location of a single bit.
 type Bit struct {
-	BitmapID  uint64
-	ProfileID uint64
+	RowID     uint64
+	ColumnID  uint64
 	Timestamp int64
 }
 
@@ -972,29 +972,29 @@ func (p Bits) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 func (p Bits) Len() int      { return len(p) }
 
 func (p Bits) Less(i, j int) bool {
-	if p[i].BitmapID == p[j].BitmapID {
-		if p[i].ProfileID < p[j].ProfileID {
+	if p[i].RowID == p[j].RowID {
+		if p[i].ColumnID < p[j].ColumnID {
 			return p[i].Timestamp < p[j].Timestamp
 		}
-		return p[i].ProfileID < p[j].ProfileID
+		return p[i].ColumnID < p[j].ColumnID
 	}
-	return p[i].BitmapID < p[j].BitmapID
+	return p[i].RowID < p[j].RowID
 }
 
-// BitmapIDs returns a slice of all the bitmap IDs.
-func (a Bits) BitmapIDs() []uint64 {
+// RowIDs returns a slice of all the row IDs.
+func (a Bits) RowIDs() []uint64 {
 	other := make([]uint64, len(a))
 	for i := range a {
-		other[i] = a[i].BitmapID
+		other[i] = a[i].RowID
 	}
 	return other
 }
 
-// ProfileIDs returns a slice of all the profile IDs.
-func (a Bits) ProfileIDs() []uint64 {
+// ColumnIDs returns a slice of all the column IDs.
+func (a Bits) ColumnIDs() []uint64 {
 	other := make([]uint64, len(a))
 	for i := range a {
-		other[i] = a[i].ProfileID
+		other[i] = a[i].ColumnID
 	}
 	return other
 }
@@ -1012,7 +1012,7 @@ func (a Bits) Timestamps() []int64 {
 func (a Bits) GroupBySlice() map[uint64][]Bit {
 	m := make(map[uint64][]Bit)
 	for _, bit := range a {
-		slice := bit.ProfileID / SliceWidth
+		slice := bit.ColumnID / SliceWidth
 		m[slice] = append(m[slice], bit)
 	}
 
@@ -1030,7 +1030,7 @@ type BitsByPos []Bit
 func (p BitsByPos) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 func (p BitsByPos) Len() int      { return len(p) }
 func (p BitsByPos) Less(i, j int) bool {
-	p0, p1 := Pos(p[i].BitmapID, p[i].ProfileID), Pos(p[j].BitmapID, p[j].ProfileID)
+	p0, p1 := Pos(p[i].RowID, p[i].ColumnID), Pos(p[j].RowID, p[j].ColumnID)
 	if p0 == p1 {
 		return p[i].Timestamp < p[j].Timestamp
 	}

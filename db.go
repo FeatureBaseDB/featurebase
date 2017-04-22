@@ -17,7 +17,7 @@ import (
 
 // Default database settings.
 const (
-	DefaultColumnLabel = "profileID"
+	DefaultColumnLabel = "columnID"
 )
 
 // DB represents a container for frames.
@@ -40,8 +40,8 @@ type DB struct {
 	remoteMaxSlice        uint64
 	remoteMaxInverseSlice uint64
 
-	// Profile attribute storage and cache
-	profileAttrStore *AttrStore
+	// Column attribute storage and cache
+	columnAttrStore *AttrStore
 
 	broadcaster Broadcaster
 	stats       StatsClient
@@ -64,7 +64,7 @@ func NewDB(path, name string) (*DB, error) {
 		remoteMaxSlice:        0,
 		remoteMaxInverseSlice: 0,
 
-		profileAttrStore: NewAttrStore(filepath.Join(path, ".data")),
+		columnAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
 		columnLabel: DefaultColumnLabel,
 
@@ -79,8 +79,8 @@ func (db *DB) Name() string { return db.name }
 // Path returns the path the database was initialized with.
 func (db *DB) Path() string { return db.path }
 
-// ProfileAttrStore returns the storage for profile attributes.
-func (db *DB) ProfileAttrStore() *AttrStore { return db.profileAttrStore }
+// ColumnAttrStore returns the storage for column attributes.
+func (db *DB) ColumnAttrStore() *AttrStore { return db.columnAttrStore }
 
 // SetColumnLabel sets the column label. Persists to meta file on update.
 func (db *DB) SetColumnLabel(v string) error {
@@ -131,7 +131,7 @@ func (db *DB) Open() error {
 		return err
 	}
 
-	if err := db.profileAttrStore.Open(); err != nil {
+	if err := db.columnAttrStore.Open(); err != nil {
 		return err
 	}
 
@@ -220,8 +220,8 @@ func (db *DB) Close() error {
 	defer db.mu.Unlock()
 
 	// Close the attribute store.
-	if db.profileAttrStore != nil {
-		db.profileAttrStore.Close()
+	if db.columnAttrStore != nil {
+		db.columnAttrStore.Close()
 	}
 
 	// Close all frames.
@@ -560,6 +560,6 @@ type importKey struct {
 }
 
 type importData struct {
-	BitmapIDs  []uint64
-	ProfileIDs []uint64
+	RowIDs    []uint64
+	ColumnIDs []uint64
 }

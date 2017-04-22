@@ -135,28 +135,28 @@ func TestIndexSyncer_SyncIndex(t *testing.T) {
 	// Verify data is the same on both nodes.
 	for i, idx := range []*Index{idx0, idx1} {
 		f := idx.Fragment("d", "f", pilosa.ViewStandard, 0)
-		if a := f.Bitmap(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+		if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
 			t.Fatalf("unexpected bits(%d/0): %+v", i, a)
-		} else if a := f.Bitmap(2).Bits(); !reflect.DeepEqual(a, []uint64{20}) {
+		} else if a := f.Row(2).Bits(); !reflect.DeepEqual(a, []uint64{20}) {
 			t.Fatalf("unexpected bits(%d/2): %+v", i, a)
-		} else if a := f.Bitmap(3).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
+		} else if a := f.Row(3).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Fatalf("unexpected bits(%d/3): %+v", i, a)
-		} else if a := f.Bitmap(120).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
+		} else if a := f.Row(120).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Fatalf("unexpected bits(%d/120): %+v", i, a)
-		} else if a := f.Bitmap(200).Bits(); !reflect.DeepEqual(a, []uint64{4}) {
+		} else if a := f.Row(200).Bits(); !reflect.DeepEqual(a, []uint64{4}) {
 			t.Fatalf("unexpected bits(%d/200): %+v", i, a)
 		}
 
 		f = idx.Fragment("d", "f0", pilosa.ViewStandard, 1)
-		a := f.Bitmap(9).Bits()
+		a := f.Row(9).Bits()
 		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
 		}
-		if a := f.Bitmap(9).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+		if a := f.Row(9).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
 		}
 		f = idx.Fragment("y", "z", pilosa.ViewStandard, 3)
-		if a := f.Bitmap(10).Bits(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
+		if a := f.Row(10).Bits(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
 			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
 		}
 	}

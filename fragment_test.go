@@ -35,19 +35,19 @@ func TestFragment_SetBit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify counts on bitmaps.
-	if n := f.Bitmap(120).Count(); n != 2 {
+	// Verify counts on rows.
+	if n := f.Row(120).Count(); n != 2 {
 		t.Fatalf("unexpected count: %d", n)
-	} else if n := f.Bitmap(121).Count(); n != 1 {
+	} else if n := f.Row(121).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Bitmap(120).Count(); n != 2 {
+	} else if n := f.Row(120).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
-	} else if n := f.Bitmap(121).Count(); n != 1 {
+	} else if n := f.Row(121).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
@@ -66,15 +66,15 @@ func TestFragment_ClearBit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify count on bitmap.
-	if n := f.Bitmap(1000).Count(); n != 1 {
+	// Verify count on row.
+	if n := f.Row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Bitmap(1000).Count(); n != 1 {
+	} else if n := f.Row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
@@ -96,14 +96,14 @@ func TestFragment_Snapshot(t *testing.T) {
 	// Snapshot bitmap and verify data.
 	if err := f.Snapshot(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Bitmap(1000).Count(); n != 1 {
+	} else if n := f.Row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Bitmap(1000).Count(); n != 1 {
+	} else if n := f.Row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
@@ -124,8 +124,8 @@ func TestFragment_ForEachBit(t *testing.T) {
 
 	// Iterate over bits.
 	var result [][2]uint64
-	if err := f.ForEachBit(func(bitmapID, profileID uint64) error {
-		result = append(result, [2]uint64{bitmapID, profileID})
+	if err := f.ForEachBit(func(rowID, columnID uint64) error {
+		result = append(result, [2]uint64{rowID, columnID})
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -142,12 +142,12 @@ func TestFragment_Top(t *testing.T) {
 	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
-	// Set bits on the bitmaps 100, 101, & 102.
+	// Set bits on the rows 100, 101, & 102.
 	f.MustSetBits(100, 1, 3, 200)
 	f.MustSetBits(101, 1)
 	f.MustSetBits(102, 1, 2)
 
-	// Retrieve top bitmaps.
+	// Retrieve top rows.
 	if pairs, err := f.Top(pilosa.TopOptions{N: 2}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
@@ -159,21 +159,21 @@ func TestFragment_Top(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can filter bitmaps when retrieving the top n bitmaps.
+// Ensure a fragment can filter rows when retrieving the top n rows.
 func TestFragment_Top_Filter(t *testing.T) {
 	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
-	// Set bits on the bitmaps 100, 101, & 102.
+	// Set bits on the rows 100, 101, & 102.
 	f.MustSetBits(100, 1, 3, 200)
 	f.MustSetBits(101, 1)
 	f.MustSetBits(102, 1, 2)
 
 	// Assign attributes.
-	f.BitmapAttrStore.SetAttrs(101, map[string]interface{}{"x": uint64(10)})
-	f.BitmapAttrStore.SetAttrs(102, map[string]interface{}{"x": uint64(20)})
+	f.RowAttrStore.SetAttrs(101, map[string]interface{}{"x": uint64(10)})
+	f.RowAttrStore.SetAttrs(102, map[string]interface{}{"x": uint64(20)})
 
-	// Retrieve top bitmaps.
+	// Retrieve top rows.
 	if pairs, err := f.Top(pilosa.TopOptions{
 		N:            2,
 		FilterField:  "x",
@@ -189,21 +189,21 @@ func TestFragment_Top_Filter(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can return top bitmaps that intersect with an input bitmap.
+// Ensure a fragment can return top rows that intersect with an input row.
 func TestFragment_TopN_Intersect(t *testing.T) {
 	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
-	// Create an intersecting input bitmap.
+	// Create an intersecting input row.
 	src := pilosa.NewBitmap(1, 2, 3)
 
-	// Set bits on various bitmaps.
+	// Set bits on various rows.
 	f.MustSetBits(100, 1, 10, 11, 12)    // one intersection
 	f.MustSetBits(101, 1, 2, 3, 4)       // three intersections
 	f.MustSetBits(102, 1, 2, 4, 5, 6)    // two intersections
 	f.MustSetBits(103, 1000, 1001, 1002) // no intersection
 
-	// Retrieve top bitmaps.
+	// Retrieve top rows.
 	if pairs, err := f.Top(pilosa.TopOptions{N: 3, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
@@ -215,7 +215,7 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can return top bitmaps that have many bits set.
+// Ensure a fragment can return top rows that have many bits set.
 func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short mode")
@@ -224,20 +224,20 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
-	// Create an intersecting input bitmap.
+	// Create an intersecting input row.
 	src := pilosa.NewBitmap(
 		980, 981, 982, 983, 984, 985, 986, 987, 988, 989,
 		990, 991, 992, 993, 994, 995, 996, 997, 998, 999,
 	)
 
-	// Set bits on bitmaps 0 - 999. Higher bitmaps have higher bit counts.
+	// Set bits on rows 0 - 999. Higher rows have higher bit counts.
 	for i := uint64(0); i < 1000; i++ {
 		for j := uint64(0); j < i; j++ {
 			f.MustSetBits(i, j)
 		}
 	}
 
-	// Retrieve top bitmaps.
+	// Retrieve top rows.
 	if pairs, err := f.Top(pilosa.TopOptions{N: 10, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
@@ -256,18 +256,18 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can return top bitmaps when specified by ID.
-func TestFragment_TopN_BitmapIDs(t *testing.T) {
+// Ensure a fragment can return top rows when specified by ID.
+func TestFragment_TopN_IDs(t *testing.T) {
 	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
 	defer f.Close()
 
-	// Set bits on various bitmaps.
+	// Set bits on various rows.
 	f.MustSetBits(100, 1, 2, 3)
 	f.MustSetBits(101, 4, 5, 6, 7)
 	f.MustSetBits(102, 8, 9, 10, 11, 12)
 
-	// Retrieve top bitmaps.
-	if pairs, err := f.Top(pilosa.TopOptions{BitmapIDs: []uint64{100, 101, 200}}); err != nil {
+	// Retrieve top rows.
+	if pairs, err := f.Top(pilosa.TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
 		{ID: 101, Count: 4},
@@ -307,16 +307,16 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	frag.Close()
 
 	f := &Fragment{
-		Fragment:        frag,
-		BitmapAttrStore: MustOpenAttrStore(),
+		Fragment:     frag,
+		RowAttrStore: MustOpenAttrStore(),
 	}
-	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
+	f.Fragment.RowAttrStore = f.RowAttrStore.AttrStore
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
 	defer f.Close()
 
-	// Set bits on various bitmaps.
+	// Set bits on various rows.
 	f.MustSetBits(100, 1, 2, 3)
 	f.MustSetBits(101, 4, 5, 6, 7)
 	f.MustSetBits(102, 8, 9, 10, 11, 12)
@@ -332,7 +332,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 		{ID: 102, Count: 5},
 	}
 
-	// Retrieve top bitmaps.
+	// Retrieve top rows.
 	if pairs, err := f.Top(pilosa.TopOptions{N: 5}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) > int(cacheSize) {
@@ -381,7 +381,7 @@ func TestFragment_Blocks(t *testing.T) {
 	}
 	prev = blocks
 
-	// Set bit on different bitmap.
+	// Set bit on different row.
 	if _, err := f.SetBit(20, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +391,7 @@ func TestFragment_Blocks(t *testing.T) {
 	}
 	prev = blocks
 
-	// Set bit on different profile.
+	// Set bit on different column.
 	if _, err := f.SetBit(20, 100); err != nil {
 		t.Fatal(err)
 	}
@@ -544,7 +544,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Verify data in other fragment.
-	if a := f1.Bitmap(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
+	if a := f1.Row(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
 
@@ -553,39 +553,10 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 		t.Fatal(err)
 	} else if n := f1.Cache().Len(); n != 1 {
 		t.Fatalf("unexpected cache size (reopen): %d", n)
-	} else if a := f1.Bitmap(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
+	} else if a := f1.Row(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
 		t.Fatalf("unexpected bits (reopen): %+v", a)
 	}
 }
-
-/*
-func BenchmarkFragment_BlockChecksum_Fill1(b *testing.B)  { benchmarkFragmentBlockChecksum(b, 0.01) }
-func BenchmarkFragment_BlockChecksum_Fill10(b *testing.B) { benchmarkFragmentBlockChecksum(b, 0.10) }
-func BenchmarkFragment_BlockChecksum_Fill50(b *testing.B) { benchmarkFragmentBlockChecksum(b, 0.50) }
-
-func benchmarkFragmentBlockChecksum(b *testing.B, fillPercent float64) {
-	f := MustOpenFragment("d", "f", pilosa.ViewStandard, 0)
-	defer f.Close()
-
-	// Fill fragment.
-	bitmapIDs, profileIDs := GenerateImportFill(pilosa.HashBlockSize, fillPercent)
-	if err := f.Import(bitmapIDs, profileIDs); err != nil {
-		b.Fatal(err)
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	// Calculate block checksum.
-	for i := 0; i < b.N; i++ {
-		f.InvalidateChecksums()
-
-		if chksum := f.BlockChecksum(0); chksum == nil {
-			b.Fatal("expected checksum")
-		}
-	}
-}
-*/
 
 func BenchmarkFragment_Blocks(b *testing.B) {
 	if *FragmentPath == "" {
@@ -633,7 +604,7 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 	// Start benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if n := f.Bitmap(1).IntersectionCount(f.Bitmap(2)); n == 0 {
+		if n := f.Row(1).IntersectionCount(f.Row(2)); n == 0 {
 			b.Fatalf("unexpected count: %d", n)
 		}
 	}
@@ -642,7 +613,7 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 // Fragment is a test wrapper for pilosa.Fragment.
 type Fragment struct {
 	*pilosa.Fragment
-	BitmapAttrStore *AttrStore
+	RowAttrStore *AttrStore
 }
 
 // NewFragment returns a new instance of Fragment with a temporary path.
@@ -654,10 +625,10 @@ func NewFragment(db, frame, view string, slice uint64) *Fragment {
 	file.Close()
 
 	f := &Fragment{
-		Fragment:        pilosa.NewFragment(file.Name(), db, frame, view, slice),
-		BitmapAttrStore: MustOpenAttrStore(),
+		Fragment:     pilosa.NewFragment(file.Name(), db, frame, view, slice),
+		RowAttrStore: MustOpenAttrStore(),
 	}
-	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
+	f.Fragment.RowAttrStore = f.RowAttrStore.AttrStore
 	return f
 }
 
@@ -674,7 +645,7 @@ func MustOpenFragment(db, frame, view string, slice uint64) *Fragment {
 func (f *Fragment) Close() error {
 	defer os.Remove(f.Path())
 	defer os.Remove(f.CachePath())
-	defer f.BitmapAttrStore.Close()
+	defer f.RowAttrStore.Close()
 	return f.Fragment.Close()
 }
 
@@ -686,64 +657,64 @@ func (f *Fragment) Reopen() error {
 	}
 
 	f.Fragment = pilosa.NewFragment(path, f.DB(), f.Frame(), f.View(), f.Slice())
-	f.Fragment.BitmapAttrStore = f.BitmapAttrStore.AttrStore
+	f.Fragment.RowAttrStore = f.RowAttrStore.AttrStore
 	if err := f.Open(); err != nil {
 		return err
 	}
 	return nil
 }
 
-// MustSetBits sets bits on a bitmap. Panic on error.
+// MustSetBits sets bits on a row. Panic on error.
 // This function does not accept a timestamp or quantum.
-func (f *Fragment) MustSetBits(bitmapID uint64, profileIDs ...uint64) {
-	for _, profileID := range profileIDs {
-		if _, err := f.SetBit(bitmapID, profileID); err != nil {
+func (f *Fragment) MustSetBits(rowID uint64, columnIDs ...uint64) {
+	for _, columnID := range columnIDs {
+		if _, err := f.SetBit(rowID, columnID); err != nil {
 			panic(err)
 		}
 	}
 }
 
-// MustClearBits clears bits on a bitmap. Panic on error.
-func (f *Fragment) MustClearBits(bitmapID uint64, profileIDs ...uint64) {
-	for _, profileID := range profileIDs {
-		if _, err := f.ClearBit(bitmapID, profileID); err != nil {
+// MustClearBits clears bits on a row. Panic on error.
+func (f *Fragment) MustClearBits(rowID uint64, columnIDs ...uint64) {
+	for _, columnID := range columnIDs {
+		if _, err := f.ClearBit(rowID, columnID); err != nil {
 			panic(err)
 		}
 	}
 }
 
-// BitmapAttrStore provides simple storage for attributes.
-type BitmapAttrStore struct {
+// RowAttrStore provides simple storage for attributes.
+type RowAttrStore struct {
 	attrs map[uint64]map[string]interface{}
 }
 
-// NewBitmapAttrStore returns a new instance of BitmapAttrStore.
-func NewBitmapAttrStore() *BitmapAttrStore {
-	return &BitmapAttrStore{
+// NewRowAttrStore returns a new instance of RowAttrStore.
+func NewRowAttrStore() *RowAttrStore {
+	return &RowAttrStore{
 		attrs: make(map[uint64]map[string]interface{}),
 	}
 }
 
-// BitmapAttrs returns the attributes set to a bitmap id.
-func (s *BitmapAttrStore) BitmapAttrs(id uint64) (map[string]interface{}, error) {
+// RowAttrs returns the attributes set to a row id.
+func (s *RowAttrStore) RowAttrs(id uint64) (map[string]interface{}, error) {
 	return s.attrs[id], nil
 }
 
-// SetBitmapAttrs assigns a set of attributes to a bitmap id.
-func (s *BitmapAttrStore) SetBitmapAttrs(id uint64, m map[string]interface{}) {
+// SetRowAttrs assigns a set of attributes to a row id.
+func (s *RowAttrStore) SetRowAttrs(id uint64, m map[string]interface{}) {
 	s.attrs[id] = m
 }
 
 // GenerateImportFill generates a set of bits pairs that evenly fill a fragment chunk.
-func GenerateImportFill(bitmapN int, pct float64) (bitmapIDs, profileIDs []uint64) {
+func GenerateImportFill(rowN int, pct float64) (rowIDs, columnIDs []uint64) {
 	ipct := int(pct * 100)
-	for i := 0; i < SliceWidth*bitmapN; i++ {
+	for i := 0; i < SliceWidth*rowN; i++ {
 		if i%100 >= ipct {
 			continue
 		}
 
-		bitmapIDs = append(bitmapIDs, uint64(i%SliceWidth))
-		profileIDs = append(profileIDs, uint64(i/SliceWidth))
+		rowIDs = append(rowIDs, uint64(i%SliceWidth))
+		columnIDs = append(columnIDs, uint64(i/SliceWidth))
 	}
 	return
 }
@@ -754,7 +725,7 @@ func TestFragment_Tanimoto(t *testing.T) {
 
 	src := pilosa.NewBitmap(1, 2, 3)
 
-	// Set bits on the bitmaps 100, 101, & 102.
+	// Set bits on the rows 100, 101, & 102.
 	f.MustSetBits(100, 1, 3, 2, 200)
 	f.MustSetBits(101, 1, 3)
 	f.MustSetBits(102, 1, 2, 10, 12)
@@ -776,7 +747,7 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 
 	src := pilosa.NewBitmap(1, 2, 3)
 
-	// Set bits on the bitmaps 100, 101, & 102.
+	// Set bits on the rows 100, 101, & 102.
 	f.MustSetBits(100, 1, 3, 2, 200)
 	f.MustSetBits(101, 1, 3)
 	f.MustSetBits(102, 1, 2, 10, 12)

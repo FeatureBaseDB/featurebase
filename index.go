@@ -34,7 +34,7 @@ type Index struct {
 	// Data directory path.
 	Path string
 
-	// The interval at which the cached bitmap ids are persisted to disk.
+	// The interval at which the cached row ids are persisted to disk.
 	CacheFlushInterval time.Duration
 
 	LogOutput io.Writer
@@ -375,7 +375,7 @@ func (s *IndexSyncer) SyncIndex() error {
 			return nil
 		}
 
-		// Sync database profile attributes.
+		// Sync database column attributes.
 		if err := s.syncDatabase(di.Name); err != nil {
 			return fmt.Errorf("db sync error: db=%s, err=%s", di.Name, err)
 		}
@@ -386,7 +386,7 @@ func (s *IndexSyncer) SyncIndex() error {
 				return nil
 			}
 
-			// Sync frame bitmap attributes.
+			// Sync frame row attributes.
 			if err := s.syncFrame(di.Name, fi.Name); err != nil {
 				return fmt.Errorf("frame sync error: db=%s, frame=%s, err=%s", di.Name, fi.Name, err)
 			}
@@ -429,7 +429,7 @@ func (s *IndexSyncer) syncDatabase(db string) error {
 	}
 
 	// Read block checksums.
-	blks, err := d.ProfileAttrStore().Blocks()
+	blks, err := d.ColumnAttrStore().Blocks()
 	if err != nil {
 		return err
 	}
@@ -443,7 +443,7 @@ func (s *IndexSyncer) syncDatabase(db string) error {
 
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := client.ProfileAttrDiff(context.Background(), db, blks)
+		m, err := client.ColumnAttrDiff(context.Background(), db, blks)
 		if err != nil {
 			return err
 		} else if len(m) == 0 {
@@ -451,12 +451,12 @@ func (s *IndexSyncer) syncDatabase(db string) error {
 		}
 
 		// Update local copy.
-		if err := d.ProfileAttrStore().SetBulkAttrs(m); err != nil {
+		if err := d.ColumnAttrStore().SetBulkAttrs(m); err != nil {
 			return err
 		}
 
 		// Recompute blocks.
-		blks, err = d.ProfileAttrStore().Blocks()
+		blks, err = d.ColumnAttrStore().Blocks()
 		if err != nil {
 			return err
 		}
@@ -474,7 +474,7 @@ func (s *IndexSyncer) syncFrame(db, name string) error {
 	}
 
 	// Read block checksums.
-	blks, err := f.BitmapAttrStore().Blocks()
+	blks, err := f.RowAttrStore().Blocks()
 	if err != nil {
 		return err
 	}
@@ -488,7 +488,7 @@ func (s *IndexSyncer) syncFrame(db, name string) error {
 
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := client.BitmapAttrDiff(context.Background(), db, name, blks)
+		m, err := client.RowAttrDiff(context.Background(), db, name, blks)
 		if err == ErrFrameNotFound {
 			continue // frame not created remotely yet, skip
 		} else if err != nil {
@@ -498,12 +498,12 @@ func (s *IndexSyncer) syncFrame(db, name string) error {
 		}
 
 		// Update local copy.
-		if err := f.BitmapAttrStore().SetBulkAttrs(m); err != nil {
+		if err := f.RowAttrStore().SetBulkAttrs(m); err != nil {
 			return err
 		}
 
 		// Recompute blocks.
-		blks, err = f.BitmapAttrStore().Blocks()
+		blks, err = f.RowAttrStore().Blocks()
 		if err != nil {
 			return err
 		}
