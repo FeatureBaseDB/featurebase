@@ -21,11 +21,13 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"reflect"
 )
 
 // Handler represents an HTTP handler.
 type Handler struct {
-	Index *Index
+	Index       *Index
+	Broadcaster Broadcaster
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -111,8 +113,21 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleGetStatus handles GET /status requests.
+func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+	if err := json.NewEncoder(w).Encode(getStatusResponse{
+		Health: h.Cluster.Health(),
+	}); err != nil {
+		h.logger().Printf("write status response error: %s", err)
+	}
+}
+
 type getSchemaResponse struct {
 	DBs []*DBInfo `json:"dbs"`
+}
+
+type getStatusResponse struct {
+	Health map[string]string `json:"health"`
 }
 
 // handlePostQuery handles /query requests.
@@ -144,26 +159,26 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	results, err := h.Executor.Execute(r.Context(), dbName, q, req.Slices, opt)
 	resp := &QueryResponse{Results: results, Err: err}
 
-	// Fill profile attributes if requested.
-	if req.Profiles {
-		// Consolidate all profile ids across all calls.
-		var profileIDs []uint64
+	// Fill column attributes if requested.
+	if req.ColumnAttrs {
+		// Consolidate all column ids across all calls.
+		var columnIDs []uint64
 		for _, result := range results {
 			bm, ok := result.(*Bitmap)
 			if !ok {
 				continue
 			}
-			profileIDs = uint64Slice(profileIDs).merge(bm.Bits())
+			columnIDs = uint64Slice(columnIDs).merge(bm.Bits())
 		}
 
-		// Retrieve profile attributes across all calls.
-		profiles, err := h.readProfiles(h.Index.DB(dbName), profileIDs)
+		// Retrieve column attributes across all calls.
+		columnAttrSets, err := h.readColumnAttrSets(h.Index.DB(dbName), columnIDs)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 			return
 		}
-		resp.Profiles = profiles
+		resp.ColumnAttrSets = columnAttrSets
 	}
 
 	// Set appropriate status code, if there is an error.
@@ -200,7 +215,7 @@ func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
 }
 
 type sliceMaxResponse struct {
-	MaxSlices map[string]uint64 `json:"MaxSlices"`
+	MaxSlices map[string]uint64 `json:"maxSlices"`
 }
 
 // handleGetDBs handles GET /db request.
@@ -232,55 +247,62 @@ type postDBRequest struct {
 	Options DBOptions `json:"options"`
 }
 
+//_postDBRequest is necessary to avoid recursion while decoding.
+type _postDBRequest postDBRequest
+
 // Custom Unmarshal JSON to validate request body when creating a new database
 func (p *postDBRequest) UnmarshalJSON(b []byte) error {
-	var data map[string]interface{}
-	if err := json.Unmarshal(b, &data); err != nil {
+
+	// m is an overflow map used to capture additional, unexpected keys.
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(b, &m); err != nil {
 		return err
 	}
-	for key, value := range data {
-		switch key {
-		case "options":
-			value, err := validateOptions(data, "columnLabel")
-			if err != nil {
-				return err
-			}
-			if value == "" {
-				p.Options = DBOptions{}
-			} else {
-				p.Options = DBOptions{ColumnLabel: value}
-			}
 
+	validDBOptions := getValidOptions(DBOptions{})
+	err := validateOptions(m, validDBOptions)
+	if err != nil {
+		return err
+	}
+	// Unmarshal expected values.
+	var _p _postDBRequest
+	if err := json.Unmarshal(b, &_p); err != nil {
+		return err
+	}
+
+	p.Options = _p.Options
+
+	return nil
+}
+
+// Raise errors for any unknown key
+func validateOptions(data map[string]interface{}, validDBOptions []string) error {
+	for k, v := range data {
+		switch k {
+		case "options":
+			options, ok := v.(map[string]interface{})
+			if !ok {
+				return errors.New("options is not map[string]interface{}")
+			}
+			for kk, vv := range options {
+				if !foundItem(validDBOptions, kk) {
+					return fmt.Errorf("Unknown key: %v:%v", kk, vv)
+				}
+			}
 		default:
-			return fmt.Errorf("Unknown key: %v:%v", key, value)
+			return fmt.Errorf("Unknown key: %v:%v", k, v)
 		}
 	}
 	return nil
 }
 
-func validateOptions(data map[string]interface{}, field string) (string, error) {
-	options, ok := data["options"].(map[string]interface{})
-	if !ok {
-		return "", errors.New("options is not map[string]interface{}")
-	}
-	var optionValue string
-	if len(options) == 0 {
-		optionValue = ""
-	} else {
-		for k, v := range options {
-			switch k {
-			case field:
-				val, ok := options[field].(string)
-				if !ok {
-					return "", fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
-				}
-				optionValue = val
-			default:
-				return "", fmt.Errorf("invalid key for options {%v:%v}", k, v)
-			}
+func foundItem(items []string, item string) bool {
+	for _, i := range items {
+		if item == i {
+			return true
 		}
 	}
-	return optionValue, nil
+	return false
 }
 
 type postDBResponse struct{}
@@ -293,6 +315,15 @@ func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 	if err := h.Index.DeleteDB(dbName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Send the delete database message to all nodes.
+	err := h.Broadcaster.SendSync(
+		&internal.DeleteDBMessage{
+			DB: dbName,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending DeleteDB message: %s", err)
 	}
 
 	// Encode response.
@@ -309,19 +340,33 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 
 	// Decode request.
 	var req postDBRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err == io.EOF {
+		// If no data was provided (EOF), we still create the database
+		// with default values.
+	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Create database.
-	_, err := h.Index.CreateDB(dbName, req.Options)
+	_, err = h.Index.CreateDB(dbName, req.Options)
 	if err == ErrDatabaseExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Send the create database message to all nodes.
+	err = h.Broadcaster.SendSync(
+		&internal.CreateDBMessage{
+			DB:   dbName,
+			Meta: req.Options.Encode(),
+		})
+	if err != nil {
+		h.logger().Printf("problem sending CreateDB message: %s", err)
 	}
 
 	// Encode response.
@@ -368,7 +413,7 @@ func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Reques
 }
 
 type patchDBTimeQuantumRequest struct {
-	TimeQuantum string `json:"time_quantum"`
+	TimeQuantum string `json:"timeQuantum"`
 }
 
 type patchDBTimeQuantumResponse struct{}
@@ -392,7 +437,7 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Retrieve local blocks.
-	blks, err := db.ProfileAttrStore().Blocks()
+	blks, err := db.ColumnAttrStore().Blocks()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -402,7 +447,7 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 	attrs := make(map[uint64]map[string]interface{})
 	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
 		// Retrieve block data.
-		m, err := db.ProfileAttrStore().BlockData(blockID)
+		m, err := db.ColumnAttrStore().BlockData(blockID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -437,7 +482,11 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 
 	// Decode request.
 	var req postFrameRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err == io.EOF {
+		// If no data was provided (EOF), we still create the frame
+		// with default values.
+	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -450,7 +499,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create frame.
-	_, err := db.CreateFrame(frameName, req.Options)
+	_, err = db.CreateFrame(frameName, req.Options)
 	if err == ErrFrameExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -459,36 +508,60 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send the create frame message to all nodes.
+	err = h.Broadcaster.SendSync(
+		&internal.CreateFrameMessage{
+			DB:    dbName,
+			Frame: frameName,
+			Meta:  req.Options.Encode(),
+		})
+	if err != nil {
+		h.logger().Printf("problem sending CreateFrame message: %s", err)
+	}
+
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
-// Custom Unmarshal JSON to validate request body when creating a new frame
+type _postFrameRequest postFrameRequest
+
+// Custom Unmarshal JSON to validate request body when creating a new frame. If there's new FrameOptions,
+// adding it to validFrameOptions to make sure the new option is validated, otherwise the request will be failed
 func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
-	var data map[string]interface{}
-	if err := json.Unmarshal(b, &data); err != nil {
+	// m is an overflow map used to capture additional, unexpected keys.
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(b, &m); err != nil {
 		return err
 	}
-	for key, value := range data {
-		switch key {
-		case "options":
-			value, err := validateOptions(data, "rowLabel")
-			if err != nil {
-				return err
-			}
-			if value == "" {
-				p.Options = FrameOptions{}
-			} else {
-				p.Options = FrameOptions{RowLabel: value}
-			}
-		default:
-			return fmt.Errorf("Unknown key: {%v:%v}", key, value)
-		}
+
+	validFrameOptions := getValidOptions(FrameOptions{})
+	err := validateOptions(m, validFrameOptions)
+	if err != nil {
+		return err
 	}
+
+	// Unmarshal expected values.
+	var _p _postFrameRequest
+	if err := json.Unmarshal(b, &_p); err != nil {
+		return err
+	}
+
+	p.Options = _p.Options
 	return nil
 
+}
+
+func getValidOptions(option interface{}) []string {
+	validOptions := []string{}
+	val := reflect.ValueOf(option)
+	for i := 0; i < val.Type().NumField(); i++ {
+		jsonTag := val.Type().Field(i).Tag.Get("json")
+		s := strings.Split(jsonTag, ",")
+		validOptions = append(validOptions, s[0])
+	}
+	return validOptions
 }
 
 type postFrameRequest struct {
@@ -515,6 +588,16 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	if err := db.DeleteFrame(frameName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Send the delete frame message to all nodes.
+	err := h.Broadcaster.SendSync(
+		&internal.DeleteFrameMessage{
+			DB:    dbName,
+			Frame: frameName,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending DeleteFrame message: %s", err)
 	}
 
 	// Encode response.
@@ -564,7 +647,7 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 }
 
 type patchFrameTimeQuantumRequest struct {
-	TimeQuantum string `json:"time_quantum"`
+	TimeQuantum string `json:"timeQuantum"`
 }
 
 type patchFrameTimeQuantumResponse struct{}
@@ -618,7 +701,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 	}
 
 	// Retrieve local blocks.
-	blks, err := f.BitmapAttrStore().Blocks()
+	blks, err := f.RowAttrStore().Blocks()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -628,7 +711,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 	attrs := make(map[uint64]map[string]interface{})
 	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
 		// Retrieve block data.
-		m, err := f.BitmapAttrStore().BlockData(blockID)
+		m, err := f.RowAttrStore().BlockData(blockID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -656,24 +739,24 @@ type postFrameAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
 
-// readProfiles returns a list of profile objects by id.
-func (h *Handler) readProfiles(db *DB, ids []uint64) ([]*Profile, error) {
+// readColumnAttrSets returns a list of column attribute objects by id.
+func (h *Handler) readColumnAttrSets(db *DB, ids []uint64) ([]*ColumnAttrSet, error) {
 	if db == nil {
 		return nil, nil
 	}
 
-	a := make([]*Profile, 0, len(ids))
+	a := make([]*ColumnAttrSet, 0, len(ids))
 	for _, id := range ids {
-		// Read attributes for profile. Skip profile if empty.
-		attrs, err := db.ProfileAttrStore().Attrs(id)
+		// Read attributes for column. Skip column if empty.
+		attrs, err := db.ColumnAttrStore().Attrs(id)
 		if err != nil {
 			return nil, err
 		} else if len(attrs) == 0 {
 			continue
 		}
 
-		// Append profile with attributes.
-		a = append(a, &Profile{ID: id, Attrs: attrs})
+		// Append column with attributes.
+		a = append(a, &ColumnAttrSet{ID: id, Attrs: attrs})
 	}
 
 	return a, nil
@@ -734,10 +817,10 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		Query:    query,
-		Slices:   slices,
-		Profiles: q.Get("profiles") == "true",
-		Quantum:  quantum,
+		Query:       query,
+		Slices:      slices,
+		ColumnAttrs: q.Get("columnAttrs") == "true",
+		Quantum:     quantum,
 	}, nil
 }
 
@@ -824,9 +907,9 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Import into fragment.
-	err = f.Import(req.BitmapIDs, req.ProfileIDs, timestamps)
+	err = f.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
-		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", req.DB, req.Frame, req.Slice, len(req.ProfileIDs), err)
+		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", req.DB, req.Frame, req.Slice, len(req.ColumnIDs), err)
 		return
 	}
 
@@ -882,10 +965,10 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	cw := csv.NewWriter(w)
 
 	// Iterate over each bit.
-	if err := f.ForEachBit(func(bitmapID, profileID uint64) error {
+	if err := f.ForEachBit(func(rowID, columnID uint64) error {
 		return cw.Write([]string{
-			strconv.FormatUint(bitmapID, 10),
-			strconv.FormatUint(profileID, 10),
+			strconv.FormatUint(rowID, 10),
+			strconv.FormatUint(columnID, 10),
 		})
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1000,7 +1083,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	// Read data
 	var resp internal.BlockDataResponse
 	if f != nil {
-		resp.BitmapIDs, resp.ProfileIDs = f.BlockData(int(req.Block))
+		resp.RowIDs, resp.ColumnIDs = f.BlockData(int(req.Block))
 	}
 
 	// Encode response.
@@ -1188,8 +1271,8 @@ type QueryRequest struct {
 	// If empty, all slices are included.
 	Slices []uint64
 
-	// Return profile attributes, if true.
-	Profiles bool
+	// Return column attributes, if true.
+	ColumnAttrs bool
 
 	// Time granularity to use with the timestamp.
 	Quantum TimeQuantum
@@ -1201,11 +1284,11 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		Query:    pb.Query,
-		Slices:   pb.Slices,
-		Profiles: pb.Profiles,
-		Quantum:  TimeQuantum(pb.Quantum),
-		Remote:   pb.Remote,
+		Query:       pb.Query,
+		Slices:      pb.Slices,
+		ColumnAttrs: pb.ColumnAttrs,
+		Quantum:     TimeQuantum(pb.Quantum),
+		Remote:      pb.Remote,
 	}
 
 	return req
@@ -1217,8 +1300,8 @@ type QueryResponse struct {
 	// Can be a Bitmap, Pairs, or uint64.
 	Results []interface{}
 
-	// Set of profiles matching IDs returned in Result.
-	Profiles []*Profile
+	// Set of column attribute objects matching IDs returned in Result.
+	ColumnAttrSets []*ColumnAttrSet
 
 	// Error during parsing or execution.
 	Err error
@@ -1226,12 +1309,12 @@ type QueryResponse struct {
 
 func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	var output struct {
-		Results  []interface{} `json:"results,omitempty"`
-		Profiles []*Profile    `json:"profiles,omitempty"`
-		Err      string        `json:"error,omitempty"`
+		Results        []interface{}    `json:"results,omitempty"`
+		ColumnAttrSets []*ColumnAttrSet `json:"columnAttrs,omitempty"`
+		Err            string           `json:"error,omitempty"`
 	}
 	output.Results = resp.Results
-	output.Profiles = resp.Profiles
+	output.ColumnAttrSets = resp.ColumnAttrSets
 
 	if resp.Err != nil {
 		output.Err = resp.Err.Error()
@@ -1241,8 +1324,8 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 
 func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 	pb := &internal.QueryResponse{
-		Results:  make([]*internal.QueryResult, len(resp.Results)),
-		Profiles: encodeProfiles(resp.Profiles),
+		Results:        make([]*internal.QueryResult, len(resp.Results)),
+		ColumnAttrSets: encodeColumnAttrSets(resp.ColumnAttrSets),
 	}
 
 	for i := range resp.Results {

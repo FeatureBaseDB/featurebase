@@ -83,7 +83,7 @@ func TestHandler_MaxSlices(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/slices/max", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"MaxSlices":{"d0":3,"d1":0}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"maxSlices":{"d0":3,"d1":0}}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -123,7 +123,7 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/slices/max?inverse=true", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"MaxSlices":{"d0":3,"d1":0}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"maxSlices":{"d0":3,"d1":0}}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -253,18 +253,18 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	}
 }
 
-// Ensure the handler can execute a query that returns a bitmap with profiles as JSON.
-func TestHandler_Query_Bitmap_Profiles_JSON(t *testing.T) {
+// Ensure the handler can execute a query that returns a bitmap with column attributes as JSON.
+func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
 	idx := NewIndex()
 	defer idx.Close()
 
-	// Create database and set profile attributes.
+	// Create database and set column attributes.
 	db, err := idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
 	if err != nil {
 		t.Fatal(err)
-	} else if err := db.ProfileAttrStore().SetAttrs(3, map[string]interface{}{"x": "y"}); err != nil {
+	} else if err := db.ColumnAttrStore().SetAttrs(3, map[string]interface{}{"x": "y"}); err != nil {
 		t.Fatal(err)
-	} else if err := db.ProfileAttrStore().SetAttrs(66, map[string]interface{}{"y": 123, "z": false}); err != nil {
+	} else if err := db.ColumnAttrStore().SetAttrs(66, map[string]interface{}{"y": 123, "z": false}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -277,10 +277,10 @@ func TestHandler_Query_Bitmap_Profiles_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/db/d/query?profiles=true", strings.NewReader("Bitmap(id=100)")))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/db/d/query?columnAttrs=true", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,1048577]}],"profiles":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,1048577]}],"columnAttrs":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -318,16 +318,16 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	}
 }
 
-// Ensure the handler can execute a query that returns a bitmap with profiles as protobuf.
-func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
+// Ensure the handler can execute a query that returns a bitmap with column attributes as protobuf.
+func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
 	idx := NewIndex()
 	defer idx.Close()
 
-	// Create database and set profile attributes.
+	// Create database and set column attributes.
 	db, err := idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
 	if err != nil {
 		t.Fatal(err)
-	} else if err := db.ProfileAttrStore().SetAttrs(1, map[string]interface{}{"x": "y"}); err != nil {
+	} else if err := db.ColumnAttrStore().SetAttrs(1, map[string]interface{}{"x": "y"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -341,8 +341,8 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 
 	// Encode request body.
 	buf, err := proto.Marshal(&internal.QueryRequest{
-		Query:    "Bitmap(id=100)",
-		Profiles: true,
+		Query:       "Bitmap(id=100)",
+		ColumnAttrs: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -373,12 +373,12 @@ func TestHandler_Query_Bitmap_Profiles_Protobuf(t *testing.T) {
 		t.Fatalf("unexpected attr[2]: %s=%v", k, v)
 	}
 
-	if a := resp.Profiles; len(a) != 1 {
-		t.Fatalf("unexpected profiles length: %d", len(a))
+	if a := resp.ColumnAttrSets; len(a) != 1 {
+		t.Fatalf("unexpected column attributes length: %d", len(a))
 	} else if a[0].ID != 1 {
 		t.Fatalf("unexpected id: %d", a[0].ID)
 	} else if len(a[0].Attrs) != 1 {
-		t.Fatalf("unexpected profile attr length: %d", len(a))
+		t.Fatalf("unexpected column attr length: %d", len(a))
 	} else if k, v := a[0].Attrs[0].Key, a[0].Attrs[0].StringValue; k != "x" || v != "y" {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
 	}
@@ -556,7 +556,7 @@ func TestHandler_SetDBTimeQuantum(t *testing.T) {
 	h := NewHandler()
 	h.Index = idx.Index
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/time-quantum", strings.NewReader(`{"time_quantum":"ymdh"}`)))
+	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
@@ -579,7 +579,7 @@ func TestHandler_SetFrameTimeQuantum(t *testing.T) {
 	h := NewHandler()
 	h.Index = idx.Index
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/frame/f1/time-quantum", strings.NewReader(`{"time_quantum":"ymdh"}`)))
+	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/frame/f1/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
@@ -603,16 +603,16 @@ func TestHandler_DB_AttrStore_Diff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.ProfileAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
+	if err := db.ColumnAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
 		t.Fatal(err)
-	} else if err := db.ProfileAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
+	} else if err := db.ColumnAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
 		t.Fatal(err)
-	} else if err := db.ProfileAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
+	} else if err := db.ColumnAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Retrieve block checksums.
-	blks, err := db.ProfileAttrStore().Blocks()
+	blks, err := db.ColumnAttrStore().Blocks()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -653,16 +653,16 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.BitmapAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
+	if err := f.RowAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
 		t.Fatal(err)
-	} else if err := f.BitmapAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
+	} else if err := f.RowAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
 		t.Fatal(err)
-	} else if err := f.BitmapAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
+	} else if err := f.RowAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Retrieve block checksums.
-	blks, err := f.BitmapAttrStore().Blocks()
+	blks, err := f.RowAttrStore().Blocks()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -732,7 +732,7 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	f1 := idx.Fragment("x", "y", pilosa.ViewStandard, 0)
 	if f1 == nil {
 		t.Fatal("fragment x/y/standard/0 not created")
-	} else if bits := f1.Bitmap(100).Bits(); !reflect.DeepEqual(bits, []uint64{1, 2, 3}) {
+	} else if bits := f1.Row(100).Bits(); !reflect.DeepEqual(bits, []uint64{1, 2, 3}) {
 		t.Fatalf("unexpected restored bits: %+v", bits)
 	}
 }
@@ -763,7 +763,7 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if w.Body.String() != `[{"host":"host1"},{"host":"host2"}]`+"\n" {
+	} else if w.Body.String() != `[{"host":"host1","internalHost":""},{"host":"host2","internalHost":""}]`+"\n" {
 		t.Fatalf("unexpected body: %q", w.Body.String())
 	}
 }
@@ -792,6 +792,10 @@ func NewHandler() *Handler {
 	}
 	h.Handler.Executor = &h.Executor
 	h.Handler.LogOutput = ioutil.Discard
+
+	// Handler test messages can no-op.
+	h.Broadcaster = pilosa.NopBroadcaster
+
 	return h
 }
 
@@ -823,6 +827,8 @@ func NewServer() *Server {
 	// Update handler to use hostname.
 	s.Handler.Host = s.Host()
 
+	// Handler test messages can no-op.
+	s.Handler.Broadcaster = pilosa.NopBroadcaster
 	// Create a default cluster on the handler
 	s.Handler.Cluster = NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()

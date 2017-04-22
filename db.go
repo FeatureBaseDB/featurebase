@@ -17,7 +17,7 @@ import (
 
 // Default database settings.
 const (
-	DefaultColumnLabel = "profileID"
+	DefaultColumnLabel = "columnID"
 )
 
 // DB represents a container for frames.
@@ -40,10 +40,11 @@ type DB struct {
 	remoteMaxSlice        uint64
 	remoteMaxInverseSlice uint64
 
-	// Profile attribute storage and cache
-	profileAttrStore *AttrStore
+	// Column attribute storage and cache
+	columnAttrStore *AttrStore
 
-	stats StatsClient
+	broadcaster Broadcaster
+	stats       StatsClient
 
 	LogOutput io.Writer
 }
@@ -63,7 +64,7 @@ func NewDB(path, name string) (*DB, error) {
 		remoteMaxSlice:        0,
 		remoteMaxInverseSlice: 0,
 
-		profileAttrStore: NewAttrStore(filepath.Join(path, ".data")),
+		columnAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
 		columnLabel: DefaultColumnLabel,
 
@@ -78,8 +79,8 @@ func (db *DB) Name() string { return db.name }
 // Path returns the path the database was initialized with.
 func (db *DB) Path() string { return db.path }
 
-// ProfileAttrStore returns the storage for profile attributes.
-func (db *DB) ProfileAttrStore() *AttrStore { return db.profileAttrStore }
+// ColumnAttrStore returns the storage for column attributes.
+func (db *DB) ColumnAttrStore() *AttrStore { return db.columnAttrStore }
 
 // SetColumnLabel sets the column label. Persists to meta file on update.
 func (db *DB) SetColumnLabel(v string) error {
@@ -130,7 +131,7 @@ func (db *DB) Open() error {
 		return err
 	}
 
-	if err := db.profileAttrStore.Open(); err != nil {
+	if err := db.columnAttrStore.Open(); err != nil {
 		return err
 	}
 
@@ -171,7 +172,7 @@ func (db *DB) openFrames() error {
 
 // loadMeta reads meta data for the database, if any.
 func (db *DB) loadMeta() error {
-	var pb internal.DB
+	var pb internal.DBMeta
 
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(db.path, ".meta"))
@@ -197,7 +198,7 @@ func (db *DB) loadMeta() error {
 // saveMeta writes meta data for the database.
 func (db *DB) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.DB{
+	buf, err := proto.Marshal(&internal.DBMeta{
 		TimeQuantum: string(db.timeQuantum),
 		ColumnLabel: db.columnLabel,
 	})
@@ -219,8 +220,8 @@ func (db *DB) Close() error {
 	defer db.mu.Unlock()
 
 	// Close the attribute store.
-	if db.profileAttrStore != nil {
-		db.profileAttrStore.Close()
+	if db.columnAttrStore != nil {
+		db.columnAttrStore.Close()
 	}
 
 	// Close all frames.
@@ -249,10 +250,10 @@ func (db *DB) MaxSlice() uint64 {
 	return max
 }
 
-func (db *DB) SetRemoteMaxSlice(v uint64) {
+func (db *DB) SetRemoteMaxSlice(newmax uint64) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	db.remoteMaxSlice = v
+	db.remoteMaxSlice = newmax
 }
 
 // MaxInverseSlice returns the max inverse slice in the database according to this node.
@@ -391,6 +392,10 @@ func (db *DB) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	if opt.RowLabel != "" {
 		f.rowLabel = opt.RowLabel
 	}
+	if opt.CacheSize != 0 {
+		f.cacheSize = opt.CacheSize
+	}
+
 	f.inverseEnabled = opt.InverseEnabled
 	if err := f.saveMeta(); err != nil {
 		f.Close()
@@ -412,6 +417,7 @@ func (db *DB) newFrame(path, name string) (*Frame, error) {
 	}
 	f.LogOutput = db.LogOutput
 	f.stats = db.stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.broadcaster = db.broadcaster
 	return f, nil
 }
 
@@ -502,9 +508,40 @@ func MergeSchemas(a, b []*DBInfo) []*DBInfo {
 	return dbs
 }
 
+// encodeDBs converts a into its internal representation.
+func encodeDBs(a []*DB) []*internal.DB {
+	other := make([]*internal.DB, len(a))
+	for i := range a {
+		other[i] = encodeDB(a[i])
+	}
+	return other
+}
+
+// encodeDB converts d into its internal representation.
+func encodeDB(d *DB) *internal.DB {
+	return &internal.DB{
+		Name: d.name,
+		Meta: &internal.DBMeta{
+			ColumnLabel: d.columnLabel,
+			TimeQuantum: string(d.timeQuantum),
+		},
+		MaxSlice: d.remoteMaxSlice,
+		Frames:   encodeFrames(d.Frames()),
+	}
+}
+
 // DBOptions represents options to set when initializing a db.
 type DBOptions struct {
-	ColumnLabel string `json:"columnLabel,omitempty"`
+	ColumnLabel string      `json:"columnLabel,omitempty"`
+	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
+}
+
+// Encode converts o into its internal representation.
+func (o *DBOptions) Encode() *internal.DBMeta {
+	return &internal.DBMeta{
+		ColumnLabel: o.ColumnLabel,
+		TimeQuantum: string(o.TimeQuantum),
+	}
 }
 
 // hasTime returns true if a contains a non-nil time.
@@ -523,6 +560,6 @@ type importKey struct {
 }
 
 type importData struct {
-	BitmapIDs  []uint64
-	ProfileIDs []uint64
+	RowIDs    []uint64
+	ColumnIDs []uint64
 }

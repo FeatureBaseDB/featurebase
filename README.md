@@ -209,17 +209,17 @@ A return value of `{"results":[true]}` indicates that the bit was toggled from 1
 A return value of `{"results":[false]}` indicates that the bit was already set to 0 and therefore nothing changed.
 
 ---
-#### SetBitmapAttrs()
+#### SetRowAttrs()
 ```
-SetBitmapAttrs(project=10, frame="collaboration", stars=123, url="http://projects.pilosa.com/10", active=true)
+SetRowAttrs(project=10, frame="collaboration", stars=123, url="http://projects.pilosa.com/10", active=true)
 ```
 Returns `{"results":[null]}`
 
 ---
-#### SetProfileAttrs()
+#### SetColumnAttrs()
 ---
 ```
-SetProfileAttrs(user=10, friends=123, username="mrpi", active=true)
+SetColumnAttrs(user=10, friends=123, username="mrpi", active=true)
 ```
 
 Returns `{"results":[null]}`
@@ -230,11 +230,11 @@ Returns `{"results":[null]}`
 Bitmap(project=10, frame="collaboration")
 ```
 Returns `{"results":[{"attrs":{"stars":123, "url":"http://projects.pilosa.com/10", "active":true},"bits":[1,2]}]}` where `attrs` are the
-attributes set using `SetBitmapAttrs()` and `bits` are the bits set using `SetBit()`.
+attributes set using `SetRowAttrs()` and `bits` are the bits set using `SetBit()`.
 
-In order to return profile attributes attached to the profiles of a bitmap, add `&profiles=true` to the query string. Sample response:
+In order to return column attributes attached to the columns of a bitmap, add `&columnAttrs=true` to the query string. Sample response:
 ```
-{"results":[{"attrs":{},"bits":[10]}],"profiles":[{"user":10,"attrs":{"friends":123, "username":"mrpi", "active":true}}]}
+{"results":[{"attrs":{},"bits":[10]}],"columnAttrs":[{"user":10,"attrs":{"friends":123, "username":"mrpi", "active":true}}]}
 ```
 
 ---

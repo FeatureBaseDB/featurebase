@@ -28,7 +28,7 @@ func createCluster(c *pilosa.Cluster) ([]*Server, []*Index) {
 	return server, idx
 }
 
-// Test distributed TopN Bitmap count across 3 nodes.
+// Test distributed TopN Row count across 3 nodes.
 func TestClient_MultiNode(t *testing.T) {
 	cluster := NewCluster(3)
 	s, idx := createCluster(cluster)
@@ -162,7 +162,7 @@ func TestClient_Import(t *testing.T) {
 
 	// Load bitmap into cache to ensure cache gets updated.
 	f := idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
-	f.Bitmap(0)
+	f.Row(0)
 
 	s := NewServer()
 	defer s.Close()
@@ -174,18 +174,18 @@ func TestClient_Import(t *testing.T) {
 	// Send import request.
 	c := MustNewClient(s.Host())
 	if err := c.Import(context.Background(), "d", "f", 0, []pilosa.Bit{
-		{BitmapID: 0, ProfileID: 1},
-		{BitmapID: 0, ProfileID: 5},
-		{BitmapID: 200, ProfileID: 6},
+		{RowID: 0, ColumnID: 1},
+		{RowID: 0, ColumnID: 5},
+		{RowID: 200, ColumnID: 6},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify data.
-	if a := f.Bitmap(0).Bits(); !reflect.DeepEqual(a, []uint64{1, 5}) {
+	if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{1, 5}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
-	if a := f.Bitmap(200).Bits(); !reflect.DeepEqual(a, []uint64{6}) {
+	if a := f.Row(200).Bits(); !reflect.DeepEqual(a, []uint64{6}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
 }
@@ -213,7 +213,7 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 	}
 
 	// Load bitmap into cache to ensure cache gets updated.
-	f.Bitmap(0)
+	f.Row(0)
 
 	s := NewServer()
 	defer s.Close()
@@ -225,22 +225,22 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 	// Send import request.
 	c := MustNewClient(s.Host())
 	if err := c.Import(context.Background(), "d", "f", 0, []pilosa.Bit{
-		{BitmapID: 0, ProfileID: 1},
-		{BitmapID: 0, ProfileID: 5},
-		{BitmapID: 200, ProfileID: 5},
-		{BitmapID: 200, ProfileID: 6},
+		{RowID: 0, ColumnID: 1},
+		{RowID: 0, ColumnID: 5},
+		{RowID: 200, ColumnID: 5},
+		{RowID: 200, ColumnID: 6},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify data.
-	if a := f.Bitmap(1).Bits(); !reflect.DeepEqual(a, []uint64{0}) {
+	if a := f.Row(1).Bits(); !reflect.DeepEqual(a, []uint64{0}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
-	if a := f.Bitmap(5).Bits(); !reflect.DeepEqual(a, []uint64{0, 200}) {
+	if a := f.Row(5).Bits(); !reflect.DeepEqual(a, []uint64{0, 200}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
-	if a := f.Bitmap(6).Bits(); !reflect.DeepEqual(a, []uint64{200}) {
+	if a := f.Row(6).Bits(); !reflect.DeepEqual(a, []uint64{200}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
 }
@@ -279,16 +279,16 @@ func TestClient_BackupRestore(t *testing.T) {
 	}
 
 	// Verify data.
-	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 0).Bitmap(100).Bits(); !reflect.DeepEqual(a, []uint64{1, 2, 3, SliceWidth - 1}) {
+	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 0).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{1, 2, 3, SliceWidth - 1}) {
 		t.Fatalf("unexpected bits(0): %+v", a)
 	}
-	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 1).Bitmap(100).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth, SliceWidth + 2}) {
+	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 1).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth, SliceWidth + 2}) {
 		t.Fatalf("unexpected bits(0): %+v", a)
 	}
-	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 5).Bitmap(100).Bits(); !reflect.DeepEqual(a, []uint64{(5 * SliceWidth) + 1}) {
+	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 5).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{(5 * SliceWidth) + 1}) {
 		t.Fatalf("unexpected bits(0): %+v", a)
 	}
-	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 0).Bitmap(200).Bits(); !reflect.DeepEqual(a, []uint64{20000}) {
+	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 0).Row(200).Bits(); !reflect.DeepEqual(a, []uint64{20000}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
 }

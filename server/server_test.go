@@ -45,18 +45,18 @@ func TestMain_Set_Quick(t *testing.T) {
 			if err := client.CreateFrame(context.Background(), "d", cmd.Frame, pilosa.FrameOptions{}); err != nil && err != pilosa.ErrFrameExists {
 				t.Fatal(err)
 			}
-			if _, err := m.Query("d", "", fmt.Sprintf(`SetBit(id=%d, frame=%q, profileID=%d)`, cmd.ID, cmd.Frame, cmd.ProfileID)); err != nil {
+			if _, err := m.Query("d", "", fmt.Sprintf(`SetBit(id=%d, frame=%q, columnID=%d)`, cmd.ID, cmd.Frame, cmd.ColumnID)); err != nil {
 				t.Fatal(err)
 			}
 		}
 
 		// Validate data.
 		for frame, frameSet := range SetCommands(cmds).Frames() {
-			for id, profileIDs := range frameSet {
+			for id, columnIDs := range frameSet {
 				exp := MustMarshalJSON(map[string]interface{}{
 					"results": []interface{}{
 						map[string]interface{}{
-							"bits":  profileIDs,
+							"bits":  columnIDs,
 							"attrs": map[string]interface{}{},
 						},
 					},
@@ -75,11 +75,11 @@ func TestMain_Set_Quick(t *testing.T) {
 
 		// Validate data after reopening.
 		for frame, frameSet := range SetCommands(cmds).Frames() {
-			for id, profileIDs := range frameSet {
+			for id, columnIDs := range frameSet {
 				exp := MustMarshalJSON(map[string]interface{}{
 					"results": []interface{}{
 						map[string]interface{}{
-							"bits":  profileIDs,
+							"bits":  columnIDs,
 							"attrs": map[string]interface{}{},
 						},
 					},
@@ -102,8 +102,8 @@ func TestMain_Set_Quick(t *testing.T) {
 	}
 }
 
-// Ensure program can set bitmap attributes and retrieve them.
-func TestMain_SetBitmapAttrs(t *testing.T) {
+// Ensure program can set row attributes and retrieve them.
+func TestMain_SetRowAttrs(t *testing.T) {
 	m := MustRunMain()
 	defer m.Close()
 
@@ -119,36 +119,36 @@ func TestMain_SetBitmapAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set bits on different bitmaps in different frames.
-	if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", profileID=100)`); err != nil {
+	// Set bits on different rows in different frames.
+	if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", columnID=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBit(id=2, frame="x.n", profileID=100)`); err != nil {
+	} else if _, err := m.Query("d", "", `SetBit(id=2, frame="x.n", columnID=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBit(id=2, frame="z", profileID=100)`); err != nil {
+	} else if _, err := m.Query("d", "", `SetBit(id=2, frame="z", columnID=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBit(id=3, frame="neg", profileID=100)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set bitmap attributes.
-	if _, err := m.Query("d", "", `SetBitmapAttrs(id=1, frame="x.n", x=100)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBitmapAttrs(id=2, frame="x.n", x=-200)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBitmapAttrs(id=2, frame="z", x=300)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBitmapAttrs(id=3, frame="neg", x=-0.44)`); err != nil {
+	} else if _, err := m.Query("d", "", `SetBit(id=3, frame="neg", columnID=100)`); err != nil {
 		t.Fatal(err)
 	}
 
-	// Query bitmap x.n/1.
+	// Set row attributes.
+	if _, err := m.Query("d", "", `SetRowAttrs(id=1, frame="x.n", x=100)`); err != nil {
+		t.Fatal(err)
+	} else if _, err := m.Query("d", "", `SetRowAttrs(id=2, frame="x.n", x=-200)`); err != nil {
+		t.Fatal(err)
+	} else if _, err := m.Query("d", "", `SetRowAttrs(id=2, frame="z", x=300)`); err != nil {
+		t.Fatal(err)
+	} else if _, err := m.Query("d", "", `SetRowAttrs(id=3, frame="neg", x=-0.44)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query row x.n/1.
 	if res, err := m.Query("d", "", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
-	// Query bitmap x.n/2.
+	// Query row x.n/2.
 	if res, err := m.Query("d", "", `Bitmap(id=2, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-200},"bits":[100]}]}`+"\n" {
@@ -159,19 +159,19 @@ func TestMain_SetBitmapAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Query bitmaps after reopening.
-	if res, err := m.Query("d", "profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+	// Query rows after reopening.
+	if res, err := m.Query("d", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 
-	if res, err := m.Query("d", "profiles=true", `Bitmap(id=3, frame="neg")`); err != nil {
+	if res, err := m.Query("d", "columnAttrs=true", `Bitmap(id=3, frame="neg")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-0.44},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
-	// Query bitmap x.n/2.
+	// Query row x.n/2.
 	if res, err := m.Query("d", "", `Bitmap(id=2, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-200},"bits":[100]}]}`+"\n" {
@@ -179,8 +179,8 @@ func TestMain_SetBitmapAttrs(t *testing.T) {
 	}
 }
 
-// Ensure program can set profile attributes and retrieve them.
-func TestMain_SetProfileAttrs(t *testing.T) {
+// Ensure program can set column attributes and retrieve them.
+func TestMain_SetColumnAttrs(t *testing.T) {
 	m := MustRunMain()
 	defer m.Close()
 
@@ -192,22 +192,22 @@ func TestMain_SetProfileAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set bits on bitmap.
-	if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", profileID=100)`); err != nil {
+	// Set bits on row.
+	if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", columnID=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", profileID=101)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set profile attributes.
-	if _, err := m.Query("d", "", `SetProfileAttrs(id=100, foo="bar")`); err != nil {
+	} else if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", columnID=101)`); err != nil {
 		t.Fatal(err)
 	}
 
-	// Query bitmap.
-	if res, err := m.Query("d", "profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+	// Set column attributes.
+	if _, err := m.Query("d", "", `SetColumnAttrs(id=100, foo="bar")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+	}
+
+	// Query row.
+	if res, err := m.Query("d", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+		t.Fatal(err)
+	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
@@ -215,16 +215,16 @@ func TestMain_SetProfileAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Query bitmap after reopening.
-	if res, err := m.Query("d", "profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+	// Query row after reopening.
+	if res, err := m.Query("d", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 }
 
-// Ensure program can set profile attributes with columnLabel option.
-func TestMain_SetProfileAttrsWithColumnOption(t *testing.T) {
+// Ensure program can set column attributes with columnLabel option.
+func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
 	m := MustRunMain()
 	defer m.Close()
 
@@ -236,22 +236,22 @@ func TestMain_SetProfileAttrsWithColumnOption(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set bits on bitmap.
+	// Set bits on row.
 	if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", col=100)`); err != nil {
 		t.Fatal(err)
 	} else if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", col=101)`); err != nil {
 		t.Fatal(err)
 	}
 
-	// Set profile attributes.
-	if _, err := m.Query("d", "", `SetProfileAttrs(col=100, foo="bar")`); err != nil {
+	// Set column attributes.
+	if _, err := m.Query("d", "", `SetColumnAttrs(col=100, foo="bar")`); err != nil {
 		t.Fatal(err)
 	}
 
-	// Query bitmap.
-	if res, err := m.Query("d", "profiles=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+	// Query row.
+	if res, err := m.Query("d", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"profiles":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
@@ -282,18 +282,18 @@ func TestMain_FrameRestore(t *testing.T) {
 
 	// Write data on first cluster.
 	if _, err := m0.Query("d", "", `
-		SetBit(id=1, frame="f", profileID=100)
-		SetBit(id=1, frame="f", profileID=1000)
-		SetBit(id=1, frame="f", profileID=100000)
-		SetBit(id=1, frame="f", profileID=200000)
-		SetBit(id=1, frame="f", profileID=400000)
-		SetBit(id=1, frame="f", profileID=600000)
-		SetBit(id=1, frame="f", profileID=800000)
+		SetBit(id=1, frame="f", columnID=100)
+		SetBit(id=1, frame="f", columnID=1000)
+		SetBit(id=1, frame="f", columnID=100000)
+		SetBit(id=1, frame="f", columnID=200000)
+		SetBit(id=1, frame="f", columnID=400000)
+		SetBit(id=1, frame="f", columnID=600000)
+		SetBit(id=1, frame="f", columnID=800000)
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	// Query bitmap on first cluster.
+	// Query row on first cluster.
 	if res, err := m0.Query("d", "", `Bitmap(id=1, frame="f")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
@@ -316,7 +316,7 @@ func TestMain_FrameRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Query bitmap on second cluster.
+	// Query row on second cluster.
 	if res, err := m2.Query("d", "", `Bitmap(id=1, frame="f")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
@@ -441,14 +441,14 @@ func (m *Main) Query(db, rawQuery, query string) (string, error) {
 
 // SetCommand represents a command to set a bit.
 type SetCommand struct {
-	ID        uint64
-	Frame     string
-	ProfileID uint64
+	ID       uint64
+	Frame    string
+	ColumnID uint64
 }
 
 type SetCommands []SetCommand
 
-// Frames returns the set of profile ids for each frame/bitmap.
+// Frames returns the set of column ids for each frame/row.
 func (a SetCommands) Frames() map[string]map[uint64][]uint64 {
 	// Create a set of unique commands.
 	m := make(map[SetCommand]struct{})
@@ -456,16 +456,16 @@ func (a SetCommands) Frames() map[string]map[uint64][]uint64 {
 		m[cmd] = struct{}{}
 	}
 
-	// Build unique ids for each frame & bitmap.
+	// Build unique ids for each frame & row.
 	frames := make(map[string]map[uint64][]uint64)
 	for cmd := range m {
 		if frames[cmd.Frame] == nil {
 			frames[cmd.Frame] = make(map[uint64][]uint64)
 		}
-		frames[cmd.Frame][cmd.ID] = append(frames[cmd.Frame][cmd.ID], cmd.ProfileID)
+		frames[cmd.Frame][cmd.ID] = append(frames[cmd.Frame][cmd.ID], cmd.ColumnID)
 	}
 
-	// Sort each set of profile ids.
+	// Sort each set of column ids.
 	for _, frame := range frames {
 		for id := range frame {
 			sort.Sort(uint64Slice(frame[id]))
@@ -480,9 +480,9 @@ func GenerateSetCommands(n int, rand *rand.Rand) []SetCommand {
 	cmds := make([]SetCommand, rand.Intn(n))
 	for i := range cmds {
 		cmds[i] = SetCommand{
-			ID:        uint64(rand.Intn(1000)),
-			Frame:     "x.n",
-			ProfileID: uint64(rand.Intn(10)),
+			ID:       uint64(rand.Intn(1000)),
+			Frame:    "x.n",
+			ColumnID: uint64(rand.Intn(10)),
 		}
 	}
 	return cmds

@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -32,8 +33,10 @@ type Server struct {
 	closing chan struct{}
 
 	// Data storage and HTTP interface.
-	Index   *Index
-	Handler *Handler
+	Index             *Index
+	Handler           *Handler
+	Broadcaster       Broadcaster
+	BroadcastReceiver BroadcastReceiver
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
@@ -52,8 +55,10 @@ func NewServer() *Server {
 	s := &Server{
 		closing: make(chan struct{}),
 
-		Index:   NewIndex(),
-		Handler: NewHandler(),
+		Index:             NewIndex(),
+		Handler:           NewHandler(),
+		Broadcaster:       NopBroadcaster,
+		BroadcastReceiver: NopBroadcastReceiver,
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
@@ -96,6 +101,15 @@ func (s *Server) Open() error {
 		return err
 	}
 
+	if err := s.BroadcastReceiver.Start(s); err != nil {
+		return err
+	}
+
+	// Open NodeSet communication
+	if err := s.Cluster.NodeSet.Open(); err != nil {
+		return err
+	}
+
 	// Create executor for executing queries.
 	e := NewExecutor()
 	e.Index = s.Index
@@ -103,10 +117,14 @@ func (s *Server) Open() error {
 	e.Cluster = s.Cluster
 
 	// Initialize HTTP handler.
+	s.Handler.Broadcaster = s.Broadcaster
 	s.Handler.Host = s.Host
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
+
+	// Initialize Index.
+	s.Index.Broadcaster = s.Broadcaster
 	s.Index.LogOutput = s.LogOutput
 
 	// Serve HTTP.
@@ -202,26 +220,105 @@ func (s *Server) monitorMaxSlices() {
 			if s.Host != node.Host {
 				maxSlices, _ := checkMaxSlices(node.Host)
 				for db, newmax := range maxSlices {
-					// if we don't know about a db locally, create it
-					// so that the /schema endpoint can report it
+					// if we don't know about a db locally, log an error because
+					// db's should be created and synced prior to slice creation
 					if localdb := s.Index.DB(db); localdb != nil {
 						if newmax > oldmaxslices[db] {
 							oldmaxslices[db] = newmax
 							localdb.SetRemoteMaxSlice(newmax)
 						}
 					} else {
-						d := s.Index.DB(db)
-						if d == nil {
-							s.logger().Printf("Local DB not found: %s", db)
-							return
-						}
-						oldmaxslices[db] = newmax
-						d.SetRemoteMaxSlice(newmax)
+						s.logger().Printf("Local DB not found: %s", db)
 					}
 				}
 			}
 		}
 	}
+}
+
+// ReceiveMessage represents an implementation of BroadcastHandler.
+func (s *Server) ReceiveMessage(pb proto.Message) error {
+	switch obj := pb.(type) {
+	case *internal.CreateSliceMessage:
+		d := s.Index.DB(obj.DB)
+		if d == nil {
+			return fmt.Errorf("Local DB not found: %s", obj.DB)
+		}
+		d.SetRemoteMaxSlice(obj.Slice)
+	case *internal.CreateDBMessage:
+		opt := DBOptions{ColumnLabel: obj.Meta.ColumnLabel}
+		_, err := s.Index.CreateDB(obj.DB, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteDBMessage:
+		if err := s.Index.DeleteDB(obj.DB); err != nil {
+			return err
+		}
+	case *internal.CreateFrameMessage:
+		db := s.Index.DB(obj.DB)
+		opt := FrameOptions{RowLabel: obj.Meta.RowLabel}
+		_, err := db.CreateFrame(obj.Frame, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteFrameMessage:
+		db := s.Index.DB(obj.DB)
+		if err := db.DeleteFrame(obj.Frame); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Server implements gossip.StateHandler.
+// LocalState returns the state of the local node as well as the
+// index (dbs/frames) according to the local node.
+// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
+func (s *Server) LocalState() (proto.Message, error) {
+	if s.Index == nil {
+		return nil, errors.New("Server.Index is nil.")
+	}
+	return &internal.NodeState{
+		Host:  s.Host,
+		State: "OK", // TODO: make this work, pull from s.Cluster.Node
+		DBs:   encodeDBs(s.Index.DBs()),
+	}, nil
+}
+
+// HandleRemoteState receives incoming NodeState from remote nodes.
+func (s *Server) HandleRemoteState(pb proto.Message) error {
+	return s.mergeRemoteState(pb.(*internal.NodeState))
+}
+
+func (s *Server) mergeRemoteState(ns *internal.NodeState) error {
+	// TODO: update some node state value in the cluster (it should be in cluster.node i guess)
+
+	// Create databases that don't exist.
+	for _, db := range ns.DBs {
+		opt := DBOptions{
+			ColumnLabel: db.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(db.Meta.TimeQuantum),
+		}
+		d, err := s.Index.CreateDBIfNotExists(db.Name, opt)
+		if err != nil {
+			return err
+		}
+		// Create frames that don't exist.
+		for _, f := range db.Frames {
+			opt := FrameOptions{
+				RowLabel:    f.Meta.RowLabel,
+				TimeQuantum: TimeQuantum(f.Meta.TimeQuantum),
+				CacheSize:   f.Meta.CacheSize,
+			}
+			_, err := d.CreateFrameIfNotExists(f.Name, opt)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func checkMaxSlices(hostport string) (map[string]uint64, error) {

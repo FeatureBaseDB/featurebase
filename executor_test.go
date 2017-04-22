@@ -27,13 +27,13 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 
 		// Set bits.
 		if _, err := e.Execute(context.Background(), "d", MustParse(``+
-			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 10, 3)+
-			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 10, SliceWidth+1)+
-			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 20, SliceWidth+1),
+			fmt.Sprintf("SetBit(frame=f, id=%d, columnID=%d)\n", 10, 3)+
+			fmt.Sprintf("SetBit(frame=f, id=%d, columnID=%d)\n", 10, SliceWidth+1)+
+			fmt.Sprintf("SetBit(frame=f, id=%d, columnID=%d)\n", 20, SliceWidth+1),
 		), nil, nil); err != nil {
 			t.Fatal(err)
 		}
-		if err := f.BitmapAttrStore().SetAttrs(10, map[string]interface{}{"foo": "bar", "baz": uint64(123)}); err != nil {
+		if err := f.RowAttrStore().SetAttrs(10, map[string]interface{}{"foo": "bar", "baz": uint64(123)}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -58,17 +58,17 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 
 		// Set bits.
 		if _, err := e.Execute(context.Background(), "d", MustParse(``+
-			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 10, 3)+
-			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 10, SliceWidth+1)+
-			fmt.Sprintf("SetBit(frame=f, id=%d, profileID=%d)\n", 20, SliceWidth+1),
+			fmt.Sprintf("SetBit(frame=f, id=%d, columnID=%d)\n", 10, 3)+
+			fmt.Sprintf("SetBit(frame=f, id=%d, columnID=%d)\n", 10, SliceWidth+1)+
+			fmt.Sprintf("SetBit(frame=f, id=%d, columnID=%d)\n", 20, SliceWidth+1),
 		), nil, nil); err != nil {
 			t.Fatal(err)
 		}
-		if err := db.ProfileAttrStore().SetAttrs(SliceWidth+1, map[string]interface{}{"foo": "bar", "baz": uint64(123)}); err != nil {
+		if err := db.ColumnAttrStore().SetAttrs(SliceWidth+1, map[string]interface{}{"foo": "bar", "baz": uint64(123)}); err != nil {
 			t.Fatal(err)
 		}
 
-		if res, err := e.Execute(context.Background(), "d", MustParse(fmt.Sprintf(`Bitmap(profileID=%d, frame=f)`, SliceWidth+1)), nil, nil); err != nil {
+		if res, err := e.Execute(context.Background(), "d", MustParse(fmt.Sprintf(`Bitmap(columnID=%d, frame=f)`, SliceWidth+1)), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{10, 20}) {
 			t.Fatalf("unexpected bits: %+v", bits)
@@ -195,11 +195,11 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	f := idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
-	if n := f.Bitmap(11).Count(); n != 0 {
+	if n := f.Row(11).Count(); n != 0 {
 		t.Fatalf("unexpected bitmap count: %d", n)
 	}
 
-	if res, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=11, frame=f, profileID=1)`), nil, nil); err != nil {
+	if res, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=11, frame=f, columnID=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else {
 		if !res[0].(bool) {
@@ -207,10 +207,10 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 		}
 	}
 
-	if n := f.Bitmap(11).Count(); n != 1 {
+	if n := f.Row(11).Count(); n != 1 {
 		t.Fatalf("unexpected bitmap count: %d", n)
 	}
-	if res, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=11, frame=f, profileID=1)`), nil, nil); err != nil {
+	if res, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=11, frame=f, columnID=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else {
 		if res[0].(bool) {
@@ -219,8 +219,8 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 	}
 }
 
-// Ensure a SetBitmapAttrs() query can be executed.
-func TestExecutor_Execute_SetBitmapAttrs(t *testing.T) {
+// Ensure a SetRowAttrs() query can be executed.
+func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
@@ -235,21 +235,21 @@ func TestExecutor_Execute_SetBitmapAttrs(t *testing.T) {
 	// Set two fields on f/10.
 	// Also set fields on other bitmaps and frames to test isolation.
 	e := NewExecutor(idx.Index, NewCluster(1))
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetRowAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=200, frame=f, YYY=1)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetRowAttrs(id=200, frame=f, YYY=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=10, frame=xxx, YYY=1)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetRowAttrs(id=10, frame=xxx, YYY=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBitmapAttrs(id=10, frame=f, baz=123, bat=true)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetRowAttrs(id=10, frame=f, baz=123, bat=true)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	f := idx.Frame("d", "f")
-	if m, err := f.BitmapAttrStore().Attrs(10); err != nil {
+	if m, err := f.RowAttrStore().Attrs(10); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(m, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
 		t.Fatalf("unexpected bitmap attr: %#v", m)
@@ -261,7 +261,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
-	// Set bits for bitmaps 0, 10, & 20 across two slices.
+	// Set bits for rows 0, 10, & 20 across two slices.
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
@@ -287,7 +287,7 @@ func TestExecutor_Execute_TopN_fill(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
-	// Set bits for bitmaps 0, 10, & 20 across two slices.
+	// Set bits for rows 0, 10, & 20 across two slices.
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 2)
@@ -345,7 +345,7 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	idx := MustOpenIndex()
 	defer idx.Close()
 
-	// Set bits for bitmaps 0, 10, & 20 across two slices.
+	// Set bits for rows 0, 10, & 20 across two slices.
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
@@ -355,7 +355,7 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth+1)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth+2)
 
-	// Create an intersecting bitmap.
+	// Create an intersecting row.
 	idx.MustCreateFragmentIfNotExists("d", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth)
 	idx.MustCreateFragmentIfNotExists("d", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth+1)
 	idx.MustCreateFragmentIfNotExists("d", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth+2)
@@ -382,7 +382,7 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
 
-	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"category": int64(123)}); err != nil {
+	if err := idx.Frame("d", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": int64(123)}); err != nil {
 		t.Fatal(err)
 	}
 	e := NewExecutor(idx.Index, NewCluster(1))
@@ -405,7 +405,7 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
 
-	if err := idx.Frame("d", "f").BitmapAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
+	if err := idx.Frame("d", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
 		t.Fatal(err)
 	}
 	e := NewExecutor(idx.Index, NewCluster(1))
@@ -445,7 +445,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 
 	f.MustSetBit(pilosa.ViewStandard, 1, 2, MustParseTimePtr("1999-12-30 00:00"))  // too early
 	f.MustSetBit(pilosa.ViewStandard, 1, 2, MustParseTimePtr("2002-02-01 00:00"))  // too late
-	f.MustSetBit(pilosa.ViewStandard, 10, 2, MustParseTimePtr("2001-01-01 00:00")) // different bitmap
+	f.MustSetBit(pilosa.ViewStandard, 10, 2, MustParseTimePtr("2001-01-01 00:00")) // different row
 
 	e := NewExecutor(idx.Index, NewCluster(1))
 	if res, err := e.Execute(context.Background(), "d", MustParse(`Range(id=1, frame=f, start="1999-12-31T00:00", end="2002-01-01T03:00")`), nil, nil); err != nil {
@@ -470,7 +470,9 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 			t.Fatalf("unexpected db: %s", db)
 		} else if query.String() != `Bitmap(frame="f", id=10)` {
 			t.Fatalf("unexpected query: %s", query.String())
-		} else if !reflect.DeepEqual(slices, []uint64{0}) { //TODO: this is incorrect because the calling node doesn't know about slice 2
+			// NOTE: while the following is technically incorrect (it should be {0, 2}) because the calling node doesn't know about slice 2 yet,
+			// we are ok with this and assuming that the calling node will become aware of slice 2 via inter-node messaging
+		} else if !reflect.DeepEqual(slices, []uint64{0}) {
 			t.Fatalf("unexpected slices: %+v", slices)
 		}
 
@@ -540,7 +542,7 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if db != `d` {
 			t.Fatalf("unexpected db: %s", db)
-		} else if query.String() != `SetBit(frame="f", id=10, profileID=2)` {
+		} else if query.String() != `SetBit(columnID=2, frame="f", id=10)` {
 			t.Fatalf("unexpected query: %s", query.String())
 		}
 		remoteCalled = true
@@ -557,12 +559,12 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	}
 
 	e := NewExecutor(idx.Index, c)
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, profileID=2)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, columnID=2)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that one bit is set on both node's index.
-	if n := idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).Bitmap(10).Count(); n != 1 {
+	if n := idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).Row(10).Count(); n != 1 {
 		t.Fatalf("unexpected local count: %d", n)
 	}
 	if !remoteCalled {
@@ -585,7 +587,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if db != `d` {
 			t.Fatalf("unexpected db: %s", db)
-		} else if query.String() != `SetBit(frame="f", id=10, profileID=2, timestamp="2016-12-11T10:09")` {
+		} else if query.String() != `SetBit(columnID=2, frame="f", id=10, timestamp="2016-12-11T10:09")` {
 			t.Fatalf("unexpected query: %s", query.String())
 		}
 		remoteCalled = true
@@ -604,12 +606,12 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	}
 
 	e := NewExecutor(idx.Index, c)
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, profileID=2, timestamp="2016-12-11T10:09")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetBit(id=10, frame=f, columnID=2, timestamp="2016-12-11T10:09")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that one bit is set on both node's index.
-	if n := idx.MustCreateFragmentIfNotExists("d", "f", "standard_2016", 0).Bitmap(10).Count(); n != 1 {
+	if n := idx.MustCreateFragmentIfNotExists("d", "f", "standard_2016", 0).Row(10).Count(); n != 1 {
 		t.Fatalf("unexpected local count: %d", n)
 	}
 	if !remoteCalled {

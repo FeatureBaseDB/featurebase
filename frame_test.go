@@ -119,10 +119,31 @@ func (f *Frame) Reopen() error {
 }
 
 // MustSetBit sets a bit on the frame. Panic on error.
-func (f *Frame) MustSetBit(view string, bitmapID, profileID uint64, t *time.Time) (changed bool) {
-	changed, err := f.SetBit(view, bitmapID, profileID, t)
+func (f *Frame) MustSetBit(view string, rowID, columnID uint64, t *time.Time) (changed bool) {
+	changed, err := f.SetBit(view, rowID, columnID, t)
 	if err != nil {
 		panic(err)
 	}
 	return changed
+}
+
+// Ensure frame can set its cache
+func TestFrame_SetCacheSize(t *testing.T) {
+	f := MustOpenFrame()
+	defer f.Close()
+	cacheSize := uint32(100)
+
+	// Set & retrieve frame cache size.
+	if err := f.SetCacheSize(cacheSize); err != nil {
+		t.Fatal(err)
+	} else if q := f.CacheSize(); q != cacheSize {
+		t.Fatalf("unexpected frame cache size: %d", q)
+	}
+
+	// Reload frame and verify that it is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if q := f.CacheSize(); q != cacheSize {
+		t.Fatalf("unexpected frame cache size (reopen): %d", q)
+	}
 }
