@@ -27,7 +27,7 @@ const (
 
 // Executor recursively executes calls in a PQL query across all slices.
 type Executor struct {
-	Index *Index
+	Holder *Holder
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -60,7 +60,7 @@ func (e *Executor) Execute(ctx context.Context, db string, q *pql.Query, slices 
 	if len(slices) == 0 {
 		if needsSlices(q.Calls) {
 			// Round up the number of slices.
-			maxSlice := e.Index.DB(db).MaxSlice()
+			maxSlice := e.Holder.DB(db).MaxSlice()
 
 			// Generate a slices of all slices.
 			slices = make([]uint64, maxSlice+1)
@@ -160,7 +160,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, db string, c *pql.Call
 	bm, _ := other.(*Bitmap)
 	if c.Name == "Bitmap" {
 
-		d := e.Index.DB(db)
+		d := e.Holder.DB(db)
 		if d != nil {
 			columnLabel := d.ColumnLabel()
 			if columnID, ok, err := c.UintArg(columnLabel); ok && err == nil {
@@ -315,7 +315,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, db string, c *pql.Call,
 		frame = DefaultFrame
 	}
 
-	f := e.Index.Fragment(db, frame, ViewStandard, slice)
+	f := e.Holder.Fragment(db, frame, ViewStandard, slice)
 	if f == nil {
 		return nil, nil
 	}
@@ -362,7 +362,7 @@ func (e *Executor) executeDifferenceSlice(ctx context.Context, db string, c *pql
 
 func (e *Executor) executeBitmapSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (*Bitmap, error) {
 	// Fetch column label from database.
-	d := e.Index.DB(db)
+	d := e.Holder.DB(db)
 	if d == nil {
 		return nil, ErrDatabaseNotFound
 	}
@@ -373,7 +373,7 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, db string, c *pql.Cal
 	if frame == "" {
 		frame = DefaultFrame
 	}
-	f := e.Index.Frame(db, frame)
+	f := e.Holder.Frame(db, frame)
 	if f == nil {
 		return nil, ErrFrameNotFound
 	}
@@ -400,7 +400,7 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, db string, c *pql.Cal
 		}
 	}
 
-	frag := e.Index.Fragment(db, frame, view, slice)
+	frag := e.Holder.Fragment(db, frame, view, slice)
 	if frag == nil {
 		return NewBitmap(), nil
 	}
@@ -438,7 +438,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call
 	}
 
 	// Retrieve base frame.
-	f := e.Index.Frame(db, frame)
+	f := e.Holder.Frame(db, frame)
 	if f == nil {
 		return nil, ErrFrameNotFound
 	}
@@ -479,7 +479,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, db string, c *pql.Call
 	// Union bitmaps across all time-based subframes.
 	bm := &Bitmap{}
 	for _, view := range ViewsByTimeRange(ViewStandard, startTime, endTime, q) {
-		f := e.Index.Fragment(db, frame, view, slice)
+		f := e.Holder.Fragment(db, frame, view, slice)
 		if f == nil {
 			continue
 		}
@@ -548,7 +548,7 @@ func (e *Executor) executeClearBit(ctx context.Context, db string, c *pql.Call, 
 	}
 
 	// Retrieve frame.
-	d := e.Index.DB(db)
+	d := e.Holder.DB(db)
 	if d == nil {
 		return false, ErrDatabaseNotFound
 	}
@@ -642,7 +642,7 @@ func (e *Executor) executeSetBit(ctx context.Context, db string, c *pql.Call, op
 	}
 
 	// Retrieve frame.
-	d := e.Index.DB(db)
+	d := e.Holder.DB(db)
 	if d == nil {
 		return false, ErrDatabaseNotFound
 	}
@@ -747,7 +747,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, db string, c *pql.Cal
 	}
 
 	// Retrieve frame.
-	frame := e.Index.Frame(db, frameName)
+	frame := e.Holder.Frame(db, frameName)
 	if frame == nil {
 		return ErrFrameNotFound
 	}
@@ -807,7 +807,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, db string, calls 
 		}
 
 		// Retrieve frame.
-		f := e.Index.Frame(db, frame)
+		f := e.Holder.Frame(db, frame)
 		if f == nil {
 			return nil, ErrFrameNotFound
 		}
@@ -846,7 +846,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, db string, calls 
 	// Bulk insert attributes by frame.
 	for name, frameMap := range m {
 		// Retrieve frame.
-		frame := e.Index.Frame(db, name)
+		frame := e.Holder.Frame(db, name)
 		if frame == nil {
 			return nil, ErrFrameNotFound
 		}
@@ -886,7 +886,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, db string, calls 
 // executeSetColumnAttrs executes a SetColumnAttrs() call.
 func (e *Executor) executeSetColumnAttrs(ctx context.Context, db string, c *pql.Call, opt *ExecOptions) error {
 	// Retrieve database.
-	d := e.Index.DB(db)
+	d := e.Holder.DB(db)
 	if d == nil {
 		return ErrDatabaseNotFound
 	}

@@ -16,8 +16,8 @@ import (
 // DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
 const DefaultCacheFlushInterval = 1 * time.Minute
 
-// Index represents a container for fragments.
-type Index struct {
+// Holder represents a container for indexes.
+type Holder struct {
 	mu sync.Mutex
 
 	// Databases by name.
@@ -40,9 +40,9 @@ type Index struct {
 	LogOutput io.Writer
 }
 
-// NewIndex returns a new instance of Index.
-func NewIndex() *Index {
-	return &Index{
+// NewHolder returns a new instance of Holder.
+func NewHolder() *Holder {
+	return &Holder{
 		dbs:     make(map[string]*DB),
 		closing: make(chan struct{}, 0),
 
@@ -54,14 +54,14 @@ func NewIndex() *Index {
 	}
 }
 
-// Open initializes the root data directory for the index.
-func (i *Index) Open() error {
-	if err := os.MkdirAll(i.Path, 0777); err != nil {
+// Open initializes the root data directory for the holder.
+func (h *Holder) Open() error {
+	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return err
 	}
 
 	// Open path to read all database directories.
-	f, err := os.Open(i.Path)
+	f, err := os.Open(h.Path)
 	if err != nil {
 		return err
 	}
@@ -77,68 +77,68 @@ func (i *Index) Open() error {
 			continue
 		}
 
-		i.logger().Printf("opening database: %s", filepath.Base(fi.Name()))
+		h.logger().Printf("opening database: %s", filepath.Base(fi.Name()))
 
-		db, err := i.newDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		db, err := h.newDB(h.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err == ErrName {
-			i.logger().Printf("ERROR opening database: %s, err=%s", fi.Name(), err)
+			h.logger().Printf("ERROR opening database: %s, err=%s", fi.Name(), err)
 			continue
 		} else if err != nil {
 			return err
 		}
 		if err := db.Open(); err != nil {
 			if err == ErrName {
-				i.logger().Printf("ERROR opening database: %s, err=%s", db.Name(), err)
+				h.logger().Printf("ERROR opening database: %s, err=%s", db.Name(), err)
 				continue
 			}
 			return fmt.Errorf("open db: name=%s, err=%s", db.Name(), err)
 		}
-		i.dbs[db.Name()] = db
+		h.dbs[db.Name()] = db
 
-		i.Stats.Count("dbN", 1)
+		h.Stats.Count("dbN", 1)
 	}
 
 	// Periodically flush cache.
-	i.wg.Add(1)
-	go func() { defer i.wg.Done(); i.monitorCacheFlush() }()
+	h.wg.Add(1)
+	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
 
 	return nil
 }
 
 // Close closes all open fragments.
-func (i *Index) Close() error {
+func (h *Holder) Close() error {
 	// Notify goroutines of closing and wait for completion.
-	close(i.closing)
-	i.wg.Wait()
+	close(h.closing)
+	h.wg.Wait()
 
-	for _, db := range i.dbs {
+	for _, db := range h.dbs {
 		db.Close()
 	}
 	return nil
 }
 
 // MaxSlices returns MaxSlice map for all databases.
-func (i *Index) MaxSlices() map[string]uint64 {
+func (h *Holder) MaxSlices() map[string]uint64 {
 	a := make(map[string]uint64)
-	for _, db := range i.DBs() {
+	for _, db := range h.DBs() {
 		a[db.Name()] = db.MaxSlice()
 	}
 	return a
 }
 
 // MaxInverseSlices returns MaxInverseSlice map for all databases.
-func (i *Index) MaxInverseSlices() map[string]uint64 {
+func (h *Holder) MaxInverseSlices() map[string]uint64 {
 	a := make(map[string]uint64)
-	for _, db := range i.DBs() {
+	for _, db := range h.DBs() {
 		a[db.Name()] = db.MaxInverseSlice()
 	}
 	return a
 }
 
 // Schema returns schema data for all databases and frames.
-func (i *Index) Schema() []*DBInfo {
+func (h *Holder) Schema() []*DBInfo {
 	var a []*DBInfo
-	for _, db := range i.DBs() {
+	for _, db := range h.DBs() {
 		di := &DBInfo{Name: db.Name()}
 		for _, frame := range db.Frames() {
 			fi := &FrameInfo{Name: frame.Name()}
@@ -156,24 +156,24 @@ func (i *Index) Schema() []*DBInfo {
 }
 
 // DBPath returns the path where a given database is stored.
-func (i *Index) DBPath(name string) string { return filepath.Join(i.Path, name) }
+func (h *Holder) DBPath(name string) string { return filepath.Join(h.Path, name) }
 
 // DB returns the database by name.
-func (i *Index) DB(name string) *DB {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	return i.db(name)
+func (h *Holder) DB(name string) *DB {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.db(name)
 }
 
-func (i *Index) db(name string) *DB { return i.dbs[name] }
+func (h *Holder) db(name string) *DB { return h.dbs[name] }
 
-// DBs returns a list of all databases in the index.
-func (i *Index) DBs() []*DB {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+// DBs returns a list of all databases in the holder.
+func (h *Holder) DBs() []*DB {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
-	a := make([]*DB, 0, len(i.dbs))
-	for _, db := range i.dbs {
+	a := make([]*DB, 0, len(h.dbs))
+	for _, db := range h.dbs {
 		a = append(a, db)
 	}
 	sort.Sort(dbSlice(a))
@@ -183,43 +183,43 @@ func (i *Index) DBs() []*DB {
 
 // CreateDB creates a database.
 // An error is returned if the database already exists.
-func (i *Index) CreateDB(name string, opt DBOptions) (*DB, error) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+func (h *Holder) CreateDB(name string, opt DBOptions) (*DB, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	// Ensure db doesn't already exist.
-	if i.dbs[name] != nil {
+	if h.dbs[name] != nil {
 		return nil, ErrDatabaseExists
 	}
-	return i.createDB(name, opt)
+	return h.createDB(name, opt)
 }
 
 // CreateDBIfNotExists returns a database by name.
 // The database is created if it does not already exist.
-func (i *Index) CreateDBIfNotExists(name string, opt DBOptions) (*DB, error) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+func (h *Holder) CreateDBIfNotExists(name string, opt DBOptions) (*DB, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	// Find database in cache first.
-	if db := i.dbs[name]; db != nil {
+	if db := h.dbs[name]; db != nil {
 		return db, nil
 	}
 
-	return i.createDB(name, opt)
+	return h.createDB(name, opt)
 }
 
-func (i *Index) createDB(name string, opt DBOptions) (*DB, error) {
+func (h *Holder) createDB(name string, opt DBOptions) (*DB, error) {
 	if name == "" {
 		return nil, errors.New("database name required")
 	}
 
 	// Return database if it exists.
-	if db := i.db(name); db != nil {
+	if db := h.db(name); db != nil {
 		return db, nil
 	}
 
 	// Otherwise create a new database.
-	db, err := i.newDB(i.DBPath(name), name)
+	db, err := h.newDB(h.DBPath(name), name)
 	if err != nil {
 		return nil, err
 	}
@@ -232,31 +232,31 @@ func (i *Index) createDB(name string, opt DBOptions) (*DB, error) {
 	db.SetColumnLabel(opt.ColumnLabel)
 	db.SetTimeQuantum(opt.TimeQuantum)
 
-	i.dbs[db.Name()] = db
+	h.dbs[db.Name()] = db
 
-	i.Stats.Count("dbN", 1)
+	h.Stats.Count("dbN", 1)
 
 	return db, nil
 }
 
-func (i *Index) newDB(path, name string) (*DB, error) {
+func (h *Holder) newDB(path, name string) (*DB, error) {
 	db, err := NewDB(path, name)
 	if err != nil {
 		return nil, err
 	}
-	db.LogOutput = i.LogOutput
-	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
-	db.broadcaster = i.Broadcaster
+	db.LogOutput = h.LogOutput
+	db.stats = h.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
+	db.broadcaster = h.Broadcaster
 	return db, nil
 }
 
-// DeleteDB removes a database from the index.
-func (i *Index) DeleteDB(name string) error {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+// DeleteDB removes a database from the holder.
+func (h *Holder) DeleteDB(name string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	// Ignore if database doesn't exist.
-	db := i.db(name)
+	db := h.db(name)
 	if db == nil {
 		return nil
 	}
@@ -267,21 +267,21 @@ func (i *Index) DeleteDB(name string) error {
 	}
 
 	// Delete database directory.
-	if err := os.RemoveAll(i.DBPath(name)); err != nil {
+	if err := os.RemoveAll(h.DBPath(name)); err != nil {
 		return err
 	}
 
 	// Remove reference.
-	delete(i.dbs, name)
+	delete(h.dbs, name)
 
-	i.Stats.Count("dbN", -1)
+	h.Stats.Count("dbN", -1)
 
 	return nil
 }
 
 // Frame returns the frame for a database and name.
-func (i *Index) Frame(db, name string) *Frame {
-	d := i.DB(db)
+func (h *Holder) Frame(db, name string) *Frame {
+	d := h.DB(db)
 	if d == nil {
 		return nil
 	}
@@ -289,8 +289,8 @@ func (i *Index) Frame(db, name string) *Frame {
 }
 
 // View returns the view for a database, frame, and name.
-func (i *Index) View(db, frame, name string) *View {
-	f := i.Frame(db, frame)
+func (h *Holder) View(db, frame, name string) *View {
+	f := h.Frame(db, frame)
 	if f == nil {
 		return nil
 	}
@@ -298,8 +298,8 @@ func (i *Index) View(db, frame, name string) *View {
 }
 
 // Fragment returns the fragment for a database, frame & slice.
-func (i *Index) Fragment(db, frame, view string, slice uint64) *Fragment {
-	v := i.View(db, frame, view)
+func (h *Holder) Fragment(db, frame, view string, slice uint64) *Fragment {
+	v := h.View(db, frame, view)
 	if v == nil {
 		return nil
 	}
@@ -308,33 +308,33 @@ func (i *Index) Fragment(db, frame, view string, slice uint64) *Fragment {
 
 // monitorCacheFlush periodically flushes all fragment caches sequentially.
 // This is run in a goroutine.
-func (i *Index) monitorCacheFlush() {
-	ticker := time.NewTicker(i.CacheFlushInterval)
+func (h *Holder) monitorCacheFlush() {
+	ticker := time.NewTicker(h.CacheFlushInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-i.closing:
+		case <-h.closing:
 			return
 		case <-ticker.C:
-			i.flushCaches()
+			h.flushCaches()
 		}
 	}
 }
 
-func (i *Index) flushCaches() {
-	for _, db := range i.DBs() {
+func (h *Holder) flushCaches() {
+	for _, db := range h.DBs() {
 		for _, frame := range db.Frames() {
 			for _, view := range frame.Views() {
 				for _, fragment := range view.Fragments() {
 					select {
-					case <-i.closing:
+					case <-h.closing:
 						return
 					default:
 					}
 
 					if err := fragment.FlushCache(); err != nil {
-						i.logger().Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
+						h.logger().Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
 					}
 				}
 			}
@@ -342,12 +342,12 @@ func (i *Index) flushCaches() {
 	}
 }
 
-func (i *Index) logger() *log.Logger { return log.New(i.LogOutput, "", log.LstdFlags) }
+func (h *Holder) logger() *log.Logger { return log.New(h.LogOutput, "", log.LstdFlags) }
 
-// IndexSyncer is an active anti-entropy tool that compares the local index
-// with a remote index based on block checksums and resolves differences.
-type IndexSyncer struct {
-	Index *Index
+// HolderSyncer is an active anti-entropy tool that compares the local holder
+// with a remote holder based on block checksums and resolves differences.
+type HolderSyncer struct {
+	Holder *Holder
 
 	Host    string
 	Cluster *Cluster
@@ -357,7 +357,7 @@ type IndexSyncer struct {
 }
 
 // Returns true if the syncer has been marked to close.
-func (s *IndexSyncer) IsClosing() bool {
+func (s *HolderSyncer) IsClosing() bool {
 	select {
 	case <-s.Closing:
 		return true
@@ -366,10 +366,10 @@ func (s *IndexSyncer) IsClosing() bool {
 	}
 }
 
-// SyncIndex compares the index on host with the local index and resolves differences.
-func (s *IndexSyncer) SyncIndex() error {
+// SyncHolder compares the holder on host with the local holder and resolves differences.
+func (s *HolderSyncer) SyncHolder() error {
 	// Iterate over schema in sorted order.
-	for _, di := range s.Index.Schema() {
+	for _, di := range s.Holder.Schema() {
 		// Verify syncer has not closed.
 		if s.IsClosing() {
 			return nil
@@ -397,7 +397,7 @@ func (s *IndexSyncer) SyncIndex() error {
 					return nil
 				}
 
-				for slice := uint64(0); slice <= s.Index.DB(di.Name).MaxSlice(); slice++ {
+				for slice := uint64(0); slice <= s.Holder.DB(di.Name).MaxSlice(); slice++ {
 					// Ignore slices that this host doesn't own.
 					if !s.Cluster.OwnsFragment(s.Host, di.Name, slice) {
 						continue
@@ -421,9 +421,9 @@ func (s *IndexSyncer) SyncIndex() error {
 }
 
 // syncDatabase synchronizes database attributes with the rest of the cluster.
-func (s *IndexSyncer) syncDatabase(db string) error {
+func (s *HolderSyncer) syncDatabase(db string) error {
 	// Retrieve database reference.
-	d := s.Index.DB(db)
+	d := s.Holder.DB(db)
 	if d == nil {
 		return nil
 	}
@@ -466,9 +466,9 @@ func (s *IndexSyncer) syncDatabase(db string) error {
 }
 
 // syncFrame synchronizes frame attributes with the rest of the cluster.
-func (s *IndexSyncer) syncFrame(db, name string) error {
+func (s *HolderSyncer) syncFrame(db, name string) error {
 	// Retrieve database reference.
-	f := s.Index.Frame(db, name)
+	f := s.Holder.Frame(db, name)
 	if f == nil {
 		return nil
 	}
@@ -513,9 +513,9 @@ func (s *IndexSyncer) syncFrame(db, name string) error {
 }
 
 // syncFragment synchronizes a fragment with the rest of the cluster.
-func (s *IndexSyncer) syncFragment(db, frame, view string, slice uint64) error {
+func (s *HolderSyncer) syncFragment(db, frame, view string, slice uint64) error {
 	// Retrieve local frame.
-	f := s.Index.Frame(db, frame)
+	f := s.Holder.Frame(db, frame)
 	if f == nil {
 		return ErrFrameNotFound
 	}

@@ -13,81 +13,81 @@ import (
 	"github.com/pilosa/pilosa/pql"
 )
 
-func createCluster(c *pilosa.Cluster) ([]*Server, []*Index) {
+func createCluster(c *pilosa.Cluster) ([]*Server, []*Holder) {
 	numNodes := len(c.Nodes)
-	idx := make([]*Index, numNodes)
+	hldr := make([]*Holder, numNodes)
 	server := make([]*Server, numNodes)
 	for i := 0; i < numNodes; i++ {
-		idx[i] = MustOpenIndex()
+		hldr[i] = MustOpenHolder()
 		server[i] = NewServer()
 		server[i].Handler.Host = server[i].Host()
 		server[i].Handler.Cluster = c
 		server[i].Handler.Cluster.Nodes[i].Host = server[i].Host()
-		server[i].Handler.Index = idx[i].Index
+		server[i].Handler.Holder = hldr[i].Holder
 	}
-	return server, idx
+	return server, hldr
 }
 
 // Test distributed TopN Row count across 3 nodes.
 func TestClient_MultiNode(t *testing.T) {
 	cluster := NewCluster(3)
-	s, idx := createCluster(cluster)
+	s, hldr := createCluster(cluster)
 
 	for i := 0; i < len(cluster.Nodes); i++ {
-		defer idx[i].Close()
+		defer hldr[i].Close()
 		defer s[i].Close()
 	}
 
 	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor()
-		e.Index = idx[0].Index
+		e.Holder = hldr[0].Holder
 		e.Host = cluster.Nodes[0].Host
 		e.Cluster = cluster
 		return e.Execute(ctx, db, query, slices, opt)
 	}
 	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor()
-		e.Index = idx[1].Index
+		e.Holder = hldr[1].Holder
 		e.Host = cluster.Nodes[1].Host
 		e.Cluster = cluster
 		return e.Execute(ctx, db, query, slices, opt)
 	}
 	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor()
-		e.Index = idx[2].Index
+		e.Holder = hldr[2].Holder
 		e.Host = cluster.Nodes[2].Host
 		e.Cluster = cluster
 		return e.Execute(ctx, db, query, slices, opt)
 	}
 
 	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and slice width increment would reveal a different TopN.
-	idx[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).MustSetBits(99, 1, 2, 3, 4)
-	idx[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).MustSetBits(100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-	idx[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).MustSetBits(98, 1, 2, 3, 4, 5, 6)
-	idx[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).MustSetBits(1, 4)
-	idx[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).MustSetBits(22, 1, 2, 3, 4, 5)
+	hldr[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).MustSetBits(99, 1, 2, 3, 4)
+	hldr[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).MustSetBits(100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+	hldr[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).MustSetBits(98, 1, 2, 3, 4, 5, 6)
+	hldr[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).MustSetBits(1, 4)
+	hldr[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).MustSetBits(22, 1, 2, 3, 4, 5)
 
-	idx[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(100, (SliceWidth*10)+10)
-	idx[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(4, (SliceWidth*10)+10, (SliceWidth*10)+11, (SliceWidth*10)+12)
-	idx[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(4, (SliceWidth*10)+10, (SliceWidth*10)+11, (SliceWidth*10)+12, (SliceWidth*10)+13, (SliceWidth*10)+14, (SliceWidth*10)+15)
-	idx[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(2, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+3, (SliceWidth*10)+4)
-	idx[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(3, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+3, (SliceWidth*10)+4, (SliceWidth*10)+5)
-	idx[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(22, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+10)
+	hldr[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(100, (SliceWidth*10)+10)
+	hldr[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(4, (SliceWidth*10)+10, (SliceWidth*10)+11, (SliceWidth*10)+12)
+	hldr[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(4, (SliceWidth*10)+10, (SliceWidth*10)+11, (SliceWidth*10)+12, (SliceWidth*10)+13, (SliceWidth*10)+14, (SliceWidth*10)+15)
+	hldr[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(2, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+3, (SliceWidth*10)+4)
+	hldr[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(3, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+3, (SliceWidth*10)+4, (SliceWidth*10)+5)
+	hldr[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).MustSetBits(22, (SliceWidth*10)+1, (SliceWidth*10)+2, (SliceWidth*10)+10)
 
-	idx[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(24, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12, (SliceWidth*6)+13, (SliceWidth*6)+14)
-	idx[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(20, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12, (SliceWidth*6)+13)
-	idx[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(21, (SliceWidth*6)+10)
-	idx[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(100, (SliceWidth*6)+10)
-	idx[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(99, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12)
-	idx[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(98, (SliceWidth*6)+10, (SliceWidth*6)+11)
-	idx[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(22, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12)
+	hldr[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(24, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12, (SliceWidth*6)+13, (SliceWidth*6)+14)
+	hldr[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(20, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12, (SliceWidth*6)+13)
+	hldr[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(21, (SliceWidth*6)+10)
+	hldr[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(100, (SliceWidth*6)+10)
+	hldr[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(99, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12)
+	hldr[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(98, (SliceWidth*6)+10, (SliceWidth*6)+11)
+	hldr[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).MustSetBits(22, (SliceWidth*6)+10, (SliceWidth*6)+11, (SliceWidth*6)+12)
 
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay
 	// built into cache.Invalidate()
-	idx[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).RecalculateCache()
-	idx[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).RecalculateCache()
-	idx[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).RecalculateCache()
+	hldr[0].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 0).RecalculateCache()
+	hldr[1].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 10).RecalculateCache()
+	hldr[2].MustCreateFragmentIfNotExists("d", "f.n", pilosa.ViewStandard, 6).RecalculateCache()
 
 	// Connect to each node to compare results.
 	client := make([]*Client, 3)
@@ -112,9 +112,9 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 
 	// Set max slice to correct value.
-	idx[0].DB("d").SetRemoteMaxSlice(10)
-	idx[1].DB("d").SetRemoteMaxSlice(10)
-	idx[2].DB("d").SetRemoteMaxSlice(10)
+	hldr[0].DB("d").SetRemoteMaxSlice(10)
+	hldr[1].DB("d").SetRemoteMaxSlice(10)
+	hldr[2].DB("d").SetRemoteMaxSlice(10)
 
 	result, err = client[0].ExecuteQuery(context.Background(), "d", q, true)
 	if err != nil {
@@ -157,11 +157,11 @@ func TestClient_MultiNode(t *testing.T) {
 
 // Ensure client can bulk import data.
 func TestClient_Import(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	// Load bitmap into cache to ensure cache gets updated.
-	f := idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
+	f := hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
 	f.Row(0)
 
 	s := NewServer()
@@ -169,7 +169,7 @@ func TestClient_Import(t *testing.T) {
 	s.Handler.Host = s.Host()
 	s.Handler.Cluster = NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
-	s.Handler.Index = idx.Index
+	s.Handler.Holder = hldr.Holder
 
 	// Send import request.
 	c := MustNewClient(s.Host())
@@ -192,10 +192,10 @@ func TestClient_Import(t *testing.T) {
 
 // Ensure client can bulk import data to an inverse frame.
 func TestClient_ImportInverseEnabled(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
-	d := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
+	d := hldr.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
 	frameOpts := pilosa.FrameOptions{
 		InverseEnabled: true,
 	}
@@ -220,7 +220,7 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 	s.Handler.Host = s.Host()
 	s.Handler.Cluster = NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
-	s.Handler.Index = idx.Index
+	s.Handler.Holder = hldr.Holder
 
 	// Send import request.
 	c := MustNewClient(s.Host())
@@ -247,20 +247,20 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 
 // Ensure client backup and restore a frame.
 func TestClient_BackupRestore(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
-	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).MustSetBits(100, 1, 2, 3, SliceWidth-1)
-	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(100, SliceWidth, SliceWidth+2)
-	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 5).MustSetBits(100, (5*SliceWidth)+1)
-	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).MustSetBits(200, 20000)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).MustSetBits(100, 1, 2, 3, SliceWidth-1)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).MustSetBits(100, SliceWidth, SliceWidth+2)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 5).MustSetBits(100, (5*SliceWidth)+1)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).MustSetBits(200, 20000)
 
 	s := NewServer()
 	defer s.Close()
 	s.Handler.Host = s.Host()
 	s.Handler.Cluster = NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
-	s.Handler.Index = idx.Index
+	s.Handler.Holder = hldr.Holder
 
 	c := MustNewClient(s.Host())
 
@@ -271,7 +271,7 @@ func TestClient_BackupRestore(t *testing.T) {
 	}
 
 	// Restore to a different frame.
-	if _, err := idx.MustCreateDBIfNotExists("x", pilosa.DBOptions{}).CreateFrameIfNotExists("y", pilosa.FrameOptions{}); err != nil {
+	if _, err := hldr.MustCreateDBIfNotExists("x", pilosa.DBOptions{}).CreateFrameIfNotExists("y", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.RestoreFrom(context.Background(), &buf, "x", "y", pilosa.ViewStandard); err != nil {
@@ -279,38 +279,38 @@ func TestClient_BackupRestore(t *testing.T) {
 	}
 
 	// Verify data.
-	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 0).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{1, 2, 3, SliceWidth - 1}) {
+	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 0).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{1, 2, 3, SliceWidth - 1}) {
 		t.Fatalf("unexpected bits(0): %+v", a)
 	}
-	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 1).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth, SliceWidth + 2}) {
+	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 1).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth, SliceWidth + 2}) {
 		t.Fatalf("unexpected bits(0): %+v", a)
 	}
-	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 5).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{(5 * SliceWidth) + 1}) {
+	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 5).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{(5 * SliceWidth) + 1}) {
 		t.Fatalf("unexpected bits(0): %+v", a)
 	}
-	if a := idx.Fragment("x", "y", pilosa.ViewStandard, 0).Row(200).Bits(); !reflect.DeepEqual(a, []uint64{20000}) {
+	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 0).Row(200).Bits(); !reflect.DeepEqual(a, []uint64{20000}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
 }
 
 // Ensure client can retrieve a list of all checksums for blocks in a fragment.
 func TestClient_FragmentBlocks(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	// Set two bits on blocks 0 & 3.
-	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
-	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(pilosa.HashBlockSize*3, 100)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(pilosa.HashBlockSize*3, 100)
 
 	// Set a bit on a different slice.
-	idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, 1)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, 1)
 
 	s := NewServer()
 	defer s.Close()
 	s.Handler.Host = s.Host()
 	s.Handler.Cluster = NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
-	s.Handler.Index = idx.Index
+	s.Handler.Holder = hldr.Holder
 
 	// Retrieve blocks.
 	c := MustNewClient(s.Host())
@@ -326,7 +326,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	}
 
 	// Verify data matches local blocks.
-	if a := idx.Fragment("d", "f", pilosa.ViewStandard, 0).Blocks(); !reflect.DeepEqual(a, blocks) {
+	if a := hldr.Fragment("d", "f", pilosa.ViewStandard, 0).Blocks(); !reflect.DeepEqual(a, blocks) {
 		t.Fatalf("blocks mismatch:\n\nexp=%s\n\ngot=%s\n\n", spew.Sdump(a), spew.Sdump(blocks))
 	}
 }

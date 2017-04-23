@@ -31,11 +31,11 @@ func TestHandler_NotFound(t *testing.T) {
 
 // Ensure the handler can return the schema.
 func TestHandler_Schema(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
-	d0 := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
-	d1 := idx.MustCreateDBIfNotExists("d1", pilosa.DBOptions{})
+	d0 := hldr.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
+	d1 := hldr.MustCreateDBIfNotExists("d1", pilosa.DBOptions{})
 
 	if f, err := d0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
 		t.Fatal(err)
@@ -54,7 +54,7 @@ func TestHandler_Schema(t *testing.T) {
 	}
 
 	h := NewHandler()
-	h.Index = idx.Index
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/schema", nil))
 	if w.Code != http.StatusOK {
@@ -66,19 +66,19 @@ func TestHandler_Schema(t *testing.T) {
 
 // Ensure the handler can return the maxslice map.
 func TestHandler_MaxSlices(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
-	idx.MustCreateFragmentIfNotExists("d0", "f0", pilosa.ViewStandard, 1).MustSetBits(30, (1*SliceWidth)+1)
-	idx.MustCreateFragmentIfNotExists("d0", "f0", pilosa.ViewStandard, 1).MustSetBits(30, (1*SliceWidth)+2)
-	idx.MustCreateFragmentIfNotExists("d0", "f0", pilosa.ViewStandard, 3).MustSetBits(30, (3*SliceWidth)+4)
+	hldr.MustCreateFragmentIfNotExists("d0", "f0", pilosa.ViewStandard, 1).MustSetBits(30, (1*SliceWidth)+1)
+	hldr.MustCreateFragmentIfNotExists("d0", "f0", pilosa.ViewStandard, 1).MustSetBits(30, (1*SliceWidth)+2)
+	hldr.MustCreateFragmentIfNotExists("d0", "f0", pilosa.ViewStandard, 3).MustSetBits(30, (3*SliceWidth)+4)
 
-	idx.MustCreateFragmentIfNotExists("d1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+1)
-	idx.MustCreateFragmentIfNotExists("d1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+2)
-	idx.MustCreateFragmentIfNotExists("d1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+8)
+	hldr.MustCreateFragmentIfNotExists("d1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+1)
+	hldr.MustCreateFragmentIfNotExists("d1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+2)
+	hldr.MustCreateFragmentIfNotExists("d1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+8)
 
 	h := NewHandler()
-	h.Index = idx.Index
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/slices/max", nil))
 	if w.Code != http.StatusOK {
@@ -90,10 +90,10 @@ func TestHandler_MaxSlices(t *testing.T) {
 
 // Ensure the handler can return the maxslice map for the inverse views.
 func TestHandler_MaxSlices_Inverse(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
-	f0, err := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{}).CreateFrame("f0", pilosa.FrameOptions{InverseEnabled: true})
+	f0, err := hldr.MustCreateDBIfNotExists("d0", pilosa.DBOptions{}).CreateFrame("f0", pilosa.FrameOptions{InverseEnabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f1, err := idx.MustCreateDBIfNotExists("d1", pilosa.DBOptions{}).CreateFrame("f1", pilosa.FrameOptions{InverseEnabled: true})
+	f1, err := hldr.MustCreateDBIfNotExists("d1", pilosa.DBOptions{}).CreateFrame("f1", pilosa.FrameOptions{InverseEnabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 	}
 
 	h := NewHandler()
-	h.Index = idx.Index
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/slices/max?inverse=true", nil))
 	if w.Code != http.StatusOK {
@@ -255,11 +255,11 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 
 // Ensure the handler can execute a query that returns a bitmap with column attributes as JSON.
 func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
-	idx := NewIndex()
-	defer idx.Close()
+	hldr := NewHolder()
+	defer hldr.Close()
 
 	// Create database and set column attributes.
-	db, err := idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
+	db, err := hldr.CreateDBIfNotExists("d", pilosa.DBOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if err := db.ColumnAttrStore().SetAttrs(3, map[string]interface{}{"x": "y"}); err != nil {
@@ -269,7 +269,7 @@ func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
 	}
 
 	h := NewHandler()
-	h.Index = idx.Index
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
@@ -320,11 +320,11 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 
 // Ensure the handler can execute a query that returns a bitmap with column attributes as protobuf.
 func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
-	idx := NewIndex()
-	defer idx.Close()
+	hldr := NewHolder()
+	defer hldr.Close()
 
 	// Create database and set column attributes.
-	db, err := idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
+	db, err := hldr.CreateDBIfNotExists("d", pilosa.DBOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if err := db.ColumnAttrStore().SetAttrs(1, map[string]interface{}{"x": "y"}); err != nil {
@@ -332,7 +332,7 @@ func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
 	}
 
 	h := NewHandler()
-	h.Index = idx.Index
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
@@ -491,15 +491,15 @@ func TestHandler_Query_ErrParse(t *testing.T) {
 
 // Ensure the handler can delete a database.
 func TestHandler_DB_Delete(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	s := NewServer()
-	s.Handler.Index = idx.Index
+	s.Handler.Holder = hldr.Holder
 	defer s.Close()
 
 	// Create database.
-	if _, err := idx.CreateDBIfNotExists("d", pilosa.DBOptions{}); err != nil {
+	if _, err := hldr.CreateDBIfNotExists("d", pilosa.DBOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -520,86 +520,86 @@ func TestHandler_DB_Delete(t *testing.T) {
 	}
 
 	// Verify database is gone.
-	if idx.DB("d") != nil {
+	if hldr.DB("d") != nil {
 		t.Fatal("expected nil database")
 	}
 }
 
 // Ensure handler can delete a frame.
 func TestHandler_DeleteFrame(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
-	d0 := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	d0 := hldr.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
 	if _, err := d0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
 	h := NewHandler()
-	h.Index = idx.Index
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/db/d0/frame/f1", strings.NewReader("")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
-	} else if f := idx.DB("d0").Frame("f1"); f != nil {
+	} else if f := hldr.DB("d0").Frame("f1"); f != nil {
 		t.Fatal("expected nil frame")
 	}
 }
 
 // Ensure handler can set the DB time quantum.
 func TestHandler_SetDBTimeQuantum(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
-	idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	hldr.MustCreateDBIfNotExists("d0", pilosa.DBOptions{})
 
 	h := NewHandler()
-	h.Index = idx.Index
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
-	} else if q := idx.DB("d0").TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+	} else if q := hldr.DB("d0").TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
 		t.Fatalf("unexpected time quantum: %s", q)
 	}
 }
 
 // Ensure handler can set the frame time quantum.
 func TestHandler_SetFrameTimeQuantum(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	// Create frame.
-	if _, err := idx.MustCreateDBIfNotExists("d0", pilosa.DBOptions{}).CreateFrame("f1", pilosa.FrameOptions{}); err != nil {
+	if _, err := hldr.MustCreateDBIfNotExists("d0", pilosa.DBOptions{}).CreateFrame("f1", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
 	h := NewHandler()
-	h.Index = idx.Index
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/db/d0/frame/f1/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
-	} else if q := idx.DB("d0").Frame("f1").TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+	} else if q := hldr.DB("d0").Frame("f1").TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
 		t.Fatalf("unexpected time quantum: %s", q)
 	}
 }
 
 // Ensure the handler can return data in differing blocks for a database.
 func TestHandler_DB_AttrStore_Diff(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	s := NewServer()
-	s.Handler.Index = idx.Index
+	s.Handler.Holder = hldr.Holder
 	defer s.Close()
 
 	// Set attributes on the database.
-	db, err := idx.CreateDBIfNotExists("d", pilosa.DBOptions{})
+	db, err := hldr.CreateDBIfNotExists("d", pilosa.DBOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -640,15 +640,15 @@ func TestHandler_DB_AttrStore_Diff(t *testing.T) {
 
 // Ensure the handler can return data in differing blocks for a frame.
 func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	s := NewServer()
-	s.Handler.Index = idx.Index
+	s.Handler.Holder = hldr.Holder
 	defer s.Close()
 
 	// Set attributes on the database.
-	d := idx.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
+	d := hldr.MustCreateDBIfNotExists("d", pilosa.DBOptions{})
 	f, err := d.CreateFrameIfNotExists("meta", pilosa.FrameOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -690,15 +690,15 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 
 // Ensure the handler can backup a fragment and then restore it.
 func TestHandler_Fragment_BackupRestore(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	s := NewServer()
-	s.Handler.Index = idx.Index
+	s.Handler.Holder = hldr.Holder
 	defer s.Close()
 
 	// Set bits in the index.
-	f0 := idx.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
+	f0 := hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
 	f0.MustSetBits(100, 1, 2, 3)
 
 	// Begin backing up from slice d/f/0.
@@ -714,7 +714,7 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	}
 
 	// Create frame.
-	if _, err := idx.MustCreateDBIfNotExists("x", pilosa.DBOptions{}).CreateFrame("y", pilosa.FrameOptions{}); err != nil {
+	if _, err := hldr.MustCreateDBIfNotExists("x", pilosa.DBOptions{}).CreateFrame("y", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -729,7 +729,7 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	}
 
 	// Verify data is correctly restored.
-	f1 := idx.Fragment("x", "y", pilosa.ViewStandard, 0)
+	f1 := hldr.Fragment("x", "y", pilosa.ViewStandard, 0)
 	if f1 == nil {
 		t.Fatal("fragment x/y/standard/0 not created")
 	} else if bits := f1.Row(100).Bits(); !reflect.DeepEqual(bits, []uint64{1, 2, 3}) {

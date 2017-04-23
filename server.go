@@ -24,7 +24,7 @@ const (
 	DefaultPollingInterval     = 60 * time.Second
 )
 
-// Server represents an index wrapped by a running HTTP server.
+// Server represents a holder wrapped by a running HTTP server.
 type Server struct {
 	ln net.Listener
 
@@ -33,7 +33,7 @@ type Server struct {
 	closing chan struct{}
 
 	// Data storage and HTTP interface.
-	Index             *Index
+	Holder            *Holder
 	Handler           *Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
@@ -55,7 +55,7 @@ func NewServer() *Server {
 	s := &Server{
 		closing: make(chan struct{}),
 
-		Index:             NewIndex(),
+		Holder:            NewHolder(),
 		Handler:           NewHandler(),
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
@@ -66,7 +66,7 @@ func NewServer() *Server {
 		LogOutput: os.Stderr,
 	}
 
-	s.Handler.Index = s.Index
+	s.Handler.Holder = s.Holder
 
 	return s
 }
@@ -96,8 +96,8 @@ func (s *Server) Open() error {
 		s.Cluster.Nodes = []*Node{{Host: s.Host}}
 	}
 
-	// Open index.
-	if err := s.Index.Open(); err != nil {
+	// Open holder.
+	if err := s.Holder.Open(); err != nil {
 		return err
 	}
 
@@ -112,7 +112,7 @@ func (s *Server) Open() error {
 
 	// Create executor for executing queries.
 	e := NewExecutor()
-	e.Index = s.Index
+	e.Holder = s.Holder
 	e.Host = s.Host
 	e.Cluster = s.Cluster
 
@@ -123,9 +123,9 @@ func (s *Server) Open() error {
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
 
-	// Initialize Index.
-	s.Index.Broadcaster = s.Broadcaster
-	s.Index.LogOutput = s.LogOutput
+	// Initialize Holder.
+	s.Holder.Broadcaster = s.Broadcaster
+	s.Holder.LogOutput = s.LogOutput
 
 	// Serve HTTP.
 	go func() { http.Serve(ln, s.Handler) }()
@@ -147,8 +147,8 @@ func (s *Server) Close() error {
 	if s.ln != nil {
 		s.ln.Close()
 	}
-	if s.Index != nil {
-		s.Index.Close()
+	if s.Holder != nil {
+		s.Holder.Close()
 	}
 
 	return nil
@@ -168,7 +168,7 @@ func (s *Server) monitorAntiEntropy() {
 	ticker := time.NewTicker(s.AntiEntropyInterval)
 	defer ticker.Stop()
 
-	s.logger().Printf("index sync monitor initializing (%s interval)", s.AntiEntropyInterval)
+	s.logger().Printf("holder sync monitor initializing (%s interval)", s.AntiEntropyInterval)
 
 	for {
 		// Wait for tick or a close.
@@ -178,23 +178,23 @@ func (s *Server) monitorAntiEntropy() {
 		case <-ticker.C:
 		}
 
-		s.logger().Printf("index sync beginning")
+		s.logger().Printf("holder sync beginning")
 
-		// Initialize syncer with local index and remote client.
-		var syncer IndexSyncer
-		syncer.Index = s.Index
+		// Initialize syncer with local holder and remote client.
+		var syncer HolderSyncer
+		syncer.Holder = s.Holder
 		syncer.Host = s.Host
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
 
-		// Sync indexes.
-		if err := syncer.SyncIndex(); err != nil {
-			s.logger().Printf("index sync error: err=%s", err)
+		// Sync holders.
+		if err := syncer.SyncHolder(); err != nil {
+			s.logger().Printf("holder sync error: err=%s", err)
 			continue
 		}
 
 		// Record successful sync in log.
-		s.logger().Printf("index sync complete")
+		s.logger().Printf("holder sync complete")
 	}
 }
 
@@ -215,14 +215,14 @@ func (s *Server) monitorMaxSlices() {
 		case <-ticker.C:
 		}
 
-		oldmaxslices := s.Index.MaxSlices()
+		oldmaxslices := s.Holder.MaxSlices()
 		for _, node := range s.Cluster.Nodes {
 			if s.Host != node.Host {
 				maxSlices, _ := checkMaxSlices(node.Host)
 				for db, newmax := range maxSlices {
 					// if we don't know about a db locally, log an error because
 					// db's should be created and synced prior to slice creation
-					if localdb := s.Index.DB(db); localdb != nil {
+					if localdb := s.Holder.DB(db); localdb != nil {
 						if newmax > oldmaxslices[db] {
 							oldmaxslices[db] = newmax
 							localdb.SetRemoteMaxSlice(newmax)
@@ -240,30 +240,30 @@ func (s *Server) monitorMaxSlices() {
 func (s *Server) ReceiveMessage(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.CreateSliceMessage:
-		d := s.Index.DB(obj.DB)
+		d := s.Holder.DB(obj.DB)
 		if d == nil {
 			return fmt.Errorf("Local DB not found: %s", obj.DB)
 		}
 		d.SetRemoteMaxSlice(obj.Slice)
 	case *internal.CreateDBMessage:
 		opt := DBOptions{ColumnLabel: obj.Meta.ColumnLabel}
-		_, err := s.Index.CreateDB(obj.DB, opt)
+		_, err := s.Holder.CreateDB(obj.DB, opt)
 		if err != nil {
 			return err
 		}
 	case *internal.DeleteDBMessage:
-		if err := s.Index.DeleteDB(obj.DB); err != nil {
+		if err := s.Holder.DeleteDB(obj.DB); err != nil {
 			return err
 		}
 	case *internal.CreateFrameMessage:
-		db := s.Index.DB(obj.DB)
+		db := s.Holder.DB(obj.DB)
 		opt := FrameOptions{RowLabel: obj.Meta.RowLabel}
 		_, err := db.CreateFrame(obj.Frame, opt)
 		if err != nil {
 			return err
 		}
 	case *internal.DeleteFrameMessage:
-		db := s.Index.DB(obj.DB)
+		db := s.Holder.DB(obj.DB)
 		if err := db.DeleteFrame(obj.Frame); err != nil {
 			return err
 		}
@@ -273,16 +273,16 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 
 // Server implements gossip.StateHandler.
 // LocalState returns the state of the local node as well as the
-// index (dbs/frames) according to the local node.
+// holder (dbs/frames) according to the local node.
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 func (s *Server) LocalState() (proto.Message, error) {
-	if s.Index == nil {
-		return nil, errors.New("Server.Index is nil.")
+	if s.Holder == nil {
+		return nil, errors.New("Server.Holder is nil.")
 	}
 	return &internal.NodeState{
 		Host:  s.Host,
 		State: "OK", // TODO: make this work, pull from s.Cluster.Node
-		DBs:   encodeDBs(s.Index.DBs()),
+		DBs:   encodeDBs(s.Holder.DBs()),
 	}, nil
 }
 
@@ -300,7 +300,7 @@ func (s *Server) mergeRemoteState(ns *internal.NodeState) error {
 			ColumnLabel: db.Meta.ColumnLabel,
 			TimeQuantum: TimeQuantum(db.Meta.TimeQuantum),
 		}
-		d, err := s.Index.CreateDBIfNotExists(db.Name, opt)
+		d, err := s.Holder.CreateDBIfNotExists(db.Name, opt)
 		if err != nil {
 			return err
 		}

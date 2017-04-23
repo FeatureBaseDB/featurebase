@@ -115,10 +115,10 @@ func (m *Command) SetupServer() error {
 		m.Server.LogOutput = logFile
 	}
 
-	// Configure index.
+	// Configure holder.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
-	m.Server.Index.Path = m.Config.DataDir
-	m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
+	m.Server.Holder.Path = m.Config.DataDir
+	m.Server.Holder.Stats = pilosa.NewExpvarStatsClient()
 
 	var err error
 	m.Server.Host, err = normalizeHost(m.Config.Host)

@@ -17,16 +17,17 @@ import (
 	"strings"
 	"time"
 
+	"reflect"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
-	"reflect"
 )
 
 // Handler represents an HTTP handler.
 type Handler struct {
-	Index       *Index
+	Holder      *Holder
 	Broadcaster Broadcaster
 
 	// Local hostname & cluster configuration.
@@ -107,7 +108,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(getSchemaResponse{
-		DBs: h.Index.Schema(),
+		DBs: h.Holder.Schema(),
 	}); err != nil {
 		h.logger().Printf("write schema response error: %s", err)
 	}
@@ -172,7 +173,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Retrieve column attributes across all calls.
-		columnAttrSets, err := h.readColumnAttrSets(h.Index.DB(dbName), columnIDs)
+		columnAttrSets, err := h.readColumnAttrSets(h.Holder.DB(dbName), columnIDs)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			h.writeQueryResponse(w, r, &QueryResponse{Err: err})
@@ -195,9 +196,9 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
 	var ms map[string]uint64
 	if inverse, _ := strconv.ParseBool(r.URL.Query().Get("inverse")); inverse {
-		ms = h.Index.MaxInverseSlices()
+		ms = h.Holder.MaxInverseSlices()
 	} else {
-		ms = h.Index.MaxSlices()
+		ms = h.Holder.MaxSlices()
 	}
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
 		pb := &internal.MaxSlicesResponse{
@@ -226,7 +227,7 @@ func (h *Handler) handleGetDBs(w http.ResponseWriter, r *http.Request) {
 // handleGetDB handles GET /db/<dbname> requests.
 func (h *Handler) handleGetDB(w http.ResponseWriter, r *http.Request) {
 	dbName := mux.Vars(r)["db"]
-	db := h.Index.DB(dbName)
+	db := h.Holder.DB(dbName)
 	if db == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
@@ -311,8 +312,8 @@ type postDBResponse struct{}
 func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
 	dbName := mux.Vars(r)["db"]
 
-	// Delete database from the index.
-	if err := h.Index.DeleteDB(dbName); err != nil {
+	// Delete database from the holder.
+	if err := h.Holder.DeleteDB(dbName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -350,7 +351,7 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create database.
-	_, err = h.Index.CreateDB(dbName, req.Options)
+	_, err = h.Holder.CreateDB(dbName, req.Options)
 	if err == ErrDatabaseExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -394,7 +395,7 @@ func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Retrieve database by name.
-	database := h.Index.DB(dbName)
+	database := h.Holder.DB(dbName)
 	if database == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
@@ -429,8 +430,8 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Retrieve database from index.
-	db := h.Index.DB(dbName)
+	// Retrieve database from holder.
+	db := h.Holder.DB(dbName)
 	if db == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
@@ -492,7 +493,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find database.
-	db := h.Index.DB(dbName)
+	db := h.Holder.DB(dbName)
 	if db == nil {
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
 		return
@@ -576,7 +577,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	frameName := mux.Vars(r)["frame"]
 
 	// Find database.
-	db := h.Index.DB(dbName)
+	db := h.Holder.DB(dbName)
 	if db == nil {
 		if err := json.NewEncoder(w).Encode(deleteDBResponse{}); err != nil {
 			h.logger().Printf("response encoding error: %s", err)
@@ -628,7 +629,7 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 	}
 
 	// Retrieve database by name.
-	f := h.Index.Frame(dbName, frameName)
+	f := h.Holder.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -658,7 +659,7 @@ func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
 	frameName := mux.Vars(r)["frame"]
 
 	// Retrieve views.
-	f := h.Index.Frame(dbName, frameName)
+	f := h.Holder.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -693,8 +694,8 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Retrieve database from index.
-	f := h.Index.Frame(dbName, frameName)
+	// Retrieve database from holder.
+	f := h.Holder.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -891,7 +892,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 	// Find the DB.
 	h.logger().Println("importing:", req.DB, req.Frame, req.Slice)
-	db := h.Index.DB(req.DB)
+	db := h.Holder.DB(req.DB)
 	if db == nil {
 		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%d, err=%s", req.DB, req.Frame, req.Slice, ErrDatabaseNotFound.Error())
 		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
@@ -956,7 +957,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the fragment.
-	f := h.Index.Fragment(db, frame, view, slice)
+	f := h.Holder.Fragment(db, frame, view, slice)
 	if f == nil {
 		return
 	}
@@ -1010,8 +1011,8 @@ func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Retrieve fragment from index.
-	f := h.Index.Fragment(q.Get("db"), q.Get("frame"), q.Get("view"), slice)
+	// Retrieve fragment from holder.
+	f := h.Holder.Fragment(q.Get("db"), q.Get("frame"), q.Get("view"), slice)
 	if f == nil {
 		http.Error(w, "fragment not found", http.StatusNotFound)
 		return
@@ -1034,7 +1035,7 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve frame.
-	f := h.Index.Frame(q.Get("db"), q.Get("frame"))
+	f := h.Holder.Frame(q.Get("db"), q.Get("frame"))
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -1073,8 +1074,8 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Retrieve fragment from index.
-	f := h.Index.Fragment(req.DB, req.Frame, req.View, req.Slice)
+	// Retrieve fragment from holder.
+	f := h.Holder.Fragment(req.DB, req.Frame, req.View, req.Slice)
 	if f == nil {
 		http.Error(w, ErrFragmentNotFound.Error(), http.StatusNotFound)
 		return
@@ -1109,8 +1110,8 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Retrieve fragment from index.
-	f := h.Index.Fragment(q.Get("db"), q.Get("frame"), q.Get("view"), slice)
+	// Retrieve fragment from holder.
+	f := h.Holder.Fragment(q.Get("db"), q.Get("frame"), q.Get("view"), slice)
 	if f == nil {
 		http.Error(w, "fragment not found", http.StatusNotFound)
 		return
@@ -1160,7 +1161,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve frame.
-	f := h.Index.Frame(dbName, frameName)
+	f := h.Holder.Frame(dbName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
