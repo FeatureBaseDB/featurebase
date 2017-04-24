@@ -118,6 +118,7 @@ func (s *Server) Open() error {
 
 	// Initialize HTTP handler.
 	s.Handler.Broadcaster = s.Broadcaster
+	s.Handler.StatusHandler = s
 	s.Handler.Host = s.Host
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
@@ -271,28 +272,49 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 	return nil
 }
 
-// Server implements gossip.StateHandler.
-// LocalState returns the state of the local node as well as the
+// Server implements StatusHandler.
+// LocalStatus returns the state of the local node as well as the
 // holder (indexes/frames) according to the local node.
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
-func (s *Server) LocalState() (proto.Message, error) {
+func (s *Server) LocalStatus() (proto.Message, error) {
 	if s.Holder == nil {
 		return nil, errors.New("Server.Holder is nil.")
 	}
-	return &internal.NodeState{
+	return &internal.NodeStatus{
 		Host:    s.Host,
-		State:   "OK", // TODO: make this work, pull from s.Cluster.Node
+		State:   NodeStateUp,
 		Indexes: encodeIndexes(s.Holder.Indexes()),
 	}, nil
 }
 
-// HandleRemoteState receives incoming NodeState from remote nodes.
-func (s *Server) HandleRemoteState(pb proto.Message) error {
-	return s.mergeRemoteState(pb.(*internal.NodeState))
+// ClusterStatus returns the NodeState for all nodes in the cluster.
+func (s *Server) ClusterStatus() (proto.Message, error) {
+	// Update local Node.state.
+	ns, err := s.LocalStatus()
+	if err != nil {
+		return nil, err
+	}
+	node := s.Cluster.NodeByHost(s.Host)
+	node.SetStatus(ns.(*internal.NodeStatus))
+
+	// Update NodeState for all nodes.
+	for host, nodeState := range s.Cluster.NodeStates() {
+		node := s.Cluster.NodeByHost(host)
+		node.SetState(nodeState)
+	}
+
+	return s.Cluster.Status(), nil
 }
 
-func (s *Server) mergeRemoteState(ns *internal.NodeState) error {
-	// TODO: update some node state value in the cluster (it should be in cluster.node i guess)
+// HandleRemoteStatus receives incoming NodeState from remote nodes.
+func (s *Server) HandleRemoteStatus(pb proto.Message) error {
+	return s.mergeRemoteStatus(pb.(*internal.NodeStatus))
+}
+
+func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
+	// Update Node.state.
+	node := s.Cluster.NodeByHost(ns.Host)
+	node.SetStatus(ns)
 
 	// Create indexes that don't exist.
 	for _, index := range ns.Indexes {
@@ -363,4 +385,13 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	}
 
 	return pb.MaxSlices, nil
+}
+
+// StatusHandler specifies two methods which an object must implement to share
+// state in the cluster. These are used by the GossipNodeSet to implement the
+// LocalState and MergeRemoteState methods of memberlist.Delegate
+type StatusHandler interface {
+	LocalStatus() (proto.Message, error)
+	ClusterStatus() (proto.Message, error)
+	HandleRemoteStatus(proto.Message) error
 }

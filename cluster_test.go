@@ -89,7 +89,7 @@ func TestCluster_NodeSetHosts(t *testing.T) {
 }
 
 // Ensure cluster can compare its Nodes and Members
-func TestCluster_Health(t *testing.T) {
+func TestCluster_NodeStates(t *testing.T) {
 	c := pilosa.Cluster{
 		Nodes: []*pilosa.Node{
 			{Host: "serverA:1000"},
@@ -109,12 +109,12 @@ func TestCluster_Health(t *testing.T) {
 	}
 
 	// Verify a DOWN node is reported, and extraneous nodes are ignored
-	if a := c.Health(); !reflect.DeepEqual(a, map[string]string{
-		"serverA:1000": pilosa.HealthStatusUp,
-		"serverB:1000": pilosa.HealthStatusDown,
-		"serverC:1000": pilosa.HealthStatusUp,
+	if a := c.NodeStates(); !reflect.DeepEqual(a, map[string]string{
+		"serverA:1000": pilosa.NodeStateUp,
+		"serverB:1000": pilosa.NodeStateDown,
+		"serverC:1000": pilosa.NodeStateUp,
 	}) {
-		t.Fatalf("unexpected health: %s", spew.Sdump(a))
+		t.Fatalf("unexpected node state: %s", spew.Sdump(a))
 	}
 }
 
