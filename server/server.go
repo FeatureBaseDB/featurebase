@@ -174,7 +174,7 @@ func (m *Command) SetupServer() error {
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
-	m.Server.Handler.LongQueryTime = time.Duration(m.Config.LongQueryTime)
+	m.Server.Cluster.LongQueryTime = time.Duration(m.Config.LongQueryTime)
 	return nil
 }
 

@@ -41,9 +41,6 @@ type Handler struct {
 
 	// The writer for any logging.
 	LogOutput io.Writer
-
-	// Threshold for logging long-running queries
-	LongQueryTime time.Duration
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -120,9 +117,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Handle some stats tagging
 	statsTags := make([]string, 0, 3)
 
-	fmt.Printf("long query time: %v\n", h.LongQueryTime)
-
-	if h.LongQueryTime > 0 && dif > h.LongQueryTime {
+	if h.Cluster.LongQueryTime > 0 && dif > h.Cluster.LongQueryTime {
 		h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), float64(dif))
 		statsTags = append(statsTags, "slow_query")
 	}
