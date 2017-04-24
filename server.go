@@ -240,11 +240,11 @@ func (s *Server) monitorMaxSlices() {
 func (s *Server) ReceiveMessage(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.CreateSliceMessage:
-		d := s.Holder.Index(obj.Index)
-		if d == nil {
+		idx := s.Holder.Index(obj.Index)
+		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		d.SetRemoteMaxSlice(obj.Slice)
+		idx.SetRemoteMaxSlice(obj.Slice)
 	case *internal.CreateIndexMessage:
 		opt := IndexOptions{ColumnLabel: obj.Meta.ColumnLabel}
 		_, err := s.Holder.CreateIndex(obj.Index, opt)
@@ -300,7 +300,7 @@ func (s *Server) mergeRemoteState(ns *internal.NodeState) error {
 			ColumnLabel: index.Meta.ColumnLabel,
 			TimeQuantum: TimeQuantum(index.Meta.TimeQuantum),
 		}
-		d, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
+		idx, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
 		if err != nil {
 			return err
 		}
@@ -311,7 +311,7 @@ func (s *Server) mergeRemoteState(ns *internal.NodeState) error {
 				TimeQuantum: TimeQuantum(f.Meta.TimeQuantum),
 				CacheSize:   f.Meta.CacheSize,
 			}
-			_, err := d.CreateFrameIfNotExists(f.Name, opt)
+			_, err := idx.CreateFrameIfNotExists(f.Name, opt)
 			if err != nil {
 				return err
 			}

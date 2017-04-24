@@ -150,7 +150,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 		f = hldr.Fragment("i", "f0", pilosa.ViewStandard, 1)
 		a := f.Row(9).Bits()
 		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
-			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
+			t.Fatalf("unexpected bits(%d/i/f0): %+v", i, a)
 		}
 		if a := f.Row(9).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
@@ -199,11 +199,11 @@ func (h *Holder) Close() error {
 
 // MustCreateIndexIfNotExists returns a given index. Panic on error.
 func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOptions) *Index {
-	d, err := h.Holder.CreateIndexIfNotExists(index, opt)
+	idx, err := h.Holder.CreateIndexIfNotExists(index, opt)
 	if err != nil {
 		panic(err)
 	}
-	return &Index{Index: d}
+	return &Index{Index: idx}
 }
 
 // MustCreateFrameIfNotExists returns a given frame. Panic on error.
@@ -217,8 +217,8 @@ func (h *Holder) MustCreateFrameIfNotExists(index, frame string) *Frame {
 
 // MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
 func (h *Holder) MustCreateFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
-	d := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := d.CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
 	if err != nil {
 		panic(err)
 	}

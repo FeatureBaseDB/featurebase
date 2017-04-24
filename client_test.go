@@ -195,11 +195,11 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
 
-	d := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+	idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 	frameOpts := pilosa.FrameOptions{
 		InverseEnabled: true,
 	}
-	frame, err := d.CreateFrameIfNotExists("f", frameOpts)
+	frame, err := idx.CreateFrameIfNotExists("f", frameOpts)
 	if err != nil {
 		panic(err)
 	}

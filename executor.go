@@ -160,11 +160,11 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	bm, _ := other.(*Bitmap)
 	if c.Name == "Bitmap" {
 
-		d := e.Holder.Index(index)
-		if d != nil {
-			columnLabel := d.ColumnLabel()
+		idx := e.Holder.Index(index)
+		if idx != nil {
+			columnLabel := idx.ColumnLabel()
 			if columnID, ok, err := c.UintArg(columnLabel); ok && err == nil {
-				attrs, err := d.ColumnAttrStore().Attrs(columnID)
+				attrs, err := idx.ColumnAttrStore().Attrs(columnID)
 				if err != nil {
 					return nil, err
 				}
@@ -173,7 +173,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 				return nil, err
 			} else {
 				frame, _ := c.Args["frame"].(string)
-				if fr := d.Frame(frame); fr != nil {
+				if fr := idx.Frame(frame); fr != nil {
 					rowLabel := fr.RowLabel()
 					rowID, _, err := c.UintArg(rowLabel)
 					if err != nil {
@@ -362,11 +362,11 @@ func (e *Executor) executeDifferenceSlice(ctx context.Context, index string, c *
 
 func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
 	// Fetch column label from index.
-	d := e.Holder.Index(index)
-	if d == nil {
+	idx := e.Holder.Index(index)
+	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
-	columnLabel := d.ColumnLabel()
+	columnLabel := idx.ColumnLabel()
 
 	// Fetch frame & row label based on argument.
 	frame, _ := c.Args["frame"].(string)
@@ -548,17 +548,17 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 	}
 
 	// Retrieve frame.
-	d := e.Holder.Index(index)
-	if d == nil {
+	idx := e.Holder.Index(index)
+	if idx == nil {
 		return false, ErrIndexNotFound
 	}
-	f := d.Frame(frame)
+	f := idx.Frame(frame)
 	if f == nil {
 		return false, ErrFrameNotFound
 	}
 
 	// Retrieve labels.
-	columnLabel := d.ColumnLabel()
+	columnLabel := idx.ColumnLabel()
 	rowLabel := f.RowLabel()
 
 	// Read fields using labels.
@@ -642,17 +642,17 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 	}
 
 	// Retrieve frame.
-	d := e.Holder.Index(index)
-	if d == nil {
+	idx := e.Holder.Index(index)
+	if idx == nil {
 		return false, ErrIndexNotFound
 	}
-	f := d.Frame(frame)
+	f := idx.Frame(frame)
 	if f == nil {
 		return false, ErrFrameNotFound
 	}
 
 	// Retrieve labels.
-	columnLabel := d.ColumnLabel()
+	columnLabel := idx.ColumnLabel()
 	rowLabel := f.RowLabel()
 
 	// Read fields using labels.
@@ -886,8 +886,8 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 // executeSetColumnAttrs executes a SetColumnAttrs() call.
 func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) error {
 	// Retrieve index.
-	d := e.Holder.Index(index)
-	if d == nil {
+	idx := e.Holder.Index(index)
+	if idx == nil {
 		return ErrIndexNotFound
 	}
 
@@ -895,7 +895,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	id, okID, errID := c.UintArg("id")
 	if errID != nil || !okID {
 		// Retrieve columnLabel
-		columnLabel := d.columnLabel
+		columnLabel := idx.columnLabel
 		col, okCol, errCol := c.UintArg(columnLabel)
 		if errCol != nil || !okCol {
 			return fmt.Errorf("reading SetColumnAttrs() id/columnLabel errs: %v/%v found %v/%v", errID, errCol, okID, okCol)
@@ -911,7 +911,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	delete(attrs, colName)
 
 	// Set attributes.
-	if err := d.ColumnAttrStore().SetAttrs(id, attrs); err != nil {
+	if err := idx.ColumnAttrStore().SetAttrs(id, attrs); err != nil {
 		return err
 	}
 

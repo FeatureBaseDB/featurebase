@@ -648,8 +648,8 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 	defer s.Close()
 
 	// Set attributes on the index.
-	d := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	f, err := d.CreateFrameIfNotExists("meta", pilosa.FrameOptions{})
+	idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+	f, err := idx.CreateFrameIfNotExists("meta", pilosa.FrameOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -701,7 +701,7 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	f0 := hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
 	f0.MustSetBits(100, 1, 2, 3)
 
-	// Begin backing up from slice d/f/0.
+	// Begin backing up from slice i/f/0.
 	resp, err := http.Get(s.URL + "/fragment/data?index=i&frame=f&view=standard&slice=0")
 	if err != nil {
 		t.Fatal(err)

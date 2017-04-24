@@ -281,11 +281,11 @@ func (h *Holder) DeleteIndex(name string) error {
 
 // Frame returns the frame for an index and name.
 func (h *Holder) Frame(index, name string) *Frame {
-	d := h.Index(index)
-	if d == nil {
+	idx := h.Index(index)
+	if idx == nil {
 		return nil
 	}
-	return d.Frame(name)
+	return idx.Frame(name)
 }
 
 // View returns the view for an index, frame, and name.
@@ -423,13 +423,13 @@ func (s *HolderSyncer) SyncHolder() error {
 // syncIndex synchronizes index attributes with the rest of the cluster.
 func (s *HolderSyncer) syncIndex(index string) error {
 	// Retrieve index reference.
-	d := s.Holder.Index(index)
-	if d == nil {
+	idx := s.Holder.Index(index)
+	if idx == nil {
 		return nil
 	}
 
 	// Read block checksums.
-	blks, err := d.ColumnAttrStore().Blocks()
+	blks, err := idx.ColumnAttrStore().Blocks()
 	if err != nil {
 		return err
 	}
@@ -451,12 +451,12 @@ func (s *HolderSyncer) syncIndex(index string) error {
 		}
 
 		// Update local copy.
-		if err := d.ColumnAttrStore().SetBulkAttrs(m); err != nil {
+		if err := idx.ColumnAttrStore().SetBulkAttrs(m); err != nil {
 			return err
 		}
 
 		// Recompute blocks.
-		blks, err = d.ColumnAttrStore().Blocks()
+		blks, err = idx.ColumnAttrStore().Blocks()
 		if err != nil {
 			return err
 		}
