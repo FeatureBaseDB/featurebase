@@ -219,16 +219,16 @@ func (s *Server) monitorMaxSlices() {
 		for _, node := range s.Cluster.Nodes {
 			if s.Host != node.Host {
 				maxSlices, _ := checkMaxSlices(node.Host)
-				for db, newmax := range maxSlices {
-					// if we don't know about a db locally, log an error because
-					// db's should be created and synced prior to slice creation
-					if localdb := s.Holder.DB(db); localdb != nil {
-						if newmax > oldmaxslices[db] {
-							oldmaxslices[db] = newmax
-							localdb.SetRemoteMaxSlice(newmax)
+				for index, newmax := range maxSlices {
+					// if we don't know about an index locally, log an error because
+					// indexes should be created and synced prior to slice creation
+					if localIndex := s.Holder.Index(index); localIndex != nil {
+						if newmax > oldmaxslices[index] {
+							oldmaxslices[index] = newmax
+							localIndex.SetRemoteMaxSlice(newmax)
 						}
 					} else {
-						s.logger().Printf("Local DB not found: %s", db)
+						s.logger().Printf("Local Index not found: %s", index)
 					}
 				}
 			}
@@ -240,31 +240,31 @@ func (s *Server) monitorMaxSlices() {
 func (s *Server) ReceiveMessage(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.CreateSliceMessage:
-		d := s.Holder.DB(obj.DB)
+		d := s.Holder.Index(obj.Index)
 		if d == nil {
-			return fmt.Errorf("Local DB not found: %s", obj.DB)
+			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
 		d.SetRemoteMaxSlice(obj.Slice)
-	case *internal.CreateDBMessage:
-		opt := DBOptions{ColumnLabel: obj.Meta.ColumnLabel}
-		_, err := s.Holder.CreateDB(obj.DB, opt)
+	case *internal.CreateIndexMessage:
+		opt := IndexOptions{ColumnLabel: obj.Meta.ColumnLabel}
+		_, err := s.Holder.CreateIndex(obj.Index, opt)
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteDBMessage:
-		if err := s.Holder.DeleteDB(obj.DB); err != nil {
+	case *internal.DeleteIndexMessage:
+		if err := s.Holder.DeleteIndex(obj.Index); err != nil {
 			return err
 		}
 	case *internal.CreateFrameMessage:
-		db := s.Holder.DB(obj.DB)
+		index := s.Holder.Index(obj.Index)
 		opt := FrameOptions{RowLabel: obj.Meta.RowLabel}
-		_, err := db.CreateFrame(obj.Frame, opt)
+		_, err := index.CreateFrame(obj.Frame, opt)
 		if err != nil {
 			return err
 		}
 	case *internal.DeleteFrameMessage:
-		db := s.Holder.DB(obj.DB)
-		if err := db.DeleteFrame(obj.Frame); err != nil {
+		index := s.Holder.Index(obj.Index)
+		if err := index.DeleteFrame(obj.Frame); err != nil {
 			return err
 		}
 	}
@@ -273,16 +273,16 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 
 // Server implements gossip.StateHandler.
 // LocalState returns the state of the local node as well as the
-// holder (dbs/frames) according to the local node.
+// holder (indexes/frames) according to the local node.
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 func (s *Server) LocalState() (proto.Message, error) {
 	if s.Holder == nil {
 		return nil, errors.New("Server.Holder is nil.")
 	}
 	return &internal.NodeState{
-		Host:  s.Host,
-		State: "OK", // TODO: make this work, pull from s.Cluster.Node
-		DBs:   encodeDBs(s.Holder.DBs()),
+		Host:    s.Host,
+		State:   "OK", // TODO: make this work, pull from s.Cluster.Node
+		Indexes: encodeIndexes(s.Holder.Indexes()),
 	}, nil
 }
 
@@ -294,18 +294,18 @@ func (s *Server) HandleRemoteState(pb proto.Message) error {
 func (s *Server) mergeRemoteState(ns *internal.NodeState) error {
 	// TODO: update some node state value in the cluster (it should be in cluster.node i guess)
 
-	// Create databases that don't exist.
-	for _, db := range ns.DBs {
-		opt := DBOptions{
-			ColumnLabel: db.Meta.ColumnLabel,
-			TimeQuantum: TimeQuantum(db.Meta.TimeQuantum),
+	// Create indexes that don't exist.
+	for _, index := range ns.Indexes {
+		opt := IndexOptions{
+			ColumnLabel: index.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(index.Meta.TimeQuantum),
 		}
-		d, err := s.Holder.CreateDBIfNotExists(db.Name, opt)
+		d, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
 		if err != nil {
 			return err
 		}
 		// Create frames that don't exist.
-		for _, f := range db.Frames {
+		for _, f := range index.Frames {
 			opt := FrameOptions{
 				RowLabel:    f.Meta.RowLabel,
 				TimeQuantum: TimeQuantum(f.Meta.TimeQuantum),

@@ -18,7 +18,7 @@ func NewBenchCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Use:   "bench",
 		Short: "Benchmark operations.",
 		Long: `
-Executes a benchmark for a given operation against the database.
+Executes a benchmark for a given operation against the index.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := Bencher.Run(context.Background()); err != nil {
@@ -29,7 +29,7 @@ Executes a benchmark for a given operation against the database.
 	}
 	flags := benchCmd.Flags()
 	flags.StringVarP(&Bencher.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
-	flags.StringVarP(&Bencher.Database, "database", "d", "", "Pilosa database to benchmark.")
+	flags.StringVarP(&Bencher.Index, "index", "i", "", "Pilosa index to benchmark.")
 	flags.StringVarP(&Bencher.Frame, "frame", "f", "", "Frame to benchmark.")
 	flags.StringVarP(&Bencher.Op, "operation", "o", "set-bit", "Operation to perform: choose from [set-bit]")
 	flags.IntVarP(&Bencher.N, "num", "n", 0, "Number of operations to perform.")

@@ -12,36 +12,36 @@ import (
 	"github.com/pilosa/pilosa/pql"
 )
 
-// Ensure holder can delete a database and its underlying files.
-func TestHolder_DeleteDB(t *testing.T) {
+// Ensure holder can delete an index and its underlying files.
+func TestHolder_DeleteIndex(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
 
-	// Write bits to separate databases.
-	f0 := hldr.MustCreateFragmentIfNotExists("d0", "f", pilosa.ViewStandard, 0)
+	// Write bits to separate indexes.
+	f0 := hldr.MustCreateFragmentIfNotExists("i0", "f", pilosa.ViewStandard, 0)
 	if _, err := f0.SetBit(100, 200); err != nil {
 		t.Fatal(err)
 	}
-	f1 := hldr.MustCreateFragmentIfNotExists("d1", "f", pilosa.ViewStandard, 0)
+	f1 := hldr.MustCreateFragmentIfNotExists("i1", "f", pilosa.ViewStandard, 0)
 	if _, err := f1.SetBit(100, 200); err != nil {
 		t.Fatal(err)
 	}
 
-	// Ensure d0 exists.
-	if _, err := os.Stat(hldr.DBPath("d0")); err != nil {
+	// Ensure i0 exists.
+	if _, err := os.Stat(hldr.IndexPath("i0")); err != nil {
 		t.Fatal(err)
 	}
 
-	// Delete d0.
-	if err := hldr.DeleteDB("d0"); err != nil {
+	// Delete i0.
+	if err := hldr.DeleteIndex("i0"); err != nil {
 		t.Fatal(err)
 	}
 
-	// Ensure d0 files are removed & d1 still exists.
-	if _, err := os.Stat(hldr.DBPath("d0")); !os.IsNotExist(err) {
-		t.Fatal("expected d0 file deletion")
-	} else if _, err := os.Stat(hldr.DBPath("d1")); err != nil {
-		t.Fatal("expected d1 files to still exist", err)
+	// Ensure i0 files are removed & i1 still exists.
+	if _, err := os.Stat(hldr.IndexPath("i0")); !os.IsNotExist(err) {
+		t.Fatal("expected i0 file deletion")
+	} else if _, err := os.Stat(hldr.IndexPath("i1")); err != nil {
+		t.Fatal("expected i1 files to still exist", err)
 	}
 }
 
@@ -59,12 +59,12 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	s := NewServer()
 	defer s.Close()
 	s.Handler.Holder = hldr1.Holder
-	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor()
 		e.Holder = hldr1.Holder
 		e.Host = cluster.Nodes[1].Host
 		e.Cluster = cluster
-		return e.Execute(ctx, db, query, slices, opt)
+		return e.Execute(ctx, index, query, slices, opt)
 	}
 
 	// Mock 2-node, fully replicated cluster.
@@ -74,13 +74,13 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	// Create frames on nodes.
 	for _, hldr := range []*Holder{hldr0, hldr1} {
-		hldr.MustCreateFrameIfNotExists("d", "f")
-		hldr.MustCreateFrameIfNotExists("d", "f0")
+		hldr.MustCreateFrameIfNotExists("i", "f")
+		hldr.MustCreateFrameIfNotExists("i", "f0")
 		hldr.MustCreateFrameIfNotExists("y", "z")
 	}
 
 	// Set data on the local holder.
-	f := hldr0.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
+	f := hldr0.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
 	if _, err := f.SetBit(0, 10); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(2, 20); err != nil {
@@ -91,7 +91,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f = hldr0.MustCreateFragmentIfNotExists("d", "f0", pilosa.ViewStandard, 1)
+	f = hldr0.MustCreateFragmentIfNotExists("i", "f0", pilosa.ViewStandard, 1)
 	if _, err := f.SetBit(9, SliceWidth+5); err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr0.MustCreateFragmentIfNotExists("y", "z", pilosa.ViewStandard, 0)
 
 	// Set data on the remote holder.
-	f = hldr1.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
+	f = hldr1.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
 	if _, err := f.SetBit(0, 4000); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(3, 10); err != nil {
@@ -118,8 +118,8 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	}
 
 	// Set highest slice.
-	hldr0.DB("d").SetRemoteMaxSlice(1)
-	hldr0.DB("y").SetRemoteMaxSlice(3)
+	hldr0.Index("i").SetRemoteMaxSlice(1)
+	hldr0.Index("y").SetRemoteMaxSlice(3)
 
 	// Set up syncer.
 	syncer := pilosa.HolderSyncer{
@@ -134,7 +134,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*Holder{hldr0, hldr1} {
-		f := hldr.Fragment("d", "f", pilosa.ViewStandard, 0)
+		f := hldr.Fragment("i", "f", pilosa.ViewStandard, 0)
 		if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
 			t.Fatalf("unexpected bits(%d/0): %+v", i, a)
 		} else if a := f.Row(2).Bits(); !reflect.DeepEqual(a, []uint64{20}) {
@@ -147,7 +147,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 			t.Fatalf("unexpected bits(%d/200): %+v", i, a)
 		}
 
-		f = hldr.Fragment("d", "f0", pilosa.ViewStandard, 1)
+		f = hldr.Fragment("i", "f0", pilosa.ViewStandard, 1)
 		a := f.Row(9).Bits()
 		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
@@ -197,18 +197,18 @@ func (h *Holder) Close() error {
 	return h.Holder.Close()
 }
 
-// MustCreateDBIfNotExists returns a given db. Panic on error.
-func (h *Holder) MustCreateDBIfNotExists(db string, opt pilosa.DBOptions) *DB {
-	d, err := h.Holder.CreateDBIfNotExists(db, opt)
+// MustCreateIndexIfNotExists returns a given index. Panic on error.
+func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOptions) *Index {
+	d, err := h.Holder.CreateIndexIfNotExists(index, opt)
 	if err != nil {
 		panic(err)
 	}
-	return &DB{DB: d}
+	return &Index{Index: d}
 }
 
 // MustCreateFrameIfNotExists returns a given frame. Panic on error.
-func (h *Holder) MustCreateFrameIfNotExists(db, frame string) *Frame {
-	f, err := h.MustCreateDBIfNotExists(db, pilosa.DBOptions{}).CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
+func (h *Holder) MustCreateFrameIfNotExists(index, frame string) *Frame {
+	f, err := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{}).CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -216,8 +216,8 @@ func (h *Holder) MustCreateFrameIfNotExists(db, frame string) *Frame {
 }
 
 // MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
-func (h *Holder) MustCreateFragmentIfNotExists(db, frame, view string, slice uint64) *Fragment {
-	d := h.MustCreateDBIfNotExists(db, pilosa.DBOptions{})
+func (h *Holder) MustCreateFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
+	d := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
 	f, err := d.CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
 	if err != nil {
 		panic(err)

@@ -37,11 +37,11 @@ func TestCluster_Owners(t *testing.T) {
 
 // Ensure the partitioner can assign a fragment to a partition.
 func TestCluster_Partition(t *testing.T) {
-	if err := quick.Check(func(db string, slice uint64, partitionN int) bool {
+	if err := quick.Check(func(index string, slice uint64, partitionN int) bool {
 		c := pilosa.NewCluster()
 		c.PartitionN = partitionN
 
-		partitionID := c.Partition(db, slice)
+		partitionID := c.Partition(index, slice)
 		if partitionID < 0 || partitionID >= partitionN {
 			t.Errorf("partition out of range: slice=%d, p=%d, n=%d", slice, partitionID, partitionN)
 		}

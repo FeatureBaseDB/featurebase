@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package internal;
 
-message DBMeta {
+message IndexMeta {
 	string ColumnLabel = 1;
 	string TimeQuantum = 2;
 }
@@ -20,7 +20,7 @@ message ImportResponse {
 }
 
 message BlockDataRequest {
-	string DB = 1;
+	string Index = 1;
 	string Frame = 2;
 	string View = 5;
 	uint64 Slice = 4;
@@ -41,27 +41,27 @@ message MaxSlicesResponse {
 }
 
 message CreateSliceMessage {
-    string DB = 1;
+    string Index = 1;
     uint64 Slice = 2;
 }
 
-message DeleteDBMessage {
-    string DB = 1;
+message DeleteIndexMessage {
+    string Index = 1;
 }
 
-message CreateDBMessage {
-    string DB = 1;
-    DBMeta Meta = 2;
+message CreateIndexMessage {
+    string Index = 1;
+    IndexMeta Meta = 2;
 }
 
 message CreateFrameMessage {
-    string DB = 1;
+    string Index = 1;
     string Frame = 2;
     FrameMeta Meta = 3;
 }
 
 message DeleteFrameMessage {
-    string DB = 1;
+    string Index = 1;
     string Frame = 2;
 }
 
@@ -70,9 +70,9 @@ message Frame {
     FrameMeta Meta = 2;
 }
 
-message DB {
+message Index {
     string Name = 1;
-    DBMeta Meta = 2;
+    IndexMeta Meta = 2;
     uint64 MaxSlice = 3;
     repeated Frame Frames = 4;
 }
@@ -80,5 +80,5 @@ message DB {
 message NodeState {
     string Host = 1;
     string State = 2;
-    repeated DB DBs = 3;
+    repeated Index Indexes = 3;
 }

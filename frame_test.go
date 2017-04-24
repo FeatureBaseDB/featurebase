@@ -60,7 +60,7 @@ func TestFrame_NameRestriction(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "d", ".meta")
+	frame, err := pilosa.NewFrame(path, "i", ".meta")
 	if frame != nil {
 		t.Fatalf("unexpected frame name %s", err)
 	}
@@ -77,7 +77,7 @@ func NewFrame() *Frame {
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "d", "f")
+	frame, err := pilosa.NewFrame(path, "i", "f")
 	if err != nil {
 		panic(err)
 	}
@@ -99,15 +99,15 @@ func (f *Frame) Close() error {
 	return f.Frame.Close()
 }
 
-// Reopen closes the database and reopens it.
+// Reopen closes the index and reopens it.
 func (f *Frame) Reopen() error {
 	var err error
 	if err := f.Frame.Close(); err != nil {
 		return err
 	}
 
-	path, db, name := f.Path(), f.DB(), f.Name()
-	f.Frame, err = pilosa.NewFrame(path, db, name)
+	path, index, name := f.Path(), f.Index(), f.Name()
+	f.Frame, err = pilosa.NewFrame(path, index, name)
 	if err != nil {
 		return err
 	}

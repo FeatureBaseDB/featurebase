@@ -50,12 +50,12 @@ const (
 	DefaultFragmentMaxOpN = 2000
 )
 
-// Fragment represents the intersection of a frame and slice in a database.
+// Fragment represents the intersection of a frame and slice in an index.
 type Fragment struct {
 	mu sync.Mutex
 
 	// Composite identifiers
-	db    string
+	index string
 	frame string
 	view  string
 	slice uint64
@@ -94,10 +94,10 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, db, frame, view string, slice uint64) *Fragment {
+func NewFragment(path, index, frame, view string, slice uint64) *Fragment {
 	return &Fragment{
 		path:      path,
-		db:        db,
+		index:     index,
 		frame:     frame,
 		view:      view,
 		slice:     slice,
@@ -117,8 +117,8 @@ func (f *Fragment) Path() string { return f.path }
 // CachePath returns the path to the fragment's cache data.
 func (f *Fragment) CachePath() string { return f.path + CacheExt }
 
-// DB returns the database the fragment was initialized with.
-func (f *Fragment) DB() string { return f.db }
+// Index returns the index that the fragment was initialized with.
+func (f *Fragment) Index() string { return f.index }
 
 // Frame returns the frame the fragment was initialized with.
 func (f *Fragment) Frame() string { return f.frame }
@@ -1002,8 +1002,8 @@ func track(start time.Time, name string, logger *log.Logger) {
 
 func (f *Fragment) snapshot() error {
 	logger := f.logger()
-	logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.db, f.frame, f.view, f.slice)
-	defer track(time.Now(), fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.db, f.frame, f.view, f.slice), logger)
+	logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
+	defer track(time.Now(), fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.frame, f.view, f.slice), logger)
 
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + SnapshotExt
@@ -1307,7 +1307,7 @@ func (s *FragmentSyncer) isClosing() bool {
 // then merges any blocks which have differences.
 func (s *FragmentSyncer) SyncFragment() error {
 	// Determine replica set.
-	nodes := s.Cluster.FragmentNodes(s.Fragment.DB(), s.Fragment.Slice())
+	nodes := s.Cluster.FragmentNodes(s.Fragment.Index(), s.Fragment.Slice())
 	if len(nodes) == 1 {
 		return nil
 	}
@@ -1327,7 +1327,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		if err != nil {
 			return err
 		}
-		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
+		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return err
 		}
@@ -1392,7 +1392,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	// Read pairs from each remote block.
 	var pairSets []PairSet
 	var clients []*Client
-	for _, node := range s.Cluster.FragmentNodes(f.DB(), f.Slice()) {
+	for _, node := range s.Cluster.FragmentNodes(f.Index(), f.Slice()) {
 		if s.Host == node.Host {
 			continue
 		}
@@ -1409,7 +1409,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		clients = append(clients, client)
 
 		// Only sync the standard block.
-		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.DB(), f.Frame(), ViewStandard, f.Slice(), id)
+		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Frame(), ViewStandard, f.Slice(), id)
 		if err != nil {
 			return err
 		}
@@ -1457,7 +1457,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		}
 
 		// Execute query.
-		_, err := clients[i].ExecuteQuery(context.Background(), f.DB(), buf.String(), false)
+		_, err := clients[i].ExecuteQuery(context.Background(), f.Index(), buf.String(), false)
 		if err != nil {
 			return err
 		}

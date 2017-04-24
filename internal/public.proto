@@ -58,7 +58,7 @@ message QueryResult {
 }
 
 message ImportRequest {
-	string DB = 1;
+	string Index = 1;
 	string Frame = 2;
 	uint64 Slice = 3;
 	repeated uint64 RowIDs = 4;
