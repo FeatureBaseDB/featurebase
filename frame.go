@@ -529,6 +529,9 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			inverse = []string{ViewInverse}
 		} else {
 			standard = ViewsByTime(ViewStandard, *timestamp, q)
+			// In order to match the logic of `SetBit()`, we want bits
+			// with timestamps to write to both time and standard views.
+			standard = append(standard, ViewStandard)
 			inverse = ViewsByTime(ViewInverse, *timestamp, q)
 		}
 
