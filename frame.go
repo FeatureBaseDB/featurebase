@@ -422,7 +422,7 @@ func (f *Frame) newView(path, name string) *View {
 	view.cacheType = f.cacheType
 	view.LogOutput = f.LogOutput
 	view.BitmapAttrStore = f.bitmapAttrStore
-	view.stats = f.Stats.WithTags(fmt.Sprintf("slice:%s", name))
+	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	return view
 }
 
