@@ -27,7 +27,7 @@ glide.lock: glide glide.yaml
 
 vendor-update: glide.lock
 
-test: vendor generate
+test: vendor
 	go test $(shell cd $(GOPATH)/src/$(CLONE_URL); go list ./... | grep -v vendor)
 
 pilosa: vendor
@@ -42,13 +42,18 @@ install: vendor
 
 .protoc-gen-gofast: vendor
 ifndef PROTOC
-	$(error "protoc is not available please install protoc from https://github.com/google/protobuf/releases")
+	$(error "protoc is not available. please install protoc from https://github.com/google/protobuf/releases")
 endif
 	go build -o .protoc-gen-gofast ./vendor/github.com/gogo/protobuf/protoc-gen-gofast
 	cp ./.protoc-gen-gofast $(GOPATH)/bin/protoc-gen-gofast
 
-generate: .protoc-gen-gofast statik
+generate-protoc: .protoc-gen-gofast
 	go generate github.com/pilosa/pilosa/internal
+
+generate-statik: statik
+	go generate github.com/pilosa/pilosa/handler
+
+generate: generate-protoc generate-statik
 
 statik:
 ifndef STATIK
