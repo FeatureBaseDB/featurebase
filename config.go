@@ -13,9 +13,8 @@ const (
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir       string   `toml:"data-dir"`
-	Host          string   `toml:"host"`
-	LongQueryTime Duration `toml:"long-query-time"`
+	DataDir string `toml:"data-dir"`
+	Host    string `toml:"host"`
 
 	Cluster struct {
 		ReplicaN        int      `toml:"replicas"`
@@ -25,6 +24,7 @@ type Config struct {
 		PollingInterval Duration `toml:"polling-interval"`
 		InternalPort    string   `toml:"internal-port"`
 		GossipSeed      string   `toml:"gossip-seed"`
+		LongQueryTime   Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
 	Plugins struct {

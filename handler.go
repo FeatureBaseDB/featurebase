@@ -117,6 +117,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Handle some stats tagging
 	statsTags := make([]string, 0, 3)
 
+	fmt.Printf("long query time: %v\n", h.Cluster.LongQueryTime)
 	if h.Cluster.LongQueryTime > 0 && dif > h.Cluster.LongQueryTime {
 		h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), float64(dif))
 		statsTags = append(statsTags, "slow_query")
