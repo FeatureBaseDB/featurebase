@@ -45,7 +45,7 @@ func (cmd *SortCommand) Run(ctx context.Context) error {
 	r.FieldsPerRecord = -1
 	a := make([]pilosa.Bit, 0, 1000000)
 	for {
-		bitmapID, profileID, timestamp, err := readCSVRow(r)
+		rowID, columnID, timestamp, err := readCSVRow(r)
 		if err == io.EOF {
 			break
 		} else if err == errBlank {
@@ -53,7 +53,7 @@ func (cmd *SortCommand) Run(ctx context.Context) error {
 		} else if err != nil {
 			return err
 		}
-		a = append(a, pilosa.Bit{BitmapID: bitmapID, ProfileID: profileID, Timestamp: timestamp})
+		a = append(a, pilosa.Bit{RowID: rowID, ColumnID: columnID, Timestamp: timestamp})
 	}
 
 	// Sort bits by position.
@@ -65,10 +65,10 @@ func (cmd *SortCommand) Run(ctx context.Context) error {
 	for _, bit := range a {
 		// Write CSV to buffer.
 		buf = buf[:0]
-		buf = strconv.AppendUint(buf, bit.BitmapID, 10)
+		buf = strconv.AppendUint(buf, bit.RowID, 10)
 
 		buf = append(buf, ',')
-		buf = strconv.AppendUint(buf, bit.ProfileID, 10)
+		buf = strconv.AppendUint(buf, bit.ColumnID, 10)
 
 		if bit.Timestamp != 0 {
 			buf = append(buf, ',')
@@ -91,8 +91,8 @@ func (cmd *SortCommand) Run(ctx context.Context) error {
 	return nil
 }
 
-// readCSVRow reads a bitmap/profile pair from a CSV row.
-func readCSVRow(r *csv.Reader) (bitmapID, profileID uint64, timestamp int64, err error) {
+// readCSVRow reads a row/column pair from a CSV row.
+func readCSVRow(r *csv.Reader) (rowID, columnID uint64, timestamp int64, err error) {
 	// Read CSV row.
 	record, err := r.Read()
 	if err != nil {
@@ -106,16 +106,16 @@ func readCSVRow(r *csv.Reader) (bitmapID, profileID uint64, timestamp int64, err
 		return 0, 0, 0, fmt.Errorf("bad column count: %d", len(record))
 	}
 
-	// Parse bitmap id.
-	bitmapID, err = strconv.ParseUint(record[0], 10, 64)
+	// Parse row id.
+	rowID, err = strconv.ParseUint(record[0], 10, 64)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid bitmap id: %q", record[0])
+		return 0, 0, 0, fmt.Errorf("invalid row id: %q", record[0])
 	}
 
-	// Parse bitmap id.
-	profileID, err = strconv.ParseUint(record[1], 10, 64)
+	// Parse column id.
+	columnID, err = strconv.ParseUint(record[1], 10, 64)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid profile id: %q", record[1])
+		return 0, 0, 0, fmt.Errorf("invalid column id: %q", record[1])
 	}
 
 	// Parse timestamp, if available.
@@ -127,7 +127,7 @@ func readCSVRow(r *csv.Reader) (bitmapID, profileID uint64, timestamp int64, err
 		timestamp = t.UnixNano()
 	}
 
-	return bitmapID, profileID, timestamp, nil
+	return rowID, columnID, timestamp, nil
 }
 
 // errBlank indicates a blank row in a CSV file.

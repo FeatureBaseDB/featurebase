@@ -22,13 +22,13 @@ func TestBenchConfig(t *testing.T) {
 			args: []string{"bench", "--operation", "set-bit"},
 			env:  map[string]string{"PILOSA_HOST": "localhost:12345"},
 			cfgFileContent: `
-database = "mydb"
+index = "myindex"
 frame = "f1"
 `,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Bencher.Host, "localhost:12345")
-				v.Check(cmd.Bencher.Database, "mydb")
+				v.Check(cmd.Bencher.Index, "myindex")
 				v.Check(cmd.Bencher.Frame, "f1")
 				v.Check(cmd.Bencher.Op, "set-bit")
 				v.Check(cmd.Bencher.N, 0)

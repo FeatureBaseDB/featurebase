@@ -23,8 +23,8 @@ type GossipNodeSet struct {
 
 	broadcasts *memberlist.TransmitLimitedQueue
 
-	stateHandler pilosa.StateHandler
-	config       *GossipConfig
+	statusHandler pilosa.StatusHandler
+	config        *GossipConfig
 
 	// The writer for any logging.
 	LogOutput io.Writer
@@ -81,7 +81,7 @@ type GossipConfig struct {
 }
 
 // NewGossipNodeSet returns a new instance of GossipNodeSet.
-func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, sh pilosa.StateHandler) *GossipNodeSet {
+func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, sh pilosa.StatusHandler) *GossipNodeSet {
 	g := &GossipNodeSet{
 		LogOutput: os.Stderr,
 	}
@@ -98,7 +98,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	g.config.memberlistConfig.AdvertisePort = gossipPort
 	g.config.memberlistConfig.Delegate = g
 
-	g.stateHandler = sh
+	g.statusHandler = sh
 
 	return g
 }
@@ -168,7 +168,7 @@ func (g *GossipNodeSet) GetBroadcasts(overhead, limit int) [][]byte {
 }
 
 func (g *GossipNodeSet) LocalState(join bool) []byte {
-	pb, err := g.stateHandler.LocalState()
+	pb, err := g.statusHandler.LocalStatus()
 	if err != nil {
 		g.logger().Printf("error getting local state, err=%s", err)
 		return []byte{}
@@ -185,12 +185,12 @@ func (g *GossipNodeSet) LocalState(join bool) []byte {
 
 func (g *GossipNodeSet) MergeRemoteState(buf []byte, join bool) {
 	// Unmarshal nodestate data.
-	var pb internal.NodeState
+	var pb internal.NodeStatus
 	if err := proto.Unmarshal(buf, &pb); err != nil {
 		g.logger().Printf("error unmarshalling nodestate data, err=%s", err)
 		return
 	}
-	err := g.stateHandler.HandleRemoteState(&pb)
+	err := g.statusHandler.HandleRemoteStatus(&pb)
 	if err != nil {
 		g.logger().Printf("merge state error: %s", err)
 	}

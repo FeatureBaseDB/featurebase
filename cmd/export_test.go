@@ -22,13 +22,13 @@ func TestExportConfig(t *testing.T) {
 			args: []string{"export", "--output-file", "/somefile"},
 			env:  map[string]string{"PILOSA_HOST": "localhost:12345"},
 			cfgFileContent: `
-database = "mydb"
+index = "myindex"
 frame = "f1"
 `,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Exporter.Host, "localhost:12345")
-				v.Check(cmd.Exporter.Database, "mydb")
+				v.Check(cmd.Exporter.Index, "myindex")
 				v.Check(cmd.Exporter.Frame, "f1")
 				v.Check(cmd.Exporter.Path, "/somefile")
 				return v.Error()

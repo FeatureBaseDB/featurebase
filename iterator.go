@@ -6,19 +6,19 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 )
 
-// Iterator is an interface for looping over bitmap/profile pairs.
+// Iterator is an interface for looping over row/column pairs.
 type Iterator interface {
-	Seek(bitmapID, profileID uint64)
-	Next() (bitmapID, profileID uint64, eof bool)
+	Seek(rowID, columnID uint64)
+	Next() (rowID, columnID uint64, eof bool)
 }
 
 // BufIterator wraps an iterator to provide the ability to unread values.
 type BufIterator struct {
 	buf struct {
-		bitmapID  uint64
-		profileID uint64
-		eof       bool
-		full      bool
+		rowID    uint64
+		columnID uint64
+		eof      bool
+		full     bool
 	}
 	itr Iterator
 }
@@ -29,28 +29,28 @@ func NewBufIterator(itr Iterator) *BufIterator {
 }
 
 // Seek moves to the first pair equal to or greater than pseek/bseek.
-func (itr *BufIterator) Seek(bitmapID, profileID uint64) {
+func (itr *BufIterator) Seek(rowID, columnID uint64) {
 	itr.buf.full = false
-	itr.itr.Seek(bitmapID, profileID)
+	itr.itr.Seek(rowID, columnID)
 }
 
-// Next returns the next pair in the bitmap.
+// Next returns the next pair in the row.
 // If a value has been buffered then it is returned and the buffer is cleared.
-func (itr *BufIterator) Next() (bitmapID, profileID uint64, eof bool) {
+func (itr *BufIterator) Next() (rowID, columnID uint64, eof bool) {
 	if itr.buf.full {
 		itr.buf.full = false
-		return itr.buf.bitmapID, itr.buf.profileID, itr.buf.eof
+		return itr.buf.rowID, itr.buf.columnID, itr.buf.eof
 	}
 
 	// Read values onto buffer in case of unread.
-	itr.buf.bitmapID, itr.buf.profileID, itr.buf.eof = itr.itr.Next()
+	itr.buf.rowID, itr.buf.columnID, itr.buf.eof = itr.itr.Next()
 
-	return itr.buf.bitmapID, itr.buf.profileID, itr.buf.eof
+	return itr.buf.rowID, itr.buf.columnID, itr.buf.eof
 }
 
 // Peek reads the next value but leaves it on the buffer.
-func (itr *BufIterator) Peek() (bitmapID, profileID uint64, eof bool) {
-	bitmapID, profileID, eof = itr.Next()
+func (itr *BufIterator) Peek() (rowID, columnID uint64, eof bool) {
+	rowID, columnID, eof = itr.Next()
 	itr.Unread()
 	return
 }
@@ -64,30 +64,30 @@ func (itr *BufIterator) Unread() {
 	itr.buf.full = true
 }
 
-// LimitIterator wraps an Iterator and limits it to a max profile/bitmap pair.
+// LimitIterator wraps an Iterator and limits it to a max column/row pair.
 type LimitIterator struct {
-	itr          Iterator
-	maxBitmapID  uint64
-	maxProfileID uint64
+	itr         Iterator
+	maxRowID    uint64
+	maxColumnID uint64
 
 	eof bool
 }
 
 // NewLimitIterator returns a new LimitIterator.
-func NewLimitIterator(itr Iterator, maxBitmapID, maxProfileID uint64) *LimitIterator {
+func NewLimitIterator(itr Iterator, maxRowID, maxColumnID uint64) *LimitIterator {
 	return &LimitIterator{
-		itr:          itr,
-		maxBitmapID:  maxBitmapID,
-		maxProfileID: maxProfileID,
+		itr:         itr,
+		maxRowID:    maxRowID,
+		maxColumnID: maxColumnID,
 	}
 }
 
-// Seek moves the underlying iterator to a profile/bitmap pair.
-func (itr *LimitIterator) Seek(bitmapID, profileID uint64) { itr.itr.Seek(bitmapID, profileID) }
+// Seek moves the underlying iterator to a column/row pair.
+func (itr *LimitIterator) Seek(rowID, columnID uint64) { itr.itr.Seek(rowID, columnID) }
 
-// Next returns the next bitmap/profile ID pair.
+// Next returns the next row/column ID pair.
 // If the underlying iterator returns a pair higher than the max then EOF is returned.
-func (itr *LimitIterator) Next() (bitmapID, profileID uint64, eof bool) {
+func (itr *LimitIterator) Next() (rowID, columnID uint64, eof bool) {
 	// Always return EOF once it is reached by limit or the underlying iterator.
 	if itr.eof {
 		return 0, 0, true
@@ -95,35 +95,35 @@ func (itr *LimitIterator) Next() (bitmapID, profileID uint64, eof bool) {
 
 	// Retrieve pair from underlying iterator.
 	// Mark as EOF if it is beyond the limit (or at EOF).
-	bitmapID, profileID, eof = itr.itr.Next()
-	if eof || bitmapID > itr.maxBitmapID || (bitmapID == itr.maxBitmapID && profileID > itr.maxProfileID) {
+	rowID, columnID, eof = itr.itr.Next()
+	if eof || rowID > itr.maxRowID || (rowID == itr.maxRowID && columnID > itr.maxColumnID) {
 		itr.eof = true
 		return 0, 0, true
 	}
 
-	return bitmapID, profileID, false
+	return rowID, columnID, false
 }
 
-// SliceIterator iterates over a pair of bitmap/profile ID slices.
+// SliceIterator iterates over a pair of row/column ID slices.
 type SliceIterator struct {
-	bitmapIDs  []uint64
-	profileIDs []uint64
+	rowIDs    []uint64
+	columnIDs []uint64
 
 	i, n int
 }
 
-// NewSliceIterator returns an iterator to iterate over a set of bitmap/profile ID pairs.
+// NewSliceIterator returns an iterator to iterate over a set of row/column ID pairs.
 // Both slices MUST have an equal length. Otherwise the function will panic.
-func NewSliceIterator(bitmapIDs, profileIDs []uint64) *SliceIterator {
-	if len(profileIDs) != len(bitmapIDs) {
-		panic(fmt.Sprintf("pilosa.SliceIterator: pair length mismatch: %d != %d", len(bitmapIDs), len(profileIDs)))
+func NewSliceIterator(rowIDs, columnIDs []uint64) *SliceIterator {
+	if len(columnIDs) != len(rowIDs) {
+		panic(fmt.Sprintf("pilosa.SliceIterator: pair length mismatch: %d != %d", len(rowIDs), len(columnIDs)))
 	}
 
 	return &SliceIterator{
-		bitmapIDs:  bitmapIDs,
-		profileIDs: profileIDs,
+		rowIDs:    rowIDs,
+		columnIDs: columnIDs,
 
-		n: len(bitmapIDs),
+		n: len(rowIDs),
 	}
 }
 
@@ -131,10 +131,10 @@ func NewSliceIterator(bitmapIDs, profileIDs []uint64) *SliceIterator {
 // If the pair is not found, the iterator seeks to the next pair.
 func (itr *SliceIterator) Seek(bseek, pseek uint64) {
 	for i := 0; i < itr.n; i++ {
-		bitmapID := itr.bitmapIDs[i]
-		profileID := itr.profileIDs[i]
+		rowID := itr.rowIDs[i]
+		columnID := itr.columnIDs[i]
 
-		if (bseek == bitmapID && pseek <= profileID) || bseek < bitmapID {
+		if (bseek == rowID && pseek <= columnID) || bseek < rowID {
 			itr.i = i
 			return
 		}
@@ -144,20 +144,20 @@ func (itr *SliceIterator) Seek(bseek, pseek uint64) {
 	itr.i = itr.n
 }
 
-// Next returns the next bitmap/profile ID pair.
-func (itr *SliceIterator) Next() (bitmapID, profileID uint64, eof bool) {
+// Next returns the next row/column ID pair.
+func (itr *SliceIterator) Next() (rowID, columnID uint64, eof bool) {
 	if itr.i >= itr.n {
 		return 0, 0, true
 	}
 
-	bitmapID = itr.bitmapIDs[itr.i]
-	profileID = itr.profileIDs[itr.i]
+	rowID = itr.rowIDs[itr.i]
+	columnID = itr.columnIDs[itr.i]
 
 	itr.i++
-	return bitmapID, profileID, false
+	return rowID, columnID, false
 }
 
-// RoaringIterator converts a roaring.Iterator to output profile/bitmap pairs.
+// RoaringIterator converts a roaring.Iterator to output column/row pairs.
 type RoaringIterator struct {
 	itr *roaring.Iterator
 }
@@ -173,8 +173,8 @@ func (itr *RoaringIterator) Seek(bseek, pseek uint64) {
 	itr.itr.Seek((bseek * SliceWidth) + pseek)
 }
 
-// Next returns the next profile/bitmap ID pair.
-func (itr *RoaringIterator) Next() (bitmapID, profileID uint64, eof bool) {
+// Next returns the next column/row ID pair.
+func (itr *RoaringIterator) Next() (rowID, columnID uint64, eof bool) {
 	v, eof := itr.itr.Next()
 	return v / SliceWidth, v % SliceWidth, eof
 }

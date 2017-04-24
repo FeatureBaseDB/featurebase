@@ -26,7 +26,7 @@ func IsValidView(name string) bool {
 type View struct {
 	mu    sync.Mutex
 	path  string
-	db    string
+	index string
 	frame string
 	name  string
 
@@ -38,15 +38,15 @@ type View struct {
 
 	stats StatsClient
 
-	BitmapAttrStore *AttrStore
-	LogOutput       io.Writer
+	RowAttrStore *AttrStore
+	LogOutput    io.Writer
 }
 
 // NewView returns a new instance of View.
-func NewView(path, db, frame, name string, cacheSize uint32) *View {
+func NewView(path, index, frame, name string, cacheSize uint32) *View {
 	return &View{
 		path:      path,
-		db:        db,
+		index:     index,
 		frame:     frame,
 		name:      name,
 		cacheSize: cacheSize,
@@ -62,8 +62,8 @@ func NewView(path, db, frame, name string, cacheSize uint32) *View {
 // Name returns the name the view was initialized with.
 func (v *View) Name() string { return v.name }
 
-// DB returns the database name the view was initialized with.
-func (v *View) DB() string { return v.db }
+// Index returns the index name the view was initialized with.
+func (v *View) Index() string { return v.index }
 
 // Frame returns the frame name the view was initialized with.
 func (v *View) Frame() string { return v.frame }
@@ -124,7 +124,7 @@ func (v *View) openFragments() error {
 		if err := frag.Open(); err != nil {
 			return fmt.Errorf("open fragment: slice=%s, err=%s", frag.Slice(), err)
 		}
-		frag.BitmapAttrStore = v.BitmapAttrStore
+		frag.RowAttrStore = v.RowAttrStore
 		v.fragments[frag.Slice()] = frag
 
 		v.stats.Count("maxSlice", 1)
@@ -205,7 +205,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	if err := frag.Open(); err != nil {
 		return nil, err
 	}
-	frag.BitmapAttrStore = v.BitmapAttrStore
+	frag.RowAttrStore = v.RowAttrStore
 
 	// Save to lookup.
 	v.fragments[slice] = frag
@@ -216,7 +216,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 }
 
 func (v *View) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, v.db, v.frame, v.name, slice)
+	frag := NewFragment(path, v.index, v.frame, v.name, slice)
 	frag.cacheType = v.cacheType
 	frag.cacheSize = v.cacheSize
 	frag.LogOutput = v.LogOutput
@@ -225,23 +225,23 @@ func (v *View) newFragment(path string, slice uint64) *Fragment {
 }
 
 // SetBit sets a bit within the view.
-func (v *View) SetBit(bitmapID, profileID uint64) (changed bool, err error) {
-	slice := profileID / SliceWidth
+func (v *View) SetBit(rowID, columnID uint64) (changed bool, err error) {
+	slice := columnID / SliceWidth
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return changed, err
 	}
-	return frag.SetBit(bitmapID, profileID)
+	return frag.SetBit(rowID, columnID)
 }
 
 // ClearBit clears a bit within the view.
-func (v *View) ClearBit(bitmapID, profileID uint64) (changed bool, err error) {
-	slice := profileID / SliceWidth
+func (v *View) ClearBit(rowID, columnID uint64) (changed bool, err error) {
+	slice := columnID / SliceWidth
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return changed, err
 	}
-	return frag.ClearBit(bitmapID, profileID)
+	return frag.ClearBit(rowID, columnID)
 }
 
 // IsInverseView returns true if the view is used for storing an inverted representation.

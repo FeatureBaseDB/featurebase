@@ -14,10 +14,10 @@ type BackupCommand struct {
 	// Destination host and port.
 	Host string
 
-	// Name of the database, frame, view to backup.
-	Database string
-	Frame    string
-	View     string
+	// Name of the index, frame, view to backup.
+	Index string
+	Frame string
+	View  string
 
 	// Output file to write to.
 	Path string
@@ -54,7 +54,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) error {
 	defer f.Close()
 
 	// Begin streaming backup.
-	if err := client.BackupTo(ctx, f, cmd.Database, cmd.Frame, cmd.View); err != nil {
+	if err := client.BackupTo(ctx, f, cmd.Index, cmd.Frame, cmd.View); err != nil {
 		return err
 	}
 

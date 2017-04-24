@@ -14,9 +14,9 @@ type ExportCommand struct {
 	// Remote host and port.
 	Host string
 
-	// Name of the database & frame to export from.
-	Database string
-	Frame    string
+	// Name of the index & frame to export from.
+	Index string
+	Frame string
 
 	// Filename to export to.
 	Path string
@@ -37,8 +37,8 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Validate arguments.
-	if cmd.Database == "" {
-		return pilosa.ErrDatabaseRequired
+	if cmd.Index == "" {
+		return pilosa.ErrIndexRequired
 	} else if cmd.Frame == "" {
 		return pilosa.ErrFrameRequired
 	}
@@ -63,15 +63,15 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	}
 
 	// Determine slice count.
-	maxSlices, err := client.MaxSliceByDatabase(ctx)
+	maxSlices, err := client.MaxSliceByIndex(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Export each slice.
-	for slice := uint64(0); slice <= maxSlices[cmd.Database]; slice++ {
+	for slice := uint64(0); slice <= maxSlices[cmd.Index]; slice++ {
 		logger.Printf("exporting slice: %d", slice)
-		if err := client.ExportCSV(ctx, cmd.Database, cmd.Frame, slice, w); err != nil {
+		if err := client.ExportCSV(ctx, cmd.Index, cmd.Frame, slice, w); err != nil {
 			return err
 		}
 	}

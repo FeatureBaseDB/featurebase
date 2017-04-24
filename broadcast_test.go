@@ -13,12 +13,12 @@ import (
 func TestMessage_Marshal(t *testing.T) {
 
 	testMessageMarshal(t, &internal.CreateSliceMessage{
-		DB:    "d",
+		Index: "i",
 		Slice: 8,
 	})
 
-	testMessageMarshal(t, &internal.DeleteDBMessage{
-		DB: "d",
+	testMessageMarshal(t, &internal.DeleteIndexMessage{
+		Index: "i",
 	})
 }
 
@@ -47,8 +47,8 @@ func TestBroadcast_BroadcastReceiver(t *testing.T) {
 	s.BroadcastReceiver = sbr
 	s.BroadcastReceiver.Start(sbh)
 
-	msg := &internal.DeleteDBMessage{
-		DB: "d",
+	msg := &internal.DeleteIndexMessage{
+		Index: "i",
 	}
 
 	s.BroadcastReceiver.(*SimpleBroadcastReceiver).Receive(msg)
