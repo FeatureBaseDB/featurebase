@@ -29,7 +29,7 @@ const (
 type Frame struct {
 	mu          sync.Mutex
 	path        string
-	db          string
+	index       string
 	name        string
 	timeQuantum TimeQuantum
 
@@ -53,16 +53,16 @@ type Frame struct {
 }
 
 // NewFrame returns a new instance of frame.
-func NewFrame(path, db, name string) (*Frame, error) {
+func NewFrame(path, index, name string) (*Frame, error) {
 	err := ValidateName(name)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Frame{
-		path: path,
-		db:   db,
-		name: name,
+		path:  path,
+		index: index,
+		name:  name,
 
 		views:        make(map[string]*View),
 		rowAttrStore: NewAttrStore(filepath.Join(path, ".data")),
@@ -81,8 +81,8 @@ func NewFrame(path, db, name string) (*Frame, error) {
 // Name returns the name the frame was initialized with.
 func (f *Frame) Name() string { return f.name }
 
-// DB returns the database name the frame was initialized with.
-func (f *Frame) DB() string { return f.db }
+// Index returns the index name the frame was initialized with.
+func (f *Frame) Index() string { return f.index }
 
 // Path returns the path the frame was initialized with.
 func (f *Frame) Path() string { return f.path }
@@ -418,7 +418,7 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 }
 
 func (f *Frame) newView(path, name string) *View {
-	view := NewView(path, f.db, f.name, name, f.cacheSize)
+	view := NewView(path, f.index, f.name, name, f.cacheSize)
 	view.cacheType = f.cacheType
 	view.LogOutput = f.LogOutput
 	view.RowAttrStore = f.rowAttrStore
@@ -515,7 +515,7 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
 	if hasTime(timestamps) && q == "" {
-		return errors.New("time quantum not set in either database or frame")
+		return errors.New("time quantum not set in either index or frame")
 	}
 
 	// Split import data by fragment.

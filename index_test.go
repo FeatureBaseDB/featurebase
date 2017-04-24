@@ -1,234 +1,179 @@
 package pilosa_test
 
 import (
-	"bytes"
-	"context"
 	"io/ioutil"
 	"os"
-	"reflect"
 	"testing"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/pql"
 )
 
-// Ensure index can delete a database and its underlying files.
-func TestIndex_DeleteDB(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+// Ensure index can open and retrieve a frame.
+func TestIndex_CreateFrameIfNotExists(t *testing.T) {
+	index := MustOpenIndex()
+	defer index.Close()
 
-	// Write bits to separate databases.
-	f0 := idx.MustCreateFragmentIfNotExists("d0", "f", pilosa.ViewStandard, 0)
-	if _, err := f0.SetBit(100, 200); err != nil {
+	// Create frame.
+	f, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
+	if err != nil {
 		t.Fatal(err)
-	}
-	f1 := idx.MustCreateFragmentIfNotExists("d1", "f", pilosa.ViewStandard, 0)
-	if _, err := f1.SetBit(100, 200); err != nil {
-		t.Fatal(err)
+	} else if f == nil {
+		t.Fatal("expected frame")
 	}
 
-	// Ensure d0 exists.
-	if _, err := os.Stat(idx.DBPath("d0")); err != nil {
+	// Retrieve existing frame.
+	other, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
+	if err != nil {
 		t.Fatal(err)
+	} else if f.Frame != other.Frame {
+		t.Fatal("frame mismatch")
 	}
 
-	// Delete d0.
-	if err := idx.DeleteDB("d0"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Ensure d0 files are removed & d1 still exists.
-	if _, err := os.Stat(idx.DBPath("d0")); !os.IsNotExist(err) {
-		t.Fatal("expected d0 file deletion")
-	} else if _, err := os.Stat(idx.DBPath("d1")); err != nil {
-		t.Fatal("expected d1 files to still exist", err)
+	if f.Frame != index.Frame("f") {
+		t.Fatal("frame mismatch")
 	}
 }
 
-// Ensure index can sync with a remote index.
-func TestIndexSyncer_SyncIndex(t *testing.T) {
-	cluster := NewCluster(2)
+// Ensure index defaults the time quantum on new frames.
+func TestIndex_CreateFrame_TimeQuantum(t *testing.T) {
+	index := MustOpenIndex()
+	defer index.Close()
 
-	// Create a local index.
-	idx0 := MustOpenIndex()
-	defer idx0.Close()
-
-	// Create a remote index wrapped by an HTTP
-	idx1 := MustOpenIndex()
-	defer idx1.Close()
-	s := NewServer()
-	defer s.Close()
-	s.Handler.Index = idx1.Index
-	s.Handler.Executor.ExecuteFn = func(ctx context.Context, db string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor()
-		e.Index = idx1.Index
-		e.Host = cluster.Nodes[1].Host
-		e.Cluster = cluster
-		return e.Execute(ctx, db, query, slices, opt)
-	}
-
-	// Mock 2-node, fully replicated cluster.
-	cluster.ReplicaN = 2
-	cluster.Nodes[0].Host = "localhost:0"
-	cluster.Nodes[1].Host = MustParseURLHost(s.URL)
-
-	// Create frames on nodes.
-	for _, idx := range []*Index{idx0, idx1} {
-		idx.MustCreateFrameIfNotExists("d", "f")
-		idx.MustCreateFrameIfNotExists("d", "f0")
-		idx.MustCreateFrameIfNotExists("y", "z")
-	}
-
-	// Set data on the local index.
-	f := idx0.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
-	if _, err := f.SetBit(0, 10); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(2, 20); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(120, 10); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(200, 4); err != nil {
+	// Set index time quantum.
+	if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
 		t.Fatal(err)
 	}
 
-	f = idx0.MustCreateFragmentIfNotExists("d", "f0", pilosa.ViewStandard, 1)
-	if _, err := f.SetBit(9, SliceWidth+5); err != nil {
+	// Create frame.
+	f, err := index.CreateFrame("f", pilosa.FrameOptions{})
+	if err != nil {
 		t.Fatal(err)
-	}
-
-	idx0.MustCreateFragmentIfNotExists("y", "z", pilosa.ViewStandard, 0)
-
-	// Set data on the remote index.
-	f = idx1.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0)
-	if _, err := f.SetBit(0, 4000); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(3, 10); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(120, 10); err != nil {
-		t.Fatal(err)
-	}
-
-	f = idx1.MustCreateFragmentIfNotExists("y", "z", pilosa.ViewStandard, 3)
-	if _, err := f.SetBit(10, (3*SliceWidth)+4); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(10, (3*SliceWidth)+5); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(10, (3*SliceWidth)+7); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set highest slice.
-	idx0.DB("d").SetRemoteMaxSlice(1)
-	idx0.DB("y").SetRemoteMaxSlice(3)
-
-	// Set up syncer.
-	syncer := pilosa.IndexSyncer{
-		Index:   idx0.Index,
-		Host:    cluster.Nodes[0].Host,
-		Cluster: cluster,
-	}
-
-	if err := syncer.SyncIndex(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify data is the same on both nodes.
-	for i, idx := range []*Index{idx0, idx1} {
-		f := idx.Fragment("d", "f", pilosa.ViewStandard, 0)
-		if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
-			t.Fatalf("unexpected bits(%d/0): %+v", i, a)
-		} else if a := f.Row(2).Bits(); !reflect.DeepEqual(a, []uint64{20}) {
-			t.Fatalf("unexpected bits(%d/2): %+v", i, a)
-		} else if a := f.Row(3).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Fatalf("unexpected bits(%d/3): %+v", i, a)
-		} else if a := f.Row(120).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Fatalf("unexpected bits(%d/120): %+v", i, a)
-		} else if a := f.Row(200).Bits(); !reflect.DeepEqual(a, []uint64{4}) {
-			t.Fatalf("unexpected bits(%d/200): %+v", i, a)
-		}
-
-		f = idx.Fragment("d", "f0", pilosa.ViewStandard, 1)
-		a := f.Row(9).Bits()
-		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
-			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
-		}
-		if a := f.Row(9).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
-			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
-		}
-		f = idx.Fragment("y", "z", pilosa.ViewStandard, 3)
-		if a := f.Row(10).Bits(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
-			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
-		}
+	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YM") {
+		t.Fatalf("unexpected frame time quantum: %s", q)
 	}
 }
 
-// Index is a test wrapper for pilosa.Index.
+// Ensure index can delete a frame.
+func TestIndex_DeleteFrame(t *testing.T) {
+	index := MustOpenIndex()
+	defer index.Close()
+
+	// Create frame.
+	if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete frame & verify it's gone.
+	if err := index.DeleteFrame("f"); err != nil {
+		t.Fatal(err)
+	} else if index.Frame("f") != nil {
+		t.Fatal("expected nil frame")
+	}
+
+	// Delete again to make sure it doesn't error.
+	if err := index.DeleteFrame("f"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Ensure index can set the default time quantum.
+func TestIndex_SetTimeQuantum(t *testing.T) {
+	index := MustOpenIndex()
+	defer index.Close()
+
+	// Set & retrieve time quantum.
+	if err := index.SetTimeQuantum(pilosa.TimeQuantum("YMDH")); err != nil {
+		t.Fatal(err)
+	} else if q := index.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+		t.Fatalf("unexpected quantum: %s", q)
+	}
+
+	// Reload index and verify that it is persisted.
+	if err := index.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if q := index.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+		t.Fatalf("unexpected quantum (reopen): %s", q)
+	}
+}
+
+// Index represents a test wrapper for pilosa.Index.
 type Index struct {
 	*pilosa.Index
-	LogOutput bytes.Buffer
 }
 
-// NewIndex returns a new instance of Index with a temporary path.
+// NewIndex returns a new instance of Index.
 func NewIndex() *Index {
-	path, err := ioutil.TempDir("", "pilosa-")
+	path, err := ioutil.TempDir("", "pilosa-index-")
 	if err != nil {
 		panic(err)
 	}
-
-	i := &Index{Index: pilosa.NewIndex()}
-	i.Path = path
-	i.Index.LogOutput = &i.LogOutput
-
-	return i
-}
-
-// MustOpenIndex creates and opens an index at a temporary path. Panic on error.
-func MustOpenIndex() *Index {
-	i := NewIndex()
-	if err := i.Open(); err != nil {
+	index, err := pilosa.NewIndex(path, "i")
+	if err != nil {
 		panic(err)
 	}
-	return i
+	return &Index{Index: index}
 }
 
-// Close closes the index and removes all underlying data.
+// MustOpenIndex returns a new, opened index at a temporary path. Panic on error.
+func MustOpenIndex() *Index {
+	index := NewIndex()
+	if err := index.Open(); err != nil {
+		panic(err)
+	}
+	return index
+}
+
+// Close closes the index and removes the underlying data.
 func (i *Index) Close() error {
-	defer os.RemoveAll(i.Path)
+	defer os.RemoveAll(i.Path())
 	return i.Index.Close()
 }
 
-// MustCreateDBIfNotExists returns a given db. Panic on error.
-func (i *Index) MustCreateDBIfNotExists(db string, opt pilosa.DBOptions) *DB {
-	d, err := i.Index.CreateDBIfNotExists(db, opt)
-	if err != nil {
-		panic(err)
+// Reopen closes the index and reopens it.
+func (i *Index) Reopen() error {
+	var err error
+	if err := i.Index.Close(); err != nil {
+		return err
 	}
-	return &DB{DB: d}
+
+	path, name := i.Path(), i.Name()
+	i.Index, err = pilosa.NewIndex(path, name)
+	if err != nil {
+		return err
+	}
+
+	if err := i.Open(); err != nil {
+		return err
+	}
+	return nil
 }
 
-// MustCreateFrameIfNotExists returns a given frame. Panic on error.
-func (i *Index) MustCreateFrameIfNotExists(db, frame string) *Frame {
-	f, err := i.MustCreateDBIfNotExists(db, pilosa.DBOptions{}).CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
+// CreateFrame creates a frame with the given options.
+func (i *Index) CreateFrame(name string, opt pilosa.FrameOptions) (*Frame, error) {
+	f, err := i.Index.CreateFrame(name, opt)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return f
+	return &Frame{Frame: f}, nil
 }
 
-// MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
-func (i *Index) MustCreateFragmentIfNotExists(db, frame, view string, slice uint64) *Fragment {
-	d := i.MustCreateDBIfNotExists(db, pilosa.DBOptions{})
-	f, err := d.CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
+// CreateFrameIfNotExists creates a frame with the given options if it doesn't exist.
+func (i *Index) CreateFrameIfNotExists(name string, opt pilosa.FrameOptions) (*Frame, error) {
+	f, err := i.Index.CreateFrameIfNotExists(name, opt)
+	if err != nil {
+		return nil, err
+	}
+	return &Frame{Frame: f}, nil
+}
+
+// Ensure index can delete a frame.
+func TestIndex_InvalidName(t *testing.T) {
+	path, err := ioutil.TempDir("", "pilosa-index-")
 	if err != nil {
 		panic(err)
 	}
-	v, err := f.CreateViewIfNotExists(view)
-	if err != nil {
-		panic(err)
+	index, err := pilosa.NewIndex(path, "ABC")
+	if index != nil {
+		t.Fatalf("unexpected index name %s", index)
 	}
-	frag, err := v.CreateFragmentIfNotExists(slice)
-	if err != nil {
-		panic(err)
-	}
-	return &Fragment{Fragment: frag}
 }

@@ -11,14 +11,14 @@ import (
 	"github.com/pilosa/pilosa"
 )
 
-// BenchCommand represents a command for benchmarking database operations.
+// BenchCommand represents a command for benchmarking index operations.
 type BenchCommand struct {
 	// Destination host and port.
 	Host string
 
-	// Name of the database & frame to execute against.
-	Database string
-	Frame    string
+	// Name of the index & frame to execute against.
+	Index string
+	Frame string
 
 	// Type of operation and number to execute.
 	Op string
@@ -57,8 +57,8 @@ func (cmd *BenchCommand) Run(ctx context.Context) error {
 func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) error {
 	if cmd.N == 0 {
 		return errors.New("operation count required")
-	} else if cmd.Database == "" {
-		return pilosa.ErrDatabaseRequired
+	} else if cmd.Index == "" {
+		return pilosa.ErrIndexRequired
 	} else if cmd.Frame == "" {
 		return pilosa.ErrFrameRequired
 	}
@@ -75,7 +75,7 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 
 		q := fmt.Sprintf(`SetBit(id=%d, frame="%s", columnID=%d)`, rowID, cmd.Frame, columnID)
 
-		if _, err := client.ExecuteQuery(ctx, cmd.Database, q, true); err != nil {
+		if _, err := client.ExecuteQuery(ctx, cmd.Index, q, true); err != nil {
 			return err
 		}
 	}

@@ -26,7 +26,7 @@ func IsValidView(name string) bool {
 type View struct {
 	mu    sync.Mutex
 	path  string
-	db    string
+	index string
 	frame string
 	name  string
 
@@ -43,10 +43,10 @@ type View struct {
 }
 
 // NewView returns a new instance of View.
-func NewView(path, db, frame, name string, cacheSize uint32) *View {
+func NewView(path, index, frame, name string, cacheSize uint32) *View {
 	return &View{
 		path:      path,
-		db:        db,
+		index:     index,
 		frame:     frame,
 		name:      name,
 		cacheSize: cacheSize,
@@ -62,8 +62,8 @@ func NewView(path, db, frame, name string, cacheSize uint32) *View {
 // Name returns the name the view was initialized with.
 func (v *View) Name() string { return v.name }
 
-// DB returns the database name the view was initialized with.
-func (v *View) DB() string { return v.db }
+// Index returns the index name the view was initialized with.
+func (v *View) Index() string { return v.index }
 
 // Frame returns the frame name the view was initialized with.
 func (v *View) Frame() string { return v.frame }
@@ -216,7 +216,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 }
 
 func (v *View) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, v.db, v.frame, v.name, slice)
+	frag := NewFragment(path, v.index, v.frame, v.name, slice)
 	frag.cacheType = v.cacheType
 	frag.cacheSize = v.cacheSize
 	frag.LogOutput = v.LogOutput

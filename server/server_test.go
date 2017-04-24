@@ -39,13 +39,13 @@ func TestMain_Set_Quick(t *testing.T) {
 
 		// Execute SetBit() commands.
 		for _, cmd := range cmds {
-			if err := client.CreateDB(context.Background(), "d", pilosa.DBOptions{}); err != nil && err != pilosa.ErrDatabaseExists {
+			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 				t.Fatal(err)
 			}
-			if err := client.CreateFrame(context.Background(), "d", cmd.Frame, pilosa.FrameOptions{}); err != nil && err != pilosa.ErrFrameExists {
+			if err := client.CreateFrame(context.Background(), "i", cmd.Frame, pilosa.FrameOptions{}); err != nil && err != pilosa.ErrFrameExists {
 				t.Fatal(err)
 			}
-			if _, err := m.Query("d", "", fmt.Sprintf(`SetBit(id=%d, frame=%q, columnID=%d)`, cmd.ID, cmd.Frame, cmd.ColumnID)); err != nil {
+			if _, err := m.Query("i", "", fmt.Sprintf(`SetBit(id=%d, frame=%q, columnID=%d)`, cmd.ID, cmd.Frame, cmd.ColumnID)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -61,7 +61,7 @@ func TestMain_Set_Quick(t *testing.T) {
 						},
 					},
 				}) + "\n"
-				if res, err := m.Query("d", "", fmt.Sprintf(`Bitmap(id=%d, frame=%q)`, id, frame)); err != nil {
+				if res, err := m.Query("i", "", fmt.Sprintf(`Bitmap(id=%d, frame=%q)`, id, frame)); err != nil {
 					t.Fatal(err)
 				} else if res != exp {
 					t.Fatalf("unexpected result:\n\ngot=%s\n\nexp=%s\n\n", res, exp)
@@ -84,7 +84,7 @@ func TestMain_Set_Quick(t *testing.T) {
 						},
 					},
 				}) + "\n"
-				if res, err := m.Query("d", "", fmt.Sprintf(`Bitmap(id=%d, frame=%q)`, id, frame)); err != nil {
+				if res, err := m.Query("i", "", fmt.Sprintf(`Bitmap(id=%d, frame=%q)`, id, frame)); err != nil {
 					t.Fatal(err)
 				} else if res != exp {
 					t.Fatalf("unexpected result (reopen):\n\ngot=%s\n\nexp=%s\n\n", res, exp)
@@ -109,47 +109,47 @@ func TestMain_SetRowAttrs(t *testing.T) {
 
 	// Create frames.
 	client := m.Client()
-	if err := client.CreateDB(context.Background(), "d", pilosa.DBOptions{}); err != nil && err != pilosa.ErrDatabaseExists {
+	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "d", "x.n", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "i", "x.n", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "d", "z", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "i", "z", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "d", "neg", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "i", "neg", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set bits on different rows in different frames.
-	if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", columnID=100)`); err != nil {
+	if _, err := m.Query("i", "", `SetBit(id=1, frame="x.n", columnID=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBit(id=2, frame="x.n", columnID=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(id=2, frame="x.n", columnID=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBit(id=2, frame="z", columnID=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(id=2, frame="z", columnID=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBit(id=3, frame="neg", columnID=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(id=3, frame="neg", columnID=100)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set row attributes.
-	if _, err := m.Query("d", "", `SetRowAttrs(id=1, frame="x.n", x=100)`); err != nil {
+	if _, err := m.Query("i", "", `SetRowAttrs(id=1, frame="x.n", x=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetRowAttrs(id=2, frame="x.n", x=-200)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetRowAttrs(id=2, frame="x.n", x=-200)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetRowAttrs(id=2, frame="z", x=300)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetRowAttrs(id=2, frame="z", x=300)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetRowAttrs(id=3, frame="neg", x=-0.44)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetRowAttrs(id=3, frame="neg", x=-0.44)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row x.n/1.
-	if res, err := m.Query("d", "", `Bitmap(id=1, frame="x.n")`); err != nil {
+	if res, err := m.Query("i", "", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
 	// Query row x.n/2.
-	if res, err := m.Query("d", "", `Bitmap(id=2, frame="x.n")`); err != nil {
+	if res, err := m.Query("i", "", `Bitmap(id=2, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-200},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -160,19 +160,19 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	}
 
 	// Query rows after reopening.
-	if res, err := m.Query("d", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 
-	if res, err := m.Query("d", "columnAttrs=true", `Bitmap(id=3, frame="neg")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(id=3, frame="neg")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-0.44},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 	// Query row x.n/2.
-	if res, err := m.Query("d", "", `Bitmap(id=2, frame="x.n")`); err != nil {
+	if res, err := m.Query("i", "", `Bitmap(id=2, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-200},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -186,26 +186,26 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 
 	// Create frames.
 	client := m.Client()
-	if err := client.CreateDB(context.Background(), "d", pilosa.DBOptions{}); err != nil && err != pilosa.ErrDatabaseExists {
+	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "d", "x.n", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "i", "x.n", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set bits on row.
-	if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", columnID=100)`); err != nil {
+	if _, err := m.Query("i", "", `SetBit(id=1, frame="x.n", columnID=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", columnID=101)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(id=1, frame="x.n", columnID=101)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set column attributes.
-	if _, err := m.Query("d", "", `SetColumnAttrs(id=100, foo="bar")`); err != nil {
+	if _, err := m.Query("i", "", `SetColumnAttrs(id=100, foo="bar")`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row.
-	if res, err := m.Query("d", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -216,7 +216,7 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	}
 
 	// Query row after reopening.
-	if res, err := m.Query("d", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
@@ -230,26 +230,26 @@ func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
 
 	// Create frames.
 	client := m.Client()
-	if err := client.CreateDB(context.Background(), "d", pilosa.DBOptions{ColumnLabel: "col"}); err != nil && err != pilosa.ErrDatabaseExists {
+	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{ColumnLabel: "col"}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "d", "x.n", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "i", "x.n", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set bits on row.
-	if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", col=100)`); err != nil {
+	if _, err := m.Query("i", "", `SetBit(id=1, frame="x.n", col=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("d", "", `SetBit(id=1, frame="x.n", col=101)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(id=1, frame="x.n", col=101)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set column attributes.
-	if _, err := m.Query("d", "", `SetColumnAttrs(col=100, foo="bar")`); err != nil {
+	if _, err := m.Query("i", "", `SetColumnAttrs(col=100, foo="bar")`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row.
-	if res, err := m.Query("d", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(id=1, frame="x.n")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -274,14 +274,14 @@ func TestMain_FrameRestore(t *testing.T) {
 
 	// Create frames.
 	client := m0.Client()
-	if err := client.CreateDB(context.Background(), "d", pilosa.DBOptions{}); err != nil && err != pilosa.ErrDatabaseExists {
+	if err := client.CreateIndex(context.Background(), "x", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "d", "f", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "x", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Write data on first cluster.
-	if _, err := m0.Query("d", "", `
+	if _, err := m0.Query("x", "", `
 		SetBit(id=1, frame="f", columnID=100)
 		SetBit(id=1, frame="f", columnID=1000)
 		SetBit(id=1, frame="f", columnID=100000)
@@ -294,7 +294,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	}
 
 	// Query row on first cluster.
-	if res, err := m0.Query("d", "", `Bitmap(id=1, frame="f")`); err != nil {
+	if res, err := m0.Query("x", "", `Bitmap(id=1, frame="f")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -308,16 +308,16 @@ func TestMain_FrameRestore(t *testing.T) {
 	client, err := pilosa.NewClient(m2.Server.Host)
 	if err != nil {
 		t.Fatal(err)
-	} else if err := m2.Client().CreateDB(context.Background(), "d", pilosa.DBOptions{}); err != nil && err != pilosa.ErrDatabaseExists {
+	} else if err := m2.Client().CreateIndex(context.Background(), "x", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := m2.Client().CreateFrame(context.Background(), "d", "f", pilosa.FrameOptions{}); err != nil {
+	} else if err := m2.Client().CreateFrame(context.Background(), "x", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
-	} else if err := client.RestoreFrame(context.Background(), m0.Server.Host, "d", "f"); err != nil {
+	} else if err := client.RestoreFrame(context.Background(), m0.Server.Host, "x", "f"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row on second cluster.
-	if res, err := m2.Query("d", "", `Bitmap(id=1, frame="f")`); err != nil {
+	if res, err := m2.Query("x", "", `Bitmap(id=1, frame="f")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -431,8 +431,9 @@ func (m *Main) Client() *pilosa.Client {
 }
 
 // Query executes a query against the program through the HTTP API.
-func (m *Main) Query(db, rawQuery, query string) (string, error) {
-	resp := MustDo("POST", m.URL()+fmt.Sprintf("/db/%s/query?", db)+rawQuery, query)
+func (m *Main) Query(index, rawQuery, query string) (string, error) {
+	fmt.Println("Query:", index, query)
+	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}

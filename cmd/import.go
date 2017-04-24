@@ -16,7 +16,7 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command 
 	importCmd := &cobra.Command{
 		Use:   "import",
 		Short: "Bulk load data into pilosa.",
-		Long: `Bulk imports one or more CSV files to a host's database and frame. The bits
+		Long: `Bulk imports one or more CSV files to a host's index and frame. The bits
 of the CSV file are grouped by slice for the most efficient import.
 
 The format of the CSV file is:
@@ -36,7 +36,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	}
 	flags := importCmd.Flags()
 	flags.StringVarP(&Importer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
-	flags.StringVarP(&Importer.Database, "database", "d", "", "Pilosa database to import into.")
+	flags.StringVarP(&Importer.Index, "index", "i", "", "Pilosa index to import into.")
 	flags.StringVarP(&Importer.Frame, "frame", "f", "", "Frame to import into.")
 	flags.IntVarP(&Importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
 

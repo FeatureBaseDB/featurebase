@@ -146,25 +146,25 @@ func (c *Cluster) NodeByHost(host string) *Node {
 }
 
 // Partition returns the partition that a slice belongs to.
-func (c *Cluster) Partition(db string, slice uint64) int {
+func (c *Cluster) Partition(index string, slice uint64) int {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], slice)
 
 	// Hash the bytes and mod by partition count.
 	h := fnv.New64a()
-	h.Write([]byte(db))
+	h.Write([]byte(index))
 	h.Write(buf[:])
 	return int(h.Sum64() % uint64(c.PartitionN))
 }
 
 // FragmentNodes returns a list of nodes that own a fragment.
-func (c *Cluster) FragmentNodes(db string, slice uint64) []*Node {
-	return c.PartitionNodes(c.Partition(db, slice))
+func (c *Cluster) FragmentNodes(index string, slice uint64) []*Node {
+	return c.PartitionNodes(c.Partition(index, slice))
 }
 
 // OwnsFragment returns true if a host owns a fragment.
-func (c *Cluster) OwnsFragment(host string, db string, slice uint64) bool {
-	return Nodes(c.FragmentNodes(db, slice)).ContainsHost(host)
+func (c *Cluster) OwnsFragment(host string, index string, slice uint64) bool {
+	return Nodes(c.FragmentNodes(index, slice)).ContainsHost(host)
 }
 
 // PartitionNodes returns a list of nodes that own a partition.

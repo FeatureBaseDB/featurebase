@@ -22,13 +22,13 @@ func TestRestoreConfig(t *testing.T) {
 			args: []string{"restore", "--input-file", "/somefile"},
 			env:  map[string]string{"PILOSA_HOST": "localhost:12345"},
 			cfgFileContent: `
-database = "mydb"
+index = "myindex"
 frame = "f1"
 `,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Restorer.Host, "localhost:12345")
-				v.Check(cmd.Restorer.Database, "mydb")
+				v.Check(cmd.Restorer.Index, "myindex")
 				v.Check(cmd.Restorer.Frame, "f1")
 				v.Check(cmd.Restorer.Path, "/somefile")
 				return v.Error()

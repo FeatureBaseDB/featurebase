@@ -1,67 +1,146 @@
 package pilosa
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/internal"
 )
 
-// DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
-const DefaultCacheFlushInterval = 1 * time.Minute
+// Default index settings.
+const (
+	DefaultColumnLabel = "columnID"
+)
 
-// Index represents a container for fragments.
+// Index represents a container for frames.
 type Index struct {
-	mu sync.Mutex
+	mu   sync.Mutex
+	path string
+	name string
 
-	// Databases by name.
-	dbs map[string]*DB
+	// Default time quantum for all frames in index.
+	// This can be overridden by individual frames.
+	timeQuantum TimeQuantum
 
-	Broadcaster Broadcaster
-	// Close management
-	wg      sync.WaitGroup
-	closing chan struct{}
+	// Label used for referring to columns in index.
+	columnLabel string
 
-	// Stats
-	Stats StatsClient
+	// Frames by name.
+	frames map[string]*Frame
 
-	// Data directory path.
-	Path string
+	// Max Slice on any node in the cluster, according to this node
+	remoteMaxSlice        uint64
+	remoteMaxInverseSlice uint64
 
-	// The interval at which the cached row ids are persisted to disk.
-	CacheFlushInterval time.Duration
+	// Column attribute storage and cache
+	columnAttrStore *AttrStore
+
+	broadcaster Broadcaster
+	stats       StatsClient
 
 	LogOutput io.Writer
 }
 
 // NewIndex returns a new instance of Index.
-func NewIndex() *Index {
-	return &Index{
-		dbs:     make(map[string]*DB),
-		closing: make(chan struct{}, 0),
-
-		Stats: NopStatsClient,
-
-		CacheFlushInterval: DefaultCacheFlushInterval,
-
-		LogOutput: os.Stderr,
+func NewIndex(path, name string) (*Index, error) {
+	err := ValidateName(name)
+	if err != nil {
+		return nil, err
 	}
+
+	return &Index{
+		path:   path,
+		name:   name,
+		frames: make(map[string]*Frame),
+
+		remoteMaxSlice:        0,
+		remoteMaxInverseSlice: 0,
+
+		columnAttrStore: NewAttrStore(filepath.Join(path, ".data")),
+
+		columnLabel: DefaultColumnLabel,
+
+		stats:     NopStatsClient,
+		LogOutput: ioutil.Discard,
+	}, nil
 }
 
-// Open initializes the root data directory for the index.
-func (i *Index) Open() error {
-	if err := os.MkdirAll(i.Path, 0777); err != nil {
+// Name returns name of the index.
+func (i *Index) Name() string { return i.name }
+
+// Path returns the path the index was initialized with.
+func (i *Index) Path() string { return i.path }
+
+// ColumnAttrStore returns the storage for column attributes.
+func (i *Index) ColumnAttrStore() *AttrStore { return i.columnAttrStore }
+
+// SetColumnLabel sets the column label. Persists to meta file on update.
+func (i *Index) SetColumnLabel(v string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Ignore if no change occurred.
+	if v == "" || i.columnLabel == v {
+		return nil
+	}
+
+	// Make sure columnLabel is valid name
+	err := ValidateName(v)
+	if err != nil {
 		return err
 	}
 
-	// Open path to read all database directories.
-	f, err := os.Open(i.Path)
+	// Persist meta data to disk on change.
+	i.columnLabel = v
+	if err := i.saveMeta(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ColumnLabel returns the column label.
+func (i *Index) ColumnLabel() string {
+	i.mu.Lock()
+	v := i.columnLabel
+	i.mu.Unlock()
+	return v
+}
+
+// Open opens and initializes the index.
+func (i *Index) Open() error {
+	// Ensure the path exists.
+	if err := os.MkdirAll(i.path, 0777); err != nil {
+		return err
+	}
+
+	// Read meta file.
+	if err := i.loadMeta(); err != nil {
+		return err
+	}
+
+	if err := i.openFrames(); err != nil {
+		return err
+	}
+
+	if err := i.columnAttrStore.Open(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// openFrames opens and initializes the frames inside the index.
+func (i *Index) openFrames() error {
+	f, err := os.Open(i.path)
 	if err != nil {
 		return err
 	}
@@ -77,471 +156,410 @@ func (i *Index) Open() error {
 			continue
 		}
 
-		i.logger().Printf("opening database: %s", filepath.Base(fi.Name()))
+		fr, err := i.newFrame(i.FramePath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		if err != nil {
+			return ErrName
+		}
+		if err := fr.Open(); err != nil {
+			return fmt.Errorf("open frame: name=%s, err=%s", fr.Name(), err)
+		}
+		i.frames[fr.Name()] = fr
 
-		db, err := i.newDB(i.DBPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
-		if err == ErrName {
-			i.logger().Printf("ERROR opening database: %s, err=%s", fi.Name(), err)
-			continue
-		} else if err != nil {
+		i.stats.Count("frameN", 1)
+	}
+	return nil
+}
+
+// loadMeta reads meta data for the index, if any.
+func (i *Index) loadMeta() error {
+	var pb internal.IndexMeta
+
+	// Read data from meta file.
+	buf, err := ioutil.ReadFile(filepath.Join(i.path, ".meta"))
+	if os.IsNotExist(err) {
+		i.timeQuantum = ""
+		i.columnLabel = DefaultColumnLabel
+		return nil
+	} else if err != nil {
+		return err
+	} else {
+		if err := proto.Unmarshal(buf, &pb); err != nil {
 			return err
 		}
-		if err := db.Open(); err != nil {
-			if err == ErrName {
-				i.logger().Printf("ERROR opening database: %s, err=%s", db.Name(), err)
-				continue
-			}
-			return fmt.Errorf("open db: name=%s, err=%s", db.Name(), err)
-		}
-		i.dbs[db.Name()] = db
-
-		i.Stats.Count("dbN", 1)
 	}
 
-	// Periodically flush cache.
-	i.wg.Add(1)
-	go func() { defer i.wg.Done(); i.monitorCacheFlush() }()
+	// Copy metadata fields.
+	i.timeQuantum = TimeQuantum(pb.TimeQuantum)
+	i.columnLabel = pb.ColumnLabel
 
 	return nil
 }
 
-// Close closes all open fragments.
+// saveMeta writes meta data for the index.
+func (i *Index) saveMeta() error {
+	// Marshal metadata.
+	buf, err := proto.Marshal(&internal.IndexMeta{
+		TimeQuantum: string(i.timeQuantum),
+		ColumnLabel: i.columnLabel,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Write to meta file.
+	if err := ioutil.WriteFile(filepath.Join(i.path, ".meta"), buf, 0666); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Close closes the index and its frames.
 func (i *Index) Close() error {
-	// Notify goroutines of closing and wait for completion.
-	close(i.closing)
-	i.wg.Wait()
+	i.mu.Lock()
+	defer i.mu.Unlock()
 
-	for _, db := range i.dbs {
-		db.Close()
+	// Close the attribute store.
+	if i.columnAttrStore != nil {
+		i.columnAttrStore.Close()
 	}
+
+	// Close all frames.
+	for _, f := range i.frames {
+		f.Close()
+	}
+	i.frames = make(map[string]*Frame)
+
 	return nil
 }
 
-// MaxSlices returns MaxSlice map for all databases.
-func (i *Index) MaxSlices() map[string]uint64 {
-	a := make(map[string]uint64)
-	for _, db := range i.DBs() {
-		a[db.Name()] = db.MaxSlice()
+// MaxSlice returns the max slice in the index according to this node.
+func (i *Index) MaxSlice() uint64 {
+	if i == nil {
+		return 0
 	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	max := i.remoteMaxSlice
+	for _, f := range i.frames {
+		if slice := f.MaxSlice(); slice > max {
+			max = slice
+		}
+	}
+	return max
+}
+
+func (i *Index) SetRemoteMaxSlice(newmax uint64) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.remoteMaxSlice = newmax
+}
+
+// MaxInverseSlice returns the max inverse slice in the index according to this node.
+func (i *Index) MaxInverseSlice() uint64 {
+	if i == nil {
+		return 0
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	max := i.remoteMaxInverseSlice
+	for _, f := range i.frames {
+		if slice := f.MaxInverseSlice(); slice > max {
+			max = slice
+		}
+	}
+	return max
+}
+
+func (i *Index) SetRemoteMaxInverseSlice(v uint64) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.remoteMaxInverseSlice = v
+}
+
+// TimeQuantum returns the default time quantum for the index.
+func (i *Index) TimeQuantum() TimeQuantum {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.timeQuantum
+}
+
+// SetTimeQuantum sets the default time quantum for the index.
+func (i *Index) SetTimeQuantum(q TimeQuantum) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Validate input.
+	if !q.Valid() {
+		return ErrInvalidTimeQuantum
+	}
+
+	// Update value on index.
+	i.timeQuantum = q
+
+	// Perist meta data to disk.
+	if err := i.saveMeta(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// FramePath returns the path to a frame in the index.
+func (i *Index) FramePath(name string) string { return filepath.Join(i.path, name) }
+
+// Frame returns a frame in the index by name.
+func (i *Index) Frame(name string) *Frame {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.frame(name)
+}
+
+func (i *Index) frame(name string) *Frame { return i.frames[name] }
+
+// Frames returns a list of all frames in the index.
+func (i *Index) Frames() []*Frame {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	a := make([]*Frame, 0, len(i.frames))
+	for _, f := range i.frames {
+		a = append(a, f)
+	}
+	sort.Sort(frameSlice(a))
+
 	return a
 }
 
-// MaxInverseSlices returns MaxInverseSlice map for all databases.
-func (i *Index) MaxInverseSlices() map[string]uint64 {
-	a := make(map[string]uint64)
-	for _, db := range i.DBs() {
-		a[db.Name()] = db.MaxInverseSlice()
+// CreateFrame creates a frame.
+func (i *Index) CreateFrame(name string, opt FrameOptions) (*Frame, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Ensure frame doesn't already exist.
+	if i.frames[name] != nil {
+		return nil, ErrFrameExists
 	}
-	return a
+	return i.createFrame(name, opt)
 }
 
-// Schema returns schema data for all databases and frames.
-func (i *Index) Schema() []*DBInfo {
-	var a []*DBInfo
-	for _, db := range i.DBs() {
-		di := &DBInfo{Name: db.Name()}
-		for _, frame := range db.Frames() {
-			fi := &FrameInfo{Name: frame.Name()}
-			for _, view := range frame.Views() {
-				fi.Views = append(fi.Views, &ViewInfo{Name: view.Name()})
+// CreateFrameIfNotExists creates a frame with the given options if it doesn't exist.
+func (i *Index) CreateFrameIfNotExists(name string, opt FrameOptions) (*Frame, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Find frame in cache first.
+	if f := i.frames[name]; f != nil {
+		return f, nil
+	}
+
+	return i.createFrame(name, opt)
+}
+
+func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
+	if name == "" {
+		return nil, errors.New("frame name required")
+	} else if opt.CacheType != "" && !IsValidCacheType(opt.CacheType) {
+		return nil, ErrInvalidCacheType
+	}
+
+	// Initialize frame.
+	f, err := i.newFrame(i.FramePath(name), name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Open frame.
+	if err := f.Open(); err != nil {
+		return nil, err
+	}
+
+	// Default the time quantum to what is set on the Index.
+	if err := f.SetTimeQuantum(i.timeQuantum); err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	// Set cache type.
+	if opt.CacheType == "" {
+		opt.CacheType = DefaultCacheType
+	}
+	f.cacheType = opt.CacheType
+
+	// Set options.
+	if opt.RowLabel != "" {
+		f.rowLabel = opt.RowLabel
+	}
+	if opt.CacheSize != 0 {
+		f.cacheSize = opt.CacheSize
+	}
+
+	f.inverseEnabled = opt.InverseEnabled
+	if err := f.saveMeta(); err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	// Add to index's frame lookup.
+	i.frames[name] = f
+
+	i.stats.Count("frameN", 1)
+
+	return f, nil
+}
+
+func (i *Index) newFrame(path, name string) (*Frame, error) {
+	f, err := NewFrame(path, i.name, name)
+	if err != nil {
+		return nil, err
+	}
+	f.LogOutput = i.LogOutput
+	f.stats = i.stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.broadcaster = i.broadcaster
+	return f, nil
+}
+
+// DeleteFrame removes a frame from the index.
+func (i *Index) DeleteFrame(name string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Ignore if frame doesn't exist.
+	f := i.frame(name)
+	if f == nil {
+		return nil
+	}
+
+	// Close frame.
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	// Delete frame directory.
+	if err := os.RemoveAll(i.FramePath(name)); err != nil {
+		return err
+	}
+
+	// Remove reference.
+	delete(i.frames, name)
+
+	i.stats.Count("frameN", -1)
+
+	return nil
+}
+
+type indexSlice []*Index
+
+func (p indexSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p indexSlice) Len() int           { return len(p) }
+func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
+
+// IndexInfo represents schema information for an index.
+type IndexInfo struct {
+	Name   string       `json:"name"`
+	Frames []*FrameInfo `json:"frames"`
+}
+
+type indexInfoSlice []*IndexInfo
+
+func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p indexInfoSlice) Len() int           { return len(p) }
+func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
+
+// MergeSchemas combines indexes and frames from a and b into one schema.
+func MergeSchemas(a, b []*IndexInfo) []*IndexInfo {
+	// Generate a map from both schemas.
+	m := make(map[string]map[string]map[string]struct{})
+	for _, idxs := range [][]*IndexInfo{a, b} {
+		for _, idx := range idxs {
+			if m[idx.Name] == nil {
+				m[idx.Name] = make(map[string]map[string]struct{})
+			}
+			for _, frame := range idx.Frames {
+				if m[idx.Name][frame.Name] == nil {
+					m[idx.Name][frame.Name] = make(map[string]struct{})
+				}
+				for _, view := range frame.Views {
+					m[idx.Name][frame.Name][view.Name] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// Generate new schema from map.
+	idxs := make([]*IndexInfo, 0, len(m))
+	for idx, frames := range m {
+		di := &IndexInfo{Name: idx}
+		for frame, views := range frames {
+			fi := &FrameInfo{Name: frame}
+			for view := range views {
+				fi.Views = append(fi.Views, &ViewInfo{Name: view})
 			}
 			sort.Sort(viewInfoSlice(fi.Views))
 			di.Frames = append(di.Frames, fi)
 		}
 		sort.Sort(frameInfoSlice(di.Frames))
-		a = append(a, di)
+		idxs = append(idxs, di)
 	}
-	sort.Sort(dbInfoSlice(a))
-	return a
+	sort.Sort(indexInfoSlice(idxs))
+
+	return idxs
 }
 
-// DBPath returns the path where a given database is stored.
-func (i *Index) DBPath(name string) string { return filepath.Join(i.Path, name) }
-
-// DB returns the database by name.
-func (i *Index) DB(name string) *DB {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	return i.db(name)
+// encodeIndexes converts a into its internal representation.
+func encodeIndexes(a []*Index) []*internal.Index {
+	other := make([]*internal.Index, len(a))
+	for i := range a {
+		other[i] = encodeIndex(a[i])
+	}
+	return other
 }
 
-func (i *Index) db(name string) *DB { return i.dbs[name] }
-
-// DBs returns a list of all databases in the index.
-func (i *Index) DBs() []*DB {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	a := make([]*DB, 0, len(i.dbs))
-	for _, db := range i.dbs {
-		a = append(a, db)
+// encodeIndex converts d into its internal representation.
+func encodeIndex(d *Index) *internal.Index {
+	return &internal.Index{
+		Name: d.name,
+		Meta: &internal.IndexMeta{
+			ColumnLabel: d.columnLabel,
+			TimeQuantum: string(d.timeQuantum),
+		},
+		MaxSlice: d.remoteMaxSlice,
+		Frames:   encodeFrames(d.Frames()),
 	}
-	sort.Sort(dbSlice(a))
-
-	return a
 }
 
-// CreateDB creates a database.
-// An error is returned if the database already exists.
-func (i *Index) CreateDB(name string, opt DBOptions) (*DB, error) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Ensure db doesn't already exist.
-	if i.dbs[name] != nil {
-		return nil, ErrDatabaseExists
-	}
-	return i.createDB(name, opt)
+// IndexOptions represents options to set when initializing an index.
+type IndexOptions struct {
+	ColumnLabel string      `json:"columnLabel,omitempty"`
+	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
-// CreateDBIfNotExists returns a database by name.
-// The database is created if it does not already exist.
-func (i *Index) CreateDBIfNotExists(name string, opt DBOptions) (*DB, error) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Find database in cache first.
-	if db := i.dbs[name]; db != nil {
-		return db, nil
+// Encode converts o into its internal representation.
+func (o *IndexOptions) Encode() *internal.IndexMeta {
+	return &internal.IndexMeta{
+		ColumnLabel: o.ColumnLabel,
+		TimeQuantum: string(o.TimeQuantum),
 	}
-
-	return i.createDB(name, opt)
 }
 
-func (i *Index) createDB(name string, opt DBOptions) (*DB, error) {
-	if name == "" {
-		return nil, errors.New("database name required")
-	}
-
-	// Return database if it exists.
-	if db := i.db(name); db != nil {
-		return db, nil
-	}
-
-	// Otherwise create a new database.
-	db, err := i.newDB(i.DBPath(name), name)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := db.Open(); err != nil {
-		return nil, err
-	}
-
-	// Update options.
-	db.SetColumnLabel(opt.ColumnLabel)
-	db.SetTimeQuantum(opt.TimeQuantum)
-
-	i.dbs[db.Name()] = db
-
-	i.Stats.Count("dbN", 1)
-
-	return db, nil
-}
-
-func (i *Index) newDB(path, name string) (*DB, error) {
-	db, err := NewDB(path, name)
-	if err != nil {
-		return nil, err
-	}
-	db.LogOutput = i.LogOutput
-	db.stats = i.Stats.WithTags(fmt.Sprintf("db:%s", db.Name()))
-	db.broadcaster = i.Broadcaster
-	return db, nil
-}
-
-// DeleteDB removes a database from the index.
-func (i *Index) DeleteDB(name string) error {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Ignore if database doesn't exist.
-	db := i.db(name)
-	if db == nil {
-		return nil
-	}
-
-	// Close database.
-	if err := db.Close(); err != nil {
-		return err
-	}
-
-	// Delete database directory.
-	if err := os.RemoveAll(i.DBPath(name)); err != nil {
-		return err
-	}
-
-	// Remove reference.
-	delete(i.dbs, name)
-
-	i.Stats.Count("dbN", -1)
-
-	return nil
-}
-
-// Frame returns the frame for a database and name.
-func (i *Index) Frame(db, name string) *Frame {
-	d := i.DB(db)
-	if d == nil {
-		return nil
-	}
-	return d.Frame(name)
-}
-
-// View returns the view for a database, frame, and name.
-func (i *Index) View(db, frame, name string) *View {
-	f := i.Frame(db, frame)
-	if f == nil {
-		return nil
-	}
-	return f.View(name)
-}
-
-// Fragment returns the fragment for a database, frame & slice.
-func (i *Index) Fragment(db, frame, view string, slice uint64) *Fragment {
-	v := i.View(db, frame, view)
-	if v == nil {
-		return nil
-	}
-	return v.Fragment(slice)
-}
-
-// monitorCacheFlush periodically flushes all fragment caches sequentially.
-// This is run in a goroutine.
-func (i *Index) monitorCacheFlush() {
-	ticker := time.NewTicker(i.CacheFlushInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-i.closing:
-			return
-		case <-ticker.C:
-			i.flushCaches()
+// hasTime returns true if a contains a non-nil time.
+func hasTime(a []*time.Time) bool {
+	for _, t := range a {
+		if t != nil {
+			return true
 		}
 	}
+	return false
 }
 
-func (i *Index) flushCaches() {
-	for _, db := range i.DBs() {
-		for _, frame := range db.Frames() {
-			for _, view := range frame.Views() {
-				for _, fragment := range view.Fragments() {
-					select {
-					case <-i.closing:
-						return
-					default:
-					}
-
-					if err := fragment.FlushCache(); err != nil {
-						i.logger().Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
-					}
-				}
-			}
-		}
-	}
+type importKey struct {
+	View  string
+	Slice uint64
 }
 
-func (i *Index) logger() *log.Logger { return log.New(i.LogOutput, "", log.LstdFlags) }
-
-// IndexSyncer is an active anti-entropy tool that compares the local index
-// with a remote index based on block checksums and resolves differences.
-type IndexSyncer struct {
-	Index *Index
-
-	Host    string
-	Cluster *Cluster
-
-	// Signals that the sync should stop.
-	Closing <-chan struct{}
-}
-
-// Returns true if the syncer has been marked to close.
-func (s *IndexSyncer) IsClosing() bool {
-	select {
-	case <-s.Closing:
-		return true
-	default:
-		return false
-	}
-}
-
-// SyncIndex compares the index on host with the local index and resolves differences.
-func (s *IndexSyncer) SyncIndex() error {
-	// Iterate over schema in sorted order.
-	for _, di := range s.Index.Schema() {
-		// Verify syncer has not closed.
-		if s.IsClosing() {
-			return nil
-		}
-
-		// Sync database column attributes.
-		if err := s.syncDatabase(di.Name); err != nil {
-			return fmt.Errorf("db sync error: db=%s, err=%s", di.Name, err)
-		}
-
-		for _, fi := range di.Frames {
-			// Verify syncer has not closed.
-			if s.IsClosing() {
-				return nil
-			}
-
-			// Sync frame row attributes.
-			if err := s.syncFrame(di.Name, fi.Name); err != nil {
-				return fmt.Errorf("frame sync error: db=%s, frame=%s, err=%s", di.Name, fi.Name, err)
-			}
-
-			for _, vi := range fi.Views {
-				// Verify syncer has not closed.
-				if s.IsClosing() {
-					return nil
-				}
-
-				for slice := uint64(0); slice <= s.Index.DB(di.Name).MaxSlice(); slice++ {
-					// Ignore slices that this host doesn't own.
-					if !s.Cluster.OwnsFragment(s.Host, di.Name, slice) {
-						continue
-					}
-
-					// Verify syncer has not closed.
-					if s.IsClosing() {
-						return nil
-					}
-
-					// Sync fragment if own it.
-					if err := s.syncFragment(di.Name, fi.Name, vi.Name, slice); err != nil {
-						return fmt.Errorf("fragment sync error: db=%s, frame=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
-					}
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-// syncDatabase synchronizes database attributes with the rest of the cluster.
-func (s *IndexSyncer) syncDatabase(db string) error {
-	// Retrieve database reference.
-	d := s.Index.DB(db)
-	if d == nil {
-		return nil
-	}
-
-	// Read block checksums.
-	blks, err := d.ColumnAttrStore().Blocks()
-	if err != nil {
-		return err
-	}
-
-	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.Host) {
-		client, err := NewClient(node.Host)
-		if err != nil {
-			return err
-		}
-
-		// Retrieve attributes from differing blocks.
-		// Skip update and recomputation if no attributes have changed.
-		m, err := client.ColumnAttrDiff(context.Background(), db, blks)
-		if err != nil {
-			return err
-		} else if len(m) == 0 {
-			continue
-		}
-
-		// Update local copy.
-		if err := d.ColumnAttrStore().SetBulkAttrs(m); err != nil {
-			return err
-		}
-
-		// Recompute blocks.
-		blks, err = d.ColumnAttrStore().Blocks()
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// syncFrame synchronizes frame attributes with the rest of the cluster.
-func (s *IndexSyncer) syncFrame(db, name string) error {
-	// Retrieve database reference.
-	f := s.Index.Frame(db, name)
-	if f == nil {
-		return nil
-	}
-
-	// Read block checksums.
-	blks, err := f.RowAttrStore().Blocks()
-	if err != nil {
-		return err
-	}
-
-	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.Host) {
-		client, err := NewClient(node.Host)
-		if err != nil {
-			return err
-		}
-
-		// Retrieve attributes from differing blocks.
-		// Skip update and recomputation if no attributes have changed.
-		m, err := client.RowAttrDiff(context.Background(), db, name, blks)
-		if err == ErrFrameNotFound {
-			continue // frame not created remotely yet, skip
-		} else if err != nil {
-			return err
-		} else if len(m) == 0 {
-			continue
-		}
-
-		// Update local copy.
-		if err := f.RowAttrStore().SetBulkAttrs(m); err != nil {
-			return err
-		}
-
-		// Recompute blocks.
-		blks, err = f.RowAttrStore().Blocks()
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// syncFragment synchronizes a fragment with the rest of the cluster.
-func (s *IndexSyncer) syncFragment(db, frame, view string, slice uint64) error {
-	// Retrieve local frame.
-	f := s.Index.Frame(db, frame)
-	if f == nil {
-		return ErrFrameNotFound
-	}
-
-	// Ensure view exists locally.
-	v, err := f.CreateViewIfNotExists(view)
-	if err != nil {
-		return err
-	}
-
-	// Ensure fragment exists locally.
-	frag, err := v.CreateFragmentIfNotExists(slice)
-	if err != nil {
-		return err
-	}
-
-	// Sync fragments together.
-	fs := FragmentSyncer{
-		Fragment: frag,
-		Host:     s.Host,
-		Cluster:  s.Cluster,
-		Closing:  s.Closing,
-	}
-	if err := fs.SyncFragment(); err != nil {
-		return err
-	}
-
-	return nil
+type importData struct {
+	RowIDs    []uint64
+	ColumnIDs []uint64
 }

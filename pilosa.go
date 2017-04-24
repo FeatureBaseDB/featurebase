@@ -11,9 +11,9 @@ import (
 var (
 	ErrHostRequired = errors.New("host required")
 
-	ErrDatabaseRequired = errors.New("database required")
-	ErrDatabaseExists   = errors.New("database already exists")
-	ErrDatabaseNotFound = errors.New("database not found")
+	ErrIndexRequired = errors.New("index required")
+	ErrIndexExists   = errors.New("index already exists")
+	ErrIndexNotFound = errors.New("index not found")
 
 	// ErrFrameRequired is returned when no frame is specified.
 	ErrFrameRequired        = errors.New("frame required")
@@ -24,18 +24,18 @@ var (
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
-	ErrName = errors.New("invalid database or frame's name, must match [a-z0-9_-]")
+	ErrName = errors.New("invalid index or frame's name, must match [a-z0-9_-]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
 	ErrQueryRequired    = errors.New("query required")
 )
 
-// Regular expression to valuate db and frame's name
+// Regular expression to valuate index and frame's name
 // Todo: remove . when frame doesn't require . for topN
 var nameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,64}$`)
 
-// ColumnAttrSet represents a set of attributes for a vertical column in a database.
+// ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
 type ColumnAttrSet struct {
 	ID    uint64                 `json:"id"`

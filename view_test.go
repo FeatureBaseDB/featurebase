@@ -14,7 +14,7 @@ type View struct {
 }
 
 // NewView returns a new instance of View with a temporary path.
-func NewView(db, frame, name string) *View {
+func NewView(index, frame, name string) *View {
 	file, err := ioutil.TempFile("", "pilosa-view-")
 	if err != nil {
 		panic(err)
@@ -22,7 +22,7 @@ func NewView(db, frame, name string) *View {
 	file.Close()
 
 	v := &View{
-		View:         pilosa.NewView(file.Name(), db, frame, name, pilosa.DefaultCacheSize),
+		View:         pilosa.NewView(file.Name(), index, frame, name, pilosa.DefaultCacheSize),
 		RowAttrStore: MustOpenAttrStore(),
 	}
 	v.View.RowAttrStore = v.RowAttrStore.AttrStore
@@ -30,8 +30,8 @@ func NewView(db, frame, name string) *View {
 }
 
 // MustOpenView creates and opens an view at a temporary path. Panic on error.
-func MustOpenView(db, frame, name string) *View {
-	v := NewView(db, frame, name)
+func MustOpenView(index, frame, name string) *View {
+	v := NewView(index, frame, name)
 	if err := v.Open(); err != nil {
 		panic(err)
 	}
@@ -52,7 +52,7 @@ func (v *View) Reopen() error {
 		return err
 	}
 
-	v.View = pilosa.NewView(path, v.DB(), v.Frame(), v.Name(), pilosa.DefaultCacheSize)
+	v.View = pilosa.NewView(path, v.Index(), v.Frame(), v.Name(), pilosa.DefaultCacheSize)
 	v.View.RowAttrStore = v.RowAttrStore.AttrStore
 	if err := v.Open(); err != nil {
 		return err

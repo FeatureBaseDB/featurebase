@@ -19,9 +19,9 @@ type ImportCommand struct {
 	// Destination host and port.
 	Host string `json:"host"`
 
-	// Name of the database & frame to import into.
-	Database string `json:"db"`
-	Frame    string `json:"frame"`
+	// Name of the index & frame to import into.
+	Index string `json:"index"`
+	Frame string `json:"frame"`
 
 	// Filenames to import from.
 	Paths []string `json:"paths"`
@@ -54,9 +54,9 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Validate arguments.
-	// Database and frame are validated early before the files are parsed.
-	if cmd.Database == "" {
-		return pilosa.ErrDatabaseRequired
+	// Index and frame are validated early before the files are parsed.
+	if cmd.Index == "" {
+		return pilosa.ErrIndexRequired
 	} else if cmd.Frame == "" {
 		return pilosa.ErrFrameRequired
 	} else if len(cmd.Paths) == 0 {
@@ -176,7 +176,7 @@ func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) err
 	// Parse path into bits.
 	for slice, bits := range bitsBySlice {
 		logger.Printf("importing slice: %d, n=%d", slice, len(bits))
-		if err := cmd.Client.Import(ctx, cmd.Database, cmd.Frame, slice, bits); err != nil {
+		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Frame, slice, bits); err != nil {
 			return err
 		}
 	}
