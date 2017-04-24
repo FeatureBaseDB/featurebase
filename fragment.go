@@ -995,15 +995,18 @@ func (f *Fragment) Snapshot() error {
 	defer f.mu.Unlock()
 	return f.snapshot()
 }
-func track(start time.Time, name string, logger *log.Logger) {
+func track(start time.Time, message string, stats StatsClient, logger *log.Logger) {
 	elapsed := time.Since(start)
-	logger.Printf("%s took %s", name, elapsed)
+	logger.Printf("%s took %s", message, elapsed)
+	stats.Histogram("snapshot", elapsed.Seconds())
 }
 
 func (f *Fragment) snapshot() error {
 	logger := f.logger()
 	logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.db, f.frame, f.view, f.slice)
-	defer track(time.Now(), fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.db, f.frame, f.view, f.slice), logger)
+	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.db, f.frame, f.view, f.slice)
+	start := time.Now()
+	defer track(start, completeMessage, f.stats, logger)
 
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + SnapshotExt
