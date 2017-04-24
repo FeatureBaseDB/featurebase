@@ -1,4 +1,4 @@
-// package server contains the `pilosa server` subcommand which runs Pilosa
+// Package server contains the `pilosa server` subcommand which runs Pilosa
 // itself. The purpose of this package is to define an easily tested Command
 // object which handles interpreting configuration and setting up all the
 // objects that Pilosa needs.
@@ -50,7 +50,7 @@ type Command struct {
 	Done chan struct{}
 }
 
-// NewMain returns a new instance of Main.
+// NewCommand returns a new instance of Main.
 func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 	return &Command{
 		Server: pilosa.NewServer(),
@@ -89,6 +89,7 @@ func (m *Command) Run(args ...string) (err error) {
 	return nil
 }
 
+// SetupServer use the cluster configuration to setup this server
 func (m *Command) SetupServer() error {
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
@@ -168,7 +169,7 @@ func (m *Command) SetupServer() error {
 			return err
 		}
 	default:
-		return fmt.Errorf("'%v' is not a supported value for broadcaster type.", m.Config.Cluster.Type)
+		return fmt.Errorf("'%v' is not a supported value for broadcaster type", m.Config.Cluster.Type)
 	}
 
 	// Set configuration options.
