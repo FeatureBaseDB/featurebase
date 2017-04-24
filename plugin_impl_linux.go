@@ -8,7 +8,7 @@ import "plugin"
 const PluginsSupported = true
 
 // Load reads a plugin file into the registry.
-func (r *PluginRegistry) Load(path string) error {
+func (r *pluginRegistry) Load(path string) error {
 	p, err := plugin.Open(path)
 	if err != nil {
 		return err
@@ -21,7 +21,7 @@ func (r *PluginRegistry) Load(path string) error {
 	}
 
 	// Execute registration.
-	if err := fn.(func(Registry) error)(r); err != nil {
+	if err := fn.(func(PluginRegistry) error)(r); err != nil {
 		return err
 	}
 

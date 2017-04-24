@@ -8,6 +8,6 @@ import "errors"
 const PluginsSupported = false
 
 // Load reads a plugin file into the registry.
-func (r *PluginRegistry) Load(path string) error {
+func (r *pluginRegistry) Load(path string) error {
 	return errors.New("plugins not supported")
 }

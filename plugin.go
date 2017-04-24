@@ -11,26 +11,27 @@ type Plugin interface {
 	Reduce(ctx context.Context, prev, v interface{}) interface{}
 }
 
-type Registry interface {
+type PluginRegistry interface {
 	Register(name string, fn NewPluginFunc) error
 	Load(path string) error
-        NewPlugin(name string) (Plugin, error) 
+	NewPlugin(name string) (Plugin, error)
 }
+
 // PluginRegistry holds a lookup of plugins.
-type PluginRegistry struct {
+type pluginRegistry struct {
 	fns map[string]NewPluginFunc
 }
 
 // NewPluginRegistry returns a new instance of PluginRegistry.
-func NewPluginRegistry() Registry {
-	return &PluginRegistry{
+func NewPluginRegistry() PluginRegistry {
+	return &pluginRegistry{
 		fns: make(map[string]NewPluginFunc),
 	}
 }
 
 // Register registers a plugin constructor with the registry.
 // Returns an error if the plugin is already registered.
-func (r *PluginRegistry) Register(name string, fn NewPluginFunc) error {
+func (r *pluginRegistry) Register(name string, fn NewPluginFunc) error {
 	if r.fns[name] != nil {
 		return errors.New("plugin already registered")
 	}
@@ -39,7 +40,7 @@ func (r *PluginRegistry) Register(name string, fn NewPluginFunc) error {
 }
 
 // NewPlugin instantiates an already loaded plugin.
-func (r *PluginRegistry) NewPlugin(name string) (Plugin, error) {
+func (r *pluginRegistry) NewPlugin(name string) (Plugin, error) {
 	fn := r.fns[name]
 	if fn == nil {
 		return nil, errors.New("plugin not found")
