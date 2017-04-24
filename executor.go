@@ -56,17 +56,41 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 		opt = &ExecOptions{}
 	}
 
+	// Don't bother calculating slices for query types that don't require it.
+	needsSlices := needsSlices(q.Calls)
+
+	// MaxSlice can differ between inverse and standard views, so we need
+	// to send queries to different slices based on orientation.
+	var inverseSlices []uint64
+	rowLabel := DefaultRowLabel
+	columnLabel := DefaultColumnLabel
+
 	// If slices aren't specified, then include all of them.
 	if len(slices) == 0 {
-		if needsSlices(q.Calls) {
+		// Determine slices and inverseSlices for use in e.executeCall().
+		if needsSlices {
 			// Round up the number of slices.
 			maxSlice := e.Holder.Index(index).MaxSlice()
+			maxInverseSlice := e.Holder.Index(index).MaxInverseSlice()
 
 			// Generate a slices of all slices.
 			slices = make([]uint64, maxSlice+1)
 			for i := range slices {
 				slices[i] = uint64(i)
 			}
+
+			// Generate a slices of all inverse slices.
+			inverseSlices = make([]uint64, maxInverseSlice+1)
+			for i := range inverseSlices {
+				inverseSlices[i] = uint64(i)
+			}
+
+			// Fetch column label from index.
+			idx := e.Holder.Index(index)
+			if idx == nil {
+				return nil, ErrIndexNotFound
+			}
+			columnLabel = idx.ColumnLabel()
 		}
 	}
 
@@ -78,6 +102,25 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
+
+		if call.SupportsInverse() && needsSlices {
+			// Fetch frame & row label based on argument.
+			frame, _ := call.Args["frame"].(string)
+			if frame == "" {
+				frame = DefaultFrame
+			}
+			f := e.Holder.Frame(index, frame)
+			if f == nil {
+				return nil, ErrFrameNotFound
+			}
+			rowLabel = f.RowLabel()
+
+			// If this call is to an inverse frame send to a different list of slices.
+			if call.IsInverse(rowLabel, columnLabel) {
+				slices = inverseSlices
+			}
+		}
+
 		v, err := e.executeCall(ctx, index, call, slices, opt)
 		if err != nil {
 			return nil, err
