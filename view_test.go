@@ -10,11 +10,11 @@ import (
 // View is a test wrapper for pilosa.View.
 type View struct {
 	*pilosa.View
-	BitmapAttrStore *AttrStore
+	RowAttrStore *AttrStore
 }
 
 // NewView returns a new instance of View with a temporary path.
-func NewView(db, frame, name string) *View {
+func NewView(index, frame, name string) *View {
 	file, err := ioutil.TempFile("", "pilosa-view-")
 	if err != nil {
 		panic(err)
@@ -22,16 +22,16 @@ func NewView(db, frame, name string) *View {
 	file.Close()
 
 	v := &View{
-		View:            pilosa.NewView(file.Name(), db, frame, name),
-		BitmapAttrStore: MustOpenAttrStore(),
+		View:         pilosa.NewView(file.Name(), index, frame, name, pilosa.DefaultCacheSize),
+		RowAttrStore: MustOpenAttrStore(),
 	}
-	v.View.BitmapAttrStore = v.BitmapAttrStore.AttrStore
+	v.View.RowAttrStore = v.RowAttrStore.AttrStore
 	return v
 }
 
 // MustOpenView creates and opens an view at a temporary path. Panic on error.
-func MustOpenView(db, frame, name string) *View {
-	v := NewView(db, frame, name)
+func MustOpenView(index, frame, name string) *View {
+	v := NewView(index, frame, name)
 	if err := v.Open(); err != nil {
 		panic(err)
 	}
@@ -41,7 +41,7 @@ func MustOpenView(db, frame, name string) *View {
 // Close closes the view and removes all underlying data.
 func (v *View) Close() error {
 	defer os.Remove(v.Path())
-	defer v.BitmapAttrStore.Close()
+	defer v.RowAttrStore.Close()
 	return v.View.Close()
 }
 
@@ -52,28 +52,28 @@ func (v *View) Reopen() error {
 		return err
 	}
 
-	v.View = pilosa.NewView(path, v.DB(), v.Frame(), v.Name())
-	v.View.BitmapAttrStore = v.BitmapAttrStore.AttrStore
+	v.View = pilosa.NewView(path, v.Index(), v.Frame(), v.Name(), pilosa.DefaultCacheSize)
+	v.View.RowAttrStore = v.RowAttrStore.AttrStore
 	if err := v.Open(); err != nil {
 		return err
 	}
 	return nil
 }
 
-// MustSetBits sets bits on a bitmap. Panic on error.
+// MustSetBits sets bits on a row. Panic on error.
 // This function does not accept a timestamp or quantum.
-func (v *View) MustSetBits(bitmapID uint64, profileIDs ...uint64) {
-	for _, profileID := range profileIDs {
-		if _, err := v.SetBit(bitmapID, profileID); err != nil {
+func (v *View) MustSetBits(rowID uint64, columnIDs ...uint64) {
+	for _, columnID := range columnIDs {
+		if _, err := v.SetBit(rowID, columnID); err != nil {
 			panic(err)
 		}
 	}
 }
 
-// MustClearBits clears bits on a bitmap. Panic on error.
-func (v *View) MustClearBits(bitmapID uint64, profileIDs ...uint64) {
-	for _, profileID := range profileIDs {
-		if _, err := v.ClearBit(bitmapID, profileID); err != nil {
+// MustClearBits clears bits on a row. Panic on error.
+func (v *View) MustClearBits(rowID uint64, columnIDs ...uint64) {
+	for _, columnID := range columnIDs {
+		if _, err := v.ClearBit(rowID, columnID); err != nil {
 			panic(err)
 		}
 	}

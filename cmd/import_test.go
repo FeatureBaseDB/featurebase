@@ -22,13 +22,13 @@ func TestImportConfig(t *testing.T) {
 			args: []string{"import"},
 			env:  map[string]string{"PILOSA_HOST": "localhost:12345"},
 			cfgFileContent: `
-database = "mydb"
+index = "myindex"
 frame = "f1"
 `,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Importer.Host, "localhost:12345")
-				v.Check(cmd.Importer.Database, "mydb")
+				v.Check(cmd.Importer.Index, "myindex")
 				v.Check(cmd.Importer.Frame, "f1")
 				return v.Error()
 			},

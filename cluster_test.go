@@ -9,6 +9,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/httpbroadcast"
 )
 
 // Ensure the cluster can fairly distribute partitions across the nodes.
@@ -36,11 +37,11 @@ func TestCluster_Owners(t *testing.T) {
 
 // Ensure the partitioner can assign a fragment to a partition.
 func TestCluster_Partition(t *testing.T) {
-	if err := quick.Check(func(db string, slice uint64, partitionN int) bool {
+	if err := quick.Check(func(index string, slice uint64, partitionN int) bool {
 		c := pilosa.NewCluster()
 		c.PartitionN = partitionN
 
-		partitionID := c.Partition(db, slice)
+		partitionID := c.Partition(index, slice)
 		if partitionID < 0 || partitionID >= partitionN {
 			t.Errorf("partition out of range: slice=%d, p=%d, n=%d", slice, partitionID, partitionN)
 		}
@@ -74,6 +75,46 @@ func TestHasher(t *testing.T) {
 				t.Errorf("hash(%v,%v)=%v, want %v", tt.key, i+1, got, v)
 			}
 		}
+	}
+}
+
+// Ensure that an empty cluster returns a valid (empty) NodeSet
+func TestCluster_NodeSetHosts(t *testing.T) {
+
+	c := pilosa.Cluster{}
+
+	if h := c.NodeSetHosts(); !reflect.DeepEqual(h, []string{}) {
+		t.Fatalf("unexpected slice of hosts: %s", h)
+	}
+}
+
+// Ensure cluster can compare its Nodes and Members
+func TestCluster_NodeStates(t *testing.T) {
+	c := pilosa.Cluster{
+		Nodes: []*pilosa.Node{
+			{Host: "serverA:1000"},
+			{Host: "serverB:1000"},
+			{Host: "serverC:1000"},
+		},
+		NodeSet: &httpbroadcast.HTTPNodeSet{},
+	}
+
+	err := c.NodeSet.(*httpbroadcast.HTTPNodeSet).Join([]*pilosa.Node{
+		&pilosa.Node{Host: "serverA:1000"},
+		&pilosa.Node{Host: "serverC:1000"},
+		&pilosa.Node{Host: "serverD:1000"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected gossiper nodes: %s", err)
+	}
+
+	// Verify a DOWN node is reported, and extraneous nodes are ignored
+	if a := c.NodeStates(); !reflect.DeepEqual(a, map[string]string{
+		"serverA:1000": pilosa.NodeStateUp,
+		"serverB:1000": pilosa.NodeStateDown,
+		"serverC:1000": pilosa.NodeStateUp,
+	}) {
+		t.Fatalf("unexpected node state: %s", spew.Sdump(a))
 	}
 }
 

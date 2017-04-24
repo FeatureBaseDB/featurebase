@@ -6,21 +6,21 @@ import (
 	"testing"
 )
 
-// Test custom UnmarshalJSON for postDBRequest object
-func TestPostDBRequestUnmarshalJSON(t *testing.T) {
+// Test custom UnmarshalJSON for postIndexRequest object
+func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 	tests := []struct {
 		json     string
-		expected postDBRequest
+		expected postIndexRequest
 		err      string
 	}{
-		{json: `{"options": {}}`, expected: postDBRequest{Options: DBOptions{}}},
+		{json: `{"options": {}}`, expected: postIndexRequest{Options: IndexOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
-		{json: `{"options": {"columnLabel": "test"}}`, expected: postDBRequest{Options: DBOptions{ColumnLabel: "test"}}},
-		{json: `{"options": {"columnLabl": "test"}}`, err: "invalid key for options {columnLabl:test}"},
+		{json: `{"options": {"columnLabel": "test"}}`, expected: postIndexRequest{Options: IndexOptions{ColumnLabel: "test"}}},
+		{json: `{"options": {"columnLabl": "test"}}`, err: "Unknown key: columnLabl:test"},
 	}
 	for _, test := range tests {
-		actual := &postDBRequest{}
+		actual := &postIndexRequest{}
 		err := json.Unmarshal([]byte(test.json), actual)
 
 		if err != nil {
@@ -51,9 +51,12 @@ func TestPostFrameRequestUnmarshalJSON(t *testing.T) {
 	}{
 		{json: `{"options": {}}`, expected: postFrameRequest{Options: FrameOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
-		{json: `{"option": {}}`, err: "Unknown key: {option:map[]}"},
+		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"options": {"rowLabel": "test"}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test"}}},
-		{json: `{"options": {"rowLabl": "test"}}`, err: "invalid key for options {rowLabl:test}"},
+		{json: `{"options": {"rowLabl": "test"}}`, err: "Unknown key: rowLabl:test"},
+		{json: `{"options": {"rowLabel": "test", "inverseEnabled": true}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test", InverseEnabled: true}}},
+		{json: `{"options": {"rowLabel": "test", "inverseEnabled": true, "cacheType": "type"}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test", InverseEnabled: true, CacheType: "type"}}},
+		{json: `{"options": {"rowLabel": "test", "inverse": true, "cacheType": "type"}}`, err: "Unknown key: inverse:true"},
 	}
 	for _, test := range tests {
 		actual := &postFrameRequest{}

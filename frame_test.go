@@ -60,7 +60,7 @@ func TestFrame_NameRestriction(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "d", ".meta")
+	frame, err := pilosa.NewFrame(path, "i", ".meta")
 	if frame != nil {
 		t.Fatalf("unexpected frame name %s", err)
 	}
@@ -77,7 +77,7 @@ func NewFrame() *Frame {
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "d", "f")
+	frame, err := pilosa.NewFrame(path, "i", "f")
 	if err != nil {
 		panic(err)
 	}
@@ -99,15 +99,15 @@ func (f *Frame) Close() error {
 	return f.Frame.Close()
 }
 
-// Reopen closes the database and reopens it.
+// Reopen closes the index and reopens it.
 func (f *Frame) Reopen() error {
 	var err error
 	if err := f.Frame.Close(); err != nil {
 		return err
 	}
 
-	path, db, name := f.Path(), f.DB(), f.Name()
-	f.Frame, err = pilosa.NewFrame(path, db, name)
+	path, index, name := f.Path(), f.Index(), f.Name()
+	f.Frame, err = pilosa.NewFrame(path, index, name)
 	if err != nil {
 		return err
 	}
@@ -119,10 +119,31 @@ func (f *Frame) Reopen() error {
 }
 
 // MustSetBit sets a bit on the frame. Panic on error.
-func (f *Frame) MustSetBit(view string, bitmapID, profileID uint64, t *time.Time) (changed bool) {
-	changed, err := f.SetBit(view, bitmapID, profileID, t)
+func (f *Frame) MustSetBit(view string, rowID, columnID uint64, t *time.Time) (changed bool) {
+	changed, err := f.SetBit(view, rowID, columnID, t)
 	if err != nil {
 		panic(err)
 	}
 	return changed
+}
+
+// Ensure frame can set its cache
+func TestFrame_SetCacheSize(t *testing.T) {
+	f := MustOpenFrame()
+	defer f.Close()
+	cacheSize := uint32(100)
+
+	// Set & retrieve frame cache size.
+	if err := f.SetCacheSize(cacheSize); err != nil {
+		t.Fatal(err)
+	} else if q := f.CacheSize(); q != cacheSize {
+		t.Fatalf("unexpected frame cache size: %d", q)
+	}
+
+	// Reload frame and verify that it is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if q := f.CacheSize(); q != cacheSize {
+		t.Fatalf("unexpected frame cache size (reopen): %d", q)
+	}
 }

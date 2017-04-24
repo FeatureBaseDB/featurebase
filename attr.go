@@ -226,7 +226,7 @@ func (s *AttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, erro
 	return m, nil
 }
 
-// txAttrs returns a map of attributes for a bitmap.
+// txAttrs returns a map of attributes for an id.
 func txAttrs(tx *bolt.Tx, id uint64) (map[string]interface{}, error) {
 	v := tx.Bucket([]byte("attrs")).Get(u64tob(id))
 	if v == nil {

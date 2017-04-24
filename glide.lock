@@ -1,6 +1,8 @@
-hash: 743e8f978eb4ad8f80a2ab71b05caebbf50b6769b71aa457bc4f144fef8c6595
-updated: 2017-04-18T15:33:39.035615802-05:00
+hash: 4bdea17c62dcd469584382515052e7a246fae6deefc2d62da70bf768e18e1f0c
+updated: 2017-04-19T10:51:10.409094081-05:00
 imports:
+- name: github.com/armon/go-metrics
+  version: 97c69685293dce4c0a2d0b19535179bbc976e4d2
 - name: github.com/boltdb/bolt
   version: 4b1ebc1869ad66568b313d0dc410e2be72670dda
 - name: github.com/BurntSushi/toml
@@ -24,13 +26,21 @@ imports:
   subpackages:
   - lru
 - name: github.com/golang/protobuf
-  version: 888eb0692c857ec880338addf316bd662d5e630e
+  version: 8ee79997227bf9b34611aee7946ae64735e6fd93
   subpackages:
   - proto
 - name: github.com/gorilla/context
   version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/mux
   version: 392c28fe23e1c45ddba891b0320b3b5df220beea
+- name: github.com/hashicorp/errwrap
+  version: 7554cd9344cec97297fa6649b055a8c98c2a1e55
+- name: github.com/hashicorp/go-msgpack
+  version: fa3f63826f7c23912c15263591e65d54d080b458
+  subpackages:
+  - codec
+- name: github.com/hashicorp/go-multierror
+  version: ed905158d87462226a13fe39ddf685ea65f1c11f
 - name: github.com/hashicorp/hcl
   version: 630949a3c5fa3c613328e1b8256052cbc2327c9b
   subpackages:
@@ -42,10 +52,14 @@ imports:
   - json/parser
   - json/scanner
   - json/token
+- name: github.com/hashicorp/memberlist
+  version: 9800c50ab79c002353852a9b1095e9591b161513
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/magiconair/properties
   version: b3b15ef068fd0b17ddf408a23669f20811d194d2
+- name: github.com/miekg/dns
+  version: ca336a1f95a6b89be9c250df26c7a41742eb4a6f
 - name: github.com/mitchellh/mapstructure
   version: db1efb556f84b25a0a13a04aad883943538ad2e0
 - name: github.com/pelletier/go-buffruneio
@@ -68,6 +82,14 @@ imports:
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/spf13/viper
   version: 7538d73b4eb9511d85a9f1dfef202eeb8ac260f4
+- name: golang.org/x/net
+  version: 60c41d1de8da134c05b7b40154a9a82bf5b7edb9
+  subpackages:
+  - context
+- name: golang.org/x/sync
+  version: 450f422ab23cf9881c94e2db30cac0eb1b7cf80c
+  subpackages:
+  - errgroup
 - name: golang.org/x/sys
   version: c200b10b5d5e122be351b67af224adc6128af5bf
   subpackages:

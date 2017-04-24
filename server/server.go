@@ -1,4 +1,4 @@
-// package server contains the `pilosa server` subcommand which runs Pilosa
+// Package server contains the `pilosa server` subcommand which runs Pilosa
 // itself. The purpose of this package is to define an easily tested Command
 // object which handles interpreting configuration and setting up all the
 // objects that Pilosa needs.
@@ -9,12 +9,16 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/gossip"
+	"github.com/pilosa/pilosa/httpbroadcast"
 )
 
 func init() {
@@ -46,7 +50,7 @@ type Command struct {
 	Done chan struct{}
 }
 
-// NewMain returns a new instance of Main.
+// NewCommand returns a new instance of Main.
 func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 	return &Command{
 		Server: pilosa.NewServer(),
@@ -71,6 +75,36 @@ func (m *Command) Run(args ...string) (err error) {
 		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
 	}
 
+	// SetupServer
+	err = m.SetupServer()
+	if err != nil {
+		return err
+	}
+
+	// Initialize server.
+	if err = m.Server.Open(); err != nil {
+		return fmt.Errorf("server.Open: %v", err)
+	}
+	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Server.Host)
+	return nil
+}
+
+// SetupServer use the cluster configuration to setup this server
+func (m *Command) SetupServer() error {
+	cluster := pilosa.NewCluster()
+	cluster.ReplicaN = m.Config.Cluster.ReplicaN
+
+	for _, hostport := range m.Config.Cluster.Hosts {
+		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
+	}
+	// TODO: if InternalHosts is not provided then pilosa.Node.InternalHost is empty.
+	// This will throw an error when trying to Broadcast messages over HTTP.
+	// One option may be to fall back to using host from hostport + config.InternalPort.
+	for i, internalhostport := range m.Config.Cluster.InternalHosts {
+		cluster.Nodes[i].InternalHost = internalhostport
+	}
+	m.Server.Cluster = cluster
+
 	// Setup logging output.
 	if m.Config.LogPath == "" {
 		m.Server.LogOutput = m.Stderr
@@ -82,26 +116,64 @@ func (m *Command) Run(args ...string) (err error) {
 		m.Server.LogOutput = logFile
 	}
 
-	// Configure index.
+	// Configure holder.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
-	m.Server.Index.Path = m.Config.DataDir
-	m.Server.Index.Stats = pilosa.NewExpvarStatsClient()
+	m.Server.Holder.Path = m.Config.DataDir
+	m.Server.Holder.Stats = pilosa.NewExpvarStatsClient()
 
-	// Build cluster from config file.
+	var err error
 	m.Server.Host, err = normalizeHost(m.Config.Host)
 	if err != nil {
 		return err
 	}
-	m.Server.Cluster = m.Config.PilosaCluster()
+
+	// Set internal port (string).
+	internalPortStr := pilosa.DefaultInternalPort
+	if m.Config.Cluster.InternalPort != "" {
+		internalPortStr = m.Config.Cluster.InternalPort
+	}
+
+	switch m.Config.Cluster.Type {
+	case "http":
+		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, internalPortStr)
+		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(internalPortStr, m.Stderr)
+		m.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
+		err := m.Server.Cluster.NodeSet.(*httpbroadcast.HTTPNodeSet).Join(m.Server.Cluster.Nodes)
+		if err != nil {
+			return err
+		}
+	case "gossip":
+		gossipPort, err := strconv.Atoi(internalPortStr)
+		if err != nil {
+			return err
+		}
+		gossipSeed := pilosa.DefaultHost
+		if m.Config.Cluster.GossipSeed != "" {
+			gossipSeed = m.Config.Cluster.GossipSeed
+		}
+		// get the host portion of addr to use for binding
+		gossipHost, _, err := net.SplitHostPort(m.Config.Host)
+		if err != nil {
+			gossipHost = m.Config.Host
+		}
+		gossipNodeSet := gossip.NewGossipNodeSet(m.Config.Host, gossipHost, gossipPort, gossipSeed, m.Server)
+		m.Server.Cluster.NodeSet = gossipNodeSet
+		m.Server.Broadcaster = gossipNodeSet
+		m.Server.BroadcastReceiver = gossipNodeSet
+	case "static", "":
+		m.Server.Broadcaster = pilosa.NopBroadcaster
+		m.Server.Cluster.NodeSet = pilosa.NewStaticNodeSet()
+		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
+		err := m.Server.Cluster.NodeSet.(*pilosa.StaticNodeSet).Join(m.Server.Cluster.Nodes)
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("'%v' is not a supported value for broadcaster type", m.Config.Cluster.Type)
+	}
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
-
-	// Initialize server.
-	if err = m.Server.Open(); err != nil {
-		return fmt.Errorf("server.Open: %v", err)
-	}
-	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Server.Host)
 	return nil
 }
 
