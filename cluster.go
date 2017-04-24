@@ -24,7 +24,7 @@ type Node struct {
 	Host         string `json:"host"`
 	InternalHost string `json:"internalHost"`
 
-	status *internal.NodeStatus `json:"state"`
+	status *internal.NodeStatus `json:"status"`
 }
 
 // SetStatus sets the NodeStatus.
