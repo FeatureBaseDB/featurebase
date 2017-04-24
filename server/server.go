@@ -163,6 +163,7 @@ func (m *Command) SetupServer() error {
 		m.Server.Broadcaster = pilosa.NopBroadcaster
 		m.Server.Cluster.NodeSet = pilosa.NewStaticNodeSet()
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
+		m.Server.Cluster.NodeSet.(*pilosa.StaticNodeSet).Join(m.Server.Cluster.Nodes)
 	default:
 		return fmt.Errorf("'%v' is not a supported value for broadcaster type.", m.Config.Cluster.Type)
 	}

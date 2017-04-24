@@ -34,6 +34,11 @@ func (s *StaticNodeSet) Open() error {
 	return nil
 }
 
+func (s *StaticNodeSet) Join(nodes []*Node) error {
+	s.nodes = nodes
+	return nil
+}
+
 // Broadcaster is an interface for broadcasting messages.
 type Broadcaster interface {
 	SendSync(pb proto.Message) error
