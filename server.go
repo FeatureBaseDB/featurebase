@@ -171,6 +171,7 @@ func (s *Server) Addr() net.Addr {
 func (s *Server) logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
 
 func (s *Server) monitorAntiEntropy() {
+	t := time.Now()
 	ticker := time.NewTicker(s.AntiEntropyInterval)
 	defer ticker.Stop()
 
@@ -182,6 +183,7 @@ func (s *Server) monitorAntiEntropy() {
 		case <-s.closing:
 			return
 		case <-ticker.C:
+			s.Holder.Stats.Count("AntiEntropy", 1)
 		}
 
 		s.logger().Printf("holder sync beginning")
@@ -199,9 +201,12 @@ func (s *Server) monitorAntiEntropy() {
 			continue
 		}
 
+
 		// Record successful sync in log.
 		s.logger().Printf("holder sync complete")
 	}
+	dif := time.Since(t)
+	s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif))
 }
 
 // monitorMaxSlices periodically pulls the highest slice from each node in the cluster.
