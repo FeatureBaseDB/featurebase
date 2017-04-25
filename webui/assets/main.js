@@ -71,7 +71,7 @@ class REPL {
         var xhr = new XMLHttpRequest();
         var e = document.getElementById("index-dropdown");
         var indexname = e.options[e.selectedIndex].text;
-        xhr.open('POST', '/db/' + indexname + '/query');  // TODO db->index
+        xhr.open('POST', '/index/' + indexname + '/query');
         xhr.setRequestHeader('Content-Type', 'application/text');
 
         const repl = this
@@ -97,7 +97,7 @@ class REPL {
       var output_json = JSON.parse(output_string)
       var result_class = "result-output"
       var getting_started_errors = [
-        'database not found',  // TODO db->index
+        'index not found',
         'frame not found',
       ]
 
@@ -107,8 +107,8 @@ class REPL {
           output_string += `<br />
           <br />
           Just getting started? Try this:<br />
-          $ curl -XPOST "http://127.0.0.1:10101/db/test" -d '{"options": {"columnLabel": "col"}}' # create index "test"<br />
-          $ curl -XPOST "http://127.0.0.1:10101/db/test/frame/foo" -d '{"options": {"rowLabel": "row"}}' # create frame "foo"<br />
+          $ curl -XPOST "http://127.0.0.1:10101/index/test" -d '{"options": {"columnLabel": "col"}}' # create index "test"<br />
+          $ curl -XPOST "http://127.0.0.1:10101/index/test/frame/foo" -d '{"options": {"rowLabel": "row"}}' # create frame "foo"<br />
           # Select "test" in the index dropdown above<br />
           SetBit(row=0, col=0, frame=foo) # Use PQL to set a bit
           `
@@ -154,15 +154,15 @@ class REPL {
 
     populate_index_dropdown() {
       var xhr = new XMLHttpRequest();
-      xhr.open('GET', '/schema')  // TODO schema->status (?)
+      xhr.open('GET', '/schema')
       var select = document.getElementById('index-dropdown')
 
       xhr.onload = function() {
         var schema = JSON.parse(xhr.responseText)
-        for(var i=0; i<schema['dbs'].length; i++) { // TODO db->index
+        for(var i=0; i<schema['indexes'].length; i++) {
           var opt = document.createElement('option')
           opt.value = i+1
-          opt.innerHTML = schema['dbs'][i]['name']
+          opt.innerHTML = schema['indexes'][i]['name']
           select.appendChild(opt)
         }
         // set the active option to one of the populated options, instead of invalid "Index"
