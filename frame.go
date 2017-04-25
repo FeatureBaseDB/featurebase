@@ -67,7 +67,8 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		views:        make(map[string]*View),
 		rowAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
-		stats: NopStatsClient,
+		broadcaster: NopBroadcaster,
+		stats:       NopStatsClient,
 
 		rowLabel:       DefaultRowLabel,
 		inverseEnabled: DefaultInverseEnabled,
@@ -423,6 +424,7 @@ func (f *Frame) newView(path, name string) *View {
 	view.LogOutput = f.LogOutput
 	view.RowAttrStore = f.rowAttrStore
 	view.stats = f.stats.WithTags(fmt.Sprintf("slice:%s", name))
+	view.broadcaster = f.broadcaster
 	return view
 }
 

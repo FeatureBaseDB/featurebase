@@ -68,8 +68,9 @@ func NewIndex(path, name string) (*Index, error) {
 
 		columnLabel: DefaultColumnLabel,
 
-		stats:     NopStatsClient,
-		LogOutput: ioutil.Discard,
+		broadcaster: NopBroadcaster,
+		stats:       NopStatsClient,
+		LogOutput:   ioutil.Discard,
 	}, nil
 }
 

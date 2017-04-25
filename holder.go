@@ -46,7 +46,8 @@ func NewHolder() *Holder {
 		indexes: make(map[string]*Index),
 		closing: make(chan struct{}, 0),
 
-		Stats: NopStatsClient,
+		Broadcaster: NopBroadcaster,
+		Stats:       NopStatsClient,
 
 		CacheFlushInterval: DefaultCacheFlushInterval,
 
