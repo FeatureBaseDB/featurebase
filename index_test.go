@@ -34,23 +34,43 @@ func TestIndex_CreateFrameIfNotExists(t *testing.T) {
 	}
 }
 
-// Ensure index defaults the time quantum on new frames.
+// Ensure index is assigned the correct time quantum on creation.
 func TestIndex_CreateFrame_TimeQuantum(t *testing.T) {
-	index := MustOpenIndex()
-	defer index.Close()
+	t.Run("Explicit", func(t *testing.T) {
+		index := MustOpenIndex()
+		defer index.Close()
 
-	// Set index time quantum.
-	if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
-		t.Fatal(err)
-	}
+		// Set index time quantum.
+		if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
+			t.Fatal(err)
+		}
 
-	// Create frame.
-	f, err := index.CreateFrame("f", pilosa.FrameOptions{})
-	if err != nil {
-		t.Fatal(err)
-	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YM") {
-		t.Fatalf("unexpected frame time quantum: %s", q)
-	}
+		// Create frame with explicit quantum.
+		f, err := index.CreateFrame("f", pilosa.FrameOptions{TimeQuantum: pilosa.TimeQuantum("YMDH")})
+		if err != nil {
+			t.Fatal(err)
+		} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+			t.Fatalf("unexpected frame time quantum: %s", q)
+		}
+	})
+
+	t.Run("Inherited", func(t *testing.T) {
+		index := MustOpenIndex()
+		defer index.Close()
+
+		// Set index time quantum.
+		if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create frame.
+		f, err := index.CreateFrame("f", pilosa.FrameOptions{})
+		if err != nil {
+			t.Fatal(err)
+		} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YM") {
+			t.Fatalf("unexpected frame time quantum: %s", q)
+		}
+	})
 }
 
 // Ensure index can delete a frame.
