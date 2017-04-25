@@ -213,8 +213,9 @@ em{
 }
 
 .result-error{
-  background-color: #f9edf4;
-  border-left: solid 4px #b51d78;
+  background-color: #fbf1f0;
+  border-left: solid 4px #fa3035;
+  color: #fa3035;
 }
 
 
