@@ -281,13 +281,13 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 	return nil
 }
 
-// Server implements StatusHandler.
 // LocalStatus returns the state of the local node as well as the
 // holder (indexes/frames) according to the local node.
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
+// Server implements StatusHandler.
 func (s *Server) LocalStatus() (proto.Message, error) {
 	if s.Holder == nil {
-		return nil, errors.New("Server.Holder is nil.")
+		return nil, errors.New("Server.Holder is nil")
 	}
 	return &internal.NodeStatus{
 		Host:    s.Host,

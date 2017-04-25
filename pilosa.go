@@ -88,7 +88,7 @@ func decodeColumnAttrSet(pb *internal.ColumnAttrSet) *ColumnAttrSet {
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
 
-// Restrict name using regex
+// ValidateName restrict name using regex
 func ValidateName(name string) error {
 	validName := nameRegexp.Match([]byte(name))
 	if validName == false {

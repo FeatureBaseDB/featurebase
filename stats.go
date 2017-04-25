@@ -12,7 +12,7 @@ func init() {
 	NopStatsClient = &nopStatsClient{}
 }
 
-// Global expvar.
+// Expvar Global expvar map.
 var Expvar = expvar.NewMap("index")
 
 // StatsClient represents a client to a stats server.
@@ -39,9 +39,9 @@ type StatsClient interface {
 	Timing(name string, value time.Duration)
 }
 
+// NopStatsClient represents a client that doesn't do anything.
 var NopStatsClient StatsClient
 
-// nopStatsClient represents a client that doesn't do anything.
 type nopStatsClient struct{}
 
 func (c *nopStatsClient) Tags() []string                          { return nil }
