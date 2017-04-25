@@ -175,6 +175,46 @@ class REPL {
 
 }
 
+function setNav(e) {
+  // toggle the nav buttons
+  document.getElementsByClassName("nav-active")[0].classList.remove("nav-active")
+  e.classList.add("nav-active")
+
+  // toggle the main interface content divs
+  document.getElementsByClassName("interface-active")[0].classList.remove("interface-active")
+  name = e.id.substring(4)
+  interface_el = document.getElementById('interface-' + name)
+  interface_el.classList.add("interface-active")
+
+  // toggle svgs
+  // show all inactive images
+  inactive_images = document.getElementsByClassName("nav-image")
+  for(var i=0; i<inactive_images.length; i++) {
+    inactive_images[i].classList.add("nav-image-visible")
+  }
+  // hide all active images
+  active_images = document.getElementsByClassName("nav-image-active")
+  for(var i=0; i<active_images.length; i++) {
+    active_images[i].classList.remove("nav-image-visible")
+  }
+
+  for(var i=0; i<e.childNodes.length; i++) {
+    var node = e.childNodes[i]
+    if(node.tagName != "IMG") {
+      continue
+    }
+    // hide inactive image on clicked element
+    if(node.classList.contains("nav-image")) {
+      node.classList.remove("nav-image-visible")
+    }
+    // show active image on clicked element
+    if(node.classList.contains("nav-image-active")) {
+      node.classList.add("nav-image-visible")
+    }
+  }
+
+}
+
 
 const input = document.getElementById('query')
 const output = document.getElementById('outputs')

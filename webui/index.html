@@ -15,20 +15,23 @@
   </div>
   <div class="container">
     <div class="nav">
-      <div class="nav-item nav-active">
-        <img style='margin-bottom:10px;' height='40px' src="/assets/nav_console_active.svg" alt="">
+      <div class="nav-item nav-active" id="nav-console" onclick="setNav(this)">
+        <img style='margin-bottom:10px;' height='40px' src="/assets/nav-console.svg" alt="" class="nav-image">
+        <img style='margin-bottom:10px;' height='40px' src="/assets/nav-console-active.svg" alt="" class="nav-image nav-image-active nav-image-visible">
         Console
       </div>
-      <div class="nav-item">
-        <img style='margin-bottom:10px;' height='20px' src="/assets/nav_cluster.svg" alt="">
+      <div class="nav-item" id="nav-cluster" onclick="setNav(this)">
+        <img style='margin-bottom:10px;' height='20px' src="/assets/nav-cluster.svg" alt="" class="nav-image nav-image-visible">
+        <img style='margin-bottom:10px;' height='20px' src="/assets/nav-cluster-active.svg" alt="" class="nav-image nav-image-active">
         Cluster Admin
       </div>
-      <div class="nav-item">
-        <img style='margin-bottom:10px;' height='30px' src="/assets/nav_documentation.svg" alt="">
+      <div class="nav-item" id="nav-documentation" onclick="setNav(this)">
+        <img style='margin-bottom:10px;' height='30px' src="/assets/nav-documentation.svg" alt="" class="nav-image nav-image-visible">
+        <img style='margin-bottom:10px;' height='30px' src="/assets/nav-documentation-active.svg" alt="" class="nav-image nav-image-active">
         Documentation
       </div>
     </div>
-    <div class="interface">
+    <div class="interface interface-active" id="interface-console">
 
       <div class="query">
         <h2>Query</h2>
@@ -54,9 +57,16 @@
 
       </div>
 
-
-
       </div>
+
+      <div class="interface" id="interface-cluster">
+      cluster stats!
+      </div>
+
+      <div class="interface" id="interface-documentation">
+      docs!
+      </div>
+
 
     </div>
   </div>

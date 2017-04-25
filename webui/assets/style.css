@@ -123,14 +123,27 @@ em{
   color: #1db598;
 }
 
+.nav-image,
+.nav-image-active{
+  display: none;
+}
+
+.nav-image-visible{
+  display: flex;
+}
+
 
 
 .interface{
-  display: flex;
+  display: none;
   flex: 1;
   flex-direction: column;
   align-items: center;
   background: #f2f7f9;
+}
+
+.interface-active{
+  display: flex;
 }
 
 .query{
