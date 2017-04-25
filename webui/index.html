@@ -1,51 +1,172 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/css/bootstrap.min.css" integrity="sha384-rwoIResjU2yc3z8GV/NPeZWAv56rSmLldC3R/AZzGRnGxQQKnKkoFVhFQhNUwEyJ" crossorigin="anonymous">
-    <link rel="stylesheet" href="/assets/main.css">
-  </head>
-  <body>
-    <nav class="navbar navbar-toggleable-md navbar-inverse bg-inverse fixed-top">
-      <button class="navbar-toggler navbar-toggler-right" type="button" data-toggle="collapse" data-target="#navbarsExampleDefault" aria-controls="navbarsExampleDefault" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <a class="navbar-brand" href="#">Pilosa</a>
-
-      <div class="collapse navbar-collapse" id="navbarsExampleDefault">
-        <ul class="navbar-nav mr-auto">
-          <li class="nav-item active">
-            <a class="nav-link" href="#">Query <span class="sr-only">(current)</span></a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="/stats">Cluster Status</a>
-          </li>
-        </ul>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/assets/style.css">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Pilosa Console</title>
+</head>
+<body>
+  <div class="header">
+    <img src="https://dc3kpxyuw05cb.cloudfront.net/img/logo.svg" width="110" alt="">
+    <a href='/' >Support</a>
+  </div>
+  <div class="container">
+    <div class="nav">
+      <div class="nav-item nav-active">
+        <img style='margin-bottom:10px;' height='40px' src="/assets/nav_console.svg" alt="">
+        Console
       </div>
-    </nav>
-    <div class="container">
-      <div class="input-bar">
-        <div class="dropdown">
-          <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-            Database
-          </button>
-          <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-            <a class="dropdown-item" href="#">1</a>
-            <a class="dropdown-item" href="#">2</a>
-          </div>
-        </div>
-        <textarea class="input-textarea"></textarea>
+      <div class="nav-item">
+        <img style='margin-bottom:10px;' height='20px' src="/assets/nav_cluster.svg" alt="">
+        Cluster Admin
+      </div>
+      <div class="nav-item">
+        <img style='margin-bottom:10px;' height='30px' src="/assets/nav_documentation.svg" alt="">
+        Documentation
       </div>
     </div>
-    <div class="container output"></div>
+    <div class="interface">
 
-    <!-- todo: remove jquery and bootstrap -->
-    <script src="https://code.jquery.com/jquery-3.1.1.slim.min.js" integrity="sha384-A7FZj7v+d/sdmMqp/nOQwliLvUsJfDHW+k9Omg/a/EheAdgtzNs3hpfag6Ed950n" crossorigin="anonymous"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/js/bootstrap.min.js" integrity="sha384-vBWWzlZJ8ea9aCX4pEW3rVHjgjt7zpkNpZk+02D9phzyeVkE+jo0ieGizqPLForn" crossorigin="anonymous"></script>
-    <script src="/assets/main.js"></script>
-    <script>
-        startup()
-    </script>
-  </body>
+      <div class="query">
+        <h2>Query</h2>
+        <textarea name="name" id='query' rows="5"  required></textarea>
+        <div class='input-controls'>
+
+          <select class="" name="">
+            <option value="">Index</option>
+          </select>
+          &nbsp;&nbsp;&nbsp;
+          <button  id='query-btn'>Run Query</button>
+        </div>
+      </div>
+
+
+      <div  class="output-container">
+
+        <h2>Output</h2>
+        <div id="outputs">
+
+          <!-- results -->
+        </div>
+
+      </div>
+
+
+
+      </div>
+
+    </div>
+  </div>
+  <script type="text/javascript">
+
+
+  //helpers
+  function prependChild(parent, newFirstChild) {
+      parent.insertBefore(newFirstChild, parent.firstChild)
+  }
+
+  var createSingleOutput = function(res){
+    var node = document.createElement("div");
+    node.classList.add('output');
+    var markup =`
+
+      <div  class="panes">
+        <div class="pane active">
+          <div class="result-io">
+            <div class="result-io-header">
+              <h5>Input</h5>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              <em>Source: Index</em>
+            </div>
+            <div class="result-input">
+              ${res.input}
+            </div>
+          </div>
+          <div class="result-io">
+            <div class="result-io-header">
+              <h5>output</h5>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+              <em>.42 ms</em>
+            </div>
+            <div class="result-ouput">
+              ${res.output}
+            </div>
+          </div>
+        </div>
+        <div class="pane">
+          <div class="raw">
+
+            <a href="${res.url}">Export raw .csv</a>
+          </div>
+        </div>
+      </div>
+
+    `
+    node.innerHTML = markup;
+
+    prependChild(document.getElementById("outputs"),node);
+  }
+
+
+
+
+
+// mock data load
+  var results=[
+    {
+      id:1,
+      input:'Union(Bitmap(id=1, frame=“foo”), Bitmap(id=1), frame=“bar”))',
+      output: '{“results”:[{“attrs”:bits”:[1,2,3,4,5,12,13,14]}]}',
+    },
+    {
+      id:2,
+      input:'SetBitmapAttrs(Bitmap(id=1, frame=“foo”), Bitmap(id=1), frame=“bar”))”))',
+      output: 'null',
+    }
+  ]
+  for (var i = 0; i < results.length; i++){
+    createSingleOutput(results[i]);
+  }
+
+
+
+
+//mock api
+function callAPI(){
+  return {
+    input:document.getElementById("query").value,
+    output: `${queryBox.value} +1`
+
+  }
+}
+
+
+
+  //events
+  var button = document.getElementById('query-btn');
+  var queryBox = document.getElementById("query")
+
+  button.onclick = function(){
+    var res = callAPI()
+    createSingleOutput(res);
+  }
+
+
+queryBox.addEventListener("keyup", function(event) {
+    event.preventDefault();
+    if (event.key == 'Enter') {
+        button.click();
+    }
+});
+
+
+
+
+
+
+
+  </script>
+</body>
 </html>
