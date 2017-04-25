@@ -377,7 +377,11 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 
 	// Default the time quantum to what is set on the Index.
-	if err := f.SetTimeQuantum(i.timeQuantum); err != nil {
+	timeQuantum := i.timeQuantum
+	if opt.TimeQuantum != "" {
+		timeQuantum = opt.TimeQuantum
+	}
+	if err := f.SetTimeQuantum(timeQuantum); err != nil {
 		f.Close()
 		return nil, err
 	}
