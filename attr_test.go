@@ -9,7 +9,7 @@ import (
 	"github.com/pilosa/pilosa"
 )
 
-// Ensure database can set and retrieve profile attributes.
+// Ensure database can set and retrieve column attributes.
 func TestAttrStore_Attrs(t *testing.T) {
 	s := MustOpenAttrStore()
 	defer s.Close()
@@ -23,14 +23,14 @@ func TestAttrStore_Attrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Retrieve attributes for profile #1.
+	// Retrieve attributes for column #1.
 	if m, err := s.Attrs(1); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(m, map[string]interface{}{"A": int64(100), "B": "VALUE", "C": int64(-27)}) {
 		t.Fatalf("unexpected attrs(1): %#v", m)
 	}
 
-	// Retrieve attributes for profile #2.
+	// Retrieve attributes for column #2.
 	if m, err := s.Attrs(2); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(m, map[string]interface{}{"A": int64(200)}) {

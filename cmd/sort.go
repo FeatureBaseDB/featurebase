@@ -25,7 +25,7 @@ Sorts the import data at PATH into the optimal sort order for importing.
 
 The format of the CSV file is:
 
-	BITMAPID,PROFILEID
+	ROWID,COLUMNID
 
 The file should contain no headers.
 `,

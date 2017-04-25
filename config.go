@@ -8,7 +8,7 @@ const (
 	DefaultPort         = "10101"
 	DefaultClusterType  = "static"
 	DefaultInternalPort = "14000"
-	DefaultMetrics      = "noop"
+	DefaultMetrics      = "nop"
 )
 
 // Config represents the configuration for the command.

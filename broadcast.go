@@ -34,6 +34,11 @@ func (s *StaticNodeSet) Open() error {
 	return nil
 }
 
+func (s *StaticNodeSet) Join(nodes []*Node) error {
+	s.nodes = nodes
+	return nil
+}
+
 // Broadcaster is an interface for broadcasting messages.
 type Broadcaster interface {
 	SendSync(pb proto.Message) error
@@ -84,8 +89,8 @@ var NopBroadcastReceiver = &nopBroadcastReceiver{}
 
 const (
 	MessageTypeCreateSlice = 1
-	MessageTypeCreateDB    = 2
-	MessageTypeDeleteDB    = 3
+	MessageTypeCreateIndex = 2
+	MessageTypeDeleteIndex = 3
 	MessageTypeCreateFrame = 4
 	MessageTypeDeleteFrame = 5
 )
@@ -95,10 +100,10 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 	switch obj := m.(type) {
 	case *internal.CreateSliceMessage:
 		typ = MessageTypeCreateSlice
-	case *internal.CreateDBMessage:
-		typ = MessageTypeCreateDB
-	case *internal.DeleteDBMessage:
-		typ = MessageTypeDeleteDB
+	case *internal.CreateIndexMessage:
+		typ = MessageTypeCreateIndex
+	case *internal.DeleteIndexMessage:
+		typ = MessageTypeDeleteIndex
 	case *internal.CreateFrameMessage:
 		typ = MessageTypeCreateFrame
 	case *internal.DeleteFrameMessage:
@@ -120,10 +125,10 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 	switch typ {
 	case MessageTypeCreateSlice:
 		m = &internal.CreateSliceMessage{}
-	case MessageTypeCreateDB:
-		m = &internal.CreateDBMessage{}
-	case MessageTypeDeleteDB:
-		m = &internal.DeleteDBMessage{}
+	case MessageTypeCreateIndex:
+		m = &internal.CreateIndexMessage{}
+	case MessageTypeDeleteIndex:
+		m = &internal.DeleteIndexMessage{}
 	case MessageTypeCreateFrame:
 		m = &internal.CreateFrameMessage{}
 	case MessageTypeDeleteFrame:
