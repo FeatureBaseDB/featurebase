@@ -192,7 +192,8 @@ em{
 }
 
 .result-input,
-.result-ouput{
+.result-output,
+.result-error{
   border-radius: 2px;
   background-color: #fafafa;
   border: solid 1.5px #e4eff4;
@@ -206,9 +207,14 @@ em{
 }
 
 
-.result-ouput{
+.result-output{
   background-color: #edf9f7;
   border-left: solid 4px #1db598;
+}
+
+.result-error{
+  background-color: #f9edf4;
+  border-left: solid 4px #b51d78;
 }
 
 

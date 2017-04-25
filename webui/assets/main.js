@@ -93,6 +93,11 @@ class REPL {
     createSingleOutput(res) {
       var node = document.createElement("div");
       node.classList.add('output');
+      var result_class = "result-output"
+      var output = JSON.parse(res['output'])
+      if("error" in output) {
+        result_class = "result-error"
+      }
       var markup =`
         <div  class="panes">
           <div class="pane active">
@@ -112,7 +117,7 @@ class REPL {
                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
                 <em>${res.querytime_ms} ms</em>
               </div>
-              <div class="result-ouput">
+              <div class="${result_class}">
                 ${res.output}
               </div>
             </div>
