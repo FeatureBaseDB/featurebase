@@ -75,15 +75,19 @@ class REPL {
         xhr.setRequestHeader('Content-Type', 'application/text');
 
         const repl = this
+        var start_time = new Date().getTime();
+        xhr.send(query)
         xhr.onload = function() {
+            var end_time = new Date().getTime()
             repl.result_number++
             repl.createSingleOutput({
               "input": query, 
               "output": xhr.responseText, 
               "indexname": indexname,
+              "querytime_ms": end_time - start_time,
             })
         }
-        xhr.send(query)
+
     }
 
     createSingleOutput(res) {
@@ -106,7 +110,7 @@ class REPL {
               <div class="result-io-header">
                 <h5>output</h5>
                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                <em>.42 ms</em>
+                <em>${res.querytime_ms} ms</em>
               </div>
               <div class="result-ouput">
                 ${res.output}
