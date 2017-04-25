@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"reflect"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
@@ -25,8 +27,9 @@ import (
 
 // Handler represents an HTTP handler.
 type Handler struct {
-	Index       *Index
-	Broadcaster Broadcaster
+	Holder        *Holder
+	Broadcaster   Broadcaster
+	StatusHandler StatusHandler
 
 	// Local hostname & cluster configuration.
 	Host    string
@@ -36,7 +39,7 @@ type Handler struct {
 
 	// The execution engine for running queries.
 	Executor interface {
-		Execute(context context.Context, db string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
+		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
 	}
 
 	// The writer for any logging.
@@ -67,20 +70,20 @@ func NewHandler() *Handler {
 
 func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
-	router.HandleFunc("/db", handler.handleGetDBs).Methods("GET")
-	router.HandleFunc("/db/{db}", handler.handleGetDB).Methods("GET")
-	router.HandleFunc("/db/{db}", handler.handlePostDB).Methods("POST")
-	router.HandleFunc("/db/{db}", handler.handleDeleteDB).Methods("DELETE")
-	router.HandleFunc("/db/{db}/attr/diff", handler.handlePostDBAttrDiff).Methods("POST")
-	//router.HandleFunc("/db/{db}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
-	router.HandleFunc("/db/{db}/frame/{frame}", handler.handlePostFrame).Methods("POST")
-	router.HandleFunc("/db/{db}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
-	router.HandleFunc("/db/{db}/query", handler.handlePostQuery).Methods("POST")
-	router.HandleFunc("/db/{db}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/db/{db}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
-	router.HandleFunc("/db/{db}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
-	router.HandleFunc("/db/{db}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
-	router.HandleFunc("/db/{db}/time-quantum", handler.handlePatchDBTimeQuantum).Methods("PATCH")
+	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
+	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET")
+	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
+	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE")
+	router.HandleFunc("/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
+	//router.HandleFunc("/index/{index}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
+	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
+	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
+	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
+	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
@@ -93,13 +96,14 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/nodes", handler.handleGetNodes).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
+	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
 	// https://github.com/gorilla/mux/issues/6
 	// For now we just do it for the most commonly used handler, /query
-	router.HandleFunc("/db/{db}/query", handler.methodNotAllowedHandler).Methods("GET")
+	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
 
 	return router
 }
@@ -140,7 +144,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(getSchemaResponse{
-		DBs: h.Index.Schema(),
+		Indexes: h.Holder.Schema(),
 	}); err != nil {
 		h.logger().Printf("write schema response error: %s", err)
 	}
@@ -148,24 +152,29 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 // handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := h.StatusHandler.ClusterStatus()
+	if err != nil {
+		h.logger().Printf("cluster status error: %s", err)
+		return
+	}
 	if err := json.NewEncoder(w).Encode(getStatusResponse{
-		Health: h.Cluster.Health(),
+		Status: status,
 	}); err != nil {
 		h.logger().Printf("write status response error: %s", err)
 	}
 }
 
 type getSchemaResponse struct {
-	DBs []*DBInfo `json:"dbs"`
+	Indexes []*IndexInfo `json:"indexes"`
 }
 
 type getStatusResponse struct {
-	Health map[string]string `json:"health"`
+	Status proto.Message `json:"status"`
 }
 
 // handlePostQuery handles /query requests.
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+	indexName := mux.Vars(r)["index"]
 
 	// Parse incoming request.
 	req, err := h.readQueryRequest(r)
@@ -189,29 +198,29 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute the query.
-	results, err := h.Executor.Execute(r.Context(), dbName, q, req.Slices, opt)
+	results, err := h.Executor.Execute(r.Context(), indexName, q, req.Slices, opt)
 	resp := &QueryResponse{Results: results, Err: err}
 
-	// Fill profile attributes if requested.
-	if req.Profiles {
-		// Consolidate all profile ids across all calls.
-		var profileIDs []uint64
+	// Fill column attributes if requested.
+	if req.ColumnAttrs {
+		// Consolidate all column ids across all calls.
+		var columnIDs []uint64
 		for _, result := range results {
 			bm, ok := result.(*Bitmap)
 			if !ok {
 				continue
 			}
-			profileIDs = uint64Slice(profileIDs).merge(bm.Bits())
+			columnIDs = uint64Slice(columnIDs).merge(bm.Bits())
 		}
 
-		// Retrieve profile attributes across all calls.
-		profiles, err := h.readProfiles(h.Index.DB(dbName), profileIDs)
+		// Retrieve column attributes across all calls.
+		columnAttrSets, err := h.readColumnAttrSets(h.Holder.Index(indexName), columnIDs)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 			return
 		}
-		resp.Profiles = profiles
+		resp.ColumnAttrSets = columnAttrSets
 	}
 
 	// Set appropriate status code, if there is an error.
@@ -228,9 +237,9 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
 	var ms map[string]uint64
 	if inverse, _ := strconv.ParseBool(r.URL.Query().Get("inverse")); inverse {
-		ms = h.Index.MaxInverseSlices()
+		ms = h.Holder.MaxInverseSlices()
 	} else {
-		ms = h.Index.MaxSlices()
+		ms = h.Holder.MaxSlices()
 	}
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
 		pb := &internal.MaxSlicesResponse{
@@ -251,120 +260,140 @@ type sliceMaxResponse struct {
 	MaxSlices map[string]uint64 `json:"maxSlices"`
 }
 
-// handleGetDBs handles GET /db request.
-func (h *Handler) handleGetDBs(w http.ResponseWriter, r *http.Request) {
+// handleGetIndexes handles GET /index request.
+func (h *Handler) handleGetIndexes(w http.ResponseWriter, r *http.Request) {
 	h.handleGetSchema(w, r)
 }
 
-// handleGetDB handles GET /db/<dbname> requests.
-func (h *Handler) handleGetDB(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
-	db := h.Index.DB(dbName)
-	if db == nil {
-		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
+// handleGetIndex handles GET /index/<indexname> requests.
+func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(getDBResponse{
-		map[string]string{"name": db.Name()},
+	if err := json.NewEncoder(w).Encode(getIndexResponse{
+		map[string]string{"name": index.Name()},
 	}); err != nil {
 		h.logger().Printf("write response error: %s", err)
 	}
 }
 
-type getDBResponse struct {
-	DB map[string]string `json:"db"`
+type getIndexResponse struct {
+	Index map[string]string `json:"index"`
 }
 
-type postDBRequest struct {
-	Options DBOptions `json:"options"`
+type postIndexRequest struct {
+	Options IndexOptions `json:"options"`
 }
 
-// Custom Unmarshal JSON to validate request body when creating a new database
-func (p *postDBRequest) UnmarshalJSON(b []byte) error {
-	var data map[string]interface{}
-	if err := json.Unmarshal(b, &data); err != nil {
+//_postIndexRequest is necessary to avoid recursion while decoding.
+type _postIndexRequest postIndexRequest
+
+// Custom Unmarshal JSON to validate request body when creating a new index.
+func (p *postIndexRequest) UnmarshalJSON(b []byte) error {
+
+	// m is an overflow map used to capture additional, unexpected keys.
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(b, &m); err != nil {
 		return err
 	}
-	for key, value := range data {
-		switch key {
-		case "options":
-			value, err := validateOptions(data, "columnLabel")
-			if err != nil {
-				return err
-			}
-			if value == "" {
-				p.Options = DBOptions{}
-			} else {
-				p.Options = DBOptions{ColumnLabel: value}
-			}
 
+	validIndexOptions := getValidOptions(IndexOptions{})
+	err := validateOptions(m, validIndexOptions)
+	if err != nil {
+		return err
+	}
+	// Unmarshal expected values.
+	var _p _postIndexRequest
+	if err := json.Unmarshal(b, &_p); err != nil {
+		return err
+	}
+
+	p.Options = _p.Options
+
+	return nil
+}
+
+// Raise errors for any unknown key
+func validateOptions(data map[string]interface{}, validIndexOptions []string) error {
+	for k, v := range data {
+		switch k {
+		case "options":
+			options, ok := v.(map[string]interface{})
+			if !ok {
+				return errors.New("options is not map[string]interface{}")
+			}
+			for kk, vv := range options {
+				if !foundItem(validIndexOptions, kk) {
+					return fmt.Errorf("Unknown key: %v:%v", kk, vv)
+				}
+			}
 		default:
-			return fmt.Errorf("Unknown key: %v:%v", key, value)
+			return fmt.Errorf("Unknown key: %v:%v", k, v)
 		}
 	}
 	return nil
 }
 
-func validateOptions(data map[string]interface{}, field string) (string, error) {
-	options, ok := data["options"].(map[string]interface{})
-	if !ok {
-		return "", errors.New("options is not map[string]interface{}")
-	}
-	var optionValue string
-	if len(options) == 0 {
-		optionValue = ""
-	} else {
-		for k, v := range options {
-			switch k {
-			case field:
-				val, ok := options[field].(string)
-				if !ok {
-					return "", fmt.Errorf("invalid option %v: {%v:%v}", field, k, v)
-				}
-				optionValue = val
-			default:
-				return "", fmt.Errorf("invalid key for options {%v:%v}", k, v)
-			}
+func foundItem(items []string, item string) bool {
+	for _, i := range items {
+		if item == i {
+			return true
 		}
 	}
-	return optionValue, nil
+	return false
 }
 
-type postDBResponse struct{}
+type postIndexResponse struct{}
 
-// handleDeleteDB handles DELETE /db request.
-func (h *Handler) handleDeleteDB(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+// handleDeleteIndex handles DELETE /index request.
+func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
 
-	// Delete database from the index.
-	if err := h.Index.DeleteDB(dbName); err != nil {
+	// Delete index from the holder.
+	if err := h.Holder.DeleteIndex(indexName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	// Send the delete index message to all nodes.
+	err := h.Broadcaster.SendSync(
+		&internal.DeleteIndexMessage{
+			Index: indexName,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending DeleteIndex message: %s", err)
+	}
+
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(deleteDBResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
-type deleteDBResponse struct{}
+type deleteIndexResponse struct{}
 
-// handlePostDB handles POST /db request.
-func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+// handlePostIndex handles POST /index request.
+func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
 
 	// Decode request.
-	var req postDBRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var req postIndexRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err == io.EOF {
+		// If no data was provided (EOF), we still create the index
+		// with default values.
+	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Create database.
-	_, err := h.Index.CreateDB(dbName, req.Options)
-	if err == ErrDatabaseExists {
+	// Create index.
+	_, err = h.Holder.CreateIndex(indexName, req.Options)
+	if err == ErrIndexExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	} else if err != nil {
@@ -372,27 +401,28 @@ func (h *Handler) handlePostDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the delete message to all nodes.
+	// Send the create index message to all nodes.
 	err = h.Broadcaster.SendSync(
-		&internal.DeleteDBMessage{
-			DB: dbName,
+		&internal.CreateIndexMessage{
+			Index: indexName,
+			Meta:  req.Options.Encode(),
 		})
 	if err != nil {
-		h.logger().Printf("problem sending DeleteDB message: %s", err)
+		h.logger().Printf("problem sending CreateIndex message: %s", err)
 	}
 
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(postDBResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(postIndexResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
-// handlePatchDBTimeQuantum handles PATCH /db/time_quantum request.
-func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+// handlePatchIndexTimeQuantum handles PATCH /index/time_quantum request.
+func (h *Handler) handlePatchIndexTimeQuantum(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
 
 	// Decode request.
-	var req patchDBTimeQuantumRequest
+	var req patchIndexTimeQuantumRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -405,51 +435,51 @@ func (h *Handler) handlePatchDBTimeQuantum(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Retrieve database by name.
-	database := h.Index.DB(dbName)
-	if database == nil {
-		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
+	// Retrieve index by name.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
-	// Set default time quantum on database.
-	if err := database.SetTimeQuantum(tq); err != nil {
+	// Set default time quantum on index.
+	if err := index.SetTimeQuantum(tq); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(patchDBTimeQuantumResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(patchIndexTimeQuantumResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
-type patchDBTimeQuantumRequest struct {
+type patchIndexTimeQuantumRequest struct {
 	TimeQuantum string `json:"timeQuantum"`
 }
 
-type patchDBTimeQuantumResponse struct{}
+type patchIndexTimeQuantumResponse struct{}
 
-// handlePostDBAttrDiff handles POST /db/attr/diff requests.
-func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+// handlePostIndexAttrDiff handles POST /index/attr/diff requests.
+func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
 
 	// Decode request.
-	var req postDBAttrDiffRequest
+	var req postIndexAttrDiffRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Retrieve database from index.
-	db := h.Index.DB(dbName)
-	if db == nil {
-		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
+	// Retrieve index from holder.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Retrieve local blocks.
-	blks, err := db.ProfileAttrStore().Blocks()
+	blks, err := index.ColumnAttrStore().Blocks()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -459,55 +489,59 @@ func (h *Handler) handlePostDBAttrDiff(w http.ResponseWriter, r *http.Request) {
 	attrs := make(map[uint64]map[string]interface{})
 	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
 		// Retrieve block data.
-		m, err := db.ProfileAttrStore().BlockData(blockID)
+		m, err := index.ColumnAttrStore().BlockData(blockID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// Copy to database-wide struct.
+		// Copy to index-wide struct.
 		for k, v := range m {
 			attrs[k] = v
 		}
 	}
 
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(postDBAttrDiffResponse{
+	if err := json.NewEncoder(w).Encode(postIndexAttrDiffResponse{
 		Attrs: attrs,
 	}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
-type postDBAttrDiffRequest struct {
+type postIndexAttrDiffRequest struct {
 	Blocks []AttrBlock `json:"blocks"`
 }
 
-type postDBAttrDiffResponse struct {
+type postIndexAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
 
 // handlePostFrame handles POST /frame request.
 func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
 	// Decode request.
 	var req postFrameRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err == io.EOF {
+		// If no data was provided (EOF), we still create the frame
+		// with default values.
+	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Find database.
-	db := h.Index.DB(dbName)
-	if db == nil {
-		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Create frame.
-	_, err := db.CreateFrame(frameName, req.Options)
+	_, err = index.CreateFrame(frameName, req.Options)
 	if err == ErrFrameExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -516,15 +550,12 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the create message to all nodes.
+	// Send the create frame message to all nodes.
 	err = h.Broadcaster.SendSync(
 		&internal.CreateFrameMessage{
-			DB:    dbName,
+			Index: indexName,
 			Frame: frameName,
-			Meta: &internal.FrameMeta{
-				RowLabel:    req.Options.RowLabel,
-				TimeQuantum: string(req.Options.TimeQuantum),
-			},
+			Meta:  req.Options.Encode(),
 		})
 	if err != nil {
 		h.logger().Printf("problem sending CreateFrame message: %s", err)
@@ -536,30 +567,43 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Custom Unmarshal JSON to validate request body when creating a new frame
+type _postFrameRequest postFrameRequest
+
+// Custom Unmarshal JSON to validate request body when creating a new frame. If there's new FrameOptions,
+// adding it to validFrameOptions to make sure the new option is validated, otherwise the request will be failed
 func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
-	var data map[string]interface{}
-	if err := json.Unmarshal(b, &data); err != nil {
+	// m is an overflow map used to capture additional, unexpected keys.
+	m := make(map[string]interface{})
+	if err := json.Unmarshal(b, &m); err != nil {
 		return err
 	}
-	for key, value := range data {
-		switch key {
-		case "options":
-			value, err := validateOptions(data, "rowLabel")
-			if err != nil {
-				return err
-			}
-			if value == "" {
-				p.Options = FrameOptions{}
-			} else {
-				p.Options = FrameOptions{RowLabel: value}
-			}
-		default:
-			return fmt.Errorf("Unknown key: {%v:%v}", key, value)
-		}
+
+	validFrameOptions := getValidOptions(FrameOptions{})
+	err := validateOptions(m, validFrameOptions)
+	if err != nil {
+		return err
 	}
+
+	// Unmarshal expected values.
+	var _p _postFrameRequest
+	if err := json.Unmarshal(b, &_p); err != nil {
+		return err
+	}
+
+	p.Options = _p.Options
 	return nil
 
+}
+
+func getValidOptions(option interface{}) []string {
+	validOptions := []string{}
+	val := reflect.ValueOf(option)
+	for i := 0; i < val.Type().NumField(); i++ {
+		jsonTag := val.Type().Field(i).Tag.Get("json")
+		s := strings.Split(jsonTag, ",")
+		validOptions = append(validOptions, s[0])
+	}
+	return validOptions
 }
 
 type postFrameRequest struct {
@@ -570,28 +614,28 @@ type postFrameResponse struct{}
 
 // handleDeleteFrame handles DELETE /frame request.
 func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
-	// Find database.
-	db := h.Index.DB(dbName)
-	if db == nil {
-		if err := json.NewEncoder(w).Encode(deleteDBResponse{}); err != nil {
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
 			h.logger().Printf("response encoding error: %s", err)
 		}
 		return
 	}
 
-	// Delete frame from the database.
-	if err := db.DeleteFrame(frameName); err != nil {
+	// Delete frame from the index.
+	if err := index.DeleteFrame(frameName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Send the delete message to all nodes.
+	// Send the delete frame message to all nodes.
 	err := h.Broadcaster.SendSync(
 		&internal.DeleteFrameMessage{
-			DB:    dbName,
+			Index: indexName,
 			Frame: frameName,
 		})
 	if err != nil {
@@ -608,7 +652,7 @@ type deleteFrameResponse struct{}
 
 // handlePatchFrameTimeQuantum handles PATCH /frame/time_quantum request.
 func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
 	// Decode request.
@@ -625,14 +669,14 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Retrieve database by name.
-	f := h.Index.Frame(dbName, frameName)
+	// Retrieve index by name.
+	f := h.Holder.Frame(indexName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
-	// Set default time quantum on database.
+	// Set default time quantum on index.
 	if err := f.SetTimeQuantum(tq); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -652,11 +696,11 @@ type patchFrameTimeQuantumResponse struct{}
 
 // handleGetFrameViews handles GET /frame/views request.
 func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
 	// Retrieve views.
-	f := h.Index.Frame(dbName, frameName)
+	f := h.Holder.Frame(indexName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -681,7 +725,7 @@ type getFrameViewsResponse struct {
 
 // handlePostFrameAttrDiff handles POST /frame/attr/diff requests.
 func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
 	// Decode request.
@@ -691,15 +735,15 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Retrieve database from index.
-	f := h.Index.Frame(dbName, frameName)
+	// Retrieve index from holder.
+	f := h.Holder.Frame(indexName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Retrieve local blocks.
-	blks, err := f.BitmapAttrStore().Blocks()
+	blks, err := f.RowAttrStore().Blocks()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -709,13 +753,13 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 	attrs := make(map[uint64]map[string]interface{})
 	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
 		// Retrieve block data.
-		m, err := f.BitmapAttrStore().BlockData(blockID)
+		m, err := f.RowAttrStore().BlockData(blockID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// Copy to database-wide struct.
+		// Copy to index-wide struct.
 		for k, v := range m {
 			attrs[k] = v
 		}
@@ -737,24 +781,24 @@ type postFrameAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
 
-// readProfiles returns a list of profile objects by id.
-func (h *Handler) readProfiles(db *DB, ids []uint64) ([]*Profile, error) {
-	if db == nil {
+// readColumnAttrSets returns a list of column attribute objects by id.
+func (h *Handler) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
+	if index == nil {
 		return nil, nil
 	}
 
-	a := make([]*Profile, 0, len(ids))
+	a := make([]*ColumnAttrSet, 0, len(ids))
 	for _, id := range ids {
-		// Read attributes for profile. Skip profile if empty.
-		attrs, err := db.ProfileAttrStore().Attrs(id)
+		// Read attributes for column. Skip column if empty.
+		attrs, err := index.ColumnAttrStore().Attrs(id)
 		if err != nil {
 			return nil, err
 		} else if len(attrs) == 0 {
 			continue
 		}
 
-		// Append profile with attributes.
-		a = append(a, &Profile{ID: id, Attrs: attrs})
+		// Append column with attributes.
+		a = append(a, &ColumnAttrSet{ID: id, Attrs: attrs})
 	}
 
 	return a, nil
@@ -815,10 +859,10 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		Query:    query,
-		Slices:   slices,
-		Profiles: q.Get("profiles") == "true",
-		Quantum:  quantum,
+		Query:       query,
+		Slices:      slices,
+		ColumnAttrs: q.Get("columnAttrs") == "true",
+		Quantum:     quantum,
 	}, nil
 }
 
@@ -881,33 +925,33 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.Host, req.DB, req.Slice) {
-		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, req.DB, req.Slice)
+	if !h.Cluster.OwnsFragment(h.Host, req.Index, req.Slice) {
+		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, req.Index, req.Slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
 	}
 
-	// Find the DB.
-	h.logger().Println("importing:", req.DB, req.Frame, req.Slice)
-	db := h.Index.DB(req.DB)
-	if db == nil {
-		h.logger().Printf("fragment error: db=%s, frame=%s, slice=%d, err=%s", req.DB, req.Frame, req.Slice, ErrDatabaseNotFound.Error())
-		http.Error(w, ErrDatabaseNotFound.Error(), http.StatusNotFound)
+	// Find the Index.
+	h.logger().Println("importing:", req.Index, req.Frame, req.Slice)
+	index := h.Holder.Index(req.Index)
+	if index == nil {
+		h.logger().Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrIndexNotFound.Error())
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Retrieve frame.
-	f := db.Frame(req.Frame)
+	f := index.Frame(req.Frame)
 	if f == nil {
-		h.logger().Printf("frame error: db=%s, frame=%s, slice=%d, err=%s", req.DB, req.Frame, req.Slice, ErrFrameNotFound.Error())
+		h.logger().Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrFrameNotFound.Error())
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Import into fragment.
-	err = f.Import(req.BitmapIDs, req.ProfileIDs, timestamps)
+	err = f.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
-		h.logger().Printf("import error: db=%s, frame=%s, slice=%d, bits=%d, err=%s", req.DB, req.Frame, req.Slice, len(req.ProfileIDs), err)
+		h.logger().Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
 		return
 	}
 
@@ -938,7 +982,7 @@ func (h *Handler) handleGetExport(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters.
 	q := r.URL.Query()
-	db, frame, view := q.Get("db"), q.Get("frame"), q.Get("view")
+	index, frame, view := q.Get("index"), q.Get("frame"), q.Get("view")
 
 	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
 	if err != nil {
@@ -947,14 +991,14 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.Host, db, slice) {
-		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, db, slice)
+	if !h.Cluster.OwnsFragment(h.Host, index, slice) {
+		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, index, slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
 	}
 
 	// Find the fragment.
-	f := h.Index.Fragment(db, frame, view, slice)
+	f := h.Holder.Fragment(index, frame, view, slice)
 	if f == nil {
 		return
 	}
@@ -963,10 +1007,10 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	cw := csv.NewWriter(w)
 
 	// Iterate over each bit.
-	if err := f.ForEachBit(func(bitmapID, profileID uint64) error {
+	if err := f.ForEachBit(func(rowID, columnID uint64) error {
 		return cw.Write([]string{
-			strconv.FormatUint(bitmapID, 10),
-			strconv.FormatUint(profileID, 10),
+			strconv.FormatUint(rowID, 10),
+			strconv.FormatUint(columnID, 10),
 		})
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -980,7 +1024,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 // handleGetFragmentNodes handles /fragment/nodes requests.
 func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	db := q.Get("db")
+	index := q.Get("index")
 
 	// Read slice parameter.
 	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
@@ -990,7 +1034,7 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve fragment owner nodes.
-	nodes := h.Cluster.FragmentNodes(db, slice)
+	nodes := h.Cluster.FragmentNodes(index, slice)
 
 	// Write to response.
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
@@ -1008,8 +1052,8 @@ func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Retrieve fragment from index.
-	f := h.Index.Fragment(q.Get("db"), q.Get("frame"), q.Get("view"), slice)
+	// Retrieve fragment from holder.
+	f := h.Holder.Fragment(q.Get("index"), q.Get("frame"), q.Get("view"), slice)
 	if f == nil {
 		http.Error(w, "fragment not found", http.StatusNotFound)
 		return
@@ -1032,7 +1076,7 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve frame.
-	f := h.Index.Frame(q.Get("db"), q.Get("frame"))
+	f := h.Holder.Frame(q.Get("index"), q.Get("frame"))
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
@@ -1071,8 +1115,8 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Retrieve fragment from index.
-	f := h.Index.Fragment(req.DB, req.Frame, req.View, req.Slice)
+	// Retrieve fragment from holder.
+	f := h.Holder.Fragment(req.Index, req.Frame, req.View, req.Slice)
 	if f == nil {
 		http.Error(w, ErrFragmentNotFound.Error(), http.StatusNotFound)
 		return
@@ -1081,7 +1125,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	// Read data
 	var resp internal.BlockDataResponse
 	if f != nil {
-		resp.BitmapIDs, resp.ProfileIDs = f.BlockData(int(req.Block))
+		resp.RowIDs, resp.ColumnIDs = f.BlockData(int(req.Block))
 	}
 
 	// Encode response.
@@ -1107,8 +1151,8 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Retrieve fragment from index.
-	f := h.Index.Fragment(q.Get("db"), q.Get("frame"), q.Get("view"), slice)
+	// Retrieve fragment from holder.
+	f := h.Holder.Fragment(q.Get("index"), q.Get("frame"), q.Get("view"), slice)
 	if f == nil {
 		http.Error(w, "fragment not found", http.StatusNotFound)
 		return
@@ -1131,7 +1175,7 @@ type getFragmentBlocksResponse struct {
 
 // handlePostFrameRestore handles POST /frame/restore requests.
 func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request) {
-	dbName := mux.Vars(r)["db"]
+	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
 	q := r.URL.Query()
@@ -1151,30 +1195,30 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Determine the maximum number of slices.
-	maxSlices, err := client.MaxSliceByDatabase(r.Context())
+	maxSlices, err := client.MaxSliceByIndex(r.Context())
 	if err != nil {
 		http.Error(w, "cannot determine remote slice count: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Retrieve frame.
-	f := h.Index.Frame(dbName, frameName)
+	f := h.Holder.Frame(indexName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
 	// Retrieve list of all views.
-	views, err := client.FrameViews(r.Context(), dbName, frameName)
+	views, err := client.FrameViews(r.Context(), indexName, frameName)
 	if err != nil {
 		http.Error(w, "cannot retrieve frame views: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Loop over each slice and import it if this node owns it.
-	for slice := uint64(0); slice <= maxSlices[dbName]; slice++ {
+	for slice := uint64(0); slice <= maxSlices[indexName]; slice++ {
 		// Ignore this slice if we don't own it.
-		if !h.Cluster.OwnsFragment(h.Host, dbName, slice) {
+		if !h.Cluster.OwnsFragment(h.Host, indexName, slice) {
 			continue
 		}
 
@@ -1195,7 +1239,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 			}
 
 			// Stream backup from remote node.
-			rd, err := client.BackupSlice(r.Context(), dbName, frameName, view, slice)
+			rd, err := client.BackupSlice(r.Context(), indexName, frameName, view, slice)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -1259,8 +1303,8 @@ func (h *Handler) logger() *log.Logger {
 
 // QueryRequest represent a request to process a query.
 type QueryRequest struct {
-	// Database to execute query against.
-	DB string
+	// Index to execute query against.
+	Index string
 
 	// The query string to parse and execute.
 	Query string
@@ -1269,8 +1313,8 @@ type QueryRequest struct {
 	// If empty, all slices are included.
 	Slices []uint64
 
-	// Return profile attributes, if true.
-	Profiles bool
+	// Return column attributes, if true.
+	ColumnAttrs bool
 
 	// Time granularity to use with the timestamp.
 	Quantum TimeQuantum
@@ -1282,11 +1326,11 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		Query:    pb.Query,
-		Slices:   pb.Slices,
-		Profiles: pb.Profiles,
-		Quantum:  TimeQuantum(pb.Quantum),
-		Remote:   pb.Remote,
+		Query:       pb.Query,
+		Slices:      pb.Slices,
+		ColumnAttrs: pb.ColumnAttrs,
+		Quantum:     TimeQuantum(pb.Quantum),
+		Remote:      pb.Remote,
 	}
 
 	return req
@@ -1298,8 +1342,8 @@ type QueryResponse struct {
 	// Can be a Bitmap, Pairs, or uint64.
 	Results []interface{}
 
-	// Set of profiles matching IDs returned in Result.
-	Profiles []*Profile
+	// Set of column attribute objects matching IDs returned in Result.
+	ColumnAttrSets []*ColumnAttrSet
 
 	// Error during parsing or execution.
 	Err error
@@ -1307,12 +1351,12 @@ type QueryResponse struct {
 
 func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	var output struct {
-		Results  []interface{} `json:"results,omitempty"`
-		Profiles []*Profile    `json:"profiles,omitempty"`
-		Err      string        `json:"error,omitempty"`
+		Results        []interface{}    `json:"results,omitempty"`
+		ColumnAttrSets []*ColumnAttrSet `json:"columnAttrs,omitempty"`
+		Err            string           `json:"error,omitempty"`
 	}
 	output.Results = resp.Results
-	output.Profiles = resp.Profiles
+	output.ColumnAttrSets = resp.ColumnAttrSets
 
 	if resp.Err != nil {
 		output.Err = resp.Err.Error()
@@ -1322,8 +1366,8 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 
 func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 	pb := &internal.QueryResponse{
-		Results:  make([]*internal.QueryResult, len(resp.Results)),
-		Profiles: encodeProfiles(resp.Profiles),
+		Results:        make([]*internal.QueryResult, len(resp.Results)),
+		ColumnAttrSets: encodeColumnAttrSets(resp.ColumnAttrSets),
 	}
 
 	for i := range resp.Results {

@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 	"time"
+
+	"github.com/pilosa/pilosa/internal"
 )
 
 const (
@@ -13,15 +15,30 @@ const (
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
 
-	// HealthStatus is the return value of the /health endpoint for a node in the cluster.
-	HealthStatusUp   = "UP"
-	HealthStatusDown = "DOWN"
+	// NodeState represents node state returned in /status endpoint for a node in the cluster.
+	NodeStateUp   = "UP"
+	NodeStateDown = "DOWN"
 )
 
 // Node represents a node in the cluster.
 type Node struct {
 	Host         string `json:"host"`
 	InternalHost string `json:"internalHost"`
+
+	status *internal.NodeStatus `json:"status"`
+}
+
+// SetStatus sets the NodeStatus.
+func (n *Node) SetStatus(s *internal.NodeStatus) {
+	n.status = s
+}
+
+// SetState sets the Node.status.state.
+func (n *Node) SetState(s string) {
+	if n.status == nil {
+		n.status = &internal.NodeStatus{}
+	}
+	n.status.State = s
 }
 
 // Nodes represents a list of nodes.
@@ -124,19 +141,35 @@ func (c *Cluster) NodeSetHosts() []string {
 	return a
 }
 
-// Health returns a map of nodes in the cluster with each node's state (UP/DOWN) as the value.
-func (c *Cluster) Health() map[string]string {
+// NodeStates returns a map of nodes in the cluster with each node's state (UP/DOWN) as the value.
+func (c *Cluster) NodeStates() map[string]string {
 	h := make(map[string]string)
 	for _, n := range c.Nodes {
-		h[n.Host] = HealthStatusDown
+		h[n.Host] = NodeStateDown
 	}
 	// we are assuming that NodeSetHosts is a subset of c.Nodes
 	for _, m := range c.NodeSetHosts() {
 		if _, ok := h[m]; ok {
-			h[m] = HealthStatusUp
+			h[m] = NodeStateUp
 		}
 	}
 	return h
+}
+
+// State returns the internal ClusterState representation.
+func (c *Cluster) Status() *internal.ClusterStatus {
+	return &internal.ClusterStatus{
+		Nodes: encodeClusterStatus(c.Nodes),
+	}
+}
+
+// encodeClusterStatus converts a into its internal representation.
+func encodeClusterStatus(a []*Node) []*internal.NodeStatus {
+	other := make([]*internal.NodeStatus, len(a))
+	for i := range a {
+		other[i] = a[i].status
+	}
+	return other
 }
 
 // NodeByHost returns a node reference by host.
@@ -150,25 +183,25 @@ func (c *Cluster) NodeByHost(host string) *Node {
 }
 
 // Partition returns the partition that a slice belongs to.
-func (c *Cluster) Partition(db string, slice uint64) int {
+func (c *Cluster) Partition(index string, slice uint64) int {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], slice)
 
 	// Hash the bytes and mod by partition count.
 	h := fnv.New64a()
-	h.Write([]byte(db))
+	h.Write([]byte(index))
 	h.Write(buf[:])
 	return int(h.Sum64() % uint64(c.PartitionN))
 }
 
 // FragmentNodes returns a list of nodes that own a fragment.
-func (c *Cluster) FragmentNodes(db string, slice uint64) []*Node {
-	return c.PartitionNodes(c.Partition(db, slice))
+func (c *Cluster) FragmentNodes(index string, slice uint64) []*Node {
+	return c.PartitionNodes(c.Partition(index, slice))
 }
 
 // OwnsFragment returns true if a host owns a fragment.
-func (c *Cluster) OwnsFragment(host string, db string, slice uint64) bool {
-	return Nodes(c.FragmentNodes(db, slice)).ContainsHost(host)
+func (c *Cluster) OwnsFragment(host string, index string, slice uint64) bool {
+	return Nodes(c.FragmentNodes(index, slice)).ContainsHost(host)
 }
 
 // PartitionNodes returns a list of nodes that own a partition.
@@ -183,15 +216,30 @@ func (c *Cluster) PartitionNodes(partitionID int) []*Node {
 	}
 
 	// Determine primary owner node.
-	index := c.Hasher.Hash(uint64(partitionID), len(c.Nodes))
+	node_index := c.Hasher.Hash(uint64(partitionID), len(c.Nodes))
 
 	// Collect nodes around the ring.
 	nodes := make([]*Node, replicaN)
 	for i := 0; i < replicaN; i++ {
-		nodes[i] = c.Nodes[(index+i)%len(c.Nodes)]
+		nodes[i] = c.Nodes[(node_index+i)%len(c.Nodes)]
 	}
 
 	return nodes
+}
+
+// OwnsSlices find the set of slices owned by the node per Index
+func (c *Cluster) OwnsSlices(index string, maxSlice uint64, host string) []uint64 {
+	var slices []uint64
+	for i := uint64(0); i <= maxSlice; i++ {
+		p := c.Partition(index, i)
+		// Determine primary owner node.
+		node_index := c.Hasher.Hash(uint64(p), len(c.Nodes))
+		if c.Nodes[node_index].Host == host {
+			slices = append(slices, i)
+		}
+
+	}
+	return slices
 }
 
 // Hasher represents an interface to hash integers into buckets.

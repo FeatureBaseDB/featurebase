@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	// SliceWidth is the number of profile IDs in a slice.
+	// SliceWidth is the number of column IDs in a slice.
 	SliceWidth = 1048576
 
 	// SnapshotExt is the file extension used for an in-process snapshot.
@@ -41,7 +41,7 @@ const (
 	// CacheExt is the file extension for persisted cache ids.
 	CacheExt = ".cache"
 
-	// HashBlockSize is the number of bitmaps in a merkle hash block.
+	// HashBlockSize is the number of rows in a merkle hash block.
 	HashBlockSize = 100
 )
 
@@ -50,12 +50,12 @@ const (
 	DefaultFragmentMaxOpN = 2000
 )
 
-// Fragment represents the intersection of a frame and slice in a database.
+// Fragment represents the intersection of a frame and slice in an index.
 type Fragment struct {
 	mu sync.Mutex
 
 	// Composite identifiers
-	db    string
+	index string
 	frame string
 	view  string
 	slice uint64
@@ -67,13 +67,13 @@ type Fragment struct {
 	storageData []byte
 	opN         int // number of ops since snapshot
 
-	// Cache for bitmap counts.
+	// Cache for row counts.
 	cacheType string // passed in by frame
 	cache     Cache
 	cacheSize uint32
 
-	// Cache containing full bitmaps (not just counts).
-	bitmapCache BitmapCache
+	// Cache containing full rows (not just counts).
+	rowCache BitmapCache
 
 	// Cached checksums for each block.
 	checksums map[int][]byte
@@ -86,18 +86,18 @@ type Fragment struct {
 	// Writer used for out-of-band log entries.
 	LogOutput io.Writer
 
-	// Bitmap attribute storage.
+	// Row attribute storage.
 	// This is set by the parent frame unless overridden for testing.
-	BitmapAttrStore *AttrStore
+	RowAttrStore *AttrStore
 
 	stats StatsClient
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, db, frame, view string, slice uint64) *Fragment {
+func NewFragment(path, index, frame, view string, slice uint64) *Fragment {
 	return &Fragment{
 		path:      path,
-		db:        db,
+		index:     index,
 		frame:     frame,
 		view:      view,
 		slice:     slice,
@@ -117,8 +117,8 @@ func (f *Fragment) Path() string { return f.path }
 // CachePath returns the path to the fragment's cache data.
 func (f *Fragment) CachePath() string { return f.path + CacheExt }
 
-// DB returns the database the fragment was initialized with.
-func (f *Fragment) DB() string { return f.db }
+// Index returns the index that the fragment was initialized with.
+func (f *Fragment) Index() string { return f.index }
 
 // Frame returns the frame the fragment was initialized with.
 func (f *Fragment) Frame() string { return f.frame }
@@ -144,7 +144,7 @@ func (f *Fragment) Open() error {
 			return err
 		}
 
-		// Fill cache with bitmaps persisted to disk.
+		// Fill cache with rows persisted to disk.
 		if err := f.openCache(); err != nil {
 			return err
 		}
@@ -213,13 +213,13 @@ func (f *Fragment) openStorage() error {
 
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
-	f.bitmapCache = &SimpleCache{make(map[uint64]*Bitmap)}
+	f.rowCache = &SimpleCache{make(map[uint64]*Bitmap)}
 
 	return nil
 
 }
 
-// openCache initializes the cache from bitmap ids persisted to disk.
+// openCache initializes the cache from row ids persisted to disk.
 func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
 	switch f.cacheType {
@@ -247,12 +247,12 @@ func (f *Fragment) openCache() error {
 		return nil
 	}
 
-	// Read in all bitmaps by ID.
+	// Read in all rows by ID.
 	// This will cause them to be added to the cache.
-	for _, bitmapID := range pb.BitmapIDs {
-		//n := f.storage.CountRange(bitmapID*SliceWidth, (bitmapID+1)*SliceWidth)
-		n := f.bitmap(bitmapID, true, true).Count()
-		f.cache.BulkAdd(bitmapID, n)
+	for _, id := range pb.IDs {
+		//n := f.storage.CountRange(id*SliceWidth, (id+1)*SliceWidth)
+		n := f.row(id, true, true).Count()
+		f.cache.BulkAdd(id, n)
 	}
 	f.cache.Invalidate()
 
@@ -314,17 +314,16 @@ func (f *Fragment) closeStorage() error {
 // logger returns a logger instance for the fragment.nt.
 func (f *Fragment) logger() *log.Logger { return log.New(f.LogOutput, "", log.LstdFlags) }
 
-// Bitmap returns a bitmap by ID.
-func (f *Fragment) Bitmap(bitmapID uint64) *Bitmap {
+// Row returns a row by ID.
+func (f *Fragment) Row(rowID uint64) *Bitmap {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.bitmap(bitmapID, true, true)
+	return f.row(rowID, true, true)
 }
 
-func (f *Fragment) bitmap(bitmapID uint64, checkBitmapCache bool, updateBitmapCache bool) *Bitmap {
-
-	if checkBitmapCache {
-		r, ok := f.bitmapCache.Fetch(bitmapID)
+func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *Bitmap {
+	if checkRowCache {
+		r, ok := f.rowCache.Fetch(rowID)
 		if ok && r != nil {
 			return r
 		}
@@ -332,11 +331,11 @@ func (f *Fragment) bitmap(bitmapID uint64, checkBitmapCache bool, updateBitmapCa
 
 	// Only use a subset of the containers.
 	// NOTE: The start & end ranges must be divisible by
-	data := f.storage.OffsetRange(f.slice*SliceWidth, bitmapID*SliceWidth, (bitmapID+1)*SliceWidth)
+	data := f.storage.OffsetRange(f.slice*SliceWidth, rowID*SliceWidth, (rowID+1)*SliceWidth)
 
 	// Reference bitmap subrange in storage.
 	// We Clone() data because otherwise bm will contains pointers to containers in storage.
-	// This causes unexpected results when we cache the bitmap and try to use it later.
+	// This causes unexpected results when we cache the row and try to use it later.
 	bm := &Bitmap{
 		segments: []BitmapSegment{{
 			data:     *data.Clone(),
@@ -346,25 +345,25 @@ func (f *Fragment) bitmap(bitmapID uint64, checkBitmapCache bool, updateBitmapCa
 	}
 	bm.InvalidateCount()
 
-	if updateBitmapCache {
-		f.bitmapCache.Add(bitmapID, bm)
+	if updateRowCache {
+		f.rowCache.Add(rowID, bm)
 	}
 
 	return bm
 }
 
-// SetBit sets a bit for a given profile & bitmap within the fragment.
+// SetBit sets a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) SetBit(bitmapID, profileID uint64) (changed bool, err error) {
+func (f *Fragment) SetBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.setBit(bitmapID, profileID)
+	return f.setBit(rowID, columnID)
 }
 
-func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, err error) {
+func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
-	pos, err := f.pos(bitmapID, profileID)
+	pos, err := f.pos(rowID, columnID)
 	if err != nil {
 		return false, err
 	}
@@ -380,37 +379,37 @@ func (f *Fragment) setBit(bitmapID, profileID uint64) (changed bool, err error) 
 	}
 
 	// Invalidate block checksum.
-	delete(f.checksums, int(bitmapID/HashBlockSize))
+	delete(f.checksums, int(rowID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
 	if err := f.incrementOpN(); err != nil {
 		return false, err
 	}
 
-	// Get the bitmap from bitmapCache or fragment.storage.
-	bm := f.bitmap(bitmapID, true, true)
-	bm.SetBit(profileID)
+	// Get the row from row cache or fragment.storage.
+	bm := f.row(rowID, true, true)
+	bm.SetBit(columnID)
 
 	// Update the cache.
-	f.cache.Add(bitmapID, bm.Count())
+	f.cache.Add(rowID, bm.Count())
 
 	f.stats.Count("setN", 1)
 
 	return changed, nil
 }
 
-// ClearBit clears a bit for a given profile & bitmap within the fragment.
+// ClearBit clears a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) ClearBit(bitmapID, profileID uint64) (bool, error) {
+func (f *Fragment) ClearBit(rowID, columnID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.clearBit(bitmapID, profileID)
+	return f.clearBit(rowID, columnID)
 }
 
-func (f *Fragment) clearBit(bitmapID, profileID uint64) (changed bool, err error) {
+func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
-	pos, err := f.pos(bitmapID, profileID)
+	pos, err := f.pos(rowID, columnID)
 	if err != nil {
 		return false, err
 	}
@@ -426,38 +425,38 @@ func (f *Fragment) clearBit(bitmapID, profileID uint64) (changed bool, err error
 	}
 
 	// Invalidate block checksum.
-	delete(f.checksums, int(bitmapID/HashBlockSize))
+	delete(f.checksums, int(rowID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
 	if err := f.incrementOpN(); err != nil {
 		return false, err
 	}
 
-	// Get the bitmap from bitmapCache or fragment.storage.
-	bm := f.bitmap(bitmapID, true, true)
-	bm.ClearBit(profileID)
+	// Get the row from cache or fragment.storage.
+	bm := f.row(rowID, true, true)
+	bm.ClearBit(columnID)
 
 	// Update the cache.
-	f.cache.Add(bitmapID, bm.Count())
+	f.cache.Add(rowID, bm.Count())
 
 	f.stats.Count("clearN", 1)
 
 	return changed, nil
 }
 
-// pos translates the bitmap ID and profile ID into a position in the storage bitmap.
-func (f *Fragment) pos(bitmapID, profileID uint64) (uint64, error) {
-	// Return an error if the profile ID is out of the range of the fragment's slice.
-	minProfileID := f.slice * SliceWidth
-	if profileID < minProfileID || profileID >= minProfileID+SliceWidth {
-		return 0, errors.New("profile out of bounds")
+// pos translates the row ID and column ID into a position in the storage bitmap.
+func (f *Fragment) pos(rowID, columnID uint64) (uint64, error) {
+	// Return an error if the column ID is out of the range of the fragment's slice.
+	minColumnID := f.slice * SliceWidth
+	if columnID < minColumnID || columnID >= minColumnID+SliceWidth {
+		return 0, errors.New("column out of bounds")
 	}
-	return Pos(bitmapID, profileID), nil
+	return Pos(rowID, columnID), nil
 }
 
 // ForEachBit executes fn for every bit set in the fragment.
 // Errors returned from fn are passed through.
-func (f *Fragment) ForEachBit(fn func(bitmapID, profileID uint64) error) error {
+func (f *Fragment) ForEachBit(fn func(rowID, columnID uint64) error) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -474,15 +473,15 @@ func (f *Fragment) ForEachBit(fn func(bitmapID, profileID uint64) error) error {
 	return err
 }
 
-// Top returns the top bitmaps from the fragment.
-// If opt.Src is specified then only bitmaps which intersect src are returned.
-// If opt.FilterValues exist then the bitmap attribute specified by field is matched.
+// Top returns the top rows from the fragment.
+// If opt.Src is specified then only rows which intersect src are returned.
+// If opt.FilterValues exist then the row attribute specified by field is matched.
 func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
-	// Retrieve pairs. If no bitmap ids specified then return from cache.
-	pairs := f.topBitmapPairs(opt.BitmapIDs)
+	// Retrieve pairs. If no row ids specified then return from cache.
+	pairs := f.topBitmapPairs(opt.RowIDs)
 
-	// If BitmapIDs are provided, we don't want to truncate the result set
-	if len(opt.BitmapIDs) > 0 {
+	// If row ids are provided, we don't want to truncate the result set
+	if len(opt.RowIDs) > 0 {
 		opt.N = 0
 	}
 
@@ -509,9 +508,9 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 	// Iterate over rankings and add to results until we have enough.
 	results := &PairHeap{}
 	for _, pair := range pairs {
-		bitmapID, cnt := pair.ID, pair.Count
+		rowID, cnt := pair.ID, pair.Count
 
-		// Ignore empty bitmaps.
+		// Ignore empty rows.
 		if cnt <= 0 {
 			continue
 		}
@@ -531,7 +530,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 		// Apply filter, if set.
 		if filters != nil {
-			attr, err := f.BitmapAttrStore.Attrs(bitmapID)
+			attr, err := f.RowAttrStore.Attrs(rowID)
 			if err != nil {
 				return nil, err
 			} else if attr == nil {
@@ -548,7 +547,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 			// Calculate count and append.
 			count := cnt
 			if opt.Src != nil {
-				count = opt.Src.IntersectionCount(f.Bitmap(bitmapID))
+				count = opt.Src.IntersectionCount(f.Row(rowID))
 			}
 			if count == 0 {
 				continue
@@ -566,7 +565,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 				}
 			}
 
-			heap.Push(results, Pair{ID: bitmapID, Count: count})
+			heap.Push(results, Pair{ID: rowID, Count: count})
 
 			// If we reach the requested number of pairs and we are not computing
 			// intersections then simply exit. If we are intersecting then sort
@@ -584,20 +583,20 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		// If it's too low then don't try finding anymore pairs.
 		threshold := results.Pairs[0].Count
 
-		// If the bitmap doesn't have enough bits set before the intersection
-		// then we can assume that any remaining bitmaps also have a count too low.
+		// If the row doesn't have enough bits set before the intersection
+		// then we can assume that any remaining rows also have a count too low.
 		if threshold < opt.MinThreshold || cnt < threshold {
 			break
 		}
 
 		// Calculate the intersecting bit count and skip if it's below our
-		// last bitmap in our current result set.
-		count := opt.Src.IntersectionCount(f.Bitmap(bitmapID))
+		// last row in our current result set.
+		count := opt.Src.IntersectionCount(f.Row(rowID))
 		if count < threshold {
 			continue
 		}
 
-		heap.Push(results, Pair{ID: bitmapID, Count: count})
+		heap.Push(results, Pair{ID: rowID, Count: count})
 	}
 
 	//Pop first opt.N elements out of heap
@@ -611,32 +610,32 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 	return r, nil
 }
 
-func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
-	// If no specific bitmaps are requested, retrieve top bitmaps.
-	if len(bitmapIDs) == 0 {
+func (f *Fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
+	// If no specific rows are requested, retrieve top rows.
+	if len(rowIDs) == 0 {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.cache.Invalidate()
 		return f.cache.Top()
 	}
 
-	// Otherwise retrieve specific bitmaps.
-	pairs := make([]BitmapPair, 0, len(bitmapIDs))
-	for _, bitmapID := range bitmapIDs {
+	// Otherwise retrieve specific rows.
+	pairs := make([]BitmapPair, 0, len(rowIDs))
+	for _, rowID := range rowIDs {
 		// Look up cache first, if available.
-		if n := f.cache.Get(bitmapID); n > 0 {
+		if n := f.cache.Get(rowID); n > 0 {
 			pairs = append(pairs, BitmapPair{
-				ID:    bitmapID,
+				ID:    rowID,
 				Count: n,
 			})
 			continue
 		}
 
-		bm := f.Bitmap(bitmapID)
+		bm := f.Row(rowID)
 		if bm.Count() > 0 {
 			// Otherwise load from storage.
 			pairs = append(pairs, BitmapPair{
-				ID:    bitmapID,
+				ID:    rowID,
 				Count: bm.Count(),
 			})
 		}
@@ -647,14 +646,14 @@ func (f *Fragment) topBitmapPairs(bitmapIDs []uint64) []BitmapPair {
 
 // TopOptions represents options passed into the Top() function.
 type TopOptions struct {
-	// Number of bitmaps to return.
+	// Number of rows to return.
 	N int
 
 	// Bitmap to intersect with.
 	Src *Bitmap
 
-	// Specific bitmaps to filter against.
-	BitmapIDs    []uint64
+	// Specific rows to filter against.
+	RowIDs       []uint64
 	MinThreshold uint64
 
 	// Filter field name & values.
@@ -768,14 +767,14 @@ func (f *Fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n i
 	}
 }
 
-// BlockData returns bits in a block as bitmap & profile ID pairs.
-func (f *Fragment) BlockData(id int) (bitmapIDs, profileIDs []uint64) {
+// BlockData returns bits in a block as row & column ID pairs.
+func (f *Fragment) BlockData(id int) (rowIDs, columnIDs []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.storage.ForEachRange(uint64(id)*HashBlockSize*SliceWidth, (uint64(id)+1)*HashBlockSize*SliceWidth, func(i uint64) {
-		bitmapIDs = append(bitmapIDs, i/SliceWidth)
-		profileIDs = append(profileIDs, i%SliceWidth)
+		rowIDs = append(rowIDs, i/SliceWidth)
+		columnIDs = append(columnIDs, i%SliceWidth)
 	})
 	return
 }
@@ -789,8 +788,8 @@ func (f *Fragment) BlockData(id int) (bitmapIDs, profileIDs []uint64) {
 func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, err error) {
 	// Ensure that all pair sets are of equal length.
 	for i := range data {
-		if len(data[i].BitmapIDs) != len(data[i].ProfileIDs) {
-			return nil, nil, fmt.Errorf("pair set mismatch(idx=%d): %d != %d", i, len(data[i].BitmapIDs), len(data[i].ProfileIDs))
+		if len(data[i].RowIDs) != len(data[i].ColumnIDs) {
+			return nil, nil, fmt.Errorf("pair set mismatch(idx=%d): %d != %d", i, len(data[i].RowIDs), len(data[i].ColumnIDs))
 		}
 	}
 
@@ -801,22 +800,22 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 	sets = make([]PairSet, len(data)+1)
 	clears = make([]PairSet, len(data)+1)
 
-	// Limit upper bitmap/profile pair.
-	maxBitmapID := uint64(id+1) * HashBlockSize
-	maxProfileID := uint64(SliceWidth)
+	// Limit upper row/column pair.
+	maxRowID := uint64(id+1) * HashBlockSize
+	maxColumnID := uint64(SliceWidth)
 
 	// Create buffered iterator for local block.
 	itrs := make([]*BufIterator, 1, len(data)+1)
 	itrs[0] = NewBufIterator(
 		NewLimitIterator(
-			NewRoaringIterator(f.storage.Iterator()), maxBitmapID, maxProfileID,
+			NewRoaringIterator(f.storage.Iterator()), maxRowID, maxColumnID,
 		),
 	)
 
 	// Append buffered iterators for each incoming block.
 	for i := range data {
-		var itr Iterator = NewSliceIterator(data[i].BitmapIDs, data[i].ProfileIDs)
-		itr = NewLimitIterator(itr, maxBitmapID, maxProfileID)
+		var itr Iterator = NewSliceIterator(data[i].RowIDs, data[i].ColumnIDs)
+		itr = NewLimitIterator(itr, maxRowID, maxColumnID)
 		itrs = append(itrs, NewBufIterator(itr))
 	}
 
@@ -833,8 +832,8 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 	values := make([]bool, len(itrs))
 	for {
 		var min struct {
-			bitmapID  uint64
-			profileID uint64
+			rowID    uint64
+			columnID uint64
 		}
 
 		// Find the lowest pair.
@@ -844,9 +843,9 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 			if eof { // no more data
 				continue
 			} else if !hasData { // first pair
-				min.bitmapID, min.profileID, hasData = bid, pid, true
-			} else if bid < min.bitmapID || (bid == min.bitmapID && pid < min.profileID) { // lower pair
-				min.bitmapID, min.profileID = bid, pid
+				min.rowID, min.columnID, hasData = bid, pid, true
+			} else if bid < min.rowID || (bid == min.rowID && pid < min.columnID) { // lower pair
+				min.rowID, min.columnID = bid, pid
 			}
 		}
 
@@ -860,7 +859,7 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 		for i, itr := range itrs {
 			bid, pid, eof := itr.Next()
 
-			values[i] = !eof && bid == min.bitmapID && pid == min.profileID
+			values[i] = !eof && bid == min.rowID && pid == min.columnID
 			if values[i] {
 				setN++ // set
 			} else {
@@ -880,25 +879,25 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 
 			// Append to either the set or clear diff.
 			if newValue {
-				sets[i].BitmapIDs = append(sets[i].BitmapIDs, min.bitmapID)
-				sets[i].ProfileIDs = append(sets[i].ProfileIDs, min.profileID)
+				sets[i].RowIDs = append(sets[i].RowIDs, min.rowID)
+				sets[i].ColumnIDs = append(sets[i].ColumnIDs, min.columnID)
 			} else {
-				clears[i].BitmapIDs = append(sets[i].BitmapIDs, min.bitmapID)
-				clears[i].ProfileIDs = append(sets[i].ProfileIDs, min.profileID)
+				clears[i].RowIDs = append(sets[i].RowIDs, min.rowID)
+				clears[i].ColumnIDs = append(sets[i].ColumnIDs, min.columnID)
 			}
 		}
 	}
 
 	// Set local bits.
-	for i := range sets[0].ProfileIDs {
-		if _, err := f.setBit(sets[0].BitmapIDs[i], (f.Slice()*SliceWidth)+sets[0].ProfileIDs[i]); err != nil {
+	for i := range sets[0].ColumnIDs {
+		if _, err := f.setBit(sets[0].RowIDs[i], (f.Slice()*SliceWidth)+sets[0].ColumnIDs[i]); err != nil {
 			return nil, nil, err
 		}
 	}
 
 	// Clear local bits.
-	for i := range clears[0].ProfileIDs {
-		if _, err := f.clearBit(clears[0].BitmapIDs[i], (f.Slice()*SliceWidth)+clears[0].ProfileIDs[i]); err != nil {
+	for i := range clears[0].ColumnIDs {
+		if _, err := f.clearBit(clears[0].RowIDs[i], (f.Slice()*SliceWidth)+clears[0].ColumnIDs[i]); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -908,12 +907,12 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 
 // Import bulk imports a set of bits and then snapshots the storage.
 // This does not affect the fragment's cache.
-func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
+func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	// Verify that there are an equal number of bitmap ids and profile ids.
-	if len(bitmapIDs) != len(profileIDs) {
-		return fmt.Errorf("mismatch of bitmap/profile len: %d != %d", len(bitmapIDs), len(profileIDs))
+	// Verify that there are an equal number of row ids and column ids.
+	if len(rowIDs) != len(columnIDs) {
+		return fmt.Errorf("mismatch of row/column len: %d != %d", len(rowIDs), len(columnIDs))
 	}
 
 	// Disconnect op writer so we don't append updates.
@@ -924,11 +923,11 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 	lastID := uint64(0)
 	if err := func() error {
 		set := make(map[uint64]struct{})
-		for i := range bitmapIDs {
-			bitmapID, profileID := bitmapIDs[i], profileIDs[i]
+		for i := range rowIDs {
+			rowID, columnID := rowIDs[i], columnIDs[i]
 
 			// Determine the position of the bit in the storage.
-			pos, err := f.pos(bitmapID, profileID)
+			pos, err := f.pos(rowID, columnID)
 			if err != nil {
 				return err
 			}
@@ -938,25 +937,25 @@ func (f *Fragment) Import(bitmapIDs, profileIDs []uint64) error {
 			if err != nil {
 				return err
 			}
-
+			f.stats.Count("ImportBit", 1)
 			// import optimization to avoid linear foreach calls
 			// slight risk of concurrent cache counter being off but
 			// no real danger
-			if i == 0 || bitmapID != lastID {
-				lastID = bitmapID
-				set[bitmapID] = struct{}{}
+			if i == 0 || rowID != lastID {
+				lastID = rowID
+				set[rowID] = struct{}{}
 			}
 
 			// Invalidate block checksum.
-			delete(f.checksums, int(bitmapID/HashBlockSize))
+			delete(f.checksums, int(rowID/HashBlockSize))
 		}
 
-		// Update cache counts for all bitmaps.
-		for bitmapID := range set {
-			// Import should ALWAYS have bitmap() load a new bm from fragment.storage
-			// because the bitmap that's in bitmapCache hasn't been updated with
+		// Update cache counts for all rows.
+		for rowID := range set {
+			// Import should ALWAYS have row() load a new bm from fragment.storage
+			// because the row that's in rowCache hasn't been updated with
 			// this import's data.
-			f.cache.BulkAdd(bitmapID, f.bitmap(bitmapID, false, false).Count())
+			f.cache.BulkAdd(rowID, f.row(rowID, false, false).Count())
 		}
 
 		f.cache.Invalidate()
@@ -995,15 +994,18 @@ func (f *Fragment) Snapshot() error {
 	defer f.mu.Unlock()
 	return f.snapshot()
 }
-func track(start time.Time, name string, logger *log.Logger) {
+func track(start time.Time, message string, stats StatsClient, logger *log.Logger) {
 	elapsed := time.Since(start)
-	logger.Printf("%s took %s", name, elapsed)
+	logger.Printf("%s took %s", message, elapsed)
+	stats.Histogram("snapshot", elapsed.Seconds())
 }
 
 func (f *Fragment) snapshot() error {
 	logger := f.logger()
-	logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.db, f.frame, f.view, f.slice)
-	defer track(time.Now(), fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.db, f.frame, f.view, f.slice), logger)
+	logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
+	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
+	start := time.Now()
+	defer track(start, completeMessage, f.stats, logger)
 
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + SnapshotExt
@@ -1061,13 +1063,11 @@ func (f *Fragment) flushCache() error {
 		return nil
 	}
 
-	// Retrieve a list of bitmap ids from the cache.
-	bitmapIDs := f.cache.BitmapIDs()
+	// Retrieve a list of row ids from the cache.
+	ids := f.cache.IDs()
 
 	// Marshal cache data to bytes.
-	buf, err := proto.Marshal(&internal.Cache{
-		BitmapIDs: bitmapIDs,
-	})
+	buf, err := proto.Marshal(&internal.Cache{IDs: ids})
 	if err != nil {
 		return err
 	}
@@ -1253,7 +1253,7 @@ func (f *Fragment) readCacheFromArchive(r io.Reader) error {
 	return nil
 }
 
-// FragmentBlock represents info about a subsection of the bitmaps in a block.
+// FragmentBlock represents info about a subsection of the rows in a block.
 // This is used for comparing data in remote blocks for active anti-entropy.
 type FragmentBlock struct {
 	ID       int    `json:"id"`
@@ -1309,7 +1309,7 @@ func (s *FragmentSyncer) isClosing() bool {
 // then merges any blocks which have differences.
 func (s *FragmentSyncer) SyncFragment() error {
 	// Determine replica set.
-	nodes := s.Cluster.FragmentNodes(s.Fragment.DB(), s.Fragment.Slice())
+	nodes := s.Cluster.FragmentNodes(s.Fragment.Index(), s.Fragment.Slice())
 	if len(nodes) == 1 {
 		return nil
 	}
@@ -1329,7 +1329,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		if err != nil {
 			return err
 		}
-		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.DB(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
+		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return err
 		}
@@ -1376,17 +1376,17 @@ func (s *FragmentSyncer) SyncFragment() error {
 		if byteSlicesEqual(checksums) {
 			continue
 		}
-
 		// Synchronize block.
 		if err := s.syncBlock(blockID); err != nil {
 			return fmt.Errorf("sync block: id=%d, err=%s", blockID, err)
 		}
+		s.Fragment.stats.Count("BlockRepair", 1)
 	}
 
 	return nil
 }
 
-// syncBlock sends and receives all bitmaps for a given block.
+// syncBlock sends and receives all rows for a given block.
 // Returns an error if any remote hosts are unreachable.
 func (s *FragmentSyncer) syncBlock(id int) error {
 	f := s.Fragment
@@ -1394,7 +1394,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	// Read pairs from each remote block.
 	var pairSets []PairSet
 	var clients []*Client
-	for _, node := range s.Cluster.FragmentNodes(f.DB(), f.Slice()) {
+	for _, node := range s.Cluster.FragmentNodes(f.Index(), f.Slice()) {
 		if s.Host == node.Host {
 			continue
 		}
@@ -1411,14 +1411,14 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		clients = append(clients, client)
 
 		// Only sync the standard block.
-		bitmapIDs, profileIDs, err := client.BlockData(context.Background(), f.DB(), f.Frame(), ViewStandard, f.Slice(), id)
+		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Frame(), ViewStandard, f.Slice(), id)
 		if err != nil {
 			return err
 		}
 
 		pairSets = append(pairSets, PairSet{
-			ProfileIDs: profileIDs,
-			BitmapIDs:  bitmapIDs,
+			ColumnIDs: columnIDs,
+			RowIDs:    rowIDs,
 		})
 	}
 
@@ -1438,7 +1438,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		set, clear := sets[i], clears[i]
 
 		// Ignore if there are no differences.
-		if len(set.ProfileIDs) == 0 && len(clear.ProfileIDs) == 0 {
+		if len(set.ColumnIDs) == 0 && len(clear.ColumnIDs) == 0 {
 			continue
 		}
 
@@ -1446,11 +1446,11 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		var buf bytes.Buffer
 
 		// Only sync the standard block.
-		for j := 0; j < len(set.ProfileIDs); j++ {
-			fmt.Fprintf(&buf, "SetBit(frame=%q, id=%d, profileID=%d)\n", f.Frame(), set.BitmapIDs[j], (f.Slice()*SliceWidth)+set.ProfileIDs[j])
+		for j := 0; j < len(set.ColumnIDs); j++ {
+			fmt.Fprintf(&buf, "SetBit(frame=%q, id=%d, columnID=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
 		}
-		for j := 0; j < len(clear.ProfileIDs); j++ {
-			fmt.Fprintf(&buf, "ClearBit(frame=%q, id=%d, profileID=%d)\n", f.Frame(), clear.BitmapIDs[j], (f.Slice()*SliceWidth)+clear.ProfileIDs[j])
+		for j := 0; j < len(clear.ColumnIDs); j++ {
+			fmt.Fprintf(&buf, "ClearBit(frame=%q, id=%d, columnID=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
 		}
 
 		// Verify sync is not prematurely closing.
@@ -1459,7 +1459,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		}
 
 		// Execute query.
-		_, err := clients[i].ExecuteQuery(context.Background(), f.DB(), buf.String(), false)
+		_, err := clients[i].ExecuteQuery(context.Background(), f.Index(), buf.String(), false)
 		if err != nil {
 			return err
 		}
@@ -1476,10 +1476,10 @@ func madvise(b []byte, advice int) (err error) {
 	return
 }
 
-// PairSet is a list of equal length bitmap and profile id lists.
+// PairSet is a list of equal length row and column id lists.
 type PairSet struct {
-	BitmapIDs  []uint64
-	ProfileIDs []uint64
+	RowIDs    []uint64
+	ColumnIDs []uint64
 }
 
 // byteSlicesEqual returns true if all slices are equal.
@@ -1496,7 +1496,7 @@ func byteSlicesEqual(a [][]byte) bool {
 	return true
 }
 
-// Pos returns the bitmap position of a bitmap/profile pair.
-func Pos(bitmapID, profileID uint64) uint64 {
-	return (bitmapID * SliceWidth) + (profileID % SliceWidth)
+// Pos returns the row position of a row/column pair.
+func Pos(rowID, columnID uint64) uint64 {
+	return (rowID * SliceWidth) + (columnID % SliceWidth)
 }

@@ -88,7 +88,7 @@ on the configured port.`,
 	flags.StringVarP(&Server.Config.Cluster.Type, "cluster.type", "", "static", "Determine how the cluster handles membership and state sharing. Choose from [static, http, gossip]")
 	flags.StringVarP(&Server.Config.Cluster.GossipSeed, "cluster.gossip-seed", "", "", "Host with which to seed the gossip membership.")
 	flags.StringVarP(&Server.Config.Cluster.InternalPort, "cluster.internal-port", "", "", "Port to which pilosa should bind for internal state sharing.")
-	flags.StringVarP(&Server.Config.Metric.Service, "metric.service", "", "noop", "Default URI on which pilosa should listen.")
+	flags.StringVarP(&Server.Config.Metric.Service, "metric.service", "", "nop", "Default URI on which pilosa should listen.")
 	flags.StringVarP(&Server.Config.Metric.Host, "metric.host", "", "", "Default URI to send metrics.")
 	flags.DurationVarP((*time.Duration)(&Server.Config.Metric.PollingInterval), "metric.poll-interval", "", time.Minute*0, "Polling interval metrics.")
 	return serveCmd

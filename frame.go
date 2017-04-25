@@ -29,17 +29,17 @@ const (
 type Frame struct {
 	mu          sync.Mutex
 	path        string
-	db          string
+	index       string
 	name        string
 	timeQuantum TimeQuantum
 
 	views map[string]*View
 
-	// Bitmap attribute storage and cache
-	bitmapAttrStore *AttrStore
+	// Row attribute storage and cache
+	rowAttrStore *AttrStore
 
 	broadcaster Broadcaster
-	stats       StatsClient
+	Stats       StatsClient
 
 	// Frame settings.
 	rowLabel       string
@@ -53,21 +53,21 @@ type Frame struct {
 }
 
 // NewFrame returns a new instance of frame.
-func NewFrame(path, db, name string) (*Frame, error) {
+func NewFrame(path, index, name string) (*Frame, error) {
 	err := ValidateName(name)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Frame{
-		path: path,
-		db:   db,
-		name: name,
+		path:  path,
+		index: index,
+		name:  name,
 
-		views:           make(map[string]*View),
-		bitmapAttrStore: NewAttrStore(filepath.Join(path, ".data")),
+		views:        make(map[string]*View),
+		rowAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
-		stats: NopStatsClient,
+		Stats: NopStatsClient,
 
 		rowLabel:       DefaultRowLabel,
 		inverseEnabled: DefaultInverseEnabled,
@@ -81,14 +81,14 @@ func NewFrame(path, db, name string) (*Frame, error) {
 // Name returns the name the frame was initialized with.
 func (f *Frame) Name() string { return f.name }
 
-// DB returns the database name the frame was initialized with.
-func (f *Frame) DB() string { return f.db }
+// Index returns the index name the frame was initialized with.
+func (f *Frame) Index() string { return f.index }
 
 // Path returns the path the frame was initialized with.
 func (f *Frame) Path() string { return f.path }
 
-// BitmapAttrStore returns the attribute storage.
-func (f *Frame) BitmapAttrStore() *AttrStore { return f.bitmapAttrStore }
+// RowAttrStore returns the attribute storage.
+func (f *Frame) RowAttrStore() *AttrStore { return f.rowAttrStore }
 
 // MaxSlice returns the max slice in the frame.
 func (f *Frame) MaxSlice() uint64 {
@@ -215,7 +215,7 @@ func (f *Frame) Open() error {
 			return err
 		}
 
-		if err := f.bitmapAttrStore.Open(); err != nil {
+		if err := f.rowAttrStore.Open(); err != nil {
 			return err
 		}
 
@@ -253,10 +253,10 @@ func (f *Frame) openViews() error {
 		if err := view.Open(); err != nil {
 			return fmt.Errorf("open view: view=%s, err=%s", view.Name(), err)
 		}
-		view.BitmapAttrStore = f.bitmapAttrStore
+		view.RowAttrStore = f.rowAttrStore
 		f.views[view.Name()] = view
 
-		f.stats.Count("maxSlice", 1)
+		f.Stats.Count("maxSlice", 1)
 	}
 
 	return nil
@@ -302,11 +302,11 @@ func (f *Frame) loadMeta() error {
 func (f *Frame) saveMeta() error {
 	// Marshal metadata.
 	buf, err := proto.Marshal(&internal.FrameMeta{
-		TimeQuantum:    string(f.timeQuantum),
 		RowLabel:       f.rowLabel,
-		CacheType:      f.cacheType,
 		InverseEnabled: f.inverseEnabled,
+		CacheType:      f.cacheType,
 		CacheSize:      f.cacheSize,
+		TimeQuantum:    string(f.timeQuantum),
 	})
 	if err != nil {
 		return err
@@ -326,8 +326,8 @@ func (f *Frame) Close() error {
 	defer f.mu.Unlock()
 
 	// Close the attribute store.
-	if f.bitmapAttrStore != nil {
-		_ = f.bitmapAttrStore.Close()
+	if f.rowAttrStore != nil {
+		_ = f.rowAttrStore.Close()
 	}
 
 	// Close all views.
@@ -411,18 +411,18 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 	if err := view.Open(); err != nil {
 		return nil, err
 	}
-	view.BitmapAttrStore = f.bitmapAttrStore
+	view.RowAttrStore = f.rowAttrStore
 	f.views[view.Name()] = view
 
 	return view, nil
 }
 
 func (f *Frame) newView(path, name string) *View {
-	view := NewView(path, f.db, f.name, name, f.cacheSize)
+	view := NewView(path, f.index, f.name, name, f.cacheSize)
 	view.cacheType = f.cacheType
 	view.LogOutput = f.LogOutput
-	view.BitmapAttrStore = f.bitmapAttrStore
-	view.stats = f.stats.WithTags(fmt.Sprintf("slice:%s", name))
+	view.RowAttrStore = f.rowAttrStore
+	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	return view
 }
 
@@ -511,17 +511,17 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 }
 
 // Import bulk imports data.
-func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) error {
+func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) error {
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
 	if hasTime(timestamps) && q == "" {
-		return errors.New("time quantum not set in either database or frame")
+		return errors.New("time quantum not set in either index or frame")
 	}
 
 	// Split import data by fragment.
 	dataByFragment := make(map[importKey]importData)
-	for i := range bitmapIDs {
-		bitmapID, profileID, timestamp := bitmapIDs[i], profileIDs[i], timestamps[i]
+	for i := range rowIDs {
+		rowID, columnID, timestamp := rowIDs[i], columnIDs[i], timestamps[i]
 
 		var standard, inverse []string
 		if timestamp == nil {
@@ -534,30 +534,37 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 
 		// Attach bit to each standard view.
 		for _, name := range standard {
-			key := importKey{View: name, Slice: profileID / SliceWidth}
+			key := importKey{View: name, Slice: columnID / SliceWidth}
 			data := dataByFragment[key]
-			data.BitmapIDs = append(data.BitmapIDs, bitmapID)
-			data.ProfileIDs = append(data.ProfileIDs, profileID)
+			data.RowIDs = append(data.RowIDs, rowID)
+			data.ColumnIDs = append(data.ColumnIDs, columnID)
 			dataByFragment[key] = data
 		}
 
-		// Attach reversed bits to each inverse view.
-		for _, name := range inverse {
-			key := importKey{View: name, Slice: bitmapID / SliceWidth}
-			data := dataByFragment[key]
-			data.BitmapIDs = append(data.BitmapIDs, profileID)  // reversed
-			data.ProfileIDs = append(data.ProfileIDs, bitmapID) // reversed
-			dataByFragment[key] = data
+		if f.inverseEnabled {
+			// Attach reversed bits to each inverse view.
+			for _, name := range inverse {
+				key := importKey{View: name, Slice: rowID / SliceWidth}
+				data := dataByFragment[key]
+				data.RowIDs = append(data.RowIDs, columnID)    // reversed
+				data.ColumnIDs = append(data.ColumnIDs, rowID) // reversed
+				dataByFragment[key] = data
+			}
 		}
 	}
 
 	// Import into each fragment.
 	for key, data := range dataByFragment {
+		// Skip inverse data if inverse is not enabled.
+		if !f.inverseEnabled && IsInverseView(key.View) {
+			continue
+		}
+
 		// Re-sort data for inverse views.
 		if IsInverseView(key.View) {
 			sort.Sort(importBitSet{
-				bitmapIDs:  data.BitmapIDs,
-				profileIDs: data.ProfileIDs,
+				rowIDs:    data.RowIDs,
+				columnIDs: data.ColumnIDs,
 			})
 		}
 
@@ -571,7 +578,7 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 			return err
 		}
 
-		if err := frag.Import(data.BitmapIDs, data.ProfileIDs); err != nil {
+		if err := frag.Import(data.RowIDs, data.ColumnIDs); err != nil {
 			return err
 		}
 	}
@@ -593,9 +600,11 @@ func encodeFrame(f *Frame) *internal.Frame {
 	return &internal.Frame{
 		Name: f.name,
 		Meta: &internal.FrameMeta{
-			TimeQuantum: string(f.timeQuantum),
-			RowLabel:    f.rowLabel,
-			CacheSize:   f.cacheSize,
+			RowLabel:       f.rowLabel,
+			InverseEnabled: f.inverseEnabled,
+			CacheType:      f.cacheType,
+			CacheSize:      f.cacheSize,
+			TimeQuantum:    string(f.timeQuantum),
 		},
 	}
 }
@@ -627,18 +636,29 @@ type FrameOptions struct {
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
+// Encode converts o into its internal representation.
+func (o *FrameOptions) Encode() *internal.FrameMeta {
+	return &internal.FrameMeta{
+		RowLabel:       o.RowLabel,
+		InverseEnabled: o.InverseEnabled,
+		CacheType:      o.CacheType,
+		CacheSize:      o.CacheSize,
+		TimeQuantum:    string(o.TimeQuantum),
+	}
+}
+
 // importBitSet represents slices of row and column ids.
 // This is used to sort data during import.
 type importBitSet struct {
-	bitmapIDs, profileIDs []uint64
+	rowIDs, columnIDs []uint64
 }
 
 func (p importBitSet) Swap(i, j int) {
-	p.bitmapIDs[i], p.bitmapIDs[j] = p.bitmapIDs[j], p.bitmapIDs[i]
-	p.profileIDs[i], p.profileIDs[j] = p.profileIDs[j], p.profileIDs[i]
+	p.rowIDs[i], p.rowIDs[j] = p.rowIDs[j], p.rowIDs[i]
+	p.columnIDs[i], p.columnIDs[j] = p.columnIDs[j], p.columnIDs[i]
 }
-func (p importBitSet) Len() int           { return len(p.bitmapIDs) }
-func (p importBitSet) Less(i, j int) bool { return p.bitmapIDs[i] < p.bitmapIDs[j] }
+func (p importBitSet) Len() int           { return len(p.rowIDs) }
+func (p importBitSet) Less(i, j int) bool { return p.rowIDs[i] < p.rowIDs[j] }
 
 // Cache types.
 const (

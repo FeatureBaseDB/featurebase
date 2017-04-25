@@ -30,10 +30,10 @@ Restores a view to the cluster from a backup file.
 	}
 	flags := restoreCmd.Flags()
 	flags.StringVarP(&Restorer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
-	flags.StringVarP(&Restorer.Database, "database", "d", "", "Pilosa database to restore into.")
+	flags.StringVarP(&Restorer.Index, "index", "i", "", "Pilosa index to restore into.")
 	flags.StringVarP(&Restorer.Frame, "frame", "f", "", "Frame to restore into.")
 	flags.StringVarP(&Restorer.View, "view", "v", "", "View to restore into.")
-	flags.StringVarP(&Restorer.Path, "input-file", "i", "", "File to restore from.")
+	flags.StringVarP(&Restorer.Path, "input-file", "d", "", "File to restore data from.")
 
 	return restoreCmd
 }

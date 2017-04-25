@@ -1,4 +1,4 @@
-// package server contains the `pilosa server` subcommand which runs Pilosa
+// Package server contains the `pilosa server` subcommand which runs Pilosa
 // itself. The purpose of this package is to define an easily tested Command
 // object which handles interpreting configuration and setting up all the
 // objects that Pilosa needs.
@@ -51,7 +51,7 @@ type Command struct {
 	Done chan struct{}
 }
 
-// NewMain returns a new instance of Main.
+// NewCommand returns a new instance of Main.
 func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 	return &Command{
 		Server: pilosa.NewServer(),
@@ -90,6 +90,7 @@ func (m *Command) Run(args ...string) (err error) {
 	return nil
 }
 
+// SetupServer use the cluster configuration to setup this server
 func (m *Command) SetupServer() error {
 	var err error
 	cluster := pilosa.NewCluster()
@@ -117,11 +118,11 @@ func (m *Command) SetupServer() error {
 		m.Server.LogOutput = logFile
 	}
 
-	// Configure index.
+	// Configure holder.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
-	m.Server.Index.Path = m.Config.DataDir
+	m.Server.Holder.Path = m.Config.DataDir
 	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollingInterval)
-	m.Server.Index.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
 	if err != nil {
 		return err
 	}
@@ -168,8 +169,12 @@ func (m *Command) SetupServer() error {
 		m.Server.Broadcaster = pilosa.NopBroadcaster
 		m.Server.Cluster.NodeSet = pilosa.NewStaticNodeSet()
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
+		err := m.Server.Cluster.NodeSet.(*pilosa.StaticNodeSet).Join(m.Server.Cluster.Nodes)
+		if err != nil {
+			return err
+		}
 	default:
-		return fmt.Errorf("'%v' is not a supported value for broadcaster type.", m.Config.Cluster.Type)
+		return fmt.Errorf("'%v' is not a supported value for broadcaster type", m.Config.Cluster.Type)
 	}
 
 	// Set configuration options.

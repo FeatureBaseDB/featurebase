@@ -29,7 +29,7 @@ Backs up the view from across the cluster into a single file.
 	}
 	flags := backupCmd.Flags()
 	flags.StringVarP(&Backuper.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
-	flags.StringVarP(&Backuper.Database, "database", "d", "", "Pilosa database to backup into.")
+	flags.StringVarP(&Backuper.Index, "index", "i", "", "Pilosa index to backup into.")
 	flags.StringVarP(&Backuper.Frame, "frame", "f", "", "Frame to backup into.")
 	flags.StringVarP(&Backuper.View, "view", "v", "", "View to backup into.")
 	flags.StringVarP(&Backuper.Path, "output-file", "o", "", "File to write backup to - default stdout")

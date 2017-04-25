@@ -37,7 +37,7 @@ bind = "localhost:10101"
 [anti-entropy]
   interval = "10m0s"
 
-[metrics]
+[metric]
 	service = "statsd"
 	host = "127.0.0.1:8125"
 
