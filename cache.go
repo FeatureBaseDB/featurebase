@@ -53,6 +53,7 @@ func NewLRUCache(maxEntries uint32) *LRUCache {
 	return c
 }
 
+// BulkAdd adds a count to the cache unsorted. You should Invalidate after completion.
 func (c *LRUCache) BulkAdd(id, n uint64) {
 	c.Add(id, n)
 }
@@ -194,6 +195,7 @@ func (c *RankCache) Invalidate() {
 	c.invalidate()
 }
 
+// Recalculate rebuilds the cache
 func (c *RankCache) Recalculate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -303,19 +305,23 @@ type PairHeap struct {
 	Pairs
 }
 
+// Less implemets the Sort interface
+// reports whether the element with index i should sort before the element with index j.
 func (p PairHeap) Less(i, j int) bool { return p.Pairs[i].Count < p.Pairs[j].Count }
 
-func (h *Pairs) Push(x interface{}) {
+// Push appends the element onto the Pair slice
+func (p *Pairs) Push(x interface{}) {
 	// Push and Pop use pointer receivers because they modify the slice's length,
 	// not just its contents.
-	*h = append(*h, x.(Pair))
+	*p = append(*p, x.(Pair))
 }
 
-func (h *Pairs) Pop() interface{} {
-	old := *h
+// Pop removes the minimum element from the Pair slice
+func (p *Pairs) Pop() interface{} {
+	old := *p
 	n := len(old)
 	x := old[n-1]
-	*h = old[0 : n-1]
+	*p = old[0 : n-1]
 	return x
 }
 
