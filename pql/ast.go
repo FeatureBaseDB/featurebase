@@ -156,6 +156,30 @@ func (c *Call) String() string {
 	return buf.String()
 }
 
+// SupportsInverse indicates that the call may be on an inverse frame.
+func (c *Call) SupportsInverse() bool {
+	if c.Name == "Bitmap" {
+		return true
+	}
+	return false
+}
+
+// IsInverse specifies if the call is for an inverse view.
+// Return defaults to false unless absolutely sure of inversion.
+func (c *Call) IsInverse(rowLabel, columnLabel string) bool {
+	if c.SupportsInverse() {
+		_, rowOK, rowErr := c.UintArg(rowLabel)
+		_, columnOK, columnErr := c.UintArg(columnLabel)
+		if rowErr != nil || columnErr != nil {
+			return false
+		}
+		if !rowOK && columnOK {
+			return true
+		}
+	}
+	return false
+}
+
 // CopyArgs returns a copy of m.
 func CopyArgs(m map[string]interface{}) map[string]interface{} {
 	other := make(map[string]interface{}, len(m))
