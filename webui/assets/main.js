@@ -69,14 +69,19 @@ class REPL {
 
     process_query(query) {
         var xhr = new XMLHttpRequest();
-        var dbname = 'foo'; // todo: get db name from dropdown menu
-        xhr.open('POST', '/db/' + dbname + '/query');
+        var e = document.getElementById("index-dropdown");
+        var indexname = e.options[e.selectedIndex].text;
+        xhr.open('POST', '/db/' + indexname + '/query');  // TODO db->index
         xhr.setRequestHeader('Content-Type', 'application/text');
 
         const repl = this
         xhr.onload = function() {
             repl.result_number++
-            repl.createSingleOutput({"input": query, "output": xhr.responseText})
+            repl.createSingleOutput({
+              "input": query, 
+              "output": xhr.responseText, 
+              "indexname": indexname,
+            })
         }
         xhr.send(query)
     }
@@ -91,7 +96,7 @@ class REPL {
               <div class="result-io-header">
                 <h5>Input</h5>
                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                <em>Source: Index</em>
+                <em>Source: ${res.indexname}</em>
               </div>
               <div class="result-input">
                 ${res.input}
@@ -119,11 +124,30 @@ class REPL {
       node.innerHTML = markup;
       this.output.insertBefore(node, this.output.firstChild)
     }
+
+    populate_index_dropdown() {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', '/schema')
+      var select = document.getElementById('index-dropdown')
+
+      xhr.onload = function() {
+        var schema = JSON.parse(xhr.responseText)
+        for(var i=0; i<schema['dbs'].length; i++) { // TODO db->index
+          var opt = document.createElement('option')
+          opt.innerHTML = schema['dbs'][i]['name']
+          select.appendChild(opt)
+        }
+      }
+      xhr.send(null)
+    }
+
 }
+
 
 const input = document.getElementById('query')
 const output = document.getElementById('outputs')
 const button = document.getElementById('query-btn')
 
 repl = new REPL(input, output, button)
+repl.populate_index_dropdown()
 repl.bind_events()
