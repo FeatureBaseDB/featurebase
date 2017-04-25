@@ -19,15 +19,15 @@ type ImportCommand struct {
 	// Destination host and port.
 	Host string `json:"host"`
 
-	// Name of the database & frame to import into.
-	Database string `json:"db"`
-	Frame    string `json:"frame"`
+	// Name of the index & frame to import into.
+	Index string `json:"index"`
+	Frame string `json:"frame"`
 
 	// Filenames to import from.
 	Paths []string `json:"paths"`
 
 	// Size of buffer used to chunk import.
-	BufferSize int `json:"buffer-size"`
+	BufferSize int `json:"bufferSize"`
 
 	// Reusable client.
 	Client *pilosa.Client `json:"-"`
@@ -54,9 +54,9 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Validate arguments.
-	// Database and frame are validated early before the files are parsed.
-	if cmd.Database == "" {
-		return pilosa.ErrDatabaseRequired
+	// Index and frame are validated early before the files are parsed.
+	if cmd.Index == "" {
+		return pilosa.ErrIndexRequired
 	} else if cmd.Frame == "" {
 		return pilosa.ErrFrameRequired
 	} else if len(cmd.Paths) == 0 {
@@ -123,19 +123,19 @@ func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
 
 		var bit pilosa.Bit
 
-		// Parse bitmap id.
-		bitmapID, err := strconv.ParseUint(record[0], 10, 64)
+		// Parse row id.
+		rowID, err := strconv.ParseUint(record[0], 10, 64)
 		if err != nil {
-			return fmt.Errorf("invalid bitmap id on row %d: %q", rnum, record[0])
+			return fmt.Errorf("invalid row id on row %d: %q", rnum, record[0])
 		}
-		bit.BitmapID = bitmapID
+		bit.RowID = rowID
 
-		// Parse bitmap id.
-		profileID, err := strconv.ParseUint(record[1], 10, 64)
+		// Parse column id.
+		columnID, err := strconv.ParseUint(record[1], 10, 64)
 		if err != nil {
-			return fmt.Errorf("invalid profile id on row %d: %q", rnum, record[1])
+			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[1])
 		}
-		bit.ProfileID = profileID
+		bit.ColumnID = columnID
 
 		// Parse time, if exists.
 		if len(record) > 2 && record[2] != "" {
@@ -176,7 +176,7 @@ func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) err
 	// Parse path into bits.
 	for slice, bits := range bitsBySlice {
 		logger.Printf("importing slice: %d, n=%d", slice, len(bits))
-		if err := cmd.Client.Import(ctx, cmd.Database, cmd.Frame, slice, bits); err != nil {
+		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Frame, slice, bits); err != nil {
 			return err
 		}
 	}

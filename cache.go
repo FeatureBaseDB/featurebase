@@ -12,15 +12,20 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// Cache represents a cache for bitmap counts.
+const (
+	// ThresholdFactor is used to calculate the threshold for new items entering the cache
+	ThresholdFactor = 1.1
+)
+
+// Cache represents a cache of counts.
 type Cache interface {
-	Add(bitmapID uint64, n uint64)
-	BulkAdd(bitmapID uint64, n uint64)
-	Get(bitmapID uint64) uint64
+	Add(id uint64, n uint64)
+	BulkAdd(id uint64, n uint64)
+	Get(id uint64) uint64
 	Len() int
 
-	// Returns a list of all bitmap IDs.
-	BitmapIDs() []uint64
+	// Returns a list of all IDs.
+	IDs() []uint64
 
 	// Updates the cache, if necessary.
 	Invalidate()
@@ -39,28 +44,28 @@ type LRUCache struct {
 }
 
 // NewLRUCache returns a new instance of LRUCache.
-func NewLRUCache(maxEntries int) *LRUCache {
+func NewLRUCache(maxEntries uint32) *LRUCache {
 	c := &LRUCache{
-		cache:  lru.New(maxEntries),
+		cache:  lru.New(int(maxEntries)),
 		counts: make(map[uint64]uint64),
 	}
 	c.cache.OnEvicted = c.onEvicted
 	return c
 }
 
-func (c *LRUCache) BulkAdd(bitmapID, n uint64) {
-	c.Add(bitmapID, n)
+func (c *LRUCache) BulkAdd(id, n uint64) {
+	c.Add(id, n)
 }
 
-// Add adds a bitmap to the cache.
-func (c *LRUCache) Add(bitmapID, n uint64) {
-	c.cache.Add(bitmapID, n)
-	c.counts[bitmapID] = n
+// Add adds a count to the cache.
+func (c *LRUCache) Add(id, n uint64) {
+	c.cache.Add(id, n)
+	c.counts[id] = n
 }
 
-// Get returns a bitmap with a given id.
-func (c *LRUCache) Get(bitmapID uint64) uint64 {
-	n, _ := c.cache.Get(bitmapID)
+// Get returns a count for a given id.
+func (c *LRUCache) Get(id uint64) uint64 {
+	n, _ := c.cache.Get(id)
 	nn, _ := n.(uint64)
 	return nn
 }
@@ -74,8 +79,8 @@ func (c *LRUCache) Invalidate() {}
 // Recalculate is a no-op.
 func (c *LRUCache) Recalculate() {}
 
-// BitmapIDs returns a list of all bitmap IDs in the cache.
-func (c *LRUCache) BitmapIDs() []uint64 {
+// IDs returns a list of all IDs in the cache.
+func (c *LRUCache) IDs() []uint64 {
 	a := make([]uint64, 0, len(c.counts))
 	for id := range c.counts {
 		a = append(a, id)
@@ -111,48 +116,56 @@ type RankCache struct {
 	updateN    int
 	updateTime time.Time
 
-	ThresholdLength int
-	ThresholdIndex  int
-	ThresholdValue  uint64
+	// maxEntries is the user defined size of the cache
+	maxEntries uint32
+
+	// thresholdBuffer is used the calculate the lowest cached threshold value
+	// This threshold determines what new items are added to the cache
+	thresholdBuffer int
+
+	// thresholdValue is the value of the last item in the cache
+	thresholdValue uint64
 }
 
 // NewRankCache returns a new instance of RankCache.
-func NewRankCache() *RankCache {
+func NewRankCache(maxEntries uint32) *RankCache {
 	return &RankCache{
-		entries: make(map[uint64]uint64),
+		maxEntries:      maxEntries,
+		thresholdBuffer: int(ThresholdFactor * float64(maxEntries)),
+		entries:         make(map[uint64]uint64),
 	}
 }
 
-// Add adds a bitmap to the cache.
-func (c *RankCache) Add(bitmapID uint64, n uint64) {
+// Add adds a count to the cache.
+func (c *RankCache) Add(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Ignore if the bit count on the bitmap is below the threshold.
-	if n < c.ThresholdValue {
+	// Ignore if the bit count is below the threshold.
+	if n < c.thresholdValue {
 		return
 	}
 
-	c.entries[bitmapID] = n
+	c.entries[id] = n
 
 	c.invalidate()
 }
 
-// BulkAdd adds a bitmap to the cache unsorted. You should Invalidate after completion.
-func (c *RankCache) BulkAdd(bitmapID uint64, n uint64) {
+// BulkAdd adds a count to the cache unsorted. You should Invalidate after completion.
+func (c *RankCache) BulkAdd(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if n < c.ThresholdValue {
+	if n < c.thresholdValue {
 		return
 	}
 
-	c.entries[bitmapID] = n
+	c.entries[id] = n
 }
 
-// Get returns a bitmap with a given id.
-func (c *RankCache) Get(bitmapID uint64) uint64 {
+// Get returns a count for a given id.
+func (c *RankCache) Get(id uint64) uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.entries[bitmapID]
+	return c.entries[id]
 }
 
 // Len returns the number of items in the cache.
@@ -162,8 +175,8 @@ func (c *RankCache) Len() int {
 	return len(c.entries)
 }
 
-// BitmapIDs returns a list of all bitmap IDs in the cache.
-func (c *RankCache) BitmapIDs() []uint64 {
+// IDs returns a list of all IDs in the cache.
+func (c *RankCache) IDs() []uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	a := make([]uint64, 0, len(c.entries))
@@ -209,26 +222,27 @@ func (c *RankCache) recalculate() {
 
 	// Store the count of the item at the threshold index.
 	c.rankings = rankings
-	if len(c.rankings) > c.ThresholdIndex {
-		c.ThresholdValue = rankings[c.ThresholdIndex].Count
+	if len(c.rankings) > int(c.maxEntries) {
+		c.thresholdValue = rankings[c.maxEntries].Count
+		c.rankings = c.rankings[0:c.maxEntries]
 	} else {
-		c.ThresholdValue = 1
+		c.thresholdValue = 1
 	}
 
 	// Reset counters.
 	c.updateTime, c.updateN = time.Now(), 0
 
 	// If size is larger than the threshold then trim it.
-	if len(c.entries) > c.ThresholdLength {
+	if len(c.entries) > c.thresholdBuffer {
 		for id, cnt := range c.entries {
-			if cnt <= c.ThresholdValue {
+			if cnt <= c.thresholdValue {
 				delete(c.entries, id)
 			}
 		}
 	}
 }
 
-// Top returns an ordered list of bitmaps.
+// Top returns an ordered list of pairs.
 func (c *RankCache) Top() []BitmapPair { return c.rankings }
 
 // WriteTo writes the cache to w.
@@ -244,7 +258,7 @@ func (c *RankCache) ReadFrom(r io.Reader) (n int64, err error) {
 // Ensure RankCache implements Cache.
 var _ Cache = &RankCache{}
 
-// BitmapPair represents a bitmap with an associated identifier.
+// BitmapPair represents a id/count pair with an associated identifier.
 type BitmapPair struct {
 	ID    uint64
 	Count uint64
@@ -257,7 +271,7 @@ func (p BitmapPairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p BitmapPairs) Len() int           { return len(p) }
 func (p BitmapPairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
-// Pair holds a bitmap id and its count.
+// Pair holds an id/count pair.
 type Pair struct {
 	ID    uint64 `json:"id"`
 	Count uint64 `json:"count"`

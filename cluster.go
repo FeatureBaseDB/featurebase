@@ -3,6 +3,8 @@ package pilosa
 import (
 	"encoding/binary"
 	"hash/fnv"
+
+	"github.com/pilosa/pilosa/internal"
 )
 
 const (
@@ -11,11 +13,31 @@ const (
 
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
+
+	// NodeState represents node state returned in /status endpoint for a node in the cluster.
+	NodeStateUp   = "UP"
+	NodeStateDown = "DOWN"
 )
 
 // Node represents a node in the cluster.
 type Node struct {
-	Host string `json:"host"`
+	Host         string `json:"host"`
+	InternalHost string `json:"internalHost"`
+
+	status *internal.NodeStatus `json:"status"`
+}
+
+// SetStatus sets the NodeStatus.
+func (n *Node) SetStatus(s *internal.NodeStatus) {
+	n.status = s
+}
+
+// SetState sets the Node.status.state.
+func (n *Node) SetState(s string) {
+	if n.status == nil {
+		n.status = &internal.NodeStatus{}
+	}
+	n.status.State = s
 }
 
 // Nodes represents a list of nodes.
@@ -81,7 +103,8 @@ func (a Nodes) Clone() []*Node {
 
 // Cluster represents a collection of nodes.
 type Cluster struct {
-	Nodes []*Node
+	Nodes   []*Node
+	NodeSet NodeSet
 
 	// Hashing algorithm used to assign partitions to nodes.
 	Hasher Hasher
@@ -102,6 +125,49 @@ func NewCluster() *Cluster {
 	}
 }
 
+// NodeSetHosts returns the list of host strings for NodeSet members
+func (c *Cluster) NodeSetHosts() []string {
+	if c.NodeSet == nil {
+		return []string{}
+	}
+	a := make([]string, 0, len(c.NodeSet.Nodes()))
+	for _, m := range c.NodeSet.Nodes() {
+		a = append(a, m.Host)
+	}
+	return a
+}
+
+// NodeStates returns a map of nodes in the cluster with each node's state (UP/DOWN) as the value.
+func (c *Cluster) NodeStates() map[string]string {
+	h := make(map[string]string)
+	for _, n := range c.Nodes {
+		h[n.Host] = NodeStateDown
+	}
+	// we are assuming that NodeSetHosts is a subset of c.Nodes
+	for _, m := range c.NodeSetHosts() {
+		if _, ok := h[m]; ok {
+			h[m] = NodeStateUp
+		}
+	}
+	return h
+}
+
+// State returns the internal ClusterState representation.
+func (c *Cluster) Status() *internal.ClusterStatus {
+	return &internal.ClusterStatus{
+		Nodes: encodeClusterStatus(c.Nodes),
+	}
+}
+
+// encodeClusterStatus converts a into its internal representation.
+func encodeClusterStatus(a []*Node) []*internal.NodeStatus {
+	other := make([]*internal.NodeStatus, len(a))
+	for i := range a {
+		other[i] = a[i].status
+	}
+	return other
+}
+
 // NodeByHost returns a node reference by host.
 func (c *Cluster) NodeByHost(host string) *Node {
 	for _, n := range c.Nodes {
@@ -113,25 +179,25 @@ func (c *Cluster) NodeByHost(host string) *Node {
 }
 
 // Partition returns the partition that a slice belongs to.
-func (c *Cluster) Partition(db string, slice uint64) int {
+func (c *Cluster) Partition(index string, slice uint64) int {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], slice)
 
 	// Hash the bytes and mod by partition count.
 	h := fnv.New64a()
-	h.Write([]byte(db))
+	h.Write([]byte(index))
 	h.Write(buf[:])
 	return int(h.Sum64() % uint64(c.PartitionN))
 }
 
 // FragmentNodes returns a list of nodes that own a fragment.
-func (c *Cluster) FragmentNodes(db string, slice uint64) []*Node {
-	return c.PartitionNodes(c.Partition(db, slice))
+func (c *Cluster) FragmentNodes(index string, slice uint64) []*Node {
+	return c.PartitionNodes(c.Partition(index, slice))
 }
 
 // OwnsFragment returns true if a host owns a fragment.
-func (c *Cluster) OwnsFragment(host string, db string, slice uint64) bool {
-	return Nodes(c.FragmentNodes(db, slice)).ContainsHost(host)
+func (c *Cluster) OwnsFragment(host string, index string, slice uint64) bool {
+	return Nodes(c.FragmentNodes(index, slice)).ContainsHost(host)
 }
 
 // PartitionNodes returns a list of nodes that own a partition.

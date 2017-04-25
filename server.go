@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,7 +24,7 @@ const (
 	DefaultPollingInterval     = 60 * time.Second
 )
 
-// Server represents an index wrapped by a running HTTP server.
+// Server represents a holder wrapped by a running HTTP server.
 type Server struct {
 	ln net.Listener
 
@@ -32,8 +33,10 @@ type Server struct {
 	closing chan struct{}
 
 	// Data storage and HTTP interface.
-	Index   *Index
-	Handler *Handler
+	Holder            *Holder
+	Handler           *Handler
+	Broadcaster       Broadcaster
+	BroadcastReceiver BroadcastReceiver
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
@@ -52,8 +55,10 @@ func NewServer() *Server {
 	s := &Server{
 		closing: make(chan struct{}),
 
-		Index:   NewIndex(),
-		Handler: NewHandler(),
+		Holder:            NewHolder(),
+		Handler:           NewHandler(),
+		Broadcaster:       NopBroadcaster,
+		BroadcastReceiver: NopBroadcastReceiver,
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
@@ -61,7 +66,7 @@ func NewServer() *Server {
 		LogOutput: os.Stderr,
 	}
 
-	s.Handler.Index = s.Index
+	s.Handler.Holder = s.Holder
 
 	return s
 }
@@ -91,23 +96,37 @@ func (s *Server) Open() error {
 		s.Cluster.Nodes = []*Node{{Host: s.Host}}
 	}
 
-	// Open index.
-	if err := s.Index.Open(); err != nil {
+	// Open holder.
+	if err := s.Holder.Open(); err != nil {
+		return err
+	}
+
+	if err := s.BroadcastReceiver.Start(s); err != nil {
+		return err
+	}
+
+	// Open NodeSet communication
+	if err := s.Cluster.NodeSet.Open(); err != nil {
 		return err
 	}
 
 	// Create executor for executing queries.
 	e := NewExecutor()
-	e.Index = s.Index
+	e.Holder = s.Holder
 	e.Host = s.Host
 	e.Cluster = s.Cluster
 
 	// Initialize HTTP handler.
+	s.Handler.Broadcaster = s.Broadcaster
+	s.Handler.StatusHandler = s
 	s.Handler.Host = s.Host
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
-	s.Index.LogOutput = s.LogOutput
+
+	// Initialize Holder.
+	s.Holder.Broadcaster = s.Broadcaster
+	s.Holder.LogOutput = s.LogOutput
 
 	// Serve HTTP.
 	go func() { http.Serve(ln, s.Handler) }()
@@ -129,8 +148,8 @@ func (s *Server) Close() error {
 	if s.ln != nil {
 		s.ln.Close()
 	}
-	if s.Index != nil {
-		s.Index.Close()
+	if s.Holder != nil {
+		s.Holder.Close()
 	}
 
 	return nil
@@ -150,7 +169,7 @@ func (s *Server) monitorAntiEntropy() {
 	ticker := time.NewTicker(s.AntiEntropyInterval)
 	defer ticker.Stop()
 
-	s.logger().Printf("index sync monitor initializing (%s interval)", s.AntiEntropyInterval)
+	s.logger().Printf("holder sync monitor initializing (%s interval)", s.AntiEntropyInterval)
 
 	for {
 		// Wait for tick or a close.
@@ -160,23 +179,23 @@ func (s *Server) monitorAntiEntropy() {
 		case <-ticker.C:
 		}
 
-		s.logger().Printf("index sync beginning")
+		s.logger().Printf("holder sync beginning")
 
-		// Initialize syncer with local index and remote client.
-		var syncer IndexSyncer
-		syncer.Index = s.Index
+		// Initialize syncer with local holder and remote client.
+		var syncer HolderSyncer
+		syncer.Holder = s.Holder
 		syncer.Host = s.Host
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
 
-		// Sync indexes.
-		if err := syncer.SyncIndex(); err != nil {
-			s.logger().Printf("index sync error: err=%s", err)
+		// Sync holders.
+		if err := syncer.SyncHolder(); err != nil {
+			s.logger().Printf("holder sync error: err=%s", err)
 			continue
 		}
 
 		// Record successful sync in log.
-		s.logger().Printf("index sync complete")
+		s.logger().Printf("holder sync complete")
 	}
 }
 
@@ -197,31 +216,140 @@ func (s *Server) monitorMaxSlices() {
 		case <-ticker.C:
 		}
 
-		oldmaxslices := s.Index.MaxSlices()
+		oldmaxslices := s.Holder.MaxSlices()
 		for _, node := range s.Cluster.Nodes {
 			if s.Host != node.Host {
 				maxSlices, _ := checkMaxSlices(node.Host)
-				for db, newmax := range maxSlices {
-					// if we don't know about a db locally, create it
-					// so that the /schema endpoint can report it
-					if localdb := s.Index.DB(db); localdb != nil {
-						if newmax > oldmaxslices[db] {
-							oldmaxslices[db] = newmax
-							localdb.SetRemoteMaxSlice(newmax)
+				for index, newmax := range maxSlices {
+					// if we don't know about an index locally, log an error because
+					// indexes should be created and synced prior to slice creation
+					if localIndex := s.Holder.Index(index); localIndex != nil {
+						if newmax > oldmaxslices[index] {
+							oldmaxslices[index] = newmax
+							localIndex.SetRemoteMaxSlice(newmax)
 						}
 					} else {
-						d := s.Index.DB(db)
-						if d == nil {
-							s.logger().Printf("Local DB not found: %s", db)
-							return
-						}
-						oldmaxslices[db] = newmax
-						d.SetRemoteMaxSlice(newmax)
+						s.logger().Printf("Local Index not found: %s", index)
 					}
 				}
 			}
 		}
 	}
+}
+
+// ReceiveMessage represents an implementation of BroadcastHandler.
+func (s *Server) ReceiveMessage(pb proto.Message) error {
+	switch obj := pb.(type) {
+	case *internal.CreateSliceMessage:
+		idx := s.Holder.Index(obj.Index)
+		if idx == nil {
+			return fmt.Errorf("Local Index not found: %s", obj.Index)
+		}
+		idx.SetRemoteMaxSlice(obj.Slice)
+	case *internal.CreateIndexMessage:
+		opt := IndexOptions{
+			ColumnLabel: obj.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(obj.Meta.TimeQuantum),
+		}
+		_, err := s.Holder.CreateIndex(obj.Index, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteIndexMessage:
+		if err := s.Holder.DeleteIndex(obj.Index); err != nil {
+			return err
+		}
+	case *internal.CreateFrameMessage:
+		index := s.Holder.Index(obj.Index)
+		opt := FrameOptions{
+			RowLabel:       obj.Meta.RowLabel,
+			InverseEnabled: obj.Meta.InverseEnabled,
+			CacheType:      obj.Meta.CacheType,
+			CacheSize:      obj.Meta.CacheSize,
+			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
+		}
+		_, err := index.CreateFrame(obj.Frame, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteFrameMessage:
+		index := s.Holder.Index(obj.Index)
+		if err := index.DeleteFrame(obj.Frame); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Server implements StatusHandler.
+// LocalStatus returns the state of the local node as well as the
+// holder (indexes/frames) according to the local node.
+// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
+func (s *Server) LocalStatus() (proto.Message, error) {
+	if s.Holder == nil {
+		return nil, errors.New("Server.Holder is nil.")
+	}
+	return &internal.NodeStatus{
+		Host:    s.Host,
+		State:   NodeStateUp,
+		Indexes: encodeIndexes(s.Holder.Indexes()),
+	}, nil
+}
+
+// ClusterStatus returns the NodeState for all nodes in the cluster.
+func (s *Server) ClusterStatus() (proto.Message, error) {
+	// Update local Node.state.
+	ns, err := s.LocalStatus()
+	if err != nil {
+		return nil, err
+	}
+	node := s.Cluster.NodeByHost(s.Host)
+	node.SetStatus(ns.(*internal.NodeStatus))
+
+	// Update NodeState for all nodes.
+	for host, nodeState := range s.Cluster.NodeStates() {
+		node := s.Cluster.NodeByHost(host)
+		node.SetState(nodeState)
+	}
+
+	return s.Cluster.Status(), nil
+}
+
+// HandleRemoteStatus receives incoming NodeState from remote nodes.
+func (s *Server) HandleRemoteStatus(pb proto.Message) error {
+	return s.mergeRemoteStatus(pb.(*internal.NodeStatus))
+}
+
+func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
+	// Update Node.state.
+	node := s.Cluster.NodeByHost(ns.Host)
+	node.SetStatus(ns)
+
+	// Create indexes that don't exist.
+	for _, index := range ns.Indexes {
+		opt := IndexOptions{
+			ColumnLabel: index.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(index.Meta.TimeQuantum),
+		}
+		idx, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
+		if err != nil {
+			return err
+		}
+		// Create frames that don't exist.
+		for _, f := range index.Frames {
+			opt := FrameOptions{
+				RowLabel:    f.Meta.RowLabel,
+				TimeQuantum: TimeQuantum(f.Meta.TimeQuantum),
+				CacheSize:   f.Meta.CacheSize,
+			}
+			_, err := idx.CreateFrameIfNotExists(f.Name, opt)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func checkMaxSlices(hostport string) (map[string]uint64, error) {
@@ -266,4 +394,13 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	}
 
 	return pb.MaxSlices, nil
+}
+
+// StatusHandler specifies two methods which an object must implement to share
+// state in the cluster. These are used by the GossipNodeSet to implement the
+// LocalState and MergeRemoteState methods of memberlist.Delegate
+type StatusHandler interface {
+	LocalStatus() (proto.Message, error)
+	ClusterStatus() (proto.Message, error)
+	HandleRemoteStatus(proto.Message) error
 }

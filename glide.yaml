@@ -35,3 +35,5 @@ import:
   version: 89fe3459b5c829c32e89bdff9c43f18aad728f2f
   subpackages:
   - fs
+- package: github.com/hashicorp/memberlist
+- package: golang.org/x/sync

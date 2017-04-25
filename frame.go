@@ -20,51 +20,59 @@ const (
 	DefaultRowLabel       = "id"
 	DefaultCacheType      = CacheTypeLRU
 	DefaultInverseEnabled = false
+
+	// Default ranked frame cache
+	DefaultCacheSize = 50000
 )
 
 // Frame represents a container for views.
 type Frame struct {
 	mu          sync.Mutex
 	path        string
-	db          string
+	index       string
 	name        string
 	timeQuantum TimeQuantum
 
 	views map[string]*View
 
-	// Bitmap attribute storage and cache
-	bitmapAttrStore *AttrStore
+	// Row attribute storage and cache
+	rowAttrStore *AttrStore
 
-	stats StatsClient
+	broadcaster Broadcaster
+	stats       StatsClient
 
 	// Frame settings.
 	rowLabel       string
 	cacheType      string
 	inverseEnabled bool
 
+	// Cache size for ranked frames
+	cacheSize uint32
+
 	LogOutput io.Writer
 }
 
 // NewFrame returns a new instance of frame.
-func NewFrame(path, db, name string) (*Frame, error) {
+func NewFrame(path, index, name string) (*Frame, error) {
 	err := ValidateName(name)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Frame{
-		path: path,
-		db:   db,
-		name: name,
+		path:  path,
+		index: index,
+		name:  name,
 
-		views:           make(map[string]*View),
-		bitmapAttrStore: NewAttrStore(filepath.Join(path, ".data")),
+		views:        make(map[string]*View),
+		rowAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
 		stats: NopStatsClient,
 
 		rowLabel:       DefaultRowLabel,
-		cacheType:      DefaultCacheType,
 		inverseEnabled: DefaultInverseEnabled,
+		cacheType:      DefaultCacheType,
+		cacheSize:      DefaultCacheSize,
 
 		LogOutput: ioutil.Discard,
 	}, nil
@@ -73,14 +81,14 @@ func NewFrame(path, db, name string) (*Frame, error) {
 // Name returns the name the frame was initialized with.
 func (f *Frame) Name() string { return f.name }
 
-// DB returns the database name the frame was initialized with.
-func (f *Frame) DB() string { return f.db }
+// Index returns the index name the frame was initialized with.
+func (f *Frame) Index() string { return f.index }
 
 // Path returns the path the frame was initialized with.
 func (f *Frame) Path() string { return f.path }
 
-// BitmapAttrStore returns the attribute storage.
-func (f *Frame) BitmapAttrStore() *AttrStore { return f.bitmapAttrStore }
+// RowAttrStore returns the attribute storage.
+func (f *Frame) RowAttrStore() *AttrStore { return f.rowAttrStore }
 
 // MaxSlice returns the max slice in the frame.
 func (f *Frame) MaxSlice() uint64 {
@@ -149,13 +157,43 @@ func (f *Frame) InverseEnabled() bool {
 	return f.inverseEnabled
 }
 
+// SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
+// defaults to DefaultCacheSize 50000
+func (f *Frame) SetCacheSize(v uint32) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Ignore if no change occurred.
+	if v == 0 || f.cacheSize == v {
+		return nil
+	}
+
+	// Persist meta data to disk on change.
+	f.cacheSize = v
+	if err := f.saveMeta(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// CacheSize returns the ranked frame cache size.
+func (f *Frame) CacheSize() uint32 {
+	f.mu.Lock()
+	v := f.cacheSize
+	f.mu.Unlock()
+	return v
+}
+
 // Options returns all options for this frame.
 func (f *Frame) Options() FrameOptions {
 	f.mu.Lock()
 	opt := FrameOptions{
 		RowLabel:       f.rowLabel,
-		CacheType:      f.cacheType,
 		InverseEnabled: f.inverseEnabled,
+		CacheType:      f.cacheType,
+		CacheSize:      f.cacheSize,
+		TimeQuantum:    f.timeQuantum,
 	}
 	f.mu.Unlock()
 	return opt
@@ -177,7 +215,7 @@ func (f *Frame) Open() error {
 			return err
 		}
 
-		if err := f.bitmapAttrStore.Open(); err != nil {
+		if err := f.rowAttrStore.Open(); err != nil {
 			return err
 		}
 
@@ -215,7 +253,7 @@ func (f *Frame) openViews() error {
 		if err := view.Open(); err != nil {
 			return fmt.Errorf("open view: view=%s, err=%s", view.Name(), err)
 		}
-		view.BitmapAttrStore = f.bitmapAttrStore
+		view.RowAttrStore = f.rowAttrStore
 		f.views[view.Name()] = view
 
 		f.stats.Count("maxSlice", 1)
@@ -226,7 +264,7 @@ func (f *Frame) openViews() error {
 
 // loadMeta reads meta data for the frame, if any.
 func (f *Frame) loadMeta() error {
-	var pb internal.Frame
+	var pb internal.FrameMeta
 
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
@@ -235,6 +273,7 @@ func (f *Frame) loadMeta() error {
 		f.rowLabel = DefaultRowLabel
 		f.cacheType = DefaultCacheType
 		f.inverseEnabled = DefaultInverseEnabled
+		f.cacheSize = DefaultCacheSize
 		return nil
 	} else if err != nil {
 		return err
@@ -248,6 +287,7 @@ func (f *Frame) loadMeta() error {
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
 	f.inverseEnabled = pb.InverseEnabled
+	f.cacheSize = pb.CacheSize
 
 	// Copy cache type.
 	f.cacheType = pb.CacheType
@@ -261,11 +301,12 @@ func (f *Frame) loadMeta() error {
 // saveMeta writes meta data for the frame.
 func (f *Frame) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.Frame{
-		TimeQuantum:    string(f.timeQuantum),
+	buf, err := proto.Marshal(&internal.FrameMeta{
 		RowLabel:       f.rowLabel,
-		CacheType:      f.cacheType,
 		InverseEnabled: f.inverseEnabled,
+		CacheType:      f.cacheType,
+		CacheSize:      f.cacheSize,
+		TimeQuantum:    string(f.timeQuantum),
 	})
 	if err != nil {
 		return err
@@ -285,8 +326,8 @@ func (f *Frame) Close() error {
 	defer f.mu.Unlock()
 
 	// Close the attribute store.
-	if f.bitmapAttrStore != nil {
-		_ = f.bitmapAttrStore.Close()
+	if f.rowAttrStore != nil {
+		_ = f.rowAttrStore.Close()
 	}
 
 	// Close all views.
@@ -370,17 +411,17 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 	if err := view.Open(); err != nil {
 		return nil, err
 	}
-	view.BitmapAttrStore = f.bitmapAttrStore
+	view.RowAttrStore = f.rowAttrStore
 	f.views[view.Name()] = view
 
 	return view, nil
 }
 
 func (f *Frame) newView(path, name string) *View {
-	view := NewView(path, f.db, f.name, name)
+	view := NewView(path, f.index, f.name, name, f.cacheSize)
 	view.cacheType = f.cacheType
 	view.LogOutput = f.LogOutput
-	view.BitmapAttrStore = f.bitmapAttrStore
+	view.RowAttrStore = f.rowAttrStore
 	view.stats = f.stats.WithTags(fmt.Sprintf("slice:%s", name))
 	return view
 }
@@ -470,17 +511,17 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 }
 
 // Import bulk imports data.
-func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) error {
+func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) error {
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
 	if hasTime(timestamps) && q == "" {
-		return errors.New("time quantum not set in either database or frame")
+		return errors.New("time quantum not set in either index or frame")
 	}
 
 	// Split import data by fragment.
 	dataByFragment := make(map[importKey]importData)
-	for i := range bitmapIDs {
-		bitmapID, profileID, timestamp := bitmapIDs[i], profileIDs[i], timestamps[i]
+	for i := range rowIDs {
+		rowID, columnID, timestamp := rowIDs[i], columnIDs[i], timestamps[i]
 
 		var standard, inverse []string
 		if timestamp == nil {
@@ -488,25 +529,28 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 			inverse = []string{ViewInverse}
 		} else {
 			standard = ViewsByTime(ViewStandard, *timestamp, q)
+			// In order to match the logic of `SetBit()`, we want bits
+			// with timestamps to write to both time and standard views.
+			standard = append(standard, ViewStandard)
 			inverse = ViewsByTime(ViewInverse, *timestamp, q)
 		}
 
 		// Attach bit to each standard view.
 		for _, name := range standard {
-			key := importKey{View: name, Slice: profileID / SliceWidth}
+			key := importKey{View: name, Slice: columnID / SliceWidth}
 			data := dataByFragment[key]
-			data.BitmapIDs = append(data.BitmapIDs, bitmapID)
-			data.ProfileIDs = append(data.ProfileIDs, profileID)
+			data.RowIDs = append(data.RowIDs, rowID)
+			data.ColumnIDs = append(data.ColumnIDs, columnID)
 			dataByFragment[key] = data
 		}
 
 		if f.inverseEnabled {
 			// Attach reversed bits to each inverse view.
 			for _, name := range inverse {
-				key := importKey{View: name, Slice: bitmapID / SliceWidth}
+				key := importKey{View: name, Slice: rowID / SliceWidth}
 				data := dataByFragment[key]
-				data.BitmapIDs = append(data.BitmapIDs, profileID)  // reversed
-				data.ProfileIDs = append(data.ProfileIDs, bitmapID) // reversed
+				data.RowIDs = append(data.RowIDs, columnID)    // reversed
+				data.ColumnIDs = append(data.ColumnIDs, rowID) // reversed
 				dataByFragment[key] = data
 			}
 		}
@@ -522,8 +566,8 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 		// Re-sort data for inverse views.
 		if IsInverseView(key.View) {
 			sort.Sort(importBitSet{
-				bitmapIDs:  data.BitmapIDs,
-				profileIDs: data.ProfileIDs,
+				rowIDs:    data.RowIDs,
+				columnIDs: data.ColumnIDs,
 			})
 		}
 
@@ -537,12 +581,35 @@ func (f *Frame) Import(bitmapIDs, profileIDs []uint64, timestamps []*time.Time) 
 			return err
 		}
 
-		if err := frag.Import(data.BitmapIDs, data.ProfileIDs); err != nil {
+		if err := frag.Import(data.RowIDs, data.ColumnIDs); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// encodeFrames converts a into its internal representation.
+func encodeFrames(a []*Frame) []*internal.Frame {
+	other := make([]*internal.Frame, len(a))
+	for i := range a {
+		other[i] = encodeFrame(a[i])
+	}
+	return other
+}
+
+// encodeFrame converts f into its internal representation.
+func encodeFrame(f *Frame) *internal.Frame {
+	return &internal.Frame{
+		Name: f.name,
+		Meta: &internal.FrameMeta{
+			RowLabel:       f.rowLabel,
+			InverseEnabled: f.inverseEnabled,
+			CacheType:      f.cacheType,
+			CacheSize:      f.cacheSize,
+			TimeQuantum:    string(f.timeQuantum),
+		},
+	}
 }
 
 type frameSlice []*Frame
@@ -565,23 +632,36 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
-	RowLabel       string `json:"rowLabel,omitempty"`
-	CacheType      string `json:"cacheType,omitempty"`
-	InverseEnabled bool   `json:"inverseEnabled,omitempty"`
+	RowLabel       string      `json:"rowLabel,omitempty"`
+	InverseEnabled bool        `json:"inverseEnabled,omitempty"`
+	CacheType      string      `json:"cacheType,omitempty"`
+	CacheSize      uint32      `json:"cacheSize,omitempty"`
+	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
+}
+
+// Encode converts o into its internal representation.
+func (o *FrameOptions) Encode() *internal.FrameMeta {
+	return &internal.FrameMeta{
+		RowLabel:       o.RowLabel,
+		InverseEnabled: o.InverseEnabled,
+		CacheType:      o.CacheType,
+		CacheSize:      o.CacheSize,
+		TimeQuantum:    string(o.TimeQuantum),
+	}
 }
 
 // importBitSet represents slices of row and column ids.
 // This is used to sort data during import.
 type importBitSet struct {
-	bitmapIDs, profileIDs []uint64
+	rowIDs, columnIDs []uint64
 }
 
 func (p importBitSet) Swap(i, j int) {
-	p.bitmapIDs[i], p.bitmapIDs[j] = p.bitmapIDs[j], p.bitmapIDs[i]
-	p.profileIDs[i], p.profileIDs[j] = p.profileIDs[j], p.profileIDs[i]
+	p.rowIDs[i], p.rowIDs[j] = p.rowIDs[j], p.rowIDs[i]
+	p.columnIDs[i], p.columnIDs[j] = p.columnIDs[j], p.columnIDs[i]
 }
-func (p importBitSet) Len() int           { return len(p.bitmapIDs) }
-func (p importBitSet) Less(i, j int) bool { return p.bitmapIDs[i] < p.bitmapIDs[j] }
+func (p importBitSet) Len() int           { return len(p.rowIDs) }
+func (p importBitSet) Less(i, j int) bool { return p.rowIDs[i] < p.rowIDs[j] }
 
 // Cache types.
 const (
