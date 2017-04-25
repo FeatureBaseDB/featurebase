@@ -150,7 +150,8 @@ em{
     margin-bottom: 30px;
 }
 .query,
-.output-container{
+.output-container,
+.status-container{
   width: 75%;
 }
 
@@ -206,7 +207,8 @@ em{
 
 .result-input,
 .result-output,
-.result-error{
+.result-error,
+.status{
   border-radius: 2px;
   background-color: #fafafa;
   border: solid 1.5px #e4eff4;
@@ -231,6 +233,9 @@ em{
   color: #fa3035;
 }
 
+.status{
+  white-space: pre;
+}
 
 .raw{
   height: 253px;
@@ -238,3 +243,10 @@ em{
   align-items: center;
   justify-content: center;
 }
+
+
+.string { color: green; }
+.number { color: darkorange; }
+.boolean { color: blue; }
+.null { color: magenta; }
+.key { color: red; }

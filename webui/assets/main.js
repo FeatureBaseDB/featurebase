@@ -186,6 +186,11 @@ function setNav(e) {
   interface_el = document.getElementById('interface-' + name)
   interface_el.classList.add("interface-active")
 
+  // hack hack
+  if(name == "cluster") {
+    update_cluster_status()
+  }
+
   // toggle svgs
   // show all inactive images
   inactive_images = document.getElementsByClassName("nav-image")
@@ -215,6 +220,18 @@ function setNav(e) {
 
 }
 
+
+function update_cluster_status() {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/status')
+  status_node = document.getElementById('status')
+  time_node = document.getElementById('status-time')
+  xhr.onload = function() {
+    status_formatted = JSON.stringify(JSON.parse(xhr.responseText), null, 4)
+    status_node.innerHTML = status_formatted
+  }
+  xhr.send(null)
+}
 
 const input = document.getElementById('query')
 const output = document.getElementById('outputs')
