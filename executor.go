@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/adapter"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
@@ -41,6 +42,7 @@ type Executor struct {
 func NewExecutor() *Executor {
 	return &Executor{
 		HTTPClient: http.DefaultClient,
+		//	PluginRegistry: NewPluginRegistry(),
 	}
 }
 
@@ -151,8 +153,10 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return nil, e.executeSetColumnAttrs(ctx, index, c, opt)
 	case "TopN":
 		return e.executeTopN(ctx, index, c, slices, opt)
-	default:
+	case "Bitmap", "Difference", "Intersect", "Range", "Union":
 		return e.executeBitmapCall(ctx, index, c, slices, opt)
+	default:
+		return e.executeExternalCall(ctx, index, c, slices, opt)
 	}
 }
 
@@ -251,6 +255,89 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 	default:
 		return nil, fmt.Errorf("unknown call: %s", c.Name)
 	}
+}
+
+// executeExternalCall executes an external plugin call.
+func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
+	// Create plugin from registry for the reduction.
+	p, err := e.newPlugin(c)
+	if err != nil {
+		return nil, err
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(slice uint64) (interface{}, error) {
+		return e.executeExternalCallSlice(ctx, db, c, slice)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		return p.Reduce(ctx, prev, v)
+	}
+
+	other, err := e.mapReduce(ctx, db, slices, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+
+	return other, nil
+}
+
+// executeExternalCallSlice executes the map phase of an external plugin call against a single slice.
+func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (interface{}, error) {
+	p, err := e.newPlugin(c)
+	if err != nil {
+		return nil, err
+	}
+
+	// Evaluate children.
+	children := make([]interface{}, len(c.Children))
+	for i, child := range c.Children {
+		ret, err := e.executeCallSlice(ctx, db, child, slice)
+		if err != nil {
+			return nil, err
+		}
+		children[i] = ret
+	}
+
+	// Copy arguments.
+	args := make(map[string]interface{}, len(c.Args))
+	for k, v := range c.Args {
+		args[k] = v
+	}
+
+	return p.Map(ctx, db, children, args, slice)
+}
+
+func (e *Executor) executeCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (interface{}, error) {
+	switch c.Name {
+	case "Bitmap", "Difference", "Intersect", "Range", "Union":
+		return e.executeBitmapCallSlice(ctx, db, c, slice)
+	case "Count":
+		//	return e.executeCountSlice(ctx, db, c, slice)
+		return nil, errors.New("Count in Plugin not currently supported")
+	case "TopN":
+		return nil, errors.New("nested TopN() not currently supported")
+	default:
+		return e.executeExternalCallSlice(ctx, db, c, slice)
+	}
+}
+
+// newPlugin instantiates a plugin from an external call.
+func (e *Executor) newPlugin(c *pql.Call) (adapter.Plugin, error) {
+	p, err := adapter.NewPlugin(c.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set index on plugin if method exists.
+	if p, ok := p.(interface {
+		SetIndex(*Index)
+	}); ok {
+		p.SetIndex(e.Index)
+	}
+
+	return p, nil
 }
 
 // executeTopN executes a TopN() call.

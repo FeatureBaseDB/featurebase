@@ -1,4 +1,5 @@
 default.etcd/
 *.test
+*.so
 vendor
 .protoc-gen-gofast
