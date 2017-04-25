@@ -242,6 +242,7 @@ func (s *Server) monitorMaxSlices() {
 	}
 }
 
+// ReceiveMessage represents an implementation of BroadcastHandler.
 func (s *Server) ReceiveMessage(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.CreateSliceMessage:

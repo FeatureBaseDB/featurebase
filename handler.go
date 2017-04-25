@@ -116,6 +116,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	status, err := h.StatusHandler.ClusterStatus()
 	if err != nil {
@@ -125,7 +126,7 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(getStatusResponse{
 		Status: status,
 	}); err != nil {
-		h.logger().Printf("Node State Error: %s", err)
+		h.logger().Printf("write status response error: %s", err)
 	}
 }
 
