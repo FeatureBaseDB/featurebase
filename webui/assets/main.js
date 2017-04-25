@@ -93,11 +93,22 @@ class REPL {
     createSingleOutput(res) {
       var node = document.createElement("div");
       node.classList.add('output');
+      var output_string = res['output']
+      var output_json = JSON.parse(output_string)
       var result_class = "result-output"
-      var output = JSON.parse(res['output'])
-      if("error" in output) {
+
+      if("error" in output_json) {
         result_class = "result-error"
+        if(output_json['error'] == 'database not found') {  // TODO db->index
+          output_string = `Error: index not found<br />
+          $ curl -XPOST "http://127.0.0.1:10101/db/test" -d '{"options": {"columnLabel": "col"}}' # create a database<br />
+          $ curl -XPOST "http://127.0.0.1:10101/db/test/frame/foo" -d '{"options": {"rowLabel": "row"}}' # create a frame<br />
+          SetBit(row=0, col=0, frame=foo) # Use PQL to set a bit
+          `
+        }
       }
+
+
       var markup =`
         <div  class="panes">
           <div class="pane active">
@@ -118,7 +129,7 @@ class REPL {
                 <em>${res.querytime_ms} ms</em>
               </div>
               <div class="${result_class}">
-                ${res.output}
+                ${output_string}
               </div>
             </div>
           </div>
