@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -42,10 +41,6 @@ type Server struct {
 	Host    string
 	Cluster *Cluster
 
-	// External plugins.
-	PluginPath     string
-	PluginRegistry PluginRegistry
-
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
 	PollingInterval     time.Duration
@@ -61,7 +56,7 @@ func NewServer() *Server {
 		Index:   NewIndex(),
 		Handler: NewHandler(),
 
-		PluginRegistry: NewPluginRegistry(),
+		//PluginRegistry: NewPluginRegistry(),
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
@@ -103,16 +98,17 @@ func (s *Server) Open() error {
 	if err := s.Index.Open(); err != nil {
 		return err
 	}
-
-	// Load plugins.
-	if err := s.loadPlugins(); err != nil {
-		return err
-	}
+	/*
+		// Load plugins.
+		if err := s.loadPlugins(); err != nil {
+			return err
+		}
+	*/
 
 	// Create executor for executing queries.
 	e := NewExecutor()
 	e.Index = s.Index
-	e.PluginRegistry = s.PluginRegistry
+	//e.PluginRegistry = s.PluginRegistry
 	e.Host = s.Host
 	e.Cluster = s.Cluster
 
@@ -130,38 +126,6 @@ func (s *Server) Open() error {
 	s.wg.Add(2)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
-
-	return nil
-}
-
-// loadPlugins reads plugins found in the plugins directory.
-func (s *Server) loadPlugins() error {
-	// Ignore if plugin path is not set.
-	if s.PluginPath == "" {
-		return nil
-	}
-
-	// Open plugin directory to read contents.
-	f, err := os.Open(s.PluginPath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// Read each file and load every non-directory file.
-	fis, err := f.Readdir(-1)
-	if err != nil {
-		return err
-	}
-	for _, fi := range fis {
-		if fi.IsDir() {
-			continue
-		}
-
-		if err := s.PluginRegistry.Load(filepath.Join(s.PluginPath, fi.Name())); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }

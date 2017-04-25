@@ -8,6 +8,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/adapter"
 	"github.com/pilosa/pilosa/pql"
 )
 
@@ -283,7 +284,7 @@ func TestExecutor_Execute_ExternalCall(t *testing.T) {
 
 	// Initialize executor with two plugins.
 	e := NewExecutor(idx.Index, NewCluster(1))
-	e.PluginRegistry.Register("test1", func() pilosa.Plugin {
+	adapter.RegisterPlugin("test1", func() adapter.Plugin {
 		return &MockPlugin{
 			MapFn: func(ctx context.Context, db string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
 				bm := children[0].(*pilosa.Bitmap)

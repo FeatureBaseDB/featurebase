@@ -36,9 +36,8 @@ func init() {
 
 // Configuration defaults.
 const (
-	DefaultDataDir    = "~/.pilosa/data"
-	DefaultPluginsDir = "~/.pilosa/plugins"
-	DefaultHost       = "localhost:15000"
+	DefaultDataDir = "~/.pilosa/data"
+	DefaultHost    = "localhost:15000"
 )
 
 func main() {
@@ -144,9 +143,6 @@ func (m *Main) Run(args ...string) error {
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
 
-	// Set plugins directory.
-	m.Server.PluginPath = m.Config.Plugins.Path
-
 	// Initialize server.
 	if err := m.Server.Open(); err != nil {
 		return err
@@ -186,14 +182,6 @@ func (m *Main) ParseFlags(args []string) error {
 	}
 	if err := ExpandPath(&m.Config.DataDir); err != nil {
 		return fmt.Errorf("cannot expand data directory: %s", err)
-	}
-
-	// Use default plugins directory if one is not specified.
-	if m.Config.Plugins.Path == "" {
-		m.Config.Plugins.Path = DefaultPluginsDir
-	}
-	if err := ExpandPath(&m.Config.Plugins.Path); err != nil {
-		return fmt.Errorf("cannot expand plugins directory: %s", err)
 	}
 
 	return nil

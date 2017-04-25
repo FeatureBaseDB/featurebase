@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/adapter"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
@@ -29,16 +30,13 @@ type Executor struct {
 
 	// Client used for remote HTTP requests.
 	HTTPClient *http.Client
-
-	// Lookup of registered plugins.
-	PluginRegistry PluginRegistry
 }
 
 // NewExecutor returns a new instance of Executor.
 func NewExecutor() *Executor {
 	return &Executor{
-		HTTPClient:     http.DefaultClient,
-		PluginRegistry: NewPluginRegistry(),
+		HTTPClient: http.DefaultClient,
+		//	PluginRegistry: NewPluginRegistry(),
 	}
 }
 
@@ -234,8 +232,8 @@ func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *p
 }
 
 // newPlugin instantiates a plugin from an external call.
-func (e *Executor) newPlugin(c *pql.Call) (Plugin, error) {
-	p, err := e.PluginRegistry.NewPlugin(c.Name)
+func (e *Executor) newPlugin(c *pql.Call) (adapter.Plugin, error) {
+	p, err := adapter.NewPlugin(c.Name)
 	if err != nil {
 		return nil, err
 	}

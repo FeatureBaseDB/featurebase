@@ -1,4 +1,4 @@
-package main
+package plugins
 
 import (
 	"bytes"
@@ -6,22 +6,29 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/adapter"
 )
 
 // Init is the entry point into the shared object to register any plugins.
+/*
 func Init(r pilosa.Registry) error {
 	if err := r.Register("Debug", NewDebugPlugin); err != nil {
 		return err
 	}
 	return nil
 }
+*/
+
+func init() {
+	fmt.Println("REGSTER DEBUG")
+	adapter.RegisterPlugin("Debug", NewDebugPlugin)
+}
 
 // DebugPlugin represents a plugin that will print args to stderr.
 type DebugPlugin struct{}
 
 // NewDebugPlugin returns a new instance of DebugPlugin.
-func NewDebugPlugin() pilosa.Plugin {
+func NewDebugPlugin() adapter.Plugin {
 	return &DebugPlugin{}
 }
 

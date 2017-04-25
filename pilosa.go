@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/pilosa/pilosa/internal"
+	_ "github.com/pilosa/pilosa/plugins"
 )
 
 var (
