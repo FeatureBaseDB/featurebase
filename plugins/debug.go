@@ -9,18 +9,7 @@ import (
 	"github.com/pilosa/pilosa/adapter"
 )
 
-// Init is the entry point into the shared object to register any plugins.
-/*
-func Init(r pilosa.Registry) error {
-	if err := r.Register("Debug", NewDebugPlugin); err != nil {
-		return err
-	}
-	return nil
-}
-*/
-
 func init() {
-	fmt.Println("REGSTER DEBUG")
 	adapter.RegisterPlugin("Debug", NewDebugPlugin)
 }
 
