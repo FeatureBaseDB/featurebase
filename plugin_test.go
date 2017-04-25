@@ -29,7 +29,7 @@ func TestPlugin(t *testing.T) {
 
 	// Execute map function.
 	// This simply prints out against STDERR to verify that args can be passed.
-	p.Map(context.Background(), "d", []interface{}{uint64(200)}, map[string]interface{}{"foo": "bar"}, 100)
+	p.Map(context.Background(), "i", []interface{}{uint64(200)}, map[string]interface{}{"foo": "bar"}, 100)
 }
 
 // MockPlugin represents a plugin that is implemented as mockable functions.

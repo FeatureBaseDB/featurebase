@@ -331,11 +331,13 @@ func (e *Executor) newPlugin(c *pql.Call) (adapter.Plugin, error) {
 	}
 
 	// Set index on plugin if method exists.
+	/* TODO What is this?
 	if p, ok := p.(interface {
 		SetIndex(*Index)
 	}); ok {
 		p.SetIndex(e.Index)
 	}
+	*/
 
 	return p, nil
 }
