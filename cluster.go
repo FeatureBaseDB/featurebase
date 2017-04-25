@@ -13,8 +13,10 @@ const (
 
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
+)
 
-	// NodeState represents node state returned in /status endpoint for a node in the cluster.
+// NodeState represents node state returned in /status endpoint for a node in the cluster.
+const (
 	NodeStateUp   = "UP"
 	NodeStateDown = "DOWN"
 )

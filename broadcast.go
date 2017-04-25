@@ -92,6 +92,7 @@ func (n *nopBroadcastReceiver) Start(b BroadcastHandler) error { return nil }
 // NopBroadcastReceiver is a no op implementation of the BroadcastReceiver
 var NopBroadcastReceiver = &nopBroadcastReceiver{}
 
+// Broadcast message types
 const (
 	MessageTypeCreateSlice = 1
 	MessageTypeCreateIndex = 2
