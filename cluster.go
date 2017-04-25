@@ -152,7 +152,7 @@ func (c *Cluster) NodeStates() map[string]string {
 	return h
 }
 
-// State returns the internal ClusterState representation.
+// Status returns the internal ClusterState representation.
 func (c *Cluster) Status() *internal.ClusterStatus {
 	return &internal.ClusterStatus{
 		Nodes: encodeClusterStatus(c.Nodes),
