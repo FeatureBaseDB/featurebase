@@ -22,13 +22,12 @@ import (
 
 // Ensure the handler returns "not found" for invalid paths.
 func TestHandler_NotFound(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	h := NewHandler()
-	h.Index = idx.Index
-
 	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/no_such_path", nil))
@@ -215,7 +214,7 @@ func TestHandler_Query_Args_Err(t *testing.T) {
 	h := NewHandler()
 	h.Cluster = NewCluster(1)
 	h.Holder = hldr.Holder
-	
+
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/idx0/query?slices=a,b", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
@@ -459,7 +458,7 @@ func TestHandler_Query_Pairs_JSON(t *testing.T) {
 }
 
 // Ensure the handler can execute a query that returns pairs as protobuf.
-func TestHandler_Query_Pairs_Protobuf(t *testing.T) {	
+func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
 
@@ -555,12 +554,12 @@ func TestHandler_Query_MethodNotAllowed(t *testing.T) {
 
 // Ensure the handler returns an error if there is a parsing error..
 func TestHandler_Query_ErrParse(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	h := NewHandler()
-	h.Index = idx.Index
 	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("bad_fn(")))
 	if w.Code != http.StatusBadRequest {
@@ -823,12 +822,12 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 
 // Ensure the handler can retrieve the version.
 func TestHandler_Version(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	h := NewHandler()
-	h.Index = idx.Index
 	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 
 	w := httptest.NewRecorder()
 	r := MustNewHTTPRequest("GET", "/version", nil)
@@ -842,11 +841,11 @@ func TestHandler_Version(t *testing.T) {
 
 // Ensure the handler can return a list of nodes for a fragment.
 func TestHandler_Fragment_Nodes(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	h := NewHandler()
-	h.Index = idx.Index
+	h.Holder = hldr.Holder
 	h.Cluster = NewCluster(3)
 	h.Cluster.ReplicaN = 2
 
@@ -862,12 +861,12 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 
 // Ensure the handler can return expvars without panicking.
 func TestHandler_Expvars(t *testing.T) {
-	idx := MustOpenIndex()
-	defer idx.Close()
+	hldr := MustOpenHolder()
+	defer hldr.Close()
 
 	h := NewHandler()
-	h.Index = idx.Index
 	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	r := MustNewHTTPRequest("GET", "/debug/vars", nil)
 	h.ServeHTTP(w, r)
