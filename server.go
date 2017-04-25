@@ -247,7 +247,10 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 		idx.SetRemoteMaxSlice(obj.Slice)
 	case *internal.CreateIndexMessage:
-		opt := IndexOptions{ColumnLabel: obj.Meta.ColumnLabel}
+		opt := IndexOptions{
+			ColumnLabel: obj.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(obj.Meta.TimeQuantum),
+		}
 		_, err := s.Holder.CreateIndex(obj.Index, opt)
 		if err != nil {
 			return err
@@ -258,7 +261,13 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 	case *internal.CreateFrameMessage:
 		index := s.Holder.Index(obj.Index)
-		opt := FrameOptions{RowLabel: obj.Meta.RowLabel}
+		opt := FrameOptions{
+			RowLabel:       obj.Meta.RowLabel,
+			InverseEnabled: obj.Meta.InverseEnabled,
+			CacheType:      obj.Meta.CacheType,
+			CacheSize:      obj.Meta.CacheSize,
+			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
+		}
 		_, err := index.CreateFrame(obj.Frame, opt)
 		if err != nil {
 			return err
