@@ -9,10 +9,10 @@ const (
 	// DefaultPort is the default port use with the hostname.
 	DefaultPort = "10101"
 
-	// DefaultClusterType sets the node intercommunication method
+	// DefaultClusterType sets the node intercommunication method.
 	DefaultClusterType = "static"
 
-	// DefaultInternalPort the port the nodes intercommunicate on
+	// DefaultInternalPort the port the nodes intercommunicate on.
 	DefaultInternalPort = "14000"
 )
 

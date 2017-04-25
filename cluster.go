@@ -127,7 +127,7 @@ func NewCluster() *Cluster {
 	}
 }
 
-// NodeSetHosts returns the list of host strings for NodeSet members
+// NodeSetHosts returns the list of host strings for NodeSet members.
 func (c *Cluster) NodeSetHosts() []string {
 	if c.NodeSet == nil {
 		return []string{}
@@ -154,7 +154,7 @@ func (c *Cluster) NodeStates() map[string]string {
 	return h
 }
 
-// Status returns the internal ClusterState representation.
+// Status returns the internal ClusterStatus representation.
 func (c *Cluster) Status() *internal.ClusterStatus {
 	return &internal.ClusterStatus{
 		Nodes: encodeClusterStatus(c.Nodes),

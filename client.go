@@ -315,7 +315,7 @@ func (c *Client) Import(ctx context.Context, index, frame string, slice uint64, 
 	return nil
 }
 
-// MarshalImportPayload marshalls the import parameters into a protobuf byte slice
+// MarshalImportPayload marshalls the import parameters into a protobuf byte slice.
 func MarshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	rowIDs := Bits(bits).RowIDs()

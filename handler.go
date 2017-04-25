@@ -58,7 +58,7 @@ func NewHandler() *Handler {
 	return handler
 }
 
-// NewRouter creates a Gorilla Mus http router
+// NewRouter creates a Gorilla Mux http router.
 func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")

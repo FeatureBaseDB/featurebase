@@ -17,27 +17,27 @@ type NodeSet interface {
 	Open() error
 }
 
-// StaticNodeSet represents a basic NodeSet for testing
+// StaticNodeSet represents a basic NodeSet for testing.
 type StaticNodeSet struct {
 	nodes []*Node
 }
 
-// NewStaticNodeSet creates a static nodeset
+// NewStaticNodeSet creates a statically defined NodeSet.
 func NewStaticNodeSet() *StaticNodeSet {
 	return &StaticNodeSet{}
 }
 
-// Nodes implements the NodeSet interface and returns a list of nodes in the cluster
+// Nodes implements the NodeSet interface and returns a list of nodes in the cluster.
 func (s *StaticNodeSet) Nodes() []*Node {
 	return s.nodes
 }
 
-// Open implements the NodeSet interface to start network activity, but is a nop
+// Open implements the NodeSet interface to start network activity, but for a static NodeSet it does nothing.
 func (s *StaticNodeSet) Open() error {
 	return nil
 }
 
-// Join add nodes from the cluster to the NodeSet
+// Join sets the NodeSet nodes to the slices of Nodes passed in.
 func (s *StaticNodeSet) Join(nodes []*Node) error {
 	s.nodes = nodes
 	return nil
@@ -89,10 +89,10 @@ type nopBroadcastReceiver struct{}
 
 func (n *nopBroadcastReceiver) Start(b BroadcastHandler) error { return nil }
 
-// NopBroadcastReceiver is a no op implementation of the BroadcastReceiver
+// NopBroadcastReceiver is a no-op implementation of the BroadcastReceiver.
 var NopBroadcastReceiver = &nopBroadcastReceiver{}
 
-// Broadcast message types
+// Broadcast message types.
 const (
 	MessageTypeCreateSlice = 1
 	MessageTypeCreateIndex = 2
@@ -101,7 +101,7 @@ const (
 	MessageTypeDeleteFrame = 5
 )
 
-// MarshalMessage encodes the protobuf message into a byte slice
+// MarshalMessage encodes the protobuf message into a byte slice.
 func MarshalMessage(m proto.Message) ([]byte, error) {
 	var typ uint8
 	switch obj := m.(type) {
@@ -125,7 +125,7 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 	return append([]byte{typ}, buf...), nil
 }
 
-// UnmarshalMessage decodes the byte slice into a protobuf message
+// UnmarshalMessage decodes the byte slice into a protobuf message.
 func UnmarshalMessage(buf []byte) (proto.Message, error) {
 	typ, buf := buf[0], buf[1:]
 

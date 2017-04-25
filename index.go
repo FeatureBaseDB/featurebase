@@ -250,7 +250,7 @@ func (i *Index) MaxSlice() uint64 {
 	return max
 }
 
-// SetRemoteMaxSlice sets the remote max slice value received from another node
+// SetRemoteMaxSlice sets the remote max slice value received from another node.
 func (i *Index) SetRemoteMaxSlice(newmax uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -274,7 +274,7 @@ func (i *Index) MaxInverseSlice() uint64 {
 	return max
 }
 
-// SetRemoteMaxInverseSlice sets the remote max inverse slice value received from another node
+// SetRemoteMaxInverseSlice sets the remote max inverse slice value received from another node.
 func (i *Index) SetRemoteMaxInverseSlice(v uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()

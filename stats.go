@@ -12,7 +12,7 @@ func init() {
 	NopStatsClient = &nopStatsClient{}
 }
 
-// Expvar Global expvar map.
+// Expvar global expvar map.
 var Expvar = expvar.NewMap("index")
 
 // StatsClient represents a client to a stats server.
