@@ -143,8 +143,13 @@ class REPL {
         var schema = JSON.parse(xhr.responseText)
         for(var i=0; i<schema['dbs'].length; i++) { // TODO db->index
           var opt = document.createElement('option')
+          opt.value = i+1
           opt.innerHTML = schema['dbs'][i]['name']
           select.appendChild(opt)
+        }
+        // set the active option to one of the populated options, instead of invalid "Index"
+        if(i > 0) {
+          select.value = 1;
         }
       }
       xhr.send(null)
