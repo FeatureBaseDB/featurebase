@@ -96,15 +96,20 @@ class REPL {
       var output_string = res['output']
       var output_json = JSON.parse(output_string)
       var result_class = "result-output"
+      var getting_started_errors = [
+        'database not found',  // TODO db->index
+        'frame not found',
+      ]
 
       if("error" in output_json) {
         result_class = "result-error"
-        if(output_json['error'] == 'database not found') {  // TODO db->index
-          output_string = `Error: index not found<br />
+        if(getting_started_errors.indexOf(output_json['error']) >= 0) {  
+          output_string += `<br />
           <br />
           Just getting started? Try this:<br />
-          $ curl -XPOST "http://127.0.0.1:10101/db/test" -d '{"options": {"columnLabel": "col"}}' # create a database<br />
-          $ curl -XPOST "http://127.0.0.1:10101/db/test/frame/foo" -d '{"options": {"rowLabel": "row"}}' # create a frame<br />
+          $ curl -XPOST "http://127.0.0.1:10101/db/test" -d '{"options": {"columnLabel": "col"}}' # create index "test"<br />
+          $ curl -XPOST "http://127.0.0.1:10101/db/test/frame/foo" -d '{"options": {"rowLabel": "row"}}' # create frame "foo"<br />
+          # Select "test" in the index dropdown above<br />
           SetBit(row=0, col=0, frame=foo) # Use PQL to set a bit
           `
         }
