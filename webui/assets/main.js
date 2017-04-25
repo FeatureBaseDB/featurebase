@@ -101,6 +101,8 @@ class REPL {
         result_class = "result-error"
         if(output_json['error'] == 'database not found') {  // TODO db->index
           output_string = `Error: index not found<br />
+          <br />
+          Just getting started? Try this:<br />
           $ curl -XPOST "http://127.0.0.1:10101/db/test" -d '{"options": {"columnLabel": "col"}}' # create a database<br />
           $ curl -XPOST "http://127.0.0.1:10101/db/test/frame/foo" -d '{"options": {"rowLabel": "row"}}' # create a frame<br />
           SetBit(row=0, col=0, frame=foo) # Use PQL to set a bit
