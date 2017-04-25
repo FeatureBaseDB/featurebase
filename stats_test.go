@@ -135,6 +135,38 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 	}
 }
 
+func TestStatsCount_CreateIndex(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
+
+	called := false
+	e := NewExecutor(hldr.Holder, NewCluster(1))
+	idx := e.Holder.Index("d")
+	if idx == nil {
+		t.Fatal("index not found")
+	}
+
+	e.Holder.Stats = &MockStats{
+		mockCount: func(name string, value int64) {
+			if name != "createIndex" {
+				t.Errorf("Expected createIndex, Results %s", name)
+			}
+
+			called = true
+			return
+		},
+	}
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetColumnAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Error("Count isn't called")
+	}
+}
+
 type MockStats struct {
 	mockCount         func(name string, value int64)
 	mockCountWithTags func(name string, value int64, tags []string)

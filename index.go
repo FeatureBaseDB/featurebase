@@ -164,8 +164,6 @@ func (i *Index) openFrames() error {
 			return fmt.Errorf("open frame: name=%s, err=%s", fr.Name(), err)
 		}
 		i.frames[fr.Name()] = fr
-
-		i.Stats.Count("frameN", 1)
 	}
 	return nil
 }
@@ -405,7 +403,7 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	// Add to index's frame lookup.
 	i.frames[name] = f
 
-	i.Stats.Count("frameN", 1)
+	i.Stats.Count("createFrame", 1)
 
 	return f, nil
 }
@@ -445,7 +443,7 @@ func (i *Index) DeleteFrame(name string) error {
 	// Remove reference.
 	delete(i.frames, name)
 
-	i.Stats.Count("frameN", -1)
+	i.Stats.Count("deleteFrame", 1)
 
 	return nil
 }

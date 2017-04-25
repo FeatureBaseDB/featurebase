@@ -94,8 +94,6 @@ func (h *Holder) Open() error {
 			return fmt.Errorf("open index: name=%s, err=%s", index.Name(), err)
 		}
 		h.indexes[index.Name()] = index
-
-		h.Stats.Count("indexN", 1)
 	}
 
 	// Periodically flush cache.
@@ -233,8 +231,8 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	index.SetTimeQuantum(opt.TimeQuantum)
 
 	h.indexes[index.Name()] = index
-
-	h.Stats.Count("indexN", 1)
+	fmt.Println("HERE")
+	h.Stats.Count("createIndex", 1)
 
 	return index, nil
 }
@@ -274,7 +272,7 @@ func (h *Holder) DeleteIndex(name string) error {
 	// Remove reference.
 	delete(h.indexes, name)
 
-	h.Stats.Count("indexN", -1)
+	h.Stats.Count("deleteIndex", 1)
 
 	return nil
 }
