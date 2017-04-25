@@ -282,18 +282,13 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 func (s *Server) LocalStatus() (proto.Message, error) {
 	if s.Holder == nil {
-		return nil, errors.New("Server.Holder is nil.")
+		return nil, errors.New("Server.Holder is nil")
 	}
 	return &internal.NodeStatus{
 		Host:    s.Host,
 		State:   NodeStateUp,
 		Indexes: encodeIndexes(s.Holder.Indexes()),
-
-	ns := internal.NodeState{
-	}
-
-	s.Cluster.SetNodeState(&ns)
-	return &ns, nil
+	}, nil
 }
 
 // ClusterStatus returns the NodeState for all nodes in the cluster.

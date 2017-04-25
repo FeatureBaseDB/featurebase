@@ -3,7 +3,6 @@ package pilosa
 import (
 	"encoding/binary"
 	"hash/fnv"
-	"sync"
 
 	"github.com/pilosa/pilosa/internal"
 )

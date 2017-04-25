@@ -920,7 +920,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	if err := idx.ColumnAttrStore().SetAttrs(id, attrs); err != nil {
 		return err
 	}
-	d.Stats.Count("SetProfileAttrs", 1)
+	idx.Stats.Count("SetProfileAttrs", 1)
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
 		return nil

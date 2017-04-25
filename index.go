@@ -44,7 +44,7 @@ type Index struct {
 	columnAttrStore *AttrStore
 
 	broadcaster Broadcaster
-	stats       StatsClient
+	Stats       StatsClient
 
 	LogOutput io.Writer
 }
@@ -68,7 +68,7 @@ func NewIndex(path, name string) (*Index, error) {
 
 		columnLabel: DefaultColumnLabel,
 
-		stats:     NopStatsClient,
+		Stats:     NopStatsClient,
 		LogOutput: ioutil.Discard,
 	}, nil
 }
@@ -165,7 +165,7 @@ func (i *Index) openFrames() error {
 		}
 		i.frames[fr.Name()] = fr
 
-		i.stats.Count("frameN", 1)
+		i.Stats.Count("frameN", 1)
 	}
 	return nil
 }
@@ -405,7 +405,7 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	// Add to index's frame lookup.
 	i.frames[name] = f
 
-	i.stats.Count("frameN", 1)
+	i.Stats.Count("frameN", 1)
 
 	return f, nil
 }
@@ -416,7 +416,7 @@ func (i *Index) newFrame(path, name string) (*Frame, error) {
 		return nil, err
 	}
 	f.LogOutput = i.LogOutput
-	f.stats = i.stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.Stats = i.Stats.WithTags(fmt.Sprintf("frame:%s", name))
 	f.broadcaster = i.broadcaster
 	return f, nil
 }
@@ -445,7 +445,7 @@ func (i *Index) DeleteFrame(name string) error {
 	// Remove reference.
 	delete(i.frames, name)
 
-	i.stats.Count("frameN", -1)
+	i.Stats.Count("frameN", -1)
 
 	return nil
 }

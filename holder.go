@@ -245,7 +245,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 		return nil, err
 	}
 	index.LogOutput = h.LogOutput
-	index.stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
+	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.Broadcaster
 	return index, nil
 }
