@@ -138,18 +138,8 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 func TestStatsCount_CreateIndex(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
-
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
-
 	called := false
-	e := NewExecutor(hldr.Holder, NewCluster(1))
-	idx := e.Holder.Index("d")
-	if idx == nil {
-		t.Fatal("index not found")
-	}
-
-	e.Holder.Stats = &MockStats{
+	hldr.Holder.Stats = &MockStats{
 		mockCount: func(name string, value int64) {
 			if name != "createIndex" {
 				t.Errorf("Expected createIndex, Results %s", name)
@@ -159,9 +149,81 @@ func TestStatsCount_CreateIndex(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetColumnAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
-		t.Fatal(err)
+	hldr.CreateIndexIfNotExists("d", pilosa.IndexOptions{})
+	if !called {
+		t.Error("Count isn't called")
 	}
+}
+
+func TestStatsCount_DeleteIndex(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	called := false
+	hldr.CreateIndexIfNotExists("d", pilosa.IndexOptions{})
+	hldr.Holder.Stats = &MockStats{
+		mockCount: func(name string, value int64) {
+			if name != "deleteIndex" {
+				t.Errorf("Expected deleteIndex, Results %s", name)
+			}
+
+			called = true
+			return
+		},
+	}
+	hldr.DeleteIndex("d")
+	if !called {
+		t.Error("Count isn't called")
+	}
+}
+
+func TestStatsCount_CreateFrame(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	called := false
+	hldr.CreateIndexIfNotExists("d", pilosa.IndexOptions{})
+	e := NewExecutor(hldr.Holder, NewCluster(1))
+	idx := e.Holder.Index("d")
+	if idx == nil {
+		t.Fatal("index not found")
+	}
+	idx.Stats = &MockStats{
+		mockCount: func(name string, value int64) {
+			if name != "createFrame" {
+				t.Errorf("Expected createFrame, Results %s", name)
+			}
+
+			called = true
+			return
+		},
+	}
+	idx.CreateFrameIfNotExists("test", pilosa.FrameOptions{})
+	if !called {
+		t.Error("Count isn't called")
+	}
+}
+
+func TestStatsCount_DeleteFrame(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	called := false
+	hldr.CreateIndexIfNotExists("d", pilosa.IndexOptions{})
+	e := NewExecutor(hldr.Holder, NewCluster(1))
+	idx := e.Holder.Index("d")
+	if idx == nil {
+		t.Fatal("index not found")
+	}
+	idx.CreateFrameIfNotExists("test", pilosa.FrameOptions{})
+	idx.Stats = &MockStats{
+		mockCount: func(name string, value int64) {
+			if name != "deleteFrame" {
+				t.Errorf("Expected deleteFrame, Results %s", name)
+			}
+
+			called = true
+			return
+		},
+	}
+	idx.DeleteFrame("test")
 	if !called {
 		t.Error("Count isn't called")
 	}

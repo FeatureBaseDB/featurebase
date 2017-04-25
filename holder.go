@@ -231,7 +231,6 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	index.SetTimeQuantum(opt.TimeQuantum)
 
 	h.indexes[index.Name()] = index
-	fmt.Println("HERE")
 	h.Stats.Count("createIndex", 1)
 
 	return index, nil
