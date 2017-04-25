@@ -136,7 +136,7 @@ class REPL {
 
     populate_index_dropdown() {
       var xhr = new XMLHttpRequest();
-      xhr.open('GET', '/schema')
+      xhr.open('GET', '/schema')  // TODO schema->status (?)
       var select = document.getElementById('index-dropdown')
 
       xhr.onload = function() {
