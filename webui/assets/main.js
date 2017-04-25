@@ -229,9 +229,19 @@ function update_cluster_status() {
   xhr.onload = function() {
     status_formatted = JSON.stringify(JSON.parse(xhr.responseText), null, 4)
     status_node.innerHTML = status_formatted
+    time_node.innerHTML = new Date().today() + " " + new Date().timeNow()
   }
   xhr.send(null)
 }
+
+Date.prototype.today = function () { 
+    return this.getFullYear() +"/"+ (((this.getMonth()+1) < 10)?"0":"") + (this.getMonth()+1) +"/"+ ((this.getDate() < 10)?"0":"") + this.getDate();
+}
+
+Date.prototype.timeNow = function () {
+     return ((this.getHours() < 10)?"0":"") + this.getHours() +":"+ ((this.getMinutes() < 10)?"0":"") + this.getMinutes() +":"+ ((this.getSeconds() < 10)?"0":"") + this.getSeconds();
+}
+
 
 const input = document.getElementById('query')
 const output = document.getElementById('outputs')
