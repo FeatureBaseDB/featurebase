@@ -8,6 +8,7 @@
 - [Docs](#docs)
 - [Getting Started](#getting-started)
 - [Data Model](#data-model)
+- [Query Language](#query-language)
 - [Client Libraries](#client-drivers)
 - [Get Support](#get-support)
 - [Contributing](#contributing)
@@ -19,9 +20,6 @@ See our [Documentation](https://www.pilosa.com/docs/) for information about inst
 
 
 ## Getting Started
-
-[Getting Started](https://www.pilosa.com/docs/getting-started/)
-
 
 1.  [Install Pilosa](https://www.pilosa.com/docs/installation/).
 
@@ -43,6 +41,11 @@ See our [Documentation](https://www.pilosa.com/docs/) for information about inst
 ## Data Model
 
 Check out how the Pilosa [Data Model](https://www.pilosa.com/docs/data-model/) works.
+
+
+## Query Language
+
+You can interact with Pilosa directly in the console using the [Pilosa Query Language](https://www.pilosa.com/docs/query-language/) (PQL).
 
 
 ## Client Libraries
