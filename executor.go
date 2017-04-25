@@ -801,7 +801,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err != nil {
 		return fmt.Errorf("reading SetRowAttrs() row: %v", err)
 	} else if !ok {
-		return fmt.Errorf("SetRowAttrs() row field '%v' required.", rowLabel)
+		return fmt.Errorf("SetRowAttrs() row field '%v' required", rowLabel)
 	}
 
 	// Copy args and remove reserved fields.
@@ -860,7 +860,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err != nil {
 			return nil, fmt.Errorf("reading SetRowAttrs() row: %v", rowLabel)
 		} else if !ok {
-			return nil, fmt.Errorf("SetRowAttrs row field '%v' required.", rowLabel)
+			return nil, fmt.Errorf("SetRowAttrs row field '%v' required", rowLabel)
 		}
 
 		// Copy args and remove reserved fields.

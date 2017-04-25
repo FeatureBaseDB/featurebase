@@ -22,18 +22,22 @@ type StaticNodeSet struct {
 	nodes []*Node
 }
 
+// NewStaticNodeSet creates a static nodeset
 func NewStaticNodeSet() *StaticNodeSet {
 	return &StaticNodeSet{}
 }
 
+// Nodes implements the NodeSet interface and returns a list of nodes in the cluster
 func (s *StaticNodeSet) Nodes() []*Node {
 	return s.nodes
 }
 
+// Open implements the NodeSet interface to start network activity, but is a nop
 func (s *StaticNodeSet) Open() error {
 	return nil
 }
 
+// Join add nodes from the cluster to the NodeSet
 func (s *StaticNodeSet) Join(nodes []*Node) error {
 	s.nodes = nodes
 	return nil
@@ -49,9 +53,9 @@ func init() {
 	NopBroadcaster = &nopBroadcaster{}
 }
 
+// NopBroadcaster represents a Broadcaster that doesn't do anything.
 var NopBroadcaster Broadcaster
 
-// nopBroadcaster represents a Broadcaster that doesn't do anything.
 type nopBroadcaster struct{}
 
 // SendSync A no-op implemenetation of Broadcaster SendSync method.
@@ -85,6 +89,7 @@ type nopBroadcastReceiver struct{}
 
 func (n *nopBroadcastReceiver) Start(b BroadcastHandler) error { return nil }
 
+// NopBroadcastReceiver is a no op implementation of the BroadcastReceiver
 var NopBroadcastReceiver = &nopBroadcastReceiver{}
 
 const (
@@ -95,6 +100,7 @@ const (
 	MessageTypeDeleteFrame = 5
 )
 
+// MarshalMessage encodes the protobuf message into a byte slice
 func MarshalMessage(m proto.Message) ([]byte, error) {
 	var typ uint8
 	switch obj := m.(type) {
@@ -118,6 +124,7 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 	return append([]byte{typ}, buf...), nil
 }
 
+// UnmarshalMessage decodes the byte slice into a protobuf message
 func UnmarshalMessage(buf []byte) (proto.Message, error) {
 	typ, buf := buf[0], buf[1:]
 
