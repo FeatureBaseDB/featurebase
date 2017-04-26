@@ -274,9 +274,11 @@ function render_status(status) {
 
   var nodes = status["status"]["Nodes"]
   table = document.createElement("table")
+  tbody = document.createElement("tbody")
+  table.appendChild(tbody)
   var caption = document.createElement("caption")
   caption.innerHTML = "(" + nodes.length + ")"
-  table.appendChild(caption)
+  tbody.appendChild(caption)
 
   var header = document.createElement('tr')
   markup = `<th>Host</th>
@@ -288,7 +290,7 @@ function render_status(status) {
     markup = `<td>${nodes[n]["Host"]}</td>
     <td>${nodes[n]["State"]}</td>`
     row.innerHTML = markup
-    table.appendChild(row)
+    tbody.appendChild(row)
   }
   nodes_div.appendChild(table)
 
@@ -301,6 +303,8 @@ function render_status(status) {
   var indexes = nodes[0]["Indexes"] // TODO currently comes from only node 0
   for(var n=0; n<indexes.length; n++) {
     table = document.createElement("table")
+    tbody = document.createElement("tbody")
+    table.appendChild(tbody)
     var caption = document.createElement("caption")
     caption.innerHTML = indexes[n]["Name"] + " (Column Label: " + indexes[n]["Meta"]["ColumnLabel"] + ")"
     table.appendChild(caption)
@@ -311,7 +315,7 @@ function render_status(status) {
     <th>Cache Type</th>
     <th>Cache Size</th>`
     header.innerHTML = markup
-    table.appendChild(header)
+    tbody.appendChild(header)
 
     var frames = indexes[n]["Frames"]
     for(var m=0; m<frames.length; m++) {
@@ -321,7 +325,7 @@ function render_status(status) {
       <td>${frames[m]["Meta"]["CacheType"]}</td>
       <td>${frames[m]["Meta"]["CacheSize"]}</td>`
       row.innerHTML = markup
-      table.appendChild(row)
+      tbody.appendChild(row)
     }
     indexes_div.appendChild(table)
   }
