@@ -289,11 +289,19 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	if s.Holder == nil {
 		return nil, errors.New("Server.Holder is nil")
 	}
-	return &internal.NodeStatus{
+
+	ns := internal.NodeStatus{
 		Host:    s.Host,
 		State:   NodeStateUp,
 		Indexes: encodeIndexes(s.Holder.Indexes()),
-	}, nil
+	}
+
+	// Append Slice list per this Node's indexes
+	for _, index := range ns.Indexes {
+		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Host)
+	}
+
+	return &ns, nil
 }
 
 // ClusterStatus returns the NodeState for all nodes in the cluster.

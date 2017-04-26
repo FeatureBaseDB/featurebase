@@ -225,6 +225,20 @@ func (c *Cluster) PartitionNodes(partitionID int) []*Node {
 	return nodes
 }
 
+// OwnsSlices find the set of slices owned by the node per Index
+func (c *Cluster) OwnsSlices(index string, maxSlice uint64, host string) []uint64 {
+	var slices []uint64
+	for i := uint64(0); i <= maxSlice; i++ {
+		p := c.Partition(index, i)
+		// Determine primary owner node.
+		nodeIndex := c.Hasher.Hash(uint64(p), len(c.Nodes))
+		if c.Nodes[nodeIndex].Host == host {
+			slices = append(slices, i)
+		}
+	}
+	return slices
+}
+
 // Hasher represents an interface to hash integers into buckets.
 type Hasher interface {
 	// Hashes the key into a number between [0,N).
