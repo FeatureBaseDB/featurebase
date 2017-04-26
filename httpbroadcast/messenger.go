@@ -106,7 +106,7 @@ func (h *HTTPBroadcaster) sendNodeMessage(node *pilosa.Node, msg []byte) error {
 	return nil
 }
 
-// HTTPBroadcastReceiver handles incoming messages and pass them onto the implemented handler.
+// HTTPBroadcastReceiver unmarshals incoming messages over HTTP and passes them on to the handler.
 type HTTPBroadcastReceiver struct {
 	port      string
 	handler   pilosa.BroadcastHandler
