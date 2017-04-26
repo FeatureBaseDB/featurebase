@@ -81,7 +81,6 @@ class REPL {
               word_start--
             }
             var input_word = this.input.value.substring(word_start, this.input.selectionEnd)
-            console.log(word_start, input_word)
 
             // check for keyword match and insert
             // this just stops at the first match
