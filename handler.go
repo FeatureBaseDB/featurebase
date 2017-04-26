@@ -58,6 +58,7 @@ func NewHandler() *Handler {
 	return handler
 }
 
+// NewRouter creates a Gorilla Mux http router.
 func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
@@ -1315,6 +1316,7 @@ type QueryResponse struct {
 	Err error
 }
 
+// MarshalJSON marshals QueryResponse into a JSON-encoded byte slice
 func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	var output struct {
 		Results        []interface{}    `json:"results,omitempty"`

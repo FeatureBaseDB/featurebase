@@ -315,6 +315,7 @@ func (c *Client) Import(ctx context.Context, index, frame string, slice uint64, 
 	return nil
 }
 
+// MarshalImportPayload marshalls the import parameters into a protobuf byte slice.
 func MarshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	rowIDs := Bits(bits).RowIDs()
@@ -982,36 +983,36 @@ func (p Bits) Less(i, j int) bool {
 }
 
 // RowIDs returns a slice of all the row IDs.
-func (a Bits) RowIDs() []uint64 {
-	other := make([]uint64, len(a))
-	for i := range a {
-		other[i] = a[i].RowID
+func (p Bits) RowIDs() []uint64 {
+	other := make([]uint64, len(p))
+	for i := range p {
+		other[i] = p[i].RowID
 	}
 	return other
 }
 
 // ColumnIDs returns a slice of all the column IDs.
-func (a Bits) ColumnIDs() []uint64 {
-	other := make([]uint64, len(a))
-	for i := range a {
-		other[i] = a[i].ColumnID
+func (p Bits) ColumnIDs() []uint64 {
+	other := make([]uint64, len(p))
+	for i := range p {
+		other[i] = p[i].ColumnID
 	}
 	return other
 }
 
 // Timestamps returns a slice of all the timestamps.
-func (a Bits) Timestamps() []int64 {
-	other := make([]int64, len(a))
-	for i := range a {
-		other[i] = a[i].Timestamp
+func (p Bits) Timestamps() []int64 {
+	other := make([]int64, len(p))
+	for i := range p {
+		other[i] = p[i].Timestamp
 	}
 	return other
 }
 
 // GroupBySlice returns a map of bits by slice.
-func (a Bits) GroupBySlice() map[uint64][]Bit {
+func (p Bits) GroupBySlice() map[uint64][]Bit {
 	m := make(map[uint64][]Bit)
-	for _, bit := range a {
+	for _, bit := range p {
 		slice := bit.ColumnID / SliceWidth
 		m[slice] = append(m[slice], bit)
 	}

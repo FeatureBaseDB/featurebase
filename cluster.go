@@ -13,8 +13,10 @@ const (
 
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
+)
 
-	// NodeState represents node state returned in /status endpoint for a node in the cluster.
+// NodeState represents node state returned in /status endpoint for a node in the cluster.
+const (
 	NodeStateUp   = "UP"
 	NodeStateDown = "DOWN"
 )
@@ -125,7 +127,7 @@ func NewCluster() *Cluster {
 	}
 }
 
-// NodeSetHosts returns the list of host strings for NodeSet members
+// NodeSetHosts returns the list of host strings for NodeSet members.
 func (c *Cluster) NodeSetHosts() []string {
 	if c.NodeSet == nil {
 		return []string{}
@@ -152,7 +154,7 @@ func (c *Cluster) NodeStates() map[string]string {
 	return h
 }
 
-// State returns the internal ClusterState representation.
+// Status returns the internal ClusterStatus representation.
 func (c *Cluster) Status() *internal.ClusterStatus {
 	return &internal.ClusterStatus{
 		Nodes: encodeClusterStatus(c.Nodes),

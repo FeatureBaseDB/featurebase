@@ -24,12 +24,13 @@ type GossipNodeSet struct {
 	broadcasts *memberlist.TransmitLimitedQueue
 
 	statusHandler pilosa.StatusHandler
-	config        *GossipConfig
+	config        *gossipConfig
 
 	// The writer for any logging.
 	LogOutput io.Writer
 }
 
+// Nodes implements the NodeSet interface and returns a list of nodes in the cluster.
 func (g *GossipNodeSet) Nodes() []*pilosa.Node {
 	a := make([]*pilosa.Node, 0, g.memberlist.NumMembers())
 	for _, n := range g.memberlist.Members() {
@@ -38,11 +39,13 @@ func (g *GossipNodeSet) Nodes() []*pilosa.Node {
 	return a
 }
 
+// Start implements the BroadcastReceiver interface and sets the BroadcastHandler
 func (g *GossipNodeSet) Start(h pilosa.BroadcastHandler) error {
 	g.handler = h
 	return nil
 }
 
+// Open implements the NodeSet interface to start network activity.
 func (g *GossipNodeSet) Open() error {
 	if g.handler == nil {
 		return fmt.Errorf("opening GossipNodeSet: you must call Start(pilosa.BroadcastHandler) before calling Open()")
@@ -75,7 +78,7 @@ func (g *GossipNodeSet) logger() *log.Logger {
 
 ////////////////////////////////////////////////////////////////
 
-type GossipConfig struct {
+type gossipConfig struct {
 	gossipSeed       string
 	memberlistConfig *memberlist.Config
 }
@@ -87,7 +90,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	}
 
 	//TODO: pull memberlist config from pilosa.cfg file
-	g.config = &GossipConfig{
+	g.config = &gossipConfig{
 		memberlistConfig: memberlist.DefaultLocalConfig(),
 		gossipSeed:       gossipSeed,
 	}
@@ -103,7 +106,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	return g
 }
 
-// SendSync implementation of the Broadcaster interface
+// SendSync implementation of the Broadcaster interface.
 func (g *GossipNodeSet) SendSync(pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
@@ -131,7 +134,7 @@ func (g *GossipNodeSet) SendSync(pb proto.Message) error {
 	return eg.Wait()
 }
 
-// SendAsync implementation of the Broadcaster interface
+// SendAsync implementation of the Broadcaster interface.
 func (g *GossipNodeSet) SendAsync(pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
@@ -146,11 +149,13 @@ func (g *GossipNodeSet) SendAsync(pb proto.Message) error {
 	return nil
 }
 
-// implementation of the memberlist.Delegate interface
+// NodeMeta implementation of the memberlist.Delegate interface.
 func (g *GossipNodeSet) NodeMeta(limit int) []byte {
 	return []byte{}
 }
 
+// NotifyMsg implementation of the memberlist.Delegate interface
+// called when a user-data message is received.
 func (g *GossipNodeSet) NotifyMsg(b []byte) {
 	m, err := pilosa.UnmarshalMessage(b)
 	if err != nil {
@@ -163,10 +168,14 @@ func (g *GossipNodeSet) NotifyMsg(b []byte) {
 	}
 }
 
+// GetBroadcasts implementation of the memberlist.Delegate interface
+// called when user data messages can be broadcast.
 func (g *GossipNodeSet) GetBroadcasts(overhead, limit int) [][]byte {
 	return g.broadcasts.GetBroadcasts(overhead, limit)
 }
 
+// LocalState implementation of the memberlist.Delegate interface
+// sends this Node's state data.
 func (g *GossipNodeSet) LocalState(join bool) []byte {
 	pb, err := g.statusHandler.LocalStatus()
 	if err != nil {
@@ -183,6 +192,8 @@ func (g *GossipNodeSet) LocalState(join bool) []byte {
 	return buf
 }
 
+// MergeRemoteState implementation of the memberlist.Delegate interface
+// receive and process the remote side side's LocalState.
 func (g *GossipNodeSet) MergeRemoteState(buf []byte, join bool) {
 	// Unmarshal nodestate data.
 	var pb internal.NodeStatus

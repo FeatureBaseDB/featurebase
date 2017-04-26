@@ -356,7 +356,7 @@ type HolderSyncer struct {
 	Closing <-chan struct{}
 }
 
-// Returns true if the syncer has been marked to close.
+// IsClosing returns true if the syncer has been marked to close.
 func (s *HolderSyncer) IsClosing() bool {
 	select {
 	case <-s.Closing:

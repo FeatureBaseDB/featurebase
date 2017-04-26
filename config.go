@@ -3,10 +3,16 @@ package pilosa
 import "time"
 
 const (
-	// DefaultHost is the default hostname and port to use.
-	DefaultHost         = "localhost"
-	DefaultPort         = "10101"
-	DefaultClusterType  = "static"
+	// DefaultHost is the default hostname to use.
+	DefaultHost = "localhost"
+
+	// DefaultPort is the default port use with the hostname.
+	DefaultPort = "10101"
+
+	// DefaultClusterType sets the node intercommunication method.
+	DefaultClusterType = "static"
+
+	// DefaultInternalPort the port the nodes intercommunicate on.
 	DefaultInternalPort = "14000"
 )
 
@@ -67,6 +73,7 @@ func (d *Duration) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// MarshalText writes duration value in text format.
 func (d Duration) MarshalText() (text []byte, err error) {
 	return []byte(d.String()), nil
 }
