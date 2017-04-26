@@ -225,8 +225,8 @@ func (c *Cluster) PartitionNodes(partitionID int) []*Node {
 	return nodes
 }
 
-// OwnsSlice find the set of slices owned by the node per Index
-func (c *Cluster) OwnsSlice(index string, maxSlice uint64, host string) []uint64 {
+// OwnsSlices find the set of slices owned by the node per Index
+func (c *Cluster) OwnsSlices(index string, maxSlice uint64, host string) []uint64 {
 	var slices []uint64
 	for i := uint64(0); i <= maxSlice; i++ {
 		p := c.Partition(index, i)

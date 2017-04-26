@@ -118,10 +118,10 @@ func TestCluster_NodeStates(t *testing.T) {
 	}
 }
 
-// Ensure OwnsSlice can find the actual slice list for node and index
-func TestCluster_OwnsSlice(t *testing.T) {
+// Ensure OwnsSlices can find the actual slice list for node and index
+func TestCluster_OwnsSlices(t *testing.T) {
 	c := NewCluster(5)
-	slices := c.OwnsSlice("test", 10, "host2")
+	slices := c.OwnsSlices("test", 10, "host2")
 
 	if !reflect.DeepEqual(slices, []uint64{1, 3, 10}) {
 		t.Fatalf("unexpected slices for node's index: %v", slices)

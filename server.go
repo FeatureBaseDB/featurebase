@@ -298,7 +298,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 
 	// Append Slice list per this Node's indexes
 	for _, index := range ns.Indexes {
-		index.Slices = s.Cluster.OwnsSlice(index.Name, index.MaxSlice, s.Host)
+		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Host)
 	}
 
 	return &ns, nil
