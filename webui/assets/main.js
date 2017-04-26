@@ -241,10 +241,14 @@ function setNav(e) {
   interface_el.classList.add("interface-active")
 
   // hack hack
-  if(name == "cluster") {
-    update_cluster_status()
+  switch(name) {
+    case "cluster":
+      update_cluster_status()
+      break
+    case "documentation":
+      open_external_docs()
+      break
   }
-
 }
 
 
@@ -259,6 +263,10 @@ function update_cluster_status() {
     time_node.innerHTML = new Date().today() + " " + new Date().timeNow()
   }
   xhr.send(null)
+}
+
+function open_external_docs() {
+  window.open("https://www.pilosa.com/docs");
 }
 
 Date.prototype.today = function () { 
