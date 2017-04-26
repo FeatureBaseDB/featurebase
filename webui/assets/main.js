@@ -250,3 +250,5 @@ const button = document.getElementById('query-btn')
 repl = new REPL(input, output, button)
 repl.populate_index_dropdown()
 repl.bind_events()
+
+input.focus()
