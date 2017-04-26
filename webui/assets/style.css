@@ -245,6 +245,11 @@ em{
   justify-content: center;
 }
 
+
+.result-table > table {
+  border-left: solid 4px #1db598;
+}
+
 table{
   border: solid 0.5px #e0e0e0;
   width: 100%;
@@ -272,8 +277,9 @@ th{
 }
 tr{
   border: solid 0.5px #e0e0e0;
+  background-color: white;
 }
-tr:nth-child(odd) {
+tr:nth-child(even) {
   background-color: #f2f7f9;
 }
 td{
