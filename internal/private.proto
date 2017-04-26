@@ -75,6 +75,7 @@ message Index {
     IndexMeta Meta = 2;
     uint64 MaxSlice = 3;
     repeated Frame Frames = 4;
+    repeated uint64 Slices = 5;
 }
 
 message NodeStatus {

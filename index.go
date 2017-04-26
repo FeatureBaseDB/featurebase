@@ -531,7 +531,7 @@ func encodeIndex(d *Index) *internal.Index {
 			ColumnLabel: d.columnLabel,
 			TimeQuantum: string(d.timeQuantum),
 		},
-		MaxSlice: d.remoteMaxSlice,
+		MaxSlice: d.MaxSlice(),
 		Frames:   encodeFrames(d.Frames()),
 	}
 }
