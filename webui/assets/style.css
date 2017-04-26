@@ -123,15 +123,21 @@ em{
   color: #1db598;
 }
 
-.nav-image,
-.nav-image-active{
-  display: none;
-}
-
-.nav-image-visible{
+.nav-item > .nav-image {
   display: flex;
 }
 
+.nav-item > .nav-image-active {
+  display: none;
+}
+
+.nav-active > .nav-image {
+  display: none;
+}
+
+.nav-active > .nav-image-active {
+  display: flex;
+}
 
 
 .interface{

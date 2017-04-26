@@ -191,33 +191,6 @@ function setNav(e) {
     update_cluster_status()
   }
 
-  // toggle svgs
-  // show all inactive images
-  inactive_images = document.getElementsByClassName("nav-image")
-  for(var i=0; i<inactive_images.length; i++) {
-    inactive_images[i].classList.add("nav-image-visible")
-  }
-  // hide all active images
-  active_images = document.getElementsByClassName("nav-image-active")
-  for(var i=0; i<active_images.length; i++) {
-    active_images[i].classList.remove("nav-image-visible")
-  }
-
-  for(var i=0; i<e.childNodes.length; i++) {
-    var node = e.childNodes[i]
-    if(node.tagName != "IMG") {
-      continue
-    }
-    // hide inactive image on clicked element
-    if(node.classList.contains("nav-image")) {
-      node.classList.remove("nav-image-visible")
-    }
-    // show active image on clicked element
-    if(node.classList.contains("nav-image-active")) {
-      node.classList.add("nav-image-visible")
-    }
-  }
-
 }
 
 
