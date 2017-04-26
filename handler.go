@@ -83,7 +83,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
 	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
-	router.HandleFunc("/nodes", handler.handleGetNodes).Methods("GET")
+	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
@@ -1228,8 +1228,8 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetNodes handles /nodes requests.
-func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
+// handleGetHosts handles /hosts requests.
+func (h *Handler) handleGetHosts(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(h.Cluster.Nodes); err != nil {
 		h.logger().Printf("write version response error: %s", err)
 	}
