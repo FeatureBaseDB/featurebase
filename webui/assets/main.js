@@ -11,9 +11,24 @@ class REPL {
     bind_events() {
         const repl = this
         const keys = {
+          TAB: 9,
           ENTER: 13,
           UP_ARROW: 38,
           DOWN_ARROW: 40
+        }
+        const keywords = {
+          // keyword: length of substring that comes after cursor
+          "SetBit()": 1,
+          "ClearBit()": 1,
+          "SetBitmapAttrs()": 1,
+          "Bitmap()": 1,
+          "Union()": 1,
+          "Intersect()": 1,
+          "Difference()": 1,
+          "Count()": 1,
+          "Range()": 1,
+          "TopN()": 1,
+          "frame=": 0,
         }
 
         this.input.addEventListener("keydown", (e) => {
@@ -51,6 +66,34 @@ class REPL {
           if (e.keyCode == keys.ENTER && !e.shiftKey) {
             e.preventDefault()
             this.submit();
+          }
+          if (e.keyCode == keys.TAB) {
+            e.preventDefault()
+
+            // extract word ending at cursor
+            var word_start = this.input.selectionEnd-1
+            while(word_start>0) {
+              var c = this.input.value.charCodeAt(word_start)
+              if(!((c>64 && c<91) || (c>96 && c<123))) {
+                word_start++
+                break
+              }
+              word_start--
+            }
+            var input_word = this.input.value.substring(word_start, this.input.selectionEnd)
+            console.log(word_start, input_word)
+
+            // check for keyword match and insert
+            // this just stops at the first match
+            for(var keyword in keywords) {
+              if(keyword.startsWith(input_word)){
+                var completion = keyword.substring(input_word.length)
+                this.input.value += completion
+                var pos = this.input.value.length - keywords[keyword]
+                this.input.setSelectionRange(pos, pos)
+                break
+              }
+            }
           }
         })
         this.button.onclick = function() {
