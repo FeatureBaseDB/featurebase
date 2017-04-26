@@ -37,7 +37,7 @@ func (s *StaticNodeSet) Open() error {
 	return nil
 }
 
-// Join sets the NodeSet nodes to the slices of Nodes passed in.
+// Join sets the NodeSet nodes to the slice of Nodes passed in.
 func (s *StaticNodeSet) Join(nodes []*Node) error {
 	s.nodes = nodes
 	return nil

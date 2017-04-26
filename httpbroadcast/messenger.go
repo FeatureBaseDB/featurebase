@@ -106,7 +106,7 @@ func (h *HTTPBroadcaster) sendNodeMessage(node *pilosa.Node, msg []byte) error {
 	return nil
 }
 
-// HTTPBroadcastReceiver a Broadcaster that broadcasts messages over HTTP using the Pilosa Server.
+// HTTPBroadcastReceiver handles incoming messages and pass them onto the implemented handler.
 type HTTPBroadcastReceiver struct {
 	port      string
 	handler   pilosa.BroadcastHandler
@@ -179,7 +179,7 @@ func (h *HTTPNodeSet) Open() error {
 	return nil
 }
 
-// Join sets the NodeSet nodes to the slices of Nodes passed in.
+// Join sets the NodeSet nodes to the slice of Nodes passed in.
 func (h *HTTPNodeSet) Join(nodes []*pilosa.Node) error {
 	h.nodes = nodes
 	return nil

@@ -39,7 +39,7 @@ func (g *GossipNodeSet) Nodes() []*pilosa.Node {
 	return a
 }
 
-// Start implements the BroadcastReceiver interface and starts listening for broadcast messages.
+// Start implements the BroadcastReceiver interface and sets the BroadcastHandler
 func (g *GossipNodeSet) Start(h pilosa.BroadcastHandler) error {
 	g.handler = h
 	return nil
