@@ -8,16 +8,19 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/httpbroadcast"
 	"github.com/pilosa/pilosa/server"
 )
 
@@ -354,6 +357,160 @@ path = "/path/to/plugins"
 	}
 }
 
+// Ensure program can send/receive broadcast messages.
+func TestMain_SendReceiveMessage(t *testing.T) {
+	m0 := MustRunMain()
+	defer m0.Close()
+
+	m1 := MustRunMain()
+	defer m1.Close()
+
+	// Get available ports for internal messaging
+	freePorts, err := availablePorts(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Update cluster config
+	m0.Server.Cluster.Nodes = []*pilosa.Node{
+		{Host: m0.Server.Host, InternalHost: "localhost:" + freePorts[0]},
+		{Host: m1.Server.Host, InternalHost: "localhost:" + freePorts[1]},
+	}
+	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
+
+	// Configure node0
+	m0.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m0.Server, freePorts[0])
+	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
+	m0.Server.Holder.Broadcaster = m0.Server.Broadcaster
+	m0.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(freePorts[0], nil)
+	m0.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
+	err = m0.Server.Cluster.NodeSet.(*httpbroadcast.HTTPNodeSet).Join(m0.Server.Cluster.Nodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m0.Server.BroadcastReceiver.Start(m0.Server); err != nil {
+		t.Fatal(err)
+	}
+
+	// Configure node1
+	m1.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m1.Server, freePorts[1])
+	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
+	m1.Server.Holder.Broadcaster = m1.Server.Broadcaster
+	m1.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(freePorts[1], nil)
+	m1.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
+	err = m1.Server.Cluster.NodeSet.(*httpbroadcast.HTTPNodeSet).Join(m1.Server.Cluster.Nodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m1.Server.BroadcastReceiver.Start(m1.Server); err != nil {
+		t.Fatal(err)
+	}
+
+	// Expected indexes and Frames
+	expected := map[string][]string{
+		"i": []string{"f"},
+	}
+
+	// Create a client for each node.
+	client0 := m0.Client()
+	client1 := m1.Client()
+
+	// Create indexes and frames on one node.
+	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		t.Fatal(err)
+	} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sure node0 knows about the index and frame created.
+	schema0, err := client0.Schema(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	received0 := map[string][]string{}
+	for _, idx := range schema0 {
+		received0[idx.Name] = []string{}
+		for _, frame := range idx.Frames {
+			received0[idx.Name] = append(received0[idx.Name], frame.Name)
+		}
+	}
+	if !reflect.DeepEqual(received0, expected) {
+		t.Fatalf("unexpected schema on node0: %d", received0)
+	}
+
+	// Make sure node1 knows about the index and frame created.
+	schema1, err := client1.Schema(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	received1 := map[string][]string{}
+	for _, idx := range schema1 {
+		received1[idx.Name] = []string{}
+		for _, frame := range idx.Frames {
+			received1[idx.Name] = append(received1[idx.Name], frame.Name)
+		}
+	}
+	if !reflect.DeepEqual(received1, expected) {
+		t.Fatalf("unexpected schema on node1: %d", received1)
+	}
+
+	// Write data on first node.
+	if _, err := m0.Query("i", "", `
+			SetBit(id=1, frame="f", columnID=1)
+			SetBit(id=1, frame="f", columnID=2400000)
+		`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sure node0 knows about the latest MaxSlice.
+	maxSlices0, err := client0.MaxSliceByIndex(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if maxSlices0["i"] != 2 {
+		t.Fatalf("unexpected maxSlice on node0: %d", maxSlices0["i"])
+	}
+
+	// Make sure node1 knows about the latest MaxSlice.
+	maxSlices1, err := client1.MaxSliceByIndex(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if maxSlices1["i"] != 2 {
+		t.Fatalf("unexpected maxSlice on node1: %d", maxSlices1["i"])
+	}
+}
+
+// availablePorts returns a slice of ports that can be used for testing.
+func availablePorts(cnt int) ([]string, error) {
+	rtn := []string{}
+
+	for i := 0; i < cnt; i++ {
+		port, err := getPort()
+		if err != nil {
+			return nil, err
+		}
+		rtn = append(rtn, strconv.Itoa(port))
+	}
+	return rtn, nil
+}
+
+// Ask the kernel for a free open port that is ready to use
+func getPort() (int, error) {
+	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	if err != nil {
+		return 0, err
+	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+
+	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
 // Main represents a test wrapper for main.Main.
 type Main struct {
 	*server.Command
@@ -432,7 +589,6 @@ func (m *Main) Client() *pilosa.Client {
 
 // Query executes a query against the program through the HTTP API.
 func (m *Main) Query(index, rawQuery, query string) (string, error) {
-	fmt.Println("Query:", index, query)
 	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
