@@ -6,19 +6,21 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pilosa/pilosa/adapter"
+	"github.com/pilosa/pilosa"
 )
 
 func init() {
-	adapter.RegisterPlugin("Debug", NewDebugPlugin)
+	pilosa.RegisterPlugin("Debug", NewDebugPlugin)
 }
 
 // DebugPlugin represents a plugin that will print args to stderr.
-type DebugPlugin struct{}
+type DebugPlugin struct {
+	holder *pilosa.Holder
+}
 
 // NewDebugPlugin returns a new instance of DebugPlugin.
-func NewDebugPlugin() adapter.Plugin {
-	return &DebugPlugin{}
+func NewDebugPlugin(h *pilosa.Holder) pilosa.Plugin {
+	return &DebugPlugin{holder: h}
 }
 
 // Map executes the plugin against a single slice.

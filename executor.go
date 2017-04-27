@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/adapter"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
@@ -253,7 +252,9 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 	case "Union":
 		return e.executeUnionSlice(ctx, index, c, slice)
 	default:
-		return nil, fmt.Errorf("unknown call: %s", c.Name)
+		//return nil, fmt.Errorf("unknown call: %s", c.Name)
+		r, e := e.executeExternalCallSlice(ctx, index, c, slice)
+		return r.(*Bitmap), e
 	}
 }
 
@@ -324,8 +325,8 @@ func (e *Executor) executeCallSlice(ctx context.Context, db string, c *pql.Call,
 }
 
 // newPlugin instantiates a plugin from an external call.
-func (e *Executor) newPlugin(c *pql.Call) (adapter.Plugin, error) {
-	p, err := adapter.NewPlugin(c.Name)
+func (e *Executor) newPlugin(c *pql.Call) (Plugin, error) {
+	p, err := NewPlugin(c.Name, e.Holder)
 	if err != nil {
 		return nil, err
 	}
