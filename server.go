@@ -320,6 +320,14 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 
 	// Update NodeState for all nodes.
 	for host, nodeState := range s.Cluster.NodeStates() {
+		// In a default configuration (or single-node) where a StaticNodeSet is used
+		// then all nodes are marked as DOWN. At the very least, we should consider
+		// the local node as UP.
+		// TODO: we should be able to remove this check if/when cluster.Nodes and
+		// cluster.NodeSet are unified.
+		if host == s.Host {
+			nodeState = NodeStateUp
+		}
 		node := s.Cluster.NodeByHost(host)
 		node.SetState(nodeState)
 	}
