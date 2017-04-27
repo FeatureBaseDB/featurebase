@@ -10,7 +10,7 @@ func init() {
 	pilosa.RegisterPlugin("MergeTop", NewMergeTopPlugin)
 }
 
-// MergeTopPlugin represents a plugin that will print args to stderr.
+// MergeTopPlugin represents a plugin that give a set of all the bits in the top-n
 type MergeTopPlugin struct {
 	holder *pilosa.Holder
 }

@@ -11,7 +11,7 @@ func init() {
 	pilosa.RegisterPlugin("DiffTop", NewMergeTopPlugin)
 }
 
-// DiffTopPlugin represents a plugin that will find the common bits of the top list.
+// DiffTopPlugin represents a plugin that will find the common bits of the top-n list.
 type DiffTopPlugin struct {
 	holder *pilosa.Holder
 }
