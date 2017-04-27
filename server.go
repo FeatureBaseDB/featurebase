@@ -245,7 +245,11 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		idx.SetRemoteMaxSlice(obj.Slice)
+		if obj.IsInverse {
+			idx.SetRemoteMaxInverseSlice(obj.Slice)
+		} else {
+			idx.SetRemoteMaxSlice(obj.Slice)
+		}
 	case *internal.CreateIndexMessage:
 		opt := IndexOptions{
 			ColumnLabel: obj.Meta.ColumnLabel,

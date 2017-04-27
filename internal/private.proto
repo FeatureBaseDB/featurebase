@@ -43,6 +43,7 @@ message MaxSlicesResponse {
 message CreateSliceMessage {
     string Index = 1;
     uint64 Slice = 2;
+    bool IsInverse = 3;
 }
 
 message DeleteIndexMessage {
