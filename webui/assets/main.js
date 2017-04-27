@@ -229,16 +229,20 @@ function populate_version() {
     xhr.send(null)
 }
 
-function setNav(e) {
+function handle_nav_click(e) {
+  // e.id = "nav-xxx"
+  name = e.id.substring(4)
+  set_active_pane_by_name(name)
+}
+
+function set_active_pane_by_name(name) {
   // toggle the nav buttons
   document.getElementsByClassName("nav-active")[0].classList.remove("nav-active")
-  e.classList.add("nav-active")
+  document.getElementById("nav-" + name).classList.add("nav-active")
 
   // toggle the main interface content divs
   document.getElementsByClassName("interface-active")[0].classList.remove("interface-active")
-  name = e.id.substring(4)
-  interface_el = document.getElementById('interface-' + name)
-  interface_el.classList.add("interface-active")
+  document.getElementById('interface-' + name).classList.add("interface-active")
 
   // hack hack
   switch(name) {
@@ -351,6 +355,14 @@ function open_external_docs() {
   window.open("https://www.pilosa.com/docs");
 }
 
+function check_anchor_uri() {
+  const pane_names = {"console": 0, "cluster": 0, "documentation": 0}
+  var anchor = window.location.hash.substr(1);
+  if(anchor in pane_names) {
+    set_active_pane_by_name(anchor)
+  }
+}
+
 Date.prototype.today = function () { 
     return this.getFullYear() +"/"+ (((this.getMonth()+1) < 10)?"0":"") + (this.getMonth()+1) +"/"+ ((this.getDate() < 10)?"0":"") + this.getDate();
 }
@@ -370,3 +382,5 @@ repl.populate_index_dropdown()
 repl.bind_events()
 
 input.focus()
+
+check_anchor_uri()
