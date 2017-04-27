@@ -231,7 +231,6 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	index.SetTimeQuantum(opt.TimeQuantum)
 
 	h.indexes[index.Name()] = index
-	h.Stats.Count("createIndex", 1)
 
 	return index, nil
 }
@@ -270,8 +269,6 @@ func (h *Holder) DeleteIndex(name string) error {
 
 	// Remove reference.
 	delete(h.indexes, name)
-
-	h.Stats.Count("deleteIndex", 1)
 
 	return nil
 }

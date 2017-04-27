@@ -403,8 +403,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	// Add to index's frame lookup.
 	i.frames[name] = f
 
-	i.Stats.Count("createFrame", 1)
-
 	return f, nil
 }
 
@@ -442,8 +440,6 @@ func (i *Index) DeleteFrame(name string) error {
 
 	// Remove reference.
 	delete(i.frames, name)
-
-	i.Stats.Count("deleteFrame", 1)
 
 	return nil
 }
