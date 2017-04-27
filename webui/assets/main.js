@@ -318,14 +318,15 @@ function render_status(status) {
     tbody.appendChild(header)
 
     var frames = indexes[n]["Frames"]
-    for(var m=0; m<frames.length; m++) {
-      var row = document.createElement("tr")
-      markup = `<td>${frames[m]["Name"]}</td>
-      <td>${frames[m]["Meta"]["RowLabel"]}</td>
-      <td>${frames[m]["Meta"]["CacheType"]}</td>
-      <td>${frames[m]["Meta"]["CacheSize"]}</td>`
-      row.innerHTML = markup
-      tbody.appendChild(row)
+    if(frames) {
+      for(var m=0; m<frames.length; m++) {
+        var row = document.createElement("tr")
+        row.innerHTML = `<td>${frames[m]["Name"]}</td>
+        <td>${frames[m]["Meta"]["RowLabel"]}</td>
+        <td>${frames[m]["Meta"]["CacheType"]}</td>
+        <td>${frames[m]["Meta"]["CacheSize"]}</td>`
+        tbody.appendChild(row)
+      }
     }
     indexes_div.appendChild(table)
   }
