@@ -26,7 +26,7 @@ func (p *MergeTopPlugin) Map(ctx context.Context, index string, children []inter
 	var frame string
 
 	if x, found := args["n"]; found {
-		n = x.(int)
+		n = int(x.(int64))
 	}
 
 	if fr, found := args["frame"]; found {

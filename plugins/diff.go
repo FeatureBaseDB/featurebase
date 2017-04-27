@@ -8,7 +8,7 @@ import (
 )
 
 func init() {
-	pilosa.RegisterPlugin("DiffTop", NewMergeTopPlugin)
+	pilosa.RegisterPlugin("DiffTop", NewDiffTopPlugin)
 }
 
 // DiffTopPlugin represents a plugin that will find the common bits of the top-n list.
@@ -27,7 +27,7 @@ func (p *DiffTopPlugin) Map(ctx context.Context, index string, children []interf
 	var frame string
 
 	if x, found := args["n"]; found {
-		n = x.(int)
+		n = int(x.(int64))
 	} else {
 		return nil, errors.New("n required")
 	}
