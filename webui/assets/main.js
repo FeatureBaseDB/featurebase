@@ -238,6 +238,7 @@ function handle_nav_click(e) {
   // e.id = "nav-xxx"
   name = e.id.substring(4)
   set_active_pane_by_name(name)
+  window.location.hash = name
 }
 
 function set_active_pane_by_name(name) {
