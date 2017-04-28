@@ -51,13 +51,13 @@ generate-protoc: .protoc-gen-gofast
 	go generate github.com/pilosa/pilosa/internal
 
 generate-statik: statik
-	go generate github.com/pilosa/pilosa/handler
+	go generate github.com/pilosa/pilosa
 
 generate: generate-protoc generate-statik
 
 statik:
 ifndef STATIK
-	go install github.com/rakyll/statik
+	go get github.com/rakyll/statik
 endif
 
 docker:
