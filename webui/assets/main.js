@@ -288,13 +288,13 @@ function render_status(status) {
   table.appendChild(tbody)
   var caption = document.createElement("caption")
   caption.innerHTML = "(" + nodes.length + ")"
-  tbody.appendChild(caption)
+  table.appendChild(caption)
 
   var header = document.createElement('tr')
   markup = `<th>Host</th>
   <th>State</th>`
   header.innerHTML = markup
-  table.appendChild(header)
+  tbody.appendChild(header)
   for(var n=0; n<nodes.length; n++) {
     var row = document.createElement("tr")
     markup = `<td>${nodes[n]["Host"]}</td>
