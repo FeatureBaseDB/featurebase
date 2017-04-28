@@ -201,7 +201,6 @@ func (s *Server) monitorAntiEntropy() {
 			continue
 		}
 
-
 		// Record successful sync in log.
 		s.logger().Printf("holder sync complete")
 	}

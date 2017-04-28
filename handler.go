@@ -338,6 +338,8 @@ func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.Count("deleteIndex", 1)
 }
 
 type deleteIndexResponse struct{}
@@ -381,6 +383,8 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(postIndexResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.Count("createIndex", 1)
 }
 
 // handlePatchIndexTimeQuantum handles PATCH /index/time_quantum request.
@@ -531,6 +535,9 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.CountWithCustomTags("createFrame", 1, []string{fmt.Sprintf("index:%s", indexName)})
+
 }
 
 type _postFrameRequest postFrameRequest
@@ -612,6 +619,8 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(deleteFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.CountWithCustomTags("deleteFrame", 1, []string{fmt.Sprintf("index:%s", indexName)})
 }
 
 type deleteFrameResponse struct{}

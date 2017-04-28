@@ -2,10 +2,11 @@ package pilosa_test
 
 import (
 	"context"
+	"github.com/pilosa/pilosa"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
-
-	"github.com/pilosa/pilosa"
 )
 
 func TestStatsCount_TopN(t *testing.T) {
@@ -130,6 +131,122 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 	if _, err := e.Execute(context.Background(), "d", MustParse(`SetColumnAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
+	if !called {
+		t.Error("Count isn't called")
+	}
+}
+
+func TestStatsCount_CreateIndex(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	s := NewServer()
+	s.Handler.Holder = hldr.Holder
+	defer s.Close()
+	called := false
+	s.Handler.Holder.Stats = &MockStats{
+		mockCount: func(name string, value int64) {
+			if name != "createIndex" {
+				t.Errorf("Expected createIndex, Results %s", name)
+			}
+
+			called = true
+			return
+		},
+	}
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i", nil))
+	if !called {
+		t.Error("Count isn't called")
+	}
+}
+
+func TestStatsCount_DeleteIndex(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	s := NewServer()
+	s.Handler.Holder = hldr.Holder
+	defer s.Close()
+
+	// Create index.
+	if _, err := hldr.CreateIndexIfNotExists("i", pilosa.IndexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	s.Handler.Holder.Stats = &MockStats{
+		mockCount: func(name string, value int64) {
+			if name != "deleteIndex" {
+				t.Errorf("Expected deleteIndex, Results %s", name)
+			}
+
+			called = true
+			return
+		},
+	}
+	http.DefaultClient.Do(MustNewHTTPRequest("DELETE", s.URL+"/index/i", strings.NewReader("")))
+	if !called {
+		t.Error("Count isn't called")
+	}
+}
+
+func TestStatsCount_CreateFrame(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	s := NewServer()
+	s.Handler.Holder = hldr.Holder
+	defer s.Close()
+
+	// Create index.
+	if _, err := hldr.CreateIndexIfNotExists("i", pilosa.IndexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	s.Handler.Holder.Stats = &MockStats{
+		mockCountWithTags: func(name string, value int64, index []string) {
+			if name != "createFrame" {
+				t.Errorf("Expected createFrame, Results %s", name)
+			}
+			if index[0] != "index:i" {
+				t.Errorf("Expected index:i, Results %s", index)
+			}
+
+			called = true
+			return
+		},
+	}
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", nil))
+	if !called {
+		t.Error("Count isn't called")
+	}
+}
+
+func TestStatsCount_DeleteFrame(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	s := NewServer()
+	s.Handler.Holder = hldr.Holder
+	defer s.Close()
+	called := false
+	// Create index.
+	indx, _ := hldr.CreateIndexIfNotExists("i", pilosa.IndexOptions{})
+	if _, err := indx.CreateFrameIfNotExists("test", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	s.Handler.Holder.Stats = &MockStats{
+		mockCountWithTags: func(name string, value int64, index []string) {
+			if name != "deleteFrame" {
+				t.Errorf("Expected deleteFrame, Results %s", name)
+			}
+			if index[0] != "index:i" {
+				t.Errorf("Expected index:i, Results %s", index)
+			}
+
+			called = true
+			return
+		},
+	}
+	http.DefaultClient.Do(MustNewHTTPRequest("DELETE", s.URL+"/index/i/frame/f", strings.NewReader("")))
 	if !called {
 		t.Error("Count isn't called")
 	}
