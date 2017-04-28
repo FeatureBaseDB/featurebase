@@ -266,11 +266,9 @@ function update_cluster_status() {
   var xhr = new XMLHttpRequest();
   xhr.open('GET', '/status')
   status_node = document.getElementById('status')
-  time_node = document.getElementById('status-time')
   xhr.onload = function() {
     var status = JSON.parse(xhr.responseText)
     render_status(status)
-    time_node.innerHTML = new Date().today() + " " + new Date().timeNow()
   }
   xhr.send(null)
 }
