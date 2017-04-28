@@ -70,7 +70,9 @@ class REPL {
           if (e.keyCode == keys.TAB) {
             e.preventDefault()
 
-            // extract word ending at cursor
+            // extract word fragment ending at cursor. a word fragment:
+            // - starts with last nonalpha character before cursor (or beginning of string)
+            // - ends at cursor
             var word_start = this.input.selectionEnd-1
             while(word_start>0) {
               var c = this.input.value.charCodeAt(word_start)
@@ -86,10 +88,13 @@ class REPL {
             // this just stops at the first match
             for(var keyword in keywords) {
               if(keyword.startsWith(input_word)){
+                var cursor_pos = this.input.selectionEnd
                 var completion = keyword.substring(input_word.length)
-                this.input.value += completion
-                var pos = this.input.value.length - keywords[keyword]
-                this.input.setSelectionRange(pos, pos)
+                var before = this.input.value.substring(0, cursor_pos)
+                var after = this.input.value.substring(cursor_pos)
+                this.input.value = before + completion + after
+                var new_pos = cursor_pos + completion.length - keywords[keyword]
+                this.input.setSelectionRange(new_pos, new_pos)
                 break
               }
             }
