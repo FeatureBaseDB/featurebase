@@ -258,11 +258,88 @@ function update_cluster_status() {
   status_node = document.getElementById('status')
   time_node = document.getElementById('status-time')
   xhr.onload = function() {
-    status_formatted = JSON.stringify(JSON.parse(xhr.responseText), null, 4)
-    status_node.innerHTML = status_formatted
+    var status = JSON.parse(xhr.responseText)
+    render_status(status)
     time_node.innerHTML = new Date().today() + " " + new Date().timeNow()
   }
   xhr.send(null)
+}
+
+function render_status(status) {
+  // render node table
+  var nodes_div = document.getElementById("status-nodes")
+  while (nodes_div.firstChild) {
+    nodes_div.removeChild(nodes_div.firstChild);
+  }
+
+  var nodes = status["status"]["Nodes"]
+  table = document.createElement("table")
+  var caption = document.createElement("caption")
+  caption.innerHTML = "(" + nodes.length + ")"
+  table.appendChild(caption)
+
+  var header = document.createElement('tr')
+  markup = `<th>Host</th>
+  <th>State</th>`
+  header.innerHTML = markup
+  table.appendChild(header)
+  for(var n=0; n<nodes.length; n++) {
+    var row = document.createElement("tr")
+    markup = `<td>${nodes[n]["Host"]}</td>
+    <td>${nodes[n]["State"]}</td>`
+    row.innerHTML = markup
+    table.appendChild(row)
+  }
+  nodes_div.appendChild(table)
+
+  // render index tables
+  var indexes_div = document.getElementById("status-indexes")
+  while (indexes_div.firstChild) {
+    indexes_div.removeChild(indexes_div.firstChild);
+  }
+
+  var indexes = nodes[0]["Indexes"] // TODO currently comes from only node 0
+  for(var n=0; n<indexes.length; n++) {
+    table = document.createElement("table")
+    var caption = document.createElement("caption")
+    caption.innerHTML = indexes[n]["Name"] + " (Column Label: " + indexes[n]["Meta"]["ColumnLabel"] + ")"
+    table.appendChild(caption)
+
+    var header = document.createElement('tr')
+    markup = `<th>Name</th>
+    <th>Row Label</th>
+    <th>Cache Type</th>
+    <th>Cache Size</th>`
+    header.innerHTML = markup
+    table.appendChild(header)
+
+    var frames = indexes[n]["Frames"]
+    for(var m=0; m<frames.length; m++) {
+      var row = document.createElement("tr")
+      markup = `<td>${frames[m]["Name"]}</td>
+      <td>${frames[m]["Meta"]["RowLabel"]}</td>
+      <td>${frames[m]["Meta"]["CacheType"]}</td>
+      <td>${frames[m]["Meta"]["CacheSize"]}</td>`
+      row.innerHTML = markup
+      table.appendChild(row)
+    }
+    indexes_div.appendChild(table)
+  }
+
+  // render slice tables
+  // TODO enable when Slices element is present in status response
+  /*
+  var slices_div = document.getElementById("status-slices")
+  data = ""
+  for(var n=0; n<nodes.length; n++) {
+    var indexes = nodes[n]["Indexes"]
+    for(var m=0; m<indexes.length; m++) {
+      data += nodes[n]["Host"] + "/" + indexes[m]["Name"] + ": " + indexes[m]["Slices"] + "<br />"
+    }
+  }
+  slices_div.innerHTML = data
+  */
+
 }
 
 function open_external_docs() {
