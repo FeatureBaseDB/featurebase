@@ -9,14 +9,14 @@ class REPL {
         this.result_number = 0
     }
     bind_events() {
-        const repl = this
-        const keys = {
+        var repl = this
+        var keys = {
           TAB: 9,
           ENTER: 13,
           UP_ARROW: 38,
           DOWN_ARROW: 40
         }
-        const keywords = {
+        var keywords = {
           // keyword: length of substring that comes after cursor
           "SetBit()": 1,
           "ClearBit()": 1,
@@ -31,41 +31,41 @@ class REPL {
           "frame=": 0,
         }
 
-        this.input.addEventListener("keydown", (e) => {
+        this.input.addEventListener("keydown", function(e) {
           if (e.keyCode == keys.UP_ARROW) {
             e.preventDefault()
-            if (this.input.value.substring(0, this.input.selectionStart).indexOf('\n') == '-1') {
-                if (this.history_index == 0) {
+            if (repl.input.value.substring(0, repl.input.selectionStart).indexOf('\n') == '-1') {
+                if (repl.history_index == 0) {
                     return
                 } else {
-                    if (this.history_index == this.history.length) {
-                        this.history_buffer = this.input.value
+                    if (repl.history_index == repl.history.length) {
+                        repl.history_buffer = repl.input.value
                     }
-                    this.history_index--
-                    this.input.value = this.history[this.history_index]
-                    this.input.setSelectionRange(this.input.value.length, this.input.value.length)
+                    repl.history_index--
+                    repl.input.value = repl.history[repl.history_index]
+                    repl.input.setSelectionRange(repl.input.value.length, repl.input.value.length)
                 }
             }
           }
           if (e.keyCode == keys.DOWN_ARROW) {
             e.preventDefault()
-            if (this.input.value.substring(this.input.selectionEnd, this.input.length).indexOf('\n') == '-1') {
-                if (this.history_index == this.history.length) {
+            if (repl.input.value.substring(repl.input.selectionEnd, repl.input.length).indexOf('\n') == '-1') {
+                if (repl.history_index == repl.history.length) {
                     return
                 } else {
-                    this.history_index++
-                    if (this.history_index == this.history.length) {
-                        this.input.value = this.history_buffer
+                    repl.history_index++
+                    if (repl.history_index == repl.history.length) {
+                        repl.input.value = repl.history_buffer
                     } else {
-                        this.input.value = this.history[this.history_index]
+                        repl.input.value = repl.history[repl.history_index]
                     }
-                    this.input.setSelectionRange(this.input.value.length, this.input.value.length)
+                    repl.input.setSelectionRange(repl.input.value.length, repl.input.value.length)
                 }
             }
           }
           if (e.keyCode == keys.ENTER && !e.shiftKey) {
             e.preventDefault()
-            this.submit();
+            repl.submit();
           }
           if (e.keyCode == keys.TAB) {
             e.preventDefault()
@@ -73,34 +73,34 @@ class REPL {
             // extract word fragment ending at cursor. a word fragment:
             // - starts with last nonalpha character before cursor (or beginning of string)
             // - ends at cursor
-            var word_start = this.input.selectionEnd-1
+            var word_start = repl.input.selectionEnd-1
             while(word_start>0) {
-              var c = this.input.value.charCodeAt(word_start)
+              var c = repl.input.value.charCodeAt(word_start)
               if(!((c>64 && c<91) || (c>96 && c<123))) {
                 word_start++
                 break
               }
               word_start--
             }
-            var input_word = this.input.value.substring(word_start, this.input.selectionEnd)
+            var input_word = repl.input.value.substring(word_start, repl.input.selectionEnd)
 
             // check for keyword match and insert
             // this just stops at the first match
             for(var keyword in keywords) {
               if(keyword.startsWith(input_word)){
-                var cursor_pos = this.input.selectionEnd
+                var cursor_pos = repl.input.selectionEnd
                 var completion = keyword.substring(input_word.length)
-                var before = this.input.value.substring(0, cursor_pos)
-                var after = this.input.value.substring(cursor_pos)
-                this.input.value = before + completion + after
+                var before = repl.input.value.substring(0, cursor_pos)
+                var after = repl.input.value.substring(cursor_pos)
+                repl.input.value = before + completion + after
                 var new_pos = cursor_pos + completion.length - keywords[keyword]
-                this.input.setSelectionRange(new_pos, new_pos)
+                repl.input.setSelectionRange(new_pos, new_pos)
                 break
               }
             }
           }
         })
-        this.button.onclick = function() {
+        repl.button.onclick = function() {
             repl.submit();
         };
     }
@@ -121,7 +121,7 @@ class REPL {
         xhr.open('POST', '/index/' + indexname + '/query');
         xhr.setRequestHeader('Content-Type', 'application/text');
 
-        const repl = this
+        var repl = this
         var start_time = new Date().getTime();
         xhr.send(query)
         xhr.onload = function() {
@@ -362,7 +362,7 @@ function open_external_docs() {
 }
 
 function check_anchor_uri() {
-  const pane_names = {"console": 0, "cluster": 0, "documentation": 0}
+  var pane_names = {"console": 0, "cluster": 0, "documentation": 0}
   var anchor = window.location.hash.substr(1);
   if(anchor in pane_names) {
     set_active_pane_by_name(anchor)
@@ -379,9 +379,9 @@ Date.prototype.timeNow = function () {
 
 populate_version()
 
-const input = document.getElementById('query')
-const output = document.getElementById('outputs')
-const button = document.getElementById('query-btn')
+var input = document.getElementById('query')
+var output = document.getElementById('outputs')
+var button = document.getElementById('query-btn')
 
 repl = new REPL(input, output, button)
 repl.populate_index_dropdown()
