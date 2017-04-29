@@ -31,7 +31,7 @@ import (
 
 // Default frame settings.
 const (
-	DefaultRowLabel       = "id"
+	DefaultRowLabel       = "rowID"
 	DefaultCacheType      = CacheTypeLRU
 	DefaultInverseEnabled = false
 
