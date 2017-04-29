@@ -211,7 +211,10 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		}
 
 		// Verify slices are equal.
-		if got, exp := bm.Slice(), uint64SetSlice(m); !reflect.DeepEqual(got, exp) {
+		// If `got` is nil and `exp` has zero length, don't perform the DeepEqual
+		// because when `a` is empty (`a = []uint64{}`) then `got` is a nil slice
+		// while `exp` is an empty slice. Therefore they will not be considered equal.
+		if got, exp := bm.Slice(), uint64SetSlice(m); !(got == nil && len(exp) == 0) && !reflect.DeepEqual(got, exp) {
 			t.Fatalf("unexpected values:\n\ngot=%+v\n\nexp=%+v\n\n", got, exp)
 		}
 
