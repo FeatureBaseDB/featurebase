@@ -117,10 +117,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
 	// If user is using curl, don't chuck HTML at them
 	if strings.HasPrefix(r.UserAgent(), "curl") {
-		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the web console by visiting this URL in your browser.", http.StatusNotFound)
+		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the WebUI by visiting this URL in your browser.", http.StatusNotFound)
 		return
 	}
-	statikFS, _ := fs.New()
+	statikFS, err := fs.New()
+	if err != nil {
+		fmt.Println("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
+		return
+	}
 	http.FileServer(statikFS).ServeHTTP(w, r)
 }
 
