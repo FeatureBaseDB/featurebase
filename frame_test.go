@@ -91,6 +91,7 @@ func TestFrame_NameValidation(t *testing.T) {
 	}
 	invalidFrameNames := []string{
 		"",
+		"123abc",
 		"x.y",
 		"_foo",
 		"-bar",
@@ -131,6 +132,7 @@ func TestFrame_RowLabelValidation(t *testing.T) {
 		"UPPERCASE",
 	}
 	invalidRowLabels := []string{
+		"123abc",
 		"x.y",
 		"_foo",
 		"-bar",

@@ -47,10 +47,10 @@ var (
 )
 
 // Regular expression to validate index and frame names.
-var nameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,64}$`)
+var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,64}$`)
 
 // Regular expression to validate row and column labels.
-var labelRegexp = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,64}$`)
+var labelRegexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,64}$`)
 
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
