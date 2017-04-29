@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa_test
 
 import (
@@ -34,23 +48,43 @@ func TestIndex_CreateFrameIfNotExists(t *testing.T) {
 	}
 }
 
-// Ensure index defaults the time quantum on new frames.
+// Ensure index is assigned the correct time quantum on creation.
 func TestIndex_CreateFrame_TimeQuantum(t *testing.T) {
-	index := MustOpenIndex()
-	defer index.Close()
+	t.Run("Explicit", func(t *testing.T) {
+		index := MustOpenIndex()
+		defer index.Close()
 
-	// Set index time quantum.
-	if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
-		t.Fatal(err)
-	}
+		// Set index time quantum.
+		if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
+			t.Fatal(err)
+		}
 
-	// Create frame.
-	f, err := index.CreateFrame("f", pilosa.FrameOptions{})
-	if err != nil {
-		t.Fatal(err)
-	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YM") {
-		t.Fatalf("unexpected frame time quantum: %s", q)
-	}
+		// Create frame with explicit quantum.
+		f, err := index.CreateFrame("f", pilosa.FrameOptions{TimeQuantum: pilosa.TimeQuantum("YMDH")})
+		if err != nil {
+			t.Fatal(err)
+		} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+			t.Fatalf("unexpected frame time quantum: %s", q)
+		}
+	})
+
+	t.Run("Inherited", func(t *testing.T) {
+		index := MustOpenIndex()
+		defer index.Close()
+
+		// Set index time quantum.
+		if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create frame.
+		f, err := index.CreateFrame("f", pilosa.FrameOptions{})
+		if err != nil {
+			t.Fatal(err)
+		} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YM") {
+			t.Fatalf("unexpected frame time quantum: %s", q)
+		}
+	})
 }
 
 // Ensure index can delete a frame.
