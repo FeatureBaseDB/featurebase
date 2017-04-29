@@ -80,6 +80,40 @@ func TestFrame_NameRestriction(t *testing.T) {
 	}
 }
 
+// Ensure that frame name validation is consistent.
+func TestFrame_NameValidation(t *testing.T) {
+	validFrameNames := []string{
+		"foo",
+		"hyphen-ated",
+		"under_score",
+		"abc123",
+		"trailing_",
+	}
+	invalidFrameNames := []string{
+		"",
+		"x.y",
+		"_foo",
+		"-bar",
+		"abc def",
+		"camelCase",
+		"UPPERCASE",
+		"a12345678901234567890123456789012345678901234567890123456789012345",
+	}
+
+	for _, name := range validFrameNames {
+		_, err := pilosa.NewFrame("", "i", name)
+		if err != nil {
+			t.Fatalf("unexpected frame name: %s %s", name, err)
+		}
+	}
+	for _, name := range invalidFrameNames {
+		_, err := pilosa.NewFrame("", "i", name)
+		if err == nil {
+			t.Fatalf("expected error on frame name: %s", name)
+		}
+	}
+}
+
 // Frame represents a test wrapper for pilosa.Frame.
 type Frame struct {
 	*pilosa.Frame

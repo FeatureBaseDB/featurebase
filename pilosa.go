@@ -45,9 +45,8 @@ var (
 	ErrQueryRequired    = errors.New("query required")
 )
 
-// Regular expression to valuate index and frame's name
-// Todo: remove . when frame doesn't require . for topN
-var nameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,64}$`)
+// Regular expression to validate index and frame names.
+var nameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,64}$`)
 
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
