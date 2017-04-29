@@ -100,18 +100,64 @@ func TestFrame_NameValidation(t *testing.T) {
 		"a12345678901234567890123456789012345678901234567890123456789012345",
 	}
 
+	path, err := ioutil.TempDir("", "pilosa-frame-")
+	if err != nil {
+		panic(err)
+	}
 	for _, name := range validFrameNames {
-		_, err := pilosa.NewFrame("", "i", name)
+		_, err := pilosa.NewFrame(path, "i", name)
 		if err != nil {
 			t.Fatalf("unexpected frame name: %s %s", name, err)
 		}
 	}
 	for _, name := range invalidFrameNames {
-		_, err := pilosa.NewFrame("", "i", name)
+		_, err := pilosa.NewFrame(path, "i", name)
 		if err == nil {
 			t.Fatalf("expected error on frame name: %s", name)
 		}
 	}
+}
+
+// Ensure that frame RowLable validation is consistent.
+func TestFrame_RowLabelValidation(t *testing.T) {
+	validRowLabels := []string{
+		"",
+		"foo",
+		"hyphen-ated",
+		"under_score",
+		"abc123",
+		"trailing_",
+		"camelCase",
+		"UPPERCASE",
+	}
+	invalidRowLabels := []string{
+		"x.y",
+		"_foo",
+		"-bar",
+		"abc def",
+		"a12345678901234567890123456789012345678901234567890123456789012345",
+	}
+
+	path, err := ioutil.TempDir("", "pilosa-frame-")
+	if err != nil {
+		panic(err)
+	}
+	f, err := pilosa.NewFrame(path, "i", "f")
+	if err != nil {
+		t.Fatalf("unexpected frame error: %s", err)
+	}
+
+	for _, label := range validRowLabels {
+		if err := f.SetRowLabel(label); err != nil {
+			t.Fatalf("unexpected row label: %s %s", label, err)
+		}
+	}
+	for _, label := range invalidRowLabels {
+		if err := f.SetRowLabel(label); err == nil {
+			t.Fatalf("expected error on row label: %s", label)
+		}
+	}
+
 }
 
 // Frame represents a test wrapper for pilosa.Frame.

@@ -38,7 +38,8 @@ var (
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
-	ErrName = errors.New("invalid index or frame's name, must match [a-z0-9_-]")
+	ErrName  = errors.New("invalid index or frame's name, must match [a-z0-9_-]")
+	ErrLabel = errors.New("invalid row or column label, must match [A-Za-z0-9_-]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
@@ -47,6 +48,9 @@ var (
 
 // Regular expression to validate index and frame names.
 var nameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,64}$`)
+
+// Regular expression to validate row and column labels.
+var labelRegexp = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,64}$`)
 
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
@@ -103,9 +107,16 @@ const TimeFormat = "2006-01-02T15:04"
 
 // ValidateName ensures that the name is a valid format.
 func ValidateName(name string) error {
-	validName := nameRegexp.Match([]byte(name))
-	if validName == false {
+	if nameRegexp.Match([]byte(name)) == false {
 		return ErrName
+	}
+	return nil
+}
+
+// ValidateLabel ensures that the label is a valid format.
+func ValidateLabel(label string) error {
+	if labelRegexp.Match([]byte(label)) == false {
+		return ErrLabel
 	}
 	return nil
 }
