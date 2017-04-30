@@ -108,7 +108,7 @@ func (i *Index) SetColumnLabel(v string) error {
 	}
 
 	// Make sure columnLabel is valid name
-	err := ValidateName(v)
+	err := ValidateLabel(v)
 	if err != nil {
 		return err
 	}

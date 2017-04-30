@@ -140,7 +140,7 @@ func (f *Frame) SetRowLabel(v string) error {
 	}
 
 	// Make sure rowLabel is valid name
-	err := ValidateName(v)
+	err := ValidateLabel(v)
 	if err != nil {
 		return err
 	}
