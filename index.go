@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -68,8 +82,9 @@ func NewIndex(path, name string) (*Index, error) {
 
 		columnLabel: DefaultColumnLabel,
 
-		stats:     NopStatsClient,
-		LogOutput: ioutil.Discard,
+		broadcaster: NopBroadcaster,
+		stats:       NopStatsClient,
+		LogOutput:   ioutil.Discard,
 	}, nil
 }
 
@@ -93,7 +108,7 @@ func (i *Index) SetColumnLabel(v string) error {
 	}
 
 	// Make sure columnLabel is valid name
-	err := ValidateName(v)
+	err := ValidateLabel(v)
 	if err != nil {
 		return err
 	}
@@ -250,6 +265,7 @@ func (i *Index) MaxSlice() uint64 {
 	return max
 }
 
+// SetRemoteMaxSlice sets the remote max slice value received from another node.
 func (i *Index) SetRemoteMaxSlice(newmax uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -273,6 +289,7 @@ func (i *Index) MaxInverseSlice() uint64 {
 	return max
 }
 
+// SetRemoteMaxInverseSlice sets the remote max inverse slice value received from another node.
 func (i *Index) SetRemoteMaxInverseSlice(v uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -377,7 +394,11 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 
 	// Default the time quantum to what is set on the Index.
-	if err := f.SetTimeQuantum(i.timeQuantum); err != nil {
+	timeQuantum := i.timeQuantum
+	if opt.TimeQuantum != "" {
+		timeQuantum = opt.TimeQuantum
+	}
+	if err := f.SetTimeQuantum(timeQuantum); err != nil {
 		f.Close()
 		return nil, err
 	}
@@ -525,7 +546,7 @@ func encodeIndex(d *Index) *internal.Index {
 			ColumnLabel: d.columnLabel,
 			TimeQuantum: string(d.timeQuantum),
 		},
-		MaxSlice: d.remoteMaxSlice,
+		MaxSlice: d.MaxSlice(),
 		Frames:   encodeFrames(d.Frames()),
 	}
 }

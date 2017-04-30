@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -9,6 +23,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/pilosa/pilosa/internal"
 )
 
 // View layout modes.
@@ -36,7 +52,12 @@ type View struct {
 	cacheType string // passed in by frame
 	fragments map[uint64]*Fragment
 
-	stats StatsClient
+	// maxSlice maintains this view's max slice in order to
+	// prevent sending multiple `CreateSliceMessage` messages
+	maxSlice uint64
+
+	broadcaster Broadcaster
+	stats       StatsClient
 
 	RowAttrStore *AttrStore
 	LogOutput    io.Writer
@@ -54,8 +75,9 @@ func NewView(path, index, frame, name string, cacheSize uint32) *View {
 		cacheType: DefaultCacheType,
 		fragments: make(map[uint64]*Fragment),
 
-		stats:     NopStatsClient,
-		LogOutput: ioutil.Discard,
+		broadcaster: NopBroadcaster,
+		stats:       NopStatsClient,
+		LogOutput:   ioutil.Discard,
 	}
 }
 
@@ -206,6 +228,22 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 		return nil, err
 	}
 	frag.RowAttrStore = v.RowAttrStore
+
+	// Broadcast a message that a new max slice was just created.
+	if slice > v.maxSlice {
+		v.maxSlice = slice
+
+		// Send the create slice message to all nodes.
+		err := v.broadcaster.SendAsync(
+			&internal.CreateSliceMessage{
+				Index:     v.index,
+				Slice:     slice,
+				IsInverse: IsInverseView(v.name),
+			})
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// Save to lookup.
 	v.fragments[slice] = frag

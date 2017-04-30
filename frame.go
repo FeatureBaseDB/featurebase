@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -17,7 +31,7 @@ import (
 
 // Default frame settings.
 const (
-	DefaultRowLabel       = "id"
+	DefaultRowLabel       = "rowID"
 	DefaultCacheType      = CacheTypeLRU
 	DefaultInverseEnabled = false
 
@@ -67,7 +81,8 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		views:        make(map[string]*View),
 		rowAttrStore: NewAttrStore(filepath.Join(path, ".data")),
 
-		stats: NopStatsClient,
+		broadcaster: NopBroadcaster,
+		stats:       NopStatsClient,
 
 		rowLabel:       DefaultRowLabel,
 		inverseEnabled: DefaultInverseEnabled,
@@ -125,7 +140,7 @@ func (f *Frame) SetRowLabel(v string) error {
 	}
 
 	// Make sure rowLabel is valid name
-	err := ValidateName(v)
+	err := ValidateLabel(v)
 	if err != nil {
 		return err
 	}
@@ -423,6 +438,7 @@ func (f *Frame) newView(path, name string) *View {
 	view.LogOutput = f.LogOutput
 	view.RowAttrStore = f.rowAttrStore
 	view.stats = f.stats.WithTags(fmt.Sprintf("slice:%s", name))
+	view.broadcaster = f.broadcaster
 	return view
 }
 
@@ -529,6 +545,9 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			inverse = []string{ViewInverse}
 		} else {
 			standard = ViewsByTime(ViewStandard, *timestamp, q)
+			// In order to match the logic of `SetBit()`, we want bits
+			// with timestamps to write to both time and standard views.
+			standard = append(standard, ViewStandard)
 			inverse = ViewsByTime(ViewInverse, *timestamp, q)
 		}
 

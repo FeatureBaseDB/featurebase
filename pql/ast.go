@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pql
 
 import (
@@ -154,6 +168,30 @@ func (c *Call) String() string {
 	buf.WriteByte(')')
 
 	return buf.String()
+}
+
+// SupportsInverse indicates that the call may be on an inverse frame.
+func (c *Call) SupportsInverse() bool {
+	if c.Name == "Bitmap" {
+		return true
+	}
+	return false
+}
+
+// IsInverse specifies if the call is for an inverse view.
+// Return defaults to false unless absolutely sure of inversion.
+func (c *Call) IsInverse(rowLabel, columnLabel string) bool {
+	if c.SupportsInverse() {
+		_, rowOK, rowErr := c.UintArg(rowLabel)
+		_, columnOK, columnErr := c.UintArg(columnLabel)
+		if rowErr != nil || columnErr != nil {
+			return false
+		}
+		if !rowOK && columnOK {
+			return true
+		}
+	}
+	return false
 }
 
 // CopyArgs returns a copy of m.
