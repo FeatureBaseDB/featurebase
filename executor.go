@@ -316,7 +316,7 @@ func (e *Executor) executeCallSlice(ctx context.Context, db string, c *pql.Call,
 		return e.executeBitmapCallSlice(ctx, db, c, slice)
 	case "Count":
 		//	return e.executeCountSlice(ctx, db, c, slice)
-		return nil, errors.New("Count in Plugin not currently supported")
+		return nil, errors.New("nested Count in Plugin not currently supported")
 	case "TopN":
 		return nil, errors.New("nested TopN() not currently supported")
 	default:
