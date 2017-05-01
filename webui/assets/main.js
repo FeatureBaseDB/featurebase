@@ -121,7 +121,7 @@ class REPL {
         var indexname = e.options[e.selectedIndex].text;
         var repl = this;
         if (query.startsWith(":")) {
-            var parsed_query = parse_query(query);
+            var parsed_query = parse_query(query, indexname);
             if (Object.keys(parsed_query).length === 0) {
                 repl.createSingleOutput({
                     "input": query,
@@ -464,9 +464,7 @@ function isJSON(str) {
     return true
 }
 
-function parse_query(query) {
-    var valid_command = [":create", ":use", ":delete"];
-    // probably separate to a different function when option getting bigger
+function parse_query(query, indexname) {
     var keys = query.replace(/\s+/g, " ").split(" ");
     var command = keys[0];
     var command_type = keys[1];
