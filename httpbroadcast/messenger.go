@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package httpbroadcast
 
 import (
@@ -62,11 +76,11 @@ func (h *HTTPBroadcaster) SendAsync(pb proto.Message) error {
 
 func (h *HTTPBroadcaster) nodes() ([]*pilosa.Node, error) {
 	if h.server == nil {
-		return nil, errors.New("HTTPBroadcaster has no reference to Server.")
+		return nil, errors.New("HTTPBroadcaster has no reference to Server")
 	}
 	nodeset, ok := h.server.Cluster.NodeSet.(*HTTPNodeSet)
 	if !ok {
-		return nil, errors.New("NodeSet cannot be caste to HTTPNodeSet.")
+		return nil, errors.New("NodeSet cannot be caste to HTTPNodeSet")
 	}
 	return nodeset.Nodes(), nil
 }
@@ -106,12 +120,14 @@ func (h *HTTPBroadcaster) sendNodeMessage(node *pilosa.Node, msg []byte) error {
 	return nil
 }
 
+// HTTPBroadcastReceiver unmarshals incoming messages over HTTP and passes them on to the handler.
 type HTTPBroadcastReceiver struct {
 	port      string
 	handler   pilosa.BroadcastHandler
 	logOutput io.Writer
 }
 
+// NewHTTPBroadcastReceiver returns a new instance of HTTPBroadcastReceiver.
 func NewHTTPBroadcastReceiver(port string, logOutput io.Writer) *HTTPBroadcastReceiver {
 	return &HTTPBroadcastReceiver{
 		port:      port,
@@ -119,6 +135,7 @@ func NewHTTPBroadcastReceiver(port string, logOutput io.Writer) *HTTPBroadcastRe
 	}
 }
 
+// Start implements the BroadcastReceiver interface and starts listening for broadcast messages.
 func (rec *HTTPBroadcastReceiver) Start(b pilosa.BroadcastHandler) error {
 	rec.handler = b
 	go func() {
@@ -166,14 +183,17 @@ func NewHTTPNodeSet() *HTTPNodeSet {
 	return &HTTPNodeSet{}
 }
 
+// Nodes implements the NodeSet interface and returns a list of nodes in the cluster.
 func (h *HTTPNodeSet) Nodes() []*pilosa.Node {
 	return h.nodes
 }
 
+// Open implements the NodeSet interface to start network activity, but for a HTTPNodeSet it does nothing.
 func (h *HTTPNodeSet) Open() error {
 	return nil
 }
 
+// Join sets the NodeSet nodes to the slice of Nodes passed in.
 func (h *HTTPNodeSet) Join(nodes []*pilosa.Node) error {
 	h.nodes = nodes
 	return nil

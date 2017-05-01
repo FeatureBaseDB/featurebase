@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -253,7 +267,11 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		idx.SetRemoteMaxSlice(obj.Slice)
+		if obj.IsInverse {
+			idx.SetRemoteMaxInverseSlice(obj.Slice)
+		} else {
+			idx.SetRemoteMaxSlice(obj.Slice)
+		}
 	case *internal.CreateIndexMessage:
 		opt := IndexOptions{
 			ColumnLabel: obj.Meta.ColumnLabel,
@@ -289,19 +307,27 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 	return nil
 }
 
-// Server implements StatusHandler.
 // LocalStatus returns the state of the local node as well as the
 // holder (indexes/frames) according to the local node.
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
+// Server implements StatusHandler.
 func (s *Server) LocalStatus() (proto.Message, error) {
 	if s.Holder == nil {
-		return nil, errors.New("Server.Holder is nil.")
+		return nil, errors.New("Server.Holder is nil")
 	}
-	return &internal.NodeStatus{
+
+	ns := internal.NodeStatus{
 		Host:    s.Host,
 		State:   NodeStateUp,
 		Indexes: encodeIndexes(s.Holder.Indexes()),
-	}, nil
+	}
+
+	// Append Slice list per this Node's indexes
+	for _, index := range ns.Indexes {
+		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Host)
+	}
+
+	return &ns, nil
 }
 
 // ClusterStatus returns the NodeState for all nodes in the cluster.
@@ -316,6 +342,14 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 
 	// Update NodeState for all nodes.
 	for host, nodeState := range s.Cluster.NodeStates() {
+		// In a default configuration (or single-node) where a StaticNodeSet is used
+		// then all nodes are marked as DOWN. At the very least, we should consider
+		// the local node as UP.
+		// TODO: we should be able to remove this check if/when cluster.Nodes and
+		// cluster.NodeSet are unified.
+		if host == s.Host {
+			nodeState = NodeStateUp
+		}
 		node := s.Cluster.NodeByHost(host)
 		node.SetState(nodeState)
 	}

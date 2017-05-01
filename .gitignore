@@ -3,3 +3,4 @@ default.etcd/
 *.so
 vendor
 .protoc-gen-gofast
+.DS_Store

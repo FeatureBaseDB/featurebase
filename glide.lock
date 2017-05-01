@@ -1,5 +1,5 @@
-hash: 4bdea17c62dcd469584382515052e7a246fae6deefc2d62da70bf768e18e1f0c
-updated: 2017-04-19T10:51:10.409094081-05:00
+hash: 5066da70d6f312d032800619798684a693851eb77991b3788f68e89dfaf93925
+updated: 2017-04-25T15:31:49.712775923-05:00
 imports:
 - name: github.com/armon/go-metrics
   version: 97c69685293dce4c0a2d0b19535179bbc976e4d2
@@ -66,6 +66,10 @@ imports:
   version: c37440a7cf42ac63b919c752ca73a85067e05992
 - name: github.com/pelletier/go-toml
   version: 13d49d4606eb801b8f01ae542b4afc4c6ee3d84a
+- name: github.com/rakyll/statik
+  version: 89fe3459b5c829c32e89bdff9c43f18aad728f2f
+  subpackages:
+  - fs
 - name: github.com/satori/go.uuid
   version: 879c5887cd475cd7864858769793b2ceb0d44feb
 - name: github.com/spf13/afero

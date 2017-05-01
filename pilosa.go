@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -24,16 +38,19 @@ var (
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
-	ErrName = errors.New("invalid index or frame's name, must match [a-z0-9_-]")
+	ErrName  = errors.New("invalid index or frame's name, must match [a-z0-9_-]")
+	ErrLabel = errors.New("invalid row or column label, must match [A-Za-z0-9_-]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
 	ErrQueryRequired    = errors.New("query required")
 )
 
-// Regular expression to valuate index and frame's name
-// Todo: remove . when frame doesn't require . for topN
-var nameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,64}$`)
+// Regular expression to validate index and frame names.
+var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,64}$`)
+
+// Regular expression to validate row and column labels.
+var labelRegexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,64}$`)
 
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
@@ -88,11 +105,18 @@ func decodeColumnAttrSet(pb *internal.ColumnAttrSet) *ColumnAttrSet {
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
 
-// Restrict name using regex
+// ValidateName ensures that the name is a valid format.
 func ValidateName(name string) error {
-	validName := nameRegexp.Match([]byte(name))
-	if validName == false {
+	if nameRegexp.Match([]byte(name)) == false {
 		return ErrName
+	}
+	return nil
+}
+
+// ValidateLabel ensures that the label is a valid format.
+func ValidateLabel(label string) error {
+	if labelRegexp.Match([]byte(label)) == false {
+		return ErrLabel
 	}
 	return nil
 }
