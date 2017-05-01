@@ -123,7 +123,7 @@ class REPL {
         if (query.startsWith(":")) {
             var parsed_query = parse_query(query, indexname);
             if (Object.keys(parsed_query).length === 0) {
-                repl.createSingleOutput({
+                repl.create_single_output({
                     "input": query,
                     "output": "invalid query",
                     "status": 400,
@@ -159,7 +159,7 @@ class REPL {
         xhr.onload = function () {
             var end_time = new Date().getTime();
             repl.result_number++
-            repl.createSingleOutput({
+            repl.create_single_output({
                 "input": query,
                 "output": xhr.responseText,
                 "status": xhr.status,
@@ -180,7 +180,7 @@ class REPL {
         }
     }
 
-    createSingleOutput(res) {
+    create_single_output(res) {
         var node = document.createElement("div");
         node.classList.add('output');
         var output_string = res['output']
