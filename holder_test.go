@@ -232,7 +232,7 @@ func (h *Holder) MustCreateFrameIfNotExists(index, frame string) *Frame {
 // MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
 func (h *Holder) MustCreateFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
+	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FrameOptions{CacheType: pilosa.CacheTypeRanked})
 	if err != nil {
 		panic(err)
 	}
