@@ -2,11 +2,12 @@ package pilosa_test
 
 import (
 	"context"
-	"github.com/pilosa/pilosa"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pilosa/pilosa"
 )
 
 func TestStatsCount_TopN(t *testing.T) {
@@ -65,7 +66,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`Bitmap(frame=f, id=0)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`Bitmap(frame=f, rowID=0)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -96,7 +97,7 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetRowAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", MustParse(`SetRowAttrs(rowID=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
