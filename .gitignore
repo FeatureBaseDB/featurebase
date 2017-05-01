@@ -2,5 +2,4 @@ default.etcd/
 *.test
 vendor
 .protoc-gen-gofast
-
-/datadog/.DS_Store
+.DS_Store

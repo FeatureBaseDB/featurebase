@@ -1,3 +1,19 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//go:generate statik -src=./webui
+
 package pilosa
 
 import (
@@ -23,6 +39,9 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+
+	_ "github.com/pilosa/pilosa/statik"
+	"github.com/rakyll/statik/fs"
 )
 
 // Handler represents an HTTP handler.
@@ -58,8 +77,11 @@ func NewHandler() *Handler {
 	return handler
 }
 
+// NewRouter creates a Gorilla Mux http router.
 func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
+	router.HandleFunc("/", handler.handleWebUI).Methods("GET")
+	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
 	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET")
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
@@ -83,7 +105,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
 	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
-	router.HandleFunc("/nodes", handler.handleGetNodes).Methods("GET")
+	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
@@ -105,6 +127,21 @@ func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Router.ServeHTTP(w, r)
+}
+
+func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
+	// If user is using curl, don't chuck HTML at them
+	if strings.HasPrefix(r.UserAgent(), "curl") {
+		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the WebUI by visiting this URL in your browser.", http.StatusNotFound)
+		return
+	}
+	statikFS, err := fs.New()
+	if err != nil {
+		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
+		fmt.Println("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
+		return
+	}
+	http.FileServer(statikFS).ServeHTTP(w, r)
 }
 
 // handleGetSchema handles GET /schema requests.
@@ -1237,8 +1274,8 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetNodes handles /nodes requests.
-func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
+// handleGetHosts handles /hosts requests.
+func (h *Handler) handleGetHosts(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(h.Cluster.Nodes); err != nil {
 		h.logger().Printf("write version response error: %s", err)
 	}
@@ -1324,6 +1361,7 @@ type QueryResponse struct {
 	Err error
 }
 
+// MarshalJSON marshals QueryResponse into a JSON-encoded byte slice
 func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	var output struct {
 		Results        []interface{}    `json:"results,omitempty"`

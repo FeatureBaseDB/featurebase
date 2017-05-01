@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -56,17 +70,41 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 		opt = &ExecOptions{}
 	}
 
+	// Don't bother calculating slices for query types that don't require it.
+	needsSlices := needsSlices(q.Calls)
+
+	// MaxSlice can differ between inverse and standard views, so we need
+	// to send queries to different slices based on orientation.
+	var inverseSlices []uint64
+	rowLabel := DefaultRowLabel
+	columnLabel := DefaultColumnLabel
+
 	// If slices aren't specified, then include all of them.
 	if len(slices) == 0 {
-		if needsSlices(q.Calls) {
+		// Determine slices and inverseSlices for use in e.executeCall().
+		if needsSlices {
 			// Round up the number of slices.
 			maxSlice := e.Holder.Index(index).MaxSlice()
+			maxInverseSlice := e.Holder.Index(index).MaxInverseSlice()
 
 			// Generate a slices of all slices.
 			slices = make([]uint64, maxSlice+1)
 			for i := range slices {
 				slices[i] = uint64(i)
 			}
+
+			// Generate a slices of all inverse slices.
+			inverseSlices = make([]uint64, maxInverseSlice+1)
+			for i := range inverseSlices {
+				inverseSlices[i] = uint64(i)
+			}
+
+			// Fetch column label from index.
+			idx := e.Holder.Index(index)
+			if idx == nil {
+				return nil, ErrIndexNotFound
+			}
+			columnLabel = idx.ColumnLabel()
 		}
 	}
 
@@ -78,6 +116,25 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
+
+		if call.SupportsInverse() && needsSlices {
+			// Fetch frame & row label based on argument.
+			frame, _ := call.Args["frame"].(string)
+			if frame == "" {
+				frame = DefaultFrame
+			}
+			f := e.Holder.Frame(index, frame)
+			if f == nil {
+				return nil, ErrFrameNotFound
+			}
+			rowLabel = f.RowLabel()
+
+			// If this call is to an inverse frame send to a different list of slices.
+			if call.IsInverse(rowLabel, columnLabel) {
+				slices = inverseSlices
+			}
+		}
+
 		v, err := e.executeCall(ctx, index, call, slices, opt)
 		if err != nil {
 			return nil, err
@@ -762,7 +819,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err != nil {
 		return fmt.Errorf("reading SetRowAttrs() row: %v", err)
 	} else if !ok {
-		return fmt.Errorf("SetRowAttrs() row field '%v' required.", rowLabel)
+		return fmt.Errorf("SetRowAttrs() row field '%v' required", rowLabel)
 	}
 
 	// Copy args and remove reserved fields.
@@ -822,7 +879,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err != nil {
 			return nil, fmt.Errorf("reading SetRowAttrs() row: %v", rowLabel)
 		} else if !ok {
-			return nil, fmt.Errorf("SetRowAttrs row field '%v' required.", rowLabel)
+			return nil, fmt.Errorf("SetRowAttrs row field '%v' required", rowLabel)
 		}
 
 		// Copy args and remove reserved fields.

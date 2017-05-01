@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -13,8 +27,10 @@ const (
 
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
+)
 
-	// NodeState represents node state returned in /status endpoint for a node in the cluster.
+// NodeState represents node state returned in /status endpoint for a node in the cluster.
+const (
 	NodeStateUp   = "UP"
 	NodeStateDown = "DOWN"
 )
@@ -125,7 +141,7 @@ func NewCluster() *Cluster {
 	}
 }
 
-// NodeSetHosts returns the list of host strings for NodeSet members
+// NodeSetHosts returns the list of host strings for NodeSet members.
 func (c *Cluster) NodeSetHosts() []string {
 	if c.NodeSet == nil {
 		return []string{}
@@ -152,7 +168,7 @@ func (c *Cluster) NodeStates() map[string]string {
 	return h
 }
 
-// State returns the internal ClusterState representation.
+// Status returns the internal ClusterStatus representation.
 func (c *Cluster) Status() *internal.ClusterStatus {
 	return &internal.ClusterStatus{
 		Nodes: encodeClusterStatus(c.Nodes),
@@ -229,11 +245,10 @@ func (c *Cluster) OwnsSlices(index string, maxSlice uint64, host string) []uint6
 	for i := uint64(0); i <= maxSlice; i++ {
 		p := c.Partition(index, i)
 		// Determine primary owner node.
-		node_index := c.Hasher.Hash(uint64(p), len(c.Nodes))
-		if c.Nodes[node_index].Host == host {
+		nodeIndex := c.Hasher.Hash(uint64(p), len(c.Nodes))
+		if c.Nodes[nodeIndex].Host == host {
 			slices = append(slices, i)
 		}
-
 	}
 	return slices
 }

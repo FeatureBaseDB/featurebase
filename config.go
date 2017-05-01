@@ -1,12 +1,32 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import "time"
 
 const (
-	// DefaultHost is the default hostname and port to use.
-	DefaultHost         = "localhost"
-	DefaultPort         = "10101"
-	DefaultClusterType  = "static"
+	// DefaultHost is the default hostname to use.
+	DefaultHost = "localhost"
+
+	// DefaultPort is the default port use with the hostname.
+	DefaultPort = "10101"
+
+	// DefaultClusterType sets the node intercommunication method.
+	DefaultClusterType = "static"
+
+	// DefaultInternalPort the port the nodes intercommunicate on.
 	DefaultInternalPort = "14000"
 	DefaultMetrics      = "nop"
 )
@@ -75,6 +95,7 @@ func (d *Duration) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// MarshalText writes duration value in text format.
 func (d Duration) MarshalText() (text []byte, err error) {
 	return []byte(d.String()), nil
 }
