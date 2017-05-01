@@ -119,7 +119,7 @@ func (c *ExpvarStatsClient) Gauge(name string, value float64) {
 }
 
 // Histogram tracks statistical distribution of a metric.
-// This works the same as guage for this client.
+// This works the same as gauge for this client.
 func (c *ExpvarStatsClient) Histogram(name string, value float64) {
 	c.Gauge(name, value)
 }
