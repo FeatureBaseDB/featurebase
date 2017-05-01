@@ -57,7 +57,7 @@ There are supported libraries for the following languages:
 
 ## Get Support
 
-There are [several channels](https://www.pilosa.com/community/#support) availble for you to reach out to us for support.
+There are [several channels](https://www.pilosa.com/community/#support) available for you to reach out to us for support.
 
 ## Contributing
 
