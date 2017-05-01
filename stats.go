@@ -107,6 +107,7 @@ func (c *ExpvarStatsClient) Count(name string, value int64) {
 	c.m.Add(name, value)
 }
 
+// CountWithCustomTags Tracks the number of times something occurs per second with custom tags
 func (c *ExpvarStatsClient) CountWithCustomTags(name string, value int64, tags []string) {
 	c.m.Add(name, value)
 }
@@ -164,6 +165,7 @@ func (a MultiStatsClient) Count(name string, value int64) {
 	}
 }
 
+// CountWithCustomTags Tracks the number of times something occurs per second with custom tags
 func (a MultiStatsClient) CountWithCustomTags(name string, value int64, tags []string) {
 	for _, c := range a {
 		c.CountWithCustomTags(name, value, tags)

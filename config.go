@@ -28,7 +28,9 @@ const (
 
 	// DefaultInternalPort the port the nodes intercommunicate on.
 	DefaultInternalPort = "14000"
-	DefaultMetrics      = "nop"
+
+	// DefaultMetrics sets the internal metrics to no op
+	DefaultMetrics = "nop"
 )
 
 // Config represents the configuration for the command.
