@@ -259,7 +259,8 @@ class REPL {
             expand.style.display = 'none';
         }
         expand.onclick = function () {
-            element.style.height = element.scrollHeight + "px"
+            element.style.height = element.scrollHeight + "px";
+            expand.style.display = 'none';
             return false;
         };
     }
@@ -505,7 +506,6 @@ function parse_query(query) {
             }
             break;
         case ":use":
-            console.log(parsed_query)
             break;
         default:
             return {}
