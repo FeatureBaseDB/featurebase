@@ -286,6 +286,10 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth)
 	hldr.MustCreateFragmentIfNotExists("i", "other", pilosa.ViewStandard, 0).SetBit(0, 0)
 
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).RecalculateCache()
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).RecalculateCache()
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 5).RecalculateCache()
+
 	// Execute query.
 	e := NewExecutor(hldr.Holder, NewCluster(1))
 	if result, err := e.Execute(context.Background(), "i", MustParse(`TopN(frame=f, n=2)`), nil, nil); err != nil {
@@ -373,6 +377,10 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	hldr.MustCreateFragmentIfNotExists("i", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth)
 	hldr.MustCreateFragmentIfNotExists("i", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth+1)
 	hldr.MustCreateFragmentIfNotExists("i", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth+2)
+
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).RecalculateCache()
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).RecalculateCache()
+	hldr.MustCreateFragmentIfNotExists("i", "other", pilosa.ViewStandard, 1).RecalculateCache()
 
 	// Execute query.
 	e := NewExecutor(hldr.Holder, NewCluster(1))

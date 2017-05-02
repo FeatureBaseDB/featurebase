@@ -291,14 +291,14 @@ func TestMain_FrameRestore(t *testing.T) {
 
 	// Create frames.
 	client := m0.Client()
-	if err := client.CreateIndex(context.Background(), "x", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "x", "f", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Write data on first cluster.
-	if _, err := m0.Query("x", "", `
+	if _, err := m0.Query("i", "", `
 		SetBit(rowID=1, frame="f", columnID=100)
 		SetBit(rowID=1, frame="f", columnID=1000)
 		SetBit(rowID=1, frame="f", columnID=100000)
@@ -311,7 +311,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	}
 
 	// Query row on first cluster.
-	if res, err := m0.Query("x", "", `Bitmap(rowID=1, frame="f")`); err != nil {
+	if res, err := m0.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -325,16 +325,16 @@ func TestMain_FrameRestore(t *testing.T) {
 	client, err := pilosa.NewClient(m2.Server.Host)
 	if err != nil {
 		t.Fatal(err)
-	} else if err := m2.Client().CreateIndex(context.Background(), "x", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+	} else if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := m2.Client().CreateFrame(context.Background(), "x", "f", pilosa.FrameOptions{}); err != nil {
+	} else if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
-	} else if err := client.RestoreFrame(context.Background(), m0.Server.Host, "x", "f"); err != nil {
+	} else if err := client.RestoreFrame(context.Background(), m0.Server.Host, "i", "f"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row on second cluster.
-	if res, err := m2.Query("x", "", `Bitmap(rowID=1, frame="f")`); err != nil {
+	if res, err := m2.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)

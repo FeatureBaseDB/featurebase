@@ -93,6 +93,14 @@ func TestClient_MultiNode(t *testing.T) {
 	baseBit0 := SliceWidth * sliceNums[0]
 	baseBit1 := SliceWidth * sliceNums[1]
 	baseBit2 := SliceWidth * sliceNums[2]
+
+	maxSlice := uint64(0)
+	for _, x := range sliceNums {
+		if x > maxSlice {
+			maxSlice = x
+		}
+	}
+
 	hldr[0].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(100, baseBit0+10)
 	hldr[0].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(4, baseBit0+10, baseBit0+11, baseBit0+12)
 	hldr[0].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(4, baseBit0+10, baseBit0+11, baseBit0+12, baseBit0+13, baseBit0+14, baseBit0+15)
@@ -100,13 +108,13 @@ func TestClient_MultiNode(t *testing.T) {
 	hldr[0].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(3, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4, baseBit0+5)
 	hldr[0].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(22, baseBit0+1, baseBit0+2, baseBit0+10)
 
-	hldr[2].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(24, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13, baseBit2+14)
 	hldr[1].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetBits(99, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4)
 	hldr[1].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetBits(100, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6, baseBit1+7, baseBit1+8, baseBit1+9, baseBit1+10)
 	hldr[1].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetBits(98, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6)
 	hldr[1].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetBits(1, baseBit1+4)
 	hldr[1].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetBits(22, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5)
 
+	hldr[2].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(24, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13, baseBit2+14)
 	hldr[2].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(20, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13)
 	hldr[2].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(21, baseBit2+10)
 	hldr[2].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(100, baseBit2+10)
@@ -117,21 +125,15 @@ func TestClient_MultiNode(t *testing.T) {
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay
 	// built into cache.Invalidate()
-	// hldr[0].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).RecalculateCache()
-	// hldr[0].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).RecalculateCache()
-	// hldr[0].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).RecalculateCache()
-	// hldr[1].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).RecalculateCache()
+	hldr[0].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).RecalculateCache()
 	hldr[1].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).RecalculateCache()
-	//hldr[1].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).RecalculateCache()
-	//hldr[2].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).RecalculateCache()
-	//hldr[2].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).RecalculateCache()
-	//hldr[2].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).RecalculateCache()
+	hldr[2].MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).RecalculateCache()
 
 	// Connect to each node to compare results.
 	client := make([]*Client, 3)
 	client[0] = MustNewClient(s[0].Host())
-	client[1] = MustNewClient(s[0].Host())
-	client[2] = MustNewClient(s[0].Host())
+	client[1] = MustNewClient(s[1].Host())
+	client[2] = MustNewClient(s[2].Host())
 
 	topN := 4
 	q := fmt.Sprintf(`TopN(frame="%s", n=%d)`, "f", topN)
@@ -144,15 +146,15 @@ func TestClient_MultiNode(t *testing.T) {
 	// Check the results before every node has the correct max slice value.
 	pairs := result.(internal.QueryResponse).Results[0].Pairs
 	for _, pair := range pairs {
-		if pair.Key == 22 && pair.Count != 11 {
+		if pair.Key == 22 && pair.Count != 3 {
 			t.Fatalf("Invalid Cluster wide MaxSlice prevents accurate calculation of %s", pair)
 		}
 	}
 
 	// Set max slice to correct value.
-	hldr[0].Index("i").SetRemoteMaxSlice(10)
-	hldr[1].Index("i").SetRemoteMaxSlice(10)
-	hldr[2].Index("i").SetRemoteMaxSlice(10)
+	hldr[0].Index("i").SetRemoteMaxSlice(maxSlice)
+	hldr[1].Index("i").SetRemoteMaxSlice(maxSlice)
+	hldr[2].Index("i").SetRemoteMaxSlice(maxSlice)
 
 	result, err = client[0].ExecuteQuery(context.Background(), "i", q, true)
 	if err != nil {
