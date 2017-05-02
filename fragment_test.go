@@ -578,7 +578,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	}
 
 	// Open the fragment specified by the path.
-	f := pilosa.NewFragment(*FragmentPath, "i", "f", pilosa.ViewStandard, 0)
+	f := pilosa.NewFragment(*FragmentPath, "i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeLRU)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -628,10 +628,11 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 type Fragment struct {
 	*pilosa.Fragment
 	RowAttrStore *AttrStore
+	CacheType    string
 }
 
 // NewFragment returns a new instance of Fragment with a temporary path.
-func NewFragment(index, frame, view string, slice uint64) *Fragment {
+func NewFragment(index, frame, view string, slice uint64, cacheType string) *Fragment {
 	file, err := ioutil.TempFile("", "pilosa-fragment-")
 	if err != nil {
 		panic(err)
@@ -639,8 +640,9 @@ func NewFragment(index, frame, view string, slice uint64) *Fragment {
 	file.Close()
 
 	f := &Fragment{
-		Fragment:     pilosa.NewFragment(file.Name(), index, frame, view, slice),
 		RowAttrStore: MustOpenAttrStore(),
+		CacheType:    cacheType,
+		Fragment:     pilosa.NewFragment(file.Name(), index, frame, view, slice, cacheType),
 	}
 	f.Fragment.RowAttrStore = f.RowAttrStore.AttrStore
 	return f
@@ -648,7 +650,7 @@ func NewFragment(index, frame, view string, slice uint64) *Fragment {
 
 // MustOpenFragment creates and opens an fragment at a temporary path. Panic on error.
 func MustOpenFragment(index, frame, view string, slice uint64) *Fragment {
-	f := NewFragment(index, frame, view, slice)
+	f := NewFragment(index, frame, view, slice, pilosa.CacheTypeLRU)
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
@@ -670,7 +672,7 @@ func (f *Fragment) Reopen() error {
 		return err
 	}
 
-	f.Fragment = pilosa.NewFragment(path, f.Index(), f.Frame(), f.View(), f.Slice())
+	f.Fragment = pilosa.NewFragment(path, f.Index(), f.Frame(), f.View(), f.Slice(), f.CacheType)
 	f.Fragment.RowAttrStore = f.RowAttrStore.AttrStore
 	if err := f.Open(); err != nil {
 		return err

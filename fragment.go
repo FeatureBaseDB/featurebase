@@ -108,14 +108,14 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, index, frame, view string, slice uint64) *Fragment {
+func NewFragment(path, index, frame, view string, slice uint64, cacheType string) *Fragment {
 	return &Fragment{
 		path:      path,
 		index:     index,
 		frame:     frame,
 		view:      view,
 		slice:     slice,
-		cacheType: DefaultCacheType,
+		cacheType: cacheType,
 		cacheSize: DefaultCacheSize,
 
 		LogOutput: ioutil.Discard,
