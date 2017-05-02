@@ -469,9 +469,13 @@ function parse_query(query, indexname) {
     var command = keys[0];
     var command_type = keys[1];
     var command_name = keys[2];
-    if (!command_name){
-        return {}
+
+    if (command !== ":use") {
+         if (!command_name){
+            return {}
+        }
     }
+   
 
     var parsed_query = {};
     parsed_query["command"] = command.substr(1, command.length);
@@ -504,6 +508,7 @@ function parse_query(query, indexname) {
             }
             break;
         case ":use":
+            parsed_query["command_name"] = keys[1];
             break;
         default:
             return {}
