@@ -17,7 +17,6 @@ package pilosa_test
 import (
 	"bytes"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"math"
 	"os"
@@ -656,7 +655,7 @@ func MustOpenFragment(index, frame, view string, slice uint64, cacheType string)
 		cacheType = pilosa.DefaultCacheType
 	}
 	f := NewFragment(index, frame, view, slice, cacheType)
-	fmt.Println("CacheType", f.CacheType)
+
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
