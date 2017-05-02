@@ -138,7 +138,7 @@ func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
 	statikFS, err := fs.New()
 	if err != nil {
 		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
-		fmt.Println("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
+		h.logger().Println("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
 		return
 	}
 	http.FileServer(statikFS).ServeHTTP(w, r)
