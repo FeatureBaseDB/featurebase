@@ -223,7 +223,7 @@ em{
   color: #102445;
   padding: 15px;
   margin-bottom: 15px;
-  word-wrap: break-word;
+  word-break: break-all;
   overflow:hidden;
 }
 
