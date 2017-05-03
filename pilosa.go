@@ -44,6 +44,7 @@ var (
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
 	ErrQueryRequired    = errors.New("query required")
+	ErrTooManyWrites    = errors.New("too many write commands")
 )
 
 // Regular expression to validate index and frame names.

@@ -40,6 +40,7 @@ func (cmd *ConfigCommand) Run(ctx context.Context) error {
 	fmt.Fprintln(cmd.Stdout, strings.TrimSpace(`
 data-dir = "~/.pilosa"
 bind = "localhost:10101"
+max-writes-per-request = 5000
 
 [cluster]
   poll-interval = "2m0s"

@@ -61,6 +61,9 @@ type Server struct {
 	AntiEntropyInterval time.Duration
 	PollingInterval     time.Duration
 
+	// Misc options.
+	MaxWritesPerRequest int
+
 	LogOutput io.Writer
 }
 
@@ -129,6 +132,7 @@ func (s *Server) Open() error {
 	e.Holder = s.Holder
 	e.Host = s.Host
 	e.Cluster = s.Cluster
+	e.MaxWritesPerRequest = s.MaxWritesPerRequest
 
 	// Initialize HTTP handler.
 	s.Handler.Broadcaster = s.Broadcaster
