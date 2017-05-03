@@ -203,8 +203,6 @@ em{
   display: block;
 }
 
-
-
 .result-io-header{
   display: flex;
   align-items: center;
@@ -214,6 +212,7 @@ em{
 .result-input,
 .result-output,
 .result-error{
+  height: 60px;
   border-radius: 2px;
   background-color: #fafafa;
   border: solid 1.5px #e4eff4;
@@ -224,6 +223,8 @@ em{
   color: #102445;
   padding: 15px;
   margin-bottom: 15px;
+  word-break: break-all;
+  overflow:hidden;
 }
 
 
@@ -291,3 +292,7 @@ td{
 .boolean { color: blue; }
 .null { color: magenta; }
 .key { color: red; }
+
+.expand {
+  text-align: center;
+}
