@@ -28,6 +28,18 @@ type Query struct {
 	Calls []*Call
 }
 
+// WriteCallN returns the number of mutating calls.
+func (q *Query) WriteCallN() int {
+	var n int
+	for _, call := range q.Calls {
+		switch call.Name {
+		case "SetBit", "ClearBit", "SetRowAttrs", "SetColumnAttrs":
+			n++
+		}
+	}
+	return n
+}
+
 // String returns a string representation of the query.
 func (q *Query) String() string {
 	a := make([]string, len(q.Calls))

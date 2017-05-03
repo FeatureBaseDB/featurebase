@@ -699,6 +699,17 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	}
 }
 
+// Ensure executor returns an error if too many writes are in a single request.
+func TestExecutor_Execute_ErrMaxWritesPerRequest(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	e := NewExecutor(hldr.Holder, NewCluster(1))
+	e.MaxWritesPerRequest = 3
+	if _, err := e.Execute(context.Background(), "i", MustParse(`SetBit() ClearBit() SetBit() SetBit()`), nil, nil); err != pilosa.ErrTooManyWrites {
+		t.Fatalf("unexpected error: %s", err)
+	}
+}
+
 // Executor represents a test wrapper for pilosa.Executor.
 type Executor struct {
 	*pilosa.Executor
