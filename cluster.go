@@ -23,7 +23,7 @@ import (
 
 const (
 	// DefaultPartitionN is the default number of partitions in a cluster.
-	DefaultPartitionN = 16
+	DefaultPartitionN = 256
 
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
