@@ -254,8 +254,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 }
 
 func (v *View) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, v.index, v.frame, v.name, slice)
-	frag.cacheType = v.cacheType
+	frag := NewFragment(path, v.index, v.frame, v.name, slice, v.cacheType)
 	frag.cacheSize = v.cacheSize
 	frag.LogOutput = v.LogOutput
 	frag.stats = v.stats.WithTags(fmt.Sprintf("slice:%d", slice))
