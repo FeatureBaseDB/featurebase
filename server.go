@@ -421,7 +421,7 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
+		return nil, fmt.Errorf("invalid status checkMaxSlices: code=%d, err=%s, req=%v", resp.StatusCode, body, req)
 	}
 
 	// Decode response object.

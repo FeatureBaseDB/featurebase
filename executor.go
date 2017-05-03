@@ -1047,7 +1047,7 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
+		return nil, fmt.Errorf("invalid status Executor.exec: code=%d, err=%s, req: %v", resp.StatusCode, body, req)
 	}
 
 	// Decode response object.
