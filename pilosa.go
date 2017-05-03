@@ -34,6 +34,7 @@ var (
 	ErrFrameExists          = errors.New("frame already exists")
 	ErrFrameNotFound        = errors.New("frame not found")
 	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
+	ErrColumnRowLabelEqual  = errors.New("column and row labels cannot be equal")
 
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
