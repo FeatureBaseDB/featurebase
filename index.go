@@ -382,6 +382,11 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, ErrInvalidCacheType
 	}
 
+	// Validate that row label does not match column label.
+	if i.columnLabel == opt.RowLabel || (opt.RowLabel == "" && i.columnLabel == DefaultRowLabel) {
+		return nil, ErrColumnRowLabelEqual
+	}
+
 	// Initialize frame.
 	f, err := i.newFrame(i.FramePath(name), name)
 	if err != nil {

@@ -49,6 +49,9 @@ type Executor struct {
 
 	// Client used for remote HTTP requests.
 	HTTPClient *http.Client
+
+	// Maximum number of SetBit() or ClearBit() commands per request.
+	MaxWritesPerRequest int
 }
 
 // NewExecutor returns a new instance of Executor.
@@ -63,6 +66,11 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// Verify that an index is set.
 	if index == "" {
 		return nil, ErrIndexRequired
+	}
+
+	// Verify that the number of writes do not exceed the maximum.
+	if e.MaxWritesPerRequest > 0 && q.WriteCallN() > e.MaxWritesPerRequest {
+		return nil, ErrTooManyWrites
 	}
 
 	// Default options.
@@ -1039,7 +1047,7 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
+		return nil, fmt.Errorf("invalid status Executor.exec: code=%d, err=%s, req: %v", resp.StatusCode, body, req)
 	}
 
 	// Decode response object.

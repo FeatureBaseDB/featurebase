@@ -228,7 +228,12 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Set appropriate status code, if there is an error.
 	if resp.Err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		switch resp.Err {
+		case ErrTooManyWrites:
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 
 	// Write response back to client.

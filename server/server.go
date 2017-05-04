@@ -135,6 +135,9 @@ func (m *Command) SetupServer() error {
 	m.Server.Holder.Path = m.Config.DataDir
 	m.Server.Holder.Stats = pilosa.NewExpvarStatsClient()
 
+	// Copy configuration flags.
+	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
+
 	var err error
 	m.Server.Host, err = normalizeHost(m.Config.Host)
 	if err != nil {
