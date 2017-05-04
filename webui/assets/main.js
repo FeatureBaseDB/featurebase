@@ -469,13 +469,13 @@ function parse_query(query, indexname) {
     var command = keys[0];
     var command_type = keys[1];
     var command_name = keys[2];
-
+    var option_str = keys.slice(3, keys.length)
+    var options = parse_options(option_str);
     if (command !== ":use") {
          if (!command_name){
             return {}
         }
     }
-   
 
     var parsed_query = {};
     parsed_query["command"] = command.substr(1, command.length);
@@ -483,14 +483,21 @@ function parse_query(query, indexname) {
     switch (command) {
         case ":create":
             parsed_query["request"] = "POST";
+            if(Object.keys(options).length === 0) {
+                parsed_query["data"] = "";
+            } else {
+                var opts = {"options":{}};
+                for (var o in options) {
+                    opts.options[o] = options[o]
+                }
+                parsed_query["data"] = JSON.stringify(opts);
+            }
             switch (command_type){
                 case "index":
                     parsed_query["url"] =  '/index/' + command_name;
-                    parsed_query["data"] = "";
                     break;
                 case "frame":
                     parsed_query["url"] =  '/index/' + indexname + '/frame/' + command_name;
-                    parsed_query["data"] = "";
                     break
             }
             break;
@@ -514,4 +521,21 @@ function parse_query(query, indexname) {
             return {}
     }
     return parsed_query;
+}
+
+function parse_options(option_str) {
+    var int_keys = ["cacheSize"];
+    var bool_keys = ["inverseEnabled"];
+    var options = {};
+        for (var i = 0; i < option_str.length; i++) {
+            var parts = option_str[i].split('=');
+            if (int_keys.indexOf(parts[0]) !== -1 ){
+                options[parts[0]] = Number(parts[1])
+            } else if (bool_keys.indexOf(parts[0]) !== -1){
+                 options[parts[0]] = (parts[1] == "true")
+            } else {
+                options[parts[0]] = parts[1]
+            }
+        }
+        return options;
 }
