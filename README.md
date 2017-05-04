@@ -4,10 +4,11 @@
     </a>
 </p>
 
-[![Build Status](https://travis-ci.com/pilosa/pilosa.svg?token=Peb4jvQ3kLbjUEhpU5aR&branch=master)](https://travis-ci.com/pilosa/pilosa)
+[![Build Status](https://travis-ci.org/pilosa/pilosa.svg?branch=master)](https://travis-ci.org/pilosa/pilosa)
 [![GoDoc](https://godoc.org/github.com/pilosa/pilosa?status.svg)](https://godoc.org/github.com/pilosa/pilosa)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pilosa/pilosa)](https://goreportcard.com/report/github.com/pilosa/pilosa)
 [![license](https://img.shields.io/github/license/pilosa/pilosa.svg)](https://github.com/pilosa/pilosa/blob/master/LICENSE)
+[![CLA Assistant](https://cla-assistant.io/readme/badge/pilosa/pilosa)](https://cla-assistant.io/pilosa/pilosa)
 [![GitHub release](https://img.shields.io/github/release/pilosa/pilosa.svg)](https://github.com/pilosa/pilosa/releases)
 
 ## An open source, distributed bitmap index.
