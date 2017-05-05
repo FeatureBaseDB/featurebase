@@ -23,6 +23,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/adapter"
 	"github.com/pilosa/pilosa/pql"
 )
 
@@ -474,6 +475,39 @@ func TestExecutor_Execute_Range(t *testing.T) {
 		t.Fatal(err)
 	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{2, 3, 4, 5, 6, 7}) {
 		t.Fatalf("unexpected bits: %+v", bits)
+	}
+}
+
+// Ensure an external plugin call can be executed.
+func TestExecutor_Execute_ExternalCall(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(10, 3)
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth+1)
+
+	// Initialize executor with two plugins.
+	e := NewExecutor(hldr.Holder, NewCluster(1))
+	adapter.RegisterPlugin("test1", func() adapter.Plugin {
+		return &MockPlugin{
+			MapFn: func(ctx context.Context, db string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
+				bm := children[0].(*pilosa.Bitmap)
+				return uint64(bm.Count() + 10), nil
+			},
+			ReduceFn: func(ctx context.Context, prev, v interface{}) interface{} {
+				u64, _ := prev.(uint64)
+				return u64 + v.(uint64)
+			},
+		}
+	})
+
+	// Execute function with plugin call.
+	// The result should include the total bit count plus 10 for each slice
+	// executed during the map phase: 1 + 10 + 1 + 10 = 22
+	if res, err := e.Execute(context.Background(), "i", MustParse(`test1(Bitmap(id=10, frame=f))`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if res[0] != uint64(22) {
+		t.Fatalf("unexpected result: %v", res)
 	}
 }
 

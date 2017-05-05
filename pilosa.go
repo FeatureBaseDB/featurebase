@@ -19,6 +19,7 @@ import (
 	"regexp"
 
 	"github.com/pilosa/pilosa/internal"
+	_ "github.com/pilosa/pilosa/plugins"
 )
 
 // System errors.
