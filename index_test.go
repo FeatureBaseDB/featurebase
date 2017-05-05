@@ -48,42 +48,70 @@ func TestIndex_CreateFrameIfNotExists(t *testing.T) {
 	}
 }
 
-// Ensure index is assigned the correct time quantum on creation.
-func TestIndex_CreateFrame_TimeQuantum(t *testing.T) {
-	t.Run("Explicit", func(t *testing.T) {
-		index := MustOpenIndex()
-		defer index.Close()
+func TestIndex_CreateFrame(t *testing.T) {
+	// Ensure time quantum can be set appropriately on a new frame.
+	t.Run("TimeQuantum", func(t *testing.T) {
+		t.Run("Explicit", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
 
-		// Set index time quantum.
-		if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
-			t.Fatal(err)
-		}
+			// Set index time quantum.
+			if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
+				t.Fatal(err)
+			}
 
-		// Create frame with explicit quantum.
-		f, err := index.CreateFrame("f", pilosa.FrameOptions{TimeQuantum: pilosa.TimeQuantum("YMDH")})
-		if err != nil {
-			t.Fatal(err)
-		} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
-			t.Fatalf("unexpected frame time quantum: %s", q)
-		}
+			// Create frame with explicit quantum.
+			f, err := index.CreateFrame("f", pilosa.FrameOptions{TimeQuantum: pilosa.TimeQuantum("YMDH")})
+			if err != nil {
+				t.Fatal(err)
+			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+				t.Fatalf("unexpected frame time quantum: %s", q)
+			}
+		})
+
+		t.Run("Inherited", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
+
+			// Set index time quantum.
+			if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
+				t.Fatal(err)
+			}
+
+			// Create frame.
+			f, err := index.CreateFrame("f", pilosa.FrameOptions{})
+			if err != nil {
+				t.Fatal(err)
+			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YM") {
+				t.Fatalf("unexpected frame time quantum: %s", q)
+			}
+		})
 	})
 
-	t.Run("Inherited", func(t *testing.T) {
-		index := MustOpenIndex()
-		defer index.Close()
+	// Ensure frame cannot be created with a matching row label.
+	t.Run("ErrColumnRowLabelEqual", func(t *testing.T) {
+		t.Run("Explicit", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
 
-		// Set index time quantum.
-		if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
-			t.Fatal(err)
-		}
+			_, err := index.CreateFrame("f", pilosa.FrameOptions{RowLabel: pilosa.DefaultColumnLabel})
+			if err != pilosa.ErrColumnRowLabelEqual {
+				t.Fatalf("unexpected error: %s", err)
+			}
+		})
 
-		// Create frame.
-		f, err := index.CreateFrame("f", pilosa.FrameOptions{})
-		if err != nil {
-			t.Fatal(err)
-		} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YM") {
-			t.Fatalf("unexpected frame time quantum: %s", q)
-		}
+		t.Run("Default", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
+			if err := index.SetColumnLabel(pilosa.DefaultRowLabel); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := index.CreateFrame("f", pilosa.FrameOptions{})
+			if err != pilosa.ErrColumnRowLabelEqual {
+				t.Fatalf("unexpected error: %s", err)
+			}
+		})
 	})
 }
 
