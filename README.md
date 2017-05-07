@@ -68,4 +68,4 @@ There are [several channels](https://www.pilosa.com/community/#support) availabl
 
 ## Contributing
 
-Pilosa is an open source project. Please see our [Contributing Guide](https://www.pilosa.com/docs/contributing/) for information about how to get involved.
+Pilosa is an open source project. Please see our [Contributing Guide](CONTRIBUTING.md) for information about how to get involved.
