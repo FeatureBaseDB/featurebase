@@ -1,4 +1,4 @@
-.PHONY: glide vendor-update docker pilosa crossbuild install generate statik
+.PHONY: glide vendor-update Dockerfile docker pilosa crossbuild install generate statik
 
 GLIDE := $(shell command -v glide 2>/dev/null)
 STATIK := $(shell command -v statik 2>/dev/null)
@@ -60,8 +60,17 @@ ifndef STATIK
 	go get github.com/rakyll/statik
 endif
 
-docker:
-	docker build -t "pilosa:$(VERSION)" \
-		--build-arg ldflags="-X github.com/pilosa/pilosa/cmd.Version=$(VERSION) \
-		-X github.com/pilosa/pilosa/cmd.BuildTime=$(BUILD_TIME)" .
+Dockerfile:
+	@echo Creating Dockerfile for pilosa:$(VERSION)...
+	@echo 'FROM scratch' > $@
+	@echo 'MAINTAINER Pilosa Corp. <dev@pilosa.com>' >> $@
+	@echo 'EXPOSE 10101' >> $@
+	@echo 'VOLUME /data' >> $@
+	@echo 'ADD build/pilosa-$(VERSION)-linux-amd64/pilosa /pilosa' >> $@
+	@echo 'ENTRYPOINT ["/pilosa"]' >> $@
+	@echo 'CMD ["server", "--data-dir", "/data"]' >> $@
+
+docker: Dockerfile
+	make crossbuild GOOS=linux GOARCH=amd64
+	docker build -t "pilosa:$(VERSION)" .
 	@echo "Created image: pilosa:$(VERSION)"
