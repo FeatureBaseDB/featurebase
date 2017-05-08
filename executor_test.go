@@ -445,36 +445,51 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 func TestExecutor_Execute_Range(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
+	e := NewExecutor(hldr.Holder, NewCluster(1))
 
 	// Create index.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 
 	// Create frame.
-	f, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
-	if err != nil {
-		t.Fatal(err)
-	} else if err := f.SetTimeQuantum(pilosa.TimeQuantum("YMDH")); err != nil {
+	if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
+		InverseEnabled: true,
+		TimeQuantum:    pilosa.TimeQuantum("YMDH"),
+	}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set bits.
-	f.MustSetBit(pilosa.ViewStandard, 1, 2, MustParseTimePtr("1999-12-31 00:00"))
-	f.MustSetBit(pilosa.ViewStandard, 1, 3, MustParseTimePtr("2000-01-01 00:00"))
-	f.MustSetBit(pilosa.ViewStandard, 1, 4, MustParseTimePtr("2000-01-02 00:00"))
-	f.MustSetBit(pilosa.ViewStandard, 1, 5, MustParseTimePtr("2000-02-01 00:00"))
-	f.MustSetBit(pilosa.ViewStandard, 1, 6, MustParseTimePtr("2001-01-01 00:00"))
-	f.MustSetBit(pilosa.ViewStandard, 1, 7, MustParseTimePtr("2002-01-01 02:00"))
+	if _, err := e.Execute(context.Background(), "i", MustParse(`
+        SetBit(frame=f, rowID=1, columnID=2, timestamp="1999-12-31T00:00")
+        SetBit(frame=f, rowID=1, columnID=3, timestamp="2000-01-01T00:00")
+        SetBit(frame=f, rowID=1, columnID=4, timestamp="2000-01-02T00:00")
+        SetBit(frame=f, rowID=1, columnID=5, timestamp="2000-02-01T00:00")
+        SetBit(frame=f, rowID=1, columnID=6, timestamp="2001-01-01T00:00")
+        SetBit(frame=f, rowID=1, columnID=7, timestamp="2002-01-01T02:00")
 
-	f.MustSetBit(pilosa.ViewStandard, 1, 2, MustParseTimePtr("1999-12-30 00:00"))  // too early
-	f.MustSetBit(pilosa.ViewStandard, 1, 2, MustParseTimePtr("2002-02-01 00:00"))  // too late
-	f.MustSetBit(pilosa.ViewStandard, 10, 2, MustParseTimePtr("2001-01-01 00:00")) // different row
-
-	e := NewExecutor(hldr.Holder, NewCluster(1))
-	if res, err := e.Execute(context.Background(), "i", MustParse(`Range(rowID=1, frame=f, start="1999-12-31T00:00", end="2002-01-01T03:00")`), nil, nil); err != nil {
+        SetBit(frame=f, rowID=1, columnID=2, timestamp="1999-12-30T00:00")
+        SetBit(frame=f, rowID=1, columnID=2, timestamp="2002-02-01T00:00")
+        SetBit(frame=f, rowID=10, columnID=2, timestamp="2001-01-01T00:00")
+	`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{2, 3, 4, 5, 6, 7}) {
-		t.Fatalf("unexpected bits: %+v", bits)
 	}
+
+	t.Run("Standard", func(t *testing.T) {
+		if res, err := e.Execute(context.Background(), "i", MustParse(`Range(rowID=1, frame=f, start="1999-12-31T00:00", end="2002-01-01T03:00")`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{2, 3, 4, 5, 6, 7}) {
+			t.Fatalf("unexpected bits: %+v", bits)
+		}
+	})
+
+	t.Run("Inverse", func(t *testing.T) {
+		e := NewExecutor(hldr.Holder, NewCluster(1))
+		if res, err := e.Execute(context.Background(), "i", MustParse(`Range(columnID=2, frame=f, start="1999-01-01T00:00", end="2003-01-01T00:00")`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{1, 10}) {
+			t.Fatalf("unexpected bits: %+v", bits)
+		}
+	})
 }
 
 // Ensure a remote query can return a bitmap.
