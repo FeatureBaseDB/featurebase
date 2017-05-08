@@ -83,6 +83,9 @@ func (a Nodes) Clone() []*Node {
 type Cluster struct {
 	Nodes []*Node
 
+	// UnavailableNodes do not receive read queries.
+	UnavailableNodes []*Node
+
 	// Hashing algorithm used to assign partitions to nodes.
 	Hasher Hasher
 
