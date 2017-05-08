@@ -296,3 +296,41 @@ td{
 .expand {
   text-align: center;
 }
+
+.query h2 {
+  display: inline-block;
+}
+
+.query-tooltip {
+  position: relative;
+  display: inline;
+  color: #1db598;
+  margin-left: 5px;
+}
+
+.query-tooltip-content {
+  visibility: hidden;
+  background-color: rgb(250, 250, 250);
+  border: solid 1.5px #e4eff4;
+  color: #102445;
+  border-radius: 2px;
+  padding: 15px;
+  margin-bottom: 15px;
+
+  /* Position the tooltip */
+  position: absolute;
+  /*
+  left: 423px;
+  top: 100px;
+  */
+  z-index: 1;
+}
+
+.query-tooltip:hover+.query-tooltip-content {
+  visibility: visible;
+}
+
+.code{
+  font-family: monospace;
+}
+
