@@ -46,6 +46,7 @@ type Config struct {
 		PollingInterval Duration `toml:"polling-interval"`
 		InternalPort    string   `toml:"internal-port"`
 		GossipSeed      string   `toml:"gossip-seed"`
+		LongQueryTime   Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
 	Plugins struct {

@@ -24,6 +24,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/server"
 )
 
@@ -41,8 +42,7 @@ It will load existing data from the configured
 directory, and start listening client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			Server.Server.Handler.Version = Version
-			fmt.Fprintf(Server.Stderr, "Pilosa %s, build time %s\n", Version, BuildTime)
+			fmt.Fprintf(Server.Stderr, "Pilosa %s, build time %s\n", pilosa.Version, pilosa.BuildTime)
 
 			// Start CPU profiling.
 			if Server.CPUProfile != "" {
@@ -93,6 +93,7 @@ on the configured port.`,
 	flags.StringSliceVarP(&Server.Config.Cluster.Hosts, "cluster.hosts", "", []string{}, "Comma separated list of hosts in cluster.")
 	flags.StringSliceVarP(&Server.Config.Cluster.InternalHosts, "cluster.internal-hosts", "", []string{}, "Comma separated list of hosts in cluster used for internal communication.")
 	flags.DurationVarP((*time.Duration)(&Server.Config.Cluster.PollingInterval), "cluster.poll-interval", "", time.Minute, "Polling interval for cluster.") // TODO what actually is this?
+	flags.DurationVarP((*time.Duration)(&Server.Config.Cluster.LongQueryTime), "long-query-time", "", 10*time.Second, "Threshold for logging long-running queries (0 to disable)")
 	flags.StringVarP(&Server.Config.Plugins.Path, "plugins.path", "", "", "Path to plugin directory.")
 	flags.StringVar(&Server.Config.LogPath, "log-path", "", "Log path")
 	flags.DurationVarP((*time.Duration)(&Server.Config.AntiEntropy.Interval), "anti-entropy.interval", "", time.Minute*10, "Interval at which to run anti-entropy routine.")

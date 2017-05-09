@@ -36,8 +36,15 @@ import (
 
 // Ensure the handler returns "not found" for invalid paths.
 func TestHandler_NotFound(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
+
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, MustNewHTTPRequest("GET", "/no_such_path", nil))
+	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/no_such_path", nil))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("invalid status: %d", w.Code)
 	}
@@ -69,6 +76,7 @@ func TestHandler_Schema(t *testing.T) {
 
 	h := NewHandler()
 	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/schema", nil))
 	if w.Code != http.StatusOK {
@@ -93,6 +101,7 @@ func TestHandler_MaxSlices(t *testing.T) {
 
 	h := NewHandler()
 	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/slices/max", nil))
 	if w.Code != http.StatusOK {
@@ -133,6 +142,7 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 
 	h := NewHandler()
 	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/slices/max?inverse=true", nil))
 	if w.Code != http.StatusOK {
@@ -144,7 +154,12 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 
 // Ensure the handler can accept URL arguments.
 func TestHandler_Query_Args_URL(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if index != "idx0" {
 			t.Fatalf("unexpected index: %s", index)
@@ -167,7 +182,12 @@ func TestHandler_Query_Args_URL(t *testing.T) {
 
 // Ensure the handler can accept arguments via protobufs.
 func TestHandler_Query_Args_Protobuf(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if index != "idx0" {
 			t.Fatalf("unexpected index: %s", index)
@@ -202,7 +222,14 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 // Ensure the handler returns an error when parsing bad arguments.
 func TestHandler_Query_Args_Err(t *testing.T) {
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, MustNewHTTPRequest("POST", "/index/idx0/query?slices=a,b", strings.NewReader("Bitmap(id=100)")))
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
+
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/idx0/query?slices=a,b", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"invalid slice argument"}`+"\n" {
@@ -212,7 +239,12 @@ func TestHandler_Query_Args_Err(t *testing.T) {
 
 // Ensure the handler can execute a query with a uint64 response as JSON.
 func TestHandler_Query_Uint64_JSON(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return []interface{}{uint64(100)}, nil
 	}
@@ -228,7 +260,12 @@ func TestHandler_Query_Uint64_JSON(t *testing.T) {
 
 // Ensure the handler can execute a query with a uint64 response as protobufs.
 func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return []interface{}{uint64(100)}, nil
 	}
@@ -251,7 +288,12 @@ func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 
 // Ensure the handler can execute a query that returns a bitmap as JSON.
 func TestHandler_Query_Bitmap_JSON(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
@@ -284,6 +326,7 @@ func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
 
 	h := NewHandler()
 	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
@@ -301,7 +344,12 @@ func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
 
 // Ensure the handler can execute a query that returns a bitmap as protobuf.
 func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
@@ -347,6 +395,7 @@ func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
 
 	h := NewHandler()
 	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
@@ -400,7 +449,12 @@ func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
 
 // Ensure the handler can execute a query that returns pairs as JSON.
 func TestHandler_Query_Pairs_JSON(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return []interface{}{[]pilosa.Pair{
 			{ID: 1, Count: 2},
@@ -419,7 +473,12 @@ func TestHandler_Query_Pairs_JSON(t *testing.T) {
 
 // Ensure the handler can execute a query that returns pairs as protobuf.
 func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return []interface{}{[]pilosa.Pair{
 			{ID: 1, Count: 2},
@@ -445,7 +504,12 @@ func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 
 // Ensure the handler can return an error as JSON.
 func TestHandler_Query_Err_JSON(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return nil, errors.New("marker")
 	}
@@ -461,7 +525,12 @@ func TestHandler_Query_Err_JSON(t *testing.T) {
 
 // Ensure the handler can return an error as protobuf.
 func TestHandler_Query_Err_Protobuf(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return nil, errors.New("marker")
 	}
@@ -484,8 +553,14 @@ func TestHandler_Query_Err_Protobuf(t *testing.T) {
 
 // Ensure the handler returns "method not allowed" for non-POST queries.
 func TestHandler_Query_MethodNotAllowed(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i/query", nil))
+	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i/query", nil))
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("invalid status: %d", w.Code)
 	}
@@ -493,7 +568,12 @@ func TestHandler_Query_MethodNotAllowed(t *testing.T) {
 
 // Ensure the handler returns an error if there is a parsing error..
 func TestHandler_Query_ErrParse(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("bad_fn(")))
 	if w.Code != http.StatusBadRequest {
@@ -550,6 +630,7 @@ func TestHandler_DeleteFrame(t *testing.T) {
 
 	h := NewHandler()
 	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/frame/f1", strings.NewReader("")))
 	if w.Code != http.StatusOK {
@@ -569,6 +650,7 @@ func TestHandler_SetIndexTimeQuantum(t *testing.T) {
 
 	h := NewHandler()
 	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/index/i0/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
@@ -592,6 +674,7 @@ func TestHandler_SetFrameTimeQuantum(t *testing.T) {
 
 	h := NewHandler()
 	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("PATCH", "/index/i0/frame/f1/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
@@ -753,22 +836,30 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 
 // Ensure the handler can retrieve the version.
 func TestHandler_Version(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
-	h.Version = "1.0.0"
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 
 	w := httptest.NewRecorder()
 	r := MustNewHTTPRequest("GET", "/version", nil)
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if w.Body.String() != `{"version":"1.0.0"}`+"\n" {
+	} else if w.Body.String() != `{"version":"`+pilosa.Version+`"}`+"\n" {
 		t.Fatalf("unexpected body: %q", w.Body.String())
 	}
 }
 
 // Ensure the handler can return a list of nodes for a fragment.
 func TestHandler_Fragment_Nodes(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Holder = hldr.Holder
 	h.Cluster = NewCluster(3)
 	h.Cluster.ReplicaN = 2
 
@@ -784,7 +875,12 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 
 // Ensure the handler can return expvars without panicking.
 func TestHandler_Expvars(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
 	h := NewHandler()
+	h.Cluster = NewCluster(1)
+	h.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	r := MustNewHTTPRequest("GET", "/debug/vars", nil)
 	h.ServeHTTP(w, r)

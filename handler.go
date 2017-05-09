@@ -61,11 +61,21 @@ type Handler struct {
 		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
 	}
 
-	// The version to report on the /version endpoint.
-	Version string
-
 	// The writer for any logging.
 	LogOutput io.Writer
+}
+
+// externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
+// This is used for stats tagging.
+var externalPrefixFlag = map[string]bool{
+	"schema":  true,
+	"query":   true,
+	"import":  true,
+	"export":  true,
+	"index":   true,
+	"frame":   true,
+	"nodes":   true,
+	"version": true,
 }
 
 // NewHandler returns a new instance of Handler with a default logger.
@@ -126,7 +136,30 @@ func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request
 
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t := time.Now()
 	h.Router.ServeHTTP(w, r)
+	dif := time.Since(t)
+
+	// Handle some stats tagging
+	statsTags := make([]string, 0, 3)
+
+	if h.Cluster.LongQueryTime > 0 && dif > h.Cluster.LongQueryTime {
+		h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), float64(dif))
+		statsTags = append(statsTags, "slow_query")
+	}
+
+	pathParts := strings.Split(r.URL.Path, "/")
+	endpointName := strings.Join(pathParts, "_")
+
+	if externalPrefixFlag[pathParts[1]] {
+		statsTags = append(statsTags, "external")
+	}
+
+	// useragent tag identifies internal/external endpoints
+	statsTags = append(statsTags, "useragent:"+r.UserAgent())
+
+	stats := h.Holder.Stats.WithTags(statsTags...)
+	stats.Histogram("http_"+endpointName, float64(dif))
 }
 
 func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
@@ -1286,7 +1319,7 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
-		Version: h.Version,
+		Version: Version,
 	}); err != nil {
 		h.logger().Printf("write version response error: %s", err)
 	}

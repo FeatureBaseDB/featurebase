@@ -17,6 +17,7 @@ package pilosa
 import (
 	"encoding/binary"
 	"hash/fnv"
+	"time"
 
 	"github.com/pilosa/pilosa/internal"
 )
@@ -130,6 +131,9 @@ type Cluster struct {
 
 	// The number of replicas a partition has.
 	ReplicaN int
+
+	// Threshold for logging long-running queries
+	LongQueryTime time.Duration
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
