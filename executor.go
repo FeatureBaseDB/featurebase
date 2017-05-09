@@ -722,6 +722,16 @@ func (e *Executor) mapReduce(ctx context.Context, db string, slices []uint64, c 
 	var nodes []*Node
 	if !opt.Remote {
 		nodes = Nodes(e.Cluster.Nodes).Clone()
+
+		// If this is a read operation, don't send the query to nodes
+		// marked as unavailable in the config file.
+		switch c.(type) {
+		case pql.BitmapCall, *pql.TopN, *pql.Count:
+			for _, u := range e.Cluster.UnavailableNodes {
+				nodes = Nodes(nodes).FilterHost(u.Host)
+			}
+		}
+
 	} else {
 		nodes = []*Node{e.Cluster.NodeByHost(e.Host)}
 	}

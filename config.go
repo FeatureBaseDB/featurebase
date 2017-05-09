@@ -13,9 +13,10 @@ type Config struct {
 	Host    string `toml:"host"`
 
 	Cluster struct {
-		ReplicaN        int           `toml:"replicas"`
-		Nodes           []*ConfigNode `toml:"node"`
-		PollingInterval Duration      `toml:"polling-interval"`
+		ReplicaN         int           `toml:"replicas"`
+		Nodes            []*ConfigNode `toml:"node"`
+		UnavailableNodes []*ConfigNode `toml:"unavailable-node"`
+		PollingInterval  Duration      `toml:"polling-interval"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -57,6 +58,10 @@ func (c *Config) PilosaCluster() *Cluster {
 
 	for _, n := range c.Cluster.Nodes {
 		cluster.Nodes = append(cluster.Nodes, &Node{Host: n.Host})
+	}
+
+	for _, u := range c.Cluster.UnavailableNodes {
+		cluster.UnavailableNodes = append(cluster.UnavailableNodes, &Node{Host: u.Host})
 	}
 
 	return cluster
