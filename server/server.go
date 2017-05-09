@@ -141,6 +141,9 @@ func (m *Command) SetupServer() error {
 		return err
 	}
 
+	// Copy configuration flags.
+	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
+
 	m.Server.Host, err = normalizeHost(m.Config.Host)
 	if err != nil {
 		return err

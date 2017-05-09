@@ -116,42 +116,90 @@ class REPL {
 
     process_query(query) {
         var xhr = new XMLHttpRequest();
+        var url, data, request, command_name;
         var e = document.getElementById("index-dropdown");
         var indexname = e.options[e.selectedIndex].text;
-        xhr.open('POST', '/index/' + indexname + '/query');
+        var repl = this;
+        if (query.startsWith(":")) {
+            var parsed_query = parse_query(query, indexname);
+            if (Object.keys(parsed_query).length === 0) {
+                repl.create_single_output({
+                    "input": query,
+                    "output": "invalid query",
+                    "status": 400,
+                    "indexname": indexname,
+                });
+                return;
+            } else {
+                // set selectedIndex from dropdown list
+                if (parsed_query.command === "use") {
+                    for (var i = 0; i < e.options.length; i++) {
+                        if (e.options[i].text === parsed_query.command_name) {
+                            e.selectedIndex = i;
+                            break;
+                        }
+                    }
+                    return;
+                }
+                url = parsed_query.url;
+                data = parsed_query.data;
+                request = parsed_query.request;
+                command_name = parsed_query.command_name;
+            }
+        }
+        else {
+            url = '/index/' + indexname + '/query'
+            request = "POST"
+            data = query
+        }
+        xhr.open(request, url);
         xhr.setRequestHeader('Content-Type', 'application/text');
 
-        var repl = this
         var start_time = new Date().getTime();
-        xhr.send(query)
-        xhr.onload = function() {
-            var end_time = new Date().getTime()
+        xhr.onload = function () {
+            var end_time = new Date().getTime();
             repl.result_number++
-            repl.createSingleOutput({
-              "input": query, 
-              "output": xhr.responseText, 
-              "indexname": indexname,
-              "querytime_ms": end_time - start_time,
-            })
-        }
+            repl.create_single_output({
+                "input": query,
+                "output": xhr.responseText,
+                "status": xhr.status,
+                "indexname": indexname,
+                "querytime_ms": end_time - start_time,
+            });
+        };
 
+        xhr.send(data);
+        // Remove index from dropdown with delete index command
+        if (request === 'DELETE' && url === '/index/' + command_name){
+            for (var i = 0; i < e.options.length; i++) {
+                if (e.options[i].text === command_name) {
+                    e.remove(i);
+                    break;
+                }
+            }
+        }
     }
 
-    createSingleOutput(res) {
-      var node = document.createElement("div");
-      node.classList.add('output');
-      var output_string = res['output']
-      var output_json = JSON.parse(output_string)
-      var result_class = "result-output"
-      var getting_started_errors = [
-        'index not found',
-        'frame not found',
-      ]
-
-      if("error" in output_json) {
-        result_class = "result-error"
-        if(getting_started_errors.indexOf(output_json['error']) >= 0) {  
-          output_string += `<br />
+    create_single_output(res) {
+        var node = document.createElement("div");
+        node.classList.add('output');
+        var output_string = res['output']
+        var result_class = "result-output"
+        var getting_started_errors = [
+            'index not found',
+            'frame not found',
+        ]
+        var output_json;
+        if (isJSON(output_string)) {
+            output_json = JSON.parse(output_string)
+        }
+        // handle output formatting
+        if (res["status"] != 200) {
+            result_class = "result-error";
+            if (output_json) {
+                if ("error" in output_json) {
+                    if (getting_started_errors.indexOf(output_json['error']) >= 0) {
+                        output_string += `<br />
           <br />
           Just getting started? Try this:<br />
           $ curl -XPOST "http://127.0.0.1:10101/index/test" -d '{"options": {"columnLabel": "col"}}' # create index "test"<br />
@@ -159,8 +207,10 @@ class REPL {
           # Select "test" in the index dropdown above<br />
           SetBit(row=0, col=0, frame=foo) # Use PQL to set a bit
           `
+                    }
+                }
+            }
         }
-      }
 
 
       var markup =`
@@ -184,7 +234,9 @@ class REPL {
               </div>
               <div class="${result_class}">
                 ${output_string}
-              </div>
+                </div>
+              <a href="#" class="expand"><h5>Expand</h5></a>
+              
             </div>
           </div>
           <div class="pane">
@@ -195,8 +247,22 @@ class REPL {
           </div>
         </div>
       `
-      node.innerHTML = markup;
-      this.output.insertBefore(node, this.output.firstChild)
+        node.innerHTML = markup;
+        this.output.insertBefore(node, this.output.firstChild);
+
+        // Expand when overflow
+        var element = this.output.firstChild.getElementsByClassName(result_class)[0];
+        var expand = this.output.firstChild.getElementsByClassName("expand")[0];
+        if (element.clientHeight < element.scrollHeight) {
+            expand.style.display = 'block';
+        } else {
+            expand.style.display = 'none';
+        }
+        expand.onclick = function () {
+            element.style.height = element.scrollHeight + "px";
+            expand.style.display = 'none';
+            return false;
+        };
     }
 
     populate_index_dropdown() {
@@ -367,7 +433,7 @@ function check_anchor_uri() {
   }
 }
 
-Date.prototype.today = function () { 
+Date.prototype.today = function () {
     return this.getFullYear() +"/"+ (((this.getMonth()+1) < 10)?"0":"") + (this.getMonth()+1) +"/"+ ((this.getDate() < 10)?"0":"") + this.getDate();
 }
 
@@ -388,3 +454,88 @@ repl.bind_events()
 input.focus()
 
 check_anchor_uri()
+
+function isJSON(str) {
+    try {
+        JSON.parse(str)
+    } catch (e) {
+        return false
+    }
+    return true
+}
+
+function parse_query(query, indexname) {
+    var keys = query.replace(/\s+/g, " ").split(" ");
+    var command = keys[0];
+    var command_type = keys[1];
+    var command_name = keys[2];
+    var option_str = keys.slice(3, keys.length)
+    var options = parse_options(option_str);
+    if (command !== ":use") {
+         if (!command_name){
+            return {}
+        }
+    }
+
+    var parsed_query = {};
+    parsed_query["command"] = command.substr(1, command.length);
+    parsed_query["command_name"] = command_name;
+    switch (command) {
+        case ":create":
+            parsed_query["request"] = "POST";
+            if(Object.keys(options).length === 0) {
+                parsed_query["data"] = "";
+            } else {
+                var opts = {"options":{}};
+                for (var o in options) {
+                    opts.options[o] = options[o]
+                }
+                parsed_query["data"] = JSON.stringify(opts);
+            }
+            switch (command_type){
+                case "index":
+                    parsed_query["url"] =  '/index/' + command_name;
+                    break;
+                case "frame":
+                    parsed_query["url"] =  '/index/' + indexname + '/frame/' + command_name;
+                    break
+            }
+            break;
+        case ":delete":
+            parsed_query["request"] = "DELETE";
+            switch (command_type){
+                case "index":
+                    parsed_query["url"] =  '/index/' + command_name;
+                    parsed_query["data"] = "";
+                    break;
+                case "frame":
+                    parsed_query["url"] =  '/index/' + indexname + '/frame/' + command_name;
+                    parsed_query["data"] = "";
+                    break;
+            }
+            break;
+        case ":use":
+            parsed_query["command_name"] = keys[1];
+            break;
+        default:
+            return {}
+    }
+    return parsed_query;
+}
+
+function parse_options(option_str) {
+    var int_keys = ["cacheSize"];
+    var bool_keys = ["inverseEnabled"];
+    var options = {};
+        for (var i = 0; i < option_str.length; i++) {
+            var parts = option_str[i].split('=');
+            if (int_keys.indexOf(parts[0]) !== -1 ){
+                options[parts[0]] = Number(parts[1])
+            } else if (bool_keys.indexOf(parts[0]) !== -1){
+                 options[parts[0]] = (parts[1] == "true")
+            } else {
+                options[parts[0]] = parts[1]
+            }
+        }
+        return options;
+}

@@ -62,5 +62,6 @@ endif
 
 docker:
 	docker build -t "pilosa:$(VERSION)" \
-		--build-arg ldflags="-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)" .
+		--build-arg ldflags="-X github.com/pilosa/pilosa/cmd.Version=$(VERSION) \
+		-X github.com/pilosa/pilosa/cmd.BuildTime=$(BUILD_TIME)" .
 	@echo "Created image: pilosa:$(VERSION)"

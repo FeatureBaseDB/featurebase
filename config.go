@@ -31,6 +31,9 @@ const (
 
 	// DefaultMetrics sets the internal metrics to no op
 	DefaultMetrics = "nop"
+
+	// DefaultMaxWritesPerRequest is the default number of writes per request.
+	DefaultMaxWritesPerRequest = 5000
 )
 
 // Config represents the configuration for the command.
@@ -57,6 +60,10 @@ type Config struct {
 		Interval Duration `toml:"interval"`
 	} `toml:"anti-entropy"`
 
+	// Limits the number of mutating commands that can be in a single request to
+	// the server. This includes SetBit, ClearBit, SetRowAttrs & SetColumnAttrs.
+	MaxWritesPerRequest int `toml:"max-writes-per-request"`
+
 	LogPath string `toml:"log-path"`
 
 	Metric struct {
@@ -69,7 +76,8 @@ type Config struct {
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Host: DefaultHost + ":" + DefaultPort,
+		Host:                DefaultHost + ":" + DefaultPort,
+		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.Type = DefaultClusterType

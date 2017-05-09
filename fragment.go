@@ -82,9 +82,9 @@ type Fragment struct {
 	opN         int // number of ops since snapshot
 
 	// Cache for row counts.
-	cacheType string // passed in by frame
+	CacheType string // passed in by frame
 	cache     Cache
-	cacheSize uint32
+	CacheSize uint32
 
 	// Cache containing full rows (not just counts).
 	rowCache BitmapCache
@@ -115,8 +115,8 @@ func NewFragment(path, index, frame, view string, slice uint64) *Fragment {
 		frame:     frame,
 		view:      view,
 		slice:     slice,
-		cacheType: DefaultCacheType,
-		cacheSize: DefaultCacheSize,
+		CacheType: DefaultCacheType,
+		CacheSize: DefaultCacheSize,
 
 		LogOutput: ioutil.Discard,
 		MaxOpN:    DefaultFragmentMaxOpN,
@@ -236,11 +236,11 @@ func (f *Fragment) openStorage() error {
 // openCache initializes the cache from row ids persisted to disk.
 func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
-	switch f.cacheType {
+	switch f.CacheType {
 	case CacheTypeRanked:
-		f.cache = NewRankCache(f.cacheSize)
+		f.cache = NewRankCache(f.CacheSize)
 	case CacheTypeLRU:
-		f.cache = NewLRUCache(f.cacheSize)
+		f.cache = NewLRUCache(f.CacheSize)
 	default:
 		return ErrInvalidCacheType
 	}

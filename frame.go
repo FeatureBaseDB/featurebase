@@ -32,7 +32,7 @@ import (
 // Default frame settings.
 const (
 	DefaultRowLabel       = "rowID"
-	DefaultCacheType      = CacheTypeLRU
+	DefaultCacheType      = CacheTypeRanked
 	DefaultInverseEnabled = false
 
 	// Default ranked frame cache

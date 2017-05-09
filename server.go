@@ -67,6 +67,9 @@ type Server struct {
 	// Threshold for logging long queries
 	LongQueryTime time.Duration
 
+	// Misc options.
+	MaxWritesPerRequest int
+
 	LogOutput io.Writer
 }
 
@@ -136,6 +139,7 @@ func (s *Server) Open() error {
 	e.Holder = s.Holder
 	e.Host = s.Host
 	e.Cluster = s.Cluster
+	e.MaxWritesPerRequest = s.MaxWritesPerRequest
 
 	// Initialize HTTP handler.
 	s.Handler.Broadcaster = s.Broadcaster
@@ -430,7 +434,7 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
+		return nil, fmt.Errorf("invalid status checkMaxSlices: code=%d, err=%s, req=%v", resp.StatusCode, body, req)
 	}
 
 	// Decode response object.

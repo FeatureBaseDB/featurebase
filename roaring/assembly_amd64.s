@@ -1,6 +1,6 @@
 #include "textflag.h"
 
-TEXT ·hasAsm(SB),4,$0
+TEXT ·hasAsm(SB),4,$0-1
 	MOVQ $1, AX
 	CPUID
 	SHRQ $23, CX
@@ -8,14 +8,14 @@ TEXT ·hasAsm(SB),4,$0
 	MOVB CX, ret+0(FP)
 	RET
 
-TEXT ·POPCNTQ(SB),NOSPLIT,$0-8
-	MOVQ x+0(FP), BP
+TEXT ·POPCNTQ(SB),NOSPLIT,$0-16
+	MOVQ memory+0(FP), BP
 	POPCNTQ BP, BX
 	MOVQ BX, ret+8(FP)
 	RET
 
-TEXT ·BSFQ(SB),NOSPLIT,$0-8
-	MOVQ x+0(FP), BP
+TEXT ·BSFQ(SB),NOSPLIT,$0-16
+	MOVQ memory+0(FP), BP
 	BSFQ BP, BX
 	MOVQ BX, ret+8(FP)
 	RET
@@ -24,8 +24,8 @@ TEXT ·BSFQ(SB),NOSPLIT,$0-8
 
 TEXT ·popcntSliceAsm(SB),4,$0-32
 XORQ	AX, AX
-MOVQ	s+0(FP), SI
-MOVQ	s+8(FP), CX
+MOVQ	s_base+0(FP), SI
+MOVQ	s_len+8(FP), CX
 TESTQ	CX, CX
 JZ		popcntSliceEnd
 popcntSliceLoop:
@@ -39,8 +39,8 @@ RET
 
 TEXT ·popcntMaskSliceAsm(SB),4,$0-56
 XORQ	AX, AX
-MOVQ	s+0(FP), SI
-MOVQ	s+8(FP), CX
+MOVQ	s_base+0(FP), SI
+MOVQ	s_len+8(FP), CX
 TESTQ	CX, CX
 JZ		popcntMaskSliceEnd
 MOVQ	m+24(FP), DI
@@ -59,8 +59,8 @@ RET
 
 TEXT ·popcntAndSliceAsm(SB),4,$0-56
 XORQ	AX, AX
-MOVQ	s+0(FP), SI
-MOVQ	s+8(FP), CX
+MOVQ	s_base+0(FP), SI
+MOVQ	s_len+8(FP), CX
 TESTQ	CX, CX
 JZ		popcntAndSliceEnd
 MOVQ	m+24(FP), DI
@@ -78,8 +78,8 @@ RET
 
 TEXT ·popcntOrSliceAsm(SB),4,$0-56
 XORQ	AX, AX
-MOVQ	s+0(FP), SI
-MOVQ	s+8(FP), CX
+MOVQ	s_base+0(FP), SI
+MOVQ	s_len+8(FP), CX
 TESTQ	CX, CX
 JZ		popcntOrSliceEnd
 MOVQ	m+24(FP), DI
@@ -97,8 +97,8 @@ RET
 
 TEXT ·popcntXorSliceAsm(SB),4,$0-56
 XORQ	AX, AX
-MOVQ	s+0(FP), SI
-MOVQ	s+8(FP), CX
+MOVQ	s_base+0(FP), SI
+MOVQ	s_len+8(FP), CX
 TESTQ	CX, CX
 JZ		popcntXorSliceEnd
 MOVQ	m+24(FP), DI
