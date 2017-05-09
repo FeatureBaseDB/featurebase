@@ -20,7 +20,8 @@ class REPL {
           // keyword: length of substring that comes after cursor
           "SetBit()": 1,
           "ClearBit()": 1,
-          "SetBitmapAttrs()": 1,
+          "SetRowAttrs()": 1,
+          "SetColumnAttrs()": 1,
           "Bitmap()": 1,
           "Union()": 1,
           "Intersect()": 1,
