@@ -53,7 +53,7 @@ var externalPrefixFlag = map[string]bool{
 	"query":   true,
 	"import":  true,
 	"export":  true,
-	"db":      true,
+	"index":   true,
 	"frame":   true,
 	"nodes":   true,
 	"version": true,
