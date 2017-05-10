@@ -7,7 +7,7 @@ VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
 IDENTIFIER := $(VERSION)-$(GOOS)-$(GOARCH)
 CLONE_URL=github.com/pilosa/pilosa
 BUILD_TIME=`date -u +%FT%T%z`
-LDFLAGS=-ldflags "-X github.com/pilosa/pilosa/cmd.Version=$(VERSION) -X github.com/pilosa/pilosa/cmd.BuildTime=$(BUILD_TIME)"
+LDFLAGS="-X github.com/pilosa/pilosa/cmd.Version=$(VERSION) -X github.com/pilosa/pilosa/cmd.BuildTime=$(BUILD_TIME)"
 
 default: test pilosa
 
@@ -31,14 +31,14 @@ test: vendor
 	go test $(shell cd $(GOPATH)/src/$(CLONE_URL); go list ./... | grep -v vendor)
 
 pilosa: vendor
-	go build $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+	go build -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
 crossbuild: vendor
 	mkdir -p build/pilosa-$(IDENTIFIER)
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
 
 install: vendor
-	go install $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+	go install -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
 .protoc-gen-gofast: vendor
 ifndef PROTOC
@@ -61,7 +61,5 @@ ifndef STATIK
 endif
 
 docker:
-	docker build -t "pilosa:$(VERSION)" \
-		--build-arg ldflags="-X github.com/pilosa/pilosa/cmd.Version=$(VERSION) \
-		-X github.com/pilosa/pilosa/cmd.BuildTime=$(BUILD_TIME)" .
+	docker build -t "pilosa:$(VERSION)" --build-arg ldflags=$(LDFLAGS) .
 	@echo "Created image: pilosa:$(VERSION)"
