@@ -40,12 +40,12 @@
 					<div class='query-tooltip-content'>
 						<h5>PQL</h5>
 						<div class="code">
-							SetBit(frame=foo, row=0, column=0)<br />
-							ClearBit(frame=foo, row=0, column=0)<br />
-							SetRowAttrs(frame=foo, row=0, color="blue")<br />
-							SetColumnAttrs(frame=foo, column=0, shape="circle")<br />
-							Bitmap(frame=foo, row=0)<br />
-							Range(frame=foo, row=0, start="2010-01", end="2017-03")<br />
+							SetBit(frame=foo, rowID=0, columnID=0)<br />
+							ClearBit(frame=foo, rowID=0, columnID=0)<br />
+							SetRowAttrs(frame=foo, rowID=0, color="blue")<br />
+							SetColumnAttrs(frame=foo, columnID=0, shape="circle")<br />
+							Bitmap(frame=foo, rowID=0)<br />
+							Range(frame=foo, rowID=0, start="2010-01", end="2017-03")<br />
 							Count(&lt;BITMAP_CALL&gt;)<br />
 							TopN([BITMAP_CALL], frame=foo, n=20)<br />
 							Union([BITMAP_CALL, ...])<br />
