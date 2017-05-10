@@ -1,4 +1,4 @@
-.PHONY: glide vendor-update docker pilosa crossbuild install generate statik
+.PHONY: glide vendor-update docker pilosa crossbuild install generate statik release
 
 GLIDE := $(shell command -v glide 2>/dev/null)
 STATIK := $(shell command -v statik 2>/dev/null)
@@ -39,6 +39,13 @@ pilosa: vendor
 crossbuild: vendor
 	mkdir -p build/pilosa-$(IDENTIFIER)
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
+	cp {LICENSE,README.md} build/pilosa-$(IDENTIFIER)
+	tar -cvz -C build -f build/pilosa-$(IDENTIFIER).tar.gz pilosa-$(IDENTIFIER)/
+	@echo "Created release build: build/pilosa-$(IDENTIFIER).tar.gz"
+
+release:
+	make crossbuild GOOS=linux GOARCH=amd64
+	make crossbuild GOOS=darwin GOARCH=amd64
 
 install: vendor
 	go install -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
