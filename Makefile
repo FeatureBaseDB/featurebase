@@ -19,7 +19,10 @@ ifndef GLIDE
 	curl https://glide.sh/get | sh
 endif
 
-vendor: glide glide.yaml
+$(GLIDE):
+	make glide
+
+vendor: $(GLIDE) glide.yaml
 	glide install
 
 glide.lock: glide glide.yaml
