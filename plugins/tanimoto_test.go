@@ -167,3 +167,22 @@ func TestExecutor_Execute_ZeroTanimoto(t *testing.T) {
 	}
 
 }
+
+func TestExecutor_Execute_InvalidThreshold(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	frag := hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
+	frag.Fragment.CacheType = pilosa.CacheTypeRanked
+	frag.MustSetBits(100, 1, 3, 2, 200)
+	frag.MustSetBits(101, 1, 3)
+	frag.MustSetBits(102, 1, 2, 10, 12)
+	frag.RecalculateCache()
+
+	e := NewExecutor(hldr.Holder, NewCluster(1))
+
+	_, err := e.Execute(context.Background(), "i", MustParse(`Tanimoto(Bitmap(rowID=102, frame=f), frame=f, threshold=101)`), nil, nil)
+	if err == nil {
+		t.Fatal(err)
+	}
+}
