@@ -493,7 +493,6 @@ func (f *Fragment) ForEachBit(fn func(rowID, columnID uint64) error) error {
 func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 	// Retrieve pairs. If no row ids specified then return from cache.
 	pairs := f.topBitmapPairs(opt.RowIDs)
-
 	// If row ids are provided, we don't want to truncate the result set
 	if len(opt.RowIDs) > 0 {
 		opt.N = 0

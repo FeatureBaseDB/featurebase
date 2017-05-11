@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/pilosa/pilosa"
-	"fmt"
-	"math"
 	"container/heap"
+	"github.com/pilosa/pilosa"
+	"math"
 )
 
 func init() {
@@ -28,34 +27,26 @@ func NewTanimotoPlugin(h *pilosa.Holder) pilosa.Plugin {
 func (p *TanimotoPlugin) Map(ctx context.Context, index string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
 
 	var frame string
-	var rowID uint64
-
+	var threshold uint64
 	if fr, found := args["frame"]; found {
 		frame = fr.(string)
 	} else {
 		return nil, errors.New("frame required")
 	}
 
-	if id, found := args["id"]; found {
-		rowID = uint64(id.(int64))
+	if thres, found := args["threshold"]; found {
+		threshold = uint64(thres.(int64))
 	} else {
-		return nil, errors.New("id required")
+		return nil, errors.New("threshold required")
 	}
 
+	bm := children[0].(*pilosa.Bitmap)
 
 	frag := p.holder.Fragment(index, frame, pilosa.ViewStandard, slice)
-	src := frag.Row(rowID)
-	opt := pilosa.TopOptions{TanimotoThreshold: 70, N: 200000, Src: src}
-
-
-	//toplist, err := f.Top(pilosa.TopOptions{N: n})
-	//if err != nil {
-	//	return nil, err
-	//}
+	opt := pilosa.TopOptions{TanimotoThreshold: threshold, Src: bm}
 
 	pairs := frag.Cache().Top()
-	fmt.Println(len(pairs))
-	 //Use `tanimotoThreshold > 0` to indicate whether or not we are considering Tanimoto.
+	//fmt.Printf("%+v\n", frag.Cache())
 	var tanimotoThreshold uint64
 	var minTanimoto, maxTanimoto float64
 	var srcCount uint64
@@ -65,8 +56,7 @@ func (p *TanimotoPlugin) Map(ctx context.Context, index string, children []inter
 		minTanimoto = float64(srcCount*tanimotoThreshold) / 100
 		maxTanimoto = float64(srcCount*100) / float64(tanimotoThreshold)
 	}
-	fmt.Println(minTanimoto, maxTanimoto)
-	var r []pilosa.Pairs
+	var rr []pilosa.Pair
 	results := &pilosa.PairHeap{}
 	for _, pair := range pairs {
 		rowID, cnt := pair.ID, pair.Count
@@ -82,10 +72,10 @@ func (p *TanimotoPlugin) Map(ctx context.Context, index string, children []inter
 			if tanimoto <= float64(tanimotoThreshold) {
 				continue
 			}
+			rr = append(rr, pilosa.Pair{ID: rowID, Count: cnt})
 			heap.Push(results, pilosa.Pair{ID: rowID, Count: cnt})
 		}
 	}
-	fmt.Println(results)
 
 	r := make(pilosa.Pairs, results.Len(), results.Len())
 	x := results.Len()
@@ -94,24 +84,13 @@ func (p *TanimotoPlugin) Map(ctx context.Context, index string, children []inter
 		r[x-i] = heap.Pop(results).(pilosa.Pair)
 		i++
 	}
-	//
-	//var bm *pilosa.Bitmap
-	//for _, pair := range toplist {
-	//	x := f.Row(pair.ID)
-	//	if bm == nil {
-	//		bm = x
-	//	} else {
-	//		bm = bm.Intersect(x)
-	//	}
-	//
-	//}
-	return r, nil
+
+	return rr, nil
 }
 
 // Reduce combines previous map results into a single value.
 func (p *TanimotoPlugin) Reduce(ctx context.Context, prev, v interface{}) interface{} {
 
-	fmt.Println(prev)
 	switch x := v.(type) {
 	case *pilosa.Bitmap:
 		if prev != nil {
@@ -122,6 +101,5 @@ func (p *TanimotoPlugin) Reduce(ctx context.Context, prev, v interface{}) interf
 	case int:
 		return x
 	}
-
 	return v
 }
