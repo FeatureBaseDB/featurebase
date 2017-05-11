@@ -35,6 +35,9 @@ func (p *TanimotoPlugin) Map(ctx context.Context, index string, children []inter
 	}
 
 	if thres, found := args["threshold"]; found {
+		if thres.(int64) > 100 {
+			return nil, errors.New("threshold is from 1 to 100")
+		}
 		threshold = uint64(thres.(int64))
 	} else {
 		return nil, errors.New("threshold required")

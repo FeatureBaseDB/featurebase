@@ -448,7 +448,6 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
 	}
 	filters, _ := c.Args["filters"].([]interface{})
-	tanimotoThreshold, _, err := c.UintArg("tanimotoThreshold")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
 	}
@@ -479,17 +478,13 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 		minThreshold = MinThreshold
 	}
 
-	if tanimotoThreshold > 100 {
-		return nil, errors.New("Tanimoto Threshold is from 1 to 100 only")
-	}
 	return f.Top(TopOptions{
-		N:                 int(n),
-		Src:               src,
-		RowIDs:            rowIDs,
-		FilterField:       field,
-		FilterValues:      filters,
-		MinThreshold:      minThreshold,
-		TanimotoThreshold: tanimotoThreshold,
+		N:            int(n),
+		Src:          src,
+		RowIDs:       rowIDs,
+		FilterField:  field,
+		FilterValues: filters,
+		MinThreshold: minThreshold,
 	})
 }
 
