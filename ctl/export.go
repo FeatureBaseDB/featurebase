@@ -49,22 +49,13 @@ func NewExportCommand(stdin io.Reader, stdout, stderr io.Writer) *ExportCommand 
 // Run executes the export.
 func (cmd *ExportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
-	foundView := false
 
 	// Validate arguments.
 	if cmd.Index == "" {
 		return pilosa.ErrIndexRequired
 	} else if cmd.Frame == "" {
 		return pilosa.ErrFrameRequired
-	}
-
-	for _, v := range []string{pilosa.ViewInverse, pilosa.ViewStandard} {
-		if cmd.View == v {
-			foundView = true
-			break
-		}
-	}
-	if foundView == false {
+	} else if !(cmd.View == pilosa.ViewStandard || cmd.View == pilosa.ViewInverse) {
 		return pilosa.ErrInvalidView
 	}
 
