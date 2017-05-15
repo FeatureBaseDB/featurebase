@@ -394,7 +394,15 @@ func (c *Client) ExportCSV(ctx context.Context, index, frame, view string, slice
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
-	} else if view != ViewInverse || view != ViewStandard {
+	}
+	foundView := false
+	for _, v := range []string{ViewInverse, ViewStandard} {
+		if view == v {
+			foundView = true
+			break
+		}
+	}
+	if foundView == false {
 		return ErrInvalidView
 	}
 
