@@ -55,8 +55,8 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 		return pilosa.ErrIndexRequired
 	} else if cmd.Frame == "" {
 		return pilosa.ErrFrameRequired
-	} else if cmd.View == "" {
-		cmd.View = pilosa.ViewStandard
+	} else if cmd.View != pilosa.ViewStandard || cmd.View != pilosa.ViewInverse {
+		return pilosa.ErrInvalidView
 	}
 
 	// Use output file, if specified.

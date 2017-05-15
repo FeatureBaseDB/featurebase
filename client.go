@@ -394,8 +394,8 @@ func (c *Client) ExportCSV(ctx context.Context, index, frame, view string, slice
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
-	} else if view == "" {
-		view = ViewStandard
+	} else if view != ViewInverse || view != ViewStandard {
+		return ErrInvalidView
 	}
 
 	// Retrieve a list of nodes that own the slice.
