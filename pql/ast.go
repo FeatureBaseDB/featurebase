@@ -184,16 +184,20 @@ func (c *Call) String() string {
 
 // SupportsInverse indicates that the call may be on an inverse frame.
 func (c *Call) SupportsInverse() bool {
-	if c.Name == "Bitmap" {
-		return true
-	}
-	return false
+	return c.Name == "Bitmap" || c.Name == "TopN"
 }
 
 // IsInverse specifies if the call is for an inverse view.
 // Return defaults to false unless absolutely sure of inversion.
 func (c *Call) IsInverse(rowLabel, columnLabel string) bool {
 	if c.SupportsInverse() {
+		// Top-n has an explicit inverse flag.
+		if c.Name == "TopN" {
+			inverse, _ := c.Args["inverse"].(bool)
+			return inverse
+		}
+
+		// Bitmap calls use the row/column labels to determine whether inverse.
 		_, rowOK, rowErr := c.UintArg(rowLabel)
 		_, columnOK, columnErr := c.UintArg(columnLabel)
 		if rowErr != nil || columnErr != nil {
