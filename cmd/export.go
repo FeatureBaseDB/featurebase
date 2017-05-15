@@ -53,6 +53,7 @@ The file does not contain any headers.
 	flags.StringVarP(&Exporter.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Exporter.Index, "index", "i", "", "Pilosa index to export into.")
 	flags.StringVarP(&Exporter.Frame, "frame", "f", "", "Frame to export into.")
+	flags.StringVarP(&Exporter.View, "view", "v", "", "View to export into - default standard")
 	flags.StringVarP(&Exporter.Path, "output-file", "o", "", "File to write export to - default stdout")
 
 	return exportCmd
