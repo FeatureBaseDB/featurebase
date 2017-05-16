@@ -79,7 +79,13 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	}
 
 	// Determine slice count.
-	maxSlices, err := client.MaxSliceByIndex(ctx)
+	var maxSlices map[string]uint64
+	if cmd.View == pilosa.ViewStandard {
+		maxSlices, err = client.MaxSliceByIndex(ctx)
+	} else if cmd.View == pilosa.ViewInverse {
+		maxSlices, err = client.MaxInverseSliceByIndex(ctx)
+	}
+
 	if err != nil {
 		return err
 	}
