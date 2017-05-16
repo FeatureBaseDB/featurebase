@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -274,32 +275,55 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 func TestExecutor_Execute_TopN(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
+	e := NewExecutor(hldr.Holder, NewCluster(1))
 
 	// Set bits for rows 0, 10, & 20 across two slices.
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth+2)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 5).SetBit(0, (5*SliceWidth)+100)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "other", pilosa.ViewStandard, 0).SetBit(0, 0)
+	if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+		t.Fatal(err)
+	} else if _, err := idx.CreateFrame("f", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
+		t.Fatal(err)
+	} else if _, err := idx.CreateFrame("other", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
+		t.Fatal(err)
+	} else if _, err := e.Execute(context.Background(), "i", MustParse(`
+		SetBit(frame=f, rowID=0, columnID=0)
+		SetBit(frame=f, rowID=0, columnID=1)
+		SetBit(frame=f, rowID=0, columnID=`+strconv.Itoa(SliceWidth)+`)
+		SetBit(frame=f, rowID=0, columnID=`+strconv.Itoa(SliceWidth+2)+`)
+		SetBit(frame=f, rowID=0, columnID=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetBit(frame=f, rowID=10, columnID=0)
+		SetBit(frame=f, rowID=10, columnID=`+strconv.Itoa(SliceWidth)+`)
+		SetBit(frame=f, rowID=20, columnID=`+strconv.Itoa(SliceWidth)+`)
+		SetBit(frame=other, rowID=0, columnID=0)
+	`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).RecalculateCache()
+	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewInverse, 0).RecalculateCache()
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).RecalculateCache()
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 5).RecalculateCache()
 
-	// Execute query.
-	e := NewExecutor(hldr.Holder, NewCluster(1))
-	if result, err := e.Execute(context.Background(), "i", MustParse(`TopN(frame=f, n=2)`), nil, nil); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(result[0], []pilosa.Pair{
-		{ID: 0, Count: 5},
-		{ID: 10, Count: 2},
-	}) {
-		t.Fatalf("unexpected result: %s", spew.Sdump(result))
-	}
+	t.Run("Standard", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", MustParse(`TopN(frame=f, n=2)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(result[0], []pilosa.Pair{
+			{ID: 0, Count: 5},
+			{ID: 10, Count: 2},
+		}) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("Inverse", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", MustParse(`TopN(frame=f, inverse=true, n=2)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(result[0], []pilosa.Pair{
+			{ID: SliceWidth, Count: 3},
+			{ID: 0, Count: 2},
+		}) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
 }
 func TestExecutor_Execute_TopN_fill(t *testing.T) {
 	hldr := MustOpenHolder()

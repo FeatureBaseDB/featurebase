@@ -9,7 +9,7 @@ COPY . /go/src/github.com/pilosa/pilosa
 RUN wget ${GLIDE} -O /go/glide.tar.gz -q \
     && tar xf /go/glide.tar.gz \
     && mv /go/linux-amd64/glide /go/bin \
-    && [ "$(sha256sum /go/bin/glide | cut -d' ' -f1)" = "$GLIDE_HASH" ] \
+    && echo "${GLIDE_HASH}  /go/bin/glide" | shasum -a 256 -c - \
     && cd /go/src/github.com/pilosa/pilosa \
     && make vendor \
     && CGO_ENABLED=0 go install -a -ldflags "$ldflags" github.com/pilosa/pilosa/cmd/pilosa

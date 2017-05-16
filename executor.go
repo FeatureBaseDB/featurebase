@@ -282,7 +282,7 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 // This first performs the TopN() to determine the top results and then
 // requeries to retrieve the full counts for each of the top results.
 func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
-	rowIDs, _, err := c.UintSliceArg("ids")
+	idsArg, _, err := c.UintSliceArg("ids")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopN: %v", err)
 	}
@@ -299,7 +299,7 @@ func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 
 	// If this call is against specific ids, or we didn't get results,
 	// or we are part of a larger distributed query then don't refetch.
-	if len(pairs) == 0 || len(rowIDs) > 0 || opt.Remote {
+	if len(pairs) == 0 || len(idsArg) > 0 || opt.Remote {
 		return pairs, nil
 	}
 	// Only the original caller should refetch the full counts.
@@ -347,6 +347,7 @@ func (e *Executor) executeTopNSlices(ctx context.Context, index string, c *pql.C
 // executeTopNSlice executes a TopN call for a single slice.
 func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Call, slice uint64) ([]Pair, error) {
 	frame, _ := c.Args["frame"].(string)
+	inverse, _ := c.Args["inverse"].(bool)
 	n, _, err := c.UintArg("n")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
@@ -383,7 +384,13 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 		frame = DefaultFrame
 	}
 
-	f := e.Holder.Fragment(index, frame, ViewStandard, slice)
+	// Determine view.
+	view := ViewStandard
+	if inverse {
+		view = ViewInverse
+	}
+
+	f := e.Holder.Fragment(index, frame, view, slice)
 	if f == nil {
 		return nil, nil
 	}
