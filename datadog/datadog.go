@@ -28,8 +28,8 @@ import (
 // statsD defailt host is "127.0.0.1:8125"
 
 const (
-	// Rate represents a metric rate of 1/sec.
-	// Rate = 1
+	// Prefix is appended to each metric event name
+	Prefix = "pilosa"
 
 	// BufferLen Stats lient buffer size.
 	BufferLen = 1024
@@ -48,7 +48,6 @@ type StatsClient struct {
 // NewStatsClient returns a new instance of StatsClient.
 func NewStatsClient(host string) (*StatsClient, error) {
 	c, err := statsd.NewBuffered(host, BufferLen)
-	// c, err := statsd.New(host)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +79,7 @@ func (c *StatsClient) WithTags(tags ...string) pilosa.StatsClient {
 
 // Count tracks the number of times something occurs per second.
 func (c *StatsClient) Count(name string, value int64, rate float64) {
-	if err := c.client.Count("pilosa."+name, value, c.tags, rate); err != nil {
+	if err := c.client.Count(Prefix+name, value, c.tags, rate); err != nil {
 		c.logger().Printf("datadog.StatsClient.Count error: %s", err)
 	}
 }
@@ -88,35 +87,35 @@ func (c *StatsClient) Count(name string, value int64, rate float64) {
 // CountWithCustomTags tracks the number of times something occurs per second with custom tags.
 func (c *StatsClient) CountWithCustomTags(name string, value int64, rate float64, t []string) {
 	tags := append(c.tags, t...)
-	if err := c.client.Count("pilosa."+name, value, tags, rate); err != nil {
+	if err := c.client.Count(Prefix+name, value, tags, rate); err != nil {
 		c.logger().Printf("datadog.StatsClient.Count error: %s", err)
 	}
 }
 
 // Gauge sets the value of a metric.
 func (c *StatsClient) Gauge(name string, value float64, rate float64) {
-	if err := c.client.Gauge("pilosa."+name, value, c.tags, rate); err != nil {
+	if err := c.client.Gauge(Prefix+name, value, c.tags, rate); err != nil {
 		c.logger().Printf("datadog.StatsClient.Gauge error: %s", err)
 	}
 }
 
 // Histogram tracks statistical distribution of a metric.
 func (c *StatsClient) Histogram(name string, value float64, rate float64) {
-	if err := c.client.Histogram("pilosa."+name, value, c.tags, rate); err != nil {
+	if err := c.client.Histogram(Prefix+name, value, c.tags, rate); err != nil {
 		c.logger().Printf("datadog.StatsClient.Histogram error: %s", err)
 	}
 }
 
 // Set tracks number of unique elements.
 func (c *StatsClient) Set(name string, value string, rate float64) {
-	if err := c.client.Set("pilosa."+name, value, c.tags, rate); err != nil {
+	if err := c.client.Set(Prefix+name, value, c.tags, rate); err != nil {
 		c.logger().Printf("datadog.StatsClient.Set error: %s", err)
 	}
 }
 
 // Timing tracks timing information for a metric.
 func (c *StatsClient) Timing(name string, value time.Duration, rate float64) {
-	if err := c.client.Timing("pilosa."+name, value, c.tags, rate); err != nil {
+	if err := c.client.Timing(Prefix+name, value, c.tags, rate); err != nil {
 		c.logger().Printf("datadog.StatsClient.Timing error: %s", err)
 	}
 }
