@@ -141,6 +141,8 @@ func (m *Command) SetupServer() error {
 		return err
 	}
 
+	m.Server.Holder.Stats.SetLogger(m.Server.LogOutput)
+
 	// Copy configuration flags.
 	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
 

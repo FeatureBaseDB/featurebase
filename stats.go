@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"expvar"
+	"io"
 	"sort"
 	"strings"
 	"sync"
@@ -54,6 +55,9 @@ type StatsClient interface {
 
 	// Tracks timing information for a metric.
 	Timing(name string, value time.Duration, rate float64)
+
+	// SetLogger Set the logger output type
+	SetLogger(logger io.Writer)
 }
 
 // NopStatsClient represents a client that doesn't do anything.
@@ -69,6 +73,7 @@ func (c *nopStatsClient) Gauge(name string, value float64, rate float64)        
 func (c *nopStatsClient) Histogram(name string, value float64, rate float64)                        {}
 func (c *nopStatsClient) Set(name string, value string, rate float64)                               {}
 func (c *nopStatsClient) Timing(name string, value time.Duration, rate float64)                     {}
+func (c *nopStatsClient) SetLogger(logger io.Writer)                                                {}
 
 // ExpvarStatsClient writes stats out to expvars.
 type ExpvarStatsClient struct {
@@ -138,6 +143,10 @@ func (c *ExpvarStatsClient) Timing(name string, value time.Duration, rate float6
 	c.mu.Unlock()
 }
 
+// SetLogger has no logger
+func (c *ExpvarStatsClient) SetLogger(logger io.Writer) {
+}
+
 // MultiStatsClient joins multiple stats clients together.
 type MultiStatsClient []StatsClient
 
@@ -197,6 +206,13 @@ func (a MultiStatsClient) Set(name string, value string, rate float64) {
 func (a MultiStatsClient) Timing(name string, value time.Duration, rate float64) {
 	for _, c := range a {
 		c.Timing(name, value, rate)
+	}
+}
+
+// SetLogger Sets the StatsD logger output type
+func (a MultiStatsClient) SetLogger(logger io.Writer) {
+	for _, c := range a {
+		c.SetLogger(logger)
 	}
 }
 

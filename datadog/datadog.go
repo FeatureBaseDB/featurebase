@@ -40,10 +40,9 @@ var _ pilosa.StatsClient = &StatsClient{}
 
 // StatsClient represents a DataDog implementation of pilosa.StatsClient.
 type StatsClient struct {
-	client *statsd.Client
-	tags   []string
-
-	LogOutput io.Writer
+	client    *statsd.Client
+	tags      []string
+	logOutput io.Writer
 }
 
 // NewStatsClient returns a new instance of StatsClient.
@@ -56,7 +55,7 @@ func NewStatsClient(host string) (*StatsClient, error) {
 
 	return &StatsClient{
 		client:    c,
-		LogOutput: ioutil.Discard,
+		logOutput: ioutil.Discard,
 	}, nil
 }
 
@@ -75,7 +74,7 @@ func (c *StatsClient) WithTags(tags ...string) pilosa.StatsClient {
 	return &StatsClient{
 		client:    c.client,
 		tags:      pilosa.UnionStringSlice(c.tags, tags),
-		LogOutput: c.LogOutput,
+		logOutput: c.logOutput,
 	}
 }
 
@@ -122,7 +121,12 @@ func (c *StatsClient) Timing(name string, value time.Duration, rate float64) {
 	}
 }
 
+// SetLogger has no logger
+func (c *StatsClient) SetLogger(logger io.Writer) {
+	c.logOutput = logger
+}
+
 // logger returns a logger that writes to LogOutput
 func (c *StatsClient) logger() *log.Logger {
-	return log.New(c.LogOutput, "", log.LstdFlags)
+	return log.New(c.logOutput, "", log.LstdFlags)
 }
