@@ -44,10 +44,18 @@ frame = "f1"
 				v.Check(cmd.Exporter.Host, "localhost:12345")
 				v.Check(cmd.Exporter.Index, "myindex")
 				v.Check(cmd.Exporter.Frame, "f1")
+				v.Check(cmd.Exporter.View, "standard")
 				v.Check(cmd.Exporter.Path, "/somefile")
 				return v.Error()
 			},
 		},
 	}
 	executeDry(t, tests)
+}
+
+func TestExportInvalidView(t *testing.T) {
+	output, err := ExecNewRootCommand(t, "export", "-i", "foo", "-f", "bar", "-v", "test")
+	if !strings.Contains(err.Error(), "invalid view") {
+		t.Fatalf("Command 'export' with invalid view should error but: err: '%v', output: '%v'", err, output)
+	}
 }

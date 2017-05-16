@@ -389,11 +389,13 @@ func (c *Client) importNode(ctx context.Context, node *Node, buf []byte) error {
 }
 
 // ExportCSV bulk exports data for a single slice from a host to CSV format.
-func (c *Client) ExportCSV(ctx context.Context, index, frame string, slice uint64, w io.Writer) error {
+func (c *Client) ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
+	} else if !(view == ViewStandard || view == ViewInverse) {
+		return ErrInvalidView
 	}
 
 	// Retrieve a list of nodes that own the slice.
@@ -407,7 +409,7 @@ func (c *Client) ExportCSV(ctx context.Context, index, frame string, slice uint6
 	for _, i := range rand.Perm(len(nodes)) {
 		node := nodes[i]
 
-		if err := c.exportNodeCSV(ctx, node, index, frame, slice, w); err != nil {
+		if err := c.exportNodeCSV(ctx, node, index, frame, view, slice, w); err != nil {
 			e = fmt.Errorf("export node: host=%s, err=%s", node.Host, err)
 			continue
 		} else {
@@ -419,7 +421,7 @@ func (c *Client) ExportCSV(ctx context.Context, index, frame string, slice uint6
 }
 
 // exportNode copies a CSV export from a node to w.
-func (c *Client) exportNodeCSV(ctx context.Context, node *Node, index, frame string, slice uint64, w io.Writer) error {
+func (c *Client) exportNodeCSV(ctx context.Context, node *Node, index, frame, view string, slice uint64, w io.Writer) error {
 	// Create URL.
 	u := url.URL{
 		Scheme: "http",
@@ -428,6 +430,7 @@ func (c *Client) exportNodeCSV(ctx context.Context, node *Node, index, frame str
 		RawQuery: url.Values{
 			"index": {index},
 			"frame": {frame},
+			"view":  {view},
 			"slice": {strconv.FormatUint(slice, 10)},
 		}.Encode(),
 	}
