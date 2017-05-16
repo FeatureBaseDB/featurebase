@@ -449,29 +449,32 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 
 // monitorRuntime periodically polls the Go runtime metrics.
 func (s *Server) monitorRuntime() {
-	if s.MetricInterval > 0 {
-		ticker := time.NewTicker(s.MetricInterval)
-		defer ticker.Stop()
+	// Disable metrics when poll interval is zero
+	if s.MetricInterval <= 0 {
+		return
+	}
 
-		gcn := gcnotifier.New()
-		defer gcn.Close()
+	ticker := time.NewTicker(s.MetricInterval)
+	defer ticker.Stop()
 
-		s.logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
+	gcn := gcnotifier.New()
+	defer gcn.Close()
 
-		for {
-			// Wait for tick or a close.
-			select {
-			case <-s.closing:
-				return
-			case <-gcn.AfterGC():
-				// GC just ran
-				s.Holder.Stats.Count("garbage_collection", 1, 1.0)
-			case <-ticker.C:
-			}
+	s.logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
 
-			// Record the number of go routines
-			s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
+	for {
+		// Wait for tick or a close.
+		select {
+		case <-s.closing:
+			return
+		case <-gcn.AfterGC():
+			// GC just ran
+			s.Holder.Stats.Count("garbage_collection", 1, 1.0)
+		case <-ticker.C:
 		}
+
+		// Record the number of go routines
+		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 	}
 }
 
