@@ -93,13 +93,15 @@ func (c *LRUCache) Get(id uint64) uint64 {
 // Len returns the number of items in the cache.
 func (c *LRUCache) Len() int { return c.cache.Len() }
 
-// Invalidate is a no-op.
+// Invalidate track size
 func (c *LRUCache) Invalidate() {
+	c.stats.Count("cache.invalidate", 1, 1.0)
 	c.stats.Gauge("LRUCache", float64(c.cache.Len()), 1.0)
 }
 
-// Recalculate is a no-op.
+// Recalculate track size
 func (c *LRUCache) Recalculate() {
+	c.stats.Count("cache.recalculate", 1, 1.0)
 	c.stats.Gauge("LRUCache", float64(c.cache.Len()), 1.0)
 }
 
@@ -230,6 +232,7 @@ func (c *RankCache) Invalidate() {
 func (c *RankCache) Recalculate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.stats.Count("cache.recalculate", 1, 1.0)
 	c.recalculate()
 }
 
@@ -239,6 +242,7 @@ func (c *RankCache) invalidate() {
 	if time.Now().Sub(c.updateTime).Seconds() < 10 {
 		return
 	}
+	c.stats.Count("cache.invalidate", 1, 1.0)
 	c.recalculate()
 }
 
@@ -270,6 +274,7 @@ func (c *RankCache) recalculate() {
 
 	// If size is larger than the threshold then trim it.
 	if len(c.entries) > c.thresholdBuffer {
+		c.stats.Count("cache.threshold", 1, 1.0)
 		for id, cnt := range c.entries {
 			if cnt <= c.thresholdValue {
 				delete(c.entries, id)
