@@ -179,7 +179,6 @@ func (v *View) MaxSlice() uint64 {
 		}
 	}
 
-	fmt.Println("*** VIEW MaxSlice", max)
 	return max
 }
 
@@ -232,8 +231,6 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	// Broadcast a message that a new max slice was just created.
 	if slice > v.maxSlice {
 		v.maxSlice = slice
-
-		fmt.Println("*** Create Fragment", slice)
 
 		// Send the create slice message to all nodes.
 		err := v.broadcaster.SendAsync(
