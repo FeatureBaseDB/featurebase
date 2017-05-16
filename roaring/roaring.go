@@ -902,7 +902,23 @@ type container struct {
 	n      int      // number of integers in container
 	array  []uint32 // used for array containers
 	bitmap []uint64 // used for bitmap containers
-	mapped bool     // mapped directly to a byte slice when true
+	runs   []interval16
+	mapped bool // mapped directly to a byte slice when true
+}
+
+type interval16 struct {
+	start uint16
+	last  uint16
+}
+
+// runlen returns the count of integers in the interval.
+func (iv interval16) runlen() int {
+	return 1 + int(iv.last) - int(iv.start)
+}
+
+// String produces a human viewable string of the contents.
+func (iv interval16) String() string {
+	return fmt.Sprintf("[%d, %d]", iv.start, iv.last)
 }
 
 // newContainer returns a new instance of container.
@@ -911,7 +927,17 @@ func newContainer() *container {
 }
 
 // isArray returns true if the container is an array container.
-func (c *container) isArray() bool { return c.bitmap == nil }
+func (c *container) isArray() bool {
+	return c.bitmap == nil && c.runs == nil
+}
+
+func (c *container) isBitmap() bool {
+	return c.array == nil && c.runs == nil
+}
+
+func (c *container) isRun() bool {
+	return c.array == nil && c.bitmap == nil
+}
 
 // unmap creates copies of the containers data in the heap.
 //
@@ -932,6 +958,11 @@ func (c *container) unmap() {
 		copy(tmp, c.bitmap)
 		c.bitmap = tmp
 	}
+	if c.runs != nil {
+		tmp := make([]interval16, len(c.runs))
+		copy(tmp, c.runs)
+		c.runs = tmp
+	}
 	c.mapped = false
 }
 
@@ -944,8 +975,10 @@ func (c *container) count() (n int) {
 func (c *container) countRange(start, end uint32) (n int) {
 	if c.isArray() {
 		return c.arrayCountRange(start, end)
+	} else if c.isBitmap() {
+		return c.bitmapCountRange(start, end)
 	}
-	return c.bitmapCountRange(start, end)
+	return c.runCountRange(start, end)
 }
 
 func (c *container) arrayCountRange(start, end uint32) (n int) {
@@ -991,12 +1024,50 @@ func (c *container) bitmapCountRange(start, end uint32) int {
 	return int(n)
 }
 
-// add adds a value to the container.
-func (c *container) add(v uint32) bool {
-	if c.isArray() {
-		return c.arrayAdd(v)
+func (c *container) runCountRange(start, end uint32) (n int) {
+	start16, end16 := uint16(start), uint16(end)
+	for _, iv := range c.runs {
+		// iv is before range
+		if iv.last < start16 {
+			continue
+		}
+		// iv is after range
+		if end16 < iv.start {
+			break
+		}
+		// iv is superset of range
+		if iv.start < start16 && iv.last > end16 {
+			return int(end16 - start16)
+		}
+		// iv is subset of range
+		if iv.start >= start16 && iv.last < end16 {
+			n += iv.runlen()
+		}
+		// iv overlaps beginning of range
+		if iv.start < start16 && iv.last < end16 {
+			n += int(iv.last - start16 + 1)
+		}
+		// iv overlaps end of range
+		if iv.start > start16 && iv.last >= end16 {
+			n += int(end16 - iv.start)
+		}
 	}
-	return c.bitmapAdd(v)
+	return n
+}
+
+// add adds a value to the container.
+func (c *container) add(v uint32) (added bool) {
+	if c.isArray() {
+		added = c.arrayAdd(v)
+	} else if c.isBitmap() {
+		added = c.bitmapAdd(v)
+	} else {
+		added = c.runAdd(v)
+	}
+	if added {
+		c.n++
+	}
+	return added
 }
 
 func (c *container) arrayAdd(v uint32) bool {
@@ -1004,7 +1075,6 @@ func (c *container) arrayAdd(v uint32) bool {
 	if c.n > 0 && c.n < ArrayMaxSize && c.isArray() && c.array[c.n-1] < v {
 		c.unmap()
 		c.array = append(c.array, v)
-		c.n++
 		return true
 	}
 
@@ -1026,7 +1096,6 @@ func (c *container) arrayAdd(v uint32) bool {
 	c.array = append(c.array, 0)
 	copy(c.array[i+1:], c.array[i:])
 	c.array[i] = v
-	c.n++
 	return true
 }
 
@@ -1036,7 +1105,50 @@ func (c *container) bitmapAdd(v uint32) bool {
 	}
 	c.unmap()
 	c.bitmap[v/64] |= (1 << uint64(v%64))
-	c.n++
+	return true
+}
+
+func (c *container) runAdd(v uint32) bool {
+	v16 := uint16(v)
+	if len(c.runs) == 0 {
+		c.unmap()
+		c.runs = []interval16{{start: v16, last: v16}}
+		return true
+	}
+	i := 0
+	var iv interval16
+	for i, iv = range c.runs {
+		if iv.last >= v16 {
+			break
+		}
+	}
+	if v16 >= iv.start && iv.last >= v16 {
+		return false
+	}
+	c.unmap()
+	if iv.last < v16 {
+		if iv.last == v16-1 {
+			c.runs[i].last += 1
+		} else {
+			c.runs = append(c.runs, interval16{start: v16, last: v16})
+		}
+	} else if v16+1 == iv.start {
+		// combining two intervals
+		if i > 0 && c.runs[i-1].last == v16-1 {
+			c.runs[i-1].last = iv.last
+			c.runs = append(c.runs[:i], c.runs[i+1:]...)
+			return true
+		}
+		// just before an interval
+		c.runs[i].start -= 1
+	} else if i > 0 && v16-1 == c.runs[i-1].last {
+		// just after an interval
+		c.runs[i-1].last += 1
+	} else {
+		// alone
+		newIv := interval16{start: v16, last: v16}
+		c.runs = append(c.runs[:i], append([]interval16{newIv}, c.runs[i:]...)...)
+	}
 	return true
 }
 
@@ -1054,6 +1166,20 @@ func (c *container) arrayContains(v uint32) bool {
 
 func (c *container) bitmapContains(v uint32) bool {
 	return (c.bitmap[v/64] & (1 << uint64(v%64))) != 0
+}
+
+func (c *container) runContains(v uint32) bool {
+	v16 := uint16(v)
+	for _, iv := range c.runs {
+		if v16 > iv.last {
+			continue
+		}
+		if v16 < iv.start {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 // remove adds a value to the container.
