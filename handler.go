@@ -159,7 +159,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	statsTags = append(statsTags, "useragent:"+r.UserAgent())
 
 	stats := h.Holder.Stats.WithTags(statsTags...)
-	stats.Histogram("http_"+endpointName, float64(dif))
+	stats.Histogram("http."+endpointName, float64(dif), 1.0)
 }
 
 func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
@@ -414,7 +414,7 @@ func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 
-	h.Holder.Stats.Count("deleteIndex", 1)
+	h.Holder.Stats.Count("deleteIndex", 1, 1.0)
 }
 
 type deleteIndexResponse struct{}
@@ -459,7 +459,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 
-	h.Holder.Stats.Count("createIndex", 1)
+	h.Holder.Stats.Count("createIndex", 1, 1.0)
 }
 
 // handlePatchIndexTimeQuantum handles PATCH /index/time_quantum request.
@@ -611,7 +611,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 
-	h.Holder.Stats.CountWithCustomTags("createFrame", 1, []string{fmt.Sprintf("index:%s", indexName)})
+	h.Holder.Stats.CountWithCustomTags("createFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 
 }
 
@@ -695,7 +695,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 
-	h.Holder.Stats.CountWithCustomTags("deleteFrame", 1, []string{fmt.Sprintf("index:%s", indexName)})
+	h.Holder.Stats.CountWithCustomTags("deleteFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 }
 
 type deleteFrameResponse struct{}

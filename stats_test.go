@@ -23,7 +23,7 @@ func TestStatsCount_TopN(t *testing.T) {
 	called := false
 	e := NewExecutor(hldr.Holder, NewCluster(1))
 	e.Holder.Stats = &MockStats{
-		mockCountWithTags: func(name string, value int64, tags []string) {
+		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "TopN" {
 				t.Errorf("Expected TopN, Results %s", name)
 			}
@@ -53,7 +53,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	called := false
 	e := NewExecutor(hldr.Holder, NewCluster(1))
 	e.Holder.Stats = &MockStats{
-		mockCountWithTags: func(name string, value int64, tags []string) {
+		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "Bitmap" {
 				t.Errorf("Expected Bitmap, Results %s", name)
 			}
@@ -89,7 +89,7 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 	}
 
 	frame.Stats = &MockStats{
-		mockCount: func(name string, value int64) {
+		mockCount: func(name string, value int64, rate float64) {
 			if name != "SetBitmapAttrs" {
 				t.Errorf("Expected SetBitmapAttrs, Results %s", name)
 			}
@@ -120,7 +120,7 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 	}
 
 	idx.Stats = &MockStats{
-		mockCount: func(name string, value int64) {
+		mockCount: func(name string, value int64, rate float64) {
 			if name != "SetProfileAttrs" {
 				t.Errorf("Expected SetProfilepAttrs, Results %s", name)
 			}
@@ -145,7 +145,7 @@ func TestStatsCount_CreateIndex(t *testing.T) {
 	defer s.Close()
 	called := false
 	s.Handler.Holder.Stats = &MockStats{
-		mockCount: func(name string, value int64) {
+		mockCount: func(name string, value int64, rate float64) {
 			if name != "createIndex" {
 				t.Errorf("Expected createIndex, Results %s", name)
 			}
@@ -174,7 +174,7 @@ func TestStatsCount_DeleteIndex(t *testing.T) {
 	}
 	called := false
 	s.Handler.Holder.Stats = &MockStats{
-		mockCount: func(name string, value int64) {
+		mockCount: func(name string, value int64, rate float64) {
 			if name != "deleteIndex" {
 				t.Errorf("Expected deleteIndex, Results %s", name)
 			}
@@ -203,7 +203,7 @@ func TestStatsCount_CreateFrame(t *testing.T) {
 	}
 	called := false
 	s.Handler.Holder.Stats = &MockStats{
-		mockCountWithTags: func(name string, value int64, index []string) {
+		mockCountWithTags: func(name string, value int64, rate float64, index []string) {
 			if name != "createFrame" {
 				t.Errorf("Expected createFrame, Results %s", name)
 			}
@@ -235,7 +235,7 @@ func TestStatsCount_DeleteFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Handler.Holder.Stats = &MockStats{
-		mockCountWithTags: func(name string, value int64, index []string) {
+		mockCountWithTags: func(name string, value int64, rate float64, index []string) {
 			if name != "deleteFrame" {
 				t.Errorf("Expected deleteFrame, Results %s", name)
 			}
@@ -254,29 +254,29 @@ func TestStatsCount_DeleteFrame(t *testing.T) {
 }
 
 type MockStats struct {
-	mockCount         func(name string, value int64)
-	mockCountWithTags func(name string, value int64, tags []string)
+	mockCount         func(name string, value int64, rate float64)
+	mockCountWithTags func(name string, value int64, rate float64, tags []string)
 }
 
-func (s *MockStats) Count(name string, value int64) {
+func (s *MockStats) Count(name string, value int64, rate float64) {
 	if s.mockCount != nil {
-		s.mockCount(name, value)
+		s.mockCount(name, value, rate)
 		return
 	}
 	return
 }
 
-func (s *MockStats) CountWithCustomTags(name string, value int64, tags []string) {
+func (s *MockStats) CountWithCustomTags(name string, value int64, rate float64, tags []string) {
 	if s.mockCountWithTags != nil {
-		s.mockCountWithTags(name, value, tags)
+		s.mockCountWithTags(name, value, rate, tags)
 		return
 	}
 	return
 }
 
-func (c *MockStats) Tags() []string                             { return nil }
-func (c *MockStats) WithTags(tags ...string) pilosa.StatsClient { return c }
-func (c *MockStats) Gauge(name string, value float64)           {}
-func (c *MockStats) Histogram(name string, value float64)       {}
-func (c *MockStats) Set(name string, value string)              {}
-func (c *MockStats) Timing(name string, value time.Duration)    {}
+func (c *MockStats) Tags() []string                                        { return nil }
+func (c *MockStats) WithTags(tags ...string) pilosa.StatsClient            { return c }
+func (c *MockStats) Gauge(name string, value float64, rate float64)        {}
+func (c *MockStats) Histogram(name string, value float64, rate float64)    {}
+func (c *MockStats) Set(name string, value string, rate float64)           {}
+func (c *MockStats) Timing(name string, value time.Duration, rate float64) {}

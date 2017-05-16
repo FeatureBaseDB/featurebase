@@ -204,7 +204,7 @@ func (s *Server) monitorAntiEntropy() {
 		case <-s.closing:
 			return
 		case <-ticker.C:
-			s.Holder.Stats.Count("AntiEntropy", 1)
+			s.Holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 
 		s.logger().Printf("holder sync beginning")
@@ -226,7 +226,7 @@ func (s *Server) monitorAntiEntropy() {
 		s.logger().Printf("holder sync complete")
 	}
 	dif := time.Since(t)
-	s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif))
+	s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
 }
 
 // monitorMaxSlices periodically pulls the highest slice from each node in the cluster.
@@ -465,12 +465,12 @@ func (s *Server) monitorRuntime() {
 				return
 			case <-gcn.AfterGC():
 				// GC just ran
-				s.Holder.Stats.Count("garbage_collection", 1)
+				s.Holder.Stats.Count("garbage_collection", 1, 1.0)
 			case <-ticker.C:
 			}
 
 			// Record the number of go routines
-			s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()))
+			s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 		}
 	}
 }

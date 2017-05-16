@@ -271,7 +271,7 @@ func (f *Frame) openViews() error {
 		view.RowAttrStore = f.rowAttrStore
 		f.views[view.Name()] = view
 
-		f.Stats.Count("maxSlice", 1)
+		// f.Stats.Count("maxSlice", 1)
 	}
 
 	return nil

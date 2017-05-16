@@ -148,8 +148,6 @@ func (v *View) openFragments() error {
 		}
 		frag.RowAttrStore = v.RowAttrStore
 		v.fragments[frag.Slice()] = frag
-
-		v.stats.Count("maxSlice", 1)
 	}
 
 	return nil
@@ -180,6 +178,8 @@ func (v *View) MaxSlice() uint64 {
 			max = slice
 		}
 	}
+
+	fmt.Println("*** VIEW MaxSlice", max)
 	return max
 }
 
@@ -233,6 +233,8 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	if slice > v.maxSlice {
 		v.maxSlice = slice
 
+		fmt.Println("*** Create Fragment", slice)
+
 		// Send the create slice message to all nodes.
 		err := v.broadcaster.SendAsync(
 			&internal.CreateSliceMessage{
@@ -247,9 +249,6 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 
 	// Save to lookup.
 	v.fragments[slice] = frag
-
-	v.stats.Count("maxSlice", 1)
-
 	return frag, nil
 }
 

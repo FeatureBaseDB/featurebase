@@ -407,7 +407,7 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	// Update the cache.
 	f.cache.Add(rowID, bm.Count())
 
-	f.stats.Count("setN", 1)
+	f.stats.Count("setBit", 1, 1.0)
 
 	return changed, nil
 }
@@ -453,7 +453,7 @@ func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	// Update the cache.
 	f.cache.Add(rowID, bm.Count())
 
-	f.stats.Count("clearN", 1)
+	f.stats.Count("clearBit", 1, 1.0)
 
 	return changed, nil
 }
@@ -951,7 +951,8 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 			if err != nil {
 				return err
 			}
-			f.stats.Count("ImportBit", 1)
+			// Reduce the StatsD rate for high volume stats
+			f.stats.Count("ImportBit", 1, 0.0001)
 			// import optimization to avoid linear foreach calls
 			// slight risk of concurrent cache counter being off but
 			// no real danger
@@ -1011,7 +1012,7 @@ func (f *Fragment) Snapshot() error {
 func track(start time.Time, message string, stats StatsClient, logger *log.Logger) {
 	elapsed := time.Since(start)
 	logger.Printf("%s took %s", message, elapsed)
-	stats.Histogram("snapshot", elapsed.Seconds())
+	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
 }
 
 func (f *Fragment) snapshot() error {
@@ -1394,7 +1395,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		if err := s.syncBlock(blockID); err != nil {
 			return fmt.Errorf("sync block: id=%d, err=%s", blockID, err)
 		}
-		s.Fragment.stats.Count("BlockRepair", 1)
+		s.Fragment.stats.Count("BlockRepair", 1, 1.0)
 	}
 
 	return nil

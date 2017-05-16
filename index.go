@@ -260,6 +260,11 @@ func (i *Index) MaxSlice() uint64 {
 			max = slice
 		}
 	}
+	fmt.Println("*** Get MAXSLICE ***", max)
+	i.Stats.Gauge("maxSlice", float64(max), 1.0)
+
+	fmt.Println("### My Remote MAXSLICE ###", i.remoteMaxSlice)
+
 	return max
 }
 
@@ -268,6 +273,9 @@ func (i *Index) SetRemoteMaxSlice(newmax uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.remoteMaxSlice = newmax
+
+	fmt.Println("### Set Remote MAXSLICE ###", newmax)
+	// i.Stats.Gauge("maxSlice", float64(newmax), 1.0)
 }
 
 // MaxInverseSlice returns the max inverse slice in the index according to this node.

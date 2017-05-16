@@ -95,12 +95,12 @@ func (c *LRUCache) Len() int { return c.cache.Len() }
 
 // Invalidate is a no-op.
 func (c *LRUCache) Invalidate() {
-	c.stats.Gauge("LRUCache", float64(c.cache.Len()))
+	c.stats.Gauge("LRUCache", float64(c.cache.Len()), 1.0)
 }
 
 // Recalculate is a no-op.
 func (c *LRUCache) Recalculate() {
-	c.stats.Gauge("LRUCache", float64(c.cache.Len()))
+	c.stats.Gauge("LRUCache", float64(c.cache.Len()), 1.0)
 }
 
 // IDs returns a list of all IDs in the cache.
@@ -256,7 +256,7 @@ func (c *RankCache) recalculate() {
 	// Store the count of the item at the threshold index.
 	c.rankings = rankings
 	length := len(c.rankings)
-	c.stats.Gauge("RankCache", float64(length))
+	c.stats.Gauge("RankCache", float64(length), 1.0)
 
 	if length > int(c.maxEntries) {
 		c.thresholdValue = rankings[c.maxEntries].Count
