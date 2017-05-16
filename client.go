@@ -480,6 +480,8 @@ func (c *Client) BackupTo(ctx context.Context, w io.Writer, index, frame, view s
 		maxSlices, err = c.MaxSliceByIndex(ctx)
 	} else if view == ViewInverse {
 		maxSlices, err = c.MaxInverseSliceByIndex(ctx)
+	} else {
+		return ErrInvalidView
 	}
 
 	if err != nil {
