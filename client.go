@@ -474,7 +474,14 @@ func (c *Client) BackupTo(ctx context.Context, w io.Writer, index, frame, view s
 	tw := tar.NewWriter(w)
 
 	// Find the maximum number of slices.
-	maxSlices, err := c.MaxSliceByIndex(ctx)
+	var maxSlices map[string]uint64
+	var err error
+	if view == ViewStandard {
+		maxSlices, err = c.MaxSliceByIndex(ctx)
+	} else if view == ViewInverse {
+		maxSlices, err = c.MaxInverseSliceByIndex(ctx)
+	}
+
 	if err != nil {
 		return fmt.Errorf("slice n: %s", err)
 	}
