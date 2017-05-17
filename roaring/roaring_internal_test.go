@@ -214,3 +214,17 @@ func TestRunRemove(t *testing.T) {
 		}
 	}
 }
+
+func TestRunMax(t *testing.T) {
+	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
+	max := c.max()
+	if max != 16 {
+		t.Fatalf("max for %v should be 16", c.runs)
+	}
+
+	c = container{runs: []interval16{}}
+	max = c.max()
+	if max != 0 {
+		t.Fatalf("max for %v should be 0", c.runs)
+	}
+}

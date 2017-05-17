@@ -1196,13 +1196,16 @@ func (c *container) runRemove(v uint32) bool {
 func (c *container) max() uint32 {
 	if c.isArray() {
 		return c.arrayMax()
+	} else if c.isBitmap() {
+		return c.bitmapMax()
+	} else {
+		return c.runMax()
 	}
-	return c.bitmapMax()
 }
 
 func (c *container) arrayMax() uint32 {
 	if len(c.array) == 0 {
-		return 0 //probably hiding some ugly bug but it prevents a crash
+		return 0 // probably hiding some ugly bug but it prevents a crash
 	}
 	return c.array[len(c.array)-1]
 }
@@ -1224,6 +1227,13 @@ func (c *container) bitmapMax() uint32 {
 		}
 	}
 	return 0
+}
+
+func (c *container) runMax() uint32 {
+	if len(c.runs) == 0 {
+		return 0
+	}
+	return uint32(c.runs[len(c.runs)-1].last)
 }
 
 // convertToArray converts the values in the bitmap to array values.
