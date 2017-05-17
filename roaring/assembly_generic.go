@@ -16,6 +16,9 @@
 
 package roaring
 
+func hasAsm() bool {return false}
+
+
 func popcntSlice(s []uint64) uint64        { return popcntSliceGo(s) }
 func popcntMaskSlice(s, m []uint64) uint64 { return popcntMaskSliceGo(s, m) }
 func popcntAndSlice(s, m []uint64) uint64  { return popcntAndSliceGo(s, m) }
