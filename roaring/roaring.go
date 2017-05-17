@@ -1086,7 +1086,7 @@ func (c *container) arrayAdd(v uint32) bool {
 
 	// Convert to a bitmap container if too many values are in an array container.
 	if c.n >= ArrayMaxSize {
-		c.convertToBitmap()
+		c.arrayToBitmap()
 		return c.bitmapAdd(v)
 	}
 
@@ -1223,7 +1223,7 @@ func (c *container) bitmapRemove(v uint32) bool {
 
 	// Convert to array if we go below the threshold.
 	if c.n == ArrayMaxSize {
-		c.convertToArray()
+		c.bitmapToArray()
 	}
 	return true
 }
@@ -1297,7 +1297,7 @@ func (c *container) runMax() uint32 {
 }
 
 // convertToArray converts the values in the bitmap to array values.
-func (c *container) convertToArray() {
+func (c *container) bitmapToArray() {
 	c.array = make([]uint32, 0, c.n)
 	for i, bitmap := range c.bitmap {
 		for bitmap != 0 {
@@ -1311,7 +1311,7 @@ func (c *container) convertToArray() {
 }
 
 // convertToBitmap converts the values in array to bitmap values.
-func (c *container) convertToBitmap() {
+func (c *container) arrayToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
 	for _, v := range c.array {
 		c.bitmap[int(v)/64] |= (uint64(1) << uint(v%64))
@@ -1332,6 +1332,11 @@ func (c *container) clone() *container {
 	if c.bitmap != nil {
 		other.bitmap = make([]uint64, len(c.bitmap))
 		copy(other.bitmap, c.bitmap)
+	}
+
+	if c.runs != nil {
+		other.runs = make([]interval16, len(c.runs))
+		copy(other.runs, c.runs)
 	}
 
 	return other
