@@ -267,7 +267,12 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 		return e.executeUnionSlice(ctx, index, c, slice)
 	default:
 		//return nil, fmt.Errorf("unknown call: %s", c.Name)
-		r, e := e.executeExternalCallSlice(ctx, index, c, slice)
+		p, err := e.newPlugin(c)
+		if err != nil {
+			return nil, err
+		}
+
+		r, e := e.executeExternalCallSlice(ctx, index, c, slice, p)
 		return r.(*Bitmap), e
 	}
 }
@@ -282,7 +287,7 @@ func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.Ca
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeExternalCallSlice(ctx, db, c, slice)
+		return e.executeExternalCallSlice(ctx, db, c, slice, p)
 	}
 
 	// Merge returned results at coordinating node.
@@ -299,16 +304,11 @@ func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.Ca
 }
 
 // executeExternalCallSlice executes the map phase of an external plugin call against a single slice.
-func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (interface{}, error) {
-	p, err := e.newPlugin(c)
-	if err != nil {
-		return nil, err
-	}
-
+func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64, p Plugin) (interface{}, error) {
 	// Evaluate children.
 	children := make([]interface{}, len(c.Children))
 	for i, child := range c.Children {
-		ret, err := e.executeCallSlice(ctx, db, child, slice)
+		ret, err := e.executeCallSlice(ctx, db, child, slice, p)
 		if err != nil {
 			return nil, err
 		}
@@ -324,7 +324,7 @@ func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *p
 	return p.Map(ctx, db, children, args, slice)
 }
 
-func (e *Executor) executeCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (interface{}, error) {
+func (e *Executor) executeCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64, p Plugin) (interface{}, error) {
 	switch c.Name {
 	case "Bitmap", "Difference", "Intersect", "Range", "Union":
 		return e.executeBitmapCallSlice(ctx, db, c, slice)
@@ -334,7 +334,7 @@ func (e *Executor) executeCallSlice(ctx context.Context, db string, c *pql.Call,
 	case "TopN":
 		return nil, errors.New("nested TopN() not currently supported")
 	default:
-		return e.executeExternalCallSlice(ctx, db, c, slice)
+		return e.executeExternalCallSlice(ctx, db, c, slice, p)
 	}
 }
 
