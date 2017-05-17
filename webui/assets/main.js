@@ -85,20 +85,27 @@ class REPL {
             }
             var input_word = repl.input.value.substring(word_start, repl.input.selectionEnd)
 
-            // check for keyword match and insert
-            // this just stops at the first match
+            // check for keyword match and insert if exactly one match
+            var matches = []
             for(var keyword in keywords) {
               if(keyword.startsWith(input_word)){
-                var cursor_pos = repl.input.selectionEnd
-                var completion = keyword.substring(input_word.length)
-                var before = repl.input.value.substring(0, cursor_pos)
-                var after = repl.input.value.substring(cursor_pos)
-                repl.input.value = before + completion + after
-                var new_pos = cursor_pos + completion.length - keywords[keyword]
-                repl.input.setSelectionRange(new_pos, new_pos)
-                break
+                matches.push(keyword)
               }
             }
+            if(matches.length > 1) {
+              // display in some dynamic element
+            }
+
+            if(matches.length == 1) {
+              var cursor_pos = repl.input.selectionEnd
+              var completion = matches[0].substring(input_word.length)
+              var before = repl.input.value.substring(0, cursor_pos)
+              var after = repl.input.value.substring(cursor_pos)
+              repl.input.value = before + completion + after
+              var new_pos = cursor_pos + completion.length - keywords[matches[0]]
+              repl.input.setSelectionRange(new_pos, new_pos)
+            }
+
           }
         })
         repl.button.onclick = function() {
