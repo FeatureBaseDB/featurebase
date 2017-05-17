@@ -47,12 +47,16 @@ func TestContainerRunAdd(t *testing.T) {
 		{8, []interval16{{start: 0, last: 4}, {start: 6, last: 8}, {start: 10, last: 10}}},
 	}
 	for _, test := range tests {
+		c.mapped = true
 		ret := c.add(test.op)
 		if !ret {
 			t.Fatalf("result of adding new bit should be true: %v", c.runs)
 		}
 		if !reflect.DeepEqual(c.runs, test.exp) {
 			t.Fatalf("Should have %v, but got %v after adding %v", test.exp, c.runs, test.op)
+		}
+		if c.mapped {
+			t.Fatalf("container should not be mapped after adding bit %v", test.op)
 		}
 	}
 }
@@ -218,6 +222,40 @@ func TestIntersectionCountArrayBitmap2(t *testing.T) {
 		ret2 := intersectionCountArrayBitmap(a, b)
 		if ret1 != ret2 || ret2 != test.exp {
 			t.Fatalf("test #%v intersectCountArrayBitmap fail orig: %v new: %v exp: %v", i, ret1, ret2, test.exp)
+		}
+	}
+}
+
+func TestRunRemove(t *testing.T) {
+	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
+	tests := []struct {
+		op     uint32
+		exp    []interval16
+		expRet bool
+	}{
+		{2, []interval16{{start: 3, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, true},
+		{10, []interval16{{start: 3, last: 9}, {start: 12, last: 13}, {start: 15, last: 16}}, true},
+		{12, []interval16{{start: 3, last: 9}, {start: 13, last: 13}, {start: 15, last: 16}}, true},
+		{13, []interval16{{start: 3, last: 9}, {start: 15, last: 16}}, true},
+		{16, []interval16{{start: 3, last: 9}, {start: 15, last: 15}}, true},
+		{6, []interval16{{start: 3, last: 5}, {start: 7, last: 9}, {start: 15, last: 15}}, true},
+		{8, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, true},
+		{8, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
+		{1, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
+		{44, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
+	}
+
+	for _, test := range tests {
+		c.mapped = true
+		ret := c.remove(test.op)
+		if ret != test.expRet || !reflect.DeepEqual(c.runs, test.exp) {
+			t.Fatalf("Unexpected result removing %v from runs. Expected %v, got %v. Expected %v, got %v", test.op, test.expRet, ret, test.exp, c.runs)
+		}
+		if ret && c.mapped {
+			t.Fatalf("container was not unmapped although bit %v was removed", test.op)
+		}
+		if !ret && !c.mapped {
+			t.Fatalf("container was unmapped although bit %v was not removed", test.op)
 		}
 	}
 }

@@ -1156,8 +1156,11 @@ func (c *container) runAdd(v uint32) bool {
 func (c *container) contains(v uint32) bool {
 	if c.isArray() {
 		return c.arrayContains(v)
+	} else if c.isBitmap() {
+		return c.bitmapContains(v)
+	} else {
+		return c.runContains(v)
 	}
-	return c.bitmapContains(v)
 }
 
 func (c *container) arrayContains(v uint32) bool {
@@ -1183,11 +1186,18 @@ func (c *container) runContains(v uint32) bool {
 }
 
 // remove adds a value to the container.
-func (c *container) remove(v uint32) bool {
+func (c *container) remove(v uint32) (removed bool) {
 	if c.isArray() {
-		return c.arrayRemove(v)
+		removed = c.arrayRemove(v)
+	} else if c.isBitmap() {
+		removed = c.bitmapRemove(v)
+	} else {
+		removed = c.runRemove(v)
 	}
-	return c.bitmapRemove(v)
+	if removed {
+		c.n--
+	}
+	return removed
 }
 
 func (c *container) arrayRemove(v uint32) bool {
@@ -1197,7 +1207,6 @@ func (c *container) arrayRemove(v uint32) bool {
 	}
 	c.unmap()
 
-	c.n--
 	c.array = append(c.array[:i], c.array[i+1:]...)
 	return true
 }
@@ -1217,6 +1226,30 @@ func (c *container) bitmapRemove(v uint32) bool {
 		c.convertToArray()
 	}
 	return true
+}
+
+func (c *container) runRemove(v uint32) bool {
+	v16 := uint16(v)
+	for i, iv := range c.runs {
+		if v16 <= iv.last {
+			if v16 < iv.start {
+				return false
+			}
+			c.unmap()
+			if v16 == iv.last && v16 == iv.start {
+				c.runs = append(c.runs[:i], c.runs[i+1:]...)
+			} else if v16 == iv.last {
+				c.runs[i].last -= 1
+			} else if v16 == iv.start {
+				c.runs[i].start += 1
+			} else if v16 > iv.start {
+				c.runs[i].last = v16 - 1
+				c.runs = append(c.runs[:i+1], append([]interval16{{start: v16 + 1, last: iv.last}}, c.runs[i+1:]...)...)
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // max returns the maximum value in the container.
