@@ -975,10 +975,10 @@ func (c *container) count() (n int) {
 func (c *container) countRange(start, end uint32) (n int) {
 	if c.isArray() {
 		return c.arrayCountRange(start, end)
-	} else if c.isBitmap() {
-		return c.bitmapCountRange(start, end)
+	} else if c.isRun() {
+		return c.runCountRange(start, end)
 	}
-	return c.runCountRange(start, end)
+	return c.bitmapCountRange(start, end)
 }
 
 func (c *container) arrayCountRange(start, end uint32) (n int) {
@@ -1058,10 +1058,10 @@ func (c *container) runCountRange(start, end uint32) (n int) {
 func (c *container) add(v uint32) (added bool) {
 	if c.isArray() {
 		added = c.arrayAdd(v)
-	} else if c.isBitmap() {
-		added = c.bitmapAdd(v)
-	} else {
+	} else if c.isRun() {
 		added = c.runAdd(v)
+	} else {
+		added = c.bitmapAdd(v)
 	}
 	if added {
 		c.n++
@@ -1154,10 +1154,10 @@ func (c *container) runAdd(v uint32) bool {
 func (c *container) contains(v uint32) bool {
 	if c.isArray() {
 		return c.arrayContains(v)
-	} else if c.isBitmap() {
-		return c.bitmapContains(v)
-	} else {
+	} else if c.isRun() {
 		return c.runContains(v)
+	} else {
+		return c.bitmapContains(v)
 	}
 }
 
@@ -1186,10 +1186,10 @@ func (c *container) runContains(v uint32) bool {
 func (c *container) remove(v uint32) (removed bool) {
 	if c.isArray() {
 		removed = c.arrayRemove(v)
-	} else if c.isBitmap() {
-		removed = c.bitmapRemove(v)
-	} else {
+	} else if c.isRun() {
 		removed = c.runRemove(v)
+	} else {
+		removed = c.bitmapRemove(v)
 	}
 	if removed {
 		c.n--
@@ -1252,10 +1252,10 @@ func (c *container) runRemove(v uint32) bool {
 func (c *container) max() uint32 {
 	if c.isArray() {
 		return c.arrayMax()
-	} else if c.isBitmap() {
-		return c.bitmapMax()
-	} else {
+	} else if c.isRun() {
 		return c.runMax()
+	} else {
+		return c.bitmapMax()
 	}
 }
 
@@ -1342,8 +1342,11 @@ func (c *container) clone() *container {
 func (c *container) WriteTo(w io.Writer) (n int64, err error) {
 	if c.isArray() {
 		return c.arrayWriteTo(w)
+	} else if c.isRun() {
+		return c.runWriteTo(w)
+	} else {
+		return c.bitmapWriteTo(w)
 	}
-	return c.bitmapWriteTo(w)
 }
 
 func (c *container) arrayWriteTo(w io.Writer) (n int64, err error) {
@@ -1366,12 +1369,20 @@ func (c *container) bitmapWriteTo(w io.Writer) (n int64, err error) {
 	return int64(nn), err
 }
 
+func (c *container) runWriteTo(w io.Writer) (n int64, err error) {
+	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.runs[0]))[:8*c.n])
+	return int64(nn), err
+}
+
 // size returns the encoded size of the container, in bytes.
 func (c *container) size() int {
 	if c.isArray() {
 		return len(c.array) * 4
+	} else if c.isRun() {
+		return len(c.runs) * 8
+	} else {
+		return len(c.bitmap) * 8
 	}
-	return len(c.bitmap) * 8
 }
 
 // info returns the current stats about the container.
@@ -1381,6 +1392,9 @@ func (c *container) info() ContainerInfo {
 	if c.isArray() {
 		info.Type = "array"
 		info.Alloc = len(c.array) * 4
+	} else if c.isRun() {
+		info.Type = "run"
+		info.Alloc = len(c.runs) * 8
 	} else {
 		info.Type = "bitmap"
 		info.Alloc = len(c.bitmap) * 8
@@ -1389,6 +1403,8 @@ func (c *container) info() ContainerInfo {
 	if c.mapped {
 		if c.isArray() {
 			info.Pointer = unsafe.Pointer(&c.array[0])
+		} else if c.isRun() {
+			info.Pointer = unsafe.Pointer(&c.runs[0])
 		} else {
 			info.Pointer = unsafe.Pointer(&c.bitmap[0])
 		}
