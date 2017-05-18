@@ -4,9 +4,9 @@ title = "Tutorials"
 
 ## Tutorials
 
-#### Transportation
+### Transportation
 
-##### Introduction
+#### Introduction
 
 New York City released an extremely detailed data set of over 1 billion taxi rides taken in the city - this data has become a popular target for analysis by tech bloggers and has been very well studied. For this reason, we thought it would be interesting to import this data to Pilosa in order to compare with other data stores and techniques on the exact same data set.
 
@@ -16,7 +16,7 @@ We've written a tool to help import the NYC taxi data into Pilosa - this tool is
 
 After initial setup, the PDK import tool does everything we need to define a Pilosa schema, map data to bitmaps accordingly, and import it into Pilosa.
 
-##### Data Model
+#### Data Model
 
 The NYC taxi data is comprised of a number of csv files listed here: http://www.nyc.gov/html/tlc/html/about/trip_record_data.shtml. These data files have around 20 columns, about half of which are relevant to the benchmark queries we're looking at:
 
@@ -54,15 +54,15 @@ frame	|mapping
 duration_minutes	|round(drop_timestamp - pickup_timestamp) → row ID
 speed_mph	|round(dist_miles / (drop_timestamp - pickup_timestamp)) → row ID
 
-##### Mapping
+#### Mapping
 
 Each column that we want to use must be mapped to a combination of frames and row IDs according to some rule. There are many ways to approach this mapping, and the taxi dataset gives us a good overview of possibilities.
 
-###### 0 columns → 1 frame
+##### 0 columns → 1 frame
 
 cab_type: contains one row for each type of cab. Each column, representing one ride, has a bit set in exactly one row of this frame. The mapping is a simple enumeration, for example yellow=0, green=1, etc. The values of the bits in this frame are determined by the source of the data. That is, we're importing data from several disparate sources: NYC yellow taxi cabs, NYC green taxi cabs, and Uber cars. For each source, the single row to be set in the cab_type frame is constant.
 
-###### 1 column → 1 frame
+##### 1 column → 1 frame
 
 The following three frames are mapped in a simple direct way from single columns of the original data.
 
@@ -124,7 +124,7 @@ Here, we define a list of Mappers, each including a name, which we use to refer 
 
 **passenger_count:** This column contains small integers, so we use one of the simplest possible mappings: the column value is the row ID.
 
-###### 1 column → multiple frames
+##### 1 column → multiple frames
 
 When working with a composite data type like a timestamp, there are plenty of mapping options. In this case, we expect to see interesting periodic trends, so we want to encode the cyclic components of time in a way that allows us to look at them independently during analysis.
 
@@ -134,7 +134,7 @@ We might continue this pattern with hours, minutes, and seconds, but we don't ha
 
 We do all of this for each timestamp of interest, one for pickup time and one for dropoff time. That gives us eight total frames for two timestamps: pickup_year, pickup_month, pickup_day, pickup_time, drop_year, drop_month, drop_day, drop_time.
 
-###### Multiple columns → 1 frame
+##### Multiple columns → 1 frame
 
 The ride data also contains geolocation data: latitude and longitude for both pickup and dropoff. We just want to be able to produce a rough overview heatmap of ride locations, so we use a grid mapping. We divide the area of interest into a 100x100 grid in latitude-longitude space, label each cell in this grid with a single integer, and use that integer as the row ID.
 
@@ -142,7 +142,7 @@ We do all of this for each location of interest, one for pickup and one for drop
 
 Again, there are many mapping options for location data. For example, we might convert to a different coordinate system, apply a projection, or aggregate locations into real-world regions such as neighborhoods. Here, the simple approach is sufficient.
 
-###### Complex mappings
+##### Complex mappings
 
 We also anticipate looking for trends in ride duration and speed, so we want to capture this information during the import process. For the frame `duration_minutes`, we compute a row ID as `round((drop_timestamp - pickup_timestamp).minutes)`. For the frame `speed_mph`, we compute row ID as `round(dist_miles / (drop_timestamp - pickup_timestamp).minutes)`. These mapping calculations are straightforward, but because they require arithmetic operations on multiple columns, they are a bit too complex to capture in the basic mappers available in PDK. Instead, we define custom mappers to do the work:
 ```go
@@ -156,11 +156,11 @@ durm := pdk.CustomMapper{
 }
 ```
 
-##### Import process
+#### Import process
 
 After designing this schema and mapping, we capture it in a JSON definition file that can be read by the PDK import tool. Running `pdk taxi` runs the import based on the information in this file. See [PDK](../pdk) for more details on this process.
 
-##### Queries
+#### Queries
 
 Now we can run some example queries.
 
@@ -194,9 +194,9 @@ for pcount, topn in zip(pcounts, resp.json()['results']):
 
 For more examples and details, see this [ipython notebook](https://github.com/alanbernstein/pilosa-notebooks/blob/master/taxi-use-case.ipynb).
 
-#### Chemical similarity search
+### Chemical similarity search
 
-##### Overview
+#### Overview
 
 The notion of chemical similarity (or molecular similarity) plays an important role in predicting the properties of chemical compounds, designing chemicals with a predefined set of properties, and—especially—conducting drug design studies. All of these are accomplished by screening large indexes containing structures of available or potentially available chemicals.
 
@@ -211,7 +211,7 @@ A and B are sets of fingerprint bits on in the fingerprints of molecule A and mo
 
 All source code to calculate tanimoto for molecule fingerprint using Pilosa is available in a Github repository https://github.com/pilosa/chem-usecase
 
-##### Data model
+#### Data model
 
 We use the latest ChEMBL release chembl_22.sdf for test data. Each molecule in the SD file gives us the canonical isomeric SMILES (Simplified molecular-input line-entry system) and chembl_id. 
 
@@ -248,7 +248,7 @@ Index: mole
 
 After retrieving chembl_id from the Inverse View, we can use the Tanimoto coefficient to compare chembl_id with the entire data set of molecules. The result of this comparison is the list of `chembl_id`s that have a Tanimoto coefficient greater than the given threshold.
 
-##### Import process
+#### Import process
 
 To import data into Pilosa, we need to get chembl_id and SMILES from SD files, convert SMILES to Morgan fingerprints, and then write chembl_id and fingerprint to Pilosa. The fastest way is to extracted chembl_id and SMILES from SD file to csv file, then use the `pilosa import` command to import the csv file into Pilosa. Since chembl_id in the SD file is always paired with CHEMBL, e.g CHEMBL6329, and because Pilosa doesn't support string keys, we will ignore CHEMBL and instead use chembl_id as an integer key.
 
@@ -276,7 +276,7 @@ Run the following commands to import the csv data into the `mole` index:
 pilosa import -d mole -f fingerprint id_fingerprint.csv
 ```
 
-##### Queries
+#### Queries
 
 Get chembl_id from a given SMILES:
 ```
@@ -330,7 +330,7 @@ Return chembl_id = [6223, 269758, 6206, 6228]. This script uses Pilosa’s TopN 
     topn = requests.post("http://127.0.0.1:10101/index/mol/query" , data=query_string)
     ```
 
-##### Benchmark
+#### Benchmark
 
 To run benchmark for specific chembl_id for different similarity threshold at percentage of [50, 70, 75, 80, 85, 90], run following command:
 ```

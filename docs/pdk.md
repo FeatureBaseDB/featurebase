@@ -8,9 +8,9 @@ The [Pilosa Dev Kit](https://github.com/pilosa/pdk) contains Go libraries to hel
 
 The PDK also contains some fully worked examples which make use of its tools. These are available in the `usecase` subdirectory and can be run as subcommands of the `pdk` binary.
 
-#### Library
+### Library
 
-##### Mapping
+#### Mapping
 
 Importing data into Pilosa is dependent on mapping it to integer IDs. PDK provides some predefined functions for inline mapping to simplify this process, supported by a framework for linking these mappings with the associated fields in a source CSV file. If no custom mapping is necessary, the entire import process can be described by an import definition file. The file is composed of four main parts:
 
@@ -51,12 +51,12 @@ Some of the simple mapper functions available with PDK include:
 * GridMapper: Maps a pair of floats to a single integer, identifying a cell in a rectangular grid. This can be used, for example, to represent (latitude, longitude) location coarsely, as in the taxi data example.
 * CustomMapper: When none of the predefined mappers will work, or when multiple fields determine a row ID value, an arbitrary mapping function can be used. Define a function in Go, with the necessary behavior, and wrap it in a CustomMapper.
 
-#### Examples
+### Examples
 
 Run `make install` to build and install the `pdk` binary which contains all the examples. Just running `pdk` will bring up a list of all the examples, with a brief description of each. `pdk help <example>` will bring up a more detailed description of that example along with all arguments that it accepts to configure its functionality.
 
 <!--
-##### Net
+#### Net
 
 A detailed discussion of using Pilosa to index network traffic data is available [here - TODO]link blog post). This will discuss the implementation of `pdk net` as it relates to the use of the PDK library tools.
 -->

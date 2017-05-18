@@ -2,8 +2,7 @@
 title = "Glossary"
 +++
 
-# Glossary
-
+## Glossary
 
 <strong id="index">Index:</strong> Indexes are the top level container in Pilosa - similar to a database in an RDBMS. Queries cannot operate across multiple indexes.
 

@@ -10,15 +10,15 @@ All options are available in all three configuration types with the exception of
 
 The syntax for each option is slightly different between each of the configuration types, but follows a simple formula. See the following three sections for an explanation of each configuration type.
 
-#### Command line flags
+### Command line flags
 
 Pilosa uses GNU/POSIX style flags. Most flags you specify as `--flagname=value` although some have a short form that is a single character and can be specified with a single dash like `-f value`. Running `pilosa server --help` will give an overview of the available flags as well as their short forms (if applicable).
 
-#### Environment variables
+### Environment variables
 
 Every command line flag has a corresponding environment variable. The environment variable is the flag name in all caps, prefxed by `PILOSA_`, and with any dashes replaced by underscores. For example: `--flag-name` becomes `PILOSA_FLAG_NAME`.
 
-#### Config file
+### Config file
 
 The config file is in the [toml format](https://github.com/toml-lang/toml) and has exactly the same options available as the flags and environment variables. Any flag which contains a dot (".") denotes nesting within the config file, so the two flags `--cluster.poll-interval=2m0s` and `--cluster.replicas=1` look like this in the config file:
 ```toml
@@ -33,9 +33,9 @@ Any flag that has a value that is a comma separated list on the command line bec
   hosts = ["one.pilosa.com:10101", "two.pilosa.com:10101"]
 ```
 
-#### All Options
+### All Options
 
-##### Anti Entropy Interval
+#### Anti Entropy Interval
 
 * Description: Interval at which the cluster will run its anti-entropy routine which makes sure that all replicas of each fragment are in sync.
 * Flag: `--anti-entropy.interval="10m0s"`
@@ -47,7 +47,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     interval = "10m0s"
     ```
 
-##### Bind
+#### Bind
 
 * Description: host:port on which the Pilosa server will listen for requests. Host defaults to localhost and port to 10101.
 * Flag: `--bind="localhost:10101"`
@@ -58,7 +58,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     bind = localhost:10101
     ```
 
-##### Cluster Hosts
+#### Cluster Hosts
 
 * Description: List of hosts in the cluster. Multiple hosts should be comma separated in the flag and env forms.
 * Flag: `--cluster.hosts="localhost:10101"`
@@ -70,7 +70,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     hosts = ["localhost:10101"]
     ```
 
-##### Cluster Internal Hosts
+#### Cluster Internal Hosts
 
 * Description: List of hosts in the cluster used for internal communication. Multiple hosts should be comma separated in the flag and env forms.
 * Flag: `--cluster.internal-hosts="localhost:11101"`
@@ -82,7 +82,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     internal-hosts = ["localhost:11101"]
     ```
 
-##### Cluster Internal Port
+#### Cluster Internal Port
 
 * Description: Port to which Pilosa should bind for internal communication.
 * Flag: `--cluster.internal-port=11101`
@@ -94,7 +94,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     internal-port = 11101
     ```
 
-##### Cluster Poll Interval
+#### Cluster Poll Interval
 
 * Description: Polling interval for cluster.
 * Flag: `cluster.poll-interval="1m0s"`
@@ -106,7 +106,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     poll-interval = "1m0s"
     ```
 
-##### Cluster Replicas
+#### Cluster Replicas
 
 * Description: Number of hosts each piece of data should be stored on. 
 * Flag: `cluster.replicas=1`
@@ -118,7 +118,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     replicas = 1
     ```
 
-##### Cluster Type
+#### Cluster Type
 
 * Description: Determine how the cluster handles membership and state sharing. Choose from [static, http, gossip].
   * static - Messaging between nodes is disabled. This is primarily used for testing.
@@ -133,7 +133,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     type = "gossip"
     ```
 
-##### Data Dir
+#### Data Dir
 
 * Description: Directory to store Pilosa data files.
 * Flag: `--data-dir="~/.pilosa"`
@@ -144,7 +144,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     data-dir = "~/.pilosa"
     ```
 
-##### Profile CPU
+#### Profile CPU
 
 * Description: If this is set to a path, collect a cpu profile and store it there.
 * Flag: `--profile.cpu="/path/to/somewhere"`
@@ -156,7 +156,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     cpu = "/path/to/somewhere"    
     ```
 
-##### Profile CPU Time
+#### Profile CPU Time
 
 * Description: Amount of time to collect cpu profiling data if `profile.cpu` is set.
 * Flag: `--profile.cpu-time="30s"`

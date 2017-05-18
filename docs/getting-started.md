@@ -7,11 +7,11 @@ title = "Getting Started"
 Pilosa supports an HTTP interface which uses JSON by default.
 Any HTTP tool can be used to interact with the Pilosa server. The examples in this documentation will use [curl](https://curl.haxx.se/) which is available by default on many UNIX-like systems including Linux and MacOS. Windows users can download curl [here](https://curl.haxx.se/download.html).
 
-<div class="admonition">
+<div class="note">
     <p>Note that Pilosa server requires a high limit for open files. Check the documentation of your system to see how to increase it in case you hit that limit.</p>
 </div>
 
-#### Starting Pilosa
+### Starting Pilosa
 
 Follow the steps in the [Install]({{< ref "installation.md" >}}) document to install Pilosa.
 Execute the following in a terminal to run Pilosa with the default configuration (Pilosa will be available at `localhost:10101`):
@@ -30,13 +30,13 @@ curl localhost:10101/status
 
 Which should output: `{"status":{"Nodes":[{"Host":":10101","State":"UP"}]}}`
 
-#### Sample Project
+### Sample Project
 
 In order to better understand Pilosa's capabilities, we will create a sample project called "Star Trace" containing information about the top 1,000 most recently updated Github repositories which have "go" in their name. The Star Trace index will include data points such as programming language, tags, and stargazers—people who have starred a project.
 
 Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and tags. We can better organize the rows by grouping them into sets called Frames. So the "repository" index might have a "languages" frame as well as a "tags" frame. You can learn more about indexes and frames in the [Data Model](../data-model) section of the documentation.
 
-##### Create the Schema
+#### Create the Schema
 
 Note:
 The queries in this section which are used to set up the indexes in Pilosa just the empty object on success: `{}` - if you would like to verify that a query worked as you expected, you can request the schema as follows:
@@ -74,7 +74,7 @@ curl localhost:10101/index/repository/frame/language \
      -d '{"options": {"rowLabel": "language_id",
                       "inverseEnabled": true}}'
 ```
-##### Import Some Data
+#### Import Some Data
 
 The sample data for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started). Download the `stargazer.csv` and `language.csv` files in that repo.
 
@@ -100,9 +100,9 @@ docker exec -it pilosa /pilosa import -i repository -f language /language.csv
 
 Note that, both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out `language.txt` to see the mapping for languages.
 
-##### Make Some Queries
+#### Make Some Queries
 
-<div class="admonition">
+<div class="note">
     <p>Note the Pilosa server comes with a <a href="../webui/">WebUI</a> for constructing queries in a browser. In local development, it is available at <a href="http://localhost:10101">localhost:10101</a>.</p>
 </div>
 
@@ -148,6 +148,6 @@ curl localhost:10101/index/repository/query \
      -d 'SetBit(frame="stargazer", repo_id=77777, stargazer_id=99999)'
 ```
 
-#### What's Next?
+### What's Next?
 
 You can jump to [Data Model](../data-model/) for an in-depth look at Pilosa's data model, or [Query Language](../query-language/) for more details about **PQL**, the query language of Pilosa. Check out the [Tutorials](../tutorials/) for example implementations of real world use cases for Pilosa. Ready to get going in your favorite language? Have a peek at our small but expanding set of official [Client Libraries](../client-libraries/).

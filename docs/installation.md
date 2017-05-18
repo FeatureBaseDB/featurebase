@@ -7,11 +7,11 @@ title = "Installation"
 
 Pilosa is currently available for [MacOS](#installing-on-macos) and [Linux](#installing-on-linux).
 
-#### Installing on MacOS
+### Installing on MacOS
 
 There are three ways to install Pilosa on MacOS: download the binary (recommended), build from source, or use Docker.
 
-##### Download the Binary
+#### Download the Binary
 
 1. Download the latest release:
     ```
@@ -71,7 +71,7 @@ There are three ways to install Pilosa on MacOS: download the binary (recommende
 
     You're good to go!
 
-##### Build from Source
+#### Build from Source
 
 1. Install the prerequisites:
 
@@ -131,7 +131,7 @@ There are three ways to install Pilosa on MacOS: download the binary (recommende
 
     You're good to go!
 
-##### Use Docker
+#### Use Docker
 
 1. Install Docker for Mac.
 
@@ -152,16 +152,16 @@ If you don't see the server listed, start the Docker application.
     docker run --rm pilosa/pilosa:latest help
     ```
 
-##### What's next?
+#### What's next?
 
 Head over to the [Getting Started](../getting-started/) guide to create your first Pilosa index.
 
 
-#### Installing on Linux
+### Installing on Linux
 
 There are three ways to install Pilosa on Linux: download the binary (recommended), build from source, or use Docker.
 
-##### Download the Binary
+#### Download the Binary
 
 1. To install the latest version of Pilosa, download the latest release:
     ```
@@ -221,7 +221,7 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
 
     You're good to go!
 
-##### Build from Source
+#### Build from Source
 
 1. Install the prerequisites:
 
@@ -282,7 +282,7 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
     You're good to go!
 
 
-##### Use Docker
+#### Use Docker
 
 1. Install Docker.
 
@@ -303,17 +303,17 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
     docker run --rm pilosa/pilosa:latest help
     ```
 
-##### What's next?
+#### What's next?
 
 Head over to the [Getting Started](../getting-started/) guide to create your first Pilosa index.
 
 
 <!--
-#### Windows
+### Windows
 
 Windows is currently not supported as a target deployment platform for Pilosa, but developing and running Pilosa is made possible by Windows Subsystem for Linux and Docker. See the [Docker](#docker) documentation for using Docker for Windows and Docker Toolbox. You can find documentation about installing Windows Subsystem for Linux at https://msdn.microsoft.com/en-us/commandline/wsl/install_guide. From there, use the instructions in the [Linux Install](#installing-on-linux) section in the this document.
 
-#### Docker
+### Docker
 
 1. Install Docker for your platform. On Linux, Docker is available via your package manager. On MacOS, you can use Docker for Mac or Docker Toolbox. On Windows, you can use Docker for Windows or Docker Toolbox.
 
