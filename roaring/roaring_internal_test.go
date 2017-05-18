@@ -19,32 +19,32 @@ import (
 	"testing"
 )
 
-func TestInterval16RunLen(t *testing.T) {
-	iv := interval16{start: 7, last: 9}
+func TestInterval32RunLen(t *testing.T) {
+	iv := interval32{start: 7, last: 9}
 	if iv.runlen() != 3 {
 		t.Fatalf("should be 3")
 	}
-	iv = interval16{start: 7, last: 7}
+	iv = interval32{start: 7, last: 7}
 	if iv.runlen() != 1 {
 		t.Fatalf("should be 1")
 	}
 }
 
 func TestContainerRunAdd(t *testing.T) {
-	c := container{runs: make([]interval16, 0)}
+	c := container{runs: make([]interval32, 0)}
 	tests := []struct {
 		op  uint32
-		exp []interval16
+		exp []interval32
 	}{
-		{1, []interval16{{start: 1, last: 1}}},
-		{2, []interval16{{start: 1, last: 2}}},
-		{4, []interval16{{start: 1, last: 2}, {start: 4, last: 4}}},
-		{3, []interval16{{start: 1, last: 4}}},
-		{10, []interval16{{start: 1, last: 4}, {start: 10, last: 10}}},
-		{7, []interval16{{start: 1, last: 4}, {start: 7, last: 7}, {start: 10, last: 10}}},
-		{6, []interval16{{start: 1, last: 4}, {start: 6, last: 7}, {start: 10, last: 10}}},
-		{0, []interval16{{start: 0, last: 4}, {start: 6, last: 7}, {start: 10, last: 10}}},
-		{8, []interval16{{start: 0, last: 4}, {start: 6, last: 8}, {start: 10, last: 10}}},
+		{1, []interval32{{start: 1, last: 1}}},
+		{2, []interval32{{start: 1, last: 2}}},
+		{4, []interval32{{start: 1, last: 2}, {start: 4, last: 4}}},
+		{3, []interval32{{start: 1, last: 4}}},
+		{10, []interval32{{start: 1, last: 4}, {start: 10, last: 10}}},
+		{7, []interval32{{start: 1, last: 4}, {start: 7, last: 7}, {start: 10, last: 10}}},
+		{6, []interval32{{start: 1, last: 4}, {start: 6, last: 7}, {start: 10, last: 10}}},
+		{0, []interval32{{start: 0, last: 4}, {start: 6, last: 7}, {start: 10, last: 10}}},
+		{8, []interval32{{start: 0, last: 4}, {start: 6, last: 8}, {start: 10, last: 10}}},
 	}
 	for _, test := range tests {
 		c.mapped = true
@@ -62,12 +62,12 @@ func TestContainerRunAdd(t *testing.T) {
 }
 
 func TestContainerRunAdd2(t *testing.T) {
-	c := container{runs: make([]interval16, 0)}
+	c := container{runs: make([]interval32, 0)}
 	ret := c.add(0)
 	if !ret {
 		t.Fatalf("result of adding new bit should be true: %v", c.runs)
 	}
-	if !reflect.DeepEqual(c.runs, []interval16{{start: 0, last: 0}}) {
+	if !reflect.DeepEqual(c.runs, []interval32{{start: 0, last: 0}}) {
 		t.Fatalf("should have 1 run of length 1, but have %v", c.runs)
 	}
 	ret = c.add(0)
@@ -77,7 +77,7 @@ func TestContainerRunAdd2(t *testing.T) {
 }
 
 func TestRunCountRange(t *testing.T) {
-	c := container{runs: make([]interval16, 0)}
+	c := container{runs: make([]interval32, 0)}
 	cnt := c.runCountRange(2, 9)
 	if cnt != 0 {
 		t.Fatalf("should get 0 from empty container, but got: %v", cnt)
@@ -130,7 +130,7 @@ func TestRunCountRange(t *testing.T) {
 }
 
 func TestRunContains(t *testing.T) {
-	c := container{runs: make([]interval16, 0)}
+	c := container{runs: make([]interval32, 0)}
 	if c.runContains(5) {
 		t.Fatalf("empty run container should not contain 5")
 	}
@@ -182,22 +182,22 @@ func TestBitmapCountRange(t *testing.T) {
 }
 
 func TestRunRemove(t *testing.T) {
-	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
+	c := container{runs: []interval32{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
 	tests := []struct {
 		op     uint32
-		exp    []interval16
+		exp    []interval32
 		expRet bool
 	}{
-		{2, []interval16{{start: 3, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, true},
-		{10, []interval16{{start: 3, last: 9}, {start: 12, last: 13}, {start: 15, last: 16}}, true},
-		{12, []interval16{{start: 3, last: 9}, {start: 13, last: 13}, {start: 15, last: 16}}, true},
-		{13, []interval16{{start: 3, last: 9}, {start: 15, last: 16}}, true},
-		{16, []interval16{{start: 3, last: 9}, {start: 15, last: 15}}, true},
-		{6, []interval16{{start: 3, last: 5}, {start: 7, last: 9}, {start: 15, last: 15}}, true},
-		{8, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, true},
-		{8, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
-		{1, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
-		{44, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
+		{2, []interval32{{start: 3, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, true},
+		{10, []interval32{{start: 3, last: 9}, {start: 12, last: 13}, {start: 15, last: 16}}, true},
+		{12, []interval32{{start: 3, last: 9}, {start: 13, last: 13}, {start: 15, last: 16}}, true},
+		{13, []interval32{{start: 3, last: 9}, {start: 15, last: 16}}, true},
+		{16, []interval32{{start: 3, last: 9}, {start: 15, last: 15}}, true},
+		{6, []interval32{{start: 3, last: 5}, {start: 7, last: 9}, {start: 15, last: 15}}, true},
+		{8, []interval32{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, true},
+		{8, []interval32{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
+		{1, []interval32{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
+		{44, []interval32{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
 	}
 
 	for _, test := range tests {
@@ -216,13 +216,13 @@ func TestRunRemove(t *testing.T) {
 }
 
 func TestRunMax(t *testing.T) {
-	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
+	c := container{runs: []interval32{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
 	max := c.max()
 	if max != 16 {
 		t.Fatalf("max for %v should be 16", c.runs)
 	}
 
-	c = container{runs: []interval16{}}
+	c = container{runs: []interval32{}}
 	max = c.max()
 	if max != 0 {
 		t.Fatalf("max for %v should be 0", c.runs)

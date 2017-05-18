@@ -842,22 +842,22 @@ type container struct {
 	n      int      // number of integers in container
 	array  []uint32 // used for array containers
 	bitmap []uint64 // used for bitmap containers
-	runs   []interval16
+	runs   []interval32
 	mapped bool // mapped directly to a byte slice when true
 }
 
-type interval16 struct {
-	start uint16
-	last  uint16
+type interval32 struct {
+	start uint32
+	last  uint32
 }
 
 // runlen returns the count of integers in the interval.
-func (iv interval16) runlen() int {
+func (iv interval32) runlen() int {
 	return 1 + int(iv.last) - int(iv.start)
 }
 
 // String produces a human viewable string of the contents.
-func (iv interval16) String() string {
+func (iv interval32) String() string {
 	return fmt.Sprintf("[%d, %d]", iv.start, iv.last)
 }
 
@@ -899,7 +899,7 @@ func (c *container) unmap() {
 		c.bitmap = tmp
 	}
 	if c.runs != nil {
-		tmp := make([]interval16, len(c.runs))
+		tmp := make([]interval32, len(c.runs))
 		copy(tmp, c.runs)
 		c.runs = tmp
 	}
@@ -965,31 +965,30 @@ func (c *container) bitmapCountRange(start, end uint32) int {
 }
 
 func (c *container) runCountRange(start, end uint32) (n int) {
-	start16, end16 := uint16(start), uint16(end)
 	for _, iv := range c.runs {
 		// iv is before range
-		if iv.last < start16 {
+		if iv.last < start {
 			continue
 		}
 		// iv is after range
-		if end16 < iv.start {
+		if end < iv.start {
 			break
 		}
 		// iv is superset of range
-		if iv.start < start16 && iv.last > end16 {
-			return int(end16 - start16)
+		if iv.start < start && iv.last > end {
+			return int(end - start)
 		}
 		// iv is subset of range
-		if iv.start >= start16 && iv.last < end16 {
+		if iv.start >= start && iv.last < end {
 			n += iv.runlen()
 		}
 		// iv overlaps beginning of range
-		if iv.start < start16 && iv.last < end16 {
-			n += int(iv.last - start16 + 1)
+		if iv.start < start && iv.last < end {
+			n += int(iv.last - start + 1)
 		}
 		// iv overlaps end of range
-		if iv.start > start16 && iv.last >= end16 {
-			n += int(end16 - iv.start)
+		if iv.start > start && iv.last >= end {
+			n += int(end - iv.start)
 		}
 	}
 	return n
@@ -1049,45 +1048,44 @@ func (c *container) bitmapAdd(v uint32) bool {
 }
 
 func (c *container) runAdd(v uint32) bool {
-	v16 := uint16(v)
 	if len(c.runs) == 0 {
 		c.unmap()
-		c.runs = []interval16{{start: v16, last: v16}}
+		c.runs = []interval32{{start: v, last: v}}
 		return true
 	}
 	i := 0
-	var iv interval16
+	var iv interval32
 	for i, iv = range c.runs {
-		if iv.last >= v16 {
+		if iv.last >= v {
 			break
 		}
 	}
-	if v16 >= iv.start && iv.last >= v16 {
+	if v >= iv.start && iv.last >= v {
 		return false
 	}
 	c.unmap()
-	if iv.last < v16 {
-		if iv.last == v16-1 {
+	if iv.last < v {
+		if iv.last == v-1 {
 			c.runs[i].last += 1
 		} else {
-			c.runs = append(c.runs, interval16{start: v16, last: v16})
+			c.runs = append(c.runs, interval32{start: v, last: v})
 		}
-	} else if v16+1 == iv.start {
+	} else if v+1 == iv.start {
 		// combining two intervals
-		if i > 0 && c.runs[i-1].last == v16-1 {
+		if i > 0 && c.runs[i-1].last == v-1 {
 			c.runs[i-1].last = iv.last
 			c.runs = append(c.runs[:i], c.runs[i+1:]...)
 			return true
 		}
 		// just before an interval
 		c.runs[i].start -= 1
-	} else if i > 0 && v16-1 == c.runs[i-1].last {
+	} else if i > 0 && v-1 == c.runs[i-1].last {
 		// just after an interval
 		c.runs[i-1].last += 1
 	} else {
 		// alone
-		newIv := interval16{start: v16, last: v16}
-		c.runs = append(c.runs[:i], append([]interval16{newIv}, c.runs[i:]...)...)
+		newIv := interval32{start: v, last: v}
+		c.runs = append(c.runs[:i], append([]interval32{newIv}, c.runs[i:]...)...)
 	}
 	return true
 }
@@ -1112,12 +1110,11 @@ func (c *container) bitmapContains(v uint32) bool {
 }
 
 func (c *container) runContains(v uint32) bool {
-	v16 := uint16(v)
 	for _, iv := range c.runs {
-		if v16 > iv.last {
+		if v > iv.last {
 			continue
 		}
-		if v16 < iv.start {
+		if v < iv.start {
 			return false
 		}
 		return true
@@ -1169,22 +1166,21 @@ func (c *container) bitmapRemove(v uint32) bool {
 }
 
 func (c *container) runRemove(v uint32) bool {
-	v16 := uint16(v)
 	for i, iv := range c.runs {
-		if v16 <= iv.last {
-			if v16 < iv.start {
+		if v <= iv.last {
+			if v < iv.start {
 				return false
 			}
 			c.unmap()
-			if v16 == iv.last && v16 == iv.start {
+			if v == iv.last && v == iv.start {
 				c.runs = append(c.runs[:i], c.runs[i+1:]...)
-			} else if v16 == iv.last {
+			} else if v == iv.last {
 				c.runs[i].last -= 1
-			} else if v16 == iv.start {
+			} else if v == iv.start {
 				c.runs[i].start += 1
-			} else if v16 > iv.start {
-				c.runs[i].last = v16 - 1
-				c.runs = append(c.runs[:i+1], append([]interval16{{start: v16 + 1, last: iv.last}}, c.runs[i+1:]...)...)
+			} else if v > iv.start {
+				c.runs[i].last = v - 1
+				c.runs = append(c.runs[:i+1], append([]interval32{{start: v + 1, last: iv.last}}, c.runs[i+1:]...)...)
 			}
 			return true
 		}
@@ -1275,7 +1271,7 @@ func (c *container) clone() *container {
 	}
 
 	if c.runs != nil {
-		other.runs = make([]interval16, len(c.runs))
+		other.runs = make([]interval32, len(c.runs))
 		copy(other.runs, c.runs)
 	}
 
