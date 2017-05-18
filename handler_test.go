@@ -86,6 +86,47 @@ func TestHandler_Schema(t *testing.T) {
 	}
 }
 
+// Ensure the handler can return the status.
+func TestHandler_Status(t *testing.T) {
+	s := NewServer()
+	hldr := MustOpenHolder()
+	defer s.Close()
+	defer hldr.Close()
+
+	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
+	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
+
+	if f, err := i0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(pilosa.ViewInverse, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := i1.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := i0.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
+	h.StatusHandler = s
+	s.Handler = h
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/status", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{"status":{"State":"UP","Indexes":[{"Name":"i0","Meta":{"ColumnLabel":"columnID"},"Frames":[{"Name":"f0","Meta":{"RowLabel":"rowID","CacheType":"ranked","CacheSize":50000}},{"Name":"f1","Meta":{"RowLabel":"rowID","InverseEnabled":true,"CacheType":"ranked","CacheSize":50000}}]},{"Name":"i1","Meta":{"ColumnLabel":"columnID"},"Frames":[{"Name":"f0","Meta":{"RowLabel":"rowID","CacheType":"ranked","CacheSize":50000}}]}]}}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
 // Ensure the handler can return the maxslice map.
 func TestHandler_MaxSlices(t *testing.T) {
 	hldr := MustOpenHolder()
@@ -945,6 +986,37 @@ func NewServer() *Server {
 
 	return s
 }
+
+// LocalStatus returns the state of the local node as well as the
+// holder (indexes/frames) according to the local node.
+func (s *Server) LocalStatus() (proto.Message, error) {
+	if s.Handler.Holder == nil {
+		return nil, errors.New("Server.Holder is nil")
+	}
+
+	ns := internal.NodeStatus{
+		Host:    s.Handler.Handler.Host,
+		State:   pilosa.NodeStateUp,
+		Indexes: pilosa.EncodeIndexes(s.Handler.Holder.Indexes()),
+	}
+
+	// Append Slice list per this Node's indexes
+	for _, index := range ns.Indexes {
+		index.Slices = s.Handler.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Handler.Host)
+	}
+
+	return &ns, nil
+}
+
+// ClusterStatus returns the NodeState for all nodes in the cluster.
+func (s *Server) ClusterStatus() (proto.Message, error) {
+	// Assuming we are only testing this with one Node
+	// So just return its status
+	return s.LocalStatus()
+}
+
+// HandleRemoteStatus just need to implement a nop to complete the Interface
+func (s *Server) HandleRemoteStatus(pb proto.Message) error { return nil }
 
 // Host returns the hostname of the running server.
 func (s *Server) Host() string { return MustParseURLHost(s.URL) }

@@ -333,7 +333,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	ns := internal.NodeStatus{
 		Host:    s.Host,
 		State:   NodeStateUp,
-		Indexes: encodeIndexes(s.Holder.Indexes()),
+		Indexes: EncodeIndexes(s.Holder.Indexes()),
 	}
 
 	// Append Slice list per this Node's indexes

@@ -530,8 +530,8 @@ func MergeSchemas(a, b []*IndexInfo) []*IndexInfo {
 	return idxs
 }
 
-// encodeIndexes converts a into its internal representation.
-func encodeIndexes(a []*Index) []*internal.Index {
+// EncodeIndexes converts a into its internal representation.
+func EncodeIndexes(a []*Index) []*internal.Index {
 	other := make([]*internal.Index, len(a))
 	for i := range a {
 		other[i] = encodeIndex(a[i])

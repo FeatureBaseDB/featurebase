@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa/datadog"
 )
@@ -42,4 +43,21 @@ func TestStatsClient_WithTags(t *testing.T) {
 	if tags := c2.Tags(); !reflect.DeepEqual(tags, []string{"bar", "baz", "foo"}) {
 		t.Fatalf("unexpected tags: %+v", tags)
 	}
+}
+
+func TestStatsClient_Methods(t *testing.T) {
+	// Create a new client.
+	c, err := datadog.NewStatsClient("localhost:19444")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	dur, _ := time.ParseDuration("123us")
+	c.CountWithCustomTags("ct", 1, 1.0, []string{"foo:bar"})
+	c.Count("cc", 1, 1.0)
+	c.Gauge("gg", 10, 1.0)
+	c.Histogram("hh", 1, 1.0)
+	c.Timing("tt", dur, 1.0)
+	c.Set("ss", "ss", 1.0)
 }
