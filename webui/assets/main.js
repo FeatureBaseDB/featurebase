@@ -404,9 +404,11 @@ populate_version()
 
 
 class Autocompleter {
-  constructor(input) {
+  constructor(input, output) {
     this.input = input
+    this.output = output
     this.keyword_map = this.static_keywords
+    this.init_dynamic_keywords()
   }
 
   get static_keywords() {
@@ -450,8 +452,12 @@ class Autocompleter {
         matches.push(keyword)
       }
     }
+    if(matches.length > 1) {
+      // completer.output.innerHTML = whatever
+    }
 
     if(matches.length == 1) {
+      // completer.output.innerHTML = ""
       var cursor_pos = completer.input.selectionEnd
       var completion = matches[0].substring(input_word.length)
       var before = completer.input.value.substring(0, cursor_pos)
@@ -461,13 +467,28 @@ class Autocompleter {
       completer.input.setSelectionRange(new_pos, new_pos)
     }
   }
+
+  init_dynamic_keywords() {
+    // hit /schema, parse indexes, frames, rowlabels, columnlabels, add to list
+  }
+
+  add_keyword() {
+    // call when index or frame created in webui
+  }
+
+  remove_keyword() {
+    // call when index or frame deleted in webui
+    // issue: if e.g. multiple indexes have same frame, removing one removes all.
+    // solution: maintain count. requires more elaborate representation of keywords.
+  }
 }
 
 var input = document.getElementById('query')
 var output = document.getElementById('outputs')
 var button = document.getElementById('query-btn')
+var autocomplete_output = document.getElementById('autocomplete-container')
 
-autocompleter = new Autocompleter(input)
+autocompleter = new Autocompleter(input, autocomplete_output)
 repl = new REPL(input, output, button, autocompleter)
 repl.populate_index_dropdown()
 repl.bind_events()
