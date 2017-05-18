@@ -1531,12 +1531,24 @@ func intersect(a, b *container) *container {
 	if a.isArray() {
 		if b.isArray() {
 			return intersectArrayArray(a, b)
+		} else if b.isRun() {
+			return intersectArrayRun(a, b)
 		} else {
 			return intersectArrayBitmap(a, b)
+		}
+	} else if a.isRun() {
+		if b.isArray() {
+			return intersectArrayRun(b, a)
+		} else if b.isRun() {
+			return intersectRunRun(a, b)
+		} else {
+			return intersectBitmapRun(b, a)
 		}
 	} else {
 		if b.isArray() {
 			return intersectArrayBitmap(b, a)
+		} else if b.isRun() {
+			return intersectBitmapRun(a, b)
 		} else {
 			return intersectBitmapBitmap(a, b)
 		}
@@ -1558,6 +1570,36 @@ func intersectArrayArray(a, b *container) *container {
 			i, j = i+1, j+1
 		}
 	}
+	return output
+}
+
+func intersectArrayRun(a, b *container) *container {
+	output := &container{}
+	na, nb := len(a.array), len(b.runs)
+	for i, j := 0, 0; i < na && j < nb; {
+		va, vb := a.array[i], b.runs[j]
+		if va < vb.start {
+			i++
+		} else if va > vb.last {
+			j++
+		} else {
+			output.array = append(output.array, va)
+			output.n++
+			i++
+		}
+	}
+	return output
+}
+
+func intersectRunRun(a, b *container) *container {
+	output := &container{}
+	// TODO
+	return output
+}
+
+func intersectBitmapRun(a, b *container) *container {
+	output := &container{}
+	// TODO
 	return output
 }
 
