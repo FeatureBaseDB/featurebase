@@ -120,6 +120,12 @@ func (s *Server) Open() error {
 		s.Cluster.Nodes = []*Node{{Host: s.Host}}
 	}
 
+	for i, n := range s.Cluster.Nodes {
+		if s.Cluster.NodeByHost(n.Host) != nil {
+			s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
+		}
+	}
+
 	// Open holder.
 	if err := s.Holder.Open(); err != nil {
 		return err
