@@ -29,7 +29,7 @@ import (
 
 const (
 	// Prefix is appended to each metric event name
-	Prefix = "pilosa"
+	Prefix = "pilosa."
 
 	// BufferLen Stats lient buffer size.
 	BufferLen = 1024
