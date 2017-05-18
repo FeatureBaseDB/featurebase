@@ -1446,12 +1446,24 @@ func intersectionCount(a, b *container) uint64 {
 	if a.isArray() {
 		if b.isArray() {
 			return intersectionCountArrayArray(a, b)
+		} else if b.isRun() {
+			return intersectionCountArrayRun(a, b)
 		} else {
 			return intersectionCountArrayBitmap(a, b)
+		}
+	} else if a.isRun() {
+		if b.isArray() {
+			return intersectionCountArrayRun(b, a)
+		} else if b.isRun() {
+			return intersectionCountRunRun(a, b)
+		} else {
+			return intersectionCountBitmapRun(b, a)
 		}
 	} else {
 		if b.isArray() {
 			return intersectionCountArrayBitmap(b, a)
+		} else if b.isRun() {
+			return intersectionCountBitmapRun(a, b)
 		} else {
 			return intersectionCountBitmapBitmap(a, b)
 		}
@@ -1470,6 +1482,61 @@ func intersectionCountArrayArray(a, b *container) (n uint64) {
 			n++
 			i, j = i+1, j+1
 		}
+	}
+	return n
+}
+
+func intersectionCountArrayRun(a, b *container) (n uint64) {
+	na, nb := len(a.array), len(b.runs)
+	for i, j := 0, 0; i < na && j < nb; {
+		va, vb := a.array[i], b.runs[j]
+		if va < vb.start {
+			i++
+		} else if va >= vb.start && va <= vb.last {
+			i++
+			n++
+		} else if va > vb.last {
+			j++
+		}
+	}
+	return n
+}
+
+func intersectionCountRunRun(a, b *container) uint64 {
+	var n uint32
+	na, nb := len(a.runs), len(b.runs)
+	for i, j := 0, 0; i < na && j < nb; {
+		va, vb := a.runs[i], b.runs[j]
+		if va.last < vb.start {
+			// |--va--| |--vb--|
+			i++
+		} else if va.start > vb.last {
+			// |--vb--| |--va--|
+			j++
+		} else if va.last > vb.last && va.start >= vb.start {
+			// |--vb-|-|-va--|
+			n += 1 + vb.last - va.start
+			j++
+		} else if va.last > vb.last && va.start < vb.start {
+			// |--va|--vb--|--|
+			n += 1 + vb.last - vb.start
+			j++
+		} else if va.last <= vb.last && va.start >= vb.start {
+			// |--vb|--va--|--|
+			n += 1 + va.last - va.start
+			i++
+		} else if va.last <= vb.last && va.start < vb.start {
+			// |--va-|-|-vb--|
+			n += 1 + va.last - vb.start
+			i++
+		}
+	}
+	return uint64(n)
+}
+
+func intersectionCountBitmapRun(a, b *container) (n uint64) {
+	for _, iv := range b.runs {
+		n += uint64(a.bitmapCountRange(iv.start, iv.last+1))
 	}
 	return n
 }
@@ -1878,7 +1945,7 @@ func xorArrayBitmap(a, b *container) *container {
 	}
 
 	if output.count() < ArrayMaxSize {
-		output.convertToArray()
+		output.bitmapToArray()
 	}
 
 	return output
@@ -1896,7 +1963,7 @@ func xorBitmapBitmap(a, b *container) *container {
 	}
 
 	if output.count() < ArrayMaxSize {
-		output.convertToArray()
+		output.bitmapToArray()
 	}
 	return output
 }

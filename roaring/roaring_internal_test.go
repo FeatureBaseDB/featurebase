@@ -273,3 +273,80 @@ func TestRunMax(t *testing.T) {
 		t.Fatalf("max for %v should be 0", c.runs)
 	}
 }
+
+func TestIntersectionCountArrayRun(t *testing.T) {
+	a := &container{array: []uint32{1, 5, 10, 11, 12}}
+	b := &container{runs: []interval32{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
+
+	ret := intersectionCountArrayRun(a, b)
+	if ret != 3 {
+		t.Fatalf("count of %v with %v should be 3, but got %v", a.array, b.runs, ret)
+	}
+}
+
+func TestIntersectionCountBitmapRun(t *testing.T) {
+	a := &container{bitmap: []uint64{1}}
+	b := &container{runs: []interval32{{start: 63, last: 64}}}
+
+	ret := intersectionCountBitmapRun(a, b)
+	if ret != 1 {
+		t.Fatalf("count of %v with %v should be 1, but got %v", a.bitmap, b.runs, ret)
+	}
+
+	a = &container{bitmap: []uint64{0xF0000001, 0xFF00000000000000, 0xFF000000000000F0, 0x0F0000}}
+	b = &container{runs: []interval32{{start: 33, last: 35}, {start: 62, last: 69}, {start: 130, last: 150}, {start: 186, last: 300}}}
+
+	ret = intersectionCountBitmapRun(a, b)
+	if ret != 22 {
+		t.Fatalf("count of %v with %v should be 22, but got %v", a.bitmap, b.runs, ret)
+	}
+}
+
+func TestIntersectionCountRunRun(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	tests := []struct {
+		aruns []interval32
+		bruns []interval32
+		exp   uint64
+	}{
+		{
+			aruns: []interval32{},
+			bruns: []interval32{{start: 3, last: 8}}, exp: 0},
+		{
+			aruns: []interval32{{start: 2, last: 10}},
+			bruns: []interval32{{start: 3, last: 8}}, exp: 6},
+		{
+			aruns: []interval32{{start: 2, last: 10}},
+			bruns: []interval32{{start: 1, last: 11}}, exp: 9},
+		{
+			aruns: []interval32{{start: 2, last: 10}},
+			bruns: []interval32{{start: 0, last: 2}}, exp: 1},
+		{
+			aruns: []interval32{{start: 2, last: 10}},
+			bruns: []interval32{{start: 1, last: 10}}, exp: 9},
+		{
+			aruns: []interval32{{start: 2, last: 10}},
+			bruns: []interval32{{start: 5, last: 12}}, exp: 6},
+		{
+			aruns: []interval32{{start: 2, last: 10}},
+			bruns: []interval32{{start: 10, last: 99}}, exp: 1},
+		{
+			aruns: []interval32{{start: 2, last: 10}, {start: 44, last: 99}},
+			bruns: []interval32{{start: 12, last: 14}}, exp: 0},
+		{
+			aruns: []interval32{{start: 2, last: 10}, {start: 12, last: 13}},
+			bruns: []interval32{{start: 2, last: 10}, {start: 12, last: 13}}, exp: 11},
+		{
+			aruns: []interval32{{start: 8, last: 12}, {start: 15, last: 19}},
+			bruns: []interval32{{start: 9, last: 9}, {start: 11, last: 17}}, exp: 6},
+	}
+	for i, test := range tests {
+		a.runs = test.aruns
+		b.runs = test.bruns
+		ret := intersectionCountRunRun(a, b)
+		if ret != test.exp {
+			t.Fatalf("test #%v failed intersecting %v with %v should be %v, but got %v", i, test.aruns, test.bruns, test.exp, ret)
+		}
+	}
+}
