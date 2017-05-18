@@ -159,7 +159,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	statsTags = append(statsTags, "useragent:"+r.UserAgent())
 
 	stats := h.Holder.Stats.WithTags(statsTags...)
-	stats.Histogram("http."+endpointName, float64(dif), 1.0)
+	stats.Histogram("http."+endpointName, float64(dif), 0.1)
 }
 
 func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {

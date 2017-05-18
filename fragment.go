@@ -407,7 +407,7 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	// Update the cache.
 	f.cache.Add(rowID, bm.Count())
 
-	f.stats.Count("setBit", 1, 1.0)
+	f.stats.Count("setBit", 1, 0.001)
 
 	return changed, nil
 }
