@@ -182,7 +182,7 @@ Average of total_amount per passenger_count can be computed with some postproces
 queries = ''
 pcounts = range(10)
 for i in pcounts:
-    queries += "TopN(Bitmap(id=%d, frame='passenger_count.n'), frame=total_amount_dollars.n)" % i
+    queries += "TopN(Bitmap(id=%d, frame='passenger_count'), frame=total_amount_dollars)" % i
 resp = requests.post(qurl, data=queries)
 
 average_amounts = []
