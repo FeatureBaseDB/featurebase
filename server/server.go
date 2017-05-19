@@ -31,9 +31,9 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/datadog"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/httpbroadcast"
+	"github.com/pilosa/pilosa/statsd"
 )
 
 func init() {
@@ -238,7 +238,7 @@ func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
 	case "expvar":
 		return pilosa.NewExpvarStatsClient(), nil
 	case "statsd":
-		return datadog.NewStatsClient(host)
+		return statsd.NewStatsClient(host)
 	default:
 		return pilosa.NopStatsClient, nil
 	}

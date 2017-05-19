@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package datadog_test
+package statsd_test
 
 import (
 	"io/ioutil"
@@ -20,12 +20,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/datadog"
+	"github.com/pilosa/pilosa/statsd"
 )
 
 func TestStatsClient_WithTags(t *testing.T) {
 	// Create a new client.
-	c, err := datadog.NewStatsClient("localhost:19444")
+	c, err := statsd.NewStatsClient("localhost:19444")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestStatsClient_WithTags(t *testing.T) {
 
 func TestStatsClient_Methods(t *testing.T) {
 	// Create a new client.
-	c, err := datadog.NewStatsClient("localhost:19444")
+	c, err := statsd.NewStatsClient("localhost:19444")
 	if err != nil {
 		t.Fatal(err)
 	}
