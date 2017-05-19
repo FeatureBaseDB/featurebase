@@ -87,7 +87,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
 	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE")
 	router.HandleFunc("/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
-	//router.HandleFunc("/index/{index}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
+	router.HandleFunc("/index/{index}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
@@ -144,6 +144,15 @@ func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
 	http.FileServer(statikFS).ServeHTTP(w, r)
 }
 
+func (h *Handler) handleGetFrames(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	if err := json.NewEncoder(w).Encode(getIndexSchemaResponse{
+		Index: h.Holder.IndexSchema(indexName),
+	}); err != nil {
+		h.logger().Printf("write schema response error: %s", err)
+	}
+}
+
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(getSchemaResponse{
@@ -169,6 +178,10 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 
 type getSchemaResponse struct {
 	Indexes []*IndexInfo `json:"indexes"`
+}
+
+type getIndexSchemaResponse struct {
+	Index *IndexInfo `json:"index"`
 }
 
 type getStatusResponse struct {
