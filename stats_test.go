@@ -3,6 +3,7 @@ package pilosa_test
 import (
 	"context"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"testing"
@@ -10,6 +11,66 @@ import (
 
 	"github.com/pilosa/pilosa"
 )
+
+// TestMultiStatClient_Expvar run the multistat client with exp var
+// since the EXPVAR data is stored in a global we should run these in one test function
+func TestMultiStatClient_Expvar(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	c := pilosa.NewExpvarStatsClient()
+	ms := make(pilosa.MultiStatsClient, 1)
+	ms[0] = c
+	hldr.Stats = ms
+
+	hldr.Stats.SetLogger(ioutil.Discard)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth+2)
+	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).ClearBit(0, 1)
+
+	if pilosa.Expvar.String() != `{"index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "setBit": 2}, "slice:1": {"setBit": 2}}}}}` {
+		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	}
+
+	hldr.Stats.CountWithCustomTags("cc", 1, 1.0, []string{"foo:bar"})
+	if pilosa.Expvar.String() != `{"cc": 1, "index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "setBit": 2}, "slice:1": {"setBit": 2}}}}}` {
+		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	}
+
+	// Gauge creates a unique key, subsequent Gauge calls will overwrite
+	hldr.Stats.Gauge("g", 5, 1.0)
+	hldr.Stats.Gauge("g", 8, 1.0)
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "setBit": 2}, "slice:1": {"setBit": 2}}}}}` {
+		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	}
+
+	// Set creates a unique key, subsequent sets will overwrite
+	hldr.Stats.Set("s", "4", 1.0)
+	hldr.Stats.Set("s", "7", 1.0)
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "setBit": 2}, "slice:1": {"setBit": 2}}}}, "s": "7"}` {
+		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	}
+
+	// Record timing duration and a uniquely Set key/value
+	dur, _ := time.ParseDuration("123us")
+	hldr.Stats.Timing("tt", dur, 1.0)
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "setBit": 2}, "slice:1": {"setBit": 2}}}}, "s": "7", "tt": 123µs}` {
+		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	}
+
+	// Expvar histogram is implemented as a gauge
+	hldr.Stats.Histogram("hh", 3, 1.0)
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "setBit": 2}, "slice:1": {"setBit": 2}}}}, "s": "7", "tt": 123µs}` {
+		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	}
+
+	// Expvar should ignore earlier set tags from setbit
+	if hldr.Stats.Tags() != nil {
+		t.Fatalf("unexpected tag")
+	}
+}
 
 func TestStatsCount_TopN(t *testing.T) {
 	hldr := MustOpenHolder()
