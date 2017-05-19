@@ -47,7 +47,7 @@ func (p *MaxIndexPlugin) Map(ctx context.Context, index string, call *pql.Call, 
 	maxPair.Slice = slice
 
 	for i, rawChild := range call.Children {
-		child, err := p.executor.ExecuteCallSlice(ctx, index, rawChild, slice)
+		child, err := p.executor.ExecuteCallSlice(ctx, index, rawChild, slice, p)
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +105,7 @@ func (p *MinIndexPlugin) Map(ctx context.Context, index string, call *pql.Call, 
 	minPair.first = true
 
 	for i, rawChild := range call.Children {
-		child, err := p.executor.ExecuteCallSlice(ctx, index, rawChild, slice)
+		child, err := p.executor.ExecuteCallSlice(ctx, index, rawChild, slice, p)
 		if err != nil {
 			return nil, err
 		}
