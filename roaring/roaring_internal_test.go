@@ -167,6 +167,7 @@ func TestBitmapCountRange(t *testing.T) {
 		{start: 66, end: 71, bitmap: []uint64{0xF, 0xFFFFFFFFFFFFFF18}, exp: 2},
 		{start: 63, end: 64, bitmap: []uint64{0x8000000000000000}, exp: 1},
 	}
+
 	for i, test := range tests {
 		c.bitmap = test.bitmap
 		if ret := c.bitmapCountRange(test.start, test.end); ret != test.exp {
