@@ -305,6 +305,14 @@ func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.Ca
 
 // executeExternalCallSlice executes the map phase of an external plugin call against a single slice.
 func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64, p Plugin) (interface{}, error) {
+	var err error
+	if p == nil {
+		p, err = e.newPlugin(c)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Evaluate children.
 	children := make([]interface{}, len(c.Children))
 	for i, child := range c.Children {
