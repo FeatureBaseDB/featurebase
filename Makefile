@@ -45,6 +45,7 @@ crossbuild: vendor
 
 release:
 	make crossbuild GOOS=linux GOARCH=amd64
+	make crossbuild GOOS=linux GOARCH=386
 	make crossbuild GOOS=darwin GOARCH=amd64
 
 install: vendor
