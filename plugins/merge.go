@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/pql"
 )
 
 func init() {
@@ -16,14 +17,16 @@ type MergeTopPlugin struct {
 }
 
 // NewMergeTopPlugin returns a new instance of MergeTopPlugin.
-func NewMergeTopPlugin(h *pilosa.Holder) pilosa.Plugin {
-	return &MergeTopPlugin{h}
+func NewMergeTopPlugin(e *pilosa.Executor) pilosa.Plugin {
+	return &MergeTopPlugin{e.Holder}
 }
 
 // Map executes the plugin against a single slice.
-func (p *MergeTopPlugin) Map(ctx context.Context, index string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
+func (p *MergeTopPlugin) Map(ctx context.Context, index string, call *pql.Call, slice uint64) (interface{}, error) {
 	n := 0
 	var frame string
+
+	args := call.Args
 
 	if x, found := args["n"]; found {
 		n = int(x.(int64))

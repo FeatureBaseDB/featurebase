@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/pql"
 )
 
 func init() {
@@ -17,14 +18,16 @@ type DiffTopPlugin struct {
 }
 
 // NewDiffTopPlugin returns a new instance of DiffTopPlugin.
-func NewDiffTopPlugin(h *pilosa.Holder) pilosa.Plugin {
-	return &DiffTopPlugin{h}
+func NewDiffTopPlugin(e *pilosa.Executor) pilosa.Plugin {
+	return &DiffTopPlugin{e.Holder}
 }
 
 // Map executes the plugin against a single slice.
-func (p *DiffTopPlugin) Map(ctx context.Context, index string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
+func (p *DiffTopPlugin) Map(ctx context.Context, index string, call *pql.Call, slice uint64) (interface{}, error) {
 	n := 0
 	var frame string
+
+	args := call.Args
 
 	if x, found := args["n"]; found {
 		n = int(x.(int64))
