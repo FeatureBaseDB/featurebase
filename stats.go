@@ -132,7 +132,9 @@ func (c *ExpvarStatsClient) Histogram(name string, value float64, rate float64) 
 
 // Set tracks number of unique elements.
 func (c *ExpvarStatsClient) Set(name string, value string, rate float64) {
-	c.m.Set(name, &expvar.String{})
+	var s expvar.String
+	s.Set(value)
+	c.m.Set(name, &s)
 }
 
 // Timing tracks timing information for a metric.
