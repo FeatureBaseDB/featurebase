@@ -167,17 +167,12 @@ func TestBitmapCountRange(t *testing.T) {
 		{start: 66, end: 71, bitmap: []uint64{0xF, 0xFFFFFFFFFFFFFF18}, exp: 2},
 		{start: 63, end: 64, bitmap: []uint64{0x8000000000000000}, exp: 1},
 	}
+
 	for i, test := range tests {
 		c.bitmap = test.bitmap
 		if ret := c.bitmapCountRange(test.start, test.end); ret != test.exp {
 			t.Fatalf("test #%v count of %v from %v to %v should be %v but got %v", i, test.bitmap, test.start, test.end, test.exp, ret)
 		}
-	}
-
-	c = container{bitmap: []uint64{0xF0000001, 0xFF000000, 0xFF00000000000000}}
-	cnt = c.bitmapCountRange(62, 129)
-	if cnt != 10 {
-		t.Fatalf("count of %v from 62 to 129 should be 10, but got %v", c.bitmap, cnt)
 	}
 }
 
