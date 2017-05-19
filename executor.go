@@ -305,15 +305,9 @@ func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *p
 		return nil, err
 	}
 
-	// Evaluate children.
-	children := make([]interface{}, len(c.Children))
-	for i, child := range c.Children {
-		ret, err := e.executeCallSlice(ctx, db, child, slice)
-		if err != nil {
-			return nil, err
-		}
-		children[i] = ret
-	}
+	// Copy children.
+	children := make([]*pql.Call, len(c.Children))
+	copy(children, c.Children)
 
 	// Copy arguments.
 	args := make(map[string]interface{}, len(c.Args))
@@ -321,10 +315,16 @@ func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *p
 		args[k] = v
 	}
 
-	return p.Map(ctx, db, children, args, slice)
+	call := &pql.Call{
+		Name:     c.Name,
+		Children: children,
+		Args:     args,
+	}
+
+	return p.Map(ctx, db, call, slice)
 }
 
-func (e *Executor) executeCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (interface{}, error) {
+func (e *Executor) ExecuteCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64) (interface{}, error) {
 	switch c.Name {
 	case "Bitmap", "Difference", "Intersect", "Range", "Union":
 		return e.executeBitmapCallSlice(ctx, db, c, slice)
@@ -340,7 +340,7 @@ func (e *Executor) executeCallSlice(ctx context.Context, db string, c *pql.Call,
 
 // newPlugin instantiates a plugin from an external call.
 func (e *Executor) newPlugin(c *pql.Call) (Plugin, error) {
-	p, err := NewPlugin(c.Name, e.Holder)
+	p, err := NewPlugin(c.Name, e)
 	if err != nil {
 		return nil, err
 	}

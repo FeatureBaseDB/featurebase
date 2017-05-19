@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/pql"
 )
 
 func init() {
@@ -13,12 +14,12 @@ func init() {
 
 // MaxIndexPlugin represents a plugin that give a set of all the bits in the top-n
 type MaxIndexPlugin struct {
-	holder *pilosa.Holder
+	executor *pilosa.Executor
 }
 
 // NewMaxIndexPlugin returns a new instance of MaxIndexPlugin.
-func NewMaxIndexPlugin(h *pilosa.Holder) pilosa.Plugin {
-	return &MaxIndexPlugin{h}
+func NewMaxIndexPlugin(e *pilosa.Executor) pilosa.Plugin {
+	return &MaxIndexPlugin{e}
 }
 
 type pair struct {
@@ -40,23 +41,27 @@ func (p *pair) setIfmax(i int, m uint64) {
 }
 
 // Map executes the plugin against a single slice.
-func (p *MaxIndexPlugin) Map(ctx context.Context, index string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
-	max_pair := pair{}
-	max_pair.first = true
-	max_pair.Slice = slice
+func (p *MaxIndexPlugin) Map(ctx context.Context, index string, call *pql.Call, slice uint64) (interface{}, error) {
+	maxPair := pair{}
+	maxPair.first = true
+	maxPair.Slice = slice
 
-	for i, child := range children {
+	for i, rawChild := range call.Children {
+		child, err := p.executor.ExecuteCallSlice(ctx, index, rawChild, slice)
+		if err != nil {
+			return nil, err
+		}
 		switch v := child.(type) {
 		case *pilosa.Bitmap: //handle bitmaps
-			max_pair.setIfmax(i, v.Count())
+			maxPair.setIfmax(i, v.Count())
 		case int64:
-			max_pair.setIfmax(i, uint64(v))
+			maxPair.setIfmax(i, uint64(v))
 		case uint64:
-			max_pair.setIfmax(i, v)
+			maxPair.setIfmax(i, v)
 		}
 
 	}
-	return max_pair, nil
+	return maxPair, nil
 }
 
 // Reduce combines previous map results into a single value.
@@ -75,11 +80,11 @@ func (p *MaxIndexPlugin) Reduce(ctx context.Context, prev, v interface{}) interf
 }
 
 type MinIndexPlugin struct {
-	holder *pilosa.Holder
+	executor *pilosa.Executor
 }
 
-func NewMinIndexPlugin(h *pilosa.Holder) pilosa.Plugin {
-	return &MinIndexPlugin{h}
+func NewMinIndexPlugin(e *pilosa.Executor) pilosa.Plugin {
+	return &MinIndexPlugin{e}
 }
 
 func (p *pair) setIfmin(i int, m uint64) {
@@ -94,23 +99,27 @@ func (p *pair) setIfmin(i int, m uint64) {
 }
 
 // Map executes the plugin against a single slice.
-func (p *MinIndexPlugin) Map(ctx context.Context, index string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
-	min_pair := pair{}
-	min_pair.Slice = slice
-	min_pair.first = true
+func (p *MinIndexPlugin) Map(ctx context.Context, index string, call *pql.Call, slice uint64) (interface{}, error) {
+	minPair := pair{}
+	minPair.Slice = slice
+	minPair.first = true
 
-	for i, child := range children {
+	for i, rawChild := range call.Children {
+		child, err := p.executor.ExecuteCallSlice(ctx, index, rawChild, slice)
+		if err != nil {
+			return nil, err
+		}
 		switch v := child.(type) {
 		case *pilosa.Bitmap: //handle bitmaps
-			min_pair.setIfmin(i, v.Count())
+			minPair.setIfmin(i, v.Count())
 		case int64:
-			min_pair.setIfmin(i, uint64(v))
+			minPair.setIfmin(i, uint64(v))
 		case uint64:
-			min_pair.setIfmin(i, v)
+			minPair.setIfmin(i, v)
 		}
 
 	}
-	return min_pair, nil
+	return minPair, nil
 }
 
 // Reduce combines previous map results into a single value.
