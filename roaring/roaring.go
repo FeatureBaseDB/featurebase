@@ -1573,6 +1573,9 @@ func intersectArrayArray(a, b *container) *container {
 	return output
 }
 
+// intersectArrayRun computes the intersect of an array container and a run
+// container. The return is always an array container (since it's guaranteed to
+// be low-cardinality)
 func intersectArrayRun(a, b *container) *container {
 	output := &container{}
 	na, nb := len(a.array), len(b.runs)
@@ -1591,9 +1594,39 @@ func intersectArrayRun(a, b *container) *container {
 	return output
 }
 
+// intersectRunRun computes the intersect of two run containers. The output is
+// always a run container, since it can't possible have more runs than either of
+// the inputs. (note: it is possible that an array container would be better in
+// some cases, but probably not worth complicating the implementation)
 func intersectRunRun(a, b *container) *container {
 	output := &container{}
-	// TODO
+	na, nb := len(a.runs), len(b.runs)
+	for i, j := 0, 0; i < na && j < nb; {
+		va, vb := a.runs[i], b.runs[j]
+		if va.last < vb.start {
+			// |--va--| |--vb--|
+			i++
+		} else if vb.last < va.start {
+			// |--vb--| |--va--|
+			j++
+		} else if va.last > vb.last && va.start >= vb.start {
+			// |--vb-|-|-va--|
+			output.runs = append(output.runs, interval32{start: va.start, last: vb.last})
+			j++
+		} else if va.last > vb.last && va.start < vb.start {
+			// |--va|--vb--|--|
+			output.runs = append(output.runs, vb)
+			j++
+		} else if va.last <= vb.last && va.start >= vb.start {
+			// |--vb|--va--|--|
+			output.runs = append(output.runs, va)
+			i++
+		} else if va.last <= vb.last && va.start < vb.start {
+			// |--va-|-|-vb--|
+			output.runs = append(output.runs, interval32{start: vb.start, last: va.last})
+			i++
+		}
+	}
 	return output
 }
 
