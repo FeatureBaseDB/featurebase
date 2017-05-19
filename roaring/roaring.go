@@ -907,13 +907,13 @@ func (c *container) bitmapCountRange(start, end uint32) int {
 	// Special case when start and end fall in the same word.
 	if i == j {
 		offi, offj := start%64, 64-end%64
-		n += popcount((c.bitmap[i] << offi) >> (offj + offi))
+		n += popcount((c.bitmap[i] >> offi) << (offj + offi))
 		return int(n)
 	}
 
 	// Count partial starting word.
 	if off := start % 64; off != 0 {
-		n += popcount(c.bitmap[i] << off)
+		n += popcount(c.bitmap[i] >> off)
 		i++
 	}
 
@@ -925,7 +925,7 @@ func (c *container) bitmapCountRange(start, end uint32) int {
 	// Count partial ending word.
 	if int(j) < len(c.bitmap) {
 		if off := 64 - (end % 64); off != 0 {
-			n += popcount(c.bitmap[j] >> off)
+			n += popcount(c.bitmap[j] << off)
 		}
 	}
 

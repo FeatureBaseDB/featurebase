@@ -5,27 +5,25 @@ import (
 )
 
 func TestBitmapCountRange(t *testing.T) {
-	c := container{bitmap: []uint64{1}}
-	cnt := c.bitmapCountRange(63, 65)
-	if cnt != 1 {
-		t.Fatalf("count of %v from 63 to 65 should be 1, but got %v", c.bitmap, cnt)
+	c := container{}
+	tests := []struct {
+		start  uint32
+		end    uint32
+		bitmap []uint64
+		exp    int
+	}{
+		{start: 0, end: 1, bitmap: []uint64{1}, exp: 1},
+		{start: 2, end: 7, bitmap: []uint64{0xFFFFFFFFFFFFFF18}, exp: 2},
+		{start: 67, end: 68, bitmap: []uint64{0, 0x8}, exp: 1},
+		{start: 1, end: 68, bitmap: []uint64{0x3, 0x8, 0xF}, exp: 2},
+		{start: 1, end: 258, bitmap: []uint64{0xF, 0x8, 0xA, 0x4, 0xFFFFFFFFFFFFFFFF}, exp: 9},
+		{start: 66, end: 71, bitmap: []uint64{0xF, 0xFFFFFFFFFFFFFF18}, exp: 2},
+		{start: 63, end: 64, bitmap: []uint64{0x8000000000000000}, exp: 1},
 	}
-
-	c = container{bitmap: []uint64{0, 0x8000000000000000}}
-	cnt = c.bitmapCountRange(65, 66)
-	if cnt != 0 {
-		t.Fatalf("count of %v from 65 to 66 should be 0, but got %v", c.bitmap, cnt)
-	}
-
-	c = container{bitmap: []uint64{0, 0xF000000000000000}}
-	cnt = c.bitmapCountRange(65, 66)
-	if cnt != 1 {
-		t.Fatalf("count of %v from 65 to 66 should be 1, but got %v", c.bitmap, cnt)
-	}
-
-	c = container{bitmap: []uint64{0x1, 0xFF00000000000000}}
-	cnt = c.bitmapCountRange(62, 66)
-	if cnt != 3 {
-		t.Fatalf("count of %v from 62 to 66 should be 3, but got %v", c.bitmap, cnt)
+	for i, test := range tests {
+		c.bitmap = test.bitmap
+		if ret := c.bitmapCountRange(test.start, test.end); ret != test.exp {
+			t.Fatalf("test #%v count of %v from %v to %v should be %v but got %v", i, test.bitmap, test.start, test.end, test.exp, ret)
+		}
 	}
 }
