@@ -924,9 +924,8 @@ func (c *container) bitmapCountRange(start, end uint32) int {
 
 	// Count partial ending word.
 	if int(j) < len(c.bitmap) {
-		if off := 64 - (end % 64); off != 64 {
-			n += popcount(c.bitmap[j] << off)
-		}
+		off := 64 - (end % 64)
+		n += popcount(c.bitmap[j] << off)
 	}
 
 	return int(n)
