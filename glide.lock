@@ -65,7 +65,7 @@ imports:
 - name: github.com/pelletier/go-buffruneio
   version: c37440a7cf42ac63b919c752ca73a85067e05992
 - name: github.com/pelletier/go-toml
-  version: 13d49d4606eb801b8f01ae542b4afc4c6ee3d84a
+  version: 23f644976aa7c724adf4aec911dadf4af17840ab
 - name: github.com/rakyll/statik
   version: 89fe3459b5c829c32e89bdff9c43f18aad728f2f
   subpackages:
