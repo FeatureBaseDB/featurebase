@@ -1563,6 +1563,127 @@ func differenceBitmapBitmap(a, b *container) *container {
 	}
 	return output
 }
+func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
+	output := &Bitmap{}
+
+	ki, ci := b.keys, b.containers
+	kj, cj := other.keys, other.containers
+
+	for {
+		var key uint64
+		var container *container
+
+		ni, nj := len(ki), len(kj)
+		if ni == 0 && nj == 0 { // eof(i,j)
+			break
+		} else if ni == 0 || (nj != 0 && ki[0] > kj[0]) { // eof(i) or i > j
+			key, container = kj[0], cj[0].clone()
+			kj, cj = kj[1:], cj[1:]
+		} else if nj == 0 || (ki[0] < kj[0]) { // eof(j) or i < j
+			key, container = ki[0], ci[0].clone()
+			ki, ci = ki[1:], ci[1:]
+		} else { // i == j
+			key, container = ki[0], xor(ci[0], cj[0])
+			ki, ci = ki[1:], ci[1:]
+			kj, cj = kj[1:], cj[1:]
+		}
+
+		output.keys = append(output.keys, key)
+		output.containers = append(output.containers, container)
+	}
+
+	return output
+}
+
+func xor(a, b *container) *container {
+	if a.isArray() {
+		if b.isArray() {
+			return xorArrayArray(a, b)
+		} else {
+			return xorArrayBitmap(a, b)
+		}
+	} else {
+		if b.isArray() {
+			return xorArrayBitmap(b, a)
+		} else {
+			return xorBitmapBitmap(a, b)
+		}
+	}
+}
+
+func xorArrayArray(a, b *container) *container {
+	output := &container{}
+	na, nb := len(a.array), len(b.array)
+	for i, j := 0, 0; ; {
+		if i >= na && j >= nb {
+			break
+		} else if i < na && j >= nb {
+			output.add(a.array[i])
+			i++
+			continue
+		} else if i >= na && j < nb {
+			output.add(b.array[j])
+			j++
+			continue
+		}
+
+		va, vb := a.array[i], b.array[j]
+		if va < vb {
+			output.add(va)
+			i++
+		} else if va > vb {
+			output.add(vb)
+			j++
+		} else { //==
+			i++
+			j++
+		}
+	}
+	return output
+}
+
+func xorArrayBitmap(a, b *container) *container {
+	output := &container{}
+	itr := newBufIterator(newBitmapIterator(b.bitmap))
+	for i := 0; ; {
+		vb, eof := itr.next()
+		if i >= len(a.array) && eof {
+			break
+		} else if i >= len(a.array) {
+			output.add(vb)
+			continue
+		} else if eof {
+			output.add(a.array[i])
+			i++
+			continue
+		}
+
+		va := a.array[i]
+		if va < vb {
+			output.add(va)
+			i++
+			itr.unread()
+		} else if va > vb {
+			output.add(vb)
+		} else {
+			i++
+		}
+	}
+	return output
+}
+
+func xorBitmapBitmap(a, b *container) *container {
+	output := &container{
+		bitmap: make([]uint64, bitmapN),
+	}
+
+	for i := 0; i < bitmapN; i++ {
+		v := a.bitmap[i] ^ b.bitmap[i]
+		output.bitmap[i] = v
+		output.n += int(popcnt(v))
+	}
+	return output
+}
 
 // opType represents a type of operation.
 type opType uint8
