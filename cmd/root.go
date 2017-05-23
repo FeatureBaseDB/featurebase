@@ -22,7 +22,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"reflect"
 )
 
 var (
@@ -162,28 +161,4 @@ func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error 
 		flagErr = f.Value.Set(value)
 	})
 	return flagErr
-}
-
-func GetValidTags(v interface{}) map[string]bool {
-	validTag := make(map[string]bool)
-	conf := reflect.ValueOf(v)
-
-	for i := 0; i < conf.Type().NumField(); i++ {
-		field := conf.Field(i)
-		if field.Kind() == reflect.Struct {
-			tag := conf.Type().Field(i).Tag.Get("toml")
-			tagString := strings.Split(tag, ",")
-			val := reflect.ValueOf(field.Interface())
-			for j := 0; j < val.Type().NumField(); j++ {
-				subTag := val.Type().Field(j).Tag.Get("toml")
-				subTagString := strings.Split(subTag, ",")
-				validTag[fmt.Sprintf("%s.%s", tagString[0], subTagString[0])] = true
-			}
-		} else {
-			tomlTag := conf.Type().Field(i).Tag.Get("toml")
-			s := strings.Split(tomlTag, ",")
-			validTag[s[0]] = true
-		}
-	}
-	return validTag
 }
