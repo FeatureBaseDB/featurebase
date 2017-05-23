@@ -111,6 +111,9 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 
+	// add plugin routes
+	attachHandlerPlugins(handler, router)
+
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
 	// https://github.com/gorilla/mux/issues/6
