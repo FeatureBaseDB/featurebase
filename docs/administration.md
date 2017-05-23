@@ -100,11 +100,15 @@ Note: This will only work when the replication factor is >= 2
 
 #### Metrics
 
-Pilosa can be configured to emit metrics on its internal processes in 2 formats, Expvar or StatsD.  Metric recording is disabled by default and enabled through the configuration file.  
-Through the configuration file choose the metric type, host to receive events, and polling interval for runtime metrics.
+Pilosa can be configured to emit metrics pertaining to its internal processes in one of two formats: Expvar or StatsD. Metric recording is disabled by default.
+The metrics configuration options are: 
+
+  - Host to receive events
+  - Polling interval for runtime metrics
+  - Metric type (StatsD, Expvar).
 
 ##### Tags
-StatsD Tags are in DataDog format (key:value), and we tag the following:
+StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
 
 - NodeID
 - Index
@@ -121,19 +125,19 @@ We currently track the following events
 
 <strong id="maxSlice">MaxSlice:</strong> The Creation of a new Slice.
 
-<strong id="setbit">SetBit:</strong> Count of set bits on a row and column.
+<strong id="setbit">SetBit:</strong> Count of set bits.
 
-<strong id="clearbit">ClearBit:</strong> Count of cleared bits a previously set bit on a row and column.
+<strong id="clearbit">ClearBit:</strong> Count of cleared bits.
 
-<strong id="importbit">ImportBit:</strong> During a bulk data import this records the count of bits created.
+<strong id="importbit">ImportBit:</strong> During a bulk data import this represents the count of bits created.
 
-<strong id="setrowattrs">SetRowAttrs:</strong> Count of Attributes set per row
+<strong id="setrowattrs">SetRowAttrs:</strong> Count of Attributes set per row.
 
 <strong id="setcollumnattrs">SetColumnAttrs:</strong> Count of Attributes set per collumn.
 
-<strong id="bitmap">Bitmap:</strong> Count of Bitmap queries run.
+<strong id="bitmap">Bitmap:</strong> Count of Bitmap queries.
 
-<strong id="topn">TopN:</strong> Count of TopN queries run.
+<strong id="topn">TopN:</strong> Count of TopN queries.
 
 <strong id="union">Union:</strong> Count of Union queries.
 
@@ -149,6 +153,6 @@ We currently track the following events
 
 <strong id="blockrepair">BlockRepair:</strong> Count of data blocks that were out of sync and repaired.
 
-<strong id="garbage_collection">Garbage Collection:</strong> Event count when Garbage Collection occurs, 
+<strong id="garbage_collection">Garbage Collection:</strong> Event count when Garbage Collection occurs.
 
 <strong id="goroutines">Goroutines:</strong> Number of running Goroutines.

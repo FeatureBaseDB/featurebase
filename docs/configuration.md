@@ -168,7 +168,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     cpu-time = "30s"
     ```
 ##### Metric Service
-* Description: which stats service to use (StatsD or ExpVar)
+* Description: Which stats service to use (StatsD or ExpVar).
 * Flag: `--metric.service=statsd`
 * Env: `PILOSA_METRIC.SERVICE=statsd'
 * Config:
@@ -179,7 +179,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     ```
 
 ##### Metric Host
-* Description: where is the StatsD service hosted
+* Description: Address of the StatsD service host.
 * Flag: `--metric.host=localhost:8125`
 * Env: `PILOSA_METRIC.HOST=localhost:8125'
 * Config:

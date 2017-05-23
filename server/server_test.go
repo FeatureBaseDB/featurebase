@@ -449,7 +449,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 		}
 	}
 	if !reflect.DeepEqual(received0, expected) {
-		t.Fatalf("unexpected schema on node0: %d", received0)
+		t.Fatalf("unexpected schema on node0: %s", received0)
 	}
 
 	// Make sure node1 knows about the index and frame created.
@@ -465,7 +465,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 		}
 	}
 	if !reflect.DeepEqual(received1, expected) {
-		t.Fatalf("unexpected schema on node1: %d", received1)
+		t.Fatalf("unexpected schema on node1: %s", received1)
 	}
 
 	// Write data on first node.
