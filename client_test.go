@@ -333,6 +333,87 @@ func TestClient_BackupRestore(t *testing.T) {
 	}
 }
 
+// Ensure client backup and restore a frame with inverse view.
+func TestClient_BackupInverseView(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+	frameOpts := pilosa.FrameOptions{
+		InverseEnabled: true,
+	}
+	frame, err := idx.CreateFrameIfNotExists("f", frameOpts)
+	if err != nil {
+		panic(err)
+	}
+	v, err := frame.CreateViewIfNotExists(pilosa.ViewInverse)
+	if err != nil {
+		panic(err)
+	}
+	f, err := v.CreateFragmentIfNotExists(0)
+	if err != nil {
+		panic(err)
+	}
+
+	f.SetBit(100, 1)
+	f.SetBit(100, 2)
+	f.SetBit(100, 3)
+	f.SetBit(100, SliceWidth-1)
+
+	s := NewServer()
+	defer s.Close()
+	s.Handler.Host = s.Host()
+	s.Handler.Cluster = NewCluster(1)
+	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Holder = hldr.Holder
+
+	c := MustNewClient(s.Host())
+
+	// Backup from frame.
+	var buf bytes.Buffer
+	if err := c.BackupTo(context.Background(), &buf, "i", "f", pilosa.ViewInverse); err != nil {
+		t.Fatal(err)
+	}
+
+	// Restore to a different frame.
+	if _, err := hldr.MustCreateIndexIfNotExists("x", pilosa.IndexOptions{}).CreateFrameIfNotExists("y", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RestoreFrom(context.Background(), &buf, "x", "y", pilosa.ViewInverse); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data.
+	if a := hldr.Fragment("x", "y", pilosa.ViewInverse, 0).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{1, 2, 3, SliceWidth - 1}) {
+		t.Fatalf("unexpected bits(0): %+v", a)
+	}
+
+}
+
+// backup returns error with invalid view
+func TestClient_BackupInvalidView(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).MustSetBits(100, 1, 2, 3, SliceWidth-1)
+
+	s := NewServer()
+	defer s.Close()
+	s.Handler.Host = s.Host()
+	s.Handler.Cluster = NewCluster(1)
+	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Holder = hldr.Holder
+
+	c := MustNewClient(s.Host())
+
+	// Backup from frame.
+	var buf bytes.Buffer
+	err := c.BackupTo(context.Background(), &buf, "i", "f", "invalid_view")
+	if err != pilosa.ErrInvalidView {
+		t.Fatal(err)
+	}
+}
+
 // Ensure client can retrieve a list of all checksums for blocks in a fragment.
 func TestClient_FragmentBlocks(t *testing.T) {
 	hldr := MustOpenHolder()

@@ -39,12 +39,13 @@ pilosa: vendor
 crossbuild: vendor
 	mkdir -p build/pilosa-$(IDENTIFIER)
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
-	cp {LICENSE,README.md} build/pilosa-$(IDENTIFIER)
+	cp LICENSE README.md build/pilosa-$(IDENTIFIER)
 	tar -cvz -C build -f build/pilosa-$(IDENTIFIER).tar.gz pilosa-$(IDENTIFIER)/
 	@echo "Created release build: build/pilosa-$(IDENTIFIER).tar.gz"
 
 release:
 	make crossbuild GOOS=linux GOARCH=amd64
+	make crossbuild GOOS=linux GOARCH=386
 	make crossbuild GOOS=darwin GOARCH=amd64
 
 install: vendor

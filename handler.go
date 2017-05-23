@@ -291,6 +291,7 @@ func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
 		} else if _, err := w.Write(buf); err != nil {
 			h.logger().Printf("stream write error: %s", err)
 		}
+		return
 	}
 	json.NewEncoder(w).Encode(sliceMaxResponse{
 		MaxSlices: ms,

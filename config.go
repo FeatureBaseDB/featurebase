@@ -110,3 +110,7 @@ func (d *Duration) UnmarshalText(text []byte) error {
 func (d Duration) MarshalText() (text []byte, err error) {
 	return []byte(d.String()), nil
 }
+
+func (d Duration) MarshalTOML() ([]byte, error) {
+	return []byte(d.String()), nil
+}

@@ -18,30 +18,46 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
-	toml "github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa"
 )
 
-// ConfigCommand represents a command for printing a default config.
-type ConfigCommand struct {
+// GenerateConfigCommand represents a command for printing a default config.
+type GenerateConfigCommand struct {
 	*pilosa.CmdIO
-	Config *pilosa.Config
 }
 
-// NewConfigCommand returns a new instance of ConfigCommand.
-func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *ConfigCommand {
-	return &ConfigCommand{
+// NewGenerateConfigCommand returns a new instance of GenerateConfigCommand.
+func NewGenerateConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *GenerateConfigCommand {
+	return &GenerateConfigCommand{
 		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 
 // Run prints out the default config.
-func (cmd *ConfigCommand) Run(ctx context.Context) error {
-	buf, err := toml.Marshal(*cmd.Config)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(cmd.Stdout, string(buf))
+func (cmd *GenerateConfigCommand) Run(ctx context.Context) error {
+	fmt.Fprintln(cmd.Stdout, strings.TrimSpace(`
+data-dir = "~/.pilosa"
+bind = "localhost:10101"
+max-writes-per-request = 5000
+
+[cluster]
+  poll-interval = "2m0s"
+  replicas = 1
+  hosts = [
+    "localhost:10101",
+  ]
+
+[anti-entropy]
+  interval = "10m0s"
+
+[profile]
+  cpu = ""
+  cpu-time = "30s"
+
+[plugins]
+  path = ""
+`)+"\n")
 	return nil
 }
