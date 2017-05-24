@@ -7,7 +7,13 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type HandlerPluginConstructor func(*Handler, *mux.Router)
+// HandlerPlugin is a plugin which attaches to HTTP endpoints
+type HandlerPlugin interface {
+	RegisterHandlers(router *mux.Router)
+}
+
+// HandlerPluginConstructor creates a handler plugin
+type HandlerPluginConstructor func(*Handler) HandlerPlugin
 
 type handlerPluginRegistry struct {
 	mutex   *sync.RWMutex
@@ -19,6 +25,7 @@ var handlerPlugins = &handlerPluginRegistry{
 	plugins: map[string]HandlerPluginConstructor{},
 }
 
+// RegisterHandlerPlugin registers a handler plugin constructor to a path prefix
 func RegisterHandlerPlugin(prefix string, c HandlerPluginConstructor) error {
 	handlerPlugins.mutex.Lock()
 	defer handlerPlugins.mutex.Unlock()
@@ -33,8 +40,8 @@ func attachHandlerPlugins(handler *Handler, router *mux.Router) {
 	handlerPlugins.mutex.Lock()
 	defer handlerPlugins.mutex.Unlock()
 	for prefix, constructor := range handlerPlugins.plugins {
-		subrouter := router.PathPrefix("/" + prefix).Subrouter()
-		constructor(handler, subrouter)
+		subrouter := router.PathPrefix(prefix).Subrouter()
+		plugin := constructor(handler)
+		plugin.RegisterHandlers(subrouter)
 	}
-
 }
