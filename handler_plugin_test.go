@@ -25,15 +25,29 @@ func (p *TestHandlerPlugin) helloHandler(w http.ResponseWriter, r *http.Request)
 	fmt.Fprintf(w, "success!")
 }
 
-func TestHandlerPlugin_Registered(t *testing.T) {
-	pilosa.RegisterHandlerPlugin("/test", NewTestHandlerPlugin)
-	h := NewHandler()
+func TestHandlerPluginRegistration(t *testing.T) {
+	t.Run("repeat regisration fails", func(t *testing.T) {
+		err := pilosa.RegisterHandlerPlugin("/test", NewTestHandlerPlugin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = pilosa.RegisterHandlerPlugin("/test", NewTestHandlerPlugin)
+		if err == nil {
+			t.Fatalf("Repeat handler plugin registration should fail")
+		}
 
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/test/hello", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
-	} else if body := w.Body.String(); body != "success!" {
-		t.Fatalf("unexpected body: %q", body)
-	}
+	})
+	t.Run("registration", func(t *testing.T) {
+		pilosa.RegisterHandlerPlugin("/test", NewTestHandlerPlugin)
+		h := NewHandler()
+
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, MustNewHTTPRequest("GET", "/test/hello", nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
+		} else if body := w.Body.String(); body != "success!" {
+			t.Fatalf("unexpected body: %q", body)
+		}
+
+	})
 }
