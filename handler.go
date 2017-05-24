@@ -42,6 +42,7 @@ import (
 
 	_ "github.com/pilosa/pilosa/statik"
 	"github.com/rakyll/statik/fs"
+	"unicode"
 )
 
 // Handler represents an HTTP handler.
@@ -843,6 +844,12 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*QueryRequest, erro
 // readURLQueryRequest parses query parameters from URL parameters from r.
 func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	q := r.URL.Query()
+	validQuery := h.getValidURLQuery(r)
+	for key, _ := range q {
+		if _, ok := validQuery[key]; !ok {
+			return nil, errors.New("invalid query params")
+		}
+	}
 
 	// Parse query string.
 	buf, err := ioutil.ReadAll(r.Body)
@@ -873,6 +880,20 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 		ColumnAttrs: q.Get("columnAttrs") == "true",
 		Quantum:     quantum,
 	}, nil
+}
+
+func (h *Handler) getValidURLQuery(r *http.Request) map[string]bool {
+	validQuery := make(map[string]bool)
+	args := reflect.ValueOf(QueryRequest{})
+
+	for i := 0; i < args.Type().NumField(); i++ {
+		fieldName := args.Type().Field(i).Name
+		chars := []rune(fieldName)
+		chars[0] = unicode.ToLower(chars[0])
+		fieldName = string(chars)
+		validQuery[fieldName] = true
+	}
+	return validQuery
 }
 
 // writeQueryResponse writes the response from the executor to w.

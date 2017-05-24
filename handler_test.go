@@ -209,6 +209,16 @@ func TestHandler_Query_Args_Err(t *testing.T) {
 		t.Fatalf("unexpected body: %q", body)
 	}
 }
+func TestHandler_Query_Params_Err(t *testing.T) {
+	w := httptest.NewRecorder()
+	NewHandler().ServeHTTP(w, MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1&db=sample", strings.NewReader("Bitmap(id=100)")))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{"error":"invalid query params"}`+"\n" {
+		t.Fatalf("unexpected body: %q", body)
+	}
+
+}
 
 // Ensure the handler can execute a query with a uint64 response as JSON.
 func TestHandler_Query_Uint64_JSON(t *testing.T) {
