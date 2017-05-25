@@ -31,7 +31,7 @@ type ExportCommand struct {
 	// Name of the index & frame to export from.
 	Index string
 	Frame string
-	View string
+	View  string
 	// Filename to export to.
 	Path string
 

@@ -844,7 +844,7 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*QueryRequest, erro
 // readURLQueryRequest parses query parameters from URL parameters from r.
 func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	q := r.URL.Query()
-	validQuery := h.getValidURLQuery(r)
+	validQuery := validOptions(QueryRequest{})
 	for key, _ := range q {
 		if _, ok := validQuery[key]; !ok {
 			return nil, errors.New("invalid query params")
@@ -882,12 +882,13 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}, nil
 }
 
-func (h *Handler) getValidURLQuery(r *http.Request) map[string]bool {
+// validOptions return all attributes of an interface with lower first character.
+func validOptions(v interface{}) map[string]bool {
 	validQuery := make(map[string]bool)
-	args := reflect.ValueOf(QueryRequest{})
+	argsType := reflect.ValueOf(v)
 
-	for i := 0; i < args.Type().NumField(); i++ {
-		fieldName := args.Type().Field(i).Name
+	for i := 0; i < argsType.Type().NumField(); i++ {
+		fieldName := argsType.Type().Field(i).Name
 		chars := []rune(fieldName)
 		chars[0] = unicode.ToLower(chars[0])
 		fieldName = string(chars)
