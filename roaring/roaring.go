@@ -1702,9 +1702,52 @@ func intersectRunRun(a, b *container) *container {
 	return output
 }
 
+// intersectBitmapRun returns an array container of the run container's
+// cardinality is < 4096. Otherwise it returns a bitmap container.
 func intersectBitmapRun(a, b *container) *container {
-	output := &container{}
-	// TODO
+	var output *container
+	if b.n < 4096 {
+		// output is array container
+		output = &container{}
+		for _, iv := range b.runs {
+			for i := iv.start; i <= iv.last; i++ {
+				if a.bitmapContains(i) {
+					output.array = append(output.array, i)
+				}
+			}
+		}
+	} else {
+		// right now this iterates through the runs and sets integers in the
+		// bitmap that are in the runs. alternately, we could zero out ranges in
+		// the bitmap which are between runs.
+		output = &container{
+			bitmap: make([]uint64, bitmapN),
+		}
+		for j := 0; j < len(b.runs); j++ {
+			vb := b.runs[j]
+			i := vb.start / 64 // index into a
+			vastart := 64 * i
+			valast := vastart + 63
+			for valast >= vb.start && vastart <= vb.last {
+				if vastart >= vb.start && valast <= vb.last { // a within b
+					output.bitmap[i] = a.bitmap[i]
+				} else if vb.start >= vastart && vb.last <= valast { // b within a
+					var mask uint64 = ((1 << (vb.last - vb.start + 1)) - 1) << (vb.start - vastart)
+					output.bitmap[i] |= a.bitmap[i] & mask
+				} else if vastart < vb.start { // a overlaps front of b
+					offset := 64 - (1 + valast - vb.start)
+					output.bitmap[i] |= (a.bitmap[i] >> offset) << offset
+				} else if vb.start < vastart { // b overlaps front of a
+					offset := 64 - (1 + vb.last - vastart)
+					output.bitmap[i] |= (a.bitmap[i] << offset) >> offset
+				}
+				// update loop vars
+				i++
+				vastart = 64 * i
+				valast = vastart + 63
+			}
+		}
+	}
 	return output
 }
 
