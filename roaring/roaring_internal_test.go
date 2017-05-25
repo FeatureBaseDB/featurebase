@@ -375,3 +375,102 @@ func TestIntersectRunRun(t *testing.T) {
 	}
 
 }
+
+func TestIntersectBitmapRunBitmap(t *testing.T) {
+	a := &container{bitmap: make([]uint64, bitmapN)}
+	b := &container{}
+	tests := []struct {
+		bitmap []uint64
+		runs   []interval32
+		exp    []uint64
+	}{
+		{
+			bitmap: []uint64{1},
+			runs:   []interval32{{start: 0, last: 0}, {start: 2, last: 5}, {start: 62, last: 71}, {start: 77, last: 4096}},
+			exp:    []uint64{1},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
+			runs:   []interval32{{start: 1, last: 1}},
+			exp:    []uint64{2},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
+			runs:   []interval32{{start: 1, last: 1}, {start: 10, last: 12}, {start: 61, last: 77}},
+			exp:    []uint64{0xe000000000001C02},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
+			runs:   []interval32{{start: 1, last: 1}, {start: 61, last: 77}},
+			exp:    []uint64{0xE000000000000002, 0x00000000000003FFF},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 1, 1, 1, 0xA, 1, 1, 0, 1},
+			runs:   []interval32{{start: 63, last: 10000}},
+			exp:    []uint64{0x8000000000000000, 1, 1, 1, 0xA, 1, 1, 0, 1},
+		},
+	}
+	for i, test := range tests {
+		for i, v := range test.bitmap {
+			a.bitmap[i] = v
+		}
+		b.runs = test.runs
+		b.n = 4097 // ;)
+		exp := make([]uint64, bitmapN)
+		for i, v := range test.exp {
+			exp[i] = v
+		}
+		ret := intersectBitmapRun(a, b)
+		if !reflect.DeepEqual(ret.bitmap, exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, exp, ret.bitmap)
+		}
+	}
+
+}
+
+func TestIntersectBitmapRunArray(t *testing.T) {
+	a := &container{bitmap: make([]uint64, bitmapN)}
+	b := &container{}
+	tests := []struct {
+		bitmap []uint64
+		runs   []interval32
+		exp    []uint32
+	}{
+		{
+			bitmap: []uint64{1},
+			runs:   []interval32{{start: 0, last: 0}, {start: 2, last: 5}, {start: 62, last: 71}, {start: 77, last: 4096}},
+			exp:    []uint32{0},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
+			runs:   []interval32{{start: 1, last: 1}},
+			exp:    []uint32{1},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
+			runs:   []interval32{{start: 1, last: 1}, {start: 10, last: 12}, {start: 61, last: 77}},
+			exp:    []uint32{1, 10, 11, 12, 61, 62, 63},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
+			runs:   []interval32{{start: 1, last: 1}, {start: 61, last: 68}},
+			exp:    []uint32{1, 61, 62, 63, 64, 65, 66, 67, 68},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 1, 1, 1, 0xA, 1, 1, 0, 1},
+			runs:   []interval32{{start: 63, last: 10000}},
+			exp:    []uint32{63, 64, 128, 192, 257, 259, 320, 384, 512},
+		},
+	}
+	for i, test := range tests {
+		for i, v := range test.bitmap {
+			a.bitmap[i] = v
+		}
+		b.runs = test.runs
+		ret := intersectBitmapRun(a, b)
+		if !reflect.DeepEqual(ret.array, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
+		}
+	}
+
+}
