@@ -885,10 +885,10 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 // validOptions return all attributes of an interface with lower first character.
 func validOptions(v interface{}) map[string]bool {
 	validQuery := make(map[string]bool)
-	argsType := reflect.ValueOf(v)
+	argsType := reflect.ValueOf(v).Type()
 
-	for i := 0; i < argsType.Type().NumField(); i++ {
-		fieldName := argsType.Type().Field(i).Name
+	for i := 0; i < argsType.NumField(); i++ {
+		fieldName := argsType.Field(i).Name
 		chars := []rune(fieldName)
 		chars[0] = unicode.ToLower(chars[0])
 		fieldName = string(chars)
