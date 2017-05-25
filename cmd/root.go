@@ -126,7 +126,7 @@ func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error 
 
 		for _, key := range v.AllKeys() {
 			if _, ok := validTags[key]; !ok {
-				return fmt.Errorf("invalid tag: %v", key)
+				return fmt.Errorf("invalid option in configuration file: %v", key)
 			}
 		}
 

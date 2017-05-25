@@ -178,20 +178,20 @@ func TestRootCommand_Config(t *testing.T) {
 		panic(err)
 	}
 	config := `data-dir = "/tmp/pil5_0"
-bind = "127.0.0.1:15000"
+bind = "127.0.0.1:10101"
 
 [cluster]
   poll-interval = "2m0s"
   replicas = 2
   partitions = 128
   hosts = [
-    "127.0.0.1:15000",
-    "127.0.0.1:15001",
+    "127.0.0.1:10101",
+    "127.0.0.1:10111",
   ]`
 	file.Write([]byte(config))
 	file.Close()
 	_, err = ExecNewRootCommand(t, "server", "--config", file.Name())
-	if err.Error() != "invalid tag: cluster.partitions" {
-		t.Fatalf("Expected invalid tag, but err: '%v'", err)
+	if err.Error() != "invalid option in configuration file: cluster.partitions" {
+		t.Fatalf("Expected invalid option in configuration file, but err: '%v'", err)
 	}
 }
