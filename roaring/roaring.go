@@ -673,6 +673,27 @@ func (b *Bitmap) Check() error {
 	return a
 }
 
+func (b *Bitmap) Flip(start, end uint64) *Bitmap {
+	result := NewBitmap()
+	itr := b.Iterator()
+	itr.Seek(start)
+	v, eof := itr.Next()
+	for i := start; i < end; i++ {
+		if eof {
+			result.add(i)
+		} else if v == i {
+			v, eof = itr.Next()
+		} else {
+			result.add(i)
+		}
+	}
+	for !eof {
+		result.add(v)
+		v, eof = itr.Next()
+	}
+	return result
+}
+
 // BitmapInfo represents a point-in-time snapshot of bitmap stats.
 type BitmapInfo struct {
 	OpN        int
