@@ -235,7 +235,7 @@ func TestIntersectionCountArrayRun(t *testing.T) {
 }
 
 func TestIntersectionCountBitmapRun(t *testing.T) {
-	a := &container{bitmap: []uint64{1}}
+	a := &container{bitmap: []uint64{0x8000000000000000}}
 	b := &container{runs: []interval32{{start: 63, last: 64}}}
 
 	ret := intersectionCountBitmapRun(a, b)
@@ -244,11 +244,11 @@ func TestIntersectionCountBitmapRun(t *testing.T) {
 	}
 
 	a = &container{bitmap: []uint64{0xF0000001, 0xFF00000000000000, 0xFF000000000000F0, 0x0F0000}}
-	b = &container{runs: []interval32{{start: 33, last: 35}, {start: 62, last: 69}, {start: 130, last: 150}, {start: 186, last: 300}}}
+	b = &container{runs: []interval32{{start: 29, last: 31}, {start: 125, last: 134}, {start: 191, last: 197}, {start: 200, last: 300}}}
 
 	ret = intersectionCountBitmapRun(a, b)
-	if ret != 22 {
-		t.Fatalf("count of %v with %v should be 22, but got %v", a.bitmap, b.runs, ret)
+	if ret != 14 {
+		t.Fatalf("count of %v with %v should be 14, but got %v", a.bitmap, b.runs, ret)
 	}
 }
 
