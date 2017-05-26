@@ -1804,12 +1804,24 @@ func union(a, b *container) *container {
 	if a.isArray() {
 		if b.isArray() {
 			return unionArrayArray(a, b)
+		} else if b.isRun() {
+			return unionArrayRun(a, b)
 		} else {
 			return unionArrayBitmap(a, b)
+		}
+	} else if a.isRun() {
+		if b.isArray() {
+			return unionArrayRun(b, a)
+		} else if b.isRun() {
+			return unionRunRun(a, b)
+		} else {
+			return unionBitmapRun(b, a)
 		}
 	} else {
 		if b.isArray() {
 			return unionArrayBitmap(b, a)
+		} else if b.isRun() {
+			return unionBitmapRun(a, b)
 		} else {
 			return unionBitmapBitmap(a, b)
 		}
@@ -1845,6 +1857,18 @@ func unionArrayArray(a, b *container) *container {
 		}
 	}
 	return output
+}
+
+func unionArrayRun(a, b *container) *container {
+	return nil
+}
+
+func unionRunRun(a, b *container) *container {
+	return nil
+}
+
+func unionBitmapRun(a, b *container) *container {
+	return nil
 }
 
 func unionArrayBitmap(a, b *container) *container {
