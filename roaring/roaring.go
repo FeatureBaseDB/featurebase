@@ -1848,12 +1848,24 @@ func difference(a, b *container) *container {
 	if a.isArray() {
 		if b.isArray() {
 			return differenceArrayArray(a, b)
+		} else if b.isRun() {
+			return differenceArrayRun(a, b)
 		} else {
 			return differenceArrayBitmap(a, b)
+		}
+	} else if a.isRun() {
+		if b.isArray() {
+			return differenceRunArray(a, b)
+		} else if b.isRun() {
+			return differenceRunRun(a, b)
+		} else {
+			return differenceRunBitmap(a, b)
 		}
 	} else {
 		if b.isArray() {
 			return differenceBitmapArray(a, b)
+		} else if b.isRun() {
+			return differenceBitmapRun(a, b)
 		} else {
 			return differenceBitmapBitmap(a, b)
 		}
@@ -1882,6 +1894,27 @@ func differenceArrayArray(a, b *container) *container {
 		}
 	}
 	return output
+}
+
+func differenceArrayRun(a, b *container) *container {
+	// TODO
+	return nil
+}
+func differenceRunArray(a, b *container) *container {
+	// TODO
+	return nil
+}
+func differenceRunBitmap(a, b *container) *container {
+	// TODO
+	return nil
+}
+func differenceBitmapRun(a, b *container) *container {
+	// TODO
+	return nil
+}
+func differenceRunRun(a, b *container) *container {
+	// TODO
+	return nil
 }
 
 func differenceArrayBitmap(a, b *container) *container {
