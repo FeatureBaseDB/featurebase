@@ -1599,6 +1599,7 @@ func intersectArrayRun(a, b *container) *container {
 // the inputs. (note: it is possible that an array container would be better in
 // some cases, but probably not worth complicating the implementation)
 func intersectRunRun(a, b *container) *container {
+	// TODO need to take the last element of output.runs into account during each loop - possible that instead of appending, the last run should just be expanded
 	output := &container{}
 	na, nb := len(a.runs), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
