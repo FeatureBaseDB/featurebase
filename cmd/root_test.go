@@ -171,3 +171,27 @@ func TestRootCommand(t *testing.T) {
 		t.Fatalf("Expected standard usage message from RootCommand, but err: '%v', output: '%s'", err, outStr)
 	}
 }
+
+func TestRootCommand_Config(t *testing.T) {
+	file, err := ioutil.TempFile("", "test.conf")
+	if err != nil {
+		panic(err)
+	}
+	config := `data-dir = "/tmp/pil5_0"
+bind = "127.0.0.1:10101"
+
+[cluster]
+  poll-interval = "2m0s"
+  replicas = 2
+  partitions = 128
+  hosts = [
+    "127.0.0.1:10101",
+    "127.0.0.1:10111",
+  ]`
+	file.Write([]byte(config))
+	file.Close()
+	_, err = ExecNewRootCommand(t, "server", "--config", file.Name())
+	if err.Error() != "invalid option in configuration file: cluster.partitions" {
+		t.Fatalf("Expected invalid option in configuration file, but err: '%v'", err)
+	}
+}
