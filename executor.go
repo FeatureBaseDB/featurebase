@@ -312,6 +312,7 @@ func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *p
 			return nil, err
 		}
 	}
+
 	// Copy children.
 	children := make([]*pql.Call, len(c.Children))
 	copy(children, c.Children)
