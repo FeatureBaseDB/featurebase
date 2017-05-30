@@ -142,7 +142,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Router.ServeHTTP(w, r)
 	dif := time.Since(t)
 
-	if h.Holder != nil {
+	if h.Holder != nil && h.Cluster != nil {
 		// Handle some stats tagging
 		statsTags := make([]string, 0, 3)
 
