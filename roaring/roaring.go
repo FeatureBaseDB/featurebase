@@ -1616,10 +1616,8 @@ func xor(a, b *container) *container {
 func xorArrayArray(a, b *container) *container {
 	output := &container{}
 	na, nb := len(a.array), len(b.array)
-	for i, j := 0, 0; ; {
-		if i >= na && j >= nb {
-			break
-		} else if i < na && j >= nb {
+	for i, j := 0, 0; i < na || j < nb; {
+		if i < na && j >= nb {
 			output.add(a.array[i])
 			i++
 			continue
