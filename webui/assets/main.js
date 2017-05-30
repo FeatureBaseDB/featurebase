@@ -161,10 +161,10 @@ class REPL {
                         output_string += `<br />
           <br />
           Just getting started? Try this:<br />
-          $ curl -XPOST "http://127.0.0.1:10101/index/test" -d '{"options": {"columnLabel": "col"}}' # create index "test"<br />
-          $ curl -XPOST "http://127.0.0.1:10101/index/test/frame/foo" -d '{"options": {"rowLabel": "row"}}' # create frame "foo"<br />
-          # Select "test" in the index dropdown above<br />
-          SetBit(row=0, col=0, frame=foo) # Use PQL to set a bit
+          :create index test<br />
+          :use test<br />
+          :create frame foo<br />
+          SetBit(rowID=0, columnID=0, frame=foo) # Use PQL to set a bit
           `
                     }
                 }

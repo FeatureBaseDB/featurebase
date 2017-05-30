@@ -56,7 +56,7 @@
 						<h5>Special commands</h5>
 					    <div class="code">
 							:create index test [columnLabel=column]<br />
-							:use index test<br />
+							:use test<br />
 							:create frame foo [rowLabel=row]<br />
 							:delete index test<br />
 							:delete frame foo
@@ -76,19 +76,15 @@
 						<button  id='query-btn'>Run Query</button>
 					</div>
 				</div>
-
-
-				<div  class="output-container">
-
-					<h2>Output</h2>
-					<div id="outputs">
-
-						<!-- results -->
-					</div>
-
-				</div>
-
 			</div>
+
+			<div  class="output-container">
+				<h2>Output</h2>
+				<div id="outputs">
+					<!-- results -->
+				</div>
+			</div>
+
 		</div>
 
 		<div class="interface" id="interface-cluster">
@@ -103,10 +99,11 @@
 				</div>
 			</div>
 			<div class="status-container">
+				<!--
 				<h2>Slice Distribution</h2>
 				<div class="status-table-container" id="status-slices">
-				...
 				</div>
+				-->
 			</div>
 
 		</div>
