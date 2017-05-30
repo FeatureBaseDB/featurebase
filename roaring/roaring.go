@@ -1228,7 +1228,7 @@ func intersectionCountArrayArray(a, b *container) (n uint64) {
 	return n
 }
 
-func intersectionCountArrayBitmap(a, b *container) (n uint64) {
+func intersectionCountArrayBitmapOld(a, b *container) (n uint64) {
 	// Copy array header so we can shrink it.
 	array := a.array
 	if len(array) == 0 {
@@ -1267,6 +1267,18 @@ func intersectionCountArrayBitmap(a, b *container) (n uint64) {
 		}
 	}
 
+	return n
+}
+
+func intersectionCountArrayBitmap(a, b *container) (n uint64) {
+	for _, val := range a.array {
+		i := val / 64
+		if i >= uint32(len(b.bitmap)) {
+			break
+		}
+		off := val % 64
+		n += (b.bitmap[i] & (1 << off)) >> off
+	}
 	return n
 }
 
