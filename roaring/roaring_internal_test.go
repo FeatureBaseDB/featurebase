@@ -498,6 +498,31 @@ func TestUnionRunRun(t *testing.T) {
 			bruns: []interval32{{start: 5, last: 10}},
 			exp:   []interval32{{start: 1, last: 3}, {start: 5, last: 12}},
 		},
+		{
+			aruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
+			bruns: []interval32{{start: 2, last: 65535}},
+			exp:   []interval32{{start: 1, last: 65535}},
+		},
+		{
+			aruns: []interval32{{start: 2, last: 65535}},
+			bruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
+			exp:   []interval32{{start: 1, last: 65535}},
+		},
+		{
+			aruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
+			bruns: []interval32{{start: 0, last: 65535}},
+			exp:   []interval32{{start: 0, last: 65535}},
+		},
+		{
+			aruns: []interval32{{start: 0, last: 65535}},
+			bruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
+			exp:   []interval32{{start: 0, last: 65535}},
+		},
+		{
+			aruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 9}, {start: 12, last: 22}},
+			bruns: []interval32{{start: 2, last: 8}, {start: 16, last: 27}, {start: 33, last: 34}},
+			exp:   []interval32{{start: 1, last: 9}, {start: 12, last: 27}, {start: 33, last: 34}},
+		},
 	}
 	for i, test := range tests {
 		a.runs = test.aruns
@@ -507,5 +532,4 @@ func TestUnionRunRun(t *testing.T) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
 		}
 	}
-
 }
