@@ -1788,8 +1788,31 @@ func unionArrayArray(a, b *container) *container {
 	return output
 }
 
+// unionArrayRun optimistically assumes that the result will be a run container,
+// and converts to a bitmap or array container afterwards if necessary.
 func unionArrayRun(a, b *container) *container {
-	return nil
+	output := &container{}
+	na, nb := len(a.array), len(b.runs)
+	var vb interval32
+	var va uint32
+	for i, j := 0, 0; i < na || j < nb; {
+		if i < na {
+			va = a.array[i]
+		}
+		if j < nb {
+			vb = b.runs[j]
+		}
+		if i < na && (j >= nb || va < vb.start) {
+			output.runAppendInterval(interval32{start: va, last: va})
+			i++
+		} else {
+			output.runAppendInterval(vb)
+			j++
+		}
+	}
+	return output
+}
+
 func (c *container) runAppendInterval(v interval32) {
 	if len(c.runs) == 0 {
 		c.runs = append(c.runs, v)
@@ -1808,9 +1831,8 @@ func unionRunRun(a, b *container) *container {
 	output := &container{
 		runs: make([]interval32, 0, na+nb),
 	}
-	i, j := 0, 0
 	var va, vb interval32
-	for i < na || j < nb {
+	for i, j := 0, 0; i < na || j < nb; {
 		if i < na {
 			va = a.runs[i]
 		}
