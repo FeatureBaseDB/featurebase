@@ -105,7 +105,7 @@ func (s *Server) Open() error {
 	// Open HTTP listener to determine port (if specified as :0).
 	ln, err := net.Listen("tcp", ":"+port)
 	if err != nil {
-		return err
+		return fmt.Errorf("net.Listen: %v", err)
 	}
 	s.ln = ln
 
@@ -125,16 +125,16 @@ func (s *Server) Open() error {
 
 	// Open holder.
 	if err := s.Holder.Open(); err != nil {
-		return err
+		return fmt.Errorf("opening Holder: %v", err)
 	}
 
 	if err := s.BroadcastReceiver.Start(s); err != nil {
-		return err
+		return fmt.Errorf("starting BroadcastReceiver: %v", err)
 	}
 
 	// Open NodeSet communication
 	if err := s.Cluster.NodeSet.Open(); err != nil {
-		return err
+		return fmt.Errorf("opening NodeSet: %v", err)
 	}
 
 	// Create executor for executing queries.
