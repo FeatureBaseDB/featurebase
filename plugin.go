@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/pilosa/pilosa/pql"
 )
 
-type NewPluginConstructor func(*Holder) Plugin
+type NewPluginConstructor func(*Executor) Plugin
 type Plugin interface {
-	Map(ctx context.Context, db string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error)
+	Map(ctx context.Context, index string, call *pql.Call, slice uint64) (interface{}, error)
 	Reduce(ctx context.Context, prev, v interface{}) interface{}
 }
 
@@ -48,11 +50,11 @@ func (r *pluginRegistry) register(name string, fn NewPluginConstructor) error {
 }
 
 // NewPlugin instantiates an already loaded plugin.
-func NewPlugin(name string, h *Holder) (Plugin, error) {
-	return pr.newPlugin(name, h)
+func NewPlugin(name string, e *Executor) (Plugin, error) {
+	return pr.newPlugin(name, e)
 }
 
-func (r *pluginRegistry) newPlugin(name string, h *Holder) (Plugin, error) {
+func (r *pluginRegistry) newPlugin(name string, e *Executor) (Plugin, error) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 
@@ -61,5 +63,5 @@ func (r *pluginRegistry) newPlugin(name string, h *Holder) (Plugin, error) {
 		return nil, errors.New("plugin not found")
 	}
 
-	return fn(h), nil
+	return fn(e), nil
 }

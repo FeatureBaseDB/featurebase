@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/pql"
 )
 
 func init() {
@@ -15,15 +16,17 @@ type MaskPlugin struct {
 }
 
 // NewDebugPlugin returns a new instance of DebugPlugin.
-func NewMaskPlugin(h *pilosa.Holder) pilosa.Plugin {
+func NewMaskPlugin(e *pilosa.Executor) pilosa.Plugin {
 	return &MaskPlugin{}
 }
 
 // Map executes the plugin against a single slice.
-func (p *MaskPlugin) Map(ctx context.Context, db string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
+func (p *MaskPlugin) Map(ctx context.Context, index string, call *pql.Call, slice uint64) (interface{}, error) {
 	start := uint64(0)
 	stop := uint64(0)
 	step := uint64(1)
+
+	args := call.Args
 
 	if x, found := args["start"]; found {
 		start = uint64(x.(int64))

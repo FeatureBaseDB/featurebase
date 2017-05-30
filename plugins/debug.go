@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/pql"
 )
 
 func init() {
@@ -19,17 +20,16 @@ type DebugPlugin struct {
 }
 
 // NewDebugPlugin returns a new instance of DebugPlugin.
-func NewDebugPlugin(h *pilosa.Holder) pilosa.Plugin {
-	return &DebugPlugin{holder: h}
+func NewDebugPlugin(e *pilosa.Executor) pilosa.Plugin {
+	return &DebugPlugin{holder: e.Holder}
 }
 
 // Map executes the plugin against a single slice.
-func (p *DebugPlugin) Map(ctx context.Context, db string, children []interface{}, args map[string]interface{}, slice uint64) (interface{}, error) {
+func (p *DebugPlugin) Map(ctx context.Context, index string, call *pql.Call, slice uint64) (interface{}, error) {
 	var buf bytes.Buffer
 	fmt.Fprint(&buf, "Debug.Map(")
-	fmt.Fprintf(&buf, "db=%#v, ", db)
-	fmt.Fprintf(&buf, "children=%#v, ", children)
-	fmt.Fprintf(&buf, "args=%#v, ", args)
+	fmt.Fprintf(&buf, "index=%#v, ", index)
+	fmt.Fprintf(&buf, "call=%#v, ", call)
 	fmt.Fprintf(&buf, "slice=%d", slice)
 	fmt.Fprintln(&buf, ")")
 	buf.WriteTo(os.Stderr)
