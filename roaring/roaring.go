@@ -1648,7 +1648,6 @@ func xorArrayBitmap(a, b *container) *container {
 		if b.bitmapContains(v) {
 			output.remove(v)
 		} else {
-
 			output.add(v)
 		}
 	}

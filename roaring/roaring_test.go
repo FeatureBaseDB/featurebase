@@ -137,8 +137,25 @@ func TestBitmap_Xor_ArrayArray(t *testing.T) {
 	if n := result.Count(); n != 2 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+
+	//equivalence array test
+	result = result.Xor(result)
+	if n := result.Count(); n > 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
 }
 
+//empty array test
+func TestBitmap_Xor_Empty(t *testing.T) {
+	bm1 := roaring.NewBitmap(0, 50000, 1000001, 1000002)
+	empty := roaring.NewBitmap()
+	result := bm1.Xor(empty)
+
+	if n := result.Count(); n != 4 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
 func TestBitmap_Xor_ArrayBitmap(t *testing.T) {
 	bm0 := roaring.NewBitmap(1, 70, 200, 4097, 4098)
 	bm1 := roaring.NewBitmap()
@@ -150,14 +167,22 @@ func TestBitmap_Xor_ArrayBitmap(t *testing.T) {
 	if n := result.Count(); n != 4999 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+
+	//equivalence bitmap test
+	result = result.Xor(result)
+	if n := result.Count(); n > 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
 }
 
 func TestBitmap_Xor_BitmapBitmap(t *testing.T) {
 	bm0 := roaring.NewBitmap()
 	bm1 := roaring.NewBitmap()
+
 	for i := uint64(0); i < 10000; i += 2 {
 		bm1.Add(i)
 	}
+
 	for i := uint64(1); i < 10000; i += 2 {
 		bm0.Add(i)
 	}
@@ -167,8 +192,6 @@ func TestBitmap_Xor_BitmapBitmap(t *testing.T) {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
-
-
 
 // Ensure bitmap can return the number of intersecting bits in two bitmaps.
 func TestBitmap_IntersectionCount_ArrayArray(t *testing.T) {
