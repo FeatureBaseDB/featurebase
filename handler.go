@@ -40,9 +40,10 @@ import (
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 
+	"unicode"
+
 	_ "github.com/pilosa/pilosa/statik"
 	"github.com/rakyll/statik/fs"
-	"unicode"
 )
 
 // Handler represents an HTTP handler.
@@ -141,26 +142,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Router.ServeHTTP(w, r)
 	dif := time.Since(t)
 
-	// Handle some stats tagging
-	statsTags := make([]string, 0, 3)
+	if h.Holder != nil {
+		// Handle some stats tagging
+		statsTags := make([]string, 0, 3)
 
-	if h.Cluster.LongQueryTime > 0 && dif > h.Cluster.LongQueryTime {
-		h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), float64(dif))
-		statsTags = append(statsTags, "slow_query")
+		if h.Cluster.LongQueryTime > 0 && dif > h.Cluster.LongQueryTime {
+			h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), float64(dif))
+			statsTags = append(statsTags, "slow_query")
+		}
+
+		pathParts := strings.Split(r.URL.Path, "/")
+		endpointName := strings.Join(pathParts, "_")
+
+		if externalPrefixFlag[pathParts[1]] {
+			statsTags = append(statsTags, "external")
+		}
+
+		// useragent tag identifies internal/external endpoints
+		statsTags = append(statsTags, "useragent:"+r.UserAgent())
+
+		stats := h.Holder.Stats.WithTags(statsTags...)
+		stats.Histogram("http."+endpointName, float64(dif), 0.1)
 	}
-
-	pathParts := strings.Split(r.URL.Path, "/")
-	endpointName := strings.Join(pathParts, "_")
-
-	if externalPrefixFlag[pathParts[1]] {
-		statsTags = append(statsTags, "external")
-	}
-
-	// useragent tag identifies internal/external endpoints
-	statsTags = append(statsTags, "useragent:"+r.UserAgent())
-
-	stats := h.Holder.Stats.WithTags(statsTags...)
-	stats.Histogram("http."+endpointName, float64(dif), 0.1)
 }
 
 func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
