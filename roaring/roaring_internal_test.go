@@ -474,3 +474,38 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 	}
 
 }
+
+func TestUnionRunRun(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	tests := []struct {
+		aruns []interval32
+		bruns []interval32
+		exp   []interval32
+	}{
+		{
+			aruns: []interval32{},
+			bruns: []interval32{{start: 5, last: 10}},
+			exp:   []interval32{{start: 5, last: 10}},
+		},
+		{
+			aruns: []interval32{{start: 5, last: 12}},
+			bruns: []interval32{{start: 5, last: 10}},
+			exp:   []interval32{{start: 5, last: 12}},
+		},
+		{
+			aruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
+			bruns: []interval32{{start: 5, last: 10}},
+			exp:   []interval32{{start: 1, last: 3}, {start: 5, last: 12}},
+		},
+	}
+	for i, test := range tests {
+		a.runs = test.aruns
+		b.runs = test.bruns
+		ret := unionRunRun(a, b)
+		if !reflect.DeepEqual(ret.runs, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
+		}
+	}
+
+}
