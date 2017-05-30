@@ -1862,72 +1862,40 @@ func unionArrayArray(a, b *container) *container {
 
 func unionArrayRun(a, b *container) *container {
 	return nil
+func (c *container) runAppendInterval(v interval32) {
+	if len(c.runs) == 0 {
+		c.runs = append(c.runs, v)
+	} else {
+		lastidx := len(c.runs) - 1
+		if c.runs[lastidx].last+1 >= v.start && v.last > c.runs[lastidx].last {
+			c.runs[lastidx].last = v.last
+		} else if c.runs[lastidx].last+1 < v.start {
+			c.runs = append(c.runs, v)
+		}
+	}
 }
 
 func unionRunRun(a, b *container) *container {
 	na, nb := len(a.runs), len(b.runs)
-	if na == 0 {
-		return b.clone()
-	} else if nb == 0 {
-		return a.clone()
-	}
 	output := &container{
 		runs: make([]interval32, 0, na+nb),
 	}
 	i, j := 0, 0
-	if a.runs[0].start < b.runs[0].start {
-		output.runs = append(output.runs, a.runs[0])
-		i = 1
-	} else {
-		output.runs = append(output.runs, b.runs[0])
-		j = 1
-	}
-	for i < na && j < nb {
-		va, vb := a.runs[i], b.runs[j]
-		lastrun := output.runs[len(output.runs)-1]
-		if va.start < vb.start {
-			if va.start <= lastrun.last+1 {
-				if lastrun.last < va.last {
-					lastrun.last = va.last
-					output.runs[len(output.runs)-1] = lastrun
-				}
-			} else {
-				output.runs = append(output.runs, va)
-			}
+	var va, vb interval32
+	for i < na || j < nb {
+		if i < na {
+			va = a.runs[i]
+		}
+		if j < nb {
+			vb = b.runs[j]
+		}
+		if i < na && (j >= nb || va.start < vb.start) {
+			output.runAppendInterval(va)
 			i++
 		} else {
-			if vb.start <= lastrun.last+1 {
-				if lastrun.last < vb.last {
-					lastrun.last = vb.last
-					output.runs[len(output.runs)-1] = lastrun
-				}
-			} else {
-				output.runs = append(output.runs, vb)
-			}
+			output.runAppendInterval(vb)
 			j++
 		}
-	}
-	var k int
-	var rest []interval32
-	if i < na {
-		k = i
-		rest = a.runs
-	} else {
-		k = j
-		rest = b.runs
-	}
-	for k < len(rest) {
-		vk := rest[k]
-		lastrun := output.runs[len(output.runs)-1]
-		if vk.start <= lastrun.last+1 {
-			if lastrun.last < vk.last {
-				lastrun.last = vk.last
-				output.runs[len(output.runs)-1] = lastrun
-			}
-		} else {
-			output.runs = append(output.runs, vk)
-		}
-		k++
 	}
 	return output
 }
