@@ -584,3 +584,43 @@ func TestUnionRunRun(t *testing.T) {
 		}
 	}
 }
+
+func TestUnionArrayRun(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	tests := []struct {
+		array []uint32
+		runs  []interval32
+		exp   []interval32
+	}{
+		{
+			array: []uint32{1, 4, 5, 7, 10, 11, 12},
+			runs:  []interval32{{start: 5, last: 10}},
+			exp:   []interval32{{start: 1, last: 1}, {start: 4, last: 12}},
+		},
+		{
+			array: []uint32{},
+			runs:  []interval32{{start: 5, last: 10}},
+			exp:   []interval32{{start: 5, last: 10}},
+		},
+		{
+			array: []uint32{1, 4, 5, 7, 10, 11, 12},
+			runs:  []interval32{},
+			exp:   []interval32{{start: 1, last: 1}, {start: 4, last: 5}, {start: 7, last: 7}, {start: 10, last: 12}},
+		},
+		{
+			array: []uint32{0, 1, 4, 5, 7, 10, 11, 12},
+			runs:  []interval32{{start: 0, last: 5}, {start: 7, last: 7}},
+			exp:   []interval32{{start: 0, last: 5}, {start: 7, last: 7}, {start: 10, last: 12}},
+		},
+	}
+
+	for i, test := range tests {
+		a.array = test.array
+		b.runs = test.runs
+		ret := unionArrayRun(a, b)
+		if !reflect.DeepEqual(ret.runs, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
+		}
+	}
+}
