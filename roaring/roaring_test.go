@@ -173,6 +173,12 @@ func TestBitmap_Xor_ArrayBitmap(t *testing.T) {
 	if n := result.Count(); n > 0 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+
+	empty := roaring.NewBitmap()
+	result = bm1.Xor(empty)
+	if n := result.Count(); n != 5000 {
+		t.Fatalf("unexpected n: %d", n)
+	}
 }
 
 func TestBitmap_Xor_BitmapBitmap(t *testing.T) {
