@@ -64,9 +64,6 @@ type Server struct {
 	PollingInterval     time.Duration
 	MetricInterval      time.Duration
 
-	// Threshold for logging long queries
-	LongQueryTime time.Duration
-
 	// Misc options.
 	MaxWritesPerRequest int
 
