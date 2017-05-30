@@ -172,7 +172,7 @@ func (f *Fragment) Open() error {
 		// Read last bit to determine max row.
 		pos := f.storage.Max()
 		f.maxRowID = pos / SliceWidth
-		f.stats.Gauge("rows", float64(f.maxRowID))
+		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
 
 		return nil
 	}(); err != nil {
@@ -420,7 +420,7 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	// Update row count if they have increased.
 	if rowID > f.maxRowID {
 		f.maxRowID = rowID
-		f.stats.Gauge("rows", float64(f.maxRowID))
+		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
 	}
 
 	return changed, nil
