@@ -50,7 +50,7 @@ type Cache interface {
 	// Returns an ordered list of the top ranked bitmaps.
 	Top() []BitmapPair
 
-	// SetStats defines the stats client used in the cache
+	// SetStats defines the stats client used in the cache.
 	SetStats(s StatsClient)
 }
 
@@ -93,17 +93,11 @@ func (c *LRUCache) Get(id uint64) uint64 {
 // Len returns the number of items in the cache.
 func (c *LRUCache) Len() int { return c.cache.Len() }
 
-// Invalidate track size
-func (c *LRUCache) Invalidate() {
-	c.stats.Count("cache.invalidate", 1, 1.0)
-	c.stats.Gauge("LRUCache", float64(c.cache.Len()), 1.0)
-}
+// Invalidate is a no-op.
+func (c *LRUCache) Invalidate() {}
 
-// Recalculate track size
-func (c *LRUCache) Recalculate() {
-	c.stats.Count("cache.recalculate", 1, 1.0)
-	c.stats.Gauge("LRUCache", float64(c.cache.Len()), 1.0)
-}
+// Recalculate is a no-op.
+func (c *LRUCache) Recalculate() {}
 
 // IDs returns a list of all IDs in the cache.
 func (c *LRUCache) IDs() []uint64 {
@@ -128,7 +122,7 @@ func (c *LRUCache) Top() []BitmapPair {
 	return a
 }
 
-// SetStats passes the stats client used the the frame that owns the cache
+// SetStats defines the stats client used in the cache.
 func (c *LRUCache) SetStats(s StatsClient) {
 	c.stats = s
 }
@@ -283,7 +277,7 @@ func (c *RankCache) recalculate() {
 	}
 }
 
-// SetStats passes the stats client used the the frame that owns the cache
+// SetStats defines the stats client used in the cache.
 func (c *RankCache) SetStats(s StatsClient) {
 	c.stats = s
 }
