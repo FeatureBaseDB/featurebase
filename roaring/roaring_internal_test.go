@@ -362,7 +362,7 @@ func TestIntersectRunRun(t *testing.T) {
 		{
 			aruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
 			bruns: []interval32{{start: 5, last: 10}},
-			exp:   []interval32{{start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 10}},
+			exp:   []interval32{{start: 5, last: 5}, {start: 7, last: 10}},
 		},
 	}
 	for i, test := range tests {

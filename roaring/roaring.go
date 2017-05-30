@@ -1612,19 +1612,20 @@ func intersectRunRun(a, b *container) *container {
 			j++
 		} else if va.last > vb.last && va.start >= vb.start {
 			// |--vb-|-|-va--|
-			output.runs = append(output.runs, interval32{start: va.start, last: vb.last})
+			output.runAppendInterval(interval32{start: va.start, last: vb.last})
 			j++
 		} else if va.last > vb.last && va.start < vb.start {
 			// |--va|--vb--|--|
-			output.runs = append(output.runs, vb)
+			output.runAppendInterval(vb)
 			j++
 		} else if va.last <= vb.last && va.start >= vb.start {
 			// |--vb|--va--|--|
 			output.runs = append(output.runs, va)
+			output.runAppendInterval(va)
 			i++
 		} else if va.last <= vb.last && va.start < vb.start {
 			// |--va-|-|-vb--|
-			output.runs = append(output.runs, interval32{start: vb.start, last: va.last})
+			output.runAppendInterval(interval32{start: vb.start, last: va.last})
 			i++
 		}
 	}
