@@ -1587,10 +1587,10 @@ func intersectArrayRun(a, b *container) *container {
 			j++
 		} else {
 			output.array = append(output.array, va)
-			output.n++
 			i++
 		}
 	}
+	output.n = len(output.array)
 	return output
 }
 
@@ -1632,7 +1632,7 @@ func intersectRunRun(a, b *container) *container {
 	return output
 }
 
-// intersectBitmapRun returns an array container of the run container's
+// intersectBitmapRun returns an array container if the run container's
 // cardinality is < 4096. Otherwise it returns a bitmap container.
 func intersectBitmapRun(a, b *container) *container {
 	var output *container
