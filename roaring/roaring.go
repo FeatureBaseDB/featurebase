@@ -832,6 +832,9 @@ func (itr *BufIterator) Unread() {
 // The maximum size of array containers.
 const ArrayMaxSize = 4096
 
+// The maximum size of run length encoded containers.
+const RunMaxSize = 2048
+
 // container represents a container for uint32 integers.
 //
 // These are used for storing the low bits. Containers are separated into two
@@ -1256,6 +1259,22 @@ func (c *container) arrayToBitmap() {
 	c.mapped = false
 }
 
+func (c *container) runToBitmap() {
+	// TODO
+}
+
+func (c *container) bitmapToRun() {
+	// TODO
+}
+
+func (c *container) arrayToRun() {
+	// TODO
+}
+
+func (c *container) runToArray() {
+	// TODO
+}
+
 // clone returns a copy of c.
 func (c *container) clone() *container {
 	other := &container{n: c.n}
@@ -1594,12 +1613,8 @@ func intersectArrayRun(a, b *container) *container {
 	return output
 }
 
-// intersectRunRun computes the intersect of two run containers. The output is
-// always a run container, since it can't possible have more runs than either of
-// the inputs. (note: it is possible that an array container would be better in
-// some cases, but probably not worth complicating the implementation)
+// intersectRunRun computes the intersect of two run containers.
 func intersectRunRun(a, b *container) *container {
-	// TODO need to take the last element of output.runs into account during each loop - possible that instead of appending, the last run should just be expanded
 	output := &container{}
 	na, nb := len(a.runs), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
@@ -1612,22 +1627,26 @@ func intersectRunRun(a, b *container) *container {
 			j++
 		} else if va.last > vb.last && va.start >= vb.start {
 			// |--vb-|-|-va--|
-			output.runAppendInterval(interval32{start: va.start, last: vb.last})
+			output.n += output.runAppendInterval(interval32{start: va.start, last: vb.last})
 			j++
 		} else if va.last > vb.last && va.start < vb.start {
 			// |--va|--vb--|--|
-			output.runAppendInterval(vb)
+			output.n += output.runAppendInterval(vb)
 			j++
 		} else if va.last <= vb.last && va.start >= vb.start {
 			// |--vb|--va--|--|
-			output.runs = append(output.runs, va)
-			output.runAppendInterval(va)
+			output.n += output.runAppendInterval(va)
 			i++
 		} else if va.last <= vb.last && va.start < vb.start {
 			// |--va-|-|-vb--|
-			output.runAppendInterval(interval32{start: vb.start, last: va.last})
+			output.n += output.runAppendInterval(interval32{start: vb.start, last: va.last})
 			i++
 		}
+	}
+	if n < 4096 && len(output.runs) > n/2 {
+		output.runToArray()
+	} else if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
 	}
 	return output
 }
@@ -1814,17 +1833,27 @@ func unionArrayRun(a, b *container) *container {
 	return output
 }
 
-func (c *container) runAppendInterval(v interval32) {
+// runAppendInterval adds the given interval to the run container. It assumes
+// that the interval comes at the end of the list of runs, and does not check
+// that this is the case. It will not behave correctly if the start of the given
+// interval is earlier than the start of the last interval in the list of runs.
+// Its return value is the amount by which the cardinality of the container was
+// increased.
+func (c *container) runAppendInterval(v interval32) int {
 	if len(c.runs) == 0 {
 		c.runs = append(c.runs, v)
+		return int(v.last - v.start + 1)
 	} else {
-		lastidx := len(c.runs) - 1
-		if c.runs[lastidx].last+1 >= v.start && v.last > c.runs[lastidx].last {
-			c.runs[lastidx].last = v.last
-		} else if c.runs[lastidx].last+1 < v.start {
+		last := c.runs[len(c.runs)-1]
+		if last.last+1 >= v.start && v.last > last.last {
+			c.runs[len(c.runs)-1].last = v.last
+			return int(v.last - last.last)
+		} else if last.last+1 < v.start {
 			c.runs = append(c.runs, v)
+			return int(v.last - v.start + 1)
 		}
 	}
+	return 0
 }
 
 func unionRunRun(a, b *container) *container {

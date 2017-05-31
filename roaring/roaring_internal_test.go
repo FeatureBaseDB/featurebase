@@ -19,6 +19,44 @@ import (
 	"testing"
 )
 
+func TestRunAppendInterval(t *testing.T) {
+	a := container{}
+	tests := []struct {
+		base []interval32
+		app  interval32
+		exp  int
+	}{
+		{
+			base: []interval32{},
+			app:  interval32{start: 22, last: 25},
+			exp:  4,
+		},
+		{
+			base: []interval32{{start: 20, last: 23}},
+			app:  interval32{start: 22, last: 25},
+			exp:  2,
+		},
+		{
+			base: []interval32{{start: 20, last: 23}},
+			app:  interval32{start: 21, last: 22},
+			exp:  0,
+		},
+		{
+			base: []interval32{{start: 20, last: 23}},
+			app:  interval32{start: 19, last: 25},
+			exp:  3,
+		},
+	}
+
+	for i, test := range tests {
+		a.runs = test.base
+		if n := a.runAppendInterval(test.app); n != test.exp {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, n)
+		}
+	}
+
+}
+
 func TestInterval32RunLen(t *testing.T) {
 	iv := interval32{start: 7, last: 9}
 	if iv.runlen() != 3 {
@@ -348,21 +386,25 @@ func TestIntersectRunRun(t *testing.T) {
 		aruns []interval32
 		bruns []interval32
 		exp   []interval32
+		expN  int
 	}{
 		{
 			aruns: []interval32{},
 			bruns: []interval32{{start: 5, last: 10}},
 			exp:   []interval32(nil),
+			expN:  0,
 		},
 		{
 			aruns: []interval32{{start: 5, last: 12}},
 			bruns: []interval32{{start: 5, last: 10}},
 			exp:   []interval32{{start: 5, last: 10}},
+			expN:  6,
 		},
 		{
 			aruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
 			bruns: []interval32{{start: 5, last: 10}},
 			exp:   []interval32{{start: 5, last: 5}, {start: 7, last: 10}},
+			expN:  5,
 		},
 	}
 	for i, test := range tests {
@@ -371,6 +413,9 @@ func TestIntersectRunRun(t *testing.T) {
 		ret := intersectRunRun(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
+		}
+		if ret.n != test.expN {
+			t.Fatalf("test #%v expected n to be %v, but got %v", i, test.expN, ret.n)
 		}
 	}
 
