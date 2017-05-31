@@ -104,10 +104,12 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 }
 func (b *Bitmap) String() string {
 	var buffer bytes.Buffer
-	for _, v := range b.Slice() {
+	for i, v := range b.Slice() {
 		buffer.WriteString(fmt.Sprintf("%d ", v))
+		if i > 0 {
+			buffer.WriteString(" ")
+		}
 	}
-	buffer.WriteString("\n")
 	return buffer.String()
 }
 
@@ -720,10 +722,12 @@ func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 	result := NewBitmap()
 	itr := b.Iterator()
 	v, eof := itr.Next()
+	//copy over previous bits.
 	for v < start && !eof {
 		result.add(v)
 		v, eof = itr.Next()
 	}
+	//flip bits in range .
 	for i := start; i <= end; i++ {
 		if eof {
 			result.add(i)
@@ -733,6 +737,7 @@ func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 			result.add(i)
 		}
 	}
+	//add remaining.
 	for !eof {
 		result.add(v)
 		v, eof = itr.Next()

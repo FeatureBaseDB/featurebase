@@ -226,6 +226,7 @@ func TestBitmap_Flip_Array(t *testing.T) {
 
 }
 
+// Ensure  Flip works with underlying Bitmap container.
 func TestBitmap_Flip_Bitmap(t *testing.T) {
 	bm := roaring.NewBitmap()
 	size := uint64(10000)
@@ -242,6 +243,7 @@ func TestBitmap_Flip_Bitmap(t *testing.T) {
 	}
 }
 
+// Verify Flip works correctly with in different regions of bitmap, beginning, middle, and end.
 func TestBitmap_Flip_After(t *testing.T) {
 	bm := roaring.NewBitmap(0, 2, 4, 8)
 	results := bm.Flip(9, 10)
