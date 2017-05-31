@@ -97,3 +97,62 @@ Note: This will only work when the replication factor is >= 2
 - Modify the cluster config file to replace the previous node address with the new node address.
 - Restart the cluster
 - Wait for the 1st sync (10 minutes) to validate Index connections
+
+#### Metrics
+
+Pilosa can be configured to emit metrics pertaining to its internal processes in one of two formats: Expvar or StatsD. Metric recording is disabled by default.
+The metrics configuration options are: 
+
+  - Host to receive events
+  - Polling interval for runtime metrics
+  - Metric type (StatsD, Expvar).
+
+##### Tags
+StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
+
+- NodeID
+- Index
+- Frame
+- View
+- Slice
+
+##### Events
+We currently track the following events
+
+<strong id="index">Index:</strong> The creation of a new Index.
+
+<strong id="frame">Frame:</strong> The creation of a new Frame.
+
+<strong id="maxSlice">MaxSlice:</strong> The Creation of a new Slice.
+
+<strong id="setbit">SetBit:</strong> Count of set bits.
+
+<strong id="clearbit">ClearBit:</strong> Count of cleared bits.
+
+<strong id="importbit">ImportBit:</strong> During a bulk data import this represents the count of bits created.
+
+<strong id="setrowattrs">SetRowAttrs:</strong> Count of Attributes set per row.
+
+<strong id="setcollumnattrs">SetColumnAttrs:</strong> Count of Attributes set per collumn.
+
+<strong id="bitmap">Bitmap:</strong> Count of Bitmap queries.
+
+<strong id="topn">TopN:</strong> Count of TopN queries.
+
+<strong id="union">Union:</strong> Count of Union queries.
+
+<strong id="intersection">Intersection:</strong> Count of Intersection queries.
+
+<strong id="difference">Difference:</strong> Count of Difference queries.
+
+<strong id="count">Count:</strong> Count of Count queries.
+
+<strong id="range">Range:</strong> Count of Range queries.
+
+<strong id="snapshot">Snapshot:</strong> Event count when the snapshot process is triggered.
+
+<strong id="blockrepair">BlockRepair:</strong> Count of data blocks that were out of sync and repaired.
+
+<strong id="garbage_collection">Garbage Collection:</strong> Event count when Garbage Collection occurs.
+
+<strong id="goroutines">Goroutines:</strong> Number of running Goroutines.

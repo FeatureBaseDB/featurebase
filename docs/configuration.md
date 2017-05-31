@@ -167,3 +167,36 @@ Any flag that has a value that is a comma separated list on the command line bec
     [profile]
     cpu-time = "30s"
     ```
+##### Metric Service
+* Description: Which stats service to use (StatsD or ExpVar).
+* Flag: `--metric.service=statsd`
+* Env: `PILOSA_METRIC.SERVICE=statsd'
+* Config:
+
+    ```toml
+    [metric]
+    service = “statsd”
+    ```
+
+##### Metric Host
+* Description: Address of the StatsD service host.
+* Flag: `--metric.host=localhost:8125`
+* Env: `PILOSA_METRIC.HOST=localhost:8125'
+* Config:
+
+    ```toml
+    [metric]
+    host = "localhost:8125"
+    ```
+
+##### Metric Poll Interval
+
+* Description: Polling interval for runtime metrics.
+* Flag: `metric.poll-interval=”0m15s”`
+* Env: `PILOSA_METRIC.POLL_INTERVAL=0m15s`
+* Config:
+
+    ```toml
+    [metric]
+    poll-interval = "0m15s"
+    ```
