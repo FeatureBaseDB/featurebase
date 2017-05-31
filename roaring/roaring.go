@@ -16,6 +16,7 @@
 package roaring
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -100,6 +101,14 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 	}
 
 	return changed, nil
+}
+func (b *Bitmap) String() string {
+	var buffer bytes.Buffer
+	for _, v := range b.Slice() {
+		buffer.WriteString(fmt.Sprintf("%d ", v))
+	}
+	buffer.WriteString("\n")
+	return buffer.String()
 }
 
 func (b *Bitmap) add(v uint64) bool {
@@ -710,9 +719,12 @@ func (b *Bitmap) Check() error {
 func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 	result := NewBitmap()
 	itr := b.Iterator()
-	itr.Seek(start)
 	v, eof := itr.Next()
-	for i := start; i < end; i++ {
+	for v < start && !eof {
+		result.add(v)
+		v, eof = itr.Next()
+	}
+	for i := start; i <= end; i++ {
 		if eof {
 			result.add(i)
 		} else if v == i {
