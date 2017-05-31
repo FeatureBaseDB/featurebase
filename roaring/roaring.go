@@ -1915,6 +1915,9 @@ func unionArrayArray(a, b *container) *container {
 // unionArrayRun optimistically assumes that the result will be a run container,
 // and converts to a bitmap or array container afterwards if necessary.
 func unionArrayRun(a, b *container) *container {
+	if b.n == 65536 {
+		return b.clone()
+	}
 	output := &container{}
 	na, nb := len(a.array), len(b.runs)
 	var vb interval32
@@ -1966,6 +1969,12 @@ func (c *container) runAppendInterval(v interval32) int {
 }
 
 func unionRunRun(a, b *container) *container {
+	if a.n == 65536 {
+		return a.clone()
+	}
+	if b.n == 65536 {
+		return b.clone()
+	}
 	na, nb := len(a.runs), len(b.runs)
 	output := &container{
 		runs: make([]interval32, 0, na+nb),
@@ -1993,8 +2002,62 @@ func unionRunRun(a, b *container) *container {
 }
 
 func unionBitmapRun(a, b *container) *container {
-	// TODO
-	return nil
+	if b.n == 65536 {
+		return b.clone()
+	}
+	output := a.clone()
+	for j := 0; j < len(b.runs); j++ {
+		output.bitmapSetRange(uint64(b.runs[j].start), uint64(b.runs[j].last))
+	}
+	return output
+}
+
+const Z = 0xFFFFFFFFFFFFFFFF
+
+// sets all bits in [i, j] (inclusive) (c must be a bitmap container)
+func (c *container) bitmapSetRange(i, j uint64) {
+	j += 1
+	x := i / 64
+	y := (j - 1) / 64
+	var X uint64 = Z << (i % 64)
+	var Y uint64 = Z >> (64 - (j % 64))
+	xcnt := popcnt(X)
+	ycnt := popcnt(Y)
+	if x == y {
+		c.n += int((j - i) - popcnt(c.bitmap[x]&(X&Y)))
+		c.bitmap[x] |= (X & Y)
+	} else {
+		c.n += int(xcnt - popcnt(c.bitmap[x]&X))
+		c.bitmap[x] |= X
+		for i := x + 1; i < y; i++ {
+			c.n += int(64 - popcnt(c.bitmap[i]))
+			c.bitmap[i] = Z
+		}
+		c.n += int(ycnt - popcnt(c.bitmap[y]&Y))
+		c.bitmap[y] |= Y
+	}
+}
+
+// zeroes all bits in [i, j] (inclusive) (c must be a bitmap container)
+func (c *container) bitmapZeroRange(i, j uint64) {
+	j += 1
+	x := i / 64
+	y := (j - 1) / 64
+	var X uint64 = Z << (i % 64)
+	var Y uint64 = Z >> (64 - (j % 64))
+	if x == y {
+		c.n -= int(popcnt(c.bitmap[x] & (X & Y)))
+		c.bitmap[x] &= ^(X & Y)
+	} else {
+		c.n -= int(popcnt(c.bitmap[x] & X))
+		c.bitmap[x] &= ^X
+		for i := x + 1; i < y; i++ {
+			c.n -= int(popcnt(c.bitmap[i]))
+			c.bitmap[i] = 0
+		}
+		c.n -= int(popcnt(c.bitmap[y] & Y))
+		c.bitmap[y] &= ^Y
+	}
 }
 
 func unionArrayBitmap(a, b *container) *container {
