@@ -142,8 +142,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Router.ServeHTTP(w, r)
 	dif := time.Since(t)
 
+	// Calculate per request StatsD metrics when the handler is fully configured.
 	if h.Holder != nil && h.Cluster != nil {
-		// Handle some stats tagging
 		statsTags := make([]string, 0, 3)
 
 		if h.Cluster.LongQueryTime > 0 && dif > h.Cluster.LongQueryTime {
