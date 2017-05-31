@@ -1643,7 +1643,7 @@ func intersectRunRun(a, b *container) *container {
 			i++
 		}
 	}
-	if output.n < 4096 && len(output.runs) > output.n/2 {
+	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
 		output.runToArray()
 	} else if len(output.runs) > RunMaxSize {
 		output.runToBitmap()
@@ -1652,10 +1652,10 @@ func intersectRunRun(a, b *container) *container {
 }
 
 // intersectBitmapRun returns an array container if the run container's
-// cardinality is < 4096. Otherwise it returns a bitmap container.
+// cardinality is < ArrayMaxSize. Otherwise it returns a bitmap container.
 func intersectBitmapRun(a, b *container) *container {
 	var output *container
-	if b.n < 4096 {
+	if b.n < ArrayMaxSize {
 		// output is array container
 		output = &container{}
 		for _, iv := range b.runs {
@@ -1704,7 +1704,7 @@ func intersectBitmapRun(a, b *container) *container {
 				valast = vastart + 63
 			}
 		}
-		if output.n < 4096 {
+		if output.n < ArrayMaxSize {
 			output.bitmapToArray()
 		}
 	}
@@ -1834,12 +1834,17 @@ func unionArrayRun(a, b *container) *container {
 			vb = b.runs[j]
 		}
 		if i < na && (j >= nb || va < vb.start) {
-			output.runAppendInterval(interval32{start: va, last: va})
+			output.n += output.runAppendInterval(interval32{start: va, last: va})
 			i++
 		} else {
-			output.runAppendInterval(vb)
+			output.n += output.runAppendInterval(vb)
 			j++
 		}
+	}
+	if output.n < ArrayMaxSize {
+		output.runToArray()
+	} else if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
 	}
 	return output
 }
@@ -1881,17 +1886,21 @@ func unionRunRun(a, b *container) *container {
 			vb = b.runs[j]
 		}
 		if i < na && (j >= nb || va.start < vb.start) {
-			output.runAppendInterval(va)
+			output.n += output.runAppendInterval(va)
 			i++
 		} else {
-			output.runAppendInterval(vb)
+			output.n += output.runAppendInterval(vb)
 			j++
 		}
+	}
+	if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
 	}
 	return output
 }
 
 func unionBitmapRun(a, b *container) *container {
+	// TODO
 	return nil
 }
 

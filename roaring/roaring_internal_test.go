@@ -44,7 +44,7 @@ func TestRunAppendInterval(t *testing.T) {
 		{
 			base: []interval32{{start: 20, last: 23}},
 			app:  interval32{start: 19, last: 25},
-			exp:  3,
+			exp:  2, // runAppendInterval explicitly does not support intervals whose start is < c.runs[-1].start
 		},
 	}
 
