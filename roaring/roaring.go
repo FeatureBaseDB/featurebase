@@ -1715,7 +1715,7 @@ func intersectRunRun(a, b *container) *container {
 			i++
 		}
 	}
-	if n < 4096 && len(output.runs) > n/2 {
+	if output.n < 4096 && len(output.runs) > output.n/2 {
 		output.runToArray()
 	} else if len(output.runs) > RunMaxSize {
 		output.runToBitmap()
@@ -1737,6 +1737,7 @@ func intersectBitmapRun(a, b *container) *container {
 				}
 			}
 		}
+		output.n = len(output.array)
 	} else {
 		// right now this iterates through the runs and sets integers in the
 		// bitmap that are in the runs. alternately, we could zero out ranges in
@@ -1752,21 +1753,31 @@ func intersectBitmapRun(a, b *container) *container {
 			for valast >= vb.start && vastart <= vb.last {
 				if vastart >= vb.start && valast <= vb.last { // a within b
 					output.bitmap[i] = a.bitmap[i]
+					output.n += int(popcnt(a.bitmap[i]))
 				} else if vb.start >= vastart && vb.last <= valast { // b within a
 					var mask uint64 = ((1 << (vb.last - vb.start + 1)) - 1) << (vb.start - vastart)
-					output.bitmap[i] |= a.bitmap[i] & mask
+					bits := a.bitmap[i] & mask
+					output.bitmap[i] |= bits
+					output.n += int(popcnt(bits))
 				} else if vastart < vb.start { // a overlaps front of b
 					offset := 64 - (1 + valast - vb.start)
-					output.bitmap[i] |= (a.bitmap[i] >> offset) << offset
+					bits := (a.bitmap[i] >> offset) << offset
+					output.bitmap[i] |= bits
+					output.n += int(popcnt(bits))
 				} else if vb.start < vastart { // b overlaps front of a
 					offset := 64 - (1 + vb.last - vastart)
-					output.bitmap[i] |= (a.bitmap[i] << offset) >> offset
+					bits := (a.bitmap[i] << offset) >> offset
+					output.bitmap[i] |= bits
+					output.n += int(popcnt(bits))
 				}
 				// update loop vars
 				i++
 				vastart = 64 * i
 				valast = vastart + 63
 			}
+		}
+		if output.n < 4096 {
+			output.bitmapToArray()
 		}
 	}
 	return output

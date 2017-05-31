@@ -479,31 +479,37 @@ func TestIntersectBitmapRunBitmap(t *testing.T) {
 		bitmap []uint64
 		runs   []interval32
 		exp    []uint64
+		expN   int
 	}{
 		{
 			bitmap: []uint64{1},
 			runs:   []interval32{{start: 0, last: 0}, {start: 2, last: 5}, {start: 62, last: 71}, {start: 77, last: 4096}},
 			exp:    []uint64{1},
+			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
 			runs:   []interval32{{start: 1, last: 1}},
 			exp:    []uint64{2},
+			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
 			runs:   []interval32{{start: 1, last: 1}, {start: 10, last: 12}, {start: 61, last: 77}},
 			exp:    []uint64{0xe000000000001C02},
+			expN:   7,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
 			runs:   []interval32{{start: 1, last: 1}, {start: 61, last: 77}},
 			exp:    []uint64{0xE000000000000002, 0x00000000000003FFF},
+			expN:   18,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 1, 1, 1, 0xA, 1, 1, 0, 1},
 			runs:   []interval32{{start: 63, last: 10000}},
 			exp:    []uint64{0x8000000000000000, 1, 1, 1, 0xA, 1, 1, 0, 1},
+			expN:   9,
 		},
 	}
 	for i, test := range tests {
@@ -517,8 +523,14 @@ func TestIntersectBitmapRunBitmap(t *testing.T) {
 			exp[i] = v
 		}
 		ret := intersectBitmapRun(a, b)
+		if ret.isArray() {
+			ret.arrayToBitmap()
+		}
 		if !reflect.DeepEqual(ret.bitmap, exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, exp, ret.bitmap)
+		}
+		if ret.n != test.expN {
+			t.Fatalf("test #%v expected n to be %v, but got %v", i, test.expN, ret.n)
 		}
 	}
 
@@ -531,31 +543,37 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 		bitmap []uint64
 		runs   []interval32
 		exp    []uint32
+		expN   int
 	}{
 		{
 			bitmap: []uint64{1},
 			runs:   []interval32{{start: 0, last: 0}, {start: 2, last: 5}, {start: 62, last: 71}, {start: 77, last: 4096}},
 			exp:    []uint32{0},
+			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
 			runs:   []interval32{{start: 1, last: 1}},
 			exp:    []uint32{1},
+			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
 			runs:   []interval32{{start: 1, last: 1}, {start: 10, last: 12}, {start: 61, last: 77}},
 			exp:    []uint32{1, 10, 11, 12, 61, 62, 63},
+			expN:   7,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
 			runs:   []interval32{{start: 1, last: 1}, {start: 61, last: 68}},
 			exp:    []uint32{1, 61, 62, 63, 64, 65, 66, 67, 68},
+			expN:   9,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 1, 1, 1, 0xA, 1, 1, 0, 1},
 			runs:   []interval32{{start: 63, last: 10000}},
 			exp:    []uint32{63, 64, 128, 192, 257, 259, 320, 384, 512},
+			expN:   9,
 		},
 	}
 	for i, test := range tests {
@@ -566,6 +584,9 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 		ret := intersectBitmapRun(a, b)
 		if !reflect.DeepEqual(ret.array, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
+		}
+		if ret.n != test.expN {
+			t.Fatalf("test #%v expected n to be %v, but got %v", i, test.expN, ret.n)
 		}
 	}
 
