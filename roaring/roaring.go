@@ -102,17 +102,6 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 
 	return changed, nil
 }
-func (b *Bitmap) String() string {
-	var buffer bytes.Buffer
-	for i, v := range b.Slice() {
-		if i > 0 {
-			buffer.WriteString(" ")
-		}
-		buffer.WriteString(fmt.Sprintf("%d", v))
-	}
-	return buffer.String()
-}
-
 func (b *Bitmap) add(v uint64) bool {
 	hb := highbits(v)
 	i := search64(b.keys, hb)
@@ -219,6 +208,19 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 
 	return n
 }
+
+//Stringify method for debuging.
+func (b *Bitmap) String() string {
+	var buffer bytes.Buffer
+	for i, v := range b.Slice() {
+		if i > 0 {
+			buffer.WriteString(" ")
+		}
+		buffer.WriteString(fmt.Sprintf("%d", v))
+	}
+	return buffer.String()
+}
+
 
 // Slice returns a slice of all integers in the bitmap.
 func (b *Bitmap) Slice() []uint64 {
