@@ -209,7 +209,7 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 	return n
 }
 
-//Stringify method for debuging.
+// Stringify method for debugging.
 func (b *Bitmap) String() string {
 	var buffer bytes.Buffer
 	for i, v := range b.Slice() {
@@ -220,7 +220,6 @@ func (b *Bitmap) String() string {
 	}
 	return buffer.String()
 }
-
 
 // Slice returns a slice of all integers in the bitmap.
 func (b *Bitmap) Slice() []uint64 {
