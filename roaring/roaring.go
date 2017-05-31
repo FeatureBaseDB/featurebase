@@ -105,10 +105,10 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 func (b *Bitmap) String() string {
 	var buffer bytes.Buffer
 	for i, v := range b.Slice() {
-		buffer.WriteString(fmt.Sprintf("%d ", v))
 		if i > 0 {
 			buffer.WriteString(" ")
 		}
+		buffer.WriteString(fmt.Sprintf("%d", v))
 	}
 	return buffer.String()
 }
