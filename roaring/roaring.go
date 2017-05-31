@@ -673,6 +673,7 @@ func (b *Bitmap) Check() error {
 	return a
 }
 
+//Perform a logical negate of the bits in the range [start,end].
 func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 	result := NewBitmap()
 	itr := b.Iterator()
