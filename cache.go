@@ -159,7 +159,6 @@ func (c *RankCache) Add(id uint64, n uint64) {
 	if n < c.thresholdValue {
 		return
 	}
-
 	c.entries[id] = n
 
 	c.invalidate()
