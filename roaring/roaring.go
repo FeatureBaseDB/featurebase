@@ -1327,12 +1327,33 @@ func (c *container) bitmapToRun() {
 	// TODO
 }
 
+// arrayToRun converts from array format to RLE format
 func (c *container) arrayToRun() {
-	// TODO
+	c.runs = make([]interval32, 0)
+	start := c.array[0]
+	for i, v := range c.array {
+		if v - c.array[i-1] > 1 {
+			// if current-previous > 1, one run ends and another begins
+			c.runs = append(c.runs, interval32{start, c.array[i-1]})
+			start = v
+		}
+	}
+	// append final run
+	c.runs = append(c.runs, interval32{start, c.array[i]})
+	c.array = nil
+	c.mapped = false
 }
 
+// runToArray converts from RLE format to array format
 func (c *container) runToArray() {
-	// TODO
+	c.array = make([]uint32, 0, c.n)
+	for _, r := range c.runs {
+		for v := r.start; v <= r.last; v++ {
+			c.array = append(c.array, v)
+		}
+	}
+	c.runs = nil
+	c.mapped = false
 }
 
 // clone returns a copy of c.
