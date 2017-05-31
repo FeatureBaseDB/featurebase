@@ -41,7 +41,7 @@ const (
 
 // AttrStore represents a storage layer for attributes.
 type AttrStore struct {
-	mu   sync.Mutex
+	mu   sync.RWMutex
 	path string
 	db   *bolt.DB
 
@@ -92,8 +92,8 @@ func (s *AttrStore) Close() error {
 
 // Attrs returns a set of attributes by ID.
 func (s *AttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	// Check cache for map.
 	if m = s.attrs[id]; m != nil {
@@ -119,6 +119,19 @@ func (s *AttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
 
 // SetAttrs sets attribute values for a given ID.
 func (s *AttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
+	// Ignore empty maps.
+	if len(m) == 0 {
+		return nil
+	}
+
+	// Check if the attributes already exist under a read-only lock.
+	if attr, err := s.Attrs(id); err != nil {
+		return err
+	} else if attr != nil && mapContains(attr, m) {
+		return nil
+	}
+
+	// Obtain write lock.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -492,4 +505,15 @@ func (cur *blockCursor) next() (key, value []byte) {
 	}
 
 	return key, value
+}
+
+// mapContains returns true if all keys & values of subset are in m.
+func mapContains(m, subset map[string]interface{}) bool {
+	for k, v := range subset {
+		value, ok := m[k]
+		if !ok || value != v {
+			return false
+		}
+	}
+	return true
 }

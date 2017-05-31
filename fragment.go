@@ -86,6 +86,9 @@ type Fragment struct {
 	cache     Cache
 	CacheSize uint32
 
+	// Stats reporting.
+	maxRowID uint64
+
 	// Cache containing full rows (not just counts).
 	rowCache BitmapCache
 
@@ -165,6 +168,11 @@ func (f *Fragment) Open() error {
 
 		// Clear checksums.
 		f.checksums = make(map[int][]byte)
+
+		// Read last bit to determine max row.
+		pos := f.storage.Max()
+		f.maxRowID = pos / SliceWidth
+		f.stats.Gauge("rows", float64(f.maxRowID))
 
 		return nil
 	}(); err != nil {
@@ -408,6 +416,12 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	f.cache.Add(rowID, bm.Count())
 
 	f.stats.Count("setN", 1)
+
+	// Update row count if they have increased.
+	if rowID > f.maxRowID {
+		f.maxRowID = rowID
+		f.stats.Gauge("rows", float64(f.maxRowID))
+	}
 
 	return changed, nil
 }

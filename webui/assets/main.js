@@ -1,8 +1,9 @@
 class REPL {
-    constructor(input, output, button) {
+    constructor(input, output, button, completer) {
         this.input = input
         this.output = output
         this.button = button
+        this.completer = completer
         this.history = []
         this.history_index = 0
         this.history_buffer = ''
@@ -15,21 +16,6 @@ class REPL {
           ENTER: 13,
           UP_ARROW: 38,
           DOWN_ARROW: 40
-        }
-        var keywords = {
-          // keyword: length of substring that comes after cursor
-          "SetBit()": 1,
-          "ClearBit()": 1,
-          "SetRowAttrs()": 1,
-          "SetColumnAttrs()": 1,
-          "Bitmap()": 1,
-          "Union()": 1,
-          "Intersect()": 1,
-          "Difference()": 1,
-          "Count()": 1,
-          "Range()": 1,
-          "TopN()": 1,
-          "frame=": 0,
         }
 
         this.input.addEventListener("keydown", function(e) {
@@ -70,35 +56,7 @@ class REPL {
           }
           if (e.keyCode == keys.TAB) {
             e.preventDefault()
-
-            // extract word fragment ending at cursor. a word fragment:
-            // - starts with last nonalpha character before cursor (or beginning of string)
-            // - ends at cursor
-            var word_start = repl.input.selectionEnd-1
-            while(word_start>0) {
-              var c = repl.input.value.charCodeAt(word_start)
-              if(!((c>64 && c<91) || (c>96 && c<123))) {
-                word_start++
-                break
-              }
-              word_start--
-            }
-            var input_word = repl.input.value.substring(word_start, repl.input.selectionEnd)
-
-            // check for keyword match and insert
-            // this just stops at the first match
-            for(var keyword in keywords) {
-              if(keyword.startsWith(input_word)){
-                var cursor_pos = repl.input.selectionEnd
-                var completion = keyword.substring(input_word.length)
-                var before = repl.input.value.substring(0, cursor_pos)
-                var after = repl.input.value.substring(cursor_pos)
-                repl.input.value = before + completion + after
-                var new_pos = cursor_pos + completion.length - keywords[keyword]
-                repl.input.setSelectionRange(new_pos, new_pos)
-                break
-              }
-            }
+            repl.completer.complete()
           }
         })
         repl.button.onclick = function() {
@@ -203,10 +161,10 @@ class REPL {
                         output_string += `<br />
           <br />
           Just getting started? Try this:<br />
-          $ curl -XPOST "http://127.0.0.1:10101/index/test" -d '{"options": {"columnLabel": "col"}}' # create index "test"<br />
-          $ curl -XPOST "http://127.0.0.1:10101/index/test/frame/foo" -d '{"options": {"rowLabel": "row"}}' # create frame "foo"<br />
-          # Select "test" in the index dropdown above<br />
-          SetBit(row=0, col=0, frame=foo) # Use PQL to set a bit
+          :create index test<br />
+          :use test<br />
+          :create frame foo<br />
+          SetBit(rowID=0, columnID=0, frame=foo) # Use PQL to set a bit
           `
                     }
                 }
@@ -444,11 +402,94 @@ Date.prototype.timeNow = function () {
 
 populate_version()
 
+
+class Autocompleter {
+  constructor(input, output) {
+    this.input = input
+    this.output = output
+    this.keyword_map = this.static_keywords
+    this.init_dynamic_keywords()
+  }
+
+  get static_keywords() {
+    return {
+      // keyword: length of substring that comes after cursor
+      "SetBit()": 1,
+      "ClearBit()": 1,
+      "SetRowAttrs()": 1,
+      "SetColumnAttrs()": 1,
+      "Bitmap()": 1,
+      "Union()": 1,
+      "Intersect()": 1,
+      "Difference()": 1,
+      "Count()": 1,
+      "Range()": 1,
+      "TopN()": 1,
+      "frame=": 0,
+    }
+  }
+
+  complete() {
+    var completer = this
+    // extract word fragment ending at cursor. a word fragment:
+    // - starts with last nonalpha character before cursor (or beginning of string)
+    // - ends at cursor
+    var word_start = completer.input.selectionEnd-1
+    while(word_start>0) {
+      var c = completer.input.value.charCodeAt(word_start)
+      if(!((c>64 && c<91) || (c>96 && c<123))) {
+        word_start++
+        break
+      }
+      word_start--
+    }
+    var input_word = completer.input.value.substring(word_start, completer.input.selectionEnd)
+
+    // check for keyword match and insert if exactly one match
+    var matches = []
+    for(var keyword in this.keyword_map) {
+      if(keyword.startsWith(input_word)){
+        matches.push(keyword)
+      }
+    }
+    if(matches.length > 1) {
+      // completer.output.innerHTML = whatever
+    }
+
+    if(matches.length == 1) {
+      // completer.output.innerHTML = ""
+      var cursor_pos = completer.input.selectionEnd
+      var completion = matches[0].substring(input_word.length)
+      var before = completer.input.value.substring(0, cursor_pos)
+      var after = completer.input.value.substring(cursor_pos)
+      completer.input.value = before + completion + after
+      var new_pos = cursor_pos + completion.length - this.keyword_map[matches[0]]
+      completer.input.setSelectionRange(new_pos, new_pos)
+    }
+  }
+
+  init_dynamic_keywords() {
+    // hit /schema, parse indexes, frames, rowlabels, columnlabels, add to list
+  }
+
+  add_keyword() {
+    // call when index or frame created in webui
+  }
+
+  remove_keyword() {
+    // call when index or frame deleted in webui
+    // issue: if e.g. multiple indexes have same frame, removing one removes all.
+    // solution: maintain count. requires more elaborate representation of keywords.
+  }
+}
+
 var input = document.getElementById('query')
 var output = document.getElementById('outputs')
 var button = document.getElementById('query-btn')
+var autocomplete_output = document.getElementById('autocomplete-container')
 
-repl = new REPL(input, output, button)
+autocompleter = new Autocompleter(input, autocomplete_output)
+repl = new REPL(input, output, button, autocompleter)
 repl.populate_index_dropdown()
 repl.bind_events()
 

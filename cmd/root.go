@@ -109,6 +109,11 @@ func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error 
 	v.AutomaticEnv()
 
 	c := v.GetString("config")
+	var flagErr error
+	validTags := make(map[string]bool)
+	flags.VisitAll(func(f *pflag.Flag) {
+		validTags[f.Name] = true
+	})
 
 	// add config file to viper
 	if c != "" {
@@ -118,10 +123,16 @@ func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error 
 		if err != nil {
 			return fmt.Errorf("error reading configuration file '%s': %v", c, err)
 		}
+
+		for _, key := range v.AllKeys() {
+			if _, ok := validTags[key]; !ok {
+				return fmt.Errorf("invalid option in configuration file: %v", key)
+			}
+		}
+
 	}
 
 	// set all values from viper
-	var flagErr error
 	flags.VisitAll(func(f *pflag.Flag) {
 		if flagErr != nil {
 			return
