@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa"
+	_ "github.com/pilosa/pilosa/test"
 )
 
 func TestValidateName(t *testing.T) {

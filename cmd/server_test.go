@@ -23,6 +23,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/cmd"
+	_ "github.com/pilosa/pilosa/test"
 )
 
 func TestServerHelp(t *testing.T) {

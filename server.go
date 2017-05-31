@@ -56,6 +56,7 @@ type Server struct {
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
+	Network string
 	Host    string
 	Cluster *Cluster
 
@@ -80,6 +81,8 @@ func NewServer() *Server {
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
 
+		Network: "tcp",
+
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
 		MetricInterval:      0,
@@ -103,7 +106,7 @@ func (s *Server) Open() error {
 	}
 
 	// Open HTTP listener to determine port (if specified as :0).
-	ln, err := net.Listen("tcp", ":"+port)
+	ln, err := net.Listen(s.Network, ":"+port)
 	if err != nil {
 		return fmt.Errorf("net.Listen: %v", err)
 	}
