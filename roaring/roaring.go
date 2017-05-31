@@ -1269,17 +1269,17 @@ func (c *container) bitmapToRun() {
 
 // arrayToRun converts from array format to RLE format
 func (c *container) arrayToRun() {
-	c.runs = make([]interval32, 0)
+	c.runs = make([]interval32, 0, c.n) // what capacity to use?
 	start := c.array[0]
-	for i, v := range c.array {
-		if v - c.array[i-1] > 1 {
+	for i, v := range c.array[1:] {
+		if v - c.array[i] > 1 {
 			// if current-previous > 1, one run ends and another begins
-			c.runs = append(c.runs, interval32{start, c.array[i-1]})
+			c.runs = append(c.runs, interval32{start, c.array[i]})
 			start = v
 		}
 	}
 	// append final run
-	c.runs = append(c.runs, interval32{start, c.array[i]})
+	c.runs = append(c.runs, interval32{start, c.array[c.n-1]})
 	c.array = nil
 	c.mapped = false
 }
