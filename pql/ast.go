@@ -72,7 +72,7 @@ func (c *Call) UintArg(key string) (uint64, bool, error) {
 	case uint64:
 		return tval, true, nil
 	default:
-		return 0, true, fmt.Errorf("could not convert %v of type %T to uint64 in Calll.UintArg", tval, tval)
+		return 0, true, fmt.Errorf("could not convert %v of type %T to uint64 in Call.UintArg", tval, tval)
 	}
 }
 

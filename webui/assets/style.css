@@ -287,12 +287,6 @@ td{
   padding: 21px  30px;
 }
 
-.string { color: green; }
-.number { color: darkorange; }
-.boolean { color: blue; }
-.null { color: magenta; }
-.key { color: red; }
-
 .expand {
   text-align: center;
 }
