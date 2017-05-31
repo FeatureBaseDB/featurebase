@@ -24,6 +24,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/ctl"
 	"github.com/pilosa/pilosa/server"
 )
@@ -31,6 +32,7 @@ import (
 // Server is global so that tests can control and verify it.
 var Server *server.Command
 
+// NewServeCmd creates a pilosa server and runs it with command line flags.
 func NewServeCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Server = server.NewCommand(stdin, stdout, stderr)
 	serveCmd := &cobra.Command{
@@ -42,8 +44,7 @@ It will load existing data from the configured
 directory, and start listening client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			Server.Server.Handler.Version = Version
-			fmt.Fprintf(Server.Stderr, "Pilosa %s, build time %s\n", Version, BuildTime)
+			fmt.Fprintf(Server.Stderr, "Pilosa %s, build time %s\n", pilosa.Version, pilosa.BuildTime)
 
 			// Start CPU profiling.
 			if Server.CPUProfile != "" {
@@ -89,7 +90,6 @@ on the configured port.`,
 
 	// Attach flags to the command.
 	ctl.BuildServerFlags(serveCmd, Server)
-
 	return serveCmd
 }
 

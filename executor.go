@@ -158,12 +158,13 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	if err := e.validateCallArgs(c); err != nil {
 		return nil, err
 	}
-
+	indexTag := fmt.Sprintf("index:%s", index)
 	// Special handling for mutation and top-n calls.
 	switch c.Name {
 	case "ClearBit":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "Count":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeCount(ctx, index, c, slices, opt)
 	case "SetBit":
 		return e.executeSetBit(ctx, index, c, opt)
@@ -172,8 +173,10 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "SetColumnAttrs":
 		return nil, e.executeSetColumnAttrs(ctx, index, c, opt)
 	case "TopN":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, slices, opt)
 	default:
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, slices, opt)
 	}
 }
@@ -581,6 +584,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 		}
 		bm = bm.Union(f.Row(id))
 	}
+	f.Stats.Count("range", 1, 1.0)
 	return bm, nil
 }
 
@@ -866,6 +870,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err := frame.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
+	frame.Stats.Count("SetBitmapAttrs", 1, 1.0)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
@@ -951,6 +956,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err := frame.RowAttrStore().SetBulkAttrs(frameMap); err != nil {
 			return nil, err
 		}
+		frame.Stats.Count("SetBitmapAttrs", 1, 1.0)
 	}
 
 	// Do not forward call if this is already being forwarded.
@@ -1010,7 +1016,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	if err := idx.ColumnAttrStore().SetAttrs(id, attrs); err != nil {
 		return err
 	}
-
+	idx.Stats.Count("SetProfileAttrs", 1, 1.0)
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
 		return nil
@@ -1062,6 +1068,7 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 	// Require protobuf encoding.
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Send request to remote node.
 	resp, err := e.HTTPClient.Do(req)

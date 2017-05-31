@@ -24,10 +24,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/CAFxX/gcnotifier"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -60,6 +62,7 @@ type Server struct {
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
 	PollingInterval     time.Duration
+	MetricInterval      time.Duration
 
 	// Misc options.
 	MaxWritesPerRequest int
@@ -79,6 +82,7 @@ func NewServer() *Server {
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
+		MetricInterval:      0,
 
 		LogOutput: os.Stderr,
 	}
@@ -111,6 +115,12 @@ func (s *Server) Open() error {
 	// Create local node if no cluster is specified.
 	if len(s.Cluster.Nodes) == 0 {
 		s.Cluster.Nodes = []*Node{{Host: s.Host}}
+	}
+
+	for i, n := range s.Cluster.Nodes {
+		if s.Cluster.NodeByHost(n.Host) != nil {
+			s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
+		}
 	}
 
 	// Open holder.
@@ -150,9 +160,10 @@ func (s *Server) Open() error {
 	go func() { http.Serve(ln, s.Handler) }()
 
 	// Start background monitoring.
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
+	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 
 	return nil
 }
@@ -184,6 +195,7 @@ func (s *Server) Addr() net.Addr {
 func (s *Server) logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
 
 func (s *Server) monitorAntiEntropy() {
+	t := time.Now()
 	ticker := time.NewTicker(s.AntiEntropyInterval)
 	defer ticker.Stop()
 
@@ -195,6 +207,7 @@ func (s *Server) monitorAntiEntropy() {
 		case <-s.closing:
 			return
 		case <-ticker.C:
+			s.Holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 
 		s.logger().Printf("holder sync beginning")
@@ -215,6 +228,8 @@ func (s *Server) monitorAntiEntropy() {
 		// Record successful sync in log.
 		s.logger().Printf("holder sync complete")
 	}
+	dif := time.Since(t)
+	s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
 }
 
 // monitorMaxSlices periodically pulls the highest slice from each node in the cluster.
@@ -315,7 +330,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	ns := internal.NodeStatus{
 		Host:    s.Host,
 		State:   NodeStateUp,
-		Indexes: encodeIndexes(s.Holder.Indexes()),
+		Indexes: EncodeIndexes(s.Holder.Indexes()),
 	}
 
 	// Append Slice list per this Node's indexes
@@ -405,6 +420,7 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	// Require protobuf encoding.
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Send request to remote node.
 	resp, err := http.DefaultClient.Do(req)
@@ -432,6 +448,37 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	}
 
 	return pb.MaxSlices, nil
+}
+
+// monitorRuntime periodically polls the Go runtime metrics.
+func (s *Server) monitorRuntime() {
+	// Disable metrics when poll interval is zero
+	if s.MetricInterval <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(s.MetricInterval)
+	defer ticker.Stop()
+
+	gcn := gcnotifier.New()
+	defer gcn.Close()
+
+	s.logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
+
+	for {
+		// Wait for tick or a close.
+		select {
+		case <-s.closing:
+			return
+		case <-gcn.AfterGC():
+			// GC just ran
+			s.Holder.Stats.Count("garbage_collection", 1, 1.0)
+		case <-ticker.C:
+		}
+
+		// Record the number of go routines
+		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
+	}
 }
 
 // StatusHandler specifies two methods which an object must implement to share

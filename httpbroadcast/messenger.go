@@ -97,6 +97,7 @@ func (h *HTTPBroadcaster) sendNodeMessage(node *pilosa.Node, msg []byte) error {
 
 	// Require protobuf encoding.
 	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Send request to remote node.
 	resp, err := client.Do(req)

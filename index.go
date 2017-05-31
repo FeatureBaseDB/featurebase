@@ -58,7 +58,7 @@ type Index struct {
 	columnAttrStore *AttrStore
 
 	broadcaster Broadcaster
-	stats       StatsClient
+	Stats       StatsClient
 
 	LogOutput io.Writer
 }
@@ -83,7 +83,7 @@ func NewIndex(path, name string) (*Index, error) {
 		columnLabel: DefaultColumnLabel,
 
 		broadcaster: NopBroadcaster,
-		stats:       NopStatsClient,
+		Stats:       NopStatsClient,
 		LogOutput:   ioutil.Discard,
 	}, nil
 }
@@ -179,8 +179,6 @@ func (i *Index) openFrames() error {
 			return fmt.Errorf("open frame: name=%s, err=%s", fr.Name(), err)
 		}
 		i.frames[fr.Name()] = fr
-
-		i.stats.Count("frameN", 1)
 	}
 	return nil
 }
@@ -262,6 +260,8 @@ func (i *Index) MaxSlice() uint64 {
 			max = slice
 		}
 	}
+
+	i.Stats.Gauge("maxSlice", float64(max), 1.0)
 	return max
 }
 
@@ -431,8 +431,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	// Add to index's frame lookup.
 	i.frames[name] = f
 
-	i.stats.Count("frameN", 1)
-
 	return f, nil
 }
 
@@ -442,7 +440,7 @@ func (i *Index) newFrame(path, name string) (*Frame, error) {
 		return nil, err
 	}
 	f.LogOutput = i.LogOutput
-	f.stats = i.stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.Stats = i.Stats.WithTags(fmt.Sprintf("frame:%s", name))
 	f.broadcaster = i.broadcaster
 	return f, nil
 }
@@ -470,8 +468,6 @@ func (i *Index) DeleteFrame(name string) error {
 
 	// Remove reference.
 	delete(i.frames, name)
-
-	i.stats.Count("frameN", -1)
 
 	return nil
 }
@@ -534,8 +530,8 @@ func MergeSchemas(a, b []*IndexInfo) []*IndexInfo {
 	return idxs
 }
 
-// encodeIndexes converts a into its internal representation.
-func encodeIndexes(a []*Index) []*internal.Index {
+// EncodeIndexes converts a into its internal representation.
+func EncodeIndexes(a []*Index) []*internal.Index {
 	other := make([]*internal.Index, len(a))
 	for i := range a {
 		other[i] = encodeIndex(a[i])

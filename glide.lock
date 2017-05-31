@@ -1,5 +1,5 @@
-hash: 5066da70d6f312d032800619798684a693851eb77991b3788f68e89dfaf93925
-updated: 2017-04-25T15:31:49.712775923-05:00
+hash: 98b6811c335d30f9711d53472ad3e1ae51090a04751dd6dc3bcb97a54e01afb9
+updated: 2017-05-01T10:42:29.124689561-05:00
 imports:
 - name: github.com/armon/go-metrics
   version: 97c69685293dce4c0a2d0b19535179bbc976e4d2
@@ -7,6 +7,8 @@ imports:
   version: 4b1ebc1869ad66568b313d0dc410e2be72670dda
 - name: github.com/BurntSushi/toml
   version: 99064174e013895bbd9b025c31100bd1d9b590ca
+- name: github.com/CAFxX/gcnotifier
+  version: adea3e70515666981da25214a7d3e377e4841c22
 - name: github.com/DataDog/datadog-go
   version: 909c02b65dd8a52e8fa6072db9752a112227cf21
   subpackages:

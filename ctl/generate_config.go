@@ -56,6 +56,11 @@ max-writes-per-request = 5000
   cpu = ""
   cpu-time = "30s"
 
+[metric]
+  service = "statsd"
+  host = "127.0.0.1:8125"
+  poll-interval = "0m15s"
+	
 [plugins]
   path = ""
 `)+"\n")

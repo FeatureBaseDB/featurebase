@@ -40,9 +40,10 @@ import (
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 
+	"unicode"
+
 	_ "github.com/pilosa/pilosa/statik"
 	"github.com/rakyll/statik/fs"
-	"unicode"
 )
 
 // Handler represents an HTTP handler.
@@ -62,11 +63,21 @@ type Handler struct {
 		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
 	}
 
-	// The version to report on the /version endpoint.
-	Version string
-
 	// The writer for any logging.
 	LogOutput io.Writer
+}
+
+// externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
+// This is used for stats tagging.
+var externalPrefixFlag = map[string]bool{
+	"schema":  true,
+	"query":   true,
+	"import":  true,
+	"export":  true,
+	"index":   true,
+	"frame":   true,
+	"nodes":   true,
+	"version": true,
 }
 
 // NewHandler returns a new instance of Handler with a default logger.
@@ -127,7 +138,32 @@ func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request
 
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t := time.Now()
 	h.Router.ServeHTTP(w, r)
+	dif := time.Since(t)
+
+	// Calculate per request StatsD metrics when the handler is fully configured.
+	if h.Holder != nil && h.Cluster != nil {
+		statsTags := make([]string, 0, 3)
+
+		if h.Cluster.LongQueryTime > 0 && dif > h.Cluster.LongQueryTime {
+			h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), float64(dif))
+			statsTags = append(statsTags, "slow_query")
+		}
+
+		pathParts := strings.Split(r.URL.Path, "/")
+		endpointName := strings.Join(pathParts, "_")
+
+		if externalPrefixFlag[pathParts[1]] {
+			statsTags = append(statsTags, "external")
+		}
+
+		// useragent tag identifies internal/external endpoints
+		statsTags = append(statsTags, "useragent:"+r.UserAgent())
+
+		stats := h.Holder.Stats.WithTags(statsTags...)
+		stats.Histogram("http."+endpointName, float64(dif), 0.1)
+	}
 }
 
 func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
@@ -382,6 +418,8 @@ func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.Count("deleteIndex", 1, 1.0)
 }
 
 type deleteIndexResponse struct{}
@@ -425,6 +463,8 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(postIndexResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.Count("createIndex", 1, 1.0)
 }
 
 // handlePatchIndexTimeQuantum handles PATCH /index/time_quantum request.
@@ -575,6 +615,9 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.CountWithCustomTags("createFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+
 }
 
 type _postFrameRequest postFrameRequest
@@ -656,6 +699,8 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(deleteFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.CountWithCustomTags("deleteFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 }
 
 type deleteFrameResponse struct{}
@@ -1305,7 +1350,7 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
-		Version: h.Version,
+		Version: Version,
 	}); err != nil {
 		h.logger().Printf("write version response error: %s", err)
 	}

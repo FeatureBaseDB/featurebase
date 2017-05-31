@@ -29,6 +29,9 @@ const (
 	// DefaultInternalPort the port the nodes intercommunicate on.
 	DefaultInternalPort = "14000"
 
+	// DefaultMetrics sets the internal metrics to no op
+	DefaultMetrics = "nop"
+
 	// DefaultMaxWritesPerRequest is the default number of writes per request.
 	DefaultMaxWritesPerRequest = 5000
 )
@@ -46,6 +49,7 @@ type Config struct {
 		PollingInterval Duration `toml:"polling-interval"`
 		InternalPort    string   `toml:"internal-port"`
 		GossipSeed      string   `toml:"gossip-seed"`
+		LongQueryTime   Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -61,6 +65,12 @@ type Config struct {
 	MaxWritesPerRequest int `toml:"max-writes-per-request"`
 
 	LogPath string `toml:"log-path"`
+
+	Metric struct {
+		Service         string   `toml:"service"`
+		Host            string   `toml:"host"`
+		PollingInterval Duration `toml:"interval"`
+	} `toml:"metrics"`
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -75,6 +85,7 @@ func NewConfig() *Config {
 	c.Cluster.Hosts = []string{}
 	c.Cluster.InternalHosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
+	c.Metric.Service = DefaultMetrics
 	return c
 }
 

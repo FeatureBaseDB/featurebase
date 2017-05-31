@@ -37,3 +37,4 @@ import:
   - fs
 - package: github.com/hashicorp/memberlist
 - package: golang.org/x/sync
+- package: github.com/CAFxX/gcnotifier
