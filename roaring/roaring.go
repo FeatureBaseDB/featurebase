@@ -1373,10 +1373,10 @@ func intersectArrayArray(a, b *container) *container {
 			j++
 		} else {
 			output.array = append(output.array, va)
-			output.n++
 			i, j = i+1, j+1
 		}
 	}
+	output.n = len(output.array)
 	return output
 }
 
