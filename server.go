@@ -460,6 +460,7 @@ func (s *Server) monitorRuntime() {
 		return
 	}
 
+	var m runtime.MemStats
 	ticker := time.NewTicker(s.MetricInterval)
 	defer ticker.Stop()
 
@@ -481,6 +482,14 @@ func (s *Server) monitorRuntime() {
 
 		// Record the number of go routines
 		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
+
+		// Runtime memory metrics
+		runtime.ReadMemStats(&m)
+		s.Holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
+		s.Holder.Stats.Gauge("HeapInuse", float64(m.HeapInuse), 1.0)
+		s.Holder.Stats.Gauge("StackInuse", float64(m.StackInuse), 1.0)
+		s.Holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
+		s.Holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
 	}
 }
 
