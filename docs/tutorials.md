@@ -92,27 +92,27 @@ pdk.BitMapper{
 These same objects are represented in the JSON definition file:
 ```go
 {
-    "Fields": [
-        "Trip_distance": 10,
-     ]
-"Mappers": [
+    "Fields": {
+        "Trip_distance": 10
+    },
+    "Mappers": [
         {
             "Name": "lfm0",
             "Min": -0.5,
-         "Max": 3600.5,
+            "Max": 3600.5,
             "Res": 3600
-        },
+        }
     ],
     "BitMappers": [
         {
             "Frame": "dist_miles",
             "Mapper": {
                 "Name": "lfm0"
-         },
+            },
             "Parsers": [
                 {"Name": "FloatParser"}
             ],
-            "Fields": "Trip_distance",
+            "Fields": "Trip_distance"
         }
     ]
 }
