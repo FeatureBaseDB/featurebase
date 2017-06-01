@@ -1279,7 +1279,7 @@ func (c *container) runMax() uint32 {
 	return uint32(c.runs[len(c.runs)-1].last)
 }
 
-// convertToArray converts the values in the bitmap to array values.
+// bitmapToArray converts from bitmap format to array format.
 func (c *container) bitmapToArray() {
 	c.array = make([]uint32, 0, c.n)
 	for i, bitmap := range c.bitmap {
@@ -1293,7 +1293,7 @@ func (c *container) bitmapToArray() {
 	c.mapped = false
 }
 
-// convertToBitmap converts the values in array to bitmap values.
+// arrayToBitmap converts from array format to bitmap format.
 func (c *container) arrayToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
 	for _, v := range c.array {
@@ -1303,20 +1303,94 @@ func (c *container) arrayToBitmap() {
 	c.mapped = false
 }
 
+// runToBitmap converts from RLE format to bitmap format.
 func (c *container) runToBitmap() {
-	// TODO
+	c.bitmap = make([]uint64, bitmapN)
+	for _, r := range c.runs {
+		// TODO is there a faster way ?!?!!
+		for v := r.start; v <= r.last; v++ {
+			c.bitmap[int(v)/64] |= (uint64(1) << uint(v%64))
+		}
+	}
+	c.runs = nil
+	c.mapped = false
 }
 
+// bitmapToRun converts from bitmap format to RLE format.
 func (c *container) bitmapToRun() {
-	// TODO
+	numRuns := c.n // TODO compute properly
+	c.runs = make([]interval32, 0, numRuns)
+	// TODO return early if no runs
+
+	current := c.bitmap[0]
+	var i, start, last uint32
+	for {
+		// skip while empty 
+		for current == 0 && i < bitmapN-1 {
+			i++
+			current = c.bitmap[i]
+		}
+
+		if current == 0 {
+			break
+		}
+		currentStart := uint32(trailingZeroN(current))
+		start = 64 * i + currentStart
+
+		// pad LSBs with 1s
+		current = current | (current-1)
+
+		// find next 0
+		for current == 0xFFFFFFFFFFFFFFFF && i < bitmapN-1 {
+			i++
+			current = c.bitmap[i]
+		}
+
+		last = 0
+		if current == 0xFFFFFFFFFFFFFFFF {
+			last = 64*i + 64  // TODO verify
+			c.runs = append(c.runs, interval32{start, last-1})
+			break
+		}
+		currentLast := uint32(trailingZeroN(^current))
+		last = 64 * i + currentLast
+		c.runs = append(c.runs, interval32{start, last-1})
+
+		// pad LSBs with 0s
+		current = current & (current+1)
+	}
+
+	c.bitmap = nil
+	c.mapped = false
 }
 
+// arrayToRun converts from array format to RLE format.
 func (c *container) arrayToRun() {
-	// TODO
+	c.runs = make([]interval32, 0, c.n) // what capacity to use?
+	start := c.array[0]
+	for i, v := range c.array[1:] {
+		if v - c.array[i] > 1 {
+			// if current-previous > 1, one run ends and another begins
+			c.runs = append(c.runs, interval32{start, c.array[i]})
+			start = v
+		}
+	}
+	// append final run
+	c.runs = append(c.runs, interval32{start, c.array[c.n-1]})
+	c.array = nil
+	c.mapped = false
 }
 
+// runToArray converts from RLE format to array format.
 func (c *container) runToArray() {
-	// TODO
+	c.array = make([]uint32, 0, c.n)
+	for _, r := range c.runs {
+		for v := r.start; v <= r.last; v++ {
+			c.array = append(c.array, v)
+		}
+	}
+	c.runs = nil
+	c.mapped = false
 }
 
 // clone returns a copy of c.
