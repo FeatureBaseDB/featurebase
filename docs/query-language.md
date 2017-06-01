@@ -359,7 +359,7 @@ Returns `[{"key": 1, "count": 2}, {"key": 2, "count": 2}, {"key": 3, "count": 1}
 
 * key is a repository ID
 * count is amount of users
-* Results are the number of user that starred each repository in descending order for all respositories in the stargazer frame.
+* Results are the number of users that starred each repository in descending order for all respositories in the stargazer frame.
 
 ```
 TopN(frame="stargazer", n=2)
