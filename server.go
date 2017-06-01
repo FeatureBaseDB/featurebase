@@ -297,7 +297,10 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.CreateFrameMessage:
-		index := s.Holder.Index(obj.Index)
+		idx := s.Holder.Index(obj.Index)
+		if idx == nil {
+			return fmt.Errorf("Local Index not found: %s", obj.Index)
+		}
 		opt := FrameOptions{
 			RowLabel:       obj.Meta.RowLabel,
 			InverseEnabled: obj.Meta.InverseEnabled,
@@ -305,13 +308,13 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			CacheSize:      obj.Meta.CacheSize,
 			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
 		}
-		_, err := index.CreateFrame(obj.Frame, opt)
+		_, err := idx.CreateFrame(obj.Frame, opt)
 		if err != nil {
 			return err
 		}
 	case *internal.DeleteFrameMessage:
-		index := s.Holder.Index(obj.Index)
-		if err := index.DeleteFrame(obj.Frame); err != nil {
+		idx := s.Holder.Index(obj.Index)
+		if err := idx.DeleteFrame(obj.Frame); err != nil {
 			return err
 		}
 	}
