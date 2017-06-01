@@ -1259,12 +1259,65 @@ func (c *container) arrayToBitmap() {
 	c.mapped = false
 }
 
+// runToBitmap converts from RLE format to bitmap format
 func (c *container) runToBitmap() {
-	// TODO
+	c.bitmap = make([]uint64, bitmapN)
+	for _, r := range c.runs {
+		// TODO is there a faster way ?!?!!
+		for v := r.start; v <= r.last; v++ {
+			c.bitmap[int(v)/64] |= (uint64(1) << uint(v%64))
+		}
+	}
+	c.runs = nil
+	c.mapped = false
 }
 
+// bitmapToRun converts from bitmap format to RLE format
 func (c *container) bitmapToRun() {
-	// TODO
+	numRuns := c.n // TODO compute properly
+	c.runs = make([]interval32, 0, numRuns)
+	// TODO return early if no runs
+
+	current := c.bitmap[0]
+	var i, start, last uint32
+	for {
+		// skip while empty 
+		for current == 0 && i < bitmapN-1 {
+			i++
+			current = c.bitmap[i]
+		}
+
+		if current == 0 {
+			break
+		}
+		currentStart := uint32(trailingZeroN(current))
+		start = 64 * i + currentStart
+
+		// pad LSBs with 1s
+		current = current | (current-1)
+
+		// find next 0
+		for current == 0xFFFFFFFFFFFFFFFF && i < bitmapN-1 {
+			i++
+			current = c.bitmap[i]
+		}
+
+		last = 0
+		if current == 0xFFFFFFFFFFFFFFFF {
+			last = 64*i + 64  // TODO verify
+			c.runs = append(c.runs, interval32{start, last-1})
+			break
+		}
+		currentLast := uint32(trailingZeroN(^current))
+		last = 64 * i + currentLast
+		c.runs = append(c.runs, interval32{start, last-1})
+
+		// pad LSBs with 0s
+		current = current & (current+1)
+	}
+
+	c.bitmap = nil
+	c.mapped = false
 }
 
 // arrayToRun converts from array format to RLE format
