@@ -471,8 +471,16 @@ func (b *Bitmap) countEmptyContainers() int {
 	return result
 }
 
+// Optimize converts array and bitmap containers to run containers as necessary.
+func (b *Bitmap) Optimize() {
+	for _, c := range b.containers {
+		c.Optimize()
+	}
+}
+
 // WriteTo writes b to w.
 func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
+	b.Optimize()
 	// Remove empty containers before persisting.
 	//b.removeEmptyContainers()
 	containerCount := len(b.keys) - b.countEmptyContainers()
@@ -1039,6 +1047,7 @@ func (c *container) arrayAdd(v uint32) bool {
 	copy(c.array[i+1:], c.array[i:])
 	c.array[i] = v
 	return true
+
 }
 
 func (c *container) bitmapAdd(v uint32) bool {
@@ -1123,6 +1132,20 @@ func (c *container) arrayCountRuns() (r int) {
 		prev = int(v)
 	}
 	return r
+}
+
+func (c *container) Optimize() {
+	if c.isArray() {
+		runs := c.arrayCountRuns()
+		if runs < c.n/2 {
+			c.arrayToRun()
+		}
+	} else if c.isBitmap() {
+		runs := c.bitmapCountRuns()
+		if runs < 2048 {
+			c.bitmapToRun()
+		}
+	}
 }
 
 func (c *container) arrayContains(v uint32) bool {
