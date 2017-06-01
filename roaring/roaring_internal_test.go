@@ -698,6 +698,10 @@ func TestRunToBitmap(t *testing.T) {
 	        runs: []interval32{{start: 2, last: 2}, {start:5, last:7}, {start:13, last:14}, {start:17, last:17}},
 	        exp: []uint64{155876},
 	    },
+	    {
+	        runs: []interval32{{start: 0, last: 3}, {start:60, last: 67}},
+	        exp: []uint64{0xF00000000000000F, 0x000000000000000F},
+	    },
 	}
 
 	for i, test := range tests {
@@ -721,16 +725,39 @@ func TestBitmapToRun(t *testing.T) {
 		exp []interval32
 	}{
 		{
+	        // single-bit run
 	        bitmap: []uint64{1},
 	        exp: []interval32{{start: 0, last: 0}},
 	    },
 		{
+	        // single multi-bit run in one word
 	        bitmap: []uint64{31},
 	        exp: []interval32{{start: 0, last: 4}},
 	    },
 		{
+	        // multiple runs in one word
 	        bitmap: []uint64{155876},
 	        exp: []interval32{{start: 2, last: 2}, {start:5, last:7}, {start:13, last:14}, {start:17, last:17}},
+	    },
+	    {
+	        // span two words, both mixed
+	        bitmap: []uint64{0xF00000000000000F, 0x000000000000000F},
+	        exp: []interval32{{start: 0, last: 3}, {start:60, last: 67}},
+	    },
+	    {
+	        // span two words, first = maxBitmap
+	        bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xF},
+	        exp: []interval32{{start: 0, last: 67}},
+	    },
+	    {
+	        // span two words, second = maxBitmap
+	        bitmap: []uint64{0xF000000000000000, 0xFFFFFFFFFFFFFFFF},
+	        exp: []interval32{{start: 60, last: 127}},
+	    },
+	    {
+	        // span three words
+	        bitmap: []uint64{0xF000000000000000, 0xFFFFFFFFFFFFFFFF, 0xF},
+	        exp: []interval32{{start: 60, last: 131}},
 	    },
 	}
 
