@@ -99,7 +99,7 @@ These same objects are represented in the JSON definition file:
         {
             "Name": "lfm0",
             "Min": -0.5,
-         "Max": 3600.5,
+            "Max": 3600.5,
             "Res": 3600
         },
     ],
