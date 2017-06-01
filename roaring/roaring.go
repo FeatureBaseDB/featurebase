@@ -1339,7 +1339,7 @@ func (c *container) runMax() uint32 {
 	return uint32(c.runs[len(c.runs)-1].last)
 }
 
-// convertToArray converts the values in the bitmap to array values.
+// bitmapToArray converts from bitmap format to array format.
 func (c *container) bitmapToArray() {
 	c.array = make([]uint32, 0, c.n)
 	for i, bitmap := range c.bitmap {
@@ -1353,7 +1353,7 @@ func (c *container) bitmapToArray() {
 	c.mapped = false
 }
 
-// convertToBitmap converts the values in array to bitmap values.
+// arrayToBitmap converts from array format to bitmap format.
 func (c *container) arrayToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
 	for _, v := range c.array {
@@ -1363,7 +1363,7 @@ func (c *container) arrayToBitmap() {
 	c.mapped = false
 }
 
-// runToBitmap converts from RLE format to bitmap format
+// runToBitmap converts from RLE format to bitmap format.
 func (c *container) runToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
 	for _, r := range c.runs {
@@ -1376,7 +1376,7 @@ func (c *container) runToBitmap() {
 	c.mapped = false
 }
 
-// bitmapToRun converts from bitmap format to RLE format
+// bitmapToRun converts from bitmap format to RLE format.
 func (c *container) bitmapToRun() {
 	numRuns := c.n // TODO compute properly
 	c.runs = make([]interval32, 0, numRuns)
@@ -1424,7 +1424,7 @@ func (c *container) bitmapToRun() {
 	c.mapped = false
 }
 
-// arrayToRun converts from array format to RLE format
+// arrayToRun converts from array format to RLE format.
 func (c *container) arrayToRun() {
 	c.runs = make([]interval32, 0, c.n) // what capacity to use?
 	start := c.array[0]
@@ -1441,7 +1441,7 @@ func (c *container) arrayToRun() {
 	c.mapped = false
 }
 
-// runToArray converts from RLE format to array format
+// runToArray converts from RLE format to array format.
 func (c *container) runToArray() {
 	c.array = make([]uint32, 0, c.n)
 	for _, r := range c.runs {
