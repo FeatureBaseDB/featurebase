@@ -762,3 +762,94 @@ func TestUnionBitmapRun(t *testing.T) {
 	}
 
 }
+
+func TestBitmapCountRuns(t *testing.T) {
+	c := &container{bitmap: make([]uint64, bitmapN)}
+	tests := []struct {
+		bitmap []uint64
+		exp    int
+	}{
+		{
+			bitmap: []uint64{0xFF00FF00},
+			exp:    2,
+		},
+		{
+			bitmap: []uint64{0xFF00FF0000000000, 0x1},
+			exp:    2,
+		},
+		{
+			bitmap: []uint64{0xFF00FF0000000000, 0x2, 0x100},
+			exp:    4,
+		},
+		{
+			bitmap: []uint64{0xFF00FF0000000000, 0x1010101FF0101010, 0x100},
+			exp:    10,
+		},
+	}
+
+	for i, test := range tests {
+		for j, v := range test.bitmap {
+			c.bitmap[j] = v
+		}
+
+		ret := c.bitmapCountRuns()
+		if ret != test.exp {
+			t.Fatalf("test #%v expected %v but got %v", i, test.exp, ret)
+		}
+
+		for j, _ := range test.bitmap {
+			c.bitmap[j] = 0
+		}
+	}
+
+	test := tests[3]
+	for j, v := range test.bitmap {
+		c.bitmap[1024-len(test.bitmap)+j] = v
+
+	}
+	ret := c.bitmapCountRuns()
+	if ret != test.exp {
+		t.Fatalf("test at end expected %v but got %v", test.exp, ret)
+	}
+}
+
+func TestArrayCountRuns(t *testing.T) {
+	c := &container{}
+	tests := []struct {
+		array []uint32
+		exp   int
+	}{
+		{
+			array: []uint32{},
+			exp:   0,
+		},
+		{
+			array: []uint32{0},
+			exp:   1,
+		},
+		{
+			array: []uint32{1},
+			exp:   1,
+		},
+		{
+			array: []uint32{1, 2, 3, 5},
+			exp:   2,
+		},
+		{
+			array: []uint32{0, 1, 3, 9, 2048, 4096, 4097, 65534, 65535},
+			exp:   6,
+		},
+		{
+			array: []uint32{0, 10, 11, 12},
+			exp:   2,
+		},
+	}
+
+	for i, test := range tests {
+		c.array = test.array
+		ret := c.arrayCountRuns()
+		if ret != test.exp {
+			t.Fatalf("test #%v expected %v but got %v", i, test.exp, ret)
+		}
+	}
+}

@@ -1104,6 +1104,27 @@ func (c *container) contains(v uint32) bool {
 	}
 }
 
+func (c *container) bitmapCountRuns() (r int) {
+	for i := 0; i < 1023; i++ {
+		v, v1 := c.bitmap[i], c.bitmap[i+1]
+		r = r + int(popcnt((v<<1)&^v)+((v>>63)&^v1))
+	}
+	vl := c.bitmap[len(c.bitmap)-1]
+	r = r + int(popcnt((vl<<1)&^vl)+vl>>63)
+	return r
+}
+
+func (c *container) arrayCountRuns() (r int) {
+	prev := -2
+	for _, v := range c.array {
+		if uint32(prev+1) != v {
+			r += 1
+		}
+		prev = int(v)
+	}
+	return r
+}
+
 func (c *container) arrayContains(v uint32) bool {
 	return search32(c.array, v) >= 0
 }
