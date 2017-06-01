@@ -15,8 +15,8 @@
 package roaring_test
 
 import (
-	"bytes"
 	"fmt"
+	"bytes"
 	"math"
 	"math/rand"
 	"reflect"
@@ -217,11 +217,11 @@ func TestBitmap_Flip_Array(t *testing.T) {
 	bm := roaring.NewBitmap(0, 1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 512, 1024)
 	results := bm.Flip(0, 4)
 	if !reflect.DeepEqual(results.Slice(), []uint64{8, 16, 32, 64, 128, 256, 512, 1024}) {
-		t.Fatalf("unexpected %s ", results.String())
+		t.Fatalf("unexpected %v ", results.Slice())
 	}
 	results = results.Flip(0, 4)
 	if !reflect.DeepEqual(results.Slice(), []uint64{0, 1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 512, 1024}) {
-		t.Fatalf("unexpected %s ", results.String())
+		t.Fatalf("unexpected %v ", results.Slice())
 	}
 
 }
@@ -249,15 +249,15 @@ func TestBitmap_Flip_After(t *testing.T) {
 	results := bm.Flip(9, 10)
 
 	if !reflect.DeepEqual(results.Slice(), []uint64{0, 2, 4, 8, 9, 10}) {
-		t.Fatalf("unexpected %s ", results.String())
+		t.Fatalf("unexpected %v ", results.Slice())
 	}
 	results = results.Flip(0, 1)
 	if !reflect.DeepEqual(results.Slice(), []uint64{1, 2, 4, 8, 9, 10}) {
-		t.Fatalf("unexpected %s ", results.String())
+		t.Fatalf("unexpected %v ", results.Slice())
 	}
 	results = results.Flip(4, 8)
 	if !reflect.DeepEqual(results.Slice(), []uint64{1, 2, 5, 6, 7, 9, 10}) {
-		t.Fatalf("unexpected %s ", results.String())
+		t.Fatalf("unexpected %v ", results.Slice())
 	}
 
 }
