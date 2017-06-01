@@ -1341,13 +1341,13 @@ func (c *container) bitmapToRun() {
 		current = current | (current-1)
 
 		// find next 0
-		for current == 0xFFFFFFFFFFFFFFFF && i < bitmapN-1 {
+		for current == maxBitmap && i < bitmapN-1 {
 			i++
 			current = c.bitmap[i]
 		}
 
 		last = 0
-		if current == 0xFFFFFFFFFFFFFFFF {
+		if current == maxBitmap {
 			last = 64*i + 64  // TODO verify
 			c.runs = append(c.runs, interval32{start, last-1})
 			break
@@ -2037,15 +2037,15 @@ func unionBitmapRun(a, b *container) *container {
 	return output
 }
 
-const Z = 0xFFFFFFFFFFFFFFFF
+const maxBitmap = 0xFFFFFFFFFFFFFFFF
 
 // sets all bits in [i, j] (inclusive) (c must be a bitmap container)
 func (c *container) bitmapSetRange(i, j uint64) {
 	j += 1
 	x := i / 64
 	y := (j - 1) / 64
-	var X uint64 = Z << (i % 64)
-	var Y uint64 = Z >> (64 - (j % 64))
+	var X uint64 = maxBitmap << (i % 64)
+	var Y uint64 = maxBitmap >> (64 - (j % 64))
 	xcnt := popcnt(X)
 	ycnt := popcnt(Y)
 	if x == y {
@@ -2056,7 +2056,7 @@ func (c *container) bitmapSetRange(i, j uint64) {
 		c.bitmap[x] |= X
 		for i := x + 1; i < y; i++ {
 			c.n += int(64 - popcnt(c.bitmap[i]))
-			c.bitmap[i] = Z
+			c.bitmap[i] = maxBitmap
 		}
 		c.n += int(ycnt - popcnt(c.bitmap[y]&Y))
 		c.bitmap[y] |= Y
@@ -2068,8 +2068,8 @@ func (c *container) bitmapZeroRange(i, j uint64) {
 	j += 1
 	x := i / 64
 	y := (j - 1) / 64
-	var X uint64 = Z << (i % 64)
-	var Y uint64 = Z >> (64 - (j % 64))
+	var X uint64 = maxBitmap << (i % 64)
+	var Y uint64 = maxBitmap >> (64 - (j % 64))
 	if x == y {
 		c.n -= int(popcnt(c.bitmap[x] & (X & Y)))
 		c.bitmap[x] &= ^(X & Y)
