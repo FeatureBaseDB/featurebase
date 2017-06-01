@@ -101,7 +101,6 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 
 	return changed, nil
 }
-
 func (b *Bitmap) add(v uint64) bool {
 	hb := highbits(v)
 	i := search64(b.keys, hb)
@@ -704,6 +703,34 @@ func (b *Bitmap) Check() error {
 		return nil
 	}
 	return a
+}
+
+//Perform a logical negate of the bits in the range [start,end].
+func (b *Bitmap) Flip(start, end uint64) *Bitmap {
+	result := NewBitmap()
+	itr := b.Iterator()
+	v, eof := itr.Next()
+	//copy over previous bits.
+	for v < start && !eof {
+		result.add(v)
+		v, eof = itr.Next()
+	}
+	//flip bits in range .
+	for i := start; i <= end; i++ {
+		if eof {
+			result.add(i)
+		} else if v == i {
+			v, eof = itr.Next()
+		} else {
+			result.add(i)
+		}
+	}
+	//add remaining.
+	for !eof {
+		result.add(v)
+		v, eof = itr.Next()
+	}
+	return result
 }
 
 // BitmapInfo represents a point-in-time snapshot of bitmap stats.

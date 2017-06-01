@@ -15,8 +15,8 @@
 package roaring_test
 
 import (
-	"bytes"
 	"fmt"
+	"bytes"
 	"math"
 	"math/rand"
 	"reflect"
@@ -197,6 +197,69 @@ func TestBitmap_Xor_BitmapBitmap(t *testing.T) {
 	if n := result.Count(); n != 10000 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+}
+
+// Ensure bitmap contents alternate.
+func TestBitmap_Flip_Empty(t *testing.T) {
+	bm := roaring.NewBitmap()
+	results := bm.Flip(0, 10)
+	if n := results.Count(); n != 11 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	results = results.Flip(0, 10)
+	if n := results.Count(); n != 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+// Test Subrange Flip should not affect bits outside of Range
+func TestBitmap_Flip_Array(t *testing.T) {
+	bm := roaring.NewBitmap(0, 1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 512, 1024)
+	results := bm.Flip(0, 4)
+	if !reflect.DeepEqual(results.Slice(), []uint64{8, 16, 32, 64, 128, 256, 512, 1024}) {
+		t.Fatalf("unexpected %v ", results.Slice())
+	}
+	results = results.Flip(0, 4)
+	if !reflect.DeepEqual(results.Slice(), []uint64{0, 1, 2, 3, 4, 8, 16, 32, 64, 128, 256, 512, 1024}) {
+		t.Fatalf("unexpected %v ", results.Slice())
+	}
+
+}
+
+// Ensure  Flip works with underlying Bitmap container.
+func TestBitmap_Flip_Bitmap(t *testing.T) {
+	bm := roaring.NewBitmap()
+	size := uint64(10000)
+	for i := uint64(0); i < size; i += 2 {
+		bm.Add(i)
+	}
+	results := bm.Flip(0, size-1)
+	if n := results.Count(); n != size/2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	results = results.Flip(0, size-1) //flipping back should be the same
+	if n := results.Count(); n != size/2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+// Verify Flip works correctly with in different regions of bitmap, beginning, middle, and end.
+func TestBitmap_Flip_After(t *testing.T) {
+	bm := roaring.NewBitmap(0, 2, 4, 8)
+	results := bm.Flip(9, 10)
+
+	if !reflect.DeepEqual(results.Slice(), []uint64{0, 2, 4, 8, 9, 10}) {
+		t.Fatalf("unexpected %v ", results.Slice())
+	}
+	results = results.Flip(0, 1)
+	if !reflect.DeepEqual(results.Slice(), []uint64{1, 2, 4, 8, 9, 10}) {
+		t.Fatalf("unexpected %v ", results.Slice())
+	}
+	results = results.Flip(4, 8)
+	if !reflect.DeepEqual(results.Slice(), []uint64{1, 2, 5, 6, 7, 9, 10}) {
+		t.Fatalf("unexpected %v ", results.Slice())
+	}
+
 }
 
 // Ensure bitmap can return the number of intersecting bits in two bitmaps.
