@@ -731,6 +731,75 @@ func TestBitmapSetRange(t *testing.T) {
 	}
 }
 
+func TestRunToBitmap(t *testing.T) {
+	a := &container{}
+	tests := []struct {
+		runs []interval32
+		exp  []uint64
+	}{
+		{
+			runs: []interval32{{start: 0, last: 0}},
+			exp:  []uint64{1},
+		},
+		{
+			runs: []interval32{{start: 0, last: 4}},
+			exp:  []uint64{31},
+		},
+		{
+			runs: []interval32{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+			exp:  []uint64{155876},
+		},
+	}
+
+	for i, test := range tests {
+		exp := make([]uint64, bitmapN)
+		for i, v := range test.exp {
+			exp[i] = v
+		}
+
+		a.runs = test.runs
+		a.runToBitmap()
+		if !reflect.DeepEqual(a.bitmap, exp) {
+			t.Logf("test #%v expected %v, but got (%d) %v", i, exp, a.bitmap)
+		}
+	}
+}
+
+func TestBitmapToRun(t *testing.T) {
+	a := &container{}
+	tests := []struct {
+		bitmap []uint64
+		exp    []interval32
+	}{
+		{
+			bitmap: []uint64{1},
+			exp:    []interval32{{start: 0, last: 0}},
+		},
+		{
+			bitmap: []uint64{31},
+			exp:    []interval32{{start: 0, last: 4}},
+		},
+		{
+			bitmap: []uint64{155876},
+			exp:    []interval32{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+		},
+	}
+
+	for i, test := range tests {
+		a.bitmap = make([]uint64, bitmapN)
+		n := 0
+		for i, v := range test.bitmap {
+			a.bitmap[i] = v
+			n += int(popcount(v))
+		}
+		a.n = n
+		a.bitmapToRun()
+		if !reflect.DeepEqual(a.runs, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.runs)
+		}
+	}
+}
+
 func TestArrayToRun(t *testing.T) {
 	a := &container{}
 	tests := []struct {
