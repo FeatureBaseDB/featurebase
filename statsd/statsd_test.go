@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/statsd"
+	_ "github.com/pilosa/pilosa/test"
 )
 
 func TestStatsClient_WithTags(t *testing.T) {

@@ -25,6 +25,7 @@ import (
 	"testing/quick"
 
 	"github.com/pilosa/pilosa/roaring"
+	_ "github.com/pilosa/pilosa/test"
 )
 
 // Ensure an empty bitmap returns false if checking for existence.

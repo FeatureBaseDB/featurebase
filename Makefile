@@ -31,7 +31,7 @@ glide.lock: glide glide.yaml
 vendor-update: glide.lock
 
 test: vendor
-	go test $(shell cd $(GOPATH)/src/$(CLONE_URL); go list ./... | grep -v vendor)
+	go test $(shell cd $(GOPATH)/src/$(CLONE_URL); go list ./... | grep -v vendor) $(TESTFLAGS)
 
 pilosa: vendor
 	go build -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa

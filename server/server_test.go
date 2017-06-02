@@ -36,6 +36,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/httpbroadcast"
 	"github.com/pilosa/pilosa/server"
+	"github.com/pilosa/pilosa/test"
 )
 
 // Ensure program can process queries and maintain consistency.
@@ -542,6 +543,7 @@ func NewMain() *Main {
 	}
 
 	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
+	m.Server.Network = *test.Network
 	m.Config.DataDir = path
 	m.Config.Host = "localhost:0"
 	m.Command.Stdin = &m.Stdin
@@ -580,7 +582,10 @@ func (m *Main) Reopen() error {
 	// Create new main with the same config.
 	config := m.Config
 	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
+	m.Server.Network = *test.Network
 	m.Config = config
+
+	println("dbg/network", *test.Network)
 
 	// Run new program.
 	if err := m.Run(); err != nil {
