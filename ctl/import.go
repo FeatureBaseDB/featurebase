@@ -59,10 +59,6 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand 
 	}
 }
 
-func (cmd *ImportCommand) String() string {
-	return fmt.Sprint(*cmd)
-}
-
 // Run executes the main program execution.
 func (cmd *ImportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
