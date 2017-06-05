@@ -1,4 +1,4 @@
-.PHONY: glide vendor-update docker pilosa crossbuild install generate statik release
+.PHONY: glide vendor-update docker pilosa crossbuild install generate statik release test
 
 GLIDE := $(shell command -v glide 2>/dev/null)
 STATIK := $(shell command -v statik 2>/dev/null)
