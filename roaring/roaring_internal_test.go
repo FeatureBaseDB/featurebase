@@ -731,6 +731,35 @@ func TestBitmapSetRange(t *testing.T) {
 	}
 }
 
+func TestArrayToBitmap(t *testing.T) {
+	a := &container{ctype: ARRAY}
+	tests := []struct {
+		array []uint32
+		exp   []uint64
+	}{
+		{
+			array: []uint32{0, 1, 2, 3},
+			exp:   []uint64{0xF},
+		},
+	}
+
+	for i, test := range tests {
+		exp := make([]uint64, bitmapN)
+		for i, v := range test.exp {
+			exp[i] = v
+		}
+
+		a.array = test.array
+		a.arrayToBitmap()
+		if !reflect.DeepEqual(a.bitmap, exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, exp, a.bitmap)
+		}
+		if a.ctype != BITMAP {
+			t.Fatalf("test #%v expected type %v but got %v", i, BITMAP, a.ctype)
+		}
+	}
+}
+
 func TestRunToBitmap(t *testing.T) {
 	a := &container{}
 	tests := []struct {
@@ -764,7 +793,7 @@ func TestRunToBitmap(t *testing.T) {
 		a.runs = test.runs
 		a.runToBitmap()
 		if !reflect.DeepEqual(a.bitmap, exp) {
-			t.Logf("test #%v expected %v, but got (%d) %v", i, exp, a.bitmap)
+			t.Fatalf("test #%v expected %v, but got %v", i, exp, a.bitmap)
 		}
 	}
 }
