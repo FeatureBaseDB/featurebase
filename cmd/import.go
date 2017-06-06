@@ -54,6 +54,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.StringVarP(&Importer.Index, "index", "i", "", "Pilosa index to import into.")
 	flags.StringVarP(&Importer.Frame, "frame", "f", "", "Frame to import into.")
 	flags.IntVarP(&Importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
+	flags.BoolVarP(&Importer.Sort, "sort", "", false, "Enables sorting before import.")
 
 	return importCmd
 }
