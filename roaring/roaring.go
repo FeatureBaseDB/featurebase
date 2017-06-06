@@ -27,10 +27,12 @@ import (
 
 const (
 	// cookie is the first four bytes in a roaring bitmap file.
-	cookie = uint32(12346)
+	cookieNoRuns = uint32(12346)
+	cookie = uint32(12347)
 
-	// headerSize is the size of the cookie and key count at the beginning of a file.
-	headerSize = 4 + 4
+	// headerBaseSize is the size of the cookie and key count at the beginning of a file.
+	// Headers in files with runs also include runFlagBitset, of length (numContainers+7)/8.
+	headerBaseSize = 4 + 4
 
 	// bitmapN is the number of values in a container.bitmap.
 	bitmapN = (1 << 16) / 64
@@ -485,10 +487,41 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	//b.removeEmptyContainers()
 	containerCount := len(b.keys) - b.countEmptyContainers()
 
+	// Create bitset indicating runs, record whether any runs present.
+	containsRuns := false
+	runFlagBitset := make([]uint8, (containerCount+7)/8)  // TODO verify size
+	var k uint8 = 0
+	for _, c := range b.containers {
+		if c.n == 0 {
+			continue
+		}
+		if c.isRun() {
+			containsRuns = true
+			runFlagBitset[k/8] |= (1 << (k%8))  // TODO verify
+		}
+		k++
+	}
+
+	thisCookie := cookieNoRuns
+	headerSize := headerBaseSize
+	if containsRuns {
+		thisCookie = cookie
+		headerSize += len(runFlagBitset)
+	}
+
 	// Build header before writing individual container blocks.
 	buf := make([]byte, headerSize+(containerCount*(4+8+4)))
-	binary.LittleEndian.PutUint32(buf[0:], cookie)
+	binary.LittleEndian.PutUint32(buf[0:], thisCookie)
+	// TODO supposed to be 2 bytes, but doesnt make sense for >65535 containers
 	binary.LittleEndian.PutUint32(buf[4:], uint32(containerCount))
+
+	if containsRuns {
+		// Write runFlag bitset.
+		for i, b := range runFlagBitset {
+			buf[8+i] = b
+		}
+	}
+
 	empty := 0
 	// Encode keys and cardinality.
 	for i, key := range b.keys {
@@ -506,6 +539,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		}
 	}
 
+	// TODO this should now be done conditionally
 	// Write the offset for each container block.
 	offset := uint32(len(buf))
 	empty = 0
@@ -542,12 +576,18 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 
 // UnmarshalBinary decodes b from a binary-encoded byte slice.
 func (b *Bitmap) UnmarshalBinary(data []byte) error {
-	if len(data) < headerSize {
+	if len(data) < headerBaseSize {
 		return errors.New("data too small")
 	}
 
-	// Verify the first 4 bytes are the correct cookie.
-	if v := binary.LittleEndian.Uint32(data[0:4]); v != cookie {
+	// Verify the first 4 bytes are a valid cookie.
+	v := binary.LittleEndian.Uint32(data[0:4])
+	containsRuns := false
+	if v == cookieNoRuns {
+		// noop
+	} else if v == cookie {
+		containsRuns = true
+	} else {
 		return errors.New("invalid roaring file")
 	}
 
@@ -556,17 +596,28 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	b.keys = make([]uint64, keyN)
 	b.containers = make([]*container, keyN)
 
+	headerSize := headerBaseSize
+
+	runFlagBitset := make([]uint8, (keyN+7)/8)  // TODO verify size
+	if containsRuns {
+		// Read runFlag bitset.
+		for i := 0; i<len(runFlagBitset); i++ {
+			runFlagBitset[i] = data[8+i]
+		}
+		headerSize += len(runFlagBitset)
+	}
+
 	// Read container key headers.
-	for i, buf := 0, data[8:]; i < int(keyN); i, buf = i+1, buf[12:] {
+	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
 		b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
 		b.containers[i] = &container{
 			n:      int(binary.LittleEndian.Uint32(buf[8:12])) + 1,
 			mapped: true,
 		}
 	}
+	opsOffset := headerSize + int(keyN)*12
 
 	// Read container offsets and attach data.
-	opsOffset := 8 + int(keyN)*12
 	for i, buf := 0, data[opsOffset:]; i < int(keyN); i, buf = i+1, buf[4:] {
 		offset := binary.LittleEndian.Uint32(buf[0:4])
 
@@ -578,13 +629,22 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		// Map byte slice directly to the container data.
 		c := b.containers[i]
 		if c.n <= ArrayMaxSize {
-			c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
-			// TODO: instead of commenting this out, we need to make it a configuration option
-			//for _, v := range c.array {
-			//    assert(lowbits(uint64(v)) == v, "array value out of range: %d", v)
-			//}
-			opsOffset = int(offset) + len(c.array)*4
+			if containsRuns && (runFlagBitset[uint8(i)/8] & (1 << uint8(i)%8)) != 0 {
+				// Read runs.
+				runCount := binary.LittleEndian.Uint16(data[offset:offset+2])
+				c.runs = (*[0xFFFFFFF]interval32)(unsafe.Pointer(&data[offset+2]))[:runCount] // TODO verify
+				opsOffset = int(offset) + 2 + len(c.runs)*8 // TODO verify
+			} else {
+				// Read array.
+				c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
+				// TODO: instead of commenting this out, we ne ed to make it a configuration option
+				//for _, v := range c.array {
+				//    assert(lowbits(uint64(v)) == v, "array value out of range: %d", v)
+				//}
+				opsOffset = int(offset) + len(c.array)*4
+			}
 		} else {
+			// Read bitmap.
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
 			opsOffset = int(offset) + len(c.bitmap)*8
 		}
@@ -1447,8 +1507,14 @@ func (c *container) bitmapWriteTo(w io.Writer) (n int64, err error) {
 }
 
 func (c *container) runWriteTo(w io.Writer) (n int64, err error) {
-	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.runs[0]))[:8*c.n])
-	return int64(nn), err
+	// TODO according to spec this should be [16-bit-runcount, start0, len0, start1, len1, ...]
+	// not sure what difference len vs last makes
+	err = binary.Write(w, binary.LittleEndian, uint16(len(c.runs)))
+	if err != nil {
+		return 0, err
+	}
+	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.runs[0]))[:8*len(c.runs)])
+	return int64(2+nn), err
 }
 
 // size returns the encoded size of the container, in bytes.
