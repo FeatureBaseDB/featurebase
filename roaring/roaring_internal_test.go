@@ -15,6 +15,7 @@
 package roaring
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 )
@@ -1083,5 +1084,45 @@ func TestArrayCountRuns(t *testing.T) {
 		if ret != test.exp {
 			t.Fatalf("test #%v expected %v but got %v", i, test.exp, ret)
 		}
+	}
+}
+
+func TestWriteReadArray(t *testing.T) {
+	ca := &container{array: []uint32{1, 10, 100, 1000}, n: 4}
+	ba := &Bitmap{keys: []uint64{0}, containers: []*container{ca}}
+	ba2 := &Bitmap{}
+	var buf bytes.Buffer
+	ba.WriteTo(&buf)
+	ba2.UnmarshalBinary(buf.Bytes())
+	if !reflect.DeepEqual(ba2.containers[0].array, ca.array) {
+		t.Fatalf("array test expected %x, but got %x", ca.array, ba2.containers[0].array)
+	}
+}
+
+func TestWriteReadBitmap(t *testing.T) {
+	// create bitmap containing > 4096 bits
+	cb := &container{bitmap: make([]uint64, bitmapN), n: 129*32}
+	for i := 0; i < 129 ; i++ {
+		cb.bitmap[i] = 0x5555555555555555
+	}
+	bb := &Bitmap{keys: []uint64{0}, containers: []*container{cb}}
+	bb2 := &Bitmap{}
+	var buf bytes.Buffer
+	bb.WriteTo(&buf)
+	bb2.UnmarshalBinary(buf.Bytes())
+	if !reflect.DeepEqual(bb2.containers[0].bitmap, cb.bitmap) {
+		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.containers[0].bitmap)
+	}
+}
+
+func TestWriteReadRun(t *testing.T) {
+	cr := &container{runs: []interval32{{start: 3, last: 13}, {start: 100, last:109}}, n: 20}
+	br := &Bitmap{keys: []uint64{0}, containers: []*container{cr}}
+	br2 := &Bitmap{}
+	var buf bytes.Buffer
+	br.WriteTo(&buf)
+	br2.UnmarshalBinary(buf.Bytes())
+	if !reflect.DeepEqual(br2.containers[0].runs, cr.runs) {
+		t.Fatalf("run test expected %x, but got %x", cr.runs, br2.containers[0].runs)
 	}
 }
