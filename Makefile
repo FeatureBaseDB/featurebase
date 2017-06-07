@@ -23,6 +23,9 @@ $(GLIDE):
 	make glide
 
 vendor: $(GLIDE) glide.yaml
+ifndef GLIDE
+	curl https://glide.sh/get | sh
+endif
 	glide install
 
 glide.lock: glide glide.yaml
