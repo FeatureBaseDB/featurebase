@@ -152,20 +152,25 @@ func (h *Holder) MaxInverseSlices() map[string]uint64 {
 func (h *Holder) Schema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
-		di := &IndexInfo{Name: index.Name()}
-		for _, frame := range index.Frames() {
-			fi := &FrameInfo{Name: frame.Name()}
-			for _, view := range frame.Views() {
-				fi.Views = append(fi.Views, &ViewInfo{Name: view.Name()})
-			}
-			sort.Sort(viewInfoSlice(fi.Views))
-			di.Frames = append(di.Frames, fi)
-		}
-		sort.Sort(frameInfoSlice(di.Frames))
-		a = append(a, di)
+		a = append(a, h.IndexSchema(index.Name()))
 	}
 	sort.Sort(indexInfoSlice(a))
 	return a
+}
+
+func (h *Holder) IndexSchema(name string) *IndexInfo {
+	index := h.Index(name)
+	di := &IndexInfo{Name: index.Name()}
+	for _, frame := range index.Frames() {
+		fi := &FrameInfo{Name: frame.Name()}
+		for _, view := range frame.Views() {
+			fi.Views = append(fi.Views, &ViewInfo{Name: view.Name()})
+		}
+		sort.Sort(viewInfoSlice(fi.Views))
+		di.Frames = append(di.Frames, fi)
+	}
+	sort.Sort(frameInfoSlice(di.Frames))
+	return di
 }
 
 // IndexPath returns the path where a given index is stored.
