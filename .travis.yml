@@ -1,6 +1,7 @@
 language: go
 go:
-  - 1.7.x
+  - 1.7
+  - 1.8
   - master
 addons:
   apt:
@@ -8,7 +9,10 @@ addons:
       - sourceline: 'ppa:masterminds/glide'
     packages:
       - glide
-script: make test
+before_install:
+  - go get github.com/mattn/goveralls
+script:
+  - make vendor && $HOME/gopath/bin/goveralls -service=travis-ci -ignore "internal/internal.go,internal/public.pb.go,internal/private.pb.go"
 notifications:
   slack:
     secure: k0m8IqQIjb8L5b1plR9+w4hGo5iWlGtrR9nxvPsHL7gShwez74dpHCmFUCjR/uJoZa5Xq6849IWmiBB71ZHE/wNVN60HpMeui9VKkYvUDVpgBuqoIo969ySPDyQo4jNsk0wRRv/dG5/wXo7ArY8qOp5UDjdVuEf4nEbDlBtKjo0A2W8qXBTdZ5EJ3VeP5nrtrT7knuWxXgeUyVmLkpnUaLgkY7icvH6evqkftfcb56n3l5ulKtlQkI/ij2XCUK+5xtNB9m0e1QbiqIFS7sjwlSly/GCstPVnTEp4oHNHE7LtS6TJ8lgRV90Qy6LPtROjbSdfVjhJ5cYKus8DdddSfcsm2qgHCHQThyYtVAfOXaFPYPb50WXEu3HOckHk1tYChfkdxwEGdn/cN8/xxa7Khd7T/+SaS1B4CPxOFp0ie+rD4lF6IhApmpr/UwtiW6srHcPB04lF5mioYWmyS2eyGKTzSZR82nifg5KYUgBL1FjywQDYb8t9QaAn/6svu08k4H29TBnYpOQWREb38pYmEnMtRqiRmbfQL6IyV8405TJkl/PZmIElX6IQGjf53M1KoFdCUuTL1we6rh8gen5zRVUwmM6BJxkVt4NJ2wGkrXg/HD3feYCMrv+DY3lfDN7tADx90lPb+ukmanB8oSIQHLuLCJ2XcFixEC3QSvVlnH0=

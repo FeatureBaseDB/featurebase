@@ -51,8 +51,9 @@ The file does not contain any headers.
 	flags := exportCmd.Flags()
 
 	flags.StringVarP(&Exporter.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
-	flags.StringVarP(&Exporter.Index, "index", "i", "", "Pilosa index to export into.")
-	flags.StringVarP(&Exporter.Frame, "frame", "f", "", "Frame to export into.")
+	flags.StringVarP(&Exporter.Index, "index", "i", "", "Pilosa index to export")
+	flags.StringVarP(&Exporter.Frame, "frame", "f", "", "Frame to export")
+	flags.StringVarP(&Exporter.View, "view", "v", "standard", "View to export - default standard")
 	flags.StringVarP(&Exporter.Path, "output-file", "o", "", "File to write export to - default stdout")
 
 	return exportCmd

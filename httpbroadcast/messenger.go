@@ -97,6 +97,7 @@ func (h *HTTPBroadcaster) sendNodeMessage(node *pilosa.Node, msg []byte) error {
 
 	// Require protobuf encoding.
 	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Send request to remote node.
 	resp, err := client.Do(req)
@@ -114,7 +115,7 @@ func (h *HTTPBroadcaster) sendNodeMessage(node *pilosa.Node, msg []byte) error {
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
+		return fmt.Errorf("invalid status sendNodeMessage: code=%d, err=%s, req=%v", resp.StatusCode, body, req)
 	}
 
 	return nil

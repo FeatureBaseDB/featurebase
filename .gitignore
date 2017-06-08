@@ -4,3 +4,4 @@ default.etcd/
 vendor
 .protoc-gen-gofast
 .DS_Store
+build

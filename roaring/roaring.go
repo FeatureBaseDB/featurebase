@@ -101,7 +101,6 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 
 	return changed, nil
 }
-
 func (b *Bitmap) add(v uint64) bool {
 	hb := highbits(v)
 	i := search64(b.keys, hb)
@@ -441,6 +440,39 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 	return output
 }
 
+// Xor returns the bitwise exclusive or of b and other.
+func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
+	output := &Bitmap{}
+
+	ki, ci := b.keys, b.containers
+	kj, cj := other.keys, other.containers
+
+	for {
+		var key uint64
+		var container *container
+
+		ni, nj := len(ki), len(kj)
+		if ni == 0 && nj == 0 { // eof(i,j)
+			break
+		} else if ni == 0 || (nj != 0 && ki[0] > kj[0]) { // eof(i) or i > j
+			key, container = kj[0], cj[0].clone()
+			kj, cj = kj[1:], cj[1:]
+		} else if nj == 0 || (ki[0] < kj[0]) { // eof(j) or i < j
+			key, container = ki[0], ci[0].clone()
+			ki, ci = ki[1:], ci[1:]
+		} else { // i == j
+			key, container = ki[0], xor(ci[0], cj[0])
+			ki, ci = ki[1:], ci[1:]
+			kj, cj = kj[1:], cj[1:]
+		}
+
+		output.keys = append(output.keys, key)
+		output.containers = append(output.containers, container)
+	}
+
+	return output
+}
+
 // removeEmptyContainers deletes all containers that have a count of zero.
 func (b *Bitmap) removeEmptyContainers() {
 	for i := 0; i < len(b.containers); {
@@ -671,6 +703,34 @@ func (b *Bitmap) Check() error {
 		return nil
 	}
 	return a
+}
+
+//Perform a logical negate of the bits in the range [start,end].
+func (b *Bitmap) Flip(start, end uint64) *Bitmap {
+	result := NewBitmap()
+	itr := b.Iterator()
+	v, eof := itr.Next()
+	//copy over previous bits.
+	for v < start && !eof {
+		result.add(v)
+		v, eof = itr.Next()
+	}
+	//flip bits in range .
+	for i := start; i <= end; i++ {
+		if eof {
+			result.add(i)
+		} else if v == i {
+			v, eof = itr.Next()
+		} else {
+			result.add(i)
+		}
+	}
+	//add remaining.
+	for !eof {
+		result.add(v)
+		v, eof = itr.Next()
+	}
+	return result
 }
 
 // BitmapInfo represents a point-in-time snapshot of bitmap stats.
@@ -904,9 +964,17 @@ func (c *container) bitmapCountRange(start, end uint32) int {
 	var n uint64
 	i, j := start/64, end/64
 
+	// Special case when start and end fall in the same word.
+	if i == j {
+		offi, offj := start%64, 64-end%64
+		n += popcount((c.bitmap[i] >> offi) << (offj + offi))
+		return int(n)
+	}
+
 	// Count partial starting word.
 	if off := start % 64; off != 0 {
-		n += popcount(c.bitmap[i] << off)
+		n += popcount(c.bitmap[i] >> off)
+		i++
 	}
 
 	// Count words in between.
@@ -916,9 +984,8 @@ func (c *container) bitmapCountRange(start, end uint32) int {
 
 	// Count partial ending word.
 	if int(j) < len(c.bitmap) {
-		if off := end % 64; off != 0 {
-			n += popcount(c.bitmap[j] >> off)
-		}
+		off := 64 - (end % 64)
+		n += popcount(c.bitmap[j] << off)
 	}
 
 	return int(n)
@@ -1221,7 +1288,7 @@ func intersectionCountArrayArray(a, b *container) (n uint64) {
 	return n
 }
 
-func intersectionCountArrayBitmap(a, b *container) (n uint64) {
+func intersectionCountArrayBitmapOld(a, b *container) (n uint64) {
 	// Copy array header so we can shrink it.
 	array := a.array
 	if len(array) == 0 {
@@ -1263,6 +1330,18 @@ func intersectionCountArrayBitmap(a, b *container) (n uint64) {
 	return n
 }
 
+func intersectionCountArrayBitmap(a, b *container) (n uint64) {
+	for _, val := range a.array {
+		i := val / 64
+		if i >= uint32(len(b.bitmap)) {
+			break
+		}
+		off := val % 64
+		n += (b.bitmap[i] & (1 << off)) >> off
+	}
+	return n
+}
+
 func intersectionCountBitmapBitmap(a, b *container) (n uint64) {
 	return popcntAndSlice(a.bitmap, b.bitmap)
 }
@@ -1294,10 +1373,10 @@ func intersectArrayArray(a, b *container) *container {
 			j++
 		} else {
 			output.array = append(output.array, va)
-			output.n++
 			i, j = i+1, j+1
 		}
 	}
+	output.n = len(output.array)
 	return output
 }
 
@@ -1553,6 +1632,85 @@ func differenceBitmapBitmap(a, b *container) *container {
 		} else if v0 > v1 {
 			itr0.unread()
 		}
+	}
+	return output
+}
+
+func xor(a, b *container) *container {
+	if a.isArray() {
+		if b.isArray() {
+			return xorArrayArray(a, b)
+		} else {
+			return xorArrayBitmap(a, b)
+		}
+	} else {
+		if b.isArray() {
+			return xorArrayBitmap(b, a)
+		} else {
+			return xorBitmapBitmap(a, b)
+		}
+	}
+}
+
+func xorArrayArray(a, b *container) *container {
+	output := &container{}
+	na, nb := len(a.array), len(b.array)
+	for i, j := 0, 0; i < na || j < nb; {
+		if i < na && j >= nb {
+			output.add(a.array[i])
+			i++
+			continue
+		} else if i >= na && j < nb {
+			output.add(b.array[j])
+			j++
+			continue
+		}
+
+		va, vb := a.array[i], b.array[j]
+		if va < vb {
+			output.add(va)
+			i++
+		} else if va > vb {
+			output.add(vb)
+			j++
+		} else { //==
+			i++
+			j++
+		}
+	}
+	return output
+}
+
+func xorArrayBitmap(a, b *container) *container {
+	output := b.clone()
+	for _, v := range a.array {
+		if b.bitmapContains(v) {
+			output.remove(v)
+		} else {
+			output.add(v)
+		}
+	}
+
+	if output.count() < ArrayMaxSize {
+		output.convertToArray()
+	}
+
+	return output
+}
+
+func xorBitmapBitmap(a, b *container) *container {
+	output := &container{
+		bitmap: make([]uint64, bitmapN),
+	}
+
+	for i := 0; i < bitmapN; i++ {
+		v := a.bitmap[i] ^ b.bitmap[i]
+		output.bitmap[i] = v
+		output.n += int(popcnt(v))
+	}
+
+	if output.count() < ArrayMaxSize {
+		output.convertToArray()
 	}
 	return output
 }

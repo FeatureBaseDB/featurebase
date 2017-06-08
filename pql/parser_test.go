@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa/pql"
+	_ "github.com/pilosa/pilosa/test"
 )
 
 // Ensure the parser can parse PQL.

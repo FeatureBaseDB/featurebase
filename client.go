@@ -87,6 +87,8 @@ func (c *Client) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]
 		return nil, err
 	}
 
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
@@ -118,6 +120,8 @@ func (c *Client) Schema(ctx context.Context) ([]*IndexInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -154,6 +158,7 @@ func (c *Client) CreateIndex(ctx context.Context, index string, opt IndexOptions
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -194,6 +199,8 @@ func (c *Client) FragmentNodes(ctx context.Context, index string, slice uint64) 
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -242,6 +249,7 @@ func (c *Client) ExecuteQuery(ctx context.Context, index, query string, allowRed
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Accept", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -283,6 +291,8 @@ func (c *Client) ExecutePQL(ctx context.Context, index, query string) (interface
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 
 	if err != nil {
@@ -362,6 +372,7 @@ func (c *Client) importNode(ctx context.Context, node *Node, buf []byte) error {
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Accept", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -389,11 +400,13 @@ func (c *Client) importNode(ctx context.Context, node *Node, buf []byte) error {
 }
 
 // ExportCSV bulk exports data for a single slice from a host to CSV format.
-func (c *Client) ExportCSV(ctx context.Context, index, frame string, slice uint64, w io.Writer) error {
+func (c *Client) ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
+	} else if !(view == ViewStandard || view == ViewInverse) {
+		return ErrInvalidView
 	}
 
 	// Retrieve a list of nodes that own the slice.
@@ -407,7 +420,7 @@ func (c *Client) ExportCSV(ctx context.Context, index, frame string, slice uint6
 	for _, i := range rand.Perm(len(nodes)) {
 		node := nodes[i]
 
-		if err := c.exportNodeCSV(ctx, node, index, frame, slice, w); err != nil {
+		if err := c.exportNodeCSV(ctx, node, index, frame, view, slice, w); err != nil {
 			e = fmt.Errorf("export node: host=%s, err=%s", node.Host, err)
 			continue
 		} else {
@@ -419,7 +432,7 @@ func (c *Client) ExportCSV(ctx context.Context, index, frame string, slice uint6
 }
 
 // exportNode copies a CSV export from a node to w.
-func (c *Client) exportNodeCSV(ctx context.Context, node *Node, index, frame string, slice uint64, w io.Writer) error {
+func (c *Client) exportNodeCSV(ctx context.Context, node *Node, index, frame, view string, slice uint64, w io.Writer) error {
 	// Create URL.
 	u := url.URL{
 		Scheme: "http",
@@ -428,6 +441,7 @@ func (c *Client) exportNodeCSV(ctx context.Context, node *Node, index, frame str
 		RawQuery: url.Values{
 			"index": {index},
 			"frame": {frame},
+			"view":  {view},
 			"slice": {strconv.FormatUint(slice, 10)},
 		}.Encode(),
 	}
@@ -438,6 +452,7 @@ func (c *Client) exportNodeCSV(ctx context.Context, node *Node, index, frame str
 		return err
 	}
 	req.Header.Set("Accept", "text/csv")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -471,7 +486,16 @@ func (c *Client) BackupTo(ctx context.Context, w io.Writer, index, frame, view s
 	tw := tar.NewWriter(w)
 
 	// Find the maximum number of slices.
-	maxSlices, err := c.MaxSliceByIndex(ctx)
+	var maxSlices map[string]uint64
+	var err error
+	if view == ViewStandard {
+		maxSlices, err = c.MaxSliceByIndex(ctx)
+	} else if view == ViewInverse {
+		maxSlices, err = c.MaxInverseSliceByIndex(ctx)
+	} else {
+		return ErrInvalidView
+	}
+
 	if err != nil {
 		return fmt.Errorf("slice n: %s", err)
 	}
@@ -572,6 +596,8 @@ func (c *Client) backupSliceNode(ctx context.Context, index, frame, view string,
 		return nil, err
 	}
 
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
@@ -657,6 +683,7 @@ func (c *Client) restoreSliceFrom(ctx context.Context, buf []byte, index, frame,
 			return err
 		}
 		req.Header.Set("Content-Type", "application/octet-stream")
+		req.Header.Set("User-Agent", "pilosa/"+Version)
 
 		resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 		if err != nil {
@@ -696,6 +723,7 @@ func (c *Client) CreateFrame(ctx context.Context, index, frame string, opt Frame
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -738,6 +766,7 @@ func (c *Client) RestoreFrame(ctx context.Context, host, index, frame string) er
 		return err
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -767,6 +796,7 @@ func (c *Client) FrameViews(ctx context.Context, index, frame string) ([]string,
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -814,6 +844,8 @@ func (c *Client) FragmentBlocks(ctx context.Context, index, frame, view string, 
 		return nil, err
 	}
 
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
@@ -859,6 +891,7 @@ func (c *Client) BlockData(ctx context.Context, index, frame, view string, slice
 	req.Header.Set("Content-Type", "application/protobuf")
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Accept", "application/protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
@@ -905,6 +938,7 @@ func (c *Client) ColumnAttrDiff(ctx context.Context, index string, blks []AttrBl
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -948,6 +982,7 @@ func (c *Client) RowAttrDiff(ctx context.Context, index, frame string, blks []At
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))

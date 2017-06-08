@@ -6,11 +6,11 @@
 	<link rel="stylesheet" href="/assets/style.css">
 	<meta http-equiv="X-UA-Compatible" content="ie=edge">
 	<title>Pilosa WebUI</title>
-	<link rel="icon" type="image/png" href="https://dc3kpxyuw05cb.cloudfront.net/img/favicon.png">
+	<link rel="icon" type="image/png" href="https://www.pilosa.com/img/favicon.png">
 </head>
 <body>
 	<div class="header">
-		<img src="https://dc3kpxyuw05cb.cloudfront.net/img/logo.svg" width="110" alt="">
+		<img src="https://www.pilosa.com/img/logo.svg" width="110" alt="">
 		<div id="server-version" class=""></div>
 	</div>
 	<div class="container">
@@ -35,26 +35,54 @@
 
 			<div class="query">
 				<h2>Query</h2>
+				<a class="query-tooltip" href="https://www.pilosa.com/docs/webui/" target="_blank"><sup>?</sup></a>
+				<div class="query-tooltip-container">
+					<div class='query-tooltip-content'>
+						<h5>PQL</h5>
+						<div class="code">
+							SetBit(frame=foo, rowID=0, columnID=0)<br />
+							ClearBit(frame=foo, rowID=0, columnID=0)<br />
+							SetRowAttrs(frame=foo, rowID=0, color="blue")<br />
+							SetColumnAttrs(frame=foo, columnID=0, shape="circle")<br />
+							Bitmap(frame=foo, rowID=0)<br />
+							Range(frame=foo, rowID=0, start="2010-01", end="2017-03")<br />
+							Count(&lt;BITMAP_CALL&gt;)<br />
+							TopN([BITMAP_CALL], frame=foo, n=20)<br />
+							Union([BITMAP_CALL, ...])<br />
+							Intersect(&lt;BITMAP_CALL&gt;, [BITMAP_CALL, ...])<br />
+							Difference(&lt;BITMAP_CALL&gt;, &lt;BITMAP_CALL&gt;)
+						</div>
+						<br />
+						<h5>Special commands</h5>
+					    <div class="code">
+							:create index test [columnLabel=column]<br />
+							:use test<br />
+							:create frame foo [rowLabel=row]<br />
+							:delete index test<br />
+							:delete frame foo
+						</div>
+						<br />
+						&lt;tab&gt;: autocomplete<br />
+						&lt;up&gt;/&lt;down&gt;: history<br />
+					</div>
+				</div>
 				<textarea name="name" id='query' rows="5"  required></textarea>
 				<div class='input-controls'>
-
-					<select class="" name="" id="index-dropdown">
-						<option value="0">Select index</option>
-					</select>
-					&nbsp;&nbsp;&nbsp;
-					<button  id='query-btn'>Run Query</button>
+					<div class="input-hints">
+						<select class="" name="" id="index-dropdown">
+							<option value="0">Select index</option>
+						</select>
+						&nbsp;&nbsp;&nbsp;
+						<button  id='query-btn'>Run Query</button>
+					</div>
 				</div>
 			</div>
 
-
 			<div  class="output-container">
-
 				<h2>Output</h2>
 				<div id="outputs">
-
 					<!-- results -->
 				</div>
-
 			</div>
 
 		</div>
@@ -71,10 +99,11 @@
 				</div>
 			</div>
 			<div class="status-container">
+				<!--
 				<h2>Slice Distribution</h2>
 				<div class="status-table-container" id="status-slices">
-				...
 				</div>
+				-->
 			</div>
 
 		</div>

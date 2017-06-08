@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"expvar"
+	"io"
 	"sort"
 	"strings"
 	"sync"
@@ -38,19 +39,25 @@ type StatsClient interface {
 	WithTags(tags ...string) StatsClient
 
 	// Tracks the number of times something occurs per second.
-	Count(name string, value int64)
+	Count(name string, value int64, rate float64)
+
+	// Tracks the number of times something occurs per second with custom tags
+	CountWithCustomTags(name string, value int64, rate float64, tags []string)
 
 	// Sets the value of a metric.
-	Gauge(name string, value float64)
+	Gauge(name string, value float64, rate float64)
 
 	// Tracks statistical distribution of a metric.
-	Histogram(name string, value float64)
+	Histogram(name string, value float64, rate float64)
 
 	// Tracks number of unique elements.
-	Set(name string, value string)
+	Set(name string, value string, rate float64)
 
 	// Tracks timing information for a metric.
-	Timing(name string, value time.Duration)
+	Timing(name string, value time.Duration, rate float64)
+
+	// SetLogger Set the logger output type
+	SetLogger(logger io.Writer)
 }
 
 // NopStatsClient represents a client that doesn't do anything.
@@ -58,13 +65,15 @@ var NopStatsClient StatsClient
 
 type nopStatsClient struct{}
 
-func (c *nopStatsClient) Tags() []string                          { return nil }
-func (c *nopStatsClient) WithTags(tags ...string) StatsClient     { return c }
-func (c *nopStatsClient) Count(name string, value int64)          {}
-func (c *nopStatsClient) Gauge(name string, value float64)        {}
-func (c *nopStatsClient) Histogram(name string, value float64)    {}
-func (c *nopStatsClient) Set(name string, value string)           {}
-func (c *nopStatsClient) Timing(name string, value time.Duration) {}
+func (c *nopStatsClient) Tags() []string                                                            { return nil }
+func (c *nopStatsClient) WithTags(tags ...string) StatsClient                                       { return c }
+func (c *nopStatsClient) Count(name string, value int64, rate float64)                              {}
+func (c *nopStatsClient) CountWithCustomTags(name string, value int64, rate float64, tags []string) {}
+func (c *nopStatsClient) Gauge(name string, value float64, rate float64)                            {}
+func (c *nopStatsClient) Histogram(name string, value float64, rate float64)                        {}
+func (c *nopStatsClient) Set(name string, value string, rate float64)                               {}
+func (c *nopStatsClient) Timing(name string, value time.Duration, rate float64)                     {}
+func (c *nopStatsClient) SetLogger(logger io.Writer)                                                {}
 
 // ExpvarStatsClient writes stats out to expvars.
 type ExpvarStatsClient struct {
@@ -99,34 +108,45 @@ func (c *ExpvarStatsClient) WithTags(tags ...string) StatsClient {
 }
 
 // Count tracks the number of times something occurs.
-func (c *ExpvarStatsClient) Count(name string, value int64) {
+func (c *ExpvarStatsClient) Count(name string, value int64, rate float64) {
+	c.m.Add(name, value)
+}
+
+// CountWithCustomTags Tracks the number of times something occurs per second with custom tags
+func (c *ExpvarStatsClient) CountWithCustomTags(name string, value int64, rate float64, tags []string) {
 	c.m.Add(name, value)
 }
 
 // Gauge sets the value of a metric.
-func (c *ExpvarStatsClient) Gauge(name string, value float64) {
+func (c *ExpvarStatsClient) Gauge(name string, value float64, rate float64) {
 	var f expvar.Float
 	f.Set(value)
 	c.m.Set(name, &f)
 }
 
 // Histogram tracks statistical distribution of a metric.
-// This works the same as guage for this client.
-func (c *ExpvarStatsClient) Histogram(name string, value float64) {
-	c.Gauge(name, value)
+// This works the same as gauge for this client.
+func (c *ExpvarStatsClient) Histogram(name string, value float64, rate float64) {
+	c.Gauge(name, value, rate)
 }
 
 // Set tracks number of unique elements.
-func (c *ExpvarStatsClient) Set(name string, value string) {
-	c.m.Set(name, &expvar.String{})
+func (c *ExpvarStatsClient) Set(name string, value string, rate float64) {
+	var s expvar.String
+	s.Set(value)
+	c.m.Set(name, &s)
 }
 
 // Timing tracks timing information for a metric.
-func (c *ExpvarStatsClient) Timing(name string, value time.Duration) {
+func (c *ExpvarStatsClient) Timing(name string, value time.Duration, rate float64) {
 	c.mu.Lock()
 	d, _ := c.m.Get(name).(time.Duration)
 	c.m.Set(name, d+value)
 	c.mu.Unlock()
+}
+
+// SetLogger has no logger
+func (c *ExpvarStatsClient) SetLogger(logger io.Writer) {
 }
 
 // MultiStatsClient joins multiple stats clients together.
@@ -150,37 +170,51 @@ func (a MultiStatsClient) WithTags(tags ...string) StatsClient {
 }
 
 // Count tracks the number of times something occurs per second on all clients.
-func (a MultiStatsClient) Count(name string, value int64) {
+func (a MultiStatsClient) Count(name string, value int64, rate float64) {
 	for _, c := range a {
-		c.Count(name, value)
+		c.Count(name, value, rate)
+	}
+}
+
+// CountWithCustomTags Tracks the number of times something occurs per second with custom tags
+func (a MultiStatsClient) CountWithCustomTags(name string, value int64, rate float64, tags []string) {
+	for _, c := range a {
+		c.CountWithCustomTags(name, value, rate, tags)
 	}
 }
 
 // Gauge sets the value of a metric on all clients.
-func (a MultiStatsClient) Gauge(name string, value float64) {
+func (a MultiStatsClient) Gauge(name string, value float64, rate float64) {
 	for _, c := range a {
-		c.Gauge(name, value)
+		c.Gauge(name, value, rate)
 	}
 }
 
 // Histogram tracks statistical distribution of a metric on all clients.
-func (a MultiStatsClient) Histogram(name string, value float64) {
+func (a MultiStatsClient) Histogram(name string, value float64, rate float64) {
 	for _, c := range a {
-		c.Histogram(name, value)
+		c.Histogram(name, value, rate)
 	}
 }
 
 // Set tracks number of unique elements on all clients.
-func (a MultiStatsClient) Set(name string, value string) {
+func (a MultiStatsClient) Set(name string, value string, rate float64) {
 	for _, c := range a {
-		c.Set(name, value)
+		c.Set(name, value, rate)
 	}
 }
 
 // Timing tracks timing information for a metric on all clients.
-func (a MultiStatsClient) Timing(name string, value time.Duration) {
+func (a MultiStatsClient) Timing(name string, value time.Duration, rate float64) {
 	for _, c := range a {
-		c.Timing(name, value)
+		c.Timing(name, value, rate)
+	}
+}
+
+// SetLogger Sets the StatsD logger output type
+func (a MultiStatsClient) SetLogger(logger io.Writer) {
+	for _, c := range a {
+		c.SetLogger(logger)
 	}
 }
 

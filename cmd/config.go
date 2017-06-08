@@ -22,24 +22,30 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/pilosa/pilosa/ctl"
+	"github.com/pilosa/pilosa/server"
 )
 
 var Conf *ctl.ConfigCommand
 
 func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Conf = ctl.NewConfigCommand(os.Stdin, os.Stdout, os.Stderr)
+	Server := server.NewCommand(stdin, stdout, stderr)
 	confCmd := &cobra.Command{
 		Use:   "config",
-		Short: "Print the default configuration.",
-		Long: `config prints the default configuration to stdout
-`,
+		Short: "Print the current configuration.",
+		Long:  `config prints the current configuration to stdout`,
+
 		RunE: func(cmd *cobra.Command, args []string) error {
+			Conf.Config = Server.Config
 			if err := Conf.Run(context.Background()); err != nil {
 				return err
 			}
 			return nil
 		},
 	}
+
+	// Attach flags to the command.
+	ctl.BuildServerFlags(confCmd, Server)
 
 	return confCmd
 }

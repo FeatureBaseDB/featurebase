@@ -148,8 +148,6 @@ func (v *View) openFragments() error {
 		}
 		frag.RowAttrStore = v.RowAttrStore
 		v.fragments[frag.Slice()] = frag
-
-		v.stats.Count("maxSlice", 1)
 	}
 
 	return nil
@@ -180,6 +178,7 @@ func (v *View) MaxSlice() uint64 {
 			max = slice
 		}
 	}
+
 	return max
 }
 
@@ -247,16 +246,13 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 
 	// Save to lookup.
 	v.fragments[slice] = frag
-
-	v.stats.Count("maxSlice", 1)
-
 	return frag, nil
 }
 
 func (v *View) newFragment(path string, slice uint64) *Fragment {
 	frag := NewFragment(path, v.index, v.frame, v.name, slice)
-	frag.cacheType = v.cacheType
-	frag.cacheSize = v.cacheSize
+	frag.CacheType = v.cacheType
+	frag.CacheSize = v.cacheSize
 	frag.LogOutput = v.LogOutput
 	frag.stats = v.stats.WithTags(fmt.Sprintf("slice:%d", slice))
 	return frag

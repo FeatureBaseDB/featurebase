@@ -109,8 +109,6 @@ func (h *Holder) Open() error {
 			return fmt.Errorf("open index: name=%s, err=%s", index.Name(), err)
 		}
 		h.indexes[index.Name()] = index
-
-		h.Stats.Count("indexN", 1)
 	}
 
 	// Periodically flush cache.
@@ -249,8 +247,6 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 
 	h.indexes[index.Name()] = index
 
-	h.Stats.Count("indexN", 1)
-
 	return index, nil
 }
 
@@ -260,7 +256,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 		return nil, err
 	}
 	index.LogOutput = h.LogOutput
-	index.stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
+	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.Broadcaster
 	return index, nil
 }
@@ -288,8 +284,6 @@ func (h *Holder) DeleteIndex(name string) error {
 
 	// Remove reference.
 	delete(h.indexes, name)
-
-	h.Stats.Count("indexN", -1)
 
 	return nil
 }

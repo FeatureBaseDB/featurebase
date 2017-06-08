@@ -40,6 +40,8 @@ import (
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 
+	"unicode"
+
 	_ "github.com/pilosa/pilosa/statik"
 	"github.com/rakyll/statik/fs"
 )
@@ -61,11 +63,21 @@ type Handler struct {
 		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
 	}
 
-	// The version to report on the /version endpoint.
-	Version string
-
 	// The writer for any logging.
 	LogOutput io.Writer
+}
+
+// externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
+// This is used for stats tagging.
+var externalPrefixFlag = map[string]bool{
+	"schema":  true,
+	"query":   true,
+	"import":  true,
+	"export":  true,
+	"index":   true,
+	"frame":   true,
+	"nodes":   true,
+	"version": true,
 }
 
 // NewHandler returns a new instance of Handler with a default logger.
@@ -126,7 +138,32 @@ func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request
 
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t := time.Now()
 	h.Router.ServeHTTP(w, r)
+	dif := time.Since(t)
+
+	// Calculate per request StatsD metrics when the handler is fully configured.
+	if h.Holder != nil && h.Cluster != nil {
+		statsTags := make([]string, 0, 3)
+
+		if h.Cluster.LongQueryTime > 0 && dif > h.Cluster.LongQueryTime {
+			h.logger().Printf("%s %s %.03fs", r.Method, r.URL.String(), float64(dif))
+			statsTags = append(statsTags, "slow_query")
+		}
+
+		pathParts := strings.Split(r.URL.Path, "/")
+		endpointName := strings.Join(pathParts, "_")
+
+		if externalPrefixFlag[pathParts[1]] {
+			statsTags = append(statsTags, "external")
+		}
+
+		// useragent tag identifies internal/external endpoints
+		statsTags = append(statsTags, "useragent:"+r.UserAgent())
+
+		stats := h.Holder.Stats.WithTags(statsTags...)
+		stats.Histogram("http."+endpointName, float64(dif), 0.1)
+	}
 }
 
 func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +175,7 @@ func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
 	statikFS, err := fs.New()
 	if err != nil {
 		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
-		fmt.Println("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
+		h.logger().Println("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
 		return
 	}
 	http.FileServer(statikFS).ServeHTTP(w, r)
@@ -228,7 +265,12 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Set appropriate status code, if there is an error.
 	if resp.Err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		switch resp.Err {
+		case ErrTooManyWrites:
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 
 	// Write response back to client.
@@ -253,6 +295,7 @@ func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
 		} else if _, err := w.Write(buf); err != nil {
 			h.logger().Printf("stream write error: %s", err)
 		}
+		return
 	}
 	json.NewEncoder(w).Encode(sliceMaxResponse{
 		MaxSlices: ms,
@@ -375,6 +418,8 @@ func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.Count("deleteIndex", 1, 1.0)
 }
 
 type deleteIndexResponse struct{}
@@ -418,6 +463,8 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(postIndexResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.Count("createIndex", 1, 1.0)
 }
 
 // handlePatchIndexTimeQuantum handles PATCH /index/time_quantum request.
@@ -568,6 +615,9 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.CountWithCustomTags("createFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+
 }
 
 type _postFrameRequest postFrameRequest
@@ -649,6 +699,8 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(deleteFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+
+	h.Holder.Stats.CountWithCustomTags("deleteFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 }
 
 type deleteFrameResponse struct{}
@@ -837,6 +889,12 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*QueryRequest, erro
 // readURLQueryRequest parses query parameters from URL parameters from r.
 func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	q := r.URL.Query()
+	validQuery := validOptions(QueryRequest{})
+	for key, _ := range q {
+		if _, ok := validQuery[key]; !ok {
+			return nil, errors.New("invalid query params")
+		}
+	}
 
 	// Parse query string.
 	buf, err := ioutil.ReadAll(r.Body)
@@ -867,6 +925,21 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 		ColumnAttrs: q.Get("columnAttrs") == "true",
 		Quantum:     quantum,
 	}, nil
+}
+
+// validOptions return all attributes of an interface with lower first character.
+func validOptions(v interface{}) map[string]bool {
+	validQuery := make(map[string]bool)
+	argsType := reflect.ValueOf(v).Type()
+
+	for i := 0; i < argsType.NumField(); i++ {
+		fieldName := argsType.Field(i).Name
+		chars := []rune(fieldName)
+		chars[0] = unicode.ToLower(chars[0])
+		fieldName = string(chars)
+		validQuery[fieldName] = true
+	}
+	return validQuery
 }
 
 // writeQueryResponse writes the response from the executor to w.
@@ -1277,7 +1350,7 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
-		Version: h.Version,
+		Version: Version,
 	}); err != nil {
 		h.logger().Printf("write version response error: %s", err)
 	}

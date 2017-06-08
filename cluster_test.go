@@ -137,7 +137,7 @@ func TestCluster_OwnsSlices(t *testing.T) {
 	c := NewCluster(5)
 	slices := c.OwnsSlices("test", 10, "host2")
 
-	if !reflect.DeepEqual(slices, []uint64{1, 3, 10}) {
+	if !reflect.DeepEqual(slices, []uint64{0, 3, 6, 10}) {
 		t.Fatalf("unexpected slices for node's index: %v", slices)
 	}
 }

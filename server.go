@@ -24,10 +24,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/CAFxX/gcnotifier"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -54,12 +56,17 @@ type Server struct {
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
+	Network string
 	Host    string
 	Cluster *Cluster
 
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
 	PollingInterval     time.Duration
+	MetricInterval      time.Duration
+
+	// Misc options.
+	MaxWritesPerRequest int
 
 	LogOutput io.Writer
 }
@@ -73,11 +80,10 @@ func NewServer() *Server {
 		Handler:           NewHandler(),
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
-
-		//PluginRegistry: NewPluginRegistry(),
-
-		AntiEntropyInterval: DefaultAntiEntropyInterval,
+    Network: "tcp",
+    AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
+		MetricInterval:      0,
 
 		LogOutput: os.Stderr,
 	}
@@ -98,9 +104,9 @@ func (s *Server) Open() error {
 	}
 
 	// Open HTTP listener to determine port (if specified as :0).
-	ln, err := net.Listen("tcp", ":"+port)
+	ln, err := net.Listen(s.Network, ":"+port)
 	if err != nil {
-		return err
+		return fmt.Errorf("net.Listen: %v", err)
 	}
 	s.ln = ln
 
@@ -112,18 +118,24 @@ func (s *Server) Open() error {
 		s.Cluster.Nodes = []*Node{{Host: s.Host}}
 	}
 
+	for i, n := range s.Cluster.Nodes {
+		if s.Cluster.NodeByHost(n.Host) != nil {
+			s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
+		}
+	}
+
 	// Open holder.
 	if err := s.Holder.Open(); err != nil {
-		return err
+		return fmt.Errorf("opening Holder: %v", err)
 	}
 
 	if err := s.BroadcastReceiver.Start(s); err != nil {
-		return err
+		return fmt.Errorf("starting BroadcastReceiver: %v", err)
 	}
 
 	// Open NodeSet communication
 	if err := s.Cluster.NodeSet.Open(); err != nil {
-		return err
+		return fmt.Errorf("opening NodeSet: %v", err)
 	}
 	/*
 		// Load plugins.
@@ -137,6 +149,7 @@ func (s *Server) Open() error {
 	e.Holder = s.Holder
 	e.Host = s.Host
 	e.Cluster = s.Cluster
+	e.MaxWritesPerRequest = s.MaxWritesPerRequest
 
 	// Initialize HTTP handler.
 	s.Handler.Broadcaster = s.Broadcaster
@@ -154,9 +167,10 @@ func (s *Server) Open() error {
 	go func() { http.Serve(ln, s.Handler) }()
 
 	// Start background monitoring.
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
+	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 
 	return nil
 }
@@ -188,6 +202,7 @@ func (s *Server) Addr() net.Addr {
 func (s *Server) logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
 
 func (s *Server) monitorAntiEntropy() {
+	t := time.Now()
 	ticker := time.NewTicker(s.AntiEntropyInterval)
 	defer ticker.Stop()
 
@@ -199,6 +214,7 @@ func (s *Server) monitorAntiEntropy() {
 		case <-s.closing:
 			return
 		case <-ticker.C:
+			s.Holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 
 		s.logger().Printf("holder sync beginning")
@@ -219,6 +235,8 @@ func (s *Server) monitorAntiEntropy() {
 		// Record successful sync in log.
 		s.logger().Printf("holder sync complete")
 	}
+	dif := time.Since(t)
+	s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
 }
 
 // monitorMaxSlices periodically pulls the highest slice from each node in the cluster.
@@ -286,7 +304,10 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.CreateFrameMessage:
-		index := s.Holder.Index(obj.Index)
+		idx := s.Holder.Index(obj.Index)
+		if idx == nil {
+			return fmt.Errorf("Local Index not found: %s", obj.Index)
+		}
 		opt := FrameOptions{
 			RowLabel:       obj.Meta.RowLabel,
 			InverseEnabled: obj.Meta.InverseEnabled,
@@ -294,13 +315,13 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			CacheSize:      obj.Meta.CacheSize,
 			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
 		}
-		_, err := index.CreateFrame(obj.Frame, opt)
+		_, err := idx.CreateFrame(obj.Frame, opt)
 		if err != nil {
 			return err
 		}
 	case *internal.DeleteFrameMessage:
-		index := s.Holder.Index(obj.Index)
-		if err := index.DeleteFrame(obj.Frame); err != nil {
+		idx := s.Holder.Index(obj.Index)
+		if err := idx.DeleteFrame(obj.Frame); err != nil {
 			return err
 		}
 	}
@@ -319,7 +340,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	ns := internal.NodeStatus{
 		Host:    s.Host,
 		State:   NodeStateUp,
-		Indexes: encodeIndexes(s.Holder.Indexes()),
+		Indexes: EncodeIndexes(s.Holder.Indexes()),
 	}
 
 	// Append Slice list per this Node's indexes
@@ -409,6 +430,7 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	// Require protobuf encoding.
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Send request to remote node.
 	resp, err := http.DefaultClient.Do(req)
@@ -425,7 +447,7 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
+		return nil, fmt.Errorf("invalid status checkMaxSlices: code=%d, err=%s, req=%v", resp.StatusCode, body, req)
 	}
 
 	// Decode response object.
@@ -436,6 +458,37 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	}
 
 	return pb.MaxSlices, nil
+}
+
+// monitorRuntime periodically polls the Go runtime metrics.
+func (s *Server) monitorRuntime() {
+	// Disable metrics when poll interval is zero
+	if s.MetricInterval <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(s.MetricInterval)
+	defer ticker.Stop()
+
+	gcn := gcnotifier.New()
+	defer gcn.Close()
+
+	s.logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
+
+	for {
+		// Wait for tick or a close.
+		select {
+		case <-s.closing:
+			return
+		case <-gcn.AfterGC():
+			// GC just ran
+			s.Holder.Stats.Count("garbage_collection", 1, 1.0)
+		case <-ticker.C:
+		}
+
+		// Record the number of go routines
+		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
+	}
 }
 
 // StatusHandler specifies two methods which an object must implement to share
