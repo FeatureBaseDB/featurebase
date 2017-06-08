@@ -496,8 +496,6 @@ func TestExecutor_Execute_ExternalCall(t *testing.T) {
 		},
 	}
 
-	//	type NewPluginConstructor func(*Holder) Plugin
-
 	pilosa.RegisterPlugin("test1", pilosa.NewPluginConstructor(p.NewMockPluginConstruct))
 
 	// Execute function with plugin call.

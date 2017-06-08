@@ -32,7 +32,7 @@ var (
 	pr = newPluginRegistry()
 )
 
-// Register registers a plugin constructor with the registry.
+// RegisterPlugin registers a plugin constructor with the registry.
 // Returns an error if the plugin is already registered.
 func RegisterPlugin(name string, fn NewPluginConstructor) error {
 	return pr.register(name, fn)

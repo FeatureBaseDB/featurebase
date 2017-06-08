@@ -263,7 +263,7 @@ func (c *ExternalCall) String() string {
 	return buf.String()
 }
 
-// Arg represents an call argument.
+// Arg represents a call argument.
 // The key can be the index or the string key.
 // The value can be a uint64, []uint64, string, Call, or Calls.
 type Arg struct {
