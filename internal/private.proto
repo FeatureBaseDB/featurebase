@@ -77,6 +77,37 @@ message Index {
     uint64 MaxSlice = 3;
     repeated Frame Frames = 4;
     repeated uint64 Slices = 5;
+    repeated InputDefinition InputDefinitions = 6;
+}
+
+message InputDefinition {
+    string Name = 1;
+    InputDefinitionMeta Meta = 2;
+}
+
+message InputDefinitionMeta {
+    repeated Frame Frames = 1;
+    repeated InputDefinitionField InputDefinitionFields = 2;
+}
+
+message InputDefinitionField {
+    string Name = 1;
+    bool PrimaryKey = 2;
+    Action Meta = 3;
+}
+
+message Action {
+    string Frame = 1;
+    string ValueDestination = 2;
+    map<string, uint64> ValueMap = 3;
+    uint64 RowID = 4;
+
+}
+
+message CreateInputDefinitionMessage {
+    string Index = 1;
+    string InputDefinition = 2;
+    InputDefinitionMeta Meta = 3;
 }
 
 message NodeStatus {

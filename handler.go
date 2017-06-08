@@ -129,6 +129,10 @@ func NewRouter(handler *Handler) *mux.Router {
 	// For now we just do it for the most commonly used handler, /query
 	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
 
+	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetDefinition).Methods("GET")
+	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostDefinition).Methods("POST")
+	router.HandleFunc("/index/{index}input-definition/{input-definition}", handler.handleDeleteDefinition).Methods("DELETE")
+
 	return router
 }
 
@@ -1494,4 +1498,61 @@ func errorString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	inputDefName := mux.Vars(r)["input-definition"]
+
+	// Decode request.
+	var req postInputDefinition
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err == io.EOF {
+		// If no data was provided (EOF), we still create the frame
+		// with default values.
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	fmt.Println(req)
+
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Create InputDefinition.
+	_, err = index.CreateInputDefinition(inputDefName, req.Frames, req.Fields)
+	if err == ErrInputDefinitionExists {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	//err = h.Broadcaster.SendSync(
+	//	&internal.CreateInputDefinitionMessage{
+	//		Index:           indexName,
+	//		InputDefinition: inputDefName,
+	//		Meta: req.Options.Encode(),
+	//	})
+	//if err != nil {
+	//	h.logger().Printf("problem sending CreateFrame message: %s", err)
+	//}
+}
+
+func (h *Handler) handleGetDefinition(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func (h *Handler) handleDeleteDefinition(w http.ResponseWriter, r *http.Request) {
+
+}
+
+type postInputDefinition struct {
+	Frames []Frame `json:"frames,omitempty"`
+	Fields []Field `json:"field,omitempty"`
 }

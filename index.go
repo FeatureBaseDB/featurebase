@@ -57,6 +57,9 @@ type Index struct {
 	// Column attribute storage and cache
 	columnAttrStore *AttrStore
 
+	// InputDefinition by name
+	inputDefinitions map[string]*InputDefinition
+
 	broadcaster Broadcaster
 	Stats       StatsClient
 
@@ -71,9 +74,10 @@ func NewIndex(path, name string) (*Index, error) {
 	}
 
 	return &Index{
-		path:   path,
-		name:   name,
-		frames: make(map[string]*Frame),
+		path:             path,
+		name:             name,
+		frames:           make(map[string]*Frame),
+		inputDefinitions: make(map[string]*InputDefinition),
 
 		remoteMaxSlice:        0,
 		remoteMaxInverseSlice: 0,
@@ -327,6 +331,11 @@ func (i *Index) SetTimeQuantum(q TimeQuantum) error {
 // FramePath returns the path to a frame in the index.
 func (i *Index) FramePath(name string) string { return filepath.Join(i.path, name) }
 
+// InputDefPath returns the path to a inputdefinition in the index.
+func (i *Index) InputDefPath(name string) string {
+	return filepath.Join(i.path, ".input-definitions", name)
+}
+
 // Frame returns a frame in the index by name.
 func (i *Index) Frame(name string) *Frame {
 	i.mu.Lock()
@@ -360,6 +369,37 @@ func (i *Index) CreateFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, ErrFrameExists
 	}
 	return i.createFrame(name, opt)
+}
+
+// CreateInputDefinition creates a new input definition.
+func (i *Index) CreateInputDefinition(name string, frames []Frame, field []Field) (*InputDefinition, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Ensure frame doesn't already exist.
+	if i.inputDefinitions[name] != nil {
+		return nil, ErrInputDefinitionExists
+	}
+	return i.createInputDefinition(name, frames, field)
+}
+
+func (i *Index) createInputDefinition(name string, frames []Frame, field []Field) (*InputDefinition, error) {
+	if name == "" {
+		return nil, errors.New("input-definition name required")
+	}
+
+	// Initialize frame.
+	inputDef, err := i.newInputDefinition(i.InputDefPath(name), name)
+	fmt.Println(inputDef)
+	if err != nil {
+		return nil, err
+	}
+	// Open frame.
+	if err := inputDef.Open(); err != nil {
+		return nil, err
+	}
+	i.inputDefinitions[name] = inputDef
+	return inputDef, nil
 }
 
 // CreateFrameIfNotExists creates a frame with the given options if it doesn't exist.
@@ -436,6 +476,17 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 
 func (i *Index) newFrame(path, name string) (*Frame, error) {
 	f, err := NewFrame(path, i.name, name)
+	if err != nil {
+		return nil, err
+	}
+	f.LogOutput = i.LogOutput
+	f.Stats = i.Stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.broadcaster = i.broadcaster
+	return f, nil
+}
+
+func (i *Index) newInputDefinition(path, name string) (*InputDefinition, error) {
+	f, err := NewInputDefinition(path, i.name, name)
 	if err != nil {
 		return nil, err
 	}
