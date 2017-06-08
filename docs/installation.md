@@ -105,6 +105,7 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       pilosa [command]
 
     Available Commands:
+
       backup          Backup data from pilosa.
       bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
@@ -178,6 +179,7 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
       sort            Sort import data for optimal import performance.
+
 
     Flags:
       -c, --config string   Configuration file to read from.
