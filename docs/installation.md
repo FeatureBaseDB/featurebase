@@ -61,7 +61,6 @@ There are three ways to install Pilosa on MacOS: download the binary (recommende
       inspect     Get stats on a pilosa data file.
       restore     Restore data to pilosa from a backup file.
       server      Run Pilosa.
-      sort        Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
@@ -121,7 +120,6 @@ There are three ways to install Pilosa on MacOS: download the binary (recommende
       inspect     Get stats on a pilosa data file.
       restore     Restore data to pilosa from a backup file.
       server      Run Pilosa.
-      sort        Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
@@ -211,7 +209,6 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
       inspect     Get stats on a pilosa data file.
       restore     Restore data to pilosa from a backup file.
       server      Run Pilosa.
-      sort        Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
@@ -271,7 +268,6 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
       inspect     Get stats on a pilosa data file.
       restore     Restore data to pilosa from a backup file.
       server      Run Pilosa.
-      sort        Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
