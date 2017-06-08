@@ -240,6 +240,6 @@ curl -XGET localhost:10101/version
 
 Response:
 ```
-{"version":"v0.3.0-353-ge633247"}
+{"version":"v0.4.0"}
 ```
 

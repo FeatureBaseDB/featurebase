@@ -9,25 +9,79 @@ Pilosa is currently available for [MacOS](#installing-on-macos) and [Linux](#ins
 
 ### Installing on MacOS
 
-There are three ways to install Pilosa on MacOS: download the binary (recommended), build from source, or use Docker.
+There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/) (recommended), download the binary, build from source, or use Docker.
+
+#### Use Homebrew
+
+1. Update your Homebrew formulas:
+    ```
+    brew update
+    ```
+
+2. Install Pilosa
+    ```
+    brew install pilosa
+    ```
+
+3. Make sure Pilosa is installed successfully:
+    ```
+    pilosa
+    ```
+
+    If you see something like:
+    ```
+    Pilosa is a fast index to turbocharge your database.
+
+    This binary contains Pilosa itself, as well as common
+    tools for administering pilosa, importing/exporting data,
+    backing up, and more. Complete documentation is available
+    at https://www.pilosa.com/docs/
+
+    Version: v0.4.0
+    Build Time: 2017-06-08T19:44:21+0000
+
+    Usage:
+      pilosa [command]
+
+    Available Commands:
+      backup          Backup data from pilosa.
+      bench           Benchmark operations.
+      check           Do a consistency check on a pilosa data file.
+      config          Print the current configuration.
+      export          Export data from pilosa.
+      generate-config Print the default configuration.
+      help            Help about any command
+      import          Bulk load data into pilosa.
+      inspect         Get stats on a pilosa data file.
+      restore         Restore data to pilosa from a backup file.
+      server          Run Pilosa.
+      sort            Sort import data for optimal import performance.
+
+    Flags:
+      -c, --config string   Configuration file to read from.
+
+    Use "pilosa [command] --help" for more information about a command.
+    ```
+
+    You're good to go!
 
 #### Download the Binary
 
 1. Download the latest release:
     ```
-    curl -L -O https://github.com/pilosa/pilosa/releases/download/v0.3.1/pilosa-v0.3.1-darwin-amd64.tar.gz
+    curl -L -O https://github.com/pilosa/pilosa/releases/download/v0.4.0/pilosa-v0.4.0-darwin-amd64.tar.gz
     ```
 
     Other releases can be downloaded from our Releases page on Github.
 
 2. Extract the binary:
     ```
-    tar xfz pilosa-v0.3.1-darwin-amd64.tar.gz
+    tar xfz pilosa-v0.4.0-darwin-amd64.tar.gz
     ```
 
 3. Move the binary into your PATH so you can run `pilosa` from any shell:
     ```
-    cp -i pilosa-v0.3.1-darwin-amd64/pilosa /usr/local/bin
+    cp -i pilosa-v0.4.0-darwin-amd64/pilosa /usr/local/bin
     ```
 
 4. Make sure Pilosa is installed successfully:
@@ -42,25 +96,28 @@ There are three ways to install Pilosa on MacOS: download the binary (recommende
     This binary contains Pilosa itself, as well as common
     tools for administering pilosa, importing/exporting data,
     backing up, and more. Complete documentation is available
-    at http://pilosa.com/docs
+    at https://www.pilosa.com/docs/
 
-    Version: v0.3.0-279-gcf7082f
-    Build Time: 2017-04-21T15:36:08+0000
+    Version: v0.4.0
+    Build Time: 2017-06-08T19:44:21+0000
 
     Usage:
       pilosa [command]
 
     Available Commands:
-      backup      Backup data from pilosa.
-      bench       Benchmark operations.
-      check       Do a consistency check on a pilosa data file.
-      config      Print the default configuration.
-      export      Export data from pilosa.
-      help        Help about any command
-      import      Bulk load data into pilosa.
-      inspect     Get stats on a pilosa data file.
-      restore     Restore data to pilosa from a backup file.
-      server      Run Pilosa.
+
+      backup          Backup data from pilosa.
+      bench           Benchmark operations.
+      check           Do a consistency check on a pilosa data file.
+      config          Print the current configuration.
+      export          Export data from pilosa.
+      generate-config Print the default configuration.
+      help            Help about any command
+      import          Bulk load data into pilosa.
+      inspect         Get stats on a pilosa data file.
+      restore         Restore data to pilosa from a backup file.
+      server          Run Pilosa.
+      sort            Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
@@ -101,25 +158,28 @@ There are three ways to install Pilosa on MacOS: download the binary (recommende
     This binary contains Pilosa itself, as well as common
     tools for administering pilosa, importing/exporting data,
     backing up, and more. Complete documentation is available
-    at http://pilosa.com/docs
+    at https://www.pilosa.com/docs/
 
-    Version: v0.3.0-279-gcf7082f
-    Build Time: 2017-04-21T15:36:08+0000
+    Version: v0.4.0
+    Build Time: 2017-06-08T19:44:21+0000
 
     Usage:
       pilosa [command]
 
     Available Commands:
-      backup      Backup data from pilosa.
-      bench       Benchmark operations.
-      check       Do a consistency check on a pilosa data file.
-      config      Print the default configuration.
-      export      Export data from pilosa.
-      help        Help about any command
-      import      Bulk load data into pilosa.
-      inspect     Get stats on a pilosa data file.
-      restore     Restore data to pilosa from a backup file.
-      server      Run Pilosa.
+      backup          Backup data from pilosa.
+      bench           Benchmark operations.
+      check           Do a consistency check on a pilosa data file.
+      config          Print the current configuration.
+      export          Export data from pilosa.
+      generate-config Print the default configuration.
+      help            Help about any command
+      import          Bulk load data into pilosa.
+      inspect         Get stats on a pilosa data file.
+      restore         Restore data to pilosa from a backup file.
+      server          Run Pilosa.
+      sort            Sort import data for optimal import performance.
+
 
     Flags:
       -c, --config string   Configuration file to read from.
@@ -163,19 +223,19 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
 
 1. To install the latest version of Pilosa, download the latest release:
     ```
-    curl -L -O https://github.com/pilosa/pilosa/releases/download/v0.3.1/pilosa-v0.3.1-linux-amd64.tar.gz
+    curl -L -O https://github.com/pilosa/pilosa/releases/download/v0.4.0/pilosa-v0.4.0-linux-amd64.tar.gz
     ```
 
     Note: This assumes you are using an `amd64` compatible architecture. Other releases can be downloaded from our Releases page on Github.
 
 2. Extract the binary:
     ```
-    tar xfz pilosa-v0.3.1-linux-amd64.tar.gz
+    tar xfz pilosa-v0.4.0-linux-amd64.tar.gz
     ```
 
 3. Move the binary into your PATH so you can run `pilosa` from any shell:
     ```
-    cp -i pilosa-v0.3.1-linux-amd64/pilosa /usr/local/bin
+    cp -i pilosa-v0.4.0-linux-amd64/pilosa /usr/local/bin
     ```
 
 4. Make sure Pilosa is installed successfully:
@@ -190,25 +250,27 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
     This binary contains Pilosa itself, as well as common
     tools for administering pilosa, importing/exporting data,
     backing up, and more. Complete documentation is available
-    at http://pilosa.com/docs
+    at https://www.pilosa.com/docs/
 
-    Version: v0.3.0-279-gcf7082f
-    Build Time: 2017-04-21T15:36:08+0000
+    Version: v0.4.0
+    Build Time: 2017-06-08T19:44:21+0000
 
     Usage:
       pilosa [command]
 
     Available Commands:
-      backup      Backup data from pilosa.
-      bench       Benchmark operations.
-      check       Do a consistency check on a pilosa data file.
-      config      Print the default configuration.
-      export      Export data from pilosa.
-      help        Help about any command
-      import      Bulk load data into pilosa.
-      inspect     Get stats on a pilosa data file.
-      restore     Restore data to pilosa from a backup file.
-      server      Run Pilosa.
+      backup          Backup data from pilosa.
+      bench           Benchmark operations.
+      check           Do a consistency check on a pilosa data file.
+      config          Print the current configuration.
+      export          Export data from pilosa.
+      generate-config Print the default configuration.
+      help            Help about any command
+      import          Bulk load data into pilosa.
+      inspect         Get stats on a pilosa data file.
+      restore         Restore data to pilosa from a backup file.
+      server          Run Pilosa.
+      sort            Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
@@ -249,25 +311,27 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
     This binary contains Pilosa itself, as well as common
     tools for administering pilosa, importing/exporting data,
     backing up, and more. Complete documentation is available
-    at http://pilosa.com/docs
+    at https://www.pilosa.com/docs/
 
-    Version: v0.3.0-279-gcf7082f
-    Build Time: 2017-04-21T15:36:08+0000
+    Version: v0.4.0
+    Build Time: 2017-06-08T19:44:21+0000
 
     Usage:
       pilosa [command]
 
     Available Commands:
-      backup      Backup data from pilosa.
-      bench       Benchmark operations.
-      check       Do a consistency check on a pilosa data file.
-      config      Print the default configuration.
-      export      Export data from pilosa.
-      help        Help about any command
-      import      Bulk load data into pilosa.
-      inspect     Get stats on a pilosa data file.
-      restore     Restore data to pilosa from a backup file.
-      server      Run Pilosa.
+      backup          Backup data from pilosa.
+      bench           Benchmark operations.
+      check           Do a consistency check on a pilosa data file.
+      config          Print the current configuration.
+      export          Export data from pilosa.
+      generate-config Print the default configuration.
+      help            Help about any command
+      import          Bulk load data into pilosa.
+      inspect         Get stats on a pilosa data file.
+      restore         Restore data to pilosa from a backup file.
+      server          Run Pilosa.
+      sort            Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
