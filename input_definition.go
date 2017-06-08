@@ -3,7 +3,9 @@ package pilosa
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 )
 
 type InputDefinition struct {
@@ -40,7 +42,7 @@ func (i *InputDefinition) Path() string { return i.path }
 func (i *InputDefinition) Open() error {
 	fmt.Println(i.path)
 	if err := func() error {
-		// Ensure the frame's path exists.
+		// Ensure the input definition's path exists.
 		if err := os.MkdirAll(i.path, 0777); err != nil {
 			return err
 		}
@@ -57,23 +59,23 @@ func (i *InputDefinition) Open() error {
 	return nil
 }
 
-// saveMeta writes meta data for the frame.
-//func (f *InputDefinition) saveMeta() error {
-//	// Marshal metadata.
-//	buf, err := proto.Marshal(&internal.InputDefinitionMeta{
-//		Frames: f.
-//	})
-//	if err != nil {
-//		return err
-//	}
-//
-//	// Write to meta file.
-//	if err := ioutil.WriteFile(filepath.Join(f.path, ".meta"), buf, 0666); err != nil {
-//		return err
-//	}
-//
-//	return nil
-//}
+//saveMeta writes meta data for the frame.
+func (f *InputDefinition) saveMeta() error {
+	// Marshal metadata.
+	//buf, err := proto.Marshal(&internal.InputDefinitionMeta{
+	//	Frames: f.
+	//})
+	//if err != nil {
+	//	return err
+	//}
+
+	// Write to meta file.
+	if err := ioutil.WriteFile(filepath.Join(f.path, f.name), []byte("123"), 0666); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 // FrameOptions represents options to set when initializing a frame.
 type InputDefinitionMeta struct {

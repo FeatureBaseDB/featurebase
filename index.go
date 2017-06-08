@@ -332,8 +332,8 @@ func (i *Index) SetTimeQuantum(q TimeQuantum) error {
 func (i *Index) FramePath(name string) string { return filepath.Join(i.path, name) }
 
 // InputDefPath returns the path to a inputdefinition in the index.
-func (i *Index) InputDefPath(name string) string {
-	return filepath.Join(i.path, ".input-definitions", name)
+func (i *Index) InputDefPath() string {
+	return filepath.Join(i.path, ".input-definitions")
 }
 
 // Frame returns a frame in the index by name.
@@ -376,7 +376,7 @@ func (i *Index) CreateInputDefinition(name string, frames []Frame, field []Field
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Ensure frame doesn't already exist.
+	// Ensure input definition doesn't already exist.
 	if i.inputDefinitions[name] != nil {
 		return nil, ErrInputDefinitionExists
 	}
@@ -388,14 +388,18 @@ func (i *Index) createInputDefinition(name string, frames []Frame, field []Field
 		return nil, errors.New("input-definition name required")
 	}
 
-	// Initialize frame.
-	inputDef, err := i.newInputDefinition(i.InputDefPath(name), name)
+	// Initialize input definition.
+	inputDef, err := i.newInputDefinition(i.InputDefPath(), name)
 	fmt.Println(inputDef)
 	if err != nil {
 		return nil, err
 	}
-	// Open frame.
+	// Open input definition.
 	if err := inputDef.Open(); err != nil {
+		return nil, err
+	}
+
+	if err = inputDef.saveMeta(); err != nil {
 		return nil, err
 	}
 	i.inputDefinitions[name] = inputDef
