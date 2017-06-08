@@ -22,6 +22,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
@@ -42,6 +43,9 @@ type ImportCommand struct {
 
 	// Size of buffer used to chunk import.
 	BufferSize int `json:"bufferSize"`
+
+	// Enables sorting of data file before import.
+	Sort bool `json:"sort"`
 
 	// Reusable client.
 	Client *pilosa.Client `json:"-"`
@@ -185,6 +189,10 @@ func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) err
 
 	// Parse path into bits.
 	for slice, bits := range bitsBySlice {
+		if cmd.Sort {
+			sort.Sort(pilosa.BitsByPos(bits))
+		}
+
 		logger.Printf("importing slice: %d, n=%d", slice, len(bits))
 		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Frame, slice, bits); err != nil {
 			return err

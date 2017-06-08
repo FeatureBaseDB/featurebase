@@ -36,9 +36,10 @@ While Pilosa does have some high system requirements it is not a best practice t
 
 The import API expects a csv of RowID,ColumnID's.
 
-When importing large datasets remember it is much faster to pre sort the data by RowID and then by ColumnID in ascending order. You can use `pilosa sort CSV_FILE` to do that. Also, avoid querying Pilosa until the import is complete, otherwise you will experience inconsistent results.
+When importing large datasets remember it is much faster to pre sort the data by RowID and then by ColumnID in ascending order. You can use the `--sort` flag to do that. Also, avoid querying Pilosa until the import is complete, otherwise you will experience inconsistent results.
+
 ```
-pilosa import  -d project -f stargazer project-stargazer.csv
+pilosa import --sort -d project -f stargazer project-stargazer.csv
 ```
 
 #### Exporting
