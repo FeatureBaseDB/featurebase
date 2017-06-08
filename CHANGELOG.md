@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.4.0] - 2017-06-08
 
+This version contains 53 contributions from 13 contributors (including 4 volunteer contributors). There are 96 files changed, 6373 insertions, and 770 deletions. Test coverage is currently 73%.
+
+*Note that data files created in Pilosa < 0.4.0 are not compatible with Pilosa 0.4.0 as a result of [#520](https://github.com/pilosa/pilosa/pull/520).*
+
 ### Added
 - Support metric reporting through StatsD protocol ([#468](https://github.com/pilosa/pilosa/pull/468), [#568](https://github.com/pilosa/pilosa/pull/568), [#580](https://github.com/pilosa/pilosa/pull/580))
 - Improve test coverage for ctl package ([#586](https://github.com/pilosa/pilosa/pull/586))
