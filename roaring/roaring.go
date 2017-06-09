@@ -2249,24 +2249,90 @@ func differenceArrayArray(a, b *container) *container {
 }
 
 func differenceArrayRun(a, b *container) *container {
-	// TODO
-	return nil
+	// func (ac *arrayContainer) iandNotRun16(rc *runContainer16) container {
+
+	output := &container{array: make([]uint32, 0, a.n)}
+	// cardinality upper bound: card(A)
+	
+	return output
 }
 func differenceRunArray(a, b *container) *container {
 	// TODO
-	return nil
+	output := &container{runs: make([]interval32, 0, a.n)}
+	return output
 }
 func differenceRunBitmap(a, b *container) *container {
 	// TODO
-	return nil
+	output := &container{runs: make([]interval32, 0, a.n)}
+	return output
 }
 func differenceBitmapRun(a, b *container) *container {
 	// TODO
-	return nil
+	output := &container{bitmap: make([]uint64, bitmapN)}
+	return output
 }
 func differenceRunRun(a, b *container) *container {
-	// TODO
-	return nil
+	// (rc *runContainer32) AndNotRunContainer32(b *runContainer32) *runContainer32 {
+
+	if a.n == 0 || b.n == 0 {
+		return a
+	}
+
+	apos := 0  // current a-run index
+	bpos := 0  // current b-run index
+	astart := a.runs[apos].start
+	alast := a.runs[apos].last
+	bstart := b.runs[bpos].start
+	blast := b.runs[bpos].last
+	alen := len(a.runs)
+	blen := len(b.runs)
+
+	output := &container{runs: make([]interval32, 0, alen+blen)}  // TODO allocate max then truncate? or something else
+	// cardinality upper bound: sum of number of runs
+	// each B-run could split an A-run in two, up to len(b.runs) times
+
+	for apos < alen && bpos < blen {
+		switch {
+		case alast < bstart:
+			// current A-run entirely preceeds current B-run: keep full A-run, advance to next A-run
+			output.runs = append(output.runs, interval32{start: uint32(astart), last: uint32(alast)})
+			apos++
+			if apos < alen {
+				astart = a.runs[apos].start
+				alast = a.runs[apos].last
+			}
+		case blast < astart:
+			// current B-run entirely preceeds current A-run: advance to next B-run
+			bpos++
+			if bpos < blen {
+				bstart = b.runs[bpos].start
+				blast = b.runs[bpos].last
+			}
+		default:
+			// overlap
+			if astart < bstart {
+				output.runs = append(output.runs, interval32{start: uint32(astart), last: uint32(bstart - 1)})
+			}
+			if alast > blast {
+				astart = blast + 1
+			} else {
+				apos++
+				if apos < alen {
+					astart = a.runs[apos].start
+					alast = a.runs[apos].last
+				}
+			}
+		}
+	}
+	if apos < alen {
+		output.runs = append(output.runs, interval32{start: uint32(astart), last: uint32(alast)})
+		apos++
+		if apos < alen {
+			output.runs = append(output.runs, a.runs[apos:]...)
+		}
+	}
+
+	return output
 }
 
 func differenceArrayBitmap(a, b *container) *container {
