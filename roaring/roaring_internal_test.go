@@ -884,6 +884,36 @@ func TestArrayToRun(t *testing.T) {
 	}
 }
 
+func TestRunToArray(t *testing.T) {
+	a := &container{}
+	tests := []struct {
+		runs []interval32
+		exp  []uint32
+	}{
+		{
+			runs: []interval32{{start: 0, last: 0}},
+			exp:  []uint32{0},
+		},
+		{
+			runs: []interval32{{start: 0, last: 4}},
+			exp:  []uint32{0, 1, 2, 3, 4},
+		},
+		{
+			runs: []interval32{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+			exp:  []uint32{2, 5, 6, 7, 13, 14, 17},
+		},
+	}
+
+	for i, test := range tests {
+		a.runs = test.runs
+		a.n = len(test.exp)
+		a.runToArray()
+		if !reflect.DeepEqual(a.array, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.array)
+		}
+	}
+}
+
 func TestBitmapZeroRange(t *testing.T) {
 	c := &container{bitmap: make([]uint64, bitmapN)}
 	tests := []struct {
@@ -1234,8 +1264,8 @@ func TestWriteReadArray(t *testing.T) {
 
 func TestWriteReadBitmap(t *testing.T) {
 	// create bitmap containing > 4096 bits
-	cb := &container{bitmap: make([]uint64, bitmapN), n: 129*32}
-	for i := 0; i < 129 ; i++ {
+	cb := &container{bitmap: make([]uint64, bitmapN), n: 129 * 32}
+	for i := 0; i < 129; i++ {
 		cb.bitmap[i] = 0x5555555555555555
 	}
 	bb := &Bitmap{keys: []uint64{0}, containers: []*container{cb}}
@@ -1249,7 +1279,7 @@ func TestWriteReadBitmap(t *testing.T) {
 }
 
 func TestWriteReadRun(t *testing.T) {
-	cr := &container{runs: []interval32{{start: 3, last: 13}, {start: 100, last:109}}, n: 20}
+	cr := &container{runs: []interval32{{start: 3, last: 13}, {start: 100, last: 109}}, n: 20}
 	br := &Bitmap{keys: []uint64{0}, containers: []*container{cr}}
 	br2 := &Bitmap{}
 	var buf bytes.Buffer
@@ -1257,5 +1287,75 @@ func TestWriteReadRun(t *testing.T) {
 	br2.UnmarshalBinary(buf.Bytes())
 	if !reflect.DeepEqual(br2.containers[0].runs, cr.runs) {
 		t.Fatalf("run test expected %x, but got %x", cr.runs, br2.containers[0].runs)
+	}
+}
+
+func TestXorArrayRun(t *testing.T) {
+	a := &container{array: []uint32{1, 5, 10, 11, 12}}
+	b := &container{runs: []interval32{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
+	exp := []uint32{1, 2, 3, 4, 6, 7, 8, 9, 11, 13, 15, 16}
+
+	ret := xorArrayRun(a, b)
+	if !reflect.DeepEqual(ret.array, exp) {
+		t.Fatalf("test expected %v, but got %v", exp, ret.array)
+	}
+}
+
+func TestXorRunRun(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	tests := []struct {
+		aruns []interval32
+		bruns []interval32
+		exp   []interval32
+	}{
+		{
+			aruns: []interval32{},
+			bruns: []interval32{{start: 5, last: 10}},
+			exp:   []interval32{{start: 5, last: 10}},
+		},
+		{
+			aruns: []interval32{{start: 5, last: 12}},
+			bruns: []interval32{{start: 5, last: 10}},
+			exp:   []interval32{{start: 11, last: 12}},
+		},
+		{
+			aruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
+			bruns: []interval32{{start: 5, last: 10}},
+			exp:   []interval32{{start: 1, last: 3}, {start: 6, last: 6}, {start: 11, last: 12}},
+		},
+		{
+			aruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
+			bruns: []interval32{{start: 2, last: 65535}},
+			exp:   []interval32{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+		},
+		{
+			aruns: []interval32{{start: 2, last: 65535}},
+			bruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
+			exp:   []interval32{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+		},
+		{
+			aruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
+			bruns: []interval32{{start: 0, last: 65535}},
+			exp:   []interval32{{start: 0, last: 0}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+		},
+		{
+			aruns: []interval32{{start: 0, last: 65535}},
+			bruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
+			exp:   []interval32{{start: 0, last: 0}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+		},
+		{
+			aruns: []interval32{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 9}, {start: 12, last: 22}},
+			bruns: []interval32{{start: 2, last: 8}, {start: 16, last: 27}, {start: 33, last: 34}},
+			exp:   []interval32{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 9, last: 9}, {start: 12, last: 15}, {start: 23, last: 27}, {start: 33, last: 34}},
+		},
+	}
+	for i, test := range tests {
+		a.runs = test.aruns
+		b.runs = test.bruns
+		ret := xorRunRun(a, b)
+		if !reflect.DeepEqual(ret.runs, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
+		}
 	}
 }
