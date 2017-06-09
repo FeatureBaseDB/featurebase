@@ -1087,6 +1087,139 @@ func TestArrayCountRuns(t *testing.T) {
 	}
 }
 
+func TestDifferenceArrayRun(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	tests := []struct {
+		array []uint32
+		runs  []interval32
+		exp   []uint32
+	}{
+		{
+			array: []uint32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+			runs:  []interval32{{start: 5, last: 10}},
+			exp:   []uint32{0, 1, 2, 3, 4, 11, 12},
+		},
+	}
+	for i, test := range tests {
+		a.array = test.array
+		b.runs = test.runs
+		b.n = b.runCountRange(0, 100)
+		ret := differenceArrayRun(a, b)
+		if !reflect.DeepEqual(ret.array, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
+		}
+	}
+}
+
+func TestDifferenceRunArray(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	tests := []struct {
+		runs  []interval32
+		array []uint32
+		exp   []interval32
+	}{
+		{
+			runs:  []interval32{{start: 0, last: 12}},
+			array: []uint32{5, 6, 7, 8, 9, 10},
+			exp:   []interval32{{start: 0, last: 4}, {start: 11, last: 12}},
+		},
+	}
+	for i, test := range tests {
+		a.runs = test.runs
+		a.n = a.runCountRange(0, 100)
+		b.array = test.array
+		ret := differenceRunArray(a, b)
+		if !reflect.DeepEqual(ret.array, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
+		}
+	}
+}
+
+func TestDifferenceRunBitmap(t *testing.T) {
+	a := &container{}
+	b := &container{bitmap: make([]uint64, bitmapN)}
+	tests := []struct {
+		runs   []interval32
+		bitmap []uint64
+		exp    []interval32
+	}{
+		{
+			runs:   []interval32{{start: 0, last: 63}},
+			bitmap: []uint64{0x0000FFFF000000F0},
+			exp:    []interval32{{start: 0, last: 3}, {start: 8, last: 31}, {start: 48, last: 63}},
+		},
+	}
+	for i, test := range tests {
+		a.runs = test.runs
+		a.n = a.runCountRange(0, 100)
+		for i, v := range test.bitmap {
+			b.bitmap[i] = v
+		}
+		ret := differenceRunBitmap(a, b)
+		if !reflect.DeepEqual(ret.runs, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
+		}
+	}
+}
+
+func TestDifferenceBitmapRun(t *testing.T) {
+	a := &container{bitmap: make([]uint64, bitmapN)}
+	b := &container{}
+	tests := []struct {
+		bitmap []uint64
+		runs   []interval32
+		exp    []uint64
+	}{
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
+			runs:   []interval32{{start: 4, last: 7}, {start: 32, last: 47}},
+			exp:    []uint64{0xFFFF0000FFFFFF0F},
+		},
+	}
+	for i, test := range tests {
+		for i, v := range test.bitmap {
+			a.bitmap[i] = v
+		}
+		b.runs = test.runs
+		b.n = b.runCountRange(0, 100)
+		ret := differenceBitmapRun(a, b)
+		if !reflect.DeepEqual(ret.bitmap[:len(test.exp)], test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.bitmap[:len(test.exp)])
+		}
+	}
+}
+
+func TestDifferenceRunRun(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	tests := []struct {
+		aruns []interval32
+		bruns []interval32
+		exp   []interval32
+	}{
+		{
+			// this tests all six overlap combinations
+			// A                     [   ]                   [   ]                        [ ]              [     ]             [   ]                 [  ]
+			// B                    [     ]                [   ]                     [ ]                     [  ]                [   ]                    [  ]
+			aruns: []interval32{{start: 3, last: 6}, {start: 13, last: 16}, {start: 24, last: 26}, {start: 33, last: 38}, {start: 43, last: 46}, {start: 53, last: 56}},
+			bruns: []interval32{{start: 1, last: 8}, {start: 11, last: 14}, {start: 21, last: 23}, {start: 35, last: 37}, {start: 44, last: 48}, {start: 57, last: 59}},
+			exp:   []interval32{{start: 15, last: 16}, {start: 24, last: 26}, {start: 33, last: 34}, {start: 38, last: 38}, {start: 43, last: 43}, {start: 53, last: 56}},
+		},
+	}
+	for i, test := range tests {
+		a.runs = test.aruns
+		a.n = a.runCountRange(0, 100)
+		b.runs = test.bruns
+		b.n = b.runCountRange(0, 100)
+		ret := differenceRunRun(a, b)
+		if !reflect.DeepEqual(ret.runs, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
+		}
+	}
+}
+
 func TestWriteReadArray(t *testing.T) {
 	ca := &container{array: []uint32{1, 10, 100, 1000}, n: 4}
 	ba := &Bitmap{keys: []uint64{0}, containers: []*container{ca}}
