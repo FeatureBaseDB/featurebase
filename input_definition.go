@@ -1,7 +1,6 @@
 package pilosa
 
 import (
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -15,6 +14,8 @@ type InputDefinition struct {
 	broadcaster Broadcaster
 	Stats       StatsClient
 	LogOutput   io.Writer
+	frames []Frame
+	fields []Field
 }
 
 func NewInputDefinition(path, index, name string) (*InputDefinition, error) {
@@ -40,9 +41,7 @@ func (i *InputDefinition) Index() string { return i.index }
 func (i *InputDefinition) Path() string { return i.path }
 
 func (i *InputDefinition) Open() error {
-	fmt.Println(i.path)
 	if err := func() error {
-		// Ensure the input definition's path exists.
 		if err := os.MkdirAll(i.path, 0777); err != nil {
 			return err
 		}
@@ -55,7 +54,6 @@ func (i *InputDefinition) Open() error {
 	}(); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -70,7 +68,7 @@ func (f *InputDefinition) saveMeta() error {
 	//}
 
 	// Write to meta file.
-	if err := ioutil.WriteFile(filepath.Join(f.path, f.name), []byte("123"), 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(f.path, f.name), []byte(""), 0666); err != nil {
 		return err
 	}
 

@@ -372,7 +372,7 @@ func (i *Index) CreateFrame(name string, opt FrameOptions) (*Frame, error) {
 }
 
 // CreateInputDefinition creates a new input definition.
-func (i *Index) CreateInputDefinition(name string, frames []Frame, field []Field) (*InputDefinition, error) {
+func (i *Index) CreateInputDefinition(name string, frames []InputFrame, field []Field) (*InputDefinition, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -383,7 +383,7 @@ func (i *Index) CreateInputDefinition(name string, frames []Frame, field []Field
 	return i.createInputDefinition(name, frames, field)
 }
 
-func (i *Index) createInputDefinition(name string, frames []Frame, field []Field) (*InputDefinition, error) {
+func (i *Index) createInputDefinition(name string, frames []InputFrame, field []Field) (*InputDefinition, error) {
 	if name == "" {
 		return nil, errors.New("input-definition name required")
 	}

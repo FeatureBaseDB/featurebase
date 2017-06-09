@@ -1514,7 +1514,6 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fmt.Println(req)
 
 	// Find index.
 	index := h.Holder.Index(indexName)
@@ -1553,6 +1552,11 @@ func (h *Handler) handleDeleteDefinition(w http.ResponseWriter, r *http.Request)
 }
 
 type postInputDefinition struct {
-	Frames []Frame `json:"frames,omitempty"`
-	Fields []Field `json:"field,omitempty"`
+	Frames []InputFrame `json:"frames,omitempty"`
+	Fields []Field `json:"fields,omitempty"`
+}
+
+type InputFrame struct {
+	Name string
+	Options FrameOptions
 }
