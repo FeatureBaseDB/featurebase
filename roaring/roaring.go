@@ -2251,31 +2251,84 @@ func differenceArrayArray(a, b *container) *container {
 func differenceArrayRun(a, b *container) *container {
 	// func (ac *arrayContainer) iandNotRun16(rc *runContainer16) container {
 
+	if b.n == 0 {
+		return a.clone()
+	}
+
 	output := &container{array: make([]uint32, 0, a.n)}
 	// cardinality upper bound: card(A)
+
+	i := 0  // array index
+	j := 0  // run index
+
+	// keep all array elements before beginning of runs
+	for ; i < b.runs[j].start; i++ {
+		output.array = append(output.array, a.array[i])
+	}
+
+	// handle overlap
+	for ; i < a.n; i++ {
+		if !(a.array[i] >= b.runs[j].start && a.array[i] <= b.runs[j].last) {
+			output.array = append(output.array, a.array[i])
+		}
+		if i >= int(b.runs[j].last) {
+			j++
+			if j == len(b.runs) {
+				break
+			}
+		}
+	}
+	i++
+
+	// keep all array elements after end of runs
+	output.array = append(output.array, a.array[i:]...)
 	
 	return output
 }
+
+func differenceBitmapRun(a, b *container) *container {
+	if a.n == 0 || b.n == 0 {
+		return a.clone()
+	}
+
+	output := a.clone()
+	for j := 0; j < len(b.runs); j++ {
+		output.bitmapZeroRange(uint64(b.runs[j].start), uint64(b.runs[j].last))
+	}
+	return output
+}
+
 func differenceRunArray(a, b *container) *container {
 	// TODO
 	output := &container{runs: make([]interval32, 0, a.n)}
 	return output
 }
+
 func differenceRunBitmap(a, b *container) *container {
-	// TODO
 	output := &container{runs: make([]interval32, 0, a.n)}
+	itr := newBufIterator(newBitmapIterator(b.bitmap))
+
+	fmt.Printf("\ndifferenceRunBitmap\n")
+	for i := 0; ; {
+		vb, eof := itr.next()
+		if eof || {
+			break
+		}
+
+		fmt.Println(i, vb, eof)
+
+		i++
+	}
+
+
 	return output
 }
-func differenceBitmapRun(a, b *container) *container {
-	// TODO
-	output := &container{bitmap: make([]uint64, bitmapN)}
-	return output
-}
+
 func differenceRunRun(a, b *container) *container {
 	// (rc *runContainer32) AndNotRunContainer32(b *runContainer32) *runContainer32 {
 
 	if a.n == 0 || b.n == 0 {
-		return a
+		return a.clone()
 	}
 
 	apos := 0  // current a-run index
