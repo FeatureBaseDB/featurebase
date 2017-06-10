@@ -2641,6 +2641,7 @@ func assert(condition bool, format string, a ...interface{}) {
 	}
 }
 
+// xorArrayRun computes the exclusive or of an array and a run container.
 func xorArrayRun(a, b *container) *container {
 	output := &container{}
 	na, nb := len(a.array), len(b.runs)
@@ -2696,7 +2697,8 @@ func xorArrayRun(a, b *container) *container {
 	return output
 }
 
-func xorCompare(x *stm) (r1 interval32, has_data bool) {
+// xorCompare computes first exclusive run between two runs.
+func xorCompare(x *xorstm) (r1 interval32, has_data bool) {
 	has_data = false
 	if !x.va_valid || !x.vb_valid {
 		if x.vb_valid {
@@ -2714,18 +2716,18 @@ func xorCompare(x *stm) (r1 interval32, has_data bool) {
 		return
 	}
 
-	if x.va.last < x.vb.start { //a  before
+	if x.va.last < x.vb.start { //va  before
 		x.va_valid = false
 		r1 = x.va
 		has_data = true
-	} else if x.vb.last < x.va.start { // b before
+	} else if x.vb.last < x.va.start { //vb before
 		x.vb_valid = false
 		r1 = x.va
 		has_data = true
 	} else if x.va.start == x.vb.start && x.va.last == x.vb.last { // Equal
 		x.va_valid = false
 		x.vb_valid = false
-	} else if x.va.start <= x.vb.start && x.va.last >= x.vb.last { // b inside
+	} else if x.va.start <= x.vb.start && x.va.last >= x.vb.last { //vb inside
 		x.vb_valid = false
 		if x.va.start != x.vb.start {
 			r1 = interval32{start: x.va.start, last: x.vb.start - 1}
@@ -2736,7 +2738,7 @@ func xorCompare(x *stm) (r1 interval32, has_data bool) {
 			x.va_valid = false
 		}
 
-	} else if x.vb.start <= x.va.start && x.vb.last >= x.va.last { //a inside
+	} else if x.vb.start <= x.va.start && x.vb.last >= x.va.last { //va inside
 		x.va_valid = false
 		if x.vb.start != x.va.start {
 			r1 = interval32{start: x.vb.start, last: x.va.start - 1}
@@ -2748,7 +2750,7 @@ func xorCompare(x *stm) (r1 interval32, has_data bool) {
 			x.vb_valid = false
 		}
 
-	} else if x.va.start < x.vb.start && x.va.last <= x.vb.last { //a first overlap
+	} else if x.va.start < x.vb.start && x.va.last <= x.vb.last { //va first overlap
 		x.va_valid = false
 		r1 = interval32{start: x.va.start, last: x.vb.start - 1}
 		has_data = true
@@ -2756,7 +2758,7 @@ func xorCompare(x *stm) (r1 interval32, has_data bool) {
 		if x.vb.start > x.vb.last {
 			x.vb_valid = false
 		}
-	} else if x.vb.start < x.va.start && x.vb.last <= x.va.last { //b first overlap
+	} else if x.vb.start < x.va.start && x.vb.last <= x.va.last { //vb first overlap
 		x.vb_valid = false
 		r1 = interval32{start: x.vb.start, last: x.va.start - 1}
 		has_data = true
@@ -2768,11 +2770,13 @@ func xorCompare(x *stm) (r1 interval32, has_data bool) {
 	return
 }
 
-type stm struct {
+//stm  is state machine used to "xor" iterate over runs.
+type xorstm struct {
 	va_valid, vb_valid bool
 	va, vb             interval32
 }
 
+// xorRunRun computes the exclusive or of two run containers.
 func xorRunRun(a, b *container) *container {
 	na, nb := len(a.runs), len(b.runs)
 	if na == 0 {
@@ -2785,9 +2789,9 @@ func xorRunRun(a, b *container) *container {
 
 	last_i, last_j := -1, -1
 
-	state := &stm{}
+	state := &xorstm{}
 
-	for i, j := 0, 0; i < na || j < nb; { //how to terminate?
+	for i, j := 0, 0; i < na || j < nb; {
 		if i < na && last_i != i {
 			state.va = a.runs[i]
 			state.va_valid = true

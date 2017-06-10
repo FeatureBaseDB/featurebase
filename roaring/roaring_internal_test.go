@@ -1102,6 +1102,36 @@ func TestXorRunRun(t *testing.T) {
 			exp:   []interval32{{start: 5, last: 10}},
 		},
 		{
+			aruns: []interval32{{start: 0, last: 4}},
+			bruns: []interval32{{start: 6, last: 10}},
+			exp:   []interval32{{start: 0, last: 4}, {start: 6, last: 10}},
+		},
+		{
+			aruns: []interval32{{start: 0, last: 6}},
+			bruns: []interval32{{start: 4, last: 10}},
+			exp:   []interval32{{start: 0, last: 3}, {start: 7, last: 10}},
+		},
+		{
+			aruns: []interval32{{start: 4, last: 10}},
+			bruns: []interval32{{start: 0, last: 6}},
+			exp:   []interval32{{start: 0, last: 3}, {start: 7, last: 10}},
+		},
+		{
+			aruns: []interval32{{start: 0, last: 10}},
+			bruns: []interval32{{start: 0, last: 6}},
+			exp:   []interval32{{start: 7, last: 10}},
+		},
+		{
+			aruns: []interval32{{start: 0, last: 6}},
+			bruns: []interval32{{start: 0, last: 10}},
+			exp:   []interval32{{start: 7, last: 10}},
+		},
+		{
+			aruns: []interval32{{start: 0, last: 6}},
+			bruns: []interval32{{start: 0, last: 10}},
+			exp:   []interval32{{start: 7, last: 10}},
+		},
+		{
 			aruns: []interval32{{start: 5, last: 12}},
 			bruns: []interval32{{start: 5, last: 10}},
 			exp:   []interval32{{start: 11, last: 12}},
