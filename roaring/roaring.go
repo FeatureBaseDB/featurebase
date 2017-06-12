@@ -497,7 +497,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Create bitset indicating runs, record whether any runs present.
 	containsRuns := false
-	runFlagBitset := make([]uint8, (containerCount+7)/8)  // TODO verify size
+	runFlagBitset := make([]uint8, (containerCount+7)/8) // TODO verify size
 	var k uint8 = 0
 	for _, c := range b.containers {
 		if c.n == 0 {
@@ -505,7 +505,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		}
 		if c.isRun() {
 			containsRuns = true
-			runFlagBitset[k/8] |= (1 << (k%8))  // TODO verify
+			runFlagBitset[k/8] |= (1 << (k % 8)) // TODO verify
 		}
 		k++
 	}
@@ -606,10 +606,10 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	headerSize := headerBaseSize
 
-	runFlagBitset := make([]uint8, (keyN+7)/8)  // TODO verify size
+	runFlagBitset := make([]uint8, (keyN+7)/8) // TODO verify size
 	if containsRuns {
 		// Read runFlag bitset.
-		for i := 0; i<len(runFlagBitset); i++ {
+		for i := 0; i < len(runFlagBitset); i++ {
 			runFlagBitset[i] = data[8+i]
 		}
 		headerSize += len(runFlagBitset)
@@ -639,9 +639,9 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		if c.n <= ArrayMaxSize {
 			if containsRuns && (runFlagBitset[uint8(i)/8] & (1 << uint8(i%8))) != 0 {
 				// Read runs.
-				runCount := binary.LittleEndian.Uint16(data[offset:offset+2])
+				runCount := binary.LittleEndian.Uint16(data[offset : offset+2])
 				c.runs = (*[0xFFFFFFF]interval32)(unsafe.Pointer(&data[offset+2]))[:runCount] // TODO verify
-				opsOffset = int(offset) + 2 + len(c.runs)*8 // TODO verify
+				opsOffset = int(offset) + 2 + len(c.runs)*8                                   // TODO verify
 			} else {
 				// Read array.
 				c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
@@ -1436,7 +1436,7 @@ func (c *container) bitmapToRun() {
 	current := c.bitmap[0]
 	var i, start, last uint32
 	for {
-		// skip while empty 
+		// skip while empty
 		for current == 0 && i < bitmapN-1 {
 			i++
 			current = c.bitmap[i]
@@ -1446,10 +1446,10 @@ func (c *container) bitmapToRun() {
 			break
 		}
 		currentStart := uint32(trailingZeroN(current))
-		start = 64 * i + currentStart
+		start = 64*i + currentStart
 
 		// pad LSBs with 1s
-		current = current | (current-1)
+		current = current | (current - 1)
 
 		// find next 0
 		for current == maxBitmap && i < bitmapN-1 {
@@ -1459,16 +1459,16 @@ func (c *container) bitmapToRun() {
 
 		last = 0
 		if current == maxBitmap {
-			last = 64*i + 64  // TODO verify
-			c.runs = append(c.runs, interval32{start, last-1})
+			last = 64*i + 64 // TODO verify
+			c.runs = append(c.runs, interval32{start, last - 1})
 			break
 		}
 		currentLast := uint32(trailingZeroN(^current))
-		last = 64 * i + currentLast
-		c.runs = append(c.runs, interval32{start, last-1})
+		last = 64*i + currentLast
+		c.runs = append(c.runs, interval32{start, last - 1})
 
 		// pad LSBs with 0s
-		current = current & (current+1)
+		current = current & (current + 1)
 	}
 
 	c.bitmap = nil
@@ -1480,7 +1480,7 @@ func (c *container) arrayToRun() {
 	c.runs = make([]interval32, 0, c.n) // what capacity to use?
 	start := c.array[0]
 	for i, v := range c.array[1:] {
-		if v - c.array[i] > 1 {
+		if v-c.array[i] > 1 {
 			// if current-previous > 1, one run ends and another begins
 			c.runs = append(c.runs, interval32{start, c.array[i]})
 			start = v
@@ -1565,7 +1565,7 @@ func (c *container) runWriteTo(w io.Writer) (n int64, err error) {
 		return 0, err
 	}
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.runs[0]))[:8*len(c.runs)])
-	return int64(2+nn), err
+	return int64(2 + nn), err
 }
 
 // size returns the encoded size of the container, in bytes.
@@ -2818,4 +2818,187 @@ func assert(condition bool, format string, a ...interface{}) {
 	if !condition {
 		panic(fmt.Sprintf(format, a...))
 	}
+}
+
+// xorArrayRun computes the exclusive or of an array and a run container.
+func xorArrayRun(a, b *container) *container {
+	output := &container{}
+	na, nb := len(a.array), len(b.runs)
+	var vb interval32
+	var va uint32
+	last_i, last_j := -1, -1
+	for i, j := 0, 0; i < na || j < nb; {
+		if i < na && i != last_i {
+			va = a.array[i]
+		}
+		if j < nb && j != last_j {
+			vb = b.runs[j]
+		}
+		last_i = i
+		last_j = j
+
+		if i < na && (j >= nb || va < vb.start) { //before
+			output.n += output.runAppendInterval(interval32{start: va, last: va})
+			i++
+		} else if j < nb && (i >= na || va > vb.last) { //after
+			output.n += output.runAppendInterval(vb)
+			j++
+		} else if va > vb.start {
+			if va < vb.last {
+				output.n += output.runAppendInterval(interval32{start: vb.start, last: va - 1})
+				vb.start = va + 1
+				i++
+				if vb.start > vb.last {
+					j++
+				}
+			} else if va > vb.last {
+				output.n += output.runAppendInterval(vb)
+				j++
+			} else { // va == vb.last
+				vb.last--
+				if vb.start < vb.last {
+					output.n += output.runAppendInterval(vb)
+				}
+				j++
+				i++
+			}
+
+		} else {
+			vb.start++
+			i++
+		}
+	}
+	if output.n < ArrayMaxSize {
+		output.runToArray()
+	} else if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
+	}
+	return output
+}
+
+// xorCompare computes first exclusive run between two runs.
+func xorCompare(x *xorstm) (r1 interval32, has_data bool) {
+	has_data = false
+	if !x.va_valid || !x.vb_valid {
+		if x.vb_valid {
+			x.vb_valid = false
+			r1 = x.vb
+			has_data = true
+			return
+		}
+		if x.va_valid {
+			x.va_valid = false
+			r1 = x.va
+			has_data = true
+			return
+		}
+		return
+	}
+
+	if x.va.last < x.vb.start { //va  before
+		x.va_valid = false
+		r1 = x.va
+		has_data = true
+	} else if x.vb.last < x.va.start { //vb before
+		x.vb_valid = false
+		r1 = x.va
+		has_data = true
+	} else if x.va.start == x.vb.start && x.va.last == x.vb.last { // Equal
+		x.va_valid = false
+		x.vb_valid = false
+	} else if x.va.start <= x.vb.start && x.va.last >= x.vb.last { //vb inside
+		x.vb_valid = false
+		if x.va.start != x.vb.start {
+			r1 = interval32{start: x.va.start, last: x.vb.start - 1}
+			has_data = true
+		}
+		x.va.start = x.vb.last + 1
+		if x.va.start > x.va.last {
+			x.va_valid = false
+		}
+
+	} else if x.vb.start <= x.va.start && x.vb.last >= x.va.last { //va inside
+		x.va_valid = false
+		if x.vb.start != x.va.start {
+			r1 = interval32{start: x.vb.start, last: x.va.start - 1}
+			has_data = true
+		}
+
+		x.vb.start = x.va.last + 1
+		if x.vb.start > x.vb.last {
+			x.vb_valid = false
+		}
+
+	} else if x.va.start < x.vb.start && x.va.last <= x.vb.last { //va first overlap
+		x.va_valid = false
+		r1 = interval32{start: x.va.start, last: x.vb.start - 1}
+		has_data = true
+		x.vb.start = x.va.last + 1
+		if x.vb.start > x.vb.last {
+			x.vb_valid = false
+		}
+	} else if x.vb.start < x.va.start && x.vb.last <= x.va.last { //vb first overlap
+		x.vb_valid = false
+		r1 = interval32{start: x.vb.start, last: x.va.start - 1}
+		has_data = true
+		x.va.start = x.vb.last + 1
+		if x.va.start > x.va.last {
+			x.va_valid = false
+		}
+	}
+	return
+}
+
+//stm  is state machine used to "xor" iterate over runs.
+type xorstm struct {
+	va_valid, vb_valid bool
+	va, vb             interval32
+}
+
+// xorRunRun computes the exclusive or of two run containers.
+func xorRunRun(a, b *container) *container {
+	na, nb := len(a.runs), len(b.runs)
+	if na == 0 {
+		return b.clone()
+	}
+	if nb == 0 {
+		return a.clone()
+	}
+	output := &container{}
+
+	last_i, last_j := -1, -1
+
+	state := &xorstm{}
+
+	for i, j := 0, 0; i < na || j < nb; {
+		if i < na && last_i != i {
+			state.va = a.runs[i]
+			state.va_valid = true
+		}
+
+		if j < nb && last_j != j {
+			state.vb = b.runs[j]
+			state.vb_valid = true
+		}
+		last_i, last_j = i, j
+
+		r1, ok := xorCompare(state)
+		if ok {
+			output.n += output.runAppendInterval(r1)
+		}
+		if !state.va_valid {
+			i++
+		}
+		if !state.vb_valid {
+			j++
+		}
+
+	}
+
+	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
+		output.runToArray()
+	} else if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
+	}
+	return output
 }
