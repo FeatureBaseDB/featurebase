@@ -1364,7 +1364,7 @@ func TestXorRunRun(t *testing.T) {
 	}
 }
 
-func TestBitmapFlipRange(t *testing.T) {
+func TestBitmapXorRange(t *testing.T) {
 	c := &container{bitmap: make([]uint64, bitmapN)}
 	tests := []struct {
 		bitmap []uint64
