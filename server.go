@@ -24,8 +24,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -486,6 +488,9 @@ func (s *Server) monitorRuntime() {
 		// Record the number of go routines
 		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 
+		// Open File handles
+		s.Holder.Stats.Gauge("OpenFiles", float64(CountOpenFiles()), 1.0)
+
 		// Runtime memory metrics
 		runtime.ReadMemStats(&m)
 		s.Holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
@@ -494,6 +499,32 @@ func (s *Server) monitorRuntime() {
 		s.Holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
 		s.Holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
 	}
+}
+
+// CountOpenFiles on opperating systems that support lsof
+func CountOpenFiles() int {
+	count := 0
+
+	switch runtime.GOOS {
+	case "darwin":
+		fallthrough
+	case "linux":
+		fallthrough
+	case "unix":
+		fallthrough
+	case "freebsd":
+		out, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("lsof -p %v", os.Getpid())).Output()
+		if err != nil {
+			log.Fatal(err)
+		}
+		lines := strings.Split(string(out), "\n")
+		count = len(lines) - 1
+	case "windows":
+		// TODO: count open file handles on windows
+	default:
+
+	}
+	return count
 }
 
 // StatusHandler specifies two methods which an object must implement to share
