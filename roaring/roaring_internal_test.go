@@ -996,36 +996,6 @@ func TestUnionBitmapRun(t *testing.T) {
 	}
 }
 
-func TestRunToArray(t *testing.T) {
-	a := &container{}
-	tests := []struct {
-		runs []interval32
-		exp  []uint32
-	}{
-		{
-			runs: []interval32{{start: 0, last: 0}},
-			exp:  []uint32{0},
-		},
-		{
-			runs: []interval32{{start: 0, last: 4}},
-			exp:  []uint32{0, 1, 2, 3, 4},
-		},
-		{
-			runs: []interval32{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
-			exp:  []uint32{2, 5, 6, 7, 13, 14, 17},
-		},
-	}
-
-	for i, test := range tests {
-		a.runs = test.runs
-		a.n = len(test.exp)
-		a.runToArray()
-		if !reflect.DeepEqual(a.array, test.exp) {
-			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.array)
-		}
-	}
-}
-
 func TestBitmapCountRuns(t *testing.T) {
 	c := &container{bitmap: make([]uint64, bitmapN)}
 	tests := []struct {
@@ -1133,6 +1103,7 @@ func TestDifferenceArrayRun(t *testing.T) {
 	}
 	for i, test := range tests {
 		a.array = test.array
+		a.n = len(a.array)
 		b.runs = test.runs
 		b.n = b.runCountRange(0, 100)
 		ret := differenceArrayRun(a, b)
@@ -1160,6 +1131,7 @@ func TestDifferenceRunArray(t *testing.T) {
 		a.runs = test.runs
 		a.n = a.runCountRange(0, 100)
 		b.array = test.array
+		b.n = len(b.array)
 		ret := differenceRunArray(a, b)
 		if !reflect.DeepEqual(ret.array, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
@@ -1187,6 +1159,7 @@ func TestDifferenceRunBitmap(t *testing.T) {
 		for i, v := range test.bitmap {
 			b.bitmap[i] = v
 		}
+		b.n = b.bitmapCountRange(0, 100)
 		ret := differenceRunBitmap(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
@@ -1212,11 +1185,12 @@ func TestDifferenceBitmapRun(t *testing.T) {
 		for i, v := range test.bitmap {
 			a.bitmap[i] = v
 		}
+		a.n = a.bitmapCountRange(0, 100)
 		b.runs = test.runs
 		b.n = b.runCountRange(0, 100)
 		ret := differenceBitmapRun(a, b)
 		if !reflect.DeepEqual(ret.bitmap[:len(test.exp)], test.exp) {
-			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.bitmap[:len(test.exp)])
+			t.Fatalf("test #%v expected \n%X, but got \n%X", i, test.exp, ret.bitmap[:len(test.exp)])
 		}
 	}
 }
