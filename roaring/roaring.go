@@ -2129,6 +2129,32 @@ func (c *container) bitmapSetRange(i, j uint64) {
 	}
 }
 
+// xor's all bits in [i, j] with all true (inclusive) (c must be a bitmap container).
+func (c *container) bitmapXorRange(i, j uint64) {
+	j += 1
+	x := i / 64
+	y := (j - 1) / 64
+	var X uint64 = maxBitmap << (i % 64)
+	var Y uint64 = maxBitmap >> (64 - (j % 64))
+	if x == y {
+		cnt := popcnt(c.bitmap[x])
+		c.bitmap[x] ^= (X & Y) //// flip
+		c.n += int(popcnt(c.bitmap[x]) - cnt)
+	} else {
+		cnt := popcnt(c.bitmap[x])
+		c.bitmap[x] ^= X
+		c.n += int(popcnt(c.bitmap[x]) - cnt)
+		for i := x + 1; i < y; i++ {
+			cnt = popcnt(c.bitmap[i])
+			c.bitmap[i] ^= maxBitmap
+			c.n += int(popcnt(c.bitmap[i]) - cnt)
+		}
+		cnt = popcnt(c.bitmap[y])
+		c.bitmap[y] ^= Y
+		c.n += int(popcnt(c.bitmap[y]) - cnt)
+	}
+}
+
 // zeroes all bits in [i, j] (inclusive) (c must be a bitmap container)
 func (c *container) bitmapZeroRange(i, j uint64) {
 	j += 1
@@ -2814,6 +2840,21 @@ func xorRunRun(a, b *container) *container {
 			j++
 		}
 
+	}
+
+	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
+		output.runToArray()
+	} else if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
+	}
+	return output
+}
+
+// xorRunRun computes the exclusive or of a bitmap and a run container.
+func xorBitmapRun(a, b *container) *container {
+	output := a.clone()
+	for j := 0; j < len(b.runs); j++ {
+		output.bitmapXorRange(uint64(b.runs[j].start), uint64(b.runs[j].last))
 	}
 
 	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
