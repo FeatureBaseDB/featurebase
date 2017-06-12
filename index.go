@@ -31,7 +31,8 @@ import (
 
 // Default index settings.
 const (
-	DefaultColumnLabel = "columnID"
+	DefaultColumnLabel  = "columnID"
+	InputDefinitionRepo = ".input-definitions"
 )
 
 // Index represents a container for frames.
@@ -154,6 +155,44 @@ func (i *Index) Open() error {
 		return err
 	}
 
+	if err := i.openInputDefinition(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// openInputDefinition opens and initializes the input definitions inside the index.
+func (i *Index) openInputDefinition() error {
+	inputDefs, err := os.Open(i.path)
+	if err != nil {
+		return err
+	}
+	defer inputDefs.Close()
+
+	fis, err := inputDefs.Readdir(0)
+	if err != nil {
+		return err
+	}
+	for _, fi := range fis {
+		if fi.Name() != InputDefinitionRepo {
+			continue
+		}
+		inputPath, err := os.Open(i.InputDefPath())
+		if err != nil {
+			return err
+		}
+		inputFiles, err := inputPath.Readdir(0)
+		for _, file := range inputFiles {
+			input, err := i.newInputDefinition(i.InputDefPath(), file.Name())
+			if err != nil {
+				return err
+			}
+			input.Open()
+			i.inputDefinitions[file.Name()] = input
+		}
+
+	}
 	return nil
 }
 
@@ -171,13 +210,12 @@ func (i *Index) openFrames() error {
 	}
 
 	for _, fi := range fis {
-		if !fi.IsDir() || fi.Name() == ".input-definitions" {
+		if !fi.IsDir() || fi.Name() == InputDefinitionRepo {
 			continue
 		}
 
 		fr, err := i.newFrame(i.FramePath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err != nil {
-			fmt.Println(err)
 			return ErrName
 		}
 		if err := fr.Open(); err != nil {
@@ -334,7 +372,7 @@ func (i *Index) FramePath(name string) string { return filepath.Join(i.path, nam
 
 // InputDefPath returns the path to a inputdefinition in the index.
 func (i *Index) InputDefPath() string {
-	return filepath.Join(i.path, ".input-definitions")
+	return filepath.Join(i.path, InputDefinitionRepo)
 }
 
 // Frame returns a frame in the index by name.
@@ -410,6 +448,7 @@ func (i *Index) createInputDefinition(name string, frames []InputFrame, fields [
 		return nil, err
 	}
 	i.inputDefinitions[name] = inputDef
+	fmt.Printf("%+v\n", i.inputDefinitions[name])
 	return inputDef, nil
 }
 
@@ -501,8 +540,6 @@ func (i *Index) newInputDefinition(path, name string) (*InputDefinition, error) 
 	if err != nil {
 		return nil, err
 	}
-	f.LogOutput = i.LogOutput
-	f.Stats = i.Stats.WithTags(fmt.Sprintf("input-definition:%s", name))
 	f.broadcaster = i.broadcaster
 	return f, nil
 }

@@ -1515,9 +1515,6 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println(req.Frames)
-	fmt.Println(req.Fields)
-
 	// Find index.
 	index := h.Holder.Index(indexName)
 	if index == nil {
@@ -1558,14 +1555,14 @@ func (h *Handler) handleGetDefinition(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-
-	inputDef := index.inputDefinition(inputDefName)
-	res, err := json.Marshal(inputDef)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	inputDef, _ := index.inputDefinitions[inputDefName]
+	inputInfo := InputDefinitionInfo{Frames: inputDef.frames, Fields: inputDef.fields}
+	if err := json.NewEncoder(w).Encode(getInputDefinitionResponse{
+		InputDefinition: inputInfo,
+	}); err != nil {
+		h.logger().Printf("write status response error: %s", err)
 	}
-	fmt.Println("RESPONSE", string(res))
+
 }
 
 func (h *Handler) handleDeleteDefinition(w http.ResponseWriter, r *http.Request) {
@@ -1581,7 +1578,7 @@ func (h *Handler) handleDeleteDefinition(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Delete frame from the index.
+	// Delete input definition from the index.
 	if err := index.DeleteInputDefinition(inputDefName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1594,6 +1591,15 @@ type postInputDefinition struct {
 }
 
 type InputFrame struct {
-	Name    string
-	Options FrameOptions
+	Name    string       `json:"name,omitempty"`
+	Options FrameOptions `json:"options,omitempty"`
+}
+
+type getInputDefinitionResponse struct {
+	InputDefinition InputDefinitionInfo `json:"input-definition"`
+}
+
+type InputDefinitionInfo struct {
+	Frames []InputFrame `json:"frames"`
+	Fields []Field      `json:"fields"`
 }

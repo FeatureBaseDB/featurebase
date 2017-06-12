@@ -3,7 +3,6 @@ package pilosa
 import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,8 +13,6 @@ type InputDefinition struct {
 	path        string
 	index       string
 	broadcaster Broadcaster
-	Stats       StatsClient
-	LogOutput   io.Writer
 	frames      []InputFrame
 	fields      []Field
 }
@@ -51,7 +48,6 @@ func (i *InputDefinition) Open() error {
 		if err := i.loadMeta(); err != nil {
 			return err
 		}
-
 		return nil
 	}(); err != nil {
 		return err
@@ -71,12 +67,43 @@ func (i *InputDefinition) loadMeta() error {
 	}
 	// Copy metadata fields.
 	i.name = pb.Name
-	i.frames = pb.Frames
-	i.fields = pb.InputDefinitionFields
+	for _, fr := range pb.Frames {
+		frameMeta := fr.Meta
+		inputFrame := InputFrame{
+			Name: fr.Name,
+			Options: FrameOptions{
+				RowLabel:       frameMeta.RowLabel,
+				InverseEnabled: frameMeta.InverseEnabled,
+				CacheSize:      frameMeta.CacheSize,
+				CacheType:      frameMeta.CacheType,
+				TimeQuantum:    TimeQuantum(frameMeta.TimeQuantum),
+			},
+		}
+		i.frames = append(i.frames, inputFrame)
+	}
+
+	for _, field := range pb.InputDefinitionFields {
+		var actions []Action
+		for _, action := range field.Actions {
+			actions = append(actions, Action{
+				Frame:            action.Frame,
+				ValueDestination: action.ValueDestination,
+				ValueMap:         action.ValueMap,
+				RowID:            action.RowID,
+			})
+		}
+
+		inputField := Field{
+			Name:       field.Name,
+			PrimaryKey: field.PrimaryKey,
+			Actions:    actions,
+		}
+		i.fields = append(i.fields, inputField)
+	}
 	return nil
 }
 
-//saveMeta writes meta data for the frame.
+//saveMeta writes meta data for the input definition file.
 func (i *InputDefinition) saveMeta() error {
 	// Marshal metadata.
 	var frames []*internal.Frame
@@ -129,12 +156,6 @@ func (i *InputDefinition) saveMeta() error {
 	return nil
 }
 
-// FrameOptions represents options to set when initializing a frame.
-type InputDefinitionMeta struct {
-	Frames []Frame `json:"frames,omitempty"`
-	Fields []Field `json:"fields,omitempty"`
-}
-
 type Field struct {
 	Name       string   `json:"name,omitempty"`
 	PrimaryKey bool     `json:"primaryKey,omitempty"`
@@ -147,11 +168,3 @@ type Action struct {
 	ValueMap         map[string]uint64 `json:"valueMap,omitempty"`
 	RowID            uint64            `json:"rowID,omitempty"`
 }
-
-// Encode converts o into its internal representation.
-//func (o *InputDefinitionMeta) Encode() *internal.InputDefinitionMeta {
-//	return &internal.InputDefinitionMeta{
-//		Frames:                o.Frames,
-//		InputDefinitionFields: o.Fields,
-//	}
-//}
