@@ -17,6 +17,7 @@ package pilosa_test
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"os"
@@ -248,6 +249,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	// Set bits on rows 0 - 999. Higher rows have higher bit counts.
 	for i := uint64(0); i < 1000; i++ {
 		for j := uint64(0); j < i; j++ {
+			//fmt.Printf("testfragment: setting %d, %d\n", i, j)
 			f.MustSetBits(i, j)
 		}
 	}
@@ -267,6 +269,45 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 		{ID: 992, Count: 12},
 		{ID: 991, Count: 11},
 		{ID: 990, Count: 10},
+	}) {
+		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
+	}
+}
+
+// temporary test for catching op log bug
+func TestFragment_TopN_Intersect_Moderate(t *testing.T) {
+	f := MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
+	defer f.Close()
+
+	// Create an intersecting input row.
+	src := pilosa.NewBitmap(
+		80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+		90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+	)
+
+	// Set bits on rows 0 - 99. Higher rows have higher bit counts.
+	for i := uint64(0); i < 100; i++ {
+		for j := uint64(0); j < i; j++ {
+			//fmt.Printf("testfragment: setting %d, %d\n", i, j)
+			f.MustSetBits(i, j)
+		}
+	}
+	f.RecalculateCache()
+
+	// Retrieve top rows.
+	if pairs, err := f.Top(pilosa.TopOptions{N: 10, Src: src}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+		{ID: 99, Count: 19},
+		{ID: 98, Count: 18},
+		{ID: 97, Count: 17},
+		{ID: 96, Count: 16},
+		{ID: 95, Count: 15},
+		{ID: 94, Count: 14},
+		{ID: 93, Count: 13},
+		{ID: 92, Count: 12},
+		{ID: 91, Count: 11},
+		{ID: 90, Count: 10},
 	}) {
 		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
 	}
@@ -789,3 +830,34 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 		t.Fatalf("unexpected pair(1): %v", pairs[2])
 	}
 }
+
+func TestFragment_Snapshot_Run(t *testing.T) {
+	fmt.Printf("mustopenfragment\n")
+    f := MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+    defer f.Close()
+
+	fmt.Printf("\n---\nset bits\n")
+    // Set bits on the fragment.
+    for i := uint64(1); i < 3; i++ {
+        if _, err := f.SetBit(1000, i); err != nil {
+            t.Fatal(err)
+        }
+    }
+
+	fmt.Printf("\n---\nsnapshot\n")
+    // Snapshot bitmap and verify data.
+    if err := f.Snapshot(); err != nil {
+        t.Fatal(err)
+    } else if n := f.Row(1000).Count(); n != 2 {
+        t.Fatalf("unexpected count: %d", n)
+    }
+
+	fmt.Printf("\n---\nreopen\n")
+    // Close and reopen the fragment & verify the data.
+    if err := f.Reopen(); err != nil {
+        t.Fatal(err)
+    } else if n := f.Row(1000).Count(); n != 2 {
+        t.Fatalf("unexpected count (reopen): %d", n)
+    }
+}
+
