@@ -1,6 +1,8 @@
 package pilosa
 
 import (
+	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/internal"
 	"io"
 	"io/ioutil"
 	"os"
@@ -14,8 +16,8 @@ type InputDefinition struct {
 	broadcaster Broadcaster
 	Stats       StatsClient
 	LogOutput   io.Writer
-	frames []Frame
-	fields []Field
+	frames      []InputFrame
+	fields      []Field
 }
 
 func NewInputDefinition(path, index, name string) (*InputDefinition, error) {
@@ -46,9 +48,9 @@ func (i *InputDefinition) Open() error {
 			return err
 		}
 
-		//if err := i.loadMeta(); err != nil {
-		//	return err
-		//}
+		if err := i.loadMeta(); err != nil {
+			return err
+		}
 
 		return nil
 	}(); err != nil {
@@ -57,18 +59,70 @@ func (i *InputDefinition) Open() error {
 	return nil
 }
 
+func (i *InputDefinition) loadMeta() error {
+	var pb internal.InputDefinition
+	buf, err := ioutil.ReadFile(filepath.Join(i.path, i.name))
+	if err != nil {
+		return err
+	} else {
+		if err := proto.Unmarshal(buf, &pb); err != nil {
+			return err
+		}
+	}
+	// Copy metadata fields.
+	i.name = pb.Name
+	i.frames = pb.Frames
+	i.fields = pb.InputDefinitionFields
+	return nil
+}
+
 //saveMeta writes meta data for the frame.
-func (f *InputDefinition) saveMeta() error {
+func (i *InputDefinition) saveMeta() error {
 	// Marshal metadata.
-	//buf, err := proto.Marshal(&internal.InputDefinitionMeta{
-	//	Frames: f.
-	//})
-	//if err != nil {
-	//	return err
-	//}
+	var frames []*internal.Frame
+	for _, fr := range i.frames {
+		frameMeta := &internal.FrameMeta{
+			RowLabel:       fr.Options.RowLabel,
+			InverseEnabled: fr.Options.InverseEnabled,
+			CacheType:      fr.Options.CacheType,
+			CacheSize:      fr.Options.CacheSize,
+			TimeQuantum:    string(fr.Options.TimeQuantum),
+		}
+		frame := &internal.Frame{Name: fr.Name, Meta: frameMeta}
+		frames = append(frames, frame)
+	}
+
+	var fields []*internal.InputDefinitionField
+	for _, field := range i.fields {
+		var actions []*internal.Action
+		for _, action := range field.Actions {
+			actionMeta := &internal.Action{
+				Frame:            action.Frame,
+				ValueDestination: action.ValueDestination,
+				ValueMap:         action.ValueMap,
+				RowID:            action.RowID,
+			}
+			actions = append(actions, actionMeta)
+		}
+
+		fieldMeta := &internal.InputDefinitionField{
+			Name:       field.Name,
+			PrimaryKey: field.PrimaryKey,
+			Actions:    actions,
+		}
+		fields = append(fields, fieldMeta)
+	}
+	buf, err := proto.Marshal(&internal.InputDefinition{
+		Name:                  i.name,
+		Frames:                frames,
+		InputDefinitionFields: fields,
+	})
+	if err != nil {
+		return err
+	}
 
 	// Write to meta file.
-	if err := ioutil.WriteFile(filepath.Join(f.path, f.name), []byte(""), 0666); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(i.path, i.name), buf, 0666); err != nil {
 		return err
 	}
 
@@ -84,7 +138,7 @@ type InputDefinitionMeta struct {
 type Field struct {
 	Name       string   `json:"name,omitempty"`
 	PrimaryKey bool     `json:"primaryKey,omitempty"`
-	Actions    []Action `json:"action,omitempty"`
+	Actions    []Action `json:"actions,omitempty"`
 }
 
 type Action struct {

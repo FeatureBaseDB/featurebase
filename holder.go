@@ -96,6 +96,7 @@ func (h *Holder) Open() error {
 
 		index, err := h.newIndex(h.IndexPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err == ErrName {
+
 			h.logger().Printf("ERROR opening index: %s, err=%s", fi.Name(), err)
 			continue
 		} else if err != nil {

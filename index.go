@@ -171,12 +171,13 @@ func (i *Index) openFrames() error {
 	}
 
 	for _, fi := range fis {
-		if !fi.IsDir() {
+		if !fi.IsDir() || fi.Name() == ".input-definitions" {
 			continue
 		}
 
 		fr, err := i.newFrame(i.FramePath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err != nil {
+			fmt.Println(err)
 			return ErrName
 		}
 		if err := fr.Open(); err != nil {
@@ -345,6 +346,8 @@ func (i *Index) Frame(name string) *Frame {
 
 func (i *Index) frame(name string) *Frame { return i.frames[name] }
 
+func (i *Index) inputDefinition(name string) *InputDefinition { return i.inputDefinitions[name] }
+
 // Frames returns a list of all frames in the index.
 func (i *Index) Frames() []*Frame {
 	i.mu.Lock()
@@ -383,9 +386,11 @@ func (i *Index) CreateInputDefinition(name string, frames []InputFrame, field []
 	return i.createInputDefinition(name, frames, field)
 }
 
-func (i *Index) createInputDefinition(name string, frames []InputFrame, field []Field) (*InputDefinition, error) {
+func (i *Index) createInputDefinition(name string, frames []InputFrame, fields []Field) (*InputDefinition, error) {
 	if name == "" {
 		return nil, errors.New("input-definition name required")
+	} else if len(frames) == 0 || len(fields) == 0 {
+		return nil, errors.New("frames and fields are required")
 	}
 
 	// Initialize input definition.
@@ -399,6 +404,8 @@ func (i *Index) createInputDefinition(name string, frames []InputFrame, field []
 		return nil, err
 	}
 
+	inputDef.frames = frames
+	inputDef.fields = fields
 	if err = inputDef.saveMeta(); err != nil {
 		return nil, err
 	}
@@ -495,7 +502,7 @@ func (i *Index) newInputDefinition(path, name string) (*InputDefinition, error) 
 		return nil, err
 	}
 	f.LogOutput = i.LogOutput
-	f.Stats = i.Stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.Stats = i.Stats.WithTags(fmt.Sprintf("input-definition:%s", name))
 	f.broadcaster = i.broadcaster
 	return f, nil
 }
@@ -523,6 +530,32 @@ func (i *Index) DeleteFrame(name string) error {
 
 	// Remove reference.
 	delete(i.frames, name)
+
+	return nil
+}
+
+// DeleteFrame removes a frame from the index.
+func (i *Index) DeleteInputDefinition(name string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Ignore if input definition doesn't exist.
+	f := i.inputDefinition(name)
+	if f == nil {
+		return nil
+	}
+
+	//if err := f.Close(); err != nil {
+	//	return err
+	//}
+
+	// Delete input definition file.
+	if err := os.Remove(filepath.Join(i.InputDefPath(), name)); err != nil {
+		return err
+	}
+
+	// Remove reference.
+	delete(i.inputDefinitions, name)
 
 	return nil
 }

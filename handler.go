@@ -131,7 +131,7 @@ func NewRouter(handler *Handler) *mux.Router {
 
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetDefinition).Methods("GET")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostDefinition).Methods("POST")
-	router.HandleFunc("/index/{index}input-definition/{input-definition}", handler.handleDeleteDefinition).Methods("DELETE")
+	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteDefinition).Methods("DELETE")
 
 	return router
 }
@@ -1515,6 +1515,9 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println(req.Frames)
+	fmt.Println(req.Fields)
+
 	// Find index.
 	index := h.Holder.Index(indexName)
 	if index == nil {
@@ -1544,19 +1547,53 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetDefinition(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	inputDefName := mux.Vars(r)["input-definition"]
 
+	//Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
+			h.logger().Printf("response encoding error: %s", err)
+		}
+		return
+	}
+
+	inputDef := index.inputDefinition(inputDefName)
+	res, err := json.Marshal(inputDef)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fmt.Println("RESPONSE", string(res))
 }
 
 func (h *Handler) handleDeleteDefinition(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	inputDefName := mux.Vars(r)["input-definition"]
 
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
+			h.logger().Printf("response encoding error: %s", err)
+		}
+		return
+	}
+
+	// Delete frame from the index.
+	if err := index.DeleteInputDefinition(inputDefName); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 type postInputDefinition struct {
 	Frames []InputFrame `json:"frames,omitempty"`
-	Fields []Field `json:"fields,omitempty"`
+	Fields []Field      `json:"fields,omitempty"`
 }
 
 type InputFrame struct {
-	Name string
+	Name    string
 	Options FrameOptions
 }

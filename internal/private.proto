@@ -89,7 +89,7 @@ message InputDefinition {
 message InputDefinitionField {
     string Name = 1;
     bool PrimaryKey = 2;
-    Action Meta = 3;
+    repeated Action Actions = 3;
 }
 
 message Action {
