@@ -1053,6 +1053,7 @@ func TestDifferenceArrayRun(t *testing.T) {
 	}
 	for i, test := range tests {
 		a.array = test.array
+		a.n = len(a.array)
 		b.runs = test.runs
 		b.n = b.runCountRange(0, 100)
 		ret := differenceArrayRun(a, b)
@@ -1080,6 +1081,7 @@ func TestDifferenceRunArray(t *testing.T) {
 		a.runs = test.runs
 		a.n = a.runCountRange(0, 100)
 		b.array = test.array
+		b.n = len(b.array)
 		ret := differenceRunArray(a, b)
 		if !reflect.DeepEqual(ret.array, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
@@ -1107,6 +1109,7 @@ func TestDifferenceRunBitmap(t *testing.T) {
 		for i, v := range test.bitmap {
 			b.bitmap[i] = v
 		}
+		b.n = b.bitmapCountRange(0, 100)
 		ret := differenceRunBitmap(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
@@ -1132,11 +1135,12 @@ func TestDifferenceBitmapRun(t *testing.T) {
 		for i, v := range test.bitmap {
 			a.bitmap[i] = v
 		}
+		a.n = a.bitmapCountRange(0, 100)
 		b.runs = test.runs
 		b.n = b.runCountRange(0, 100)
 		ret := differenceBitmapRun(a, b)
 		if !reflect.DeepEqual(ret.bitmap[:len(test.exp)], test.exp) {
-			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.bitmap[:len(test.exp)])
+			t.Fatalf("test #%v expected \n%X, but got \n%X", i, test.exp, ret.bitmap[:len(test.exp)])
 		}
 	}
 }
@@ -1208,4 +1212,5 @@ func TestWriteReadRun(t *testing.T) {
 	if !reflect.DeepEqual(br2.containers[0].runs, cr.runs) {
 		t.Fatalf("run test expected %x, but got %x", cr.runs, br2.containers[0].runs)
 	}
+	br.Add(1)
 }
