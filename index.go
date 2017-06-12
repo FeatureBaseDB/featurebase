@@ -414,8 +414,6 @@ func (i *Index) CreateFrame(name string, opt FrameOptions) (*Frame, error) {
 
 // CreateInputDefinition creates a new input definition.
 func (i *Index) CreateInputDefinition(name string, frames []InputFrame, field []Field) (*InputDefinition, error) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
 
 	// Ensure input definition doesn't already exist.
 	if i.inputDefinitions[name] != nil {
@@ -431,14 +429,18 @@ func (i *Index) createInputDefinition(name string, frames []InputFrame, fields [
 		return nil, errors.New("frames and fields are required")
 	}
 
+	for _, fr := range frames {
+		_, err := i.CreateFrame(fr.Name, fr.Options)
+		if err == ErrFrameExists {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+	}
+
 	// Initialize input definition.
 	inputDef, err := i.newInputDefinition(i.InputDefPath(), name)
-	fmt.Println(inputDef)
 	if err != nil {
-		return nil, err
-	}
-	// Open input definition.
-	if err := inputDef.Open(); err != nil {
 		return nil, err
 	}
 
@@ -448,7 +450,6 @@ func (i *Index) createInputDefinition(name string, frames []InputFrame, fields [
 		return nil, err
 	}
 	i.inputDefinitions[name] = inputDef
-	fmt.Printf("%+v\n", i.inputDefinitions[name])
 	return inputDef, nil
 }
 

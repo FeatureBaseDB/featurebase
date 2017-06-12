@@ -1507,10 +1507,7 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 	// Decode request.
 	var req postInputDefinition
 	err := json.NewDecoder(r.Body).Decode(&req)
-	if err == io.EOF {
-		// If no data was provided (EOF), we still create the frame
-		// with default values.
-	} else if err != nil {
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1532,15 +1529,14 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//err = h.Broadcaster.SendSync(
-	//	&internal.CreateInputDefinitionMessage{
-	//		Index:           indexName,
-	//		InputDefinition: inputDefName,
-	//		Meta: req.Options.Encode(),
-	//	})
-	//if err != nil {
-	//	h.logger().Printf("problem sending CreateFrame message: %s", err)
-	//}
+	err = h.Broadcaster.SendSync(
+		&internal.CreateInputDefinitionMessage{
+			Index:           indexName,
+			InputDefinition: inputDefName,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending CreateInputDefinition message: %s", err)
+	}
 }
 
 func (h *Handler) handleGetDefinition(w http.ResponseWriter, r *http.Request) {

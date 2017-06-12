@@ -105,6 +105,9 @@ func (i *InputDefinition) loadMeta() error {
 
 //saveMeta writes meta data for the input definition file.
 func (i *InputDefinition) saveMeta() error {
+	if err := os.MkdirAll(i.path, 0777); err != nil {
+		return err
+	}
 	// Marshal metadata.
 	var frames []*internal.Frame
 	for _, fr := range i.frames {
