@@ -1315,3 +1315,96 @@ func TestXorRunRun(t *testing.T) {
 		}
 	}
 }
+
+func TestBitmapXorRange(t *testing.T) {
+	c := &container{bitmap: make([]uint64, bitmapN)}
+	tests := []struct {
+		bitmap []uint64
+		start  uint64
+		last   uint64
+		exp    []uint64
+		expN   int
+	}{
+		{
+			bitmap: []uint64{0x0000000000000000},
+			start:  0,
+			last:   2,
+			exp:    []uint64{0x0000000000000007},
+			expN:   3,
+		},
+		{
+			bitmap: []uint64{0xF1},
+			start:  4,
+			last:   8,
+			exp:    []uint64{0x101},
+			expN:   2,
+		},
+		{
+			bitmap: []uint64{0xAA},
+			start:  0,
+			last:   7,
+			exp:    []uint64{0x55},
+			expN:   4,
+		},
+		{
+			bitmap: []uint64{0x0, 0x0000000000000000, 0x0000000000000000},
+			start:  63,
+			last:   128,
+			exp:    []uint64{0x8000000000000000, 0xFFFFFFFFFFFFFFFF, 0x000000000000001},
+			expN:   66,
+		},
+		{
+			bitmap: []uint64{0x0, 0x00000000000000FF, 0x0000000000000000},
+			start:  63,
+			last:   128,
+			exp:    []uint64{0x8000000000000000, 0xFFFFFFFFFFFFFF00, 0x000000000000001},
+			expN:   58,
+		},
+		{
+			bitmap: []uint64{0x0, 0x0, 0x0},
+			start:  129,
+			last:   131,
+			exp:    []uint64{0x0000000000000000, 0x0000000000000000, 0x00000000000000E},
+			expN:   3,
+		},
+	}
+
+	for i, test := range tests {
+		for i, v := range test.bitmap {
+			c.bitmap[i] = v
+		}
+		c.n = c.countRange(0, 65535)
+		c.bitmapXorRange(test.start, test.last)
+		if !reflect.DeepEqual(c.bitmap[:len(test.exp)], test.exp) {
+			t.Fatalf("test %#v expected %x, got %x", i, test.exp, c.bitmap[:len(test.bitmap)])
+		}
+		if test.expN != c.n {
+			t.Fatalf("test #%v expected n to be %v, but got %v", i, test.expN, c.n)
+		}
+	}
+}
+
+func TestXorBitmapRun(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	tests := []struct {
+		bitmap []uint64
+		runs   []interval32
+		exp    []uint64
+	}{
+		{bitmap: []uint64{0x0, 0x0, 0x0},
+			runs: []interval32{{start: 129, last: 131}},
+			exp:  []uint64{0x0, 0x0, 0x00000000000000E},
+		},
+	}
+	for i, test := range tests {
+		a.bitmap = test.bitmap
+		b.runs = test.runs
+		ret := xorBitmapRun(a, b)
+
+		if !reflect.DeepEqual(ret.bitmap, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.bitmap)
+		}
+	}
+
+}
