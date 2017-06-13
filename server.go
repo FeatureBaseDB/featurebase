@@ -513,12 +513,15 @@ func CountOpenFiles() int {
 	case "unix":
 		fallthrough
 	case "freebsd":
-		out, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("lsof -p %v", os.Getpid())).Output()
+		// -b option avoid kernel blocks
+		pid := os.Getpid()
+		out, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("lsof -b -p %v", pid)).Output()
 		if err != nil {
 			log.Fatal(err)
 		}
-		lines := strings.Split(string(out), "\n")
-		count = len(lines) - 1
+		// only count lines with our pid, avoiding warning messages from -b
+		lines := strings.Split(string(out), strconv.Itoa(pid))
+		count = len(lines)
 	case "windows":
 		// TODO: count open file handles on windows
 	default:

@@ -157,3 +157,5 @@ We currently track the following events
 <strong id="garbage_collection">Garbage Collection:</strong> Event count when Garbage Collection occurs.
 
 <strong id="goroutines">Goroutines:</strong> Number of running Goroutines.
+
+<strong id="openfiles">OpenFiles:</strong> Number of open file handles associated with running Pilosa process ID.
