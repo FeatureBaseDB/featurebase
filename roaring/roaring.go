@@ -42,6 +42,13 @@ const (
 	// Headers in files with runs also include runFlagBitset, of length (numContainers+7)/8.
 	headerBaseSize = 4 + 4
 
+	// runCountHeaderSize is the size in bytes of the run count stored
+	// at the beginning of every serialized run container.
+	runCountHeaderSize = 2
+
+	// interval32Size is the size of a single run in a container.runs.
+	interval32Size = 8
+
 	// bitmapN is the number of values in a container.bitmap.
 	bitmapN = (1 << 16) / 64
 
@@ -52,7 +59,7 @@ const (
 // Bitmap represents a roaring bitmap.
 type Bitmap struct {
 	keys       []uint64     // keys for containers
-	containers []*container // array and bitmap containers
+	containers []*container // array, bitmap and RLE containers
 
 	// Number of operations written to the writer.
 	opN int
@@ -497,7 +504,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Create bitset indicating runs, record whether any runs present.
 	containsRuns := false
-	runFlagBitset := make([]uint8, (containerCount+7)/8) // TODO verify size
+	runFlagBitset := make([]uint8, (containerCount+7)/8)
 	k := 0
 	for _, c := range b.containers {
 		if c.n == 0 {
@@ -505,7 +512,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		}
 		if c.isRun() {
 			containsRuns = true
-			runFlagBitset[k/8] |= (1 << uint(k % 8)) // TODO verify
+			runFlagBitset[k/8] |= (1 << uint(k % 8))
 		}
 		k++
 	}
@@ -518,9 +525,11 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	}
 
 	// Build header before writing individual container blocks.
+	// Metadata for each container is 4+8+4 = sizeof(key) + sizeof(cardinality) + sizeof(file offset)
 	buf := make([]byte, headerSize+(containerCount*(4+8+4)))
+
+	// Cookie header section.
 	binary.LittleEndian.PutUint32(buf[0:], thisCookie)
-	// TODO supposed to be 2 bytes, but doesnt make sense for >65535 containers
 	binary.LittleEndian.PutUint32(buf[4:], uint32(containerCount))
 
 	if containsRuns {
@@ -531,7 +540,8 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	}
 
 	empty := 0
-	// Encode keys and cardinality.
+	// Descriptive header section: encode keys and cardinality.
+	// Key and cardinality are stored interleaved here, 12 bytes per container.
 	for i, key := range b.keys {
 		c := b.containers[i]
 
@@ -547,8 +557,8 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		}
 	}
 
-	// TODO this should now be done conditionally
-	// Write the offset for each container block.
+	// Offset header section: write the offset for each container block.
+	// 4 bytes per container.
 	offset := uint32(len(buf))
 	empty = 0
 	for i, c := range b.containers {
@@ -568,7 +578,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		return n, err
 	}
 
-	// Write each container block.
+	// Container storage section: write each container block.
 	for _, c := range b.containers {
 		if c.n > 0 {
 			nn, err := c.WriteTo(w)
@@ -588,7 +598,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		return errors.New("data too small")
 	}
 
-	// Verify the first 4 bytes are a valid cookie.
+	// Verify the first sizeof(cookie)=4 bytes are a valid cookie.
 	v := binary.LittleEndian.Uint32(data[0:4])
 	containsRuns := false
 	if v == cookieNoRuns {
@@ -599,14 +609,14 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		return errors.New("invalid roaring file")
 	}
 
-	// Read key count.
+	// Read key count in bytes sizeof(cookie):(sizeof(cookie)+sizeof(uint32)).
 	keyN := binary.LittleEndian.Uint32(data[4:8])
 	b.keys = make([]uint64, keyN)
 	b.containers = make([]*container, keyN)
 
 	headerSize := headerBaseSize
 
-	runFlagBitset := make([]uint8, (keyN+7)/8) // TODO verify size
+	runFlagBitset := make([]uint8, (keyN+7)/8)
 	if containsRuns {
 		// Read runFlag bitset.
 		for i := 0; i < len(runFlagBitset); i++ {
@@ -615,7 +625,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		headerSize += len(runFlagBitset)
 	}
 
-	// Read container key headers.
+	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
 		b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
 		b.containers[i] = &container{
@@ -639,9 +649,9 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		if c.n <= ArrayMaxSize {
 			if containsRuns && (runFlagBitset[i/8] & (1 << uint(i%8))) != 0 {
 				// Read runs.
-				runCount := binary.LittleEndian.Uint16(data[offset : offset+2])
-				c.runs = (*[0xFFFFFFF]interval32)(unsafe.Pointer(&data[offset+2]))[:runCount] // TODO verify
-				opsOffset = int(offset) + 2 + len(c.runs)*8                                   // TODO verify
+				runCount := binary.LittleEndian.Uint16(data[offset : offset+runCountHeaderSize])
+				c.runs = (*[0xFFFFFFF]interval32)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount]
+				opsOffset = int(offset) + runCountHeaderSize + len(c.runs)*interval32Size
 			} else {
 				// Read array.
 				c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
@@ -649,12 +659,12 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 				//for _, v := range c.array {
 				//    assert(lowbits(uint64(v)) == v, "array value out of range: %d", v)
 				//}
-				opsOffset = int(offset) + len(c.array)*4
+				opsOffset = int(offset) + len(c.array)*4  // sizeof(uint32)
 			}
 		} else {
 			// Read bitmap.
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
-			opsOffset = int(offset) + len(c.bitmap)*8
+			opsOffset = int(offset) + len(c.bitmap)*8  // sizeof(uint64)
 		}
 		// Verify container count on load.
 		// TODO: instead of commenting this out, we need to make it a configuration option
@@ -954,15 +964,15 @@ const RunMaxSize = 2048
 
 // container represents a container for uint32 integers.
 //
-// These are used for storing the low bits. Containers are separated into two
+// These are used for storing the low bits. Containers are separated into three
 // types depending on cardinality. For containers with less than 4,096 values,
-// an array container is used. For containers with more than 4,096 values,
-// the values are encoded into bitmaps.
+// an array or RLE container is used, depending on the contents. For containers 
+// with more than 4,096 values, the values are encoded into bitmaps.
 type container struct {
-	n      int      // number of integers in container
-	array  []uint32 // used for array containers
-	bitmap []uint64 // used for bitmap containers
-	runs   []interval32
+	n      int            // number of integers in container
+	array  []uint32       // used for array containers
+	bitmap []uint64       // used for bitmap containers
+	runs   []interval32   // used for RLE containers
 	mapped bool // mapped directly to a byte slice when true
 }
 
@@ -1268,6 +1278,7 @@ func (c *container) bitmapContains(v uint32) bool {
 }
 
 func (c *container) runContains(v uint32) bool {
+	// TODO binary search
 	for _, iv := range c.runs {
 		if v > iv.last {
 			continue
@@ -1280,7 +1291,7 @@ func (c *container) runContains(v uint32) bool {
 	return false
 }
 
-// remove adds a value to the container.
+// remove removes a value from the container.
 func (c *container) remove(v uint32) (removed bool) {
 	if c.isArray() {
 		removed = c.arrayRemove(v)
@@ -1324,6 +1335,7 @@ func (c *container) bitmapRemove(v uint32) bool {
 }
 
 func (c *container) runRemove(v uint32) bool {
+	// TODO binary search
 	for i, iv := range c.runs {
 		if v <= iv.last {
 			if v < iv.start {
@@ -1477,7 +1489,8 @@ func (c *container) bitmapToRun() {
 
 // arrayToRun converts from array format to RLE format.
 func (c *container) arrayToRun() {
-	c.runs = make([]interval32, 0, c.n) // TODO what capacity to use?
+	numRuns := c.arrayCountRuns()  // TODO test
+	c.runs = make([]interval32, 0, numRuns)
 	start := c.array[0]
 	for i, v := range c.array[1:] {
 		if v-c.array[i] > 1 {
@@ -1548,11 +1561,13 @@ func (c *container) arrayWriteTo(w io.Writer) (n int64, err error) {
 	//  	assert(lowbits(uint64(v)) == v, "cannot write array value out of range: %d", v)
 	//}
 
+	// Write sizeof(uint32) * cardinality bytes.
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.array[0]))[:4*c.n])
 	return int64(nn), err
 }
 
 func (c *container) bitmapWriteTo(w io.Writer) (n int64, err error) {
+	// Write sizeof(uint64) * bitmapN bytes.
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.bitmap[0]))[:(8 * bitmapN)])
 	return int64(nn), err
 }
@@ -1561,24 +1576,23 @@ func (c *container) runWriteTo(w io.Writer) (n int64, err error) {
 	if len(c.runs) == 0 {
 		return 0, nil
 	}
-	// TODO according to spec this should be [16-bit-runcount, start0, len0, start1, len1, ...]
-	// not sure what difference len vs last makes
+	// Write sizeof(interval32) * runCount bytes.
 	err = binary.Write(w, binary.LittleEndian, uint16(len(c.runs)))
 	if err != nil {
 		return 0, err
 	}
-	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.runs[0]))[:8*len(c.runs)])
-	return int64(2 + nn), err
+	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.runs[0]))[:interval32Size*len(c.runs)])
+	return int64(runCountHeaderSize + nn), err
 }
 
 // size returns the encoded size of the container, in bytes.
 func (c *container) size() int {
 	if c.isArray() {
-		return len(c.array) * 4
+		return len(c.array) * 4  // sizeof(uint32)
 	} else if c.isRun() {
-		return len(c.runs) * 8 + 2
+		return len(c.runs) * interval32Size + runCountHeaderSize
 	} else {
-		return len(c.bitmap) * 8
+		return len(c.bitmap) * 8  // sizeof(uint64)
 	}
 }
 
@@ -1588,13 +1602,13 @@ func (c *container) info() ContainerInfo {
 
 	if c.isArray() {
 		info.Type = "array"
-		info.Alloc = len(c.array) * 4
+		info.Alloc = len(c.array) * 4  // sizeof(uint32)
 	} else if c.isRun() {
 		info.Type = "run"
-		info.Alloc = len(c.runs) * 8 + 2
+		info.Alloc = len(c.runs) * interval32Size + runCountHeaderSize
 	} else {
 		info.Type = "bitmap"
-		info.Alloc = len(c.bitmap) * 8
+		info.Alloc = len(c.bitmap) * 8  // sizeof(uint64)
 	}
 
 	if c.mapped {
@@ -2161,6 +2175,7 @@ func unionBitmapRun(a, b *container) *container {
 const maxBitmap = 0xFFFFFFFFFFFFFFFF
 
 // sets all bits in [i, j] (inclusive) (c must be a bitmap container)
+// TODO inclusive upper limit is inconsistent with other functions (CountRange, SliceRange, ForEachRange, OffsetRange(?))
 func (c *container) bitmapSetRange(i, j uint64) {
 	j += 1
 	x := i / 64
@@ -2185,6 +2200,7 @@ func (c *container) bitmapSetRange(i, j uint64) {
 }
 
 // xor's all bits in [i, j] with all true (inclusive) (c must be a bitmap container).
+// TODO inclusive upper limit is inconsistent with other functions
 func (c *container) bitmapXorRange(i, j uint64) {
 	j += 1
 	x := i / 64
@@ -2211,6 +2227,7 @@ func (c *container) bitmapXorRange(i, j uint64) {
 }
 
 // zeroes all bits in [i, j] (inclusive) (c must be a bitmap container)
+// TODO inclusive upper limit is inconsistent with other functions
 func (c *container) bitmapZeroRange(i, j uint64) {
 	j += 1
 	x := i / 64
@@ -2415,8 +2432,6 @@ func differenceRunBitmap(a, b *container) *container {
 }
 
 func differenceRunRun(a, b *container) *container {
-	// (rc *runContainer32) AndNotRunContainer32(b *runContainer32) *runContainer32 {
-
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
 	}
