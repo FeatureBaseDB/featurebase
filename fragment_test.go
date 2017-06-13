@@ -17,7 +17,6 @@ package pilosa_test
 import (
 	"bytes"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"math"
 	"os"
@@ -249,7 +248,6 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	// Set bits on rows 0 - 999. Higher rows have higher bit counts.
 	for i := uint64(0); i < 1000; i++ {
 		for j := uint64(0); j < i; j++ {
-			//fmt.Printf("testfragment: setting %d, %d\n", i, j)
 			f.MustSetBits(i, j)
 		}
 	}
@@ -288,7 +286,6 @@ func TestFragment_TopN_Intersect_Moderate(t *testing.T) {
 	// Set bits on rows 0 - 99. Higher rows have higher bit counts.
 	for i := uint64(0); i < 100; i++ {
 		for j := uint64(0); j < i; j++ {
-			//fmt.Printf("testfragment: setting %d, %d\n", i, j)
 			f.MustSetBits(i, j)
 		}
 	}
@@ -832,11 +829,9 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 }
 
 func TestFragment_Snapshot_Run(t *testing.T) {
-	fmt.Printf("mustopenfragment\n")
     f := MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
     defer f.Close()
 
-	fmt.Printf("\n---\nset bits\n")
     // Set bits on the fragment.
     for i := uint64(1); i < 3; i++ {
         if _, err := f.SetBit(1000, i); err != nil {
@@ -844,7 +839,6 @@ func TestFragment_Snapshot_Run(t *testing.T) {
         }
     }
 
-	fmt.Printf("\n---\nsnapshot\n")
     // Snapshot bitmap and verify data.
     if err := f.Snapshot(); err != nil {
         t.Fatal(err)
@@ -852,7 +846,6 @@ func TestFragment_Snapshot_Run(t *testing.T) {
         t.Fatalf("unexpected count: %d", n)
     }
 
-	fmt.Printf("\n---\nreopen\n")
     // Close and reopen the fragment & verify the data.
     if err := f.Reopen(); err != nil {
         t.Fatal(err)
