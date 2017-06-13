@@ -498,14 +498,14 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	// Create bitset indicating runs, record whether any runs present.
 	containsRuns := false
 	runFlagBitset := make([]uint8, (containerCount+7)/8) // TODO verify size
-	var k uint8 = 0
+	k := 0
 	for _, c := range b.containers {
 		if c.n == 0 {
 			continue
 		}
 		if c.isRun() {
 			containsRuns = true
-			runFlagBitset[k/8] |= (1 << (k % 8)) // TODO verify
+			runFlagBitset[k/8] |= (1 << uint(k % 8)) // TODO verify
 		}
 		k++
 	}
@@ -637,7 +637,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		// Map byte slice directly to the container data.
 		c := b.containers[i]
 		if c.n <= ArrayMaxSize {
-			if containsRuns && (runFlagBitset[uint8(i)/8] & (1 << uint8(i%8))) != 0 {
+			if containsRuns && (runFlagBitset[i/8] & (1 << uint(i%8))) != 0 {
 				// Read runs.
 				runCount := binary.LittleEndian.Uint16(data[offset : offset+2])
 				c.runs = (*[0xFFFFFFF]interval32)(unsafe.Pointer(&data[offset+2]))[:runCount] // TODO verify
@@ -1313,7 +1313,7 @@ func (c *container) bitmapRemove(v uint32) bool {
 	c.unmap()
 
 	// Lower count and remove element.
-	c.n--
+	// c.n-- // TODO removed this - test it
 	c.bitmap[v/64] &^= (uint64(1) << (v % 64))
 
 	// Convert to array if we go below the threshold.
@@ -1429,7 +1429,7 @@ func (c *container) runToBitmap() {
 
 // bitmapToRun converts from bitmap format to RLE format.
 func (c *container) bitmapToRun() {
-	numRuns := c.n // TODO compute properly
+	numRuns := c.bitmapCountRuns()  // TODO test
 	c.runs = make([]interval32, 0, numRuns)
 	// TODO return early if no runs
 
@@ -1477,7 +1477,7 @@ func (c *container) bitmapToRun() {
 
 // arrayToRun converts from array format to RLE format.
 func (c *container) arrayToRun() {
-	c.runs = make([]interval32, 0, c.n) // what capacity to use?
+	c.runs = make([]interval32, 0, c.n) // TODO what capacity to use?
 	start := c.array[0]
 	for i, v := range c.array[1:] {
 		if v-c.array[i] > 1 {
@@ -1558,6 +1558,9 @@ func (c *container) bitmapWriteTo(w io.Writer) (n int64, err error) {
 }
 
 func (c *container) runWriteTo(w io.Writer) (n int64, err error) {
+	if len(c.runs) == 0 {
+		return 0, nil
+	}
 	// TODO according to spec this should be [16-bit-runcount, start0, len0, start1, len1, ...]
 	// not sure what difference len vs last makes
 	err = binary.Write(w, binary.LittleEndian, uint16(len(c.runs)))
@@ -1612,6 +1615,7 @@ func (c *container) check() error {
 	var a ErrorList
 
 	if c.n <= ArrayMaxSize {
+		// TODO check run here
 		if len(c.array) != c.n {
 			a.Append(fmt.Errorf("array count mismatch: count=%d, n=%d", len(c.array), c.n))
 		}

@@ -1063,6 +1063,7 @@ func TestDifferenceArrayRun(t *testing.T) {
 	}
 }
 
+/*
 func TestDifferenceRunArray(t *testing.T) {
 	a := &container{}
 	b := &container{}
@@ -1116,6 +1117,7 @@ func TestDifferenceRunBitmap(t *testing.T) {
 		}
 	}
 }
+*/
 
 func TestDifferenceBitmapRun(t *testing.T) {
 	a := &container{bitmap: make([]uint64, bitmapN)}
