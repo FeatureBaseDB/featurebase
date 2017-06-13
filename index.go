@@ -348,6 +348,16 @@ func (i *Index) Frame(name string) *Frame {
 	return i.frame(name)
 }
 
+// InputDefinition returns an input definition in the index by name.
+func (i *Index) InputDefinition(name string) *InputDefinition {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if inputDef, ok := i.inputDefinitions[name]; ok {
+		return inputDef
+	}
+	return nil
+}
+
 func (i *Index) frame(name string) *Frame { return i.frames[name] }
 
 func (i *Index) inputDefinition(name string) *InputDefinition { return i.inputDefinitions[name] }

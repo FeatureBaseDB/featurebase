@@ -1066,3 +1066,51 @@ func MustReadAll(r io.Reader) []byte {
 	}
 	return buf
 }
+
+// Ensure handler can delete a frame.
+func TestHandler_CreateInputDefinition(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
+
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
+	w := httptest.NewRecorder()
+	inputBody := []byte(`
+			{
+			"frames":[{
+				"name":"event-time",
+				"options":{
+					"timeQuantum": "YMD",
+					"inverseEnabled": false,
+					"cacheType": "ranked"
+				}
+			}],
+			"fields": [
+				{
+					"name": "id",
+					"primaryKey": true
+				},
+				{
+					"name": "cabType",
+					"actions": [
+						{
+							"frame": "cab-type",
+							"valueDestination": "mapping",
+							"valueMap": {
+								"Green": 1,
+								"Yellow": 2
+							}
+						}
+					]
+				}
+			]
+		}`)
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}

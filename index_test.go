@@ -267,7 +267,7 @@ func TestIndex_CreateExistingInputDefinition(t *testing.T) {
 	frames := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
 	action := pilosa.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
 	fields := pilosa.Field{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
-	_ , err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	_, err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,8 +282,32 @@ func TestIndex_CreateEmptyInputDefinition(t *testing.T) {
 	defer index.Close()
 
 	// Create Input Definition.
-	_ , err := index.CreateInputDefinition("test", []pilosa.InputFrame{}, []pilosa.Field{})
+	_, err := index.CreateInputDefinition("test", []pilosa.InputFrame{}, []pilosa.Field{})
 	if err.Error() != "frames and fields are required" {
 		t.Fatal(err)
 	}
+}
+
+func TestIndex_DeleteInputDefinition(t *testing.T) {
+	index := MustOpenIndex()
+	defer index.Close()
+
+	// Create Input Definition.
+	frames := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
+	action := pilosa.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	fields := pilosa.Field{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
+	_, err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	if err != nil {
+		t.Fatal(err)
+	} else if index.InputDefinition("test") == nil {
+		t.Fatal("No input definition created")
+	}
+
+	err = index.DeleteInputDefinition("test")
+	if err != nil {
+		t.Fatal(err)
+	} else if index.InputDefinition("test") != nil {
+		t.Fatal("input definition isn't deleted")
+	}
+
 }

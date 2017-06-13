@@ -1537,6 +1537,10 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger().Printf("problem sending CreateInputDefinition message: %s", err)
 	}
+
+	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
 }
 
 func (h *Handler) handleGetDefinition(w http.ResponseWriter, r *http.Request) {
@@ -1599,3 +1603,5 @@ type InputDefinitionInfo struct {
 	Frames []InputFrame `json:"frames"`
 	Fields []Field      `json:"fields"`
 }
+
+type postInputDefinitionResponse struct{}
