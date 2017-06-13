@@ -325,9 +325,17 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		m := make(map[uint64]struct{})
 
 		// Add values to the bitmap and set.
+		manual_count := uint64(0)
 		for _, v := range a {
-			bm.Add(v)
+			new_bit, _ := bm.Add(v)
+			if new_bit {
+				manual_count++
+			}
 			m[v] = struct{}{}
+		}
+		//check count
+		if manual_count != bm.Count() {
+			t.Fatalf("expected bitmap Add count to be: %d got: %d", manual_count, bm.Count())
 		}
 
 		// Verify existence.
@@ -352,8 +360,16 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		}
 
 		// Remove all values in random order.
+		fmt.Println(len(a))
 		for _, i := range rand.Perm(len(a)) {
-			bm.Remove(a[i])
+			removed, _ := bm.Remove(a[i])
+			if removed {
+				manual_count--
+			}
+			//check count
+			if manual_count != bm.Count() {
+				t.Fatalf("expected bitmap Remove count to be: %d got: %d", manual_count, bm.Count())
+			}
 		}
 
 		// Verify all values have been removed.
