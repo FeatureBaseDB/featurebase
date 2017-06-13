@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa"
+	"reflect"
 )
 
 // Ensure index can open and retrieve a frame.
@@ -237,5 +238,23 @@ func TestIndex_InvalidName(t *testing.T) {
 	index, err := pilosa.NewIndex(path, "ABC")
 	if index != nil {
 		t.Fatalf("unexpected index name %s", index)
+	}
+}
+
+func TestIndex_CreateInputDefinition(t *testing.T) {
+	index := MustOpenIndex()
+	defer index.Close()
+
+	// Create Input Definition.
+	frames := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
+	action := pilosa.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	fields := pilosa.Field{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
+	inputDef, err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	if err != nil {
+		t.Fatal(err)
+	} else if inputDef.Frames()[0] != frames {
+		t.Fatalf("unexpected input definition frames", inputDef.Frames())
+	} else if !reflect.DeepEqual(inputDef.Fields()[0], fields) {
+		t.Fatalf("unexpected input definition actions", inputDef.Fields())
 	}
 }

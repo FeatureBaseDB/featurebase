@@ -162,40 +162,6 @@ func (i *Index) Open() error {
 	return nil
 }
 
-// openInputDefinition opens and initializes the input definitions inside the index.
-func (i *Index) openInputDefinition() error {
-	inputDefs, err := os.Open(i.path)
-	if err != nil {
-		return err
-	}
-	defer inputDefs.Close()
-
-	fis, err := inputDefs.Readdir(0)
-	if err != nil {
-		return err
-	}
-	for _, fi := range fis {
-		if fi.Name() != InputDefinitionRepo {
-			continue
-		}
-		inputPath, err := os.Open(i.InputDefPath())
-		if err != nil {
-			return err
-		}
-		inputFiles, err := inputPath.Readdir(0)
-		for _, file := range inputFiles {
-			input, err := i.newInputDefinition(i.InputDefPath(), file.Name())
-			if err != nil {
-				return err
-			}
-			input.Open()
-			i.inputDefinitions[file.Name()] = input
-		}
-
-	}
-	return nil
-}
-
 // openFrames opens and initializes the frames inside the index.
 func (i *Index) openFrames() error {
 	f, err := os.Open(i.path)
@@ -412,47 +378,6 @@ func (i *Index) CreateFrame(name string, opt FrameOptions) (*Frame, error) {
 	return i.createFrame(name, opt)
 }
 
-// CreateInputDefinition creates a new input definition.
-func (i *Index) CreateInputDefinition(name string, frames []InputFrame, field []Field) (*InputDefinition, error) {
-
-	// Ensure input definition doesn't already exist.
-	if i.inputDefinitions[name] != nil {
-		return nil, ErrInputDefinitionExists
-	}
-	return i.createInputDefinition(name, frames, field)
-}
-
-func (i *Index) createInputDefinition(name string, frames []InputFrame, fields []Field) (*InputDefinition, error) {
-	if name == "" {
-		return nil, errors.New("input-definition name required")
-	} else if len(frames) == 0 || len(fields) == 0 {
-		return nil, errors.New("frames and fields are required")
-	}
-
-	for _, fr := range frames {
-		_, err := i.CreateFrame(fr.Name, fr.Options)
-		if err == ErrFrameExists {
-			continue
-		} else if err != nil {
-			return nil, err
-		}
-	}
-
-	// Initialize input definition.
-	inputDef, err := i.newInputDefinition(i.InputDefPath(), name)
-	if err != nil {
-		return nil, err
-	}
-
-	inputDef.frames = frames
-	inputDef.fields = fields
-	if err = inputDef.saveMeta(); err != nil {
-		return nil, err
-	}
-	i.inputDefinitions[name] = inputDef
-	return inputDef, nil
-}
-
 // CreateFrameIfNotExists creates a frame with the given options if it doesn't exist.
 func (i *Index) CreateFrameIfNotExists(name string, opt FrameOptions) (*Frame, error) {
 	i.mu.Lock()
@@ -536,15 +461,6 @@ func (i *Index) newFrame(path, name string) (*Frame, error) {
 	return f, nil
 }
 
-func (i *Index) newInputDefinition(path, name string) (*InputDefinition, error) {
-	f, err := NewInputDefinition(path, i.name, name)
-	if err != nil {
-		return nil, err
-	}
-	f.broadcaster = i.broadcaster
-	return f, nil
-}
-
 // DeleteFrame removes a frame from the index.
 func (i *Index) DeleteFrame(name string) error {
 	i.mu.Lock()
@@ -568,32 +484,6 @@ func (i *Index) DeleteFrame(name string) error {
 
 	// Remove reference.
 	delete(i.frames, name)
-
-	return nil
-}
-
-// DeleteFrame removes a frame from the index.
-func (i *Index) DeleteInputDefinition(name string) error {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Ignore if input definition doesn't exist.
-	f := i.inputDefinition(name)
-	if f == nil {
-		return nil
-	}
-
-	//if err := f.Close(); err != nil {
-	//	return err
-	//}
-
-	// Delete input definition file.
-	if err := os.Remove(filepath.Join(i.InputDefPath(), name)); err != nil {
-		return err
-	}
-
-	// Remove reference.
-	delete(i.inputDefinitions, name)
 
 	return nil
 }
@@ -710,4 +600,109 @@ type importKey struct {
 type importData struct {
 	RowIDs    []uint64
 	ColumnIDs []uint64
+}
+
+// CreateInputDefinition creates a new input definition.
+func (i *Index) CreateInputDefinition(name string, frames []InputFrame, field []Field) (*InputDefinition, error) {
+
+	// Ensure input definition doesn't already exist.
+	if i.inputDefinitions[name] != nil {
+		return nil, ErrInputDefinitionExists
+	}
+	return i.createInputDefinition(name, frames, field)
+}
+
+func (i *Index) createInputDefinition(name string, frames []InputFrame, fields []Field) (*InputDefinition, error) {
+	if name == "" {
+		return nil, errors.New("input-definition name required")
+	} else if len(frames) == 0 || len(fields) == 0 {
+		return nil, errors.New("frames and fields are required")
+	}
+
+	for _, fr := range frames {
+		_, err := i.CreateFrame(fr.Name, fr.Options)
+		if err == ErrFrameExists {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+	}
+
+	// Initialize input definition.
+	inputDef, err := i.newInputDefinition(i.InputDefPath(), name)
+	if err != nil {
+		return nil, err
+	}
+
+	inputDef.frames = frames
+	inputDef.fields = fields
+	if err = inputDef.saveMeta(); err != nil {
+		return nil, err
+	}
+	i.inputDefinitions[name] = inputDef
+	return inputDef, nil
+}
+
+func (i *Index) newInputDefinition(path, name string) (*InputDefinition, error) {
+	f, err := NewInputDefinition(path, i.name, name)
+	if err != nil {
+		return nil, err
+	}
+	f.broadcaster = i.broadcaster
+	return f, nil
+}
+
+// DeleteFrame removes a frame from the index.
+func (i *Index) DeleteInputDefinition(name string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Ignore if input definition doesn't exist.
+	f := i.inputDefinition(name)
+	if f == nil {
+		return nil
+	}
+
+	// Delete input definition file.
+	if err := os.Remove(filepath.Join(i.InputDefPath(), name)); err != nil {
+		return err
+	}
+
+	// Remove reference.
+	delete(i.inputDefinitions, name)
+	return nil
+}
+
+// openInputDefinition opens and initializes the input definitions inside the index.
+func (i *Index) openInputDefinition() error {
+	inputDefs, err := os.Open(i.path)
+	if err != nil {
+		return err
+	}
+	defer inputDefs.Close()
+
+	fis, err := inputDefs.Readdir(0)
+	if err != nil {
+		return err
+	}
+	for _, fi := range fis {
+		if fi.Name() != InputDefinitionRepo {
+			continue
+		}
+		inputPath, err := os.Open(i.InputDefPath())
+		if err != nil {
+			return err
+		}
+		inputFiles, err := inputPath.Readdir(0)
+		for _, file := range inputFiles {
+			input, err := i.newInputDefinition(i.InputDefPath(), file.Name())
+			if err != nil {
+				return err
+			}
+			input.Open()
+			i.inputDefinitions[file.Name()] = input
+		}
+
+	}
+	return nil
 }

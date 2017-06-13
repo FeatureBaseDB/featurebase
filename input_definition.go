@@ -39,6 +39,12 @@ func (i *InputDefinition) Index() string { return i.index }
 // Path returns the path of the input definition was initialized with.
 func (i *InputDefinition) Path() string { return i.path }
 
+// Frames returns frames of the input definition was initialized with.
+func (i *InputDefinition) Frames() []InputFrame { return i.frames }
+
+// Fields returns frames of the input definition was initialized with.
+func (i *InputDefinition) Fields() []Field { return i.fields }
+
 func (i *InputDefinition) Open() error {
 	if err := func() error {
 		if err := os.MkdirAll(i.path, 0777); err != nil {
