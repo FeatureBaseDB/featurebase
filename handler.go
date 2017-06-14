@@ -1519,8 +1519,8 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Add the name
 	req.Name = inputDefName
-	fmt.Println(req.String())
 
 	err = h.Broadcaster.SendSync(
 		&internal.CreateInputDefinitionMessage{

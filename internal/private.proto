@@ -83,7 +83,7 @@ message Index {
 message InputDefinition {
     string Name = 1;
     repeated Frame Frames = 2;
-    repeated InputDefinitionField InputDefinitionFields = 3;
+    repeated InputDefinitionField Fields = 3;
 }
 
 message InputDefinitionField {

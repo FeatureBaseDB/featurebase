@@ -1,11 +1,12 @@
 package pilosa
 
 import (
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/internal"
 )
 
 type InputDefinition struct {
@@ -88,7 +89,7 @@ func (i *InputDefinition) loadMeta() error {
 		i.frames = append(i.frames, inputFrame)
 	}
 
-	for _, field := range pb.InputDefinitionFields {
+	for _, field := range pb.Fields {
 		var actions []Action
 		for _, action := range field.Actions {
 			actions = append(actions, Action{
@@ -149,9 +150,9 @@ func (i *InputDefinition) saveMeta() error {
 		fields = append(fields, fieldMeta)
 	}
 	buf, err := proto.Marshal(&internal.InputDefinition{
-		Name:                  i.name,
-		Frames:                frames,
-		InputDefinitionFields: fields,
+		Name:   i.name,
+		Frames: frames,
+		Fields: fields,
 	})
 	if err != nil {
 		return err

@@ -1087,7 +1087,7 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 					"cacheType": "ranked"
 				}
 			}],
-			"inputdefinitionfields": [
+			"fields": [
 				{
 					"name": "id",
 					"primaryKey": true
