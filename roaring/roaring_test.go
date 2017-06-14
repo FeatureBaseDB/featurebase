@@ -360,7 +360,6 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		}
 
 		// Remove all values in random order.
-		fmt.Println(len(a))
 		for _, i := range rand.Perm(len(a)) {
 			removed, _ := bm.Remove(a[i])
 			if removed {

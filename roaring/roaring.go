@@ -1337,18 +1337,22 @@ func (c *container) bitmapContains(v uint32) bool {
 	return (c.bitmap[v/64] & (1 << uint64(v%64))) != 0
 }
 
-func (c *container) runContains(v uint32) bool {
-	// TODO binary search
-	for _, iv := range c.runs {
-		if v > iv.last {
-			continue
-		}
-		if v < iv.start {
-			return false
-		}
-		return true
+//runBinSearch uses a binary search of the runs and returns the index of nearest
+//run.
+func runBinSearch(v uint32, a []interval32) (int, bool) {
+	i := sort.Search(len(a),
+		func(i int) bool { return a[i].last >= v })
+	if i < len(a) {
+		return i, (v >= a[i].start) && (v <= a[i].last)
 	}
-	return false
+
+	return i, false
+}
+
+//runContains determines if v is in the containers run set.
+func (c *container) runContains(v uint32) bool {
+	_, found := runBinSearch(v, c.runs)
+	return found
 }
 
 // remove removes a value from the container.
