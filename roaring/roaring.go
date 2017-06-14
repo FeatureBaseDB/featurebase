@@ -2394,6 +2394,7 @@ func difference(a, b *container) *container {
 	}
 }
 
+// differenceArrayArray computes the difference bween two arrays.
 func differenceArrayArray(a, b *container) *container {
 	output := &container{}
 	na, nb := len(a.array), len(b.array)
@@ -2418,6 +2419,7 @@ func differenceArrayArray(a, b *container) *container {
 	return output
 }
 
+// differenceArrayRun computes the difference of an array from a run.
 func differenceArrayRun(a, b *container) *container {
 	// func (ac *arrayContainer) iandNotRun16(rc *runContainer16) container {
 
@@ -2458,6 +2460,7 @@ func differenceArrayRun(a, b *container) *container {
 	return output
 }
 
+// differenceBitmapRun computes the difference of an bitmap from a run.
 func differenceBitmapRun(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
@@ -2470,16 +2473,65 @@ func differenceBitmapRun(a, b *container) *container {
 	return output
 }
 
+// differenceRunArray computes the difference of an run from a array.
 func differenceRunArray(a, b *container) *container {
-	// TODO
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
 	}
 
 	output := &container{runs: make([]interval32, 0, a.n)}
+	i := 0
+	j := 0
+	vr := a.runs[j]
+	working := true
+	for working {
+		switch {
+		case b.array[i] < vr.start: //before
+		case b.array[i] > vr.last: //after
+			if vr.start <= vr.last {
+				output.n += output.runAppendInterval(vr)
+			}
+			j++
+			if j < len(a.runs) {
+				vr = a.runs[j]
+			} else {
+				working = false
+			}
+		case b.array[i] == vr.start: //begining of run
+			vr.start++
+		case b.array[i] == a.runs[j].last: //end of run
+			vr.last--
+			if vr.last >= vr.start {
+				output.n += output.runAppendInterval(vr)
+			}
+			j++
+			if j < len(a.runs) {
+				vr = a.runs[j]
+			} else {
+				working = false
+			}
+		case b.array[i] > vr.start: //inside run
+			output.n += output.runAppendInterval(interval32{start: vr.start, last: b.array[i] - 1})
+			vr.start = b.array[i] + 1
+
+		}
+		i++
+		if i >= len(b.array) {
+			working = false
+		}
+	}
+	if vr.start <= vr.last {
+		output.n += output.runAppendInterval(vr)
+	}
+	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
+		output.runToArray()
+	} else if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
+	}
 	return output
 }
 
+// differenceRunBitmap computes the difference of an run from a bitmap.
 func differenceRunBitmap(a, b *container) *container {
 	// TODO
 	if a.n == 0 || b.n == 0 {
@@ -2502,6 +2554,7 @@ func differenceRunBitmap(a, b *container) *container {
 	return output
 }
 
+// differenceRunRun computes the difference of two runs.
 func differenceRunRun(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
