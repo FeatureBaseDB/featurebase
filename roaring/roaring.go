@@ -808,7 +808,7 @@ func (itr *Iterator) Seek(seek uint64) {
 			itr.i, itr.j, itr.k = 0, 0, -1
 		}
 
-		j, contains := runBinSearch(lb, c.runs)
+		j, contains := binSearchRuns(lb, c.runs)
 		if !contains {
 			itr.j = -1
 			itr.k = -1
