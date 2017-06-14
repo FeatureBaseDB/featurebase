@@ -108,11 +108,13 @@ var NopBroadcastReceiver = &nopBroadcastReceiver{}
 
 // Broadcast message types.
 const (
-	MessageTypeCreateSlice = 1
-	MessageTypeCreateIndex = 2
-	MessageTypeDeleteIndex = 3
-	MessageTypeCreateFrame = 4
-	MessageTypeDeleteFrame = 5
+	MessageTypeCreateSlice           = 1
+	MessageTypeCreateIndex           = 2
+	MessageTypeDeleteIndex           = 3
+	MessageTypeCreateFrame           = 4
+	MessageTypeDeleteFrame           = 5
+	MessageTypeCreateInputDefinition = 6
+	MessageTypeDeleteInputDefinition = 7
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
@@ -129,6 +131,8 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeCreateFrame
 	case *internal.DeleteFrameMessage:
 		typ = MessageTypeDeleteFrame
+	case *internal.CreateInputDefinitionMessage:
+		typ = MessageTypeCreateInputDefinition
 	default:
 		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
 	}
@@ -155,6 +159,8 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.CreateFrameMessage{}
 	case MessageTypeDeleteFrame:
 		m = &internal.DeleteFrameMessage{}
+	case MessageTypeCreateInputDefinition:
+		m = &internal.CreateInputDefinitionMessage{}
 	default:
 		return nil, fmt.Errorf("invalid message type: %d", typ)
 	}

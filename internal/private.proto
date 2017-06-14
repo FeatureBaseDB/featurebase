@@ -102,7 +102,8 @@ message Action {
 
 message CreateInputDefinitionMessage {
     string Index = 1;
-    string InputDefinition = 2;
+    string Name = 2;
+    InputDefinition Definition = 3;
 }
 
 message NodeStatus {
