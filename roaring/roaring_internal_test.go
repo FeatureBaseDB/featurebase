@@ -15,10 +15,20 @@
 package roaring
 
 import (
+	"fmt"
 	"bytes"
 	"reflect"
 	"testing"
 )
+
+// String produces a human viewable string of the contents.
+func (iv interval32) String() string {
+	return fmt.Sprintf("[%d, %d]", iv.start, iv.last)
+}
+
+func (c *container) String() string {
+	return fmt.Sprintf("<%s container (%v), n=%d, array[%d], runs[%d], bitmap[%d]>", c.info().Type, &c, c.n, len(c.array), len(c.runs), len(c.bitmap))
+}
 
 func TestRunAppendInterval(t *testing.T) {
 	a := container{}
