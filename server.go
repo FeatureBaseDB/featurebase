@@ -506,13 +506,7 @@ func CountOpenFiles() int {
 	count := 0
 
 	switch runtime.GOOS {
-	case "darwin":
-		fallthrough
-	case "linux":
-		fallthrough
-	case "unix":
-		fallthrough
-	case "freebsd":
+	case "darwin", "linux", "unix", "freebsd":
 		// -b option avoid kernel blocks
 		pid := os.Getpid()
 		out, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("lsof -b -p %v", pid)).Output()
