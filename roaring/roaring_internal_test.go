@@ -15,8 +15,8 @@
 package roaring
 
 import (
-	"fmt"
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -1468,9 +1468,10 @@ func TestXorBitmapRun(t *testing.T) {
 		runs   []interval32
 		exp    []uint64
 	}{
-		{bitmap: []uint64{0x0, 0x0, 0x0},
-			runs: []interval32{{start: 129, last: 131}},
-			exp:  []uint64{0x0, 0x0, 0x00000000000000E},
+		{
+			bitmap: []uint64{0x0, 0x0, 0x0},
+			runs:   []interval32{{start: 129, last: 131}},
+			exp:    []uint64{0x0, 0x0, 0x00000000000000E},
 		},
 	}
 	for i, test := range tests {
@@ -1535,10 +1536,10 @@ func TestIteratorBitmap(t *testing.T) {
 	// this dataset will update to bitmap after enough Adds,
 	// but won't update to RLE until Optimize() is called
 	b := NewBitmap()
-	for i := uint64(61000); i<71000; i++ {
+	for i := uint64(61000); i < 71000; i++ {
 		b.Add(i)
 	}
-	for i := uint64(75000); i<75100; i++ {
+	for i := uint64(75000); i < 75100; i++ {
 		b.Add(i)
 	}
 	if !b.containers[0].isBitmap() {
@@ -1636,5 +1637,58 @@ func TestIteratorRuns(t *testing.T) {
 	val, eof = itr.Next()
 	if !(val == 0 && eof) {
 		t.Fatalf("iterator did not eof correctly: %d, %v\n", val, eof)
+	}
+}
+
+func TestRunBinSearchContains(t *testing.T) {
+	tests := []struct {
+		runs  []interval32
+		index uint32
+		exp   struct {
+			index int
+			found bool
+		}
+	}{
+		{
+			runs:  []interval32{{start: 0, last: 10}},
+			index: uint32(3),
+			exp: struct {
+				index int
+				found bool
+			}{index: 0, found: true},
+		},
+		{
+			runs:  []interval32{{start: 0, last: 10}},
+			index: uint32(13),
+			exp: struct {
+				index int
+				found bool
+			}{index: 0, found: false},
+		},
+		{
+			runs:  []interval32{{start: 0, last: 10}, {start: 20, last: 30}},
+			index: uint32(13),
+			exp: struct {
+				index int
+				found bool
+			}{index: 0, found: false},
+		},
+		{
+			runs:  []interval32{{start: 0, last: 10}, {start: 20, last: 30}},
+			index: uint32(36),
+			exp: struct {
+				index int
+				found bool
+			}{index: 1, found: false},
+		},
+	}
+	for i, test := range tests {
+		index := test.index
+		runs := test.runs
+		idx, found := binSearchRuns(index, runs)
+
+		if test.exp.index != idx && test.exp.found != found {
+			t.Fatalf("test #%v expected %v , but got %v %v", i, test.exp, idx, found)
+		}
 	}
 }
