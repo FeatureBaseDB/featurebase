@@ -272,44 +272,6 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	}
 }
 
-// temporary test for catching op log bug
-func TestFragment_TopN_Intersect_Moderate(t *testing.T) {
-	f := MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
-	defer f.Close()
-
-	// Create an intersecting input row.
-	src := pilosa.NewBitmap(
-		80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
-		90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
-	)
-
-	// Set bits on rows 0 - 99. Higher rows have higher bit counts.
-	for i := uint64(0); i < 100; i++ {
-		for j := uint64(0); j < i; j++ {
-			f.MustSetBits(i, j)
-		}
-	}
-	f.RecalculateCache()
-
-	// Retrieve top rows.
-	if pairs, err := f.Top(pilosa.TopOptions{N: 10, Src: src}); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
-		{ID: 99, Count: 19},
-		{ID: 98, Count: 18},
-		{ID: 97, Count: 17},
-		{ID: 96, Count: 16},
-		{ID: 95, Count: 15},
-		{ID: 94, Count: 14},
-		{ID: 93, Count: 13},
-		{ID: 92, Count: 12},
-		{ID: 91, Count: 11},
-		{ID: 90, Count: 10},
-	}) {
-		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
-	}
-}
-
 // Ensure a fragment can return top rows when specified by ID.
 func TestFragment_TopN_IDs(t *testing.T) {
 	f := MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
