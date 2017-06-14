@@ -1588,3 +1588,67 @@ func TestIteratorRuns(t *testing.T) {
 		t.Fatalf("iterator did not eof correctly: %d, %v\n", val, eof)
 	}
 }
+
+func TestRunBinSearch(t *testing.T) {
+	tests := []struct {
+		runs   []interval32
+		search uint32
+		exp    bool
+		expi   int
+	}{
+		{
+			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
+			search: 1,
+			exp: 	false,
+			expi:   0,
+		},
+		{
+			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
+			search: 2,
+			exp: 	true,
+			expi:   0,
+		},
+		{
+			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
+			search: 5,
+			exp: 	true,
+			expi:   0,
+		},
+		{
+			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
+			search: 10,
+			exp: 	true,
+			expi:   0,
+		},
+		{
+			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
+			search: 20,
+			exp: 	false,
+			expi:   1,
+		},
+		{
+			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
+			search: 55,
+			exp: 	true,
+			expi:   1,
+		},
+		{
+			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
+			search: 70,
+			exp: 	false,
+			expi:   2,
+		},
+		{
+			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
+			search: 100,
+			exp: 	false,
+			expi:   3,
+		},
+	}
+	for i, test := range tests {
+		idx, contains := runBinSearch(test.search, test.runs)
+		if !(test.exp == contains && test.expi == idx) {
+			t.Fatalf("test #%v expected (%v, %v) but got (%v, %v)", i, test.exp, test.expi, contains, idx)
+		}
+	}
+}
