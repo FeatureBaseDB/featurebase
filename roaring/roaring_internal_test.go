@@ -1073,7 +1073,6 @@ func TestDifferenceArrayRun(t *testing.T) {
 	}
 }
 
-/*
 func TestDifferenceRunArray(t *testing.T) {
 	a := &container{}
 	b := &container{}
@@ -1087,6 +1086,21 @@ func TestDifferenceRunArray(t *testing.T) {
 			array: []uint32{5, 6, 7, 8, 9, 10},
 			exp:   []interval32{{start: 0, last: 4}, {start: 11, last: 12}},
 		},
+		{
+			runs:  []interval32{{start: 0, last: 12}},
+			array: []uint32{0, 1, 2, 3},
+			exp:   []interval32{{start: 4, last: 12}},
+		},
+		{
+			runs:  []interval32{{start: 0, last: 12}},
+			array: []uint32{9, 10, 11, 12, 13},
+			exp:   []interval32{{start: 0, last: 8}},
+		},
+		{
+			runs:  []interval32{{start: 1, last: 12}},
+			array: []uint32{0, 9, 10, 11, 12, 13},
+			exp:   []interval32{{start: 1, last: 8}},
+		},
 	}
 	for i, test := range tests {
 		a.runs = test.runs
@@ -1094,11 +1108,13 @@ func TestDifferenceRunArray(t *testing.T) {
 		b.array = test.array
 		b.n = len(b.array)
 		ret := differenceRunArray(a, b)
-		if !reflect.DeepEqual(ret.array, test.exp) {
-			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
+		if !reflect.DeepEqual(ret.runs, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
 		}
 	}
 }
+
+/*
 
 func TestDifferenceRunBitmap(t *testing.T) {
 	a := &container{}
