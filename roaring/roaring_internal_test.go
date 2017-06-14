@@ -1408,9 +1408,10 @@ func TestXorBitmapRun(t *testing.T) {
 		runs   []interval32
 		exp    []uint64
 	}{
-		{bitmap: []uint64{0x0, 0x0, 0x0},
-			runs: []interval32{{start: 129, last: 131}},
-			exp:  []uint64{0x0, 0x0, 0x00000000000000E},
+		{
+			bitmap: []uint64{0x0, 0x0, 0x0},
+			runs:   []interval32{{start: 129, last: 131}},
+			exp:    []uint64{0x0, 0x0, 0x00000000000000E},
 		},
 	}
 	for i, test := range tests {
@@ -1420,6 +1421,60 @@ func TestXorBitmapRun(t *testing.T) {
 
 		if !reflect.DeepEqual(ret.bitmap, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.bitmap)
+		}
+	}
+
+}
+
+func TestRunBinSearchContains(t *testing.T) {
+	tests := []struct {
+		runs  []interval32
+		index uint32
+		exp   struct {
+			index int
+			found bool
+		}
+	}{
+		{
+			runs:  []interval32{{start: 0, last: 10}},
+			index: uint32(3),
+			exp: struct {
+				index int
+				found bool
+			}{index: 0, found: true},
+		},
+		{
+			runs:  []interval32{{start: 0, last: 10}},
+			index: uint32(13),
+			exp: struct {
+				index int
+				found bool
+			}{index: 0, found: false},
+		},
+		{
+			runs:  []interval32{{start: 0, last: 10}, {start: 20, last: 30}},
+			index: uint32(13),
+			exp: struct {
+				index int
+				found bool
+			}{index: 0, found: false},
+		},
+		{
+			runs:  []interval32{{start: 0, last: 10}, {start: 20, last: 30}},
+			index: uint32(36),
+			exp: struct {
+				index int
+				found bool
+			}{index: 1, found: false},
+		},
+	}
+	for i, test := range tests {
+		index := test.index
+		runs := test.runs
+		idx, found := binSearchRuns(index, runs)
+
+		if test.exp.index != idx && test.exp.found != found {
+			t.Fatalf("test #%v expected %v , but got %v %v", i, test.exp, idx, found)
 		}
 	}
 
