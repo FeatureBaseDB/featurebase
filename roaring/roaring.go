@@ -804,11 +804,19 @@ func (itr *Iterator) Seek(seek uint64) {
 	}
 
 	if c.isRun() {
-		// TODO work for seek!=0
-		itr.i, itr.j, itr.k = 0, 0, -1
-		if seek != 0 {
-			panic("cant seeek nonzero")
+		if seek == 0 {
+			itr.i, itr.j, itr.k = 0, 0, -1
 		}
+
+		j, contains := runBinSearch(lb, c.runs)
+		if !contains {
+			itr.j = -1
+			itr.k = -1
+		} else {
+			itr.j = j
+			itr.k = int(lb) - int(c.runs[j].start) - 1
+		}
+
 		return
 	}
 
