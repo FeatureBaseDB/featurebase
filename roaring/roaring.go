@@ -28,15 +28,15 @@ import (
 const (
 	// magicNumber is an identifier, in bytes 0-1 of the file.
 	magicNumberNoRuns = uint32(12346)
-	magicNumber = uint32(12347)
+	magicNumber       = uint32(12347)
 
 	// storageVersion indicates the storage version, in bytes 2-3.
 	storageVersion = uint32(0)
 
 	// cookie is the first four bytes in a roaring bitmap file,
 	// formed by joining magicNumber and storageVersion
-	cookieNoRuns = magicNumberNoRuns << 16 + storageVersion
-	cookie = magicNumber << 16 + storageVersion
+	cookieNoRuns = magicNumberNoRuns<<16 + storageVersion
+	cookie       = magicNumber<<16 + storageVersion
 
 	// headerBaseSize is the size of the cookie and key count at the beginning of a file.
 	// Headers in files with runs also include runFlagBitset, of length (numContainers+7)/8.
@@ -512,7 +512,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		}
 		if c.isRun() {
 			containsRuns = true
-			runFlagBitset[k/8] |= (1 << uint(k % 8))
+			runFlagBitset[k/8] |= (1 << uint(k%8))
 		}
 		k++
 	}
@@ -647,7 +647,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		// Map byte slice directly to the container data.
 		c := b.containers[i]
 		if c.n <= ArrayMaxSize {
-			if containsRuns && (runFlagBitset[i/8] & (1 << uint(i%8))) != 0 {
+			if containsRuns && (runFlagBitset[i/8]&(1<<uint(i%8))) != 0 {
 				// Read runs.
 				runCount := binary.LittleEndian.Uint16(data[offset : offset+runCountHeaderSize])
 				c.runs = (*[0xFFFFFFF]interval32)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount]
@@ -659,12 +659,12 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 				//for _, v := range c.array {
 				//    assert(lowbits(uint64(v)) == v, "array value out of range: %d", v)
 				//}
-				opsOffset = int(offset) + len(c.array)*4  // sizeof(uint32)
+				opsOffset = int(offset) + len(c.array)*4 // sizeof(uint32)
 			}
 		} else {
 			// Read bitmap.
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
-			opsOffset = int(offset) + len(c.bitmap)*8  // sizeof(uint64)
+			opsOffset = int(offset) + len(c.bitmap)*8 // sizeof(uint64)
 		}
 		// Verify container count on load.
 		// TODO: instead of commenting this out, we need to make it a configuration option
@@ -767,7 +767,7 @@ type BitmapInfo struct {
 // Iterator represents an iterator over a Bitmap.
 type Iterator struct {
 	bitmap  *Bitmap
-	i, j, k int  // i: container; j: array index, bit index, or run index; k: 
+	i, j, k int // i: container; j: array index, bit index, or run index; k:
 }
 
 // eof returns true if the iterator is at the end of the bitmap.
@@ -901,7 +901,7 @@ func (itr *Iterator) peek() uint64 {
 		return uint64(key)<<16 | uint64(c.array[itr.j])
 	}
 	if c.isRun() {
-		return uint64(key)<<16 | uint64(c.runs[itr.j].start + uint32(itr.k))
+		return uint64(key)<<16 | uint64(c.runs[itr.j].start+uint32(itr.k))
 	}
 	return uint64(key)<<16 | uint64(itr.j)
 }
@@ -966,14 +966,14 @@ const RunMaxSize = 2048
 //
 // These are used for storing the low bits. Containers are separated into three
 // types depending on cardinality. For containers with less than 4,096 values,
-// an array or RLE container is used, depending on the contents. For containers 
+// an array or RLE container is used, depending on the contents. For containers
 // with more than 4,096 values, the values are encoded into bitmaps.
 type container struct {
-	n      int            // number of integers in container
-	array  []uint32       // used for array containers
-	bitmap []uint64       // used for bitmap containers
-	runs   []interval32   // used for RLE containers
-	mapped bool // mapped directly to a byte slice when true
+	n      int          // number of integers in container
+	array  []uint32     // used for array containers
+	bitmap []uint64     // used for bitmap containers
+	runs   []interval32 // used for RLE containers
+	mapped bool         // mapped directly to a byte slice when true
 }
 
 type interval32 struct {
@@ -1441,7 +1441,7 @@ func (c *container) runToBitmap() {
 
 // bitmapToRun converts from bitmap format to RLE format.
 func (c *container) bitmapToRun() {
-	numRuns := c.bitmapCountRuns()  // TODO test
+	numRuns := c.bitmapCountRuns() // TODO test
 	c.runs = make([]interval32, 0, numRuns)
 	// TODO return early if no runs
 
@@ -1489,7 +1489,7 @@ func (c *container) bitmapToRun() {
 
 // arrayToRun converts from array format to RLE format.
 func (c *container) arrayToRun() {
-	numRuns := c.arrayCountRuns()  // TODO test
+	numRuns := c.arrayCountRuns() // TODO test
 	c.runs = make([]interval32, 0, numRuns)
 	start := c.array[0]
 	for i, v := range c.array[1:] {
@@ -1588,11 +1588,11 @@ func (c *container) runWriteTo(w io.Writer) (n int64, err error) {
 // size returns the encoded size of the container, in bytes.
 func (c *container) size() int {
 	if c.isArray() {
-		return len(c.array) * 4  // sizeof(uint32)
+		return len(c.array) * 4 // sizeof(uint32)
 	} else if c.isRun() {
-		return len(c.runs) * interval32Size + runCountHeaderSize
+		return len(c.runs)*interval32Size + runCountHeaderSize
 	} else {
-		return len(c.bitmap) * 8  // sizeof(uint64)
+		return len(c.bitmap) * 8 // sizeof(uint64)
 	}
 }
 
@@ -1602,13 +1602,13 @@ func (c *container) info() ContainerInfo {
 
 	if c.isArray() {
 		info.Type = "array"
-		info.Alloc = len(c.array) * 4  // sizeof(uint32)
+		info.Alloc = len(c.array) * 4 // sizeof(uint32)
 	} else if c.isRun() {
 		info.Type = "run"
-		info.Alloc = len(c.runs) * interval32Size + runCountHeaderSize
+		info.Alloc = len(c.runs)*interval32Size + runCountHeaderSize
 	} else {
 		info.Type = "bitmap"
-		info.Alloc = len(c.bitmap) * 8  // sizeof(uint64)
+		info.Alloc = len(c.bitmap) * 8 // sizeof(uint64)
 	}
 
 	if c.mapped {
@@ -2322,6 +2322,7 @@ func difference(a, b *container) *container {
 	}
 }
 
+// differenceArrayArray computes the difference bween two arrays.
 func differenceArrayArray(a, b *container) *container {
 	output := &container{}
 	na, nb := len(a.array), len(b.array)
@@ -2346,6 +2347,7 @@ func differenceArrayArray(a, b *container) *container {
 	return output
 }
 
+// differenceArrayRun computes the difference of an array from a run.
 func differenceArrayRun(a, b *container) *container {
 	// func (ac *arrayContainer) iandNotRun16(rc *runContainer16) container {
 
@@ -2356,8 +2358,8 @@ func differenceArrayRun(a, b *container) *container {
 	output := &container{array: make([]uint32, 0, a.n)}
 	// cardinality upper bound: card(A)
 
-	i := 0  // array index
-	j := 0  // run index
+	i := 0 // array index
+	j := 0 // run index
 
 	// keep all array elements before beginning of runs
 	for ; i < int(b.runs[j].start); i++ {
@@ -2382,10 +2384,11 @@ func differenceArrayRun(a, b *container) *container {
 
 	// keep all array elements after end of runs
 	output.array = append(output.array, a.array[i:]...)
-	
+
 	return output
 }
 
+// differenceBitmapRun computes the difference of an bitmap from a run.
 func differenceBitmapRun(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
@@ -2398,16 +2401,65 @@ func differenceBitmapRun(a, b *container) *container {
 	return output
 }
 
+// differenceRunArray computes the difference of an run from a array.
 func differenceRunArray(a, b *container) *container {
-	// TODO
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
 	}
 
 	output := &container{runs: make([]interval32, 0, a.n)}
+	i := 0
+	j := 0
+	vr := a.runs[j]
+	working := true
+	for working {
+		switch {
+		case b.array[i] < vr.start: //before
+		case b.array[i] > vr.last: //after
+			if vr.start <= vr.last {
+				output.n += output.runAppendInterval(vr)
+			}
+			j++
+			if j < len(a.runs) {
+				vr = a.runs[j]
+			} else {
+				working = false
+			}
+		case b.array[i] == vr.start: //begining of run
+			vr.start++
+		case b.array[i] == a.runs[j].last: //end of run
+			vr.last--
+			if vr.last >= vr.start {
+				output.n += output.runAppendInterval(vr)
+			}
+			j++
+			if j < len(a.runs) {
+				vr = a.runs[j]
+			} else {
+				working = false
+			}
+		case b.array[i] > vr.start: //inside run
+			output.n += output.runAppendInterval(interval32{start: vr.start, last: b.array[i] - 1})
+			vr.start = b.array[i] + 1
+
+		}
+		i++
+		if i >= len(b.array) {
+			working = false
+		}
+	}
+	if vr.start <= vr.last {
+		output.n += output.runAppendInterval(vr)
+	}
+	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
+		output.runToArray()
+	} else if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
+	}
 	return output
 }
 
+// differenceRunBitmap computes the difference of an run from a bitmap.
 func differenceRunBitmap(a, b *container) *container {
 	// TODO
 	if a.n == 0 || b.n == 0 {
@@ -2427,17 +2479,17 @@ func differenceRunBitmap(a, b *container) *container {
 		i++
 	}
 
-
 	return output
 }
 
+// differenceRunRun computes the difference of two runs.
 func differenceRunRun(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
 	}
 
-	apos := 0  // current a-run index
-	bpos := 0  // current b-run index
+	apos := 0 // current a-run index
+	bpos := 0 // current b-run index
 	astart := a.runs[apos].start
 	alast := a.runs[apos].last
 	bstart := b.runs[bpos].start
@@ -2445,7 +2497,7 @@ func differenceRunRun(a, b *container) *container {
 	alen := len(a.runs)
 	blen := len(b.runs)
 
-	output := &container{runs: make([]interval32, 0, alen+blen)}  // TODO allocate max then truncate? or something else
+	output := &container{runs: make([]interval32, 0, alen+blen)} // TODO allocate max then truncate? or something else
 	// cardinality upper bound: sum of number of runs
 	// each B-run could split an A-run in two, up to len(b.runs) times
 
