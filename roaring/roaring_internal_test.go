@@ -1418,9 +1418,10 @@ func TestXorBitmapRun(t *testing.T) {
 		runs   []interval32
 		exp    []uint64
 	}{
-		{bitmap: []uint64{0x0, 0x0, 0x0},
-			runs: []interval32{{start: 129, last: 131}},
-			exp:  []uint64{0x0, 0x0, 0x00000000000000E},
+		{
+			bitmap: []uint64{0x0, 0x0, 0x0},
+			runs:   []interval32{{start: 129, last: 131}},
+			exp:    []uint64{0x0, 0x0, 0x00000000000000E},
 		},
 	}
 	for i, test := range tests {
@@ -1589,66 +1590,55 @@ func TestIteratorRuns(t *testing.T) {
 	}
 }
 
-func TestRunBinSearch(t *testing.T) {
+func TestRunBinSearchContains(t *testing.T) {
 	tests := []struct {
-		runs   []interval32
-		search uint32
-		exp    bool
-		expi   int
+		runs  []interval32
+		index uint32
+		exp   struct {
+			index int
+			found bool
+		}
 	}{
 		{
-			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
-			search: 1,
-			exp: 	false,
-			expi:   0,
+			runs:  []interval32{{start: 0, last: 10}},
+			index: uint32(3),
+			exp: struct {
+				index int
+				found bool
+			}{index: 0, found: true},
 		},
 		{
-			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
-			search: 2,
-			exp: 	true,
-			expi:   0,
+			runs:  []interval32{{start: 0, last: 10}},
+			index: uint32(13),
+			exp: struct {
+				index int
+				found bool
+			}{index: 0, found: false},
 		},
 		{
-			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
-			search: 5,
-			exp: 	true,
-			expi:   0,
+			runs:  []interval32{{start: 0, last: 10}, {start: 20, last: 30}},
+			index: uint32(13),
+			exp: struct {
+				index int
+				found bool
+			}{index: 0, found: false},
 		},
 		{
-			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
-			search: 10,
-			exp: 	true,
-			expi:   0,
-		},
-		{
-			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
-			search: 20,
-			exp: 	false,
-			expi:   1,
-		},
-		{
-			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
-			search: 55,
-			exp: 	true,
-			expi:   1,
-		},
-		{
-			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
-			search: 70,
-			exp: 	false,
-			expi:   2,
-		},
-		{
-			runs:   []interval32{{2, 10}, {50, 60}, {80, 90}},
-			search: 100,
-			exp: 	false,
-			expi:   3,
+			runs:  []interval32{{start: 0, last: 10}, {start: 20, last: 30}},
+			index: uint32(36),
+			exp: struct {
+				index int
+				found bool
+			}{index: 1, found: false},
 		},
 	}
 	for i, test := range tests {
-		idx, contains := runBinSearch(test.search, test.runs)
-		if !(test.exp == contains && test.expi == idx) {
-			t.Fatalf("test #%v expected (%v, %v) but got (%v, %v)", i, test.exp, test.expi, contains, idx)
+		index := test.index
+		runs := test.runs
+		idx, found := binSearchRuns(index, runs)
+
+		if test.exp.index != idx && test.exp.found != found {
+			t.Fatalf("test #%v expected %v , but got %v %v", i, test.exp, idx, found)
 		}
 	}
 }
