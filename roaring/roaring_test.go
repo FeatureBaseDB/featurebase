@@ -55,6 +55,7 @@ func TestBitmap_Slice_Empty(t *testing.T) {
 }
 
 // Ensure a bitmap can return a slice of values within a range.
+// TODO duplicate for all container types
 func TestBitmap_SliceRange(t *testing.T) {
 	if a := roaring.NewBitmap(0, 1000001, 1000002, 1000003).SliceRange(1, 1000003); !reflect.DeepEqual(a, []uint64{1000001, 1000002}) {
 		t.Fatalf("unexpected slice: %+v", a)
@@ -384,6 +385,7 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 	})
 }
 
+
 func TestBitmap_Marshal_Quick_Array1(t *testing.T)  { testBitmapMarshalQuick(t, 1000, 1000, 2000, false) }
 func TestBitmap_Marshal_Quick_Array2(t *testing.T)  { testBitmapMarshalQuick(t, 10000, 0, 1000, false) }
 func TestBitmap_Marshal_Quick_Bitmap1(t *testing.T) { testBitmapMarshalQuick(t, 10000, 0, 10000, false) }
@@ -397,6 +399,8 @@ func TestBitmap_Marshal_Quick_LargeValue(t *testing.T) {
 func TestBitmap_Marshal_Quick_Bitmap_Sorted(t *testing.T) {
 	testBitmapMarshalQuick(t, 10000, 0, 10000, true)
 }
+
+// TODO update for RLE
 
 // Ensure a bitmap can be marshaled and unmarshaled.
 func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
@@ -461,6 +465,7 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 }
 
 // Ensure iterator can iterate over all the values on the bitmap.
+// TODO duplicate for all container types
 func TestIterator(t *testing.T) {
 	itr := roaring.NewBitmap(1, 2, 3).Iterator()
 	itr.Seek(0)
