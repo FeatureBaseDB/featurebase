@@ -1046,11 +1046,6 @@ func (iv interval32) runlen() int {
 	return 1 + int(iv.last) - int(iv.start)
 }
 
-// String produces a human viewable string of the contents.
-func (iv interval32) String() string {
-	return fmt.Sprintf("[%d, %d]", iv.start, iv.last)
-}
-
 // newContainer returns a new instance of container.
 func newContainer() *container {
 	return &container{}
