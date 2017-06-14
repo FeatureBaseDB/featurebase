@@ -1484,3 +1484,157 @@ func TestXorBitmapRun(t *testing.T) {
 	}
 
 }
+
+func TestIteratorArray(t *testing.T) {
+	// use values that span two containers
+	b := NewBitmap(0, 1, 10, 100, 1000, 10000, 90000, 100000)
+	if !b.containers[0].isArray() {
+		t.Fatalf("wrong container type")
+	}
+
+	itr := b.Iterator()
+	if !(itr.i == 0 && itr.j == -1) {
+		t.Fatalf("iterator did not zero correctly: %v\n", itr)
+	}
+
+	itr.Seek(1000)
+	if !(itr.i == 0 && itr.j == 3) {
+		t.Fatalf("iterator did not seek correctly: %v\n", itr)
+	}
+
+	itr.Seek(10000)
+	itr.Next()
+	val, eof := itr.Next()
+	if !(itr.i == 1 && itr.j == 0 && val == 90000 && !eof) {
+		t.Fatalf("iterator did not next correctly across containers: %v\n", itr)
+	}
+
+	itr.Seek(80000)
+	if !(itr.i == 1 && itr.j == -1) {
+		t.Fatalf("iterator did not seek missing value correctly: %v\n", itr)
+	}
+
+	itr.Seek(100000)
+	if !(itr.i == 1 && itr.j == 0) {
+		t.Fatalf("iterator did not seek correctly in multiple containers: %v\n", itr)
+	}
+
+	val, eof = itr.Next()
+	if !(val == 100000 && !eof) {
+		t.Fatalf("iterator did not next correctly: %d, %v\n", val, eof)
+	}
+
+	val, eof = itr.Next()
+	if !(val == 0 && eof) {
+		t.Fatalf("iterator did not eof correctly: %d, %v\n", val, eof)
+	}
+}
+
+func TestIteratorBitmap(t *testing.T) {
+	// use values that span two containers
+	// this dataset will update to bitmap after enough Adds,
+	// but won't update to RLE until Optimize() is called
+	b := NewBitmap()
+	for i := uint64(61000); i<71000; i++ {
+		b.Add(i)
+	}
+	for i := uint64(75000); i<75100; i++ {
+		b.Add(i)
+	}
+	if !b.containers[0].isBitmap() {
+		t.Fatalf("wrong container type")
+	}
+
+	itr := b.Iterator()
+	if !(itr.i == 0 && itr.j == -1) {
+		t.Fatalf("iterator did not zero correctly: %v\n", itr)
+	}
+
+	itr.Seek(65000)
+	if !(itr.i == 0 && itr.j == 64999) {
+		t.Fatalf("iterator did not seek correctly: %v\n", itr)
+	}
+
+	itr.Seek(65535)
+	itr.Next()
+	val, eof := itr.Next()
+	if !(itr.i == 1 && itr.j == 0 && val == 65536 && !eof) {
+		t.Fatalf("iterator did not next correctly across containers: %v\n", itr)
+	}
+
+	itr.Seek(74000)
+	if !(itr.i == 1 && itr.j == 8463) {
+		t.Fatalf("iterator did not seek missing value correctly: %v\n", itr)
+	}
+
+	itr.Seek(70999)
+	if !(itr.i == 1 && itr.j == 5462) {
+		t.Fatalf("iterator did not seek correctly in multiple containers: %v\n", itr)
+	}
+
+	val, eof = itr.Next()
+	if !(val == 70999 && !eof) {
+		t.Fatalf("iterator did not next correctly: %d, %v\n", val, eof)
+	}
+
+	itr.Seek(75100)
+	val, eof = itr.Next()
+	if !(val == 0 && eof) {
+		t.Fatalf("iterator did not eof correctly: %d, %v\n", val, eof)
+	}
+}
+
+func TestIteratorRuns(t *testing.T) {
+	b := NewBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 100003, 100004, 100005)
+	b.Optimize()
+	if !b.containers[0].isRun() {
+		t.Fatalf("wrong container type")
+	}
+
+	itr := b.Iterator()
+	if !(itr.i == 0 && itr.j == 0 && itr.k == -1) {
+		t.Fatalf("iterator did not zero correctly: %v\n", itr)
+	}
+
+	itr.Seek(4)
+	if !(itr.i == 0 && itr.j == 0 && itr.k == 3) {
+		t.Fatalf("iterator did not seek correctly: %v\n", itr)
+	}
+	itr.Next()
+	val, eof := itr.Next()
+	if !(val == 1000 && !eof) {
+		t.Fatalf("iterator did not next correctly across runs")
+	}
+	itr.Next()
+	val, eof = itr.Next()
+	if !(val == 1002 && !eof) {
+		t.Fatalf("iterator did not next correctly within a run")
+	}
+	itr.Next()
+	itr.Next()
+	itr.Next()
+	val, eof = itr.Next()
+	if !(val == 100000 && !eof) {
+		t.Fatalf("iterator did not next correctly across containers")
+	}
+
+	itr.Seek(500)
+	if !(itr.i == 0 && itr.j == 1 && itr.k == -1) {
+		t.Fatalf("iterator did not seek missing value correctly: %v\n", itr)
+	}
+
+	itr.Seek(1004)
+	if !(itr.i == 0 && itr.j == 1 && itr.k == 3) {
+		t.Fatalf("iterator did not seek correctly in multiple runs: %v\n", itr)
+	}
+
+	itr.Seek(100005)
+	if !(itr.i == 1 && itr.j == 0 && itr.k == 4) {
+		t.Fatalf("iterator did not seek correctly in multiple containers: %v\n", itr)
+	}
+
+	val, eof = itr.Next()
+	if !(val == 0 && eof) {
+		t.Fatalf("iterator did not eof correctly: %d, %v\n", val, eof)
+	}
+}
