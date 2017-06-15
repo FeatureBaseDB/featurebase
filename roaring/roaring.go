@@ -2218,17 +2218,15 @@ func unionBitmapRun(a, b *container) *container {
 	}
 	output := a.clone()
 	for j := 0; j < len(b.runs); j++ {
-		output.bitmapSetRange(uint64(b.runs[j].start), uint64(b.runs[j].last))
+		output.bitmapSetRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
 	return output
 }
 
 const maxBitmap = 0xFFFFFFFFFFFFFFFF
 
-// sets all bits in [i, j] (inclusive) (c must be a bitmap container)
-// TODO inclusive upper limit is inconsistent with other functions (CountRange, SliceRange, ForEachRange, OffsetRange(?))
+// sets all bits in [i, j) (c must be a bitmap container)
 func (c *container) bitmapSetRange(i, j uint64) {
-	j += 1
 	x := i / 64
 	y := (j - 1) / 64
 	var X uint64 = maxBitmap << (i % 64)
@@ -2250,10 +2248,8 @@ func (c *container) bitmapSetRange(i, j uint64) {
 	}
 }
 
-// xor's all bits in [i, j] with all true (inclusive) (c must be a bitmap container).
-// TODO inclusive upper limit is inconsistent with other functions
+// xor's all bits in [i, j) with all true (c must be a bitmap container).
 func (c *container) bitmapXorRange(i, j uint64) {
-	j += 1
 	x := i / 64
 	y := (j - 1) / 64
 	var X uint64 = maxBitmap << (i % 64)
@@ -2277,10 +2273,8 @@ func (c *container) bitmapXorRange(i, j uint64) {
 	}
 }
 
-// zeroes all bits in [i, j] (inclusive) (c must be a bitmap container)
-// TODO inclusive upper limit is inconsistent with other functions
+// zeroes all bits in [i, j) (c must be a bitmap container)
 func (c *container) bitmapZeroRange(i, j uint64) {
-	j += 1
 	x := i / 64
 	y := (j - 1) / 64
 	var X uint64 = maxBitmap << (i % 64)
@@ -2447,7 +2441,7 @@ func differenceBitmapRun(a, b *container) *container {
 
 	output := a.clone()
 	for j := 0; j < len(b.runs); j++ {
-		output.bitmapZeroRange(uint64(b.runs[j].start), uint64(b.runs[j].last))
+		output.bitmapZeroRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
 	return output
 }
@@ -3155,7 +3149,7 @@ func xorRunRun(a, b *container) *container {
 func xorBitmapRun(a, b *container) *container {
 	output := a.clone()
 	for j := 0; j < len(b.runs); j++ {
-		output.bitmapXorRange(uint64(b.runs[j].start), uint64(b.runs[j].last))
+		output.bitmapXorRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
 
 	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
