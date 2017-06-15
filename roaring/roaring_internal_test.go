@@ -844,7 +844,13 @@ func TestBitmapToRun(t *testing.T) {
 			bitmap: []uint64{0xF000000000000000, 0xFFFFFFFFFFFFFFFF, 0xF},
 			exp:    []interval32{{start: 60, last: 131}},
 		},
+		{
+			bitmap: make([]uint64, bitmapN),
+			exp:    []interval32{{start: 65408, last: 65535}},
+		},
 	}
+	tests[8].bitmap[1022] = 0xFFFFFFFFFFFFFFFF
+	tests[8].bitmap[1023] = 0xFFFFFFFFFFFFFFFF
 
 	for i, test := range tests {
 		a.bitmap = make([]uint64, bitmapN)

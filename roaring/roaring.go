@@ -1458,7 +1458,7 @@ func (c *container) runToBitmap() {
 	}
 
 	for _, r := range c.runs {
-		// TODO is there a faster way ?!?!!
+		// TODO this can be ~64x faster for long runs by setting maxBitmap instead of single bits
 		for v := r.start; v <= r.last; v++ {
 			c.bitmap[int(v)/64] |= (uint64(1) << uint(v%64))
 		}
@@ -1504,10 +1504,9 @@ func (c *container) bitmapToRun() {
 			current = c.bitmap[i]
 		}
 
-		last = 0
 		if current == maxBitmap {
-			last = 64*i + 64 // TODO verify
-			c.runs = append(c.runs, interval32{start, last - 1})
+			// bitmap[1023] == maxBitmap
+			c.runs = append(c.runs, interval32{start, 65535})
 			break
 		}
 		currentLast := uint32(trailingZeroN(^current))
