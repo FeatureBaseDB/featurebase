@@ -869,12 +869,13 @@ func (itr *Iterator) Seek(seek uint64) {
 		}
 
 		j, contains := binSearchRuns(lb, c.runs)
-		if !contains {
-			itr.j = -1
-			itr.k = -1
-		} else {
+		if contains {
 			itr.j = j
 			itr.k = int(lb) - int(c.runs[j].start) - 1
+		} else {
+			// Set iterator to next value in the Bitmap.
+			itr.j = j
+			itr.k = -1
 		}
 
 		return
