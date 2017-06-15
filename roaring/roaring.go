@@ -1469,6 +1469,14 @@ func (c *container) runMax() uint32 {
 // bitmapToArray converts from bitmap format to array format.
 func (c *container) bitmapToArray() {
 	c.array = make([]uint32, 0, c.n)
+
+	// return early if empty
+	if c.n == 0 {
+		c.bitmap = nil
+		c.mapped = false
+		return
+	}
+
 	for i, bitmap := range c.bitmap {
 		for bitmap != 0 {
 			t := bitmap & -bitmap
@@ -1483,6 +1491,14 @@ func (c *container) bitmapToArray() {
 // arrayToBitmap converts from array format to bitmap format.
 func (c *container) arrayToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
+
+	// return early if empty
+	if c.n == 0 {
+		c.array = nil
+		c.mapped = false
+		return
+	}
+
 	for _, v := range c.array {
 		c.bitmap[int(v)/64] |= (uint64(1) << uint(v%64))
 	}
@@ -1493,6 +1509,14 @@ func (c *container) arrayToBitmap() {
 // runToBitmap converts from RLE format to bitmap format.
 func (c *container) runToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
+
+	// return early if empty
+	if c.n == 0 {
+		c.runs = nil
+		c.mapped = false
+		return
+	}
+
 	for _, r := range c.runs {
 		// TODO is there a faster way ?!?!!
 		for v := r.start; v <= r.last; v++ {
@@ -1505,9 +1529,16 @@ func (c *container) runToBitmap() {
 
 // bitmapToRun converts from bitmap format to RLE format.
 func (c *container) bitmapToRun() {
-	numRuns := c.bitmapCountRuns() // TODO test
+	// return early if empty
+	if c.n == 0 {
+		c.runs = make([]interval32, 0)
+		c.bitmap = nil
+		c.mapped = false
+		return
+	}
+
+	numRuns := c.bitmapCountRuns()
 	c.runs = make([]interval32, 0, numRuns)
-	// TODO return early if no runs
 
 	current := c.bitmap[0]
 	var i, start, last uint32
@@ -1553,7 +1584,15 @@ func (c *container) bitmapToRun() {
 
 // arrayToRun converts from array format to RLE format.
 func (c *container) arrayToRun() {
-	numRuns := c.arrayCountRuns() // TODO test
+	// return early if empty
+	if c.n == 0 {
+		c.runs = make([]interval32, 0)
+		c.array = nil
+		c.mapped = false
+		return
+	}
+
+	numRuns := c.arrayCountRuns()
 	c.runs = make([]interval32, 0, numRuns)
 	start := c.array[0]
 	for i, v := range c.array[1:] {
@@ -1572,6 +1611,14 @@ func (c *container) arrayToRun() {
 // runToArray converts from RLE format to array format.
 func (c *container) runToArray() {
 	c.array = make([]uint32, 0, c.n)
+
+	// return early if empty
+	if c.n == 0 {
+		c.runs = nil
+		c.mapped = false
+		return
+	}
+
 	for _, r := range c.runs {
 		for v := r.start; v <= r.last; v++ {
 			c.array = append(c.array, v)
