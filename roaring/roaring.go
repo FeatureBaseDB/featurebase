@@ -2523,57 +2523,8 @@ func differenceRunArray(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
 	}
-
-	output := &container{runs: make([]interval32, 0, a.n)}
-	i := 0
-	j := 0
-	vr := a.runs[j]
-	working := true
-	for working {
-		switch {
-		case b.array[i] < vr.start: //before
-		case b.array[i] > vr.last: //after
-			if vr.start <= vr.last {
-				output.n += output.runAppendInterval(vr)
-			}
-			j++
-			if j < len(a.runs) {
-				vr = a.runs[j]
-			} else {
-				working = false
-			}
-		case b.array[i] == vr.start: //begining of run
-			vr.start++
-		case b.array[i] == a.runs[j].last: //end of run
-			vr.last--
-			if vr.last >= vr.start {
-				output.n += output.runAppendInterval(vr)
-			}
-			j++
-			if j < len(a.runs) {
-				vr = a.runs[j]
-			} else {
-				working = false
-			}
-		case b.array[i] > vr.start: //inside run
-			output.n += output.runAppendInterval(interval32{start: vr.start, last: b.array[i] - 1})
-			vr.start = b.array[i] + 1
-
-		}
-		i++
-		if i >= len(b.array) {
-			working = false
-		}
-	}
-	if vr.start <= vr.last {
-		output.n += output.runAppendInterval(vr)
-	}
-	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
-		output.runToArray()
-	} else if len(output.runs) > RunMaxSize {
-		output.runToBitmap()
-	}
-	return output
+	itr := newArrayIterator(b.array)
+	return differenceRunIterator(a, itr)
 }
 
 // differenceRunBitmap computes the difference of an run from a bitmap.
@@ -2581,9 +2532,13 @@ func differenceRunBitmap(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
 	}
+	itr := newBufIterator(newBitmapIterator(b.bitmap))
+	return differenceRunIterator(a, itr)
+}
+
+func differenceRunIterator(a *container, itr containerIterator) *container {
 
 	output := &container{runs: make([]interval32, 0, a.n)}
-	itr := newBufIterator(newBitmapIterator(b.bitmap))
 
 	vb, eof := itr.next()
 	j := 0
@@ -3030,6 +2985,34 @@ func popcount(x uint64) (n uint64) {
 	x &= 0x0f0f0f0f0f0f0f0f
 	x *= 0x0101010101010101
 	return x >> 56
+}
+
+// Returns eof as true if there are no values left in the iterator.
+type containerIterator interface {
+	next() (uint32, bool)
+}
+
+// bitmapIterator represents an iterator over container array values.
+type arrayIterator struct {
+	array []uint32
+	i     int
+}
+
+func newArrayIterator(array []uint32) *arrayIterator {
+	return &arrayIterator{
+		array: array,
+		i:     -1,
+	}
+}
+
+// next returns the next value in the array.
+func (itr *arrayIterator) next() (v uint32, eof bool) {
+
+	itr.i++
+	if itr.i >= len(itr.array) {
+		return 0, true
+	}
+	return itr.array[itr.i], false
 }
 
 // bitmapIterator represents an iterator over container bitmap values.
