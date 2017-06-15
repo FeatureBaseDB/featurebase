@@ -179,7 +179,15 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
      e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
      return e.executeBitmapCall(ctx, index, c, slices, opt)
   default:
-		return e.executeExternalCall(ctx, index, c, slices, opt)
+		value, err := e.executeExternalCall(ctx, index, c, slices, opt)
+		if err != nil {
+			return nil, err
+		}
+		err = e.validateReturnValue(value)
+		if err != nil {
+			return nil, err
+		}
+		return value, nil
 	}
 }
 
@@ -200,6 +208,14 @@ func (e *Executor) validateCallArgs(c *pql.Call) error {
 		}
 	}
 	return nil
+}
+
+func (e *Executor) validateReturnValue(value interface{}) error {
+	switch value.(type) {
+	case bool, uint64, []Pair, Bitmap:
+		return nil
+	}
+	return errors.New("Unknown return value type")
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
