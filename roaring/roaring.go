@@ -1678,14 +1678,23 @@ func (c *container) info() ContainerInfo {
 func (c *container) check() error {
 	var a ErrorList
 
-	if c.n <= ArrayMaxSize {
-		// TODO check run here
+	if c.isArray() {
 		if len(c.array) != c.n {
 			a.Append(fmt.Errorf("array count mismatch: count=%d, n=%d", len(c.array), c.n))
 		}
-	} else {
+	} else if c.isRun() {
+		runCount := c.runCountRange(0, 0xFFFFFFFF)
+		if runCount != c.n {
+			a.Append(fmt.Errorf("run count mismatch: count=%d, n=%d", runCount, c.n))
+		}
+	} else if c.isBitmap() {
 		if n := c.bitmapCountRange(0, uint32(len(c.bitmap)*64)); n != c.n {
 			a.Append(fmt.Errorf("bitmap count mismatch: count=%d, n=%d", n, c.n))
+		}
+	} else {
+		a.Append(fmt.Errorf("empty container"))
+		if c.n != 0 {
+			a.Append(fmt.Errorf("empty container with nonzero count: n=%d", c.n))
 		}
 	}
 

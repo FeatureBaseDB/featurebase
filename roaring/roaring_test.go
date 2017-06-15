@@ -27,6 +27,38 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 )
 
+func TestCheckBitmap(t *testing.T) {
+	b := roaring.NewBitmap()
+	for i := uint64(61000); i < 71000; i++ {
+		b.Add(i)
+	}
+	for i := uint64(75000); i < 75100; i++ {
+		b.Add(i)
+	}
+
+	err := b.Check()
+	if err != nil {
+		t.Fatalf("%v\n", err)
+	}
+}
+
+func TestCheckArray(t *testing.T) {
+	b := roaring.NewBitmap(0, 1, 10, 100, 1000, 10000, 90000, 100000)
+	err := b.Check()
+	if err != nil {
+		t.Fatalf("%v\n", err)
+	}
+}
+
+func TestCheckRun(t *testing.T) {
+	b := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 100003, 100004, 100005)
+	b.Optimize() // convert to runs
+	err := b.Check()
+	if err != nil {
+		t.Fatalf("%v\n", err)
+	}
+}
+
 // Ensure an empty bitmap returns false if checking for existence.
 func TestBitmap_Contains_Empty(t *testing.T) {
 	if roaring.NewBitmap().Contains(1000) {
