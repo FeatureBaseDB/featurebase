@@ -732,7 +732,7 @@ func TestBitmapSetRange(t *testing.T) {
 			c.bitmap[i] = v
 		}
 		c.n = c.countRange(0, 65535)
-		c.bitmapSetRange(test.start, test.last)
+		c.bitmapSetRange(test.start, test.last+1)
 		if !reflect.DeepEqual(c.bitmap[:len(test.exp)], test.exp) {
 			t.Fatalf("test %#v expected %x, got %x", i, test.exp, c.bitmap[:len(test.bitmap)])
 		}
@@ -1010,7 +1010,7 @@ func TestBitmapZeroRange(t *testing.T) {
 			c.bitmap[i] = v
 		}
 		c.n = c.countRange(0, 65535)
-		c.bitmapZeroRange(test.start, test.last)
+		c.bitmapZeroRange(test.start, test.last+1)
 		if !reflect.DeepEqual(c.bitmap[:len(test.exp)], test.exp) {
 			t.Fatalf("test %#v expected %x, got %x", i, test.exp, c.bitmap[:len(test.bitmap)])
 		}
@@ -1528,7 +1528,7 @@ func TestBitmapXorRange(t *testing.T) {
 			c.bitmap[i] = v
 		}
 		c.n = c.countRange(0, 65535)
-		c.bitmapXorRange(test.start, test.last)
+		c.bitmapXorRange(test.start, test.last+1)
 		if !reflect.DeepEqual(c.bitmap[:len(test.exp)], test.exp) {
 			t.Fatalf("test %#v expected %x, got %x", i, test.exp, c.bitmap[:len(test.bitmap)])
 		}
