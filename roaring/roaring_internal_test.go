@@ -15,8 +15,8 @@
 package roaring
 
 import (
-	"fmt"
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -1114,8 +1114,6 @@ func TestDifferenceRunArray(t *testing.T) {
 	}
 }
 
-/*
-
 func TestDifferenceRunBitmap(t *testing.T) {
 	a := &container{}
 	b := &container{bitmap: make([]uint64, bitmapN)}
@@ -1128,6 +1126,31 @@ func TestDifferenceRunBitmap(t *testing.T) {
 			runs:   []interval32{{start: 0, last: 63}},
 			bitmap: []uint64{0x0000FFFF000000F0},
 			exp:    []interval32{{start: 0, last: 3}, {start: 8, last: 31}, {start: 48, last: 63}},
+		},
+		{
+			runs:   []interval32{{start: 0, last: 63}},
+			bitmap: []uint64{0x8000000000000000},
+			exp:    []interval32{{start: 0, last: 62}},
+		},
+		{
+			runs:   []interval32{{start: 0, last: 63}},
+			bitmap: []uint64{0x0000000000000001},
+			exp:    []interval32{{start: 1, last: 63}},
+		},
+		{
+			runs:   []interval32{{start: 0, last: 63}},
+			bitmap: []uint64{0x0, 0x0000000000000001},
+			exp:    []interval32{{start: 0, last: 63}},
+		},
+		{
+			runs:   []interval32{{start: 0, last: 65}},
+			bitmap: []uint64{0x0, 0x0000000000000001},
+			exp:    []interval32{{start: 0, last: 63}, {start: 65, last: 65}},
+		},
+		{
+			runs:   []interval32{{start: 0, last: 65}},
+			bitmap: []uint64{0x0, 0x8000000000000000},
+			exp:    []interval32{{start: 0, last: 65}},
 		},
 	}
 	for i, test := range tests {
@@ -1143,7 +1166,6 @@ func TestDifferenceRunBitmap(t *testing.T) {
 		}
 	}
 }
-*/
 
 func TestDifferenceBitmapRun(t *testing.T) {
 	a := &container{bitmap: make([]uint64, bitmapN)}
@@ -1486,10 +1508,10 @@ func TestIteratorBitmap(t *testing.T) {
 	// this dataset will update to bitmap after enough Adds,
 	// but won't update to RLE until Optimize() is called
 	b := NewBitmap()
-	for i := uint64(61000); i<71000; i++ {
+	for i := uint64(61000); i < 71000; i++ {
 		b.Add(i)
 	}
-	for i := uint64(75000); i<75100; i++ {
+	for i := uint64(75000); i < 75100; i++ {
 		b.Add(i)
 	}
 	if !b.containers[0].isBitmap() {
