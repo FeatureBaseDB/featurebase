@@ -893,10 +893,10 @@ func (itr *Iterator) Next() (v uint64, eof bool) {
 			return 0, true
 		}
 
-		// Move to the next item in the container if it's an array container.
 		c := itr.bitmap.containers[itr.i]
 		if c.isArray() {
 			if itr.j >= c.n-1 {
+				// Reached end of array, move to the next container.
 				itr.i, itr.j = itr.i+1, -1
 				continue
 			}
@@ -905,30 +905,21 @@ func (itr *Iterator) Next() (v uint64, eof bool) {
 		}
 
 		if c.isRun() {
-			if itr.j >= len(c.runs)-1 {
-				r := c.runs[itr.j]
-				runLength := int(r.last - r.start)
-
-				if itr.k >= runLength {
-					itr.i++
-					itr.j = -1
-					continue
-				} else {
-					itr.k++
-					return itr.peek(), false
-				}
-			}
-
 			r := c.runs[itr.j]
 			runLength := int(r.last - r.start)
 
 			if itr.k >= runLength {
-				itr.k = 0
-				itr.j++
-			} else {
-				itr.k++
+				// Reached end of run, move to the next run.
+				itr.j, itr.k = itr.j+1, -1
 			}
 
+			if itr.j >= len(c.runs) {
+				// Reached end of runs, move to the next container.
+				itr.i, itr.j = itr.i+1, 0
+				continue
+			}
+
+			itr.k++
 			return itr.peek(), false
 		}
 
