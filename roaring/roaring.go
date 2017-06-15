@@ -1341,28 +1341,25 @@ func (c *container) bitmapRemove(v uint32) bool {
 	return true
 }
 
+// runRemove removes v from a run container, and returns true if v was removed.
 func (c *container) runRemove(v uint32) bool {
-	// TODO binary search
-	for i, iv := range c.runs {
-		if v <= iv.last {
-			if v < iv.start {
-				return false
-			}
-			c.unmap()
-			if v == iv.last && v == iv.start {
-				c.runs = append(c.runs[:i], c.runs[i+1:]...)
-			} else if v == iv.last {
-				c.runs[i].last -= 1
-			} else if v == iv.start {
-				c.runs[i].start += 1
-			} else if v > iv.start {
-				c.runs[i].last = v - 1
-				c.runs = append(c.runs[:i+1], append([]interval32{{start: v + 1, last: iv.last}}, c.runs[i+1:]...)...)
-			}
-			return true
-		}
+	i, contains := binSearchRuns(v, c.runs)
+	if !contains {
+		return false
 	}
-	return false
+	c.unmap()
+	if v == c.runs[i].last && v == c.runs[i].start {
+		c.runs = append(c.runs[:i], c.runs[i+1:]...)
+	} else if v == c.runs[i].last {
+		c.runs[i].last -= 1
+	} else if v == c.runs[i].start {
+		c.runs[i].start += 1
+	} else if v > c.runs[i].start {
+		last := c.runs[i].last
+		c.runs[i].last = v - 1
+		c.runs = append(c.runs[:i+1], append([]interval32{{start: v+1, last: last}}, c.runs[i+1:]...)...)
+	}
+	return true
 }
 
 // max returns the maximum value in the container.
@@ -1412,6 +1409,14 @@ func (c *container) runMax() uint32 {
 // bitmapToArray converts from bitmap format to array format.
 func (c *container) bitmapToArray() {
 	c.array = make([]uint32, 0, c.n)
+
+	// return early if empty
+	if c.n == 0 {
+		c.bitmap = nil
+		c.mapped = false
+		return
+	}
+
 	for i, bitmap := range c.bitmap {
 		for bitmap != 0 {
 			t := bitmap & -bitmap
@@ -1426,6 +1431,14 @@ func (c *container) bitmapToArray() {
 // arrayToBitmap converts from array format to bitmap format.
 func (c *container) arrayToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
+
+	// return early if empty
+	if c.n == 0 {
+		c.array = nil
+		c.mapped = false
+		return
+	}
+
 	for _, v := range c.array {
 		c.bitmap[int(v)/64] |= (uint64(1) << uint(v%64))
 	}
@@ -1436,6 +1449,14 @@ func (c *container) arrayToBitmap() {
 // runToBitmap converts from RLE format to bitmap format.
 func (c *container) runToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
+
+	// return early if empty
+	if c.n == 0 {
+		c.runs = nil
+		c.mapped = false
+		return
+	}
+
 	for _, r := range c.runs {
 		// TODO is there a faster way ?!?!!
 		for v := r.start; v <= r.last; v++ {
@@ -1448,9 +1469,16 @@ func (c *container) runToBitmap() {
 
 // bitmapToRun converts from bitmap format to RLE format.
 func (c *container) bitmapToRun() {
-	numRuns := c.bitmapCountRuns() // TODO test
+	// return early if empty
+	if c.n == 0 {
+		c.runs = make([]interval32, 0)
+		c.bitmap = nil
+		c.mapped = false
+		return
+	}
+
+	numRuns := c.bitmapCountRuns()
 	c.runs = make([]interval32, 0, numRuns)
-	// TODO return early if no runs
 
 	current := c.bitmap[0]
 	var i, start, last uint32
@@ -1496,7 +1524,15 @@ func (c *container) bitmapToRun() {
 
 // arrayToRun converts from array format to RLE format.
 func (c *container) arrayToRun() {
-	numRuns := c.arrayCountRuns() // TODO test
+	// return early if empty
+	if c.n == 0 {
+		c.runs = make([]interval32, 0)
+		c.array = nil
+		c.mapped = false
+		return
+	}
+
+	numRuns := c.arrayCountRuns()
 	c.runs = make([]interval32, 0, numRuns)
 	start := c.array[0]
 	for i, v := range c.array[1:] {
@@ -1515,6 +1551,14 @@ func (c *container) arrayToRun() {
 // runToArray converts from RLE format to array format.
 func (c *container) runToArray() {
 	c.array = make([]uint32, 0, c.n)
+
+	// return early if empty
+	if c.n == 0 {
+		c.runs = nil
+		c.mapped = false
+		return
+	}
+
 	for _, r := range c.runs {
 		for v := r.start; v <= r.last; v++ {
 			c.array = append(c.array, v)
@@ -2174,17 +2218,15 @@ func unionBitmapRun(a, b *container) *container {
 	}
 	output := a.clone()
 	for j := 0; j < len(b.runs); j++ {
-		output.bitmapSetRange(uint64(b.runs[j].start), uint64(b.runs[j].last))
+		output.bitmapSetRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
 	return output
 }
 
 const maxBitmap = 0xFFFFFFFFFFFFFFFF
 
-// sets all bits in [i, j] (inclusive) (c must be a bitmap container)
-// TODO inclusive upper limit is inconsistent with other functions (CountRange, SliceRange, ForEachRange, OffsetRange(?))
+// sets all bits in [i, j) (c must be a bitmap container)
 func (c *container) bitmapSetRange(i, j uint64) {
-	j += 1
 	x := i / 64
 	y := (j - 1) / 64
 	var X uint64 = maxBitmap << (i % 64)
@@ -2206,10 +2248,8 @@ func (c *container) bitmapSetRange(i, j uint64) {
 	}
 }
 
-// xor's all bits in [i, j] with all true (inclusive) (c must be a bitmap container).
-// TODO inclusive upper limit is inconsistent with other functions
+// xor's all bits in [i, j) with all true (c must be a bitmap container).
 func (c *container) bitmapXorRange(i, j uint64) {
-	j += 1
 	x := i / 64
 	y := (j - 1) / 64
 	var X uint64 = maxBitmap << (i % 64)
@@ -2233,10 +2273,8 @@ func (c *container) bitmapXorRange(i, j uint64) {
 	}
 }
 
-// zeroes all bits in [i, j] (inclusive) (c must be a bitmap container)
-// TODO inclusive upper limit is inconsistent with other functions
+// zeroes all bits in [i, j) (c must be a bitmap container)
 func (c *container) bitmapZeroRange(i, j uint64) {
-	j += 1
 	x := i / 64
 	y := (j - 1) / 64
 	var X uint64 = maxBitmap << (i % 64)
@@ -2403,7 +2441,7 @@ func differenceBitmapRun(a, b *container) *container {
 
 	output := a.clone()
 	for j := 0; j < len(b.runs); j++ {
-		output.bitmapZeroRange(uint64(b.runs[j].start), uint64(b.runs[j].last))
+		output.bitmapZeroRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
 	return output
 }
@@ -3131,7 +3169,7 @@ func xorRunRun(a, b *container) *container {
 func xorBitmapRun(a, b *container) *container {
 	output := a.clone()
 	for j := 0; j < len(b.runs); j++ {
-		output.bitmapXorRange(uint64(b.runs[j].start), uint64(b.runs[j].last))
+		output.bitmapXorRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
 
 	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {

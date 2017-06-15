@@ -244,17 +244,17 @@ func TestRunRemove(t *testing.T) {
 		{44, []interval32{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
 		c.mapped = true
 		ret := c.remove(test.op)
 		if ret != test.expRet || !reflect.DeepEqual(c.runs, test.exp) {
-			t.Fatalf("Unexpected result removing %v from runs. Expected %v, got %v. Expected %v, got %v", test.op, test.expRet, ret, test.exp, c.runs)
+			t.Fatalf("test #%v Unexpected result removing %v from runs. Expected %v, got %v. Expected %v, got %v", i, test.op, test.expRet, ret, test.exp, c.runs)
 		}
 		if ret && c.mapped {
-			t.Fatalf("container was not unmapped although bit %v was removed", test.op)
+			t.Fatalf("test #%v container was not unmapped although bit %v was removed", i, test.op)
 		}
 		if !ret && !c.mapped {
-			t.Fatalf("container was unmapped although bit %v was not removed", test.op)
+			t.Fatalf("test #%v container was unmapped although bit %v was not removed", i, test.op)
 		}
 	}
 }
@@ -681,7 +681,7 @@ func TestBitmapSetRange(t *testing.T) {
 			c.bitmap[i] = v
 		}
 		c.n = c.countRange(0, 65535)
-		c.bitmapSetRange(test.start, test.last)
+		c.bitmapSetRange(test.start, test.last+1)
 		if !reflect.DeepEqual(c.bitmap[:len(test.exp)], test.exp) {
 			t.Fatalf("test %#v expected %x, got %x", i, test.exp, c.bitmap[:len(test.bitmap)])
 		}
@@ -698,6 +698,10 @@ func TestArrayToBitmap(t *testing.T) {
 		exp   []uint64
 	}{
 		{
+			array: []uint32{},
+			exp:   []uint64{},
+		},
+		{
 			array: []uint32{0, 1, 2, 3},
 			exp:   []uint64{0xF},
 		},
@@ -710,9 +714,41 @@ func TestArrayToBitmap(t *testing.T) {
 		}
 
 		a.array = test.array
+		a.n = len(test.array)
 		a.arrayToBitmap()
 		if !reflect.DeepEqual(a.bitmap, exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, exp, a.bitmap)
+		}
+	}
+}
+
+func TestBitmapToArray(t *testing.T) {
+	a := &container{}
+	tests := []struct {
+		bitmap []uint64
+		exp    []uint32
+	}{
+		{
+			bitmap: []uint64{},
+			exp:    []uint32{},
+		},
+		{
+			bitmap: []uint64{0xF},
+			exp:    []uint32{0, 1, 2, 3},
+		},
+	}
+	for i, test := range tests {
+		a.bitmap = make([]uint64, bitmapN)
+		n := 0
+		for i, v := range test.bitmap {
+			a.bitmap[i] = v
+			n += int(popcount(v))
+		}
+		a.n = n
+
+		a.bitmapToArray()
+		if !reflect.DeepEqual(a.array, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.array)
 		}
 	}
 }
@@ -723,6 +759,10 @@ func TestRunToBitmap(t *testing.T) {
 		runs []interval32
 		exp  []uint64
 	}{
+		{
+			runs: []interval32{},
+			exp:  []uint64{},
+		},
 		{
 			runs: []interval32{{start: 0, last: 0}},
 			exp:  []uint64{1},
@@ -743,11 +783,14 @@ func TestRunToBitmap(t *testing.T) {
 
 	for i, test := range tests {
 		exp := make([]uint64, bitmapN)
+		n := 0
 		for i, v := range test.exp {
 			exp[i] = v
+			n += int(popcount(v))
 		}
 
 		a.runs = test.runs
+		a.n = n
 		a.runToBitmap()
 		if !reflect.DeepEqual(a.bitmap, exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, exp, a.bitmap)
@@ -761,6 +804,11 @@ func TestBitmapToRun(t *testing.T) {
 		bitmap []uint64
 		exp    []interval32
 	}{
+		{
+			// empty run
+			bitmap: []uint64{},
+			exp:    []interval32{},
+		},
 		{
 			// single-bit run
 			bitmap: []uint64{1},
@@ -820,6 +868,10 @@ func TestArrayToRun(t *testing.T) {
 		exp   []interval32
 	}{
 		{
+			array: []uint32{},
+			exp:   []interval32{},
+		},
+		{
 			array: []uint32{0},
 			exp:   []interval32{{start: 0, last: 0}},
 		},
@@ -849,6 +901,10 @@ func TestRunToArray(t *testing.T) {
 		runs []interval32
 		exp  []uint32
 	}{
+		{
+			runs: []interval32{},
+			exp:  []uint32{},
+		},
 		{
 			runs: []interval32{{start: 0, last: 0}},
 			exp:  []uint32{0},
@@ -903,7 +959,7 @@ func TestBitmapZeroRange(t *testing.T) {
 			c.bitmap[i] = v
 		}
 		c.n = c.countRange(0, 65535)
-		c.bitmapZeroRange(test.start, test.last)
+		c.bitmapZeroRange(test.start, test.last+1)
 		if !reflect.DeepEqual(c.bitmap[:len(test.exp)], test.exp) {
 			t.Fatalf("test %#v expected %x, got %x", i, test.exp, c.bitmap[:len(test.bitmap)])
 		}
@@ -1422,7 +1478,7 @@ func TestBitmapXorRange(t *testing.T) {
 			c.bitmap[i] = v
 		}
 		c.n = c.countRange(0, 65535)
-		c.bitmapXorRange(test.start, test.last)
+		c.bitmapXorRange(test.start, test.last+1)
 		if !reflect.DeepEqual(c.bitmap[:len(test.exp)], test.exp) {
 			t.Fatalf("test %#v expected %x, got %x", i, test.exp, c.bitmap[:len(test.bitmap)])
 		}
