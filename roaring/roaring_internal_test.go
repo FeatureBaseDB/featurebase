@@ -698,6 +698,10 @@ func TestArrayToBitmap(t *testing.T) {
 		exp   []uint64
 	}{
 		{
+			array: []uint32{},
+			exp:   []uint64{},
+		},
+		{
 			array: []uint32{0, 1, 2, 3},
 			exp:   []uint64{0xF},
 		},
@@ -710,9 +714,41 @@ func TestArrayToBitmap(t *testing.T) {
 		}
 
 		a.array = test.array
+		a.n = len(test.array)
 		a.arrayToBitmap()
 		if !reflect.DeepEqual(a.bitmap, exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, exp, a.bitmap)
+		}
+	}
+}
+
+func TestBitmapToArray(t *testing.T) {
+	a := &container{}
+	tests := []struct {
+		bitmap []uint64
+		exp    []uint32
+	}{
+		{
+			bitmap: []uint64{},
+			exp:    []uint32{},
+		},
+		{
+			bitmap: []uint64{0xF},
+			exp:    []uint32{0, 1, 2, 3},
+		},
+	}
+	for i, test := range tests {
+		a.bitmap = make([]uint64, bitmapN)
+		n := 0
+		for i, v := range test.bitmap {
+			a.bitmap[i] = v
+			n += int(popcount(v))
+		}
+		a.n = n
+
+		a.bitmapToArray()
+		if !reflect.DeepEqual(a.array, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.array)
 		}
 	}
 }
@@ -723,6 +759,10 @@ func TestRunToBitmap(t *testing.T) {
 		runs []interval32
 		exp  []uint64
 	}{
+		{
+			runs: []interval32{},
+			exp:  []uint64{},
+		},
 		{
 			runs: []interval32{{start: 0, last: 0}},
 			exp:  []uint64{1},
@@ -743,11 +783,14 @@ func TestRunToBitmap(t *testing.T) {
 
 	for i, test := range tests {
 		exp := make([]uint64, bitmapN)
+		n := 0
 		for i, v := range test.exp {
 			exp[i] = v
+			n += int(popcount(v))
 		}
 
 		a.runs = test.runs
+		a.n = n
 		a.runToBitmap()
 		if !reflect.DeepEqual(a.bitmap, exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, exp, a.bitmap)
@@ -761,6 +804,11 @@ func TestBitmapToRun(t *testing.T) {
 		bitmap []uint64
 		exp    []interval32
 	}{
+		{
+			// empty run
+			bitmap: []uint64{},
+			exp:    []interval32{},
+		},
 		{
 			// single-bit run
 			bitmap: []uint64{1},
@@ -820,6 +868,10 @@ func TestArrayToRun(t *testing.T) {
 		exp   []interval32
 	}{
 		{
+			array: []uint32{},
+			exp:   []interval32{},
+		},
+		{
 			array: []uint32{0},
 			exp:   []interval32{{start: 0, last: 0}},
 		},
@@ -849,6 +901,10 @@ func TestRunToArray(t *testing.T) {
 		runs []interval32
 		exp  []uint32
 	}{
+		{
+			runs: []interval32{},
+			exp:  []uint32{},
+		},
 		{
 			runs: []interval32{{start: 0, last: 0}},
 			exp:  []uint32{0},
