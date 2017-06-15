@@ -1291,8 +1291,14 @@ func TestWriteReadArray(t *testing.T) {
 	ba := &Bitmap{keys: []uint64{0}, containers: []*container{ca}}
 	ba2 := &Bitmap{}
 	var buf bytes.Buffer
-	ba.WriteTo(&buf)
-	ba2.UnmarshalBinary(buf.Bytes())
+	_, err := ba.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+	err = ba2.UnmarshalBinary(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error unmarshaling: %v", err)
+	}
 	if !reflect.DeepEqual(ba2.containers[0].array, ca.array) {
 		t.Fatalf("array test expected %x, but got %x", ca.array, ba2.containers[0].array)
 	}
@@ -1307,8 +1313,14 @@ func TestWriteReadBitmap(t *testing.T) {
 	bb := &Bitmap{keys: []uint64{0}, containers: []*container{cb}}
 	bb2 := &Bitmap{}
 	var buf bytes.Buffer
-	bb.WriteTo(&buf)
-	bb2.UnmarshalBinary(buf.Bytes())
+	_, err := bb.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+	err = bb2.UnmarshalBinary(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error unmarshaling: %v", err)
+	}
 	if !reflect.DeepEqual(bb2.containers[0].bitmap, cb.bitmap) {
 		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.containers[0].bitmap)
 	}
@@ -1319,8 +1331,14 @@ func TestWriteReadRun(t *testing.T) {
 	br := &Bitmap{keys: []uint64{0}, containers: []*container{cr}}
 	br2 := &Bitmap{}
 	var buf bytes.Buffer
-	br.WriteTo(&buf)
-	br2.UnmarshalBinary(buf.Bytes())
+	_, err := br.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+	err = br2.UnmarshalBinary(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error unmarshaling: %v", err)
+	}
 	if !reflect.DeepEqual(br2.containers[0].runs, cr.runs) {
 		t.Fatalf("run test expected %x, but got %x", cr.runs, br2.containers[0].runs)
 	}

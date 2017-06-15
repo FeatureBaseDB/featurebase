@@ -35,8 +35,8 @@ const (
 
 	// cookie is the first four bytes in a roaring bitmap file,
 	// formed by joining magicNumber and storageVersion
-	cookieNoRuns = magicNumberNoRuns<<16 + storageVersion
-	cookie       = magicNumber<<16 + storageVersion
+	cookieNoRuns = magicNumberNoRuns + storageVersion<<16
+	cookie       = magicNumber + storageVersion<<16
 
 	// headerBaseSize is the size of the cookie and key count at the beginning of a file.
 	// Headers in files with runs also include runFlagBitset, of length (numContainers+7)/8.
@@ -598,15 +598,20 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		return errors.New("data too small")
 	}
 
-	// Verify the first sizeof(cookie)=4 bytes are a valid cookie.
-	v := binary.LittleEndian.Uint32(data[0:4])
+	// Verify the first two bytes are a valid magicNumber, and second two bytes match current storageVersion.
+	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
+	fileVersion := uint32(binary.LittleEndian.Uint16(data[2:4]))
 	containsRuns := false
-	if v == cookieNoRuns {
+	if fileMagic == magicNumberNoRuns {
 		// noop
-	} else if v == cookie {
+	} else if fileMagic == magicNumber {
 		containsRuns = true
 	} else {
-		return errors.New("invalid roaring file")
+		return fmt.Errorf("invalid roaring file, magic number %v is incorrect", fileMagic)
+	}
+
+	if fileVersion != storageVersion {
+		return fmt.Errorf("wrong roaring version, file is v%d, server requires v%d", fileVersion, storageVersion)
 	}
 
 	// Read key count in bytes sizeof(cookie):(sizeof(cookie)+sizeof(uint32)).
