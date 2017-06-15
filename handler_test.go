@@ -1067,16 +1067,11 @@ func MustReadAll(r io.Reader) []byte {
 	return buf
 }
 
-// Ensure handler can delete a frame.
+// Ensure handler can create a input definition.
 func TestHandler_CreateInputDefinition(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
 	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-
-	h := NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
-	w := httptest.NewRecorder()
 	inputBody := []byte(`
 			{
 			"frames":[{
@@ -1107,10 +1102,73 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 				}
 			]
 		}`)
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
+	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
+// Ensure handler can delete a input definition.
+func TestHandler_DeleteInputDefinition(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
+
+	frames := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
+	action := pilosa.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	fields := pilosa.Field{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
+	_, err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/input-definition/test", strings.NewReader("")))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	} else if index.InputDefinition("test") != nil {
+		t.Fatalf("unexpected result: %s", index.InputDefinition("test"))
+	}
+}
+
+// Return existing input definition
+func TestHandler_GetInputDefinition(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
+
+	frames := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
+	action := pilosa.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	fields := pilosa.Field{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
+	inputDef, err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := &pilosa.InputDefinitionInfo{Frames: inputDef.Frames(), Fields: inputDef.Fields()}
+	expect, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i0/input-definition/test", strings.NewReader("")))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != string(expect)+"\n" {
+		t.Fatalf("unexpected body: %s, expect: %s", body, string(expect))
 	}
 }

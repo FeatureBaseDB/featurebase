@@ -1550,9 +1550,10 @@ func (h *Handler) handleGetDefinition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inputDef, _ := index.inputDefinitions[inputDefName]
-	inputInfo := InputDefinitionInfo{Frames: inputDef.frames, Fields: inputDef.fields}
-	if err := json.NewEncoder(w).Encode(getInputDefinitionResponse{
-		InputDefinition: inputInfo,
+	//inputInfo := InputDefinitionInfo{Frames: inputDef.frames, Fields: inputDef.fields}
+	if err := json.NewEncoder(w).Encode(InputDefinitionInfo{
+		Frames: inputDef.frames,
+		Fields: inputDef.fields,
 	}); err != nil {
 		h.logger().Printf("write status response error: %s", err)
 	}
@@ -1577,15 +1578,15 @@ func (h *Handler) handleDeleteDefinition(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
 }
 
 type InputFrame struct {
 	Name    string       `json:"name,omitempty"`
 	Options FrameOptions `json:"options,omitempty"`
-}
-
-type getInputDefinitionResponse struct {
-	InputDefinition InputDefinitionInfo `json:"input-definition"`
 }
 
 type InputDefinitionInfo struct {

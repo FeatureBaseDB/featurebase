@@ -662,14 +662,14 @@ func (i *Index) newInputDefinition(path, name string) (*InputDefinition, error) 
 	return f, nil
 }
 
-// DeleteFrame removes a frame from the index.
+// DeleteInputDefinition removes a input definition from the index.
 func (i *Index) DeleteInputDefinition(name string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
 	// Ignore if input definition doesn't exist.
-	f := i.inputDefinition(name)
-	if f == nil {
+	inputDef := i.inputDefinition(name)
+	if inputDef == nil {
 		return nil
 	}
 

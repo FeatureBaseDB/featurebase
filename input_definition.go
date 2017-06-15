@@ -31,19 +31,10 @@ func NewInputDefinition(path, index, name string) (*InputDefinition, error) {
 	}, nil
 }
 
-// Name returns the name of input definition was initialized with.
-func (i *InputDefinition) Name() string { return i.name }
-
-// Index returns the index name of the input definition was initialized with.
-func (i *InputDefinition) Index() string { return i.index }
-
-// Path returns the path of the input definition was initialized with.
-func (i *InputDefinition) Path() string { return i.path }
-
 // Frames returns frames of the input definition was initialized with.
 func (i *InputDefinition) Frames() []InputFrame { return i.frames }
 
-// Fields returns frames of the input definition was initialized with.
+// Fields returns fields of the input definition was initialized with.
 func (i *InputDefinition) Fields() []Field { return i.fields }
 
 func (i *InputDefinition) Open() error {
