@@ -1636,21 +1636,22 @@ func TestIteratorRuns(t *testing.T) {
 		t.Fatalf("iterator did not seek correctly: %v\n", itr)
 	}
 	itr.Next()
+	itr.Next()
 	val, eof := itr.Next()
 	if !(val == 1000 && !eof) {
-		t.Fatalf("iterator did not next correctly across runs")
+		t.Fatalf("iterator did not next correctly across runs: %v, %v", val, itr)
 	}
 	itr.Next()
 	val, eof = itr.Next()
 	if !(val == 1002 && !eof) {
-		t.Fatalf("iterator did not next correctly within a run")
+		t.Fatalf("iterator did not next correctly within a run: %v, %v", val, itr)
 	}
 	itr.Next()
 	itr.Next()
 	itr.Next()
 	val, eof = itr.Next()
 	if !(val == 100000 && !eof) {
-		t.Fatalf("iterator did not next correctly across containers")
+		t.Fatalf("iterator did not next correctly across containers: %v, %v", val, itr)
 	}
 
 	itr.Seek(500)
@@ -1663,11 +1664,17 @@ func TestIteratorRuns(t *testing.T) {
 		t.Fatalf("iterator did not seek correctly in multiple runs: %v\n", itr)
 	}
 
+	itr.Seek(1005)
+	if !(itr.i == 0 && itr.j == 1 && itr.k == 4) {
+		t.Fatalf("iterator did not seek correctly to end of run: %v\n", itr)
+	}
+
 	itr.Seek(100005)
 	if !(itr.i == 1 && itr.j == 0 && itr.k == 4) {
 		t.Fatalf("iterator did not seek correctly in multiple containers: %v\n", itr)
 	}
 
+	val, eof = itr.Next()
 	val, eof = itr.Next()
 	if !(val == 0 && eof) {
 		t.Fatalf("iterator did not eof correctly: %d, %v\n", val, eof)
