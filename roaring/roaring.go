@@ -1341,28 +1341,25 @@ func (c *container) bitmapRemove(v uint32) bool {
 	return true
 }
 
+// runRemove removes v from a run container, and returns true if v was removed.
 func (c *container) runRemove(v uint32) bool {
-	// TODO binary search
-	for i, iv := range c.runs {
-		if v <= iv.last {
-			if v < iv.start {
-				return false
-			}
-			c.unmap()
-			if v == iv.last && v == iv.start {
-				c.runs = append(c.runs[:i], c.runs[i+1:]...)
-			} else if v == iv.last {
-				c.runs[i].last -= 1
-			} else if v == iv.start {
-				c.runs[i].start += 1
-			} else if v > iv.start {
-				c.runs[i].last = v - 1
-				c.runs = append(c.runs[:i+1], append([]interval32{{start: v + 1, last: iv.last}}, c.runs[i+1:]...)...)
-			}
-			return true
-		}
+	i, contains := binSearchRuns(v, c.runs)
+	if !contains {
+		return false
 	}
-	return false
+	c.unmap()
+	if v == c.runs[i].last && v == c.runs[i].start {
+		c.runs = append(c.runs[:i], c.runs[i+1:]...)
+	} else if v == c.runs[i].last {
+		c.runs[i].last -= 1
+	} else if v == c.runs[i].start {
+		c.runs[i].start += 1
+	} else if v > c.runs[i].start {
+		last := c.runs[i].last
+		c.runs[i].last = v - 1
+		c.runs = append(c.runs[:i+1], append([]interval32{{start: v+1, last: last}}, c.runs[i+1:]...)...)
+	}
+	return true
 }
 
 // max returns the maximum value in the container.
