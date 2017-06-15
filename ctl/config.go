@@ -18,14 +18,15 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 
+	toml "github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa"
 )
 
 // ConfigCommand represents a command for printing a default config.
 type ConfigCommand struct {
 	*pilosa.CmdIO
+	Config *pilosa.Config
 }
 
 // NewConfigCommand returns a new instance of ConfigCommand.
@@ -37,26 +38,10 @@ func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *ConfigCommand 
 
 // Run prints out the default config.
 func (cmd *ConfigCommand) Run(ctx context.Context) error {
-	fmt.Fprintln(cmd.Stdout, strings.TrimSpace(`
-data-dir = "~/.pilosa"
-bind = "localhost:10101"
-
-[cluster]
-  poll-interval = "2m0s"
-  replicas = 1
-  hosts = [
-    "localhost:10101",
-  ]
-
-[anti-entropy]
-  interval = "10m0s"
-
-[profile]
-  cpu = ""
-  cpu-time = "30s"
-
-[plugins]
-  path = ""
-`)+"\n")
+	buf, err := toml.Marshal(*cmd.Config)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.Stdout, string(buf))
 	return nil
 }

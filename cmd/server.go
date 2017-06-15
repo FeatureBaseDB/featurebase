@@ -24,12 +24,15 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/ctl"
 	"github.com/pilosa/pilosa/server"
 )
 
 // Server is global so that tests can control and verify it.
 var Server *server.Command
 
+// NewServeCmd creates a pilosa server and runs it with command line flags.
 func NewServeCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Server = server.NewCommand(stdin, stdout, stderr)
 	serveCmd := &cobra.Command{
@@ -41,8 +44,7 @@ It will load existing data from the configured
 directory, and start listening client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			Server.Server.Handler.Version = Version
-			fmt.Fprintf(Server.Stderr, "Pilosa %s, build time %s\n", Version, BuildTime)
+			fmt.Fprintf(Server.Stderr, "Pilosa %s, build time %s\n", pilosa.Version, pilosa.BuildTime)
 
 			// Start CPU profiling.
 			if Server.CPUProfile != "" {
@@ -85,23 +87,9 @@ on the configured port.`,
 			return nil
 		},
 	}
-	flags := serveCmd.Flags()
 
-	flags.StringVarP(&Server.Config.DataDir, "data-dir", "d", "~/.pilosa", "Directory to store pilosa data files.")
-	flags.StringVarP(&Server.Config.Host, "bind", "b", ":10101", "Default URI on which pilosa should listen.")
-	flags.IntVarP(&Server.Config.Cluster.ReplicaN, "cluster.replicas", "", 1, "Number of hosts each piece of data should be stored on.")
-	flags.StringSliceVarP(&Server.Config.Cluster.Hosts, "cluster.hosts", "", []string{}, "Comma separated list of hosts in cluster.")
-	flags.StringSliceVarP(&Server.Config.Cluster.InternalHosts, "cluster.internal-hosts", "", []string{}, "Comma separated list of hosts in cluster used for internal communication.")
-	flags.DurationVarP((*time.Duration)(&Server.Config.Cluster.PollingInterval), "cluster.poll-interval", "", time.Minute, "Polling interval for cluster.") // TODO what actually is this?
-	flags.StringVarP(&Server.Config.Plugins.Path, "plugins.path", "", "", "Path to plugin directory.")
-	flags.StringVar(&Server.Config.LogPath, "log-path", "", "Log path")
-	flags.DurationVarP((*time.Duration)(&Server.Config.AntiEntropy.Interval), "anti-entropy.interval", "", time.Minute*10, "Interval at which to run anti-entropy routine.")
-	flags.StringVarP(&Server.CPUProfile, "profile.cpu", "", "", "Where to store CPU profile.")
-	flags.DurationVarP(&Server.CPUTime, "profile.cpu-time", "", 30*time.Second, "CPU profile duration.")
-	flags.StringVarP(&Server.Config.Cluster.Type, "cluster.type", "", "static", "Determine how the cluster handles membership and state sharing. Choose from [static, http, gossip]")
-	flags.StringVarP(&Server.Config.Cluster.GossipSeed, "cluster.gossip-seed", "", "", "Host with which to seed the gossip membership.")
-	flags.StringVarP(&Server.Config.Cluster.InternalPort, "cluster.internal-port", "", "", "Port to which pilosa should bind for internal state sharing.")
-
+	// Attach flags to the command.
+	ctl.BuildServerFlags(serveCmd, Server)
 	return serveCmd
 }
 

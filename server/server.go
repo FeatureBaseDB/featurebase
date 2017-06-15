@@ -33,6 +33,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/httpbroadcast"
+	"github.com/pilosa/pilosa/statsd"
 )
 
 func init() {
@@ -105,6 +106,7 @@ func (m *Command) Run(args ...string) (err error) {
 
 // SetupServer use the cluster configuration to setup this server
 func (m *Command) SetupServer() error {
+	var err error
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 
@@ -133,9 +135,17 @@ func (m *Command) SetupServer() error {
 	// Configure holder.
 	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
 	m.Server.Holder.Path = m.Config.DataDir
-	m.Server.Holder.Stats = pilosa.NewExpvarStatsClient()
+	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollingInterval)
+	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	if err != nil {
+		return err
+	}
 
-	var err error
+	m.Server.Holder.Stats.SetLogger(m.Server.LogOutput)
+
+	// Copy configuration flags.
+	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
+
 	m.Server.Host, err = normalizeHost(m.Config.Host)
 	if err != nil {
 		return err
@@ -188,6 +198,7 @@ func (m *Command) SetupServer() error {
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
+	m.Server.Cluster.LongQueryTime = time.Duration(m.Config.Cluster.LongQueryTime)
 	return nil
 }
 
@@ -219,4 +230,16 @@ func (m *Command) Close() error {
 		return logErr
 	}
 	return serveErr
+}
+
+// NewStatsClient creates a stats client from the config
+func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
+	switch name {
+	case "expvar":
+		return pilosa.NewExpvarStatsClient(), nil
+	case "statsd":
+		return statsd.NewStatsClient(host)
+	default:
+		return pilosa.NopStatsClient, nil
+	}
 }

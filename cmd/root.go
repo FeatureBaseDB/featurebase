@@ -19,14 +19,10 @@ import (
 	"io"
 	"strings"
 
+	"github.com/pilosa/pilosa"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-)
-
-var (
-	Version   string
-	BuildTime string
 )
 
 // TODO maybe give this an Add method which will ensure two command
@@ -34,7 +30,6 @@ var (
 var subcommandFns = map[string]func(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command{}
 
 func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	setupVersionBuild()
 	rc := &cobra.Command{
 		Use:   "pilosa",
 		Short: "Pilosa - A Distributed In-memory Binary Bitmap Index.",
@@ -46,8 +41,8 @@ tools for administering pilosa, importing/exporting data,
 backing up, and more. Complete documentation is available
 at https://www.pilosa.com/docs/
 
-Version: ` + Version + `
-Build Time: ` + BuildTime + "\n",
+Version: ` + pilosa.Version + `
+Build Time: ` + pilosa.BuildTime + "\n",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
 			err := setAllConfig(v, cmd.Flags(), "PILOSA")
@@ -77,15 +72,6 @@ Build Time: ` + BuildTime + "\n",
 	return rc
 }
 
-func setupVersionBuild() {
-	if Version == "" {
-		Version = "v0.0.0"
-	}
-	if BuildTime == "" {
-		BuildTime = "not recorded"
-	}
-}
-
 // setAllConfig takes a FlagSet to be the definition of all configuration
 // options, as well as their defaults. It then reads from the command line, the
 // environment, and a config file (if specified), and applies the configuration
@@ -109,6 +95,11 @@ func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error 
 	v.AutomaticEnv()
 
 	c := v.GetString("config")
+	var flagErr error
+	validTags := make(map[string]bool)
+	flags.VisitAll(func(f *pflag.Flag) {
+		validTags[f.Name] = true
+	})
 
 	// add config file to viper
 	if c != "" {
@@ -118,10 +109,16 @@ func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error 
 		if err != nil {
 			return fmt.Errorf("error reading configuration file '%s': %v", c, err)
 		}
+
+		for _, key := range v.AllKeys() {
+			if _, ok := validTags[key]; !ok {
+				return fmt.Errorf("invalid option in configuration file: %v", key)
+			}
+		}
+
 	}
 
 	// set all values from viper
-	var flagErr error
 	flags.VisitAll(func(f *pflag.Flag) {
 		if flagErr != nil {
 			return

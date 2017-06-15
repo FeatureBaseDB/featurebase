@@ -82,9 +82,12 @@ type Fragment struct {
 	opN         int // number of ops since snapshot
 
 	// Cache for row counts.
-	cacheType string // passed in by frame
+	CacheType string // passed in by frame
 	cache     Cache
-	cacheSize uint32
+	CacheSize uint32
+
+	// Stats reporting.
+	maxRowID uint64
 
 	// Cache containing full rows (not just counts).
 	rowCache BitmapCache
@@ -115,8 +118,8 @@ func NewFragment(path, index, frame, view string, slice uint64) *Fragment {
 		frame:     frame,
 		view:      view,
 		slice:     slice,
-		cacheType: DefaultCacheType,
-		cacheSize: DefaultCacheSize,
+		CacheType: DefaultCacheType,
+		CacheSize: DefaultCacheSize,
 
 		LogOutput: ioutil.Discard,
 		MaxOpN:    DefaultFragmentMaxOpN,
@@ -165,6 +168,11 @@ func (f *Fragment) Open() error {
 
 		// Clear checksums.
 		f.checksums = make(map[int][]byte)
+
+		// Read last bit to determine max row.
+		pos := f.storage.Max()
+		f.maxRowID = pos / SliceWidth
+		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
 
 		return nil
 	}(); err != nil {
@@ -236,11 +244,11 @@ func (f *Fragment) openStorage() error {
 // openCache initializes the cache from row ids persisted to disk.
 func (f *Fragment) openCache() error {
 	// Determine cache type from frame name.
-	switch f.cacheType {
+	switch f.CacheType {
 	case CacheTypeRanked:
-		f.cache = NewRankCache(f.cacheSize)
+		f.cache = NewRankCache(f.CacheSize)
 	case CacheTypeLRU:
-		f.cache = NewLRUCache(f.cacheSize)
+		f.cache = NewLRUCache(f.CacheSize)
 	default:
 		return ErrInvalidCacheType
 	}
@@ -407,7 +415,13 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	// Update the cache.
 	f.cache.Add(rowID, bm.Count())
 
-	f.stats.Count("setN", 1)
+	f.stats.Count("setBit", 1, 0.001)
+
+	// Update row count if they have increased.
+	if rowID > f.maxRowID {
+		f.maxRowID = rowID
+		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
+	}
 
 	return changed, nil
 }
@@ -453,7 +467,7 @@ func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	// Update the cache.
 	f.cache.Add(rowID, bm.Count())
 
-	f.stats.Count("clearN", 1)
+	f.stats.Count("clearBit", 1, 1.0)
 
 	return changed, nil
 }
@@ -951,7 +965,8 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 			if err != nil {
 				return err
 			}
-
+			// Reduce the StatsD rate for high volume stats
+			f.stats.Count("ImportBit", 1, 0.0001)
 			// import optimization to avoid linear foreach calls
 			// slight risk of concurrent cache counter being off but
 			// no real danger
@@ -1008,16 +1023,18 @@ func (f *Fragment) Snapshot() error {
 	defer f.mu.Unlock()
 	return f.snapshot()
 }
-
-func track(start time.Time, name string, logger *log.Logger) {
+func track(start time.Time, message string, stats StatsClient, logger *log.Logger) {
 	elapsed := time.Since(start)
-	logger.Printf("%s took %s", name, elapsed)
+	logger.Printf("%s took %s", message, elapsed)
+	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
 }
 
 func (f *Fragment) snapshot() error {
 	logger := f.logger()
 	logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
-	defer track(time.Now(), fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.frame, f.view, f.slice), logger)
+	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
+	start := time.Now()
+	defer track(start, completeMessage, f.stats, logger)
 
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + SnapshotExt
@@ -1388,11 +1405,11 @@ func (s *FragmentSyncer) SyncFragment() error {
 		if byteSlicesEqual(checksums) {
 			continue
 		}
-
 		// Synchronize block.
 		if err := s.syncBlock(blockID); err != nil {
 			return fmt.Errorf("sync block: id=%d, err=%s", blockID, err)
 		}
+		s.Fragment.stats.Count("BlockRepair", 1, 1.0)
 	}
 
 	return nil

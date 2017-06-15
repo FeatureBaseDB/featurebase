@@ -14,11 +14,6 @@
 
 package roaring
 
-func hasAsm() bool
-
-func BSFQ(memory uint64) int
-
-func POPCNTQ(memory uint64) int
 
 // bit population count, take from
 // https://code.google.com/p/go/issues/detail?id=4988#c11

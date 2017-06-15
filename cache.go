@@ -49,12 +49,16 @@ type Cache interface {
 
 	// Returns an ordered list of the top ranked bitmaps.
 	Top() []BitmapPair
+
+	// SetStats defines the stats client used in the cache.
+	SetStats(s StatsClient)
 }
 
 // LRUCache represents a least recently used Cache implemenation.
 type LRUCache struct {
 	cache  *lru.Cache
 	counts map[uint64]uint64
+	stats  StatsClient
 }
 
 // NewLRUCache returns a new instance of LRUCache.
@@ -62,6 +66,7 @@ func NewLRUCache(maxEntries uint32) *LRUCache {
 	c := &LRUCache{
 		cache:  lru.New(int(maxEntries)),
 		counts: make(map[uint64]uint64),
+		stats:  NopStatsClient,
 	}
 	c.cache.OnEvicted = c.onEvicted
 	return c
@@ -117,6 +122,11 @@ func (c *LRUCache) Top() []BitmapPair {
 	return a
 }
 
+// SetStats defines the stats client used in the cache.
+func (c *LRUCache) SetStats(s StatsClient) {
+	c.stats = s
+}
+
 func (c *LRUCache) onEvicted(key lru.Key, _ interface{}) { delete(c.counts, key.(uint64)) }
 
 // Ensure LRUCache implements Cache.
@@ -140,6 +150,8 @@ type RankCache struct {
 
 	// thresholdValue is the value of the last item in the cache
 	thresholdValue uint64
+
+	stats StatsClient
 }
 
 // NewRankCache returns a new instance of RankCache.
@@ -148,6 +160,7 @@ func NewRankCache(maxEntries uint32) *RankCache {
 		maxEntries:      maxEntries,
 		thresholdBuffer: int(ThresholdFactor * float64(maxEntries)),
 		entries:         make(map[uint64]uint64),
+		stats:           NopStatsClient,
 	}
 }
 
@@ -213,6 +226,7 @@ func (c *RankCache) Invalidate() {
 func (c *RankCache) Recalculate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.stats.Count("cache.recalculate", 1, 1.0)
 	c.recalculate()
 }
 
@@ -222,6 +236,7 @@ func (c *RankCache) invalidate() {
 	if time.Now().Sub(c.updateTime).Seconds() < 10 {
 		return
 	}
+	c.stats.Count("cache.invalidate", 1, 1.0)
 	c.recalculate()
 }
 
@@ -238,7 +253,10 @@ func (c *RankCache) recalculate() {
 
 	// Store the count of the item at the threshold index.
 	c.rankings = rankings
-	if len(c.rankings) > int(c.maxEntries) {
+	length := len(c.rankings)
+	c.stats.Gauge("RankCache", float64(length), 1.0)
+
+	if length > int(c.maxEntries) {
 		c.thresholdValue = rankings[c.maxEntries].Count
 		c.rankings = c.rankings[0:c.maxEntries]
 	} else {
@@ -250,12 +268,18 @@ func (c *RankCache) recalculate() {
 
 	// If size is larger than the threshold then trim it.
 	if len(c.entries) > c.thresholdBuffer {
+		c.stats.Count("cache.threshold", 1, 1.0)
 		for id, cnt := range c.entries {
 			if cnt <= c.thresholdValue {
 				delete(c.entries, id)
 			}
 		}
 	}
+}
+
+// SetStats defines the stats client used in the cache.
+func (c *RankCache) SetStats(s StatsClient) {
+	c.stats = s
 }
 
 // Top returns an ordered list of pairs.

@@ -17,13 +17,14 @@ package pilosa
 import (
 	"encoding/binary"
 	"hash/fnv"
+	"time"
 
 	"github.com/pilosa/pilosa/internal"
 )
 
 const (
 	// DefaultPartitionN is the default number of partitions in a cluster.
-	DefaultPartitionN = 16
+	DefaultPartitionN = 256
 
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
@@ -130,6 +131,9 @@ type Cluster struct {
 
 	// The number of replicas a partition has.
 	ReplicaN int
+
+	// Threshold for logging long-running queries
+	LongQueryTime time.Duration
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
@@ -228,12 +232,12 @@ func (c *Cluster) PartitionNodes(partitionID int) []*Node {
 	}
 
 	// Determine primary owner node.
-	index := c.Hasher.Hash(uint64(partitionID), len(c.Nodes))
+	nodeIndex := c.Hasher.Hash(uint64(partitionID), len(c.Nodes))
 
 	// Collect nodes around the ring.
 	nodes := make([]*Node, replicaN)
 	for i := 0; i < replicaN; i++ {
-		nodes[i] = c.Nodes[(index+i)%len(c.Nodes)]
+		nodes[i] = c.Nodes[(nodeIndex+i)%len(c.Nodes)]
 	}
 
 	return nodes

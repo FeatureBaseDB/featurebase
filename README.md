@@ -1,8 +1,15 @@
-<a href="https://www.pilosa.com">
-    <img src="https://www.pilosa.com/img/logo.svg" width="50%">
-</a>
+<p>
+    <a href="https://www.pilosa.com">
+        <img src="https://www.pilosa.com/img/logo.svg" width="50%">
+    </a>
+</p>
 
-[![Build Status](https://travis-ci.com/pilosa/pilosa.svg?token=Peb4jvQ3kLbjUEhpU5aR&branch=master)](https://travis-ci.com/pilosa/pilosa)
+[![Build Status](https://travis-ci.org/pilosa/pilosa.svg?branch=master)](https://travis-ci.org/pilosa/pilosa)
+[![GoDoc](https://godoc.org/github.com/pilosa/pilosa?status.svg)](https://godoc.org/github.com/pilosa/pilosa)
+[![Go Report Card](https://goreportcard.com/badge/github.com/pilosa/pilosa)](https://goreportcard.com/report/github.com/pilosa/pilosa)
+[![license](https://img.shields.io/github/license/pilosa/pilosa.svg)](https://github.com/pilosa/pilosa/blob/master/LICENSE)
+[![CLA Assistant](https://cla-assistant.io/readme/badge/pilosa/pilosa)](https://cla-assistant.io/pilosa/pilosa)
+[![GitHub release](https://img.shields.io/github/release/pilosa/pilosa.svg)](https://github.com/pilosa/pilosa/releases)
 
 ## An open source, distributed bitmap index.
 - [Docs](#docs)
@@ -57,8 +64,8 @@ There are supported libraries for the following languages:
 
 ## Get Support
 
-There are [several channels](https://www.pilosa.com/community/#support) availble for you to reach out to us for support.
+There are [several channels](https://www.pilosa.com/community/#support) available for you to reach out to us for support.
 
 ## Contributing
 
-Pilosa is an open source project. Please see our [Contributing Guide](https://www.pilosa.com/docs/contributing/) for information about how to get involved.
+Pilosa is an open source project. Please see our [Contributing Guide](CONTRIBUTING.md) for information about how to get involved.

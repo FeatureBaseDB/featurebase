@@ -25,6 +25,7 @@ import (
 
 var Importer *ctl.ImportCommand
 
+// NewImportCommand runs the Pilosa import subcommand for ingesting bulk data.
 func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Importer = ctl.NewImportCommand(stdin, stdout, stderr)
 	importCmd := &cobra.Command{

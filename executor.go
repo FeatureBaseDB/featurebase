@@ -49,13 +49,15 @@ type Executor struct {
 
 	// Client used for remote HTTP requests.
 	HTTPClient *http.Client
+
+	// Maximum number of SetBit() or ClearBit() commands per request.
+	MaxWritesPerRequest int
 }
 
 // NewExecutor returns a new instance of Executor.
 func NewExecutor() *Executor {
 	return &Executor{
 		HTTPClient: http.DefaultClient,
-		//	PluginRegistry: NewPluginRegistry(),
 	}
 }
 
@@ -64,6 +66,11 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// Verify that an index is set.
 	if index == "" {
 		return nil, ErrIndexRequired
+	}
+
+	// Verify that the number of writes do not exceed the maximum.
+	if e.MaxWritesPerRequest > 0 && q.WriteCallN() > e.MaxWritesPerRequest {
+		return nil, ErrTooManyWrites
 	}
 
 	// Default options.
@@ -151,12 +158,13 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	if err := e.validateCallArgs(c); err != nil {
 		return nil, err
 	}
-
+	indexTag := fmt.Sprintf("index:%s", index)
 	// Special handling for mutation and top-n calls.
 	switch c.Name {
 	case "ClearBit":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "Count":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeCount(ctx, index, c, slices, opt)
 	case "SetBit":
 		return e.executeSetBit(ctx, index, c, opt)
@@ -165,10 +173,12 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "SetColumnAttrs":
 		return nil, e.executeSetColumnAttrs(ctx, index, c, opt)
 	case "TopN":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, slices, opt)
 	case "Bitmap", "Difference", "Intersect", "Range", "Union":
-		return e.executeBitmapCall(ctx, index, c, slices, opt)
-	default:
+     e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+     return e.executeBitmapCall(ctx, index, c, slices, opt)
+  default:
 		value, err := e.executeExternalCall(ctx, index, c, slices, opt)
 		if err != nil {
 			return nil, err
@@ -294,7 +304,7 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 }
 
 // executeExternalCall executes an external plugin call.
-func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
+func (e *Executor) executeExternalCall(ctx context.Context, idx string, c *pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
 	// Create plugin from registry for the reduction.
 	p, err := e.newPlugin(c)
 	if err != nil {
@@ -303,7 +313,7 @@ func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.Ca
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeExternalCallSlice(ctx, db, c, slice, p)
+		return e.executeExternalCallSlice(ctx, idx, c, slice, p)
 	}
 
 	// Merge returned results at coordinating node.
@@ -311,7 +321,7 @@ func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.Ca
 		return p.Reduce(ctx, prev, v)
 	}
 
-	other, err := e.mapReduce(ctx, db, slices, c, opt, mapFn, reduceFn)
+	other, err := e.mapReduce(ctx, idx, slices, c, opt, mapFn, reduceFn)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +330,7 @@ func (e *Executor) executeExternalCall(ctx context.Context, db string, c *pql.Ca
 }
 
 // executeExternalCallSlice executes the map phase of an external plugin call against a single slice.
-func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64, p Plugin) (interface{}, error) {
+func (e *Executor) executeExternalCallSlice(ctx context.Context, idx string, c *pql.Call, slice uint64, p Plugin) (interface{}, error) {
 	var err error
 	if p == nil {
 		p, err = e.newPlugin(c)
@@ -345,20 +355,19 @@ func (e *Executor) executeExternalCallSlice(ctx context.Context, db string, c *p
 		Args:     args,
 	}
 
-	return p.Map(ctx, db, call, slice)
+	return p.Map(ctx, idx, call, slice)
 }
 
-func (e *Executor) ExecuteCallSlice(ctx context.Context, db string, c *pql.Call, slice uint64, p Plugin) (interface{}, error) {
+func (e *Executor) ExecuteCallSlice(ctx context.Context, idx string, c *pql.Call, slice uint64, p Plugin) (interface{}, error) {
 	switch c.Name {
 	case "Bitmap", "Difference", "Intersect", "Range", "Union":
-		return e.executeBitmapCallSlice(ctx, db, c, slice)
+		return e.executeBitmapCallSlice(ctx, idx, c, slice)
 	case "Count":
-		//	return e.executeCountSlice(ctx, db, c, slice)
 		return nil, errors.New("nested Count in Plugin not currently supported")
 	case "TopN":
 		return nil, errors.New("nested TopN() not currently supported")
 	default:
-		return e.executeExternalCallSlice(ctx, db, c, slice, p)
+		return e.executeExternalCallSlice(ctx, idx, c, slice, p)
 	}
 }
 
@@ -369,15 +378,6 @@ func (e *Executor) newPlugin(c *pql.Call) (Plugin, error) {
 		return nil, err
 	}
 
-	// Set index on plugin if method exists.
-	/* TODO What is this?
-	if p, ok := p.(interface {
-		SetIndex(*Index)
-	}); ok {
-		p.SetIndex(e.Index)
-	}
-	*/
-
 	return p, nil
 }
 
@@ -385,7 +385,7 @@ func (e *Executor) newPlugin(c *pql.Call) (Plugin, error) {
 // This first performs the TopN() to determine the top results and then
 // requeries to retrieve the full counts for each of the top results.
 func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
-	rowIDs, _, err := c.UintSliceArg("ids")
+	idsArg, _, err := c.UintSliceArg("ids")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopN: %v", err)
 	}
@@ -402,7 +402,7 @@ func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 
 	// If this call is against specific ids, or we didn't get results,
 	// or we are part of a larger distributed query then don't refetch.
-	if len(pairs) == 0 || len(rowIDs) > 0 || opt.Remote {
+	if len(pairs) == 0 || len(idsArg) > 0 || opt.Remote {
 		return pairs, nil
 	}
 	// Only the original caller should refetch the full counts.
@@ -450,6 +450,7 @@ func (e *Executor) executeTopNSlices(ctx context.Context, index string, c *pql.C
 // executeTopNSlice executes a TopN call for a single slice.
 func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Call, slice uint64) ([]Pair, error) {
 	frame, _ := c.Args["frame"].(string)
+	inverse, _ := c.Args["inverse"].(bool)
 	n, _, err := c.UintArg("n")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
@@ -486,7 +487,13 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 		frame = DefaultFrame
 	}
 
-	f := e.Holder.Fragment(index, frame, ViewStandard, slice)
+	// Determine view.
+	view := ViewStandard
+	if inverse {
+		view = ViewInverse
+	}
+
+	f := e.Holder.Fragment(index, frame, view, slice)
 	if f == nil {
 		return nil, nil
 	}
@@ -608,17 +615,41 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 		frame = DefaultFrame
 	}
 
+	// Retrieve column label.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+	columnLabel := idx.ColumnLabel()
+
 	// Retrieve base frame.
-	f := e.Holder.Frame(index, frame)
+	f := idx.Frame(frame)
 	if f == nil {
 		return nil, ErrFrameNotFound
 	}
 	rowLabel := f.RowLabel()
 
-	// Read row id.
-	rowID, _, err := c.UintArg(rowLabel) // TODO: why are we ignoring missing rowID?
+	// Read row & column id.
+	columnID, columnOK, err := c.UintArg(columnLabel)
+	if err != nil {
+		return nil, fmt.Errorf("executeRangeSlice - reading column: %v", err)
+	}
+	rowID, rowOK, err := c.UintArg(rowLabel)
 	if err != nil {
 		return nil, fmt.Errorf("executeRangeSlice - reading row: %v", err)
+	}
+
+	// Determine view.
+	var id uint64
+	var viewName string
+	if columnOK && rowOK {
+		return nil, fmt.Errorf("Range() cannot contain both %q and %q", columnLabel, rowLabel)
+	} else if !columnOK && !rowOK {
+		return nil, fmt.Errorf("Range() must specify either %q or %q", columnLabel, rowLabel)
+	} else if columnOK {
+		viewName, id = ViewInverse, columnID
+	} else {
+		viewName, id = ViewStandard, rowID
 	}
 
 	// Parse start time.
@@ -649,13 +680,14 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 
 	// Union bitmaps across all time-based subframes.
 	bm := &Bitmap{}
-	for _, view := range ViewsByTimeRange(ViewStandard, startTime, endTime, q) {
+	for _, view := range ViewsByTimeRange(viewName, startTime, endTime, q) {
 		f := e.Holder.Fragment(index, frame, view, slice)
 		if f == nil {
 			continue
 		}
-		bm = bm.Union(f.Row(rowID))
+		bm = bm.Union(f.Row(id))
 	}
+	f.Stats.Count("range", 1, 1.0)
 	return bm, nil
 }
 
@@ -941,6 +973,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err := frame.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
+	frame.Stats.Count("SetBitmapAttrs", 1, 1.0)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
@@ -1026,6 +1059,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err := frame.RowAttrStore().SetBulkAttrs(frameMap); err != nil {
 			return nil, err
 		}
+		frame.Stats.Count("SetBitmapAttrs", 1, 1.0)
 	}
 
 	// Do not forward call if this is already being forwarded.
@@ -1085,7 +1119,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	if err := idx.ColumnAttrStore().SetAttrs(id, attrs); err != nil {
 		return err
 	}
-
+	idx.Stats.Count("SetProfileAttrs", 1, 1.0)
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
 		return nil
@@ -1137,6 +1171,7 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 	// Require protobuf encoding.
 	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Send request to remote node.
 	resp, err := e.HTTPClient.Do(req)
@@ -1153,7 +1188,7 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 
 	// Check status code.
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status: code=%d, err=%s", resp.StatusCode, body)
+		return nil, fmt.Errorf("invalid status Executor.exec: code=%d, err=%s, req: %v", resp.StatusCode, body, req)
 	}
 
 	// Decode response object.

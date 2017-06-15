@@ -28,6 +28,18 @@ type Query struct {
 	Calls []*Call
 }
 
+// WriteCallN returns the number of mutating calls.
+func (q *Query) WriteCallN() int {
+	var n int
+	for _, call := range q.Calls {
+		switch call.Name {
+		case "SetBit", "ClearBit", "SetRowAttrs", "SetColumnAttrs":
+			n++
+		}
+	}
+	return n
+}
+
 // String returns a string representation of the query.
 func (q *Query) String() string {
 	a := make([]string, len(q.Calls))
@@ -60,7 +72,7 @@ func (c *Call) UintArg(key string) (uint64, bool, error) {
 	case uint64:
 		return tval, true, nil
 	default:
-		return 0, true, fmt.Errorf("could not convert %v of type %T to uint64 in Calll.UintArg", tval, tval)
+		return 0, true, fmt.Errorf("could not convert %v of type %T to uint64 in Call.UintArg", tval, tval)
 	}
 }
 
@@ -172,16 +184,20 @@ func (c *Call) String() string {
 
 // SupportsInverse indicates that the call may be on an inverse frame.
 func (c *Call) SupportsInverse() bool {
-	if c.Name == "Bitmap" {
-		return true
-	}
-	return false
+	return c.Name == "Bitmap" || c.Name == "TopN"
 }
 
 // IsInverse specifies if the call is for an inverse view.
 // Return defaults to false unless absolutely sure of inversion.
 func (c *Call) IsInverse(rowLabel, columnLabel string) bool {
 	if c.SupportsInverse() {
+		// Top-n has an explicit inverse flag.
+		if c.Name == "TopN" {
+			inverse, _ := c.Args["inverse"].(bool)
+			return inverse
+		}
+
+		// Bitmap calls use the row/column labels to determine whether inverse.
 		_, rowOK, rowErr := c.UintArg(rowLabel)
 		_, columnOK, columnErr := c.UintArg(columnLabel)
 		if rowErr != nil || columnErr != nil {
@@ -263,7 +279,7 @@ func (c *ExternalCall) String() string {
 	return buf.String()
 }
 
-// Arg represents an call argument.
+// Arg represents a call argument.
 // The key can be the index or the string key.
 // The value can be a uint64, []uint64, string, Call, or Calls.
 type Arg struct {
