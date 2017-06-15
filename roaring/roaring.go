@@ -2540,7 +2540,6 @@ func differenceRunArray(a, b *container) *container {
 
 // differenceRunBitmap computes the difference of an run from a bitmap.
 func differenceRunBitmap(a, b *container) *container {
-	// TODO
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
 	}
@@ -2548,16 +2547,54 @@ func differenceRunBitmap(a, b *container) *container {
 	output := &container{runs: make([]interval32, 0, a.n)}
 	itr := newBufIterator(newBitmapIterator(b.bitmap))
 
-	for i := 0; ; {
-		vb, eof := itr.next()
-		if eof {
-			break
+	vb, eof := itr.next()
+	j := 0
+	vr := a.runs[j]
+	working := !eof
+	for working {
+		switch {
+		case vb < vr.start: //before
+		case vb > vr.last: //after
+			if vr.start <= vr.last {
+				output.n += output.runAppendInterval(vr)
+			}
+			j++
+			if j < len(a.runs) {
+				vr = a.runs[j]
+			} else {
+				working = false
+			}
+		case vb == vr.start: //begining of run
+			vr.start++
+		case vb == a.runs[j].last: //end of run
+			vr.last--
+			if vr.last >= vr.start {
+				output.n += output.runAppendInterval(vr)
+			}
+			j++
+			if j < len(a.runs) {
+				vr = a.runs[j]
+			} else {
+				working = false
+			}
+		case vb > vr.start: //inside run
+			output.n += output.runAppendInterval(interval32{start: vr.start, last: vb - 1})
+			vr.start = vb + 1
+
 		}
-		fmt.Println(i, vb)
-
-		i++
+		vb, eof = itr.next()
+		if eof {
+			working = false
+		}
 	}
-
+	if vr.start <= vr.last {
+		output.n += output.runAppendInterval(vr)
+	}
+	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
+		output.runToArray()
+	} else if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
+	}
 	return output
 }
 
