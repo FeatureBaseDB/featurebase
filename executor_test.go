@@ -749,8 +749,6 @@ func TestExecutor_ValidateResultType(t *testing.T) {
 	defer hldr.Close()
 
 	hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	// hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(10, 3)
-	// hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth+1)
 
 	var res []interface{}
 	var err error
