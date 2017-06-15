@@ -295,17 +295,17 @@ func TestRunRemove(t *testing.T) {
 		{44, []interval32{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
 		c.mapped = true
 		ret := c.remove(test.op)
 		if ret != test.expRet || !reflect.DeepEqual(c.runs, test.exp) {
-			t.Fatalf("Unexpected result removing %v from runs. Expected %v, got %v. Expected %v, got %v", test.op, test.expRet, ret, test.exp, c.runs)
+			t.Fatalf("test #%v Unexpected result removing %v from runs. Expected %v, got %v. Expected %v, got %v", i, test.op, test.expRet, ret, test.exp, c.runs)
 		}
 		if ret && c.mapped {
-			t.Fatalf("container was not unmapped although bit %v was removed", test.op)
+			t.Fatalf("test #%v container was not unmapped although bit %v was removed", i, test.op)
 		}
 		if !ret && !c.mapped {
-			t.Fatalf("container was unmapped although bit %v was not removed", test.op)
+			t.Fatalf("test #%v container was unmapped although bit %v was not removed", i, test.op)
 		}
 	}
 }
