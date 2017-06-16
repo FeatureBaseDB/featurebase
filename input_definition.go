@@ -9,6 +9,7 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
+// InputDefinition represents a container for the data input definition.
 type InputDefinition struct {
 	name        string
 	path        string
@@ -18,6 +19,7 @@ type InputDefinition struct {
 	fields      []Field
 }
 
+// NewInputDefinition returns a new instance of InputDefinition.
 func NewInputDefinition(path, index, name string) (*InputDefinition, error) {
 	err := ValidateName(name)
 	if err != nil {
@@ -37,6 +39,7 @@ func (i *InputDefinition) Frames() []InputFrame { return i.frames }
 // Fields returns fields of the input definition was initialized with.
 func (i *InputDefinition) Fields() []Field { return i.fields }
 
+// Open opens and initializes the InputDefinition from file.
 func (i *InputDefinition) Open() error {
 	if err := func() error {
 		if err := os.MkdirAll(i.path, 0777); err != nil {
