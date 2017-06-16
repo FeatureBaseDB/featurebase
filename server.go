@@ -311,8 +311,10 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			CacheSize:      obj.Meta.CacheSize,
 			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
 		}
-		err := s.createFrame(idx, obj.Frame, opt)
-		return err
+		_, err := idx.CreateFrame(obj.Frame, opt)
+		if err != nil {
+			return err
+		}
 	case *internal.DeleteFrameMessage:
 		idx := s.Holder.Index(obj.Index)
 		if err := idx.DeleteFrame(obj.Frame); err != nil {
@@ -324,14 +326,6 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
 		idx.CreateInputDefinition(obj.Definition)
-	}
-	return nil
-}
-
-func (s *Server) createFrame(idx *Index, frame string, opt FrameOptions) error {
-	_, err := idx.CreateFrame(frame, opt)
-	if err != nil {
-		return err
 	}
 	return nil
 }
