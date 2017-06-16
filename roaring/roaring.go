@@ -196,7 +196,7 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 	j := search64(b.keys, highbits(end))
 
 	// If range is entirely in one container then just count that range.
-	if i > 0 && i == j {
+	if i >= 0 && i == j {
 		return uint64(b.containers[i].countRange(lowbits(start), lowbits(end)))
 	}
 
