@@ -27,6 +27,24 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 )
 
+func TestBitmapClone(t *testing.T) {
+	b := roaring.NewBitmap()
+	for i := uint64(61000); i < 71000; i++ {
+		b.Add(i)
+	}
+	c := b.Clone()
+	if !reflect.DeepEqual(b, c) {
+		t.Fatalf("Clone Objects not equal\n")
+	}
+	d := func() *roaring.Bitmap { //anybody know how to declare a nil value?
+		return nil
+	}()
+	e := d.Clone()
+	if e != nil {
+		t.Fatalf("Clone nil Objects not equal\n")
+	}
+}
+
 func TestCheckBitmap(t *testing.T) {
 	b := roaring.NewBitmap()
 	for i := uint64(61000); i < 71000; i++ {
@@ -163,6 +181,22 @@ func TestBitmap_Intersection(t *testing.T) {
 	}
 
 }
+
+func TestBitmap_Union1(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 2683177)
+	bm1 := roaring.NewBitmap()
+	for i := uint64(628); i < 2683301; i++ {
+		bm1.Add(i)
+	}
+	bm1.Add(4000000)
+
+	result := bm0.Union(bm1)
+	if n := result.Count(); n != 2682675 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+}
+
 func TestBitmap_Intersection_Empty(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177)
 	bm1 := roaring.NewBitmap()
