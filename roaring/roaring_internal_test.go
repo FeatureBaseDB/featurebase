@@ -1307,6 +1307,58 @@ func TestDifferenceBitmapRun(t *testing.T) {
 	}
 }
 
+func TestDifferenceBitmapArray(t *testing.T) {
+	a := &container{bitmap: make([]uint64, bitmapN)}
+	b := &container{}
+	tests := []struct {
+		bitmap []uint64
+		array  []uint32
+		exp    []uint32
+	}{
+		{
+			bitmap: []uint64{0xFF0F},
+			array:  []uint32{0, 1, 2, 3, 4, 5, 6, 7, 10},
+			exp:    []uint32{8, 9, 11, 12, 13, 14, 15},
+		},
+	}
+	for i, test := range tests {
+		a.bitmap = test.bitmap
+		b.array = test.array
+		ret := differenceBitmapArray(a, b)
+		if !reflect.DeepEqual(ret.array, test.exp) {
+			t.Fatalf("test #%v expected \n%X, but got \n%X", i, test.exp, ret.array)
+		}
+	}
+}
+func TestDifferenceBitmapBitmap(t *testing.T) {
+	a := &container{bitmap: make([]uint64, bitmapN)}
+	b := &container{bitmap: make([]uint64, bitmapN)}
+	tests := []struct {
+		abitmap []uint64
+		bbitmap []uint64
+		exp     []uint32
+	}{
+		{
+			abitmap: []uint64{0xFF00FFFFFFFFFFFF},
+			bbitmap: []uint64{0xFFFFFFFFFFFFF000},
+			exp:     []uint32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
+		},
+		{
+			abitmap: []uint64{0xF},
+			bbitmap: []uint64{},
+			exp:     []uint32{0, 1, 2, 3},
+		},
+	}
+	for i, test := range tests {
+		a.bitmap = test.abitmap
+		b.bitmap = test.bbitmap
+		ret := differenceBitmapBitmap(a, b)
+		if !reflect.DeepEqual(ret.array, test.exp) {
+			t.Fatalf("test #%v expected \n%X, but got \n%X", i, test.exp, ret.array)
+		}
+	}
+}
+
 func TestDifferenceRunRun(t *testing.T) {
 	a := &container{}
 	b := &container{}
