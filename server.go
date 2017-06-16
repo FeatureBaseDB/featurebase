@@ -326,6 +326,12 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
 		idx.CreateInputDefinition(obj.Definition)
+	case *internal.DeleteInputDefinitionMessage:
+		idx := s.Holder.Index(obj.Index)
+		err := idx.DeleteInputDefinition(obj.Name)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

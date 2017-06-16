@@ -133,6 +133,8 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeDeleteFrame
 	case *internal.CreateInputDefinitionMessage:
 		typ = MessageTypeCreateInputDefinition
+	case *internal.DeleteInputDefinitionMessage:
+		typ = MessageTypeDeleteInputDefinition
 	default:
 		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
 	}
@@ -161,6 +163,8 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.DeleteFrameMessage{}
 	case MessageTypeCreateInputDefinition:
 		m = &internal.CreateInputDefinitionMessage{}
+	case MessageTypeDeleteInputDefinition:
+		m = &internal.DeleteInputDefinitionMessage{}
 	default:
 		return nil, fmt.Errorf("invalid message type: %d", typ)
 	}
