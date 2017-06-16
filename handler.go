@@ -894,7 +894,7 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*QueryRequest, erro
 func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	q := r.URL.Query()
 	validQuery := validOptions(QueryRequest{})
-	for key, _ := range q {
+	for key := range q {
 		if _, ok := validQuery[key]; !ok {
 			return nil, errors.New("invalid query params")
 		}
@@ -1587,6 +1587,15 @@ func (h *Handler) handleDeleteDefinition(w http.ResponseWriter, r *http.Request)
 	if err := index.DeleteInputDefinition(inputDefName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	err := h.Broadcaster.SendSync(
+		&internal.DeleteInputDefinitionMessage{
+			Index: indexName,
+			Name:  inputDefName,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending CreateInputDefinition message: %s", err)
 	}
 
 	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
