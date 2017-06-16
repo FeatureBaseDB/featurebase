@@ -1354,7 +1354,7 @@ func (c *container) runRemove(v uint32) bool {
 	} else if v > c.runs[i].start {
 		last := c.runs[i].last
 		c.runs[i].last = v - 1
-		c.runs = append(c.runs[:i+1], append([]interval32{{start: v+1, last: last}}, c.runs[i+1:]...)...)
+		c.runs = append(c.runs[:i+1], append([]interval32{{start: v + 1, last: last}}, c.runs[i+1:]...)...)
 	}
 	return true
 }
@@ -2615,26 +2615,28 @@ func differenceArrayBitmap(a, b *container) *container {
 func differenceBitmapArray(a, b *container) *container {
 	output := &container{}
 	itr := newBufIterator(newBitmapIterator(a.bitmap))
-	array := b.array
+	i := 0
+	va, eof := itr.next()
 	for {
-		va, eof := itr.next()
 		if eof {
 			break
 		}
 
-		if len(array) == 0 {
+		if i >= len(b.array) {
 			output.add(va)
+			va, eof = itr.next()
 			continue
 		}
 
-		vb := array[0]
+		vb := b.array[i]
 		if va < vb {
 			output.add(va)
+			va, eof = itr.next()
 		} else if va > vb {
-			array = array[1:]
-			itr.unread()
+			i++
 		} else {
-			array = array[1:]
+			i++
+			va, eof = itr.next()
 		}
 	}
 	return output
@@ -2644,19 +2646,25 @@ func differenceBitmapBitmap(a, b *container) *container {
 	output := &container{}
 	itr0 := newBufIterator(newBitmapIterator(a.bitmap))
 	itr1 := newBufIterator(newBitmapIterator(b.bitmap))
+	v0, eof0 := itr0.next()
+	v1, eof1 := itr1.next()
 	for {
-		v0, eof0 := itr0.next()
-		v1, eof1 := itr1.next()
-
 		if eof0 {
 			break
 		} else if eof1 {
 			output.add(v0)
-		} else if v0 < v1 {
+			v0, eof0 = itr0.next()
+			continue
+		}
+		if v0 < v1 {
 			output.add(v0)
-			itr1.unread()
+			v0, eof0 = itr0.next()
 		} else if v0 > v1 {
-			itr0.unread()
+			v1, eof1 = itr1.next()
+		} else {
+			v0, eof0 = itr0.next()
+			v1, eof1 = itr1.next()
+
 		}
 	}
 	return output
