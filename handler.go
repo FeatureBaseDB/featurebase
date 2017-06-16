@@ -94,20 +94,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
-	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
-	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET")
-	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
-	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE")
-	router.HandleFunc("/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
-	//router.HandleFunc("/index/{index}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
-	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
-	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
-	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
-	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
@@ -117,6 +103,23 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
 	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
+	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
+	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET")
+	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
+	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE")
+	router.HandleFunc("/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
+	//router.HandleFunc("/index/{index}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
+	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
+	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
+	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
+	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetInputDefinition).Methods("GET")
+	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
+	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
+	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
+	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
@@ -128,10 +131,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	// https://github.com/gorilla/mux/issues/6
 	// For now we just do it for the most commonly used handler, /query
 	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
-
-	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetDefinition).Methods("GET")
-	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostDefinition).Methods("POST")
-	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteDefinition).Methods("DELETE")
 
 	return router
 }
@@ -1500,7 +1499,7 @@ func errorString(err error) string {
 	return err.Error()
 }
 
-func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]
 
@@ -1547,7 +1546,7 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleGetDefinition(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]
 
@@ -1570,7 +1569,7 @@ func (h *Handler) handleGetDefinition(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *Handler) handleDeleteDefinition(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]
 
