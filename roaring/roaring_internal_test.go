@@ -468,16 +468,34 @@ func TestIntersectRunRun(t *testing.T) {
 			exp:   []interval32{{start: 5, last: 5}, {start: 7, last: 10}},
 			expN:  5,
 		},
+		{
+			aruns: []interval32{{start: 20, last: 30}},
+			bruns: []interval32{{start: 5, last: 10}, {start: 19, last: 21}},
+			exp:   []interval32{{start: 20, last: 21}},
+			expN:  2,
+		},
+		{
+			aruns: []interval32{{start: 5, last: 10}},
+			bruns: []interval32{{start: 7, last: 12}},
+			exp:   []interval32{{start: 7, last: 10}},
+			expN:  4,
+		},
+		{
+			aruns: []interval32{{start: 5, last: 12}},
+			bruns: []interval32{{start: 7, last: 10}},
+			exp:   []interval32{{start: 7, last: 10}},
+			expN:  4,
+		},
 	}
 	for i, test := range tests {
 		a.runs = test.aruns
 		b.runs = test.bruns
 		ret := intersectRunRun(a, b)
-		if !reflect.DeepEqual(ret.runs, test.exp) {
-			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
-		}
 		if ret.n != test.expN {
 			t.Fatalf("test #%v expected n to be %v, but got %v", i, test.expN, ret.n)
+		}
+		if !reflect.DeepEqual(ret.runs, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
 		}
 	}
 
