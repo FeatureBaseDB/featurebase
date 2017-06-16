@@ -126,6 +126,29 @@ func TestBitmap_Max(t *testing.T) {
 		}
 	}
 }
+func TestBitmap_CountRange(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 2683177)
+	for i := uint64(628); i < 2683301; i++ {
+		bm0.Add(i)
+	}
+	bm0.Add(2683307)
+	if n := bm0.CountRange(1, 2683311); n != 2682674 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	if n := bm0.CountRange(2683177, 2683310); n != 125 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	if n := bm0.CountRange(2683301, 3000000); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	if n := bm0.CountRange(0, 1); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+}
 
 func TestBitmap_Intersection(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177)
@@ -140,6 +163,16 @@ func TestBitmap_Intersection(t *testing.T) {
 	}
 
 }
+func TestBitmap_Intersection_Empty(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 2683177)
+	bm1 := roaring.NewBitmap()
+
+	result := bm0.Intersect(bm1)
+	if n := result.Count(); n != 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+}
 
 func TestBitmap_Difference(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177)
@@ -148,8 +181,15 @@ func TestBitmap_Difference(t *testing.T) {
 		bm1.Add(i)
 	}
 	result := bm0.Difference(bm1)
-	//expect to have just 0
 	if n := result.Count(); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+func TestBitmap_Difference_Empty(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 2683177)
+	bm1 := roaring.NewBitmap()
+	result := bm0.Difference(bm1)
+	if n := result.Count(); n != 2 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
@@ -283,7 +323,6 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		},
 	})
 }
-
 
 func TestBitmap_Marshal_Quick_Array1(t *testing.T)  { testBitmapMarshalQuick(t, 1000, 1000, 2000, false) }
 func TestBitmap_Marshal_Quick_Array2(t *testing.T)  { testBitmapMarshalQuick(t, 10000, 0, 1000, false) }
