@@ -215,7 +215,7 @@ func TestHandler_Query_Args_URL(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("Count( Bitmap( id=100))")))
 	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code, w.Body.String())
+		t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
 	} else if body := w.Body.String(); body != `{"results":[100]}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
@@ -1120,10 +1120,11 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 	defer hldr.Close()
 	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 
-	frames := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
-	action := pilosa.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
-	fields := pilosa.Field{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
-	_, err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
+	action := internal.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
+	_, err := index.CreateInputDefinition(&def)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1138,7 +1139,7 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	} else if index.InputDefinition("test") != nil {
-		t.Fatalf("unexpected result: %s", index.InputDefinition("test"))
+		t.Fatalf("unexpected result: %v", index.InputDefinition("test"))
 	}
 }
 
@@ -1148,10 +1149,11 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 	defer hldr.Close()
 	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 
-	frames := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
-	action := pilosa.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
-	fields := pilosa.Field{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
-	inputDef, err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
+	action := internal.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
+	inputDef, err := index.CreateInputDefinition(&def)
 	if err != nil {
 		t.Fatal(err)
 	}

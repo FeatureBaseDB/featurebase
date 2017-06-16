@@ -1505,7 +1505,7 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 	inputDefName := mux.Vars(r)["input-definition"]
 
 	// Decode request.
-	var req internal.InputDefinition
+	var req InputDefinitionInfo
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1519,14 +1519,24 @@ func (h *Handler) handlePostDefinition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add the name
-	req.Name = inputDefName
+	def := req.Encode()
+	def.Name = inputDefName
+
+	// Create InputDefinition.
+	_, err = index.CreateInputDefinition(def)
+	if err == ErrInputDefinitionExists {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	err = h.Broadcaster.SendSync(
 		&internal.CreateInputDefinitionMessage{
 			Index:      indexName,
 			Name:       inputDefName,
-			Definition: &req,
+			Definition: def,
 		})
 	if err != nil {
 		h.logger().Printf("problem sending CreateInputDefinition message: %s", err)
@@ -1582,16 +1592,6 @@ func (h *Handler) handleDeleteDefinition(w http.ResponseWriter, r *http.Request)
 	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
-}
-
-type InputFrame struct {
-	Name    string       `json:"name,omitempty"`
-	Options FrameOptions `json:"options,omitempty"`
-}
-
-type InputDefinitionInfo struct {
-	Frames []InputFrame `json:"frames"`
-	Fields []Field      `json:"fields"`
 }
 
 type postInputDefinitionResponse struct{}

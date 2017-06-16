@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa"
-	"reflect"
+	"github.com/pilosa/pilosa/internal"
 )
 
 // Ensure index can open and retrieve a frame.
@@ -237,7 +237,7 @@ func TestIndex_InvalidName(t *testing.T) {
 	}
 	index, err := pilosa.NewIndex(path, "ABC")
 	if index != nil {
-		t.Fatalf("unexpected index name %s", index)
+		t.Fatalf("unexpected index name %v", index)
 	}
 }
 
@@ -246,16 +246,17 @@ func TestIndex_CreateInputDefinition(t *testing.T) {
 	defer index.Close()
 
 	// Create Input Definition.
-	frames := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
-	action := pilosa.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
-	fields := pilosa.Field{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
-	inputDef, err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
+	action := internal.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
+	inputDef, err := index.CreateInputDefinition(&def)
 	if err != nil {
 		t.Fatal(err)
-	} else if inputDef.Frames()[0] != frames {
-		t.Fatalf("unexpected input definition frames", inputDef.Frames())
-	} else if !reflect.DeepEqual(inputDef.Fields()[0], fields) {
-		t.Fatalf("unexpected input definition actions", inputDef.Fields())
+	} else if inputDef.Frames()[0].Name != frames.Name {
+		t.Fatalf("unexpected input definition frames %v", inputDef.Frames())
+	} else if inputDef.Fields()[0].Name != fields.Name {
+		t.Fatalf("unexpected input definition actions %v", inputDef.Fields())
 	}
 }
 
@@ -264,14 +265,15 @@ func TestIndex_CreateExistingInputDefinition(t *testing.T) {
 	defer index.Close()
 
 	// Create Input Definition.
-	frames := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
-	action := pilosa.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
-	fields := pilosa.Field{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
-	_, err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
+	action := internal.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
+	_, err := index.CreateInputDefinition(&def)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	_, err = index.CreateInputDefinition(&def)
 	if err != pilosa.ErrInputDefinitionExists {
 		t.Fatal(err)
 	}
@@ -282,7 +284,8 @@ func TestIndex_CreateEmptyInputDefinition(t *testing.T) {
 	defer index.Close()
 
 	// Create Input Definition.
-	_, err := index.CreateInputDefinition("test", []pilosa.InputFrame{}, []pilosa.Field{})
+	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{}, Fields: []*internal.InputDefinitionField{}}
+	_, err := index.CreateInputDefinition(&def)
 	if err.Error() != "frames and fields are required" {
 		t.Fatal(err)
 	}
@@ -293,10 +296,11 @@ func TestIndex_DeleteInputDefinition(t *testing.T) {
 	defer index.Close()
 
 	// Create Input Definition.
-	frames := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
-	action := pilosa.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
-	fields := pilosa.Field{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
-	_, err := index.CreateInputDefinition("test", []pilosa.InputFrame{frames}, []pilosa.Field{fields})
+	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
+	action := internal.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
+	_, err := index.CreateInputDefinition(&def)
 	if err != nil {
 		t.Fatal(err)
 	} else if index.InputDefinition("test") == nil {
@@ -309,5 +313,4 @@ func TestIndex_DeleteInputDefinition(t *testing.T) {
 	} else if index.InputDefinition("test") != nil {
 		t.Fatal("input definition isn't deleted")
 	}
-
 }

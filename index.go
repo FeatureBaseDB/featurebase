@@ -613,24 +613,30 @@ type importData struct {
 }
 
 // CreateInputDefinition creates a new input definition.
-func (i *Index) CreateInputDefinition(name string, frames []InputFrame, field []Field) (*InputDefinition, error) {
-
+func (i *Index) CreateInputDefinition(pb *internal.InputDefinition) (*InputDefinition, error) {
 	// Ensure input definition doesn't already exist.
-	if i.inputDefinitions[name] != nil {
+	if i.inputDefinitions[pb.Name] != nil {
 		return nil, ErrInputDefinitionExists
 	}
-	return i.createInputDefinition(name, frames, field)
+	return i.createInputDefinition(pb)
 }
 
-func (i *Index) createInputDefinition(name string, frames []InputFrame, fields []Field) (*InputDefinition, error) {
-	if name == "" {
+func (i *Index) createInputDefinition(pb *internal.InputDefinition) (*InputDefinition, error) {
+	if pb.Name == "" {
 		return nil, errors.New("input-definition name required")
-	} else if len(frames) == 0 || len(fields) == 0 {
+	} else if len(pb.Frames) == 0 || len(pb.Fields) == 0 {
 		return nil, errors.New("frames and fields are required")
 	}
 
-	for _, fr := range frames {
-		_, err := i.CreateFrame(fr.Name, fr.Options)
+	for _, fr := range pb.Frames {
+		opt := FrameOptions{
+			RowLabel:       fr.Meta.RowLabel,
+			InverseEnabled: fr.Meta.InverseEnabled,
+			CacheType:      fr.Meta.CacheType,
+			CacheSize:      fr.Meta.CacheSize,
+			TimeQuantum:    TimeQuantum(fr.Meta.TimeQuantum),
+		}
+		_, err := i.CreateFrame(fr.Name, opt)
 		if err == ErrFrameExists {
 			continue
 		} else if err != nil {
@@ -639,17 +645,16 @@ func (i *Index) createInputDefinition(name string, frames []InputFrame, fields [
 	}
 
 	// Initialize input definition.
-	inputDef, err := i.newInputDefinition(i.InputDefPath(), name)
+	inputDef, err := i.newInputDefinition(i.InputDefPath(), pb.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	inputDef.frames = frames
-	inputDef.fields = fields
+	inputDef.LoadDefinition(pb)
 	if err = inputDef.saveMeta(); err != nil {
 		return nil, err
 	}
-	i.inputDefinitions[name] = inputDef
+	i.inputDefinitions[pb.Name] = inputDef
 	return inputDef, nil
 }
 
