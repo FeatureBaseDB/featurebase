@@ -651,23 +651,19 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 		// Map byte slice directly to the container data.
 		c := b.containers[i]
-		if c.n <= ArrayMaxSize {
-			if containsRuns && (runFlagBitset[i/8]&(1<<uint(i%8))) != 0 {
-				// Read runs.
-				runCount := binary.LittleEndian.Uint16(data[offset : offset+runCountHeaderSize])
-				c.runs = (*[0xFFFFFFF]interval32)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount]
-				opsOffset = int(offset) + runCountHeaderSize + len(c.runs)*interval32Size
-			} else {
-				// Read array.
-				c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
-				// TODO: instead of commenting this out, we ne ed to make it a configuration option
-				//for _, v := range c.array {
-				//    assert(lowbits(uint64(v)) == v, "array value out of range: %d", v)
-				//}
-				opsOffset = int(offset) + len(c.array)*4 // sizeof(uint32)
-			}
-		} else {
-			// Read bitmap.
+
+		if containsRuns && (runFlagBitset[i/8]&(1<<uint(i%8))) != 0 { // Read runs.
+			runCount := binary.LittleEndian.Uint16(data[offset : offset+runCountHeaderSize])
+			c.runs = (*[0xFFFFFFF]interval32)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount]
+			opsOffset = int(offset) + runCountHeaderSize + len(c.runs)*interval32Size
+		} else if c.n <= ArrayMaxSize { // Read array.
+			c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
+			// TODO: instead of commenting this out, we ne ed to make it a configuration option
+			//for _, v := range c.array {
+			//    assert(lowbits(uint64(v)) == v, "array value out of range: %d", v)
+			//}
+			opsOffset = int(offset) + len(c.array)*4 // sizeof(uint32)
+		} else { // Read bitmap.
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
 			opsOffset = int(offset) + len(c.bitmap)*8 // sizeof(uint64)
 		}
