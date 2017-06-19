@@ -31,8 +31,8 @@ import (
 
 // Default index settings.
 const (
-	DefaultColumnLabel  = "columnID"
-	InputDefinitionRepo = ".input-definitions"
+	DefaultColumnLabel = "columnID"
+	InputDefinitionDir = ".input-definitions"
 )
 
 // Index represents a container for frames.
@@ -176,7 +176,7 @@ func (i *Index) openFrames() error {
 	}
 
 	for _, fi := range fis {
-		if !fi.IsDir() || fi.Name() == InputDefinitionRepo {
+		if !fi.IsDir() || fi.Name() == InputDefinitionDir {
 			continue
 		}
 
@@ -336,9 +336,9 @@ func (i *Index) SetTimeQuantum(q TimeQuantum) error {
 // FramePath returns the path to a frame in the index.
 func (i *Index) FramePath(name string) string { return filepath.Join(i.path, name) }
 
-// InputDefPath returns the path to a inputdefinition in the index.
-func (i *Index) InputDefPath() string {
-	return filepath.Join(i.path, InputDefinitionRepo)
+// InputDefinitionPath returns the path to a inputdefinition in the index.
+func (i *Index) InputDefinitionPath() string {
+	return filepath.Join(i.path, InputDefinitionDir)
 }
 
 // Frame returns a frame in the index by name.
@@ -584,7 +584,7 @@ type IndexOptions struct {
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
-// Encode converts o into its internal representation.
+// Encode converts i into its internal representation.
 func (o *IndexOptions) Encode() *internal.IndexMeta {
 	return &internal.IndexMeta{
 		ColumnLabel: o.ColumnLabel,
@@ -645,7 +645,7 @@ func (i *Index) createInputDefinition(pb *internal.InputDefinition) (*InputDefin
 	}
 
 	// Initialize input definition.
-	inputDef, err := i.newInputDefinition(i.InputDefPath(), pb.Name)
+	inputDef, err := i.newInputDefinition(pb.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -658,13 +658,13 @@ func (i *Index) createInputDefinition(pb *internal.InputDefinition) (*InputDefin
 	return inputDef, nil
 }
 
-func (i *Index) newInputDefinition(path, name string) (*InputDefinition, error) {
-	f, err := NewInputDefinition(path, i.name, name)
+func (i *Index) newInputDefinition(name string) (*InputDefinition, error) {
+	inputDef, err := NewInputDefinition(i.InputDefinitionPath(), i.name, name)
 	if err != nil {
 		return nil, err
 	}
-	f.broadcaster = i.broadcaster
-	return f, nil
+	inputDef.broadcaster = i.broadcaster
+	return inputDef, nil
 }
 
 // DeleteInputDefinition removes a input definition from the index.
@@ -679,7 +679,7 @@ func (i *Index) DeleteInputDefinition(name string) error {
 	}
 
 	// Delete input definition file.
-	if err := os.Remove(filepath.Join(i.InputDefPath(), name)); err != nil {
+	if err := os.Remove(filepath.Join(i.InputDefinitionPath(), name)); err != nil {
 		return err
 	}
 
@@ -690,32 +690,31 @@ func (i *Index) DeleteInputDefinition(name string) error {
 
 // openInputDefinition opens and initializes the input definitions inside the index.
 func (i *Index) openInputDefinition() error {
-	inputDefs, err := os.Open(i.path)
-	if err != nil {
+	inputDef, err := os.Open(i.InputDefinitionPath())
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
 		return err
 	}
-	defer inputDefs.Close()
+	defer inputDef.Close()
 
-	fis, err := inputDefs.Readdir(0)
-	if err != nil {
-		return err
-	}
-	for _, fi := range fis {
-		if fi.Name() != InputDefinitionRepo {
-			continue
-		}
-		inputPath, err := os.Open(i.InputDefPath())
+	inputFiles, err := inputDef.Readdir(0)
+	for _, file := range inputFiles {
+		input, err := i.newInputDefinition(file.Name())
 		if err != nil {
 			return err
 		}
-		inputFiles, err := inputPath.Readdir(0)
-		for _, file := range inputFiles {
-			input, err := i.newInputDefinition(i.InputDefPath(), file.Name())
-			if err != nil {
-				return err
+		input.Open()
+		i.inputDefinitions[file.Name()] = input
+
+		// Create frame if it doesn't exist
+		for _, fr := range input.frames {
+			_, err := i.CreateFrame(fr.Name, fr.Options)
+			if err == ErrFrameExists {
+				continue
+			} else if err != nil {
+				return nil
 			}
-			input.Open()
-			i.inputDefinitions[file.Name()] = input
 		}
 
 	}

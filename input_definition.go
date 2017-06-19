@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -213,14 +227,22 @@ type InputDefinitionInfo struct {
 }
 
 // Encode converts InputDefinitionInfo into its internal representation.
-func (o *InputDefinitionInfo) Encode() *internal.InputDefinition {
+func (i *InputDefinitionInfo) Encode() *internal.InputDefinition {
 	var def internal.InputDefinition
-	for _, f := range o.Frames {
+	for _, f := range i.Frames {
 		def.Frames = append(def.Frames, &internal.Frame{Name: f.Name, Meta: f.Options.Encode()})
 	}
-	for _, f := range o.Fields {
+	for _, f := range i.Fields {
 		def.Fields = append(def.Fields, f.Encode())
 	}
 
 	return &def
+}
+
+func (i *InputDefinition) AddFrame(frame InputFrame) error {
+	i.frames = append(i.frames, frame)
+	if err := i.saveMeta(); err != nil {
+		return err
+	}
+	return nil
 }
