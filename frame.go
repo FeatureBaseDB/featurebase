@@ -653,7 +653,7 @@ type FrameOptions struct {
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
-// Encode converts i into its internal representation.
+// Encode converts o into its internal representation.
 func (o *FrameOptions) Encode() *internal.FrameMeta {
 	return &internal.FrameMeta{
 		RowLabel:       o.RowLabel,
