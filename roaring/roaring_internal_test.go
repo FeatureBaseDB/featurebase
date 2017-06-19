@@ -223,12 +223,6 @@ func TestBitmapCountRange(t *testing.T) {
 			t.Fatalf("test #%v count of %v from %v to %v should be %v but got %v", i, test.bitmap, test.start, test.end, test.exp, ret)
 		}
 	}
-
-	c = container{bitmap: []uint64{0xF0000001, 0xFF000000, 0xFF00000000000000}}
-	cnt := c.bitmapCountRange(62, 129)
-	if cnt != 10 {
-		t.Fatalf("count of %v from 62 to 129 should be 10, but got %v", c.bitmap, cnt)
-	}
 }
 
 func TestIntersectionCountArrayBitmap2(t *testing.T) {
@@ -1929,7 +1923,7 @@ func TestRunBinSearch(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		idx, contains := runBinSearch(test.search, test.runs)
+		idx, contains := binSearchRuns(test.search, test.runs)
 		if !(test.exp == contains && test.expi == idx) {
 			t.Fatalf("test #%v expected (%v, %v) but got (%v, %v)", i, test.exp, test.expi, contains, idx)
 		}
