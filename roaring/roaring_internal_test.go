@@ -615,6 +615,140 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 
 }
 
+func TestUnionMixed(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	c := &container{}
+
+	a.runs = []interval32{{start: 5, last: 10}}
+	a.n = 6
+	b.array = []uint32{1, 4, 5, 7, 10, 11, 12}
+	b.n = 7
+	res := union(a, b)
+	if !reflect.DeepEqual(res.array, []uint32{1, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+		t.Fatalf("test #1 expected %v, but got %v", []uint32{1, 4, 5, 6, 7, 8, 9, 10, 11, 12}, res.array)
+	}
+	res = union(b, a)
+	if !reflect.DeepEqual(res.array, []uint32{1, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+		t.Fatalf("test #2 expected %v, but got %v", []uint32{1, 4, 5, 6, 7, 8, 9, 10, 11, 12}, res.array)
+	}
+
+	res = union(a, a)
+	if !reflect.DeepEqual(res.runs, []interval32{{start: 5, last: 10}}) {
+		t.Fatalf("test #3 expected %v, but got %v", []interval32{{start: 5, last: 10}}, res.runs)
+	}
+	c.bitmap = []uint64{0x3}
+	c.n = 2
+	res = union(c, a)
+	if !reflect.DeepEqual(res.bitmap, []uint64{2019}) {
+		t.Fatalf("test #4 expected %v, but got %v", []uint64{2019}, res.bitmap)
+	}
+	res = union(a, c)
+	if !reflect.DeepEqual(res.bitmap, []uint64{2019}) {
+		t.Fatalf("test #5 expected %v, but got %v", []uint64{2019}, res.bitmap)
+	}
+	res = union(b, c)
+	if !reflect.DeepEqual(res.array, []uint32{0, 1, 4, 5, 7, 10, 11, 12}) {
+		t.Fatalf("test #6 expected %v, but got %v", []uint32{0, 1, 4, 5, 7, 10, 11, 12}, res.array)
+	}
+	res = union(c, b)
+	if !reflect.DeepEqual(res.array, []uint32{0, 1, 4, 5, 7, 10, 11, 12}) {
+		t.Fatalf("test #6 expected %v, but got %v", []uint32{0, 1, 4, 5, 7, 10, 11, 12}, res.array)
+	}
+
+}
+func TestIntersectMixed(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	c := &container{}
+
+	a.runs = []interval32{{start: 5, last: 10}}
+	a.n = 6
+	b.array = []uint32{1, 4, 5, 7, 10, 11, 12}
+	b.n = 7
+	res := intersect(a, b)
+	if !reflect.DeepEqual(res.array, []uint32{5, 7, 10}) {
+		t.Fatalf("test #1 expected %v, but got %v", []uint32{5, 7, 10}, res.array)
+	}
+	res = intersect(b, a)
+	if !reflect.DeepEqual(res.array, []uint32{5, 7, 10}) {
+		t.Fatalf("test #1 expected %v, but got %v", []uint32{5, 7, 10}, res.array)
+	}
+
+	res = intersect(a, a)
+	if !reflect.DeepEqual(res.runs, []interval32{{start: 5, last: 10}}) {
+		t.Fatalf("test #3 expected %v, but got %v", []interval32{{start: 5, last: 10}}, res.runs)
+	}
+	c.bitmap = []uint64{0x60}
+	c.n = 2
+	res = intersect(c, a)
+	if !reflect.DeepEqual(res.array, []uint32{5, 6}) {
+		t.Fatalf("test #4 expected %v, but got %v", []uint32{6}, res.array)
+	}
+
+	res = intersect(a, c)
+	if !reflect.DeepEqual(res.array, []uint32{5, 6}) {
+		t.Fatalf("test #5 expected %v, but got %v", []uint32{6}, res.array)
+	}
+
+	res = intersect(b, c)
+	if !reflect.DeepEqual(res.array, []uint32{5}) {
+		t.Fatalf("test #6 expected %v, but got %v", []uint32{5}, res.array)
+	}
+	res = intersect(c, b)
+	if !reflect.DeepEqual(res.array, []uint32{5}) {
+		t.Fatalf("test #7 expected %v, but got %v", []uint32{5}, res.array)
+	}
+
+}
+func TestDifferenceMixed(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	c := &container{}
+
+	a.runs = []interval32{{start: 5, last: 10}}
+	a.n = a.runCountRange(0, 100)
+
+	b.array = []uint32{1, 4, 5, 7, 10, 11, 12}
+	b.n = len(b.array)
+	res := difference(a, b)
+
+	if !reflect.DeepEqual(res.array, []uint32{6, 8, 9}) {
+		t.Fatalf("test #1 expected %v, but got %v", []uint32{6, 8, 9}, res.runs)
+	}
+	res = difference(b, a)
+	if !reflect.DeepEqual(res.array, []uint32{1, 4, 11, 12}) {
+		t.Fatalf("test #2 expected %v, but got %v", []uint32{1, 4, 11, 12}, res.array)
+	}
+
+	res = difference(a, a)
+	if !reflect.DeepEqual(res.runs, []interval32{}) {
+		t.Fatalf("test #3 expected empty but got %v", res.runs)
+	}
+	c.bitmap = []uint64{0x64}
+	c.n = c.countRange(0, 100)
+	res = difference(c, a)
+
+	if !reflect.DeepEqual(res.bitmap, []uint64{0x4}) {
+		t.Fatalf("test #4 expected %v, but got %v", []uint32{4}, res.bitmap)
+	}
+
+	res = difference(a, c)
+	if !reflect.DeepEqual(res.runs, []interval32{{start: 7, last: 10}}) {
+		t.Fatalf("test #5 expected %v, but got %v", []interval32{{start: 7, last: 10}}, res.runs)
+	}
+
+	res = difference(b, c)
+	if !reflect.DeepEqual(res.array, []uint32{1, 4, 7, 10, 11, 12}) {
+		t.Fatalf("test #6 expected %v, but got %v", []uint32{1, 4, 7, 10, 11, 12}, res.array)
+	}
+	res = difference(c, b)
+	if !reflect.DeepEqual(res.array, []uint32{2, 6}) {
+		t.Fatalf("test #7 expected %v, but got %v", []uint32{2, 6}, res.array)
+	}
+
+}
+
 func TestUnionRunRun(t *testing.T) {
 	a := &container{}
 	b := &container{}

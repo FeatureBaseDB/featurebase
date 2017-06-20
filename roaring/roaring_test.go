@@ -194,6 +194,11 @@ func TestBitmap_Union1(t *testing.T) {
 	if n := result.Count(); n != 2682675 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+	bm := testBM()
+	result = bm.Union(bm0)
+	if n := result.Count(); n != 75009 {
+		t.Fatalf("unexpected n: %d", n)
+	}
 
 }
 
@@ -233,6 +238,15 @@ func TestBitmap_Union(t *testing.T) {
 	bm1 := roaring.NewBitmap(0, 50000, 1000001, 1000002)
 	result := bm0.Union(bm1)
 	if n := result.Count(); n != 5 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_Xor(t *testing.T) {
+	bm0 := testBM()
+	bm1 := roaring.NewBitmap(0, 1, 2, 3)
+	result := bm1.Xor(bm0)
+	if n := result.Count(); n != 75011 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
@@ -601,6 +615,7 @@ func TestIterator(t *testing.T) {
 
 //testBM creates a bitmap with 3 containers(an array,bitmap, and run)
 func testBM() *roaring.Bitmap {
+
 	bm := roaring.NewBitmap()
 	//the array
 	for i := uint64(0); i < 1024; i += 4 {
@@ -618,6 +633,7 @@ func testBM() *roaring.Bitmap {
 	for i := uint64(0); i < 65535; i += 1 {
 		bm.Add((4 << 16) + i)
 	}
+	//count 75007
 	return bm
 }
 
@@ -632,6 +648,10 @@ func TestBitmapOffsetRange(t *testing.T) {
 	if bm1.Count() != 256 {
 		t.Fatalf("Not Equal %d %d", bm1.Count(), 256)
 	}
+
+}
+
+func TestBitmapBufIterator(t *testing.T) {
 
 }
 
@@ -705,4 +725,12 @@ func diff(a, b []uint64) string {
 		}
 	}
 	return ""
+}
+
+func TestBitmap_Intersect(t *testing.T) {
+	bm0 := testBM()
+	result := bm0.Intersect(bm0)
+	if bm0.Count() != result.Count() {
+		t.Fatalf("Counts do not match %d %d", bm0.Count(), result.Count())
+	}
 }

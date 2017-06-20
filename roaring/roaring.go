@@ -2479,7 +2479,7 @@ func differenceArrayRun(a, b *container) *container {
 	j := 0 // run index
 
 	// keep all array elements before beginning of runs
-	for ; i < int(b.runs[j].start); i++ {
+	for ; i < len(a.array) && a.array[i] < b.runs[j].start; i++ {
 		output.array = append(output.array, a.array[i])
 	}
 
@@ -2490,7 +2490,7 @@ func differenceArrayRun(a, b *container) *container {
 			output.array = append(output.array, a.array[i])
 		}
 		// update current run
-		if i >= int(b.runs[j].last) {
+		if a.array[i] >= b.runs[j].last {
 			j++
 			if j == len(b.runs) {
 				break
@@ -2498,10 +2498,10 @@ func differenceArrayRun(a, b *container) *container {
 		}
 	}
 	i++
-
-	// keep all array elements after end of runs
-	output.array = append(output.array, a.array[i:]...)
-
+	if i < len(a.array) {
+		// keep all array elements after end of runs
+		output.array = append(output.array, a.array[i:]...)
+	}
 	return output
 }
 
