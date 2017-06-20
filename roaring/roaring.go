@@ -828,13 +828,13 @@ type BitmapInfo struct {
 // Iterator represents an iterator over a Bitmap.
 type Iterator struct {
 	bitmap  *Bitmap
-	i, j, k int // i: container; j: array index, bit index, or run index; k:
+	i, j, k int // i: container; j: array index, bit index, or run index; k: offset within the run
 }
 
 // eof returns true if the iterator is at the end of the bitmap.
 func (itr *Iterator) eof() bool { return itr.i >= len(itr.bitmap.containers) }
 
-// Seek moves to the first value equal to or greater than v.
+// Seek moves to the first value equal to or greater than `seek`.
 func (itr *Iterator) Seek(seek uint64) {
 	// Move to the correct container.
 	itr.i = search64(itr.bitmap.keys, highbits(seek))
@@ -845,7 +845,7 @@ func (itr *Iterator) Seek(seek uint64) {
 		return
 	}
 
-	// Move to the correct value index inside the array container.
+	// Move to the correct value index inside the container.
 	lb := lowbits(seek)
 	c := itr.bitmap.containers[itr.i]
 	if c.isArray() {
@@ -907,6 +907,16 @@ func (itr *Iterator) Next() (v uint64, eof bool) {
 		}
 
 		if c.isRun() {
+			// Because itr.j for an array container defaults to -1
+			// but defaults to 0 for a run container, we need to
+			// standardize on treating -1 as our default value for itr.j.
+			// Note that this is easier than changing the default to 0
+			// because the array logic uses the negative number space
+			// to represent offsets to an array position that isn't filled
+			// (-1 being the first empty space in an array, or 0).
+			if itr.j == -1 {
+				itr.j++
+			}
 			r := c.runs[itr.j]
 			runLength := int(r.last - r.start)
 
@@ -917,7 +927,7 @@ func (itr *Iterator) Next() (v uint64, eof bool) {
 
 			if itr.j >= len(c.runs) {
 				// Reached end of runs, move to the next container.
-				itr.i, itr.j = itr.i+1, 0
+				itr.i, itr.j = itr.i+1, -1
 				continue
 			}
 

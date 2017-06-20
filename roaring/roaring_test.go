@@ -15,8 +15,8 @@
 package roaring_test
 
 import (
-	"fmt"
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
@@ -75,6 +75,16 @@ func TestCheckRun(t *testing.T) {
 	err := b.Check()
 	if err != nil {
 		t.Fatalf("%v\n", err)
+	}
+}
+
+// Ensure that we can transition between runs and arrays when materializing the bitmap.
+func TestContainerTransitions(t *testing.T) {
+	// [run, run][array][run]
+	b := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 132000, 132001, 132002, 132003, 132004, 132005)
+	b.Optimize() // convert to runs
+	if !reflect.DeepEqual(b.Slice(), []uint64{0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 132000, 132001, 132002, 132003, 132004, 132005}) {
+		t.Fatalf("unexpected slice: %+v", b.Slice())
 	}
 }
 
