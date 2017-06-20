@@ -2090,22 +2090,23 @@ func intersectBitmapRun(a, b *container) *container {
 
 func intersectArrayBitmap(a, b *container) *container {
 	output := &container{}
-	itr := newBufIterator(newBitmapIterator(b.bitmap))
-	for i := 0; i < len(a.array); {
-		va := a.array[i]
-		vb, eof := itr.next()
-		if eof {
+	itra := newArrayIterator(a.array)
+	itrb := newBitmapIterator(b.bitmap)
+	va, eof1 := itra.next()
+	vb, eof2 := itrb.next()
+	for {
+		if eof1 || eof2 {
 			break
 		}
 
 		if va < vb {
-			i++
-			itr.unread()
+			va, eof1 = itra.next()
 		} else if va > vb {
-			// nop
+			vb, eof2 = itrb.next()
 		} else {
 			output.add(va)
-			i++
+			va, eof1 = itra.next()
+			vb, eof2 = itrb.next()
 		}
 	}
 	return output
@@ -2113,25 +2114,23 @@ func intersectArrayBitmap(a, b *container) *container {
 
 func intersectBitmapBitmap(a, b *container) *container {
 	output := &container{}
-	itr0 := newBufIterator(newBitmapIterator(a.bitmap))
-	itr1 := newBufIterator(newBitmapIterator(b.bitmap))
+	itr0 := newBitmapIterator(a.bitmap)
+	itr1 := newBitmapIterator(b.bitmap)
+	va, eof1 := itr0.next()
+	vb, eof2 := itr1.next()
 	for {
-		va, eof := itr0.next()
-		if eof {
-			break
-		}
-
-		vb, eof := itr1.next()
-		if eof {
+		if eof1 || eof2 {
 			break
 		}
 
 		if va < vb {
-			itr1.unread()
+			va, eof1 = itr0.next()
 		} else if va > vb {
-			itr0.unread()
+			vb, eof2 = itr1.next()
 		} else {
 			output.add(va)
+			va, eof1 = itr0.next()
+			vb, eof2 = itr1.next()
 		}
 	}
 	return output
@@ -3046,7 +3045,7 @@ func (itr *bitmapIterator) next() (v uint32, eof bool) {
 	itr.i++
 
 	// Find first non-zero bit in current bitmap, if possible.
-	hb := int(itr.i / 64)
+	hb := int(itr.i >> 6)
 	lb := itr.bitmap[hb] >> (uint(itr.i) % 64)
 	if lb != 0 {
 		itr.i = int(itr.i) + trailingZeroN(lb)
@@ -3056,7 +3055,7 @@ func (itr *bitmapIterator) next() (v uint32, eof bool) {
 	// Otherwise iterate through remaining bitmaps to find next bit.
 	for hb++; hb < len(itr.bitmap); hb++ {
 		if itr.bitmap[hb] != 0 {
-			itr.i = int(hb*64) + trailingZeroN(itr.bitmap[hb])
+			itr.i = int(hb<<6) + trailingZeroN(itr.bitmap[hb])
 			return uint32(itr.i), false
 		}
 	}
