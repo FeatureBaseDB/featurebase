@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 
@@ -39,6 +40,8 @@ type HTTPBroadcaster struct {
 func NewHTTPBroadcaster(s *pilosa.Server, internalPort string) *HTTPBroadcaster {
 	return &HTTPBroadcaster{server: s, internalPort: internalPort}
 }
+
+func (h *HTTPBroadcaster) logger() *log.Logger { return log.New(h.server.LogOutput, "", log.LstdFlags) }
 
 // SendSync sends a protobuf message to all nodes simultaneously.
 // It waits for all nodes to respond before the function returns (and returns any errors).
@@ -71,7 +74,13 @@ func (h *HTTPBroadcaster) SendSync(pb proto.Message) error {
 // SendAsync exists to implement the Broadcaster interface, but just calls
 // SendSync.
 func (h *HTTPBroadcaster) SendAsync(pb proto.Message) error {
-	return h.SendSync(pb)
+	go func() {
+		err := h.SendSync(pb)
+		if err != nil {
+			h.logger().Printf("http broadcast async error: %v", err)
+		}
+	}()
+	return nil
 }
 
 func (h *HTTPBroadcaster) nodes() ([]*pilosa.Node, error) {
