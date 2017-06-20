@@ -19,9 +19,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"errors"
+	"fmt"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
+
+var ValidValueDestination = []string{"map", "valueToRow", "stringToBool"}
 
 // InputDefinition represents a container for the data input definition.
 type InputDefinition struct {
@@ -89,15 +93,36 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 		i.frames = append(i.frames, inputFrame)
 	}
 
+	numPrimaryKey := 0
+	countRowID := make(map[uint64]bool)
 	for _, field := range pb.Fields {
 		var actions []Action
 		for _, action := range field.Actions {
+			if err := i.ValidateAction(action); err != nil {
+				return err
+			}
+			if action.RowID != 0 {
+				_, ok := countRowID[action.RowID]
+				if !ok {
+					countRowID[action.RowID] = true
+				} else {
+					return fmt.Errorf("duplicate rowID with other field: %s", action.RowID)
+				}
+			}
 			actions = append(actions, Action{
 				Frame:            action.Frame,
 				ValueDestination: action.ValueDestination,
 				ValueMap:         action.ValueMap,
 				RowID:            action.RowID,
 			})
+		}
+
+		if field.PrimaryKey {
+			numPrimaryKey += 1
+		}
+
+		if numPrimaryKey > 1 {
+			return errors.New("duplicate primaryKey with other field")
 		}
 
 		inputField := Field{
@@ -244,5 +269,30 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	if err := i.saveMeta(); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (i *InputDefinition) ValidateAction(action *internal.Action) error {
+	validValues := make(map[string]bool)
+	for _, val := range ValidValueDestination {
+		validValues[val] = true
+	}
+	if _, ok := validValues[action.ValueDestination]; !ok {
+		return fmt.Errorf("invalid ValueDestination: %s", action.ValueDestination)
+	}
+
+	switch action.ValueDestination {
+	case "map":
+		if len(action.ValueMap) == 0 {
+			return errors.New("valueMap required for map")
+		}
+	case "stringToBool":
+		if action.RowID == 0 {
+			return errors.New("rowID required for stringToBool")
+		}
+	default:
+		return nil
+	}
+
 	return nil
 }
