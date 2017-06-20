@@ -1929,3 +1929,32 @@ func TestRunBinSearch(t *testing.T) {
 		}
 	}
 }
+func TestBitmap_RemoveEmptyContainers(t *testing.T) {
+	bm1 := NewBitmap(1<<16, 2<<16, 3<<16)
+	bm1.Remove(2 << 16)
+	if bm1.countEmptyContainers() != 1 {
+		t.Fatalf("Should be 1 empty container ")
+	}
+	bm1.removeEmptyContainers()
+
+	if bm1.countEmptyContainers() != 0 {
+		t.Fatalf("Should be no empty containers ")
+	}
+}
+
+func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
+	bm1 := NewBitmap(1<<16, 2<<16, 3<<16)
+	bm1.Remove(2 << 16)
+	var buf bytes.Buffer
+	if _, err := bm1.WriteTo(&buf); err != nil {
+		t.Fatalf("Failure to write to bitmap buffer. ")
+	}
+	bm0 := NewBitmap()
+	bm0.UnmarshalBinary(buf.Bytes())
+	if bm0.countEmptyContainers() != 0 {
+		t.Fatalf("Should be no empty containers ")
+	}
+	if bm0.Count() != bm1.Count() {
+		t.Fatalf("Counts do not match after a marshal %d %d", bm0.Count(), bm1.Count())
+	}
+}

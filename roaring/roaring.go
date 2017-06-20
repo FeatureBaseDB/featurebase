@@ -929,7 +929,7 @@ func (itr *Iterator) Next() (v uint64, eof bool) {
 		itr.j++
 
 		// Find first non-zero bit in current bitmap, if possible.
-		hb := int(itr.j / 64)
+		hb := int(itr.j >> 6)
 
 		if hb >= len(c.bitmap) {
 			itr.i, itr.j = itr.i+1, -1
@@ -944,7 +944,7 @@ func (itr *Iterator) Next() (v uint64, eof bool) {
 		// Otherwise iterate through remaining bitmaps to find next bit.
 		for hb++; hb < len(c.bitmap); hb++ {
 			if c.bitmap[hb] != 0 {
-				itr.j = int(hb*64) + trailingZeroN(c.bitmap[hb])
+				itr.j = int(hb<<6) + trailingZeroN(c.bitmap[hb])
 				return itr.peek(), false
 			}
 		}
@@ -1909,7 +1909,7 @@ func intersectionCountArrayBitmapOld(a, b *container) (n uint64) {
 
 func intersectionCountArrayBitmap(a, b *container) (n uint64) {
 	for _, val := range a.array {
-		i := val / 64
+		i := val >> 6
 		if i >= uint32(len(b.bitmap)) {
 			break
 		}
@@ -2052,8 +2052,8 @@ func intersectBitmapRun(a, b *container) *container {
 		}
 		for j := 0; j < len(b.runs); j++ {
 			vb := b.runs[j]
-			i := vb.start / 64 // index into a
-			vastart := 64 * i
+			i := vb.start >> 6 // index into a
+			vastart := i << 6
 			valast := vastart + 63
 			for valast >= vb.start && vastart <= vb.last {
 				if vastart >= vb.start && valast <= vb.last { // a within b
@@ -2077,7 +2077,7 @@ func intersectBitmapRun(a, b *container) *container {
 				}
 				// update loop vars
 				i++
-				vastart = 64 * i
+				vastart = i << 6
 				valast = vastart + 63
 			}
 		}
@@ -2300,8 +2300,8 @@ const maxBitmap = 0xFFFFFFFFFFFFFFFF
 
 // sets all bits in [i, j) (c must be a bitmap container)
 func (c *container) bitmapSetRange(i, j uint64) {
-	x := i / 64
-	y := (j - 1) / 64
+	x := i >> 6
+	y := (j - 1) >> 6
 	var X uint64 = maxBitmap << (i % 64)
 	var Y uint64 = maxBitmap >> (64 - (j % 64))
 	xcnt := popcnt(X)
@@ -2323,8 +2323,8 @@ func (c *container) bitmapSetRange(i, j uint64) {
 
 // xor's all bits in [i, j) with all true (c must be a bitmap container).
 func (c *container) bitmapXorRange(i, j uint64) {
-	x := i / 64
-	y := (j - 1) / 64
+	x := i >> 6
+	y := (j - 1) >> 6
 	var X uint64 = maxBitmap << (i % 64)
 	var Y uint64 = maxBitmap >> (64 - (j % 64))
 	if x == y {
@@ -2348,8 +2348,8 @@ func (c *container) bitmapXorRange(i, j uint64) {
 
 // zeroes all bits in [i, j) (c must be a bitmap container)
 func (c *container) bitmapZeroRange(i, j uint64) {
-	x := i / 64
-	y := (j - 1) / 64
+	x := i >> 6
+	y := (j - 1) >> 6
 	var X uint64 = maxBitmap << (i % 64)
 	var Y uint64 = maxBitmap >> (64 - (j % 64))
 	if x == y {

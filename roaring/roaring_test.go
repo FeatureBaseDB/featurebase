@@ -15,8 +15,8 @@
 package roaring_test
 
 import (
-	"fmt"
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
@@ -166,7 +166,6 @@ func TestBitmap_CountRange(t *testing.T) {
 	if n := bm0.CountRange(0, 1); n != 1 {
 		t.Fatalf("unexpected n: %d", n)
 	}
-
 }
 
 func TestBitmap_Intersection(t *testing.T) {
@@ -418,6 +417,21 @@ func TestBitmap_IntersectionCount_BitmapBitmap(t *testing.T) {
 		t.Fatalf("unexpected n (reverse): %d", n)
 	}
 }
+func TestBitmap_IntersectionCount_Mixed(t *testing.T) {
+	bm0 := testBM()
+	bm1 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 65536)
+	bm3 := roaring.NewBitmap(131072)
+
+	if n := bm0.IntersectionCount(bm0); n != bm0.Count() {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	if n := bm0.IntersectionCount(bm1); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	if n := bm0.IntersectionCount(bm3); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
 
 func TestBitmap_Quick_Array1(t *testing.T)     { testBitmapQuick(t, 1000, 1000, 2000) }
 func TestBitmap_Quick_Array2(t *testing.T)     { testBitmapQuick(t, 10000, 0, 1000) }
@@ -583,6 +597,42 @@ func TestIterator(t *testing.T) {
 	if !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
 		t.Fatalf("unexpected values: %+v", a)
 	}
+}
+
+//testBM creates a bitmap with 3 containers(an array,bitmap, and run)
+func testBM() *roaring.Bitmap {
+	bm := roaring.NewBitmap()
+	//the array
+	for i := uint64(0); i < 1024; i += 4 {
+		bm.Add((1 << 16) + i)
+	}
+	//the bitmap
+	for i := uint64(0); i < 16384; i += 2 {
+		bm.Add((2 << 16) + i)
+	}
+	//small run
+	for i := uint64(0); i < 1024; i += 1 {
+		bm.Add((3 << 16) + i)
+	}
+	//large run
+	for i := uint64(0); i < 65535; i += 1 {
+		bm.Add((4 << 16) + i)
+	}
+	return bm
+}
+
+func TestBitmapOffsetRange(t *testing.T) {
+	bm := testBM()
+
+	bm1 := bm.OffsetRange(0, 0, 327680)
+	if bm1.Count() != bm.Count() {
+		t.Fatalf("Not Equal %d %d", bm1.Count(), bm.Count())
+	}
+	bm1 = bm.OffsetRange(0, 0, 131072)
+	if bm1.Count() != 256 {
+		t.Fatalf("Not Equal %d %d", bm1.Count(), 256)
+	}
+
 }
 
 var benchmarkBitmapIntersectionCountData struct {
