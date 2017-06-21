@@ -25,7 +25,7 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-var ValidValueDestination = []string{"map", "valueToRow", "stringToBool"}
+var ValidValueDestination = []string{"mapping", "value-to-row", "single-row-boolean"}
 
 // InputDefinition represents a container for the data input definition.
 type InputDefinition struct {
@@ -101,10 +101,10 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 			if err := i.ValidateAction(action); err != nil {
 				return err
 			}
-			if action.RowID != 0 && action.Frame != ""{
+			if action.RowID != 0 && action.Frame != "" {
 				val, ok := countRowID[action.Frame]
 				if ok && val == action.RowID {
-					return fmt.Errorf("duplicate rowID with other field: %s", action.RowID)
+					return fmt.Errorf("duplicate rowID with other field: %v", action.RowID)
 				} else {
 					countRowID[action.Frame] = action.RowID
 				}
@@ -113,7 +113,7 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 				Frame:            action.Frame,
 				ValueDestination: action.ValueDestination,
 				ValueMap:         action.ValueMap,
-				RowID:            action.RowID,
+				RowID:            &action.RowID,
 			})
 		}
 
@@ -176,7 +176,7 @@ func (i *InputDefinition) saveMeta() error {
 				Frame:            action.Frame,
 				ValueDestination: action.ValueDestination,
 				ValueMap:         action.ValueMap,
-				RowID:            action.RowID,
+				RowID:            convert(action.RowID),
 			}
 			actions = append(actions, actionMeta)
 		}
@@ -226,7 +226,7 @@ type Action struct {
 	Frame            string            `json:"frame,omitempty"`
 	ValueDestination string            `json:"valueDestination,omitempty"`
 	ValueMap         map[string]uint64 `json:"valueMap,omitempty"`
-	RowID            uint64            `json:"rowID,omitempty"`
+	RowID            *uint64           `json:"rowID,omitempty"`
 }
 
 // Encode converts Action into its internal representation.
@@ -235,8 +235,17 @@ func (o *Action) Encode() *internal.Action {
 		Frame:            o.Frame,
 		ValueDestination: o.ValueDestination,
 		ValueMap:         o.ValueMap,
-		RowID:            o.RowID,
+		RowID:            convert(o.RowID),
 	}
+}
+
+func convert(x *uint64) uint64 {
+	if x != nil {
+		return *x
+	}
+	var v int64 = -1
+	var v2 uint64 = uint64(v)
+	return v2
 }
 
 // InputFrame defines the frame used in the input definition.
@@ -282,17 +291,14 @@ func (i *InputDefinition) ValidateAction(action *internal.Action) error {
 	}
 
 	switch action.ValueDestination {
-	case "map":
+	case "mapping":
 		if len(action.ValueMap) == 0 {
 			return errors.New("valueMap required for map")
 		}
-	case "stringToBool":
-		if action.RowID == 0 {
-			return errors.New("rowID required for stringToBool")
+	case "single-row-boolean":
+		if int64(action.RowID) == -1 {
+			return errors.New("rowID required for single-row-boolean")
 		}
-	default:
-		return nil
 	}
-
 	return nil
 }

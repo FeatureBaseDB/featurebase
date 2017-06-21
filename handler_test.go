@@ -1121,7 +1121,7 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
-	action := internal.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	action := internal.Action{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
 	_, err := index.CreateInputDefinition(&def)
@@ -1150,7 +1150,7 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
-	action := internal.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	action := internal.Action{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
 	inputDef, err := index.CreateInputDefinition(&def)
