@@ -2060,11 +2060,8 @@ func intersectBitmapRun(a, b *container) *container {
 			i := vb.start / 64 // index into a
 			vastart := 64 * i
 			valast := vastart + 63
-			for valast >= vb.start && vastart <= vb.last {
+			for valast >= vb.start && vastart <= vb.last && i < 1024 {
 				if vastart >= vb.start && valast <= vb.last { // a within b
-					if int(i) >= len(a.bitmap) {
-						fmt.Printf("debugn: vb: %v, i: %v, len(a.bitmap): %v, len(output.bitmap): %v\n", vb, i, len(a.bitmap), len(output.bitmap))
-					}
 					output.bitmap[i] = a.bitmap[i]
 					output.n += int(popcnt(a.bitmap[i]))
 				} else if vb.start >= vastart && vb.last <= valast { // b within a
