@@ -143,4 +143,11 @@ func TestInputDefinition_LoadDefinition(t *testing.T) {
 	if !strings.Contains(err.Error(), "duplicate rowID with other field") {
 		t.Fatalf("Expected duplicate rowID with other field error, actual error: %s", err)
 	}
+
+	action = internal.Action{ValueDestination: "single-row-boolean", RowID: 100}
+	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
+	err = input.LoadDefinition(def)
+	if !strings.Contains(err.Error(), "frame required") {
+		t.Fatalf("Expected frame required error, actual error: %s", err)
+	}
 }

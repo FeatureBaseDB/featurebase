@@ -282,6 +282,9 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 }
 
 func (i *InputDefinition) ValidateAction(action *internal.Action) error {
+	if action.Frame == "" {
+		return ErrFrameRequired
+	}
 	validValues := make(map[string]bool)
 	for _, val := range ValidValueDestination {
 		validValues[val] = true
