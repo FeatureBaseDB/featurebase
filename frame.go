@@ -34,6 +34,7 @@ const (
 	DefaultRowLabel       = "rowID"
 	DefaultCacheType      = CacheTypeRanked
 	DefaultInverseEnabled = false
+	DefaultRangeEnabled   = false
 
 	// Default ranked frame cache
 	DefaultCacheSize = 50000
@@ -46,6 +47,7 @@ type Frame struct {
 	index       string
 	name        string
 	timeQuantum TimeQuantum
+	schema      *FrameSchema
 
 	views map[string]*View
 
@@ -59,6 +61,7 @@ type Frame struct {
 	rowLabel       string
 	cacheType      string
 	inverseEnabled bool
+	rangeEnabled   bool
 
 	// Cache size for ranked frames
 	cacheSize uint32
@@ -74,9 +77,10 @@ func NewFrame(path, index, name string) (*Frame, error) {
 	}
 
 	return &Frame{
-		path:  path,
-		index: index,
-		name:  name,
+		path:   path,
+		index:  index,
+		name:   name,
+		schema: &FrameSchema{},
 
 		views:        make(map[string]*View),
 		rowAttrStore: NewAttrStore(filepath.Join(path, ".data")),
@@ -86,6 +90,7 @@ func NewFrame(path, index, name string) (*Frame, error) {
 
 		rowLabel:       DefaultRowLabel,
 		inverseEnabled: DefaultInverseEnabled,
+		rangeEnabled:   DefaultRangeEnabled,
 		cacheType:      DefaultCacheType,
 		cacheSize:      DefaultCacheSize,
 
@@ -172,6 +177,11 @@ func (f *Frame) InverseEnabled() bool {
 	return f.inverseEnabled
 }
 
+// RangeEnabled returns true if range fields can be stored on this frame.
+func (f *Frame) RangeEnabled() bool {
+	return f.rangeEnabled
+}
+
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
 // defaults to DefaultCacheSize 50000
 func (f *Frame) SetCacheSize(v uint32) error {
@@ -206,6 +216,7 @@ func (f *Frame) Options() FrameOptions {
 	opt := FrameOptions{
 		RowLabel:       f.rowLabel,
 		InverseEnabled: f.inverseEnabled,
+		RangeEnabled:   f.rangeEnabled,
 		CacheType:      f.cacheType,
 		CacheSize:      f.cacheSize,
 		TimeQuantum:    f.timeQuantum,
@@ -223,6 +234,8 @@ func (f *Frame) Open() error {
 		}
 
 		if err := f.loadMeta(); err != nil {
+			return err
+		} else if err := f.loadSchema(); err != nil {
 			return err
 		}
 
@@ -286,6 +299,7 @@ func (f *Frame) loadMeta() error {
 		f.rowLabel = DefaultRowLabel
 		f.cacheType = DefaultCacheType
 		f.inverseEnabled = DefaultInverseEnabled
+		f.rangeEnabled = DefaultRangeEnabled
 		f.cacheSize = DefaultCacheSize
 		return nil
 	} else if err != nil {
@@ -300,6 +314,7 @@ func (f *Frame) loadMeta() error {
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
 	f.inverseEnabled = pb.InverseEnabled
+	f.rangeEnabled = pb.RangeEnabled
 	f.cacheSize = pb.CacheSize
 
 	// Copy cache type.
@@ -317,6 +332,7 @@ func (f *Frame) saveMeta() error {
 	buf, err := proto.Marshal(&internal.FrameMeta{
 		RowLabel:       f.rowLabel,
 		InverseEnabled: f.inverseEnabled,
+		RangeEnabled:   f.rangeEnabled,
 		CacheType:      f.cacheType,
 		CacheSize:      f.cacheSize,
 		TimeQuantum:    string(f.timeQuantum),
@@ -330,6 +346,35 @@ func (f *Frame) saveMeta() error {
 		return err
 	}
 
+	return nil
+}
+
+// loadSchema reads the schema for the frame.
+func (f *Frame) loadSchema() error {
+	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".schema"))
+	if os.IsNotExist(err) {
+		f.schema = &FrameSchema{}
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	var pb internal.FrameSchema
+	if err := proto.Unmarshal(buf, &pb); err != nil {
+		return err
+	}
+	f.schema = decodeFrameSchema(&pb)
+
+	return nil
+}
+
+// saveSchema writes the current schema to disk.
+func (f *Frame) saveSchema() error {
+	if buf, err := proto.Marshal(encodeFrameSchema(f.schema)); err != nil {
+		return err
+	} else if err := ioutil.WriteFile(filepath.Join(f.path, ".schema"), buf, 0666); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -350,6 +395,13 @@ func (f *Frame) Close() error {
 	f.views = make(map[string]*View)
 
 	return nil
+}
+
+// Schema returns the frame's current schema.
+func (f *Frame) Schema() *FrameSchema {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.schema
 }
 
 // TimeQuantum returns the time quantum for the frame.
@@ -619,6 +671,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 		Meta: &internal.FrameMeta{
 			RowLabel:       f.rowLabel,
 			InverseEnabled: f.inverseEnabled,
+			RangeEnabled:   f.rangeEnabled,
 			CacheType:      f.cacheType,
 			CacheSize:      f.cacheSize,
 			TimeQuantum:    string(f.timeQuantum),
@@ -648,9 +701,11 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 type FrameOptions struct {
 	RowLabel       string      `json:"rowLabel,omitempty"`
 	InverseEnabled bool        `json:"inverseEnabled,omitempty"`
+	RangeEnabled   bool        `json:"rangeEnabled,omitempty"`
 	CacheType      string      `json:"cacheType,omitempty"`
 	CacheSize      uint32      `json:"cacheSize,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
+	Fields         []*Field    `json:"fields,omitempty"`
 }
 
 // Encode converts o into its internal representation.
@@ -658,9 +713,112 @@ func (o *FrameOptions) Encode() *internal.FrameMeta {
 	return &internal.FrameMeta{
 		RowLabel:       o.RowLabel,
 		InverseEnabled: o.InverseEnabled,
+		RangeEnabled:   o.RangeEnabled,
 		CacheType:      o.CacheType,
 		CacheSize:      o.CacheSize,
 		TimeQuantum:    string(o.TimeQuantum),
+	}
+}
+
+// FrameSchema represents the list of fields on a frame.
+type FrameSchema struct {
+	Fields []*Field
+}
+
+func encodeFrameSchema(schema *FrameSchema) *internal.FrameSchema {
+	if schema == nil {
+		return nil
+	}
+	return &internal.FrameSchema{
+		Fields: encodeFields(schema.Fields),
+	}
+}
+
+func decodeFrameSchema(schema *internal.FrameSchema) *FrameSchema {
+	if schema == nil {
+		return nil
+	}
+	return &FrameSchema{
+		Fields: decodeFields(schema.Fields),
+	}
+}
+
+// List of field data types.
+const (
+	FieldTypeInt = "int"
+)
+
+func IsValidFieldType(v string) bool {
+	switch v {
+	case FieldTypeInt:
+		return true
+	default:
+		return false
+	}
+}
+
+// Field represents a range field on a frame.
+type Field struct {
+	Name string `json:"name,omitempty"`
+	Type string `json:"type,omitempty"`
+	Min  int    `json:"min,omitempty"`
+	Max  int    `json:"max,omitempty"`
+}
+
+func ValidateField(f *Field) error {
+	if f.Name == "" {
+		return ErrFieldNameRequired
+	} else if !IsValidFieldType(f.Type) {
+		return ErrInvalidFieldType
+	} else if f.Min > f.Max {
+		return ErrInvalidFieldRange
+	}
+	return nil
+}
+
+func encodeFields(a []*Field) []*internal.Field {
+	if len(a) == 0 {
+		return nil
+	}
+	other := make([]*internal.Field, len(a))
+	for i := range a {
+		other[i] = encodeField(a[i])
+	}
+	return other
+}
+
+func decodeFields(a []*internal.Field) []*Field {
+	if len(a) == 0 {
+		return nil
+	}
+	other := make([]*Field, len(a))
+	for i := range a {
+		other[i] = decodeField(a[i])
+	}
+	return other
+}
+
+func encodeField(f *Field) *internal.Field {
+	if f == nil {
+		return nil
+	}
+	return &internal.Field{
+		Name: f.Name,
+		Type: f.Type,
+		Min:  int64(f.Min),
+		Max:  int64(f.Max),
+	}
+}
+
+func decodeField(f *internal.Field) *Field {
+	if f == nil {
+		return nil
+	}
+	return &Field{
+		Name: f.Name,
+		Type: f.Type,
+		Min:  int(f.Min),
+		Max:  int(f.Max),
 	}
 }
 
