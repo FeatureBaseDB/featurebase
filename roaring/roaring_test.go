@@ -86,6 +86,14 @@ func TestContainerTransitions(t *testing.T) {
 	if !reflect.DeepEqual(b.Slice(), []uint64{0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 132000, 132001, 132002, 132003, 132004, 132005}) {
 		t.Fatalf("unexpected slice: %+v", b.Slice())
 	}
+
+	// Test the case where last and first bits of adjoining containers are set.
+	// [run][array][run]
+	b2 := roaring.NewBitmap(65531, 65532, 65533, 65534, 65535, 65536, 131071, 131072, 131073, 131074, 131075, 131076)
+	b2.Optimize() // convert to runs
+	if !reflect.DeepEqual(b2.Slice(), []uint64{65531, 65532, 65533, 65534, 65535, 65536, 131071, 131072, 131073, 131074, 131075, 131076}) {
+		t.Fatalf("unexpected slice: %+v", b2.Slice())
+	}
 }
 
 // Ensure an empty bitmap returns false if checking for existence.
