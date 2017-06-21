@@ -94,19 +94,19 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 	}
 
 	numPrimaryKey := 0
-	countRowID := make(map[uint64]bool)
+	countRowID := make(map[string]uint64)
 	for _, field := range pb.Fields {
 		var actions []Action
 		for _, action := range field.Actions {
 			if err := i.ValidateAction(action); err != nil {
 				return err
 			}
-			if action.RowID != 0 {
-				_, ok := countRowID[action.RowID]
-				if !ok {
-					countRowID[action.RowID] = true
-				} else {
+			if action.RowID != 0 && action.Frame != ""{
+				val, ok := countRowID[action.Frame]
+				if ok && val == action.RowID {
 					return fmt.Errorf("duplicate rowID with other field: %s", action.RowID)
+				} else {
+					countRowID[action.Frame] = action.RowID
 				}
 			}
 			actions = append(actions, Action{
