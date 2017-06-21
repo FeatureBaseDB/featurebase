@@ -115,6 +115,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
+	router.HandleFunc("/index/{index}/input/{input-definition}", handler.handlePostInput).Methods("POST")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetInputDefinition).Methods("GET")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
@@ -1510,6 +1511,7 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	fmt.Println()
 
 	// Find index.
 	index := h.Holder.Index(indexName)
@@ -1603,3 +1605,34 @@ func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Req
 }
 
 type postInputDefinitionResponse struct{}
+
+func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	inputDefName := mux.Vars(r)["input-definition"]
+
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+
+	// Decode request.
+	var reqs []interface{}
+	err := json.NewDecoder(r.Body).Decode(&reqs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	for _, req := range reqs {
+		definition := index.inputDefinition(inputDefName)
+		err = index.JSONParser(req.(map[string]interface{}), definition)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+}
+
+

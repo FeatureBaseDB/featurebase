@@ -94,19 +94,19 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 	}
 
 	numPrimaryKey := 0
-	countRowID := make(map[uint64]bool)
+	countRowID := make(map[string]uint64)
+	var actions []Action
 	for _, field := range pb.Fields {
-		var actions []Action
 		for _, action := range field.Actions {
 			if err := i.ValidateAction(action); err != nil {
 				return err
 			}
-			if action.RowID != 0 {
-				_, ok := countRowID[action.RowID]
-				if !ok {
-					countRowID[action.RowID] = true
-				} else {
+			if action.RowID != 0 && action.Frame != ""{
+				val, ok := countRowID[action.Frame]
+				if ok && val == action.RowID {
 					return fmt.Errorf("duplicate rowID with other field: %s", action.RowID)
+				} else {
+					countRowID[action.Frame] = action.RowID
 				}
 			}
 			actions = append(actions, Action{
@@ -116,7 +116,7 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 				RowID:            action.RowID,
 			})
 		}
-
+		fmt.Println(actions)
 		if field.PrimaryKey {
 			numPrimaryKey += 1
 		}
@@ -280,18 +280,17 @@ func (i *InputDefinition) ValidateAction(action *internal.Action) error {
 	if _, ok := validValues[action.ValueDestination]; !ok {
 		return fmt.Errorf("invalid ValueDestination: %s", action.ValueDestination)
 	}
-
+	fmt.Println("ACTION", action.ValueDestination)
 	switch action.ValueDestination {
 	case "map":
 		if len(action.ValueMap) == 0 {
 			return errors.New("valueMap required for map")
 		}
 	case "stringToBool":
+		fmt.Println("HERR", action.RowID)
 		if action.RowID == 0 {
 			return errors.New("rowID required for stringToBool")
 		}
-	default:
-		return nil
 	}
 
 	return nil
