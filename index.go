@@ -27,6 +27,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"reflect"
 )
 
 // Default index settings.
@@ -753,5 +754,51 @@ func (i *Index) openInputDefinition() error {
 		}
 
 	}
+	return nil
+}
+
+
+func (i *Index) JSONParser(req map[string]interface{}, inputDef *InputDefinition) error {
+	fmt.Println(i.Frames)
+	for _, field := range inputDef.fields{
+		if _, ok := req[field.Name]; !ok {
+			return fmt.Errorf("field not found")
+		}
+		for _, action := range field.Actions {
+			switch action.ValueDestination {
+			case "map":
+				err := i.MapAction(action.Frame, action.ValueMap, req[field.Name].(string))
+				if err != nil {
+					return fmt.Errorf("Error map value: %s", err)
+				}
+			case "stringToBool":
+				fmt.Println("HERE")
+				err := i.StringToBool(action.Frame, action.RowID, req[field.Name].(bool))
+				if err != nil {
+					return fmt.Errorf("Error map value: %s", err)
+				}
+			case "valueToRow":
+				err := i.ValueToRow(action.Frame, field.Name, req[field.Name].(uint64))
+				if err != nil {
+					return fmt.Errorf("Error map value: %s", err)
+				}
+			}
+		}
+	}
+	val := reflect.ValueOf(Action{})
+	for i := 0; i < val.Type().NumField(); i++{
+		fmt.Println(val.Type().Field(i).Type)
+	}
+	return nil
+}
+func (i *Index) MapAction(frame string, valueMap map[string]uint64, value string) error{
+	return nil
+}
+
+func (i *Index) StringToBool(frame string, rowID uint64, value bool) error{
+	return nil
+}
+
+func (i *Index) ValueToRow(frame, name string, value uint64) error{
 	return nil
 }
