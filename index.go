@@ -387,6 +387,30 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, ErrColumnRowLabelEqual
 	}
 
+	// Validate mutually exclusive options if ranges are enabled.
+	//
+	// NOTE(https://github.com/pilosa/pilosa/issues/399):
+	// Cache type should be validated as "none" once it is allowed.
+	if opt.RangeEnabled {
+		if opt.InverseEnabled {
+			return nil, ErrInverseRangeNotAllowed
+		} else if opt.CacheType != "" && opt.CacheType != CacheTypeLRU {
+			return nil, ErrRangeCacheNotAllowed
+		}
+		opt.CacheSize = 0
+	} else {
+		if len(opt.Fields) > 0 {
+			return nil, ErrFrameFieldsNotAllowed
+		}
+	}
+
+	// Validate fields.
+	for _, field := range opt.Fields {
+		if err := ValidateField(field); err != nil {
+			return nil, err
+		}
+	}
+
 	// Initialize frame.
 	f, err := i.newFrame(i.FramePath(name), name)
 	if err != nil {
@@ -424,6 +448,15 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 
 	f.inverseEnabled = opt.InverseEnabled
 	if err := f.saveMeta(); err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	// Set schema & save.
+	f.schema = &FrameSchema{
+		Fields: opt.Fields,
+	}
+	if err := f.saveSchema(); err != nil {
 		f.Close()
 		return nil, err
 	}

@@ -13,6 +13,7 @@ message FrameMeta {
 	string CacheType = 3;
 	uint32 CacheSize = 4;
 	string TimeQuantum = 5;
+	bool RangeEnabled = 6;
 }
 
 message ImportResponse {
@@ -87,4 +88,15 @@ message NodeStatus {
 
 message ClusterStatus {
     repeated NodeStatus Nodes = 1;
+}
+
+message FrameSchema {
+    repeated Field Fields = 1;
+}
+
+message Field {
+    string Name = 1;
+    string Type = 2;
+    int64 Min = 3;
+    int64 Max = 4;
 }
