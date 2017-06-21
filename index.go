@@ -651,7 +651,9 @@ func (i *Index) createInputDefinition(pb *internal.InputDefinition) (*InputDefin
 		return nil, err
 	}
 
-	inputDef.LoadDefinition(pb)
+	if err = inputDef.LoadDefinition(pb); err != nil {
+		return nil, err
+	}
 	if err = inputDef.saveMeta(); err != nil {
 		return nil, err
 	}
