@@ -25,7 +25,13 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-var ValidValueDestination = []string{"mapping", "value-to-row", "single-row-boolean"}
+const (
+	Mapping       = "mapping"
+	ValueToRow    = "value-to-row"
+	SingleRowBool = "single-row-boolean"
+)
+
+var ValidValueDestination = []string{Mapping, ValueToRow, SingleRowBool}
 
 // InputDefinition represents a container for the data input definition.
 type InputDefinition struct {
@@ -116,7 +122,6 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 				RowID:            &action.RowID,
 			})
 		}
-
 		if field.PrimaryKey {
 			numPrimaryKey += 1
 		}
@@ -213,12 +218,17 @@ type Field struct {
 }
 
 // Encode converts Field into its internal representation.
-func (o *Field) Encode() *internal.InputDefinitionField {
+func (o *Field) Encode() (*internal.InputDefinitionField, error) {
 	field := internal.InputDefinitionField{Name: o.Name, PrimaryKey: o.PrimaryKey}
+
 	for _, action := range o.Actions {
-		field.Actions = append(field.Actions, action.Encode())
+		actionEncode, err := action.Encode()
+		if err != nil {
+			return nil, err
+		}
+		field.Actions = append(field.Actions, actionEncode)
 	}
-	return &field
+	return &field, nil
 }
 
 // Action descripes the mapping method for the field in the InputDefinition.
@@ -230,22 +240,23 @@ type Action struct {
 }
 
 // Encode converts Action into its internal representation.
-func (o *Action) Encode() *internal.Action {
+func (o *Action) Encode() (*internal.Action, error) {
+	if o.RowID == nil && o.ValueDestination == "single-row-boolean" {
+		return nil, errors.New("rowID required for single-row-boolean")
+	}
 	return &internal.Action{
 		Frame:            o.Frame,
 		ValueDestination: o.ValueDestination,
 		ValueMap:         o.ValueMap,
 		RowID:            convert(o.RowID),
-	}
+	}, nil
 }
 
 func convert(x *uint64) uint64 {
 	if x != nil {
 		return *x
 	}
-	var v int64 = -1
-	var v2 uint64 = uint64(v)
-	return v2
+	return 0
 }
 
 // InputFrame defines the frame used in the input definition.
@@ -261,16 +272,20 @@ type InputDefinitionInfo struct {
 }
 
 // Encode converts InputDefinitionInfo into its internal representation.
-func (i *InputDefinitionInfo) Encode() *internal.InputDefinition {
+func (i *InputDefinitionInfo) Encode() (*internal.InputDefinition, error) {
 	var def internal.InputDefinition
 	for _, f := range i.Frames {
 		def.Frames = append(def.Frames, &internal.Frame{Name: f.Name, Meta: f.Options.Encode()})
 	}
 	for _, f := range i.Fields {
-		def.Fields = append(def.Fields, f.Encode())
+		fEncode, err := f.Encode()
+		if err != nil {
+			return nil, err
+		}
+		def.Fields = append(def.Fields, fEncode)
 	}
 
-	return &def
+	return &def, nil
 }
 
 func (i *InputDefinition) AddFrame(frame InputFrame) error {
@@ -292,15 +307,10 @@ func (i *InputDefinition) ValidateAction(action *internal.Action) error {
 	if _, ok := validValues[action.ValueDestination]; !ok {
 		return fmt.Errorf("invalid ValueDestination: %s", action.ValueDestination)
 	}
-
 	switch action.ValueDestination {
-	case "mapping":
+	case Mapping:
 		if len(action.ValueMap) == 0 {
 			return errors.New("valueMap required for map")
-		}
-	case "single-row-boolean":
-		if int64(action.RowID) == -1 {
-			return errors.New("rowID required for single-row-boolean")
 		}
 	}
 	return nil

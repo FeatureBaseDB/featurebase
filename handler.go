@@ -1518,7 +1518,11 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	def := req.Encode()
+	def, err := req.Encode()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	def.Name = inputDefName
 
 	// Create InputDefinition.
