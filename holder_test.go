@@ -19,12 +19,230 @@ import (
 	"context"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/pql"
 )
+
+func TestHolder_Open(t *testing.T) {
+	t.Run("ErrIndexName", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if err := os.Mkdir(h.IndexPath("!"), 0777); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.Reopen(); err != nil {
+			t.Fatal(err)
+		} else if logOutput := h.LogOutput.String(); !strings.Contains(logOutput, `ERROR opening index: !`) {
+			t.Fatalf("expected log error:\n%s", logOutput)
+		}
+	})
+
+	t.Run("ErrIndexPermission", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if err := os.Chmod(h.IndexPath("test"), 0000); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(h.IndexPath("test"), 0777)
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+	t.Run("ErrIndexMetaCorrupt", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if err := os.Truncate(filepath.Join(h.IndexPath("test"), ".meta"), 2); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "unexpected EOF") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+	t.Run("ErrIndexAttrStoreCorrupt", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if err := os.Truncate(filepath.Join(h.IndexPath("test"), ".data"), 2); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=test, err=invalid database") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("ErrFramePermission", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar"), 0000); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(filepath.Join(h.Path, "foo", "bar"), 0777)
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+	t.Run("ErrFrameMetaCorrupt", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", ".meta"), 2); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=open frame: name=bar, err=unexpected EOF") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+	t.Run("ErrFrameAttrStoreCorrupt", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", ".data"), 2); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=open frame: name=bar, err=invalid database") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("ErrViewPermission", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+			t.Fatal(err)
+		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard"), 0000); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard"), 0777)
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+	t.Run("ErrViewFragmentsMkdir", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+			t.Fatal(err)
+		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments"), 0000); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments"), 0777)
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		} else if view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+			t.Fatal(err)
+		} else if _, err := view.SetBit(0, 0); err != nil {
+			t.Fatal(err)
+		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 0000); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 0666)
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+	t.Run("ErrFragmentStorageCorrupt", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		} else if view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+			t.Fatal(err)
+		} else if _, err := view.SetBit(0, 0); err != nil {
+			t.Fatal(err)
+		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 2); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open fragment: slice=0, err=unmarshal storage") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("ErrFragmentCachePermission", func(t *testing.T) {
+		h := MustOpenHolder()
+		defer h.Close()
+
+		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		} else if view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+			t.Fatal(err)
+		} else if _, err := view.SetBit(0, 0); err != nil {
+			t.Fatal(err)
+		} else if err := view.Fragment(0).FlushCache(); err != nil {
+			t.Fatal(err)
+		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0.cache"), 0000); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0.cache"), 0666)
+
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+}
 
 // Ensure holder can delete an index and its underlying files.
 func TestHolder_DeleteIndex(t *testing.T) {
@@ -209,6 +427,23 @@ func MustOpenHolder() *Holder {
 func (h *Holder) Close() error {
 	defer os.RemoveAll(h.Path)
 	return h.Holder.Close()
+}
+
+// Reopen closes the holder and instantiates and opens a new holder.
+func (h *Holder) Reopen() error {
+	if err := h.Holder.Close(); err != nil {
+		return err
+	}
+
+	path, logOutput := h.Path, h.Holder.LogOutput
+	h.Holder = pilosa.NewHolder()
+	h.Holder.Path = path
+	h.Holder.LogOutput = logOutput
+	if err := h.Holder.Open(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // MustCreateIndexIfNotExists returns a given index. Panic on error.

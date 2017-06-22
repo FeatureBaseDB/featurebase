@@ -24,8 +24,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -475,6 +477,7 @@ func (s *Server) monitorRuntime() {
 		return
 	}
 
+	var m runtime.MemStats
 	ticker := time.NewTicker(s.MetricInterval)
 	defer ticker.Stop()
 
@@ -496,7 +499,41 @@ func (s *Server) monitorRuntime() {
 
 		// Record the number of go routines
 		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
+
+		// Open File handles
+		s.Holder.Stats.Gauge("OpenFiles", float64(CountOpenFiles()), 1.0)
+
+		// Runtime memory metrics
+		runtime.ReadMemStats(&m)
+		s.Holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
+		s.Holder.Stats.Gauge("HeapInuse", float64(m.HeapInuse), 1.0)
+		s.Holder.Stats.Gauge("StackInuse", float64(m.StackInuse), 1.0)
+		s.Holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
+		s.Holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
 	}
+}
+
+// CountOpenFiles on opperating systems that support lsof
+func CountOpenFiles() int {
+	count := 0
+
+	switch runtime.GOOS {
+	case "darwin", "linux", "unix", "freebsd":
+		// -b option avoid kernel blocks
+		pid := os.Getpid()
+		out, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("lsof -b -p %v", pid)).Output()
+		if err != nil {
+			log.Fatal(err)
+		}
+		// only count lines with our pid, avoiding warning messages from -b
+		lines := strings.Split(string(out), strconv.Itoa(pid))
+		count = len(lines)
+	case "windows":
+		// TODO: count open file handles on windows
+	default:
+
+	}
+	return count
 }
 
 // StatusHandler specifies two methods which an object must implement to share

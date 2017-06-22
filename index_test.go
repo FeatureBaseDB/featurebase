@@ -17,6 +17,7 @@ package pilosa_test
 import (
 	"io/ioutil"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -85,6 +86,123 @@ func TestIndex_CreateFrame(t *testing.T) {
 				t.Fatal(err)
 			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YM") {
 				t.Fatalf("unexpected frame time quantum: %s", q)
+			}
+		})
+	})
+
+	// Ensure frame can include range columns.
+	t.Run("RangeEnabled", func(t *testing.T) {
+		t.Run("OK", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
+
+			// Create frame with schema and verify it exists.
+			if f, err := index.CreateFrame("f", pilosa.FrameOptions{
+				RangeEnabled: true,
+				Fields: []*pilosa.Field{
+					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
+					{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
+				},
+			}); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(f.Schema(), &pilosa.FrameSchema{
+				Fields: []*pilosa.Field{
+					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
+					{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
+				},
+			}) {
+				t.Fatalf("unexpected schema: %#v", f.Schema())
+			}
+
+			// Reopen the index & verify the fields are loaded.
+			if err := index.Reopen(); err != nil {
+				t.Fatal(err)
+			} else if f := index.Frame("f"); !reflect.DeepEqual(f.Schema(), &pilosa.FrameSchema{
+				Fields: []*pilosa.Field{
+					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
+					{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
+				},
+			}) {
+				t.Fatalf("unexpected schema after reopen: %#v", f.Schema())
+			}
+		})
+
+		t.Run("ErrInverseRangeNotAllowed", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
+
+			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				InverseEnabled: true,
+				RangeEnabled:   true,
+			}); err != pilosa.ErrInverseRangeNotAllowed {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("ErrRangeCacheNotAllowed", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
+
+			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				RangeEnabled: true,
+				CacheType:    pilosa.CacheTypeRanked,
+			}); err != pilosa.ErrRangeCacheNotAllowed {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("ErrFrameFieldsNotAllowed", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
+
+			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				Fields: []*pilosa.Field{
+					{Name: "field0", Type: pilosa.FieldTypeInt},
+				},
+			}); err != pilosa.ErrFrameFieldsNotAllowed {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("ErrFieldNameRequired", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
+
+			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				RangeEnabled: true,
+				Fields: []*pilosa.Field{
+					{Name: "", Type: pilosa.FieldTypeInt},
+				},
+			}); err != pilosa.ErrFieldNameRequired {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("ErrInvalidFieldType", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
+
+			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				RangeEnabled: true,
+				Fields: []*pilosa.Field{
+					{Name: "field0", Type: "bad_type"},
+				},
+			}); err != pilosa.ErrInvalidFieldType {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("ErrInvalidFieldRange", func(t *testing.T) {
+			index := MustOpenIndex()
+			defer index.Close()
+
+			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				RangeEnabled: true,
+				Fields: []*pilosa.Field{
+					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 100, Max: 50},
+				},
+			}); err != pilosa.ErrInvalidFieldRange {
+				t.Fatal(err)
 			}
 		})
 	})
