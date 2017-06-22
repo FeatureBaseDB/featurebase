@@ -422,12 +422,55 @@ func TestBitmap_Flip_After(t *testing.T) {
 
 // Ensure bitmap can return the number of intersecting bits in two bitmaps.
 func TestBitmap_IntersectionCount_ArrayArray(t *testing.T) {
-	bm0 := roaring.NewBitmap(0, 1000001, 1000002, 1000003)
+	bm0 := roaring.NewBitmap(0, 1, 1000001, 1000002, 1000003)
 	bm1 := roaring.NewBitmap(0, 50000, 1000001, 1000002)
 
 	if n := bm0.IntersectionCount(bm1); n != 3 {
 		t.Fatalf("unexpected n: %d", n)
 	} else if n := bm1.IntersectionCount(bm0); n != 3 {
+		t.Fatalf("unexpected n (reverse): %d", n)
+	}
+}
+
+// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+func TestBitmap_IntersectionCount_ArrayRun(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 1000001, 1000002, 1000003)
+	bm1 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 1000000, 1000002, 1000003, 1000004, 1000005, 1000006)
+	bm1.Optimize() // convert to runs
+
+	if n := bm0.IntersectionCount(bm1); n != 3 {
+		t.Fatalf("unexpected n: %d", n)
+	} else if n := bm1.IntersectionCount(bm0); n != 3 {
+		t.Fatalf("unexpected n (reverse): %d", n)
+	}
+}
+
+// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+func TestBitmap_IntersectionCount_RunRun(t *testing.T) {
+	bm0 := roaring.NewBitmap(3, 4, 5, 6, 7, 8, 1000001, 1000002, 1000003, 1000004)
+	bm0.Optimize() // convert to runs
+	bm1 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 1000000, 1000002, 1000003, 1000004, 1000005, 1000006)
+	bm1.Optimize() // convert to runs
+
+	if n := bm0.IntersectionCount(bm1); n != 6 {
+		t.Fatalf("unexpected n: %d", n)
+	} else if n := bm1.IntersectionCount(bm0); n != 6 {
+		t.Fatalf("unexpected n (reverse): %d", n)
+	}
+}
+
+// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+func TestBitmap_IntersectionCount_BitmapRun(t *testing.T) {
+	bm0 := roaring.NewBitmap()
+	for i := uint64(3); i <= 1000006; i += 2 {
+		bm0.Add(i)
+	}
+	bm1 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 1000000, 1000002, 1000003, 1000004, 1000005, 1000006)
+	bm1.Optimize() // convert to runs
+
+	if n := bm0.IntersectionCount(bm1); n != 4 {
+		t.Fatalf("unexpected n: %d", n)
+	} else if n := bm1.IntersectionCount(bm0); n != 4 {
 		t.Fatalf("unexpected n (reverse): %d", n)
 	}
 }
