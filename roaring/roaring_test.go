@@ -242,11 +242,39 @@ func TestBitmap_Difference(t *testing.T) {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
+
 func TestBitmap_Difference_Empty(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177)
 	bm1 := roaring.NewBitmap()
 	result := bm0.Difference(bm1)
 	if n := result.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_DifferenceArrayArray(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 4, 8, 12, 16, 20)
+	bm1 := roaring.NewBitmap(1, 3, 6, 9, 12, 15, 18)
+	result := bm0.Difference(bm1)
+	if n := result.Count(); n != 5 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_DifferenceArrayRun(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 4, 8, 12, 16, 20, 36, 40, 44)
+
+	bm1 := roaring.NewBitmap(1, 2, 3, 4, 5, 6, 7, 8, 9, 30, 31, 32, 33, 34, 35, 36)
+	bm1.Optimize() // convert to runs
+	result := bm0.Difference(bm1)
+	if n := result.Count(); n != 6 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// ensure empty array returns empty
+	bm2 := roaring.NewBitmap()
+	result = bm2.Difference(bm1)
+	if n := result.Count(); n != 0 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
