@@ -22,7 +22,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -720,34 +719,4 @@ func (i *Index) openInputDefinition() error {
 
 	}
 	return nil
-}
-
-// MapAction Process the input data and set a bit
-func (i *Index) MapAction(a *Action, value, f string, colID uint64) error {
-	rowID, ok := a.ValueMap[value]
-	if !ok {
-		return fmt.Errorf("Value %s does not exist in definition map", value)
-	}
-	_, err := i.Frame(f).SetBit(ViewStandard, rowID, colID, nil)
-	return err
-}
-
-// ValueToRow Sets a bitmap with rowID from the input value
-func (i *Index) ValueToRow(a *Action, value, f string, colID uint64) error {
-	rowID, err := strconv.ParseUint(value, 10, 64)
-	if err != nil {
-		return err
-	}
-	_, err = i.Frame(f).SetBit(ViewStandard, rowID, colID, nil)
-	return err
-}
-
-// SingleRowBoolean Sets a bitmap with rowID from the Action defintion
-func (i *Index) SingleRowBoolean(a *Action, value, f string, colID uint64) error {
-	rowID, err := strconv.ParseUint(value, 10, 64)
-	if err != nil {
-		return err
-	}
-	_, err = i.Frame(f).SetBit(ViewStandard, rowID, colID, nil)
-	return err
 }
