@@ -107,7 +107,7 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 			if err := i.ValidateAction(action); err != nil {
 				return err
 			}
-			if action.RowID != 0 && action.Frame != "" {
+			if action.ValueDestination == SingleRowBool && action.Frame != "" {
 				val, ok := countRowID[action.Frame]
 				if ok && val == action.RowID {
 					return fmt.Errorf("duplicate rowID with other field: %v", action.RowID)
