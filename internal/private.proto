@@ -89,10 +89,10 @@ message InputDefinition {
 message InputDefinitionField {
     string Name = 1;
     bool PrimaryKey = 2;
-    repeated Action Actions = 3;
+    repeated InputDefinitionAction InputDefinitionActions = 3;
 }
 
-message Action {
+message InputDefinitionAction {
     string Frame = 1;
     string ValueDestination = 2;
     map<string, uint64> ValueMap = 3;

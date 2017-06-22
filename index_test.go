@@ -247,8 +247,8 @@ func TestIndex_CreateInputDefinition(t *testing.T) {
 
 	// Create Input Definition.
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
-	action := internal.Action{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
-	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
+	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
 	inputDef, err := index.CreateInputDefinition(&def)
 	if err != nil {
@@ -266,8 +266,8 @@ func TestIndex_CreateExistingInputDefinition(t *testing.T) {
 
 	// Create Input Definition.
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
-	action := internal.Action{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
-	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
+	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
 	_, err := index.CreateInputDefinition(&def)
 	if err != nil {
@@ -297,8 +297,8 @@ func TestIndex_DeleteInputDefinition(t *testing.T) {
 
 	// Create Input Definition.
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
-	action := internal.Action{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
-	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
+	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
 	_, err := index.CreateInputDefinition(&def)
 	if err != nil {
@@ -321,8 +321,8 @@ func TestIndex_CreateFrameWhenOpenInputDefinition(t *testing.T) {
 
 	// Create Input Definition.
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
-	action := internal.Action{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
-	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
+	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
 	input, err := index.CreateInputDefinition(&def)
 	if err != nil {

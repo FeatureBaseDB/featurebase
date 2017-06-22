@@ -103,7 +103,7 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 	countRowID := make(map[string]uint64)
 	for _, field := range pb.Fields {
 		var actions []Action
-		for _, action := range field.Actions {
+		for _, action := range field.InputDefinitionActions {
 			if err := i.ValidateAction(action); err != nil {
 				return err
 			}
@@ -175,9 +175,9 @@ func (i *InputDefinition) saveMeta() error {
 
 	var fields []*internal.InputDefinitionField
 	for _, field := range i.fields {
-		var actions []*internal.Action
+		var actions []*internal.InputDefinitionAction
 		for _, action := range field.Actions {
-			actionMeta := &internal.Action{
+			actionMeta := &internal.InputDefinitionAction{
 				Frame:            action.Frame,
 				ValueDestination: action.ValueDestination,
 				ValueMap:         action.ValueMap,
@@ -187,9 +187,9 @@ func (i *InputDefinition) saveMeta() error {
 		}
 
 		fieldMeta := &internal.InputDefinitionField{
-			Name:       field.Name,
-			PrimaryKey: field.PrimaryKey,
-			Actions:    actions,
+			Name:                   field.Name,
+			PrimaryKey:             field.PrimaryKey,
+			InputDefinitionActions: actions,
 		}
 		fields = append(fields, fieldMeta)
 	}
@@ -226,7 +226,7 @@ func (o *Field) Encode() (*internal.InputDefinitionField, error) {
 		if err != nil {
 			return nil, err
 		}
-		field.Actions = append(field.Actions, actionEncode)
+		field.InputDefinitionActions = append(field.InputDefinitionActions, actionEncode)
 	}
 	return &field, nil
 }
@@ -240,11 +240,11 @@ type Action struct {
 }
 
 // Encode converts Action into its internal representation.
-func (o *Action) Encode() (*internal.Action, error) {
+func (o *Action) Encode() (*internal.InputDefinitionAction, error) {
 	if o.RowID == nil && o.ValueDestination == "single-row-boolean" {
 		return nil, errors.New("rowID required for single-row-boolean")
 	}
-	return &internal.Action{
+	return &internal.InputDefinitionAction{
 		Frame:            o.Frame,
 		ValueDestination: o.ValueDestination,
 		ValueMap:         o.ValueMap,
@@ -296,7 +296,7 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	return nil
 }
 
-func (i *InputDefinition) ValidateAction(action *internal.Action) error {
+func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction) error {
 	if action.Frame == "" {
 		return ErrFrameRequired
 	}
