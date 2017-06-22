@@ -27,7 +27,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
-	"reflect"
 )
 
 // Default index settings.
@@ -724,48 +723,72 @@ func (i *Index) openInputDefinition() error {
 	return nil
 }
 
-
-func (i *Index) JSONParser(req map[string]interface{}, inputDef *InputDefinition) error {
-	fmt.Println(i.Frames)
-	for _, field := range inputDef.fields{
-		if _, ok := req[field.Name]; !ok {
-			return fmt.Errorf("field not found")
+func (i *Index) JSONParser(req map[string]interface{}, name string) error {
+	inputDef := i.inputDefinition(name)
+	if inputDef == nil {
+		return ErrInputDefinitionNotFound
+	}
+	// if field in input data is not in defined definition, return error
+	validFields := make(map[string]bool)
+	for _, field := range inputDef.Fields() {
+		validFields[field.Name] = true
+	}
+	for key, _ := range req {
+		_, ok := validFields[key]
+		if !ok {
+			fmt.Errorf("field not found", key)
 		}
+	}
+
+	for _, field := range inputDef.Fields() {
+		// skip field that defined in definition but not in input data
+		if _, ok := req[field.Name]; !ok {
+			continue
+		}
+
 		for _, action := range field.Actions {
 			switch action.ValueDestination {
-			case "map":
+			case "mapping":
+				value, ok := req[field.Name].(string)
+				if !ok {
+					return fmt.Errorf("String type required, got %s:%s", field.Name, value)
+				}
 				err := i.MapAction(action.Frame, action.ValueMap, req[field.Name].(string))
 				if err != nil {
-					return fmt.Errorf("Error map value: %s", err)
+					return fmt.Errorf("Error action mapping : %s", err)
 				}
-			case "stringToBool":
-				fmt.Println("HERE")
-				err := i.StringToBool(action.Frame, action.RowID, req[field.Name].(bool))
-				if err != nil {
-					return fmt.Errorf("Error map value: %s", err)
+			case "single-row-boolean":
+				value, ok := req[field.Name].(bool)
+				if !ok {
+					return fmt.Errorf("Bool type required, got %s:%s", field.Name, req[field.Name])
 				}
-			case "valueToRow":
-				err := i.ValueToRow(action.Frame, field.Name, req[field.Name].(uint64))
+				err := i.StringRowBoolean(action.Frame, action.RowID, value)
 				if err != nil {
-					return fmt.Errorf("Error map value: %s", err)
+					return fmt.Errorf("Error action single-row-boolean : %s", err)
+				}
+			case "value-to-row":
+				value, ok := req[field.Name].(float64)
+				if !ok {
+					return fmt.Errorf("Float type required, got %s:%s", field.Name, req[field.Name])
+				}
+				err := i.ValueToRow(action.Frame, field.Name, uint64(value))
+				if err != nil {
+					return fmt.Errorf("Error action value-to-row: %s", err)
 				}
 			}
 		}
 	}
-	val := reflect.ValueOf(Action{})
-	for i := 0; i < val.Type().NumField(); i++{
-		fmt.Println(val.Type().Field(i).Type)
-	}
+
 	return nil
 }
-func (i *Index) MapAction(frame string, valueMap map[string]uint64, value string) error{
+func (i *Index) MapAction(frame string, valueMap map[string]uint64, value string) error {
 	return nil
 }
 
-func (i *Index) StringToBool(frame string, rowID uint64, value bool) error{
+func (i *Index) StringRowBoolean(frame string, rowID *uint64, value bool) error {
 	return nil
 }
 
-func (i *Index) ValueToRow(frame, name string, value uint64) error{
+func (i *Index) ValueToRow(frame, name string, value uint64) error {
 	return nil
 }

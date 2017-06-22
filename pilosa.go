@@ -30,12 +30,14 @@ var (
 	ErrIndexNotFound = errors.New("index not found")
 
 	// ErrFrameRequired is returned when no frame is specified.
-	ErrFrameRequired         = errors.New("frame required")
-	ErrFrameExists           = errors.New("frame already exists")
-	ErrInputDefinitionExists = errors.New("input-definition already exists")
-	ErrFrameNotFound         = errors.New("frame not found")
-	ErrFrameInverseDisabled  = errors.New("frame inverse disabled")
-	ErrColumnRowLabelEqual   = errors.New("column and row labels cannot be equal")
+	ErrFrameRequired        = errors.New("frame required")
+	ErrFrameExists          = errors.New("frame already exists")
+	ErrFrameNotFound        = errors.New("frame not found")
+	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
+	ErrColumnRowLabelEqual  = errors.New("column and row labels cannot be equal")
+
+	ErrInputDefinitionExists   = errors.New("input-definition already exists")
+	ErrInputDefinitionNotFound = errors.New("input-definition not found")
 
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")

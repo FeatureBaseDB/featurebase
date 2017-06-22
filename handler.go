@@ -1520,7 +1520,11 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	def := req.Encode()
+	def, err := req.Encode()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	def.Name = inputDefName
 
 	// Create InputDefinition.
@@ -1617,7 +1621,6 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
 	// Decode request.
 	var reqs []interface{}
 	err := json.NewDecoder(r.Body).Decode(&reqs)
@@ -1626,13 +1629,13 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, req := range reqs {
-		definition := index.inputDefinition(inputDefName)
-		err = index.JSONParser(req.(map[string]interface{}), definition)
-		if err != nil {
+		err = index.JSONParser(req.(map[string]interface{}), inputDefName)
+		if err == ErrInputDefinitionNotFound {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		} else if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 	}
 }
-
-
