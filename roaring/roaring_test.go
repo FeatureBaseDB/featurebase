@@ -258,6 +258,70 @@ func TestBitmap_Intersection_Empty(t *testing.T) {
 
 }
 
+func TestBitmap_IntersectArrayArray(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 1, 2683, 5005)
+	bm1 := roaring.NewBitmap(0, 2683, 2684, 5000)
+
+	result := bm0.Intersect(bm1)
+	if n := result.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_IntersectBitmapBitmap(t *testing.T) {
+	bm0 := roaring.NewBitmap()
+	for i := uint64(0); i < 65536; i += 2 {
+		bm0.Add(i)
+	}
+
+	bm1 := roaring.NewBitmap()
+	for i := uint64(0); i < 65536; i += 3 {
+		bm1.Add(i)
+	}
+
+	result := bm0.Intersect(bm1)
+	if n := result.Count(); n != 10923 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_IntersectRunRun(t *testing.T) {
+	// Intersect two runs that result in an array.
+	bm0 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15)
+	bm0.Optimize() // convert to runs
+	bm1 := roaring.NewBitmap(5, 6, 7, 8, 9, 10, 11)
+	bm1.Optimize() // convert to runs
+	result := bm0.Intersect(bm1)
+	if n := result.Count(); n != 3 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// Intersect two runs that result in a bitmap.
+	bm2 := roaring.NewBitmap()
+	runLen := uint64(25)
+	spaceLen := uint64(8)
+	offset := (runLen / 2) + spaceLen
+	for i := uint64(0); i < (65536 - runLen - offset); i += (runLen + spaceLen) {
+		for j := uint64(0); j < runLen; j++ {
+			bm2.Add(offset + i + j)
+		}
+	}
+	bm2.Optimize() // convert to runs
+	bm3 := roaring.NewBitmap()
+	runLen = uint64(32)
+	spaceLen = uint64(1)
+	for i := uint64(0); i < (65536 - runLen); i += (runLen + spaceLen) {
+		for j := uint64(0); j < runLen; j++ {
+			bm3.Add(i + j)
+		}
+	}
+	bm3.Optimize() // convert to runs
+	result = bm2.Intersect(bm3)
+	if n := result.Count(); n != 47628 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
 func TestBitmap_Difference(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177)
 	bm1 := roaring.NewBitmap()
@@ -701,7 +765,7 @@ func TestIterator(t *testing.T) {
 	}
 }
 
-//testBM creates a bitmap with 3 containers(an array,bitmap, and run)
+// testBM creates a bitmap with 3 containers: array, bitmap, and run.
 func testBM() *roaring.Bitmap {
 
 	bm := roaring.NewBitmap()
