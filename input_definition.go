@@ -257,9 +257,7 @@ func convert(x *uint64) uint64 {
 	if x != nil {
 		return *x
 	}
-	var v int64 = -1
-	var v2 uint64 = uint64(v)
-	return v2
+	return 0
 }
 
 // InputFrame defines the frame used in the input definition.
