@@ -651,6 +651,7 @@ func testBM() *roaring.Bitmap {
 	for i := uint64(0); i < 65535; i += 1 {
 		bm.Add((4 << 16) + i)
 	}
+	bm.Optimize()
 	//count 75007
 	return bm
 }
@@ -667,6 +668,19 @@ func TestBitmapOffsetRange(t *testing.T) {
 		t.Fatalf("Not Equal %d %d", bm1.Count(), 256)
 	}
 
+}
+func TestBitmapContains(t *testing.T) {
+	bm := testBM()
+
+	//search for run value present
+	if found := bm.Contains(3 << 16); !found {
+		t.Fatalf("Test #1 Not Found %d ", 3<<16)
+	}
+
+	//search for value not present
+	if found := bm.Contains((3 << 16) + 2048); found {
+		t.Fatalf("Test #2 Found %d ", (3<<16)+2048)
+	}
 }
 
 func TestBitmapBufIterator(t *testing.T) {
