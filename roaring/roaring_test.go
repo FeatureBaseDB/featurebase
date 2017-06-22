@@ -270,13 +270,6 @@ func TestBitmap_DifferenceArrayRun(t *testing.T) {
 	if n := result.Count(); n != 6 {
 		t.Fatalf("unexpected n: %d", n)
 	}
-
-	// ensure empty array returns empty
-	bm2 := roaring.NewBitmap()
-	result = bm2.Difference(bm1)
-	if n := result.Count(); n != 0 {
-		t.Fatalf("unexpected n: %d", n)
-	}
 }
 
 func TestBitmap_Union(t *testing.T) {
