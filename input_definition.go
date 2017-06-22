@@ -19,9 +19,19 @@ import (
 	"os"
 	"path/filepath"
 
+	"errors"
+	"fmt"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
+
+const (
+	Mapping       = "mapping"
+	ValueToRow    = "value-to-row"
+	SingleRowBool = "single-row-boolean"
+)
+
+var ValidValueDestination = []string{Mapping, ValueToRow, SingleRowBool}
 
 // InputDefinition represents a container for the data input definition.
 type InputDefinition struct {
@@ -89,15 +99,35 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 		i.frames = append(i.frames, inputFrame)
 	}
 
+	numPrimaryKey := 0
+	countRowID := make(map[string]uint64)
 	for _, field := range pb.Fields {
 		var actions []Action
 		for _, action := range field.Actions {
+			if err := i.ValidateAction(action); err != nil {
+				return err
+			}
+			if action.ValueDestination == SingleRowBool && action.Frame != "" {
+				val, ok := countRowID[action.Frame]
+				if ok && val == action.RowID {
+					return fmt.Errorf("duplicate rowID with other field: %v", action.RowID)
+				} else {
+					countRowID[action.Frame] = action.RowID
+				}
+			}
 			actions = append(actions, Action{
 				Frame:            action.Frame,
 				ValueDestination: action.ValueDestination,
 				ValueMap:         action.ValueMap,
-				RowID:            action.RowID,
+				RowID:            &action.RowID,
 			})
+		}
+		if field.PrimaryKey {
+			numPrimaryKey += 1
+		}
+
+		if numPrimaryKey > 1 {
+			return errors.New("duplicate primaryKey with other field")
 		}
 
 		inputField := Field{
@@ -151,7 +181,7 @@ func (i *InputDefinition) saveMeta() error {
 				Frame:            action.Frame,
 				ValueDestination: action.ValueDestination,
 				ValueMap:         action.ValueMap,
-				RowID:            action.RowID,
+				RowID:            convert(action.RowID),
 			}
 			actions = append(actions, actionMeta)
 		}
@@ -188,12 +218,17 @@ type Field struct {
 }
 
 // Encode converts Field into its internal representation.
-func (o *Field) Encode() *internal.InputDefinitionField {
+func (o *Field) Encode() (*internal.InputDefinitionField, error) {
 	field := internal.InputDefinitionField{Name: o.Name, PrimaryKey: o.PrimaryKey}
+
 	for _, action := range o.Actions {
-		field.Actions = append(field.Actions, action.Encode())
+		actionEncode, err := action.Encode()
+		if err != nil {
+			return nil, err
+		}
+		field.Actions = append(field.Actions, actionEncode)
 	}
-	return &field
+	return &field, nil
 }
 
 // Action descripes the mapping method for the field in the InputDefinition.
@@ -201,17 +236,27 @@ type Action struct {
 	Frame            string            `json:"frame,omitempty"`
 	ValueDestination string            `json:"valueDestination,omitempty"`
 	ValueMap         map[string]uint64 `json:"valueMap,omitempty"`
-	RowID            uint64            `json:"rowID,omitempty"`
+	RowID            *uint64           `json:"rowID,omitempty"`
 }
 
 // Encode converts Action into its internal representation.
-func (o *Action) Encode() *internal.Action {
+func (o *Action) Encode() (*internal.Action, error) {
+	if o.RowID == nil && o.ValueDestination == "single-row-boolean" {
+		return nil, errors.New("rowID required for single-row-boolean")
+	}
 	return &internal.Action{
 		Frame:            o.Frame,
 		ValueDestination: o.ValueDestination,
 		ValueMap:         o.ValueMap,
-		RowID:            o.RowID,
+		RowID:            convert(o.RowID),
+	}, nil
+}
+
+func convert(x *uint64) uint64 {
+	if x != nil {
+		return *x
 	}
+	return 0
 }
 
 // InputFrame defines the frame used in the input definition.
@@ -227,22 +272,46 @@ type InputDefinitionInfo struct {
 }
 
 // Encode converts InputDefinitionInfo into its internal representation.
-func (i *InputDefinitionInfo) Encode() *internal.InputDefinition {
+func (i *InputDefinitionInfo) Encode() (*internal.InputDefinition, error) {
 	var def internal.InputDefinition
 	for _, f := range i.Frames {
 		def.Frames = append(def.Frames, &internal.Frame{Name: f.Name, Meta: f.Options.Encode()})
 	}
 	for _, f := range i.Fields {
-		def.Fields = append(def.Fields, f.Encode())
+		fEncode, err := f.Encode()
+		if err != nil {
+			return nil, err
+		}
+		def.Fields = append(def.Fields, fEncode)
 	}
 
-	return &def
+	return &def, nil
 }
 
 func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	i.frames = append(i.frames, frame)
 	if err := i.saveMeta(); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (i *InputDefinition) ValidateAction(action *internal.Action) error {
+	if action.Frame == "" {
+		return ErrFrameRequired
+	}
+	validValues := make(map[string]bool)
+	for _, val := range ValidValueDestination {
+		validValues[val] = true
+	}
+	if _, ok := validValues[action.ValueDestination]; !ok {
+		return fmt.Errorf("invalid ValueDestination: %s", action.ValueDestination)
+	}
+	switch action.ValueDestination {
+	case Mapping:
+		if len(action.ValueMap) == 0 {
+			return errors.New("valueMap required for map")
+		}
 	}
 	return nil
 }

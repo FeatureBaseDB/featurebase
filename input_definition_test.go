@@ -20,6 +20,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
+	"strings"
 )
 
 func TestInputDefinition_Open(t *testing.T) {
@@ -28,7 +29,7 @@ func TestInputDefinition_Open(t *testing.T) {
 
 	// Create Input Definition.
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
-	action := internal.Action{Frame: "f", ValueDestination: "map", ValueMap: map[string]uint64{"Green": 1}}
+	action := internal.Action{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
 	inputDef, err := index.CreateInputDefinition(&def)
@@ -79,7 +80,10 @@ func TestInputDefinition_Encoding(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	internalDef := def.Encode()
+	internalDef, err := def.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if internalDef.Frames[0].Name != "event-time" {
 		t.Fatalf("unexpected frame: %v", internalDef)
@@ -91,5 +95,59 @@ func TestInputDefinition_Encoding(t *testing.T) {
 		t.Fatalf("unexpected number of Actions: %v", internalDef.Fields[1].Actions)
 	} else if internalDef.Fields[1].Actions[0].ValueDestination != "mapping" {
 		t.Fatalf("unexpected ValueDestination: %v", internalDef.Fields[1].Actions[0])
+	}
+}
+
+func TestInputDefinition_LoadDefinition(t *testing.T) {
+	index := MustOpenIndex()
+	defer index.Close()
+
+	// Create Input Definition.
+	input := pilosa.InputDefinition{}
+	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
+	action := internal.Action{Frame: "f", ValueDestination: "value-to-ROW", ValueMap: map[string]uint64{"Green": 1}}
+	field := internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	def := &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
+	err := input.LoadDefinition(def)
+	if !strings.Contains(err.Error(), "invalid ValueDestination") {
+		t.Fatalf("Expected invalid ValueDestination error, actual error: %s", err)
+	}
+
+	act := pilosa.Action{Frame: "f", ValueDestination: pilosa.SingleRowBool, ValueMap: map[string]uint64{"Green": 1}}
+	_, err = act.Encode()
+	if !strings.Contains(err.Error(), "rowID required for single-row-boolean") {
+		t.Fatalf("Expected rowID required for single-row-boolean error, actual error: %s", err)
+	}
+
+	action = internal.Action{Frame: "f", ValueDestination: pilosa.Mapping, RowID: 100}
+	field = internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action}}
+	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
+	err = input.LoadDefinition(def)
+	if !strings.Contains(err.Error(), "valueMap required for map") {
+		t.Fatalf("Expected valueMap required for map error, actual error: %s", err)
+	}
+
+	action = internal.Action{Frame: "f", ValueDestination: pilosa.SingleRowBool, RowID: 100}
+	action1 := internal.Action{Frame: "f", ValueDestination: pilosa.SingleRowBool, RowID: 0}
+	field1 := internal.InputDefinitionField{Name: "newID", PrimaryKey: true, Actions: []*internal.Action{&action1}}
+	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field, &field1}}
+	err = input.LoadDefinition(def)
+	if !strings.Contains(err.Error(), "duplicate primaryKey with other field") {
+		t.Fatalf("Expected duplicate primaryKey error, actual error: %s", err)
+	}
+
+	action1 = internal.Action{Frame: "f", ValueDestination: pilosa.SingleRowBool, RowID: 100}
+	field1 = internal.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []*internal.Action{&action1}}
+	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field, &field1}}
+	err = input.LoadDefinition(def)
+	if !strings.Contains(err.Error(), "duplicate rowID with other field") {
+		t.Fatalf("Expected duplicate rowID with other field error, actual error: %s", err)
+	}
+
+	action = internal.Action{ValueDestination: pilosa.SingleRowBool, RowID: 100}
+	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
+	err = input.LoadDefinition(def)
+	if !strings.Contains(err.Error(), "frame required") {
+		t.Fatalf("Expected frame required error, actual error: %s", err)
 	}
 }
