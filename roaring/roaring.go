@@ -453,7 +453,6 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 		}
 
 	}
-
 	return output
 }
 
@@ -2488,29 +2487,37 @@ func differenceArrayRun(a, b *container) *container {
 	i := 0 // array index
 	j := 0 // run index
 
-	// keep all array elements before beginning of runs
-	for ; i < len(a.array) && a.array[i] < b.runs[j].start; i++ {
-		output.array = append(output.array, a.array[i])
-	}
-
 	// handle overlap
-	for ; i < a.n; i++ {
-		// if array element in run, keep
-		if !(a.array[i] >= b.runs[j].start && a.array[i] <= b.runs[j].last) {
-			output.array = append(output.array, a.array[i])
+	for i < a.n {
+
+		// keep all array elements before beginning of runs
+		if a.array[i] < b.runs[j].start {
+			output.add(a.array[i])
+			i++
+			continue
 		}
-		// update current run
-		if a.array[i] >= b.runs[j].last {
+
+		// if array element in run, skip it
+		if a.array[i] >= b.runs[j].start && a.array[i] <= b.runs[j].last {
+			i++
+			continue
+		}
+
+		// if array element larger than current run, check next run
+		if a.array[i] > b.runs[j].last {
 			j++
 			if j == len(b.runs) {
 				break
 			}
 		}
 	}
-	i++
+
 	if i < len(a.array) {
 		// keep all array elements after end of runs
 		output.array = append(output.array, a.array[i:]...)
+		// TODO: consider handling container.n mutations in one place
+		// like we do with container.add().
+		output.n += len(a.array[i:])
 	}
 	return output
 }
