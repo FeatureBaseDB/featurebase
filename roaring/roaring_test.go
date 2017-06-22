@@ -163,7 +163,8 @@ func TestBitmap_Max(t *testing.T) {
 		}
 	}
 }
-func TestBitmap_CountRange(t *testing.T) {
+
+func TestBitmap_BitmapCountRange(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177)
 	for i := uint64(628); i < 2683301; i++ {
 		bm0.Add(i)
@@ -182,6 +183,32 @@ func TestBitmap_CountRange(t *testing.T) {
 	}
 
 	if n := bm0.CountRange(0, 1); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// Test the case where the range is outside of the bitmap space.
+	if n := bm0.CountRange(10000000, 10000001); n != 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_ArrayCountRange(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 2683177, 2683313)
+	if n := bm0.CountRange(1, 2683311); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_RunCountRange(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17, 1000000, 1000002, 1000003, 1000004, 1000005, 1000006, 1000010, 1000011, 1000012, 1000013, 1000014)
+	bm0.Optimize() // convert to runs
+	if n := bm0.CountRange(15, 1000003); n != 5 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	bm1 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
+	bm1.Optimize() // convert to runs
+	if n := bm1.CountRange(5, 12); n != 7 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
