@@ -217,6 +217,10 @@ func TestBitmap_Union1(t *testing.T) {
 	if n := result.Count(); n != 75009 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+	result = bm.Union(bm)
+	if n := result.Count(); n != 75007 {
+		t.Fatalf("unexpected n: %d", n)
+	}
 
 }
 
@@ -267,6 +271,16 @@ func TestBitmap_Xor(t *testing.T) {
 	if n := result.Count(); n != 75011 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+
+	result = bm0.Xor(bm1)
+	if n := result.Count(); n != 75011 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	result = bm0.Xor(bm0)
+	if n := result.Count(); n != 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
 }
 
 func TestBitmap_Xor_ArrayArray(t *testing.T) {
@@ -304,13 +318,18 @@ func TestBitmap_Xor_ArrayBitmap(t *testing.T) {
 
 	result := bm0.Xor(bm1)
 	if n := result.Count(); n != 4999 {
-		t.Fatalf("unexpected n: %d", n)
+		t.Fatalf("test #1 unexpected n: %d", n)
+	}
+
+	result = bm1.Xor(bm0)
+	if n := result.Count(); n != 4999 {
+		t.Fatalf("test #2 unexpected n: %d", n)
 	}
 
 	//equivalence bitmap test
 	result = result.Xor(result)
 	if n := result.Count(); n > 0 {
-		t.Fatalf("unexpected n: %d", n)
+		t.Fatalf("test 3 unexpected n: %d", n)
 	}
 
 	empty := roaring.NewBitmap()

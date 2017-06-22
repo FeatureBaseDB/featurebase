@@ -2751,12 +2751,24 @@ func xor(a, b *container) *container {
 	if a.isArray() {
 		if b.isArray() {
 			return xorArrayArray(a, b)
+		} else if b.isRun() {
+			return xorArrayRun(a, b)
 		} else {
 			return xorArrayBitmap(a, b)
+		}
+	} else if a.isRun() {
+		if b.isArray() {
+			return xorArrayRun(b, a)
+		} else if b.isRun() {
+			return xorRunRun(a, b)
+		} else {
+			return xorBitmapRun(b, a)
 		}
 	} else {
 		if b.isArray() {
 			return xorArrayBitmap(b, a)
+		} else if b.isRun() {
+			return xorBitmapRun(a, b)
 		} else {
 			return xorBitmapBitmap(a, b)
 		}
@@ -2813,7 +2825,6 @@ func xorBitmapBitmap(a, b *container) *container {
 	output := &container{
 		bitmap: make([]uint64, bitmapN),
 	}
-
 	for i := 0; i < bitmapN; i++ {
 		v := a.bitmap[i] ^ b.bitmap[i]
 		output.bitmap[i] = v
@@ -3232,7 +3243,7 @@ func xorCompare(x *xorstm) (r1 interval32, has_data bool) {
 		has_data = true
 	} else if x.vb.last < x.va.start { //vb before
 		x.vb_valid = false
-		r1 = x.va
+		r1 = x.vb
 		has_data = true
 	} else if x.va.start == x.vb.start && x.va.last == x.vb.last { // Equal
 		x.va_valid = false

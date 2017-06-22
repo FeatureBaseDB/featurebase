@@ -1624,9 +1624,41 @@ func TestXorArrayRun(t *testing.T) {
 	b := &container{runs: []interval32{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
 	exp := []uint32{1, 2, 3, 4, 6, 7, 8, 9, 11, 13, 15, 16}
 
-	ret := xorArrayRun(a, b)
+	//ret := xorArrayRun(a, b)
+	ret := xor(a, b)
 	if !reflect.DeepEqual(ret.array, exp) {
-		t.Fatalf("test expected %v, but got %v", exp, ret.array)
+		t.Fatalf("test #1 expected %v, but got %v", exp, ret.array)
+	}
+
+	ret = xor(b, a)
+	if !reflect.DeepEqual(ret.array, exp) {
+		t.Fatalf("test #2 expected %v, but got %v", exp, ret.array)
+	}
+	c := &container{array: []uint32{1, 5, 10, 11, 12, 13, 14}}
+	exp = []uint32{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}
+	ret = xor(b, c)
+	if !reflect.DeepEqual(ret.array, exp) {
+		t.Fatalf("test #3 expected %v, but got %v", exp, ret.array)
+	}
+	ret = xor(c, b)
+	if !reflect.DeepEqual(ret.array, exp) {
+		t.Fatalf("test #4 expected %v, but got %v", exp, ret.array)
+	}
+}
+
+//special case that didn't fit the xorrunrun table testing below.
+func TestXorRunRun1(t *testing.T) {
+	a := &container{}
+	b := &container{}
+	a.runs = []interval32{{start: 4, last: 10}}
+	b.runs = []interval32{{start: 5, last: 10}}
+	ret := xorRunRun(a, b)
+	if !reflect.DeepEqual(ret.array, []uint32{4}) {
+		t.Fatalf("test #1 expected %v, but got %v", []uint32{4}, ret.array)
+	}
+	ret = xorRunRun(b, a)
+	if !reflect.DeepEqual(ret.array, []uint32{4}) {
+		t.Fatalf("test #1 expected %v, but got %v", []uint32{4}, ret.array)
 	}
 }
 
@@ -1716,6 +1748,10 @@ func TestXorRunRun(t *testing.T) {
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
 		}
+		ret = xorRunRun(b, a)
+		if !reflect.DeepEqual(ret.runs, test.exp) {
+			t.Fatalf("test #%v.1 expected %v, but got %v", i, test.exp, ret.runs)
+		}
 	}
 }
 
@@ -1804,10 +1840,14 @@ func TestXorBitmapRun(t *testing.T) {
 	for i, test := range tests {
 		a.bitmap = test.bitmap
 		b.runs = test.runs
-		ret := xorBitmapRun(a, b)
-
+		//xorBitmapRun
+		ret := xor(a, b)
 		if !reflect.DeepEqual(ret.bitmap, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.bitmap)
+		}
+		ret = xor(b, a)
+		if !reflect.DeepEqual(ret.bitmap, test.exp) {
+			t.Fatalf("test #%v.1 expected %v, but got %v", i, test.exp, ret.bitmap)
 		}
 	}
 
