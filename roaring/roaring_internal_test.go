@@ -705,30 +705,36 @@ func TestDifferenceMixed(t *testing.T) {
 	a := &container{}
 	b := &container{}
 	c := &container{}
+	d := &container{}
 
 	a.runs = []interval32{{start: 5, last: 10}}
 	a.n = a.runCountRange(0, 100)
 
-	b.array = []uint32{1, 4, 5, 7, 10, 11, 12}
+	b.array = []uint32{0, 2, 4, 6, 8, 10, 12}
 	b.n = len(b.array)
+
+	d.array = []uint32{1, 3, 5, 7, 9, 11, 12}
+	d.n = len(d.array)
+
 	res := difference(a, b)
 
-	if !reflect.DeepEqual(res.array, []uint32{6, 8, 9}) {
-		t.Fatalf("test #1 expected %v, but got %v", []uint32{6, 8, 9}, res.runs)
+	if !reflect.DeepEqual(res.array, []uint32{5, 7, 9}) {
+		t.Fatalf("test #1 expected %v, but got %v", []uint32{5, 7, 9}, res.array)
 	}
+
 	res = difference(b, a)
-	if !reflect.DeepEqual(res.array, []uint32{1, 4, 11, 12}) {
-		t.Fatalf("test #2 expected %v, but got %v", []uint32{1, 4, 11, 12}, res.array)
+	if !reflect.DeepEqual(res.array, []uint32{0, 2, 4, 12}) {
+		t.Fatalf("test #2 expected %v, but got %v", []uint32{0, 2, 4, 12}, res.array)
 	}
 
 	res = difference(a, a)
 	if !reflect.DeepEqual(res.runs, []interval32{}) {
 		t.Fatalf("test #3 expected empty but got %v", res.runs)
 	}
+
 	c.bitmap = []uint64{0x64}
 	c.n = c.countRange(0, 100)
 	res = difference(c, a)
-
 	if !reflect.DeepEqual(res.bitmap, []uint64{0x4}) {
 		t.Fatalf("test #4 expected %v, but got %v", []uint32{4}, res.bitmap)
 	}
@@ -739,12 +745,33 @@ func TestDifferenceMixed(t *testing.T) {
 	}
 
 	res = difference(b, c)
-	if !reflect.DeepEqual(res.array, []uint32{1, 4, 7, 10, 11, 12}) {
-		t.Fatalf("test #6 expected %v, but got %v", []uint32{1, 4, 7, 10, 11, 12}, res.array)
+	if !reflect.DeepEqual(res.array, []uint32{0, 4, 8, 10, 12}) {
+		t.Fatalf("test #6 expected %v, but got %v", []uint32{0, 4, 8, 10, 12}, res.array)
 	}
+
 	res = difference(c, b)
-	if !reflect.DeepEqual(res.array, []uint32{2, 6}) {
-		t.Fatalf("test #7 expected %v, but got %v", []uint32{2, 6}, res.array)
+	if !reflect.DeepEqual(res.array, []uint32{5}) {
+		t.Fatalf("test #7 expected %v, but got %v", []uint32{5}, res.array)
+	}
+
+	res = difference(b, b)
+	if res.n != 0 {
+		t.Fatalf("test #8 expected 0, but got %d", res.n)
+	}
+
+	res = difference(c, c)
+	if res.n != 0 {
+		t.Fatalf("test #9 expected 0, but got %d", res.n)
+	}
+
+	res = difference(d, b)
+	if !reflect.DeepEqual(res.array, []uint32{1, 3, 5, 7, 9, 11}) {
+		t.Fatalf("test #10 expected %v, but got %d", []uint32{1, 3, 5, 7, 9, 11}, res.array)
+	}
+
+	res = difference(b, d)
+	if !reflect.DeepEqual(res.array, []uint32{0, 2, 4, 6, 8, 10}) {
+		t.Fatalf("test #11 expected %v, but got %d", []uint32{0, 2, 4, 6, 8, 10}, res.array)
 	}
 
 }
