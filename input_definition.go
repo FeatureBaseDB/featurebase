@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	"errors"
-	"fmt"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
@@ -341,13 +340,13 @@ func HandleAction(a *Action, value interface{}, colID uint64) (*Bit, error) {
 		switch value.(type) {
 		case bool:
 			if value.(bool) {
-				bit.RowID = a.RowID
+				bit.RowID = *a.RowID
 			} else { // value is not True.
 				return nil, err
 			}
 		case float64:
 			if value.(float64) >= 1 {
-				bit.RowID = a.RowID
+				bit.RowID = *a.RowID
 			} else { // value is not True.
 				return nil, err
 			}
@@ -357,7 +356,7 @@ func HandleAction(a *Action, value interface{}, colID uint64) (*Bit, error) {
 			v := strings.ToLower(value.(string))
 			i := sort.SearchStrings(valid, v)
 			if i < len(valid) && valid[i] == v {
-				bit.RowID = a.RowID
+				bit.RowID = *a.RowID
 			} else { // value is not True.
 				return nil, err
 			}
