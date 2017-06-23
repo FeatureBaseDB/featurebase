@@ -15,9 +15,12 @@
 package pilosa
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"errors"
 	"fmt"
@@ -295,7 +298,6 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	}
 	return nil
 }
-
 func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction) error {
 	if action.Frame == "" {
 		return ErrFrameRequired
@@ -314,4 +316,60 @@ func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction)
 		}
 	}
 	return nil
+}
+// HandleAction Process the input data with its action and return a bit to be imported later
+// Note: if the Bit should not be set then nil is returned with no error
+// From the JSON marshalling the possible types are: float64, boolean, string
+func HandleAction(a *Action, value interface{}, colID uint64) (*Bit, error) {
+	var err error
+	var bit Bit
+	bit.ColumnID = colID
+
+	switch a.ValueDestination {
+	case "mapping":
+		v, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("Mapping value must be a string %v", value)
+		}
+		bit.RowID, ok = a.ValueMap[v]
+		if !ok {
+			return nil, fmt.Errorf("Value %s does not exist in definition map", v)
+		}
+	case "single-row-boolean":
+		switch value.(type) {
+		case bool:
+			if value.(bool) {
+				bit.RowID = a.RowID
+			} else { // value is not True.
+				return nil, err
+			}
+		case float64:
+			if value.(float64) >= 1 {
+				bit.RowID = a.RowID
+			} else { // value is not True.
+				return nil, err
+			}
+		case string:
+			valid := []string{"t", "true", "y", "yes"}
+			// sort.Strings(valid)	// NOTE: This slice is already sorted. Please resort when adding more values.
+			v := strings.ToLower(value.(string))
+			i := sort.SearchStrings(valid, v)
+			if i < len(valid) && valid[i] == v {
+				bit.RowID = a.RowID
+			} else { // value is not True.
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("single-row-boolean value %v must equate to a Bool", value)
+		}
+	case "value-to-row":
+		v, ok := value.(float64)
+		if !ok {
+			return nil, fmt.Errorf("value-to-row value must be an integer %v", value)
+		}
+		bit.RowID = uint64(v)
+	default:
+		return nil, fmt.Errorf("Unrecognized Value Destination: %s in Action ", a.ValueDestination)
+	}
+	return &bit, err
 }
