@@ -1499,6 +1499,7 @@ func errorString(err error) string {
 	return err.Error()
 }
 
+// handlePOSTInputDefinition handles POST /input-definition request.
 func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]
@@ -1525,6 +1526,26 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 	}
 	def.Name = inputDefName
 
+	// Validate columnLabel & duplicate primaryKey
+	numPrimaryKey := 0
+	for _, field := range def.Fields {
+		if field.PrimaryKey {
+			numPrimaryKey += 1
+			if field.Name == index.columnLabel {
+				continue
+			} else {
+				err = fmt.Errorf("primary field's name not match columnLabel")
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	if numPrimaryKey > 1 {
+		err = errors.New("duplicate primaryKey with other field")
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	// Create InputDefinition.
 	_, err = index.CreateInputDefinition(def)
 	if err == ErrInputDefinitionExists {
@@ -1550,6 +1571,7 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// handleGetInputDefinition handles GET /input-definition request.
 func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]
@@ -1563,7 +1585,6 @@ func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	inputDef, _ := index.inputDefinitions[inputDefName]
-	//inputInfo := InputDefinitionInfo{Frames: inputDef.frames, Fields: inputDef.fields}
 	if err := json.NewEncoder(w).Encode(InputDefinitionInfo{
 		Frames: inputDef.frames,
 		Fields: inputDef.fields,
@@ -1573,6 +1594,7 @@ func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Reques
 
 }
 
+// handleDeleteInputDefinition handles DELETE /input-definition request.
 func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]

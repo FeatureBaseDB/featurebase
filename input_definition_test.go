@@ -128,16 +128,8 @@ func TestInputDefinition_LoadDefinition(t *testing.T) {
 	}
 
 	action = internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.SingleRowBool, RowID: 100}
-	action1 := internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.SingleRowBool, RowID: 0}
-	field1 := internal.InputDefinitionField{Name: "newID", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action1}}
-	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field, &field1}}
-	err = input.LoadDefinition(def)
-	if !strings.Contains(err.Error(), "duplicate primaryKey with other field") {
-		t.Fatalf("Expected duplicate primaryKey error, actual error: %s", err)
-	}
-
-	action1 = internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.SingleRowBool, RowID: 100}
-	field1 = internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action1}}
+	action1 := internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.SingleRowBool, RowID: 100}
+	field1 := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action1}}
 	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field, &field1}}
 	err = input.LoadDefinition(def)
 	if !strings.Contains(err.Error(), "duplicate rowID with other field") {

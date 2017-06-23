@@ -1084,7 +1084,7 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 			}],
 			"fields": [
 				{
-					"name": "id",
+					"name": "columnID",
 					"primaryKey": true
 				},
 				{
@@ -1112,6 +1112,80 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
+
+}
+
+//Ensure throwing error if there's duplicated primaryKey field
+func TestHandler_DuplicatePrimaryKey(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
+	inputBody1 := []byte(`
+			{
+			"frames":[{
+				"name":"event-time",
+				"options":{
+					"timeQuantum": "YMD",
+					"inverseEnabled": false,
+					"cacheType": "ranked"
+				}
+			}],
+			"fields": [
+				{
+					"name": "columnID",
+					"primaryKey": true
+				},
+				{
+					"name": "columnID",
+					"primaryKey": true
+				}
+			]
+		}`)
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input2", bytes.NewBuffer(inputBody1)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `duplicate primaryKey with other field`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
+// Eusure throwing error if primary field's name doesn't match columnLabel
+func TestHandler_UnmatchColumnID(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{ColumnLabel: "id"})
+	inputBody := []byte(`
+			{
+			"frames":[{
+				"name":"event-time",
+				"options":{
+					"timeQuantum": "YMD",
+					"inverseEnabled": false,
+					"cacheType": "ranked"
+				}
+			}],
+			"fields": [
+				{
+					"name": "columnID",
+					"primaryKey": true
+				}
+			]
+		}`)
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `primary field's name not match columnLabel`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+
 }
 
 // Ensure handler can delete a input definition.

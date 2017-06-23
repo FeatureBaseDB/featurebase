@@ -99,7 +99,6 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 		i.frames = append(i.frames, inputFrame)
 	}
 
-	numPrimaryKey := 0
 	countRowID := make(map[string]uint64)
 	for _, field := range pb.Fields {
 		var actions []Action
@@ -121,13 +120,6 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 				ValueMap:         action.ValueMap,
 				RowID:            &action.RowID,
 			})
-		}
-		if field.PrimaryKey {
-			numPrimaryKey += 1
-		}
-
-		if numPrimaryKey > 1 {
-			return errors.New("duplicate primaryKey with other field")
 		}
 
 		inputField := InputDefinitionField{
@@ -252,6 +244,7 @@ func (o *Action) Encode() (*internal.InputDefinitionAction, error) {
 	}, nil
 }
 
+// convert pointer to uint64
 func convert(x *uint64) uint64 {
 	if x != nil {
 		return *x
@@ -267,8 +260,8 @@ type InputFrame struct {
 
 // InputDefinitionInfo the json message format to create an InputDefinition.
 type InputDefinitionInfo struct {
-	Frames []InputFrame `json:"frames"`
-	Fields []InputDefinitionField      `json:"fields"`
+	Frames []InputFrame           `json:"frames"`
+	Fields []InputDefinitionField `json:"fields"`
 }
 
 // Encode converts InputDefinitionInfo into its internal representation.
@@ -288,6 +281,7 @@ func (i *InputDefinitionInfo) Encode() (*internal.InputDefinition, error) {
 	return &def, nil
 }
 
+// AddFrame adds frame to input definition
 func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	i.frames = append(i.frames, frame)
 	if err := i.saveMeta(); err != nil {
@@ -296,6 +290,7 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	return nil
 }
 
+// ValidateAction validate actions from input-definition
 func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction) error {
 	if action.Frame == "" {
 		return ErrFrameRequired
