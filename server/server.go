@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -102,9 +101,7 @@ func (m *Command) Run(args ...string) (err error) {
 		return fmt.Errorf("server.Open: %v", err)
 	}
 
-	logger := log.New(m.Server.LogOutput, "", log.LstdFlags) // TODO make this a function?
-
-	logger.Printf("Listening as http://%s\n", m.Server.Host)
+	m.Server.Logger().Printf("Listening as http://%s\n", m.Server.Host)
 	return nil
 }
 
@@ -136,10 +133,8 @@ func (m *Command) SetupServer() error {
 		m.Server.LogOutput = logFile
 	}
 
-	logger := log.New(m.Server.LogOutput, "", log.LstdFlags)
-
 	// Configure holder.
-	logger.Printf("Using data from: %s\n", m.Config.DataDir)
+	m.Server.Logger().Printf("Using data from: %s\n", m.Config.DataDir)
 	m.Server.Holder.Path = m.Config.DataDir
 	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollingInterval)
 	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
