@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/test"
 )
 
 // TestMultiStatClient_Expvar run the multistat client with exp var
 // since the EXPVAR data is stored in a global we should run these in one test function
 func TestMultiStatClient_Expvar(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
 	c := pilosa.NewExpvarStatsClient()
@@ -73,7 +74,7 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 }
 
 func TestStatsCount_TopN(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
@@ -83,7 +84,7 @@ func TestStatsCount_TopN(t *testing.T) {
 
 	// Execute query.
 	called := false
-	e := NewExecutor(hldr.Holder, NewCluster(1))
+	e := NewExecutor(hldr.Holder, test.NewCluster(1))
 	e.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "TopN" {
@@ -107,13 +108,13 @@ func TestStatsCount_TopN(t *testing.T) {
 }
 
 func TestStatsCount_Bitmap(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	called := false
-	e := NewExecutor(hldr.Holder, NewCluster(1))
+	e := NewExecutor(hldr.Holder, test.NewCluster(1))
 	e.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "Bitmap" {
@@ -137,14 +138,14 @@ func TestStatsCount_Bitmap(t *testing.T) {
 }
 
 func TestStatsCount_SetBitmapAttrs(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
 
 	called := false
-	e := NewExecutor(hldr.Holder, NewCluster(1))
+	e := NewExecutor(hldr.Holder, test.NewCluster(1))
 	frame := e.Holder.Frame("d", "f")
 	if frame == nil {
 		t.Fatal("frame not found")
@@ -168,14 +169,14 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 }
 
 func TestStatsCount_SetProfileAttrs(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
 
 	called := false
-	e := NewExecutor(hldr.Holder, NewCluster(1))
+	e := NewExecutor(hldr.Holder, test.NewCluster(1))
 	idx := e.Holder.Index("d")
 	if idx == nil {
 		t.Fatal("idex not found")
@@ -200,9 +201,9 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 }
 
 func TestStatsCount_CreateIndex(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	s := NewServer()
+	s := test.NewServer()
 	s.Handler.Holder = hldr.Holder
 	defer s.Close()
 	called := false
@@ -216,17 +217,17 @@ func TestStatsCount_CreateIndex(t *testing.T) {
 			return
 		},
 	}
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i", nil))
+	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i", nil))
 	if !called {
 		t.Error("Count isn't called")
 	}
 }
 
 func TestStatsCount_DeleteIndex(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	s := NewServer()
+	s := test.NewServer()
 	s.Handler.Holder = hldr.Holder
 	defer s.Close()
 
@@ -245,17 +246,17 @@ func TestStatsCount_DeleteIndex(t *testing.T) {
 			return
 		},
 	}
-	http.DefaultClient.Do(MustNewHTTPRequest("DELETE", s.URL+"/index/i", strings.NewReader("")))
+	http.DefaultClient.Do(test.MustNewHTTPRequest("DELETE", s.URL+"/index/i", strings.NewReader("")))
 	if !called {
 		t.Error("Count isn't called")
 	}
 }
 
 func TestStatsCount_CreateFrame(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	s := NewServer()
+	s := test.NewServer()
 	s.Handler.Holder = hldr.Holder
 	defer s.Close()
 
@@ -277,17 +278,17 @@ func TestStatsCount_CreateFrame(t *testing.T) {
 			return
 		},
 	}
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", nil))
+	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", nil))
 	if !called {
 		t.Error("Count isn't called")
 	}
 }
 
 func TestStatsCount_DeleteFrame(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	s := NewServer()
+	s := test.NewServer()
 	s.Handler.Holder = hldr.Holder
 	defer s.Close()
 	called := false
@@ -309,7 +310,7 @@ func TestStatsCount_DeleteFrame(t *testing.T) {
 			return
 		},
 	}
-	http.DefaultClient.Do(MustNewHTTPRequest("DELETE", s.URL+"/index/i/frame/f", strings.NewReader("")))
+	http.DefaultClient.Do(test.MustNewHTTPRequest("DELETE", s.URL+"/index/i/frame/f", strings.NewReader("")))
 	if !called {
 		t.Error("Count isn't called")
 	}
