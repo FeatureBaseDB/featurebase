@@ -129,7 +129,7 @@ func (s *Server) Open() error {
 	}
 
 	// Open holder.
-	if err := s.Holder.Open(); err != nil {
+	if err := s.Holder.Open(s.LogOutput); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
 
@@ -159,7 +159,6 @@ func (s *Server) Open() error {
 
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster
-	s.Holder.LogOutput = s.LogOutput
 
 	// Serve HTTP.
 	go func() { http.Serve(ln, s.Handler) }()
