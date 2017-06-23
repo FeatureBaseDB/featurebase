@@ -13,6 +13,7 @@ message FrameMeta {
 	string CacheType = 3;
 	uint32 CacheSize = 4;
 	string TimeQuantum = 5;
+	bool RangeEnabled = 6;
 }
 
 message ImportResponse {
@@ -89,10 +90,10 @@ message InputDefinition {
 message InputDefinitionField {
     string Name = 1;
     bool PrimaryKey = 2;
-    repeated Action Actions = 3;
+    repeated InputDefinitionAction InputDefinitionActions = 3;
 }
 
-message Action {
+message InputDefinitionAction {
     string Frame = 1;
     string ValueDestination = 2;
     map<string, uint64> ValueMap = 3;
@@ -119,4 +120,15 @@ message NodeStatus {
 
 message ClusterStatus {
     repeated NodeStatus Nodes = 1;
+}
+
+message FrameSchema {
+    repeated Field Fields = 1;
+}
+
+message Field {
+    string Name = 1;
+    string Type = 2;
+    int64 Min = 3;
+    int64 Max = 4;
 }

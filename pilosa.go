@@ -39,6 +39,13 @@ var (
 	ErrInputDefinitionExists   = errors.New("input-definition already exists")
 	ErrInputDefinitionNotFound = errors.New("input-definition not found")
 
+	ErrFieldNameRequired      = errors.New("field name required")
+	ErrInvalidFieldType       = errors.New("invalid field type")
+	ErrInvalidFieldRange      = errors.New("invalid field range")
+	ErrInverseRangeNotAllowed = errors.New("inverse range not allowed")
+	ErrRangeCacheNotAllowed   = errors.New("range cache not allowed")
+	ErrFrameFieldsNotAllowed  = errors.New("frame fields not allowed")
+
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 

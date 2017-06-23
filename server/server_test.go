@@ -25,7 +25,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -369,6 +371,42 @@ path = "/path/to/plugins"
 		t.Fatal(err)
 	} else if c.Plugins.Path != "/path/to/plugins" {
 		t.Fatalf("unexpected path: %s", c.Plugins.Path)
+	}
+}
+
+// tempMkdir makes a temporary directory
+func tempMkdir(t *testing.T) string {
+	dir, err := ioutil.TempDir("", "pilosatemp")
+	if err != nil {
+		t.Fatalf("failed to create test directory: %s", err)
+	}
+	return dir
+}
+
+// Ensure the file handle count is working
+func TestCountOpenFiles(t *testing.T) {
+	// Windows is not supported yet
+	supported := []string{"darwin", "linux", "unix", "freebsd"}
+	sort.Strings(supported)
+	i := sort.Search(len(supported),
+		func(i int) bool { return supported[i] >= runtime.GOOS })
+	if i == len(supported) {
+		return
+	}
+
+	// Create directory store temp file
+	testDir := tempMkdir(t)
+	defer os.RemoveAll(testDir)
+
+	count := pilosa.CountOpenFiles()
+	testFile := filepath.Join(testDir, "test.txt")
+	_, err := os.Create(testFile)
+	if err != nil {
+		t.Fatalf("create test file failed: %s", err)
+	}
+
+	if pilosa.CountOpenFiles() < count+1 {
+		t.Error("Invalid open file handle count")
 	}
 }
 

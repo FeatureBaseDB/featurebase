@@ -144,7 +144,7 @@ func (v *View) openFragments() error {
 
 		frag := v.newFragment(v.FragmentPath(slice), slice)
 		if err := frag.Open(); err != nil {
-			return fmt.Errorf("open fragment: slice=%s, err=%s", frag.Slice(), err)
+			return fmt.Errorf("open fragment: slice=%d, err=%s", frag.Slice(), err)
 		}
 		frag.RowAttrStore = v.RowAttrStore
 		v.fragments[frag.Slice()] = frag

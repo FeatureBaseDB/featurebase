@@ -40,7 +40,7 @@ type InputDefinition struct {
 	index       string
 	broadcaster Broadcaster
 	frames      []InputFrame
-	fields      []Field
+	fields      []InputDefinitionField
 }
 
 // NewInputDefinition returns a new instance of InputDefinition.
@@ -61,7 +61,7 @@ func NewInputDefinition(path, index, name string) (*InputDefinition, error) {
 func (i *InputDefinition) Frames() []InputFrame { return i.frames }
 
 // Fields returns fields of the input definition was initialized with.
-func (i *InputDefinition) Fields() []Field { return i.fields }
+func (i *InputDefinition) Fields() []InputDefinitionField { return i.fields }
 
 // Open opens and initializes the InputDefinition from file.
 func (i *InputDefinition) Open() error {
@@ -103,11 +103,11 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 	countRowID := make(map[string]uint64)
 	for _, field := range pb.Fields {
 		var actions []Action
-		for _, action := range field.Actions {
+		for _, action := range field.InputDefinitionActions {
 			if err := i.ValidateAction(action); err != nil {
 				return err
 			}
-			if action.RowID != 0 && action.Frame != "" {
+			if action.ValueDestination == SingleRowBool && action.Frame != "" {
 				val, ok := countRowID[action.Frame]
 				if ok && val == action.RowID {
 					return fmt.Errorf("duplicate rowID with other field: %v", action.RowID)
@@ -130,7 +130,7 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 			return errors.New("duplicate primaryKey with other field")
 		}
 
-		inputField := Field{
+		inputField := InputDefinitionField{
 			Name:       field.Name,
 			PrimaryKey: field.PrimaryKey,
 			Actions:    actions,
@@ -175,9 +175,9 @@ func (i *InputDefinition) saveMeta() error {
 
 	var fields []*internal.InputDefinitionField
 	for _, field := range i.fields {
-		var actions []*internal.Action
+		var actions []*internal.InputDefinitionAction
 		for _, action := range field.Actions {
-			actionMeta := &internal.Action{
+			actionMeta := &internal.InputDefinitionAction{
 				Frame:            action.Frame,
 				ValueDestination: action.ValueDestination,
 				ValueMap:         action.ValueMap,
@@ -187,9 +187,9 @@ func (i *InputDefinition) saveMeta() error {
 		}
 
 		fieldMeta := &internal.InputDefinitionField{
-			Name:       field.Name,
-			PrimaryKey: field.PrimaryKey,
-			Actions:    actions,
+			Name:                   field.Name,
+			PrimaryKey:             field.PrimaryKey,
+			InputDefinitionActions: actions,
 		}
 		fields = append(fields, fieldMeta)
 	}
@@ -210,15 +210,15 @@ func (i *InputDefinition) saveMeta() error {
 	return nil
 }
 
-// Field descripes a single field mapping in the InputDefinition.
-type Field struct {
+// InputDefinitionField descripes a single field mapping in the InputDefinition.
+type InputDefinitionField struct {
 	Name       string   `json:"name,omitempty"`
 	PrimaryKey bool     `json:"primaryKey,omitempty"`
 	Actions    []Action `json:"actions,omitempty"`
 }
 
-// Encode converts Field into its internal representation.
-func (o *Field) Encode() (*internal.InputDefinitionField, error) {
+// Encode converts InputDefinitionField into its internal representation.
+func (o *InputDefinitionField) Encode() (*internal.InputDefinitionField, error) {
 	field := internal.InputDefinitionField{Name: o.Name, PrimaryKey: o.PrimaryKey}
 
 	for _, action := range o.Actions {
@@ -226,7 +226,7 @@ func (o *Field) Encode() (*internal.InputDefinitionField, error) {
 		if err != nil {
 			return nil, err
 		}
-		field.Actions = append(field.Actions, actionEncode)
+		field.InputDefinitionActions = append(field.InputDefinitionActions, actionEncode)
 	}
 	return &field, nil
 }
@@ -240,11 +240,11 @@ type Action struct {
 }
 
 // Encode converts Action into its internal representation.
-func (o *Action) Encode() (*internal.Action, error) {
+func (o *Action) Encode() (*internal.InputDefinitionAction, error) {
 	if o.RowID == nil && o.ValueDestination == "single-row-boolean" {
 		return nil, errors.New("rowID required for single-row-boolean")
 	}
-	return &internal.Action{
+	return &internal.InputDefinitionAction{
 		Frame:            o.Frame,
 		ValueDestination: o.ValueDestination,
 		ValueMap:         o.ValueMap,
@@ -268,7 +268,7 @@ type InputFrame struct {
 // InputDefinitionInfo the json message format to create an InputDefinition.
 type InputDefinitionInfo struct {
 	Frames []InputFrame `json:"frames"`
-	Fields []Field      `json:"fields"`
+	Fields []InputDefinitionField      `json:"fields"`
 }
 
 // Encode converts InputDefinitionInfo into its internal representation.
@@ -296,7 +296,7 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	return nil
 }
 
-func (i *InputDefinition) ValidateAction(action *internal.Action) error {
+func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction) error {
 	if action.Frame == "" {
 		return ErrFrameRequired
 	}
