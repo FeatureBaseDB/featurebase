@@ -2159,3 +2159,62 @@ func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
 		t.Fatalf("Counts do not match after a marshal %d %d", bm0.Count(), bm1.Count())
 	}
 }
+
+func Test_BufBitmapIterator_Next(t *testing.T) {
+	b := NewBitmap()
+	for i := uint64(0); i < 4097; i++ {
+		b.Add(i)
+	}
+	if !b.containers[0].isBitmap() {
+		t.Fatalf("wrong container type")
+	}
+
+	bin := []uint32{}
+
+	itr := newBufBitmapIterator(newBitmapIterator(b.containers[0].bitmap))
+	x := uint32(0)
+
+	for i := 0; i < 10; i++ {
+		x, _ = itr.next()
+		bin = append(bin, x)
+	}
+	exp := []uint32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+	if !reflect.DeepEqual(bin, exp) {
+		t.Fatalf("BufBitmapIterator expected (%v) but got (%v)", exp, bin)
+	}
+
+	// ensure that unread points next back one such that the last value is repeated
+	itr.unread()
+	x, _ = itr.next()
+	bin = append(bin, x)
+	exp = append(exp, uint32(9))
+	if !reflect.DeepEqual(bin, exp) {
+		t.Fatalf("BufBitmapIterator expected (%v) but got (%v)", exp, bin)
+	}
+}
+
+func Test_BufBitmapIterator_UnreadPanic(t *testing.T) {
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("BufBitmapIterator unread did not panic")
+		}
+	}()
+
+	b := NewBitmap()
+	for i := uint64(0); i < 4097; i++ {
+		b.Add(i)
+	}
+	if !b.containers[0].isBitmap() {
+		t.Fatalf("wrong container type")
+	}
+
+	itr := newBufBitmapIterator(newBitmapIterator(b.containers[0].bitmap))
+	for i := 0; i < 10; i++ {
+		itr.next()
+	}
+
+	// ensure that unreading back-to-back panics
+	itr.unread()
+	itr.unread()
+}
