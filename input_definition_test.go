@@ -16,7 +16,6 @@ package pilosa_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"strings"
@@ -231,14 +230,12 @@ func TestHandleAction(t *testing.T) {
 	action.ValueDestination = pilosa.Mapping
 	value = "test"
 	b, err = pilosa.HandleAction(&action, value, colID)
-	fmt.Println(b, err)
 	if b != nil {
 		t.Fatalf("Expected Ignore values that are not type string")
 	}
 
 	value = 25
 	b, err = pilosa.HandleAction(&action, value, colID)
-	fmt.Println(b, err)
 	if b != nil {
 		t.Fatalf("Expected Ignore values that are not type string")
 	}
