@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 
 	"golang.org/x/sync/errgroup"
 
@@ -98,9 +97,9 @@ type gossipConfig struct {
 }
 
 // NewGossipNodeSet returns a new instance of GossipNodeSet.
-func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, sh pilosa.StatusHandler) *GossipNodeSet {
+func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, sh pilosa.StatusHandler, logOutput io.Writer) *GossipNodeSet {
 	g := &GossipNodeSet{
-		LogOutput: os.Stderr,
+		LogOutput: logOutput,
 	}
 
 	//TODO: pull memberlist config from pilosa.cfg file

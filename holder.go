@@ -92,7 +92,7 @@ func (h *Holder) Open() error {
 			continue
 		}
 
-		h.logger().Printf("opening index: %s", filepath.Base(fi.Name()))
+		h.logger().Printf("opening index: %s", filepath.Base(fi.Name())) // TODO h.LogOutput not set until server.go:Server.Open()
 
 		index, err := h.newIndex(h.IndexPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err == ErrName {
