@@ -194,7 +194,7 @@ func TestBitmap_BitmapCountRange(t *testing.T) {
 
 func TestBitmap_ArrayCountRange(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177, 2683313)
-	if n := bm0.CountRange(1, 2683311); n != 1 {
+	if n := bm0.CountRange(1, 2683313); n != 1 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
