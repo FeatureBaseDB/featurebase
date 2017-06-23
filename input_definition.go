@@ -24,6 +24,7 @@ import (
 
 	"errors"
 	"fmt"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -270,8 +271,8 @@ type InputFrame struct {
 
 // InputDefinitionInfo the json message format to create an InputDefinition.
 type InputDefinitionInfo struct {
-	Frames []InputFrame `json:"frames"`
-	Fields []InputDefinitionField      `json:"fields"`
+	Frames []InputFrame           `json:"frames"`
+	Fields []InputDefinitionField `json:"fields"`
 }
 
 // Encode converts InputDefinitionInfo into its internal representation.
@@ -317,6 +318,7 @@ func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction)
 	}
 	return nil
 }
+
 // HandleAction Process the input data with its action and return a bit to be imported later
 // Note: if the Bit should not be set then nil is returned with no error
 // From the JSON marshalling the possible types are: float64, boolean, string
