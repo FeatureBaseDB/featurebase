@@ -29,6 +29,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1638,4 +1639,66 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// MapAction Process the input data and set a bit
+func (h *Handler) MapAction(a *Action, value string, colID uint64) (*Bit, error) {
+	var bit Bit
+	var ok bool
+	bit.ColumnID = colID
+	bit.RowID, ok = a.ValueMap[value]
+	if !ok {
+		return nil, fmt.Errorf("Value %s does not exist in definition map", value)
+	}
+
+	// _, err := i.Frame(f).SetBit(ViewStandard, rowID, colID, nil)
+	return &bit, nil
+}
+
+// ValueToRow Sets a bitmap with rowID from the input value
+func (h *Handler) ValueToRow(a *Action, value string, colID uint64) (*Bit, error) {
+	var bit Bit
+	var err error
+	bit.ColumnID = colID
+	bit.RowID, err = strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	// _, err = i.Frame(f).SetBit(ViewStandard, rowID, colID, nil)
+	return &bit, err
+}
+
+// SingleRowBoolean Sets a bitmap with rowID from the Action defintion
+func (h *Handler) SingleRowBoolean(a *Action, value string, colID uint64) (*Bit, error) {
+	var bit Bit
+	var err error
+	bit.ColumnID = colID
+	bit.RowID, err = strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	// _, err = i.Frame(f).SetBit(ViewStandard, rowID, colID, nil)
+	return &bit, err
+}
+
+// InputBits Process and Sort the Input Bits and route to appropriate nodes.
+func (h *Handler) InputBits(index, frame string, bits []Bit) error {
+	client, err := NewClient(h.Host)
+	if err != nil {
+		return err
+	}
+
+	bitsBySlice := Bits(bits).GroupBySlice()
+
+	// Parse path into bits.
+	for slice, bits := range bitsBySlice {
+		sort.Sort(BitsByPos(bits))
+
+		h.logger().Printf("inputing slice: %d, n=%d", slice, len(bits))
+		if err := client.Import(context.Background(), index, frame, slice, bits); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
