@@ -1328,10 +1328,15 @@ func (c *container) Optimize() {
 		}
 	} else if c.isBitmap() {
 		runs := c.bitmapCountRuns()
-		if runs < 2048 {
+		if runs < RunMaxSize {
 			c.bitmapToRun()
 		}
+	} else if c.isRun() {
+		if len(c.runs) > RunMaxSize {
+			c.runToBitmap()
+		}
 	}
+
 }
 
 func (c *container) arrayContains(v uint32) bool {
