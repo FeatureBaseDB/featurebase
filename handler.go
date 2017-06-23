@@ -1630,7 +1630,7 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, req := range reqs {
-		err = index.JSONParser(req.(map[string]interface{}), inputDefName)
+		err = h.JSONParser(req.(map[string]interface{}), index, inputDefName)
 		if err == ErrInputDefinitionNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1641,63 +1641,42 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// MapAction Process the input data and set a bit
-func (h *Handler) MapAction(a *Action, value string, colID uint64) (*Bit, error) {
-	var bit Bit
-	var ok bool
-	bit.ColumnID = colID
-	bit.RowID, ok = a.ValueMap[value]
-	if !ok {
-		return nil, fmt.Errorf("Value %s does not exist in definition map", value)
+// JSONParser validate input json file and execute SetBit
+func (h *Handler) JSONParser(req map[string]interface{}, index *Index, name string) error {
+	inputDef := index.inputDefinition(name)
+	if inputDef == nil {
+		return ErrInputDefinitionNotFound
 	}
-
-	// _, err := i.Frame(f).SetBit(ViewStandard, rowID, colID, nil)
-	return &bit, nil
-}
-
-// ValueToRow Sets a bitmap with rowID from the input value
-func (h *Handler) ValueToRow(a *Action, value string, colID uint64) (*Bit, error) {
-	var bit Bit
-	var err error
-	bit.ColumnID = colID
-	bit.RowID, err = strconv.ParseUint(value, 10, 64)
-	if err != nil {
-		return nil, err
+	// if field in input data is not in defined definition, return error
+	validFields := make(map[string]bool)
+	for _, field := range inputDef.Fields() {
+		validFields[field.Name] = true
 	}
-	// _, err = i.Frame(f).SetBit(ViewStandard, rowID, colID, nil)
-	return &bit, err
-}
-
-// SingleRowBoolean Sets a bitmap with rowID from the Action defintion
-func (h *Handler) SingleRowBoolean(a *Action, value string, colID uint64) (*Bit, error) {
-	var bit Bit
-	var err error
-	bit.ColumnID = colID
-	bit.RowID, err = strconv.ParseUint(value, 10, 64)
-	if err != nil {
-		return nil, err
-	}
-	// _, err = i.Frame(f).SetBit(ViewStandard, rowID, colID, nil)
-	return &bit, err
-}
-
-// InputBits Process and Sort the Input Bits and route to appropriate nodes.
-func (h *Handler) InputBits(index, frame string, bits []Bit) error {
-	client, err := NewClient(h.Host)
-	if err != nil {
-		return err
-	}
-
-	bitsBySlice := Bits(bits).GroupBySlice()
-
-	// Parse path into bits.
-	for slice, bits := range bitsBySlice {
-		sort.Sort(BitsByPos(bits))
-
-		h.logger().Printf("inputing slice: %d, n=%d", slice, len(bits))
-		if err := client.Import(context.Background(), index, frame, slice, bits); err != nil {
-			return err
+	for key, _ := range req {
+		_, ok := validFields[key]
+		if !ok {
+			fmt.Errorf("field not found", key)
 		}
+	}
+
+	for _, field := range inputDef.Fields() {
+		// skip field that defined in definition but not in input data
+		var colValue uint64
+		if _, ok := req[field.Name]; !ok {
+			continue
+		} else if field.PrimaryKey {
+			colValue, ok := req[field.Name].(float64)
+			if !ok {
+				return fmt.Errorf("float type required, got %s:%s", field.Name, colValue)
+			} else {
+				val, ok := req[DefaultColumnLabel]
+				if !ok {
+					return errors.New("column ID not provided")
+				}
+				colValue = val.(float64)
+			}
+		}
+
 	}
 
 	return nil
