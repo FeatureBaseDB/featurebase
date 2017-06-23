@@ -45,20 +45,12 @@ It will load existing data from the configured
 directory, and start listening client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO this code is duplicated from server/server.go:Server.Run() because it hasnt run yet
-			var logOutput io.Writer
-			if Server.Config.LogPath == "" {
-				logOutput = stderr
-			} else {
-				var err error
-				logOutput, err = os.OpenFile(Server.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
-				if err != nil {
-					return err
-				}
+			logOutput, err := server.GetLogWriter(Server.Config.LogPath, stderr)
+			if err != nil {
+				return err
 			}
 			logger := log.New(logOutput, "", log.LstdFlags)
 			logger.Printf("Pilosa %s, build time %s\n", pilosa.Version, pilosa.BuildTime)
-			// fmt.Fprintf(Server.Stderr, "Pilosa %s, build time %s\n", pilosa.Version, pilosa.BuildTime)
 
 			// Start CPU profiling.
 			if Server.CPUProfile != "" {
