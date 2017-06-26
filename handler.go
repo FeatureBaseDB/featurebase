@@ -1628,7 +1628,7 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, req := range reqs {
-		bits, err := h.JSONParser(req.(map[string]interface{}), index, inputDefName)
+		bits, err := h.InputJsonDataParser(req.(map[string]interface{}), index, inputDefName)
 		if err == ErrInputDefinitionNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1649,8 +1649,8 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// JSONParser validate input json file and execute SetBit
-func (h *Handler) JSONParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
+// InputJsonDataParser validate input json file and execute SetBit
+func (h *Handler) InputJsonDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
 	inputDef := index.inputDefinition(name)
 	if inputDef == nil {
 		return nil, ErrInputDefinitionNotFound
@@ -1671,11 +1671,9 @@ func (h *Handler) JSONParser(req map[string]interface{}, index *Index, name stri
 		}
 	}
 
-	var bits []*Bit
 	setBits := make(map[string][]*Bit)
 	for _, field := range inputDef.Fields() {
 		// skip field that defined in definition but not in input data
-		//var colValue uint64
 		if _, ok := req[field.Name]; !ok {
 			continue
 		}
@@ -1694,8 +1692,9 @@ func (h *Handler) JSONParser(req map[string]interface{}, index *Index, name stri
 			if err != nil {
 				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
 			}
-			//bits = append(bits, bit)
-			setBits[frame] = append(bits, bit)
+			if bit != nil {
+				setBits[frame] = append(setBits[frame], bit)
+			}
 		}
 	}
 	return setBits, nil
