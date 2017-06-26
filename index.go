@@ -755,3 +755,23 @@ func (i *Index) openInputDefinition() error {
 	}
 	return nil
 }
+
+// InputBits Process the []Bit though the Frame import process
+func (i *Index) InputBits(frame string, bits []Bit) error {
+	var rowIDs, columnIDs []uint64
+	timestamps := make([]*time.Time, len(bits))
+	f := i.Frame(frame)
+
+	for i, bit := range bits {
+		rowIDs = append(rowIDs, bit.RowID)
+		columnIDs = append(columnIDs, bit.ColumnID)
+
+		// Convert timestamps to time.Time.
+		if bit.Timestamp > 0 {
+			t := time.Unix(0, bit.Timestamp)
+			timestamps[i] = &t
+		}
+	}
+
+	return f.Import(rowIDs, columnIDs, timestamps)
+}

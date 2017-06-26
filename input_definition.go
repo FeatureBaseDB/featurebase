@@ -15,12 +15,13 @@
 package pilosa
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 
 	"errors"
-	"fmt"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -267,8 +268,8 @@ type InputFrame struct {
 
 // InputDefinitionInfo the json message format to create an InputDefinition.
 type InputDefinitionInfo struct {
-	Frames []InputFrame `json:"frames"`
-	Fields []InputDefinitionField      `json:"fields"`
+	Frames []InputFrame           `json:"frames"`
+	Fields []InputDefinitionField `json:"fields"`
 }
 
 // Encode converts InputDefinitionInfo into its internal representation.
@@ -295,7 +296,6 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	}
 	return nil
 }
-
 func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction) error {
 	if action.Frame == "" {
 		return ErrFrameRequired
@@ -314,4 +314,52 @@ func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction)
 		}
 	}
 	return nil
+}
+
+// HandleAction Process the input data with its action and return a bit to be imported later
+// Note: if the Bit should not be set then nil is returned with no error
+// From the JSON marshalling the possible types are: float64, boolean, string
+// TODO handle Timestams
+func HandleAction(a *Action, value interface{}, colID uint64) (*Bit, error) {
+	var err error
+	var bit Bit
+	bit.ColumnID = colID
+
+	switch a.ValueDestination {
+	case Mapping:
+		v, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("Mapping value must be a string %v", value)
+		}
+		bit.RowID, ok = a.ValueMap[v]
+		if !ok {
+			return nil, fmt.Errorf("Value %s does not exist in definition map", v)
+		}
+	case SingleRowBool:
+		switch value.(type) {
+		case bool:
+			if value.(bool) {
+				bit.RowID = *a.RowID
+			} else { // value is not True.
+				return nil, err
+			}
+		case float64:
+			if value.(float64) >= 1 {
+				bit.RowID = *a.RowID
+			} else { // value is not True.
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("single-row-boolean value %v must equate to a Bool", value)
+		}
+	case ValueToRow:
+		v, ok := value.(float64)
+		if !ok {
+			return nil, fmt.Errorf("value-to-row value must equate to an integer %v", value)
+		}
+		bit.RowID = uint64(v)
+	default:
+		return nil, fmt.Errorf("Unrecognized Value Destination: %s in Action", a.ValueDestination)
+	}
+	return &bit, err
 }

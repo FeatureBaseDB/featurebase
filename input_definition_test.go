@@ -18,9 +18,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"strings"
+
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
-	"strings"
 )
 
 func TestInputDefinition_Open(t *testing.T) {
@@ -150,4 +151,93 @@ func TestInputDefinition_LoadDefinition(t *testing.T) {
 	if !strings.Contains(err.Error(), "frame required") {
 		t.Fatalf("Expected frame required error, actual error: %s", err)
 	}
+}
+
+func TestHandleAction(t *testing.T) {
+	var value interface{}
+	colID := uint64(0)
+	rowID := uint64(100)
+	action := pilosa.Action{ValueDestination: pilosa.SingleRowBool, RowID: &rowID}
+
+	value = 1
+	b, err := pilosa.HandleAction(&action, value, colID)
+	if b != nil {
+		t.Fatalf("Expected integer type is not handled by single-row-boolean")
+	} else if !strings.Contains(err.Error(), "single-row-boolean value") {
+		t.Fatalf("Expected single-row-boolean value error, actual error: %s", err)
+	}
+
+	value = "1"
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if b != nil {
+		t.Fatalf("Expected Ignore strings, only accept boolean")
+	}
+
+	value = "t"
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if !strings.Contains(err.Error(), "must equate to a Bool") {
+		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
+	}
+
+	value = float64(1.5)
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if b != nil {
+		if b.RowID != 100 {
+			t.Fatalf("Unexpected rowID %v", b.RowID)
+		}
+	}
+	value = float64(0)
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if b != nil {
+		t.Fatalf("Expected Ignore values that do not equate to True")
+	}
+
+	value = false
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if b != nil {
+		t.Fatalf("Expected Ignore values that do not equate to True")
+	}
+
+	value = true
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if b != nil {
+		if b.ColumnID != 0 {
+			t.Fatalf("Unexpected ColumnID %v", b.ColumnID)
+		}
+	}
+
+	action.ValueDestination = pilosa.ValueToRow
+	rowID = 101
+	value = float64(25.0)
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if b != nil {
+		if b.RowID != 25 {
+			t.Fatalf("Unexpected RowID %v", b.RowID)
+		}
+	}
+	value = "25"
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if b != nil {
+		t.Fatalf("Expected Ignore values that are not type float64")
+	}
+
+	action.ValueDestination = pilosa.Mapping
+	value = "test"
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if b != nil {
+		t.Fatalf("Expected Ignore values that are not type string")
+	}
+
+	value = 25
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if b != nil {
+		t.Fatalf("Expected Ignore values that are not type string")
+	}
+
+	action.ValueDestination = "test"
+	b, err = pilosa.HandleAction(&action, value, colID)
+	if !strings.Contains(err.Error(), "Unrecognized Value Destination") {
+		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
+	}
+
 }
