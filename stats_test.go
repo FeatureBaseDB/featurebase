@@ -84,7 +84,7 @@ func TestStatsCount_TopN(t *testing.T) {
 
 	// Execute query.
 	called := false
-	e := NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	e.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "TopN" {
@@ -99,7 +99,7 @@ func TestStatsCount_TopN(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`TopN(frame=f, n=2)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`TopN(frame=f, n=2)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -114,7 +114,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	called := false
-	e := NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	e.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "Bitmap" {
@@ -129,7 +129,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`Bitmap(frame=f, rowID=0)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`Bitmap(frame=f, rowID=0)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -145,7 +145,7 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
 
 	called := false
-	e := NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	frame := e.Holder.Frame("d", "f")
 	if frame == nil {
 		t.Fatal("frame not found")
@@ -160,7 +160,7 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetRowAttrs(rowID=10, frame=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetRowAttrs(rowID=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -176,7 +176,7 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
 
 	called := false
-	e := NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	idx := e.Holder.Index("d")
 	if idx == nil {
 		t.Fatal("idex not found")
@@ -192,7 +192,7 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", MustParse(`SetColumnAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetColumnAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {

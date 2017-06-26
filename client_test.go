@@ -131,10 +131,10 @@ func TestClient_MultiNode(t *testing.T) {
 	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).RecalculateCache()
 
 	// Connect to each node to compare results.
-	client := make([]*Client, 3)
-	client[0] = MustNewClient(s[0].Host())
-	client[1] = MustNewClient(s[1].Host())
-	client[2] = MustNewClient(s[2].Host())
+	client := make([]*test.Client, 3)
+	client[0] = test.MustNewClient(s[0].Host())
+	client[1] = test.MustNewClient(s[1].Host())
+	client[2] = test.MustNewClient(s[2].Host())
 
 	topN := 4
 	q := fmt.Sprintf(`TopN(frame="%s", n=%d)`, "f", topN)
@@ -213,7 +213,7 @@ func TestClient_Import(t *testing.T) {
 	s.Handler.Holder = hldr.Holder
 
 	// Send import request.
-	c := MustNewClient(s.Host())
+	c := test.MustNewClient(s.Host())
 	if err := c.Import(context.Background(), "i", "f", 0, []pilosa.Bit{
 		{RowID: 0, ColumnID: 1},
 		{RowID: 0, ColumnID: 5},
@@ -264,7 +264,7 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 	s.Handler.Holder = hldr.Holder
 
 	// Send import request.
-	c := MustNewClient(s.Host())
+	c := test.MustNewClient(s.Host())
 	if err := c.Import(context.Background(), "i", "f", 0, []pilosa.Bit{
 		{RowID: 0, ColumnID: 1},
 		{RowID: 0, ColumnID: 5},
@@ -303,7 +303,7 @@ func TestClient_BackupRestore(t *testing.T) {
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
 
-	c := MustNewClient(s.Host())
+	c := test.MustNewClient(s.Host())
 
 	// Backup from frame.
 	var buf bytes.Buffer
@@ -368,7 +368,7 @@ func TestClient_BackupInverseView(t *testing.T) {
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
 
-	c := MustNewClient(s.Host())
+	c := test.MustNewClient(s.Host())
 
 	// Backup from frame.
 	var buf bytes.Buffer
@@ -405,7 +405,7 @@ func TestClient_BackupInvalidView(t *testing.T) {
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
 
-	c := MustNewClient(s.Host())
+	c := test.MustNewClient(s.Host())
 
 	// Backup from frame.
 	var buf bytes.Buffer
@@ -435,7 +435,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	s.Handler.Holder = hldr.Holder
 
 	// Retrieve blocks.
-	c := MustNewClient(s.Host())
+	c := test.MustNewClient(s.Host())
 	blocks, err := c.FragmentBlocks(context.Background(), "i", "f", pilosa.ViewStandard, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -451,18 +451,4 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	if a := hldr.Fragment("i", "f", pilosa.ViewStandard, 0).Blocks(); !reflect.DeepEqual(a, blocks) {
 		t.Fatalf("blocks mismatch:\n\nexp=%s\n\ngot=%s\n\n", spew.Sdump(a), spew.Sdump(blocks))
 	}
-}
-
-// Client represents a test wrapper for pilosa.Client.
-type Client struct {
-	*pilosa.Client
-}
-
-// MustNewClient returns a new instance of Client. Panic on error.
-func MustNewClient(host string) *Client {
-	c, err := pilosa.NewClient(host)
-	if err != nil {
-		panic(err)
-	}
-	return &Client{Client: c}
 }
