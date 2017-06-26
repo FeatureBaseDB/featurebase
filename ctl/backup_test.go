@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 )
 
@@ -190,7 +191,7 @@ func NewHolder() *Holder {
 // MustOpenHolder creates and opens a holder at a temporary path. Panic on error.
 func MustOpenHolder() *Holder {
 	h := NewHolder()
-	if err := h.Open(); err != nil {
+	if err := h.Open(os.Stderr); err != nil {
 		panic(err)
 	}
 	return h
