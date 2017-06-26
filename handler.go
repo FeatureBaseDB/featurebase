@@ -1665,7 +1665,7 @@ func (h *Handler) JSONParser(req map[string]interface{}, index *Index, name stri
 			columnLabel = field.Name
 		}
 	}
-	for key, _ := range req {
+	for key := range req {
 		_, ok := validFields[key]
 		if !ok {
 			return nil, fmt.Errorf("field not found: %s", key)
