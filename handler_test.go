@@ -1115,7 +1115,7 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 
 }
 
-//Ensure throwing error if there's duplicated primaryKey field
+// Ensure throwing error if there's duplicated primaryKey field.
 func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
@@ -1148,12 +1148,12 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input2", bytes.NewBuffer(inputBody1)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `duplicate primaryKey with other field`+"\n" {
+	} else if body := w.Body.String(); body != `InputDefinition can only contain one PrimaryKey`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
 
-// Eusure throwing error if primary field's name doesn't match columnLabel
+// Eusure throwing error if primary field's name doesn't match columnLabel.
 func TestHandler_UnmatchColumnID(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
@@ -1182,7 +1182,7 @@ func TestHandler_UnmatchColumnID(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `primary field's name not match columnLabel`+"\n" {
+	} else if body := w.Body.String(); body != `PrimaryKey field name does not match columnLabel`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 
