@@ -1511,7 +1511,6 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	fmt.Println()
 
 	// Find index.
 	index := h.Holder.Index(indexName)
