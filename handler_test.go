@@ -19,11 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/internal"
-	"github.com/pilosa/pilosa/pql"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -32,6 +27,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Ensure the handler returns "not found" for invalid paths.
@@ -1395,7 +1395,6 @@ func TestHandler_CreateInput(t *testing.T) {
 	h.Cluster = NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer(inputBody)))
-	fmt.Print(w.Body.String())
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
