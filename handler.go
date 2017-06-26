@@ -29,7 +29,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1639,6 +1638,10 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
 }
 
 // JSONParser validate input json file and execute SetBit
@@ -1648,36 +1651,48 @@ func (h *Handler) JSONParser(req map[string]interface{}, index *Index, name stri
 		return ErrInputDefinitionNotFound
 	}
 	// if field in input data is not in defined definition, return error
+	var columnLabel string
 	validFields := make(map[string]bool)
 	for _, field := range inputDef.Fields() {
 		validFields[field.Name] = true
+		if field.PrimaryKey {
+			columnLabel = field.Name
+		}
 	}
 	for key, _ := range req {
 		_, ok := validFields[key]
 		if !ok {
-			fmt.Errorf("field not found", key)
+			return fmt.Errorf("field not found: %s", key)
 		}
 	}
 
+	var bits []*Bit
 	for _, field := range inputDef.Fields() {
 		// skip field that defined in definition but not in input data
-		var colValue uint64
+		//var colValue uint64
 		if _, ok := req[field.Name]; !ok {
 			continue
-		} else if field.PrimaryKey {
-			colValue, ok := req[field.Name].(float64)
-			if !ok {
-				return fmt.Errorf("float type required, got %s:%s", field.Name, colValue)
-			} else {
-				val, ok := req[DefaultColumnLabel]
-				if !ok {
-					return errors.New("column ID not provided")
-				}
-				colValue = val.(float64)
-			}
+		}
+		value, ok := req[columnLabel]
+		if !ok {
+			return fmt.Errorf("columnLabel required")
+		}
+		colValue, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
 		}
 
+		for _, action := range field.Actions {
+			bit, err := h.HandleAction(action, req[field.Name], uint64(colValue))
+			if err != nil {
+				return fmt.Errorf("error handling action: %s", action.ValueDestination)
+			}
+			bits = append(bits, bit)
+		}
 	}
-
 	return nil
+}
+
+func (h *Handler) HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
+	return nil, nil
 }

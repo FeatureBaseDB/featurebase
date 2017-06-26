@@ -267,8 +267,8 @@ type InputFrame struct {
 
 // InputDefinitionInfo the json message format to create an InputDefinition.
 type InputDefinitionInfo struct {
-	Frames []InputFrame `json:"frames"`
-	Fields []InputDefinitionField      `json:"fields"`
+	Frames []InputFrame           `json:"frames"`
+	Fields []InputDefinitionField `json:"fields"`
 }
 
 // Encode converts InputDefinitionInfo into its internal representation.
