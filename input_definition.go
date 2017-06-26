@@ -26,13 +26,14 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
+// Action Mapping types
 const (
-	Mapping       = "mapping"
-	ValueToRow    = "value-to-row"
-	SingleRowBool = "single-row-boolean"
+	InputMapping       = "mapping"
+	InputValueToRow    = "value-to-row"
+	InputSingleRowBool = "single-row-boolean"
 )
 
-var ValidValueDestination = []string{Mapping, ValueToRow, SingleRowBool}
+var validValueDestination = []string{InputMapping, InputValueToRow, InputSingleRowBool}
 
 // InputDefinition represents a container for the data input definition.
 type InputDefinition struct {
@@ -108,13 +109,12 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 			if err := i.ValidateAction(action); err != nil {
 				return err
 			}
-			if action.ValueDestination == SingleRowBool && action.Frame != "" {
+			if action.ValueDestination == InputSingleRowBool && action.Frame != "" {
 				val, ok := countRowID[action.Frame]
 				if ok && val == action.RowID {
 					return fmt.Errorf("duplicate rowID with other field: %v", action.RowID)
-				} else {
-					countRowID[action.Frame] = action.RowID
 				}
+				countRowID[action.Frame] = action.RowID
 			}
 			actions = append(actions, Action{
 				Frame:            action.Frame,
@@ -124,7 +124,7 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 			})
 		}
 		if field.PrimaryKey {
-			numPrimaryKey += 1
+			numPrimaryKey++
 		}
 
 		if numPrimaryKey > 1 {
@@ -289,6 +289,7 @@ func (i *InputDefinitionInfo) Encode() (*internal.InputDefinition, error) {
 	return &def, nil
 }
 
+// AddFrame manually add frame to input definition.
 func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	i.frames = append(i.frames, frame)
 	if err := i.saveMeta(); err != nil {
@@ -296,19 +297,21 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	}
 	return nil
 }
+
+// ValidateAction ensures the input definition action conforms to our specification.
 func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction) error {
 	if action.Frame == "" {
 		return ErrFrameRequired
 	}
 	validValues := make(map[string]bool)
-	for _, val := range ValidValueDestination {
+	for _, val := range validValueDestination {
 		validValues[val] = true
 	}
 	if _, ok := validValues[action.ValueDestination]; !ok {
 		return fmt.Errorf("invalid ValueDestination: %s", action.ValueDestination)
 	}
 	switch action.ValueDestination {
-	case Mapping:
+	case InputMapping:
 		if len(action.ValueMap) == 0 {
 			return errors.New("valueMap required for map")
 		}
@@ -319,14 +322,14 @@ func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction)
 // HandleAction Process the input data with its action and return a bit to be imported later
 // Note: if the Bit should not be set then nil is returned with no error
 // From the JSON marshalling the possible types are: float64, boolean, string
-// TODO handle Timestams
+// TODO handle Timestamps
 func HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
 	var err error
 	var bit Bit
 	bit.ColumnID = colID
 
 	switch a.ValueDestination {
-	case Mapping:
+	case InputMapping:
 		v, ok := value.(string)
 		if !ok {
 			return nil, fmt.Errorf("Mapping value must be a string %v", value)
@@ -335,7 +338,7 @@ func HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
 		if !ok {
 			return nil, fmt.Errorf("Value %s does not exist in definition map", v)
 		}
-	case SingleRowBool:
+	case InputSingleRowBool:
 		switch value.(type) {
 		case bool:
 			if value.(bool) {
@@ -352,7 +355,7 @@ func HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
 		default:
 			return nil, fmt.Errorf("single-row-boolean value %v must equate to a Bool", value)
 		}
-	case ValueToRow:
+	case InputValueToRow:
 		v, ok := value.(float64)
 		if !ok {
 			return nil, fmt.Errorf("value-to-row value must equate to an integer %v", value)

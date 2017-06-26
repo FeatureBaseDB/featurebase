@@ -114,13 +114,13 @@ func TestInputDefinition_LoadDefinition(t *testing.T) {
 		t.Fatalf("Expected invalid ValueDestination error, actual error: %s", err)
 	}
 
-	act := pilosa.Action{Frame: "f", ValueDestination: pilosa.SingleRowBool, ValueMap: map[string]uint64{"Green": 1}}
+	act := pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, ValueMap: map[string]uint64{"Green": 1}}
 	_, err = act.Encode()
 	if !strings.Contains(err.Error(), "rowID required for single-row-boolean") {
 		t.Fatalf("Expected rowID required for single-row-boolean error, actual error: %s", err)
 	}
 
-	action = internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.Mapping, RowID: 100}
+	action = internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.InputMapping, RowID: 100}
 	field = internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
 	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
 	err = input.LoadDefinition(def)
@@ -128,8 +128,8 @@ func TestInputDefinition_LoadDefinition(t *testing.T) {
 		t.Fatalf("Expected valueMap required for map error, actual error: %s", err)
 	}
 
-	action = internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.SingleRowBool, RowID: 100}
-	action1 := internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.SingleRowBool, RowID: 0}
+	action = internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: 100}
+	action1 := internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: 0}
 	field1 := internal.InputDefinitionField{Name: "newID", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action1}}
 	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field, &field1}}
 	err = input.LoadDefinition(def)
@@ -137,7 +137,7 @@ func TestInputDefinition_LoadDefinition(t *testing.T) {
 		t.Fatalf("Expected duplicate primaryKey error, actual error: %s", err)
 	}
 
-	action1 = internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.SingleRowBool, RowID: 100}
+	action1 = internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: 100}
 	field1 = internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action1}}
 	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field, &field1}}
 	err = input.LoadDefinition(def)
@@ -145,7 +145,7 @@ func TestInputDefinition_LoadDefinition(t *testing.T) {
 		t.Fatalf("Expected duplicate rowID with other field error, actual error: %s", err)
 	}
 
-	action = internal.InputDefinitionAction{ValueDestination: pilosa.SingleRowBool, RowID: 100}
+	action = internal.InputDefinitionAction{ValueDestination: pilosa.InputSingleRowBool, RowID: 100}
 	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
 	err = input.LoadDefinition(def)
 	if !strings.Contains(err.Error(), "frame required") {
@@ -157,7 +157,7 @@ func TestHandleAction(t *testing.T) {
 	var value interface{}
 	colID := uint64(0)
 	rowID := uint64(100)
-	action := pilosa.Action{ValueDestination: pilosa.SingleRowBool, RowID: &rowID}
+	action := pilosa.Action{ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
 
 	value = 1
 	b, err := pilosa.HandleAction(action, value, colID)
@@ -206,7 +206,7 @@ func TestHandleAction(t *testing.T) {
 		}
 	}
 
-	action.ValueDestination = pilosa.ValueToRow
+	action.ValueDestination = pilosa.InputValueToRow
 	rowID = 101
 	value = float64(25.0)
 	b, err = pilosa.HandleAction(action, value, colID)
@@ -221,7 +221,7 @@ func TestHandleAction(t *testing.T) {
 		t.Fatalf("Expected Ignore values that are not type float64")
 	}
 
-	action.ValueDestination = pilosa.Mapping
+	action.ValueDestination = pilosa.InputMapping
 	value = "test"
 	b, err = pilosa.HandleAction(action, value, colID)
 	if b != nil {
