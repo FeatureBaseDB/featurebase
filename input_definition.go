@@ -19,8 +19,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	"errors"
 
@@ -347,16 +345,6 @@ func HandleAction(a *Action, value interface{}, colID uint64) (*Bit, error) {
 			}
 		case float64:
 			if value.(float64) >= 1 {
-				bit.RowID = *a.RowID
-			} else { // value is not True.
-				return nil, err
-			}
-		case string:
-			valid := []string{"t", "true", "y", "yes"}
-			// sort.Strings(valid)	// NOTE: This slice is already sorted. Please resort when adding more values.
-			v := strings.ToLower(value.(string))
-			i := sort.SearchStrings(valid, v)
-			if i < len(valid) && valid[i] == v {
 				bit.RowID = *a.RowID
 			} else { // value is not True.
 				return nil, err

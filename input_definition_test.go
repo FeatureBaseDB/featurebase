@@ -169,20 +169,14 @@ func TestHandleAction(t *testing.T) {
 
 	value = "1"
 	b, err = pilosa.HandleAction(&action, value, colID)
-	if b == nil {
-		if err != nil {
-			t.Fatalf("Expected Ignore strings that do not equate to True")
-		}
-	} else {
-		t.Fatalf("Expected Ignore strings that do not equate to True")
+	if b != nil {
+		t.Fatalf("Expected Ignore strings, only accept boolean")
 	}
 
 	value = "t"
 	b, err = pilosa.HandleAction(&action, value, colID)
-	if b != nil {
-		if b.Timestamp != 0 {
-			t.Fatalf("Unexpected timestamp %v", b.Timestamp)
-		}
+	if !strings.Contains(err.Error(), "must equate to a Bool") {
+		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
 	}
 
 	value = float64(1.5)
