@@ -1643,7 +1643,7 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, req := range reqs {
-		err = h.JSONParser(req.(map[string]interface{}), index, inputDefName)
+		bits, err := h.JSONParser(req.(map[string]interface{}), index, inputDefName)
 		if err == ErrInputDefinitionNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1651,18 +1651,24 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		for fr, bs := range bits {
+			err := index.InputBits(fr, bs)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
 	}
-
 	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
 // JSONParser validate input json file and execute SetBit
-func (h *Handler) JSONParser(req map[string]interface{}, index *Index, name string) error {
+func (h *Handler) JSONParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
 	inputDef := index.inputDefinition(name)
 	if inputDef == nil {
-		return ErrInputDefinitionNotFound
+		return nil, ErrInputDefinitionNotFound
 	}
 	// if field in input data is not in defined definition, return error
 	var columnLabel string
@@ -1676,11 +1682,12 @@ func (h *Handler) JSONParser(req map[string]interface{}, index *Index, name stri
 	for key, _ := range req {
 		_, ok := validFields[key]
 		if !ok {
-			return fmt.Errorf("field not found: %s", key)
+			return nil, fmt.Errorf("field not found: %s", key)
 		}
 	}
 
 	var bits []*Bit
+	setBits := make(map[string][]*Bit)
 	for _, field := range inputDef.Fields() {
 		// skip field that defined in definition but not in input data
 		//var colValue uint64
@@ -1689,24 +1696,22 @@ func (h *Handler) JSONParser(req map[string]interface{}, index *Index, name stri
 		}
 		value, ok := req[columnLabel]
 		if !ok {
-			return fmt.Errorf("columnLabel required")
+			return nil, fmt.Errorf("columnLabel required")
 		}
 		colValue, ok := value.(float64)
 		if !ok {
-			return fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
+			return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
 		}
 
 		for _, action := range field.Actions {
-			bit, err := h.HandleAction(action, req[field.Name], uint64(colValue))
+			frame := action.Frame
+			bit, err := HandleAction(action, req[field.Name], uint64(colValue))
 			if err != nil {
-				return fmt.Errorf("error handling action: %s", action.ValueDestination)
+				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
 			}
-			bits = append(bits, bit)
+			//bits = append(bits, bit)
+			setBits[frame] = append(bits, bit)
 		}
 	}
-	return nil
-}
-
-func (h *Handler) HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
-	return nil, nil
+	return setBits, nil
 }

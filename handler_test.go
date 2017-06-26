@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
@@ -1304,10 +1305,25 @@ var defaultBody = `
 			{
 			   "frames":[
 				  {
-					 "name":"event-time",
+					 "name":"cab-type",
 					 "options": {
 						"timeQuantum":"YMD",
 						"inverseEnabled":false,
+						"cacheType":"ranked"
+					}
+				},
+				{
+					 "name":"add-ons",
+					 "options": {
+						"timeQuantum":"YMD",
+						"inverseEnabled":false,
+						"cacheType":"ranked"
+					}
+				},
+				{
+					 "name":"distance-miles",
+					 "options": {
+						"timeQuantum":"YMD",
 						"cacheType":"ranked"
 					}
 				}
@@ -1324,8 +1340,8 @@ var defaultBody = `
 						   "frame":"cab-type",
 						   "valueDestination":"mapping",
 						   "valueMap":{
-							  "Green":1,
-							  "Yellow":2
+							  "green":1,
+							  "yellow":2
 						   }
 						}
 					 ]
@@ -1372,13 +1388,14 @@ func TestHandler_CreateInput(t *testing.T) {
 				"id": 1,
 				"cabType": "yellow",
 				"distanceMiles": 8,
-				"with-pet": true
+				"withPet": true
 			}]`)
 	h := NewHandler()
 	h.Holder = hldr.Holder
 	h.Cluster = NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer(inputBody)))
+	fmt.Print(w.Body.String())
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {

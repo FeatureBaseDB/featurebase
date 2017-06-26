@@ -459,3 +459,37 @@ func TestIndex_CreateFrameWhenOpenInputDefinition(t *testing.T) {
 	}
 
 }
+
+func TestIndex_InputBits(t *testing.T) {
+	index := MustOpenIndex()
+	defer index.Close()
+
+	// Set index time quantum.
+	if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create frame.
+	if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	var bits []*pilosa.Bit
+	bits = append(bits, &pilosa.Bit{RowID: 0, ColumnID: 0})
+	bits = append(bits, &pilosa.Bit{RowID: 0, ColumnID: 1})
+	bits = append(bits, &pilosa.Bit{RowID: 2, ColumnID: 2, Timestamp: 1})
+
+	err := index.InputBits("f", bits)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f := index.Frame("f")
+	v := f.View(pilosa.ViewStandard)
+	fragment := v.Fragment(0)
+
+	// Verify the Bits were set
+	if a := fragment.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{0, 1}) {
+		t.Fatalf("unexpected bits: %+v", a)
+	}
+}
