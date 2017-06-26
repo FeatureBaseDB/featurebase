@@ -19,6 +19,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pql"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -27,11 +31,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/internal"
-	"github.com/pilosa/pilosa/pql"
 )
 
 // Ensure the handler returns "not found" for invalid paths.
@@ -1299,4 +1298,152 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 	} else if body := w.Body.String(); body != string(expect)+"\n" {
 		t.Fatalf("unexpected body: %s, expect: %s", body, string(expect))
 	}
+}
+
+var defaultBody = `
+			{
+			   "frames":[
+				  {
+					 "name":"event-time",
+					 "options": {
+						"timeQuantum":"YMD",
+						"inverseEnabled":false,
+						"cacheType":"ranked"
+					}
+				}
+			   ],
+			   "fields":[
+				  {
+					 "name":"id",
+					 "primaryKey":true
+				  },
+				  {
+					 "name":"cabType",
+					 "actions":[
+						{
+						   "frame":"cab-type",
+						   "valueDestination":"mapping",
+						   "valueMap":{
+							  "Green":1,
+							  "Yellow":2
+						   }
+						}
+					 ]
+				  },
+				  {
+					 "name":"withPet",
+					 "actions":[
+						{
+						   "frame":"add-ons",
+						   "valueDestination":"single-row-boolean",
+						   "rowID":100
+						}
+					 ]
+				  },
+				  {
+					 "name":"distanceMiles",
+					 "actions":[
+						{
+						   "frame":"distance-miles",
+						   "valueDestination":"value-to-row"
+
+						}
+					 ]
+				  }
+			   ]
+			}`
+
+func TestHandler_CreateInput(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
+
+	defBody := []byte(defaultBody)
+	def, err := EncodeInputDef("input1", defBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = index.CreateInputDefinition(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputBody := []byte(`
+			[{
+				"id": 1,
+				"cabType": "yellow",
+				"distanceMiles": 8,
+				"with-pet": true
+			}]`)
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer(inputBody)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
+func TestInput_JSON(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
+	defBody := []byte(defaultBody)
+	def, err := EncodeInputDef("input1", defBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = index.CreateInputDefinition(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		json string
+		err  string
+	}{
+		{json: `[{
+				"id": 1,
+				"cabType": "yellow",
+				"distanceMiles": 8,
+				"nofield": true
+				}]`,
+			err: "field not found: nofield"},
+		{json: `[{
+				"id": "abc",
+				"cabType": "yellow",
+				"distanceMiles": 8,
+				"withPet": true
+				}]`,
+			err: "float64 require, got value:abc, type: string"},
+		{json: `[{
+				"cabType": "yellow",
+				"distanceMiles": 8,
+				"withPet": true
+				}]`,
+			err: "columnLabel required"},
+	}
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
+	for _, test := range tests {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer([]byte(test.json))))
+		if body := w.Body.String(); body != test.err+"\n" {
+			t.Fatalf("Expect error: %s, actual: %s", test.err, body)
+		}
+	}
+
+}
+func EncodeInputDef(name string, body []byte) (*internal.InputDefinition, error) {
+	var req pilosa.InputDefinitionInfo
+	err := json.Unmarshal(body, &req)
+	if err != nil {
+		return nil, err
+	}
+	def, err := req.Encode()
+	def.Name = name
+	return def, err
 }
