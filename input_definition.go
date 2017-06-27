@@ -82,7 +82,7 @@ func (i *InputDefinition) Open() error {
 	return nil
 }
 
-// LoadDefinition loads the protobuf format of a defition
+// LoadDefinition loads the protobuf format of a definition.
 func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 	// Copy metadata fields.
 	i.name = pb.Name
@@ -101,7 +101,6 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 		i.frames = append(i.frames, inputFrame)
 	}
 
-	numPrimaryKey := 0
 	countRowID := make(map[string]uint64)
 	for _, field := range pb.Fields {
 		var actions []Action
@@ -122,13 +121,6 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 				ValueMap:         action.ValueMap,
 				RowID:            &action.RowID,
 			})
-		}
-		if field.PrimaryKey {
-			numPrimaryKey++
-		}
-
-		if numPrimaryKey > 1 {
-			return errors.New("duplicate primaryKey with other field")
 		}
 
 		inputField := InputDefinitionField{
@@ -155,7 +147,7 @@ func (i *InputDefinition) loadMeta() error {
 	return i.LoadDefinition(&pb)
 }
 
-//saveMeta writes meta data for the input definition file.
+// saveMeta writes meta data for the input definition file.
 func (i *InputDefinition) saveMeta() error {
 	if err := os.MkdirAll(i.path, 0777); err != nil {
 		return err
@@ -253,6 +245,7 @@ func (o *Action) Encode() (*internal.InputDefinitionAction, error) {
 	}, nil
 }
 
+// convert pointer to uint64
 func convert(x *uint64) uint64 {
 	if x != nil {
 		return *x
@@ -266,7 +259,7 @@ type InputFrame struct {
 	Options FrameOptions `json:"options,omitempty"`
 }
 
-// InputDefinitionInfo the json message format to create an InputDefinition.
+// InputDefinitionInfo represents the json message format needed to create an InputDefinition.
 type InputDefinitionInfo struct {
 	Frames []InputFrame           `json:"frames"`
 	Fields []InputDefinitionField `json:"fields"`

@@ -36,8 +36,11 @@ var (
 	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
 	ErrColumnRowLabelEqual  = errors.New("column and row labels cannot be equal")
 
-	ErrInputDefinitionExists   = errors.New("input-definition already exists")
-	ErrInputDefinitionNotFound = errors.New("input-definition not found")
+	ErrInputDefinitionExists        = errors.New("input-definition already exists")
+	ErrInputDefinitionPrimaryKey    = errors.New("input-definition can only contain one PrimaryKey")
+	ErrInputDefinitionColumnLabel   = errors.New("PrimaryKey field name does not match columnLabel")
+	ErrInputDefinitionNameRequired  = errors.New("input-definition name required")
+	ErrInputDefinitionAttrsRequired = errors.New("frames and fields are required")
 
 	ErrFieldNameRequired      = errors.New("field name required")
 	ErrInvalidFieldType       = errors.New("invalid field type")
@@ -45,6 +48,7 @@ var (
 	ErrInverseRangeNotAllowed = errors.New("inverse range not allowed")
 	ErrRangeCacheNotAllowed   = errors.New("range cache not allowed")
 	ErrFrameFieldsNotAllowed  = errors.New("frame fields not allowed")
+	ErrInputDefinitionNotFound = errors.New("input-definition not found")
 
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")

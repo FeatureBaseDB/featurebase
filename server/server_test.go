@@ -540,7 +540,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 							"cacheType": "ranked",
 							"timeQuantum": "YMD"
 						}}],
-			"fields": [{"name": "id",
+			"fields": [{"name": "columnID",
 						"primaryKey": true
 						}]}
 		`); err != nil {

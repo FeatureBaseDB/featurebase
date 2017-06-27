@@ -1500,9 +1500,17 @@ func errorString(err error) string {
 	return err.Error()
 }
 
+// handlePostInputDefinition handles POST /input-definition request.
 func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]
+
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
 
 	// Decode request.
 	var req InputDefinitionInfo
@@ -1512,19 +1520,29 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Find index.
-	index := h.Holder.Index(indexName)
-	if index == nil {
-		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
+	// Encode InputDefinition to its internal representation.
 	def, err := req.Encode()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	def.Name = inputDefName
+
+	// Validate columnLabel and duplicate primaryKey.
+	numPrimaryKey := 0
+	for _, field := range def.Fields {
+		if field.PrimaryKey {
+			numPrimaryKey += 1
+			if field.Name != index.columnLabel {
+				http.Error(w, ErrInputDefinitionColumnLabel.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	if numPrimaryKey > 1 {
+		http.Error(w, ErrInputDefinitionPrimaryKey.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Create InputDefinition.
 	_, err = index.CreateInputDefinition(def)
@@ -1539,32 +1557,30 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 	err = h.Broadcaster.SendSync(
 		&internal.CreateInputDefinitionMessage{
 			Index:      indexName,
-			Name:       inputDefName,
 			Definition: def,
 		})
 	if err != nil {
 		h.logger().Printf("problem sending CreateInputDefinition message: %s", err)
 	}
 
-	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
+// handleGetInputDefinition handles GET /input-definition request.
 func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]
 
-	//Find index.
+	// Find index.
 	index := h.Holder.Index(indexName)
 	if index == nil {
-		if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
-			h.logger().Printf("response encoding error: %s", err)
-		}
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
+
 	inputDef, _ := index.inputDefinitions[inputDefName]
-	//inputInfo := InputDefinitionInfo{Frames: inputDef.frames, Fields: inputDef.fields}
 	if err := json.NewEncoder(w).Encode(InputDefinitionInfo{
 		Frames: inputDef.frames,
 		Fields: inputDef.fields,
@@ -1574,6 +1590,7 @@ func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Reques
 
 }
 
+// handleDeleteInputDefinition handles DELETE /input-definition request.
 func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]
@@ -1581,9 +1598,7 @@ func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Req
 	// Find index.
 	index := h.Holder.Index(indexName)
 	if index == nil {
-		if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
-			h.logger().Printf("response encoding error: %s", err)
-		}
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -1599,15 +1614,15 @@ func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Req
 			Name:  inputDefName,
 		})
 	if err != nil {
-		h.logger().Printf("problem sending CreateInputDefinition message: %s", err)
+		h.logger().Printf("problem sending DeleteInputDefinition message: %s", err)
 	}
 
-	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
-type postInputDefinitionResponse struct{}
+type defaultInputDefinitionResponse struct{}
 
 func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
@@ -1644,7 +1659,7 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
