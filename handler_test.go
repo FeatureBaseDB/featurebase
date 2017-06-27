@@ -1113,6 +1113,14 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 		t.Fatalf("unexpected body: %s", body)
 	}
 
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
+	if w.Code != http.StatusConflict {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionExists.Error()+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+
 }
 
 // Ensure throwing error if there's duplicated primaryKey field.
@@ -1120,7 +1128,12 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
 	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-	inputBody1 := []byte(`
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
+
+	//Ensure throwing error if there's duplicated primaryKey field
+	invalidPrimaryKey := []byte(`
 			{
 			"frames":[{
 				"name":"event-time",
@@ -1141,24 +1154,18 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 				}
 			]
 		}`)
-	h := NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
+
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input2", bytes.NewBuffer(inputBody1)))
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input2", bytes.NewBuffer(invalidPrimaryKey)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `InputDefinition can only contain one PrimaryKey`+"\n" {
+	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionPrimaryKey.Error()+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
-}
 
-// Eusure throwing error if primary field's name doesn't match columnLabel.
-func TestHandler_UnmatchColumnID(t *testing.T) {
-	hldr := MustOpenHolder()
-	defer hldr.Close()
-	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{ColumnLabel: "id"})
-	inputBody := []byte(`
+	// Eusure throwing error if primary field's name doesn't match columnLabel
+	hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{ColumnLabel: "id"})
+	unmatchColumnBody := []byte(`
 			{
 			"frames":[{
 				"name":"event-time",
@@ -1175,14 +1182,39 @@ func TestHandler_UnmatchColumnID(t *testing.T) {
 				}
 			]
 		}`)
-	h := NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
+
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i1/input-definition/input1", bytes.NewBuffer(unmatchColumnBody)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `PrimaryKey field name does not match columnLabel`+"\n" {
+	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionColumnLabel.Error()+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+
+	// Eusure throwing error if request body is invalid
+	jsonErrorBody := []byte(`
+			{
+			"frames":[{
+				"name":"event-time",
+				"options":{
+					"timeQuantum": "YMD",
+					"inverseEnabled": false,
+					"cacheType": "ranked"
+				}
+			}],
+			"fields": [
+				{
+					"name": "columnID",
+					"primaryKey": true
+
+
+		}`)
+
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(jsonErrorBody)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `unexpected EOF`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 
@@ -1192,8 +1224,21 @@ func TestHandler_UnmatchColumnID(t *testing.T) {
 func TestHandler_DeleteInputDefinition(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
-	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
 
+	// Test index not found
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/input-definition/test", strings.NewReader("")))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != pilosa.ErrIndexNotFound.Error()+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+
+	// Test input definition is deleted
+	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
@@ -1202,11 +1247,7 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	h := NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
-	w := httptest.NewRecorder()
+	w = httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/input-definition/test", strings.NewReader("")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
@@ -1217,30 +1258,41 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 	}
 }
 
-// Return existing input definition
+// Ensure handler can get existing input definition
 func TestHandler_GetInputDefinition(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
-	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
+	h := NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = NewCluster(1)
 
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
+
+	// Return error if index does not exist
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i0/input-definition/test", strings.NewReader("")))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != pilosa.ErrIndexNotFound.Error()+"\n" {
+		t.Fatalf("unexpected body: %s, expect: %s", body, pilosa.ErrIndexNotFound)
+	}
+
+	// Return existing input definition
+	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	inputDef, err := index.CreateInputDefinition(&def)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	response := &pilosa.InputDefinitionInfo{Frames: inputDef.Frames(), Fields: inputDef.Fields()}
 	expect, err := json.Marshal(response)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
-	w := httptest.NewRecorder()
+
+	w = httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i0/input-definition/test", strings.NewReader("")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)

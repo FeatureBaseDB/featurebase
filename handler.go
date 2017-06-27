@@ -1533,15 +1533,13 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		if field.PrimaryKey {
 			numPrimaryKey += 1
 			if field.Name != index.columnLabel {
-				err = fmt.Errorf("PrimaryKey field name does not match columnLabel")
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				http.Error(w, ErrInputDefinitionColumnLabel.Error(), http.StatusBadRequest)
 				return
 			}
 		}
 	}
 	if numPrimaryKey > 1 {
-		err = errors.New("InputDefinition can only contain one PrimaryKey")
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, ErrInputDefinitionPrimaryKey.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -1558,14 +1556,13 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 	err = h.Broadcaster.SendSync(
 		&internal.CreateInputDefinitionMessage{
 			Index:      indexName,
-			Name:       inputDefName,
 			Definition: def,
 		})
 	if err != nil {
 		h.logger().Printf("problem sending CreateInputDefinition message: %s", err)
 	}
 
-	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
@@ -1578,11 +1575,10 @@ func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Reques
 	// Find index.
 	index := h.Holder.Index(indexName)
 	if index == nil {
-		if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
-			h.logger().Printf("response encoding error: %s", err)
-		}
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
+
 	inputDef, _ := index.inputDefinitions[inputDefName]
 	if err := json.NewEncoder(w).Encode(InputDefinitionInfo{
 		Frames: inputDef.frames,
@@ -1601,9 +1597,7 @@ func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Req
 	// Find index.
 	index := h.Holder.Index(indexName)
 	if index == nil {
-		if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
-			h.logger().Printf("response encoding error: %s", err)
-		}
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -1622,9 +1616,9 @@ func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Req
 		h.logger().Printf("problem sending DeleteInputDefinition message: %s", err)
 	}
 
-	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
-type postInputDefinitionResponse struct{}
+type defaultInputDefinitionResponse struct{}
