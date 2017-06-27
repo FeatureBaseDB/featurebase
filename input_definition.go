@@ -339,22 +339,14 @@ func HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
 			return nil, fmt.Errorf("Value %s does not exist in definition map", v)
 		}
 	case InputSingleRowBool:
-		switch value.(type) {
-		case bool:
-			if value.(bool) {
-				bit.RowID = *a.RowID
-			} else { // value is not True.
-				return nil, err
-			}
-		case float64:
-			if value.(float64) >= 1 {
-				bit.RowID = *a.RowID
-			} else { // value is not True.
-				return nil, err
-			}
-		default:
+		v, ok := value.(bool)
+		if !ok {
 			return nil, fmt.Errorf("single-row-boolean value %v must equate to a Bool", value)
 		}
+		if v == false { // False returns a nil error and nil bit.
+			return nil, err
+		}
+		bit.RowID = *a.RowID
 	case InputValueToRow:
 		v, ok := value.(float64)
 		if !ok {

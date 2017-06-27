@@ -1274,6 +1274,32 @@ func TestHandler_CreateInput(t *testing.T) {
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
+
+	// Verify the bits set per frame
+	// f := index.Frame("cab-type")
+	f0 := index.Frame("distance-miles")
+	v0 := f0.View(pilosa.ViewStandard)
+	fragment0 := v0.Fragment(0)
+
+	// Verify the distanceMiles Bit was set
+	if a := fragment0.Row(8).Bits(); !reflect.DeepEqual(a, []uint64{1}) {
+		t.Fatalf("unexpected bits: %+v", a)
+	}
+
+	f1 := index.Frame("add-ons")
+	v1 := f1.View(pilosa.ViewStandard)
+	fragment1 := v1.Fragment(0)
+
+	// Verify the add-ons frame does not have a distanceMiles Bit set
+	// The Input process must respect the Action Frame assignments
+	if a := fragment1.Row(8).Bits(); !reflect.DeepEqual(a, []uint64{}) {
+		t.Fatalf("unexpected bits: %+v", a)
+	}
+	// Verify the withPet Bit was set
+	if a := fragment1.Row(100).Bits(); !reflect.DeepEqual(a, []uint64{1}) {
+		t.Fatalf("unexpected bits: %+v", a)
+	}
+
 }
 
 func TestInput_JSON(t *testing.T) {
@@ -1325,8 +1351,8 @@ func TestInput_JSON(t *testing.T) {
 			t.Fatalf("Expect error: %s, actual: %s", test.err, body)
 		}
 	}
-
 }
+
 func EncodeInputDef(name string, body []byte) (*internal.InputDefinition, error) {
 	var req pilosa.InputDefinitionInfo
 	err := json.Unmarshal(body, &req)

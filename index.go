@@ -766,6 +766,9 @@ func (i *Index) InputBits(frame string, bits []*Bit) error {
 	}
 
 	for i, bit := range bits {
+		if bit == nil {
+			continue
+		}
 		rowIDs = append(rowIDs, bit.RowID)
 		columnIDs = append(columnIDs, bit.ColumnID)
 

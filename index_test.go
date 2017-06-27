@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -456,6 +457,7 @@ func TestIndex_CreateFrameWhenOpenInputDefinition(t *testing.T) {
 }
 
 func TestIndex_InputBits(t *testing.T) {
+	var bits []*pilosa.Bit
 	index := MustOpenIndex()
 	defer index.Close()
 
@@ -464,17 +466,22 @@ func TestIndex_InputBits(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	err := index.InputBits("f", bits)
+	if !strings.Contains(err.Error(), "Frame not found") {
+		t.Fatalf("Expected Frame not found error, actual error: %s", err)
+	}
+
 	// Create frame.
 	if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	var bits []*pilosa.Bit
 	bits = append(bits, &pilosa.Bit{RowID: 0, ColumnID: 0})
 	bits = append(bits, &pilosa.Bit{RowID: 0, ColumnID: 1})
 	bits = append(bits, &pilosa.Bit{RowID: 2, ColumnID: 2, Timestamp: 1})
+	bits = append(bits, nil)
 
-	err := index.InputBits("f", bits)
+	err = index.InputBits("f", bits)
 	if err != nil {
 		t.Fatal(err)
 	}
