@@ -232,7 +232,7 @@ func (o *InputDefinitionField) Encode() (*internal.InputDefinitionField, error) 
 	return &field, nil
 }
 
-// Action descripes the mapping method for the field in the InputDefinition.
+// Action describes the mapping method for the field in the InputDefinition.
 type Action struct {
 	Frame            string            `json:"frame,omitempty"`
 	ValueDestination string            `json:"valueDestination,omitempty"`
