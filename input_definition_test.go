@@ -171,17 +171,10 @@ func TestHandleAction(t *testing.T) {
 		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
 	}
 
-	value = float64(1.5)
+	value = float64(1)
 	b, err = pilosa.HandleAction(action, value, colID)
-	if b != nil {
-		if b.RowID != 100 {
-			t.Fatalf("Unexpected rowID %v", b.RowID)
-		}
-	}
-	value = float64(0)
-	b, err = pilosa.HandleAction(action, value, colID)
-	if b != nil {
-		t.Fatalf("Expected Ignore values that do not equate to True")
+	if !strings.Contains(err.Error(), "must equate to a Bool") {
+		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
 	}
 
 	value = false
@@ -195,6 +188,9 @@ func TestHandleAction(t *testing.T) {
 	if b != nil {
 		if b.ColumnID != 0 {
 			t.Fatalf("Unexpected ColumnID %v", b.ColumnID)
+		}
+		if b.RowID != 100 {
+			t.Fatalf("Unexpected rowID %v", b.RowID)
 		}
 	}
 

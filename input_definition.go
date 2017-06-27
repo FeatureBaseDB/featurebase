@@ -346,12 +346,6 @@ func HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
 			} else { // value is not True.
 				return nil, err
 			}
-		case float64:
-			if value.(float64) >= 1 {
-				bit.RowID = *a.RowID
-			} else { // value is not True.
-				return nil, err
-			}
 		default:
 			return nil, fmt.Errorf("single-row-boolean value %v must equate to a Bool", value)
 		}
