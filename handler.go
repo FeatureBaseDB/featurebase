@@ -1499,10 +1499,17 @@ func errorString(err error) string {
 	return err.Error()
 }
 
-// handlePOSTInputDefinition handles POST /input-definition request.
+// handlePostInputDefinition handles POST /input-definition request.
 func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]
+
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
 
 	// Decode request.
 	var req InputDefinitionInfo
@@ -1512,13 +1519,7 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Find index.
-	index := h.Holder.Index(indexName)
-	if index == nil {
-		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
+	// Encode InputDefinition to its internal representation.
 	def, err := req.Encode()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1526,22 +1527,20 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 	}
 	def.Name = inputDefName
 
-	// Validate columnLabel & duplicate primaryKey
+	// Validate columnLabel and duplicate primaryKey.
 	numPrimaryKey := 0
 	for _, field := range def.Fields {
 		if field.PrimaryKey {
 			numPrimaryKey += 1
-			if field.Name == index.columnLabel {
-				continue
-			} else {
-				err = fmt.Errorf("primary field's name not match columnLabel")
+			if field.Name != index.columnLabel {
+				err = fmt.Errorf("PrimaryKey field name does not match columnLabel")
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 		}
 	}
 	if numPrimaryKey > 1 {
-		err = errors.New("duplicate primaryKey with other field")
+		err = errors.New("InputDefinition can only contain one PrimaryKey")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1576,7 +1575,7 @@ func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Reques
 	indexName := mux.Vars(r)["index"]
 	inputDefName := mux.Vars(r)["input-definition"]
 
-	//Find index.
+	// Find index.
 	index := h.Holder.Index(indexName)
 	if index == nil {
 		if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
@@ -1620,7 +1619,7 @@ func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Req
 			Name:  inputDefName,
 		})
 	if err != nil {
-		h.logger().Printf("problem sending CreateInputDefinition message: %s", err)
+		h.logger().Printf("problem sending DeleteInputDefinition message: %s", err)
 	}
 
 	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {

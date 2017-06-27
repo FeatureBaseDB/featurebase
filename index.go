@@ -51,14 +51,14 @@ type Index struct {
 	// Frames by name.
 	frames map[string]*Frame
 
-	// Max Slice on any node in the cluster, according to this node
+	// Max Slice on any node in the cluster, according to this node.
 	remoteMaxSlice        uint64
 	remoteMaxInverseSlice uint64
 
-	// Column attribute storage and cache
+	// Column attribute storage and cache.
 	columnAttrStore *AttrStore
 
-	// InputDefinition by name
+	// InputDefinitions by name.
 	inputDefinitions map[string]*InputDefinition
 
 	broadcaster Broadcaster
@@ -336,7 +336,7 @@ func (i *Index) SetTimeQuantum(q TimeQuantum) error {
 // FramePath returns the path to a frame in the index.
 func (i *Index) FramePath(name string) string { return filepath.Join(i.path, name) }
 
-// InputDefinitionPath returns the path to a inputdefinition in the index.
+// InputDefinitionPath returns the path to an input definition in the index.
 func (i *Index) InputDefinitionPath() string {
 	return filepath.Join(i.path, InputDefinitionDir)
 }
@@ -618,10 +618,10 @@ type IndexOptions struct {
 }
 
 // Encode converts i into its internal representation.
-func (o *IndexOptions) Encode() *internal.IndexMeta {
+func (i *IndexOptions) Encode() *internal.IndexMeta {
 	return &internal.IndexMeta{
-		ColumnLabel: o.ColumnLabel,
-		TimeQuantum: string(o.TimeQuantum),
+		ColumnLabel: i.ColumnLabel,
+		TimeQuantum: string(i.TimeQuantum),
 	}
 }
 
@@ -702,7 +702,7 @@ func (i *Index) newInputDefinition(name string) (*InputDefinition, error) {
 	return inputDef, nil
 }
 
-// DeleteInputDefinition removes a input definition from the index.
+// DeleteInputDefinition removes an input definition from the index.
 func (i *Index) DeleteInputDefinition(name string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -742,7 +742,7 @@ func (i *Index) openInputDefinition() error {
 		input.Open()
 		i.inputDefinitions[file.Name()] = input
 
-		// Create frame if it doesn't exist
+		// Create frame if it doesn't exist.
 		for _, fr := range input.frames {
 			_, err := i.CreateFrame(fr.Name, fr.Options)
 			if err == ErrFrameExists {

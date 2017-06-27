@@ -21,6 +21,7 @@ import (
 
 	"errors"
 	"fmt"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -80,7 +81,7 @@ func (i *InputDefinition) Open() error {
 	return nil
 }
 
-// LoadDefinition loads the protobuf format of a defition
+// LoadDefinition loads the protobuf format of a definition.
 func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 	// Copy metadata fields.
 	i.name = pb.Name
@@ -146,7 +147,7 @@ func (i *InputDefinition) loadMeta() error {
 	return i.LoadDefinition(&pb)
 }
 
-//saveMeta writes meta data for the input definition file.
+// saveMeta writes meta data for the input definition file.
 func (i *InputDefinition) saveMeta() error {
 	if err := os.MkdirAll(i.path, 0777); err != nil {
 		return err
@@ -223,7 +224,7 @@ func (o *InputDefinitionField) Encode() (*internal.InputDefinitionField, error) 
 	return &field, nil
 }
 
-// Action descripes the mapping method for the field in the InputDefinition.
+// Action describes the mapping method for the field in the InputDefinition.
 type Action struct {
 	Frame            string            `json:"frame,omitempty"`
 	ValueDestination string            `json:"valueDestination,omitempty"`
@@ -258,7 +259,7 @@ type InputFrame struct {
 	Options FrameOptions `json:"options,omitempty"`
 }
 
-// InputDefinitionInfo the json message format to create an InputDefinition.
+// InputDefinitionInfo represents the json message format needed to create an InputDefinition.
 type InputDefinitionInfo struct {
 	Frames []InputFrame           `json:"frames"`
 	Fields []InputDefinitionField `json:"fields"`
@@ -281,7 +282,7 @@ func (i *InputDefinitionInfo) Encode() (*internal.InputDefinition, error) {
 	return &def, nil
 }
 
-// AddFrame adds frame to input definition
+// AddFrame adds frame to input definition.
 func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	i.frames = append(i.frames, frame)
 	if err := i.saveMeta(); err != nil {
@@ -290,7 +291,7 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	return nil
 }
 
-// ValidateAction validate actions from input-definition
+// ValidateAction validates actions from InputDefinition.
 func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction) error {
 	if action.Frame == "" {
 		return ErrFrameRequired
