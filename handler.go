@@ -268,6 +268,8 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 		switch resp.Err {
 		case ErrTooManyWrites:
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
+		case ErrSliceIndexTooLarge:
+			w.WriteHeader(http.StatusNotImplemented)
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
 		}
