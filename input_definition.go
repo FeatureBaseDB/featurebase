@@ -253,13 +253,6 @@ func convert(x *uint64) uint64 {
 	return 0
 }
 
-func convert(x *uint64) uint64 {
-	if x != nil {
-		return *x
-	}
-	return 0
-}
-
 // InputFrame defines the frame used in the input definition.
 type InputFrame struct {
 	Name    string       `json:"name,omitempty"`

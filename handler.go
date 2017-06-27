@@ -1659,7 +1659,7 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if err := json.NewEncoder(w).Encode(postInputDefinitionResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
