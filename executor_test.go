@@ -769,15 +769,19 @@ func TestExecutor_Execute_ErrSliceIndexTooLarge(t *testing.T) {
 
 	e := NewExecutor(hldr.Holder, NewCluster(1))
 
-	// Set bits.
-	if _, err := e.Execute(context.Background(), "i", MustParse(`SetBit(frame=f, rowID=19042, columnID=406, timestamp="2016-03-15T04:54")`), nil, nil); err != nil {
+	// Set bit with very high columnID
+	if _, err := e.Execute(context.Background(), "i", MustParse(`SetBit(frame=f, rowID=19042, columnID=6018148517796380732, timestamp="2016-03-15T04:54")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
-
-	if _, err := e.Execute(context.Background(), "i", MustParse(`Bitmap(frame=f, rowID=6018148517796380732)`), nil, nil); err != pilosa.ErrSliceIndexTooLarge {
+	if _, err := e.Execute(context.Background(), "i", MustParse(`Bitmap(frame=f, columnID=6018148517796380732)`), nil, nil); err != pilosa.ErrSliceIndexTooLarge {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, err := e.Execute(context.Background(), "i", MustParse(`Bitmap(frame=f, columnID=6018148517796380732)`), nil, nil); err != pilosa.ErrSliceIndexTooLarge {
+
+	// Set bit with very high rowID
+	if _, err := e.Execute(context.Background(), "i", MustParse(`SetBit(frame=f, rowID=6018148517796380732, columnID=402, timestamp="2016-03-15T04:54")`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Execute(context.Background(), "i", MustParse(`Bitmap(frame=f, rowID=6018148517796380732)`), nil, nil); err != pilosa.ErrSliceIndexTooLarge {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
