@@ -32,8 +32,14 @@ func TestInputDefinition_Open(t *testing.T) {
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
-	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
+	def := internal.InputDefinition{Name: "^", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
 	inputDef, err := index.CreateInputDefinition(&def)
+	if !strings.Contains(err.Error(), "invalid index or frame's name") {
+		t.Fatalf("Expected Invalid name error, actual error: %s", err)
+	}
+
+	def = internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
+	inputDef, err = index.CreateInputDefinition(&def)
 	if err != nil {
 		t.Fatal(err)
 	}
