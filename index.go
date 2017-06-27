@@ -656,9 +656,9 @@ func (i *Index) CreateInputDefinition(pb *internal.InputDefinition) (*InputDefin
 
 func (i *Index) createInputDefinition(pb *internal.InputDefinition) (*InputDefinition, error) {
 	if pb.Name == "" {
-		return nil, errors.New("input-definition name required")
+		return nil, ErrInputDefinitionNameRequired
 	} else if len(pb.Frames) == 0 || len(pb.Fields) == 0 {
-		return nil, errors.New("frames and fields are required")
+		return nil, ErrInputDefinitionAttrsRequired
 	}
 
 	for _, fr := range pb.Frames {

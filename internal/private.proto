@@ -103,7 +103,6 @@ message InputDefinitionAction {
 
 message CreateInputDefinitionMessage {
     string Index = 1;
-    string Name = 2;
     InputDefinition Definition = 3;
 }
 

@@ -378,16 +378,31 @@ func TestIndex_CreateInputDefinition(t *testing.T) {
 	}
 }
 
+// Ensure create input definition handle correct error
 func TestIndex_CreateExistingInputDefinition(t *testing.T) {
 	index := MustOpenIndex()
 	defer index.Close()
+
+	// Test frames and fields are required
+	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{}, Fields: []*internal.InputDefinitionField{}}
+	_, err := index.CreateInputDefinition(&def)
+	if err != pilosa.ErrInputDefinitionAttrsRequired {
+		t.Fatal(err)
+	}
+
+	//Test input definition name is required
+	def = internal.InputDefinition{Name: "", Frames: []*internal.Frame{}, Fields: []*internal.InputDefinitionField{}}
+	_, err = index.CreateInputDefinition(&def)
+	if err != pilosa.ErrInputDefinitionNameRequired {
+		t.Fatal(err)
+	}
 
 	// Create Input Definition.
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
-	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
-	_, err := index.CreateInputDefinition(&def)
+	def = internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
+	_, err = index.CreateInputDefinition(&def)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,18 +412,7 @@ func TestIndex_CreateExistingInputDefinition(t *testing.T) {
 	}
 }
 
-func TestIndex_CreateEmptyInputDefinition(t *testing.T) {
-	index := MustOpenIndex()
-	defer index.Close()
-
-	// Create Input Definition.
-	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{}, Fields: []*internal.InputDefinitionField{}}
-	_, err := index.CreateInputDefinition(&def)
-	if err.Error() != "frames and fields are required" {
-		t.Fatal(err)
-	}
-}
-
+// Ensure to delete existing input definition.
 func TestIndex_DeleteInputDefinition(t *testing.T) {
 	index := MustOpenIndex()
 	defer index.Close()
@@ -433,6 +437,7 @@ func TestIndex_DeleteInputDefinition(t *testing.T) {
 	}
 }
 
+// Ensure that frame in input definition will be created when server restart
 func TestIndex_CreateFrameWhenOpenInputDefinition(t *testing.T) {
 	index := MustOpenIndex()
 	defer index.Close()
