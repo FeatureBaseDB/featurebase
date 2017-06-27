@@ -754,6 +754,34 @@ func TestExecutor_Execute_ErrMaxWritesPerRequest(t *testing.T) {
 	}
 }
 
+// Ensure executor returns intended error if row or column ID is too large for memory.
+func TestExecutor_Execute_ErrSliceIndexTooLarge(t *testing.T) {
+	hldr := MustOpenHolder()
+	defer hldr.Close()
+	i := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+	_, err := i.CreateFrame("f", pilosa.FrameOptions{
+		InverseEnabled: true,
+		TimeQuantum: pilosa.TimeQuantum("YMD"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e := NewExecutor(hldr.Holder, NewCluster(1))
+
+	// Set bits.
+	if _, err := e.Execute(context.Background(), "i", MustParse(`SetBit(frame=f, rowID=19042, columnID=406, timestamp="2016-03-15T04:54")`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.Execute(context.Background(), "i", MustParse(`Bitmap(frame=f, rowID=6018148517796380732)`), nil, nil); err != pilosa.ErrSliceIndexTooLarge {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := e.Execute(context.Background(), "i", MustParse(`Bitmap(frame=f, columnID=6018148517796380732)`), nil, nil); err != pilosa.ErrSliceIndexTooLarge {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // Executor represents a test wrapper for pilosa.Executor.
 type Executor struct {
 	*pilosa.Executor
