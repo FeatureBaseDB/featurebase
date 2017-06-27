@@ -115,6 +115,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
+	router.HandleFunc("/index/{index}/input/{input-definition}", handler.handlePostInput).Methods("POST")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetInputDefinition).Methods("GET")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
@@ -1622,3 +1623,94 @@ func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Req
 }
 
 type defaultInputDefinitionResponse struct{}
+
+func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	inputDefName := mux.Vars(r)["input-definition"]
+
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Decode request.
+	var reqs []interface{}
+	err := json.NewDecoder(r.Body).Decode(&reqs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	for _, req := range reqs {
+		bits, err := h.InputJsonDataParser(req.(map[string]interface{}), index, inputDefName)
+		if err == ErrInputDefinitionNotFound {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		} else if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		for fr, bs := range bits {
+			err := index.InputBits(fr, bs)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+// InputJsonDataParser validate input json file and execute SetBit
+func (h *Handler) InputJsonDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
+	inputDef := index.inputDefinition(name)
+	if inputDef == nil {
+		return nil, ErrInputDefinitionNotFound
+	}
+	// if field in input data is not in defined definition, return error
+	var columnLabel string
+	validFields := make(map[string]bool)
+	for _, field := range inputDef.Fields() {
+		validFields[field.Name] = true
+		if field.PrimaryKey {
+			columnLabel = field.Name
+		}
+	}
+	for key := range req {
+		_, ok := validFields[key]
+		if !ok {
+			return nil, fmt.Errorf("field not found: %s", key)
+		}
+	}
+
+	setBits := make(map[string][]*Bit)
+	for _, field := range inputDef.Fields() {
+		// skip field that defined in definition but not in input data
+		if _, ok := req[field.Name]; !ok {
+			continue
+		}
+		value, ok := req[columnLabel]
+		if !ok {
+			return nil, fmt.Errorf("columnLabel required")
+		}
+		colValue, ok := value.(float64)
+		if !ok {
+			return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
+		}
+
+		for _, action := range field.Actions {
+			frame := action.Frame
+			bit, err := HandleAction(action, req[field.Name], uint64(colValue))
+			if err != nil {
+				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
+			}
+			if bit != nil {
+				setBits[frame] = append(setBits[frame], bit)
+			}
+		}
+	}
+	return setBits, nil
+}
