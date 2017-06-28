@@ -95,11 +95,13 @@ Response:
 
 In order to send protobuf binaries in the request and response, set `Content-Type` and `Accept` headers to: `application/x-protobuf`.
 
-The response doesn't include column attributes by default. To return them, set `columnAttrs` query argument to `true`.
+The response doesn't include column attributes by default. To return them, set the `columnAttrs` query argument to `true`.
+
+The query is executed for all [slices](../data-model#slice) by default. To use specified slices only, set the `slices` query argument to a comma-separated list of slice indices.
 
 Request:
 ```
-curl localhost:10101/index/user/query?columnAttrs=true \
+curl "localhost:10101/index/user/query?columnAttrs=true&slices=0,1" \
      -X POST \
      -d 'Bitmap(frame="language", id=5)'
 ```
