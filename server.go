@@ -129,7 +129,8 @@ func (s *Server) Open() error {
 	}
 
 	// Open holder.
-	if err := s.Holder.Open(s.LogOutput); err != nil {
+	s.Holder.LogOutput = s.LogOutput
+	if err := s.Holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
 

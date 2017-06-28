@@ -70,7 +70,7 @@ func NewHolder() *Holder {
 }
 
 // Open initializes the root data directory for the holder.
-func (h *Holder) Open(logOutput io.Writer) error {
+func (h *Holder) Open() error {
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return err
 	}
@@ -86,8 +86,6 @@ func (h *Holder) Open(logOutput io.Writer) error {
 	if err != nil {
 		return err
 	}
-
-	h.LogOutput = logOutput
 
 	for _, fi := range fis {
 		if !fi.IsDir() {

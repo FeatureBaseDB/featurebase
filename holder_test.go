@@ -417,7 +417,7 @@ func NewHolder() *Holder {
 // MustOpenHolder creates and opens a holder at a temporary path. Panic on error.
 func MustOpenHolder() *Holder {
 	h := NewHolder()
-	if err := h.Open(&h.LogOutput); err != nil {
+	if err := h.Open(); err != nil {
 		panic(err)
 	}
 	return h
@@ -439,7 +439,7 @@ func (h *Holder) Reopen() error {
 	h.Holder = pilosa.NewHolder()
 	h.Holder.Path = path
 	h.Holder.LogOutput = logOutput
-	if err := h.Holder.Open(&h.LogOutput); err != nil {
+	if err := h.Holder.Open(); err != nil {
 		return err
 	}
 
