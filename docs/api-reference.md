@@ -93,13 +93,13 @@ In order to send protobuf binaries in the request and response, set `Content-Typ
 
 The response doesn't include column attributes by default. To return them, set `columnAttrs` query argument to `true`.
 
-The query is executed for all [slices](data-model#slice) by default. To use specified slices only, set `slices` query argument to a comma-separated list of slice indices.
+The query is executed for all [slices](../data-model#slice) by default. To use specified slices only, set `slices` query argument to a comma-separated list of slice indices.
 
-The time quantum can be specified with the `time_granularity`. Valid values match those for the [time-quantum](#/index/<index-name>/time-quantum) endpoint.
+The time quantum can be specified with the `time_granularity`. Valid values match those for the `time-quantum`  endpoint.
 
 Request:
 ```
-curl localhost:10101/index/user/query?columnAttrs=true \
+curl "localhost:10101/index/user/query?columnAttrs=true&slices=0,1" \
      -X POST \
      -d 'Bitmap(frame="language", id=5)'
 ```
