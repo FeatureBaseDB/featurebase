@@ -26,7 +26,7 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// Action Mapping types
+// Action types.
 const (
 	InputMapping       = "mapping"
 	InputValueToRow    = "value-to-row"
@@ -101,7 +101,7 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 		i.frames = append(i.frames, inputFrame)
 	}
 
-	countRowID := make(map[string]uint64)
+	accountRowID := make(map[string]uint64)
 	for _, field := range pb.Fields {
 		var actions []Action
 		for _, action := range field.InputDefinitionActions {
@@ -109,11 +109,11 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 				return err
 			}
 			if action.ValueDestination == InputSingleRowBool && action.Frame != "" {
-				val, ok := countRowID[action.Frame]
+				val, ok := accountRowID[action.Frame]
 				if ok && val == action.RowID {
 					return fmt.Errorf("duplicate rowID with other field: %v", action.RowID)
 				}
-				countRowID[action.Frame] = action.RowID
+				accountRowID[action.Frame] = action.RowID
 			}
 			actions = append(actions, Action{
 				Frame:            action.Frame,
@@ -152,40 +152,18 @@ func (i *InputDefinition) saveMeta() error {
 	if err := os.MkdirAll(i.path, 0777); err != nil {
 		return err
 	}
-	// Marshal metadata.
+
 	var frames []*internal.Frame
 	for _, fr := range i.frames {
-		frameMeta := &internal.FrameMeta{
-			RowLabel:       fr.Options.RowLabel,
-			InverseEnabled: fr.Options.InverseEnabled,
-			CacheType:      fr.Options.CacheType,
-			CacheSize:      fr.Options.CacheSize,
-			TimeQuantum:    string(fr.Options.TimeQuantum),
-		}
-		frame := &internal.Frame{Name: fr.Name, Meta: frameMeta}
-		frames = append(frames, frame)
+		frames = append(frames, fr.Encode())
 	}
 
 	var fields []*internal.InputDefinitionField
 	for _, field := range i.fields {
-		var actions []*internal.InputDefinitionAction
-		for _, action := range field.Actions {
-			actionMeta := &internal.InputDefinitionAction{
-				Frame:            action.Frame,
-				ValueDestination: action.ValueDestination,
-				ValueMap:         action.ValueMap,
-				RowID:            convert(action.RowID),
-			}
-			actions = append(actions, actionMeta)
-		}
-
-		fieldMeta := &internal.InputDefinitionField{
-			Name:                   field.Name,
-			PrimaryKey:             field.PrimaryKey,
-			InputDefinitionActions: actions,
-		}
-		fields = append(fields, fieldMeta)
+		fields = append(fields, field.Encode())
 	}
+
+	// Marshal input definition.
 	buf, err := proto.Marshal(&internal.InputDefinition{
 		Name:   i.name,
 		Frames: frames,
@@ -211,17 +189,16 @@ type InputDefinitionField struct {
 }
 
 // Encode converts InputDefinitionField into its internal representation.
-func (o *InputDefinitionField) Encode() (*internal.InputDefinitionField, error) {
-	field := internal.InputDefinitionField{Name: o.Name, PrimaryKey: o.PrimaryKey}
-
+func (o *InputDefinitionField) Encode() *internal.InputDefinitionField {
+	var actions []*internal.InputDefinitionAction
 	for _, action := range o.Actions {
-		actionEncode, err := action.Encode()
-		if err != nil {
-			return nil, err
-		}
-		field.InputDefinitionActions = append(field.InputDefinitionActions, actionEncode)
+		actions = append(actions, action.Encode())
 	}
-	return &field, nil
+	return &internal.InputDefinitionField{
+		Name:                   o.Name,
+		PrimaryKey:             o.PrimaryKey,
+		InputDefinitionActions: actions,
+	}
 }
 
 // Action describes the mapping method for the field in the InputDefinition.
@@ -233,16 +210,19 @@ type Action struct {
 }
 
 // Encode converts Action into its internal representation.
-func (o *Action) Encode() (*internal.InputDefinitionAction, error) {
-	if o.RowID == nil && o.ValueDestination == "single-row-boolean" {
-		return nil, errors.New("rowID required for single-row-boolean")
-	}
+func (o *Action) Encode() *internal.InputDefinitionAction {
+	// TODO: this check needs to happen somewhere other than Encode()
+	/*
+		if o.RowID == nil && o.ValueDestination == InputSingleRowBool {
+			return nil, errors.New("rowID required for single-row-boolean")
+		}
+	*/
 	return &internal.InputDefinitionAction{
 		Frame:            o.Frame,
 		ValueDestination: o.ValueDestination,
 		ValueMap:         o.ValueMap,
 		RowID:            convert(o.RowID),
-	}, nil
+	}
 }
 
 // convert pointer to uint64
@@ -259,6 +239,15 @@ type InputFrame struct {
 	Options FrameOptions `json:"options,omitempty"`
 }
 
+// Encode converts InputFrame into its internal representation.
+func (f *InputFrame) Encode() *internal.Frame {
+	return &internal.Frame{
+		Name: f.Name,
+		Meta: f.Options.Encode(),
+	}
+
+}
+
 // InputDefinitionInfo represents the json message format needed to create an InputDefinition.
 type InputDefinitionInfo struct {
 	Frames []InputFrame           `json:"frames"`
@@ -266,20 +255,15 @@ type InputDefinitionInfo struct {
 }
 
 // Encode converts InputDefinitionInfo into its internal representation.
-func (i *InputDefinitionInfo) Encode() (*internal.InputDefinition, error) {
+func (i *InputDefinitionInfo) Encode() *internal.InputDefinition {
 	var def internal.InputDefinition
 	for _, f := range i.Frames {
-		def.Frames = append(def.Frames, &internal.Frame{Name: f.Name, Meta: f.Options.Encode()})
+		def.Frames = append(def.Frames, f.Encode())
 	}
 	for _, f := range i.Fields {
-		fEncode, err := f.Encode()
-		if err != nil {
-			return nil, err
-		}
-		def.Fields = append(def.Fields, fEncode)
+		def.Fields = append(def.Fields, f.Encode())
 	}
-
-	return &def, nil
+	return &def
 }
 
 // AddFrame manually add frame to input definition.

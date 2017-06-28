@@ -155,7 +155,7 @@ func (i *Index) Open() error {
 		return err
 	}
 
-	if err := i.openInputDefinition(); err != nil {
+	if err := i.openInputDefinitions(); err != nil {
 		return err
 	}
 
@@ -336,7 +336,7 @@ func (i *Index) SetTimeQuantum(q TimeQuantum) error {
 // FramePath returns the path to a frame in the index.
 func (i *Index) FramePath(name string) string { return filepath.Join(i.path, name) }
 
-// InputDefinitionPath returns the path to an input definition in the index.
+// InputDefinitionPath returns the path to the input definition directory for the index.
 func (i *Index) InputDefinitionPath() string {
 	return filepath.Join(i.path, InputDefinitionDir)
 }
@@ -723,8 +723,8 @@ func (i *Index) DeleteInputDefinition(name string) error {
 	return nil
 }
 
-// openInputDefinition opens and initializes the input definitions inside the index.
-func (i *Index) openInputDefinition() error {
+// openInputDefinitions opens and initializes the input definitions inside the index.
+func (i *Index) openInputDefinitions() error {
 	inputDef, err := os.Open(i.InputDefinitionPath())
 	if os.IsNotExist(err) {
 		return nil
