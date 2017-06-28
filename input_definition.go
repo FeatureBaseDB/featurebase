@@ -15,12 +15,11 @@
 package pilosa
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-
-	"errors"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
@@ -101,20 +100,9 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 		i.frames = append(i.frames, inputFrame)
 	}
 
-	accountRowID := make(map[string]uint64)
 	for _, field := range pb.Fields {
 		var actions []Action
 		for _, action := range field.InputDefinitionActions {
-			if err := i.ValidateAction(action); err != nil {
-				return err
-			}
-			if action.ValueDestination == InputSingleRowBool && action.Frame != "" {
-				val, ok := accountRowID[action.Frame]
-				if ok && val == action.RowID {
-					return fmt.Errorf("duplicate rowID with other field: %v", action.RowID)
-				}
-				accountRowID[action.Frame] = action.RowID
-			}
 			actions = append(actions, Action{
 				Frame:            action.Frame,
 				ValueDestination: action.ValueDestination,
@@ -209,19 +197,34 @@ type Action struct {
 	RowID            *uint64           `json:"rowID,omitempty"`
 }
 
-// Encode converts Action into its internal representation.
-func (o *Action) Encode() *internal.InputDefinitionAction {
-	// TODO: this check needs to happen somewhere other than Encode()
-	/*
-		if o.RowID == nil && o.ValueDestination == InputSingleRowBool {
-			return nil, errors.New("rowID required for single-row-boolean")
+// Validate ensures the input definition action conforms to our specification.
+func (a *Action) Validate() error {
+	if a.Frame == "" {
+		return ErrFrameRequired
+	}
+	validValues := make(map[string]bool)
+	for _, val := range validValueDestination {
+		validValues[val] = true
+	}
+	if _, ok := validValues[a.ValueDestination]; !ok {
+		return fmt.Errorf("invalid ValueDestination: %s", a.ValueDestination)
+	}
+	switch a.ValueDestination {
+	case InputMapping:
+		if len(a.ValueMap) == 0 {
+			return errors.New("valueMap required for map")
 		}
-	*/
+	}
+	return nil
+}
+
+// Encode converts Action into its internal representation.
+func (a *Action) Encode() *internal.InputDefinitionAction {
 	return &internal.InputDefinitionAction{
-		Frame:            o.Frame,
-		ValueDestination: o.ValueDestination,
-		ValueMap:         o.ValueMap,
-		RowID:            convert(o.RowID),
+		Frame:            a.Frame,
+		ValueDestination: a.ValueDestination,
+		ValueMap:         a.ValueMap,
+		RowID:            convert(a.RowID),
 	}
 }
 
@@ -239,19 +242,77 @@ type InputFrame struct {
 	Options FrameOptions `json:"options,omitempty"`
 }
 
-// Encode converts InputFrame into its internal representation.
-func (f *InputFrame) Encode() *internal.Frame {
-	return &internal.Frame{
-		Name: f.Name,
-		Meta: f.Options.Encode(),
+// Validate the InputFrame data
+func (i *InputFrame) Validate() error {
+	if err := ValidateName(i.Name); err != nil {
+		return err
 	}
 
+	return nil
+}
+
+// Encode converts InputFrame into its internal representation.
+func (i *InputFrame) Encode() *internal.Frame {
+	return &internal.Frame{
+		Name: i.Name,
+		Meta: i.Options.Encode(),
+	}
 }
 
 // InputDefinitionInfo represents the json message format needed to create an InputDefinition.
 type InputDefinitionInfo struct {
 	Frames []InputFrame           `json:"frames"`
 	Fields []InputDefinitionField `json:"fields"`
+}
+
+// Validate the InputDefinitionInfo data
+func (i *InputDefinitionInfo) Validate(columnLabel string) error {
+	numPrimaryKey := 0
+	accountRowID := make(map[string]uint64)
+
+	if len(i.Frames) == 0 {
+		return fmt.Errorf("At least one frame is required per Input Definition")
+	}
+
+	for _, frame := range i.Frames {
+		if err := frame.Validate(); err != nil {
+			return err
+		}
+		// TODO frame option validation
+	}
+
+	// Validate columnLabel and duplicate primaryKey.
+	for _, field := range i.Fields {
+		if field.PrimaryKey {
+			numPrimaryKey++
+			if field.Name != columnLabel {
+				return ErrInputDefinitionColumnLabel
+			}
+		}
+		for _, action := range field.Actions {
+			if err := action.Validate(); err != nil {
+				return err
+			}
+			if action.ValueDestination == InputSingleRowBool && action.Frame != "" {
+				if action.RowID == nil {
+					return fmt.Errorf("rowID required for single-row-boolean Field %s", field.Name)
+				}
+				val, ok := accountRowID[action.Frame]
+				if ok && val == convert(action.RowID) {
+					return fmt.Errorf("duplicate rowID with other field: %v", action.RowID)
+				}
+				accountRowID[action.Frame] = convert(action.RowID)
+			}
+		}
+	}
+	if len(i.Fields) > 0 && numPrimaryKey == 0 {
+		return ErrInputDefinitionHasPrimaryKey
+	}
+	if numPrimaryKey > 1 {
+		return ErrInputDefinitionDupePrimaryKey
+	}
+
+	return nil
 }
 
 // Encode converts InputDefinitionInfo into its internal representation.
@@ -271,27 +332,6 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 	i.frames = append(i.frames, frame)
 	if err := i.saveMeta(); err != nil {
 		return err
-	}
-	return nil
-}
-
-// ValidateAction ensures the input definition action conforms to our specification.
-func (i *InputDefinition) ValidateAction(action *internal.InputDefinitionAction) error {
-	if action.Frame == "" {
-		return ErrFrameRequired
-	}
-	validValues := make(map[string]bool)
-	for _, val := range validValueDestination {
-		validValues[val] = true
-	}
-	if _, ok := validValues[action.ValueDestination]; !ok {
-		return fmt.Errorf("invalid ValueDestination: %s", action.ValueDestination)
-	}
-	switch action.ValueDestination {
-	case InputMapping:
-		if len(action.ValueMap) == 0 {
-			return errors.New("valueMap required for map")
-		}
 	}
 	return nil
 }

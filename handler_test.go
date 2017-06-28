@@ -1159,7 +1159,7 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input2", bytes.NewBuffer(invalidPrimaryKey)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionPrimaryKey.Error()+"\n" {
+	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionDupePrimaryKey.Error()+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 

@@ -102,63 +102,85 @@ func TestInputDefinition_Encoding(t *testing.T) {
 	}
 }
 
-func TestInputDefinition_LoadDefinition(t *testing.T) {
-	index := MustOpenIndex()
-	defer index.Close()
+// Test The Action validation cases
+func TestActionValidation(t *testing.T) {
+	rowID := uint64(100)
 
-	// Create Input Definition.
-	input := pilosa.InputDefinition{}
-	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
-	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "value-to-ROW", ValueMap: map[string]uint64{"Green": 1}}
-	field := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
-	def := &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
-	err := input.LoadDefinition(def)
+	action := pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, ValueMap: map[string]uint64{"Green": 1}}
+	field := pilosa.InputDefinitionField{Name: "id", PrimaryKey: false, Actions: []pilosa.Action{action}}
+	info := pilosa.InputDefinitionInfo{Fields: []pilosa.InputDefinitionField{field}}
+	err := info.Validate("id")
+	if !strings.Contains(err.Error(), "one frame is required per Input Definition") {
+		t.Fatalf("Expected frame required error, actual error: %s", err)
+	}
+
+	frame := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
+	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
+	err = info.Validate("id")
+	if !strings.Contains(err.Error(), "rowID required for single-row-boolean") {
+		t.Fatalf("Expected rowID required for single-row-boolean error, actual error: %s", err)
+	}
+
+	frame = pilosa.InputFrame{Name: "^", Options: pilosa.FrameOptions{RowLabel: "row"}}
+	action = pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
+	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
+	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
+	err = info.Validate("id")
+	if !strings.Contains(err.Error(), "invalid index or frame's name") {
+		t.Fatalf("Expected iinvalid index or frame's name error, actual error: %s", err)
+	}
+
+	frame = pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
+	action = pilosa.Action{ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
+	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
+	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
+	err = info.Validate("id")
+	if !strings.Contains(err.Error(), "frame required") {
+		t.Fatalf("Expected frame required error, actual error: %s", err)
+	}
+
+	action = pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
+	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
+	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
+	err = info.Validate("test")
+	if !strings.Contains(err.Error(), "PrimaryKey field name does not match columnLabel") {
+		t.Fatalf("Expected PrimaryKey field name does not match columnLabel error, actual error: %s", err)
+	}
+
+	action = pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
+	field = pilosa.InputDefinitionField{Name: "x", PrimaryKey: false, Actions: []pilosa.Action{action}}
+	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
+	err = info.Validate("id")
+	if !strings.Contains(err.Error(), "input-definition must contain one PrimaryKey") {
+		t.Fatalf("Expected input-definition must contain one PrimaryKey error, actual error: %s", err)
+	}
+
+	action = pilosa.Action{Frame: "f", ValueDestination: "value-to-ROW", ValueMap: map[string]uint64{"Green": 1}}
+	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
+	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
+	err = info.Validate("id")
 	if !strings.Contains(err.Error(), "invalid ValueDestination") {
 		t.Fatalf("Expected invalid ValueDestination error, actual error: %s", err)
 	}
 
-	action = internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.InputMapping, RowID: 100}
-	field = internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
-	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
-	err = input.LoadDefinition(def)
+	action = pilosa.Action{Frame: "f", ValueDestination: pilosa.InputMapping, RowID: &rowID}
+	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
+	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
+	err = info.Validate("id")
 	if !strings.Contains(err.Error(), "valueMap required for map") {
 		t.Fatalf("Expected valueMap required for map error, actual error: %s", err)
 	}
 
-	action = internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: 100}
-	action1 := internal.InputDefinitionAction{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: 100}
-	field1 := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action1}}
-	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field, &field1}}
-	err = input.LoadDefinition(def)
+	action = pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
+	field = pilosa.InputDefinitionField{Name: "test", PrimaryKey: false, Actions: []pilosa.Action{action}}
+	action1 := pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
+	field1 := pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action1}}
+	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field, field1}}
+	err = info.Validate("id")
 	if !strings.Contains(err.Error(), "duplicate rowID with other field") {
 		t.Fatalf("Expected duplicate rowID with other field error, actual error: %s", err)
 	}
-
-	action = internal.InputDefinitionAction{ValueDestination: pilosa.InputSingleRowBool, RowID: 100}
-	def = &internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
-	err = input.LoadDefinition(def)
-	if !strings.Contains(err.Error(), "frame required") {
-		t.Fatalf("Expected frame required error, actual error: %s", err)
-	}
 }
-
-/*
-// TODO: handle validation outside of the Encode()
-func TestActionEncoding(t *testing.T) {
-	action := pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, ValueMap: map[string]uint64{"Green": 1}}
-	_, err := action.Encode()
-	if !strings.Contains(err.Error(), "rowID required for single-row-boolean") {
-		t.Fatalf("Expected rowID required for single-row-boolean error, actual error: %s", err)
-	}
-
-	field := pilosa.InputDefinitionField{Name: "id", PrimaryKey: false, Actions: []pilosa.Action{action}}
-	info := pilosa.InputDefinitionInfo{Fields: []pilosa.InputDefinitionField{field}}
-	_, err = info.Encode()
-	if !strings.Contains(err.Error(), "rowID required for single-row-boolean") {
-		t.Fatalf("Expected rowID required for single-row-boolean error, actual error: %s", err)
-	}
-}
-*/
 
 func TestHandleAction(t *testing.T) {
 	var value interface{}
