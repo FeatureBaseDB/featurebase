@@ -909,21 +909,10 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 		return nil, errors.New("invalid slice argument")
 	}
 
-	// Parse time granularity.
-	quantum := TimeQuantum("YMDH")
-	if s := q.Get("time_granularity"); s != "" {
-		v, err := ParseTimeQuantum(s)
-		if err != nil {
-			return nil, errors.New("invalid time granularity")
-		}
-		quantum = v
-	}
-
 	return &QueryRequest{
 		Query:       query,
 		Slices:      slices,
 		ColumnAttrs: q.Get("columnAttrs") == "true",
-		Quantum:     quantum,
 	}, nil
 }
 
@@ -1392,9 +1381,6 @@ type QueryRequest struct {
 	// Return column attributes, if true.
 	ColumnAttrs bool
 
-	// Time granularity to use with the timestamp.
-	Quantum TimeQuantum
-
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
 	Remote bool
@@ -1405,7 +1391,6 @@ func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 		Query:       pb.Query,
 		Slices:      pb.Slices,
 		ColumnAttrs: pb.ColumnAttrs,
-		Quantum:     TimeQuantum(pb.Quantum),
 		Remote:      pb.Remote,
 	}
 
