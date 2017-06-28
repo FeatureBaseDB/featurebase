@@ -54,7 +54,7 @@ Attributes are arbitrary key/value pairs that can be associated to both rows or 
 
 ### Slice
 
-Indexes are sharded into groups of columns called Slices - each Slice contains a fixed number of columns which is the SliceWidth.
+Indexes are sharded into groups of columns called Slices - each Slice contains a fixed number of columns which is the SliceWidth. SliceWidth is a non-configurable constant set to 2^20.
 
 Columns are sharded on a preset width, and each shard is referred to as a Slice.  Slices are operated on in parallel, and they are evenly distributed across a cluster via a consistent hash algorithm.
 
