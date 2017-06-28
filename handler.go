@@ -1520,12 +1520,16 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// TODO: validation before/after encode?
+
 	// Encode InputDefinition to its internal representation.
-	def, err := req.Encode()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	def := req.Encode()
+	/*
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	*/
 	def.Name = inputDefName
 
 	// Validate columnLabel and duplicate primaryKey.

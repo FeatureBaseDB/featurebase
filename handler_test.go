@@ -1485,7 +1485,7 @@ func EncodeInputDef(name string, body []byte) (*internal.InputDefinition, error)
 	if err != nil {
 		return nil, err
 	}
-	def, err := req.Encode()
+	def := req.Encode()
 	def.Name = name
-	return def, err
+	return def, nil
 }
