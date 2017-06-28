@@ -95,8 +95,6 @@ The response doesn't include column attributes by default. To return them, set t
 
 The query is executed for all [slices](../data-model#slice) by default. To use specified slices only, set the `slices` query argument to a comma-separated list of slice indices.
 
-The time quantum can be specified with the `time_granularity` query argument. Valid values match those for the `time-quantum`  endpoint.
-
 Request:
 ```
 curl "localhost:10101/index/user/query?columnAttrs=true&slices=0,1" \
