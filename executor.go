@@ -62,7 +62,16 @@ func NewExecutor() *Executor {
 }
 
 // Execute executes a PQL query.
-func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error) {
+func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slices []uint64, opt *ExecOptions) (results []interface{}, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if r.(error).Error() == "runtime error: makeslice: len out of range" {
+				// Catch panic from make([]uint64, veryLargeNumber).
+				results, err = nil, ErrSliceIndexTooLarge
+			}
+		}
+	}()
+
 	// Verify that an index is set.
 	if index == "" {
 		return nil, ErrIndexRequired
@@ -122,7 +131,7 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	}
 
 	// Execute each call serially.
-	results := make([]interface{}, 0, len(q.Calls))
+	results = make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
 
 		if call.SupportsInverse() && needsSlices {

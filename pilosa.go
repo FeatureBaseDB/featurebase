@@ -53,6 +53,8 @@ var (
 	ErrFragmentNotFound = errors.New("fragment not found")
 	ErrQueryRequired    = errors.New("query required")
 	ErrTooManyWrites    = errors.New("too many write commands")
+
+	ErrSliceIndexTooLarge = errors.New("slices must fit in memory")
 )
 
 // Regular expression to validate index and frame names.
