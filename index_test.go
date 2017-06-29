@@ -384,16 +384,9 @@ func TestIndex_CreateExistingInputDefinition(t *testing.T) {
 	index := MustOpenIndex()
 	defer index.Close()
 
-	// Test frames and fields are required
-	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{}, Fields: []*internal.InputDefinitionField{}}
-	_, err := index.CreateInputDefinition(&def)
-	if err != pilosa.ErrInputDefinitionAttrsRequired {
-		t.Fatal(err)
-	}
-
 	//Test input definition name is required
-	def = internal.InputDefinition{Name: "", Frames: []*internal.Frame{}, Fields: []*internal.InputDefinitionField{}}
-	_, err = index.CreateInputDefinition(&def)
+	def := internal.InputDefinition{Name: "", Frames: []*internal.Frame{}, Fields: []*internal.InputDefinitionField{}}
+	_, err := index.CreateInputDefinition(&def)
 	if err != pilosa.ErrInputDefinitionNameRequired {
 		t.Fatal(err)
 	}
@@ -426,15 +419,21 @@ func TestIndex_DeleteInputDefinition(t *testing.T) {
 	_, err := index.CreateInputDefinition(&def)
 	if err != nil {
 		t.Fatal(err)
-	} else if index.InputDefinition("test") == nil {
-		t.Fatal("No input definition created")
+	}
+
+	_, err = index.InputDefinition("test")
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	err = index.DeleteInputDefinition("test")
 	if err != nil {
 		t.Fatal(err)
-	} else if index.InputDefinition("test") != nil {
-		t.Fatal("input definition isn't deleted")
+	}
+
+	_, err = index.InputDefinition("test")
+	if err != pilosa.ErrInputDefinitionNotFound {
+		t.Fatal(err)
 	}
 }
 

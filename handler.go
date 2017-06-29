@@ -1520,33 +1520,15 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// TODO: validation before/after encode?
+	// Validation the input definition with the curent index's ColumnLabel.
+	if err := req.Validate(index.ColumnLabel()); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Encode InputDefinition to its internal representation.
 	def := req.Encode()
-	/*
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	*/
 	def.Name = inputDefName
-
-	// Validate columnLabel and duplicate primaryKey.
-	numPrimaryKey := 0
-	for _, field := range def.Fields {
-		if field.PrimaryKey {
-			numPrimaryKey += 1
-			if field.Name != index.columnLabel {
-				http.Error(w, ErrInputDefinitionColumnLabel.Error(), http.StatusBadRequest)
-				return
-			}
-		}
-	}
-	if numPrimaryKey > 1 {
-		http.Error(w, ErrInputDefinitionPrimaryKey.Error(), http.StatusBadRequest)
-		return
-	}
 
 	// Create InputDefinition.
 	_, err = index.CreateInputDefinition(def)
@@ -1584,8 +1566,13 @@ func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	inputDef, _ := index.inputDefinitions[inputDefName]
-	if err := json.NewEncoder(w).Encode(InputDefinitionInfo{
+	inputDef, err := index.InputDefinition(inputDefName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	if err = json.NewEncoder(w).Encode(InputDefinitionInfo{
 		Frames: inputDef.frames,
 		Fields: inputDef.fields,
 	}); err != nil {
@@ -1608,7 +1595,7 @@ func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Req
 
 	// Delete input definition from the index.
 	if err := index.DeleteInputDefinition(inputDefName); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -1647,7 +1634,7 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, req := range reqs {
-		bits, err := h.InputJsonDataParser(req.(map[string]interface{}), index, inputDefName)
+		bits, err := h.InputJSONDataParser(req.(map[string]interface{}), index, inputDefName)
 		if err == ErrInputDefinitionNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1668,11 +1655,11 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// InputJsonDataParser validate input json file and execute SetBit
-func (h *Handler) InputJsonDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
-	inputDef := index.inputDefinition(name)
-	if inputDef == nil {
-		return nil, ErrInputDefinitionNotFound
+// InputJSONDataParser validates input json file and executes SetBit.
+func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
+	inputDef, err := index.InputDefinition(name)
+	if err != nil {
+		return nil, err
 	}
 	// if field in input data is not in defined definition, return error
 	var columnLabel string
