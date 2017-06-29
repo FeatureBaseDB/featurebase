@@ -1253,8 +1253,10 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
-	} else if index.InputDefinition("test") != nil {
-		t.Fatalf("unexpected result: %v", index.InputDefinition("test"))
+	}
+	_, err = index.InputDefinition("test")
+	if err != pilosa.ErrInputDefinitionNotFound {
+		t.Fatal(err)
 	}
 }
 
@@ -1298,6 +1300,13 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != string(expect)+"\n" {
 		t.Fatalf("unexpected body: %s, expect: %s", body, string(expect))
+	}
+
+	// Check non existant definition
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i0/input-definition/foo", strings.NewReader("")))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 }
 

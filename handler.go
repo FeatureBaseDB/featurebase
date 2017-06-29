@@ -1566,8 +1566,13 @@ func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	inputDef, _ := index.inputDefinitions[inputDefName]
-	if err := json.NewEncoder(w).Encode(InputDefinitionInfo{
+	inputDef, err := index.InputDefinition(inputDefName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	if err = json.NewEncoder(w).Encode(InputDefinitionInfo{
 		Frames: inputDef.frames,
 		Fields: inputDef.fields,
 	}); err != nil {
@@ -1629,7 +1634,7 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, req := range reqs {
-		bits, err := h.InputJsonDataParser(req.(map[string]interface{}), index, inputDefName)
+		bits, err := h.InputJSONDataParser(req.(map[string]interface{}), index, inputDefName)
 		if err == ErrInputDefinitionNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1650,11 +1655,11 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// InputJsonDataParser validate input json file and execute SetBit
-func (h *Handler) InputJsonDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
-	inputDef := index.inputDefinition(name)
-	if inputDef == nil {
-		return nil, ErrInputDefinitionNotFound
+// InputJSONDataParser validate input json file and execute SetBit
+func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
+	inputDef, err := index.InputDefinition(name)
+	if err != nil {
+		return nil, err
 	}
 	// if field in input data is not in defined definition, return error
 	var columnLabel string
