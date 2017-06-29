@@ -111,7 +111,7 @@ func TestActionValidation(t *testing.T) {
 	info := pilosa.InputDefinitionInfo{Fields: []pilosa.InputDefinitionField{field}}
 	err := info.Validate("id")
 	if err != pilosa.ErrInputDefinitionAttrsRequired {
-		t.Fatalf("Expected frame required error, actual error: %s", err)
+		t.Fatalf("Expect error: %s, actual err: %s", pilosa.ErrInputDefinitionAttrsRequired, err)
 	}
 
 	frame := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
@@ -126,8 +126,8 @@ func TestActionValidation(t *testing.T) {
 	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
 	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
 	err = info.Validate("id")
-	if !strings.Contains(err.Error(), "invalid index or frame's name") {
-		t.Fatalf("Expected iinvalid index or frame's name error, actual error: %s", err)
+	if err != pilosa.ErrName {
+		t.Fatalf("Expect error: %s, actual err: %s", pilosa.ErrName, err)
 	}
 
 	frame = pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
@@ -135,24 +135,24 @@ func TestActionValidation(t *testing.T) {
 	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
 	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
 	err = info.Validate("id")
-	if !strings.Contains(err.Error(), "frame required") {
-		t.Fatalf("Expected frame required error, actual error: %s", err)
+	if err != pilosa.ErrFrameRequired {
+		t.Fatalf("Expect error: %s, actual err: %s", pilosa.ErrFrameRequired, err)
 	}
 
 	action = pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
 	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
 	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
 	err = info.Validate("test")
-	if !strings.Contains(err.Error(), "PrimaryKey field name does not match columnLabel") {
-		t.Fatalf("Expected PrimaryKey field name does not match columnLabel error, actual error: %s", err)
+	if err != pilosa.ErrInputDefinitionColumnLabel {
+		t.Fatalf("Expect error: %s, actual err: %s", pilosa.ErrInputDefinitionColumnLabel, err)
 	}
 
 	action = pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
 	field = pilosa.InputDefinitionField{Name: "x", PrimaryKey: false, Actions: []pilosa.Action{action}}
 	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
 	err = info.Validate("id")
-	if !strings.Contains(err.Error(), "input-definition must contain one PrimaryKey") {
-		t.Fatalf("Expected input-definition must contain one PrimaryKey error, actual error: %s", err)
+	if err != pilosa.ErrInputDefinitionHasPrimaryKey {
+		t.Fatalf("Expect error: %s, actual err: %s", pilosa.ErrInputDefinitionHasPrimaryKey, err)
 	}
 
 	action = pilosa.Action{Frame: "f", ValueDestination: "value-to-ROW", ValueMap: map[string]uint64{"Green": 1}}

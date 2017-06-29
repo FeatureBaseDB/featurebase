@@ -1655,7 +1655,7 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// InputJSONDataParser validate input json file and execute SetBit
+// InputJSONDataParser validates input json file and executes SetBit.
 func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
 	inputDef, err := index.InputDefinition(name)
 	if err != nil {

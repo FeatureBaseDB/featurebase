@@ -1121,7 +1121,7 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 		t.Fatalf("unexpected body: %s", body)
 	}
 
-	// Test index not found
+	// Test index not found.
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/foo/input-definition/input2", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusNotFound {
@@ -1200,7 +1200,7 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 		t.Fatalf("unexpected body: %s", body)
 	}
 
-	// Eusure throwing error if request body is invalid
+	// Eusure throwing error if request body is invalid.
 	jsonErrorBody := []byte(`
 			{
 			"frames":[{
@@ -1237,7 +1237,7 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 	h.Holder = hldr.Holder
 	h.Cluster = NewCluster(1)
 
-	// Test index not found
+	// Test index not found.
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/input-definition/test", strings.NewReader("")))
 	if w.Code != http.StatusNotFound {
@@ -1246,7 +1246,7 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 		t.Fatalf("unexpected body: %s", body)
 	}
 
-	// Test input definition is deleted
+	// Test input definition is deleted.
 	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
@@ -1257,7 +1257,7 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Test definition not found
+	// Test definition not found.
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/input-definition/foo", strings.NewReader("")))
 	if w.Code != http.StatusNotFound {
@@ -1277,7 +1277,7 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 	}
 }
 
-// Ensure handler can get existing input definition
+// Ensure handler can get existing input definition.
 func TestHandler_GetInputDefinition(t *testing.T) {
 	hldr := MustOpenHolder()
 	defer hldr.Close()
@@ -1290,7 +1290,7 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
 
-	// Return error if index does not exist
+	// Return error if index does not exist.
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i0/input-definition/test", strings.NewReader("")))
 	if w.Code != http.StatusNotFound {
@@ -1299,7 +1299,7 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 		t.Fatalf("unexpected body: %s, expect: %s", body, pilosa.ErrIndexNotFound)
 	}
 
-	// Return existing input definition
+	// Return existing input definition.
 	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	inputDef, err := index.CreateInputDefinition(&def)
 	if err != nil {
@@ -1319,7 +1319,7 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 		t.Fatalf("unexpected body: %s, expect: %s", body, string(expect))
 	}
 
-	// Check non existant definition
+	// Check nonexistant definition.
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i0/input-definition/foo", strings.NewReader("")))
 	if w.Code != http.StatusNotFound {
@@ -1430,7 +1430,7 @@ func TestHandler_CreateInput(t *testing.T) {
 	h.Holder = hldr.Holder
 	h.Cluster = NewCluster(1)
 
-	// Return error if index does not exist
+	// Return error if index does not exist.
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/foo/input/input1", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusNotFound {
@@ -1439,7 +1439,7 @@ func TestHandler_CreateInput(t *testing.T) {
 		t.Fatalf("unexpected body: %s, expect: %s", body, pilosa.ErrIndexNotFound)
 	}
 
-	// Check non existant definition
+	// Check nonexistant definition.
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input2", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusNotFound {
@@ -1454,13 +1454,13 @@ func TestHandler_CreateInput(t *testing.T) {
 		t.Fatalf("unexpected body: %s", body)
 	}
 
-	// Verify the bits set per frame
+	// Verify the bits set per frame.
 	// f := index.Frame("cab-type")
 	f0 := index.Frame("distance-miles")
 	v0 := f0.View(pilosa.ViewStandard)
 	fragment0 := v0.Fragment(0)
 
-	// Verify the distanceMiles Bit was set
+	// Verify the distanceMiles Bit was set.
 	if a := fragment0.Row(8).Bits(); !reflect.DeepEqual(a, []uint64{1}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
@@ -1469,12 +1469,12 @@ func TestHandler_CreateInput(t *testing.T) {
 	v1 := f1.View(pilosa.ViewStandard)
 	fragment1 := v1.Fragment(0)
 
-	// Verify the add-ons frame does not have a distanceMiles Bit set
+	// Verify the add-ons frame does not have a distanceMiles Bit set.
 	// The Input process must respect the Action Frame assignments
 	if a := fragment1.Row(8).Bits(); !reflect.DeepEqual(a, []uint64{}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
-	// Verify the withPet Bit was set
+	// Verify the withPet Bit was set.
 	if a := fragment1.Row(100).Bits(); !reflect.DeepEqual(a, []uint64{1}) {
 		t.Fatalf("unexpected bits: %+v", a)
 	}
