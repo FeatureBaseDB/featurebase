@@ -129,6 +129,7 @@ func (s *Server) Open() error {
 	}
 
 	// Open holder.
+	s.Holder.LogOutput = s.LogOutput
 	if err := s.Holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
@@ -159,7 +160,6 @@ func (s *Server) Open() error {
 
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster
-	s.Holder.LogOutput = s.LogOutput
 
 	// Serve HTTP.
 	go func() { http.Serve(ln, s.Handler) }()
@@ -197,14 +197,14 @@ func (s *Server) Addr() net.Addr {
 	return s.ln.Addr()
 }
 
-func (s *Server) logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
+func (s *Server) Logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
 
 func (s *Server) monitorAntiEntropy() {
 	t := time.Now()
 	ticker := time.NewTicker(s.AntiEntropyInterval)
 	defer ticker.Stop()
 
-	s.logger().Printf("holder sync monitor initializing (%s interval)", s.AntiEntropyInterval)
+	s.Logger().Printf("holder sync monitor initializing (%s interval)", s.AntiEntropyInterval)
 
 	for {
 		// Wait for tick or a close.
@@ -215,7 +215,7 @@ func (s *Server) monitorAntiEntropy() {
 			s.Holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 
-		s.logger().Printf("holder sync beginning")
+		s.Logger().Printf("holder sync beginning")
 
 		// Initialize syncer with local holder and remote client.
 		var syncer HolderSyncer
@@ -226,12 +226,12 @@ func (s *Server) monitorAntiEntropy() {
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {
-			s.logger().Printf("holder sync error: err=%s", err)
+			s.Logger().Printf("holder sync error: err=%s", err)
 			continue
 		}
 
 		// Record successful sync in log.
-		s.logger().Printf("holder sync complete")
+		s.Logger().Printf("holder sync complete")
 	}
 	dif := time.Since(t)
 	s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
@@ -267,7 +267,7 @@ func (s *Server) monitorMaxSlices() {
 							localIndex.SetRemoteMaxSlice(newmax)
 						}
 					} else {
-						s.logger().Printf("Local Index not found: %s", index)
+						s.Logger().Printf("Local Index not found: %s", index)
 					}
 				}
 			}
@@ -484,7 +484,7 @@ func (s *Server) monitorRuntime() {
 	gcn := gcnotifier.New()
 	defer gcn.Close()
 
-	s.logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
+	s.Logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
 
 	for {
 		// Wait for tick or a close.

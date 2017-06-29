@@ -100,7 +100,8 @@ func (m *Command) Run(args ...string) (err error) {
 	if err = m.Server.Open(); err != nil {
 		return fmt.Errorf("server.Open: %v", err)
 	}
-	fmt.Fprintf(m.Stderr, "Listening as http://%s\n", m.Server.Host)
+
+	m.Server.Logger().Printf("Listening as http://%s\n", m.Server.Host)
 	return nil
 }
 
@@ -122,18 +123,13 @@ func (m *Command) SetupServer() error {
 	m.Server.Cluster = cluster
 
 	// Setup logging output.
-	if m.Config.LogPath == "" {
-		m.Server.LogOutput = m.Stderr
-	} else {
-		logFile, err := os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
-		if err != nil {
-			return err
-		}
-		m.Server.LogOutput = logFile
+	m.Server.LogOutput, err = GetLogWriter(m.Config.LogPath, m.Stderr)
+	if err != nil {
+		return err
 	}
 
 	// Configure holder.
-	fmt.Fprintf(m.Stderr, "Using data from: %s\n", m.Config.DataDir)
+	m.Server.Logger().Printf("Using data from: %s\n", m.Config.DataDir)
 	m.Server.Holder.Path = m.Config.DataDir
 	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollingInterval)
 	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
@@ -160,7 +156,7 @@ func (m *Command) SetupServer() error {
 	switch m.Config.Cluster.Type {
 	case "http":
 		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, internalPortStr)
-		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(internalPortStr, m.Stderr)
+		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(internalPortStr, m.Server.LogOutput)
 		m.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
 		err := m.Server.Cluster.NodeSet.(*httpbroadcast.HTTPNodeSet).Join(m.Server.Cluster.Nodes)
 		if err != nil {
@@ -200,6 +196,20 @@ func (m *Command) SetupServer() error {
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
 	m.Server.Cluster.LongQueryTime = time.Duration(m.Config.Cluster.LongQueryTime)
 	return nil
+}
+
+// GetLogWriter opens a file for logging, or a default io.Writer (such as stderr) for an empty path.
+func GetLogWriter(path string, defaultWriter io.Writer) (io.Writer, error) {
+	// This is split out so it can be used in NewServeCmd as well as SetupServer
+	if path == "" {
+		return defaultWriter, nil
+	} else {
+		logFile, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		if err != nil {
+			return nil, err
+		}
+		return logFile, nil
+	}
 }
 
 func normalizeHost(host string) (string, error) {
