@@ -349,13 +349,13 @@ func (i *Index) Frame(name string) *Frame {
 }
 
 // InputDefinition returns an input definition in the index by name.
-func (i *Index) InputDefinition(name string) *InputDefinition {
+func (i *Index) InputDefinition(name string) (*InputDefinition, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if inputDef, ok := i.inputDefinitions[name]; ok {
-		return inputDef
+		return inputDef, nil
 	}
-	return nil
+	return nil, ErrInputDefinitionNotFound
 }
 
 func (i *Index) frame(name string) *Frame { return i.frames[name] }
@@ -657,8 +657,6 @@ func (i *Index) CreateInputDefinition(pb *internal.InputDefinition) (*InputDefin
 func (i *Index) createInputDefinition(pb *internal.InputDefinition) (*InputDefinition, error) {
 	if pb.Name == "" {
 		return nil, ErrInputDefinitionNameRequired
-	} else if len(pb.Frames) == 0 || len(pb.Fields) == 0 {
-		return nil, ErrInputDefinitionAttrsRequired
 	}
 
 	for _, fr := range pb.Frames {
@@ -704,14 +702,14 @@ func (i *Index) newInputDefinition(name string) (*InputDefinition, error) {
 
 // DeleteInputDefinition removes an input definition from the index.
 func (i *Index) DeleteInputDefinition(name string) error {
+	// Fail if input definition doesn't exist.
+	_, err := i.InputDefinition(name)
+	if err != nil {
+		return err
+	}
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
-
-	// Ignore if input definition doesn't exist.
-	inputDef := i.inputDefinition(name)
-	if inputDef == nil {
-		return nil
-	}
 
 	// Delete input definition file.
 	if err := os.Remove(filepath.Join(i.InputDefinitionPath(), name)); err != nil {
