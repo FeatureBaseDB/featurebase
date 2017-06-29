@@ -48,7 +48,7 @@ cover-pkg:
 	mkdir -p build/coverage
 	touch build/coverage/$(subst /,-,$(PKG)).out
 	go test -coverprofile=build/coverage/$(subst /,-,$(PKG)).out $(PKG)
-	tail +2 build/coverage/$(subst /,-,$(PKG)).out >> build/coverage/all.out
+	tail -n +2 build/coverage/$(subst /,-,$(PKG)).out >> build/coverage/all.out
 
 cover-viz: cover
 	go tool cover -html=build/coverage/all.out

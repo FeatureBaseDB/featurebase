@@ -18,10 +18,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/pilosa/pilosa"
 	"io"
 	"os"
 	"testing"
+
+	"github.com/pilosa/pilosa"
 )
 
 func TestBenchCommand_InvalidOption(t *testing.T) {

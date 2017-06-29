@@ -19,12 +19,13 @@ import (
 	"os"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/test"
 )
 
 // View is a test wrapper for pilosa.View.
 type View struct {
 	*pilosa.View
-	RowAttrStore *AttrStore
+	RowAttrStore *test.AttrStore
 }
 
 // NewView returns a new instance of View with a temporary path.
@@ -37,7 +38,7 @@ func NewView(index, frame, name string) *View {
 
 	v := &View{
 		View:         pilosa.NewView(file.Name(), index, frame, name, pilosa.DefaultCacheSize),
-		RowAttrStore: MustOpenAttrStore(),
+		RowAttrStore: test.MustOpenAttrStore(),
 	}
 	v.View.RowAttrStore = v.RowAttrStore.AttrStore
 	return v

@@ -17,11 +17,13 @@ package ctl
 import (
 	"bufio"
 	"bytes"
-	"github.com/pilosa/pilosa"
-	"golang.org/x/net/context"
 	"io"
 	"io/ioutil"
 	"testing"
+
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/test"
+	"golang.org/x/net/context"
 )
 
 func TestRestoreCommand_FileRequired(t *testing.T) {
@@ -41,13 +43,13 @@ func TestRestoreCommand_Run(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	s := NewServer()
+	s := test.NewServer()
 	defer s.Close()
 	s.Handler.Host = s.Host()
-	s.Handler.Cluster = NewCluster(1)
+	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
 

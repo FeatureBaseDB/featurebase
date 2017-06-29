@@ -265,7 +265,7 @@ func (f *Fragment) openCache() error {
 	// Unmarshal cache data.
 	var pb internal.Cache
 	if err := proto.Unmarshal(buf, &pb); err != nil {
-		log.Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
+		f.logger().Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
 		return nil
 	}
 
