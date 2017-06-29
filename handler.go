@@ -1595,7 +1595,7 @@ func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Req
 
 	// Delete input definition from the index.
 	if err := index.DeleteInputDefinition(inputDefName); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 

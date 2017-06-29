@@ -1121,6 +1121,15 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 		t.Fatalf("unexpected body: %s", body)
 	}
 
+	// Test index not found
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/foo/input-definition/input2", bytes.NewBuffer(inputBody)))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != pilosa.ErrIndexNotFound.Error()+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+
 }
 
 // Ensure throwing error if there's duplicated primaryKey field.
@@ -1247,6 +1256,14 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Test definition not found
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/input-definition/foo", strings.NewReader("")))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/input-definition/test", strings.NewReader("")))
 	if w.Code != http.StatusOK {
@@ -1402,7 +1419,24 @@ func TestHandler_CreateInput(t *testing.T) {
 	h := NewHandler()
 	h.Holder = hldr.Holder
 	h.Cluster = NewCluster(1)
+
+	// Return error if index does not exist
 	w := httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/foo/input/input1", bytes.NewBuffer(inputBody)))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != pilosa.ErrIndexNotFound.Error()+"\n" {
+		t.Fatalf("unexpected body: %s, expect: %s", body, pilosa.ErrIndexNotFound)
+	}
+
+	// Check non existant definition
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input2", bytes.NewBuffer(inputBody)))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+
+	w = httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
