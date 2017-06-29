@@ -1520,7 +1520,7 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// validation definition before/after encode?
+	// Validation the input definition with the curent index's ColumnLabel.
 	if err := req.Validate(index.ColumnLabel()); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
