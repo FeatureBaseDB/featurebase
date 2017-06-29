@@ -1391,6 +1391,16 @@ var defaultBody = `
 
 						}
 					 ]
+				  },
+				  {
+					 "name":"noFrame",
+					 "actions":[
+						{
+						   "frame":"foo",
+						   "valueDestination":"value-to-row"
+
+						}
+					 ]
 				  }
 			   ]
 			}`
@@ -1509,6 +1519,20 @@ func TestInput_JSON(t *testing.T) {
 				"withPet": true
 				}]`,
 			err: "columnLabel required"},
+		{json: `[{
+				"id": 1,
+				"cabType": "yellow",
+				"distanceMiles": 8,
+				"withPet": true
+				}`,
+			err: "unexpected EOF"},
+		{json: `[{
+				"id": 1,
+				"cabType": "yellow",
+				"distanceMiles": 8,
+				"noFrame": 1
+				}]`,
+			err: "Frame not found: foo"},
 	}
 	h := NewHandler()
 	h.Holder = hldr.Holder
