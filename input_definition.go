@@ -247,7 +247,7 @@ func (i *InputFrame) Validate() error {
 	if err := ValidateName(i.Name); err != nil {
 		return err
 	}
-
+	// TODO frame option validation
 	return nil
 }
 
@@ -270,15 +270,14 @@ func (i *InputDefinitionInfo) Validate(columnLabel string) error {
 	numPrimaryKey := 0
 	accountRowID := make(map[string]uint64)
 
-	if len(i.Frames) == 0 {
-		return fmt.Errorf("At least one frame is required per Input Definition")
+	if len(i.Frames) == 0 || len(i.Fields) == 0 {
+		return ErrInputDefinitionAttrsRequired
 	}
 
 	for _, frame := range i.Frames {
 		if err := frame.Validate(); err != nil {
 			return err
 		}
-		// TODO frame option validation
 	}
 
 	// Validate columnLabel and duplicate primaryKey.
@@ -293,7 +292,7 @@ func (i *InputDefinitionInfo) Validate(columnLabel string) error {
 			if err := action.Validate(); err != nil {
 				return err
 			}
-			if action.ValueDestination == InputSingleRowBool && action.Frame != "" {
+			if action.ValueDestination == InputSingleRowBool {
 				if action.RowID == nil {
 					return fmt.Errorf("rowID required for single-row-boolean Field %s", field.Name)
 				}
@@ -305,13 +304,13 @@ func (i *InputDefinitionInfo) Validate(columnLabel string) error {
 			}
 		}
 	}
+
 	if len(i.Fields) > 0 && numPrimaryKey == 0 {
 		return ErrInputDefinitionHasPrimaryKey
 	}
 	if numPrimaryKey > 1 {
 		return ErrInputDefinitionDupePrimaryKey
 	}
-
 	return nil
 }
 

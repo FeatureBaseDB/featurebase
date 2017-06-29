@@ -110,7 +110,7 @@ func TestActionValidation(t *testing.T) {
 	field := pilosa.InputDefinitionField{Name: "id", PrimaryKey: false, Actions: []pilosa.Action{action}}
 	info := pilosa.InputDefinitionInfo{Fields: []pilosa.InputDefinitionField{field}}
 	err := info.Validate("id")
-	if !strings.Contains(err.Error(), "one frame is required per Input Definition") {
+	if err != pilosa.ErrInputDefinitionAttrsRequired {
 		t.Fatalf("Expected frame required error, actual error: %s", err)
 	}
 
