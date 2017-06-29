@@ -278,13 +278,9 @@ func (i *InputDefinitionInfo) Validate(columnLabel string) error {
 
 	// Validate columnLabel and duplicate primaryKey.
 	for _, field := range i.Fields {
-		if field.PrimaryKey {
-			numPrimaryKey++
-			if field.Name != columnLabel {
-				return ErrInputDefinitionColumnLabel
-			}
-		}
+		var actionCount int
 		for _, action := range field.Actions {
+			actionCount++
 			if err := action.Validate(); err != nil {
 				return err
 			}
@@ -298,6 +294,14 @@ func (i *InputDefinitionInfo) Validate(columnLabel string) error {
 				}
 				accountRowID[action.Frame] = convert(action.RowID)
 			}
+		}
+		if field.PrimaryKey {
+			numPrimaryKey++
+			if field.Name != columnLabel {
+				return ErrInputDefinitionColumnLabel
+			}
+		} else if actionCount == 0 {
+			return ErrInputDefinitionActionRequired
 		}
 	}
 

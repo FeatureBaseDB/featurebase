@@ -43,6 +43,7 @@ var (
 	ErrInputDefinitionNameRequired   = errors.New("input-definition name required")
 	ErrInputDefinitionAttrsRequired  = errors.New("frames and fields are required")
 	ErrInputDefinitionValueMap       = errors.New("valueMap required for map")
+	ErrInputDefinitionActionRequired = errors.New("field definitions require an action")
 
 	ErrFieldNameRequired       = errors.New("field name required")
 	ErrInvalidFieldType        = errors.New("invalid field type")

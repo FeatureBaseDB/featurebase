@@ -1319,7 +1319,7 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 		t.Fatalf("unexpected body: %s, expect: %s", body, string(expect))
 	}
 
-	// Check nonexistant definition.
+	// Check nonexistent definition.
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i0/input-definition/foo", strings.NewReader("")))
 	if w.Code != http.StatusNotFound {
@@ -1439,7 +1439,7 @@ func TestHandler_CreateInput(t *testing.T) {
 		t.Fatalf("unexpected body: %s, expect: %s", body, pilosa.ErrIndexNotFound)
 	}
 
-	// Check nonexistant definition.
+	// Check nonexistent definition.
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input2", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusNotFound {

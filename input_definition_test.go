@@ -180,6 +180,14 @@ func TestActionValidation(t *testing.T) {
 	if !strings.Contains(err.Error(), "duplicate rowID with other field") {
 		t.Fatalf("Expected duplicate rowID with other field error, actual error: %s", err)
 	}
+
+	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true}
+	field1 = pilosa.InputDefinitionField{Name: "test", PrimaryKey: false}
+	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field, field1}}
+	err = info.Validate("id")
+	if err != pilosa.ErrInputDefinitionActionRequired {
+		t.Fatalf("Expect error: %s, actual err: %s", pilosa.ErrInputDefinitionActionRequired, err)
+	}
 }
 
 func TestHandleAction(t *testing.T) {
