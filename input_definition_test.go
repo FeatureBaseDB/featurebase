@@ -167,8 +167,8 @@ func TestActionValidation(t *testing.T) {
 	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
 	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
 	err = info.Validate("id")
-	if !strings.Contains(err.Error(), "valueMap required for map") {
-		t.Fatalf("Expected valueMap required for map error, actual error: %s", err)
+	if err != pilosa.ErrInputDefinitionValueMap {
+		t.Fatalf("Expect error: %s, actual err: %s", pilosa.ErrInputDefinitionValueMap, err)
 	}
 
 	action = pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}

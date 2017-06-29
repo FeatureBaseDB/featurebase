@@ -15,7 +15,6 @@
 package pilosa
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -209,7 +208,7 @@ func (a *Action) Validate() error {
 	switch a.ValueDestination {
 	case InputMapping:
 		if len(a.ValueMap) == 0 {
-			return errors.New("valueMap required for map")
+			return ErrInputDefinitionValueMap
 		}
 	}
 	return nil

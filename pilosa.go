@@ -42,6 +42,7 @@ var (
 	ErrInputDefinitionColumnLabel    = errors.New("PrimaryKey field name does not match columnLabel")
 	ErrInputDefinitionNameRequired   = errors.New("input-definition name required")
 	ErrInputDefinitionAttrsRequired  = errors.New("frames and fields are required")
+	ErrInputDefinitionValueMap       = errors.New("valueMap required for map")
 
 	ErrFieldNameRequired       = errors.New("field name required")
 	ErrInvalidFieldType        = errors.New("invalid field type")
