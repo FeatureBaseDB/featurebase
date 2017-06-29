@@ -202,13 +202,10 @@ func (a *Action) Validate() error {
 	if a.Frame == "" {
 		return ErrFrameRequired
 	}
-	validValues := make(map[string]bool)
-	for _, val := range validValueDestination {
-		validValues[val] = true
-	}
-	if _, ok := validValues[a.ValueDestination]; !ok {
+	if !foundItem(validValueDestination, a.ValueDestination) {
 		return fmt.Errorf("invalid ValueDestination: %s", a.ValueDestination)
 	}
+
 	switch a.ValueDestination {
 	case InputMapping:
 		if len(a.ValueMap) == 0 {
@@ -228,7 +225,7 @@ func (a *Action) Encode() *internal.InputDefinitionAction {
 	}
 }
 
-// convert pointer to uint64
+// convert pointer to uint64.
 func convert(x *uint64) uint64 {
 	if x != nil {
 		return *x
@@ -242,7 +239,7 @@ type InputFrame struct {
 	Options FrameOptions `json:"options,omitempty"`
 }
 
-// Validate the InputFrame data
+// Validate the InputFrame data.
 func (i *InputFrame) Validate() error {
 	if err := ValidateName(i.Name); err != nil {
 		return err
@@ -265,7 +262,7 @@ type InputDefinitionInfo struct {
 	Fields []InputDefinitionField `json:"fields"`
 }
 
-// Validate the InputDefinitionInfo data
+// Validate the InputDefinitionInfo data.
 func (i *InputDefinitionInfo) Validate(columnLabel string) error {
 	numPrimaryKey := 0
 	accountRowID := make(map[string]uint64)
