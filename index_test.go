@@ -15,6 +15,7 @@
 package pilosa_test
 
 import (
+	"io/ioutil"
 	"reflect"
 	"strings"
 	"testing"
@@ -276,6 +277,7 @@ func TestIndex_SetTimeQuantum(t *testing.T) {
 		t.Fatalf("unexpected quantum (reopen): %s", q)
 	}
 }
+
 // Ensure index can delete a frame.
 func TestIndex_InvalidName(t *testing.T) {
 	path, err := ioutil.TempDir("", "pilosa-index-")
@@ -289,7 +291,7 @@ func TestIndex_InvalidName(t *testing.T) {
 }
 
 func TestIndex_CreateInputDefinition(t *testing.T) {
-	index := MustOpenIndex()
+	index := test.MustOpenIndex()
 	defer index.Close()
 
 	// Create Input Definition.
@@ -309,7 +311,7 @@ func TestIndex_CreateInputDefinition(t *testing.T) {
 
 // Ensure create input definition handle correct error
 func TestIndex_CreateExistingInputDefinition(t *testing.T) {
-	index := MustOpenIndex()
+	index := test.MustOpenIndex()
 	defer index.Close()
 
 	//Test input definition name is required
@@ -336,7 +338,7 @@ func TestIndex_CreateExistingInputDefinition(t *testing.T) {
 
 // Ensure to delete existing input definition.
 func TestIndex_DeleteInputDefinition(t *testing.T) {
-	index := MustOpenIndex()
+	index := test.MustOpenIndex()
 	defer index.Close()
 
 	// Create Input Definition.
@@ -367,7 +369,7 @@ func TestIndex_DeleteInputDefinition(t *testing.T) {
 
 // Ensure that frame in input definition will be created when server restart
 func TestIndex_CreateFrameWhenOpenInputDefinition(t *testing.T) {
-	index := MustOpenIndex()
+	index := test.MustOpenIndex()
 	defer index.Close()
 
 	// Create Input Definition.
@@ -390,7 +392,7 @@ func TestIndex_CreateFrameWhenOpenInputDefinition(t *testing.T) {
 
 func TestIndex_InputBits(t *testing.T) {
 	var bits []*pilosa.Bit
-	index := MustOpenIndex()
+	index := test.MustOpenIndex()
 	defer index.Close()
 
 	// Set index time quantum.

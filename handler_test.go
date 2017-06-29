@@ -17,6 +17,7 @@ package pilosa_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"net/http"
@@ -940,7 +941,7 @@ func TestHandler_Expvars(t *testing.T) {
 
 // Ensure handler can create a input definition.
 func TestHandler_CreateInputDefinition(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	inputBody := []byte(`
@@ -973,11 +974,11 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 				}
 			]
 		}`)
-	h := NewHandler()
+	h := test.NewHandler()
 	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
+	h.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
@@ -985,7 +986,7 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 	}
 
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusConflict {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionExists.Error()+"\n" {
@@ -994,7 +995,7 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 
 	// Test index not found.
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/foo/input-definition/input2", bytes.NewBuffer(inputBody)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/foo/input-definition/input2", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != pilosa.ErrIndexNotFound.Error()+"\n" {
@@ -1005,12 +1006,12 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 
 // Ensure throwing error if there's duplicated primaryKey field.
 func TestHandler_DuplicatePrimaryKey(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-	h := NewHandler()
+	h := test.NewHandler()
 	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
+	h.Cluster = test.NewCluster(1)
 
 	//Ensure throwing error if there's duplicated primaryKey field
 	invalidPrimaryKey := []byte(`
@@ -1036,7 +1037,7 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 		}`)
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input2", bytes.NewBuffer(invalidPrimaryKey)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/input-definition/input2", bytes.NewBuffer(invalidPrimaryKey)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionDupePrimaryKey.Error()+"\n" {
@@ -1064,7 +1065,7 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 		}`)
 
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i1/input-definition/input1", bytes.NewBuffer(unmatchColumnBody)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i1/input-definition/input1", bytes.NewBuffer(unmatchColumnBody)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionColumnLabel.Error()+"\n" {
@@ -1091,7 +1092,7 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 		}`)
 
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(jsonErrorBody)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(jsonErrorBody)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `unexpected EOF`+"\n" {
@@ -1102,15 +1103,15 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 
 // Ensure handler can delete a input definition.
 func TestHandler_DeleteInputDefinition(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	h := NewHandler()
+	h := test.NewHandler()
 	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
+	h.Cluster = test.NewCluster(1)
 
 	// Test index not found.
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/input-definition/test", strings.NewReader("")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i0/input-definition/test", strings.NewReader("")))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != pilosa.ErrIndexNotFound.Error()+"\n" {
@@ -1130,13 +1131,13 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 
 	// Test definition not found.
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/input-definition/foo", strings.NewReader("")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i0/input-definition/foo", strings.NewReader("")))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("DELETE", "/index/i0/input-definition/test", strings.NewReader("")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i0/input-definition/test", strings.NewReader("")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
@@ -1150,11 +1151,11 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 
 // Ensure handler can get existing input definition.
 func TestHandler_GetInputDefinition(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	h := NewHandler()
+	h := test.NewHandler()
 	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
+	h.Cluster = test.NewCluster(1)
 
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
@@ -1163,7 +1164,7 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 
 	// Return error if index does not exist.
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i0/input-definition/test", strings.NewReader("")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/index/i0/input-definition/test", strings.NewReader("")))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != pilosa.ErrIndexNotFound.Error()+"\n" {
@@ -1183,7 +1184,7 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 	}
 
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i0/input-definition/test", strings.NewReader("")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/index/i0/input-definition/test", strings.NewReader("")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != string(expect)+"\n" {
@@ -1192,7 +1193,7 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 
 	// Check nonexistent definition.
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("GET", "/index/i0/input-definition/foo", strings.NewReader("")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/index/i0/input-definition/foo", strings.NewReader("")))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
@@ -1277,7 +1278,7 @@ var defaultBody = `
 			}`
 
 func TestHandler_CreateInput(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 
@@ -1297,13 +1298,13 @@ func TestHandler_CreateInput(t *testing.T) {
 				"distanceMiles": 8,
 				"withPet": true
 			}]`)
-	h := NewHandler()
+	h := test.NewHandler()
 	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
+	h.Cluster = test.NewCluster(1)
 
 	// Return error if index does not exist.
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/foo/input/input1", bytes.NewBuffer(inputBody)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/foo/input/input1", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != pilosa.ErrIndexNotFound.Error()+"\n" {
@@ -1312,13 +1313,13 @@ func TestHandler_CreateInput(t *testing.T) {
 
 	// Check nonexistent definition.
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input2", bytes.NewBuffer(inputBody)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/input/input2", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer(inputBody)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
@@ -1353,7 +1354,7 @@ func TestHandler_CreateInput(t *testing.T) {
 }
 
 func TestInput_JSON(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	defBody := []byte(defaultBody)
@@ -1405,14 +1406,14 @@ func TestInput_JSON(t *testing.T) {
 				}]`,
 			err: "Frame not found: foo"},
 	}
-	h := NewHandler()
+	h := test.NewHandler()
 	h.Holder = hldr.Holder
-	h.Cluster = NewCluster(1)
-	for _, test := range tests {
+	h.Cluster = test.NewCluster(1)
+	for _, req := range tests {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer([]byte(test.json))))
-		if body := w.Body.String(); body != test.err+"\n" {
-			t.Fatalf("Expect error: %s, actual: %s", test.err, body)
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer([]byte(req.json))))
+		if body := w.Body.String(); body != req.err+"\n" {
+			t.Fatalf("Expect error: %s, actual: %s", req.err, body)
 		}
 	}
 }

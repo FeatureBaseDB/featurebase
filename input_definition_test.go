@@ -22,10 +22,11 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/test"
 )
 
 func TestInputDefinition_Open(t *testing.T) {
-	index := MustOpenIndex()
+	index := test.MustOpenIndex()
 	defer index.Close()
 
 	// Create Input Definition.
