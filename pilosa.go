@@ -36,12 +36,15 @@ var (
 	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
 	ErrColumnRowLabelEqual  = errors.New("column and row labels cannot be equal")
 
+	ErrFieldNotFound          = errors.New("field not found")
 	ErrFieldNameRequired      = errors.New("field name required")
 	ErrInvalidFieldType       = errors.New("invalid field type")
 	ErrInvalidFieldRange      = errors.New("invalid field range")
 	ErrInverseRangeNotAllowed = errors.New("inverse range not allowed")
 	ErrRangeCacheNotAllowed   = errors.New("range cache not allowed")
 	ErrFrameFieldsNotAllowed  = errors.New("frame fields not allowed")
+	ErrFieldValueTooLow       = errors.New("field value too low")
+	ErrFieldValueTooHigh      = errors.New("field value too high")
 
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")

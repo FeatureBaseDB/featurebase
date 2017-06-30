@@ -472,6 +472,69 @@ func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	return changed, nil
 }
 
+func (f *Fragment) bit(rowID, columnID uint64) (bool, error) {
+	pos, err := f.pos(rowID, columnID)
+	if err != nil {
+		return false, err
+	}
+	return f.storage.Contains(pos), nil
+}
+
+// FieldValue uses a column of bits to read a multi-bit value.
+func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// If existance bit is unset then ignore remaining bits.
+	if v, err := f.bit(uint64(bitDepth), columnID); err != nil {
+		return 0, false, err
+	} else if !v {
+		return 0, false, nil
+	}
+
+	// Compute other bits into a value.
+	for i := uint(0); i < bitDepth; i++ {
+		if v, err := f.bit(uint64(i), columnID); err != nil {
+			return 0, false, err
+		} else if !v {
+			value |= (1 << i)
+		}
+	}
+
+	return value, true, nil
+}
+
+// SetFieldValue uses a column of bits to set a multi-bit value.
+func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for i := uint(0); i < bitDepth; i++ {
+		if value&(1<<i) != 0 {
+			if c, err := f.clearBit(uint64(i), columnID); err != nil {
+				return changed, err
+			} else if c {
+				changed = true
+			}
+		} else {
+			if c, err := f.setBit(uint64(i), columnID); err != nil {
+				return changed, err
+			} else if c {
+				changed = true
+			}
+		}
+	}
+
+	// Mark value as set.
+	if c, err := f.setBit(uint64(bitDepth), columnID); err != nil {
+		return changed, err
+	} else if c {
+		changed = true
+	}
+
+	return changed, nil
+}
+
 // pos translates the row ID and column ID into a position in the storage bitmap.
 func (f *Fragment) pos(rowID, columnID uint64) (uint64, error) {
 	// Return an error if the column ID is out of the range of the fragment's slice.

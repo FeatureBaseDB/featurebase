@@ -20,6 +20,7 @@ import (
 	"math"
 	"reflect"
 	"testing"
+	"testing/quick"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
@@ -90,6 +91,128 @@ func TestFragment_ClearBit(t *testing.T) {
 	} else if n := f.Row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
+}
+
+// Ensure a fragment can set & read a field value.
+func TestFragment_SetFieldValue(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		defer f.Close()
+
+		// Set value.
+		if changed, err := f.SetFieldValue(100, 16, 3829); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Read value.
+		if value, exists, err := f.FieldValue(100, 16); err != nil {
+			t.Fatal(err)
+		} else if value != 3829 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if !exists {
+			t.Fatal("expected to exist")
+		}
+
+		// Setting value should return no change.
+		if changed, err := f.SetFieldValue(100, 16, 3829); err != nil {
+			t.Fatal(err)
+		} else if changed {
+			t.Fatal("expected no change")
+		}
+	})
+
+	t.Run("Overwrite", func(t *testing.T) {
+		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		defer f.Close()
+
+		// Set value.
+		if changed, err := f.SetFieldValue(100, 16, 3829); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Overwriting value should overwrite all bits.
+		if changed, err := f.SetFieldValue(100, 16, 2028); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Read value.
+		if value, exists, err := f.FieldValue(100, 16); err != nil {
+			t.Fatal(err)
+		} else if value != 2028 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if !exists {
+			t.Fatal("expected to exist")
+		}
+	})
+
+	t.Run("NotExists", func(t *testing.T) {
+		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		defer f.Close()
+
+		// Set value.
+		if changed, err := f.SetFieldValue(100, 10, 20); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Non-existant value.
+		if value, exists, err := f.FieldValue(100, 11); err != nil {
+			t.Fatal(err)
+		} else if value != 0 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if exists {
+			t.Fatal("expected to not exist")
+		}
+	})
+
+	t.Run("QuickCheck", func(t *testing.T) {
+		if err := quick.Check(func(bitDepth uint, columnN uint64, values []uint64) bool {
+			// Limit bit depth & maximum values.
+			bitDepth = (bitDepth % 62) + 1
+			columnN = (columnN % 100)
+			for i := range values {
+				values[i] = values[i] % (1 << bitDepth)
+			}
+
+			f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+			defer f.Close()
+
+			// Set values.
+			m := make(map[uint64]int64)
+			for _, value := range values {
+				columnID := value % columnN
+
+				m[columnID] = int64(value)
+
+				if _, err := f.SetFieldValue(columnID, bitDepth, value); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Ensure values are set.
+			for columnID, value := range m {
+				v, exists, err := f.FieldValue(columnID, bitDepth)
+				if err != nil {
+					t.Fatal(err)
+				} else if value != int64(v) {
+					t.Fatalf("value mismatch: column=%d, bitdepth=%d, value: %d != %d", columnID, bitDepth, value, v)
+				} else if !exists {
+					t.Fatalf("value should exist: column=%d", columnID)
+				}
+			}
+
+			return true
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 // Ensure a fragment can snapshot correctly.
