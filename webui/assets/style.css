@@ -231,6 +231,7 @@ em{
 .result-output{
   background-color: #edf9f7;
   border-left: solid 4px #1db598;
+  word-wrap: break-word;
 }
 
 .result-error{
