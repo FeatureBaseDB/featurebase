@@ -75,10 +75,10 @@ curl localhost:10101/index/repository/frame/language \
                       "inverseEnabled": true}}'
 ```
 
-#### Create the Schema with Input Definition
+#### Create the Schema Using an Input Definition
 
-Input Definition supports user to define a schema based on their data and allows them to provide data to Pilosa in
-a more standard format like JSON. Once an Input Definition is created, we can send data to Pilosa in JSON a format that adheres to that definition and Pilosa will internally perform all
+Input definitions allow users to define a schema based on their data and to provide data to Pilosa in
+a more standard format like JSON. Once an input definition is created, we can send data to Pilosa as JSON, and as long as the data adheres to the definition, Pilosa will internally perform all
 of the appropriate mutations.
 
 Before creating a schema, let's create the repository index first:
@@ -88,7 +88,7 @@ curl localhost:10101/index/repository \
      -X POST \
      -d '{"options": {"columnLabel": "repo_id"}}'
 ```
-Then we can send following input definition as JSON to Pilosa. The sample input-defintion schema for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started), `input-definition.json` file
+Then we can send the following input definition as JSON to Pilosa. The sample input defintion schema for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started), `input-definition.json` file
 
 ```
 curl localhost:10101/index/repository/input-definition/stargazer \
@@ -145,19 +145,19 @@ curl localhost:10101/index/repository/input-definition/stargazer \
          }'
 ```
 
-Instead of creating `stargazer` frame and `language` frame individually like above, we can create multiple frames in one input definition.
-We can also set `repo_id` for multiple frames at the same time by providing actions. There are three options for valueDestination:
+Instead of creating a `stargazer` frame and a `language` frame individually like above, we can create multiple frames in one input definition.
+We can also set `repo_id` for multiple frames at the same time by providing field actions. There are three options for valueDestination:
 
- - value-to-row: the value for this field is used as the `rowID`
- - single-row-boolean: the value must be a boolean, and this specifies `SetBit()` or `ClearBit()`, a `rowID` must be specified for this destination type.
- - mapping: the value for this field is used to lookup a `rowID` in a map, a valueMap is required for this destination type
+ - value-to-row: The value for this field is used as the `rowID`.
+ - single-row-boolean: The value must be a boolean, and this specifies `SetBit()` or `ClearBit()`, a `rowID` must be specified for this destination type.
+ - mapping: The value for this field is used to lookup a `rowID` in a map. A valueMap is required for this destination type.
 
 
-#### Import Some Data with Input Definition
+#### Import Data Using an Input Definition
 
 The sample data for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started). 
 
-If you import data using input-definition, download the `json-input.json` file in that repo, then run the following request to input-definition created above:
+If you import data using an input definition, download the `json-input.json` file in that repo, then run the following request using the input definition created above:
 
 ```
 curl localhost:10101/index/repository/input/stargazer \
@@ -175,8 +175,8 @@ curl localhost:10101/index/repository/input/stargazer \
          ]
 ```
 
-As define in input definition, field name `language_id` map language to correspondent id in `valueMap` in `language` frame and field name `stargazer_id` is added to `stargazer` frame as rowID
-The data input above is relevant to multiple `SetBit()` queries :
+As defined in the input definition, field name `language_id` maps language to a corresponding id defined in `valueMap` and sets the appropriate bit in the `language` frame.  The value corresponding to field name `stargazer_id` is added to the `stargazer` frame as rowID.
+The data input above is equivalent to the following `SetBit()` operations:
 
 ```
 curl localhost:10101/index/repository/query \
@@ -187,7 +187,7 @@ curl localhost:10101/index/repository/query \
      '
 ```
 
-#### Import Some Data with csv files
+#### Import Data From CSV Files
 
 If you import data using csv files and without input defintion, download the `stargazer.csv` and `language.csv` files in that repo.
 
