@@ -88,7 +88,7 @@ curl localhost:10101/index/repository \
      -X POST \
      -d '{"options": {"columnLabel": "repo_id"}}'
 ```
-Then we can send following input definition as JSON to Pilosa:
+Then we can send following input definition as JSON to Pilosa. The sample input-defintion schema for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started), `input-definition.json` file
 
 ```
 curl localhost:10101/index/repository/input-definition/stargazer \
@@ -152,13 +152,12 @@ We can also set `repo_id` for multiple frames at the same time by providing acti
  - single-row-boolean: the value must be a boolean, and this specifies `SetBit()` or `ClearBit()`, a `rowID` must be specified for this destination type.
  - mapping: the value for this field is used to lookup a `rowID` in a map, a valueMap is required for this destination type
 
-The sample input definition in JSON format for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started), `input-defintion.txt`
 
 #### Import Some Data with Input Definition
 
 The sample data for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started). 
 
-If you import data using input-definition, download the `json-input.txt` file in that repo, then run the following request to input-definition created above:
+If you import data using input-definition, download the `json-input.json` file in that repo, then run the following request to input-definition created above:
 
 ```
 curl localhost:10101/index/repository/input/stargazer \
