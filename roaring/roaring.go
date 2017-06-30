@@ -976,56 +976,6 @@ func (itr *Iterator) peek() uint64 {
 	return uint64(key)<<16 | uint64(itr.j)
 }
 
-// BufIterator wraps an iterator to provide the ability to unread values.
-type BufIterator struct {
-	buf struct {
-		v    uint64
-		eof  bool
-		full bool
-	}
-	itr *Iterator
-}
-
-// NewBufIterator returns a buffered iterator that wraps itr.
-func NewBufIterator(itr *Iterator) *BufIterator {
-	return &BufIterator{itr: itr}
-}
-
-// Seek moves to the first pair equal to or greater than pseek/bseek.
-func (itr *BufIterator) Seek(v uint64) {
-	itr.buf.full = false
-	itr.itr.Seek(v)
-}
-
-// Next returns the next pair in the bitmap.
-// If a value has been buffered then it is returned and the buffer is cleared.
-func (itr *BufIterator) Next() (v uint64, eof bool) {
-	if itr.buf.full {
-		itr.buf.full = false
-		return itr.buf.v, itr.buf.eof
-	}
-
-	// Read value onto buffer in case of unread.
-	itr.buf.v, itr.buf.eof = itr.itr.Next()
-	return itr.buf.v, itr.buf.eof
-}
-
-// Peek reads the next value but leaves it on the buffer.
-func (itr *BufIterator) Peek() (v uint64, eof bool) {
-	v, eof = itr.Next()
-	itr.Unread()
-	return
-}
-
-// Unread pushes previous pair on to the buffer.
-// Panics if the buffer is already full.
-func (itr *BufIterator) Unread() {
-	if itr.buf.full {
-		panic("roaring.BufIterator: buffer full")
-	}
-	itr.buf.full = true
-}
-
 // The maximum size of array containers.
 const ArrayMaxSize = 4096
 
@@ -2382,7 +2332,7 @@ func (c *container) bitmapZeroRange(i, j uint64) {
 
 func unionArrayBitmap(a, b *container) *container {
 	output := &container{}
-	itr := newBufIterator(newBitmapIterator(b.bitmap))
+	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
 	for i := 0; ; {
 		vb, eof := itr.next()
 		if i >= len(a.array) && eof {
@@ -2554,7 +2504,7 @@ func differenceRunBitmap(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
 	}
-	itr := newBufIterator(newBitmapIterator(b.bitmap))
+	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
 	return differenceRunIterator(a, itr)
 }
 
@@ -2678,7 +2628,7 @@ func differenceRunRun(a, b *container) *container {
 
 func differenceArrayBitmap(a, b *container) *container {
 	output := &container{}
-	itr := newBufIterator(newBitmapIterator(b.bitmap))
+	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
 	for i := 0; i < len(a.array); {
 		va := a.array[i]
 		vb, eof := itr.next()
@@ -2703,7 +2653,7 @@ func differenceArrayBitmap(a, b *container) *container {
 
 func differenceBitmapArray(a, b *container) *container {
 	output := &container{}
-	itr := newBufIterator(newBitmapIterator(a.bitmap))
+	itr := newBufBitmapIterator(newBitmapIterator(a.bitmap))
 	i := 0
 	va, eof := itr.next()
 	for {
@@ -2733,8 +2683,8 @@ func differenceBitmapArray(a, b *container) *container {
 
 func differenceBitmapBitmap(a, b *container) *container {
 	output := &container{}
-	itr0 := newBufIterator(newBitmapIterator(a.bitmap))
-	itr1 := newBufIterator(newBitmapIterator(b.bitmap))
+	itr0 := newBufBitmapIterator(newBitmapIterator(a.bitmap))
+	itr1 := newBufBitmapIterator(newBitmapIterator(b.bitmap))
 	v0, eof0 := itr0.next()
 	v1, eof1 := itr1.next()
 	for {
@@ -3033,7 +2983,7 @@ type containerIterator interface {
 	next() (uint32, bool)
 }
 
-// bitmapIterator represents an iterator over container array values.
+// arrayIterator represents an iterator over container array values.
 type arrayIterator struct {
 	array []uint32
 	i     int
@@ -3107,7 +3057,7 @@ type bufBitmapIterator struct {
 }
 
 // newBufBitmapIterator returns a buffered iterator that wraps a bitmapIterator.
-func newBufIterator(itr *bitmapIterator) *bufBitmapIterator {
+func newBufBitmapIterator(itr *bitmapIterator) *bufBitmapIterator {
 	return &bufBitmapIterator{itr: itr}
 }
 
