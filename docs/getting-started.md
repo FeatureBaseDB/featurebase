@@ -74,9 +74,123 @@ curl localhost:10101/index/repository/frame/language \
      -d '{"options": {"rowLabel": "language_id",
                       "inverseEnabled": true}}'
 ```
-#### Import Some Data
 
-The sample data for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started). Download the `stargazer.csv` and `language.csv` files in that repo.
+#### Create the Schema with Input Definition
+
+Input Definition supports user to define a schema based on their data and allows them to provide data to Pilosa in
+a more standard format like JSON. Once an Input Definition is created, we can send data to Pilosa in JSON a format that adheres to that definition and Pilosa will internally perform all
+of the appropriate mutations.
+
+Before creating a schema, let's create the repository index first:
+
+```
+curl localhost:10101/index/repository \
+     -X POST \
+     -d '{"options": {"columnLabel": "repo_id"}}'
+```
+Then we can send following input definition as JSON to Pilosa:
+
+```
+curl localhost:10101/index/repository/input-definition/stargazer \
+     -X POST \
+     -d '{
+            "frames": [
+                 {
+                     "name": "language", 
+                     "options": { 
+                         "inverseEnabled": true, 
+                         "timeQuantum": "YMD"
+                     }
+                 }, 
+                 {
+                     "name": "stargazer", 
+                     "options": {
+                         "inverseEnabled": true, 
+                         "timeQuantum": "YMD"
+                     }
+                 }
+             ],
+             "fields": [
+                 {
+                     "name": "repo_id", 
+                     "primaryKey": true
+                 }, 
+                 {
+                     "actions": [
+                         {
+                             "frame": "language", 
+                             "valueDestination": "mapping", 
+                             "valueMap": {
+                                 "C": 7, 
+                                 "C#": 27, 
+                                 "Go": 5, 
+                                 "Java": 21, 
+                                 "JavaScript": 13, 
+                                 "Python": 17, 
+                             }
+                         }
+                     ], 
+                     "name": "language_id"
+                 }, 
+                 {
+                     "actions": [
+                         {
+                             "frame": "stargazer", 
+                             "valueDestination": "value-to-row"
+                         }
+                     ], 
+                     "name": "stargazer_id"
+                 }
+             ] 
+         }'
+```
+
+Instead of creating `stargazer` frame and `language` frame individually like above, we can create multiple frames in one input definition.
+We can also set `repo_id` for multiple frames at the same time by providing actions. There are three options for valueDestination:
+
+ - value-to-row: the value for this field is used as the `rowID`
+ - single-row-boolean: the value must be a boolean, and this specifies `SetBit()` or `ClearBit()`, a `rowID` must be specified for this destination type.
+ - mapping: the value for this field is used to lookup a `rowID` in a map, a valueMap is required for this destination type
+
+The sample input definition in JSON format for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started), `input-defintion.txt`
+
+#### Import Some Data with Input Definition
+
+The sample data for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started). 
+
+If you import data using input-definition, download the `json-input.txt` file in that repo, then run the following request to input-definition created above:
+
+```
+curl localhost:10101/index/repository/input/stargazer \
+     -X POST \
+     -d '[
+             {
+                 "language_id": "Go", 
+                 "repo_id": 91720568, 
+                 "stargazer_id": 513114
+             }, 
+             {
+                 "language_id": "Python", 
+                 "repo_id": 95122322
+             }'
+         ]
+```
+
+As define in input definition, field name `language_id` map language to correspondent id in `valueMap` in `language` frame and field name `stargazer_id` is added to `stargazer` frame as rowID
+The data input above is relevant to multiple `SetBit()` queries :
+
+```
+curl localhost:10101/index/repository/query \
+     -X POST \
+     -d 'SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114)
+         SetBit(frame="language", repo_id=91720568, language_id=5)
+         SetBit(frame="language", repo_id=95122322, language_id=17)
+     '
+```
+
+#### Import Some Data with csv files
+
+If you import data using csv files and without input defintion, download the `stargazer.csv` and `language.csv` files in that repo.
 
 ```
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/stargazer.csv
