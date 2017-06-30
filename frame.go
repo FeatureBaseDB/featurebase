@@ -404,6 +404,16 @@ func (f *Frame) Schema() *FrameSchema {
 	return f.schema
 }
 
+// Field returns a field from the schema by name.
+func (f *Frame) Field(name string) *Field {
+	for _, field := range f.Schema().Fields {
+		if field.Name == name {
+			return field
+		}
+	}
+	return nil
+}
+
 // TimeQuantum returns the time quantum for the frame.
 func (f *Frame) TimeQuantum() TimeQuantum {
 	f.mu.Lock()
@@ -574,6 +584,52 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	}
 
 	return changed, nil
+}
+
+// FieldValue reads a field value for a column.
+func (f *Frame) FieldValue(columnID uint64, name string) (value int64, exists bool, err error) {
+	field := f.Field(name)
+	if field == nil {
+		return 0, false, ErrFieldNotFound
+	}
+
+	// Fetch target view.
+	view := f.View(ViewFieldPrefix + name)
+	if view == nil {
+		return 0, false, nil
+	}
+
+	v, exists, err := view.FieldValue(columnID, field.BitDepth())
+	if err != nil {
+		return 0, false, err
+	} else if !exists {
+		return 0, false, nil
+	}
+	return int64(v) + field.Min, true, nil
+}
+
+// SetFieldValue sets a field value for a column.
+func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (changed bool, err error) {
+	// Fetch field and validate value.
+	field := f.Field(name)
+	if field == nil {
+		return false, ErrFieldNotFound
+	} else if value < field.Min {
+		return false, ErrFieldValueTooLow
+	} else if value > field.Max {
+		return false, ErrFieldValueTooHigh
+	}
+
+	// Fetch target view.
+	view, err := f.CreateViewIfNotExists(ViewFieldPrefix + name)
+	if err != nil {
+		return false, err
+	}
+
+	// Determine base value to store.
+	baseValue := uint64(value - field.Min)
+
+	return view.SetFieldValue(columnID, field.BitDepth(), baseValue)
 }
 
 // Import bulk imports data.
@@ -761,8 +817,18 @@ func IsValidFieldType(v string) bool {
 type Field struct {
 	Name string `json:"name,omitempty"`
 	Type string `json:"type,omitempty"`
-	Min  int    `json:"min,omitempty"`
-	Max  int    `json:"max,omitempty"`
+	Min  int64  `json:"min,omitempty"`
+	Max  int64  `json:"max,omitempty"`
+}
+
+// BitDepth returns the number of bits required to store a value between min & max.
+func (f *Field) BitDepth() uint {
+	for i := uint(0); i < 63; i++ {
+		if f.Max-f.Min < (1 << i) {
+			return i
+		}
+	}
+	return 63
 }
 
 func ValidateField(f *Field) error {
@@ -817,8 +883,8 @@ func decodeField(f *internal.Field) *Field {
 	return &Field{
 		Name: f.Name,
 		Type: f.Type,
-		Min:  int(f.Min),
-		Max:  int(f.Max),
+		Min:  f.Min,
+		Max:  f.Max,
 	}
 }
 

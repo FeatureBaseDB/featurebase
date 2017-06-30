@@ -31,6 +31,8 @@ import (
 const (
 	ViewStandard = "standard"
 	ViewInverse  = "inverse"
+
+	ViewFieldPrefix = "field_"
 )
 
 // IsValidView returns true if name is valid.
@@ -276,6 +278,26 @@ func (v *View) ClearBit(rowID, columnID uint64) (changed bool, err error) {
 		return changed, err
 	}
 	return frag.ClearBit(rowID, columnID)
+}
+
+// FieldValue uses a column of bits to read a multi-bit value.
+func (v *View) FieldValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+	slice := columnID / SliceWidth
+	frag, err := v.CreateFragmentIfNotExists(slice)
+	if err != nil {
+		return value, exists, err
+	}
+	return frag.FieldValue(columnID, bitDepth)
+}
+
+// SetFieldValue uses a column of bits to set a multi-bit value.
+func (v *View) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+	slice := columnID / SliceWidth
+	frag, err := v.CreateFragmentIfNotExists(slice)
+	if err != nil {
+		return changed, err
+	}
+	return frag.SetFieldValue(columnID, bitDepth, value)
 }
 
 // IsInverseView returns true if the view is used for storing an inverted representation.
