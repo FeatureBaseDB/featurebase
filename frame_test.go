@@ -68,6 +68,153 @@ func TestFrame_SetTimeQuantum(t *testing.T) {
 	}
 }
 
+// Ensure a frame can set & read a field value.
+func TestFrame_SetFieldValue(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
+				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 20, Max: 25},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value on first field.
+		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Set value on same column but different field.
+		if changed, err := f.SetFieldValue(100, "field1", 25); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Read value.
+		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+			t.Fatal(err)
+		} else if value != 21 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if !exists {
+			t.Fatal("expected value to exist")
+		}
+
+		// Setting value should return no change.
+		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+			t.Fatal(err)
+		} else if changed {
+			t.Fatal("expected no change")
+		}
+	})
+
+	t.Run("Overwrite", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value.
+		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Set different value.
+		if changed, err := f.SetFieldValue(100, "field0", 23); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Read value.
+		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+			t.Fatal(err)
+		} else if value != 23 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if !exists {
+			t.Fatal("expected value to exist")
+		}
+	})
+
+	t.Run("ErrFieldNotFound", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value.
+		if _, err := f.SetFieldValue(100, "no_such_field", 21); err != pilosa.ErrFieldNotFound {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("ErrFieldValueTooLow", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 20, Max: 30},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value.
+		if _, err := f.SetFieldValue(100, "field0", 15); err != pilosa.ErrFieldValueTooLow {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("ErrFieldValueTooHigh", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 20, Max: 30},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value.
+		if _, err := f.SetFieldValue(100, "field0", 31); err != pilosa.ErrFieldValueTooHigh {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+}
+
 func TestFrame_NameRestriction(t *testing.T) {
 	path, err := ioutil.TempDir("", "pilosa-frame-")
 	if err != nil {

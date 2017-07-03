@@ -4,6 +4,8 @@ title = "Query Language"
 
 ## Query Language
 
+### Overview
+
 This section will provide a detailed reference and examples for the Pilosa Query Language (PQL). All PQL queries operate on a single [index]({{< ref "glossary.md#index" >}}) and are passed to Pilosa through the `/index/*index_name*/query` endpoint. You may pass multiple PQL queries in a single request by simply concatenating the queries together - a space is not needed. The results format is always:
 
 ```
@@ -43,9 +45,9 @@ curl localhost:10101/index/repository/query \
 * `BITMAP_CALL` Any query which returns a bitmap, such as `Bitmap`, `Union`, `Difference`, `Intersect`, `Range`
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`)
 
-#### Write Operations
+### Write Operations
 
-##### SetBit
+#### SetBit
 
 **Spec:**
 
@@ -83,7 +85,7 @@ Setting multiple bits in a single request:
 SetBit(frame="stargazer", repo_id=10, stargazer_id=1) SetBit(frame="stargazer", repo_id=10, stargazer_id=2) SetBit(frame="stargazer", repo_id=20, stargazer_id=1) SetBit(frame="stargazer", repo_id=30, stargazer_id=2)
 ```
 
-##### SetRowAttrs
+#### SetRowAttrs
 **Spec:**
 
 ```
@@ -114,7 +116,7 @@ SetRowAttrs(frame="stargazer", stargazer_id=10, username=null)
 
 Delete username value for user 10.
 
-##### SetColumnAttrs
+#### SetColumnAttrs
 
 **Spec:**
 
@@ -147,7 +149,7 @@ SetColumnAttrs(frame="stargazer", repo_id=10, url=null)
 Delete url value for repo 10.
 
 
-##### ClearBit
+#### ClearBit
 
 **Spec:**
 
@@ -175,9 +177,9 @@ ClearBit(frame="stargazer", repo_id=10, stargazer_id=1)
 Remove relationship between stargazer_id 1 and repo_id 10  from the stargazer frame.
 
 
-#### Read Operations
+### Read Operations
 
-##### Bitmap
+#### Bitmap
 
 **Spec:**
 
@@ -205,7 +207,7 @@ Returns `{"attrs":{"username":"mrpi","active":true},"bits":[10, 20]}`
 * attrs are the attributes for user 1 
 * bits are the repositories which user 1 has starred.
 
-##### Union
+#### Union
 
 **Spec:**
 
@@ -232,7 +234,7 @@ Returns `{"attrs":{},"bits":[10, 20, 30]}`.
 
 * bits are repositories that were starred by user 1 OR user 2
 
-##### Intersect
+#### Intersect
 
 
 **Spec:**
@@ -261,7 +263,7 @@ Returns `{"attrs":{},"bits":[10]}`.
 
 * bits are repositories that were starred by user 1 AND user 2
 
-##### Difference
+#### Difference
 
 **Spec:**
 
@@ -296,7 +298,7 @@ Return `{"attrs":{},"bits":[30]}`
 
 * Bits are repositories that were starred by user 2 BUT NOT user 1
 
-##### Count
+#### Count
 **Spec:**
 
 ```
@@ -320,7 +322,7 @@ Return `2`
 
 * Result is the number of repositories that user 1 has starred.
 
-##### TopN
+#### TopN
 
 **Spec:**
 
@@ -377,7 +379,7 @@ Returns `[{"key": 1, "count": 2}, {"key": 2, "count": 1}]`
 
 * Results are the top two users sorted by the number of repositories that they've starred which are written in language 1.
 
-##### Range Queries
+#### Range Queries
 
 **Spec:**
 
