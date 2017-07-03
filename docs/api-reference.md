@@ -331,7 +331,7 @@ Request:
 ```
 curl localhost:10101/index/user/input/stargazer-input \
      -X POST \
-     -d '[{"language_id": "Go", "repo_id": 92274475, "stargazer_id": 513111}]'
+     -d '[{"language_id": "Go", "repo_id": 92274475}]'
 ```
 
 Response:
