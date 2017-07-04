@@ -224,6 +224,7 @@ em{
   padding: 15px;
   margin-bottom: 15px;
   word-break: break-all;
+  overflow-wrap: break-word;
   overflow:hidden;
 }
 
@@ -231,7 +232,6 @@ em{
 .result-output{
   background-color: #edf9f7;
   border-left: solid 4px #1db598;
-  word-wrap: break-word;
 }
 
 .result-error{
