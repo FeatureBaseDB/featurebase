@@ -38,8 +38,9 @@ const (
 	cookieNoRuns = magicNumberNoRuns + storageVersion<<16
 	cookie       = magicNumber + storageVersion<<16
 
-	// headerBaseSize is the size of the cookie and key count at the beginning of a file.
-	// Headers in files with runs also include runFlagBitset, of length (numContainers+7)/8.
+	// headerBaseSize is the size in bytes of the cookie and key count at the
+	// beginning of a file. Headers in files with runs also include
+	// runFlagBitset, of length (numContainers+7)/8.
 	headerBaseSize = 4 + 4
 
 	// runCountHeaderSize is the size in bytes of the run count stored
@@ -341,7 +342,9 @@ func (b *Bitmap) insertAt(key uint64, c *container, i int) {
 	b.containers = insertContainer(b.containers, i, c)
 }
 
-// IntersectionCount returns the number of intersections between b and other.
+// IntersectionCount returns the number of set bits that would result in an
+// intersection between b and other. It is more efficient than actually
+// intersecting the two and counting the result.
 func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 	var n uint64
 	for i, j := 0, 0; i < len(b.containers) && j < len(other.containers); {
@@ -689,7 +692,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 			opsOffset = int(offset) + runCountHeaderSize + len(c.runs)*interval32Size
 		} else if c.n <= ArrayMaxSize { // Read array.
 			c.array = (*[0xFFFFFFF]uint32)(unsafe.Pointer(&data[offset]))[:c.n]
-			// TODO: instead of commenting this out, we ne ed to make it a configuration option
+			// TODO: instead of commenting this out, we need to make it a configuration option
 			//for _, v := range c.array {
 			//    assert(lowbits(uint64(v)) == v, "array value out of range: %d", v)
 			//}
@@ -1016,12 +1019,12 @@ func (c *container) isArray() bool {
 	return c.bitmap == nil && c.runs == nil
 }
 
-// isBitmap returns true if the container is a bitmap container
+// isBitmap returns true if the container is a bitmap container.
 func (c *container) isBitmap() bool {
 	return c.array == nil && c.runs == nil
 }
 
-// isRun returns true if the container is a run-length-encoded container
+// isRun returns true if the container is a run-length-encoded container.
 func (c *container) isRun() bool {
 	return c.array == nil && c.bitmap == nil
 }
@@ -1270,6 +1273,8 @@ func (c *container) arrayCountRuns() (r int) {
 	return r
 }
 
+// Optimize converts the container to the type which will take up the least
+// amount of space.
 func (c *container) Optimize() {
 	if c.isArray() {
 		runs := c.arrayCountRuns()
@@ -1309,7 +1314,8 @@ func binSearchRuns(v uint32, a []interval32) (int, bool) {
 	return i, false
 }
 
-//runContains determines if v is in the containers run set.
+// runContains determines if v is in the container assuming c is a run
+// container.
 func (c *container) runContains(v uint32) bool {
 	_, found := binSearchRuns(v, c.runs)
 	return found
@@ -1724,7 +1730,7 @@ func (c *container) check() error {
 // ContainerInfo represents a point-in-time snapshot of container stats.
 type ContainerInfo struct {
 	Key     uint64         // container key
-	Type    string         // container type (array or bitmap)
+	Type    string         // container type (array, bitmap, or run)
 	N       int            // number of bits
 	Alloc   int            // memory used
 	Pointer unsafe.Pointer // offset within the mmap
