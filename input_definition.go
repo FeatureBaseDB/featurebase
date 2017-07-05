@@ -22,6 +22,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"time"
 )
 
 // Action types.
@@ -29,9 +30,10 @@ const (
 	InputMapping       = "mapping"
 	InputValueToRow    = "value-to-row"
 	InputSingleRowBool = "single-row-boolean"
+	InputSetTimestamp  = "set-timestamp"
 )
 
-var validValueDestination = []string{InputMapping, InputValueToRow, InputSingleRowBool}
+var validValueDestination = []string{InputMapping, InputValueToRow, InputSingleRowBool, InputSetTimestamp}
 
 // InputDefinition represents a container for the data input definition.
 type InputDefinition struct {
@@ -367,6 +369,13 @@ func HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
 			return nil, fmt.Errorf("value-to-row value must equate to an integer %v", value)
 		}
 		bit.RowID = uint64(v)
+	case InputSetTimestamp:
+		v, err := time.Parse(TimeFormat, value.(string))
+		if err != nil {
+			return nil, fmt.Errorf("set-timestamp value for :%v must in time format: YYYY-MM-DD", value)
+		}
+		bit.Timestamp = v.Unix()
+
 	default:
 		return nil, fmt.Errorf("Unrecognized Value Destination: %s in Action", a.ValueDestination)
 	}
