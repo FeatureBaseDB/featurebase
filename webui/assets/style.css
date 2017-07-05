@@ -224,6 +224,7 @@ em{
   padding: 15px;
   margin-bottom: 15px;
   word-break: break-all;
+  overflow-wrap: break-word;
   overflow:hidden;
 }
 
