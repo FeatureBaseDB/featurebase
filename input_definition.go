@@ -212,7 +212,10 @@ func (a *Action) Validate() error {
 		if len(a.ValueMap) == 0 {
 			return ErrInputDefinitionValueMap
 		}
+	case InputSetTimestamp:
+
 	}
+
 	return nil
 }
 
@@ -338,11 +341,17 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 // HandleAction Process the input data with its action and return a bit to be imported later
 // Note: if the Bit should not be set then nil is returned with no error
 // From the JSON marshalling the possible types are: float64, boolean, string
-// TODO handle Timestamps
-func HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
+func HandleAction(a Action, value interface{}, colID uint64, timestamp string) (*Bit, error) {
 	var err error
 	var bit Bit
 	bit.ColumnID = colID
+	if timestamp != "" {
+		v, err := time.Parse(TimeFormat, timestamp)
+		if err != nil {
+			return nil, fmt.Errorf("set-timestamp value for :%v must in time format: YYYY-MM-DD", timestamp)
+		}
+		bit.Timestamp = v.Unix()
+	}
 
 	switch a.ValueDestination {
 	case InputMapping:
@@ -370,12 +379,7 @@ func HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
 		}
 		bit.RowID = uint64(v)
 	case InputSetTimestamp:
-		v, err := time.Parse(TimeFormat, value.(string))
-		if err != nil {
-			return nil, fmt.Errorf("set-timestamp value for :%v must in time format: YYYY-MM-DD", value)
-		}
-		bit.Timestamp = v.Unix()
-
+		break
 	default:
 		return nil, fmt.Errorf("Unrecognized Value Destination: %s in Action", a.ValueDestination)
 	}

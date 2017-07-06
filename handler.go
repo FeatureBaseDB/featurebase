@@ -1664,10 +1664,16 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 	// if field in input data is not in defined definition, return error
 	var columnLabel string
 	validFields := make(map[string]bool)
+	timestampFrame := make(map[string]string)
 	for _, field := range inputDef.Fields() {
 		validFields[field.Name] = true
 		if field.PrimaryKey {
 			columnLabel = field.Name
+		}
+		for _, action := range field.Actions {
+			if action.ValueDestination == InputSetTimestamp {
+				timestampFrame[action.Frame] = field.Name
+			}
 		}
 	}
 	for key := range req {
@@ -1678,6 +1684,7 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 	}
 
 	setBits := make(map[string][]*Bit)
+
 	for _, field := range inputDef.Fields() {
 		// skip field that defined in definition but not in input data
 		if _, ok := req[field.Name]; !ok {
@@ -1692,9 +1699,17 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 			return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
 		}
 
+		var timestamp string
 		for _, action := range field.Actions {
 			frame := action.Frame
-			bit, err := HandleAction(action, req[field.Name], uint64(colValue))
+			timeField, ok := timestampFrame[action.Frame]
+			if !ok {
+				timestamp = ""
+			} else {
+				timestamp = req[timeField].(string)
+			}
+
+			bit, err := HandleAction(action, req[field.Name], uint64(colValue), timestamp)
 			if err != nil {
 				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
 			}

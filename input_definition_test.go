@@ -197,9 +197,10 @@ func TestHandleAction(t *testing.T) {
 	colID := uint64(0)
 	rowID := uint64(100)
 	action := pilosa.Action{ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
+	timestamp := ""
 
 	value = 1
-	b, err := pilosa.HandleAction(action, value, colID)
+	b, err := pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		t.Fatalf("Expected integer type is not handled by single-row-boolean")
 	} else if !strings.Contains(err.Error(), "single-row-boolean value") {
@@ -207,31 +208,31 @@ func TestHandleAction(t *testing.T) {
 	}
 
 	value = "1"
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		t.Fatalf("Expected Ignore strings, only accept boolean")
 	}
 
 	value = "t"
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if !strings.Contains(err.Error(), "must equate to a Bool") {
 		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
 	}
 
 	value = float64(1)
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if !strings.Contains(err.Error(), "must equate to a Bool") {
 		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
 	}
 
 	value = false
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		t.Fatalf("Expected Ignore values that do not equate to True")
 	}
 
 	value = true
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		if b.ColumnID != 0 {
 			t.Fatalf("Unexpected ColumnID %v", b.ColumnID)
@@ -244,35 +245,35 @@ func TestHandleAction(t *testing.T) {
 	action.ValueDestination = pilosa.InputValueToRow
 	rowID = 101
 	value = float64(25.0)
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		if b.RowID != 25 {
 			t.Fatalf("Unexpected RowID %v", b.RowID)
 		}
 	}
 	value = "25"
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		t.Fatalf("Expected Ignore values that are not type float64")
 	}
 
 	action.ValueDestination = pilosa.InputMapping
 	value = "test"
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		t.Fatalf("Expected Ignore values that are not type string")
 	}
 
 	value = 25
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		t.Fatalf("Expected Ignore values that are not type string")
 	}
 
 	action.ValueDestination = pilosa.InputSetTimestamp
-	value = "2017-03-20T19:35"
+	timestamp = "2017-03-20T19:35"
 	parsedTime, _ := time.Parse(pilosa.TimeFormat, value.(string))
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if b == nil {
 		t.Fatalf("Expected return bit")
 	} else if b.Timestamp != parsedTime.Unix() {
@@ -280,13 +281,14 @@ func TestHandleAction(t *testing.T) {
 	}
 
 	value = "12345677"
-	b, err = pilosa.HandleAction(action, value, colID)
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if !strings.Contains(err.Error(), "set-timestamp value for :12345677 must in time format: YYYY-MM-DD") {
 		t.Fatal("Expect invalid timestamp format")
 	}
 
 	action.ValueDestination = "test"
-	b, err = pilosa.HandleAction(action, value, colID)
+	timestamp = ""
+	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if !strings.Contains(err.Error(), "Unrecognized Value Destination") {
 		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
 	}

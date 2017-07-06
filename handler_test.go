@@ -1273,6 +1273,16 @@ var defaultBody = `
 
 						}
 					 ]
+				  },
+				  {
+					 "name":"time_value",
+					 "actions":[
+						{
+						   "frame":"add-ons",
+						   "valueDestination":"set_timestamp"
+
+						}
+					 ]
 				  }
 			   ]
 			}`
