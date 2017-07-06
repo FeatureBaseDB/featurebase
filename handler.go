@@ -1670,6 +1670,7 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 		if field.PrimaryKey {
 			columnLabel = field.Name
 		}
+		// finding frame that need to add timestamp
 		for _, action := range field.Actions {
 			if action.ValueDestination == InputSetTimestamp {
 				timestampFrame[action.Frame] = field.Name
@@ -1699,6 +1700,7 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 			return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
 		}
 
+		// Looking into timestampFrame map and set timestamp to the whole frame
 		var timestamp string
 		for _, action := range field.Actions {
 			frame := action.Frame
@@ -1706,7 +1708,15 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 			if !ok {
 				timestamp = ""
 			} else {
-				timestamp = req[timeField].(string)
+				tmstamp, ok := req[timeField]
+				if !ok {
+					timestamp = ""
+				} else {
+					timestamp, ok = tmstamp.(string)
+					if !ok {
+						return nil, fmt.Errorf("set-timestamp value must be in time format: YYYY-MM-DD, having: %v", req[timeField])
+					}
+				}
 			}
 
 			bit, err := HandleAction(action, req[field.Name], uint64(colValue), timestamp)

@@ -26,6 +26,7 @@ import (
 	"strings"
 	"testing"
 
+	"fmt"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
@@ -1279,7 +1280,7 @@ var defaultBody = `
 					 "actions":[
 						{
 						   "frame":"add-ons",
-						   "valueDestination":"set_timestamp"
+						   "valueDestination":"set-timestamp"
 
 						}
 					 ]
@@ -1306,7 +1307,8 @@ func TestHandler_CreateInput(t *testing.T) {
 				"id": 1,
 				"cabType": "yellow",
 				"distanceMiles": 8,
-				"withPet": true
+				"withPet": true,
+				"time_value": "2017-03-20T19:35"
 			}]`)
 	h := test.NewHandler()
 	h.Holder = hldr.Holder
@@ -1328,6 +1330,7 @@ func TestHandler_CreateInput(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 
+	// Test successfully ingest data
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusOK {
@@ -1337,7 +1340,6 @@ func TestHandler_CreateInput(t *testing.T) {
 	}
 
 	// Verify the bits set per frame.
-	// f := index.Frame("cab-type")
 	f0 := index.Frame("distance-miles")
 	v0 := f0.View(pilosa.ViewStandard)
 	fragment0 := v0.Fragment(0)
@@ -1415,6 +1417,13 @@ func TestInput_JSON(t *testing.T) {
 				"noFrame": 1
 				}]`,
 			err: "Frame not found: foo"},
+		{json: `[{
+				"id": 1,
+				"cabType": "yellow",
+				"distanceMiles": 8,
+				"time_value": 12345
+				}]`,
+			err: "set-timestamp value must be in time format: YYYY-MM-DD, having: 12345"},
 	}
 	h := test.NewHandler()
 	h.Holder = hldr.Holder

@@ -348,7 +348,7 @@ func HandleAction(a Action, value interface{}, colID uint64, timestamp string) (
 	if timestamp != "" {
 		v, err := time.Parse(TimeFormat, timestamp)
 		if err != nil {
-			return nil, fmt.Errorf("set-timestamp value for :%v must in time format: YYYY-MM-DD", timestamp)
+			return nil, err
 		}
 		bit.Timestamp = v.Unix()
 	}

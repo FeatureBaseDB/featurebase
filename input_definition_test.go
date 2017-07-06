@@ -272,18 +272,12 @@ func TestHandleAction(t *testing.T) {
 
 	action.ValueDestination = pilosa.InputSetTimestamp
 	timestamp = "2017-03-20T19:35"
-	parsedTime, _ := time.Parse(pilosa.TimeFormat, value.(string))
+	parsedTime, _ := time.Parse(pilosa.TimeFormat, timestamp)
 	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if b == nil {
 		t.Fatalf("Expected return bit")
 	} else if b.Timestamp != parsedTime.Unix() {
 		t.Fatalf("Timestamp is not set correctly")
-	}
-
-	value = "12345677"
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if !strings.Contains(err.Error(), "set-timestamp value for :12345677 must in time format: YYYY-MM-DD") {
-		t.Fatal("Expect invalid timestamp format")
 	}
 
 	action.ValueDestination = "test"
