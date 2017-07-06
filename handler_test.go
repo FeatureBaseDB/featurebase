@@ -26,7 +26,6 @@ import (
 	"strings"
 	"testing"
 
-	"fmt"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
