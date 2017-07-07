@@ -22,7 +22,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
-	"time"
 )
 
 // Action types.
@@ -341,17 +340,11 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 // HandleAction Process the input data with its action and return a bit to be imported later
 // Note: if the Bit should not be set then nil is returned with no error
 // From the JSON marshalling the possible types are: float64, boolean, string
-func HandleAction(a Action, value interface{}, colID uint64, timestamp string) (*Bit, error) {
+func HandleAction(a Action, value interface{}, colID uint64, timestamp int64) (*Bit, error) {
 	var err error
 	var bit Bit
 	bit.ColumnID = colID
-	if timestamp != "" {
-		v, err := time.Parse(TimeFormat, timestamp)
-		if err != nil {
-			return nil, err
-		}
-		bit.Timestamp = v.Unix()
-	}
+	bit.Timestamp = timestamp
 
 	switch a.ValueDestination {
 	case InputMapping:

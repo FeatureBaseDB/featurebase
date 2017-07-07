@@ -23,7 +23,6 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/test"
-	"time"
 )
 
 func TestInputDefinition_Open(t *testing.T) {
@@ -197,7 +196,7 @@ func TestHandleAction(t *testing.T) {
 	colID := uint64(0)
 	rowID := uint64(100)
 	action := pilosa.Action{ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
-	timestamp := ""
+	timestamp := int64(0)
 
 	value = 1
 	b, err := pilosa.HandleAction(action, value, colID, timestamp)
@@ -270,21 +269,9 @@ func TestHandleAction(t *testing.T) {
 		t.Fatalf("Expected Ignore values that are not type string")
 	}
 
-	action.ValueDestination = pilosa.InputSetTimestamp
-	timestamp = "2017-03-20T19:35"
-	parsedTime, _ := time.Parse(pilosa.TimeFormat, timestamp)
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if b == nil {
-		t.Fatalf("Expected return bit")
-	} else if b.Timestamp != parsedTime.Unix() {
-		t.Fatalf("Timestamp is not set correctly")
-	}
-
 	action.ValueDestination = "test"
-	timestamp = ""
 	b, err = pilosa.HandleAction(action, value, colID, timestamp)
 	if !strings.Contains(err.Error(), "Unrecognized Value Destination") {
 		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
 	}
-
 }
