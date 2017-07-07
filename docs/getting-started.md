@@ -140,7 +140,16 @@ curl localhost:10101/index/repository/input-definition/stargazer \
                          }
                      ], 
                      "name": "stargazer_id"
-                 }
+                 },
+                 {
+                      "actions": [
+                          {
+                              "frame": "stargazer", 
+                              "valueDestination": "set-timestamp"
+                          }
+                      ], 
+                      "name": "time_value
+                  }
              ] 
          }'
 ```
@@ -151,7 +160,7 @@ We can also set `repo_id` for multiple frames at the same time by providing fiel
  - value-to-row: The value for this field is used as the `rowID`.
  - single-row-boolean: The value must be a boolean, and this specifies `SetBit()` or `ClearBit()`, a `rowID` must be specified for this destination type.
  - mapping: The value for this field is used to lookup a `rowID` in a map. A valueMap is required for this destination type.
-
+ - set-timestamp: The value for this field is used to lookup timestamp and set timestamp for the whole frame
 
 #### Import Data Using an Input Definition
 
@@ -167,6 +176,7 @@ curl localhost:10101/index/repository/input/stargazer \
                  "language_id": "Go", 
                  "repo_id": 91720568, 
                  "stargazer_id": 513114
+                 "time_value": "2017-05-18T20:40"
              }, 
              {
                  "language_id": "Python", 
@@ -182,6 +192,7 @@ The data input above is equivalent to the following `SetBit()` operations:
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114)
+        'SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114, timestamp="2017-05-18T20:40")
          SetBit(frame="language", repo_id=91720568, language_id=5)
          SetBit(frame="language", repo_id=95122322, language_id=17)
      '
