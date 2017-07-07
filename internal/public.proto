@@ -40,7 +40,6 @@ message QueryRequest {
 	string Query = 1;
 	repeated uint64 Slices = 2;
 	bool ColumnAttrs = 3;
-	string Quantum = 4;
 	bool Remote = 5;
 }
 
