@@ -1661,15 +1661,35 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 	if err != nil {
 		return nil, err
 	}
-	// if field in input data is not in defined definition, return error
-	var columnLabel string
+	// If field in input data is not in defined definition, return error.
+	var colValue uint64
 	validFields := make(map[string]bool)
+	timestampFrame := make(map[string]int64)
 	for _, field := range inputDef.Fields() {
 		validFields[field.Name] = true
 		if field.PrimaryKey {
-			columnLabel = field.Name
+			columnLabel := field.Name
+			value, ok := req[columnLabel]
+			if !ok {
+				return nil, fmt.Errorf("columnLabel required")
+			}
+			rawValue, ok := value.(float64) // The default JSON marshalling will interpret this as a float
+			if !ok {
+				return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
+			}
+			colValue = uint64(rawValue)
+		}
+		// Find frame that need to add timestamp.
+		for _, action := range field.Actions {
+			if action.ValueDestination == InputSetTimestamp {
+				timestampFrame[action.Frame], err = GetTimeStamp(req, field.Name)
+				if err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
+
 	for key := range req {
 		_, ok := validFields[key]
 		if !ok {
@@ -1678,23 +1698,18 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 	}
 
 	setBits := make(map[string][]*Bit)
+
 	for _, field := range inputDef.Fields() {
 		// skip field that defined in definition but not in input data
 		if _, ok := req[field.Name]; !ok {
 			continue
 		}
-		value, ok := req[columnLabel]
-		if !ok {
-			return nil, fmt.Errorf("columnLabel required")
-		}
-		colValue, ok := value.(float64)
-		if !ok {
-			return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
-		}
 
+		// Looking into timestampFrame map and set timestamp to the whole frame
 		for _, action := range field.Actions {
 			frame := action.Frame
-			bit, err := HandleAction(action, req[field.Name], uint64(colValue))
+			timestamp := timestampFrame[action.Frame]
+			bit, err := HandleAction(action, req[field.Name], colValue, timestamp)
 			if err != nil {
 				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
 			}
@@ -1704,4 +1719,24 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 		}
 	}
 	return setBits, nil
+}
+
+// GetTimeStamp retrieves unix timestamp from Input data.
+func GetTimeStamp(data map[string]interface{}, timeField string) (int64, error) {
+	tmstamp, ok := data[timeField]
+	if !ok {
+		return 0, nil
+	}
+
+	timestamp, ok := tmstamp.(string)
+	if !ok {
+		return 0, fmt.Errorf("set-timestamp value must be in time format: YYYY-MM-DD, has: %v", data[timeField])
+	}
+
+	v, err := time.Parse(TimeFormat, timestamp)
+	if err != nil {
+		return 0, err
+	}
+
+	return v.Unix(), nil
 }

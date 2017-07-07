@@ -29,9 +29,10 @@ const (
 	InputMapping       = "mapping"
 	InputValueToRow    = "value-to-row"
 	InputSingleRowBool = "single-row-boolean"
+	InputSetTimestamp  = "set-timestamp"
 )
 
-var validValueDestination = []string{InputMapping, InputValueToRow, InputSingleRowBool}
+var validValueDestination = []string{InputMapping, InputValueToRow, InputSingleRowBool, InputSetTimestamp}
 
 // InputDefinition represents a container for the data input definition.
 type InputDefinition struct {
@@ -210,7 +211,10 @@ func (a *Action) Validate() error {
 		if len(a.ValueMap) == 0 {
 			return ErrInputDefinitionValueMap
 		}
+	case InputSetTimestamp:
+
 	}
+
 	return nil
 }
 
@@ -336,11 +340,11 @@ func (i *InputDefinition) AddFrame(frame InputFrame) error {
 // HandleAction Process the input data with its action and return a bit to be imported later
 // Note: if the Bit should not be set then nil is returned with no error
 // From the JSON marshalling the possible types are: float64, boolean, string
-// TODO handle Timestamps
-func HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
+func HandleAction(a Action, value interface{}, colID uint64, timestamp int64) (*Bit, error) {
 	var err error
 	var bit Bit
 	bit.ColumnID = colID
+	bit.Timestamp = timestamp
 
 	switch a.ValueDestination {
 	case InputMapping:
@@ -367,6 +371,8 @@ func HandleAction(a Action, value interface{}, colID uint64) (*Bit, error) {
 			return nil, fmt.Errorf("value-to-row value must equate to an integer %v", value)
 		}
 		bit.RowID = uint64(v)
+	case InputSetTimestamp:
+		break
 	default:
 		return nil, fmt.Errorf("Unrecognized Value Destination: %s in Action", a.ValueDestination)
 	}

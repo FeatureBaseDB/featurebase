@@ -772,7 +772,7 @@ func (i *Index) InputBits(frame string, bits []*Bit) error {
 
 		// Convert timestamps to time.Time.
 		if bit.Timestamp > 0 {
-			t := time.Unix(0, bit.Timestamp)
+			t := time.Unix(bit.Timestamp, 0)
 			timestamps[i] = &t
 		}
 	}
