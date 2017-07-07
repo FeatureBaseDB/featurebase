@@ -69,8 +69,8 @@ type Config struct {
 	Metric struct {
 		Service         string   `toml:"service"`
 		Host            string   `toml:"host"`
-		PollingInterval Duration `toml:"interval"`
-	} `toml:"metrics"`
+		PollingInterval Duration `toml:"poll-interval"`
+	} `toml:"metric"`
 }
 
 // NewConfig returns an instance of Config with default options.
