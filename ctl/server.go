@@ -42,5 +42,5 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVarP(&srv.Config.Cluster.InternalPort, "cluster.internal-port", "", "", "Port to which pilosa should bind for internal state sharing.")
 	flags.StringVarP(&srv.Config.Metric.Service, "metric.service", "", "nop", "Default URI on which pilosa should listen.")
 	flags.StringVarP(&srv.Config.Metric.Host, "metric.host", "", "", "Default URI to send metrics.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Metric.PollingInterval), "metric.poll-interval", "", time.Minute*0, "Polling interval metrics.")
+	flags.DurationVarP((*time.Duration)(&srv.Config.Metric.PollingInterval), "metric.polling-interval", "", time.Minute*0, "Polling interval metrics.")
 }

@@ -178,10 +178,10 @@ func TestRootCommand_Config(t *testing.T) {
 		panic(err)
 	}
 	config := `data-dir = "/tmp/pil5_0"
-bind = "127.0.0.1:10101"
+host = "127.0.0.1:10101"
 
 [cluster]
-  poll-interval = "2m0s"
+  polling-interval = "2m0s"
   replicas = 2
   partitions = 128
   hosts = [

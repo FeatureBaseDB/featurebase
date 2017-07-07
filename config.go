@@ -69,7 +69,7 @@ type Config struct {
 	Metric struct {
 		Service         string   `toml:"service"`
 		Host            string   `toml:"host"`
-		PollingInterval Duration `toml:"poll-interval"`
+		PollingInterval Duration `toml:"polling-interval"`
 	} `toml:"metric"`
 }
 
