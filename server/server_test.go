@@ -346,7 +346,7 @@ func TestMain_FrameRestore(t *testing.T) {
 
 // Ensure the host can be parsed.
 func TestConfig_Parse_Host(t *testing.T) {
-	if c, err := ParseConfig(`host = "local"`); err != nil {
+	if c, err := ParseConfig(`bind = "local"`); err != nil {
 		t.Fatal(err)
 	} else if c.Host != "local" {
 		t.Fatalf("unexpected host: %s", c.Host)

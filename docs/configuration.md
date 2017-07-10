@@ -20,10 +20,10 @@ Every command line flag has a corresponding environment variable. The environmen
 
 ### Config file
 
-The config file is in the [toml format](https://github.com/toml-lang/toml) and has exactly the same options available as the flags and environment variables. Any flag which contains a dot (".") denotes nesting within the config file, so the two flags `--cluster.polling-interval=2m0s` and `--cluster.replicas=1` look like this in the config file:
+The config file is in the [toml format](https://github.com/toml-lang/toml) and has exactly the same options available as the flags and environment variables. Any flag which contains a dot (".") denotes nesting within the config file, so the two flags `--cluster.poll-interval=2m0s` and `--cluster.replicas=1` look like this in the config file:
 ```toml
 [cluster]
-  polling-interval = "2m0s"
+  poll-interval = "2m0s"
   replicas = 1
 ```
 
@@ -47,15 +47,15 @@ Any flag that has a value that is a comma separated list on the command line bec
     interval = "10m0s"
     ```
 
-#### Host
+#### Bind
 
 * Description: host:port on which the Pilosa server will listen for requests. Host defaults to localhost and port to 10101.
-* Flag: `--host="localhost:10101"`
+* Flag: `--bind="localhost:10101"`
 * Env: `PILOSA_BIND="localhost:10101"`
 * Config:
 
     ```toml
-    host = localhost:10101
+    bind = localhost:10101
     ```
 
 #### Cluster Hosts
@@ -97,13 +97,13 @@ Any flag that has a value that is a comma separated list on the command line bec
 #### Cluster Poll Interval
 
 * Description: Polling interval for cluster.
-* Flag: `cluster.polling-interval="1m0s"`
-* Env: `PILOSA_CLUSTER.POLLING_INTERVAL="1m0s"`
+* Flag: `cluster.poll-interval="1m0s"`
+* Env: `PILOSA_CLUSTER.POLL_INTERVAL="1m0s"`
 * Config:
 
     ```toml
     [cluster]
-    polling-interval = "1m0s"
+    poll-interval = "1m0s"
     ```
 
 #### Cluster Replicas
@@ -192,11 +192,11 @@ Any flag that has a value that is a comma separated list on the command line bec
 ##### Metric Poll Interval
 
 * Description: Polling interval for runtime metrics.
-* Flag: `metric.polling-interval=”0m15s”`
-* Env: `PILOSA_METRIC.POLLING_INTERVAL=0m15s`
+* Flag: `metric.poll-interval=”0m15s”`
+* Env: `PILOSA_METRIC.POLL_INTERVAL=0m15s`
 * Config:
 
     ```toml
     [metric]
-    polling-interval = "0m15s"
+    poll-interval = "0m15s"
     ```

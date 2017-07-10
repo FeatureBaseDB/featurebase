@@ -25,13 +25,13 @@ import (
 func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags := cmd.Flags()
 	flags.StringVarP(&srv.Config.DataDir, "data-dir", "d", "~/.pilosa", "Directory to store pilosa data files.")
-	flags.StringVarP(&srv.Config.Host, "host", "", ":10101", "Default URI on which pilosa should listen.")
+	flags.StringVarP(&srv.Config.Host, "bind", "b", ":10101", "Default URI on which pilosa should listen.")
 	flags.IntVarP(&srv.Config.MaxWritesPerRequest, "max-writes-per-request", "", srv.Config.MaxWritesPerRequest, "Number of write commands per request.")
 	flags.IntVarP(&srv.Config.Cluster.ReplicaN, "cluster.replicas", "", 1, "Number of hosts each piece of data should be stored on.")
 	flags.StringSliceVarP(&srv.Config.Cluster.Hosts, "cluster.hosts", "", []string{}, "Comma separated list of hosts in cluster.")
 	flags.StringSliceVarP(&srv.Config.Cluster.InternalHosts, "cluster.internal-hosts", "", []string{}, "Comma separated list of hosts in cluster used for internal communication.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Cluster.PollingInterval), "cluster.polling-interval", "", time.Minute, "Polling interval for cluster.") // TODO what actually is this?
-	flags.DurationVarP((*time.Duration)(&srv.Config.Cluster.LongQueryTime), "cluster.long-query-time", "", time.Minute, "Long time query.")
+	flags.DurationVarP((*time.Duration)(&srv.Config.Cluster.PollingInterval), "cluster.poll-interval", "", time.Minute, "Polling interval for cluster.") // TODO what actually is this?
+	flags.DurationVarP((*time.Duration)(&srv.Config.Cluster.LongQueryTime), "cluster.long-query-time", "", time.Minute, "Long Query Time.")
 	flags.StringVarP(&srv.Config.Plugins.Path, "plugins.path", "", "", "Path to plugin directory.")
 	flags.StringVar(&srv.Config.LogPath, "log-path", "", "Log path")
 	flags.DurationVarP((*time.Duration)(&srv.Config.AntiEntropy.Interval), "anti-entropy.interval", "", time.Minute*10, "Interval at which to run anti-entropy routine.")
@@ -42,5 +42,5 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVarP(&srv.Config.Cluster.InternalPort, "cluster.internal-port", "", "", "Port to which pilosa should bind for internal state sharing.")
 	flags.StringVarP(&srv.Config.Metric.Service, "metric.service", "", "nop", "Default URI on which pilosa should listen.")
 	flags.StringVarP(&srv.Config.Metric.Host, "metric.host", "", "", "Default URI to send metrics.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Metric.PollingInterval), "metric.polling-interval", "", time.Minute*0, "Polling interval metrics.")
+	flags.DurationVarP((*time.Duration)(&srv.Config.Metric.PollingInterval), "metric.poll-interval", "", time.Minute*0, "Polling interval metrics.")
 }

@@ -39,14 +39,14 @@ const (
 // Config represents the configuration for the command.
 type Config struct {
 	DataDir string `toml:"data-dir"`
-	Host    string `toml:"host"`
+	Host    string `toml:"bind"`
 
 	Cluster struct {
 		ReplicaN        int      `toml:"replicas"`
 		Type            string   `toml:"type"`
 		Hosts           []string `toml:"hosts"`
 		InternalHosts   []string `toml:"internal-hosts"`
-		PollingInterval Duration `toml:"polling-interval"`
+		PollingInterval Duration `toml:"poll-interval"`
 		InternalPort    string   `toml:"internal-port"`
 		GossipSeed      string   `toml:"gossip-seed"`
 		LongQueryTime   Duration `toml:"long-query-time"`
@@ -69,7 +69,7 @@ type Config struct {
 	Metric struct {
 		Service         string   `toml:"service"`
 		Host            string   `toml:"host"`
-		PollingInterval Duration `toml:"polling-interval"`
+		PollingInterval Duration `toml:"poll-interval"`
 	} `toml:"metric"`
 }
 
