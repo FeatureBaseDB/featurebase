@@ -43,7 +43,7 @@ bind = "localhost:10101"
 max-writes-per-request = 5000
 
 [cluster]
-  polling-interval = "2m0s"
+  poll-interval = "2m0s"
   replicas = 1
   hosts = [
     "localhost:10101",
@@ -59,7 +59,7 @@ max-writes-per-request = 5000
 [metric]
   service = "statsd"
   host = "127.0.0.1:8125"
-  polling-interval = "0m15s"
+  poll-interval = "0m15s"
 	
 [plugins]
   path = ""
