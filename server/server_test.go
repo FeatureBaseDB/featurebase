@@ -348,8 +348,8 @@ func TestMain_FrameRestore(t *testing.T) {
 func TestConfig_Parse_Host(t *testing.T) {
 	if c, err := ParseConfig(`bind = "local"`); err != nil {
 		t.Fatal(err)
-	} else if c.Host != "local" {
-		t.Fatalf("unexpected host: %s", c.Host)
+	} else if c.Bind != "local" {
+		t.Fatalf("unexpected host: %s", c.Bind)
 	}
 }
 
@@ -583,7 +583,7 @@ func NewMain() *Main {
 	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
 	m.Server.Network = *test.Network
 	m.Config.DataDir = path
-	m.Config.Host = "localhost:0"
+	m.Config.Bind = "localhost:0"
 	m.Command.Stdin = &m.Stdin
 	m.Command.Stdout = &m.Stdout
 	m.Command.Stderr = &m.Stderr

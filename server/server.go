@@ -131,7 +131,7 @@ func (m *Command) SetupServer() error {
 	// Configure holder.
 	m.Server.Logger().Printf("Using data from: %s\n", m.Config.DataDir)
 	m.Server.Holder.Path = m.Config.DataDir
-	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollingInterval)
+	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollInterval)
 	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
 	if err != nil {
 		return err
@@ -142,7 +142,7 @@ func (m *Command) SetupServer() error {
 	// Copy configuration flags.
 	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
 
-	m.Server.Host, err = normalizeHost(m.Config.Host)
+	m.Server.Host, err = normalizeHost(m.Config.Bind)
 	if err != nil {
 		return err
 	}
@@ -172,11 +172,11 @@ func (m *Command) SetupServer() error {
 			gossipSeed = m.Config.Cluster.GossipSeed
 		}
 		// get the host portion of addr to use for binding
-		gossipHost, _, err := net.SplitHostPort(m.Config.Host)
+		gossipHost, _, err := net.SplitHostPort(m.Config.Bind)
 		if err != nil {
-			gossipHost = m.Config.Host
+			gossipHost = m.Config.Bind
 		}
-		gossipNodeSet := gossip.NewGossipNodeSet(m.Config.Host, gossipHost, gossipPort, gossipSeed, m.Server)
+		gossipNodeSet := gossip.NewGossipNodeSet(m.Config.Bind, gossipHost, gossipPort, gossipSeed, m.Server)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet

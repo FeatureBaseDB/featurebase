@@ -39,17 +39,17 @@ const (
 // Config represents the configuration for the command.
 type Config struct {
 	DataDir string `toml:"data-dir"`
-	Host    string `toml:"bind"`
+	Bind    string `toml:"bind"`
 
 	Cluster struct {
-		ReplicaN        int      `toml:"replicas"`
-		Type            string   `toml:"type"`
-		Hosts           []string `toml:"hosts"`
-		InternalHosts   []string `toml:"internal-hosts"`
-		PollingInterval Duration `toml:"poll-interval"`
-		InternalPort    string   `toml:"internal-port"`
-		GossipSeed      string   `toml:"gossip-seed"`
-		LongQueryTime   Duration `toml:"long-query-time"`
+		ReplicaN      int      `toml:"replicas"`
+		Type          string   `toml:"type"`
+		Hosts         []string `toml:"hosts"`
+		InternalHosts []string `toml:"internal-hosts"`
+		PollInterval  Duration `toml:"poll-interval"`
+		InternalPort  string   `toml:"internal-port"`
+		GossipSeed    string   `toml:"gossip-seed"`
+		LongQueryTime Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -67,21 +67,21 @@ type Config struct {
 	LogPath string `toml:"log-path"`
 
 	Metric struct {
-		Service         string   `toml:"service"`
-		Host            string   `toml:"host"`
-		PollingInterval Duration `toml:"poll-interval"`
+		Service      string   `toml:"service"`
+		Host         string   `toml:"host"`
+		PollInterval Duration `toml:"poll-interval"`
 	} `toml:"metric"`
 }
 
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Host:                DefaultHost + ":" + DefaultPort,
+		Bind:                DefaultHost + ":" + DefaultPort,
 		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.Type = DefaultClusterType
-	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
+	c.Cluster.PollInterval = Duration(DefaultPollingInterval)
 	c.Cluster.Hosts = []string{}
 	c.Cluster.InternalHosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
