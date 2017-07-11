@@ -158,7 +158,7 @@ func (m *Command) SetupServer() error {
 	}
 
 	switch m.Config.Cluster.Type {
-	case "http":
+	case pilosa.ClusterHTTP:
 		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, internalPortStr)
 		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(internalPortStr, m.Server.LogOutput)
 		m.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
@@ -166,7 +166,7 @@ func (m *Command) SetupServer() error {
 		if err != nil {
 			return err
 		}
-	case "gossip":
+	case pilosa.ClusterGossip:
 		gossipPort, err := strconv.Atoi(internalPortStr)
 		if err != nil {
 			return err
@@ -184,7 +184,7 @@ func (m *Command) SetupServer() error {
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet
-	case "static", "":
+	case pilosa.ClusterStatic, pilosa.ClusterNone:
 		m.Server.Broadcaster = pilosa.NopBroadcaster
 		m.Server.Cluster.NodeSet = pilosa.NewStaticNodeSet()
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver

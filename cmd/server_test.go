@@ -52,9 +52,14 @@ func TestServerConfig(t *testing.T) {
 
 	[cluster]
 		poll-interval = "45s"
+		type = "http"
 		replicas = 2
 		hosts = [
 			"localhost:19444",
+		]
+		internal-hosts = [
+			"localhost:19500",
+			"localhost:19501",
 		]
 	`,
 			validation: func() error {
@@ -75,8 +80,13 @@ func TestServerConfig(t *testing.T) {
 	bind = "localhost:0"
 	data-dir = "` + actualDataDir + `"
 	[cluster]
+		type = "http"
 		hosts = [
 			"localhost:19444",
+		]
+		internal-hosts = [
+			"localhost:19500",
+			"localhost:19501",
 		]
 	[plugins]
 		path = "/var/sloth"
