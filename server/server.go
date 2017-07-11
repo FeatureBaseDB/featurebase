@@ -107,7 +107,11 @@ func (m *Command) Run(args ...string) (err error) {
 
 // SetupServer use the cluster configuration to setup this server
 func (m *Command) SetupServer() error {
-	var err error
+	err := m.Config.Validate()
+	if err != nil {
+		return err
+	}
+
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 

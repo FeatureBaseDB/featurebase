@@ -89,6 +89,26 @@ func NewConfig() *Config {
 	return c
 }
 
+// Validate that all configuration permutations are compatible with each other.
+func (c *Config) Validate() error {
+	if !foundItem(c.Cluster.Hosts, c.Bind) {
+		return ErrConfigHosts
+	}
+
+	// Validate cluster types
+	// TODO cluster types
+	// TODO validate len hosts
+	// TODO vaidate replica num and host len
+	// TODO  internal-hosts and hosts len must match
+
+	if c.Cluster.Type == "http" || c.Cluster.Type == "gossip" {
+		if !ContainsSubstring(c.Cluster.InternalPort, c.Cluster.InternalHosts) {
+			return ErrConfigBroadcastPort
+		}
+	}
+	return nil
+}
+
 // Duration is a TOML wrapper type for time.Duration.
 type Duration time.Duration
 
