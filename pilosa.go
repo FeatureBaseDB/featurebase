@@ -61,7 +61,7 @@ var (
 	ErrConfigClusterTypeInvalid = errors.New("invalid cluster type")
 	ErrConfigClusterTypeMissing = errors.New("missing cluster type")
 	ErrConfigHostsMissing       = errors.New("missing bind address in cluster hosts")
-	ErrConfigBroadcastPort      = errors.New("missing broadcast port in internal-hosts")
+	ErrConfigBroadcastPort      = errors.New("internal-port not found in internal-hosts")
 	ErrConfigHostsMismatch      = errors.New("hosts and internal-hosts length mismatch")
 	ErrConfigReplicaNInvalid    = errors.New("replica number must be <= hosts")
 	ErrConfigGossipSeed         = errors.New("invalid gossip seed")
