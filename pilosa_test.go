@@ -54,3 +54,27 @@ func TestValidateLabelInvalid(t *testing.T) {
 		}
 	}
 }
+
+func TestStringInSlice(t *testing.T) {
+	list := []string{"localhost:10101", "localhost:10102", "localhost:10103"}
+	substr := "localhost:10101"
+	if !pilosa.StringInSlice(substr, list) {
+		t.Fatalf("Expected substring %s in %v", substr, list)
+	}
+	substr = "10101"
+	if pilosa.StringInSlice(substr, list) {
+		t.Fatalf("Expected substring %s not in %v", substr, list)
+	}
+}
+
+func TestContainsSubstring(t *testing.T) {
+	list := []string{"localhost:10101", "localhost:10102", "localhost:10103"}
+	substr := "10101"
+	if !pilosa.ContainsSubstring(substr, list) {
+		t.Fatalf("Expected substring %s contained in %v", substr, list)
+	}
+	substr = "4000"
+	if pilosa.ContainsSubstring(substr, list) {
+		t.Fatalf("Expected substring %s in not contained in %v", substr, list)
+	}
+}

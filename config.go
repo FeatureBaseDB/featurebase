@@ -14,7 +14,17 @@
 
 package pilosa
 
-import "time"
+import (
+	"time"
+)
+
+// Cluster types.
+const (
+	ClusterNone   = ""
+	ClusterStatic = "static"
+	ClusterHTTP   = "http"
+	ClusterGossip = "gossip"
+)
 
 const (
 	// DefaultHost is the default hostname to use.
@@ -24,7 +34,7 @@ const (
 	DefaultPort = "10101"
 
 	// DefaultClusterType sets the node intercommunication method.
-	DefaultClusterType = "static"
+	DefaultClusterType = ClusterStatic
 
 	// DefaultInternalPort the port the nodes intercommunicate on.
 	DefaultInternalPort = "14000"
@@ -35,6 +45,9 @@ const (
 	// DefaultMaxWritesPerRequest is the default number of writes per request.
 	DefaultMaxWritesPerRequest = 5000
 )
+
+// ClusterTypes set of cluster types.
+var ClusterTypes = []string{ClusterNone, ClusterStatic, ClusterHTTP, ClusterGossip}
 
 // Config represents the configuration for the command.
 type Config struct {
@@ -89,6 +102,35 @@ func NewConfig() *Config {
 	return c
 }
 
+// Validate that all configuration permutations are compatible with each other.
+func (c *Config) Validate() error {
+	if !StringInSlice(c.Cluster.Type, ClusterTypes) {
+		return ErrConfigClusterTypeInvalid
+	}
+	if len(c.Cluster.Hosts) > 1 && !(c.Cluster.Type == ClusterHTTP || c.Cluster.Type == ClusterGossip) {
+		return ErrConfigClusterTypeMissing
+	}
+	if c.Cluster.Type == ClusterHTTP || c.Cluster.Type == ClusterGossip {
+		if c.Cluster.ReplicaN > len(c.Cluster.Hosts) {
+			return ErrConfigReplicaNInvalid
+		}
+		if len(c.Cluster.Hosts) != len(c.Cluster.InternalHosts) {
+			return ErrConfigHostsMismatch
+		}
+		if !foundItem(c.Cluster.Hosts, c.Bind) {
+			return ErrConfigHostsMissing
+		}
+		if !ContainsSubstring(c.Cluster.InternalPort, c.Cluster.InternalHosts) {
+			return ErrConfigBroadcastPort
+		}
+	}
+	if c.Cluster.Type == ClusterGossip && !StringInSlice(c.Cluster.GossipSeed, c.Cluster.InternalHosts) {
+		return ErrConfigGossipSeed
+	}
+
+	return nil
+}
+
 // Duration is a TOML wrapper type for time.Duration.
 type Duration time.Duration
 
@@ -111,6 +153,7 @@ func (d Duration) MarshalText() (text []byte, err error) {
 	return []byte(d.String()), nil
 }
 
+// MarshalTOML write duration into valid TOML.
 func (d Duration) MarshalTOML() ([]byte, error) {
 	return []byte(d.String()), nil
 }

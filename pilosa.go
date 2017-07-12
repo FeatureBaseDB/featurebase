@@ -17,6 +17,7 @@ package pilosa
 import (
 	"errors"
 	"regexp"
+	"strings"
 
 	"github.com/pilosa/pilosa/internal"
 )
@@ -56,6 +57,14 @@ var (
 	ErrFragmentNotFound = errors.New("fragment not found")
 	ErrQueryRequired    = errors.New("query required")
 	ErrTooManyWrites    = errors.New("too many write commands")
+
+	ErrConfigClusterTypeInvalid = errors.New("invalid cluster type")
+	ErrConfigClusterTypeMissing = errors.New("missing cluster type")
+	ErrConfigHostsMissing       = errors.New("missing bind address in cluster hosts")
+	ErrConfigBroadcastPort      = errors.New("internal-port not found in internal-hosts")
+	ErrConfigHostsMismatch      = errors.New("hosts and internal-hosts length mismatch")
+	ErrConfigReplicaNInvalid    = errors.New("replica number must be <= hosts")
+	ErrConfigGossipSeed         = errors.New("invalid gossip seed")
 )
 
 // Regular expression to validate index and frame names.
@@ -131,4 +140,24 @@ func ValidateLabel(label string) error {
 		return ErrLabel
 	}
 	return nil
+}
+
+// StringInSlice checks is substring a is in the slice
+func StringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
+// ContainsSubstring checks is substring a is contained in the slice
+func ContainsSubstring(a string, list []string) bool {
+	for _, b := range list {
+		if strings.Contains(b, a) {
+			return true
+		}
+	}
+	return false
 }
