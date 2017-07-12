@@ -153,6 +153,7 @@ func (d Duration) MarshalText() (text []byte, err error) {
 	return []byte(d.String()), nil
 }
 
+// MarshalTOML write duration into valid TOML.
 func (d Duration) MarshalTOML() ([]byte, error) {
 	return []byte(d.String()), nil
 }

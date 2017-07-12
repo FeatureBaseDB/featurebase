@@ -1,7 +1,9 @@
 package pilosa_test
 
 import (
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa"
 )
@@ -48,5 +50,39 @@ func Test_NewConfig(t *testing.T) {
 	c.Cluster.GossipSeed = "localhost:10101"
 	if err := c.Validate(); err != pilosa.ErrConfigGossipSeed {
 		t.Fatal(err)
+	}
+
+	c.Cluster.GossipSeed = "localhost:14000"
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDuration(t *testing.T) {
+	d := pilosa.Duration(time.Second * 182)
+	if d.String() != "3m2s" {
+		t.Fatalf("Unexpected time Duration %s", d)
+	}
+
+	b := []byte{51, 109, 50, 115}
+	v, _ := d.MarshalText()
+	if !reflect.DeepEqual(b, v) {
+		t.Fatalf("Unexpected marshalled value %v", v)
+	}
+
+	v, _ = d.MarshalTOML()
+	if !reflect.DeepEqual(b, v) {
+		t.Fatalf("Unexpected marshalled value %v", v)
+	}
+
+	err := d.UnmarshalText([]byte("5"))
+	if err.Error() != "time: missing unit in duration 5" {
+		t.Fatalf("expected time: missing unit in duration: %s", err)
+	}
+
+	err = d.UnmarshalText([]byte("3m2s"))
+	v, _ = d.MarshalText()
+	if !reflect.DeepEqual(b, v) {
+		t.Fatalf("Unexpected marshalled value %v", v)
 	}
 }

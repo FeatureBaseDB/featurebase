@@ -497,7 +497,7 @@ func TestFragment_Checksum(t *testing.T) {
 
 	// Ensure new checksum is different.
 	if chksum := f.Checksum(); bytes.Equal(chksum, orig) {
-		t.Fatalf("expected checksum to change: %x", chksum, orig)
+		t.Fatalf("expected checksum to change: %x - %x", chksum, orig)
 	}
 }
 
