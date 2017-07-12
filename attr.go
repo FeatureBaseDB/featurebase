@@ -49,7 +49,17 @@ type AttrCache struct {
 func (c *AttrCache) Get(id uint64) map[string]interface{} {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.attrs[id]
+	attrs := c.attrs[id]
+	if attrs == nil {
+		return nil
+	}
+
+	// Make a copy for safety
+	ret := make(map[string]interface{})
+	for k, v := range attrs {
+		ret[k] = v
+	}
+	return ret
 }
 
 // Set updates the cached attributes for a given id.
