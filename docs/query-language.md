@@ -341,6 +341,14 @@ have the attribute specified by `field` with one of the values specified in
 
 **Result Type:** array of key/count objects
 
+**Caveats:**
+* TopN will return the top bitmaps by count only on frames with a ranked cache.  
+* The frame's cache size determines the limit of sorted bitmaps.  
+* Non-ranked frames maintain a LRU (least recently used) cache, thus a TopN query on this frame will return bitmaps in most recently setbit order.  
+* The ranked cache maintains a sorted set of bitmaps by count up to the cache size.  
+* Once full, the cache will truncate the set of bitmaps at the frame options CacheSize limit.  Bitmaps with a similar count that straddle the limit will be truncated in no particular order.
+* The TopN filter operation only applies to data in the cache, and not all bitmaps in the frame.
+
 **Examples:**
 
 ```
