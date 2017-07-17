@@ -346,7 +346,7 @@ have the attribute specified by `field` with one of the values specified in
 * Frames with cache type lru will maintain an LRU (Least Recently Used) cache, thus a TopN() query on this type of frame will return bitmaps sorted in order of most recently set bit.
 * The frame's cache size determines the number of sorted bitmaps to maintain in the cache for purposes of TopN() queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance.
 * Once full, the cache will truncate the set of bitmaps according to the frame option CacheSize. Bitmaps that straddle the limit and have the same count will be truncated in no particular order.
-* The TopN() query's attribute filter is applied the the existing sorted cached of bitmaps.  Bitmaps that fall outside of the sorted cache range, but would pass the filter are ignored.
+* The TopN() query's attribute filter is applied to the existing sorted cache of bitmaps. Bitmaps that fall outside of the sorted cache range, even if they would normally pass the filter, are ignored.
 
 **Examples:**
 
