@@ -44,6 +44,7 @@ var (
 	ErrInverseRangeNotAllowed = errors.New("inverse range not allowed")
 	ErrRangeCacheNotAllowed   = errors.New("range cache not allowed")
 	ErrFrameFieldsNotAllowed  = errors.New("frame fields not allowed")
+	ErrInvalidFieldValueType  = errors.New("invalid field value type")
 	ErrFieldValueTooLow       = errors.New("field value too low")
 	ErrFieldValueTooHigh      = errors.New("field value too high")
 
