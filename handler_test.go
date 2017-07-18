@@ -1275,6 +1275,16 @@ var defaultBody = `
 					 ]
 				  },
 				  {
+					 "name":"null_value",
+					 "actions":[
+						{
+						   "frame":"add-ons",
+						   "valueDestination":"value-to-row"
+
+						}
+					 ]
+				  },
+				  {
 					 "name":"time_value",
 					 "actions":[
 						{
@@ -1307,7 +1317,8 @@ func TestHandler_CreateInput(t *testing.T) {
 				"cabType": "yellow",
 				"distanceMiles": 8,
 				"withPet": true,
-				"time_value": "2017-03-20T19:35"
+				"time_value": "2017-03-20T19:35",
+				"null_value": null
 			}]`)
 	h := test.NewHandler()
 	h.Holder = hldr.Holder

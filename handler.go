@@ -1694,6 +1694,10 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 		for _, action := range field.Actions {
 			frame := action.Frame
 			timestamp := timestampFrame[action.Frame]
+			// Skip input data field values that are set to null
+			if req[field.Name] == nil {
+				continue
+			}
 			bit, err := HandleAction(action, req[field.Name], colValue, timestamp)
 			if err != nil {
 				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
