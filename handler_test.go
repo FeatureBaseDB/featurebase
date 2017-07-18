@@ -937,3 +937,54 @@ func TestHandler_Expvars(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 }
+
+// Ensure the handler can import
+func TestHandler_Import(t *testing.T) {
+	HandlerImport(t, "")
+	HandlerImport(t, pilosa.ViewStandard)
+}
+
+func HandlerImport(t *testing.T, view string) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	h := test.NewHandler()
+	h.Cluster = test.NewCluster(1)
+	h.Host = "host0"
+	h.Holder = hldr.Holder
+
+	f := hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
+
+	request := &internal.ImportRequest{
+		Index:     "i",
+		Frame:     "f",
+		Slice:     0,
+		View:      view,
+		RowIDs:    []uint64{10},
+		ColumnIDs: []uint64{100},
+	}
+	if view == "" {
+		request.Timestamps = []int64{0}
+	}
+	data, err := proto.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := bytes.NewReader(data)
+
+	w := httptest.NewRecorder()
+	r := test.MustNewHTTPRequest("POST", "/import", reader)
+	r.Header.Set("Content-Type", "application/x-protobuf")
+	r.Header.Set("Accept", "application/x-protobuf")
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d %s", w.Code, w.Body)
+	}
+	bits := f.Row(10).Bits()
+	if len(bits) != 1 {
+		t.Fatalf("Target row should have a single bit set")
+	}
+	if bits[0] != 100 {
+		t.Fatal("Target bit should be 100")
+	}
+}

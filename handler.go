@@ -1016,8 +1016,9 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Import into fragment.
 	if req.View != "" {
 		err = f.ImportView(req.View, req.Slice, req.RowIDs, req.ColumnIDs)
+	} else {
+		err = f.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	}
-	err = f.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
 		h.logger().Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
 		return
