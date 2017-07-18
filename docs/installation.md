@@ -140,9 +140,10 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
     go get -d github.com/pilosa/pilosa
     ```
 
-3. Build the Pilosa repo:
+3. Build the Pilosa repo (the `make generate-statik` line isn't necessary but builds a nice web console into Pilosa):
     ```
     cd $GOPATH/src/github.com/pilosa/pilosa
+    make generate-statik
     make install
     ```
 
