@@ -997,10 +997,10 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the Index.
-	h.logger().Println("importing:", req.Index, req.Frame, req.Slice)
+	h.logger().Println("importing:", req.Index, req.Frame, req.Slice, req.View)
 	index := h.Holder.Index(req.Index)
 	if index == nil {
-		h.logger().Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrIndexNotFound.Error())
+		h.logger().Printf("fragment error: index=%s, frame=%s, slice=%d, view=%s, err=%s", req.Index, req.Frame, req.Slice, req.View, ErrIndexNotFound.Error())
 		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
@@ -1014,6 +1014,9 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Import into fragment.
+	if req.View != "" {
+		err = f.ImportView(req.View, req.Slice, req.RowIDs, req.ColumnIDs)
+	}
 	err = f.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
 		h.logger().Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
