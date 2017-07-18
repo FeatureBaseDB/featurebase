@@ -14,7 +14,17 @@
 
 package pilosa
 
-import "time"
+import (
+	"time"
+)
+
+// Cluster types.
+const (
+	ClusterNone   = ""
+	ClusterStatic = "static"
+	ClusterHTTP   = "http"
+	ClusterGossip = "gossip"
+)
 
 const (
 	// DefaultHost is the default hostname to use.
@@ -24,7 +34,7 @@ const (
 	DefaultPort = "10101"
 
 	// DefaultClusterType sets the node intercommunication method.
-	DefaultClusterType = "static"
+	DefaultClusterType = ClusterStatic
 
 	// DefaultInternalPort the port the nodes intercommunicate on.
 	DefaultInternalPort = "14000"
@@ -36,20 +46,23 @@ const (
 	DefaultMaxWritesPerRequest = 5000
 )
 
+// ClusterTypes set of cluster types.
+var ClusterTypes = []string{ClusterNone, ClusterStatic, ClusterHTTP, ClusterGossip}
+
 // Config represents the configuration for the command.
 type Config struct {
 	DataDir string `toml:"data-dir"`
-	Host    string `toml:"host"`
+	Bind    string `toml:"bind"`
 
 	Cluster struct {
-		ReplicaN        int      `toml:"replicas"`
-		Type            string   `toml:"type"`
-		Hosts           []string `toml:"hosts"`
-		InternalHosts   []string `toml:"internal-hosts"`
-		PollingInterval Duration `toml:"polling-interval"`
-		InternalPort    string   `toml:"internal-port"`
-		GossipSeed      string   `toml:"gossip-seed"`
-		LongQueryTime   Duration `toml:"long-query-time"`
+		ReplicaN      int      `toml:"replicas"`
+		Type          string   `toml:"type"`
+		Hosts         []string `toml:"hosts"`
+		InternalHosts []string `toml:"internal-hosts"`
+		PollInterval  Duration `toml:"poll-interval"`
+		InternalPort  string   `toml:"internal-port"`
+		GossipSeed    string   `toml:"gossip-seed"`
+		LongQueryTime Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -67,26 +80,55 @@ type Config struct {
 	LogPath string `toml:"log-path"`
 
 	Metric struct {
-		Service         string   `toml:"service"`
-		Host            string   `toml:"host"`
-		PollingInterval Duration `toml:"interval"`
-	} `toml:"metrics"`
+		Service      string   `toml:"service"`
+		Host         string   `toml:"host"`
+		PollInterval Duration `toml:"poll-interval"`
+	} `toml:"metric"`
 }
 
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Host:                DefaultHost + ":" + DefaultPort,
+		Bind:                DefaultHost + ":" + DefaultPort,
 		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.Type = DefaultClusterType
-	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
+	c.Cluster.PollInterval = Duration(DefaultPollingInterval)
 	c.Cluster.Hosts = []string{}
 	c.Cluster.InternalHosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics
 	return c
+}
+
+// Validate that all configuration permutations are compatible with each other.
+func (c *Config) Validate() error {
+	if !StringInSlice(c.Cluster.Type, ClusterTypes) {
+		return ErrConfigClusterTypeInvalid
+	}
+	if len(c.Cluster.Hosts) > 1 && !(c.Cluster.Type == ClusterHTTP || c.Cluster.Type == ClusterGossip) {
+		return ErrConfigClusterTypeMissing
+	}
+	if c.Cluster.Type == ClusterHTTP || c.Cluster.Type == ClusterGossip {
+		if c.Cluster.ReplicaN > len(c.Cluster.Hosts) {
+			return ErrConfigReplicaNInvalid
+		}
+		if len(c.Cluster.Hosts) != len(c.Cluster.InternalHosts) {
+			return ErrConfigHostsMismatch
+		}
+		if !foundItem(c.Cluster.Hosts, c.Bind) {
+			return ErrConfigHostsMissing
+		}
+		if !ContainsSubstring(c.Cluster.InternalPort, c.Cluster.InternalHosts) {
+			return ErrConfigBroadcastPort
+		}
+	}
+	if c.Cluster.Type == ClusterGossip && !StringInSlice(c.Cluster.GossipSeed, c.Cluster.InternalHosts) {
+		return ErrConfigGossipSeed
+	}
+
+	return nil
 }
 
 // Duration is a TOML wrapper type for time.Duration.
@@ -111,6 +153,7 @@ func (d Duration) MarshalText() (text []byte, err error) {
 	return []byte(d.String()), nil
 }
 
+// MarshalTOML write duration into valid TOML.
 func (d Duration) MarshalTOML() ([]byte, error) {
 	return []byte(d.String()), nil
 }

@@ -176,7 +176,8 @@ func TestFragment_SetFieldValue(t *testing.T) {
 		if err := quick.Check(func(bitDepth uint, columnN uint64, values []uint64) bool {
 			// Limit bit depth & maximum values.
 			bitDepth = (bitDepth % 62) + 1
-			columnN = (columnN % 100) + 1
+			columnN = (columnN % 99) + 1
+
 			for i := range values {
 				values[i] = values[i] % (1 << bitDepth)
 			}
@@ -497,7 +498,7 @@ func TestFragment_Checksum(t *testing.T) {
 
 	// Ensure new checksum is different.
 	if chksum := f.Checksum(); bytes.Equal(chksum, orig) {
-		t.Fatalf("expected checksum to change: %x", chksum, orig)
+		t.Fatalf("expected checksum to change: %x - %x", chksum, orig)
 	}
 }
 

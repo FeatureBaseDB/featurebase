@@ -39,21 +39,56 @@ const (
 	AttrTypeFloat  = 4
 )
 
+// AttrCache represents a cache for attributes.
+type AttrCache struct {
+	mu    sync.RWMutex
+	attrs map[uint64]map[string]interface{}
+}
+
+// Get returns the cached attributes for a given id.
+func (c *AttrCache) Get(id uint64) map[string]interface{} {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	attrs := c.attrs[id]
+	if attrs == nil {
+		return nil
+	}
+
+	// Make a copy for safety
+	ret := make(map[string]interface{})
+	for k, v := range attrs {
+		ret[k] = v
+	}
+	return ret
+}
+
+// Set updates the cached attributes for a given id.
+func (c *AttrCache) Set(id uint64, attrs map[string]interface{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.attrs[id] = attrs
+}
+
 // AttrStore represents a storage layer for attributes.
 type AttrStore struct {
-	mu   sync.RWMutex
-	path string
-	db   *bolt.DB
+	mu        sync.RWMutex
+	path      string
+	db        *bolt.DB
+	attrCache *AttrCache
+}
 
-	// in-memory cache
-	attrs map[uint64]map[string]interface{}
+// NewAttrCache returns a new instance of AttrCache.
+func NewAttrCache() *AttrCache {
+	return &AttrCache{
+		attrs: make(map[uint64]map[string]interface{}),
+	}
 }
 
 // NewAttrStore returns a new instance of AttrStore.
 func NewAttrStore(path string) *AttrStore {
 	return &AttrStore{
-		path:  path,
-		attrs: make(map[uint64]map[string]interface{}),
+		path:      path,
+		attrCache: NewAttrCache(),
 	}
 }
 
@@ -96,7 +131,7 @@ func (s *AttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
 	defer s.mu.RUnlock()
 
 	// Check cache for map.
-	if m = s.attrs[id]; m != nil {
+	if m = s.attrCache.Get(id); m != nil {
 		return m, nil
 	}
 
@@ -112,7 +147,7 @@ func (s *AttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
 	}
 
 	// Add to cache.
-	s.attrs[id] = m
+	s.attrCache.Set(id, m)
 
 	return
 }
@@ -149,7 +184,7 @@ func (s *AttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 	}
 
 	// Swap attributes map in cache.
-	s.attrs[id] = attr
+	s.attrCache.Set(id, attr)
 
 	return nil
 }
@@ -184,7 +219,7 @@ func (s *AttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
 
 	// Swap attributes map in cache.
 	for id, attr := range attrs {
-		s.attrs[id] = attr
+		s.attrCache.Set(id, attr)
 	}
 
 	return nil

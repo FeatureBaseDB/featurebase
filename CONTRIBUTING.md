@@ -15,6 +15,8 @@ Before you start working on new features, you should [open a new issue][1] to le
 you're doing before you start working, otherwise you run the risk of duplicating effort. This also
 gives others an opportunity to provide input for your feature.
 
+If you want to help but you aren't sure where to start, check out our [github label for low-effort issues][6].
+
 - Fork the [Pilosa repository][2] and then clone your fork:
 
     ```shell
@@ -57,3 +59,4 @@ gives others an opportunity to provide input for your feature.
 [3]: https://github.com/pilosa/pilosa/compare/
 [4]: https://github.com/pilosa/general/blob/master/proposal.md
 [5]: https://github.com/pilosa/pilosa/issues
+[6]: https://github.com/pilosa/pilosa/issues?q=is%3Aopen+is%3Aissue+label%3Anewcomer
