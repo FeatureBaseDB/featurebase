@@ -32,6 +32,30 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
+func TestHandlerPanics(t *testing.T) {
+	h := test.NewHandler()
+	buf := &bytes.Buffer{}
+	h.Handler.LogOutput = buf
+
+	w := httptest.NewRecorder()
+	// will panic since Handler has no Holder set up
+	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/index/taxi", nil))
+	bufbytes, err := ioutil.ReadAll(buf)
+	if err != nil {
+		t.Fatalf("reading all logoutput: %v", err)
+	}
+	if !bytes.Contains(bufbytes, []byte("PANIC: runtime error: invalid memory address or nil pointer dereference")) {
+		t.Fatalf("expected panic in log, but got: %s", bufbytes)
+	}
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected internal server error, but got: %v", w.Code)
+	}
+	bodyBytes := w.Body.Bytes()
+	if !bytes.Contains(bodyBytes, []byte("PANIC: runtime error: invalid memory address or nil pointer dereference")) {
+		t.Fatalf("response to client should have panic, but got %s", bodyBytes)
+	}
+}
+
 // Ensure the handler returns "not found" for invalid paths.
 func TestHandler_NotFound(t *testing.T) {
 	hldr := test.MustOpenHolder()
