@@ -161,9 +161,14 @@ func (p *Parser) parseArgs() (map[string]interface{}, error) {
 		}
 		key := lit
 
-		// Expect '=' next.
-		if tok, pos, lit := p.scanIgnoreWhitespace(); tok != EQ {
-			return nil, parseErrorf(pos, "expected equals sign, found %q", lit)
+		// Expect '=' or a comparison next.
+		var op Token
+		switch tok, pos, lit := p.scanIgnoreWhitespace(); tok {
+		case ASSIGN:
+		case EQ, LT, LTE, GT, GTE:
+			op = tok
+		default:
+			return nil, parseErrorf(pos, "expected equals sign or comparison operator, found %q", lit)
 		}
 
 		// Parse value.
@@ -207,6 +212,11 @@ func (p *Parser) parseArgs() (map[string]interface{}, error) {
 		// Ensure key doesn't already exist.
 		if _, ok := args[key]; ok {
 			return nil, parseErrorf(pos, "argument key already used: %s", key)
+		}
+
+		// If op is specified then create a condition.
+		if op != 0 {
+			value = &Condition{Op: op, Value: value}
 		}
 
 		// Add key/value pair to arguments.

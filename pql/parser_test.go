@@ -169,4 +169,24 @@ func TestParser_Parse(t *testing.T) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
 		}
 	})
+
+	// Parse with condition arguments.
+	t.Run("WithCondition", func(t *testing.T) {
+		q, err := pql.ParseString(`MyCall(key=foo, x == 12.25, y >= 100)`)
+		if err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(q.Calls[0],
+			&pql.Call{
+				Name: "MyCall",
+				Args: map[string]interface{}{
+					"key": "foo",
+					"x":   &pql.Condition{Op: pql.EQ, Value: 12.25},
+					"y":   &pql.Condition{Op: pql.GTE, Value: int64(100)},
+				},
+			},
+		) {
+			t.Fatalf("unexpected call: %#v", q.Calls[0])
+		}
+	})
+
 }
