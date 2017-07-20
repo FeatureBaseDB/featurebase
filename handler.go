@@ -112,6 +112,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
 	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
+	router.HandleFunc("/fragment/block/attrs", handler.handleGetFragmentBlockAttrs).Methods("GET")
 	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET")
 	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET")
 	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
@@ -1202,6 +1203,74 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 
 	// Write response.
 	w.Header().Set("Content-Type", "application/protobuf")
+	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
+	w.Write(buf)
+}
+
+func (h *Handler) handleGetFragmentBlockAttrs(w http.ResponseWriter, r *http.Request) {
+	qry := r.URL.Query()
+	indexName := qry.Get("index")
+	frameName := qry.Get("frame")
+	view := qry.Get("view")
+	sliceStr := qry.Get("slice")
+	blockStr := qry.Get("block")
+	if indexName == "" || frameName == "" || view == "" || sliceStr == "" || blockStr == "" {
+		http.Error(w, "index, frame, view, slice and block parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	slice, err := strconv.ParseUint(sliceStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid slice", http.StatusBadRequest)
+		return
+	}
+
+	block, err := strconv.ParseUint(blockStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid block", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve fragment from holder.
+	f := h.Holder.Fragment(indexName, frameName, view, slice)
+	if f == nil {
+		http.Error(w, ErrFragmentNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Retrieve the index.
+	index := h.Holder.index(indexName)
+	if f == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	rowAttrs, err := f.RowAttrStore.BlockData(block)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	columnAttrs, err := index.ColumnAttrStore().BlockData(block)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]map[uint64]map[string]interface{}{
+		"rowAttrs":    rowAttrs,
+		"columnAttrs": columnAttrs,
+	}
+
+	// Encode response.
+	buf, err := json.Marshal(&response)
+	if err != nil {
+		h.logger().Printf("block attributes response encoding error: %s", err)
+		return
+	}
+
+	// Write response.
+	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
 	w.Write(buf)
 }
