@@ -54,7 +54,7 @@ type Cache interface {
 	SetStats(s StatsClient)
 }
 
-// LRUCache represents a least recently used Cache implemenation.
+// LRUCache represents a least recently used Cache implementation.
 type LRUCache struct {
 	cache  *lru.Cache
 	counts map[uint64]uint64
@@ -482,4 +482,36 @@ func (s *SimpleCache) Fetch(id uint64) (*Bitmap, bool) {
 // Add adds the bitmap to the cache, keyed on the id.
 func (s *SimpleCache) Add(id uint64, b *Bitmap) {
 	s.cache[id] = b
+}
+
+type NopCache struct {
+	stats StatsClient
+}
+
+// NopCache implement Cache interface, returns no cache for cache type None
+var _ Cache = &NopCache{}
+
+// NewNopeCache returns a new instance of NopCache.
+func NewNopCache() *NopCache {
+	c := &NopCache{
+		stats: NopStatsClient,
+	}
+	return c
+}
+
+func (c *NopCache) Add(id uint64, n uint64)     {}
+func (c *NopCache) BulkAdd(id uint64, n uint64) {}
+func (c *NopCache) Get(id uint64) uint64 { return 0 }
+func (c *NopCache) IDs() []uint64 { return make([]uint64, 0, 0) }
+
+func (c *NopCache) Invalidate() {}
+func (c *NopCache) Len() int { return 0 }
+func (c *NopCache) Recalculate() {
+}
+func (c *NopCache) SetStats(s StatsClient) {
+	c.stats = s
+}
+
+func (c *NopCache) Top() []BitmapPair {
+	return []BitmapPair{}
 }

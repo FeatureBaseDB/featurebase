@@ -249,6 +249,8 @@ func (f *Fragment) openCache() error {
 		f.cache = NewRankCache(f.CacheSize)
 	case CacheTypeLRU:
 		f.cache = NewLRUCache(f.CacheSize)
+	case CacheTypeNone:
+		f.cache = NewNopCache()
 	default:
 		return ErrInvalidCacheType
 	}
