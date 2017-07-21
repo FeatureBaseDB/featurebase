@@ -1013,3 +1013,79 @@ func TestHandler_GetBlockRowAttrs(t *testing.T) {
 		t.Fatal("correct attributes should be returned")
 	}
 }
+
+func TestHandler_PostColumnAttrs(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	f := hldr.MustCreateFragmentIfNotExists("i", "f", "standard", 0)
+	f.SetBit(1, 100)
+
+	data := map[uint64]map[string]interface{}{
+		100: {
+			"foo": "bar",
+		},
+	}
+	buf, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := test.NewHandler()
+	h.Cluster = test.NewCluster(1)
+	h.Holder = hldr.Holder
+	w := httptest.NewRecorder()
+	r := test.MustNewHTTPRequest("POST", "/block/column-attrs?index=i", bytes.NewReader(buf))
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+	response := map[string]interface{}{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := map[string]interface{}{
+		"result": true,
+	}
+	if !reflect.DeepEqual(target, response) {
+		t.Fatal("success should be returned")
+	}
+}
+
+func TestHandler_PostRowAttrs(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	f := hldr.MustCreateFragmentIfNotExists("i", "f", "standard", 0)
+	f.SetBit(1, 100)
+
+	data := map[uint64]map[string]interface{}{
+		1: {
+			"foo": "bar",
+		},
+	}
+	buf, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := test.NewHandler()
+	h.Cluster = test.NewCluster(1)
+	h.Holder = hldr.Holder
+	w := httptest.NewRecorder()
+	r := test.MustNewHTTPRequest("POST", "/block/row-attrs?index=i&frame=f", bytes.NewReader(buf))
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+	response := map[string]interface{}{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := map[string]interface{}{
+		"result": true,
+	}
+	if !reflect.DeepEqual(target, response) {
+		t.Fatal("success should be returned")
+	}
+}

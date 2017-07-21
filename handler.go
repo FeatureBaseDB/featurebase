@@ -121,7 +121,9 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 	router.HandleFunc("/block/column-attrs", handler.handleGetBlockColumnAttrs).Methods("GET")
+	router.HandleFunc("/block/column-attrs", handler.handlePostColumnAttrs).Methods("POST")
 	router.HandleFunc("/block/row-attrs", handler.handleGetBlockRowAttrs).Methods("GET")
+	router.HandleFunc("/block/row-attrs", handler.handlePostBlockRowAttrs).Methods("POST")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
@@ -1285,6 +1287,68 @@ func (h *Handler) handleGetBlockRowAttrs(w http.ResponseWriter, r *http.Request)
 		"frame": args["frame"],
 		"block": uintArgs["block"],
 		"attrs": rowAttrs,
+	}
+
+	h.writeJSONResponse(w, response)
+}
+
+func (h *Handler) handlePostColumnAttrs(w http.ResponseWriter, r *http.Request) {
+	args, err := extractQueryArgs(r.URL, "index")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the index.
+	index := h.Holder.index(args["index"])
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	idAttrs := map[uint64]map[string]interface{}{}
+	err = json.NewDecoder(r.Body).Decode(&idAttrs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	err = index.ColumnAttrStore().SetBulkAttrs(idAttrs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
+	response := map[string]interface{}{
+		"result": true,
+	}
+
+	h.writeJSONResponse(w, response)
+}
+
+func (h *Handler) handlePostBlockRowAttrs(w http.ResponseWriter, r *http.Request) {
+	args, err := extractQueryArgs(r.URL, "index", "frame")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the frame.
+	frame := h.Holder.Frame(args["index"], args["frame"])
+	if frame == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	idAttrs := map[uint64]map[string]interface{}{}
+	err = json.NewDecoder(r.Body).Decode(&idAttrs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	err = frame.RowAttrStore().SetBulkAttrs(idAttrs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
+	response := map[string]interface{}{
+		"result": true,
 	}
 
 	h.writeJSONResponse(w, response)
