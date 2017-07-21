@@ -704,6 +704,10 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 }
 
 func (f *Fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
+	// Don't retrieve from storage if CacheTypeNone
+	if f.CacheType == CacheTypeNone {
+		return f.cache.Top()
+	}
 	// If no specific rows are requested, retrieve top rows.
 	if len(rowIDs) == 0 {
 		f.mu.Lock()

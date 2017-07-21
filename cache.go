@@ -501,11 +501,11 @@ func NewNopCache() *NopCache {
 
 func (c *NopCache) Add(id uint64, n uint64)     {}
 func (c *NopCache) BulkAdd(id uint64, n uint64) {}
-func (c *NopCache) Get(id uint64) uint64 { return 0 }
-func (c *NopCache) IDs() []uint64 { return make([]uint64, 0, 0) }
+func (c *NopCache) Get(id uint64) uint64        { return 0 }
+func (c *NopCache) IDs() []uint64               { return make([]uint64, 0, 0) }
 
 func (c *NopCache) Invalidate() {}
-func (c *NopCache) Len() int { return 0 }
+func (c *NopCache) Len() int    { return 0 }
 func (c *NopCache) Recalculate() {
 }
 func (c *NopCache) SetStats(s StatsClient) {
