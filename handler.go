@@ -28,20 +28,18 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"net/url"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
-
-	"reflect"
+	"unicode"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
-
-	"unicode"
-
 	_ "github.com/pilosa/pilosa/statik"
 	"github.com/rakyll/statik/fs"
 )
@@ -114,6 +112,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
 	router.HandleFunc("/fragment/block/attrs", handler.handleGetFragmentBlockAttrs).Methods("GET")
 	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET")
+	router.HandleFunc("/fragment/attr/blocks", handler.handleGetFragmentAttrBlocks).Methods("GET")
 	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET")
 	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
 	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
@@ -955,6 +954,19 @@ func (h *Handler) writeJSONQueryResponse(w http.ResponseWriter, resp *QueryRespo
 	return json.NewEncoder(w).Encode(resp)
 }
 
+func (h *Handler) writeJSONResponse(w http.ResponseWriter, thing interface{}) {
+	buf, err := json.Marshal(thing)
+	if err != nil {
+		http.Error(w, "cannot encode data", http.StatusInternalServerError)
+		return
+	}
+
+	// Write response.
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
+	w.Write(buf)
+}
+
 // handlePostImport handles /import requests.
 func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Verify that request is only communicating over protobufs.
@@ -1208,16 +1220,14 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *Handler) handleGetFragmentBlockAttrs(w http.ResponseWriter, r *http.Request) {
-	qry := r.URL.Query()
-	indexName := qry.Get("index")
-	frameName := qry.Get("frame")
-	view := qry.Get("view")
-	sliceStr := qry.Get("slice")
-	blockStr := qry.Get("block")
-	if indexName == "" || frameName == "" || view == "" || sliceStr == "" || blockStr == "" {
-		http.Error(w, "index, frame, view, slice and block parameters are required", http.StatusBadRequest)
+	args, err := extractQueryArgs(r.URL, "index", "frame", "view", "slice", "block")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	indexName := args["index"]
+	sliceStr := args["slice"]
+	blockStr := args["block"]
 
 	slice, err := strconv.ParseUint(sliceStr, 10, 64)
 	if err != nil {
@@ -1232,7 +1242,7 @@ func (h *Handler) handleGetFragmentBlockAttrs(w http.ResponseWriter, r *http.Req
 	}
 
 	// Retrieve fragment from holder.
-	f := h.Holder.Fragment(indexName, frameName, view, slice)
+	f := h.Holder.Fragment(indexName, args["frame"], args["view"], slice)
 	if f == nil {
 		http.Error(w, ErrFragmentNotFound.Error(), http.StatusNotFound)
 		return
@@ -1262,17 +1272,7 @@ func (h *Handler) handleGetFragmentBlockAttrs(w http.ResponseWriter, r *http.Req
 		"columnAttrs": columnAttrs,
 	}
 
-	// Encode response.
-	buf, err := json.Marshal(&response)
-	if err != nil {
-		h.logger().Printf("block attributes response encoding error: %s", err)
-		return
-	}
-
-	// Write response.
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
-	w.Write(buf)
+	h.writeJSONResponse(w, response)
 }
 
 // handleGetFragmentBlocks handles GET /fragment/blocks requests.
@@ -1301,6 +1301,53 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 	}); err != nil {
 		h.logger().Printf("block response encoding error: %s", err)
 	}
+}
+
+func (h *Handler) handleGetFragmentAttrBlocks(w http.ResponseWriter, r *http.Request) {
+	args, err := extractQueryArgs(r.URL, "index", "frame", "view", "slice")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	indexName := args["index"]
+	sliceStr := args["slice"]
+
+	slice, err := strconv.ParseUint(sliceStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid slice", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve fragment from holder.
+	f := h.Holder.Fragment(indexName, args["frame"], args["view"], slice)
+	if f == nil {
+		http.Error(w, ErrFragmentNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Retrieve the index.
+	index := h.Holder.index(indexName)
+	if f == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	rowAttrBlocks, err := f.RowAttrStore.Blocks()
+	if err != nil {
+		http.Error(w, "cannot retrieve row attr blocks", http.StatusInternalServerError)
+		return
+	}
+	columnAttrBlocks, err := index.ColumnAttrStore().Blocks()
+	if err != nil {
+		http.Error(w, "cannot retrieve column attr blocks", http.StatusInternalServerError)
+		return
+	}
+	response := map[string]interface{}{
+		"rowAttrBlocks":    rowAttrBlocks,
+		"columnAttrBlocks": columnAttrBlocks,
+	}
+
+	h.writeJSONResponse(w, response)
 }
 
 type getFragmentBlocksResponse struct {
@@ -1548,4 +1595,17 @@ func errorString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func extractQueryArgs(url *url.URL, args ...string) (map[string]string, error) {
+	qry := url.Query()
+	result := map[string]string{}
+	for _, arg := range args {
+		value := qry.Get(arg)
+		if value == "" {
+			return nil, fmt.Errorf("%s parameter is required", arg)
+		}
+		result[arg] = value
+	}
+	return result, nil
 }
