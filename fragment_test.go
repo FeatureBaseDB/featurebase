@@ -415,7 +415,7 @@ func TestFragment_TopN_IDs(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can return top rows when specified by ID.
+// Ensure a fragment return none if CacheTypeNone is set
 func TestFragment_TopN_NopCache(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeNone)
 	defer f.Close()
