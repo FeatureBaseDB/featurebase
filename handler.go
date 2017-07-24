@@ -29,6 +29,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -138,6 +139,16 @@ func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request
 
 // ServeHTTP handles an HTTP request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			stack := debug.Stack()
+			msg := "PANIC: %s\n%s"
+			fmt.Fprintf(h.LogOutput, msg, err, stack)
+			fmt.Fprintf(w, msg, err, stack)
+		}
+	}()
+
 	t := time.Now()
 	h.Router.ServeHTTP(w, r)
 	dif := time.Since(t)
