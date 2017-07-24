@@ -26,7 +26,7 @@ func Test_NewConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c.Cluster.InternalPort = pilosa.DefaultInternalPort
+	c.InternalPort = pilosa.DefaultInternalPort
 	c.Cluster.InternalHosts = []string{"localhost:14004", "localhost:14001"}
 	if err := c.Validate(); err != pilosa.ErrConfigBroadcastPort {
 		t.Fatal(err)
@@ -47,11 +47,6 @@ func Test_NewConfig(t *testing.T) {
 
 	c.Cluster.ReplicaN = 2
 	c.Cluster.Type = pilosa.ClusterGossip
-	c.Cluster.GossipSeed = "localhost:10101"
-	if err := c.Validate(); err != pilosa.ErrConfigGossipSeed {
-		t.Fatal(err)
-	}
-
 	c.Cluster.GossipSeed = "localhost:14000"
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
