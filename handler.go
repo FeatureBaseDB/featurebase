@@ -28,20 +28,18 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"net/url"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
-
-	"reflect"
+	"unicode"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
-
-	"unicode"
-
 	_ "github.com/pilosa/pilosa/statik"
 	"github.com/rakyll/statik/fs"
 )
@@ -122,6 +120,10 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
+	router.HandleFunc("/block/column-attrs", handler.handleGetBlockColumnAttrs).Methods("GET")
+	router.HandleFunc("/block/column-attrs", handler.handlePostColumnAttrs).Methods("POST")
+	router.HandleFunc("/block/row-attrs", handler.handleGetBlockRowAttrs).Methods("GET")
+	router.HandleFunc("/block/row-attrs", handler.handlePostBlockRowAttrs).Methods("POST")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
@@ -954,6 +956,19 @@ func (h *Handler) writeJSONQueryResponse(w http.ResponseWriter, resp *QueryRespo
 	return json.NewEncoder(w).Encode(resp)
 }
 
+func (h *Handler) writeJSONResponse(w http.ResponseWriter, thing interface{}) {
+	buf, err := json.Marshal(thing)
+	if err != nil {
+		http.Error(w, "cannot encode data", http.StatusInternalServerError)
+		return
+	}
+
+	// Write response.
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
+	w.Write(buf)
+}
+
 // handlePostImport handles /import requests.
 func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Verify that request is only communicating over protobufs.
@@ -1204,6 +1219,139 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/protobuf")
 	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
 	w.Write(buf)
+}
+
+func (h *Handler) handleGetBlockColumnAttrs(w http.ResponseWriter, r *http.Request) {
+	args, err := extractQueryArgs(r.URL, "index")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	uintArgs, err := extractUintQueryArgs(r.URL, "block")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the index.
+	index := h.Holder.index(args["index"])
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	columnAttrs, err := index.ColumnAttrStore().BlockData(uintArgs["block"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"index": args["index"],
+		"block": uintArgs["block"],
+		"attrs": columnAttrs,
+	}
+
+	h.writeJSONResponse(w, response)
+}
+
+func (h *Handler) handleGetBlockRowAttrs(w http.ResponseWriter, r *http.Request) {
+	args, err := extractQueryArgs(r.URL, "index", "frame")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	uintArgs, err := extractUintQueryArgs(r.URL, "block")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the frame.
+	frame := h.Holder.Frame(args["index"], args["frame"])
+	if frame == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	rowAttrs, err := frame.RowAttrStore().BlockData(uintArgs["block"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"index": args["index"],
+		"frame": args["frame"],
+		"block": uintArgs["block"],
+		"attrs": rowAttrs,
+	}
+
+	h.writeJSONResponse(w, response)
+}
+
+func (h *Handler) handlePostColumnAttrs(w http.ResponseWriter, r *http.Request) {
+	args, err := extractQueryArgs(r.URL, "index")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the index.
+	index := h.Holder.index(args["index"])
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	idAttrs := map[uint64]map[string]interface{}{}
+	err = json.NewDecoder(r.Body).Decode(&idAttrs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	err = index.ColumnAttrStore().SetBulkAttrs(idAttrs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
+	response := map[string]interface{}{
+		"result": true,
+	}
+
+	h.writeJSONResponse(w, response)
+}
+
+func (h *Handler) handlePostBlockRowAttrs(w http.ResponseWriter, r *http.Request) {
+	args, err := extractQueryArgs(r.URL, "index", "frame")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve the frame.
+	frame := h.Holder.Frame(args["index"], args["frame"])
+	if frame == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	idAttrs := map[uint64]map[string]interface{}{}
+	err = json.NewDecoder(r.Body).Decode(&idAttrs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	err = frame.RowAttrStore().SetBulkAttrs(idAttrs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
+	response := map[string]interface{}{
+		"result": true,
+	}
+
+	h.writeJSONResponse(w, response)
 }
 
 // handleGetFragmentBlocks handles GET /fragment/blocks requests.
@@ -1479,4 +1627,34 @@ func errorString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func extractQueryArgs(url *url.URL, args ...string) (map[string]string, error) {
+	qry := url.Query()
+	result := map[string]string{}
+	for _, arg := range args {
+		value := qry.Get(arg)
+		if value == "" {
+			return nil, fmt.Errorf("%s parameter is required", arg)
+		}
+		result[arg] = value
+	}
+	return result, nil
+}
+
+func extractUintQueryArgs(url *url.URL, args ...string) (map[string]uint64, error) {
+	result := map[string]uint64{}
+	strArgs, err := extractQueryArgs(url, args...)
+	if err != nil {
+		return nil, err
+	}
+	for _, arg := range args {
+		value, err := strconv.ParseUint(strArgs[arg], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s", arg)
+		}
+		result[arg] = value
+	}
+
+	return result, nil
 }

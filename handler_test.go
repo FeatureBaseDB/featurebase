@@ -25,6 +25,8 @@ import (
 	"strings"
 	"testing"
 
+	"encoding/json"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
@@ -935,5 +937,155 @@ func TestHandler_Expvars(t *testing.T) {
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+}
+func TestHandler_GetBlockColumnAttrs(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	f := hldr.MustCreateFragmentIfNotExists("i", "f", "standard", 0)
+	f.SetBit(1, 10000)
+	attrStore := hldr.Index("i").ColumnAttrStore()
+	attrStore.SetAttrs(10000, map[string]interface{}{"A": "col-10000"})
+
+	h := test.NewHandler()
+	h.Cluster = test.NewCluster(1)
+	h.Holder = hldr.Holder
+	w := httptest.NewRecorder()
+	r := test.MustNewHTTPRequest("GET", "/block/column-attrs?index=i&block=100", nil)
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+	response := map[string]interface{}{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := map[string]interface{}{
+		"index": "i",
+		"block": float64(100),
+		"attrs": map[string]interface{}{
+			"10000": map[string]interface{}{
+				"A": "col-10000",
+			},
+		},
+	}
+	if !reflect.DeepEqual(target, response) {
+		t.Fatal("correct attributes should be returned")
+	}
+}
+
+func TestHandler_GetBlockRowAttrs(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	f := hldr.MustCreateFragmentIfNotExists("i", "f", "standard", 0)
+	f.SetBit(1, 10000)
+	attrStore := hldr.Frame("i", "f").RowAttrStore()
+	attrStore.SetAttrs(1, map[string]interface{}{"A": "row-1"})
+
+	h := test.NewHandler()
+	h.Cluster = test.NewCluster(1)
+	h.Holder = hldr.Holder
+	w := httptest.NewRecorder()
+	r := test.MustNewHTTPRequest("GET", "/block/row-attrs?index=i&frame=f&block=0", nil)
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+	response := map[string]interface{}{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := map[string]interface{}{
+		"index": "i",
+		"frame": "f",
+		"block": float64(0),
+		"attrs": map[string]interface{}{
+			"1": map[string]interface{}{
+				"A": "row-1",
+			},
+		},
+	}
+	if !reflect.DeepEqual(target, response) {
+		t.Fatal("correct attributes should be returned")
+	}
+}
+
+func TestHandler_PostColumnAttrs(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	f := hldr.MustCreateFragmentIfNotExists("i", "f", "standard", 0)
+	f.SetBit(1, 100)
+
+	data := map[uint64]map[string]interface{}{
+		100: {
+			"foo": "bar",
+		},
+	}
+	buf, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := test.NewHandler()
+	h.Cluster = test.NewCluster(1)
+	h.Holder = hldr.Holder
+	w := httptest.NewRecorder()
+	r := test.MustNewHTTPRequest("POST", "/block/column-attrs?index=i", bytes.NewReader(buf))
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+	response := map[string]interface{}{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := map[string]interface{}{
+		"result": true,
+	}
+	if !reflect.DeepEqual(target, response) {
+		t.Fatal("success should be returned")
+	}
+}
+
+func TestHandler_PostRowAttrs(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	f := hldr.MustCreateFragmentIfNotExists("i", "f", "standard", 0)
+	f.SetBit(1, 100)
+
+	data := map[uint64]map[string]interface{}{
+		1: {
+			"foo": "bar",
+		},
+	}
+	buf, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := test.NewHandler()
+	h.Cluster = test.NewCluster(1)
+	h.Holder = hldr.Holder
+	w := httptest.NewRecorder()
+	r := test.MustNewHTTPRequest("POST", "/block/row-attrs?index=i&frame=f", bytes.NewReader(buf))
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+	response := map[string]interface{}{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := map[string]interface{}{
+		"result": true,
+	}
+	if !reflect.DeepEqual(target, response) {
+		t.Fatal("success should be returned")
 	}
 }
