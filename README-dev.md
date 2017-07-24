@@ -21,12 +21,18 @@ git clone git@github.com:${USER}/pilosa.git
 cd ${GOPATH}/src/github.com/pilosa/pilosa
 ```
 
-Install [Glide][] to manage dependencies.
+Install `dep` to manage dependencies:
+
+```sh
+go get -u github.com/golang/dep/cmd/dep
+```
 
 Install Pilosa command line tools:
 
 ```sh
-go install github.com/pilosa/pilosa/cmd/...
+make install
+# or:
+# dep ensure && go install github.com/pilosa/pilosa/cmd/...
 ```
 
 Running `pilosa` should now run a Pilosa instance.
@@ -61,5 +67,3 @@ git push --set-upstream origin a-branch-for-the-task
 ```
 
 All left to do is creating a pull request on github.com.
-
-[Glide]: http://glide.sh/

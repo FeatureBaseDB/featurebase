@@ -4,11 +4,6 @@ go:
   - 1.8
   - master
 addons:
-  apt:
-    sources:
-      - sourceline: 'ppa:masterminds/glide'
-    packages:
-      - glide
 before_install:
   - go get github.com/mattn/goveralls
 script:
