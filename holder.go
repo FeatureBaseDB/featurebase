@@ -24,11 +24,17 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"syscall"
 	"time"
 )
 
-// DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
-const DefaultCacheFlushInterval = 1 * time.Minute
+const (
+	// DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
+	DefaultCacheFlushInterval = 1 * time.Minute
+
+	// FileLimit is the maximum open file limit (ulimit -n) to automatically set.
+	FileLimit uint64 = 262144 // (512^2)
+)
 
 // Holder represents a container for indexes.
 type Holder struct {
@@ -71,6 +77,8 @@ func NewHolder() *Holder {
 
 // Open initializes the root data directory for the holder.
 func (h *Holder) Open() error {
+	h.setFileLimit()
+
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return err
 	}
@@ -346,6 +354,42 @@ func (h *Holder) flushCaches() {
 						h.logger().Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
 					}
 				}
+			}
+		}
+	}
+}
+
+// setFileLimit attempts to set the open file limit to the FileLimit constant defined above.
+func (h *Holder) setFileLimit() {
+	lim := &syscall.Rlimit{}
+	var setLimit uint64
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, lim); err != nil {
+		h.logger().Printf("ERROR checking open file limit: %s", err)
+		return
+	}
+	if lim.Max < FileLimit {
+		h.logger().Printf("WARNING: open file limit max is %d. Please consider running \"ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error.", lim.Max, FileLimit)
+	}
+	// If the soft limit is lower than both the FileLimit constant and the hard limit, we will try to change it.
+	if lim.Cur < FileLimit && lim.Cur < lim.Max {
+		if FileLimit < lim.Max {
+			setLimit = FileLimit
+		} else {
+			setLimit = lim.Max
+		}
+		lim.Cur = setLimit
+
+		// Try to set the limit
+		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, lim); err != nil {
+			h.logger().Printf("ERROR setting open file limit: %s", err)
+		}
+
+		// Check the limit after setting it. OS may not obey Setrlimit call.
+		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, lim); err != nil {
+			h.logger().Printf("ERROR checking open file limit: %s", err)
+		} else {
+			if lim.Cur != setLimit {
+				h.logger().Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error.", setLimit, lim.Cur, FileLimit)
 			}
 		}
 	}
