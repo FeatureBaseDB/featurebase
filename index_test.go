@@ -155,7 +155,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
 				RangeEnabled: true,
 				CacheType:    pilosa.CacheTypeNone,
-				CacheSize: uint32(5),
+				CacheSize:    uint32(5),
 			}); err != nil {
 				t.Fatal(err)
 			}

@@ -484,19 +484,19 @@ func (s *SimpleCache) Add(id uint64, b *Bitmap) {
 	s.cache[id] = b
 }
 
+// NopCache represents a no-op Cache implementation.
 type NopCache struct {
 	stats StatsClient
 }
 
-// NopCache implement Cache interface, returns no cache for cache type None
+// Ensure NopCache implements Cache.
 var _ Cache = &NopCache{}
 
-// NewNopeCache returns a new instance of NopCache.
+// NewNopCache returns a new instance of NopCache.
 func NewNopCache() *NopCache {
-	c := &NopCache{
+	return &NopCache{
 		stats: NopStatsClient,
 	}
-	return c
 }
 
 func (c *NopCache) Add(id uint64, n uint64)     {}
