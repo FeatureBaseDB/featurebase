@@ -65,7 +65,6 @@ var (
 	ErrConfigBroadcastPort      = errors.New("internal-port not found in internal-hosts")
 	ErrConfigHostsMismatch      = errors.New("hosts and internal-hosts length mismatch")
 	ErrConfigReplicaNInvalid    = errors.New("replica number must be <= hosts")
-	ErrConfigGossipSeed         = errors.New("invalid gossip seed")
 )
 
 // Regular expression to validate index and frame names.
@@ -143,7 +142,7 @@ func ValidateLabel(label string) error {
 	return nil
 }
 
-// StringInSlice checks is substring a is in the slice
+// StringInSlice checks for substring a in the slice.
 func StringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
@@ -153,7 +152,7 @@ func StringInSlice(a string, list []string) bool {
 	return false
 }
 
-// ContainsSubstring checks is substring a is contained in the slice
+// ContainsSubstring checks to see if substring a is contained in any string in the slice.
 func ContainsSubstring(a string, list []string) bool {
 	for _, b := range list {
 		if strings.Contains(b, a) {

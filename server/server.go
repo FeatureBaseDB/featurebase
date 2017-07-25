@@ -153,8 +153,8 @@ func (m *Command) SetupServer() error {
 
 	// Set internal port (string).
 	internalPortStr := pilosa.DefaultInternalPort
-	if m.Config.Cluster.InternalPort != "" {
-		internalPortStr = m.Config.Cluster.InternalPort
+	if m.Config.InternalPort != "" {
+		internalPortStr = m.Config.InternalPort
 	}
 
 	switch m.Config.Cluster.Type {

@@ -58,6 +58,17 @@ Any flag that has a value that is a comma separated list on the command line bec
     bind = localhost:10101
     ```
 
+#### Internal Port
+
+* Description: Port to which Pilosa should bind for internal communication.
+* Flag: `--internal-port=11101`
+* Env: `PILOSA_INTERNAL_PORT=11101`
+* Config:
+
+    ```toml
+    internal-port = 11101
+    ```
+
 #### Cluster Hosts
 
 * Description: List of hosts in the cluster. Multiple hosts should be comma separated in the flag and env forms.
@@ -80,18 +91,6 @@ Any flag that has a value that is a comma separated list on the command line bec
     ```toml
     [cluster]
     internal-hosts = ["localhost:11101"]
-    ```
-
-#### Cluster Internal Port
-
-* Description: Port to which Pilosa should bind for internal communication.
-* Flag: `--cluster.internal-port=11101`
-* Env: `PILOSA_CLUSTER.INTERNAL_PORT=11101`
-* Config:
-
-    ```toml
-    [cluster]
-    internal-port = 11101
     ```
 
 #### Cluster Poll Interval
