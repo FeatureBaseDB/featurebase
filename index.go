@@ -414,16 +414,12 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 
 	// Validate mutually exclusive options if ranges are enabled.
-	//
-	// NOTE(https://github.com/pilosa/pilosa/issues/399):
-	// Cache type should be validated as "none" once it is allowed.
 	if opt.RangeEnabled {
 		if opt.InverseEnabled {
 			return nil, ErrInverseRangeNotAllowed
-		} else if opt.CacheType != "" && opt.CacheType != CacheTypeLRU {
+		} else if opt.CacheType != "" && opt.CacheType != CacheTypeNone {
 			return nil, ErrRangeCacheNotAllowed
 		}
-		opt.CacheSize = 0
 	} else {
 		if len(opt.Fields) > 0 {
 			return nil, ErrFrameFieldsNotAllowed

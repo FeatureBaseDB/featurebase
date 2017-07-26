@@ -152,6 +152,18 @@ func TestIndex_CreateFrame(t *testing.T) {
 			}
 		})
 
+		t.Run("RangeEnabledWithCacheTypeNone", func(t *testing.T) {
+			index := test.MustOpenIndex()
+			defer index.Close()
+			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				RangeEnabled: true,
+				CacheType:    pilosa.CacheTypeNone,
+				CacheSize:    uint32(5),
+			}); err != nil {
+				t.Fatal(err)
+			}
+		})
+
 		t.Run("ErrFrameFieldsNotAllowed", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()

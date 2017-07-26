@@ -903,12 +903,13 @@ func (p importBitSet) Less(i, j int) bool { return p.rowIDs[i] < p.rowIDs[j] }
 const (
 	CacheTypeLRU    = "lru"
 	CacheTypeRanked = "ranked"
+	CacheTypeNone   = "none"
 )
 
 // IsValidCacheType returns true if v is a valid cache type.
 func IsValidCacheType(v string) bool {
 	switch v {
-	case CacheTypeLRU, CacheTypeRanked:
+	case CacheTypeLRU, CacheTypeRanked, CacheTypeNone:
 		return true
 	default:
 		return false
