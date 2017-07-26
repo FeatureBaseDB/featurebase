@@ -531,6 +531,8 @@ func (b *Bitmap) Optimize() {
 
 // WriteTo writes b to w.
 func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
+	// Convert all containers to the appropriate type. This must be done before write,
+	// because container types are inferred from cardinality on read.
 	b.Optimize()
 	// Remove empty containers before persisting.
 	//b.removeEmptyContainers()
@@ -1273,6 +1275,19 @@ func (c *container) arrayCountRuns() (r int) {
 	return r
 }
 
+func (c *container) countRuns() (r int) {
+	if c.isArray() {
+		return c.arrayCountRuns()
+	} else if c.isBitmap() {
+		return c.bitmapCountRuns()
+	} else if c.isRun() {
+		return len(c.runs)
+	}
+
+	// sure hope this never happens
+	return 0
+}
+
 // Optimize converts the container to the type which will take up the least
 // amount of space.
 func (c *container) Optimize() {
@@ -1280,18 +1295,58 @@ func (c *container) Optimize() {
 		runs := c.arrayCountRuns()
 		if runs < c.n/2 {
 			c.arrayToRun()
+		} else if c.n > ArrayMaxSize {
+			c.arrayToBitmap()
 		}
 	} else if c.isBitmap() {
 		runs := c.bitmapCountRuns()
 		if runs < RunMaxSize {
 			c.bitmapToRun()
+		} else if c.n <= ArrayMaxSize {
+			c.bitmapToArray()
 		}
 	} else if c.isRun() {
 		if len(c.runs) > RunMaxSize {
-			c.runToBitmap()
+			if c.n <= ArrayMaxSize {
+				c.runToArray()
+			} else {
+				c.runToBitmap()
+			}
 		}
 	}
+}
 
+func (c *container) OptimizeNew() {
+	runs := c.countRuns()
+
+	var newType string
+	if runs <= RunMaxSize && runs <= c.n/2 {
+		newType = "runs"
+	} else if c.n < ArrayMaxSize {
+		newType = "array"
+	} else {
+		newType = "bitmap"
+	}
+
+	if c.isArray() {
+		if newType == "bitmap" {
+			c.arrayToBitmap()
+		} else if newType == "runs" {
+			c.arrayToRun()
+		}
+	} else if c.isBitmap() {
+		if newType == "array" {
+			c.bitmapToArray()
+		} else if newType == "runs" {
+			c.bitmapToRun()
+		}
+	} else if c.isRun() {
+		if newType == "bitmap" {
+			c.runToBitmap()
+		} else if newType == "array" {
+			c.runToArray()
+		}
+	}
 }
 
 func (c *container) arrayContains(v uint32) bool {
