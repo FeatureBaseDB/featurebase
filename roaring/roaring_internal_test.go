@@ -30,6 +30,37 @@ func (c *container) String() string {
 	return fmt.Sprintf("<%s container (%v), n=%d, array[%d], runs[%d], bitmap[%d]>", c.info().Type, &c, c.n, len(c.array), len(c.runs), len(c.bitmap))
 }
 
+func (b *Bitmap) Equal(other Bitmap) bool {
+	if !reflect.DeepEqual(b.keys, other.keys) {
+		return false
+	}
+	if len(b.containers) != len(other.containers) {
+		return false
+	}
+
+	if b.opN != other.opN {
+		return false
+	}
+
+	if b.OpWriter != other.OpWriter {
+		return false
+	}
+
+	for n, c := range b.containers {
+		if !c.Equal(*other.containers[n]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *container) Equal(other container) bool {
+	return c.n == other.n &&
+		reflect.DeepEqual(c.array, other.array) &&
+		reflect.DeepEqual(c.bitmap, other.bitmap) &&
+		reflect.DeepEqual(c.runs, other.runs)
+}
+
 func TestRunAppendInterval(t *testing.T) {
 	a := container{}
 	tests := []struct {
