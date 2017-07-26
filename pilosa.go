@@ -71,11 +71,7 @@ var (
 	ErrTooManyWrites    = errors.New("too many write commands")
 
 	ErrConfigClusterTypeInvalid = errors.New("invalid cluster type")
-	ErrConfigClusterTypeMissing = errors.New("missing cluster type")
 	ErrConfigHostsMissing       = errors.New("missing bind address in cluster hosts")
-	ErrConfigBroadcastPort      = errors.New("internal-port not found in internal-hosts")
-	ErrConfigHostsMismatch      = errors.New("hosts and internal-hosts length mismatch")
-	ErrConfigReplicaNInvalid    = errors.New("replica number must be <= hosts")
 )
 
 // Regular expression to validate index and frame names.

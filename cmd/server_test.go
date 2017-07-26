@@ -52,14 +52,10 @@ func TestServerConfig(t *testing.T) {
 
 	[cluster]
 		poll-interval = "45s"
-		type = "http"
+		type = "static"
 		replicas = 2
 		hosts = [
 			"localhost:19444",
-		]
-		internal-hosts = [
-			"localhost:19500",
-			"localhost:19501",
 		]
 	`,
 			validation: func() error {
@@ -80,13 +76,9 @@ func TestServerConfig(t *testing.T) {
 	bind = "localhost:0"
 	data-dir = "` + actualDataDir + `"
 	[cluster]
-		type = "http"
+		type = "static"
 		hosts = [
 			"localhost:19444",
-		]
-		internal-hosts = [
-			"localhost:19500",
-			"localhost:19501",
 		]
 	[plugins]
 		path = "/var/sloth"
@@ -101,7 +93,7 @@ func TestServerConfig(t *testing.T) {
 		},
 		// TEST 2
 		{
-			args: []string{"server", "--log-path", logFile.Name()},
+			args: []string{"server", "--log-path", logFile.Name(), "--cluster.type", "static"},
 			env:  map[string]string{"PILOSA_PROFILE.CPU_TIME": "1m"},
 			cfgFileContent: `
 	bind = "localhost:19444"

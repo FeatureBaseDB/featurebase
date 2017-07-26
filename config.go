@@ -20,7 +20,6 @@ import "time"
 const (
 	ClusterNone   = ""
 	ClusterStatic = "static"
-	ClusterHTTP   = "http"
 	ClusterGossip = "gossip"
 )
 
@@ -32,12 +31,12 @@ const (
 	DefaultPort = "10101"
 
 	// DefaultClusterType sets the node intercommunication method.
-	DefaultClusterType = ClusterStatic
+	DefaultClusterType = ClusterGossip
 
-	// DefaultInternalPort the port the nodes intercommunicate on.
-	DefaultInternalPort = "14000"
+	// DefaultGossipPort indicates the port to which pilosa should bind for internal state sharing.
+	DefaultGossipPort = "14000"
 
-	// DefaultMetrics sets the internal metrics to no op
+	// DefaultMetrics sets the internal metrics to no-op.
 	DefaultMetrics = "nop"
 
 	// DefaultMaxWritesPerRequest is the default number of writes per request.
@@ -45,21 +44,20 @@ const (
 )
 
 // ClusterTypes set of cluster types.
-var ClusterTypes = []string{ClusterNone, ClusterStatic, ClusterHTTP, ClusterGossip}
+var ClusterTypes = []string{ClusterNone, ClusterStatic, ClusterGossip}
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir      string `toml:"data-dir"`
-	Bind         string `toml:"bind"`
-	InternalPort string `toml:"internal-port"`
+	DataDir    string `toml:"data-dir"`
+	Bind       string `toml:"bind"`
+	GossipPort string `toml:"gossip-port"`
+	GossipSeed string `toml:"gossip-seed"`
 
 	Cluster struct {
 		ReplicaN      int      `toml:"replicas"`
 		Type          string   `toml:"type"`
 		Hosts         []string `toml:"hosts"`
-		InternalHosts []string `toml:"internal-hosts"`
 		PollInterval  Duration `toml:"poll-interval"`
-		GossipSeed    string   `toml:"gossip-seed"`
 		LongQueryTime Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
@@ -94,7 +92,6 @@ func NewConfig() *Config {
 	c.Cluster.Type = DefaultClusterType
 	c.Cluster.PollInterval = Duration(DefaultPollingInterval)
 	c.Cluster.Hosts = []string{}
-	c.Cluster.InternalHosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics
 	return c
@@ -105,29 +102,10 @@ func (c *Config) Validate() error {
 	if !StringInSlice(c.Cluster.Type, ClusterTypes) {
 		return ErrConfigClusterTypeInvalid
 	}
-	if len(c.Cluster.Hosts) > 1 && !(c.Cluster.Type == ClusterHTTP || c.Cluster.Type == ClusterGossip) {
-		return ErrConfigClusterTypeMissing
-	}
-	if c.Cluster.Type == ClusterHTTP || c.Cluster.Type == ClusterGossip {
-		if c.Cluster.ReplicaN > len(c.Cluster.Hosts) {
-			return ErrConfigReplicaNInvalid
-		}
+
+	if c.Cluster.Type == ClusterGossip {
 		if !foundItem(c.Cluster.Hosts, c.Bind) {
 			return ErrConfigHostsMissing
-		}
-	}
-	if c.Cluster.Type == ClusterHTTP {
-		if len(c.Cluster.Hosts) != len(c.Cluster.InternalHosts) {
-			return ErrConfigHostsMismatch
-		}
-		// TODO: this seems like an odd check; it's just ensuring that InternalPort
-		// matches any one substring from any of the InternalHosts.
-		// I suggest we either remove this completely or make it actually check
-		// the port portion of the address for this node. (note that this only applies
-		// to the http broadcaster, so if we simply use gossip for all implementations
-		// we can remove this).
-		if !ContainsSubstring(c.InternalPort, c.Cluster.InternalHosts) {
-			return ErrConfigBroadcastPort
 		}
 	}
 

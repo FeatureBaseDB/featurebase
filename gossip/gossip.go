@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -71,7 +72,7 @@ func (g *GossipNodeSet) Open() error {
 
 	// attach to gossip seed node
 	nodes := []*pilosa.Node{&pilosa.Node{Host: g.config.gossipSeed}} //TODO: support a list of seeds
-	_, err = g.memberlist.Join(pilosa.Nodes(nodes).Hosts())
+	err = g.joinWithRetry(pilosa.Nodes(nodes).Hosts())
 	if err != nil {
 		return err
 	}
@@ -82,6 +83,31 @@ func (g *GossipNodeSet) Open() error {
 		RetransmitMult: 3,
 	}
 	return nil
+}
+
+// joinWithRetry wraps the standard memberlist Join function in a retry.
+func (g *GossipNodeSet) joinWithRetry(hosts []string) error {
+	err := retry(60, 2*time.Second, func() error {
+		_, err := g.memberlist.Join(hosts)
+		return err
+	})
+	return err
+}
+
+// retry periodically retries function fn a specified number of attempts.
+func retry(attempts int, sleep time.Duration, fn func() error) (err error) {
+	for i := 0; ; i++ {
+		err = fn()
+		if err == nil {
+			return
+		}
+		if i >= (attempts - 1) {
+			break
+		}
+		time.Sleep(sleep)
+		log.Println("retrying after error:", err)
+	}
+	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
 
 // logger returns a logger for the GossipNodeSet.

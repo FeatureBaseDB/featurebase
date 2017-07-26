@@ -33,10 +33,11 @@ import (
 	"strings"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/httpbroadcast"
+	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
@@ -426,38 +427,73 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Update cluster config
 	m0.Server.Cluster.Nodes = []*pilosa.Node{
-		{Host: m0.Server.Host, InternalHost: "localhost:" + freePorts[0]},
-		{Host: m1.Server.Host, InternalHost: "localhost:" + freePorts[1]},
+		{Host: m0.Server.Host},
+		{Host: m1.Server.Host},
 	}
 	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
 
 	// Configure node0
-	m0.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m0.Server, freePorts[0])
-	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
-	m0.Server.Holder.Broadcaster = m0.Server.Broadcaster
-	m0.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(freePorts[0], nil)
-	m0.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
-	err = m0.Server.Cluster.NodeSet.(*httpbroadcast.HTTPNodeSet).Join(m0.Server.Cluster.Nodes)
+
+	// get the host portion of addr to use for binding
+	gossipHost, _, err := net.SplitHostPort(m0.Server.Host)
+	if err != nil {
+		gossipHost = m0.Server.Host
+	}
+	if gossipHost == "localhost" {
+		gossipHost = "127.0.0.1"
+	}
+	gossipPort, err := strconv.Atoi(freePorts[0])
 	if err != nil {
 		t.Fatal(err)
 	}
+	gossipSeed := gossipHost + ":" + freePorts[0]
+
+	gossipNodeSet0 := gossip.NewGossipNodeSet(m0.Server.Host, gossipHost, gossipPort, gossipSeed, m0.Server)
+	m0.Server.Cluster.NodeSet = gossipNodeSet0
+	m0.Server.Broadcaster = gossipNodeSet0
+	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
+	m0.Server.Holder.Broadcaster = m0.Server.Broadcaster
+	m0.Server.BroadcastReceiver = gossipNodeSet0
+
 	if err := m0.Server.BroadcastReceiver.Start(m0.Server); err != nil {
+		t.Fatal(err)
+	}
+	// Open NodeSet communication
+	if err := m0.Server.Cluster.NodeSet.Open(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Configure node1
-	m1.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m1.Server, freePorts[1])
-	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
-	m1.Server.Holder.Broadcaster = m1.Server.Broadcaster
-	m1.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(freePorts[1], nil)
-	m1.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
-	err = m1.Server.Cluster.NodeSet.(*httpbroadcast.HTTPNodeSet).Join(m1.Server.Cluster.Nodes)
+
+	// get the host portion of addr to use for binding
+	gossipHost, _, err = net.SplitHostPort(m1.Server.Host)
+	if err != nil {
+		gossipHost = m1.Server.Host
+	}
+	if gossipHost == "localhost" {
+		gossipHost = "127.0.0.1"
+	}
+	gossipPort, err = strconv.Atoi(freePorts[1])
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	gossipNodeSet1 := gossip.NewGossipNodeSet(m1.Server.Host, gossipHost, gossipPort, gossipSeed, m1.Server)
+	m1.Server.Cluster.NodeSet = gossipNodeSet1
+	m1.Server.Broadcaster = gossipNodeSet1
+	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
+	m1.Server.Holder.Broadcaster = m1.Server.Broadcaster
+	m1.Server.BroadcastReceiver = gossipNodeSet1
+
 	if err := m1.Server.BroadcastReceiver.Start(m1.Server); err != nil {
 		t.Fatal(err)
 	}
+	// Open NodeSet communication
+	if err := m1.Server.Cluster.NodeSet.Open(); err != nil {
+		t.Fatal(err)
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// Expected indexes and Frames
 	expected := map[string][]string{
@@ -509,11 +545,14 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Write data on first node.
 	if _, err := m0.Query("i", "", `
-			SetBit(rowID=1, frame="f", columnID=1)
-			SetBit(rowID=1, frame="f", columnID=2400000)
-		`); err != nil {
+            SetBit(rowID=1, frame="f", columnID=1)
+            SetBit(rowID=1, frame="f", columnID=2400000)
+        `); err != nil {
 		t.Fatal(err)
 	}
+
+	// We have to wait for the broadcast message to be sent before checking state.
+	time.Sleep(1 * time.Second)
 
 	// Make sure node0 knows about the latest MaxSlice.
 	maxSlices0, err := client0.MaxSliceByIndex(context.Background())
@@ -535,15 +574,15 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Write input definition to the first node.
 	if _, err := m0.CreateDefinition("i", "test", `{
-			"frames": [{"name": "event-time",
-						"options": {
-							"cacheType": "ranked",
-							"timeQuantum": "YMD"
-						}}],
-			"fields": [{"name": "columnID",
-						"primaryKey": true
-						}]}
-		`); err != nil {
+            "frames": [{"name": "event-time",
+                        "options": {
+                            "cacheType": "ranked",
+                            "timeQuantum": "YMD"
+                        }}],
+            "fields": [{"name": "columnID",
+                        "primaryKey": true
+                        }]}
+        `); err != nil {
 		t.Fatal(err)
 	}
 
@@ -607,6 +646,7 @@ func NewMain() *Main {
 	m.Server.Network = *test.Network
 	m.Config.DataDir = path
 	m.Config.Bind = "localhost:0"
+	m.Config.Cluster.Type = "static"
 	m.Command.Stdin = &m.Stdin
 	m.Command.Stdout = &m.Stdout
 	m.Command.Stderr = &m.Stderr

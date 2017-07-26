@@ -22,7 +22,6 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/httpbroadcast"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -110,10 +109,10 @@ func TestCluster_NodeStates(t *testing.T) {
 			{Host: "serverB:1000"},
 			{Host: "serverC:1000"},
 		},
-		NodeSet: &httpbroadcast.HTTPNodeSet{},
+		NodeSet: &pilosa.StaticNodeSet{},
 	}
 
-	err := c.NodeSet.(*httpbroadcast.HTTPNodeSet).Join([]*pilosa.Node{
+	err := c.NodeSet.(*pilosa.StaticNodeSet).Join([]*pilosa.Node{
 		&pilosa.Node{Host: "serverA:1000"},
 		&pilosa.Node{Host: "serverC:1000"},
 		&pilosa.Node{Host: "serverD:1000"},
