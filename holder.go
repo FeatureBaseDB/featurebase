@@ -361,35 +361,48 @@ func (h *Holder) flushCaches() {
 
 // setFileLimit attempts to set the open file limit to the FileLimit constant defined above.
 func (h *Holder) setFileLimit() {
-	lim := &syscall.Rlimit{}
-	var setLimit uint64
-	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, lim); err != nil {
+	oldLimit := &syscall.Rlimit{}
+	newLimit := &syscall.Rlimit{}
+
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
 		h.logger().Printf("ERROR checking open file limit: %s", err)
 		return
 	}
-	if lim.Max < FileLimit {
-		h.logger().Printf("WARNING: open file limit max is %d. Please consider running \"ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error.", lim.Max, FileLimit)
-	}
-	// If the soft limit is lower than both the FileLimit constant and the hard limit, we will try to change it.
-	if lim.Cur < FileLimit && lim.Cur < lim.Max {
-		if FileLimit < lim.Max {
-			setLimit = FileLimit
+	// If the soft limit is lower than the FileLimit constant, we will try to change it.
+	if oldLimit.Cur < FileLimit {
+		newLimit.Cur = FileLimit
+		// If the hard limit is not high enough, we will try to change it too.
+		if oldLimit.Max < FileLimit {
+			newLimit.Max = FileLimit
 		} else {
-			setLimit = lim.Max
+			newLimit.Max = oldLimit.Max
 		}
-		lim.Cur = setLimit
 
 		// Try to set the limit
-		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, lim); err != nil {
-			h.logger().Printf("ERROR setting open file limit: %s", err)
+		if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, newLimit); err != nil {
+			// If we just tried to change the hard limit and failed, we probably don't have permission. Let's try again without setting the hard limit.
+			if newLimit.Max > oldLimit.Max {
+				newLimit.Max = oldLimit.Max
+				// Obviously the hard limit cannot be higher than the soft limit.
+				if newLimit.Cur >= newLimit.Max {
+					newLimit.Cur = newLimit.Max
+				}
+				// Try setting again with lowered Max (hard limit)
+				if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, newLimit); err != nil {
+					h.logger().Printf("ERROR setting open file limit: %s", err)
+				}
+				// If we weren't trying to change the hard limit, let the user know something is wrong.
+			} else {
+				h.logger().Printf("ERROR setting open file limit: %s", err)
+			}
 		}
 
 		// Check the limit after setting it. OS may not obey Setrlimit call.
-		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, lim); err != nil {
+		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
 			h.logger().Printf("ERROR checking open file limit: %s", err)
 		} else {
-			if lim.Cur != setLimit {
-				h.logger().Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error.", setLimit, lim.Cur, FileLimit)
+			if oldLimit.Cur < FileLimit {
+				h.logger().Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/administration/#open-file-limits for more information.", FileLimit, oldLimit.Cur, FileLimit)
 			}
 		}
 	}
