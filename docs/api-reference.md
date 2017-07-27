@@ -173,7 +173,7 @@ Response:
 
 ### Remove frame
 
-`DELETE POST /index/<index-name>/frame/<frame-name>`
+`DELETE /index/<index-name>/frame/<frame-name>`
 
 Removes the given frame.
 
@@ -212,6 +212,126 @@ Request:
 curl localhost:10101/index/user/frame/language/time-quantum \
      -X POST \
      -d '{"timeQuantum": "YM"}'
+```
+
+Response:
+```
+{}
+```
+
+### Create input definition
+
+`POST /index/<index-name>/input-definition/<input-definition-name>`
+ 
+Creates an input definition in the given index with the given name.
+ 
+The request payload is JSON, and it must contain the fields `frames` and `fields`. `frames` is an array of frames used within this input definition.  Each frame must contain a `name` and may contain the following options:
+ 
+* `rowLabel` (string): Row label of the frame.
+* `timeQuantum` (string): [Time Quantum]({{< ref "data-model.md#time-quantum" >}}) for this frame.
+* `inverseEnabled` (boolean): Enables [the inverted view]({{< ref "data-model.md#inverse" >}}) for this frame if `true`.
+* `cacheType` (string): [ranked]({{< ref "data-model.md#ranked" >}}) or [LRU]({{< ref "data-model.md#lru" >}}) caching on this frame. Default is `lru`.
+* `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
+ 
+The `fields` array contains a series of JSON objects describing how to process each field received in the input data.  Each `field` object must contain a `name` which maps to the source JSON field name.  One field must be defined at the `primaryKey`.  The `primarykey` source field name must equal the column label for the `Index`, and its value must be an unsigned integer which maps directly to a columnID in Pilosa.
+
+* `name`    (string): Maps the source data field to actions that process the field's corresponding value.
+* `actions` (array): List of actions that will process the field's value.
+ 
+The `action` describes how the field value will be processed.  Each `action` may contain:
+
+* `frame` (string): The Frame that will contain this action's set bits.
+* `rowid` (int): The action can use this as a pre-defined SetBit rowID.  The user is required to ensure this ID does not overlap with other rows in use per frame.
+* `valueDestination` (string): The mapping rule used for this data.
+    - `value-to-row`: The value should be an integer and will map directly to a RowID.
+    - `single-row-boolean`: If the value is true set a bit using the `rowid`.
+    - `mapping`: Map the value to a RowID in the `valueMap`.
+* `valueMap` (object): string and integer pairs used to map field values to RowID's.
+ 
+Request:
+```
+curl localhost:10101/index/user/input-definition/stargazer-input \
+    -X POST \
+    -d '{
+            "frames":[
+                {
+                    "name": "language",
+                    "options": {"rowLabel": "language_id"}
+                }
+            ],
+            "fields":[
+                {
+                    "name": "repo_id",
+                    "primaryKey":true
+                },
+                {
+                    "name": "language_id",
+                    "actions":[
+                        {
+                            "frame": "language",
+                            "valueDestination": "mapping",
+                            "valueMap": {
+                                "Go": 5,
+                                "Python": 17,
+                                "C++": 10
+                            }
+                        }
+                    ]
+                }
+            ]
+        }'
+```
+ 
+Response:
+```
+{}
+```
+
+### Get input definition
+
+`GET /index/<index-name>/input-definition/<input-definition-name>`
+
+Returns the given input definition as JSON.
+
+Request:
+```
+curl -XGET localhost:10101/index/user/input-definition/stargazer-input
+```
+
+Response:
+```
+{"frames":[{"name":"language","options":{"rowLabel":"language_id"}}],"fields":[{"name":"repo_id","primaryKey":true},{"name":"language_id","actions":[{"frame":"language","valueDestination":"mapping","valueMap":{"Go":5,"Python":17,"C++":10}}]}]}
+```
+
+### Remove input definition
+
+`DELETE /index/<index-name>/input-definition/<input-definition-name>`
+
+Removes the given input definition.
+
+Request:
+```
+curl -XDELETE localhost:10101/index/user/input-definition/stargazer-input
+```
+
+Response:
+```
+{}
+```
+
+### Process input data
+
+`POST /index/<index-name>/input/<input-definition-name>`
+
+Processes the JSON payload using the given input definition.
+
+The request payload is a JSON array of objects containing one field for the primary key that corresponds to the column label, and additional fields that will be handled by corresponding actions in the input definition.
+
+Request:
+```
+curl localhost:10101/index/user/input/stargazer-input \
+     -X POST \
+     -d '[{"language_id": "Go", "repo_id": 92274475}]'
 ```
 
 Response:

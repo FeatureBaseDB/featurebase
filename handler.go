@@ -95,20 +95,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
-	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
-	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET")
-	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
-	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE")
-	router.HandleFunc("/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
-	//router.HandleFunc("/index/{index}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
-	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
-	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
-	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
-	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
@@ -118,6 +104,24 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
 	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
+	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
+	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET")
+	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
+	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE")
+	router.HandleFunc("/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
+	//router.HandleFunc("/index/{index}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
+	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
+	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
+	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
+	router.HandleFunc("/index/{index}/input/{input-definition}", handler.handlePostInput).Methods("POST")
+	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetInputDefinition).Methods("GET")
+	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
+	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
+	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
+	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
@@ -901,7 +905,7 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*QueryRequest, erro
 func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	q := r.URL.Query()
 	validQuery := validOptions(QueryRequest{})
-	for key, _ := range q {
+	for key := range q {
 		if _, ok := validQuery[key]; !ok {
 			return nil, errors.New("invalid query params")
 		}
@@ -1490,4 +1494,249 @@ func errorString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// handlePostInputDefinition handles POST /input-definition request.
+func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	inputDefName := mux.Vars(r)["input-definition"]
+
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Decode request.
+	var req InputDefinitionInfo
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validation the input definition with the curent index's ColumnLabel.
+	if err := req.Validate(index.ColumnLabel()); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Encode InputDefinition to its internal representation.
+	def := req.Encode()
+	def.Name = inputDefName
+
+	// Create InputDefinition.
+	_, err = index.CreateInputDefinition(def)
+	if err == ErrInputDefinitionExists {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = h.Broadcaster.SendSync(
+		&internal.CreateInputDefinitionMessage{
+			Index:      indexName,
+			Definition: def,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending CreateInputDefinition message: %s", err)
+	}
+
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+// handleGetInputDefinition handles GET /input-definition request.
+func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	inputDefName := mux.Vars(r)["input-definition"]
+
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	inputDef, err := index.InputDefinition(inputDefName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	if err = json.NewEncoder(w).Encode(InputDefinitionInfo{
+		Frames: inputDef.frames,
+		Fields: inputDef.fields,
+	}); err != nil {
+		h.logger().Printf("write status response error: %s", err)
+	}
+
+}
+
+// handleDeleteInputDefinition handles DELETE /input-definition request.
+func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	inputDefName := mux.Vars(r)["input-definition"]
+
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Delete input definition from the index.
+	if err := index.DeleteInputDefinition(inputDefName); err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	err := h.Broadcaster.SendSync(
+		&internal.DeleteInputDefinitionMessage{
+			Index: indexName,
+			Name:  inputDefName,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending DeleteInputDefinition message: %s", err)
+	}
+
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type defaultInputDefinitionResponse struct{}
+
+func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	inputDefName := mux.Vars(r)["input-definition"]
+
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Decode request.
+	var reqs []interface{}
+	err := json.NewDecoder(r.Body).Decode(&reqs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	for _, req := range reqs {
+		bits, err := h.InputJSONDataParser(req.(map[string]interface{}), index, inputDefName)
+		if err == ErrInputDefinitionNotFound {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		} else if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		for fr, bs := range bits {
+			err := index.InputBits(fr, bs)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+// InputJSONDataParser validates input json file and executes SetBit.
+func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
+	inputDef, err := index.InputDefinition(name)
+	if err != nil {
+		return nil, err
+	}
+	// If field in input data is not in defined definition, return error.
+	var colValue uint64
+	validFields := make(map[string]bool)
+	timestampFrame := make(map[string]int64)
+	for _, field := range inputDef.Fields() {
+		validFields[field.Name] = true
+		if field.PrimaryKey {
+			columnLabel := field.Name
+			value, ok := req[columnLabel]
+			if !ok {
+				return nil, fmt.Errorf("columnLabel required")
+			}
+			rawValue, ok := value.(float64) // The default JSON marshalling will interpret this as a float
+			if !ok {
+				return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
+			}
+			colValue = uint64(rawValue)
+		}
+		// Find frame that need to add timestamp.
+		for _, action := range field.Actions {
+			if action.ValueDestination == InputSetTimestamp {
+				timestampFrame[action.Frame], err = GetTimeStamp(req, field.Name)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	for key := range req {
+		_, ok := validFields[key]
+		if !ok {
+			return nil, fmt.Errorf("field not found: %s", key)
+		}
+	}
+
+	setBits := make(map[string][]*Bit)
+
+	for _, field := range inputDef.Fields() {
+		// skip field that defined in definition but not in input data
+		if _, ok := req[field.Name]; !ok {
+			continue
+		}
+
+		// Looking into timestampFrame map and set timestamp to the whole frame
+		for _, action := range field.Actions {
+			frame := action.Frame
+			timestamp := timestampFrame[action.Frame]
+			// Skip input data field values that are set to null
+			if req[field.Name] == nil {
+				continue
+			}
+			bit, err := HandleAction(action, req[field.Name], colValue, timestamp)
+			if err != nil {
+				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
+			}
+			if bit != nil {
+				setBits[frame] = append(setBits[frame], bit)
+			}
+		}
+	}
+	return setBits, nil
+}
+
+// GetTimeStamp retrieves unix timestamp from Input data.
+func GetTimeStamp(data map[string]interface{}, timeField string) (int64, error) {
+	tmstamp, ok := data[timeField]
+	if !ok {
+		return 0, nil
+	}
+
+	timestamp, ok := tmstamp.(string)
+	if !ok {
+		return 0, fmt.Errorf("set-timestamp value must be in time format: YYYY-MM-DD, has: %v", data[timeField])
+	}
+
+	v, err := time.Parse(TimeFormat, timestamp)
+	if err != nil {
+		return 0, err
+	}
+
+	return v.Unix(), nil
 }

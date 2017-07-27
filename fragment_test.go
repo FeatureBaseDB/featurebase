@@ -177,6 +177,7 @@ func TestFragment_SetFieldValue(t *testing.T) {
 			// Limit bit depth & maximum values.
 			bitDepth = (bitDepth % 62) + 1
 			columnN = (columnN % 99) + 1
+
 			for i := range values {
 				values[i] = values[i] % (1 << bitDepth)
 			}
