@@ -8,6 +8,8 @@ import (
 	"testing"
 )
 
+// randomBitmap generates a random Bitmap with Ncontainers.
+// The type and cardinality of each container is random; keys are sequential.
 func randomBitmap(Ncontainers int) *Bitmap {
 	b := &Bitmap{
 		keys:       make([]uint64, Ncontainers),
@@ -16,21 +18,21 @@ func randomBitmap(Ncontainers int) *Bitmap {
 
 	for n := 0; n < Ncontainers; n++ {
 		b.keys[n] = uint64(n)
-		// We could generate only bitmaps here and then depend on Optimize()
-		// to convert to the appropriate container types. However, certain
-		// sets can be correctly represented as either array or runs.
-		// Generating the desired type directly encourages a more uniform
-		// distribution of container types. This is not perfect (TODO)
+		// The intent here is to generate containers with uniformly distributed container
+		// type, but after b.Optimize(), that won't be the case. As long as we get some
+		// amount of each type, this still serves its purpose.
+		// The Right Way would be to generate bitsets that get optimized into the correct
+		// type, i.e. calling a function randomBitset(N, Nruns) with appropriate arguments.
 		switch rand.Intn(3) {
 		case 0:
+			// Could be array or RLE.
 			b.containers[n] = randomArray(rand.Intn(ArrayMaxSize))
-			// fmt.Printf("%d array len = %d\n", n, len(b.containers[n].array))
 		case 1:
-			b.containers[n] = randomBitset(rand.Intn(65536))
-			// fmt.Printf("%d bitmap len = %d\n", n, len(b.containers[n].bitmap))
+			// Guaranteed bitmap.
+			b.containers[n] = randomBitset(rand.Intn(65536-ArrayMaxSize) + ArrayMaxSize)
 		case 2:
+			// Probably RLE.
 			b.containers[n] = randomRunset(rand.Intn(RunMaxSize))
-			// fmt.Printf("%d runs len = %d\n", n, len(b.containers[n].runs))
 		}
 
 	}
@@ -38,8 +40,8 @@ func randomBitmap(Ncontainers int) *Bitmap {
 	return b
 }
 
+// randomArray generates an array container with N elements.
 func randomArray(N int) *container {
-	// generate array container with N elements
 	c := &container{n: N}
 	vals := rand.Perm(65536)[0:N]
 	sort.Ints(vals)
@@ -50,8 +52,8 @@ func randomArray(N int) *container {
 	return c
 }
 
+// randomBitset generates a bitmap container with N elements.
 func randomBitset(N int) *container {
-	// generate bitmap container with N elements
 	c := &container{n: N}
 	vals := rand.Perm(65536)
 	c.bitmap = make([]uint64, bitmapN)
@@ -61,10 +63,20 @@ func randomBitset(N int) *container {
 	return c
 }
 
+// randomRunset generates an RLE container with N runs.
 func randomRunset(N int) *container {
-	// generate run container with N elements
-	c := randomArray(N)
-	// c.arrayToRun()
+	c := &container{}
+	vals := rand.Perm(65536)[0 : 2*N]
+	sort.Ints(vals)
+	c.runs = make([]interval32, N)
+	c.n = 0
+	for n := 0; n < N; n++ {
+		c.runs[n] = interval32{
+			start: uint32(vals[2*n]),
+			last:  uint32(vals[2*n+1]),
+		}
+		c.n += vals[2*n+1] - vals[2*n] + 1
+	}
 	return c
 }
 
@@ -81,7 +93,6 @@ func TestWriteRead(t *testing.T) {
 	iterations := 10
 	for i := 0; i < iterations; i++ {
 		b := randomBitmap(Ncontainers)
-		// fmt.Printf("\n%d\n", i)
 		// b.DebugInfo()
 		b2 := &Bitmap{}
 
