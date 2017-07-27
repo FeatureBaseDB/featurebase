@@ -32,7 +32,7 @@ While Pilosa does have some high system requirements it is not a best practice t
 
 ### Open File Limits
 
-Pilosa requires a large amount of open files to support its memory-mapped file storage system. Most operating systems put limits on the maximum number of files that may be opened concurrently by a process. On Linux systems, this limit is controlled by a utility called [ulimit](https://ss64.com/bash/ulimit.html). Pilosa will automatically attempt to raise the limit to `262144` during startup, but it may fail due to access limitations. If you see errors related to open file limits when starting Pilosa, it is recommended that you run `sudo ulimit -n 262144` before starting Pilosa.
+Pilosa requires a large number of open files to support its memory-mapped file storage system. Most operating systems put limits on the maximum number of files that may be opened concurrently by a process. On Linux systems, this limit is controlled by a utility called [ulimit](https://ss64.com/bash/ulimit.html). Pilosa will automatically attempt to raise the limit to `262144` during startup, but it may fail due to access limitations. If you see errors related to open file limits when starting Pilosa, it is recommended that you run `sudo ulimit -n 262144` before starting Pilosa.
 
 On Mac OS X, `ulimit` does not behave predictably. [This blog post](https://blog.dekstroza.io/ulimit-shenanigans-on-osx-el-capitan/) contains information about setting open file limits in OS X.
 
