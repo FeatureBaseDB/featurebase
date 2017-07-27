@@ -46,15 +46,25 @@ func TestBitmapClone(t *testing.T) {
 	}
 }
 
+func TestContainerCount(t *testing.T) {
+	b := roaring.NewBitmap(65535)
+
+	if b.Count() != b.CountRange(0, 65546) {
+		t.Fatalf("Count != CountRange\n")
+	}
+}
+
 func TestCheckBitmap(t *testing.T) {
 	b := roaring.NewBitmap()
+	x := 0
 	for i := uint64(61000); i < 71000; i++ {
+		x++
 		b.Add(i)
 	}
 	for i := uint64(75000); i < 75100; i++ {
+		x++
 		b.Add(i)
 	}
-
 	err := b.Check()
 	if err != nil {
 		t.Fatalf("%v\n", err)
