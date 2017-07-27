@@ -536,6 +536,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	b.Optimize()
 	// Remove empty containers before persisting.
 	//b.removeEmptyContainers()
+	// Instead of removing empty from the Bitmap, we just skip writing them to file.
 	containerCount := len(b.keys) - b.countEmptyContainers()
 
 	// Create bitset indicating runs, record whether any runs present.
@@ -544,6 +545,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	k := 0
 	for _, c := range b.containers {
 		if c.n == 0 {
+			// Skip empty.
 			continue
 		}
 		if c.isRun() {
@@ -589,6 +591,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 			binary.LittleEndian.PutUint64(buf[headerSize+(i-empty)*12:], uint64(key))
 			binary.LittleEndian.PutUint32(buf[headerSize+(i-empty)*12+8:], uint32(c.n-1))
 		} else {
+			// Skip empty.
 			empty++
 		}
 	}
@@ -598,13 +601,13 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	offset := uint32(len(buf))
 	empty = 0
 	for i, c := range b.containers {
-
 		if c.n > 0 {
 			binary.LittleEndian.PutUint32(buf[headerSize+(containerCount*12)+((i-empty)*4):], uint32(offset))
+			offset += uint32(c.size())
 		} else {
+			// Skip empty.
 			empty++
 		}
-		offset += uint32(c.size())
 	}
 
 	// Write header.
@@ -1291,34 +1294,12 @@ func (c *container) countRuns() (r int) {
 // Optimize converts the container to the type which will take up the least
 // amount of space.
 func (c *container) Optimize() {
-	if c.isArray() {
-		runs := c.arrayCountRuns()
-		if runs < c.n/2 {
-			c.arrayToRun()
-		} else if c.n > ArrayMaxSize {
-			c.arrayToBitmap()
-		}
-	} else if c.isBitmap() {
-		runs := c.bitmapCountRuns()
-		if runs < RunMaxSize {
-			c.bitmapToRun()
-		} else if c.n <= ArrayMaxSize {
-			c.bitmapToArray()
-		}
-	} else if c.isRun() {
-		if len(c.runs) > RunMaxSize {
-			if c.n <= ArrayMaxSize {
-				c.runToArray()
-			} else {
-				c.runToBitmap()
-			}
-		}
+	if c.n == 0 {
+		return
 	}
-}
-
-func (c *container) OptimizeNew() {
 	runs := c.countRuns()
 
+	// First decide which type to use.
 	var newType string
 	if runs <= RunMaxSize && runs <= c.n/2 {
 		newType = "runs"
@@ -1328,6 +1309,7 @@ func (c *container) OptimizeNew() {
 		newType = "bitmap"
 	}
 
+	// Then convert accordingly.
 	if c.isArray() {
 		if newType == "bitmap" {
 			c.arrayToBitmap()
