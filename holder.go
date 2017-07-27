@@ -33,7 +33,7 @@ const (
 	DefaultCacheFlushInterval = 1 * time.Minute
 
 	// FileLimit is the maximum open file limit (ulimit -n) to automatically set.
-	FileLimit uint64 = 262144 // (512^2)
+	FileLimit = 262144 // (512^2)
 )
 
 // Holder represents a container for indexes.
