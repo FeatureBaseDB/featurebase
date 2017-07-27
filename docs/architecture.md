@@ -14,7 +14,7 @@ Bitmaps are persisted to disk using a file format very similar to the [Roaring B
 * RLE runs are serialized as [start, last], not [start, length].
 * After the container storage section is an operation log, of unspecified length.
 
-![roaring file format diagram](/img/docs/pilosa-roaring-storage-diagram.svg)
+![roaring file format diagram](/img/docs/pilosa-roaring-storage-diagram.png)
 
 All values are little-endian. The first two bytes of the cookie is 12346 when the file contains no RLE containers, or 12347 when it does. In the no-RLE case, the runFlagBitset is absent. Otherwise the format is identical in both cases. Container types are determined by their cardinality - a container with 4096 or more values is a bitmap, a container with fewer is an array or RLE container. A high bit in runFlagBitset indicates an RLE container.
 
