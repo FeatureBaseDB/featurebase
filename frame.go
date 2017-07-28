@@ -213,6 +213,11 @@ func (f *Frame) CacheSize() uint32 {
 // Options returns all options for this frame.
 func (f *Frame) Options() FrameOptions {
 	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.options()
+}
+
+func (f *Frame) options() FrameOptions {
 	opt := FrameOptions{
 		RowLabel:       f.rowLabel,
 		InverseEnabled: f.inverseEnabled,
@@ -221,7 +226,6 @@ func (f *Frame) Options() FrameOptions {
 		CacheSize:      f.cacheSize,
 		TimeQuantum:    f.timeQuantum,
 	}
-	f.mu.Unlock()
 	return opt
 }
 
@@ -329,14 +333,8 @@ func (f *Frame) loadMeta() error {
 // saveMeta writes meta data for the frame.
 func (f *Frame) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.FrameMeta{
-		RowLabel:       f.rowLabel,
-		InverseEnabled: f.inverseEnabled,
-		RangeEnabled:   f.rangeEnabled,
-		CacheType:      f.cacheType,
-		CacheSize:      f.cacheSize,
-		TimeQuantum:    string(f.timeQuantum),
-	})
+	fo := f.options()
+	buf, err := proto.Marshal(fo.Encode())
 	if err != nil {
 		return err
 	}
@@ -914,12 +912,13 @@ func (p importBitSet) Less(i, j int) bool { return p.rowIDs[i] < p.rowIDs[j] }
 const (
 	CacheTypeLRU    = "lru"
 	CacheTypeRanked = "ranked"
+	CacheTypeNone   = "none"
 )
 
 // IsValidCacheType returns true if v is a valid cache type.
 func IsValidCacheType(v string) bool {
 	switch v {
-	case CacheTypeLRU, CacheTypeRanked:
+	case CacheTypeLRU, CacheTypeRanked, CacheTypeNone:
 		return true
 	default:
 		return false

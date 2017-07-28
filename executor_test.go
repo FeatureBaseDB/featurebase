@@ -234,6 +234,103 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 	}
 }
 
+// Ensure a SetFieldValue() query can be executed.
+func TestExecutor_Execute_SetFieldValue(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		hldr := test.MustOpenHolder()
+		defer hldr.Close()
+
+		// Create frames.
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 50},
+				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 1, Max: 2},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		} else if _, err := index.CreateFrameIfNotExists("xxx", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set field values.
+		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(columnID=10, frame=f, field0=25, field1=2)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(columnID=100, frame=f, field0=10)`), nil, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		f := hldr.Frame("i", "f")
+		if value, exists, err := f.FieldValue(10, "field0"); err != nil {
+			t.Fatal(err)
+		} else if !exists {
+			t.Fatal("expected value to exist")
+		} else if value != 25 {
+			t.Fatal("unexpected value: %v", value)
+		}
+
+		if value, exists, err := f.FieldValue(10, "field1"); err != nil {
+			t.Fatal(err)
+		} else if !exists {
+			t.Fatal("expected value to exist")
+		} else if value != 2 {
+			t.Fatal("unexpected value: %v", value)
+		}
+
+		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+			t.Fatal(err)
+		} else if !exists {
+			t.Fatal("expected value to exist")
+		} else if value != 10 {
+			t.Fatal("unexpected value: %v", value)
+		}
+	})
+
+	t.Run("", func(t *testing.T) {
+		hldr := test.MustOpenHolder()
+		defer hldr.Close()
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 100},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run("ErrFrameRequired", func(t *testing.T) {
+			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(columnID=10, field0=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() frame required` {
+				t.Fatalf("unexpected error: %s", err)
+			}
+		})
+
+		t.Run("ErrColumnFieldRequired", func(t *testing.T) {
+			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name=10, frame=f, field0=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'columnID' required` {
+				t.Fatalf("unexpected error: %s", err)
+			}
+		})
+
+		t.Run("ErrColumnFieldValue", func(t *testing.T) {
+			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name="bad_column", frame=f, field0=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'columnID' required` {
+				t.Fatalf("unexpected error: %s", err)
+			}
+		})
+
+		t.Run("ErrInvalidFieldValueType", func(t *testing.T) {
+			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(columnID=10, frame=f, field0="hello")`), nil, nil); err == nil || err.Error() != `invalid field value type` {
+				t.Fatalf("unexpected error: %s", err)
+			}
+		})
+	})
+}
+
 // Ensure a SetRowAttrs() query can be executed.
 func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 	hldr := test.MustOpenHolder()

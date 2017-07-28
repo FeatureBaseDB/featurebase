@@ -177,6 +177,7 @@ func TestFragment_SetFieldValue(t *testing.T) {
 			// Limit bit depth & maximum values.
 			bitDepth = (bitDepth % 62) + 1
 			columnN = (columnN % 99) + 1
+
 			for i := range values {
 				values[i] = values[i] % (1 << bitDepth)
 			}
@@ -411,6 +412,24 @@ func TestFragment_TopN_IDs(t *testing.T) {
 		{ID: 101, Count: 4},
 		{ID: 100, Count: 3},
 	}) {
+		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
+	}
+}
+
+// Ensure a fragment return none if CacheTypeNone is set
+func TestFragment_TopN_NopCache(t *testing.T) {
+	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeNone)
+	defer f.Close()
+
+	// Set bits on various rows.
+	f.MustSetBits(100, 1, 2, 3)
+	f.MustSetBits(101, 4, 5, 6, 7)
+	f.MustSetBits(102, 8, 9, 10, 11, 12)
+
+	// Retrieve top rows.
+	if pairs, err := f.Top(pilosa.TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{}) {
 		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
 	}
 }

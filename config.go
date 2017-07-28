@@ -14,9 +14,7 @@
 
 package pilosa
 
-import (
-	"time"
-)
+import "time"
 
 // Cluster types.
 const (
@@ -51,8 +49,9 @@ var ClusterTypes = []string{ClusterNone, ClusterStatic, ClusterHTTP, ClusterGoss
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir string `toml:"data-dir"`
-	Bind    string `toml:"bind"`
+	DataDir      string `toml:"data-dir"`
+	Bind         string `toml:"bind"`
+	InternalPort string `toml:"internal-port"`
 
 	Cluster struct {
 		ReplicaN      int      `toml:"replicas"`
@@ -60,7 +59,6 @@ type Config struct {
 		Hosts         []string `toml:"hosts"`
 		InternalHosts []string `toml:"internal-hosts"`
 		PollInterval  Duration `toml:"poll-interval"`
-		InternalPort  string   `toml:"internal-port"`
 		GossipSeed    string   `toml:"gossip-seed"`
 		LongQueryTime Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
@@ -114,18 +112,23 @@ func (c *Config) Validate() error {
 		if c.Cluster.ReplicaN > len(c.Cluster.Hosts) {
 			return ErrConfigReplicaNInvalid
 		}
-		if len(c.Cluster.Hosts) != len(c.Cluster.InternalHosts) {
-			return ErrConfigHostsMismatch
-		}
 		if !foundItem(c.Cluster.Hosts, c.Bind) {
 			return ErrConfigHostsMissing
 		}
-		if !ContainsSubstring(c.Cluster.InternalPort, c.Cluster.InternalHosts) {
+	}
+	if c.Cluster.Type == ClusterHTTP {
+		if len(c.Cluster.Hosts) != len(c.Cluster.InternalHosts) {
+			return ErrConfigHostsMismatch
+		}
+		// TODO: this seems like an odd check; it's just ensuring that InternalPort
+		// matches any one substring from any of the InternalHosts.
+		// I suggest we either remove this completely or make it actually check
+		// the port portion of the address for this node. (note that this only applies
+		// to the http broadcaster, so if we simply use gossip for all implementations
+		// we can remove this).
+		if !ContainsSubstring(c.InternalPort, c.Cluster.InternalHosts) {
 			return ErrConfigBroadcastPort
 		}
-	}
-	if c.Cluster.Type == ClusterGossip && !StringInSlice(c.Cluster.GossipSeed, c.Cluster.InternalHosts) {
-		return ErrConfigGossipSeed
 	}
 
 	return nil

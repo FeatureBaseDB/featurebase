@@ -3,7 +3,6 @@ package test
 import (
 	"io/ioutil"
 	"os"
-	"testing"
 
 	"github.com/pilosa/pilosa"
 )
@@ -76,16 +75,4 @@ func (i *Index) CreateFrameIfNotExists(name string, opt pilosa.FrameOptions) (*F
 		return nil, err
 	}
 	return &Frame{Frame: f}, nil
-}
-
-// Ensure index can delete a frame.
-func TestIndex_InvalidName(t *testing.T) {
-	path, err := ioutil.TempDir("", "pilosa-index-")
-	if err != nil {
-		panic(err)
-	}
-	index, err := pilosa.NewIndex(path, "ABC")
-	if index != nil {
-		t.Fatalf("unexpected index name %s", index)
-	}
 }

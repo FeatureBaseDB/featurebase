@@ -37,6 +37,16 @@ var (
 	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
 	ErrColumnRowLabelEqual  = errors.New("column and row labels cannot be equal")
 
+	ErrInputDefinitionExists         = errors.New("input-definition already exists")
+	ErrInputDefinitionHasPrimaryKey  = errors.New("input-definition must contain one PrimaryKey")
+	ErrInputDefinitionDupePrimaryKey = errors.New("input-definition can only contain one PrimaryKey")
+	ErrInputDefinitionColumnLabel    = errors.New("PrimaryKey field name does not match columnLabel")
+	ErrInputDefinitionNameRequired   = errors.New("input-definition name required")
+	ErrInputDefinitionAttrsRequired  = errors.New("frames and fields are required")
+	ErrInputDefinitionValueMap       = errors.New("valueMap required for map")
+	ErrInputDefinitionActionRequired = errors.New("field definitions require an action")
+	ErrInputDefinitionNotFound       = errors.New("input-definition not found")
+
 	ErrFieldNotFound          = errors.New("field not found")
 	ErrFieldNameRequired      = errors.New("field name required")
 	ErrInvalidFieldType       = errors.New("invalid field type")
@@ -44,6 +54,7 @@ var (
 	ErrInverseRangeNotAllowed = errors.New("inverse range not allowed")
 	ErrRangeCacheNotAllowed   = errors.New("range cache not allowed")
 	ErrFrameFieldsNotAllowed  = errors.New("frame fields not allowed")
+	ErrInvalidFieldValueType  = errors.New("invalid field value type")
 	ErrFieldValueTooLow       = errors.New("field value too low")
 	ErrFieldValueTooHigh      = errors.New("field value too high")
 
@@ -64,7 +75,6 @@ var (
 	ErrConfigBroadcastPort      = errors.New("internal-port not found in internal-hosts")
 	ErrConfigHostsMismatch      = errors.New("hosts and internal-hosts length mismatch")
 	ErrConfigReplicaNInvalid    = errors.New("replica number must be <= hosts")
-	ErrConfigGossipSeed         = errors.New("invalid gossip seed")
 )
 
 // Regular expression to validate index and frame names.
@@ -142,7 +152,7 @@ func ValidateLabel(label string) error {
 	return nil
 }
 
-// StringInSlice checks is substring a is in the slice
+// StringInSlice checks for substring a in the slice.
 func StringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
@@ -152,7 +162,7 @@ func StringInSlice(a string, list []string) bool {
 	return false
 }
 
-// ContainsSubstring checks is substring a is contained in the slice
+// ContainsSubstring checks to see if substring a is contained in any string in the slice.
 func ContainsSubstring(a string, list []string) bool {
 	for _, b := range list {
 		if strings.Contains(b, a) {

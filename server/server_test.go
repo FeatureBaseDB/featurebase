@@ -532,6 +532,29 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	if maxSlices1["i"] != 2 {
 		t.Fatalf("unexpected maxSlice on node1: %d", maxSlices1["i"])
 	}
+
+	// Write input definition to the first node.
+	if _, err := m0.CreateDefinition("i", "test", `{
+			"frames": [{"name": "event-time",
+						"options": {
+							"cacheType": "ranked",
+							"timeQuantum": "YMD"
+						}}],
+			"fields": [{"name": "columnID",
+						"primaryKey": true
+						}]}
+		`); err != nil {
+		t.Fatal(err)
+	}
+
+	frame0 := m0.Server.Holder.Frame("i", "event-time")
+	if frame0 == nil {
+		t.Fatal("frame not found")
+	}
+	frame1 := m1.Server.Holder.Frame("i", "event-time")
+	if frame1 == nil {
+		t.Fatal("frame not found")
+	}
 }
 
 // availablePorts returns a slice of ports that can be used for testing.
@@ -647,6 +670,15 @@ func (m *Main) Client() *pilosa.Client {
 // Query executes a query against the program through the HTTP API.
 func (m *Main) Query(index, rawQuery, query string) (string, error) {
 	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+	return resp.Body, nil
+}
+
+// CreateDefinition.
+func (m *Main) CreateDefinition(index, def, query string) (string, error) {
+	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/input-definition/%s", index, def), query)
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
