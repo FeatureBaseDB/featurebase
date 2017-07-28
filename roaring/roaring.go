@@ -510,15 +510,6 @@ func (b *Bitmap) Optimize() {
 		c.Optimize()
 	}
 }
-func checkA(a []uint16) bool {
-	for _, x := range a {
-		if x > 65535 {
-			return true
-		}
-	}
-	return false
-
-}
 
 // WriteTo writes b to w.
 func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
@@ -533,7 +524,6 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	// Build header before writing individual container blocks.
 	// Metadata for each container is 4+8+4 = sizeof(key) + sizeof(container_type)+sizeof(cardinality) + sizeof(file offset)
 	buf := make([]byte, headerSize+(containerCount*(4+4+4+4)))
-
 	// Cookie header section.
 	binary.LittleEndian.PutUint32(buf[0:], thisCookie)
 	binary.LittleEndian.PutUint32(buf[4:], uint32(containerCount))
@@ -550,7 +540,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		//assert(c.count() == c.n, "cannot write container count, mismatch: count=%d, n=%d", count, c.n)
 		if c.n > 0 {
 			binary.LittleEndian.PutUint64(buf[headerSize+(i-empty)*12:], uint64(key))
-			buf[headerSize+(i-empty)*12+8] = c.container_type
+			binary.LittleEndian.PutUint16(buf[headerSize+(i-empty)*12+8:], uint16(c.container_type))
 			binary.LittleEndian.PutUint16(buf[headerSize+(i-empty)*12+8+2:], uint16(c.n-1))
 		} else {
 			empty++
@@ -565,10 +555,10 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 
 		if c.n > 0 {
 			binary.LittleEndian.PutUint32(buf[headerSize+(containerCount*12)+((i-empty)*4):], uint32(offset))
+			offset += uint32(c.size())
 		} else {
 			empty++
 		}
-		offset += uint32(c.size())
 	}
 
 	// Write header.
@@ -624,7 +614,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
 		b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
 		b.containers[i] = &container{
-			container_type: buf[8],
+			container_type: byte(binary.LittleEndian.Uint16(buf[8:10])),
 			n:              int(binary.LittleEndian.Uint16(buf[10:12]) + 1),
 			mapped:         true,
 		}
@@ -634,7 +624,6 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	// Read container offsets and attach data.
 	for i, buf := 0, data[opsOffset:]; i < int(keyN); i, buf = i+1, buf[4:] {
 		offset := binary.LittleEndian.Uint32(buf[0:4])
-
 		// Verify the offset is within the bounds of the input data.
 		if int(offset) >= len(data) {
 			return fmt.Errorf("offset out of bounds: off=%d, len=%d", offset, len(data))
@@ -1226,25 +1215,57 @@ func (c *container) arrayCountRuns() (r int) {
 	return r
 }
 
+func (c *container) countRuns() (r int) {
+	if c.isArray() {
+		return c.arrayCountRuns()
+	} else if c.isBitmap() {
+		return c.bitmapCountRuns()
+	} else if c.isRun() {
+		return len(c.runs)
+	}
+
+	// sure hope this never happens
+	return 0
+}
+
 // Optimize converts the container to the type which will take up the least
 // amount of space.
 func (c *container) Optimize() {
+	if c.n == 0 {
+		return
+	}
+	runs := c.countRuns()
+
+	// First decide which type to use.
+	var newType byte
+	if runs <= RunMaxSize && runs <= c.n/2 {
+		newType = ContainerRun
+	} else if c.n < ArrayMaxSize {
+		newType = ContainerArray
+	} else {
+		newType = ContainerBitmap
+	}
+
+	// Then convert accordingly.
 	if c.isArray() {
-		runs := c.arrayCountRuns()
-		if runs < c.n/2 {
+		if newType == ContainerBitmap {
+			c.arrayToBitmap()
+		} else if newType == ContainerRun {
 			c.arrayToRun()
 		}
 	} else if c.isBitmap() {
-		runs := c.bitmapCountRuns()
-		if runs < RunMaxSize {
+		if newType == ContainerArray {
+			c.bitmapToArray()
+		} else if newType == ContainerRun {
 			c.bitmapToRun()
 		}
 	} else if c.isRun() {
-		if len(c.runs) > RunMaxSize {
+		if newType == ContainerBitmap {
 			c.runToBitmap()
+		} else if newType == ContainerArray {
+			c.runToArray()
 		}
 	}
-
 }
 
 func (c *container) arrayContains(v uint16) bool {
@@ -1438,7 +1459,8 @@ func (c *container) runToBitmap() {
 
 	for _, r := range c.runs {
 		// TODO this can be ~64x faster for long runs by setting maxBitmap instead of single bits
-		for v := r.start; v <= r.last; v++ {
+		//note v must be int or will overflow
+		for v := int(r.start); v <= int(r.last); v++ {
 			c.bitmap[int(v)/64] |= (uint64(1) << uint(v%64))
 		}
 	}
@@ -1541,8 +1563,8 @@ func (c *container) runToArray() {
 	}
 
 	for _, r := range c.runs {
-		for v := r.start; v <= r.last; v++ {
-			c.array = append(c.array, v)
+		for v := int(r.start); v <= int(r.last); v++ {
+			c.array = append(c.array, uint16(v))
 		}
 	}
 	c.runs = nil
@@ -2127,7 +2149,7 @@ func unionArrayArray(a, b *container) *container {
 // unionArrayRun optimistically assumes that the result will be a run container,
 // and converts to a bitmap or array container afterwards if necessary.
 func unionArrayRun(a, b *container) *container {
-	if b.n == 65535 {
+	if b.n == maxContainerVal {
 		return b.clone()
 	}
 	output := &container{}
@@ -2169,7 +2191,7 @@ func (c *container) runAppendInterval(v interval16) int {
 		return int(v.last - v.start + 1)
 	} else {
 		last := c.runs[len(c.runs)-1]
-		if last.last == 65535 { //protect against overflow
+		if last.last == maxContainerVal { //protect against overflow
 			return 0
 		}
 		if last.last+1 >= v.start && v.last > last.last {
@@ -2184,10 +2206,10 @@ func (c *container) runAppendInterval(v interval16) int {
 }
 
 func unionRunRun(a, b *container) *container {
-	if a.n == 65535 {
+	if a.n == maxContainerVal {
 		return a.clone()
 	}
-	if b.n == 65535 {
+	if b.n == maxContainerVal {
 		return b.clone()
 	}
 	na, nb := len(a.runs), len(b.runs)
@@ -2217,7 +2239,7 @@ func unionRunRun(a, b *container) *container {
 }
 
 func unionBitmapRun(a, b *container) *container {
-	if b.n == 65535 {
+	if b.n == maxContainerVal {
 		return b.clone()
 	}
 	output := a.clone()
