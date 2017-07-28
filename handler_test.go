@@ -1011,6 +1011,8 @@ func HandlerImport(t *testing.T, view string) {
 	}
 	if bits[0] != 100 {
 		t.Fatal("Target bit should be 100")
+    }
+}
 
 // Ensure handler can create a input definition.
 func TestHandler_CreateInputDefinition(t *testing.T) {
