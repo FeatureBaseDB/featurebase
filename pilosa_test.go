@@ -1,6 +1,7 @@
 package pilosa_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -76,5 +77,35 @@ func TestContainsSubstring(t *testing.T) {
 	substr = "4000"
 	if pilosa.ContainsSubstring(substr, list) {
 		t.Fatalf("Expected substring %s in not contained in %v", substr, list)
+	}
+}
+
+// Test custom UnmarshalJSON for postIndexRequest object
+func TestNormalizeAddress(t *testing.T) {
+	tests := []struct {
+		addr     string
+		expected string
+	}{
+		{addr: "", expected: "127.0.0.1:10101"},
+		{addr: ":", expected: "127.0.0.1:10101"},
+		{addr: "localhost", expected: "127.0.0.1:10101"},
+		{addr: "localhost:", expected: "127.0.0.1:10101"},
+		{addr: "127.0.0.1:10101", expected: "127.0.0.1:10101"},
+		{addr: "127.0.0.1:", expected: "127.0.0.1:10101"},
+		{addr: ":10101", expected: "127.0.0.1:10101"},
+		{addr: ":55555", expected: "127.0.0.1:55555"},
+		{addr: "1.2.3.4", expected: "1.2.3.4:10101"},
+		{addr: "1.2.3.4:", expected: "1.2.3.4:10101"},
+		{addr: "1.2.3.4:55555", expected: "1.2.3.4:55555"},
+		// TODO: add some tests that expect errors
+	}
+	for _, test := range tests {
+		actual, err := pilosa.NormalizeAddress(test.addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(actual, test.expected) {
+			t.Errorf("expected: %v, but got: %v", test.expected, actual)
+		}
 	}
 }

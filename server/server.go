@@ -115,7 +115,11 @@ func (m *Command) SetupServer() error {
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 
 	for _, hostport := range m.Config.Cluster.Hosts {
-		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
+		addr, err := pilosa.NormalizeAddress(hostport)
+		if err != nil {
+			return err
+		}
+		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: addr})
 	}
 	m.Server.Cluster = cluster
 
@@ -139,7 +143,7 @@ func (m *Command) SetupServer() error {
 	// Copy configuration flags.
 	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
 
-	m.Server.Host, err = normalizeHost(m.Config.Bind)
+	m.Server.Host, err = pilosa.NormalizeAddress(m.Config.Bind)
 	if err != nil {
 		return err
 	}
@@ -156,12 +160,21 @@ func (m *Command) SetupServer() error {
 		if err != nil {
 			return err
 		}
-		gossipSeed := pilosa.DefaultHost
+		gossipSeed := ":" + pilosa.DefaultGossipPort
 		if m.Config.GossipSeed != "" {
 			gossipSeed = m.Config.GossipSeed
 		}
+		gossipSeed, err = pilosa.NormalizeAddress(gossipSeed)
+		if err != nil {
+			return err
+		}
+
 		// get the host portion of addr to use for binding
-		gossipHost, _, err := net.SplitHostPort(m.Config.Bind)
+		bind, err := pilosa.NormalizeAddress(m.Config.Bind)
+		if err != nil {
+			return err
+		}
+		gossipHost, _, err := net.SplitHostPort(bind)
 		if err != nil {
 			gossipHost = m.Config.Bind
 		}
@@ -199,19 +212,6 @@ func GetLogWriter(path string, defaultWriter io.Writer) (io.Writer, error) {
 		}
 		return logFile, nil
 	}
-}
-
-func normalizeHost(host string) (string, error) {
-	if !strings.Contains(host, ":") {
-		host = host + ":"
-	} else if strings.Contains(host, "://") {
-		if strings.HasPrefix(host, "http://") {
-			host = host[7:]
-		} else {
-			return "", fmt.Errorf("invalid scheme or host: '%s'. use the format [http://]<host>:<port>", host)
-		}
-	}
-	return host, nil
 }
 
 // Close shuts down the server.

@@ -439,6 +439,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	if err != nil {
 		gossipHost = m0.Server.Host
 	}
+	// TODO travis: remove these checks
 	if gossipHost == "localhost" {
 		gossipHost = "127.0.0.1"
 	}
