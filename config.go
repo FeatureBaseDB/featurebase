@@ -105,12 +105,13 @@ func (c *Config) Validate() error {
 
 	if c.Cluster.Type == ClusterGossip {
 		if len(c.Cluster.Hosts) > 0 {
-			// TODO travis: revisit this logic as it doesn't work well with defaults.
-			/*
-				if !foundItem(c.Cluster.Hosts, c.Bind) {
-					return ErrConfigHostsMissing
-				}
-			*/
+			bindWithDefaults, err := AddressWithDefaults(c.Bind)
+			if err != nil {
+				return err
+			}
+			if !foundItem(c.Cluster.Hosts, bindWithDefaults) {
+				return ErrConfigHostsMissing
+			}
 		}
 	}
 

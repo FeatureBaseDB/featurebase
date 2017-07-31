@@ -136,7 +136,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	g.config.memberlistConfig.Name = name
 	g.config.memberlistConfig.BindAddr = gossipHost
 	g.config.memberlistConfig.BindPort = gossipPort
-	g.config.memberlistConfig.AdvertiseAddr = gossipHost
+	g.config.memberlistConfig.AdvertiseAddr = pilosa.HostToIP(gossipHost)
 	g.config.memberlistConfig.AdvertisePort = gossipPort
 	g.config.memberlistConfig.Delegate = g
 

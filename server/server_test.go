@@ -439,10 +439,6 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	if err != nil {
 		gossipHost = m0.Server.Host
 	}
-	// TODO travis: remove these checks
-	if gossipHost == "localhost" {
-		gossipHost = "127.0.0.1"
-	}
 	gossipPort, err := strconv.Atoi(freePorts[0])
 	if err != nil {
 		t.Fatal(err)
@@ -470,9 +466,6 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	gossipHost, _, err = net.SplitHostPort(m1.Server.Host)
 	if err != nil {
 		gossipHost = m1.Server.Host
-	}
-	if gossipHost == "localhost" {
-		gossipHost = "127.0.0.1"
 	}
 	gossipPort, err = strconv.Atoi(freePorts[1])
 	if err != nil {
@@ -586,6 +579,9 @@ func TestMain_SendReceiveMessage(t *testing.T) {
         `); err != nil {
 		t.Fatal(err)
 	}
+
+	// We have to wait for the broadcast message to be sent before checking state.
+	time.Sleep(1 * time.Second)
 
 	frame0 := m0.Server.Holder.Frame("i", "event-time")
 	if frame0 == nil {

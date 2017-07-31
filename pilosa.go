@@ -172,9 +172,45 @@ func ContainsSubstring(a string, list []string) bool {
 
 // NormalizeAddress converts addr into a valid "IP4:port" string.
 func NormalizeAddress(addr string) (string, error) {
-	var host, port string
-	var err error
+	host, port, err := hostPortWithDefaults(addr)
+	if err != nil {
+		return "", err
+	}
+	return net.JoinHostPort(HostToIP(host), port), nil
+}
 
+// HostToIP converts host to an IP4 address based on net.LookupIP().
+func HostToIP(host string) string {
+	// if host is not an IP addr, check net.LookupIP()
+	if net.ParseIP(host) == nil {
+		hosts, err := net.LookupIP(host)
+		if err != nil {
+			return host
+		}
+		for _, h := range hosts {
+			// this restricts pilosa to IP4
+			if h.To4() != nil {
+				return h.String()
+			}
+		}
+	}
+	return host
+}
+
+// AddressWithDefaults converts addr into a valid address,
+// using defaults when necessary.
+func AddressWithDefaults(addr string) (string, error) {
+	host, port, err := hostPortWithDefaults(addr)
+	if err != nil {
+		return "", err
+	}
+
+	return net.JoinHostPort(host, port), nil
+}
+
+// hostPortWithDefaults returns the host and port portions of addr
+// using defaults when necessary.
+func hostPortWithDefaults(addr string) (host, port string, err error) {
 	// check for a colon between host and port
 	if !hasPort(addr) {
 		addr += ":"
@@ -183,7 +219,7 @@ func NormalizeAddress(addr string) (string, error) {
 	// break into host, port
 	host, port, err = net.SplitHostPort(addr)
 	if err != nil {
-		return "", err
+		return host, port, err
 	}
 
 	// use defaults when not provided
@@ -194,23 +230,7 @@ func NormalizeAddress(addr string) (string, error) {
 		port = DefaultPort
 	}
 
-	// if host is not an IP addr, check net.LookupIP()
-	ip := net.ParseIP(host)
-	if ip == nil {
-		hosts, err := net.LookupIP(host)
-		if err != nil {
-			return "", err
-		}
-		for _, h := range hosts {
-			// this restricts pilosa to IP4
-			if h.To4() != nil {
-				host = h.String()
-				break
-			}
-		}
-	}
-
-	return net.JoinHostPort(host, port), nil
+	return host, port, nil
 }
 
 func hasPort(s string) bool {

@@ -115,11 +115,7 @@ func (m *Command) SetupServer() error {
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 
 	for _, hostport := range m.Config.Cluster.Hosts {
-		addr, err := pilosa.NormalizeAddress(hostport)
-		if err != nil {
-			return err
-		}
-		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: addr})
+		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
 	}
 	m.Server.Cluster = cluster
 
@@ -143,10 +139,11 @@ func (m *Command) SetupServer() error {
 	// Copy configuration flags.
 	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
 
-	m.Server.Host, err = pilosa.NormalizeAddress(m.Config.Bind)
+	bindWithDefaults, err := pilosa.AddressWithDefaults(m.Config.Bind)
 	if err != nil {
 		return err
 	}
+	m.Server.Host = bindWithDefaults
 
 	// Set internal port (string).
 	gossipPortStr := pilosa.DefaultGossipPort
@@ -160,25 +157,17 @@ func (m *Command) SetupServer() error {
 		if err != nil {
 			return err
 		}
-		gossipSeed := ":" + pilosa.DefaultGossipPort
+		gossipSeed := pilosa.DefaultHost + ":" + pilosa.DefaultGossipPort
 		if m.Config.GossipSeed != "" {
 			gossipSeed = m.Config.GossipSeed
 		}
-		gossipSeed, err = pilosa.NormalizeAddress(gossipSeed)
-		if err != nil {
-			return err
-		}
 
 		// get the host portion of addr to use for binding
-		bind, err := pilosa.NormalizeAddress(m.Config.Bind)
-		if err != nil {
-			return err
-		}
-		gossipHost, _, err := net.SplitHostPort(bind)
+		gossipHost, _, err := net.SplitHostPort(bindWithDefaults)
 		if err != nil {
 			gossipHost = m.Config.Bind
 		}
-		gossipNodeSet := gossip.NewGossipNodeSet(m.Config.Bind, gossipHost, gossipPort, gossipSeed, m.Server)
+		gossipNodeSet := gossip.NewGossipNodeSet(bindWithDefaults, gossipHost, gossipPort, gossipSeed, m.Server)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet
