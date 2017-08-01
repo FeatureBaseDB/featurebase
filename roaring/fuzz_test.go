@@ -26,13 +26,13 @@ func randomBitmap(Ncontainers int) *Bitmap {
 		switch rand.Intn(3) {
 		case 0:
 			// Could be array or RLE.
-			b.containers[n] = randomArray(rand.Intn(ArrayMaxSize))
+			b.containers[n] = randomArray(rand.Intn(ArrayMaxSize-1) + 1)
 		case 1:
 			// Guaranteed bitmap.
 			b.containers[n] = randomBitset(rand.Intn(65536-ArrayMaxSize) + ArrayMaxSize)
 		case 2:
 			// Probably RLE.
-			b.containers[n] = randomRunset(rand.Intn(RunMaxSize))
+			b.containers[n] = randomRunset(rand.Intn(RunMaxSize-1) + 1)
 		}
 
 	}
