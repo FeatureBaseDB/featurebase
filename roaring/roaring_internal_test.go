@@ -1022,6 +1022,15 @@ func TestRunToBitmap(t *testing.T) {
 	}
 }
 
+func getFullBitmap() []uint64 {
+	x := make([]uint64, 1024, 1024)
+	for i := range x {
+		x[i] = uint64(0xFFFFFFFFFFFFFFFF)
+	}
+	return x
+
+}
+
 func TestBitmapToRun(t *testing.T) {
 	a := &container{}
 	tests := []struct {
@@ -1072,6 +1081,10 @@ func TestBitmapToRun(t *testing.T) {
 			bitmap: make([]uint64, bitmapN),
 			exp:    []interval16{{start: 65408, last: 65535}},
 		},
+		{
+			bitmap: getFullBitmap(),
+			exp:    []interval16{{start: 0, last: 65535}},
+		},
 	}
 	tests[8].bitmap[1022] = 0xFFFFFFFFFFFFFFFF
 	tests[8].bitmap[1023] = 0xFFFFFFFFFFFFFFFF
@@ -1084,9 +1097,14 @@ func TestBitmapToRun(t *testing.T) {
 			n += int(popcount(v))
 		}
 		a.n = n
+		x := a.bitmap
 		a.bitmapToRun()
 		if !reflect.DeepEqual(a.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.runs)
+		}
+		a.runToBitmap()
+		if !reflect.DeepEqual(a.bitmap, x) {
+			t.Fatalf("test #%v expected %v, but got %v", i, a.bitmap, x)
 		}
 	}
 }

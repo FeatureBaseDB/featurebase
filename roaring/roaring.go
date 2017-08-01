@@ -948,7 +948,7 @@ type interval16 struct {
 
 // runlen returns the count of integers in the interval.
 func (iv interval16) runlen() int {
-	return int(1 + iv.last - iv.start)
+	return 1 + int(iv.last-iv.start)
 }
 
 // newContainer returns a new instance of container.
@@ -958,17 +958,17 @@ func newContainer() *container {
 
 // isArray returns true if the container is an array container.
 func (c *container) isArray() bool {
-	return c.bitmap == nil && c.runs == nil
+	return c.container_type == ContainerArray
 }
 
 // isBitmap returns true if the container is a bitmap container.
 func (c *container) isBitmap() bool {
-	return c.array == nil && c.runs == nil
+	return c.container_type == ContainerBitmap
 }
 
 // isRun returns true if the container is a run-length-encoded container.
 func (c *container) isRun() bool {
-	return c.array == nil && c.bitmap == nil
+	return c.container_type == ContainerRun
 }
 
 // unmap creates copies of the containers data in the heap.
@@ -1507,6 +1507,7 @@ func (c *container) bitmapToRun() {
 		}
 
 		if current == maxBitmap {
+
 			// bitmap[1023] == maxBitmap
 			c.runs = append(c.runs, interval16{start, maxContainerVal})
 			break

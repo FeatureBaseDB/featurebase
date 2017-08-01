@@ -87,6 +87,24 @@ func TestCheckRun(t *testing.T) {
 		t.Fatalf("%v\n", err)
 	}
 }
+func TestCheckFullRun(t *testing.T) {
+	b := roaring.NewBitmap()
+	for i := uint64(0); i < 2097152; i++ {
+		if i%16384 == 0 {
+			b.Optimize() // convert to runs
+		}
+		b.Add(i)
+	}
+	err := b.Check()
+	if err != nil {
+		t.Fatalf("Before %v\n", err)
+	}
+	b.Optimize() // convert to runs
+	err = b.Check()
+	if err != nil {
+		t.Fatalf("After %v\n", err)
+	}
+}
 
 // Ensure that we can transition between runs and arrays when materializing the bitmap.
 func TestContainerTransitions(t *testing.T) {
