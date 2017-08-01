@@ -15,8 +15,8 @@
 package roaring_test
 
 import (
-	"fmt"
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
@@ -107,6 +107,19 @@ func TestBitmap_Intersection(t *testing.T) {
 		t.Fatalf("unexpected n: %d", n)
 	}
 
+}
+
+func TestBitmap_IntersectInverse(t *testing.T) {
+	bm0 := roaring.NewBitmap(200, 2683177, 3000000)
+	bm1 := roaring.NewBitmap()
+	for i := uint64(628); i < 2683301; i++ {
+		bm1.Add(i)
+	}
+
+	result := bm0.IntersectInverse(bm1)
+	if n := result.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d (%#v)", n, result.Slice())
+	}
 }
 
 func TestBitmap_Difference(t *testing.T) {

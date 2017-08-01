@@ -97,6 +97,23 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	return &Bitmap{segments: segments}
 }
 
+// IntersectInverse returns the itersection of b and the inverse other.
+func (b *Bitmap) IntersectInverse(other *Bitmap) *Bitmap {
+	var segments []BitmapSegment
+
+	itr := newMergeSegmentIterator(b.segments, other.segments)
+	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
+		if s0 == nil {
+			continue
+		} else if s1 == nil {
+			segments = append(segments, *s0)
+		}
+		segments = append(segments, *s0.IntersectInverse(s1))
+	}
+
+	return &Bitmap{segments: segments}
+}
+
 // Union returns the bitwise union of b and other.
 func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 	var segments []BitmapSegment
@@ -312,6 +329,17 @@ func (s *BitmapSegment) IntersectionCount(other *BitmapSegment) uint64 {
 // Intersect returns the itersection of s and other.
 func (s *BitmapSegment) Intersect(other *BitmapSegment) *BitmapSegment {
 	data := s.data.Intersect(&other.data)
+
+	return &BitmapSegment{
+		data:  *data,
+		slice: s.slice,
+		n:     data.Count(),
+	}
+}
+
+// IntersectInverse returns the itersection of s and the inverse of other.
+func (s *BitmapSegment) IntersectInverse(other *BitmapSegment) *BitmapSegment {
+	data := s.data.IntersectInverse(&other.data)
 
 	return &BitmapSegment{
 		data:  *data,

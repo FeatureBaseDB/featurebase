@@ -300,6 +300,19 @@ func (v *View) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (chan
 	return frag.SetFieldValue(columnID, bitDepth, value)
 }
 
+// FieldRange returns bitmaps with a field value encoding matching the predicate.
+func (v *View) FieldRange(op string, bitDepth uint, predicate uint64) (*Bitmap, error) {
+	bm := NewBitmap()
+	for _, frag := range v.Fragments() {
+		other, err := frag.FieldRange(op, bitDepth, predicate)
+		if err != nil {
+			return nil, err
+		}
+		bm = bm.Union(other)
+	}
+	return bm, nil
+}
+
 // IsInverseView returns true if the view is used for storing an inverted representation.
 func IsInverseView(name string) bool {
 	return strings.HasPrefix(name, ViewInverse)

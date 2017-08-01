@@ -101,6 +101,7 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 
 	return changed, nil
 }
+
 func (b *Bitmap) add(v uint64) bool {
 	hb := highbits(v)
 	i := search64(b.keys, hb)
@@ -368,6 +369,33 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 			output.containers = append(output.containers, container)
 		}
 
+	}
+
+	return output
+}
+
+// IntersectInverse returns the intersection of b and the inverse of other.
+func (b *Bitmap) IntersectInverse(other *Bitmap) *Bitmap {
+	output := &Bitmap{}
+
+	ki, ci := b.keys, b.containers
+	kj, cj := other.keys, other.containers
+	for {
+		ni, nj := len(ki), len(kj)
+		if ni == 0 && nj == 0 { // eof(i,j)
+			break
+		} else if ni == 0 || (nj != 0 && ki[0] > kj[0]) { // eof(i) or i > j
+			kj, cj = kj[1:], cj[1:]
+		} else if nj == 0 || (ki[0] < kj[0]) { // eof(j) or i < j
+			output.keys = append(output.keys, ki[0])
+			output.containers = append(output.containers, ci[0].clone())
+			ki, ci = ki[1:], ci[1:]
+		} else { // i == j
+			output.keys = append(output.keys, ki[0])
+			output.containers = append(output.containers, intersectInverse(ci[0], cj[0]))
+			ki, ci = ki[1:], ci[1:]
+			kj, cj = kj[1:], cj[1:]
+		}
 	}
 
 	return output
@@ -1424,6 +1452,106 @@ func intersectBitmapBitmap(a, b *container) *container {
 			itr0.unread()
 		} else {
 			output.add(va)
+		}
+	}
+	return output
+}
+
+func intersectInverse(a, b *container) *container {
+	if a.isArray() {
+		if b.isArray() {
+			return intersectInverseArrayArray(a, b)
+		} else {
+			return intersectInverseArrayBitmap(a, b)
+		}
+	} else {
+		if b.isArray() {
+			return intersectInverseBitmapArray(a, b)
+		} else {
+			return intersectInverseBitmapBitmap(a, b)
+		}
+	}
+}
+
+func intersectInverseArrayArray(a, b *container) *container {
+	output := &container{}
+	aa, ab := a.array, b.array
+	for len(aa) > 0 && len(ab) > 0 {
+		if aa[0] < ab[0] {
+			output.array = append(output.array, aa[0])
+			aa = aa[1:]
+		} else if aa[0] > ab[0] {
+			ab = ab[1:]
+		} else {
+			aa, ab = aa[1:], ab[1:]
+		}
+	}
+	output.array = append(output.array, aa...)
+	output.n = len(output.array)
+	return output
+}
+
+func intersectInverseArrayBitmap(a, b *container) *container {
+	output := &container{}
+	aa := a.array
+	itr := newBufIterator(newBitmapIterator(b.bitmap))
+	for len(aa) > 0 {
+		vb, eof := itr.next()
+
+		if aa[0] < vb || eof {
+			output.add(aa[0])
+			aa = aa[1:]
+			itr.unread()
+		} else if aa[0] > vb {
+			// nop
+		} else {
+			aa = aa[1:]
+		}
+	}
+	return output
+}
+
+func intersectInverseBitmapArray(a, b *container) *container {
+	output := &container{}
+	itr := newBufIterator(newBitmapIterator(a.bitmap))
+	ab := b.array
+	for {
+		va, eof := itr.next()
+		if eof {
+			break
+		}
+
+		if len(ab) == 0 {
+			output.add(ab[0])
+			ab = ab[1:]
+		} else if va < ab[0] {
+			output.add(va)
+		} else if va > ab[0] {
+			// nop
+		} else {
+			ab = ab[1:]
+		}
+	}
+	return output
+}
+
+func intersectInverseBitmapBitmap(a, b *container) *container {
+	output := &container{}
+	itr0 := newBufIterator(newBitmapIterator(a.bitmap))
+	itr1 := newBufIterator(newBitmapIterator(b.bitmap))
+	for {
+		va, eof := itr0.next()
+		if eof {
+			break
+		}
+
+		vb, eof := itr1.next()
+
+		if va < vb || eof {
+			output.add(va)
+			itr1.unread()
+		} else if va > vb {
+			itr0.unread()
 		}
 	}
 	return output
