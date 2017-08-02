@@ -615,7 +615,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
 		b.containers[i] = &container{
 			container_type: byte(binary.LittleEndian.Uint16(buf[8:10])),
-			n:              int(binary.LittleEndian.Uint16(buf[10:12]) + 1),
+			n:              int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
 			mapped:         true,
 		}
 	}
@@ -1236,7 +1236,6 @@ func (c *container) Optimize() {
 	}
 	runs := c.countRuns()
 
-	// First decide which type to use.
 	var newType byte
 	if runs <= RunMaxSize && runs <= c.n/2 {
 		newType = ContainerRun
@@ -1259,21 +1258,11 @@ func (c *container) Optimize() {
 		} else if newType == ContainerRun {
 			c.bitmapToRun()
 		}
-		e := c.check()
-		if e != nil {
-			fmt.Printf("Bitmap %v\n", c)
-			panic(e)
-		}
 	} else if c.isRun() {
 		if newType == ContainerBitmap {
 			c.runToBitmap()
 		} else if newType == ContainerArray {
 			c.runToArray()
-		}
-		e := c.check()
-		if e != nil {
-			fmt.Printf("Run %v\n", c)
-			panic(e)
 		}
 	}
 }

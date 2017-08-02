@@ -1634,6 +1634,35 @@ func TestWriteReadBitmap(t *testing.T) {
 	}
 }
 
+func TestWriteReadFullBitmap(t *testing.T) {
+	// create bitmap containing > 4096 bits
+	cb := &container{bitmap: make([]uint64, bitmapN), n: 65536, container_type: ContainerBitmap}
+	for i := 0; i < bitmapN; i++ {
+		cb.bitmap[i] = 0xffffffffffffffff
+	}
+	bb := &Bitmap{keys: []uint64{0}, containers: []*container{cb}}
+	bb2 := &Bitmap{}
+	var buf bytes.Buffer
+	_, err := bb.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+	err = bb2.UnmarshalBinary(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error unmarshaling: %v", err)
+	}
+	if !reflect.DeepEqual(bb2.containers[0].bitmap, cb.bitmap) {
+		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.containers[0].bitmap)
+	}
+
+	if bb2.containers[0].n != cb.n {
+		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.containers[0].n)
+	}
+	if bb2.containers[0].count() != cb.count() {
+		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.containers[0].n)
+	}
+}
+
 func TestWriteReadRun(t *testing.T) {
 	cr := &container{runs: []interval16{{start: 3, last: 13}, {start: 100, last: 109}}, n: 21, container_type: ContainerRun}
 	br := &Bitmap{keys: []uint64{0}, containers: []*container{cr}}
