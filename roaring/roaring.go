@@ -2007,7 +2007,7 @@ func intersectBitmapRun(a, b *container) *container {
 			i := vb.start >> 6 // index into a
 			vastart := i << 6
 			valast := vastart + 63
-			for valast >= vb.start && vastart <= vb.last {
+			for valast >= vb.start && vastart <= vb.last && i < bitmapN {
 				if vastart >= vb.start && valast <= vb.last { // a within b
 					output.bitmap[i] = a.bitmap[i]
 					output.n += int(popcnt(a.bitmap[i]))
