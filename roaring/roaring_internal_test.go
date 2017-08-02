@@ -271,7 +271,7 @@ func TestIntersectionCountArrayBitmap2(t *testing.T) {
 }
 
 func TestRunRemove(t *testing.T) {
-	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
+	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun}
 	tests := []struct {
 		op     uint16
 		exp    []interval16
@@ -305,7 +305,7 @@ func TestRunRemove(t *testing.T) {
 }
 
 func TestRunMax(t *testing.T) {
-	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
+	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun}
 	max := c.max()
 	if max != 16 {
 		t.Fatalf("max for %v should be 16", c.runs)
@@ -621,8 +621,11 @@ func TestUnionMixed(t *testing.T) {
 	c := &container{}
 
 	a.runs = []interval16{{start: 5, last: 10}}
+	a.container_type = ContainerRun
 	a.n = 6
+
 	b.array = []uint16{1, 4, 5, 7, 10, 11, 12}
+	b.container_type = ContainerArray
 	b.n = 7
 	res := union(a, b)
 	if !reflect.DeepEqual(res.array, []uint16{1, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
@@ -639,6 +642,8 @@ func TestUnionMixed(t *testing.T) {
 	}
 	c.bitmap = []uint64{0x3}
 	c.n = 2
+	c.container_type = ContainerBitmap
+
 	res = union(c, a)
 	if !reflect.DeepEqual(res.bitmap, []uint64{2019}) {
 		t.Fatalf("test #4 expected %v, but got %v", []uint64{2019}, res.bitmap)
@@ -647,6 +652,7 @@ func TestUnionMixed(t *testing.T) {
 	if !reflect.DeepEqual(res.bitmap, []uint64{2019}) {
 		t.Fatalf("test #5 expected %v, but got %v", []uint64{2019}, res.bitmap)
 	}
+
 	res = union(b, c)
 	if !reflect.DeepEqual(res.array, []uint16{0, 1, 4, 5, 7, 10, 11, 12}) {
 		t.Fatalf("test #6 expected %v, but got %v", []uint16{0, 1, 4, 5, 7, 10, 11, 12}, res.array)
@@ -664,8 +670,10 @@ func TestIntersectMixed(t *testing.T) {
 
 	a.runs = []interval16{{start: 5, last: 10}}
 	a.n = 6
+	a.container_type = ContainerRun
 	b.array = []uint16{1, 4, 5, 7, 10, 11, 12}
 	b.n = 7
+	b.container_type = ContainerArray
 	res := intersect(a, b)
 	if !reflect.DeepEqual(res.array, []uint16{5, 7, 10}) {
 		t.Fatalf("test #1 expected %v, but got %v", []uint16{5, 7, 10}, res.array)
@@ -681,6 +689,8 @@ func TestIntersectMixed(t *testing.T) {
 	}
 	c.bitmap = []uint64{0x60}
 	c.n = 2
+	c.container_type = ContainerBitmap
+
 	res = intersect(c, a)
 	if !reflect.DeepEqual(res.array, []uint16{5, 6}) {
 		t.Fatalf("test #4 expected %v, but got %v", []uint16{6}, res.array)
@@ -709,12 +719,15 @@ func TestDifferenceMixed(t *testing.T) {
 
 	a.runs = []interval16{{start: 5, last: 10}}
 	a.n = a.runCountRange(0, 100)
+	a.container_type = ContainerRun
 
 	b.array = []uint16{0, 2, 4, 6, 8, 10, 12}
 	b.n = len(b.array)
+	b.container_type = ContainerArray
 
 	d.array = []uint16{1, 3, 5, 7, 9, 11, 12}
 	d.n = len(d.array)
+	d.container_type = ContainerArray
 
 	res := difference(a, b)
 
@@ -734,6 +747,7 @@ func TestDifferenceMixed(t *testing.T) {
 
 	c.bitmap = []uint64{0x64}
 	c.n = c.countRange(0, 100)
+	c.container_type = ContainerBitmap
 	res = difference(c, a)
 	if !reflect.DeepEqual(res.bitmap, []uint64{0x4}) {
 		t.Fatalf("test #4 expected %v, but got %v", []uint16{4}, res.bitmap)
@@ -1522,8 +1536,8 @@ func TestDifferenceBitmapArray(t *testing.T) {
 	}
 }
 func TestDifferenceBitmapBitmap(t *testing.T) {
-	a := &container{bitmap: make([]uint64, bitmapN)}
-	b := &container{bitmap: make([]uint64, bitmapN)}
+	a := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+	b := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
 	tests := []struct {
 		abitmap []uint64
 		bbitmap []uint64
@@ -1543,6 +1557,7 @@ func TestDifferenceBitmapBitmap(t *testing.T) {
 	for i, test := range tests {
 		a.bitmap = test.abitmap
 		b.bitmap = test.bbitmap
+
 		ret := differenceBitmapBitmap(a, b)
 		if !reflect.DeepEqual(ret.array, test.exp) {
 			t.Fatalf("test #%v expected \n%X, but got \n%X", i, test.exp, ret.array)
@@ -1551,8 +1566,8 @@ func TestDifferenceBitmapBitmap(t *testing.T) {
 }
 
 func TestDifferenceRunRun(t *testing.T) {
-	a := &container{}
-	b := &container{}
+	a := &container{container_type: ContainerRun}
+	b := &container{container_type: ContainerRun}
 	tests := []struct {
 		aruns []interval16
 		bruns []interval16
@@ -1620,7 +1635,7 @@ func TestWriteReadBitmap(t *testing.T) {
 }
 
 func TestWriteReadRun(t *testing.T) {
-	cr := &container{runs: []interval16{{start: 3, last: 13}, {start: 100, last: 109}}, n: 20, container_type: ContainerRun}
+	cr := &container{runs: []interval16{{start: 3, last: 13}, {start: 100, last: 109}}, n: 21, container_type: ContainerRun}
 	br := &Bitmap{keys: []uint64{0}, containers: []*container{cr}}
 	br2 := &Bitmap{}
 	var buf bytes.Buffer
@@ -1653,13 +1668,14 @@ func TestXorArrayRun(t *testing.T) {
 		t.Fatalf("test #2 expected %v, but got %v", exp, ret.array)
 	}
 	c := &container{array: []uint16{1, 5, 10, 11, 12, 13, 14}, container_type: ContainerArray}
-	exp = []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}
+	//	exp = []int16{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}
+	expr := []interval16{{start: 1, last: 4}, {start: 6, last: 9}, {start: 11, last: 11}, {start: 14, last: 16}}
 	ret = xor(b, c)
-	if !reflect.DeepEqual(ret.array, exp) {
-		t.Fatalf("test #3 expected %v, but got %v", exp, ret.array)
+	if !reflect.DeepEqual(ret.runs, expr) {
+		t.Fatalf("test #3 expected %v, but got %v", exp, ret.runs)
 	}
 	ret = xor(c, b)
-	if !reflect.DeepEqual(ret.array, exp) {
+	if !reflect.DeepEqual(ret.runs, expr) {
 		t.Fatalf("test #4 expected %v, but got %v", exp, ret.array)
 	}
 }
