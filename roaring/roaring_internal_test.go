@@ -225,12 +225,39 @@ func TestBitmapCountRange(t *testing.T) {
 	}
 }
 
+func TestIntersectionCountArrayBitmap3(t *testing.T) {
+	a, b := &container{}, &container{}
+	a.container_type = ContainerBitmap
+	a.bitmap = getFullBitmap()
+	a.n = maxContainerVal + 1
+
+	b.container_type = ContainerBitmap
+	b.bitmap = getFullBitmap()
+	b.n = maxContainerVal + 1
+	res := intersectBitmapBitmap(a, b)
+	if res.n != res.count() || res.n != maxContainerVal+1 {
+		t.Fatalf("test #1 intersectCountBitmapBitmap fail orig: %v new: %v exp: %v", res.n, res.count(), maxContainerVal+1)
+	}
+
+	a.bitmapToRun()
+	res = intersectBitmapRun(b, a)
+	if res.n != res.count() || res.n != maxContainerVal+1 {
+		t.Fatalf("test #2 intersectCountBitmapRun fail orig: %v new: %v exp: %v", res.n, res.count(), maxContainerVal+1)
+	}
+	b.bitmapToRun()
+	res = intersectRunRun(a, b)
+	n := intersectionCountRunRun(a, b)
+	if res.n != res.count() || res.n != maxContainerVal+1 || res.n != int(n) {
+		t.Fatalf("test #3 intersectCountRunRun fail orig: %v new: %v exp: %v", res.n, res.count(), maxContainerVal+1)
+	}
+}
+
 func TestIntersectionCountArrayBitmap2(t *testing.T) {
 	a, b := &container{}, &container{}
 	tests := []struct {
 		array  []uint16
 		bitmap []uint64
-		exp    uint64
+		exp    int
 	}{
 		{
 			array:  []uint16{0},
@@ -261,8 +288,10 @@ func TestIntersectionCountArrayBitmap2(t *testing.T) {
 
 	for i, test := range tests {
 		a.array = test.array
+		a.container_type = ContainerArray
 		b.bitmap = test.bitmap
-		ret1 := intersectionCountArrayBitmapOld(a, b)
+		b.container_type = ContainerBitmap
+		ret1 := int(intersectionCountArrayBitmapOld(a, b))
 		ret2 := intersectionCountArrayBitmap(a, b)
 		if ret1 != ret2 || ret2 != test.exp {
 			t.Fatalf("test #%v intersectCountArrayBitmap fail orig: %v new: %v exp: %v", i, ret1, ret2, test.exp)
@@ -352,7 +381,7 @@ func TestIntersectionCountRunRun(t *testing.T) {
 	tests := []struct {
 		aruns []interval16
 		bruns []interval16
-		exp   uint64
+		exp   int
 	}{
 		{
 			aruns: []interval16{},

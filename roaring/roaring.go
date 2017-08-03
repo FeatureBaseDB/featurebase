@@ -336,7 +336,7 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 		} else if ki > kj {
 			j++
 		} else {
-			n += intersectionCount(b.containers[i], other.containers[j])
+			n += uint64(intersectionCount(b.containers[i], other.containers[j]))
 			i, j = i+1, j+1
 		}
 	}
@@ -1717,7 +1717,7 @@ type ContainerInfo struct {
 	Pointer unsafe.Pointer // offset within the mmap
 }
 
-func intersectionCount(a, b *container) uint64 {
+func intersectionCount(a, b *container) int {
 	if a.isArray() {
 		if b.isArray() {
 			return intersectionCountArrayArray(a, b)
@@ -1745,7 +1745,7 @@ func intersectionCount(a, b *container) uint64 {
 	}
 }
 
-func intersectionCountArrayArray(a, b *container) (n uint64) {
+func intersectionCountArrayArray(a, b *container) (n int) {
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.array[i], b.array[j]
@@ -1761,7 +1761,7 @@ func intersectionCountArrayArray(a, b *container) (n uint64) {
 	return n
 }
 
-func intersectionCountArrayRun(a, b *container) (n uint64) {
+func intersectionCountArrayRun(a, b *container) (n int) {
 	na, nb := len(a.array), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.array[i], b.runs[j]
@@ -1777,8 +1777,7 @@ func intersectionCountArrayRun(a, b *container) (n uint64) {
 	return n
 }
 
-func intersectionCountRunRun(a, b *container) uint64 {
-	var n uint16
+func intersectionCountRunRun(a, b *container) (n int) {
 	na, nb := len(a.runs), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.runs[i], b.runs[j]
@@ -1790,28 +1789,28 @@ func intersectionCountRunRun(a, b *container) uint64 {
 			j++
 		} else if va.last > vb.last && va.start >= vb.start {
 			// |--vb-|-|-va--|
-			n += 1 + vb.last - va.start
+			n += 1 + int(vb.last-va.start)
 			j++
 		} else if va.last > vb.last && va.start < vb.start {
 			// |--va|--vb--|--|
-			n += 1 + vb.last - vb.start
+			n += 1 + int(vb.last-vb.start)
 			j++
 		} else if va.last <= vb.last && va.start >= vb.start {
 			// |--vb|--va--|--|
-			n += 1 + va.last - va.start
+			n += 1 + int(va.last-va.start)
 			i++
 		} else if va.last <= vb.last && va.start < vb.start {
 			// |--va-|-|-vb--|
-			n += 1 + va.last - vb.start
+			n += 1 + int(va.last-vb.start)
 			i++
 		}
 	}
-	return uint64(n)
+	return
 }
 
-func intersectionCountBitmapRun(a, b *container) (n uint64) {
+func intersectionCountBitmapRun(a, b *container) (n int) {
 	for _, iv := range b.runs {
-		n += uint64(a.bitmapCountRange(int(iv.start), int(iv.last)+1))
+		n += a.bitmapCountRange(int(iv.start), int(iv.last)+1)
 	}
 	return n
 }
@@ -1858,20 +1857,20 @@ func intersectionCountArrayBitmapOld(a, b *container) (n uint64) {
 	return n
 }
 
-func intersectionCountArrayBitmap(a, b *container) (n uint64) {
+func intersectionCountArrayBitmap(a, b *container) (n int) {
 	for _, val := range a.array {
 		i := val >> 6
 		if i >= uint16(len(b.bitmap)) {
 			break
 		}
 		off := val % 64
-		n += (b.bitmap[i] & (1 << off)) >> off
+		n += int((b.bitmap[i] & (1 << off)) >> off)
 	}
 	return n
 }
 
-func intersectionCountBitmapBitmap(a, b *container) (n uint64) {
-	return popcntAndSlice(a.bitmap, b.bitmap)
+func intersectionCountBitmapBitmap(a, b *container) (n int) {
+	return int(popcntAndSlice(a.bitmap, b.bitmap))
 }
 
 func intersect(a, b *container) *container {
