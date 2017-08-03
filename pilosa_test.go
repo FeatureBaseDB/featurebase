@@ -2,6 +2,7 @@ package pilosa_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -80,11 +81,11 @@ func TestContainsSubstring(t *testing.T) {
 	}
 }
 
-// Test custom UnmarshalJSON for postIndexRequest object
 func TestNormalizeAddress(t *testing.T) {
 	tests := []struct {
 		addr     string
 		expected string
+		err      string
 	}{
 		{addr: "", expected: "127.0.0.1:10101"},
 		{addr: ":", expected: "127.0.0.1:10101"},
@@ -97,15 +98,54 @@ func TestNormalizeAddress(t *testing.T) {
 		{addr: "1.2.3.4", expected: "1.2.3.4:10101"},
 		{addr: "1.2.3.4:", expected: "1.2.3.4:10101"},
 		{addr: "1.2.3.4:55555", expected: "1.2.3.4:55555"},
-		// TODO: add some tests that expect errors
+		// The following tests check the error conditions.
+		{addr: "nolookup", expected: "nolookup:10101"},
+		{addr: "[invalid][addr]:port", err: "missing port in address"},
 	}
 	for _, test := range tests {
 		actual, err := pilosa.NormalizeAddress(test.addr)
 		if err != nil {
-			t.Fatal(err)
+			if !strings.Contains(err.Error(), test.err) {
+				t.Errorf("expected error: %v, but got: %v", test.err, err)
+			}
+		} else {
+			if !reflect.DeepEqual(actual, test.expected) {
+				t.Errorf("expected: %v, but got: %v", test.expected, actual)
+			}
 		}
-		if !reflect.DeepEqual(actual, test.expected) {
-			t.Errorf("expected: %v, but got: %v", test.expected, actual)
+	}
+}
+
+func TestAddressWithDefaults(t *testing.T) {
+	tests := []struct {
+		addr     string
+		expected string
+		err      string
+	}{
+		{addr: "", expected: "localhost:10101"},
+		{addr: ":", expected: "localhost:10101"},
+		{addr: "localhost", expected: "localhost:10101"},
+		{addr: "localhost:", expected: "localhost:10101"},
+		{addr: "127.0.0.1:10101", expected: "127.0.0.1:10101"},
+		{addr: "127.0.0.1:", expected: "127.0.0.1:10101"},
+		{addr: ":10101", expected: "localhost:10101"},
+		{addr: ":55555", expected: "localhost:55555"},
+		{addr: "1.2.3.4", expected: "1.2.3.4:10101"},
+		{addr: "1.2.3.4:", expected: "1.2.3.4:10101"},
+		{addr: "1.2.3.4:55555", expected: "1.2.3.4:55555"},
+		// The following tests check the error conditions.
+		{addr: "[invalid][addr]:port", err: "missing port in address"},
+	}
+	for _, test := range tests {
+		actual, err := pilosa.AddressWithDefaults(test.addr)
+		if err != nil {
+			if !strings.Contains(err.Error(), test.err) {
+				t.Errorf("expected error: %v, but got: %v", test.err, err)
+			}
+		} else {
+			if !reflect.DeepEqual(actual, test.expected) {
+				t.Errorf("expected: %v, but got: %v", test.expected, actual)
+			}
 		}
 	}
 }
