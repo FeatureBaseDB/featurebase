@@ -498,7 +498,7 @@ func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exi
 	for i := uint(0); i < bitDepth; i++ {
 		if v, err := f.bit(uint64(i), columnID); err != nil {
 			return 0, false, err
-		} else if !v {
+		} else if v {
 			value |= (1 << i)
 		}
 	}
@@ -513,13 +513,13 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
-			if c, err := f.clearBit(uint64(i), columnID); err != nil {
+			if c, err := f.setBit(uint64(i), columnID); err != nil {
 				return changed, err
 			} else if c {
 				changed = true
 			}
 		} else {
-			if c, err := f.setBit(uint64(i), columnID); err != nil {
+			if c, err := f.clearBit(uint64(i), columnID); err != nil {
 				return changed, err
 			} else if c {
 				changed = true
@@ -535,6 +535,115 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 	}
 
 	return changed, nil
+}
+
+func (f *Fragment) FieldRange(op string, bitDepth uint, predicate uint64) (*Bitmap, error) {
+	switch op {
+	case RangeOpEQ:
+		return f.fieldRangeEQ(bitDepth, predicate)
+	case RangeOpLT, RangeOpLTE:
+		return f.fieldRangeLT(bitDepth, predicate, op == RangeOpLTE)
+	case RangeOpGT, RangeOpGTE:
+		return f.fieldRangeGT(bitDepth, predicate, op == RangeOpGTE)
+	default:
+		return nil, ErrInvalidRangeOperation
+	}
+}
+
+func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Bitmap, error) {
+	// Start with set of columns with values set.
+	b := f.Row(uint64(bitDepth))
+
+	// Filter any bits that don't match the current bit value.
+	for i := int(bitDepth - 1); i >= 0; i-- {
+		row := f.Row(uint64(i))
+		bit := (predicate >> uint(i)) & 1
+
+		if bit == 1 {
+			b = b.Intersect(row)
+		} else {
+			b = b.Difference(row)
+		}
+	}
+
+	return b, nil
+}
+
+func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Bitmap, error) {
+	keep := NewBitmap()
+
+	// Start with set of columns with values set.
+	b := f.Row(uint64(bitDepth))
+
+	// Filter any bits that don't match the current bit value.
+	leadingZeros := true
+	for i := int(bitDepth - 1); i >= 0; i-- {
+		row := f.Row(uint64(i))
+		bit := (predicate >> uint(i)) & 1
+
+		// Remove any columns with higher bits set.
+		if leadingZeros {
+			if bit == 0 {
+				b = b.Difference(row)
+				continue
+			} else {
+				leadingZeros = false
+			}
+		}
+
+		// Handle last bit differently.
+		// If bit is zero then return only already kept columns.
+		// If bit is one then remove any one columns.
+		if i == 0 && !allowEquality {
+			if bit == 0 {
+				return keep, nil
+			}
+			return b.Difference(row.Difference(keep)), nil
+		}
+
+		// If bit is zero then remove all set columns not in excluded bitmap.
+		if bit == 0 {
+			b = b.Difference(row.Difference(keep))
+			continue
+		}
+
+		// If bit is set then add columns for set bits to exclude.
+		keep = keep.Union(b.Difference(row))
+	}
+
+	return b, nil
+}
+
+func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Bitmap, error) {
+	b := f.Row(uint64(bitDepth))
+	keep := NewBitmap()
+
+	// Filter any bits that don't match the current bit value.
+	for i := int(bitDepth - 1); i >= 0; i-- {
+		row := f.Row(uint64(i))
+		bit := (predicate >> uint(i)) & 1
+
+		// Handle last bit differently.
+		// If bit is one then return only already kept columns.
+		// If bit is zero then remove any unset columns.
+		if i == 0 && !allowEquality {
+			if bit == 1 {
+				return keep, nil
+			}
+			return b.Difference(b.Difference(row).Difference(keep)), nil
+		}
+
+		// If bit is set then remove all unset columns not already kept.
+		if bit == 1 {
+			b = b.Difference(b.Difference(row).Difference(keep))
+			continue
+		}
+
+		// If bit is unset then add columns with set bit to keep.
+		keep = keep.Union(b.Intersect(row))
+	}
+
+	return b, nil
 }
 
 // pos translates the row ID and column ID into a position in the storage bitmap.

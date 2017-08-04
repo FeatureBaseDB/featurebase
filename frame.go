@@ -40,6 +40,15 @@ const (
 	DefaultCacheSize = 50000
 )
 
+// List of operators for field range queries.
+const (
+	RangeOpEQ  = "eq"
+	RangeOpLT  = "lt"
+	RangeOpLTE = "lte"
+	RangeOpGT  = "gt"
+	RangeOpGTE = "gte"
+)
+
 // Frame represents a container for views.
 type Frame struct {
 	mu          sync.Mutex
@@ -628,6 +637,27 @@ func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (change
 	baseValue := uint64(value - field.Min)
 
 	return view.SetFieldValue(columnID, field.BitDepth(), baseValue)
+}
+
+func (f *Frame) FieldRange(name, op string, predicate int64) (*Bitmap, error) {
+	// Retrieve and validate field.
+	field := f.Field(name)
+	if field == nil {
+		return nil, ErrFieldNotFound
+	} else if predicate < field.Min || predicate > field.Max {
+		return nil, nil
+	}
+
+	// Retrieve field's view.
+	view := f.View(ViewFieldPrefix + name)
+	if view == nil {
+		return nil, nil
+	}
+
+	// Adjust predicate to range.
+	baseValue := uint64(predicate - field.Min)
+
+	return view.FieldRange(op, field.BitDepth(), baseValue)
 }
 
 // Import bulk imports data.

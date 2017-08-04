@@ -101,6 +101,7 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 
 	return changed, nil
 }
+
 func (b *Bitmap) add(v uint64) bool {
 	hb := highbits(v)
 	i := search64(b.keys, hb)

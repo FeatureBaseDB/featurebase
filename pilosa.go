@@ -57,6 +57,7 @@ var (
 	ErrInvalidFieldValueType  = errors.New("invalid field value type")
 	ErrFieldValueTooLow       = errors.New("field value too low")
 	ErrFieldValueTooHigh      = errors.New("field value too high")
+	ErrInvalidRangeOperation  = errors.New("invalid range operation")
 
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")

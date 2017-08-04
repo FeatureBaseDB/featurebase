@@ -15,8 +15,8 @@
 package roaring_test
 
 import (
-	"fmt"
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
