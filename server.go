@@ -162,7 +162,12 @@ func (s *Server) Open() error {
 	s.Holder.Broadcaster = s.Broadcaster
 
 	// Serve HTTP.
-	go func() { http.Serve(ln, s.Handler) }()
+	go func() {
+		err := http.Serve(ln, s.Handler)
+		if err != nil {
+			s.logger().Printf("HTTP handler terminated with error: %s\n", err)
+		}
+	}()
 
 	// Start background monitoring.
 	s.wg.Add(3)

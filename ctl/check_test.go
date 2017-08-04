@@ -17,7 +17,6 @@ package ctl
 import (
 	"bytes"
 	"encoding/hex"
-	"golang.org/x/net/context"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -25,6 +24,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"context"
 )
 
 func TestCheckCommand_RunCacheFile(t *testing.T) {
@@ -84,7 +85,7 @@ func TestCheckCommand_Run(t *testing.T) {
 	var buf bytes.Buffer
 	io.Copy(&buf, r)
 
-	if err.Error() != "invalid roaring file" {
+	if !strings.HasPrefix(err.Error(), "invalid roaring file") {
 		t.Fatalf("expect error: invalid roaring file, actual: '%s'", err)
 	}
 	//	Todo: need correct roaring file for happy path
