@@ -522,8 +522,8 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	headerSize := headerBaseSize
 
 	// Build header before writing individual container blocks.
-	// Metadata for each container is 4+8+4 = sizeof(key) + sizeof(container_type)+sizeof(cardinality) + sizeof(file offset)
-	buf := make([]byte, headerSize+(containerCount*(4+4+4+4)))
+	// Metadata for each container is 8+2+2+4 = sizeof(key) + sizeof(container_type)+sizeof(cardinality) + sizeof(file offset)
+	buf := make([]byte, headerSize+(containerCount*(8+2+2+4)))
 	// Cookie header section.
 	binary.LittleEndian.PutUint32(buf[0:], thisCookie)
 	binary.LittleEndian.PutUint32(buf[4:], uint32(containerCount))
