@@ -562,7 +562,7 @@ func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Bitmap, error
 		if bit == 1 {
 			b = b.Intersect(row)
 		} else {
-			b = b.IntersectInverse(row)
+			b = b.Difference(row)
 		}
 	}
 
@@ -608,7 +608,7 @@ func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality b
 		}
 
 		// If bit is set then add columns for set bits to exclude.
-		keep = keep.Union(b.IntersectInverse(row))
+		keep = keep.Union(b.Difference(row))
 	}
 
 	return b, nil
@@ -630,12 +630,12 @@ func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality b
 			if bit == 1 {
 				return keep, nil
 			}
-			return b.Difference(b.IntersectInverse(row).Difference(keep)), nil
+			return b.Difference(b.Difference(row).Difference(keep)), nil
 		}
 
 		// If bit is set then remove all unset columns not already kept.
 		if bit == 1 {
-			b = b.Difference(b.IntersectInverse(row).Difference(keep))
+			b = b.Difference(b.Difference(row).Difference(keep))
 			continue
 		}
 
