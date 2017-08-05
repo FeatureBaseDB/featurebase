@@ -272,8 +272,7 @@ func (f *Fragment) openCache() error {
 	// Read in all rows by ID.
 	// This will cause them to be added to the cache.
 	for _, id := range pb.IDs {
-		n := f.storage.CountRange(id*SliceWidth, (id+1)*SliceWidth)
-		//n := f.row(id, true, true).Count()
+		n := f.row(id, false, false).Count()
 		f.cache.BulkAdd(id, n)
 	}
 	f.cache.Invalidate()
