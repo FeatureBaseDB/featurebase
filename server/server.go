@@ -32,7 +32,6 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
-	"github.com/pilosa/pilosa/httpbroadcast"
 	"github.com/pilosa/pilosa/statsd"
 )
 
@@ -105,7 +104,7 @@ func (m *Command) Run(args ...string) (err error) {
 	return nil
 }
 
-// SetupServer use the cluster configuration to setup this server
+// SetupServer uses the cluster configuration to set up this server.
 func (m *Command) SetupServer() error {
 	err := m.Config.Validate()
 	if err != nil {
@@ -117,12 +116,6 @@ func (m *Command) SetupServer() error {
 
 	for _, hostport := range m.Config.Cluster.Hosts {
 		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
-	}
-	// TODO: if InternalHosts is not provided then pilosa.Node.InternalHost is empty.
-	// This will throw an error when trying to Broadcast messages over HTTP.
-	// One option may be to fall back to using host from hostport + config.InternalPort.
-	for i, internalhostport := range m.Config.Cluster.InternalHosts {
-		cluster.Nodes[i].InternalHost = internalhostport
 	}
 	m.Server.Cluster = cluster
 
@@ -146,41 +139,35 @@ func (m *Command) SetupServer() error {
 	// Copy configuration flags.
 	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
 
-	m.Server.Host, err = normalizeHost(m.Config.Bind)
+	bindWithDefaults, err := pilosa.AddressWithDefaults(m.Config.Bind)
 	if err != nil {
 		return err
 	}
+	m.Server.Host = bindWithDefaults
 
 	// Set internal port (string).
-	internalPortStr := pilosa.DefaultInternalPort
-	if m.Config.InternalPort != "" {
-		internalPortStr = m.Config.InternalPort
+	gossipPortStr := pilosa.DefaultGossipPort
+	if m.Config.GossipPort != "" {
+		gossipPortStr = m.Config.GossipPort
 	}
 
 	switch m.Config.Cluster.Type {
-	case pilosa.ClusterHTTP:
-		m.Server.Broadcaster = httpbroadcast.NewHTTPBroadcaster(m.Server, internalPortStr)
-		m.Server.BroadcastReceiver = httpbroadcast.NewHTTPBroadcastReceiver(internalPortStr, m.Server.LogOutput)
-		m.Server.Cluster.NodeSet = httpbroadcast.NewHTTPNodeSet()
-		err := m.Server.Cluster.NodeSet.(*httpbroadcast.HTTPNodeSet).Join(m.Server.Cluster.Nodes)
-		if err != nil {
-			return err
-		}
 	case pilosa.ClusterGossip:
-		gossipPort, err := strconv.Atoi(internalPortStr)
+		gossipPort, err := strconv.Atoi(gossipPortStr)
 		if err != nil {
 			return err
 		}
-		gossipSeed := pilosa.DefaultHost
-		if m.Config.Cluster.GossipSeed != "" {
-			gossipSeed = m.Config.Cluster.GossipSeed
+		gossipSeed := pilosa.DefaultHost + ":" + pilosa.DefaultGossipPort
+		if m.Config.GossipSeed != "" {
+			gossipSeed = m.Config.GossipSeed
 		}
+
 		// get the host portion of addr to use for binding
-		gossipHost, _, err := net.SplitHostPort(m.Config.Bind)
+		gossipHost, _, err := net.SplitHostPort(bindWithDefaults)
 		if err != nil {
 			gossipHost = m.Config.Bind
 		}
-		gossipNodeSet := gossip.NewGossipNodeSet(m.Config.Bind, gossipHost, gossipPort, gossipSeed, m.Server)
+		gossipNodeSet := gossip.NewGossipNodeSet(bindWithDefaults, gossipHost, gossipPort, gossipSeed, m.Server)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet
@@ -214,19 +201,6 @@ func GetLogWriter(path string, defaultWriter io.Writer) (io.Writer, error) {
 		}
 		return logFile, nil
 	}
-}
-
-func normalizeHost(host string) (string, error) {
-	if !strings.Contains(host, ":") {
-		host = host + ":"
-	} else if strings.Contains(host, "://") {
-		if strings.HasPrefix(host, "http://") {
-			host = host[7:]
-		} else {
-			return "", fmt.Errorf("invalid scheme or host: '%s'. use the format [http://]<host>:<port>", host)
-		}
-	}
-	return host, nil
 }
 
 // Close shuts down the server.

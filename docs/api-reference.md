@@ -352,7 +352,7 @@ curl -XGET localhost:10101/hosts
 
 Response:
 ```
-[{"host":":10101","internalHost":""}]
+[{"host":":10101"}]
 ```
 
 ### Get version
