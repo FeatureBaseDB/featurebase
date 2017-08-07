@@ -99,7 +99,6 @@ func TestNormalizeAddress(t *testing.T) {
 		{addr: "1.2.3.4:", expected: "1.2.3.4:10101"},
 		{addr: "1.2.3.4:55555", expected: "1.2.3.4:55555"},
 		// The following tests check the error conditions.
-		{addr: "nolookup", expected: "nolookup:10101"},
 		{addr: "[invalid][addr]:port", err: "missing port in address"},
 	}
 	for _, test := range tests {
