@@ -938,3 +938,30 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 		t.Fatalf("unexpected pair(1): %v", pairs[2])
 	}
 }
+
+func TestFragment_Snapshot_Run(t *testing.T) {
+    f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+    defer f.Close()
+
+    // Set bits on the fragment.
+    for i := uint64(1); i < 3; i++ {
+        if _, err := f.SetBit(1000, i); err != nil {
+            t.Fatal(err)
+        }
+    }
+
+    // Snapshot bitmap and verify data.
+    if err := f.Snapshot(); err != nil {
+        t.Fatal(err)
+    } else if n := f.Row(1000).Count(); n != 2 {
+        t.Fatalf("unexpected count: %d", n)
+    }
+
+    // Close and reopen the fragment & verify the data.
+    if err := f.Reopen(); err != nil {
+        t.Fatal(err)
+    } else if n := f.Row(1000).Count(); n != 2 {
+        t.Fatalf("unexpected count (reopen): %d", n)
+    }
+}
+

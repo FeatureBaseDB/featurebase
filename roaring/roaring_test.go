@@ -28,6 +28,102 @@ import (
 	_ "github.com/pilosa/pilosa/test"
 )
 
+func TestBitmapClone(t *testing.T) {
+	b := roaring.NewBitmap()
+	for i := uint64(61000); i < 71000; i++ {
+		b.Add(i)
+	}
+	c := b.Clone()
+	if !reflect.DeepEqual(b, c) {
+		t.Fatalf("Clone Objects not equal\n")
+	}
+	d := func() *roaring.Bitmap { //anybody know how to declare a nil value?
+		return nil
+	}()
+	e := d.Clone()
+	if e != nil {
+		t.Fatalf("Clone nil Objects not equal\n")
+	}
+}
+
+func TestContainerCount(t *testing.T) {
+	b := roaring.NewBitmap(65535)
+
+	if b.Count() != b.CountRange(0, 65546) {
+		t.Fatalf("Count != CountRange\n")
+	}
+}
+
+func TestCheckBitmap(t *testing.T) {
+	b := roaring.NewBitmap()
+	x := 0
+	for i := uint64(61000); i < 71000; i++ {
+		x++
+		b.Add(i)
+	}
+	for i := uint64(75000); i < 75100; i++ {
+		x++
+		b.Add(i)
+	}
+	err := b.Check()
+	if err != nil {
+		t.Fatalf("%v\n", err)
+	}
+}
+
+func TestCheckArray(t *testing.T) {
+	b := roaring.NewBitmap(0, 1, 10, 100, 1000, 10000, 90000, 100000)
+	err := b.Check()
+	if err != nil {
+		t.Fatalf("%v\n", err)
+	}
+}
+
+func TestCheckRun(t *testing.T) {
+	b := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 100003, 100004, 100005)
+	b.Optimize() // convert to runs
+	err := b.Check()
+	if err != nil {
+		t.Fatalf("%v\n", err)
+	}
+}
+func TestCheckFullRun(t *testing.T) {
+	b := roaring.NewBitmap()
+	for i := uint64(0); i < 2097152; i++ {
+		if i%16384 == 0 {
+			b.Optimize() // convert to runs
+		}
+		b.Add(i)
+	}
+	err := b.Check()
+	if err != nil {
+		t.Fatalf("Before %v\n", err)
+	}
+	b.Optimize() // convert to runs
+	err = b.Check()
+	if err != nil {
+		t.Fatalf("After %v\n", err)
+	}
+}
+
+// Ensure that we can transition between runs and arrays when materializing the bitmap.
+func TestContainerTransitions(t *testing.T) {
+	// [run, run][array][run]
+	b := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 132000, 132001, 132002, 132003, 132004, 132005)
+	b.Optimize() // convert to runs
+	if !reflect.DeepEqual(b.Slice(), []uint64{0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 132000, 132001, 132002, 132003, 132004, 132005}) {
+		t.Fatalf("unexpected slice: %+v", b.Slice())
+	}
+
+	// Test the case where last and first bits of adjoining containers are set.
+	// [run][array][run]
+	b2 := roaring.NewBitmap(65531, 65532, 65533, 65534, 65535, 65536, 131071, 131072, 131073, 131074, 131075, 131076)
+	b2.Optimize() // convert to runs
+	if !reflect.DeepEqual(b2.Slice(), []uint64{65531, 65532, 65533, 65534, 65535, 65536, 131071, 131072, 131073, 131074, 131075, 131076}) {
+		t.Fatalf("unexpected slice: %+v", b2.Slice())
+	}
+}
+
 // Ensure an empty bitmap returns false if checking for existence.
 func TestBitmap_Contains_Empty(t *testing.T) {
 	if roaring.NewBitmap().Contains(1000) {
@@ -55,6 +151,7 @@ func TestBitmap_Slice_Empty(t *testing.T) {
 }
 
 // Ensure a bitmap can return a slice of values within a range.
+// TODO duplicate for all container types
 func TestBitmap_SliceRange(t *testing.T) {
 	if a := roaring.NewBitmap(0, 1000001, 1000002, 1000003).SliceRange(1, 1000003); !reflect.DeepEqual(a, []uint64{1000001, 1000002}) {
 		t.Fatalf("unexpected slice: %+v", a)
@@ -95,6 +192,55 @@ func TestBitmap_Max(t *testing.T) {
 	}
 }
 
+func TestBitmap_BitmapCountRange(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 2683177)
+	for i := uint64(628); i < 2683301; i++ {
+		bm0.Add(i)
+	}
+	bm0.Add(2683307)
+	if n := bm0.CountRange(1, 2683311); n != 2682674 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	if n := bm0.CountRange(2683177, 2683310); n != 125 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	if n := bm0.CountRange(2683301, 3000000); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	if n := bm0.CountRange(0, 1); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// Test the case where the range is outside of the bitmap space.
+	if n := bm0.CountRange(10000000, 10000001); n != 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_ArrayCountRange(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 2683177, 2683313)
+	if n := bm0.CountRange(1, 2683313); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_RunCountRange(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17, 1000000, 1000002, 1000003, 1000004, 1000005, 1000006, 1000010, 1000011, 1000012, 1000013, 1000014)
+	bm0.Optimize() // convert to runs
+	if n := bm0.CountRange(15, 1000003); n != 5 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	bm1 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
+	bm1.Optimize() // convert to runs
+	if n := bm1.CountRange(5, 12); n != 7 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
 func TestBitmap_Intersection(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177)
 	bm1 := roaring.NewBitmap()
@@ -109,6 +255,105 @@ func TestBitmap_Intersection(t *testing.T) {
 
 }
 
+func TestBitmap_Union1(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 2683177)
+	bm1 := roaring.NewBitmap()
+	for i := uint64(628); i < 2683301; i++ {
+		bm1.Add(i)
+	}
+	bm1.Add(4000000)
+
+	result := bm0.Union(bm1)
+	if n := result.Count(); n != 2682675 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	bm := testBM()
+	result = bm.Union(bm0)
+	if n := result.Count(); n != 75009 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	result = bm.Union(bm)
+	if n := result.Count(); n != 75007 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+}
+
+func TestBitmap_Intersection_Empty(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 2683177)
+	bm1 := roaring.NewBitmap()
+
+	result := bm0.Intersect(bm1)
+	if n := result.Count(); n != 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+}
+
+func TestBitmap_IntersectArrayArray(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 1, 2683, 5005)
+	bm1 := roaring.NewBitmap(0, 2683, 2684, 5000)
+
+	result := bm0.Intersect(bm1)
+	if n := result.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_IntersectBitmapBitmap(t *testing.T) {
+	bm0 := roaring.NewBitmap()
+	for i := uint64(0); i < 65536; i += 2 {
+		bm0.Add(i)
+	}
+
+	bm1 := roaring.NewBitmap()
+	for i := uint64(0); i < 65536; i += 3 {
+		bm1.Add(i)
+	}
+
+	result := bm0.Intersect(bm1)
+	if n := result.Count(); n != 10923 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_IntersectRunRun(t *testing.T) {
+	// Intersect two runs that result in an array.
+	bm0 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15)
+	bm0.Optimize() // convert to runs
+	bm1 := roaring.NewBitmap(5, 6, 7, 8, 9, 10, 11)
+	bm1.Optimize() // convert to runs
+	result := bm0.Intersect(bm1)
+	if n := result.Count(); n != 3 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// Intersect two runs that result in a bitmap.
+	bm2 := roaring.NewBitmap()
+	runLen := uint64(25)
+	spaceLen := uint64(8)
+	offset := (runLen / 2) + spaceLen
+	for i := uint64(0); i < (65536 - runLen - offset); i += (runLen + spaceLen) {
+		for j := uint64(0); j < runLen; j++ {
+			bm2.Add(offset + i + j)
+		}
+	}
+	bm2.Optimize() // convert to runs
+	bm3 := roaring.NewBitmap()
+	runLen = uint64(32)
+	spaceLen = uint64(1)
+	for i := uint64(0); i < (65536 - runLen); i += (runLen + spaceLen) {
+		for j := uint64(0); j < runLen; j++ {
+			bm3.Add(i + j)
+		}
+	}
+	bm3.Optimize() // convert to runs
+	result = bm2.Intersect(bm3)
+	if n := result.Count(); n != 47628 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
 func TestBitmap_Difference(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177)
 	bm1 := roaring.NewBitmap()
@@ -116,8 +361,36 @@ func TestBitmap_Difference(t *testing.T) {
 		bm1.Add(i)
 	}
 	result := bm0.Difference(bm1)
-	//expect to have just 0
 	if n := result.Count(); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_Difference_Empty(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 2683177)
+	bm1 := roaring.NewBitmap()
+	result := bm0.Difference(bm1)
+	if n := result.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_DifferenceArrayArray(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 4, 8, 12, 16, 20)
+	bm1 := roaring.NewBitmap(1, 3, 6, 9, 12, 15, 18)
+	result := bm0.Difference(bm1)
+	if n := result.Count(); n != 5 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_DifferenceArrayRun(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 4, 8, 12, 16, 20, 36, 40, 44)
+
+	bm1 := roaring.NewBitmap(1, 2, 3, 4, 5, 6, 7, 8, 9, 30, 31, 32, 33, 34, 35, 36)
+	bm1.Optimize() // convert to runs
+	result := bm0.Difference(bm1)
+	if n := result.Count(); n != 6 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
@@ -127,6 +400,25 @@ func TestBitmap_Union(t *testing.T) {
 	bm1 := roaring.NewBitmap(0, 50000, 1000001, 1000002)
 	result := bm0.Union(bm1)
 	if n := result.Count(); n != 5 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_Xor(t *testing.T) {
+	bm0 := testBM()
+	bm1 := roaring.NewBitmap(0, 1, 2, 3)
+	result := bm1.Xor(bm0)
+	if n := result.Count(); n != 75011 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	result = bm0.Xor(bm1)
+	if n := result.Count(); n != 75011 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	result = bm0.Xor(bm0)
+	if n := result.Count(); n != 0 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
@@ -166,13 +458,18 @@ func TestBitmap_Xor_ArrayBitmap(t *testing.T) {
 
 	result := bm0.Xor(bm1)
 	if n := result.Count(); n != 4999 {
-		t.Fatalf("unexpected n: %d", n)
+		t.Fatalf("test #1 unexpected n: %d", n)
+	}
+
+	result = bm1.Xor(bm0)
+	if n := result.Count(); n != 4999 {
+		t.Fatalf("test #2 unexpected n: %d", n)
 	}
 
 	//equivalence bitmap test
 	result = result.Xor(result)
 	if n := result.Count(); n > 0 {
-		t.Fatalf("unexpected n: %d", n)
+		t.Fatalf("test 3 unexpected n: %d", n)
 	}
 
 	empty := roaring.NewBitmap()
@@ -265,12 +562,55 @@ func TestBitmap_Flip_After(t *testing.T) {
 
 // Ensure bitmap can return the number of intersecting bits in two bitmaps.
 func TestBitmap_IntersectionCount_ArrayArray(t *testing.T) {
-	bm0 := roaring.NewBitmap(0, 1000001, 1000002, 1000003)
+	bm0 := roaring.NewBitmap(0, 1, 1000001, 1000002, 1000003)
 	bm1 := roaring.NewBitmap(0, 50000, 1000001, 1000002)
 
 	if n := bm0.IntersectionCount(bm1); n != 3 {
 		t.Fatalf("unexpected n: %d", n)
 	} else if n := bm1.IntersectionCount(bm0); n != 3 {
+		t.Fatalf("unexpected n (reverse): %d", n)
+	}
+}
+
+// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+func TestBitmap_IntersectionCount_ArrayRun(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 1000001, 1000002, 1000003)
+	bm1 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 1000000, 1000002, 1000003, 1000004, 1000005, 1000006)
+	bm1.Optimize() // convert to runs
+
+	if n := bm0.IntersectionCount(bm1); n != 3 {
+		t.Fatalf("unexpected n: %d", n)
+	} else if n := bm1.IntersectionCount(bm0); n != 3 {
+		t.Fatalf("unexpected n (reverse): %d", n)
+	}
+}
+
+// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+func TestBitmap_IntersectionCount_RunRun(t *testing.T) {
+	bm0 := roaring.NewBitmap(3, 4, 5, 6, 7, 8, 1000001, 1000002, 1000003, 1000004)
+	bm0.Optimize() // convert to runs
+	bm1 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 1000000, 1000002, 1000003, 1000004, 1000005, 1000006)
+	bm1.Optimize() // convert to runs
+
+	if n := bm0.IntersectionCount(bm1); n != 6 {
+		t.Fatalf("unexpected n: %d", n)
+	} else if n := bm1.IntersectionCount(bm0); n != 6 {
+		t.Fatalf("unexpected n (reverse): %d", n)
+	}
+}
+
+// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+func TestBitmap_IntersectionCount_BitmapRun(t *testing.T) {
+	bm0 := roaring.NewBitmap()
+	for i := uint64(3); i <= 1000006; i += 2 {
+		bm0.Add(i)
+	}
+	bm1 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 1000000, 1000002, 1000003, 1000004, 1000005, 1000006)
+	bm1.Optimize() // convert to runs
+
+	if n := bm0.IntersectionCount(bm1); n != 4 {
+		t.Fatalf("unexpected n: %d", n)
+	} else if n := bm1.IntersectionCount(bm0); n != 4 {
 		t.Fatalf("unexpected n (reverse): %d", n)
 	}
 }
@@ -311,6 +651,21 @@ func TestBitmap_IntersectionCount_BitmapBitmap(t *testing.T) {
 		t.Fatalf("unexpected n (reverse): %d", n)
 	}
 }
+func TestBitmap_IntersectionCount_Mixed(t *testing.T) {
+	bm0 := testBM()
+	bm1 := roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 65536)
+	bm3 := roaring.NewBitmap(131072)
+
+	if n := bm0.IntersectionCount(bm0); n != bm0.Count() {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	if n := bm0.IntersectionCount(bm1); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	if n := bm0.IntersectionCount(bm3); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
 
 func TestBitmap_Quick_Array1(t *testing.T)     { testBitmapQuick(t, 1000, 1000, 2000) }
 func TestBitmap_Quick_Array2(t *testing.T)     { testBitmapQuick(t, 10000, 0, 1000) }
@@ -325,9 +680,17 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		m := make(map[uint64]struct{})
 
 		// Add values to the bitmap and set.
+		manual_count := uint64(0)
 		for _, v := range a {
-			bm.Add(v)
+			new_bit, _ := bm.Add(v)
+			if new_bit {
+				manual_count++
+			}
 			m[v] = struct{}{}
+		}
+		//check count
+		if manual_count != bm.Count() {
+			t.Fatalf("expected bitmap Add count to be: %d got: %d", manual_count, bm.Count())
 		}
 
 		// Verify existence.
@@ -353,7 +716,14 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 
 		// Remove all values in random order.
 		for _, i := range rand.Perm(len(a)) {
-			bm.Remove(a[i])
+			removed, _ := bm.Remove(a[i])
+			if removed {
+				manual_count--
+			}
+			//check count
+			if manual_count != bm.Count() {
+				t.Fatalf("expected bitmap Remove count to be: %d got: %d", manual_count, bm.Count())
+			}
 		}
 
 		// Verify all values have been removed.
@@ -382,6 +752,8 @@ func TestBitmap_Marshal_Quick_LargeValue(t *testing.T) {
 func TestBitmap_Marshal_Quick_Bitmap_Sorted(t *testing.T) {
 	testBitmapMarshalQuick(t, 10000, 0, 10000, true)
 }
+
+// TODO update for RLE
 
 // Ensure a bitmap can be marshaled and unmarshaled.
 func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
@@ -446,6 +818,7 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 }
 
 // Ensure iterator can iterate over all the values on the bitmap.
+// TODO duplicate for all container types
 func TestIterator(t *testing.T) {
 	itr := roaring.NewBitmap(1, 2, 3).Iterator()
 	itr.Seek(0)
@@ -458,6 +831,62 @@ func TestIterator(t *testing.T) {
 	if !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
 		t.Fatalf("unexpected values: %+v", a)
 	}
+}
+
+// testBM creates a bitmap with 3 containers: array, bitmap, and run.
+func testBM() *roaring.Bitmap {
+
+	bm := roaring.NewBitmap()
+	//the array
+	for i := uint64(0); i < 1024; i += 4 {
+		bm.Add((1 << 16) + i)
+	}
+	//the bitmap
+	for i := uint64(0); i < 16384; i += 2 {
+		bm.Add((2 << 16) + i)
+	}
+	//small run
+	for i := uint64(0); i < 1024; i += 1 {
+		bm.Add((3 << 16) + i)
+	}
+	//large run
+	for i := uint64(0); i < 65535; i += 1 {
+		bm.Add((4 << 16) + i)
+	}
+	bm.Optimize()
+	//count 75007
+	return bm
+}
+
+func TestBitmapOffsetRange(t *testing.T) {
+	bm := testBM()
+
+	bm1 := bm.OffsetRange(0, 0, 327680)
+	if bm1.Count() != bm.Count() {
+		t.Fatalf("Not Equal %d %d", bm1.Count(), bm.Count())
+	}
+	bm1 = bm.OffsetRange(0, 0, 131072)
+	if bm1.Count() != 256 {
+		t.Fatalf("Not Equal %d %d", bm1.Count(), 256)
+	}
+
+}
+func TestBitmapContains(t *testing.T) {
+	bm := testBM()
+
+	//search for run value present
+	if found := bm.Contains(3 << 16); !found {
+		t.Fatalf("Test #1 Not Found %d ", 3<<16)
+	}
+
+	//search for value not present
+	if found := bm.Contains((3 << 16) + 2048); found {
+		t.Fatalf("Test #2 Found %d ", (3<<16)+2048)
+	}
+}
+
+func TestBitmapBufIterator(t *testing.T) {
+
 }
 
 var benchmarkBitmapIntersectionCountData struct {
@@ -530,4 +959,12 @@ func diff(a, b []uint64) string {
 		}
 	}
 	return ""
+}
+
+func TestBitmap_Intersect(t *testing.T) {
+	bm0 := testBM()
+	result := bm0.Intersect(bm0)
+	if bm0.Count() != result.Count() {
+		t.Fatalf("Counts do not match %d %d", bm0.Count(), result.Count())
+	}
 }
