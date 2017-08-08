@@ -165,7 +165,7 @@ func (s *Server) Open() error {
 	go func() {
 		err := http.Serve(ln, s.Handler)
 		if err != nil {
-			s.logger().Printf("HTTP handler terminated with error: %s\n", err)
+			s.Logger().Printf("HTTP handler terminated with error: %s\n", err)
 		}
 	}()
 

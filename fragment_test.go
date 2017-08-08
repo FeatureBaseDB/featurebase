@@ -940,7 +940,7 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 }
 
 func TestFragment_Snapshot_Run(t *testing.T) {
-    f := MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+    f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
     defer f.Close()
 
     // Set bits on the fragment.
