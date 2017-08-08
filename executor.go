@@ -168,6 +168,8 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeCount(ctx, index, c, slices, opt)
 	case "SetBit":
 		return e.executeSetBit(ctx, index, c, opt)
+	case "SetFieldValue":
+		return nil, e.executeSetFieldValue(ctx, index, c, opt)
 	case "SetRowAttrs":
 		return nil, e.executeSetRowAttrs(ctx, index, c, opt)
 	case "SetColumnAttrs":
@@ -837,6 +839,77 @@ func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.C
 		}
 	}
 	return ret, nil
+}
+
+// executeSetFieldValue executes a SetFieldValue() call.
+func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) error {
+	frameName, ok := c.Args["frame"].(string)
+	if !ok {
+		return errors.New("SetFieldValue() frame required")
+	}
+
+	// Retrieve column label.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return ErrIndexNotFound
+	}
+	columnLabel := idx.ColumnLabel()
+
+	// Retrieve frame.
+	frame := e.Holder.Frame(index, frameName)
+	if frame == nil {
+		return ErrFrameNotFound
+	}
+
+	// Parse labels.
+	columnID, ok, err := c.UintArg(columnLabel)
+	if err != nil {
+		return fmt.Errorf("reading SetFieldValue() column: %v", err)
+	} else if !ok {
+		return fmt.Errorf("SetFieldValue() column field '%v' required", columnLabel)
+	}
+
+	// Copy args and remove reserved fields.
+	args := pql.CopyArgs(c.Args)
+	delete(args, "frame")
+	delete(args, columnLabel)
+
+	// Set values.
+	for name, value := range args {
+		switch value := value.(type) {
+		case int64:
+			if _, err := frame.SetFieldValue(columnID, name, value); err != nil {
+				return err
+			}
+		default:
+			return ErrInvalidFieldValueType
+		}
+	}
+	frame.Stats.Count("SetFieldValue", 1, 1.0)
+
+	// Do not forward call if this is already being forwarded.
+	if opt.Remote {
+		return nil
+	}
+
+	// Execute on remote nodes in parallel.
+	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	resp := make(chan error, len(nodes))
+	for _, node := range nodes {
+		go func(node *Node) {
+			_, err := e.exec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
+			resp <- err
+		}(node)
+	}
+
+	// Return first error.
+	for range nodes {
+		if err := <-resp; err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // executeSetRowAttrs executes a SetRowAttrs() call.

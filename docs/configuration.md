@@ -58,6 +58,17 @@ Any flag that has a value that is a comma separated list on the command line bec
     bind = localhost:10101
     ```
 
+#### Gossip Port
+
+* Description: Port to which Pilosa should bind for internal communication.
+* Flag: `--gossip-port=11101`
+* Env: `PILOSA_GOSSIP_PORT=11101`
+* Config:
+
+    ```toml
+    gossip-port = 11101
+    ```
+
 #### Cluster Hosts
 
 * Description: List of hosts in the cluster. Multiple hosts should be comma separated in the flag and env forms.
@@ -68,30 +79,6 @@ Any flag that has a value that is a comma separated list on the command line bec
     ```toml
     [cluster]
     hosts = ["localhost:10101"]
-    ```
-
-#### Cluster Internal Hosts
-
-* Description: List of hosts in the cluster used for internal communication. Multiple hosts should be comma separated in the flag and env forms.
-* Flag: `--cluster.internal-hosts="localhost:11101"`
-* Env: `PILOSA_CLUSTER.INTERNAL_HOSTS="localhost:11101"`
-* Config:
-
-    ```toml
-    [cluster]
-    internal-hosts = ["localhost:11101"]
-    ```
-
-#### Cluster Internal Port
-
-* Description: Port to which Pilosa should bind for internal communication.
-* Flag: `--cluster.internal-port=11101`
-* Env: `PILOSA_CLUSTER.INTERNAL_PORT=11101`
-* Config:
-
-    ```toml
-    [cluster]
-    internal-port = 11101
     ```
 
 #### Cluster Poll Interval
@@ -142,6 +129,19 @@ Any flag that has a value that is a comma separated list on the command line bec
 
     ```toml
     data-dir = "~/.pilosa"
+    ```
+
+#### Gossip Seed
+
+* Description: When using the gossip [Cluster Type]({{< ref "#cluster-type" >}}), this specifies which internal host should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip-seed` for all three nodes can be configured to be the address of `node0`.
+* Flag: `--gossip-seed="localhost:11101"`
+* Env: `PILOSA_GOSSIP_SEED="localhost:11101"`
+* Config:
+
+    ```toml
+    [cluster]
+    type = "gossip"
+    gossip-seed = "localhost:11101"
     ```
 
 #### Profile CPU

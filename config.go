@@ -16,6 +16,13 @@ package pilosa
 
 import "time"
 
+// Cluster types.
+const (
+	ClusterNone   = ""
+	ClusterStatic = "static"
+	ClusterGossip = "gossip"
+)
+
 const (
 	// DefaultHost is the default hostname to use.
 	DefaultHost = "localhost"
@@ -24,32 +31,34 @@ const (
 	DefaultPort = "10101"
 
 	// DefaultClusterType sets the node intercommunication method.
-	DefaultClusterType = "static"
+	DefaultClusterType = ClusterGossip
 
-	// DefaultInternalPort the port the nodes intercommunicate on.
-	DefaultInternalPort = "14000"
+	// DefaultGossipPort indicates the port to which pilosa should bind for internal state sharing.
+	DefaultGossipPort = "14000"
 
-	// DefaultMetrics sets the internal metrics to no op
+	// DefaultMetrics sets the internal metrics to no-op.
 	DefaultMetrics = "nop"
 
 	// DefaultMaxWritesPerRequest is the default number of writes per request.
 	DefaultMaxWritesPerRequest = 5000
 )
 
+// ClusterTypes set of cluster types.
+var ClusterTypes = []string{ClusterNone, ClusterStatic, ClusterGossip}
+
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir string `toml:"data-dir"`
-	Host    string `toml:"host"`
+	DataDir    string `toml:"data-dir"`
+	Bind       string `toml:"bind"`
+	GossipPort string `toml:"gossip-port"`
+	GossipSeed string `toml:"gossip-seed"`
 
 	Cluster struct {
-		ReplicaN        int      `toml:"replicas"`
-		Type            string   `toml:"type"`
-		Hosts           []string `toml:"hosts"`
-		InternalHosts   []string `toml:"internal-hosts"`
-		PollingInterval Duration `toml:"polling-interval"`
-		InternalPort    string   `toml:"internal-port"`
-		GossipSeed      string   `toml:"gossip-seed"`
-		LongQueryTime   Duration `toml:"long-query-time"`
+		ReplicaN      int      `toml:"replicas"`
+		Type          string   `toml:"type"`
+		Hosts         []string `toml:"hosts"`
+		PollInterval  Duration `toml:"poll-interval"`
+		LongQueryTime Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
 	Plugins struct {
@@ -67,26 +76,46 @@ type Config struct {
 	LogPath string `toml:"log-path"`
 
 	Metric struct {
-		Service         string   `toml:"service"`
-		Host            string   `toml:"host"`
-		PollingInterval Duration `toml:"interval"`
-	} `toml:"metrics"`
+		Service      string   `toml:"service"`
+		Host         string   `toml:"host"`
+		PollInterval Duration `toml:"poll-interval"`
+	} `toml:"metric"`
 }
 
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Host:                DefaultHost + ":" + DefaultPort,
+		Bind:                DefaultHost + ":" + DefaultPort,
 		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.Type = DefaultClusterType
-	c.Cluster.PollingInterval = Duration(DefaultPollingInterval)
+	c.Cluster.PollInterval = Duration(DefaultPollingInterval)
 	c.Cluster.Hosts = []string{}
-	c.Cluster.InternalHosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics
 	return c
+}
+
+// Validate that all configuration permutations are compatible with each other.
+func (c *Config) Validate() error {
+	if !StringInSlice(c.Cluster.Type, ClusterTypes) {
+		return ErrConfigClusterTypeInvalid
+	}
+
+	if c.Cluster.Type == ClusterGossip {
+		if len(c.Cluster.Hosts) > 0 {
+			bindWithDefaults, err := AddressWithDefaults(c.Bind)
+			if err != nil {
+				return err
+			}
+			if !foundItem(c.Cluster.Hosts, bindWithDefaults) {
+				return ErrConfigHostsMissing
+			}
+		}
+	}
+
+	return nil
 }
 
 // Duration is a TOML wrapper type for time.Duration.
@@ -111,6 +140,7 @@ func (d Duration) MarshalText() (text []byte, err error) {
 	return []byte(d.String()), nil
 }
 
+// MarshalTOML write duration into valid TOML.
 func (d Duration) MarshalTOML() ([]byte, error) {
 	return []byte(d.String()), nil
 }

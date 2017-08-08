@@ -52,6 +52,7 @@ func TestServerConfig(t *testing.T) {
 
 	[cluster]
 		poll-interval = "45s"
+		type = "static"
 		replicas = 2
 		hosts = [
 			"localhost:19444",
@@ -60,10 +61,10 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.DataDir, actualDataDir)
-				v.Check(cmd.Server.Config.Host, "example.com:10111")
+				v.Check(cmd.Server.Config.Bind, "example.com:10111")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"example.com:10111", "example.com:10110"})
-				v.Check(cmd.Server.Config.Cluster.PollingInterval, pilosa.Duration(time.Second*182))
+				v.Check(cmd.Server.Config.Cluster.PollInterval, pilosa.Duration(time.Second*182))
 				return v.Error()
 			},
 		},
@@ -75,6 +76,7 @@ func TestServerConfig(t *testing.T) {
 	bind = "localhost:0"
 	data-dir = "` + actualDataDir + `"
 	[cluster]
+		type = "static"
 		hosts = [
 			"localhost:19444",
 		]
@@ -91,7 +93,7 @@ func TestServerConfig(t *testing.T) {
 		},
 		// TEST 2
 		{
-			args: []string{"server", "--log-path", logFile.Name()},
+			args: []string{"server", "--log-path", logFile.Name(), "--cluster.type", "static"},
 			env:  map[string]string{"PILOSA_PROFILE.CPU_TIME": "1m"},
 			cfgFileContent: `
 	bind = "localhost:19444"
@@ -113,7 +115,7 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:19444"})
-				v.Check(cmd.Server.Config.Cluster.PollingInterval, pilosa.Duration(time.Minute*2))
+				v.Check(cmd.Server.Config.Cluster.PollInterval, pilosa.Duration(time.Minute*2))
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*11))
 				v.Check(cmd.Server.CPUProfile, profFile.Name())
 				v.Check(cmd.Server.CPUTime, time.Minute)

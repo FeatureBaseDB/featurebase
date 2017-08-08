@@ -30,6 +30,12 @@ Pilosa is designed to be a distributed application, with data replication shared
 
 While Pilosa does have some high system requirements it is not a best practice to set up a cluster with the fewest, largest machines available.  You want an evenly distributed load across several nodes in a cluster to easily recover from a single node failure, and have the resource capacity to handle a missing node until it's repaired or replaced.   Nor is it advisable to have many small machines.  The internode network traffic will become a bottleneck.  You can always add nodes later, but that does require some down time.
 
+### Open File Limits
+
+Pilosa requires a large number of open files to support its memory-mapped file storage system. Most operating systems put limits on the maximum number of files that may be opened concurrently by a process. On Linux systems, this limit is controlled by a utility called [ulimit](https://ss64.com/bash/ulimit.html). Pilosa will automatically attempt to raise the limit to `262144` during startup, but it may fail due to access limitations. If you see errors related to open file limits when starting Pilosa, it is recommended that you run `sudo ulimit -n 262144` before starting Pilosa.
+
+On Mac OS X, `ulimit` does not behave predictably. [This blog post](https://blog.dekstroza.io/ulimit-shenanigans-on-osx-el-capitan/) contains information about setting open file limits in OS X.
+
 ### Importing and Exporting Data
 
 #### Importing

@@ -15,7 +15,6 @@
 package pilosa_test
 
 import (
-	"fmt"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -23,7 +22,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/httpbroadcast"
+	"github.com/pilosa/pilosa/test"
 )
 
 // Ensure the cluster can fairly distribute partitions across the nodes.
@@ -34,7 +33,7 @@ func TestCluster_Owners(t *testing.T) {
 			{Host: "serverB:1000"},
 			{Host: "serverC:1000"},
 		},
-		Hasher:   NewModHasher(),
+		Hasher:   test.NewModHasher(),
 		ReplicaN: 2,
 	}
 
@@ -110,10 +109,10 @@ func TestCluster_NodeStates(t *testing.T) {
 			{Host: "serverB:1000"},
 			{Host: "serverC:1000"},
 		},
-		NodeSet: &httpbroadcast.HTTPNodeSet{},
+		NodeSet: &pilosa.StaticNodeSet{},
 	}
 
-	err := c.NodeSet.(*httpbroadcast.HTTPNodeSet).Join([]*pilosa.Node{
+	err := c.NodeSet.(*pilosa.StaticNodeSet).Join([]*pilosa.Node{
 		&pilosa.Node{Host: "serverA:1000"},
 		&pilosa.Node{Host: "serverC:1000"},
 		&pilosa.Node{Host: "serverD:1000"},
@@ -134,43 +133,10 @@ func TestCluster_NodeStates(t *testing.T) {
 
 // Ensure OwnsSlices can find the actual slice list for node and index
 func TestCluster_OwnsSlices(t *testing.T) {
-	c := NewCluster(5)
+	c := test.NewCluster(5)
 	slices := c.OwnsSlices("test", 10, "host2")
 
 	if !reflect.DeepEqual(slices, []uint64{0, 3, 6, 10}) {
 		t.Fatalf("unexpected slices for node's index: %v", slices)
 	}
 }
-
-// NewCluster returns a cluster with n nodes and uses a mod-based hasher.
-func NewCluster(n int) *pilosa.Cluster {
-	c := pilosa.NewCluster()
-	c.ReplicaN = 1
-	c.Hasher = NewModHasher()
-
-	for i := 0; i < n; i++ {
-		c.Nodes = append(c.Nodes, &pilosa.Node{
-			Host: fmt.Sprintf("host%d", i),
-		})
-	}
-
-	return c
-}
-
-// ModHasher represents a simple, mod-based hashing.
-type ModHasher struct{}
-
-// NewModHasher returns a new instance of ModHasher with n buckets.
-func NewModHasher() *ModHasher { return &ModHasher{} }
-
-func (*ModHasher) Hash(key uint64, n int) int { return int(key) % n }
-
-// ConstHasher represents hash that always returns the same index.
-type ConstHasher struct {
-	i int
-}
-
-// NewConstHasher returns a new instance of ConstHasher that always returns i.
-func NewConstHasher(i int) *ConstHasher { return &ConstHasher{i: i} }
-
-func (h *ConstHasher) Hash(key uint64, n int) int { return h.i }

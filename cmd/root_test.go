@@ -96,7 +96,7 @@ func (v *validator) Check(actual, expected interface{}) {
 // Error returns the validator's error value if any v.Check call found an error.
 func (v *validator) Error() error { return v.err }
 
-// commandTest represents all possible ways to configure a a pilosa command, as
+// commandTest represents all possible ways to configure a pilosa command, as
 // well as a function for validating whether the command worked as expected.
 // args should be set to everything that comes after "pilosa" on the comand
 // line. See tests like backup_test.go for examples.

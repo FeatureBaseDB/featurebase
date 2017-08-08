@@ -15,9 +15,7 @@
 package pilosa_test
 
 import (
-	"bytes"
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -26,11 +24,12 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/test"
 )
 
 func TestHolder_Open(t *testing.T) {
 	t.Run("ErrIndexName", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if err := os.Mkdir(h.IndexPath("!"), 0777); err != nil {
@@ -45,7 +44,7 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrIndexPermission", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
@@ -60,7 +59,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrIndexMetaCorrupt", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
@@ -74,7 +73,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrIndexAttrStoreCorrupt", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
@@ -89,7 +88,7 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFramePermission", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
@@ -106,7 +105,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFrameMetaCorrupt", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
@@ -122,7 +121,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFrameAttrStoreCorrupt", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
@@ -139,7 +138,7 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrViewPermission", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
@@ -158,7 +157,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrViewFragmentsMkdir", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
@@ -178,7 +177,7 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
@@ -199,7 +198,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFragmentStorageCorrupt", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
@@ -220,7 +219,7 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFragmentCachePermission", func(t *testing.T) {
-		h := MustOpenHolder()
+		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
@@ -246,7 +245,7 @@ func TestHolder_Open(t *testing.T) {
 
 // Ensure holder can delete an index and its underlying files.
 func TestHolder_DeleteIndex(t *testing.T) {
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
 	// Write bits to separate indexes.
@@ -279,16 +278,16 @@ func TestHolder_DeleteIndex(t *testing.T) {
 
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
-	cluster := NewCluster(2)
+	cluster := test.NewCluster(2)
 
 	// Create a local holder.
-	hldr0 := MustOpenHolder()
+	hldr0 := test.MustOpenHolder()
 	defer hldr0.Close()
 
 	// Create a remote holder wrapped by an HTTP
-	hldr1 := MustOpenHolder()
+	hldr1 := test.MustOpenHolder()
 	defer hldr1.Close()
-	s := NewServer()
+	s := test.NewServer()
 	defer s.Close()
 	s.Handler.Holder = hldr1.Holder
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -302,10 +301,10 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	// Mock 2-node, fully replicated cluster.
 	cluster.ReplicaN = 2
 	cluster.Nodes[0].Host = "localhost:0"
-	cluster.Nodes[1].Host = MustParseURLHost(s.URL)
+	cluster.Nodes[1].Host = test.MustParseURLHost(s.URL)
 
 	// Create frames on nodes.
-	for _, hldr := range []*Holder{hldr0, hldr1} {
+	for _, hldr := range []*test.Holder{hldr0, hldr1} {
 		hldr.MustCreateFrameIfNotExists("i", "f")
 		hldr.MustCreateFrameIfNotExists("i", "f0")
 		hldr.MustCreateFrameIfNotExists("y", "z")
@@ -365,7 +364,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	}
 
 	// Verify data is the same on both nodes.
-	for i, hldr := range []*Holder{hldr0, hldr1} {
+	for i, hldr := range []*test.Holder{hldr0, hldr1} {
 		f := hldr.Fragment("i", "f", pilosa.ViewStandard, 0)
 		if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
 			t.Fatalf("unexpected bits(%d/0): %+v", i, a)
@@ -392,110 +391,4 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
 		}
 	}
-}
-
-// Holder is a test wrapper for pilosa.Holder.
-type Holder struct {
-	*pilosa.Holder
-	LogOutput bytes.Buffer
-}
-
-// NewHolder returns a new instance of Holder with a temporary path.
-func NewHolder() *Holder {
-	path, err := ioutil.TempDir("", "pilosa-")
-	if err != nil {
-		panic(err)
-	}
-
-	h := &Holder{Holder: pilosa.NewHolder()}
-	h.Path = path
-	h.Holder.LogOutput = &h.LogOutput
-
-	return h
-}
-
-// MustOpenHolder creates and opens a holder at a temporary path. Panic on error.
-func MustOpenHolder() *Holder {
-	h := NewHolder()
-	if err := h.Open(); err != nil {
-		panic(err)
-	}
-	return h
-}
-
-// Close closes the holder and removes all underlying data.
-func (h *Holder) Close() error {
-	defer os.RemoveAll(h.Path)
-	return h.Holder.Close()
-}
-
-// Reopen closes the holder and instantiates and opens a new holder.
-func (h *Holder) Reopen() error {
-	if err := h.Holder.Close(); err != nil {
-		return err
-	}
-
-	path, logOutput := h.Path, h.Holder.LogOutput
-	h.Holder = pilosa.NewHolder()
-	h.Holder.Path = path
-	h.Holder.LogOutput = logOutput
-	if err := h.Holder.Open(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// MustCreateIndexIfNotExists returns a given index. Panic on error.
-func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOptions) *Index {
-	idx, err := h.Holder.CreateIndexIfNotExists(index, opt)
-	if err != nil {
-		panic(err)
-	}
-	return &Index{Index: idx}
-}
-
-// MustCreateFrameIfNotExists returns a given frame. Panic on error.
-func (h *Holder) MustCreateFrameIfNotExists(index, frame string) *Frame {
-	f, err := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{}).CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
-	if err != nil {
-		panic(err)
-	}
-	return f
-}
-
-// MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
-func (h *Holder) MustCreateFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
-	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
-	if err != nil {
-		panic(err)
-	}
-	v, err := f.CreateViewIfNotExists(view)
-	if err != nil {
-		panic(err)
-	}
-	frag, err := v.CreateFragmentIfNotExists(slice)
-	if err != nil {
-		panic(err)
-	}
-	return &Fragment{Fragment: frag}
-}
-
-// MustCreateRankedFragmentIfNotExists returns a given fragment with a ranked cache. Panic on error.
-func (h *Holder) MustCreateRankedFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
-	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FrameOptions{CacheType: pilosa.CacheTypeRanked})
-	if err != nil {
-		panic(err)
-	}
-	v, err := f.CreateViewIfNotExists(view)
-	if err != nil {
-		panic(err)
-	}
-	frag, err := v.CreateFragmentIfNotExists(slice)
-	if err != nil {
-		panic(err)
-	}
-	return &Fragment{Fragment: frag}
 }

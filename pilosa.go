@@ -16,7 +16,9 @@ package pilosa
 
 import (
 	"errors"
+	"net"
 	"regexp"
+	"strings"
 
 	"github.com/pilosa/pilosa/internal"
 )
@@ -36,6 +38,28 @@ var (
 	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
 	ErrColumnRowLabelEqual  = errors.New("column and row labels cannot be equal")
 
+	ErrInputDefinitionExists         = errors.New("input-definition already exists")
+	ErrInputDefinitionHasPrimaryKey  = errors.New("input-definition must contain one PrimaryKey")
+	ErrInputDefinitionDupePrimaryKey = errors.New("input-definition can only contain one PrimaryKey")
+	ErrInputDefinitionColumnLabel    = errors.New("PrimaryKey field name does not match columnLabel")
+	ErrInputDefinitionNameRequired   = errors.New("input-definition name required")
+	ErrInputDefinitionAttrsRequired  = errors.New("frames and fields are required")
+	ErrInputDefinitionValueMap       = errors.New("valueMap required for map")
+	ErrInputDefinitionActionRequired = errors.New("field definitions require an action")
+	ErrInputDefinitionNotFound       = errors.New("input-definition not found")
+
+	ErrFieldNotFound          = errors.New("field not found")
+	ErrFieldNameRequired      = errors.New("field name required")
+	ErrInvalidFieldType       = errors.New("invalid field type")
+	ErrInvalidFieldRange      = errors.New("invalid field range")
+	ErrInverseRangeNotAllowed = errors.New("inverse range not allowed")
+	ErrRangeCacheNotAllowed   = errors.New("range cache not allowed")
+	ErrFrameFieldsNotAllowed  = errors.New("frame fields not allowed")
+	ErrInvalidFieldValueType  = errors.New("invalid field value type")
+	ErrFieldValueTooLow       = errors.New("field value too low")
+	ErrFieldValueTooHigh      = errors.New("field value too high")
+	ErrInvalidRangeOperation  = errors.New("invalid range operation")
+
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
@@ -46,6 +70,9 @@ var (
 	ErrFragmentNotFound = errors.New("fragment not found")
 	ErrQueryRequired    = errors.New("query required")
 	ErrTooManyWrites    = errors.New("too many write commands")
+
+	ErrConfigClusterTypeInvalid = errors.New("invalid cluster type")
+	ErrConfigHostsMissing       = errors.New("missing bind address in cluster hosts")
 )
 
 // Regular expression to validate index and frame names.
@@ -121,4 +148,90 @@ func ValidateLabel(label string) error {
 		return ErrLabel
 	}
 	return nil
+}
+
+// StringInSlice checks for substring a in the slice.
+func StringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
+// ContainsSubstring checks to see if substring a is contained in any string in the slice.
+func ContainsSubstring(a string, list []string) bool {
+	for _, b := range list {
+		if strings.Contains(b, a) {
+			return true
+		}
+	}
+	return false
+}
+
+// NormalizeAddress converts addr into a valid "IP4:port" string.
+func NormalizeAddress(addr string) (string, error) {
+	host, port, err := hostPortWithDefaults(addr)
+	if err != nil {
+		return "", err
+	}
+	return net.JoinHostPort(HostToIP(host), port), nil
+}
+
+// HostToIP converts host to an IP4 address based on net.LookupIP().
+func HostToIP(host string) string {
+	// if host is not an IP addr, check net.LookupIP()
+	if net.ParseIP(host) == nil {
+		hosts, err := net.LookupIP(host)
+		if err != nil {
+			return host
+		}
+		for _, h := range hosts {
+			// this restricts pilosa to IP4
+			if h.To4() != nil {
+				return h.String()
+			}
+		}
+	}
+	return host
+}
+
+// AddressWithDefaults converts addr into a valid address,
+// using defaults when necessary.
+func AddressWithDefaults(addr string) (string, error) {
+	host, port, err := hostPortWithDefaults(addr)
+	if err != nil {
+		return "", err
+	}
+	return net.JoinHostPort(host, port), nil
+}
+
+// hostPortWithDefaults returns the host and port portions of addr
+// using defaults when necessary.
+func hostPortWithDefaults(addr string) (host, port string, err error) {
+	// check for a colon between host and port
+	if !hasPort(addr) {
+		addr += ":"
+	}
+
+	// break into host, port
+	host, port, err = net.SplitHostPort(addr)
+	if err != nil {
+		return host, port, err
+	}
+
+	// use defaults when not provided
+	if host == "" {
+		host = DefaultHost
+	}
+	if port == "" {
+		port = DefaultPort
+	}
+
+	return host, port, nil
+}
+
+func hasPort(s string) bool {
+	return strings.LastIndex(s, ":") > strings.LastIndex(s, "]")
 }

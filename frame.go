@@ -34,9 +34,19 @@ const (
 	DefaultRowLabel       = "rowID"
 	DefaultCacheType      = CacheTypeRanked
 	DefaultInverseEnabled = false
+	DefaultRangeEnabled   = false
 
 	// Default ranked frame cache
 	DefaultCacheSize = 50000
+)
+
+// List of operators for field range queries.
+const (
+	RangeOpEQ  = "eq"
+	RangeOpLT  = "lt"
+	RangeOpLTE = "lte"
+	RangeOpGT  = "gt"
+	RangeOpGTE = "gte"
 )
 
 // Frame represents a container for views.
@@ -46,6 +56,7 @@ type Frame struct {
 	index       string
 	name        string
 	timeQuantum TimeQuantum
+	schema      *FrameSchema
 
 	views map[string]*View
 
@@ -59,6 +70,7 @@ type Frame struct {
 	rowLabel       string
 	cacheType      string
 	inverseEnabled bool
+	rangeEnabled   bool
 
 	// Cache size for ranked frames
 	cacheSize uint32
@@ -74,9 +86,10 @@ func NewFrame(path, index, name string) (*Frame, error) {
 	}
 
 	return &Frame{
-		path:  path,
-		index: index,
-		name:  name,
+		path:   path,
+		index:  index,
+		name:   name,
+		schema: &FrameSchema{},
 
 		views:        make(map[string]*View),
 		rowAttrStore: NewAttrStore(filepath.Join(path, ".data")),
@@ -86,6 +99,7 @@ func NewFrame(path, index, name string) (*Frame, error) {
 
 		rowLabel:       DefaultRowLabel,
 		inverseEnabled: DefaultInverseEnabled,
+		rangeEnabled:   DefaultRangeEnabled,
 		cacheType:      DefaultCacheType,
 		cacheSize:      DefaultCacheSize,
 
@@ -172,6 +186,11 @@ func (f *Frame) InverseEnabled() bool {
 	return f.inverseEnabled
 }
 
+// RangeEnabled returns true if range fields can be stored on this frame.
+func (f *Frame) RangeEnabled() bool {
+	return f.rangeEnabled
+}
+
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
 // defaults to DefaultCacheSize 50000
 func (f *Frame) SetCacheSize(v uint32) error {
@@ -203,14 +222,19 @@ func (f *Frame) CacheSize() uint32 {
 // Options returns all options for this frame.
 func (f *Frame) Options() FrameOptions {
 	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.options()
+}
+
+func (f *Frame) options() FrameOptions {
 	opt := FrameOptions{
 		RowLabel:       f.rowLabel,
 		InverseEnabled: f.inverseEnabled,
+		RangeEnabled:   f.rangeEnabled,
 		CacheType:      f.cacheType,
 		CacheSize:      f.cacheSize,
 		TimeQuantum:    f.timeQuantum,
 	}
-	f.mu.Unlock()
 	return opt
 }
 
@@ -223,6 +247,8 @@ func (f *Frame) Open() error {
 		}
 
 		if err := f.loadMeta(); err != nil {
+			return err
+		} else if err := f.loadSchema(); err != nil {
 			return err
 		}
 
@@ -286,6 +312,7 @@ func (f *Frame) loadMeta() error {
 		f.rowLabel = DefaultRowLabel
 		f.cacheType = DefaultCacheType
 		f.inverseEnabled = DefaultInverseEnabled
+		f.rangeEnabled = DefaultRangeEnabled
 		f.cacheSize = DefaultCacheSize
 		return nil
 	} else if err != nil {
@@ -300,6 +327,7 @@ func (f *Frame) loadMeta() error {
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
 	f.inverseEnabled = pb.InverseEnabled
+	f.rangeEnabled = pb.RangeEnabled
 	f.cacheSize = pb.CacheSize
 
 	// Copy cache type.
@@ -314,13 +342,8 @@ func (f *Frame) loadMeta() error {
 // saveMeta writes meta data for the frame.
 func (f *Frame) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.FrameMeta{
-		RowLabel:       f.rowLabel,
-		InverseEnabled: f.inverseEnabled,
-		CacheType:      f.cacheType,
-		CacheSize:      f.cacheSize,
-		TimeQuantum:    string(f.timeQuantum),
-	})
+	fo := f.options()
+	buf, err := proto.Marshal(fo.Encode())
 	if err != nil {
 		return err
 	}
@@ -330,6 +353,35 @@ func (f *Frame) saveMeta() error {
 		return err
 	}
 
+	return nil
+}
+
+// loadSchema reads the schema for the frame.
+func (f *Frame) loadSchema() error {
+	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".schema"))
+	if os.IsNotExist(err) {
+		f.schema = &FrameSchema{}
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	var pb internal.FrameSchema
+	if err := proto.Unmarshal(buf, &pb); err != nil {
+		return err
+	}
+	f.schema = decodeFrameSchema(&pb)
+
+	return nil
+}
+
+// saveSchema writes the current schema to disk.
+func (f *Frame) saveSchema() error {
+	if buf, err := proto.Marshal(encodeFrameSchema(f.schema)); err != nil {
+		return err
+	} else if err := ioutil.WriteFile(filepath.Join(f.path, ".schema"), buf, 0666); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -349,6 +401,23 @@ func (f *Frame) Close() error {
 	}
 	f.views = make(map[string]*View)
 
+	return nil
+}
+
+// Schema returns the frame's current schema.
+func (f *Frame) Schema() *FrameSchema {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.schema
+}
+
+// Field returns a field from the schema by name.
+func (f *Frame) Field(name string) *Field {
+	for _, field := range f.Schema().Fields {
+		if field.Name == name {
+			return field
+		}
+	}
 	return nil
 }
 
@@ -524,6 +593,73 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	return changed, nil
 }
 
+// FieldValue reads a field value for a column.
+func (f *Frame) FieldValue(columnID uint64, name string) (value int64, exists bool, err error) {
+	field := f.Field(name)
+	if field == nil {
+		return 0, false, ErrFieldNotFound
+	}
+
+	// Fetch target view.
+	view := f.View(ViewFieldPrefix + name)
+	if view == nil {
+		return 0, false, nil
+	}
+
+	v, exists, err := view.FieldValue(columnID, field.BitDepth())
+	if err != nil {
+		return 0, false, err
+	} else if !exists {
+		return 0, false, nil
+	}
+	return int64(v) + field.Min, true, nil
+}
+
+// SetFieldValue sets a field value for a column.
+func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (changed bool, err error) {
+	// Fetch field and validate value.
+	field := f.Field(name)
+	if field == nil {
+		return false, ErrFieldNotFound
+	} else if value < field.Min {
+		return false, ErrFieldValueTooLow
+	} else if value > field.Max {
+		return false, ErrFieldValueTooHigh
+	}
+
+	// Fetch target view.
+	view, err := f.CreateViewIfNotExists(ViewFieldPrefix + name)
+	if err != nil {
+		return false, err
+	}
+
+	// Determine base value to store.
+	baseValue := uint64(value - field.Min)
+
+	return view.SetFieldValue(columnID, field.BitDepth(), baseValue)
+}
+
+func (f *Frame) FieldRange(name, op string, predicate int64) (*Bitmap, error) {
+	// Retrieve and validate field.
+	field := f.Field(name)
+	if field == nil {
+		return nil, ErrFieldNotFound
+	} else if predicate < field.Min || predicate > field.Max {
+		return nil, nil
+	}
+
+	// Retrieve field's view.
+	view := f.View(ViewFieldPrefix + name)
+	if view == nil {
+		return nil, nil
+	}
+
+	// Adjust predicate to range.
+	baseValue := uint64(predicate - field.Min)
+
+	return view.FieldRange(op, field.BitDepth(), baseValue)
+}
+
 // Import bulk imports data.
 func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) error {
 	// Determine quantum if timestamps are set.
@@ -619,6 +755,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 		Meta: &internal.FrameMeta{
 			RowLabel:       f.rowLabel,
 			InverseEnabled: f.inverseEnabled,
+			RangeEnabled:   f.rangeEnabled,
 			CacheType:      f.cacheType,
 			CacheSize:      f.cacheSize,
 			TimeQuantum:    string(f.timeQuantum),
@@ -648,9 +785,11 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 type FrameOptions struct {
 	RowLabel       string      `json:"rowLabel,omitempty"`
 	InverseEnabled bool        `json:"inverseEnabled,omitempty"`
+	RangeEnabled   bool        `json:"rangeEnabled,omitempty"`
 	CacheType      string      `json:"cacheType,omitempty"`
 	CacheSize      uint32      `json:"cacheSize,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
+	Fields         []*Field    `json:"fields,omitempty"`
 }
 
 // Encode converts o into its internal representation.
@@ -658,9 +797,122 @@ func (o *FrameOptions) Encode() *internal.FrameMeta {
 	return &internal.FrameMeta{
 		RowLabel:       o.RowLabel,
 		InverseEnabled: o.InverseEnabled,
+		RangeEnabled:   o.RangeEnabled,
 		CacheType:      o.CacheType,
 		CacheSize:      o.CacheSize,
 		TimeQuantum:    string(o.TimeQuantum),
+	}
+}
+
+// FrameSchema represents the list of fields on a frame.
+type FrameSchema struct {
+	Fields []*Field
+}
+
+func encodeFrameSchema(schema *FrameSchema) *internal.FrameSchema {
+	if schema == nil {
+		return nil
+	}
+	return &internal.FrameSchema{
+		Fields: encodeFields(schema.Fields),
+	}
+}
+
+func decodeFrameSchema(schema *internal.FrameSchema) *FrameSchema {
+	if schema == nil {
+		return nil
+	}
+	return &FrameSchema{
+		Fields: decodeFields(schema.Fields),
+	}
+}
+
+// List of field data types.
+const (
+	FieldTypeInt = "int"
+)
+
+func IsValidFieldType(v string) bool {
+	switch v {
+	case FieldTypeInt:
+		return true
+	default:
+		return false
+	}
+}
+
+// Field represents a range field on a frame.
+type Field struct {
+	Name string `json:"name,omitempty"`
+	Type string `json:"type,omitempty"`
+	Min  int64  `json:"min,omitempty"`
+	Max  int64  `json:"max,omitempty"`
+}
+
+// BitDepth returns the number of bits required to store a value between min & max.
+func (f *Field) BitDepth() uint {
+	for i := uint(0); i < 63; i++ {
+		if f.Max-f.Min < (1 << i) {
+			return i
+		}
+	}
+	return 63
+}
+
+func ValidateField(f *Field) error {
+	if f.Name == "" {
+		return ErrFieldNameRequired
+	} else if !IsValidFieldType(f.Type) {
+		return ErrInvalidFieldType
+	} else if f.Min > f.Max {
+		return ErrInvalidFieldRange
+	}
+	return nil
+}
+
+func encodeFields(a []*Field) []*internal.Field {
+	if len(a) == 0 {
+		return nil
+	}
+	other := make([]*internal.Field, len(a))
+	for i := range a {
+		other[i] = encodeField(a[i])
+	}
+	return other
+}
+
+func decodeFields(a []*internal.Field) []*Field {
+	if len(a) == 0 {
+		return nil
+	}
+	other := make([]*Field, len(a))
+	for i := range a {
+		other[i] = decodeField(a[i])
+	}
+	return other
+}
+
+func encodeField(f *Field) *internal.Field {
+	if f == nil {
+		return nil
+	}
+	return &internal.Field{
+		Name: f.Name,
+		Type: f.Type,
+		Min:  int64(f.Min),
+		Max:  int64(f.Max),
+	}
+}
+
+func decodeField(f *internal.Field) *Field {
+	if f == nil {
+		return nil
+	}
+	return &Field{
+		Name: f.Name,
+		Type: f.Type,
+		Min:  f.Min,
+		Max:  f.Max,
 	}
 }
 
@@ -681,12 +933,13 @@ func (p importBitSet) Less(i, j int) bool { return p.rowIDs[i] < p.rowIDs[j] }
 const (
 	CacheTypeLRU    = "lru"
 	CacheTypeRanked = "ranked"
+	CacheTypeNone   = "none"
 )
 
 // IsValidCacheType returns true if v is a valid cache type.
 func IsValidCacheType(v string) bool {
 	switch v {
-	case CacheTypeLRU, CacheTypeRanked:
+	case CacheTypeLRU, CacheTypeRanked, CacheTypeNone:
 		return true
 	default:
 		return false

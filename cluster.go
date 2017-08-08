@@ -38,8 +38,7 @@ const (
 
 // Node represents a node in the cluster.
 type Node struct {
-	Host         string `json:"host"`
-	InternalHost string `json:"internalHost"`
+	Host string `json:"host"`
 
 	status *internal.NodeStatus `json:"status"`
 }

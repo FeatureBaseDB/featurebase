@@ -249,6 +249,8 @@ func (f *Fragment) openCache() error {
 		f.cache = NewRankCache(f.CacheSize)
 	case CacheTypeLRU:
 		f.cache = NewLRUCache(f.CacheSize)
+	case CacheTypeNone:
+		f.cache = NewNopCache()
 	default:
 		return ErrInvalidCacheType
 	}
@@ -265,7 +267,7 @@ func (f *Fragment) openCache() error {
 	// Unmarshal cache data.
 	var pb internal.Cache
 	if err := proto.Unmarshal(buf, &pb); err != nil {
-		log.Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
+		f.logger().Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
 		return nil
 	}
 
@@ -471,6 +473,178 @@ func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	return changed, nil
 }
 
+func (f *Fragment) bit(rowID, columnID uint64) (bool, error) {
+	pos, err := f.pos(rowID, columnID)
+	if err != nil {
+		return false, err
+	}
+	return f.storage.Contains(pos), nil
+}
+
+// FieldValue uses a column of bits to read a multi-bit value.
+func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// If existance bit is unset then ignore remaining bits.
+	if v, err := f.bit(uint64(bitDepth), columnID); err != nil {
+		return 0, false, err
+	} else if !v {
+		return 0, false, nil
+	}
+
+	// Compute other bits into a value.
+	for i := uint(0); i < bitDepth; i++ {
+		if v, err := f.bit(uint64(i), columnID); err != nil {
+			return 0, false, err
+		} else if v {
+			value |= (1 << i)
+		}
+	}
+
+	return value, true, nil
+}
+
+// SetFieldValue uses a column of bits to set a multi-bit value.
+func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for i := uint(0); i < bitDepth; i++ {
+		if value&(1<<i) != 0 {
+			if c, err := f.setBit(uint64(i), columnID); err != nil {
+				return changed, err
+			} else if c {
+				changed = true
+			}
+		} else {
+			if c, err := f.clearBit(uint64(i), columnID); err != nil {
+				return changed, err
+			} else if c {
+				changed = true
+			}
+		}
+	}
+
+	// Mark value as set.
+	if c, err := f.setBit(uint64(bitDepth), columnID); err != nil {
+		return changed, err
+	} else if c {
+		changed = true
+	}
+
+	return changed, nil
+}
+
+func (f *Fragment) FieldRange(op string, bitDepth uint, predicate uint64) (*Bitmap, error) {
+	switch op {
+	case RangeOpEQ:
+		return f.fieldRangeEQ(bitDepth, predicate)
+	case RangeOpLT, RangeOpLTE:
+		return f.fieldRangeLT(bitDepth, predicate, op == RangeOpLTE)
+	case RangeOpGT, RangeOpGTE:
+		return f.fieldRangeGT(bitDepth, predicate, op == RangeOpGTE)
+	default:
+		return nil, ErrInvalidRangeOperation
+	}
+}
+
+func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Bitmap, error) {
+	// Start with set of columns with values set.
+	b := f.Row(uint64(bitDepth))
+
+	// Filter any bits that don't match the current bit value.
+	for i := int(bitDepth - 1); i >= 0; i-- {
+		row := f.Row(uint64(i))
+		bit := (predicate >> uint(i)) & 1
+
+		if bit == 1 {
+			b = b.Intersect(row)
+		} else {
+			b = b.Difference(row)
+		}
+	}
+
+	return b, nil
+}
+
+func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Bitmap, error) {
+	keep := NewBitmap()
+
+	// Start with set of columns with values set.
+	b := f.Row(uint64(bitDepth))
+
+	// Filter any bits that don't match the current bit value.
+	leadingZeros := true
+	for i := int(bitDepth - 1); i >= 0; i-- {
+		row := f.Row(uint64(i))
+		bit := (predicate >> uint(i)) & 1
+
+		// Remove any columns with higher bits set.
+		if leadingZeros {
+			if bit == 0 {
+				b = b.Difference(row)
+				continue
+			} else {
+				leadingZeros = false
+			}
+		}
+
+		// Handle last bit differently.
+		// If bit is zero then return only already kept columns.
+		// If bit is one then remove any one columns.
+		if i == 0 && !allowEquality {
+			if bit == 0 {
+				return keep, nil
+			}
+			return b.Difference(row.Difference(keep)), nil
+		}
+
+		// If bit is zero then remove all set columns not in excluded bitmap.
+		if bit == 0 {
+			b = b.Difference(row.Difference(keep))
+			continue
+		}
+
+		// If bit is set then add columns for set bits to exclude.
+		keep = keep.Union(b.Difference(row))
+	}
+
+	return b, nil
+}
+
+func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Bitmap, error) {
+	b := f.Row(uint64(bitDepth))
+	keep := NewBitmap()
+
+	// Filter any bits that don't match the current bit value.
+	for i := int(bitDepth - 1); i >= 0; i-- {
+		row := f.Row(uint64(i))
+		bit := (predicate >> uint(i)) & 1
+
+		// Handle last bit differently.
+		// If bit is one then return only already kept columns.
+		// If bit is zero then remove any unset columns.
+		if i == 0 && !allowEquality {
+			if bit == 1 {
+				return keep, nil
+			}
+			return b.Difference(b.Difference(row).Difference(keep)), nil
+		}
+
+		// If bit is set then remove all unset columns not already kept.
+		if bit == 1 {
+			b = b.Difference(b.Difference(row).Difference(keep))
+			continue
+		}
+
+		// If bit is unset then add columns with set bit to keep.
+		keep = keep.Union(b.Intersect(row))
+	}
+
+	return b, nil
+}
+
 // pos translates the row ID and column ID into a position in the storage bitmap.
 func (f *Fragment) pos(rowID, columnID uint64) (uint64, error) {
 	// Return an error if the column ID is out of the range of the fragment's slice.
@@ -638,6 +812,10 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 }
 
 func (f *Fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
+	// Don't retrieve from storage if CacheTypeNone.
+	if f.CacheType == CacheTypeNone {
+		return f.cache.Top()
+	}
 	// If no specific rows are requested, retrieve top rows.
 	if len(rowIDs) == 0 {
 		f.mu.Lock()

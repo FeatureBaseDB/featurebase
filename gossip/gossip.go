@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -72,7 +72,7 @@ func (g *GossipNodeSet) Open() error {
 
 	// attach to gossip seed node
 	nodes := []*pilosa.Node{&pilosa.Node{Host: g.config.gossipSeed}} //TODO: support a list of seeds
-	_, err = g.memberlist.Join(pilosa.Nodes(nodes).Hosts())
+	err = g.joinWithRetry(pilosa.Nodes(nodes).Hosts())
 	if err != nil {
 		return err
 	}
@@ -83,6 +83,31 @@ func (g *GossipNodeSet) Open() error {
 		RetransmitMult: 3,
 	}
 	return nil
+}
+
+// joinWithRetry wraps the standard memberlist Join function in a retry.
+func (g *GossipNodeSet) joinWithRetry(hosts []string) error {
+	err := retry(60, 2*time.Second, func() error {
+		_, err := g.memberlist.Join(hosts)
+		return err
+	})
+	return err
+}
+
+// retry periodically retries function fn a specified number of attempts.
+func retry(attempts int, sleep time.Duration, fn func() error) (err error) {
+	for i := 0; ; i++ {
+		err = fn()
+		if err == nil {
+			return
+		}
+		if i >= (attempts - 1) {
+			break
+		}
+		time.Sleep(sleep)
+		log.Println("retrying after error:", err)
+	}
+	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
 
 // logger returns a logger for the GossipNodeSet.
@@ -98,9 +123,9 @@ type gossipConfig struct {
 }
 
 // NewGossipNodeSet returns a new instance of GossipNodeSet.
-func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, sh pilosa.StatusHandler) *GossipNodeSet {
+func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, server *pilosa.Server) *GossipNodeSet {
 	g := &GossipNodeSet{
-		LogOutput: os.Stderr,
+		LogOutput: server.LogOutput,
 	}
 
 	//TODO: pull memberlist config from pilosa.cfg file
@@ -111,11 +136,11 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	g.config.memberlistConfig.Name = name
 	g.config.memberlistConfig.BindAddr = gossipHost
 	g.config.memberlistConfig.BindPort = gossipPort
-	g.config.memberlistConfig.AdvertiseAddr = gossipHost
+	g.config.memberlistConfig.AdvertiseAddr = pilosa.HostToIP(gossipHost)
 	g.config.memberlistConfig.AdvertisePort = gossipPort
 	g.config.memberlistConfig.Delegate = g
 
-	g.statusHandler = sh
+	g.statusHandler = server
 
 	return g
 }

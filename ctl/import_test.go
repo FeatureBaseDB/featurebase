@@ -16,13 +16,15 @@ package ctl
 
 import (
 	"bytes"
-	"github.com/pilosa/pilosa"
-	"golang.org/x/net/context"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/test"
+	"golang.org/x/net/context"
 )
 
 func TestImportCommand_Validation(t *testing.T) {
@@ -59,12 +61,12 @@ func TestImportCommand_Run(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hldr := MustOpenHolder()
+	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	s := NewServer()
+	s := test.NewServer()
 	defer s.Close()
 	s.Handler.Host = s.Host()
-	s.Handler.Cluster = NewCluster(1)
+	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
 	cm.Host = s.Host()

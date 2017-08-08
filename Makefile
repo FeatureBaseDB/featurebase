@@ -1,6 +1,6 @@
-.PHONY: glide vendor-update docker pilosa crossbuild install generate statik release test cover cover-pkg cover-viz
+.PHONY: dep docker pilosa crossbuild install generate statik release test cover cover-pkg cover-viz
 
-GLIDE := $(shell command -v glide 2>/dev/null)
+DEP := $(shell command -v dep 2>/dev/null)
 STATIK := $(shell command -v statik 2>/dev/null)
 PROTOC := $(shell command -v protoc 2>/dev/null)
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -15,24 +15,18 @@ default: test pilosa
 $(GOPATH)/bin:
 	mkdir $(GOPATH)/bin
 
-glide: $(GOPATH)/bin
-ifndef GLIDE
-	curl https://glide.sh/get | sh
+dep: $(GOPATH)/bin
+	go get -u github.com/golang/dep/cmd/dep
+
+vendor: Gopkg.toml
+ifndef DEP
+	make dep
 endif
+	dep ensure
+	touch vendor
 
-$(GLIDE):
-	make glide
-
-vendor: $(GLIDE) glide.yaml
-ifndef GLIDE
-	curl https://glide.sh/get | sh
-endif
-	glide install
-
-glide.lock: glide glide.yaml
-	glide update
-
-vendor-update: glide.lock
+Gopkg.lock: dep Gopkg.toml
+	dep ensure
 
 test: vendor
 	go test $(PKGS) $(TESTFLAGS)
@@ -48,7 +42,7 @@ cover-pkg:
 	mkdir -p build/coverage
 	touch build/coverage/$(subst /,-,$(PKG)).out
 	go test -coverprofile=build/coverage/$(subst /,-,$(PKG)).out $(PKG)
-	tail +2 build/coverage/$(subst /,-,$(PKG)).out >> build/coverage/all.out
+	tail -n +2 build/coverage/$(subst /,-,$(PKG)).out >> build/coverage/all.out
 
 cover-viz: cover
 	go tool cover -html=build/coverage/all.out

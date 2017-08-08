@@ -16,16 +16,15 @@ package pilosa_test
 
 import (
 	"io/ioutil"
-	"os"
 	"testing"
-	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/test"
 )
 
 // Ensure frame can open and retrieve a view.
 func TestFrame_CreateViewIfNotExists(t *testing.T) {
-	f := MustOpenFrame()
+	f := test.MustOpenFrame()
 	defer f.Close()
 
 	// Create view.
@@ -51,7 +50,7 @@ func TestFrame_CreateViewIfNotExists(t *testing.T) {
 
 // Ensure frame can set its time quantum.
 func TestFrame_SetTimeQuantum(t *testing.T) {
-	f := MustOpenFrame()
+	f := test.MustOpenFrame()
 	defer f.Close()
 
 	// Set & retrieve time quantum.
@@ -67,6 +66,153 @@ func TestFrame_SetTimeQuantum(t *testing.T) {
 	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
 		t.Fatalf("unexpected quantum (reopen): %s", q)
 	}
+}
+
+// Ensure a frame can set & read a field value.
+func TestFrame_SetFieldValue(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
+				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 20, Max: 25},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value on first field.
+		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Set value on same column but different field.
+		if changed, err := f.SetFieldValue(100, "field1", 25); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Read value.
+		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+			t.Fatal(err)
+		} else if value != 21 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if !exists {
+			t.Fatal("expected value to exist")
+		}
+
+		// Setting value should return no change.
+		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+			t.Fatal(err)
+		} else if changed {
+			t.Fatal("expected no change")
+		}
+	})
+
+	t.Run("Overwrite", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value.
+		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Set different value.
+		if changed, err := f.SetFieldValue(100, "field0", 23); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Read value.
+		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+			t.Fatal(err)
+		} else if value != 23 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if !exists {
+			t.Fatal("expected value to exist")
+		}
+	})
+
+	t.Run("ErrFieldNotFound", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value.
+		if _, err := f.SetFieldValue(100, "no_such_field", 21); err != pilosa.ErrFieldNotFound {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("ErrFieldValueTooLow", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 20, Max: 30},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value.
+		if _, err := f.SetFieldValue(100, "field0", 15); err != pilosa.ErrFieldValueTooLow {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("ErrFieldValueTooHigh", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields: []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 20, Max: 30},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value.
+		if _, err := f.SetFieldValue(100, "field0", 31); err != pilosa.ErrFieldValueTooHigh {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
 }
 
 func TestFrame_NameRestriction(t *testing.T) {
@@ -160,86 +306,4 @@ func TestFrame_RowLabelValidation(t *testing.T) {
 		}
 	}
 
-}
-
-// Frame represents a test wrapper for pilosa.Frame.
-type Frame struct {
-	*pilosa.Frame
-}
-
-// NewFrame returns a new instance of Frame d/0.
-func NewFrame() *Frame {
-	path, err := ioutil.TempDir("", "pilosa-frame-")
-	if err != nil {
-		panic(err)
-	}
-	frame, err := pilosa.NewFrame(path, "i", "f")
-	if err != nil {
-		panic(err)
-	}
-	return &Frame{Frame: frame}
-}
-
-// MustOpenFrame returns a new, opened frame at a temporary path. Panic on error.
-func MustOpenFrame() *Frame {
-	f := NewFrame()
-	if err := f.Open(); err != nil {
-		panic(err)
-	}
-	return f
-}
-
-// Close closes the frame and removes the underlying data.
-func (f *Frame) Close() error {
-	defer os.RemoveAll(f.Path())
-	return f.Frame.Close()
-}
-
-// Reopen closes the index and reopens it.
-func (f *Frame) Reopen() error {
-	var err error
-	if err := f.Frame.Close(); err != nil {
-		return err
-	}
-
-	path, index, name := f.Path(), f.Index(), f.Name()
-	f.Frame, err = pilosa.NewFrame(path, index, name)
-	if err != nil {
-		return err
-	}
-
-	if err := f.Open(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// MustSetBit sets a bit on the frame. Panic on error.
-func (f *Frame) MustSetBit(view string, rowID, columnID uint64, t *time.Time) (changed bool) {
-	changed, err := f.SetBit(view, rowID, columnID, t)
-	if err != nil {
-		panic(err)
-	}
-	return changed
-}
-
-// Ensure frame can set its cache
-func TestFrame_SetCacheSize(t *testing.T) {
-	f := MustOpenFrame()
-	defer f.Close()
-	cacheSize := uint32(100)
-
-	// Set & retrieve frame cache size.
-	if err := f.SetCacheSize(cacheSize); err != nil {
-		t.Fatal(err)
-	} else if q := f.CacheSize(); q != cacheSize {
-		t.Fatalf("unexpected frame cache size: %d", q)
-	}
-
-	// Reload frame and verify that it is persisted.
-	if err := f.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if q := f.CacheSize(); q != cacheSize {
-		t.Fatalf("unexpected frame cache size (reopen): %d", q)
-	}
 }
