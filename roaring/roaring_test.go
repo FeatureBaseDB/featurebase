@@ -191,7 +191,7 @@ func TestBitmap_Max(t *testing.T) {
 		}
 	}
 }
-func TestBitmap_BitmapCountRangeBug(t *testing.T) {
+func TestBitmap_BitmapCountRangeEdgeCase(t *testing.T) {
 	s := uint64(2009 * 1048576)
 	e := uint64(2010 * 1048576)
 
