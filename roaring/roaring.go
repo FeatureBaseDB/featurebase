@@ -197,9 +197,14 @@ func (b *Bitmap) Count() (n uint64) {
 
 // CountRange returns the number of bits set between [start, end).
 func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
+	if len(b.keys) == 0 {
+		return
+	}
+	skey := highbits(start)
+	ekey := highbits(end)
 
-	i := search64(b.keys, highbits(start))
-	j := search64(b.keys, highbits(end))
+	i := search64(b.keys, skey)
+	j := search64(b.keys, ekey)
 
 	// If range is entirely in one container then just count that range.
 	if i >= 0 && i == j {
@@ -208,7 +213,13 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 
 	// Count first partial container.
 	if i < 0 {
-		i = -i
+		// start is before container, so we should start counting
+		// at first container that has value
+		if skey < b.keys[0] {
+			i = -1
+		} else {
+			i = -i
+		}
 	} else {
 		n += uint64(b.containers[i].countRange(int(lowbits(start)), maxContainerVal+1))
 	}

@@ -192,6 +192,29 @@ func TestBitmap_Max(t *testing.T) {
 	}
 }
 
+// Ensure CountRange is correct even if rangekey is prior to inital container.
+func TestBitmap_BitmapCountRangeEdgeCase(t *testing.T) {
+	s := uint64(2009 * 1048576)
+	e := uint64(2010 * 1048576)
+
+	start := s + (39314024 % 1048576)
+	bm0 := roaring.NewBitmap()
+	for i := uint64(0); i < 65536; i++ {
+		if (i+1)%4096 == 0 {
+			start += 16384
+		} else {
+			start += 2
+		}
+		bm0.Add(start)
+	}
+	a := bm0.Count()
+	r := bm0.CountRange(s, e)
+	if a != r {
+		t.Fatalf("Counts != CountRange %v %v", a, r)
+
+	}
+}
+
 func TestBitmap_BitmapCountRange(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177)
 	for i := uint64(628); i < 2683301; i++ {
