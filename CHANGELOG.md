@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.6.0] - 2017-08-11
+
+This version contains 14 contributions from 5 contributors. There are 28 files changed, 4,936 insertions, and 692 deletions.
+
+### Added
+
+- Add Run-length Encoding ([#758](https://github.com/pilosa/pilosa/pull/758))
+
+### Changed
+
+- Make gossip the default broadcast type ([#750](https://github.com/pilosa/pilosa/pull/750))
+
+### Fixed
+
+- Fix CountRange ([#759](https://github.com/pilosa/pilosa/pull/759))
+- Fix `differenceArrayRun` logic ([#674](https://github.com/pilosa/pilosa/pull/674))
+
 ## [0.5.0] - 2017-08-02
 
 This version contains 65 contributions from 8 contributors (including 1 volunteer contributor). There are 79 files changed, 7,972 insertions, and 2,800 deletions.
