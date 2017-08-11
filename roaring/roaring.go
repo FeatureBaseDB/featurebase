@@ -27,20 +27,17 @@ import (
 
 const (
 	// magicNumber is an identifier, in bytes 0-1 of the file.
-	magicNumberNoRuns = uint32(12346)
-	magicNumber       = uint32(12347)
+	magicNumber = uint32(12348)
 
 	// storageVersion indicates the storage version, in bytes 2-3.
 	storageVersion = uint32(0)
 
 	// cookie is the first four bytes in a roaring bitmap file,
 	// formed by joining magicNumber and storageVersion
-	cookieNoRuns = magicNumberNoRuns + storageVersion<<16
-	cookie       = magicNumber + storageVersion<<16
+	cookie = magicNumber + storageVersion<<16
 
 	// headerBaseSize is the size in bytes of the cookie and key count at the
-	// beginning of a file. Headers in files with runs also include
-	// runFlagBitset, of length (numContainers+7)/8.
+	// beginning of a file.
 	headerBaseSize = 4 + 4
 
 	// runCountHeaderSize is the size in bytes of the run count stored
@@ -530,14 +527,13 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	//b.removeEmptyContainers()
 
 	containerCount := len(b.keys) - b.countEmptyContainers()
-	thisCookie := cookieNoRuns
 	headerSize := headerBaseSize
 
 	// Build header before writing individual container blocks.
 	// Metadata for each container is 8+2+2+4 = sizeof(key) + sizeof(container_type)+sizeof(cardinality) + sizeof(file offset)
 	buf := make([]byte, headerSize+(containerCount*(8+2+2+4)))
 	// Cookie header section.
-	binary.LittleEndian.PutUint32(buf[0:], thisCookie)
+	binary.LittleEndian.PutUint32(buf[0:], cookie)
 	binary.LittleEndian.PutUint32(buf[4:], uint32(containerCount))
 
 	empty := 0
@@ -603,11 +599,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	// Verify the first two bytes are a valid magicNumber, and second two bytes match current storageVersion.
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
 	fileVersion := uint32(binary.LittleEndian.Uint16(data[2:4]))
-	if fileMagic == magicNumberNoRuns {
-		// noop
-		//	} else if fileMagic == magicNumber {
-		//	containsRuns = true
-	} else {
+	if fileMagic != magicNumber {
 		return fmt.Errorf("invalid roaring file, magic number %v is incorrect", fileMagic)
 	}
 

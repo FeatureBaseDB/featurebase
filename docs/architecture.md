@@ -10,12 +10,11 @@ Bitmaps are persisted to disk using a file format very similar to the [Roaring B
 
 * The cookie is always bytes 0-3; the container count is always bytes 4-7, never bytes 2-3.
 * The cookie includes file format version in bytes 2-3 (currently equal to zero).
+* The descriptive header includes, for each container, a 64-bit key, a 16-bit cardinality, and a 16-bit container type (which only uses two bits now). This makes the runFlag bitset unnecessary. This is in contrast to the spec, which stores a 16-bit key and a 16-bit cardinality.
 * The offset header section is always included.
 * RLE runs are serialized as [start, last], not [start, length].
 * After the container storage section is an operation log, of unspecified length.
 
-![roaring file format diagram](/img/docs/pilosa-roaring-storage-diagram.svg)
+![roaring file format diagram](/img/docs/pilosa-roaring-storage-diagram.png)
 
-All values are little-endian. The first two bytes of the cookie is 12346 when the file contains no RLE containers, or 12347 when it does. In the no-RLE case, the runFlagBitset is absent. Otherwise the format is identical in both cases. Container types are determined by their cardinality - a container with 4096 or more values is a bitmap, a container with fewer is an array or RLE container. A high bit in runFlagBitset indicates an RLE container.
-
-Storing the runFlagBitset in a separate section, indicated by the cookie value, keeps this format backward compatible with older storage versions that do not support RLE containers.
+All values are little-endian. The first two bytes of the cookie is 12348, to reflect incompatibility with the spec, which uses 12346 or 12347. Container types are NOT inferred from their cardinality as in the spec. Instead, the container type is read directly from the descriptive header.
