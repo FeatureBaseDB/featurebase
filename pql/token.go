@@ -37,7 +37,12 @@ const (
 	ALL
 	keyword_end
 
-	EQ     // =
+	ASSIGN // =
+	EQ     // ==
+	LT     // <
+	LTE    // <=
+	GT     // >
+	GTE    // >=
 	COMMA  // ,
 	LPAREN // (
 	RPAREN // )
@@ -56,7 +61,12 @@ var tokens = [...]string{
 
 	ALL: "ALL",
 
-	EQ:     "=",
+	ASSIGN: "=",
+	EQ:     "==",
+	LT:     "<",
+	LTE:    "<=",
+	GT:     ">",
+	GTE:    ">=",
 	COMMA:  ",",
 	LPAREN: "(",
 	RPAREN: ")",

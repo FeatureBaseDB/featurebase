@@ -59,26 +59,38 @@ func (s *Scanner) Scan() (tok Token, pos Pos, lit string) {
 	// Otherwise parse individual characters.
 	switch ch {
 	case eof:
-		tok = EOF
-		return
+		return EOF, pos, ""
 	case '=':
-		tok = EQ
+		if next := s.read(); next == '=' {
+			return EQ, pos, "=="
+		}
+		s.unread()
+		return ASSIGN, pos, string(ch)
+	case '<':
+		if next := s.read(); next == '=' {
+			return LTE, pos, "<="
+		}
+		s.unread()
+		return LT, pos, string(ch)
+	case '>':
+		if next := s.read(); next == '=' {
+			return GTE, pos, ">="
+		}
+		s.unread()
+		return GT, pos, string(ch)
 	case ',':
-		tok = COMMA
+		return COMMA, pos, string(ch)
 	case '(':
-		tok = LPAREN
+		return LPAREN, pos, string(ch)
 	case ')':
-		tok = RPAREN
+		return RPAREN, pos, string(ch)
 	case '[':
-		tok = LBRACK
+		return LBRACK, pos, string(ch)
 	case ']':
-		tok = RBRACK
+		return RBRACK, pos, string(ch)
 	default:
-		tok = ILLEGAL
+		return ILLEGAL, pos, string(ch)
 	}
-
-	lit = string(ch)
-	return
 }
 
 // read returns the next code point from the underlying reader and updates the pos.

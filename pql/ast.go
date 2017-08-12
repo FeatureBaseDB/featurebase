@@ -161,19 +161,7 @@ func (c *Call) String() string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-
-		switch v := c.Args[key].(type) {
-		case string:
-			fmt.Fprintf(&buf, "%v=%q", key, v)
-		case []interface{}:
-			fmt.Fprintf(&buf, "%v=%s", key, joinInterfaceSlice(v))
-		case []uint64:
-			fmt.Fprintf(&buf, "%v=%s", key, joinUint64Slice(v))
-		case time.Time:
-			fmt.Fprintf(&buf, "%v=\"%s\"", key, v.Format(TimeFormat))
-		default:
-			fmt.Fprintf(&buf, "%v=%v", key, v)
-		}
+		fmt.Fprintf(&buf, "%v=%s", key, FormatValue(c.Args[key]))
 	}
 
 	// Write closing.
@@ -208,6 +196,35 @@ func (c *Call) IsInverse(rowLabel, columnLabel string) bool {
 		}
 	}
 	return false
+}
+
+// Condition represents an operation & value.
+// When used in an argument map it represents a binary expression.
+type Condition struct {
+	Op    Token
+	Value interface{}
+}
+
+// String returns the string representation of the condition.
+func (cond *Condition) String() string {
+	return fmt.Sprintf("%s %s", cond.Op.String(), FormatValue(cond.Value))
+}
+
+func FormatValue(v interface{}) string {
+	switch v := v.(type) {
+	case string:
+		return fmt.Sprintf("%q", v)
+	case []interface{}:
+		return fmt.Sprintf("%s", joinInterfaceSlice(v))
+	case []uint64:
+		return fmt.Sprintf("%s", joinUint64Slice(v))
+	case time.Time:
+		return fmt.Sprintf("\"%s\"", v.Format(TimeFormat))
+	case *Condition:
+		return v.String()
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 // CopyArgs returns a copy of m.
