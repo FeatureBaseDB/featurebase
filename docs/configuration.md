@@ -1,5 +1,12 @@
 +++
 title = "Configuration"
+weight = 7
+nav = [
+    "Command line flags",
+    "Environment variables",
+    "Config file",
+    "All Options",
+]
 +++
 
 ## Configuration

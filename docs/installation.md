@@ -1,5 +1,10 @@
 +++
 title = "Installation"
+weight = 2
+nav = [
+    "Installing on MacOS",
+    "Installing on Linux",
+]
 +++
 
 

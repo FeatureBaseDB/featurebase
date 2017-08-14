@@ -1,5 +1,12 @@
 +++
 title = "Getting Started"
+weight = 3
+nav = [
+     "Starting Pilosa",
+     "Sample Project",
+     "Input Definition",
+     "What's Next?",
+]
 +++
 
 ## Getting Started
