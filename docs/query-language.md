@@ -1,5 +1,12 @@
 +++
 title = "Query Language"
+weight = 6
+nav = [
+    "Conventions",
+    "Arguments and Types",
+    "Write Operations",
+    "Read Operations",
+]
 +++
 
 ## Query Language

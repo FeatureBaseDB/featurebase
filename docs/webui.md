@@ -1,5 +1,10 @@
 +++
 title = "WebUI"
+weight = 9
+nav = [
+    "Console",
+    "Cluster Admin",
+]
 +++
 
 ## WebUI

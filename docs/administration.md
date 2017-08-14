@@ -1,5 +1,12 @@
 +++
-title = "Administration Guide"
+title = "Administration"
+weight = 13
+nav = [
+    "Installing in production",
+    "Imports and Exports",
+    "Versioning",
+    "Backup/restore",
+]
 +++
 
 ## Administration Guide

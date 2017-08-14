@@ -1,5 +1,17 @@
 +++
 title = "Data Model"
+weight = 5
+nav = [
+    "Overview",
+    "Index",
+    "Column",
+    "Row",
+    "Frame",
+    "Time Quantum",
+    "Attribute",
+    "Slice",
+    "View",
+]
 +++
 
 ## Data Model
