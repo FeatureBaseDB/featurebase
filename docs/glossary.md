@@ -1,5 +1,7 @@
 +++
 title = "Glossary"
+weight = 14
+nav = []
 +++
 
 ## Glossary
