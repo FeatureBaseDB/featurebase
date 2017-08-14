@@ -1,5 +1,7 @@
 +++
 title = "FAQ"
+weight = 15
+nav = []
 +++
 
 ## FAQ

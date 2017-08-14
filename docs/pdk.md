@@ -1,5 +1,10 @@
 +++
 title = "PDK"
+weight = 11
+nav = [
+    "Library",
+    "Examples",
+]
 +++
 
 ## PDK
