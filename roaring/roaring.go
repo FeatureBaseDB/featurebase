@@ -235,7 +235,7 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 	// Count containers in between.
 	for x := i + 1; x < j; x++ {
 		// Ensure that current container is inside the requested range since
-		// keys to not have to be consecutive
+		// keys do not have to be consecutive
 		if ekey < b.keys[x] {
 			break
 		}
