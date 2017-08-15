@@ -197,6 +197,7 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 	if len(b.keys) == 0 {
 		return
 	}
+
 	skey := highbits(start)
 	ekey := highbits(end)
 
@@ -233,7 +234,11 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 
 	// Count containers in between.
 	for x := i + 1; x < j; x++ {
+		if ekey < b.keys[x] {
+			break
+		}
 		n += uint64(b.containers[x].n)
+
 	}
 
 	return n
