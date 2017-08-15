@@ -209,38 +209,29 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 		return uint64(b.containers[i].countRange(int(lowbits(start)), int(lowbits(end))))
 	}
 
-	// Count first partial container.
 	if i < 0 {
-		// start is before container, so we should start counting
-		// at first container that has value
-		if skey < b.keys[0] {
-			i = -1
-		} else {
-			i = -i
-		}
+		// start's container did not exist
+		// set i to the index of the first container we have with values higher than start
+		i = -i - 1
 	} else {
+		// Count first partial container and advance i so we don't recount it
 		n += uint64(b.containers[i].countRange(int(lowbits(start)), maxContainerVal+1))
+		i += 1
 	}
 
 	// Count last container.
 	if j < 0 {
-		j = -j
-		if j > len(b.containers) {
-			j = len(b.containers)
-		}
+		// end's container did not exist
+		// set j to the index of the first container with values higher than end (or len(containers))
+		j = -j - 1
 	} else {
+		// end's container exists, count it up to end
 		n += uint64(b.containers[j].countRange(0, int(lowbits(end))))
 	}
 
 	// Count containers in between.
-	for x := i + 1; x < j; x++ {
-		// Ensure that current container is inside the requested range since
-		// keys do not have to be consecutive
-		if ekey < b.keys[x] {
-			break
-		}
+	for x := i; x < j; x++ {
 		n += uint64(b.containers[x].n)
-
 	}
 
 	return n
