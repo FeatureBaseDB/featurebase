@@ -2310,3 +2310,81 @@ func Test_BufBitmapIterator_UnreadPanic(t *testing.T) {
 	itr.unread()
 	itr.unread()
 }
+
+func TestSearc64(t *testing.T) {
+	tests := []struct {
+		a     []uint64
+		value uint64
+		exp   int
+	}{
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 5,
+			exp:   1,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 1,
+			exp:   0,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 0,
+			exp:   -1,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 2,
+			exp:   -2,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 7,
+			exp:   -3,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 11,
+			exp:   -4,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 13,
+			exp:   -5,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 3843534,
+			exp:   -5,
+		},
+		{
+			a:     []uint64{},
+			value: 3843534,
+			exp:   -1,
+		},
+		{
+			a:     []uint64{},
+			value: 0,
+			exp:   -1,
+		},
+		{
+			a:     []uint64{0},
+			value: 0,
+			exp:   0,
+		},
+		{
+			a:     []uint64{0},
+			value: 1,
+			exp:   -2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%d in %v", test.value, test.a), func(t *testing.T) {
+			actual := search64(test.a, test.value)
+			if actual != test.exp {
+				t.Errorf("got: %d, exp: %d", actual, test.exp)
+			}
+		})
+	}
+}

@@ -197,6 +197,7 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 	if len(b.keys) == 0 {
 		return
 	}
+
 	skey := highbits(start)
 	ekey := highbits(end)
 
@@ -208,31 +209,28 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 		return uint64(b.containers[i].countRange(int(lowbits(start)), int(lowbits(end))))
 	}
 
-	// Count first partial container.
 	if i < 0 {
-		// start is before container, so we should start counting
-		// at first container that has value
-		if skey < b.keys[0] {
-			i = -1
-		} else {
-			i = -i
-		}
+		// start's container did not exist
+		// set i to the index of the first container we have with values higher than start
+		i = -i - 1
 	} else {
+		// Count first partial container and advance i so we don't recount it
 		n += uint64(b.containers[i].countRange(int(lowbits(start)), maxContainerVal+1))
+		i += 1
 	}
 
 	// Count last container.
 	if j < 0 {
-		j = -j
-		if j > len(b.containers) {
-			j = len(b.containers)
-		}
+		// end's container did not exist
+		// set j to the index of the first container with values higher than end (or len(containers))
+		j = -j - 1
 	} else {
+		// end's container exists, count it up to end
 		n += uint64(b.containers[j].countRange(0, int(lowbits(end))))
 	}
 
 	// Count containers in between.
-	for x := i + 1; x < j; x++ {
+	for x := i; x < j; x++ {
 		n += uint64(b.containers[x].n)
 	}
 
@@ -2867,7 +2865,8 @@ func (*op) size() int { return 1 + 8 + 4 }
 func highbits(v uint64) uint64 { return uint64(v >> 16) }
 func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
 
-// search32 returns the index of v in a.
+// search32 returns the index of value in a. If value is not found, it works the
+// same way as search64.
 func search32(a []uint16, value uint16) int {
 	// Optimize for elements and the last element.
 	n := len(a)
@@ -2904,7 +2903,13 @@ func search32(a []uint16, value uint16) int {
 	return -(lo + 1)
 }
 
-// search64 returns the index of v in a.
+// search64 returns the index of value in a. If value is not found, -1 * (1 +
+// the index where v would be if it were inserted) is returned. This is done in
+// order to both signal that value was not found (negative number), and also
+// return information about where v would go if it were inserted. The +1 offset
+// is necessary due to the case where v is not found, but would go at index 0.
+// since negative 0 is no different from positive 0, we offset the returned
+// negative indices by 1. See the test for this function for examples.
 func search64(a []uint64, value uint64) int {
 	// Optimize for elements and the last element.
 	n := len(a)
