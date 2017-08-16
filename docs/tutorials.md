@@ -1,5 +1,10 @@
 +++
 title = "Tutorials"
+weight = 4
+nav = [
+    "Transportation",
+    "Chemical similarity search",
+]
 +++
 
 ## Tutorials

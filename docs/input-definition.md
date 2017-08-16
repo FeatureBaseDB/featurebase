@@ -1,12 +1,17 @@
 +++
 title = "Input Definition"
+weight = 8
+nav = [
+    "Create the Schema",
+    "Import Data",
+]
 +++
 
 ## Input Definition
 This document builds on the data import concepts introduced in [Getting Started](../getting-started/).  
 Here we will demonstrate creating the index's schema and data definition.  Then using this definition to import JSON data.
 
-#### Create the Schema Using an Input Definition
+### Create the Schema
 
 Input definitions allow users to define a schema based on their data and to provide data to Pilosa in a more standard format like JSON. Once an input definition is created, we can send data to Pilosa as JSON, and as long as the data adheres to the definition, Pilosa will internally perform all of the appropriate mutations.
 
@@ -91,7 +96,7 @@ We can also set `repo_id` for multiple frames at the same time by providing fiel
  - mapping: The value for this field is used to lookup a `rowID` in a map. A valueMap is required for this destination type.
  - set-timestamp: The value for this field is used to lookup timestamp and set timestamp for the whole frame
 
-#### Import Data Using an Input Definition
+### Import Data
 
 The sample data for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started). 
 
