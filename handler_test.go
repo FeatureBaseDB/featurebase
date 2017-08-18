@@ -1511,3 +1511,23 @@ func TestHandler_GetTimeStamp(t *testing.T) {
 		t.Fatalf("Expected Ignore nonexistent fields")
 	}
 }
+
+// Ensure handler can delete a view.
+func TestHandler_DeleteView(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	hldr.MustCreateFragmentIfNotExists("i0", "f0", "v0", 1).MustSetBits(30, (1*SliceWidth)+1)
+
+	h := test.NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = test.NewCluster(1)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i0/frame/f0/view/v0", strings.NewReader("")))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != `{}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	} else if f := hldr.Index("i0").Frame("f0").View("v0"); f != nil {
+		t.Fatal("expected nil view")
+	}
+}
