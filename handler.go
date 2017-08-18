@@ -116,6 +116,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
+	router.HandleFunc("/index/{index}/frame/{frame}/view/{view}", handler.handleDeleteView).Methods("DELETE")
 	router.HandleFunc("/index/{index}/input/{input-definition}", handler.handlePostInput).Methods("POST")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetInputDefinition).Methods("GET")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
@@ -788,6 +789,34 @@ func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
+
+// handleDeleteView handles Delete /frame/view request.
+func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	frameName := mux.Vars(r)["frame"]
+	viewName := mux.Vars(r)["view"]
+
+	// Retrieve frame.
+	f := h.Holder.Frame(indexName, frameName)
+	if f == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	if err := f.DeleteView(viewName); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// TODO: Send the delete frame message to all nodes.
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(deleteViewResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type deleteViewResponse struct{}
 
 type getFrameViewsResponse struct {
 	Views []string `json:"views,omitempty"`
