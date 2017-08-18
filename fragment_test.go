@@ -216,6 +216,45 @@ func TestFragment_SetFieldValue(t *testing.T) {
 	})
 }
 
+// Ensure a fragment can sum field values.
+func TestFragment_FieldSum(t *testing.T) {
+	const bitDepth = 16
+
+	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	defer f.Close()
+
+	// Set values.
+	if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("NoFilter", func(t *testing.T) {
+		if sum, n, err := f.FieldSum(nil, bitDepth); err != nil {
+			t.Fatal(err)
+		} else if n != 4 {
+			t.Fatalf("unexpected count: %d", n)
+		} else if sum != 3800 {
+			t.Fatalf("unexpected sum: %d", sum)
+		}
+	})
+
+	t.Run("WithFilter", func(t *testing.T) {
+		if sum, n, err := f.FieldSum(pilosa.NewBitmap(2000, 4000, 5000), bitDepth); err != nil {
+			t.Fatal(err)
+		} else if n != 2 {
+			t.Fatalf("unexpected count: %d", n)
+		} else if sum != 600 {
+			t.Fatalf("unexpected sum: %d", sum)
+		}
+	})
+}
+
 // Ensure a fragment query for matching fields.
 func TestFragment_FieldRange(t *testing.T) {
 	const bitDepth = 16
@@ -940,28 +979,27 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 }
 
 func TestFragment_Snapshot_Run(t *testing.T) {
-    f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
-    defer f.Close()
+	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	defer f.Close()
 
-    // Set bits on the fragment.
-    for i := uint64(1); i < 3; i++ {
-        if _, err := f.SetBit(1000, i); err != nil {
-            t.Fatal(err)
-        }
-    }
+	// Set bits on the fragment.
+	for i := uint64(1); i < 3; i++ {
+		if _, err := f.SetBit(1000, i); err != nil {
+			t.Fatal(err)
+		}
+	}
 
-    // Snapshot bitmap and verify data.
-    if err := f.Snapshot(); err != nil {
-        t.Fatal(err)
-    } else if n := f.Row(1000).Count(); n != 2 {
-        t.Fatalf("unexpected count: %d", n)
-    }
+	// Snapshot bitmap and verify data.
+	if err := f.Snapshot(); err != nil {
+		t.Fatal(err)
+	} else if n := f.Row(1000).Count(); n != 2 {
+		t.Fatalf("unexpected count: %d", n)
+	}
 
-    // Close and reopen the fragment & verify the data.
-    if err := f.Reopen(); err != nil {
-        t.Fatal(err)
-    } else if n := f.Row(1000).Count(); n != 2 {
-        t.Fatalf("unexpected count (reopen): %d", n)
-    }
+	// Close and reopen the fragment & verify the data.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if n := f.Row(1000).Count(); n != 2 {
+		t.Fatalf("unexpected count (reopen): %d", n)
+	}
 }
-

@@ -124,11 +124,15 @@ func (f *Frame) MaxSlice() uint64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	view := f.views[ViewStandard]
-	if view == nil {
-		return 0
+	var max uint64
+	for _, view := range f.views {
+		if view.name == ViewInverse {
+			continue
+		} else if viewMaxSlice := view.MaxSlice(); viewMaxSlice > max {
+			max = viewMaxSlice
+		}
 	}
-	return view.MaxSlice()
+	return max
 }
 
 // MaxInverseSlice returns the max inverse slice in the frame.
@@ -637,6 +641,26 @@ func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (change
 	baseValue := uint64(value - field.Min)
 
 	return view.SetFieldValue(columnID, field.BitDepth(), baseValue)
+}
+
+// FieldSum returns the sum and count for a field.
+// An optional filtering bitmap can be provided.
+func (f *Frame) FieldSum(filter *Bitmap, name string) (sum, count int64, err error) {
+	field := f.Field(name)
+	if field == nil {
+		return 0, 0, ErrFieldNotFound
+	}
+
+	view := f.View(ViewFieldPrefix + name)
+	if view == nil {
+		return 0, 0, nil
+	}
+
+	vsum, vcount, err := view.FieldSum(filter, field.BitDepth())
+	if err != nil {
+		return 0, 0, err
+	}
+	return int64(vsum) + (int64(vcount) * field.Min), int64(vcount), nil
 }
 
 func (f *Frame) FieldRange(name, op string, predicate int64) (*Bitmap, error) {

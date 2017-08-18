@@ -300,6 +300,19 @@ func (v *View) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (chan
 	return frag.SetFieldValue(columnID, bitDepth, value)
 }
 
+// FieldSum returns the sum & count of a field.
+func (v *View) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err error) {
+	for _, f := range v.Fragments() {
+		fsum, fcount, err := f.FieldSum(filter, bitDepth)
+		if err != nil {
+			return sum, count, err
+		}
+		sum += fsum
+		count += fcount
+	}
+	return sum, count, nil
+}
+
 // FieldRange returns bitmaps with a field value encoding matching the predicate.
 func (v *View) FieldRange(op string, bitDepth uint, predicate uint64) (*Bitmap, error) {
 	bm := NewBitmap()
