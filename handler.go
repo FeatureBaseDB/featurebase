@@ -803,12 +803,33 @@ func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := f.DeleteView(viewName); err != nil {
+	// Check that the view name is an integer.
+	if _, err := strconv.Atoi(viewName); err != nil {
+		http.Error(w, "only time based views can be deleted", http.StatusBadRequest)
+		return
+	}
+
+	// Check the frame for time quantum.
+	if f.TimeQuantum() == "" {
+		http.Error(w, "frame does not contain a Time Quantum", http.StatusBadRequest)
+		return
+	}
+
+	// Delete the standard view.
+	if err := f.DeleteView(ViewStandard + "_" + viewName); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// TODO: Send the delete frame message to all nodes.
+	// Delete the inverse view.
+	if f.InverseEnabled() {
+		if err := f.DeleteView(ViewInverse + "_" + viewName); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// TODO: Send the delete view message to all nodes.
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteViewResponse{}); err != nil {
