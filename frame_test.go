@@ -307,3 +307,34 @@ func TestFrame_RowLabelValidation(t *testing.T) {
 	}
 
 }
+
+// Ensure frame can open and retrieve a view.
+func TestFrame_DeleteView(t *testing.T) {
+	f := test.MustOpenFrame()
+	defer f.Close()
+
+	// Create view.
+	view, err := f.CreateViewIfNotExists("v")
+	if err != nil {
+		t.Fatal(err)
+	} else if view == nil {
+		t.Fatal("expected view")
+	}
+
+	err = f.DeleteView("v")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if f.View("v") != nil {
+		t.Fatal("view still exists in frame")
+	}
+
+	// // Retrieve existing view.
+	view2, err := f.CreateViewIfNotExists("v")
+	if err != nil {
+		t.Fatal(err)
+	} else if view == view2 {
+		t.Fatal("failed to create new view")
+	}
+}

@@ -509,6 +509,26 @@ func (f *Frame) newView(path, name string) *View {
 	return view
 }
 
+// DeleteView removes a view from the frame.
+func (f *Frame) DeleteView(name string) error {
+	view := f.views[name]
+	if view == nil {
+		return ErrInvalidView
+	}
+
+	// TODO capture errors lower down in this method
+	_ = view.Close()
+
+	// Delete view directory.
+	if err := os.RemoveAll(view.Path()); err != nil {
+		return err
+	}
+
+	delete(f.views, name)
+
+	return nil
+}
+
 // SetBit sets a bit on a view within the frame.
 func (f *Frame) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.
