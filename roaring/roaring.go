@@ -1992,6 +1992,10 @@ func intersectBitmapRun(a, b *container) *container {
 				if a.bitmapContains(i) {
 					output.array = append(output.array, i)
 				}
+				// If the run ends the container, break to avoid an infinite loop.
+				if i == 65535 {
+					break
+				}
 			}
 		}
 		output.n = len(output.array)

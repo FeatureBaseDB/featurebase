@@ -623,7 +623,7 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 1, 1, 1, 0xA, 1, 1, 0, 1},
-			runs:   []interval16{{start: 63, last: 10000}},
+			runs:   []interval16{{start: 63, last: 10000}, {start: 65000, last: 65535}},
 			exp:    []uint16{63, 64, 128, 192, 257, 259, 320, 384, 512},
 			expN:   9,
 		},
