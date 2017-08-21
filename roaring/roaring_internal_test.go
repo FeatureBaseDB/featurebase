@@ -1832,6 +1832,11 @@ func TestXorRunRun(t *testing.T) {
 			bruns: []interval16{{start: 2, last: 8}, {start: 16, last: 27}, {start: 33, last: 34}},
 			exp:   []interval16{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 9, last: 9}, {start: 12, last: 15}, {start: 23, last: 27}, {start: 33, last: 34}},
 		},
+		{
+			aruns: []interval16{{start: 65530, last: 65535}},
+			bruns: []interval16{{start: 65531, last: 65535}},
+			exp:   []interval16{{start: 65530, last: 65530}},
+		},
 	}
 	for i, test := range tests {
 		a.runs = test.aruns
