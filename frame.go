@@ -513,8 +513,25 @@ func (f *Frame) newView(path, name string) *View {
 	return view
 }
 
-// DeleteView removes a view from the frame.
+// DeleteView removes the standard and inverse view from the frame.
 func (f *Frame) DeleteView(name string) error {
+	// Delete the standard view.
+	if err := f.deleteView(ViewStandard + "_" + name); err != nil {
+		return err
+	}
+
+	// Delete the inverse view.
+	if f.InverseEnabled() {
+		if err := f.deleteView(ViewInverse + "_" + name); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// deleteView removes view from the frame.
+func (f *Frame) deleteView(name string) error {
 	view := f.views[name]
 	if view == nil {
 		return ErrInvalidView

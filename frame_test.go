@@ -313,8 +313,10 @@ func TestFrame_DeleteView(t *testing.T) {
 	f := test.MustOpenFrame()
 	defer f.Close()
 
+	viewName := pilosa.ViewStandard + "_v"
+
 	// Create view.
-	view, err := f.CreateViewIfNotExists("v")
+	view, err := f.CreateViewIfNotExists(viewName)
 	if err != nil {
 		t.Fatal(err)
 	} else if view == nil {
@@ -326,12 +328,12 @@ func TestFrame_DeleteView(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if f.View("v") != nil {
+	if f.View(viewName) != nil {
 		t.Fatal("view still exists in frame")
 	}
 
 	// // Retrieve existing view.
-	view2, err := f.CreateViewIfNotExists("v")
+	view2, err := f.CreateViewIfNotExists(viewName)
 	if err != nil {
 		t.Fatal(err)
 	} else if view == view2 {
