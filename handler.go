@@ -1455,6 +1455,8 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 			pb.Results[i].Bitmap = encodeBitmap(result)
 		case []Pair:
 			pb.Results[i].Pairs = encodePairs(result)
+		case SumCount:
+			pb.Results[i].SumCount = encodeSumCount(result)
 		case uint64:
 			pb.Results[i].N = result
 		case bool:
