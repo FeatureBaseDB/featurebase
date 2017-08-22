@@ -241,7 +241,9 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Build execution options.
 	opt := &ExecOptions{
-		Remote: req.Remote,
+		Remote:       req.Remote,
+		InhibitAttrs: req.InhibitAttrs,
+		InhibitBits:  req.InhibitBits,
 	}
 
 	// Parse query string.
@@ -257,7 +259,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	resp := &QueryResponse{Results: results, Err: err}
 
 	// Fill column attributes if requested.
-	if req.ColumnAttrs {
+	if req.ColumnAttrs && !req.InhibitBits {
 		// Consolidate all column ids across all calls.
 		var columnIDs []uint64
 		for _, result := range results {
@@ -925,9 +927,11 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		Query:       query,
-		Slices:      slices,
-		ColumnAttrs: q.Get("columnAttrs") == "true",
+		Query:        query,
+		Slices:       slices,
+		ColumnAttrs:  q.Get("columnAttrs") == "true",
+		InhibitAttrs: q.Get("inhibitAttrs") == "true",
+		InhibitBits:  q.Get("inhibitBits") == "true",
 	}, nil
 }
 
@@ -1396,6 +1400,12 @@ type QueryRequest struct {
 	// Return column attributes, if true.
 	ColumnAttrs bool
 
+	// Do not return row attributes, if true.
+	InhibitAttrs bool
+
+	// Do not return bits, if true.
+	InhibitBits bool
+
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
 	Remote bool
@@ -1403,10 +1413,12 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		Query:       pb.Query,
-		Slices:      pb.Slices,
-		ColumnAttrs: pb.ColumnAttrs,
-		Remote:      pb.Remote,
+		Query:        pb.Query,
+		Slices:       pb.Slices,
+		ColumnAttrs:  pb.ColumnAttrs,
+		Remote:       pb.Remote,
+		InhibitAttrs: pb.InhibitAttrs,
+		InhibitBits:  pb.InhibitBits,
 	}
 
 	return req
