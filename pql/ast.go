@@ -256,3 +256,50 @@ func joinUint64Slice(a []uint64) string {
 	}
 	return "[" + strings.Join(other, ",") + "]"
 }
+
+// ExternalCall represents a function call to an external plugin.
+type ExternalCall struct {
+	Name string
+	Args []Arg
+}
+
+// String returns the string representation of the call.
+func (c *ExternalCall) String() string {
+	var buf bytes.Buffer
+	buf.WriteString(c.Name)
+	buf.WriteByte('(')
+
+	// Write arg list.
+	for i, arg := range c.Args {
+		if i != 0 {
+			buf.WriteString(", ")
+		}
+
+		// Write key if argument is keyed.
+		if key, ok := arg.Key.(string); ok {
+			buf.WriteString(key)
+			buf.WriteByte('=')
+		}
+
+		// Write value based on its data type.
+		switch v := arg.Value.(type) {
+		case string:
+			fmt.Fprintf(&buf, "%q", v)
+		case Call:
+			buf.WriteString(v.String())
+		default:
+			fmt.Fprintf(&buf, "%v", v)
+		}
+	}
+
+	buf.WriteByte(')')
+	return buf.String()
+}
+
+// Arg represents a call argument.
+// The key can be the index or the string key.
+// The value can be a uint64, []uint64, string, Call, or Calls.
+type Arg struct {
+	Key   interface{}
+	Value interface{}
+}

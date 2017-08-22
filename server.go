@@ -82,10 +82,8 @@ func NewServer() *Server {
 		Handler:           NewHandler(),
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
-
-		Network: "tcp",
-
-		AntiEntropyInterval: DefaultAntiEntropyInterval,
+    Network: "tcp",
+    AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
 		MetricInterval:      0,
 
@@ -142,6 +140,12 @@ func (s *Server) Open() error {
 	if err := s.Cluster.NodeSet.Open(); err != nil {
 		return fmt.Errorf("opening NodeSet: %v", err)
 	}
+	/*
+		// Load plugins.
+		if err := s.loadPlugins(); err != nil {
+			return err
+		}
+	*/
 
 	// Create executor for executing queries.
 	e := NewExecutor()
