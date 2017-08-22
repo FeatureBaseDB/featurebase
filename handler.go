@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	// Imported for its side-effect of registering pprof endpoints with the server.
 	_ "net/http/pprof"
 	"os"
 	"runtime/debug"
@@ -43,6 +44,7 @@ import (
 
 	"unicode"
 
+	// Allow building Pilosa without the web UI.
 	_ "github.com/pilosa/pilosa/statik"
 	"github.com/rakyll/statik/fs"
 )
