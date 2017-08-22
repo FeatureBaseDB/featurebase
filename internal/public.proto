@@ -63,4 +63,5 @@ message ImportRequest {
 	repeated uint64 RowIDs = 4;
 	repeated uint64 ColumnIDs = 5;
 	repeated int64 Timestamps = 6;
+	string View = 7;
 }

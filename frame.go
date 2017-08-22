@@ -721,19 +721,28 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			})
 		}
 
-		view, err := f.CreateViewIfNotExists(key.View)
+		err := f.ImportView(key.View, key.Slice, data.RowIDs, data.ColumnIDs)
 		if err != nil {
 			return err
 		}
+	}
 
-		frag, err := view.CreateFragmentIfNotExists(key.Slice)
-		if err != nil {
-			return err
-		}
+	return nil
+}
 
-		if err := frag.Import(data.RowIDs, data.ColumnIDs); err != nil {
-			return err
-		}
+// ImportView imports bits into a view.
+func (f *Frame) ImportView(viewName string, slice uint64, rowIDs, columnIDs []uint64) error {
+	view, err := f.CreateViewIfNotExists(viewName)
+	if err != nil {
+		return err
+	}
+	frag, err := view.CreateFragmentIfNotExists(slice)
+	if err != nil {
+		return err
+	}
+
+	if err := frag.Import(rowIDs, columnIDs); err != nil {
+		return err
 	}
 
 	return nil
