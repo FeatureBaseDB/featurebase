@@ -401,7 +401,9 @@ func (f *Frame) Close() error {
 
 	// Close all views.
 	for _, view := range f.views {
-		_ = view.Close()
+		if err := view.Close(); err != nil {
+			return err
+		}
 	}
 	f.views = make(map[string]*View)
 
@@ -537,8 +539,10 @@ func (f *Frame) deleteView(name string) error {
 		return ErrInvalidView
 	}
 
-	// TODO capture errors lower down in this method
-	_ = view.Close()
+	// Close data files before deletion
+	if err := view.Close(); err != nil {
+		return err
+	}
 
 	// Delete view directory.
 	if err := os.RemoveAll(view.Path()); err != nil {
