@@ -115,6 +115,8 @@ Response:
 }
 ```
 
+By default, all bits and attributes (*for `Bitmap` queries only*) are returned. In order to suppress returning bits, set `inhibitBits` query argument to `true`; to suppress returning attributes, set `inhibitAttrs` query argument to `true`.
+
 ### Change index time quantum
 
 `PATCH /index/<index-name>/time-quantum`
