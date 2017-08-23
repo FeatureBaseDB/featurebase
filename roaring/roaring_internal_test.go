@@ -1736,6 +1736,31 @@ func TestXorArrayRun(t *testing.T) {
 	if !reflect.DeepEqual(ret.runs, expr) {
 		t.Fatalf("test #4 expected %v, but got %v", exp, ret.array)
 	}
+
+	a = &container{array: []uint16{65535}, container_type: ContainerArray}
+	b = &container{runs: []interval16{{start: 65534, last: 65535}}, container_type: ContainerRun}
+	exp = []uint16{65534}
+	ret = xor(a, b)
+	if !reflect.DeepEqual(ret.array, exp) {
+		t.Fatalf("test #5 expected %v, but got %v", exp, ret.array)
+	}
+
+	ret = xor(b, a)
+	if !reflect.DeepEqual(ret.array, exp) {
+		t.Fatalf("test #6 expected %v, but got %v", exp, ret.array)
+	}
+
+	b = &container{runs: []interval16{{start: 65535, last: 65535}}, container_type: ContainerRun}
+	exp = []uint16{}
+	ret = xor(a, b)
+	if !reflect.DeepEqual(ret.array, exp) {
+		t.Fatalf("test #7 expected %v, but got %v", exp, ret.array)
+	}
+
+	ret = xor(b, a)
+	if !reflect.DeepEqual(ret.array, exp) {
+		t.Fatalf("test #8 expected %v, but got %v", exp, ret.array)
+	}
 }
 
 //special case that didn't fit the xorrunrun table testing below.
