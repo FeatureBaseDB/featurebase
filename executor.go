@@ -229,7 +229,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	// If the row label is used then return bitmap attributes.
 	bm, _ := other.(*Bitmap)
 	if c.Name == "Bitmap" {
-		if opt.InhibitAttrs {
+		if opt.ExcludeAttrs {
 			bm.Attrs = map[string]interface{}{}
 		} else {
 			idx := e.Holder.Index(index)
@@ -262,7 +262,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 		}
 	}
 
-	if opt.InhibitBits {
+	if opt.ExcludeBits {
 		bm.segments = []BitmapSegment{}
 	}
 
@@ -1379,8 +1379,8 @@ type mapResponse struct {
 // ExecOptions represents an execution context for a single Execute() call.
 type ExecOptions struct {
 	Remote       bool
-	InhibitAttrs bool
-	InhibitBits  bool
+	ExcludeAttrs bool
+	ExcludeBits  bool
 }
 
 // decodeError returns an error representation of s if s is non-blank.

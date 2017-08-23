@@ -61,7 +61,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 		}
 
 		// Inhibit bits.
-		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(rowID=10, frame=f)`), nil, &pilosa.ExecOptions{InhibitBits: true}); err != nil {
+		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(rowID=10, frame=f)`), nil, &pilosa.ExecOptions{ExcludeBits: true}); err != nil {
 			t.Fatal(err)
 		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{}) {
 			t.Fatalf("unexpected bits: %+v", bits)
@@ -70,7 +70,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 		}
 
 		// Inhibit attributes.
-		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(rowID=10, frame=f)`), nil, &pilosa.ExecOptions{InhibitAttrs: true}); err != nil {
+		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(rowID=10, frame=f)`), nil, &pilosa.ExecOptions{ExcludeAttrs: true}); err != nil {
 			t.Fatal(err)
 		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
 			t.Fatalf("unexpected bits: %+v", bits)

@@ -242,8 +242,8 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// Build execution options.
 	opt := &ExecOptions{
 		Remote:       req.Remote,
-		InhibitAttrs: req.InhibitAttrs,
-		InhibitBits:  req.InhibitBits,
+		ExcludeAttrs: req.ExcludeAttrs,
+		ExcludeBits:  req.ExcludeBits,
 	}
 
 	// Parse query string.
@@ -259,7 +259,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	resp := &QueryResponse{Results: results, Err: err}
 
 	// Fill column attributes if requested.
-	if req.ColumnAttrs && !req.InhibitBits {
+	if req.ColumnAttrs && !req.ExcludeBits {
 		// Consolidate all column ids across all calls.
 		var columnIDs []uint64
 		for _, result := range results {
@@ -930,8 +930,8 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 		Query:        query,
 		Slices:       slices,
 		ColumnAttrs:  q.Get("columnAttrs") == "true",
-		InhibitAttrs: q.Get("inhibitAttrs") == "true",
-		InhibitBits:  q.Get("inhibitBits") == "true",
+		ExcludeAttrs: q.Get("excludeAttrs") == "true",
+		ExcludeBits:  q.Get("excludeBits") == "true",
 	}, nil
 }
 
@@ -1401,10 +1401,10 @@ type QueryRequest struct {
 	ColumnAttrs bool
 
 	// Do not return row attributes, if true.
-	InhibitAttrs bool
+	ExcludeAttrs bool
 
 	// Do not return bits, if true.
-	InhibitBits bool
+	ExcludeBits bool
 
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
@@ -1417,8 +1417,8 @@ func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 		Slices:       pb.Slices,
 		ColumnAttrs:  pb.ColumnAttrs,
 		Remote:       pb.Remote,
-		InhibitAttrs: pb.InhibitAttrs,
-		InhibitBits:  pb.InhibitBits,
+		ExcludeAttrs: pb.ExcludeAttrs,
+		ExcludeBits:  pb.ExcludeBits,
 	}
 
 	return req
