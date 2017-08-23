@@ -3218,7 +3218,8 @@ func xorCompare(x *xorstm) (r1 interval16, has_data bool) {
 			r1 = interval16{start: x.va.start, last: x.vb.start - 1}
 			has_data = true
 		}
-		if x.vb.last == 65535 {
+
+		if x.vb.last == maxContainerVal { // Check for overflow
 			x.va_valid = false
 
 		} else {
@@ -3235,7 +3236,7 @@ func xorCompare(x *xorstm) (r1 interval16, has_data bool) {
 			has_data = true
 		}
 
-		if x.va.last == 65535 {
+		if x.va.last == maxContainerVal { //check for overflow
 			x.vb_valid = false
 		} else {
 			x.vb.start = x.va.last + 1
@@ -3248,7 +3249,7 @@ func xorCompare(x *xorstm) (r1 interval16, has_data bool) {
 		x.va_valid = false
 		r1 = interval16{start: x.va.start, last: x.vb.start - 1}
 		has_data = true
-		if x.va.last == 65535 {
+		if x.va.last == maxContainerVal { // check for overflow
 			x.vb_valid = false
 		} else {
 			x.vb.start = x.va.last + 1
@@ -3261,7 +3262,7 @@ func xorCompare(x *xorstm) (r1 interval16, has_data bool) {
 		r1 = interval16{start: x.vb.start, last: x.va.start - 1}
 		has_data = true
 
-		if x.vb.last == 65535 {
+		if x.vb.last == maxContainerVal { // check for overflow
 			x.va_valid = false
 		} else {
 			x.va.start = x.vb.last + 1
