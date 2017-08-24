@@ -3153,8 +3153,6 @@ func xorArrayRun(a, b *container) *container {
 			if va < vb.last {
 				output.n += output.runAppendInterval(interval16{start: vb.start, last: va - 1})
 				i++
-				// candidate for overflow
-				// but no va must be less than max-1
 				vb.start = va + 1
 
 				if vb.start > vb.last {
