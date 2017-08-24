@@ -3177,6 +3177,9 @@ func xorArrayRun(a, b *container) *container {
 				j++
 			} else {
 				vb.start++
+				if vb.start > vb.last {
+					j++
+				}
 			}
 			i++
 		}
