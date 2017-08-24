@@ -3156,8 +3156,9 @@ func xorArrayRun(a, b *container) *container {
 		} else if va > vb.start {
 			if va < vb.last {
 				output.n += output.runAppendInterval(interval16{start: vb.start, last: va - 1})
-				vb.start = va + 1
 				i++
+				vb.start = va + 1
+
 				if vb.start > vb.last {
 					j++
 				}
@@ -3166,15 +3167,22 @@ func xorArrayRun(a, b *container) *container {
 				j++
 			} else { // va == vb.last
 				vb.last--
-				if vb.start < vb.last {
+				if vb.start <= vb.last {
 					output.n += output.runAppendInterval(vb)
 				}
 				j++
 				i++
 			}
 
-		} else {
-			vb.start++
+		} else { // we know va == vb.start
+			if vb.start == maxContainerVal { // protect overflow
+				j++
+			} else {
+				vb.start++
+				if vb.start > vb.last {
+					j++
+				}
+			}
 			i++
 		}
 	}
@@ -3222,9 +3230,15 @@ func xorCompare(x *xorstm) (r1 interval16, has_data bool) {
 			r1 = interval16{start: x.va.start, last: x.vb.start - 1}
 			has_data = true
 		}
-		x.va.start = x.vb.last + 1
-		if x.va.start > x.va.last {
+
+		if x.vb.last == maxContainerVal { // Check for overflow
 			x.va_valid = false
+
+		} else {
+			x.va.start = x.vb.last + 1
+			if x.va.start > x.va.last {
+				x.va_valid = false
+			}
 		}
 
 	} else if x.vb.start <= x.va.start && x.vb.last >= x.va.last { //va inside
@@ -3234,26 +3248,39 @@ func xorCompare(x *xorstm) (r1 interval16, has_data bool) {
 			has_data = true
 		}
 
-		x.vb.start = x.va.last + 1
-		if x.vb.start > x.vb.last {
+		if x.va.last == maxContainerVal { //check for overflow
 			x.vb_valid = false
+		} else {
+			x.vb.start = x.va.last + 1
+			if x.vb.start > x.vb.last {
+				x.vb_valid = false
+			}
 		}
 
 	} else if x.va.start < x.vb.start && x.va.last <= x.vb.last { //va first overlap
 		x.va_valid = false
 		r1 = interval16{start: x.va.start, last: x.vb.start - 1}
 		has_data = true
-		x.vb.start = x.va.last + 1
-		if x.vb.start > x.vb.last {
+		if x.va.last == maxContainerVal { // check for overflow
 			x.vb_valid = false
+		} else {
+			x.vb.start = x.va.last + 1
+			if x.vb.start > x.vb.last {
+				x.vb_valid = false
+			}
 		}
 	} else if x.vb.start < x.va.start && x.vb.last <= x.va.last { //vb first overlap
 		x.vb_valid = false
 		r1 = interval16{start: x.vb.start, last: x.va.start - 1}
 		has_data = true
-		x.va.start = x.vb.last + 1
-		if x.va.start > x.va.last {
+
+		if x.vb.last == maxContainerVal { // check for overflow
 			x.va_valid = false
+		} else {
+			x.va.start = x.vb.last + 1
+			if x.va.start > x.va.last {
+				x.va_valid = false
+			}
 		}
 	}
 	return
