@@ -103,10 +103,14 @@ func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 
 	itr := newMergeSegmentIterator(b.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
-		// Ignore non-overlapping segments.
-		if s0 == nil || s1 == nil {
+		if s1 == nil {
+			segments = append(segments, *s0)
+			continue
+		} else if s0 == nil {
+			segments = append(segments, *s1)
 			continue
 		}
+
 		segments = append(segments, *s0.Xor(s1))
 	}
 
