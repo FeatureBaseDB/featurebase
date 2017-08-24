@@ -735,6 +735,119 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 }
 
+// Ensure a Range(field) query can be executed.
+func TestExecutor_Execute_FieldRange(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+
+	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
+		RangeEnabled: true,
+		Fields: []*pilosa.Field{
+			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
+			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
+		RangeEnabled: true,
+		Fields: []*pilosa.Field{
+			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.Execute(context.Background(), "i", test.MustParse(`
+		SetBit(frame=f, rowID=0, columnID=0)
+		SetBit(frame=f, rowID=0, columnID=`+strconv.Itoa(SliceWidth+1)+`)
+
+		SetFieldValue(frame=f, foo=20, bar=2000, columnID=50)
+		SetFieldValue(frame=f, foo=30, columnID=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(frame=f, foo=10, columnID=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(frame=f, foo=20, columnID=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(frame=f, foo=60, columnID=`+strconv.Itoa(SliceWidth+1)+`)
+		SetFieldValue(frame=other, foo=1000, columnID=0)
+	`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("EQ", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{50, (5 * SliceWidth) + 100}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("LT", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo < 20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{SliceWidth + 2}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("LTE", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo <= 20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{50, SliceWidth + 2, (5 * SliceWidth) + 100}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("GT", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo > 20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("GTE", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo >= 20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{50, SliceWidth, SliceWidth + 1, (5 * SliceWidth) + 100}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("BelowMin", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 0)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("AboveMax", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 200)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("ErrFrameNotFound", func(t *testing.T) {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=bad_frame, foo >= 20)`), nil, nil); err != pilosa.ErrFrameNotFound {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("ErrFieldNotFound", func(t *testing.T) {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, bad_field >= 20)`), nil, nil); err != pilosa.ErrFieldNotFound {
+			t.Fatal(err)
+		}
+	})
+}
+
 // Ensure a remote query can return a bitmap.
 func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	c := test.NewCluster(2)

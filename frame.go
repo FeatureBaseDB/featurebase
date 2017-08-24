@@ -27,6 +27,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Default frame settings.
@@ -38,15 +39,6 @@ const (
 
 	// Default ranked frame cache
 	DefaultCacheSize = 50000
-)
-
-// List of operators for field range queries.
-const (
-	RangeOpEQ  = "eq"
-	RangeOpLT  = "lt"
-	RangeOpLTE = "lte"
-	RangeOpGT  = "gt"
-	RangeOpGTE = "gte"
 )
 
 // Frame represents a container for views.
@@ -663,7 +655,7 @@ func (f *Frame) FieldSum(filter *Bitmap, name string) (sum, count int64, err err
 	return int64(vsum) + (int64(vcount) * field.Min), int64(vcount), nil
 }
 
-func (f *Frame) FieldRange(name, op string, predicate int64) (*Bitmap, error) {
+func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Bitmap, error) {
 	// Retrieve and validate field.
 	field := f.Field(name)
 	if field == nil {
