@@ -2508,7 +2508,7 @@ func differenceRunBitmap(a, b *container) *container {
 
 func differenceRunIterator(a *container, itr containerIterator) *container {
 
-	output := &container{runs: make([]interval16, 0, a.n)}
+	output := &container{runs: make([]interval16, 0, a.n), container_type: ContainerRun}
 
 	vb, eof := itr.next()
 	j := 0
@@ -2576,7 +2576,7 @@ func differenceRunRun(a, b *container) *container {
 	alen := len(a.runs)
 	blen := len(b.runs)
 
-	output := &container{runs: make([]interval16, 0, alen+blen)} // TODO allocate max then truncate? or something else
+	output := &container{runs: make([]interval16, 0, alen+blen), container_type: ContainerRun} // TODO allocate max then truncate? or something else
 	// cardinality upper bound: sum of number of runs
 	// each B-run could split an A-run in two, up to len(b.runs) times
 
