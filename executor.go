@@ -323,6 +323,8 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 		return e.executeRangeSlice(ctx, index, c, slice)
 	case "Union":
 		return e.executeUnionSlice(ctx, index, c, slice)
+	case "Xor":
+		return e.executeXorSlice(ctx, index, c, slice)
 	default:
 		return nil, fmt.Errorf("unknown call: %s", c.Name)
 	}
@@ -722,6 +724,25 @@ func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.C
 			other = bm
 		} else {
 			other = other.Union(bm)
+		}
+	}
+	other.InvalidateCount()
+	return other, nil
+}
+
+// executeXorSlice executes a xor() call for a local slice.
+func (e *Executor) executeXorSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
+	other := NewBitmap()
+	for i, input := range c.Children {
+		bm, err := e.executeBitmapCallSlice(ctx, index, input, slice)
+		if err != nil {
+			return nil, err
+		}
+
+		if i == 0 {
+			other = bm
+		} else {
+			other = other.Xor(bm)
 		}
 	}
 	other.InvalidateCount()

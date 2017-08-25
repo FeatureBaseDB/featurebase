@@ -206,6 +206,25 @@ func TestExecutor_Execute_Empty_Union(t *testing.T) {
 	}
 }
 
+// Ensure a xor query can be executed.
+func TestExecutor_Execute_Xor(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 0)
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+2)
+
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(11, 2)
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(11, SliceWidth+2)
+
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Xor(Bitmap(rowID=10), Bitmap(rowID=11))`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{0, 2, SliceWidth + 1}) {
+		t.Fatalf("unexpected bits: %+v", bits)
+	}
+}
+
 // Ensure a count query can be executed.
 func TestExecutor_Execute_Count(t *testing.T) {
 	hldr := test.MustOpenHolder()
