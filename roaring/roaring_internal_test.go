@@ -1711,31 +1711,43 @@ func TestWriteReadRun(t *testing.T) {
 }
 
 func TestXorArrayRun(t *testing.T) {
-	a := &container{array: []uint16{1, 5, 10, 11, 12}, container_type: ContainerArray}
-	b := &container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun}
-	exp := []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 13, 15, 16}
-
-	//ret := xorArrayRun(a, b)
-	ret := xor(a, b)
-	if !reflect.DeepEqual(ret.array, exp) {
-		t.Fatalf("test #1 expected %v, but got %v", exp, ret.array)
+	tests := []struct {
+		a   *container
+		b   *container
+		exp *container
+	}{
+		{
+			a:   &container{array: []uint16{1, 5, 10, 11, 12}, container_type: ContainerArray},
+			b:   &container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun},
+			exp: &container{array: []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 13, 15, 16}, container_type: ContainerArray, n: 12},
+		}, {
+			a:   &container{array: []uint16{1, 5, 10, 11, 12, 13, 14}, container_type: ContainerArray},
+			b:   &container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun},
+			exp: &container{array: []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}, container_type: ContainerArray, n: 12},
+		}, {
+			a:   &container{array: []uint16{65535}, container_type: ContainerArray},
+			b:   &container{runs: []interval16{{start: 65534, last: 65535}}, container_type: ContainerRun},
+			exp: &container{array: []uint16{65534}, container_type: ContainerArray, n: 1},
+		}, {
+			a:   &container{array: []uint16{65535}, container_type: ContainerArray},
+			b:   &container{runs: []interval16{{start: 65535, last: 65535}}, container_type: ContainerRun},
+			exp: &container{array: []uint16{}, container_type: ContainerArray, n: 0},
+		},
 	}
 
-	ret = xor(b, a)
-	if !reflect.DeepEqual(ret.array, exp) {
-		t.Fatalf("test #2 expected %v, but got %v", exp, ret.array)
+	for i, test := range tests {
+		test.a.n = test.a.count()
+		test.b.n = test.b.count()
+		ret := xor(test.a, test.b)
+		if !reflect.DeepEqual(ret, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret)
+		}
+		ret = xor(test.b, test.a)
+		if !reflect.DeepEqual(ret, test.exp) {
+			t.Fatalf("test #%v.1 expected %v, but got %v", i, test.exp, ret)
+		}
 	}
-	c := &container{array: []uint16{1, 5, 10, 11, 12, 13, 14}, container_type: ContainerArray}
-	//	exp = []int16{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}
-	expr := []interval16{{start: 1, last: 4}, {start: 6, last: 9}, {start: 11, last: 11}, {start: 14, last: 16}}
-	ret = xor(b, c)
-	if !reflect.DeepEqual(ret.runs, expr) {
-		t.Fatalf("test #3 expected %v, but got %v", exp, ret.runs)
-	}
-	ret = xor(c, b)
-	if !reflect.DeepEqual(ret.runs, expr) {
-		t.Fatalf("test #4 expected %v, but got %v", exp, ret.array)
-	}
+
 }
 
 //special case that didn't fit the xorrunrun table testing below.
@@ -1831,6 +1843,11 @@ func TestXorRunRun(t *testing.T) {
 			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 9}, {start: 12, last: 22}},
 			bruns: []interval16{{start: 2, last: 8}, {start: 16, last: 27}, {start: 33, last: 34}},
 			exp:   []interval16{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 9, last: 9}, {start: 12, last: 15}, {start: 23, last: 27}, {start: 33, last: 34}},
+		},
+		{
+			aruns: []interval16{{start: 65530, last: 65535}},
+			bruns: []interval16{{start: 65532, last: 65535}},
+			exp:   []interval16{{start: 65530, last: 65531}},
 		},
 	}
 	for i, test := range tests {
