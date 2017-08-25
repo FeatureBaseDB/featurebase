@@ -1516,19 +1516,20 @@ func TestHandler_GetTimeStamp(t *testing.T) {
 func TestHandler_DeleteView(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	hldr.MustCreateFragmentIfNotExists("i0", "f0", pilosa.ViewStandard+"_2017", 1).MustSetBits(30, (1*SliceWidth)+1)
+	viewName := pilosa.ViewStandard + "_2017"
+	hldr.MustCreateFragmentIfNotExists("i0", "f0", viewName, 1).MustSetBits(30, (1*SliceWidth)+1)
 	hldr.Index("i0").Frame("f0").SetTimeQuantum("YMD")
 
 	h := test.NewHandler()
 	h.Holder = hldr.Holder
 	h.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i0/frame/f0/view/2017", strings.NewReader("")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i0/frame/f0/view/standard_2017", strings.NewReader("")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
-	} else if f := hldr.Index("i0").Frame("f0").View(pilosa.ViewStandard + "_2017"); f != nil {
+	} else if f := hldr.Index("i0").Frame("f0").View(viewName); f != nil {
 		t.Fatal("expected nil view")
 	}
 }

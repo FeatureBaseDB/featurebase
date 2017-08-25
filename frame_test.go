@@ -323,7 +323,7 @@ func TestFrame_DeleteView(t *testing.T) {
 		t.Fatal("expected view")
 	}
 
-	err = f.DeleteView("v")
+	err = f.DeleteView(viewName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +332,7 @@ func TestFrame_DeleteView(t *testing.T) {
 		t.Fatal("view still exists in frame")
 	}
 
-	// // Retrieve existing view.
+	// Recreate view with same name, verify that the old view was not reused.
 	view2, err := f.CreateViewIfNotExists(viewName)
 	if err != nil {
 		t.Fatal(err)

@@ -805,12 +805,6 @@ func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check the frame for time quantum.
-	if f.TimeQuantum() == "" {
-		http.Error(w, "frame does not contain a Time Quantum", http.StatusBadRequest)
-		return
-	}
-
 	// Delete the view.
 	if err := f.DeleteView(viewName); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
