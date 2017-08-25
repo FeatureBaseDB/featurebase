@@ -46,6 +46,8 @@ message QueryRequest {
 	repeated uint64 Slices = 2;
 	bool ColumnAttrs = 3;
 	bool Remote = 5;
+	bool ExcludeAttrs = 6;
+	bool ExcludeBits = 7;
 }
 
 message QueryResponse {

@@ -270,34 +270,41 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	// If the row label is used then return bitmap attributes.
 	bm, _ := other.(*Bitmap)
 	if c.Name == "Bitmap" {
-
-		idx := e.Holder.Index(index)
-		if idx != nil {
-			columnLabel := idx.ColumnLabel()
-			if columnID, ok, err := c.UintArg(columnLabel); ok && err == nil {
-				attrs, err := idx.ColumnAttrStore().Attrs(columnID)
-				if err != nil {
-					return nil, err
-				}
-				bm.Attrs = attrs
-			} else if err != nil {
-				return nil, err
-			} else {
-				frame, _ := c.Args["frame"].(string)
-				if fr := idx.Frame(frame); fr != nil {
-					rowLabel := fr.RowLabel()
-					rowID, _, err := c.UintArg(rowLabel)
-					if err != nil {
-						return nil, err
-					}
-					attrs, err := fr.RowAttrStore().Attrs(rowID)
+		if opt.ExcludeAttrs {
+			bm.Attrs = map[string]interface{}{}
+		} else {
+			idx := e.Holder.Index(index)
+			if idx != nil {
+				columnLabel := idx.ColumnLabel()
+				if columnID, ok, err := c.UintArg(columnLabel); ok && err == nil {
+					attrs, err := idx.ColumnAttrStore().Attrs(columnID)
 					if err != nil {
 						return nil, err
 					}
 					bm.Attrs = attrs
+				} else if err != nil {
+					return nil, err
+				} else {
+					frame, _ := c.Args["frame"].(string)
+					if fr := idx.Frame(frame); fr != nil {
+						rowLabel := fr.RowLabel()
+						rowID, _, err := c.UintArg(rowLabel)
+						if err != nil {
+							return nil, err
+						}
+						attrs, err := fr.RowAttrStore().Attrs(rowID)
+						if err != nil {
+							return nil, err
+						}
+						bm.Attrs = attrs
+					}
 				}
 			}
 		}
+	}
+
+	if opt.ExcludeBits {
+		bm.segments = []BitmapSegment{}
 	}
 
 	return bm, nil
@@ -1484,7 +1491,9 @@ type mapResponse struct {
 
 // ExecOptions represents an execution context for a single Execute() call.
 type ExecOptions struct {
-	Remote bool
+	Remote       bool
+	ExcludeAttrs bool
+	ExcludeBits  bool
 }
 
 // decodeError returns an error representation of s if s is non-blank.
