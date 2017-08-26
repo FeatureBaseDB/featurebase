@@ -2621,6 +2621,7 @@ func differenceRunRun(a, b *container) *container {
 		}
 	}
 
+	output.n = output.count()
 	return output
 }
 

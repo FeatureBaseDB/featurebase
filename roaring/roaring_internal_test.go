@@ -1601,6 +1601,7 @@ func TestDifferenceRunRun(t *testing.T) {
 		aruns []interval16
 		bruns []interval16
 		exp   []interval16
+		expn  int
 	}{
 		{
 			// this tests all six overlap combinations
@@ -1609,6 +1610,7 @@ func TestDifferenceRunRun(t *testing.T) {
 			aruns: []interval16{{start: 3, last: 6}, {start: 13, last: 16}, {start: 24, last: 26}, {start: 33, last: 38}, {start: 43, last: 46}, {start: 53, last: 56}},
 			bruns: []interval16{{start: 1, last: 8}, {start: 11, last: 14}, {start: 21, last: 23}, {start: 35, last: 37}, {start: 44, last: 48}, {start: 57, last: 59}},
 			exp:   []interval16{{start: 15, last: 16}, {start: 24, last: 26}, {start: 33, last: 34}, {start: 38, last: 38}, {start: 43, last: 43}, {start: 53, last: 56}},
+			expn:  13,
 		},
 	}
 	for i, test := range tests {
@@ -1619,6 +1621,9 @@ func TestDifferenceRunRun(t *testing.T) {
 		ret := differenceRunRun(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
+		}
+		if ret.n != test.expn {
+			t.Fatalf("test #%v expected n=%v, but got n=%v", i, test.expn, ret.n)
 		}
 	}
 }
