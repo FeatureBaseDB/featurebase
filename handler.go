@@ -807,8 +807,11 @@ func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
 
 	// Delete the view.
 	if err := f.DeleteView(viewName); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		// Ingore this error becuase views do not exist on all nodes due to slice distribution.
+		if err != ErrInvalidView {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Send the delete view message to all nodes.
