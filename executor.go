@@ -629,6 +629,11 @@ func (e *Executor) executeIntersectSlice(ctx context.Context, index string, c *p
 
 // executeRangeSlice executes a range() call for a local slice.
 func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
+	// Handle field ranges differently.
+	if c.HasConditionArg() {
+		return e.executeFieldRangeSlice(ctx, index, c, slice)
+	}
+
 	// Parse frame, use default if unset.
 	frame, _ := c.Args["frame"].(string)
 	if frame == "" {
@@ -683,7 +688,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	}
 
 	// Parse end time.
-	endTimeStr, _ := c.Args["end"].(string)
+	endTimeStr, ok := c.Args["end"].(string)
 	if !ok {
 		return nil, errors.New("Range() end time required")
 	}
@@ -709,6 +714,64 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	}
 	f.Stats.Count("range", 1, 1.0)
 	return bm, nil
+}
+
+// executeFieldRangeSlice executes a range(field) call for a local slice.
+func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
+	// Parse frame, use default if unset.
+	frame, _ := c.Args["frame"].(string)
+	if frame == "" {
+		frame = DefaultFrame
+	}
+	f := e.Holder.Frame(index, frame)
+	if f == nil {
+		return nil, ErrFrameNotFound
+	}
+
+	// Remove frame field.
+	args := pql.CopyArgs(c.Args)
+	delete(args, "frame")
+
+	// Only one conditional field should remain.
+	if len(args) == 0 {
+		return nil, errors.New("Range(): condition required")
+	} else if len(args) > 1 {
+		return nil, errors.New("Range(): too many arguments")
+	}
+
+	// Extract condition field.
+	var fieldName string
+	var cond *pql.Condition
+	for k, v := range args {
+		vv, ok := v.(*pql.Condition)
+		if !ok {
+			return nil, fmt.Errorf("Range(): %q: expected condition argument, got %v", k, v)
+		}
+		fieldName, cond = k, vv
+	}
+
+	// Only support integers for now.
+	value, ok := cond.Value.(int64)
+	if !ok {
+		return nil, errors.New("Range(): conditions only support integer values")
+	}
+
+	// Find field.
+	field := f.Field(fieldName)
+	if field == nil {
+		return nil, ErrFieldNotFound
+	} else if value < field.Min || value > field.Max {
+		return NewBitmap(), nil
+	}
+
+	// Retrieve fragment.
+	frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+	if frag == nil {
+		return NewBitmap(), nil
+	}
+
+	f.Stats.Count("range:field", 1, 1.0)
+	return frag.FieldRange(cond.Op, field.BitDepth(), uint64(value-field.Min))
 }
 
 // executeUnionSlice executes a union() call for a local slice.

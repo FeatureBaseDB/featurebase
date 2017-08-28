@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // View layout modes.
@@ -314,7 +315,7 @@ func (v *View) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err e
 }
 
 // FieldRange returns bitmaps with a field value encoding matching the predicate.
-func (v *View) FieldRange(op string, bitDepth uint, predicate uint64) (*Bitmap, error) {
+func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitmap, error) {
 	bm := NewBitmap()
 	for _, frag := range v.Fragments() {
 		other, err := frag.FieldRange(op, bitDepth, predicate)

@@ -198,6 +198,16 @@ func (c *Call) IsInverse(rowLabel, columnLabel string) bool {
 	return false
 }
 
+// HasConditionArg returns true if any arg is a conditional.
+func (c *Call) HasConditionArg() bool {
+	for _, v := range c.Args {
+		if _, ok := v.(*Condition); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // Condition represents an operation & value.
 // When used in an argument map it represents a binary expression.
 type Condition struct {

@@ -24,6 +24,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -275,7 +276,7 @@ func TestFragment_FieldRange(t *testing.T) {
 		}
 
 		// Query for equality.
-		if b, err := f.FieldRange(pilosa.RangeOpEQ, bitDepth, 300); err != nil {
+		if b, err := f.FieldRange(pql.EQ, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 4000}) {
 			t.Fatalf("unexpected bits: %+v", b.Bits())
@@ -302,28 +303,28 @@ func TestFragment_FieldRange(t *testing.T) {
 		}
 
 		// Query for fields less than (ending with set bit).
-		if b, err := f.FieldRange(pilosa.RangeOpLT, bitDepth, 301); err != nil {
+		if b, err := f.FieldRange(pql.LT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 5000, 6000}) {
 			t.Fatalf("unexpected bits: %+v", b.Bits())
 		}
 
 		// Query for fields less than (ending with unset bit).
-		if b, err := f.FieldRange(pilosa.RangeOpLT, bitDepth, 300); err != nil {
+		if b, err := f.FieldRange(pql.LT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Bits(), []uint64{5000, 6000}) {
 			t.Fatalf("unexpected bits: %+v", b.Bits())
 		}
 
 		// Query for fields less than or equal to (ending with set bit).
-		if b, err := f.FieldRange(pilosa.RangeOpLTE, bitDepth, 301); err != nil {
+		if b, err := f.FieldRange(pql.LTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 4000, 5000, 6000}) {
 			t.Fatalf("unexpected bits: %+v", b.Bits())
 		}
 
 		// Query for fields less than or equal to (ending with unset bit).
-		if b, err := f.FieldRange(pilosa.RangeOpLTE, bitDepth, 300); err != nil {
+		if b, err := f.FieldRange(pql.LTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 5000, 6000}) {
 			t.Fatalf("unexpected bits: %+v", b.Bits())
@@ -350,28 +351,28 @@ func TestFragment_FieldRange(t *testing.T) {
 		}
 
 		// Query for fields greater than (ending with unset bit).
-		if b, err := f.FieldRange(pilosa.RangeOpGT, bitDepth, 300); err != nil {
+		if b, err := f.FieldRange(pql.GT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected bits: %+v", b.Bits())
 		}
 
 		// Query for fields greater than (ending with set bit).
-		if b, err := f.FieldRange(pilosa.RangeOpGT, bitDepth, 301); err != nil {
+		if b, err := f.FieldRange(pql.GT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000}) {
 			t.Fatalf("unexpected bits: %+v", b.Bits())
 		}
 
 		// Query for fields greater than or equal to (ending with unset bit).
-		if b, err := f.FieldRange(pilosa.RangeOpGTE, bitDepth, 300); err != nil {
+		if b, err := f.FieldRange(pql.GTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 2000, 3000, 4000}) {
 			t.Fatalf("unexpected bits: %+v", b.Bits())
 		}
 
 		// Query for fields greater than or equal to (ending with set bit).
-		if b, err := f.FieldRange(pilosa.RangeOpGTE, bitDepth, 301); err != nil {
+		if b, err := f.FieldRange(pql.GTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected bits: %+v", b.Bits())

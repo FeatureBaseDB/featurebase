@@ -39,6 +39,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
 )
 
@@ -567,14 +568,14 @@ func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, e
 	return sum, count, nil
 }
 
-func (f *Fragment) FieldRange(op string, bitDepth uint, predicate uint64) (*Bitmap, error) {
+func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitmap, error) {
 	switch op {
-	case RangeOpEQ:
+	case pql.EQ:
 		return f.fieldRangeEQ(bitDepth, predicate)
-	case RangeOpLT, RangeOpLTE:
-		return f.fieldRangeLT(bitDepth, predicate, op == RangeOpLTE)
-	case RangeOpGT, RangeOpGTE:
-		return f.fieldRangeGT(bitDepth, predicate, op == RangeOpGTE)
+	case pql.LT, pql.LTE:
+		return f.fieldRangeLT(bitDepth, predicate, op == pql.LTE)
+	case pql.GT, pql.GTE:
+		return f.fieldRangeGT(bitDepth, predicate, op == pql.GTE)
 	default:
 		return nil, ErrInvalidRangeOperation
 	}
