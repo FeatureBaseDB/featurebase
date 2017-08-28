@@ -393,7 +393,9 @@ func (f *Frame) Close() error {
 
 	// Close all views.
 	for _, view := range f.views {
-		_ = view.Close()
+		if err := view.Close(); err != nil {
+			return err
+		}
 	}
 	f.views = make(map[string]*View)
 
@@ -503,6 +505,28 @@ func (f *Frame) newView(path, name string) *View {
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	view.broadcaster = f.broadcaster
 	return view
+}
+
+// DeleteView removes the view from the frame.
+func (f *Frame) DeleteView(name string) error {
+	view := f.views[name]
+	if view == nil {
+		return ErrInvalidView
+	}
+
+	// Close data files before deletion.
+	if err := view.Close(); err != nil {
+		return err
+	}
+
+	// Delete view directory.
+	if err := os.RemoveAll(view.Path()); err != nil {
+		return err
+	}
+
+	delete(f.views, name)
+
+	return nil
 }
 
 // SetBit sets a bit on a view within the frame.

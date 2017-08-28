@@ -163,7 +163,9 @@ func (v *View) Close() error {
 
 	// Close all fragments.
 	for _, frag := range v.fragments {
-		_ = frag.Close()
+		if err := frag.Close(); err != nil {
+			return err
+		}
 	}
 	v.fragments = make(map[uint64]*Fragment)
 

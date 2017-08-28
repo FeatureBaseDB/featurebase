@@ -294,11 +294,13 @@ func (f *Fragment) close() error {
 	// Flush cache if closing gracefully.
 	if err := f.flushCache(); err != nil {
 		f.logger().Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
+		return err
 	}
 
 	// Close underlying storage.
 	if err := f.closeStorage(); err != nil {
 		f.logger().Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
+		return err
 	}
 
 	// Remove checksums.
