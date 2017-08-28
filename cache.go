@@ -273,6 +273,11 @@ func (c *RankCache) recalculate() {
 			if cnt <= c.thresholdValue {
 				delete(c.entries, id)
 			}
+			// prevent from deleting the whole cache if all the same value
+			if len(c.entries) <= int(c.maxEntries) {
+				break
+			}
+
 		}
 	}
 }
