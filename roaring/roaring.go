@@ -197,6 +197,7 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 	if len(b.keys) == 0 {
 		return
 	}
+
 	skey := highbits(start)
 	ekey := highbits(end)
 
@@ -208,31 +209,28 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 		return uint64(b.containers[i].countRange(int(lowbits(start)), int(lowbits(end))))
 	}
 
-	// Count first partial container.
 	if i < 0 {
-		// start is before container, so we should start counting
-		// at first container that has value
-		if skey < b.keys[0] {
-			i = -1
-		} else {
-			i = -i
-		}
+		// start's container did not exist
+		// set i to the index of the first container we have with values higher than start
+		i = -i - 1
 	} else {
+		// Count first partial container and advance i so we don't recount it
 		n += uint64(b.containers[i].countRange(int(lowbits(start)), maxContainerVal+1))
+		i += 1
 	}
 
 	// Count last container.
 	if j < 0 {
-		j = -j
-		if j > len(b.containers) {
-			j = len(b.containers)
-		}
+		// end's container did not exist
+		// set j to the index of the first container with values higher than end (or len(containers))
+		j = -j - 1
 	} else {
+		// end's container exists, count it up to end
 		n += uint64(b.containers[j].countRange(0, int(lowbits(end))))
 	}
 
 	// Count containers in between.
-	for x := i + 1; x < j; x++ {
+	for x := i; x < j; x++ {
 		n += uint64(b.containers[x].n)
 	}
 
@@ -1994,6 +1992,10 @@ func intersectBitmapRun(a, b *container) *container {
 				if a.bitmapContains(i) {
 					output.array = append(output.array, i)
 				}
+				// If the run ends the container, break to avoid an infinite loop.
+				if i == 65535 {
+					break
+				}
 			}
 		}
 		output.n = len(output.array)
@@ -2506,7 +2508,7 @@ func differenceRunBitmap(a, b *container) *container {
 
 func differenceRunIterator(a *container, itr containerIterator) *container {
 
-	output := &container{runs: make([]interval16, 0, a.n)}
+	output := &container{runs: make([]interval16, 0, a.n), container_type: ContainerRun}
 
 	vb, eof := itr.next()
 	j := 0
@@ -2574,7 +2576,7 @@ func differenceRunRun(a, b *container) *container {
 	alen := len(a.runs)
 	blen := len(b.runs)
 
-	output := &container{runs: make([]interval16, 0, alen+blen)} // TODO allocate max then truncate? or something else
+	output := &container{runs: make([]interval16, 0, alen+blen), container_type: ContainerRun} // TODO allocate max then truncate? or something else
 	// cardinality upper bound: sum of number of runs
 	// each B-run could split an A-run in two, up to len(b.runs) times
 
@@ -2619,6 +2621,7 @@ func differenceRunRun(a, b *container) *container {
 		}
 	}
 
+	output.n = output.count()
 	return output
 }
 
@@ -2867,7 +2870,8 @@ func (*op) size() int { return 1 + 8 + 4 }
 func highbits(v uint64) uint64 { return uint64(v >> 16) }
 func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
 
-// search32 returns the index of v in a.
+// search32 returns the index of value in a. If value is not found, it works the
+// same way as search64.
 func search32(a []uint16, value uint16) int {
 	// Optimize for elements and the last element.
 	n := len(a)
@@ -2904,7 +2908,13 @@ func search32(a []uint16, value uint16) int {
 	return -(lo + 1)
 }
 
-// search64 returns the index of v in a.
+// search64 returns the index of value in a. If value is not found, -1 * (1 +
+// the index where v would be if it were inserted) is returned. This is done in
+// order to both signal that value was not found (negative number), and also
+// return information about where v would go if it were inserted. The +1 offset
+// is necessary due to the case where v is not found, but would go at index 0.
+// since negative 0 is no different from positive 0, we offset the returned
+// negative indices by 1. See the test for this function for examples.
 func search64(a []uint64, value uint64) int {
 	// Optimize for elements and the last element.
 	n := len(a)
@@ -3147,8 +3157,9 @@ func xorArrayRun(a, b *container) *container {
 		} else if va > vb.start {
 			if va < vb.last {
 				output.n += output.runAppendInterval(interval16{start: vb.start, last: va - 1})
-				vb.start = va + 1
 				i++
+				vb.start = va + 1
+
 				if vb.start > vb.last {
 					j++
 				}
@@ -3157,15 +3168,22 @@ func xorArrayRun(a, b *container) *container {
 				j++
 			} else { // va == vb.last
 				vb.last--
-				if vb.start < vb.last {
+				if vb.start <= vb.last {
 					output.n += output.runAppendInterval(vb)
 				}
 				j++
 				i++
 			}
 
-		} else {
-			vb.start++
+		} else { // we know va == vb.start
+			if vb.start == maxContainerVal { // protect overflow
+				j++
+			} else {
+				vb.start++
+				if vb.start > vb.last {
+					j++
+				}
+			}
 			i++
 		}
 	}
@@ -3213,9 +3231,15 @@ func xorCompare(x *xorstm) (r1 interval16, has_data bool) {
 			r1 = interval16{start: x.va.start, last: x.vb.start - 1}
 			has_data = true
 		}
-		x.va.start = x.vb.last + 1
-		if x.va.start > x.va.last {
+
+		if x.vb.last == maxContainerVal { // Check for overflow
 			x.va_valid = false
+
+		} else {
+			x.va.start = x.vb.last + 1
+			if x.va.start > x.va.last {
+				x.va_valid = false
+			}
 		}
 
 	} else if x.vb.start <= x.va.start && x.vb.last >= x.va.last { //va inside
@@ -3225,26 +3249,39 @@ func xorCompare(x *xorstm) (r1 interval16, has_data bool) {
 			has_data = true
 		}
 
-		x.vb.start = x.va.last + 1
-		if x.vb.start > x.vb.last {
+		if x.va.last == maxContainerVal { //check for overflow
 			x.vb_valid = false
+		} else {
+			x.vb.start = x.va.last + 1
+			if x.vb.start > x.vb.last {
+				x.vb_valid = false
+			}
 		}
 
 	} else if x.va.start < x.vb.start && x.va.last <= x.vb.last { //va first overlap
 		x.va_valid = false
 		r1 = interval16{start: x.va.start, last: x.vb.start - 1}
 		has_data = true
-		x.vb.start = x.va.last + 1
-		if x.vb.start > x.vb.last {
+		if x.va.last == maxContainerVal { // check for overflow
 			x.vb_valid = false
+		} else {
+			x.vb.start = x.va.last + 1
+			if x.vb.start > x.vb.last {
+				x.vb_valid = false
+			}
 		}
 	} else if x.vb.start < x.va.start && x.vb.last <= x.va.last { //vb first overlap
 		x.vb_valid = false
 		r1 = interval16{start: x.vb.start, last: x.va.start - 1}
 		has_data = true
-		x.va.start = x.vb.last + 1
-		if x.va.start > x.va.last {
+
+		if x.vb.last == maxContainerVal { // check for overflow
 			x.va_valid = false
+		} else {
+			x.va.start = x.vb.last + 1
+			if x.va.start > x.va.last {
+				x.va_valid = false
+			}
 		}
 	}
 	return

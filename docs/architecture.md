@@ -1,5 +1,7 @@
 +++
 title = "Architecture"
+weight = 6
+nav = []
 +++
 
 ## Architecture

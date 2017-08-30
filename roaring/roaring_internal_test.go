@@ -623,7 +623,7 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 1, 1, 1, 0xA, 1, 1, 0, 1},
-			runs:   []interval16{{start: 63, last: 10000}},
+			runs:   []interval16{{start: 63, last: 10000}, {start: 65000, last: 65535}},
 			exp:    []uint16{63, 64, 128, 192, 257, 259, 320, 384, 512},
 			expN:   9,
 		},
@@ -1601,6 +1601,7 @@ func TestDifferenceRunRun(t *testing.T) {
 		aruns []interval16
 		bruns []interval16
 		exp   []interval16
+		expn  int
 	}{
 		{
 			// this tests all six overlap combinations
@@ -1609,6 +1610,7 @@ func TestDifferenceRunRun(t *testing.T) {
 			aruns: []interval16{{start: 3, last: 6}, {start: 13, last: 16}, {start: 24, last: 26}, {start: 33, last: 38}, {start: 43, last: 46}, {start: 53, last: 56}},
 			bruns: []interval16{{start: 1, last: 8}, {start: 11, last: 14}, {start: 21, last: 23}, {start: 35, last: 37}, {start: 44, last: 48}, {start: 57, last: 59}},
 			exp:   []interval16{{start: 15, last: 16}, {start: 24, last: 26}, {start: 33, last: 34}, {start: 38, last: 38}, {start: 43, last: 43}, {start: 53, last: 56}},
+			expn:  13,
 		},
 	}
 	for i, test := range tests {
@@ -1619,6 +1621,9 @@ func TestDifferenceRunRun(t *testing.T) {
 		ret := differenceRunRun(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
+		}
+		if ret.n != test.expn {
+			t.Fatalf("test #%v expected n=%v, but got n=%v", i, test.expn, ret.n)
 		}
 	}
 }
@@ -1711,31 +1716,43 @@ func TestWriteReadRun(t *testing.T) {
 }
 
 func TestXorArrayRun(t *testing.T) {
-	a := &container{array: []uint16{1, 5, 10, 11, 12}, container_type: ContainerArray}
-	b := &container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun}
-	exp := []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 13, 15, 16}
-
-	//ret := xorArrayRun(a, b)
-	ret := xor(a, b)
-	if !reflect.DeepEqual(ret.array, exp) {
-		t.Fatalf("test #1 expected %v, but got %v", exp, ret.array)
+	tests := []struct {
+		a   *container
+		b   *container
+		exp *container
+	}{
+		{
+			a:   &container{array: []uint16{1, 5, 10, 11, 12}, container_type: ContainerArray},
+			b:   &container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun},
+			exp: &container{array: []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 13, 15, 16}, container_type: ContainerArray, n: 12},
+		}, {
+			a:   &container{array: []uint16{1, 5, 10, 11, 12, 13, 14}, container_type: ContainerArray},
+			b:   &container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun},
+			exp: &container{array: []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}, container_type: ContainerArray, n: 12},
+		}, {
+			a:   &container{array: []uint16{65535}, container_type: ContainerArray},
+			b:   &container{runs: []interval16{{start: 65534, last: 65535}}, container_type: ContainerRun},
+			exp: &container{array: []uint16{65534}, container_type: ContainerArray, n: 1},
+		}, {
+			a:   &container{array: []uint16{65535}, container_type: ContainerArray},
+			b:   &container{runs: []interval16{{start: 65535, last: 65535}}, container_type: ContainerRun},
+			exp: &container{array: []uint16{}, container_type: ContainerArray, n: 0},
+		},
 	}
 
-	ret = xor(b, a)
-	if !reflect.DeepEqual(ret.array, exp) {
-		t.Fatalf("test #2 expected %v, but got %v", exp, ret.array)
+	for i, test := range tests {
+		test.a.n = test.a.count()
+		test.b.n = test.b.count()
+		ret := xor(test.a, test.b)
+		if !reflect.DeepEqual(ret, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret)
+		}
+		ret = xor(test.b, test.a)
+		if !reflect.DeepEqual(ret, test.exp) {
+			t.Fatalf("test #%v.1 expected %v, but got %v", i, test.exp, ret)
+		}
 	}
-	c := &container{array: []uint16{1, 5, 10, 11, 12, 13, 14}, container_type: ContainerArray}
-	//	exp = []int16{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}
-	expr := []interval16{{start: 1, last: 4}, {start: 6, last: 9}, {start: 11, last: 11}, {start: 14, last: 16}}
-	ret = xor(b, c)
-	if !reflect.DeepEqual(ret.runs, expr) {
-		t.Fatalf("test #3 expected %v, but got %v", exp, ret.runs)
-	}
-	ret = xor(c, b)
-	if !reflect.DeepEqual(ret.runs, expr) {
-		t.Fatalf("test #4 expected %v, but got %v", exp, ret.array)
-	}
+
 }
 
 //special case that didn't fit the xorrunrun table testing below.
@@ -1831,6 +1848,11 @@ func TestXorRunRun(t *testing.T) {
 			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 9}, {start: 12, last: 22}},
 			bruns: []interval16{{start: 2, last: 8}, {start: 16, last: 27}, {start: 33, last: 34}},
 			exp:   []interval16{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 9, last: 9}, {start: 12, last: 15}, {start: 23, last: 27}, {start: 33, last: 34}},
+		},
+		{
+			aruns: []interval16{{start: 65530, last: 65535}},
+			bruns: []interval16{{start: 65532, last: 65535}},
+			exp:   []interval16{{start: 65530, last: 65531}},
 		},
 	}
 	for i, test := range tests {
@@ -2309,4 +2331,82 @@ func Test_BufBitmapIterator_UnreadPanic(t *testing.T) {
 	// ensure that unreading back-to-back panics
 	itr.unread()
 	itr.unread()
+}
+
+func TestSearc64(t *testing.T) {
+	tests := []struct {
+		a     []uint64
+		value uint64
+		exp   int
+	}{
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 5,
+			exp:   1,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 1,
+			exp:   0,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 0,
+			exp:   -1,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 2,
+			exp:   -2,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 7,
+			exp:   -3,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 11,
+			exp:   -4,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 13,
+			exp:   -5,
+		},
+		{
+			a:     []uint64{1, 5, 10, 12},
+			value: 3843534,
+			exp:   -5,
+		},
+		{
+			a:     []uint64{},
+			value: 3843534,
+			exp:   -1,
+		},
+		{
+			a:     []uint64{},
+			value: 0,
+			exp:   -1,
+		},
+		{
+			a:     []uint64{0},
+			value: 0,
+			exp:   0,
+		},
+		{
+			a:     []uint64{0},
+			value: 1,
+			exp:   -2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%d in %v", test.value, test.a), func(t *testing.T) {
+			actual := search64(test.a, test.value)
+			if actual != test.exp {
+				t.Errorf("got: %d, exp: %d", actual, test.exp)
+			}
+		})
+	}
 }

@@ -133,7 +133,9 @@ func (h *Holder) Close() error {
 	h.wg.Wait()
 
 	for _, index := range h.indexes {
-		index.Close()
+		if err := index.Close(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

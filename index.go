@@ -248,7 +248,9 @@ func (i *Index) Close() error {
 
 	// Close all frames.
 	for _, f := range i.frames {
-		f.Close()
+		if err := f.Close(); err != nil {
+			return err
+		}
 	}
 	i.frames = make(map[string]*Frame)
 

@@ -54,6 +54,104 @@ func TestContainerCount(t *testing.T) {
 	}
 }
 
+func TestCountRange(t *testing.T) {
+	tests := []struct {
+		name   string
+		bitmap []uint64
+		start  uint64
+		end    uint64
+		exp    uint64
+	}{
+		{
+			name:   "j < 0 : 1",
+			bitmap: []uint64{0, 1, 2, 3 * 65536},
+			start:  0,
+			end:    65536,
+			exp:    3,
+		},
+		{
+			name:   "i < 0 : 1",
+			bitmap: []uint64{0, 1, 2, 2 * 65536, 3 * 65536},
+			start:  65536,
+			end:    3 * 65536,
+			exp:    1,
+		},
+		{
+			name:   "single-container-run",
+			bitmap: []uint64{0, 2, 3, 4, 5, 2 * 65536, 3 * 65536},
+			start:  2,
+			end:    5,
+			exp:    3,
+		},
+		{
+			name:   "single-container-beg",
+			bitmap: []uint64{1, 2, 3, 4, 5, 2 * 65536, 3 * 65536},
+			start:  1,
+			end:    4,
+			exp:    3,
+		},
+		{
+			name:   "partial-start",
+			bitmap: []uint64{1, 2, 3, 4, 5, 2 * 65536, 3 * 65536},
+			start:  5,
+			end:    3 * 65536,
+			exp:    2,
+		},
+		{
+			name:   "partial-end",
+			bitmap: []uint64{1, 2 * 65536, 3 * 65536, 3*65536 + 1, 3*65536 + 2},
+			start:  0,
+			end:    (3 * 65536) + 1,
+			exp:    3,
+		},
+		{
+			name:   "partial-both",
+			bitmap: []uint64{65536, 65537, 65538, 2 * 65536, 2*65536 + 1, 2*65536 + 2},
+			start:  65537,
+			end:    (2 * 65536) + 1,
+			exp:    3,
+		},
+		{
+			name:   "partial-both-bookends",
+			bitmap: []uint64{0, 65535, 65536, 65537, 65538, 2 * 65536, 2*65536 + 1, 2*65536 + 2, 3 * 65536},
+			start:  65537,
+			end:    (2 * 65536) + 1,
+			exp:    3,
+		},
+		{
+			name:   "empty-bookends",
+			bitmap: []uint64{1, 65535, 5 * 65536, 5*65536 + 1},
+			start:  65536,
+			end:    5 * 65536,
+			exp:    0,
+		},
+		{
+			name:   "i not found, j found",
+			bitmap: []uint64{1, 65535, 5 * 65536},
+			start:  2 * 65535,
+			end:    5*65536 + 1,
+			exp:    1,
+		},
+		{
+			name:   "i not found, j not found",
+			bitmap: []uint64{1, 65535, 5 * 65536, 7 * 65536},
+			start:  2 * 65535,
+			end:    6 * 65536,
+			exp:    1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%s: %d to %d in '%v'", test.name, test.start, test.end, test.bitmap), func(t *testing.T) {
+			b := roaring.NewBitmap(test.bitmap...)
+			actual := b.CountRange(test.start, test.end)
+			if actual != test.exp {
+				t.Errorf("got: %d, exp: %d", actual, test.exp)
+			}
+		})
+	}
+}
+
 func TestCheckBitmap(t *testing.T) {
 	b := roaring.NewBitmap()
 	x := 0

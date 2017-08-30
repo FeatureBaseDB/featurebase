@@ -256,8 +256,10 @@ func (c *RankCache) recalculate() {
 	length := len(c.rankings)
 	c.stats.Gauge("RankCache", float64(length), 1.0)
 
+	var removeItems []BitmapPair // cached, ordered list
 	if length > int(c.maxEntries) {
 		c.thresholdValue = rankings[c.maxEntries].Count
+		removeItems = c.rankings[c.maxEntries:]
 		c.rankings = c.rankings[0:c.maxEntries]
 	} else {
 		c.thresholdValue = 1
@@ -269,10 +271,8 @@ func (c *RankCache) recalculate() {
 	// If size is larger than the threshold then trim it.
 	if len(c.entries) > c.thresholdBuffer {
 		c.stats.Count("cache.threshold", 1, 1.0)
-		for id, cnt := range c.entries {
-			if cnt <= c.thresholdValue {
-				delete(c.entries, id)
-			}
+		for _, pair := range removeItems {
+			delete(c.entries, pair.ID)
 		}
 	}
 }

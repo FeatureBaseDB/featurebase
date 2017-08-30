@@ -34,8 +34,9 @@ func TestHolder_Open(t *testing.T) {
 
 		if err := os.Mkdir(h.IndexPath("!"), 0777); err != nil {
 			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
+			t.Fatal(err)
 		}
-
 		if err := h.Reopen(); err != nil {
 			t.Fatal(err)
 		} else if logOutput := h.LogOutput.String(); !strings.Contains(logOutput, `ERROR opening index: !`) {
@@ -48,6 +49,8 @@ func TestHolder_Open(t *testing.T) {
 		defer h.Close()
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
 		} else if err := os.Chmod(h.IndexPath("test"), 0000); err != nil {
 			t.Fatal(err)
@@ -64,6 +67,8 @@ func TestHolder_Open(t *testing.T) {
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
+			t.Fatal(err)
 		} else if err := os.Truncate(filepath.Join(h.IndexPath("test"), ".meta"), 2); err != nil {
 			t.Fatal(err)
 		}
@@ -77,6 +82,8 @@ func TestHolder_Open(t *testing.T) {
 		defer h.Close()
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
 		} else if err := os.Truncate(filepath.Join(h.IndexPath("test"), ".data"), 2); err != nil {
 			t.Fatal(err)
@@ -95,6 +102,8 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
+			t.Fatal(err)
 		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar"), 0000); err != nil {
 			t.Fatal(err)
 		}
@@ -112,6 +121,8 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
+			t.Fatal(err)
 		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", ".meta"), 2); err != nil {
 			t.Fatal(err)
 		}
@@ -127,6 +138,8 @@ func TestHolder_Open(t *testing.T) {
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
 		} else if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
 		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", ".data"), 2); err != nil {
 			t.Fatal(err)
@@ -147,6 +160,8 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
+			t.Fatal(err)
 		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard"), 0000); err != nil {
 			t.Fatal(err)
 		}
@@ -165,6 +180,8 @@ func TestHolder_Open(t *testing.T) {
 		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		} else if _, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
 		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments"), 0000); err != nil {
 			t.Fatal(err)
@@ -188,6 +205,8 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if _, err := view.SetBit(0, 0); err != nil {
 			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
+			t.Fatal(err)
 		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 0000); err != nil {
 			t.Fatal(err)
 		}
@@ -208,6 +227,8 @@ func TestHolder_Open(t *testing.T) {
 		} else if view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)
 		} else if _, err := view.SetBit(0, 0); err != nil {
+			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
 		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 2); err != nil {
 			t.Fatal(err)
@@ -231,6 +252,8 @@ func TestHolder_Open(t *testing.T) {
 		} else if _, err := view.SetBit(0, 0); err != nil {
 			t.Fatal(err)
 		} else if err := view.Fragment(0).FlushCache(); err != nil {
+			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
 		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0.cache"), 0000); err != nil {
 			t.Fatal(err)
