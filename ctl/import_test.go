@@ -16,6 +16,7 @@ package ctl
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -24,7 +25,6 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/test"
-	"golang.org/x/net/context"
 )
 
 func TestImportCommand_Validation(t *testing.T) {
