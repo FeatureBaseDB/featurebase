@@ -518,7 +518,7 @@ func (b *Bitmap) Optimize() {
 	}
 }
 
-//hoping this inines
+//hoping this in-lines
 func WriteUint16(w io.Writer, b []byte, v uint16) (int, error) {
 	binary.LittleEndian.PutUint16(b, v)
 	return w.Write(b)
