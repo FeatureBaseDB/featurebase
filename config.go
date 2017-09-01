@@ -42,7 +42,7 @@ const (
 	// DefaultMaxWritesPerRequest is the default number of writes per request.
 	DefaultMaxWritesPerRequest = 5000
 
-	// DefaultMaxClientConnections is 0 which means no limit
+	// DefaultMaxClientConnections is zero, which means no connection limit.
 	DefaultMaxClientConnections = 0
 )
 
