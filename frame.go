@@ -419,6 +419,58 @@ func (f *Frame) Field(name string) *Field {
 	return nil
 }
 
+// CreateField creates a new field on the schema.
+func (f *Frame) CreateField(field *Field) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Ensure frame supports fields.
+	if f.rangeEnabled {
+		return ErrFrameFieldsNotAllowed
+	}
+
+	// Copy schema and append field.
+	schema := f.schema.Clone()
+	if err := schema.AddField(field); err != nil {
+		return err
+	}
+	f.schema = schema
+
+	return nil
+}
+
+// DeleteField deletes an existing field on the schema.
+func (f *Frame) DeleteField(name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Ensure frame supports fields.
+	if f.rangeEnabled {
+		return ErrFrameFieldsNotAllowed
+	}
+
+	// Copy schema and remove field.
+	schema := f.schema.Clone()
+	if err := schema.DeleteField(name); err != nil {
+		return err
+	}
+	f.schema = schema
+
+	// Remove views.
+	viewName := ViewFieldPrefix + name
+	if view := f.views[viewName]; view != nil {
+		delete(f.views, viewName)
+
+		if err := view.Close(); err != nil {
+			return err
+		} else if err := os.RemoveAll(view.Path()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // TimeQuantum returns the time quantum for the frame.
 func (f *Frame) TimeQuantum() TimeQuantum {
 	f.mu.Lock()
@@ -847,6 +899,54 @@ func (o *FrameOptions) Encode() *internal.FrameMeta {
 // FrameSchema represents the list of fields on a frame.
 type FrameSchema struct {
 	Fields []*Field
+}
+
+// Clone returns a copy of s.
+func (s *FrameSchema) Clone() *FrameSchema {
+	other := &FrameSchema{Fields: make([]*Field, len(s.Fields))}
+	copy(other.Fields, s.Fields)
+	return other
+}
+
+// HasField returns true if a field exists on the schema.
+func (s *FrameSchema) HasField(name string) bool {
+	for _, f := range s.Fields {
+		if f.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// AddField adds a single field to the schema.
+func (s *FrameSchema) AddField(field *Field) error {
+	if err := ValidateField(field); err != nil {
+		return err
+	} else if s.HasField(field.Name) {
+		return ErrFieldExists
+	}
+
+	// Add field to list.
+	s.Fields = append(s.Fields, field)
+
+	// Sort fields by name.
+	sort.Slice(s.Fields, func(i, j int) bool {
+		return s.Fields[i].Name < s.Fields[j].Name
+	})
+
+	return nil
+}
+
+// DeleteField removes a single field from the schema.
+func (s *FrameSchema) DeleteField(name string) error {
+	for i, field := range s.Fields {
+		if field.Name == name {
+			copy(s.Fields[i:], s.Fields[i+1:])
+			s.Fields, s.Fields[len(s.Fields)-1] = s.Fields[:len(s.Fields)-1], nil
+			return nil
+		}
+	}
+	return ErrFieldNotFound
 }
 
 func encodeFrameSchema(schema *FrameSchema) *internal.FrameSchema {

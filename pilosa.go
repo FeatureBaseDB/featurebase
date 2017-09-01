@@ -49,6 +49,7 @@ var (
 	ErrInputDefinitionNotFound       = errors.New("input-definition not found")
 
 	ErrFieldNotFound          = errors.New("field not found")
+	ErrFieldExists            = errors.New("field already exists")
 	ErrFieldNameRequired      = errors.New("field name required")
 	ErrInvalidFieldType       = errors.New("invalid field type")
 	ErrInvalidFieldRange      = errors.New("invalid field range")
