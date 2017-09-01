@@ -11,7 +11,7 @@ var (
 	ErrorTooManyConnections = errTooManyConnections{}
 )
 
-func NewBoundListener(maxActive int, l net.Listener) net.Listener {
+func NewBoundListener(l net.Listener, maxActive int) net.Listener {
 	b := &boundListener{l, make(chan struct{}, maxActive)}
 	for i := 0; i < maxActive; i++ {
 		b.active <- struct{}{}
@@ -31,7 +31,7 @@ type boundConn struct {
 type errTooManyConnections struct {
 }
 
-func (e errTooManyConnections) Error() string   { return "To Many Connections" }
+func (e errTooManyConnections) Error() string   { return "Too many connections" }
 func (e errTooManyConnections) Timeout() bool   { return false }
 func (e errTooManyConnections) Temporary() bool { return true }
 
@@ -46,7 +46,7 @@ func (l *boundListener) Accept() (net.Conn, error) {
 		return &boundConn{c, l.active}, err
 	default: //out of connections
 		c, _ := l.Listener.Accept()
-		l.writeError(c, "Too Many Connections")
+		l.writeError(c, ErrorTooManyConnections.Error())
 		c.Close()
 		return nil, ErrorTooManyConnections
 	}

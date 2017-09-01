@@ -167,7 +167,7 @@ func (s *Server) Open() error {
 	go func() {
 		listener := ln
 		if s.MaxClientConnections > 0 {
-			listener = NewBoundListener(s.MaxClientConnections, ln)
+			listener = NewBoundListener(ln,s.MaxClientConnections)
 		}
 		err := http.Serve(listener, s.Handler)
 
