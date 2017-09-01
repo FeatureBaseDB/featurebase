@@ -162,12 +162,26 @@ The request payload is in JSON, and may contain the `options` field. The `option
 * `inverseEnabled` (boolean): Enables [the inverted view]({{< ref "data-model.md#inverse" >}}) for this frame if `true`.
 * `cacheType` (string): [ranked]({{< ref "data-model.md#ranked" >}}) or [LRU]({{< ref "data-model.md#lru" >}}) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
+* `rangeEnabled` (boolean): Enables range encoded numbers in this frame.
+* `fields` (array): List of range encoded fields.
+
+Each individual `field` contains the following:
+* `name` (string): Field name.
+* `type` (string): Field type, currently only "int" is supported.
+* `min` (int): Minimum of the value range stored in this field.
+* `max` (int): Maximum of the value range stored in this field.
 
 Request:
 ```
 curl localhost:10101/index/user/frame/language \
      -X POST \
      -d '{"options": {"rowLabel": "language_id"}}'
+```
+
+```
+curl localhost:10101/index/user/frame/language \
+     -X POST \
+     -d '{"options": {"rowLabel": "language_id"} "rangeEnabled": true, "fields": [{"name": "field0", "type": "int", "min": 0, "max": 1000}]}'
 ```
 
 Response:
