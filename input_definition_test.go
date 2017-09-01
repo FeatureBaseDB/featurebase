@@ -198,34 +198,26 @@ func TestHandleAction(t *testing.T) {
 	action := pilosa.Action{ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
 	timestamp := int64(0)
 
-	value = 1
-	b, err := pilosa.HandleAction(action, value, colID, timestamp)
-	if b != nil {
-		t.Fatalf("Expected integer type is not handled by single-row-boolean")
-	} else if !strings.Contains(err.Error(), "single-row-boolean value") {
-		t.Fatalf("Expected single-row-boolean value error, actual error: %s", err)
+	tests := []struct {
+		name     string
+		value    interface{}
+		expected string
+	}{
+		{name: "integer value", value: 1, expected: "single-row-boolean value"},
+		{name: "string value", value: "1", expected: "single-row-boolean value 1 must equate to a Bool"},
 	}
+	for _, r := range tests {
+		t.Run(r.name, func(t *testing.T) {
+			_, err := pilosa.HandleAction(action, r.value, colID, timestamp)
+			if !strings.Contains(err.Error(), r.expected) {
+				t.Fatalf("Expect err: %s, actual: %s", r.expected, err.Error())
+			}
+		})
 
-	value = "1"
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if b != nil {
-		t.Fatalf("Expected Ignore strings, only accept boolean")
-	}
-
-	value = "t"
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if !strings.Contains(err.Error(), "must equate to a Bool") {
-		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
-	}
-
-	value = float64(1)
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if !strings.Contains(err.Error(), "must equate to a Bool") {
-		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
 	}
 
 	value = false
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
+	b, err := pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		t.Fatalf("Expected Ignore values that do not equate to True")
 	}
@@ -274,4 +266,12 @@ func TestHandleAction(t *testing.T) {
 	if !strings.Contains(err.Error(), "Unrecognized Value Destination") {
 		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
 	}
+
+	action.ValueDestination = pilosa.InputSetTimestamp
+	t.Run("nil bit", func(t *testing.T) {
+		b, err = pilosa.HandleAction(action, value, colID, timestamp)
+		if b != nil {
+			t.Fatalf("Expected nil bit is set")
+		}
+	})
 }

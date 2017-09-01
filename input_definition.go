@@ -211,7 +211,6 @@ func (a *Action) Validate() error {
 		if len(a.ValueMap) == 0 {
 			return ErrInputDefinitionValueMap
 		}
-	case InputSetTimestamp:
 
 	}
 
@@ -372,7 +371,7 @@ func HandleAction(a Action, value interface{}, colID uint64, timestamp int64) (*
 		}
 		bit.RowID = uint64(v)
 	case InputSetTimestamp:
-		break
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("Unrecognized Value Destination: %s in Action", a.ValueDestination)
 	}
