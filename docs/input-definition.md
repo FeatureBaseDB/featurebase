@@ -31,7 +31,8 @@ curl localhost:10101/index/repository/input-definition/stargazer \
             "frames": [
                  {
                      "name": "language", 
-                     "options": { 
+                     "options": {
+                         "rowLabel": "language_id",
                          "inverseEnabled": true, 
                          "timeQuantum": "YMD"
                      }
@@ -39,6 +40,7 @@ curl localhost:10101/index/repository/input-definition/stargazer \
                  {
                      "name": "stargazer", 
                      "options": {
+                         "rowLabel": "stargazer_id",
                          "inverseEnabled": true, 
                          "timeQuantum": "YMD"
                      }
@@ -60,7 +62,7 @@ curl localhost:10101/index/repository/input-definition/stargazer \
                                  "Go": 5, 
                                  "Java": 21, 
                                  "JavaScript": 13, 
-                                 "Python": 17, 
+                                 "Python": 17
                              }
                          }
                      ], 
@@ -82,7 +84,7 @@ curl localhost:10101/index/repository/input-definition/stargazer \
                               "valueDestination": "set-timestamp"
                           }
                       ], 
-                      "name": "time_value
+                      "name": "time_value"
                   }
              ] 
          }'
@@ -109,14 +111,14 @@ curl localhost:10101/index/repository/input/stargazer \
              {
                  "language_id": "Go", 
                  "repo_id": 91720568, 
-                 "stargazer_id": 513114
+                 "stargazer_id": 513114,
                  "time_value": "2017-05-18T20:40"
              }, 
              {
                  "language_id": "Python", 
                  "repo_id": 95122322
-             }'
-         ]
+             }
+         ]'
 ```
 
 As defined in the input definition, field name `language_id` maps language to a corresponding id defined in `valueMap` and sets the appropriate bit in the `language` frame.  The value corresponding to field name `stargazer_id` is added to the `stargazer` frame as rowID.
@@ -126,7 +128,7 @@ The data input above is equivalent to the following `SetBit()` operations:
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114)
-        'SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114, timestamp="2017-05-18T20:40")
+         SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114, timestamp="2017-05-18T20:40")
          SetBit(frame="language", repo_id=91720568, language_id=5)
          SetBit(frame="language", repo_id=95122322, language_id=17)
      '
