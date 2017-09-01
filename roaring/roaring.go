@@ -518,6 +518,21 @@ func (b *Bitmap) Optimize() {
 	}
 }
 
+//hoping this inines
+func WriteUint16(w io.Writer, b []byte, v uint16) (int, error) {
+	binary.LittleEndian.PutUint16(b, v)
+	return w.Write(b)
+}
+func WriteUint32(w io.Writer, b []byte, v uint32) (int, error) {
+	binary.LittleEndian.PutUint32(b, v)
+	return w.Write(b)
+}
+
+func WriteUint64(w io.Writer, b []byte, v uint64) (int, error) {
+	binary.LittleEndian.PutUint64(b, v)
+	return w.Write(b)
+}
+
 // WriteTo writes b to w.
 func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	b.Optimize()
@@ -526,15 +541,18 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 
 	containerCount := len(b.keys) - b.countEmptyContainers()
 	headerSize := headerBaseSize
+	byte2 := make([]byte, 2)
+	byte4 := make([]byte, 4)
+	byte8 := make([]byte, 8)
 
 	// Build header before writing individual container blocks.
 	// Metadata for each container is 8+2+2+4 = sizeof(key) + sizeof(container_type)+sizeof(cardinality) + sizeof(file offset)
-	buf := make([]byte, headerSize+(containerCount*(8+2+2+4)))
+	//	buf := make([]byte, headerSize+(containerCount*(8+2+2+4)))
 	// Cookie header section.
-	binary.LittleEndian.PutUint32(buf[0:], cookie)
-	binary.LittleEndian.PutUint32(buf[4:], uint32(containerCount))
 
-	empty := 0
+	WriteUint32(w, byte4, cookie)
+	WriteUint32(w, byte4, uint32(containerCount))
+
 	// Descriptive header section: encode keys and cardinality.
 	// Key and cardinality are stored interleaved here, 12 bytes per container.
 	for i, key := range b.keys {
@@ -545,31 +563,24 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		//count := c.count()
 		//assert(c.count() == c.n, "cannot write container count, mismatch: count=%d, n=%d", count, c.n)
 		if c.n > 0 {
-			binary.LittleEndian.PutUint64(buf[headerSize+(i-empty)*12:], uint64(key))
-			binary.LittleEndian.PutUint16(buf[headerSize+(i-empty)*12+8:], uint16(c.container_type))
-			binary.LittleEndian.PutUint16(buf[headerSize+(i-empty)*12+8+2:], uint16(c.n-1))
-		} else {
-			empty++
+			WriteUint64(w, byte8, uint64(key))
+			WriteUint16(w, byte2, uint16(c.container_type))
+			WriteUint16(w, byte2, uint16(c.n-1))
 		}
 	}
 
 	// Offset header section: write the offset for each container block.
 	// 4 bytes per container.
-	offset := uint32(len(buf))
-	empty = 0
-	for i, c := range b.containers {
+	offset := uint32(headerSize + (containerCount * (8 + 2 + 2 + 4)))
+	for _, c := range b.containers {
 
 		if c.n > 0 {
-			binary.LittleEndian.PutUint32(buf[headerSize+(containerCount*12)+((i-empty)*4):], uint32(offset))
+			WriteUint32(w, byte4, uint32(offset))
 			offset += uint32(c.size())
-		} else {
-			empty++
 		}
 	}
 
-	// Write header.
-	i, err := w.Write(buf)
-	n += int64(i)
+	n = int64(headerSize + (containerCount * (8 + 2 + 2 + 4)))
 	if err != nil {
 		return n, err
 	}
@@ -1613,9 +1624,9 @@ func (c *container) arrayWriteTo(w io.Writer) (n int64, err error) {
 
 	// Verify all elements are valid.
 	// TODO: instead of commenting this out, we need to make it a configuration option
-	for _, v := range c.array {
-		assert(lowbits(uint64(v)) == v, "cannot write array value out of range: %d", v)
-	}
+	//	for _, v := range c.array {
+	//	assert(lowbits(uint64(v)) == v, "cannot write array value out of range: %d", v)
+	//}
 
 	// Write sizeof(uint32) * cardinality bytes.
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.array[0]))[:2*c.n])
@@ -1632,8 +1643,10 @@ func (c *container) runWriteTo(w io.Writer) (n int64, err error) {
 	if len(c.runs) == 0 {
 		return 0, nil
 	}
+	var byte2 [2]byte
 	// Write sizeof(interval16) * runCount bytes.
-	err = binary.Write(w, binary.LittleEndian, uint16(len(c.runs)))
+	//	err = binary.Write(w, binary.LittleEndian, uint16(len(c.runs)))
+	_, err = WriteUint16(w, byte2[:], uint16(len(c.runs)))
 	if err != nil {
 		return 0, err
 	}
