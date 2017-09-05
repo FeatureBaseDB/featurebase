@@ -307,3 +307,36 @@ func TestFrame_RowLabelValidation(t *testing.T) {
 	}
 
 }
+
+// Ensure frame can open and retrieve a view.
+func TestFrame_DeleteView(t *testing.T) {
+	f := test.MustOpenFrame()
+	defer f.Close()
+
+	viewName := pilosa.ViewStandard + "_v"
+
+	// Create view.
+	view, err := f.CreateViewIfNotExists(viewName)
+	if err != nil {
+		t.Fatal(err)
+	} else if view == nil {
+		t.Fatal("expected view")
+	}
+
+	err = f.DeleteView(viewName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if f.View(viewName) != nil {
+		t.Fatal("view still exists in frame")
+	}
+
+	// Recreate view with same name, verify that the old view was not reused.
+	view2, err := f.CreateViewIfNotExists(viewName)
+	if err != nil {
+		t.Fatal(err)
+	} else if view == view2 {
+		t.Fatal("failed to create new view")
+	}
+}

@@ -43,12 +43,9 @@ func (h *Holder) Close() error {
 	return h.Holder.Close()
 }
 
-// Reopen closes the holder and instantiates and opens a new holder.
+// Reopen instantiates and opens a new holder.
+// Note that the holder must be Closed first.
 func (h *Holder) Reopen() error {
-	if err := h.Holder.Close(); err != nil {
-		return err
-	}
-
 	path, logOutput := h.Path, h.Holder.LogOutput
 	h.Holder = pilosa.NewHolder()
 	h.Holder.Path = path

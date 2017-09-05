@@ -115,6 +115,7 @@ const (
 	MessageTypeDeleteFrame           = 5
 	MessageTypeCreateInputDefinition = 6
 	MessageTypeDeleteInputDefinition = 7
+	MessageTypeDeleteView            = 8
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
@@ -135,6 +136,8 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeCreateInputDefinition
 	case *internal.DeleteInputDefinitionMessage:
 		typ = MessageTypeDeleteInputDefinition
+	case *internal.DeleteViewMessage:
+		typ = MessageTypeDeleteView
 	default:
 		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
 	}
@@ -165,6 +168,8 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.CreateInputDefinitionMessage{}
 	case MessageTypeDeleteInputDefinition:
 		m = &internal.DeleteInputDefinitionMessage{}
+	case MessageTypeDeleteView:
+		m = &internal.DeleteViewMessage{}
 	default:
 		return nil, fmt.Errorf("invalid message type: %d", typ)
 	}

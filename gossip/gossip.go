@@ -69,18 +69,18 @@ func (g *GossipNodeSet) Open() error {
 		return err
 	}
 	g.memberlist = ml
+	g.broadcasts = &memberlist.TransmitLimitedQueue{
+		NumNodes: func() int {
+			return ml.NumMembers()
+		},
+		RetransmitMult: 3,
+	}
 
 	// attach to gossip seed node
 	nodes := []*pilosa.Node{&pilosa.Node{Host: g.config.gossipSeed}} //TODO: support a list of seeds
 	err = g.joinWithRetry(pilosa.Nodes(nodes).Hosts())
 	if err != nil {
 		return err
-	}
-	g.broadcasts = &memberlist.TransmitLimitedQueue{
-		NumNodes: func() int {
-			return ml.NumMembers()
-		},
-		RetransmitMult: 3,
 	}
 	return nil
 }

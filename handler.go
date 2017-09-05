@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	// Imported for its side-effect of registering pprof endpoints with the server.
 	_ "net/http/pprof"
 	"os"
 	"runtime/debug"
@@ -43,6 +44,7 @@ import (
 
 	"unicode"
 
+	// Allow building Pilosa without the web UI.
 	_ "github.com/pilosa/pilosa/statik"
 	"github.com/rakyll/statik/fs"
 )
@@ -116,6 +118,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
+	router.HandleFunc("/index/{index}/frame/{frame}/view/{view}", handler.handleDeleteView).Methods("DELETE")
 	router.HandleFunc("/index/{index}/input/{input-definition}", handler.handlePostInput).Methods("POST")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetInputDefinition).Methods("GET")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
@@ -241,7 +244,9 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Build execution options.
 	opt := &ExecOptions{
-		Remote: req.Remote,
+		Remote:       req.Remote,
+		ExcludeAttrs: req.ExcludeAttrs,
+		ExcludeBits:  req.ExcludeBits,
 	}
 
 	// Parse query string.
@@ -257,7 +262,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	resp := &QueryResponse{Results: results, Err: err}
 
 	// Fill column attributes if requested.
-	if req.ColumnAttrs {
+	if req.ColumnAttrs && !req.ExcludeBits {
 		// Consolidate all column ids across all calls.
 		var columnIDs []uint64
 		for _, result := range results {
@@ -789,6 +794,47 @@ func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleDeleteView handles Delete /frame/view request.
+func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	frameName := mux.Vars(r)["frame"]
+	viewName := mux.Vars(r)["view"]
+
+	// Retrieve frame.
+	f := h.Holder.Frame(indexName, frameName)
+	if f == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Delete the view.
+	if err := f.DeleteView(viewName); err != nil {
+		// Ingore this error becuase views do not exist on all nodes due to slice distribution.
+		if err != ErrInvalidView {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Send the delete view message to all nodes.
+	err := h.Broadcaster.SendSync(
+		&internal.DeleteViewMessage{
+			Index: indexName,
+			Frame: frameName,
+			View:  viewName,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending DeleteView message: %s", err)
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(deleteViewResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type deleteViewResponse struct{}
+
 type getFrameViewsResponse struct {
 	Views []string `json:"views,omitempty"`
 }
@@ -925,9 +971,11 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		Query:       query,
-		Slices:      slices,
-		ColumnAttrs: q.Get("columnAttrs") == "true",
+		Query:        query,
+		Slices:       slices,
+		ColumnAttrs:  q.Get("columnAttrs") == "true",
+		ExcludeAttrs: q.Get("excludeAttrs") == "true",
+		ExcludeBits:  q.Get("excludeBits") == "true",
 	}, nil
 }
 
@@ -1396,6 +1444,12 @@ type QueryRequest struct {
 	// Return column attributes, if true.
 	ColumnAttrs bool
 
+	// Do not return row attributes, if true.
+	ExcludeAttrs bool
+
+	// Do not return bits, if true.
+	ExcludeBits bool
+
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
 	Remote bool
@@ -1403,10 +1457,12 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		Query:       pb.Query,
-		Slices:      pb.Slices,
-		ColumnAttrs: pb.ColumnAttrs,
-		Remote:      pb.Remote,
+		Query:        pb.Query,
+		Slices:       pb.Slices,
+		ColumnAttrs:  pb.ColumnAttrs,
+		Remote:       pb.Remote,
+		ExcludeAttrs: pb.ExcludeAttrs,
+		ExcludeBits:  pb.ExcludeBits,
 	}
 
 	return req
@@ -1455,6 +1511,8 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 			pb.Results[i].Bitmap = encodeBitmap(result)
 		case []Pair:
 			pb.Results[i].Pairs = encodePairs(result)
+		case SumCount:
+			pb.Results[i].SumCount = encodeSumCount(result)
 		case uint64:
 			pb.Results[i].N = result
 		case bool:

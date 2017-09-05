@@ -1,5 +1,10 @@
 +++
 title = "Tutorials"
+weight = 4
+nav = [
+    "Transportation",
+    "Chemical similarity search",
+]
 +++
 
 ## Tutorials
@@ -192,7 +197,7 @@ for pcount, topn in zip(pcounts, resp.json()['results']):
     average_amounts.append(float(wsum)/count)
 ```
 
-For more examples and details, see this [ipython notebook](https://github.com/alanbernstein/pilosa-notebooks/blob/master/taxi-use-case.ipynb).
+For more examples and details, see this [ipython notebook](https://github.com/pilosa/notebooks/blob/master/taxi-use-case.ipynb).
 
 ### Chemical similarity search
 

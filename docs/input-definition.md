@@ -1,12 +1,17 @@
 +++
 title = "Input Definition"
+weight = 8
+nav = [
+    "Create the Schema",
+    "Import Data",
+]
 +++
 
 ## Input Definition
 This document builds on the data import concepts introduced in [Getting Started](../getting-started/).  
 Here we will demonstrate creating the index's schema and data definition.  Then using this definition to import JSON data.
 
-#### Create the Schema Using an Input Definition
+### Create the Schema
 
 Input definitions allow users to define a schema based on their data and to provide data to Pilosa in a more standard format like JSON. Once an input definition is created, we can send data to Pilosa as JSON, and as long as the data adheres to the definition, Pilosa will internally perform all of the appropriate mutations.
 
@@ -26,7 +31,8 @@ curl localhost:10101/index/repository/input-definition/stargazer \
             "frames": [
                  {
                      "name": "language", 
-                     "options": { 
+                     "options": {
+                         "rowLabel": "language_id",
                          "inverseEnabled": true, 
                          "timeQuantum": "YMD"
                      }
@@ -34,6 +40,7 @@ curl localhost:10101/index/repository/input-definition/stargazer \
                  {
                      "name": "stargazer", 
                      "options": {
+                         "rowLabel": "stargazer_id",
                          "inverseEnabled": true, 
                          "timeQuantum": "YMD"
                      }
@@ -55,7 +62,7 @@ curl localhost:10101/index/repository/input-definition/stargazer \
                                  "Go": 5, 
                                  "Java": 21, 
                                  "JavaScript": 13, 
-                                 "Python": 17, 
+                                 "Python": 17
                              }
                          }
                      ], 
@@ -77,7 +84,7 @@ curl localhost:10101/index/repository/input-definition/stargazer \
                               "valueDestination": "set-timestamp"
                           }
                       ], 
-                      "name": "time_value
+                      "name": "time_value"
                   }
              ] 
          }'
@@ -91,7 +98,7 @@ We can also set `repo_id` for multiple frames at the same time by providing fiel
  - mapping: The value for this field is used to lookup a `rowID` in a map. A valueMap is required for this destination type.
  - set-timestamp: The value for this field is used to lookup timestamp and set timestamp for the whole frame
 
-#### Import Data Using an Input Definition
+### Import Data
 
 The sample data for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started). 
 
@@ -104,14 +111,14 @@ curl localhost:10101/index/repository/input/stargazer \
              {
                  "language_id": "Go", 
                  "repo_id": 91720568, 
-                 "stargazer_id": 513114
+                 "stargazer_id": 513114,
                  "time_value": "2017-05-18T20:40"
              }, 
              {
                  "language_id": "Python", 
                  "repo_id": 95122322
-             }'
-         ]
+             }
+         ]'
 ```
 
 As defined in the input definition, field name `language_id` maps language to a corresponding id defined in `valueMap` and sets the appropriate bit in the `language` frame.  The value corresponding to field name `stargazer_id` is added to the `stargazer` frame as rowID.
@@ -121,7 +128,7 @@ The data input above is equivalent to the following `SetBit()` operations:
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114)
-        'SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114, timestamp="2017-05-18T20:40")
+         SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114, timestamp="2017-05-18T20:40")
          SetBit(frame="language", repo_id=91720568, language_id=5)
          SetBit(frame="language", repo_id=95122322, language_id=17)
      '

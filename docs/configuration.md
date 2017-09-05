@@ -1,5 +1,12 @@
 +++
 title = "Configuration"
+weight = 7
+nav = [
+    "Command line flags",
+    "Environment variables",
+    "Config file",
+    "All Options",
+]
 +++
 
 ## Configuration
@@ -200,3 +207,43 @@ Any flag that has a value that is a comma separated list on the command line bec
     [metric]
     poll-interval = "0m15s"
     ```
+
+### Example Cluster Configuration
+
+A three node cluster could be minimally configured as follows:
+
+#### Node 0
+
+    data-dir = "/home/pilosa/data"
+    bind = "node0.pilosa.com:10101"
+    gossip-port = 12000
+    gossip-seed = "node0.pilosa.com:12000"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["node0.pilosa.com:10101","node1.pilosa.com:10101","node2.pilosa.com:10101"]
+
+#### Node 1
+
+    data-dir = "/home/pilosa/data"
+    bind = "node1.pilosa.com:10101"
+    gossip-port = 12000
+    gossip-seed = "node0.pilosa.com:12000"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["node0.pilosa.com:10101","node1.pilosa.com:10101","node2.pilosa.com:10101"]
+
+#### Node 2
+
+    data-dir = "/home/pilosa/data"
+    bind = "node2.pilosa.com:10101"
+    gossip-port = 12000
+    gossip-seed = "node0.pilosa.com:12000"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["node0.pilosa.com:10101","node1.pilosa.com:10101","node2.pilosa.com:10101"]

@@ -17,13 +17,13 @@ package ctl
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"testing"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/test"
-	"golang.org/x/net/context"
 )
 
 func TestRestoreCommand_FileRequired(t *testing.T) {

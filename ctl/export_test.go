@@ -16,13 +16,13 @@ package ctl
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/test"
-	"golang.org/x/net/context"
 )
 
 func TestExportCommand_Validation(t *testing.T) {

@@ -27,6 +27,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pql"
 )
 
 // Default frame settings.
@@ -38,15 +39,6 @@ const (
 
 	// Default ranked frame cache
 	DefaultCacheSize = 50000
-)
-
-// List of operators for field range queries.
-const (
-	RangeOpEQ  = "eq"
-	RangeOpLT  = "lt"
-	RangeOpLTE = "lte"
-	RangeOpGT  = "gt"
-	RangeOpGTE = "gte"
 )
 
 // Frame represents a container for views.
@@ -124,11 +116,15 @@ func (f *Frame) MaxSlice() uint64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	view := f.views[ViewStandard]
-	if view == nil {
-		return 0
+	var max uint64
+	for _, view := range f.views {
+		if view.name == ViewInverse {
+			continue
+		} else if viewMaxSlice := view.MaxSlice(); viewMaxSlice > max {
+			max = viewMaxSlice
+		}
 	}
-	return view.MaxSlice()
+	return max
 }
 
 // MaxInverseSlice returns the max inverse slice in the frame.
@@ -397,7 +393,9 @@ func (f *Frame) Close() error {
 
 	// Close all views.
 	for _, view := range f.views {
-		_ = view.Close()
+		if err := view.Close(); err != nil {
+			return err
+		}
 	}
 	f.views = make(map[string]*View)
 
@@ -507,6 +505,28 @@ func (f *Frame) newView(path, name string) *View {
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	view.broadcaster = f.broadcaster
 	return view
+}
+
+// DeleteView removes the view from the frame.
+func (f *Frame) DeleteView(name string) error {
+	view := f.views[name]
+	if view == nil {
+		return ErrInvalidView
+	}
+
+	// Close data files before deletion.
+	if err := view.Close(); err != nil {
+		return err
+	}
+
+	// Delete view directory.
+	if err := os.RemoveAll(view.Path()); err != nil {
+		return err
+	}
+
+	delete(f.views, name)
+
+	return nil
 }
 
 // SetBit sets a bit on a view within the frame.
@@ -639,7 +659,27 @@ func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (change
 	return view.SetFieldValue(columnID, field.BitDepth(), baseValue)
 }
 
-func (f *Frame) FieldRange(name, op string, predicate int64) (*Bitmap, error) {
+// FieldSum returns the sum and count for a field.
+// An optional filtering bitmap can be provided.
+func (f *Frame) FieldSum(filter *Bitmap, name string) (sum, count int64, err error) {
+	field := f.Field(name)
+	if field == nil {
+		return 0, 0, ErrFieldNotFound
+	}
+
+	view := f.View(ViewFieldPrefix + name)
+	if view == nil {
+		return 0, 0, nil
+	}
+
+	vsum, vcount, err := view.FieldSum(filter, field.BitDepth())
+	if err != nil {
+		return 0, 0, err
+	}
+	return int64(vsum) + (int64(vcount) * field.Min), int64(vcount), nil
+}
+
+func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Bitmap, error) {
 	// Retrieve and validate field.
 	field := f.Field(name)
 	if field == nil {

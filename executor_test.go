@@ -59,6 +59,25 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
+
+		// Inhibit bits.
+		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(rowID=10, frame=f)`), nil, &pilosa.ExecOptions{ExcludeBits: true}); err != nil {
+			t.Fatal(err)
+		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{}) {
+			t.Fatalf("unexpected bits: %+v", bits)
+		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		}
+
+		// Inhibit attributes.
+		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(rowID=10, frame=f)`), nil, &pilosa.ExecOptions{ExcludeAttrs: true}); err != nil {
+			t.Fatal(err)
+		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
+			t.Fatalf("unexpected bits: %+v", bits)
+		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{}) {
+			fmt.Println("ATTRS", attrs)
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		}
 	})
 
 	t.Run("Column", func(t *testing.T) {
@@ -183,6 +202,25 @@ func TestExecutor_Execute_Empty_Union(t *testing.T) {
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Union()`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{}) {
+		t.Fatalf("unexpected bits: %+v", bits)
+	}
+}
+
+// Ensure a xor query can be executed.
+func TestExecutor_Execute_Xor(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 0)
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+2)
+
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(11, 2)
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(11, SliceWidth+2)
+
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Xor(Bitmap(rowID=10), Bitmap(rowID=11))`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{0, 2, SliceWidth + 1}) {
 		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
@@ -422,6 +460,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 		}
 	})
 }
+
 func TestExecutor_Execute_TopN_fill(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
@@ -559,7 +598,128 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
+}
 
+// Ensure a Sum() query can be executed.
+func TestExecutor_Execute_Sum(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+
+	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
+		RangeEnabled: true,
+		Fields: []*pilosa.Field{
+			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
+			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
+		RangeEnabled: true,
+		Fields: []*pilosa.Field{
+			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.Execute(context.Background(), "i", test.MustParse(`
+		SetBit(frame=f, rowID=0, columnID=0)
+		SetBit(frame=f, rowID=0, columnID=`+strconv.Itoa(SliceWidth+1)+`)
+
+		SetFieldValue(frame=f, foo=20, bar=2000, columnID=0)
+		SetFieldValue(frame=f, foo=30, columnID=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(frame=f, foo=40, columnID=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(frame=f, foo=50, columnID=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(frame=f, foo=60, columnID=`+strconv.Itoa(SliceWidth+1)+`)
+		SetFieldValue(frame=other, foo=1000, columnID=0)
+	`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("NoFilter", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=f, field=foo)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if result[0] != int64(200) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("WithFilter", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=f, rowID=0), frame=f, field=foo)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if result[0] != int64(80) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+}
+
+// Ensure a Average() query can be executed.
+func TestExecutor_Execute_Average(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+
+	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
+		RangeEnabled: true,
+		Fields: []*pilosa.Field{
+			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
+			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
+		RangeEnabled: true,
+		Fields: []*pilosa.Field{
+			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.Execute(context.Background(), "i", test.MustParse(`
+		SetBit(frame=f, rowID=0, columnID=0)
+		SetBit(frame=f, rowID=0, columnID=`+strconv.Itoa(SliceWidth+2)+`)
+
+		SetFieldValue(frame=f, foo=20, bar=2000, columnID=0)
+		SetFieldValue(frame=f, foo=30, columnID=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(frame=f, foo=40, columnID=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(frame=f, foo=50, columnID=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(frame=f, foo=60, columnID=`+strconv.Itoa(SliceWidth+1)+`)
+		SetFieldValue(frame=other, foo=1000, columnID=0)
+	`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("NoFilter", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Average(frame=f, field=foo)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if result[0] != int64(40) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("WithFilter", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Average(Bitmap(frame=f, rowID=0), frame=f, field=foo)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if result[0] != int64(30) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
 }
 
 // Ensure a range query can be executed.
@@ -609,6 +769,119 @@ func TestExecutor_Execute_Range(t *testing.T) {
 			t.Fatal(err)
 		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{1, 10}) {
 			t.Fatalf("unexpected bits: %+v", bits)
+		}
+	})
+}
+
+// Ensure a Range(field) query can be executed.
+func TestExecutor_Execute_FieldRange(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+
+	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
+		RangeEnabled: true,
+		Fields: []*pilosa.Field{
+			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
+			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
+		RangeEnabled: true,
+		Fields: []*pilosa.Field{
+			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.Execute(context.Background(), "i", test.MustParse(`
+		SetBit(frame=f, rowID=0, columnID=0)
+		SetBit(frame=f, rowID=0, columnID=`+strconv.Itoa(SliceWidth+1)+`)
+
+		SetFieldValue(frame=f, foo=20, bar=2000, columnID=50)
+		SetFieldValue(frame=f, foo=30, columnID=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(frame=f, foo=10, columnID=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(frame=f, foo=20, columnID=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(frame=f, foo=60, columnID=`+strconv.Itoa(SliceWidth+1)+`)
+		SetFieldValue(frame=other, foo=1000, columnID=0)
+	`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("EQ", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{50, (5 * SliceWidth) + 100}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("LT", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo < 20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{SliceWidth + 2}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("LTE", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo <= 20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{50, SliceWidth + 2, (5 * SliceWidth) + 100}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("GT", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo > 20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("GTE", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo >= 20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{50, SliceWidth, SliceWidth + 1, (5 * SliceWidth) + 100}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("BelowMin", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 0)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("AboveMax", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 200)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("ErrFrameNotFound", func(t *testing.T) {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=bad_frame, foo >= 20)`), nil, nil); err != pilosa.ErrFrameNotFound {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("ErrFieldNotFound", func(t *testing.T) {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, bad_field >= 20)`), nil, nil); err != pilosa.ErrFieldNotFound {
+			t.Fatal(err)
 		}
 	})
 }

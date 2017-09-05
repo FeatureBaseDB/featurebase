@@ -1,5 +1,11 @@
 +++
 title = "Client Libraries"
+weight = 12
+nav = [
+    "Go",
+    "Python",
+    "Java",
+]
 +++
 
 ## Client Libraries
