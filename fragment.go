@@ -206,10 +206,11 @@ func (f *Fragment) openStorage() error {
 	if err != nil {
 		return err
 	} else if fi.Size() == 0 {
-		if _, err := f.storage.WriteTo(f.file); err != nil {
+		bi := bufio.NewWriter(f.file)
+		if _, err := f.storage.WriteTo(bi); err != nil {
 			return fmt.Errorf("init storage file: %s", err)
 		}
-
+		bi.Flush()
 		fi, err = f.file.Stat()
 		if err != nil {
 			return err
@@ -1262,6 +1263,7 @@ func (f *Fragment) snapshot() error {
 	} else if err := bw.Flush(); err != nil {
 		return fmt.Errorf("flush: %s", err)
 	}
+	bw.Flush()
 
 	// Close current storage.
 	if err := f.closeStorage(); err != nil {
