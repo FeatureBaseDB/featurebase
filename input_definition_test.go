@@ -195,43 +195,37 @@ func TestHandleAction(t *testing.T) {
 	var value interface{}
 	colID := uint64(0)
 	rowID := uint64(100)
-	action := pilosa.Action{ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
+	action := pilosa.Action{RowID: &rowID}
 	timestamp := int64(0)
 
-	value = 1
-	b, err := pilosa.HandleAction(action, value, colID, timestamp)
-	if b != nil {
-		t.Fatalf("Expected integer type is not handled by single-row-boolean")
-	} else if !strings.Contains(err.Error(), "single-row-boolean value") {
-		t.Fatalf("Expected single-row-boolean value error, actual error: %s", err)
+	tests := []struct {
+		action   string
+		name     string
+		value    interface{}
+		expected uint64
+		err 	 string
+	}{
+		{name: "integer single-row-bool", action: pilosa.InputSingleRowBool, value: 1, err: "single-row-boolean value"},
+		{name: "string single-row-bool", action: pilosa.InputSingleRowBool,value: "1", err: "single-row-boolean value 1 must equate to a Bool"},
+		{name: "string value-to-row", action: pilosa.InputValueToRow,value: "25", err: "value-to-row value must equate to an integer"},
+		{name: "string mapping", action: pilosa.InputMapping,value: "test", err: "Value test does not exist in definition map"},
+		{name: "int mapping", action: pilosa.InputMapping,value: 25, err: "Mapping value must be a string"},
+		{name: "invalid action", action: "test",value: true, err: "Unrecognized Value Destination"},
 	}
+	for _, r := range tests {
+		t.Run(r.name, func(t *testing.T) {
+			action.ValueDestination = r.action
+			_, err := pilosa.HandleAction(action, r.value, colID, timestamp)
+			if !strings.Contains(err.Error(), r.err) {
+				t.Fatalf("Expect err: %s, actual: %s", r.err, err.Error())
+			}
+		})
 
-	value = "1"
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if b != nil {
-		t.Fatalf("Expected Ignore strings, only accept boolean")
-	}
-
-	value = "t"
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if !strings.Contains(err.Error(), "must equate to a Bool") {
-		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
-	}
-
-	value = float64(1)
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if !strings.Contains(err.Error(), "must equate to a Bool") {
-		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
-	}
-
-	value = false
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if b != nil {
-		t.Fatalf("Expected Ignore values that do not equate to True")
 	}
 
 	value = true
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
+	action.ValueDestination = pilosa.InputSingleRowBool
+	b, err := pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		if b.ColumnID != 0 {
 			t.Fatalf("Unexpected ColumnID %v", b.ColumnID)
@@ -244,34 +238,18 @@ func TestHandleAction(t *testing.T) {
 	action.ValueDestination = pilosa.InputValueToRow
 	rowID = 101
 	value = float64(25.0)
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
+	b, _ = pilosa.HandleAction(action, value, colID, timestamp)
 	if b != nil {
 		if b.RowID != 25 {
 			t.Fatalf("Unexpected RowID %v", b.RowID)
 		}
 	}
-	value = "25"
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if b != nil {
-		t.Fatalf("Expected Ignore values that are not type float64")
-	}
 
-	action.ValueDestination = pilosa.InputMapping
-	value = "test"
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if b != nil {
-		t.Fatalf("Expected Ignore values that are not type string")
-	}
-
-	value = 25
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if b != nil {
-		t.Fatalf("Expected Ignore values that are not type string")
-	}
-
-	action.ValueDestination = "test"
-	b, err = pilosa.HandleAction(action, value, colID, timestamp)
-	if !strings.Contains(err.Error(), "Unrecognized Value Destination") {
-		t.Fatalf("Expected Unrecognized Value Destination error, actual error: %s", err)
-	}
+	action.ValueDestination = pilosa.InputSetTimestamp
+	t.Run("nil bit", func(t *testing.T) {
+		b, err = pilosa.HandleAction(action, value, colID, timestamp)
+		if b != nil {
+			t.Fatalf("Expected nil bit is set")
+		}
+	})
 }
