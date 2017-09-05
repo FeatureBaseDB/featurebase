@@ -371,7 +371,8 @@ func HandleAction(a Action, value interface{}, colID uint64, timestamp int64) (*
 		}
 		bit.RowID = uint64(v)
 	case InputSetTimestamp:
-		// SetTimestamp action return nil bit because it is to set timestamp for a frame if it's defined, not for setting bit
+		// InputSetTimestamp action is used in the InputJSONDataParser Handler to append a timestamp to all bits in the frame.
+		// There are no individual rowID's to set, and the action is a no-op at this step
 		return nil, nil
 	default:
 		return nil, fmt.Errorf("Unrecognized Value Destination: %s in Action", a.ValueDestination)
