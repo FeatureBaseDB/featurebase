@@ -210,7 +210,7 @@ func TestHandleAction(t *testing.T) {
 		{name: "string value-to-row", action: pilosa.InputValueToRow,value: "25", err: "value-to-row value must equate to an integer"},
 		{name: "string mapping", action: pilosa.InputMapping,value: "test", err: "Value test does not exist in definition map"},
 		{name: "int mapping", action: pilosa.InputMapping,value: 25, err: "Mapping value must be a string"},
-		{name: "handle single-row-value", action: "test",value: true, err: "Unrecognized Value Destination"},
+		{name: "invalid action", action: "test",value: true, err: "Unrecognized Value Destination"},
 	}
 	for _, r := range tests {
 		t.Run(r.name, func(t *testing.T) {
