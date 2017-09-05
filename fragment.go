@@ -1260,10 +1260,11 @@ func (f *Fragment) snapshot() error {
 	bw := bufio.NewWriter(file)
 	if _, err := f.storage.WriteTo(bw); err != nil {
 		return fmt.Errorf("snapshot write to: %s", err)
-	} else if err := bw.Flush(); err != nil {
+	}
+
+	if err := bw.Flush(); err != nil {
 		return fmt.Errorf("flush: %s", err)
 	}
-	bw.Flush()
 
 	// Close current storage.
 	if err := f.closeStorage(); err != nil {

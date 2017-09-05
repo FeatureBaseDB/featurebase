@@ -547,7 +547,6 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Build header before writing individual container blocks.
 	// Metadata for each container is 8+2+2+4 = sizeof(key) + sizeof(container_type)+sizeof(cardinality) + sizeof(file offset)
-	//	buf := make([]byte, headerSize+(containerCount*(8+2+2+4)))
 	// Cookie header section.
 
 	WriteUint32(w, byte4, cookie)
@@ -1644,8 +1643,7 @@ func (c *container) runWriteTo(w io.Writer) (n int64, err error) {
 		return 0, nil
 	}
 	var byte2 [2]byte
-	// Write sizeof(interval16) * runCount bytes.
-	//	err = binary.Write(w, binary.LittleEndian, uint16(len(c.runs)))
+
 	_, err = WriteUint16(w, byte2[:], uint16(len(c.runs)))
 	if err != nil {
 		return 0, err
