@@ -237,6 +237,30 @@ Response:
 {}
 ```
 
+### Create Field
+
+`POST /index/<index-name>/frame/<frame-name>/field/<field-name>`
+
+Creates a new field to store integer values in the given frame.
+
+The request payload is JSON, and it must contain the fields `type`, `min`, `max`.
+* `type` (string): Field type, currently only "int" is supported.
+* `min` (int): Minimum of the value range stored in this field.
+* `max` (int): Maximum of the value range stored in this field.
+
+Request:
+```
+curl localhost:10101/index/repository/frame/stats/field/pullrequests \
+     -X POST \
+     -d '{"type": "int", "min": 0, "max": 1000000}'
+```
+
+Response:
+```
+{}
+```
+
+
 ### Create input definition
 
 `POST /index/<index-name>/input-definition/<input-definition-name>`
