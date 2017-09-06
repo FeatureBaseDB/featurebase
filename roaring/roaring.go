@@ -617,9 +617,10 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	// Read key count in bytes sizeof(cookie):(sizeof(cookie)+sizeof(uint32)).
 	keyN := binary.LittleEndian.Uint32(data[4:8])
-	b.keys = make([]uint64, keyN)
-	b.containers = make([]*container, keyN)
-
+	if int(keyN) != len(b.keys) {
+		b.keys = make([]uint64, keyN)
+		b.containers = make([]*container, keyN)
+	}
 	headerSize := headerBaseSize
 
 	// Descriptive header section: Read container keys and cardinalities.

@@ -312,7 +312,8 @@ func (f *Fragment) close() error {
 
 func (f *Fragment) closeStorage() error {
 	// Clear the storage bitmap so it doesn't access the closed mmap.
-	f.storage = roaring.NewBitmap()
+
+	//f.storage = roaring.NewBitmap()
 
 	// Unmap the file.
 	if f.storageData != nil {
