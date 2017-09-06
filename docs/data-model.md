@@ -101,3 +101,13 @@ SetBit(frame="A", rowID=8, columnID=3, timestamp="2017-05-19T00:00")
 ```
 
 ![time quantum frame diagram](/img/docs/frame-time-quantum.svg)
+
+
+#### BSI Range-Encoding
+
+BSI (bit-sliced index) is the storage method Pilosa utilizes for multi-bit integers in its internal bitmap index. Integers shall be stored as n-bit, range-encoded
+bit-sliced indexes of base-2, plus an additional bitmap indicating "not null". This means that a 16-bit integer will require 17 bitmaps: one for each 0-bit of the 16 bit-slice components (the 1-bit does not need to be stored because with range-encoding the highest bit position is always 1) and one for the non-null bitmap. Pilosa can evaluate, aggregate, and range queries on these BSI integers. 
+
+Internally Pilosa stores each BSI `field` as a `view` within a `frame`. The 'rowIDs' of the `view` are composed of the base-2 representation of the integer. Pilosa manages the base-2 offset and translation that efficiently packs the integer value within the minimum set of rows.
+
+![BSI diagram TODO]()
