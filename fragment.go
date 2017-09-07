@@ -187,8 +187,9 @@ func (f *Fragment) Open() error {
 // openStorage opens the storage bitmap.
 func (f *Fragment) openStorage() error {
 	// Create a roaring bitmap to serve as storage for the slice.
-	f.storage = roaring.NewBitmap()
-
+	if f.storage == nil {
+		f.storage = roaring.NewBitmap()
+	}
 	// Open the data file to be mmap'd and used as an ops log.
 	file, err := os.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
