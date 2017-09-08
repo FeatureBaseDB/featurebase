@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -859,6 +860,176 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 	}
 }
 
+// Ensure the handler can create a new field on an existing frame.
+func TestHandler_Frame_AddField(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	s := test.NewServer()
+	s.Handler.Holder = hldr.Holder
+	defer s.Close()
+
+	t.Run("OK", func(t *testing.T) {
+		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := http.Post(
+			s.URL+"/index/i/frame/f/field/x",
+			"application/json",
+			strings.NewReader(`{"type":"int","min":100,"max":200}`),
+		)
+		if err != nil {
+			t.Fatal(err)
+		} else if err := resp.Body.Close(); err != nil {
+			t.Fatal(err)
+		} else if resp.StatusCode != http.StatusOK {
+			t.Fatalf("unexpected status code: %d", resp.StatusCode)
+		}
+
+		if field := f.Field("x"); !reflect.DeepEqual(field, &pilosa.Field{Name: "x", Type: "int", Min: 100, Max: 200}) {
+			t.Fatalf("unexpected field: %#v", field)
+		}
+	})
+
+	t.Run("ErrInvalidFieldType", func(t *testing.T) {
+		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true}); err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := http.Post(
+			s.URL+"/index/i/frame/f/field/x",
+			"application/json",
+			strings.NewReader(`{"type":"bad_type","min":100,"max":200}`),
+		)
+		if err != nil {
+			t.Fatal(err)
+		} else if body := MustReadAll(resp.Body); string(body) != `invalid field type`+"\n" {
+			t.Fatalf("unexpected body: %q", body)
+		} else if err := resp.Body.Close(); err != nil {
+			t.Fatal(err)
+		} else if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("unexpected status code: %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("ErrInvalidFieldRange", func(t *testing.T) {
+		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true}); err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := http.Post(
+			s.URL+"/index/i/frame/f/field/x",
+			"application/json",
+			strings.NewReader(`{"type":"int","min":200,"max":100}`),
+		)
+		if err != nil {
+			t.Fatal(err)
+		} else if body := MustReadAll(resp.Body); string(body) != `invalid field range`+"\n" {
+			t.Fatalf("unexpected body: %q", body)
+		} else if err := resp.Body.Close(); err != nil {
+			t.Fatal(err)
+		} else if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("unexpected status code: %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("ErrFieldAlreadyExists", func(t *testing.T) {
+		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{
+			RangeEnabled: true,
+			Fields:       []*pilosa.Field{{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := http.Post(
+			s.URL+"/index/i/frame/f/field/x",
+			"application/json",
+			strings.NewReader(`{"type":"int","min":0,"max":100}`),
+		)
+		if err != nil {
+			t.Fatal(err)
+		} else if body := MustReadAll(resp.Body); string(body) != `field already exists`+"\n" {
+			t.Fatalf("unexpected body: %q", body)
+		} else if err := resp.Body.Close(); err != nil {
+			t.Fatal(err)
+		} else if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("unexpected status code: %d", resp.StatusCode)
+		}
+	})
+}
+
+// Ensure the handler can delete existing fields.
+func TestHandler_Frame_DeleteField(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	s := test.NewServer()
+	s.Handler.Holder = hldr.Holder
+	defer s.Close()
+
+	t.Run("OK", func(t *testing.T) {
+		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		if err != nil {
+			t.Fatal(err)
+		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}); err != nil {
+			t.Fatal(err)
+		}
+
+		req, err := http.NewRequest("DELETE", s.URL+"/index/i/frame/f/field/x", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		} else if err := resp.Body.Close(); err != nil {
+			t.Fatal(err)
+		} else if resp.StatusCode != http.StatusOK {
+			t.Fatalf("unexpected status code: %d", resp.StatusCode)
+		}
+
+		if field := f.Field("x"); field != nil {
+			t.Fatalf("expected nil field, got: %#v", field)
+		}
+	})
+
+	t.Run("ErrFieldNotFound", func(t *testing.T) {
+		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		if err != nil {
+			t.Fatal(err)
+		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}); err != nil {
+			t.Fatal(err)
+		}
+
+		req, err := http.NewRequest("DELETE", s.URL+"/index/i/frame/f/field/y", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		} else if body, err := ioutil.ReadAll(resp.Body); err != nil {
+			t.Fatal(err)
+		} else if strings.TrimSpace(string(body)) != `field not found` {
+			t.Fatalf("unexpected body: %q", body)
+		} else if err := resp.Body.Close(); err != nil {
+			t.Fatal(err)
+		} else if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("unexpected status code: %d", resp.StatusCode)
+		}
+	})
+}
+
 // Ensure the handler can backup a fragment and then restore it.
 func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	hldr := test.MustOpenHolder()
@@ -1532,4 +1703,12 @@ func TestHandler_DeleteView(t *testing.T) {
 	} else if f := hldr.Index("i0").Frame("f0").View(viewName); f != nil {
 		t.Fatal("expected nil view")
 	}
+}
+
+func MustReadAll(r io.Reader) []byte {
+	buf, err := ioutil.ReadAll(r)
+	if err != nil {
+		panic(err)
+	}
+	return buf
 }
