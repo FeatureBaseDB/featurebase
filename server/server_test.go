@@ -445,6 +445,12 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	}
 	gossipSeed := gossipHost + ":" + freePorts[0]
 
+	topology := &pilosa.Topology{HostList: []string{m0.Server.URI.HostPort(), m1.Server.URI.HostPort()}}
+
+	m0.Server.Cluster.Coordinator = m0.Server.URI.HostPort()
+	m0.Server.Cluster.Topology = topology
+	m0.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
+
 	gossipNodeSet0 := gossip.NewGossipNodeSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server, nil)
 	m0.Server.Cluster.NodeSet = gossipNodeSet0
 	m0.Server.Broadcaster = gossipNodeSet0
@@ -455,8 +461,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	if err := m0.Server.BroadcastReceiver.Start(m0.Server); err != nil {
 		t.Fatal(err)
 	}
-	// Open NodeSet communication
-	if err := m0.Server.Cluster.NodeSet.Open(); err != nil {
+	// Open Cluster management.
+	if err := m0.Server.Cluster.Open(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -472,6 +478,9 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	m1.Server.Cluster.Coordinator = m0.Server.URI.HostPort()
+	m1.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
+
 	gossipNodeSet1 := gossip.NewGossipNodeSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server, nil)
 	m1.Server.Cluster.NodeSet = gossipNodeSet1
 	m1.Server.Broadcaster = gossipNodeSet1
@@ -482,8 +491,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	if err := m1.Server.BroadcastReceiver.Start(m1.Server); err != nil {
 		t.Fatal(err)
 	}
-	// Open NodeSet communication
-	if err := m1.Server.Cluster.NodeSet.Open(); err != nil {
+	// Open Cluster management.
+	if err := m1.Server.Cluster.Open(); err != nil {
 		t.Fatal(err)
 	}
 

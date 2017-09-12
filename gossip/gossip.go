@@ -53,7 +53,7 @@ func (g *GossipNodeSet) Nodes() []*pilosa.Node {
 	return a
 }
 
-// Start implements the BroadcastReceiver interface and sets the BroadcastHandler
+// Start implements the BroadcastReceiver interface and sets the BroadcastHandler.
 func (g *GossipNodeSet) Start(h pilosa.BroadcastHandler) error {
 	g.handler = h
 	return nil
@@ -64,14 +64,16 @@ func (g *GossipNodeSet) Open() error {
 	if g.handler == nil {
 		return fmt.Errorf("opening GossipNodeSet: you must call Start(pilosa.BroadcastHandler) before calling Open()")
 	}
-	ml, err := memberlist.Create(g.config.memberlistConfig)
+
+	err := error(nil)
+	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
 	if err != nil {
 		return err
 	}
-	g.memberlist = ml
+
 	g.broadcasts = &memberlist.TransmitLimitedQueue{
 		NumNodes: func() int {
-			return ml.NumMembers()
+			return g.memberlist.NumMembers()
 		},
 		RetransmitMult: 3,
 	}
@@ -138,8 +140,11 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	g.config.memberlistConfig.BindPort = gossipPort
 	g.config.memberlistConfig.AdvertiseAddr = pilosa.HostToIP(gossipHost)
 	g.config.memberlistConfig.AdvertisePort = gossipPort
+	// TODO travis: pause node status (remove this next line)
+	g.config.memberlistConfig.PushPullInterval = 0 * time.Millisecond
 	g.config.memberlistConfig.Delegate = g
 	g.config.memberlistConfig.SecretKey = secretKey
+	g.config.memberlistConfig.Events = server.Cluster.EventReceiver.(memberlist.EventDelegate)
 
 	g.statusHandler = server
 
@@ -189,6 +194,25 @@ func (g *GossipNodeSet) SendAsync(pb proto.Message) error {
 	return nil
 }
 
+// SendTo implementation of the Broadcaster interface.
+func (g *GossipNodeSet) SendTo(to *pilosa.Node, pb proto.Message) error {
+	msg, err := pilosa.MarshalMessage(pb)
+	if err != nil {
+		return err
+	}
+
+	mlist := g.memberlist
+
+	// Get the memberlist.Node from the pilosa.Node.
+	for _, node := range mlist.Members() {
+		if node.Name == to.Host {
+			return mlist.SendToTCP(node, msg)
+		}
+	}
+
+	return nil
+}
+
 // NodeMeta implementation of the memberlist.Delegate interface.
 func (g *GossipNodeSet) NodeMeta(limit int) []byte {
 	return []byte{}
@@ -233,7 +257,7 @@ func (g *GossipNodeSet) LocalState(join bool) []byte {
 }
 
 // MergeRemoteState implementation of the memberlist.Delegate interface
-// receive and process the remote side side's LocalState.
+// receive and process the remote side's LocalState.
 func (g *GossipNodeSet) MergeRemoteState(buf []byte, join bool) {
 	// Unmarshal nodestate data.
 	var pb internal.NodeStatus
@@ -244,6 +268,65 @@ func (g *GossipNodeSet) MergeRemoteState(buf []byte, join bool) {
 	err := g.statusHandler.HandleRemoteStatus(&pb)
 	if err != nil {
 		g.logger().Printf("merge state error: %s", err)
+	}
+}
+
+// GossipEventReceiver is used to enable an application to receive
+// events about joins and leaves over a channel.
+//
+// Care must be taken that events are processed in a timely manner from
+// the channel, since this delegate will block until an event can be sent.
+type GossipEventReceiver struct {
+	ch           chan memberlist.NodeEvent
+	eventHandler pilosa.EventHandler
+}
+
+// NewGossipEventReceiver returns a new instance of GossipEventReceiver.
+func NewGossipEventReceiver() *GossipEventReceiver {
+	return &GossipEventReceiver{
+		ch: make(chan memberlist.NodeEvent, 1),
+	}
+}
+
+func (g *GossipEventReceiver) NotifyJoin(n *memberlist.Node) {
+	g.ch <- memberlist.NodeEvent{memberlist.NodeJoin, n}
+}
+
+func (g *GossipEventReceiver) NotifyLeave(n *memberlist.Node) {
+	g.ch <- memberlist.NodeEvent{memberlist.NodeLeave, n}
+}
+
+func (g *GossipEventReceiver) NotifyUpdate(n *memberlist.Node) {
+	g.ch <- memberlist.NodeEvent{memberlist.NodeUpdate, n}
+}
+
+// Start implements the pilosa.EventReceiver interface and sets the EventHandler.
+func (g *GossipEventReceiver) Start(h pilosa.EventHandler) error {
+	g.eventHandler = h
+	go g.listen()
+	return nil
+}
+
+func (g *GossipEventReceiver) listen() {
+	var nodeEventType pilosa.NodeEventType
+	for {
+		e := <-g.ch
+		switch e.Event {
+		case memberlist.NodeJoin:
+			nodeEventType = pilosa.NodeJoin
+		case memberlist.NodeLeave:
+			nodeEventType = pilosa.NodeLeave
+		case memberlist.NodeUpdate:
+			nodeEventType = pilosa.NodeUpdate
+		default:
+			continue
+		}
+
+		ne := &pilosa.NodeEvent{
+			Event: nodeEventType,
+			Host:  e.Node.Name,
+		}
+		g.eventHandler.ReceiveEvent(ne)
 	}
 }
 

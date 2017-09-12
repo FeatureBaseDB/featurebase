@@ -74,6 +74,7 @@ type Config struct {
 	} `toml:"gossip"`
 
 	Cluster struct {
+		Coordinator   string   `toml:"coordinator"`
 		ReplicaN      int      `toml:"replicas"`
 		Type          string   `toml:"type"`
 		Hosts         []string `toml:"hosts"`

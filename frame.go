@@ -964,8 +964,9 @@ func (p frameSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // FrameInfo represents schema information for a frame.
 type FrameInfo struct {
-	Name  string      `json:"name"`
-	Views []*ViewInfo `json:"views,omitempty"`
+	Name    string       `json:"name"`
+	Options FrameOptions `json:"options"`
+	Views   []*ViewInfo  `json:"views,omitempty"`
 }
 
 type frameInfoSlice []*FrameInfo
@@ -987,6 +988,13 @@ type FrameOptions struct {
 
 // Encode converts o into its internal representation.
 func (o *FrameOptions) Encode() *internal.FrameMeta {
+	return encodeFrameOptions(o)
+}
+
+func encodeFrameOptions(o *FrameOptions) *internal.FrameMeta {
+	if o == nil {
+		return nil
+	}
 	return &internal.FrameMeta{
 		RowLabel:       o.RowLabel,
 		InverseEnabled: o.InverseEnabled,
@@ -995,6 +1003,21 @@ func (o *FrameOptions) Encode() *internal.FrameMeta {
 		CacheSize:      o.CacheSize,
 		TimeQuantum:    string(o.TimeQuantum),
 		Fields:         encodeFields(o.Fields),
+	}
+}
+
+func decodeFrameOptions(options *internal.FrameMeta) *FrameOptions {
+	if options == nil {
+		return nil
+	}
+	return &FrameOptions{
+		RowLabel:       options.RowLabel,
+		InverseEnabled: options.InverseEnabled,
+		RangeEnabled:   options.RangeEnabled,
+		CacheType:      options.CacheType,
+		CacheSize:      options.CacheSize,
+		TimeQuantum:    TimeQuantum(options.TimeQuantum),
+		Fields:         decodeFields(options.Fields),
 	}
 }
 

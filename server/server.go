@@ -30,10 +30,11 @@ import (
 	"time"
 
 	"crypto/tls"
+	"io/ioutil"
+
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statsd"
-	"io/ioutil"
 )
 
 func init() {
@@ -120,17 +121,21 @@ func (m *Command) SetupServer() error {
 
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
+	cluster.IndexReporter = m.Server.Holder
 
-	for _, address := range m.Config.Cluster.Hosts {
-		uri, err := pilosa.NewURIFromAddress(address)
-		if err != nil {
-			return err
+	/*
+		// TODO travis: get rid of this URI code
+		for _, address := range m.Config.Cluster.Hosts {
+			uri, err := pilosa.NewURIFromAddress(address)
+			if err != nil {
+				return err
+			}
+			cluster.Nodes = append(cluster.Nodes, &pilosa.Node{
+				Scheme: uri.Scheme(),
+				Host:   uri.HostPort(),
+			})
 		}
-		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{
-			Scheme: uri.Scheme(),
-			Host:   uri.HostPort(),
-		})
-	}
+	*/
 	m.Server.Cluster = cluster
 
 	// Setup logging output.
@@ -138,6 +143,9 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return err
 	}
+
+	// Configure data directory (for Cluster .topology)
+	m.Server.Cluster.Path = m.Config.DataDir
 
 	// Configure holder.
 	m.Server.Logger().Printf("Using data from: %s\n", m.Config.DataDir)
@@ -171,6 +179,13 @@ func (m *Command) SetupServer() error {
 		}
 		m.Server.Handler.ClientOptions = &pilosa.ClientOptions{TLS: m.Server.TLS}
 	}
+
+	// Set the coordinator node.
+	uri, err = pilosa.AddressWithDefaults(m.Config.Cluster.Coordinator)
+	if err != nil {
+		return err
+	}
+	m.Server.Cluster.Coordinator = uri.HostPort()
 
 	// Set internal port (string).
 	gossipPortStr := pilosa.DefaultGossipPort
@@ -206,6 +221,7 @@ func (m *Command) SetupServer() error {
 		// get the host portion of addr to use for binding
 		gossipHost := uri.Host()
 		gossipNodeSet := gossip.NewGossipNodeSet(uri.HostPort(), gossipHost, gossipPort, gossipSeed, m.Server, gossipKey)
+		m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet
@@ -220,6 +236,9 @@ func (m *Command) SetupServer() error {
 	default:
 		return fmt.Errorf("'%v' is not a supported value for broadcaster type", m.Config.Cluster.Type)
 	}
+
+	// Cluster management needs.
+	m.Server.Cluster.Broadcaster = m.Server.Broadcaster
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)

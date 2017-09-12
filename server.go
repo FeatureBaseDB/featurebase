@@ -132,6 +132,9 @@ func (s *Server) Open() error {
 		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
 	}
 
+	// Set Cluster URI.
+	s.Cluster.URI = s.URI
+
 	// Create local node if no cluster is specified.
 	if len(s.Cluster.Nodes) == 0 {
 		s.Cluster.Nodes = []*Node{
@@ -139,6 +142,7 @@ func (s *Server) Open() error {
 		}
 	}
 
+	// TODO: nodes aren't here yet. May need to merge new stats code anyway.
 	for i, n := range s.Cluster.Nodes {
 		if s.Cluster.NodeByHost(n.Host) != nil {
 			s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
@@ -151,13 +155,14 @@ func (s *Server) Open() error {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
 
+	// Start the BroadcastReceiver.
 	if err := s.BroadcastReceiver.Start(s); err != nil {
 		return fmt.Errorf("starting BroadcastReceiver: %v", err)
 	}
 
-	// Open NodeSet communication
-	if err := s.Cluster.NodeSet.Open(); err != nil {
-		return fmt.Errorf("opening NodeSet: %v", err)
+	// Open Cluster management.
+	if err := s.Cluster.Open(); err != nil {
+		return fmt.Errorf("opening Cluster: %v", err)
 	}
 
 	// Create default HTTP client
@@ -190,11 +195,13 @@ func (s *Server) Open() error {
 		}
 	}()
 
-	// Start background monitoring.
-	s.wg.Add(3)
-	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
-	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
-	go func() { defer s.wg.Done(); s.monitorRuntime() }()
+	/*
+		// Start background monitoring.
+		s.wg.Add(3)
+		go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
+		go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
+		go func() { defer s.wg.Done(); s.monitorRuntime() }()
+	*/
 
 	return nil
 }
@@ -207,6 +214,9 @@ func (s *Server) Close() error {
 
 	if s.ln != nil {
 		s.ln.Close()
+	}
+	if s.Cluster != nil {
+		s.Cluster.Close()
 	}
 	if s.Holder != nil {
 		s.Holder.Close()
@@ -266,11 +276,6 @@ func (s *Server) monitorAntiEntropy() {
 
 // monitorMaxSlices periodically pulls the highest slice from each node in the cluster.
 func (s *Server) monitorMaxSlices() {
-	// Ignore if only one node in the cluster.
-	if len(s.Cluster.Nodes) <= 1 {
-		return
-	}
-
 	ticker := time.NewTicker(s.PollingInterval)
 	defer ticker.Stop()
 
@@ -333,16 +338,8 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		opt := FrameOptions{
-			RowLabel:       obj.Meta.RowLabel,
-			InverseEnabled: obj.Meta.InverseEnabled,
-			RangeEnabled:   obj.Meta.RangeEnabled,
-			CacheType:      obj.Meta.CacheType,
-			CacheSize:      obj.Meta.CacheSize,
-			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
-			Fields:         decodeFields(obj.Meta.Fields),
-		}
-		_, err := idx.CreateFrame(obj.Frame, opt)
+		opt := decodeFrameOptions(obj.Meta)
+		_, err := idx.CreateFrame(obj.Frame, *opt)
 		if err != nil {
 			return err
 		}
@@ -372,8 +369,26 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
+	case *internal.ClusterStatus:
+		err := s.Cluster.mergeClusterStatus(obj)
+		if err != nil {
+			return err
+		}
+	case *internal.ResizeInstruction:
+		s.Cluster.followResizeInstruction(obj)
+	case *internal.ResizeInstructionComplete:
+		err := s.Cluster.MarkResizeInstructionComplete(obj)
+		if err != nil {
+			return err
+		}
 	}
+
 	return nil
+}
+
+// State returns the cluster state according to this node.
+func (s *Server) State() string {
+	return s.Cluster.State
 }
 
 // LocalStatus returns the state of the local node as well as the
@@ -381,16 +396,21 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 // Server implements StatusHandler.
 func (s *Server) LocalStatus() (proto.Message, error) {
+	if s.Cluster == nil {
+		return nil, errors.New("Server.Cluster is nil")
+	}
 	if s.Holder == nil {
 		return nil, errors.New("Server.Holder is nil")
 	}
 
 	ns := internal.NodeStatus{
-		Host:    s.URI.HostPort(),
-		State:   NodeStateUp,
-		Indexes: EncodeIndexes(s.Holder.Indexes()),
+		Host:     s.URI.HostPort(),
+		State:    s.State(),
+		Indexes:  EncodeIndexes(s.Holder.Indexes()),
+		HostList: s.Cluster.HostList(),
 	}
 
+	// TODO: get rid of this
 	// Append Slice list per this Node's indexes
 	for _, index := range ns.Indexes {
 		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.URI.HostPort())
@@ -406,22 +426,8 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	node := s.Cluster.NodeByHost(s.URI.HostPort())
-	node.SetStatus(ns.(*internal.NodeStatus))
-
-	// Update NodeState for all nodes.
-	for host, nodeState := range s.Cluster.NodeStates() {
-		// In a default configuration (or single-node) where a StaticNodeSet is used
-		// then all nodes are marked as DOWN. At the very least, we should consider
-		// the local node as UP.
-		// TODO: we should be able to remove this check if/when cluster.Nodes and
-		// cluster.NodeSet are unified.
-		if host == s.URI.HostPort() {
-			nodeState = NodeStateUp
-		}
-		node := s.Cluster.NodeByHost(host)
-		node.SetState(nodeState)
-	}
+	localNode := s.Cluster.localNode()
+	localNode.SetStatus(ns.(*internal.NodeStatus))
 
 	return s.Cluster.Status(), nil
 }
@@ -432,9 +438,19 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 }
 
 func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
+
+	// Ignore status updates from self.
+	if s.URI.HostPort() == ns.Host {
+		return nil
+	}
+	fmt.Printf("mergeRemoteStatus on (%s) from (%s)\n", s.URI.HostPort(), ns.Host)
+
 	// Update Node.state.
-	node := s.Cluster.NodeByHost(ns.Host)
-	node.SetStatus(ns)
+	// Node can be nil if a merge occurs (via gossip) before the coordinator has
+	// a chance to broadcast the existence of the node.
+	if node := s.Cluster.NodeByHost(ns.Host); node != nil {
+		node.SetStatus(ns)
+	}
 
 	// Create indexes that don't exist.
 	for _, index := range ns.Indexes {
@@ -448,12 +464,8 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 		}
 		// Create frames that don't exist.
 		for _, f := range index.Frames {
-			opt := FrameOptions{
-				RowLabel:    f.Meta.RowLabel,
-				TimeQuantum: TimeQuantum(f.Meta.TimeQuantum),
-				CacheSize:   f.Meta.CacheSize,
-			}
-			_, err := idx.CreateFrameIfNotExists(f.Name, opt)
+			opt := decodeFrameOptions(f.Meta)
+			_, err := idx.CreateFrameIfNotExists(f.Name, *opt)
 			if err != nil {
 				return err
 			}
@@ -581,7 +593,7 @@ func CountOpenFiles() int {
 	return count
 }
 
-// StatusHandler specifies two methods which an object must implement to share
+// StatusHandler specifies the methods which an object must implement to share
 // state in the cluster. These are used by the GossipNodeSet to implement the
 // LocalState and MergeRemoteState methods of memberlist.Delegate
 type StatusHandler interface {

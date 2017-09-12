@@ -61,6 +61,7 @@ func (s *StaticNodeSet) Join(nodes []*Node) error {
 type Broadcaster interface {
 	SendSync(pb proto.Message) error
 	SendAsync(pb proto.Message) error
+	SendTo(to *Node, pb proto.Message) error
 }
 
 func init() {
@@ -72,13 +73,18 @@ var NopBroadcaster Broadcaster
 
 type nopBroadcaster struct{}
 
-// SendSync A no-op implemenetation of Broadcaster SendSync method.
+// SendSync is a no-op implemenetation of Broadcaster SendSync method.
 func (c *nopBroadcaster) SendSync(pb proto.Message) error {
 	return nil
 }
 
-// SendAsync A no-op implemenetation of Broadcaster SendAsync method.
+// SendAsync is a no-op implemenetation of Broadcaster SendAsync method.
 func (c *nopBroadcaster) SendAsync(pb proto.Message) error {
+	return nil
+}
+
+// SendTo is a no-op implemenetation of Broadcaster SendTo method.
+func (c *nopBroadcaster) SendTo(to *Node, pb proto.Message) error {
 	return nil
 }
 
@@ -108,14 +114,17 @@ var NopBroadcastReceiver = &nopBroadcastReceiver{}
 
 // Broadcast message types.
 const (
-	MessageTypeCreateSlice           = 1
-	MessageTypeCreateIndex           = 2
-	MessageTypeDeleteIndex           = 3
-	MessageTypeCreateFrame           = 4
-	MessageTypeDeleteFrame           = 5
-	MessageTypeCreateInputDefinition = 6
-	MessageTypeDeleteInputDefinition = 7
-	MessageTypeDeleteView            = 8
+	MessageTypeCreateSlice               = 1
+	MessageTypeCreateIndex               = 2
+	MessageTypeDeleteIndex               = 3
+	MessageTypeCreateFrame               = 4
+	MessageTypeDeleteFrame               = 5
+	MessageTypeCreateInputDefinition     = 6
+	MessageTypeDeleteInputDefinition     = 7
+	MessageTypeDeleteView                = 8
+	MessageTypeClusterStatus             = 9
+	MessageTypeResizeInstruction         = 10
+	MessageTypeResizeInstructionComplete = 11
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
@@ -138,6 +147,12 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeDeleteInputDefinition
 	case *internal.DeleteViewMessage:
 		typ = MessageTypeDeleteView
+	case *internal.ClusterStatus:
+		typ = MessageTypeClusterStatus
+	case *internal.ResizeInstruction:
+		typ = MessageTypeResizeInstruction
+	case *internal.ResizeInstructionComplete:
+		typ = MessageTypeResizeInstructionComplete
 	default:
 		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
 	}
@@ -170,6 +185,12 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.DeleteInputDefinitionMessage{}
 	case MessageTypeDeleteView:
 		m = &internal.DeleteViewMessage{}
+	case MessageTypeClusterStatus:
+		m = &internal.ClusterStatus{}
+	case MessageTypeResizeInstruction:
+		m = &internal.ResizeInstruction{}
+	case MessageTypeResizeInstructionComplete:
+		m = &internal.ResizeInstructionComplete{}
 	default:
 		return nil, fmt.Errorf("invalid message type: %d", typ)
 	}

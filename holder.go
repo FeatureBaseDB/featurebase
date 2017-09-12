@@ -140,6 +140,13 @@ func (h *Holder) Close() error {
 	return nil
 }
 
+// HasData returns true if Holder contains at least one index.
+// This is used to determine if the rebalancing of data is necessary
+// when a node joins the cluster.
+func (h *Holder) HasData() bool {
+	return len(h.indexes) > 0
+}
+
 // MaxSlices returns MaxSlice map for all indexes.
 func (h *Holder) MaxSlices() map[string]uint64 {
 	a := make(map[string]uint64)
@@ -158,13 +165,13 @@ func (h *Holder) MaxInverseSlices() map[string]uint64 {
 	return a
 }
 
-// Schema returns schema data for all indexes and frames.
+// Schema returns schema information for all indexes, frames, and views.
 func (h *Holder) Schema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{Name: index.Name()}
 		for _, frame := range index.Frames() {
-			fi := &FrameInfo{Name: frame.Name()}
+			fi := &FrameInfo{Name: frame.Name(), Options: frame.Options()}
 			for _, view := range frame.Views() {
 				fi.Views = append(fi.Views, &ViewInfo{Name: view.Name()})
 			}
@@ -546,7 +553,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 
 // syncFrame synchronizes frame attributes with the rest of the cluster.
 func (s *HolderSyncer) syncFrame(index, name string) error {
-	// Retrieve index reference.
+	// Retrieve frame reference.
 	f := s.Holder.Frame(index, name)
 	if f == nil {
 		return nil
@@ -624,4 +631,9 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 	}
 
 	return nil
+}
+
+type IndexReporter interface {
+	HasData() bool
+	Indexes() []*Index
 }

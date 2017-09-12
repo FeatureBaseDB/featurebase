@@ -2,15 +2,23 @@ package test
 
 import (
 	"fmt"
+	"io/ioutil"
 
 	"github.com/pilosa/pilosa"
 )
 
 // NewCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewCluster(n int) *pilosa.Cluster {
+	path, err := ioutil.TempDir("", "pilosa-cluster-")
+	if err != nil {
+		panic(err)
+	}
+
 	c := pilosa.NewCluster()
 	c.ReplicaN = 1
 	c.Hasher = NewModHasher()
+	c.Path = path
+	c.Topology = pilosa.NewTopology()
 
 	for i := 0; i < n; i++ {
 		c.Nodes = append(c.Nodes, &pilosa.Node{

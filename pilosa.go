@@ -162,6 +162,50 @@ func StringInSlice(a string, list []string) bool {
 	return false
 }
 
+// SlicesAreEqual determines if two string slices are equal.
+func SlicesAreEqual(a, b []string) bool {
+
+	if a == nil && b == nil {
+		return true
+	}
+
+	if a == nil || b == nil {
+		return false
+	}
+
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// SliceDiff returns the difference between two uint64 slices.
+func SliceDiff(a, b []uint64) []uint64 {
+	m := make(map[uint64]uint64)
+
+	for _, y := range b {
+		m[y]++
+	}
+
+	var ret []uint64
+	for _, x := range a {
+		if m[x] > 0 {
+			m[x]--
+			continue
+		}
+		ret = append(ret, x)
+	}
+
+	return ret
+}
+
 // ContainsSubstring checks to see if substring a is contained in any string in the slice.
 func ContainsSubstring(a string, list []string) bool {
 	for _, b := range list {

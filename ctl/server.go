@@ -31,6 +31,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVarP(&srv.Config.Gossip.Port, "gossip.port", "", "", "Port to which pilosa should bind for internal state sharing.")
 	flags.StringVarP(&srv.Config.Gossip.Seed, "gossip.seed", "", "", "Host with which to seed the gossip membership.")
 	flags.StringVarP(&srv.Config.Gossip.Key, "gossip.key", "", "", "The path to file of the encryption key for gossip. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256.")
+	flags.StringVarP(&srv.Config.Cluster.Coordinator, "cluster.coordinator", "", "", "Host that will act as cluster coordinator during startup and resizing.")
 	flags.IntVarP(&srv.Config.MaxWritesPerRequest, "max-writes-per-request", "", srv.Config.MaxWritesPerRequest, "Number of write commands per request.")
 	flags.IntVarP(&srv.Config.Cluster.ReplicaN, "cluster.replicas", "", 1, "Number of hosts each piece of data should be stored on.")
 	flags.StringSliceVarP(&srv.Config.Cluster.Hosts, "cluster.hosts", "", []string{}, "Comma separated list of hosts in cluster.")
