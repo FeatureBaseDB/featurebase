@@ -600,8 +600,8 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	}
 }
 
-// Ensure a SumReduce() query can be executed.
-func TestExecutor_Execute_SumReduce(t *testing.T) {
+// Ensure a Sum() query can be executed.
+func TestExecutor_Execute_Sum(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
