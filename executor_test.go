@@ -647,7 +647,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	t.Run("NoFilter", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=f, field=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if result[0] != int64(200) {
+		} else if !reflect.DeepEqual(result[0], pilosa.SumCount{Sum: 200, Count: 5}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -655,68 +655,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	t.Run("WithFilter", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=f, rowID=0), frame=f, field=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if result[0] != int64(80) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result))
-		}
-	})
-}
-
-// Ensure a Average() query can be executed.
-func TestExecutor_Execute_Average(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-
-	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		RangeEnabled: true,
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
-			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
-		RangeEnabled: true,
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := e.Execute(context.Background(), "i", test.MustParse(`
-		SetBit(frame=f, rowID=0, columnID=0)
-		SetBit(frame=f, rowID=0, columnID=`+strconv.Itoa(SliceWidth+2)+`)
-
-		SetFieldValue(frame=f, foo=20, bar=2000, columnID=0)
-		SetFieldValue(frame=f, foo=30, columnID=`+strconv.Itoa(SliceWidth)+`)
-		SetFieldValue(frame=f, foo=40, columnID=`+strconv.Itoa(SliceWidth+2)+`)
-		SetFieldValue(frame=f, foo=50, columnID=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetFieldValue(frame=f, foo=60, columnID=`+strconv.Itoa(SliceWidth+1)+`)
-		SetFieldValue(frame=other, foo=1000, columnID=0)
-	`), nil, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("NoFilter", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Average(frame=f, field=foo)`), nil, nil); err != nil {
-			t.Fatal(err)
-		} else if result[0] != int64(40) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result))
-		}
-	})
-
-	t.Run("WithFilter", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Average(Bitmap(frame=f, rowID=0), frame=f, field=foo)`), nil, nil); err != nil {
-			t.Fatal(err)
-		} else if result[0] != int64(30) {
+		} else if !reflect.DeepEqual(result[0], pilosa.SumCount{Sum: 80, Count: 2}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
