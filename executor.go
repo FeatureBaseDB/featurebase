@@ -161,9 +161,9 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	indexTag := fmt.Sprintf("index:%s", index)
 	// Special handling for mutation and top-n calls.
 	switch c.Name {
-	case "SumReduce":
+	case "Sum":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeSumReduce(ctx, index, c, slices, opt)
+		return e.executeSum(ctx, index, c, slices, opt)
 	case "ClearBit":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "Count":
@@ -205,16 +205,16 @@ func (e *Executor) validateCallArgs(c *pql.Call) error {
 	return nil
 }
 
-// executeSumReduce executes a SumCount() call.
-func (e *Executor) executeSumReduce(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (SumCount, error) {
+// executeSum executes a Sum() call.
+func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (SumCount, error) {
 	if frame, _ := c.Args["frame"]; frame == "" {
-		return SumCount{}, errors.New("SumReduce(): frame required")
+		return SumCount{}, errors.New("Sum(): frame required")
 	} else if field, _ := c.Args["field"]; field == "" {
-		return SumCount{}, errors.New("SumReduce(): field required")
+		return SumCount{}, errors.New("Sum(): field required")
 	}
 
 	if len(c.Children) > 1 {
-		return SumCount{}, errors.New("SumReduce() only accepts a single bitmap input")
+		return SumCount{}, errors.New("Sum() only accepts a single bitmap input")
 	}
 
 	// Execute calls in bulk on each remote node and merge.

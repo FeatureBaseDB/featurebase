@@ -645,7 +645,7 @@ func TestExecutor_Execute_SumReduce(t *testing.T) {
 	}
 
 	t.Run("NoFilter", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`SumReduce(frame=f, field=foo)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=f, field=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(result[0], pilosa.SumCount{Sum: 200, Count: 5}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -653,7 +653,7 @@ func TestExecutor_Execute_SumReduce(t *testing.T) {
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`SumReduce(Bitmap(frame=f, rowID=0), frame=f, field=foo)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=f, rowID=0), frame=f, field=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(result[0], pilosa.SumCount{Sum: 80, Count: 2}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
