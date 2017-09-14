@@ -540,6 +540,37 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 	return changed, nil
 }
 
+func (f *Fragment) ImportSetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+
+	for i := uint(0); i < bitDepth; i++ {
+		if value&(1<<i) != 0 {
+			bit, _ := f.pos(uint64(i), columnID)
+			if c, err := f.storage.Add(bit); err != nil {
+				return changed, err
+			} else if c {
+				changed = true
+			}
+		} else {
+			bit, _ := f.pos(uint64(i), columnID)
+			if c, err := f.storage.Remove(bit); err != nil {
+				return changed, err
+			} else if c {
+				changed = true
+			}
+		}
+	}
+
+	// Mark value as set.
+	p, _ := f.pos(uint64(bitDepth), columnID)
+	if c, err := f.storage.Add(p); err != nil {
+		return changed, err
+	} else if c {
+		changed = true
+	}
+
+	return changed, nil
+}
+
 // FieldSum returns the sum of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err error) {
@@ -1217,24 +1248,32 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 
 // ImportValue bulk imports a set of range-encoded values.
 func (f *Fragment) ImportValue(columnIDs, values []uint64, bitDepth uint) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	// Verify that there are an equal number of column ids and values.
 	if len(columnIDs) != len(values) {
 		return fmt.Errorf("mismatch of column/value len: %d != %d", len(columnIDs), len(values))
 	}
 
+	f.storage.OpWriter = nil
 	// Process every value.
 	// If an error occurs then reopen the storage.
 	if err := func() error {
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
 
-			_, err := f.SetFieldValue(columnID, bitDepth, value)
+			_, err := f.ImportSetFieldValue(columnID, bitDepth, value)
 			if err != nil {
 				return err
 			}
 		}
 		return nil
 	}(); err != nil {
+		_ = f.closeStorage()
+		_ = f.openStorage()
+		return err
+	}
+	if err := f.snapshot(); err != nil {
 		return err
 	}
 	return nil
