@@ -425,7 +425,7 @@ func (f *Frame) CreateField(field *Field) error {
 	defer f.mu.Unlock()
 
 	// Ensure frame supports fields.
-	if f.rangeEnabled {
+	if !f.RangeEnabled() {
 		return ErrFrameFieldsNotAllowed
 	}
 
@@ -445,7 +445,7 @@ func (f *Frame) DeleteField(name string) error {
 	defer f.mu.Unlock()
 
 	// Ensure frame supports fields.
-	if f.rangeEnabled {
+	if !f.RangeEnabled() {
 		return ErrFrameFieldsNotAllowed
 	}
 
@@ -849,6 +849,58 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 		}
 
 		if err := frag.Import(data.RowIDs, data.ColumnIDs); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ImportValue bulk imports range-encoded value data.
+func (f *Frame) ImportValue(fieldName string, columnIDs, values []uint64) error {
+	// Verify that this frame is range-encoded.
+	if !f.RangeEnabled() {
+		return fmt.Errorf("Frame not RangeEnabled: %s", f.name)
+	}
+
+	viewName := ViewFieldPrefix + fieldName
+	// Get the field so we know bitDepth.
+	field := f.Field(fieldName)
+	if field == nil {
+		return fmt.Errorf("Field does not exist: %s", fieldName)
+	}
+
+	// Split import data by fragment.
+	dataByFragment := make(map[importKey]importValueData)
+	for i := range columnIDs {
+		columnID, value := columnIDs[i], values[i]
+
+		// Attach value to each field view.
+		for _, name := range []string{viewName} {
+			key := importKey{View: name, Slice: columnID / SliceWidth}
+			data := dataByFragment[key]
+			data.ColumnIDs = append(data.ColumnIDs, columnID)
+			data.Values = append(data.Values, value)
+			dataByFragment[key] = data
+		}
+	}
+
+	// Import into each fragment.
+	for key, data := range dataByFragment {
+
+		// The view must already exist (i.e. we can't create it)
+		// because we need to know bitDepth (based on min/max value).
+		view, err := f.CreateViewIfNotExists(key.View)
+		if err != nil {
+			return err
+		}
+
+		frag, err := view.CreateFragmentIfNotExists(key.Slice)
+		if err != nil {
+			return err
+		}
+
+		if err := frag.ImportValue(data.ColumnIDs, data.Values, field.BitDepth()); err != nil {
 			return err
 		}
 	}

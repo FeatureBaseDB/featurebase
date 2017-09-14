@@ -485,6 +485,8 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 
 	f.inverseEnabled = opt.InverseEnabled
+	f.rangeEnabled = opt.RangeEnabled
+
 	if err := f.saveMeta(); err != nil {
 		f.Close()
 		return nil, err
@@ -655,6 +657,11 @@ type importKey struct {
 type importData struct {
 	RowIDs    []uint64
 	ColumnIDs []uint64
+}
+
+type importValueData struct {
+	ColumnIDs []uint64
+	Values    []uint64
 }
 
 // CreateInputDefinition creates a new input definition.
