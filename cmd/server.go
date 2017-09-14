@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/pprof"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -76,7 +77,7 @@ on the configured port.`,
 
 			// First SIGKILL causes server to shut down gracefully.
 			c := make(chan os.Signal, 2)
-			signal.Notify(c, os.Interrupt)
+			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 			select {
 			case sig := <-c:
 				logger.Printf("Received %s; gracefully shutting down...\n", sig.String())
