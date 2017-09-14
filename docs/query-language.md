@@ -139,18 +139,18 @@ SetColumnAttrs(<frame=STRING>, <ROW_LABEL=UINT>,
 
 **Result Type:** null
 
-SetColumnAttrs queries always return `null` upon success. Setting a value of `null`, without quotes, deletes an attribute.
+SetColumnAttrs queries always return `null` upon success. Setting a value of `null`, without quotes, deletes an attribute. Note that, `frame` cannot be used as an attribute name.
 
 **Examples:**
 
 ```
-SetColumnAttrs(frame="stargazer", repo_id=10, stars=123, url="http://projects.pilosa.com/10", active=true)
+SetColumnAttrs(repo_id=10, stars=123, url="http://projects.pilosa.com/10", active=true)
 ```
 
 Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap]({{< ref "query-language.md#bitmap" >}}) query like so `Bitmap(frame="stargazer", repo_id=10)`.
 
 ```
-SetColumnAttrs(frame="stargazer", repo_id=10, url=null)
+SetColumnAttrs(repo_id=10, url=null)
 ```
 
 Delete url value for repo 10.
