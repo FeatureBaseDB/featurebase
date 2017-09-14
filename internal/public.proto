@@ -72,3 +72,12 @@ message ImportRequest {
 	repeated uint64 ColumnIDs = 5;
 	repeated int64 Timestamps = 6;
 }
+
+message ImportValueRequest {
+	string Index = 1;
+	string Frame = 2;
+	uint64 Slice = 3;
+	string Field = 4;
+	repeated uint64 ColumnIDs = 5;
+	repeated uint64 Values = 6;
+}
