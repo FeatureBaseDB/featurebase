@@ -1252,6 +1252,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	// Copy args and remove reserved fields.
 	attrs := pql.CopyArgs(c.Args)
 	delete(attrs, colName)
+	delete(attrs, "frame")
 
 	// Set attributes.
 	if err := idx.ColumnAttrStore().SetAttrs(id, attrs); err != nil {
