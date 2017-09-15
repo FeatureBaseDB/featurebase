@@ -2089,6 +2089,9 @@ func intersectBitmapBitmap(a, b *container) *container {
 		output.n += int(popcount(v))
 
 	}
+	if output.n < ArrayMaxSize {
+		output.bitmapToArray()
+	}
 	return output
 }
 
