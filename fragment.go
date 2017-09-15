@@ -592,9 +592,10 @@ func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, e
 	// Compute count based on the existance bit.
 	row := f.row(uint64(bitDepth), true, true)
 	if filter != nil {
-		row = row.Intersect(filter)
+		count = row.IntersectionCount(filter)
+	} else {
+		count = row.Count()
 	}
-	count = row.Count()
 
 	// Compute the sum based on the bit count of each row multiplied by the
 	// place value of each row. For example, 10 bits in the 1's place plus
@@ -605,10 +606,13 @@ func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, e
 	//
 	for i := uint(0); i < bitDepth; i++ {
 		row := f.row(uint64(i), true, true)
+		cnt := uint64(0)
 		if filter != nil {
-			row = row.Intersect(filter)
+			cnt = row.IntersectionCount(filter)
+		} else {
+			cnt = row.Count()
 		}
-		sum += (1 << i) * row.Count()
+		sum += (1 << i) * cnt
 	}
 
 	return sum, count, nil
