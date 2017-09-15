@@ -2098,24 +2098,12 @@ func intersectArrayBitmap(a, b *container) *container {
 
 func intersectBitmapBitmap(a, b *container) *container {
 	output := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
-	itr0 := newBitmapIterator(a.bitmap)
-	itr1 := newBitmapIterator(b.bitmap)
-	va, eof1 := itr0.next()
-	vb, eof2 := itr1.next()
-	for {
-		if eof1 || eof2 {
-			break
-		}
 
-		if va < vb {
-			va, eof1 = itr0.next()
-		} else if va > vb {
-			vb, eof2 = itr1.next()
-		} else {
-			output.add(va)
-			va, eof1 = itr0.next()
-			vb, eof2 = itr1.next()
-		}
+	for i := range a.bitmap {
+		v := a.bitmap[i] & b.bitmap[i]
+		output.bitmap[i] = v
+		output.n += int(popcount(v))
+
 	}
 	return output
 }
