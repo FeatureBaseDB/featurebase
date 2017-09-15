@@ -2056,7 +2056,7 @@ func intersectBitmapRun(a, b *container) *container {
 	return output
 }
 
-func intersectArrayBitmap(a, b *container) *container {
+func intersectArrayBitmapOld(a, b *container) *container {
 	output := &container{container_type: ContainerArray}
 	itra := newArrayIterator(a.array)
 	itrb := newBitmapIterator(b.bitmap)
@@ -2075,6 +2075,20 @@ func intersectArrayBitmap(a, b *container) *container {
 			output.add(va)
 			va, eof1 = itra.next()
 			vb, eof2 = itrb.next()
+		}
+	}
+	return output
+}
+
+func intersectArrayBitmap(a, b *container) *container {
+	output := &container{container_type: ContainerArray}
+	for _, va := range a.array {
+		bmidx := va / 64
+		bidx := va % 64
+		mask := uint64(1) << bidx
+		b := b.bitmap[bmidx]
+		if b&mask > 0 {
+			output.array = append(output.array, va)
 		}
 	}
 	return output
