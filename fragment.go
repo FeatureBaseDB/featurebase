@@ -542,18 +542,25 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 	return changed, nil
 }
 
-func (f *Fragment) ImportSetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// importSetFieldValue is a more efficient SetFieldValue just for imports.
+func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
-			bit, _ := f.pos(uint64(i), columnID)
+			bit, err := f.pos(uint64(i), columnID)
+			if err != nil {
+				return changed, err
+			}
 			if c, err := f.storage.Add(bit); err != nil {
 				return changed, err
 			} else if c {
 				changed = true
 			}
 		} else {
-			bit, _ := f.pos(uint64(i), columnID)
+			bit, err := f.pos(uint64(i), columnID)
+			if err != nil {
+				return changed, err
+			}
 			if c, err := f.storage.Remove(bit); err != nil {
 				return changed, err
 			} else if c {
@@ -563,7 +570,10 @@ func (f *Fragment) ImportSetFieldValue(columnID uint64, bitDepth uint, value uin
 	}
 
 	// Mark value as set.
-	p, _ := f.pos(uint64(bitDepth), columnID)
+	p, err := f.pos(uint64(bitDepth), columnID)
+	if err != nil {
+		return changed, err
+	}
 	if c, err := f.storage.Add(p); err != nil {
 		return changed, err
 	} else if c {
@@ -1264,7 +1274,7 @@ func (f *Fragment) ImportValue(columnIDs, values []uint64, bitDepth uint) error 
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
 
-			_, err := f.ImportSetFieldValue(columnID, bitDepth, value)
+			_, err := f.importSetFieldValue(columnID, bitDepth, value)
 			if err != nil {
 				return err
 			}
