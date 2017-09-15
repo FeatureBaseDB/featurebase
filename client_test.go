@@ -286,6 +286,53 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 	}
 }
 
+// Ensure client can bulk import value data.
+func TestClient_Importalue(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	fld := pilosa.Field{
+		Name: "fld",
+		Type: pilosa.FieldTypeInt,
+		Min:  0,
+		Max:  100,
+	}
+
+	// Load bitmap into cache to ensure cache gets updated.
+	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true, Fields: []*pilosa.Field{&fld}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := test.NewServer()
+	defer s.Close()
+	s.Handler.Host = s.Host()
+	s.Handler.Cluster = test.NewCluster(1)
+	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Holder = hldr.Holder
+
+	// Send import request.
+	c := test.MustNewClient(s.Host())
+	if err := c.ImportValue(context.Background(), "i", "f", fld.Name, 0, []pilosa.FieldValue{
+		{ColumnID: 1, Value: 10},
+		{ColumnID: 2, Value: 20},
+		{ColumnID: 3, Value: 40},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, cnt, err := frame.FieldSum(nil, fld.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data.
+	if sum != 70 || cnt != 3 {
+		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=70, cnt=3", sum, cnt)
+	}
+}
+
 // Ensure client backup and restore a frame.
 func TestClient_BackupRestore(t *testing.T) {
 	hldr := test.MustOpenHolder()
