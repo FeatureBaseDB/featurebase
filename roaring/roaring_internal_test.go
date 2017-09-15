@@ -2410,3 +2410,84 @@ func TestSearc64(t *testing.T) {
 		})
 	}
 }
+
+func TestIntersectArrayBitmap(t *testing.T) {
+	a, b := &container{}, &container{
+		bitmap: make([]uint64, bitmapN),
+	}
+	tests := []struct {
+		array  []uint16
+		bitmap []uint64
+		exp    []uint16
+	}{
+		{
+			array:  []uint16{0},
+			bitmap: []uint64{1},
+			exp:    []uint16{0},
+		},
+		{
+			array:  []uint16{0, 1},
+			bitmap: []uint64{3},
+			exp:    []uint16{0, 1},
+		},
+		{
+			array:  []uint16{64, 128, 129, 2000},
+			bitmap: []uint64{932421, 2},
+			exp:    []uint16{},
+		},
+		{
+			array:  []uint16{0, 65, 130, 195},
+			bitmap: []uint64{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
+			exp:    []uint16{0, 65, 130, 195},
+		},
+		{
+			array:  []uint16{63, 120, 543, 639, 12000},
+			bitmap: []uint64{0x8000000000000000, 0, 0, 0, 0, 0, 0, 0, 0, 0x8000000000000000},
+			exp:    []uint16{63, 639},
+		},
+		{
+			array:  []uint16{0, 1, 63, 120, 543, 639, 12000, 65534, 65535},
+			bitmap: bitmapOdds(),
+			exp:    []uint16{1, 63, 543, 639, 65535},
+		},
+		{
+			array:  []uint16{0, 1, 63, 120, 543, 639, 12000, 65534, 65535},
+			bitmap: bitmapEvens(),
+			exp:    []uint16{0, 120, 12000, 65534},
+		},
+	}
+
+	for i, test := range tests {
+		a.array = test.array
+		a.container_type = ContainerArray
+		for i, bmval := range test.bitmap {
+			b.bitmap[i] = bmval
+		}
+		b.container_type = ContainerBitmap
+		ret1 := intersectArrayBitmapOld(a, b).array
+		ret2 := intersectArrayBitmap(a, b).array
+		fmt.Println("ret1", ret1, "ret2", ret2, "test.exp", test.exp)
+		if len(ret1) == 0 && len(ret2) == 0 && len(test.exp) == 0 {
+			continue
+		}
+		if !reflect.DeepEqual(ret1, ret2) || !reflect.DeepEqual(ret2, test.exp) {
+			t.Fatalf("test #%v intersectArrayBitmap fail orig: %v new: %v exp: %v", i, ret1, ret2, test.exp)
+		}
+	}
+}
+
+func bitmapOdds() []uint64 {
+	bitmap := make([]uint64, bitmapN)
+	for i := 0; i < bitmapN; i++ {
+		bitmap[i] = 0xAAAAAAAAAAAAAAAA
+	}
+	return bitmap
+}
+
+func bitmapEvens() []uint64 {
+	bitmap := make([]uint64, bitmapN)
+	for i := 0; i < bitmapN; i++ {
+		bitmap[i] = 0x5555555555555555
+	}
+	return bitmap
+}
