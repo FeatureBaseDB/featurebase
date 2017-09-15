@@ -2498,7 +2498,6 @@ func TestIntersectArrayBitmap(t *testing.T) {
 		b.container_type = ContainerBitmap
 		ret1 := intersectArrayBitmapOld(a, b).array
 		ret2 := intersectArrayBitmap(a, b).array
-		fmt.Println("ret1", ret1, "ret2", ret2, "test.exp", test.exp)
 		if len(ret1) == 0 && len(ret2) == 0 && len(test.exp) == 0 {
 			continue
 		}
