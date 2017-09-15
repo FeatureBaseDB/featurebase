@@ -1579,13 +1579,13 @@ func TestDifferenceBitmapBitmap(t *testing.T) {
 		},
 		{
 			abitmap: []uint64{0xF},
-			bbitmap: []uint64{},
+			bbitmap: []uint64{0},
 			exp:     []uint16{0, 1, 2, 3},
 		},
 	}
 	for i, test := range tests {
-		a.bitmap = test.abitmap
-		b.bitmap = test.bbitmap
+		a.bitmap[0] = test.abitmap[0]
+		b.bitmap[0] = test.bbitmap[0]
 
 		ret := differenceBitmapBitmap(a, b)
 		if !reflect.DeepEqual(ret.array, test.exp) {
