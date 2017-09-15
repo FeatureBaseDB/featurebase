@@ -2091,7 +2091,7 @@ func intersectArrayBitmap(a, b *container) *container {
 			output.array = append(output.array, va)
 		}
 	}
-	output.n = len(output.array) 
+	output.n = len(output.array)
 	return output
 }
 
@@ -2657,33 +2657,6 @@ func differenceArrayBitmap(a, b *container) *container {
 	output.n = len(output.array)
 	return output
 }
-
-/*
-func differenceArrayBitmap(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
-	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
-	for i := 0; i < len(a.array); {
-		va := a.array[i]
-		vb, eof := itr.next()
-		if eof {
-			output.add(va)
-			i++
-			continue
-		}
-
-		if va < vb {
-			output.add(va)
-			i++
-			itr.unread()
-		} else if va > vb {
-			// nop
-		} else {
-			i++
-		}
-	}
-	return output
-}
-*/
 
 func differenceBitmapArray(a, b *container) *container {
 	output := &container{container_type: ContainerArray}
