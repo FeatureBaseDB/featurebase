@@ -2659,31 +2659,16 @@ func differenceArrayBitmap(a, b *container) *container {
 }
 
 func differenceBitmapArray(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
-	itr := newBufBitmapIterator(newBitmapIterator(a.bitmap))
-	i := 0
-	va, eof := itr.next()
-	for {
-		if eof {
-			break
-		}
+	output := a.clone()
 
-		if i >= len(b.array) {
-			output.add(va)
-			va, eof = itr.next()
-			continue
+	for _, v := range b.array {
+		if output.bitmapContains(v) {
+			output.bitmap[v/64] &^= (uint64(1) << uint(v%64))
+			output.n--
 		}
-
-		vb := b.array[i]
-		if va < vb {
-			output.add(va)
-			va, eof = itr.next()
-		} else if va > vb {
-			i++
-		} else {
-			i++
-			va, eof = itr.next()
-		}
+	}
+	if output.n < ArrayMaxSize {
+		output.bitmapToArray()
 	}
 	return output
 }
