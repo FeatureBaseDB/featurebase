@@ -230,6 +230,7 @@ func (f *Frame) options() FrameOptions {
 		CacheType:      f.cacheType,
 		CacheSize:      f.cacheSize,
 		TimeQuantum:    f.timeQuantum,
+		Fields:         f.schema.Fields,
 	}
 	return opt
 }
@@ -903,6 +904,7 @@ func encodeFrame(f *Frame) *internal.Frame {
 			CacheType:      f.cacheType,
 			CacheSize:      f.cacheSize,
 			TimeQuantum:    string(f.timeQuantum),
+			Fields:         encodeFields(f.schema.Fields),
 		},
 	}
 }
@@ -945,6 +947,7 @@ func (o *FrameOptions) Encode() *internal.FrameMeta {
 		CacheType:      o.CacheType,
 		CacheSize:      o.CacheSize,
 		TimeQuantum:    string(o.TimeQuantum),
+		Fields:         encodeFields(o.Fields),
 	}
 }
 
