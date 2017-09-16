@@ -2372,39 +2372,6 @@ func unionArrayBitmap(a, b *container) *container {
 	return output
 }
 
-/*
-func unionArrayBitmap(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
-	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
-	for i := 0; ; {
-		vb, eof := itr.next()
-		if i >= len(a.array) && eof {
-			break
-		} else if i >= len(a.array) {
-			output.add(vb)
-			continue
-		} else if eof {
-			output.add(a.array[i])
-			i++
-			continue
-		}
-
-		va := a.array[i]
-		if va < vb {
-			output.add(va)
-			i++
-			itr.unread()
-		} else if va > vb {
-			output.add(vb)
-		} else {
-			output.add(va)
-			i++
-		}
-	}
-	return output
-}
-*/
-
 func unionBitmapBitmap(a, b *container) *container {
 	output := &container{
 		bitmap:         make([]uint64, bitmapN),
