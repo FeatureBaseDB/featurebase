@@ -314,9 +314,11 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		opt := FrameOptions{
 			RowLabel:       obj.Meta.RowLabel,
 			InverseEnabled: obj.Meta.InverseEnabled,
+			RangeEnabled:   obj.Meta.RangeEnabled,
 			CacheType:      obj.Meta.CacheType,
 			CacheSize:      obj.Meta.CacheSize,
 			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
+			Fields:         decodeFields(obj.Meta.Fields),
 		}
 		_, err := idx.CreateFrame(obj.Frame, opt)
 		if err != nil {
