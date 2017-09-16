@@ -924,10 +924,10 @@ func encodeFrames(a []*Frame) []*internal.Frame {
 
 // encodeFrame converts f into its internal representation.
 func encodeFrame(f *Frame) *internal.Frame {
-	options := f.Options()
+	fo := f.options()
 	return &internal.Frame{
 		Name: f.name,
-		Meta: options.Encode(),
+		Meta: fo.Encode(),
 	}
 }
 
