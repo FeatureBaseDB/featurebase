@@ -2345,6 +2345,19 @@ func (c *container) bitmapZeroRange(i, j uint64) {
 }
 
 func unionArrayBitmap(a, b *container) *container {
+	output := b.clone()
+	for _, v := range a.array {
+		if !output.bitmapContains(v) {
+			output.bitmap[v/64] |= (1 << uint64(v%64))
+			output.n++
+		}
+	}
+
+	return output
+}
+
+/*
+func unionArrayBitmap(a, b *container) *container {
 	output := &container{container_type: ContainerArray}
 	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
 	for i := 0; ; {
@@ -2374,6 +2387,7 @@ func unionArrayBitmap(a, b *container) *container {
 	}
 	return output
 }
+*/
 
 func unionBitmapBitmap(a, b *container) *container {
 	output := &container{
