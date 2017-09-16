@@ -622,6 +622,10 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		b.keys = make([]uint64, 0, keyN)
 		b.containers = make([]*container, 0, keyN)
 	} else if int(keyN) < len(b.keys) { //shrink
+		// nil out to allow to be GCed
+		for i := range b.containers[keyN:] {
+			b.containers[int(keyN)+i] = nil
+		}
 		b.keys = b.keys[:keyN]
 		b.containers = b.containers[:keyN]
 	}
