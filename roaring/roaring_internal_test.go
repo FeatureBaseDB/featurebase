@@ -793,6 +793,7 @@ func TestDifferenceMixed(t *testing.T) {
 	}
 
 	res = difference(c, b)
+	fmt.Println(res)
 	if !reflect.DeepEqual(res.array, []uint16{5}) {
 		t.Fatalf("test #7 expected %v, but got %v", []uint16{5}, res.array)
 	}
@@ -1542,8 +1543,8 @@ func TestDifferenceBitmapRun(t *testing.T) {
 }
 
 func TestDifferenceBitmapArray(t *testing.T) {
-	a := &container{bitmap: make([]uint64, bitmapN)}
-	b := &container{}
+	a := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+	b := &container{container_type: ContainerArray}
 	tests := []struct {
 		bitmap []uint64
 		array  []uint16
@@ -1556,7 +1557,8 @@ func TestDifferenceBitmapArray(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		a.bitmap = test.bitmap
+		a.bitmap[0] = test.bitmap[0]
+		a.n = a.count()
 		b.array = test.array
 		ret := differenceBitmapArray(a, b)
 		if !reflect.DeepEqual(ret.array, test.exp) {
