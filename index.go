@@ -135,6 +135,20 @@ func (i *Index) ColumnLabel() string {
 	return v
 }
 
+// Options returns all options for this index.
+func (i *Index) Options() IndexOptions {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.options()
+}
+
+func (i *Index) options() IndexOptions {
+	return IndexOptions{
+		ColumnLabel: i.columnLabel,
+		TimeQuantum: i.timeQuantum,
+	}
+}
+
 // Open opens and initializes the index.
 func (i *Index) Open() error {
 	// Ensure the path exists.
@@ -600,12 +614,10 @@ func EncodeIndexes(a []*Index) []*internal.Index {
 
 // encodeIndex converts d into its internal representation.
 func encodeIndex(d *Index) *internal.Index {
+	io := d.options()
 	return &internal.Index{
-		Name: d.name,
-		Meta: &internal.IndexMeta{
-			ColumnLabel: d.columnLabel,
-			TimeQuantum: string(d.timeQuantum),
-		},
+		Name:     d.name,
+		Meta:     io.Encode(),
 		MaxSlice: d.MaxSlice(),
 		Frames:   encodeFrames(d.Frames()),
 	}

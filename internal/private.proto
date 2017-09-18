@@ -14,6 +14,7 @@ message FrameMeta {
 	uint32 CacheSize = 4;
 	string TimeQuantum = 5;
 	bool RangeEnabled = 6;
+    repeated Field Fields = 7;
 }
 
 message ImportResponse {

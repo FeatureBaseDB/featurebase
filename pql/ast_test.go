@@ -28,6 +28,18 @@ func TestCall_String(t *testing.T) {
 			t.Fatalf("unexpected string: %s", s)
 		}
 	})
+	t.Run("With Args", func(t *testing.T) {
+		c := &pql.Call{
+			Name: "Range",
+			Args: map[string]interface{}{
+				"frame":  "f",
+				"field0": &pql.Condition{Op: pql.GTE, Value: 10},
+			},
+		}
+		if s := c.String(); s != `Range(field0 >= 10, frame="f")` {
+			t.Fatalf("unexpected string: %s", s)
+		}
+	})
 }
 
 // Ensure call can be converted into a string.

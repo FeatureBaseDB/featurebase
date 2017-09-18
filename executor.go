@@ -161,9 +161,9 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	indexTag := fmt.Sprintf("index:%s", index)
 	// Special handling for mutation and top-n calls.
 	switch c.Name {
-	case "Average":
+	case "Sum":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeAverage(ctx, index, c, slices, opt)
+		return e.executeSum(ctx, index, c, slices, opt)
 	case "ClearBit":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "Count":
@@ -177,9 +177,6 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return nil, e.executeSetRowAttrs(ctx, index, c, opt)
 	case "SetColumnAttrs":
 		return nil, e.executeSetColumnAttrs(ctx, index, c, opt)
-	case "Sum":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeSum(ctx, index, c, slices, opt)
 	case "TopN":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, slices, opt)
@@ -208,16 +205,16 @@ func (e *Executor) validateCallArgs(c *pql.Call) error {
 	return nil
 }
 
-// executeAverage executes an average() call.
-func (e *Executor) executeAverage(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (int64, error) {
+// executeSum executes a Sum() call.
+func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (SumCount, error) {
 	if frame, _ := c.Args["frame"]; frame == "" {
-		return 0, errors.New("Average(): frame required")
+		return SumCount{}, errors.New("Sum(): frame required")
 	} else if field, _ := c.Args["field"]; field == "" {
-		return 0, errors.New("Average(): field required")
+		return SumCount{}, errors.New("Sum(): field required")
 	}
 
 	if len(c.Children) > 1 {
-		return 0, errors.New("Average() only accepts a single bitmap input")
+		return SumCount{}, errors.New("Sum() only accepts a single bitmap input")
 	}
 
 	// Execute calls in bulk on each remote node and merge.
@@ -233,14 +230,14 @@ func (e *Executor) executeAverage(ctx context.Context, index string, c *pql.Call
 
 	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
 	if err != nil {
-		return 0, err
+		return SumCount{}, err
 	}
 	other, _ := result.(SumCount)
 
 	if other.Count == 0 {
-		return 0, nil
+		return SumCount{}, nil
 	}
-	return other.Sum / other.Count, nil
+	return other, nil
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
@@ -328,38 +325,6 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 	default:
 		return nil, fmt.Errorf("unknown call: %s", c.Name)
 	}
-}
-
-// executeSum executes a sum() call.
-func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (int64, error) {
-	if frame, _ := c.Args["frame"]; frame == "" {
-		return 0, errors.New("Sum(): frame required")
-	} else if field, _ := c.Args["field"]; field == "" {
-		return 0, errors.New("Sum(): field required")
-	}
-
-	if len(c.Children) > 1 {
-		return 0, errors.New("Sum() only accepts a single bitmap input")
-	}
-
-	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeSumCountSlice(ctx, index, c, slice)
-	}
-
-	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
-		other, _ := prev.(SumCount)
-		return other.Add(v.(SumCount))
-	}
-
-	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
-	if err != nil {
-		return 0, err
-	}
-	other, _ := result.(SumCount)
-
-	return other.Sum, nil
 }
 
 // executeSumCountSlice executes calculates the sum & count for fields on a slice.
@@ -1347,11 +1312,13 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Send request to remote node.
+	start := time.Now()
 	resp, err := e.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	e.Holder.logger().Printf("Query '%v' to %v took %v", q.String(), node.Host, time.Since(start))
 
 	// Read response into buffer.
 	body, err := ioutil.ReadAll(resp.Body)
