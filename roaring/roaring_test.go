@@ -24,6 +24,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/roaring"
 	_ "github.com/pilosa/pilosa/test"
 )
@@ -484,6 +485,15 @@ func TestBitmap_Difference(t *testing.T) {
 	result := bm0.Difference(bm1)
 	if n := result.Count(); n != 1 {
 		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_Difference2(t *testing.T) {
+	bm0 := roaring.NewBitmap(0, 1, 2, 131072, 262144, pilosa.SliceWidth+5, pilosa.SliceWidth+7)
+	bm1 := roaring.NewBitmap(2, 3, 100000, 262144, 2*pilosa.SliceWidth+1)
+	result := bm0.Difference(bm1)
+	if !reflect.DeepEqual(result.Slice(), []uint64{0, 1, 131072, pilosa.SliceWidth + 5, pilosa.SliceWidth + 7}) {
+		t.Fatalf("unexpected : %v", result.Slice())
 	}
 }
 
