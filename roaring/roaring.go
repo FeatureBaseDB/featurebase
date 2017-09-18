@@ -422,24 +422,25 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 	ki, ci := b.keys, b.containers
 	kj, cj := other.keys, other.containers
 
+	ni, nj := len(ki), len(kj)
+	i, j := 0, 0
 	for {
 		var key uint64
 		var container *container
 
-		ni, nj := len(ki), len(kj)
-		if ni == 0 { // eof(i)
+		if ni == i { // eof(i)
 			break
-		} else if nj == 0 || ki[0] < kj[0] { // eof(j) or i < j
-			key, container = ki[0], ci[0].clone()
-			ki, ci = ki[1:], ci[1:]
+		} else if nj == j || ki[i] < kj[j] { // eof(j) or i < j
+			key, container = ki[i], ci[i].clone()
+			i++
 			output.keys = append(output.keys, key)
 			output.containers = append(output.containers, container)
-		} else if nj > 0 && ki[0] > kj[0] { // i > j
-			kj, cj = kj[1:], cj[1:]
+		} else if nj > j && ki[i] > kj[j] { // i > j
+			j++
 		} else { // i == j
-			key, container = ki[0], difference(ci[0], cj[0])
-			ki, ci = ki[1:], ci[1:]
-			kj, cj = kj[1:], cj[1:]
+			key, container = ki[i], difference(ci[i], cj[j])
+			i++
+			j++
 			output.keys = append(output.keys, key)
 			output.containers = append(output.containers, container)
 		}
