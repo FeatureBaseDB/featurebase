@@ -1040,6 +1040,8 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 	// Copy args and remove reserved fields.
 	args := pql.CopyArgs(c.Args)
 	delete(args, "frame")
+	// While frame could technically work as a ColumnAttr argument, we are treating it as a reserved word primarily to avoid confusion.
+	// Also, if we ever need to make ColumnAttrs frame-specific, then having this reserved word prevents backward incompatibility.
 	delete(args, columnLabel)
 
 	// Set values.
@@ -1252,6 +1254,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	// Copy args and remove reserved fields.
 	attrs := pql.CopyArgs(c.Args)
 	delete(attrs, colName)
+	delete(attrs, "frame")
 
 	// Set attributes.
 	if err := idx.ColumnAttrStore().SetAttrs(id, attrs); err != nil {

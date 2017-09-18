@@ -1062,3 +1062,50 @@ func TestExecutor_Execute_ErrMaxWritesPerRequest(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 }
+
+// Ensure SetColumnAttrs doesn't save `frame` as an attribute
+func TestExectutor_SetColumnAttrs_ExcludeFrame(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+	index.CreateFrame("f", pilosa.FrameOptions{InverseEnabled: true})
+	targetAttrs := map[string]interface{}{
+		"foo": "bar",
+	}
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+
+	// SetColumnAttrs call should exclude the frame attribute
+	_, err := e.Execute(context.Background(), "i", test.MustParse("SetBit(frame='f', rowID=1, columnID=10)"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = e.Execute(context.Background(), "i", test.MustParse("SetColumnAttrs(frame='f', columnID=10, foo='bar')"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs, err := index.ColumnAttrStore().Attrs(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(attrs, targetAttrs) {
+		t.Fatalf("%#v != %#v", targetAttrs, attrs)
+	}
+
+	// SetColumnAttrs call should not break if frame is not specified
+	_, err = e.Execute(context.Background(), "i", test.MustParse("SetBit(frame='f', rowID=1, columnID=20)"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = e.Execute(context.Background(), "i", test.MustParse("SetColumnAttrs(columnID=20, foo='bar')"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs, err = index.ColumnAttrStore().Attrs(20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(attrs, targetAttrs) {
+		t.Fatalf("%#v != %#v", targetAttrs, attrs)
+	}
+
+}
