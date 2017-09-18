@@ -139,7 +139,7 @@ SetColumnAttrs(<frame=STRING>, <ROW_LABEL=UINT>,
 
 **Result Type:** null
 
-SetColumnAttrs queries always return `null` upon success. Setting a value of `null`, without quotes, deletes an attribute. Note that, `frame` cannot be used as an attribute name.
+SetColumnAttrs queries always return `null` upon success. Setting a value of `null`, without quotes, deletes an attribute. To avoid confusion, `frame` cannot be used as an attribute name.
 
 **Examples:**
 

@@ -1040,6 +1040,8 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 	// Copy args and remove reserved fields.
 	args := pql.CopyArgs(c.Args)
 	delete(args, "frame")
+	// While frame could technically work as a ColumnAttr argument, we are treating it as a reserved word primarily to avoid confusion.
+	// Also, if we ever need to make ColumnAttrs frame-specific, then having this reserved word prevents backward incompatibility.
 	delete(args, columnLabel)
 
 	// Set values.
