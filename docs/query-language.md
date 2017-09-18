@@ -481,6 +481,7 @@ Returns `{{"attrs":{},"bits":[10]}`
 
 * bits are repositories which had at least 100 commits in the last year.
 
+
 #### Sum
 
 **Spec:**
@@ -491,9 +492,9 @@ Sum(<frame=STRING>, <field=STRING>)
 
 **Description:**
 
-Returns the computed sum of all `field` values across the bits in a `frame`.
+Returns the computed sum of all `field` values across the bits in a `frame` plus the count of bitmaps with a field value.
 
-**Result Type:** int
+**Result Type:** object with sum and count.
 
 **Examples:**
 
@@ -502,34 +503,9 @@ Query the size of all repositories.
 Sum(frame="stats", field="diskusage")
 ```
 
-Return `100000`
+Return `{"sum":10,"count":3}`
 
-* Result is the size of all repositories in kilobytes.
-
-#### Average
-
-**Spec:**
-
-```
-Sum(<frame=STRING>, <field=STRING>)
-```
-
-**Description:**
-
-Returns the computed average of all `field` values across the bits in a `frame`.
-
-**Result Type:** int
-
-**Examples:**
-
-Query the average number of pull requests across all repositories.
-```
-average(frame="stats", field="pullrequests")
-```
-
-Return `125`
-
-* Result is the average number of pull requests for this set of repositories.
+* Result is the size of all repositories in kilobytes, plus the number of repositories.
 
 
 #### SetFieldValue
