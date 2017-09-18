@@ -689,7 +689,10 @@ func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality b
 		}
 
 		// If bit is set then add columns for set bits to exclude.
-		keep = keep.Union(b.Difference(row))
+		// Don't bother to compute this on the final iteration.
+		if i > 0 {
+			keep = keep.Union(b.Difference(row))
+		}
 	}
 
 	return b, nil
@@ -721,7 +724,53 @@ func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality b
 		}
 
 		// If bit is unset then add columns with set bit to keep.
-		keep = keep.Union(b.Intersect(row))
+		// Don't bother to compute this on the final iteration.
+		if i > 0 {
+			keep = keep.Union(b.Intersect(row))
+		}
+	}
+
+	return b, nil
+}
+
+func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Bitmap, error) {
+	return f.fieldRangeBetween(bitDepth, predicateMin, predicateMax)
+}
+
+func (f *Fragment) fieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Bitmap, error) {
+	b := f.Row(uint64(bitDepth))
+	keep1 := NewBitmap() // GTE
+	keep2 := NewBitmap() // LTE
+
+	// Filter any bits that don't match the current bit value.
+	for i := int(bitDepth - 1); i >= 0; i-- {
+		row := f.Row(uint64(i))
+		bit1 := (predicateMin >> uint(i)) & 1
+		bit2 := (predicateMax >> uint(i)) & 1
+
+		// GTE predicateMin
+		// If bit is set then remove all unset columns not already kept.
+		if bit1 == 1 {
+			b = b.Difference(b.Difference(row).Difference(keep1))
+		} else {
+			// If bit is unset then add columns with set bit to keep.
+			// Don't bother to compute this on the final iteration.
+			if i > 0 {
+				keep1 = keep1.Union(b.Intersect(row))
+			}
+		}
+
+		// LTE predicateMin
+		// If bit is zero then remove all set columns not in excluded bitmap.
+		if bit2 == 0 {
+			b = b.Difference(row.Difference(keep2))
+		} else {
+			// If bit is set then add columns for set bits to exclude.
+			// Don't bother to compute this on the final iteration.
+			if i > 0 {
+				keep2 = keep2.Union(b.Difference(row))
+			}
+		}
 	}
 
 	return b, nil
