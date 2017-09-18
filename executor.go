@@ -715,28 +715,90 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		fieldName, cond = k, vv
 	}
 
-	// Only support integers for now.
-	value, ok := cond.Value.(int64)
-	if !ok {
-		return nil, errors.New("Range(): conditions only support integer values")
-	}
+	if cond.Op == pql.BETWEEN {
 
-	// Find field.
-	field := f.Field(fieldName)
-	if field == nil {
-		return nil, ErrFieldNotFound
-	} else if value < field.Min || value > field.Max {
-		return NewBitmap(), nil
-	}
+		predicates, err := cond.IntSliceValue()
+		if err != nil {
+			return nil, err
+		}
 
-	// Retrieve fragment.
-	frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
-	if frag == nil {
-		return NewBitmap(), nil
-	}
+		// Only support two integers for the between operation.
+		if len(predicates) != 2 {
+			return nil, errors.New("Range(): BETWEEN condition requires exactly two integer values")
+		}
 
-	f.Stats.Count("range:field", 1, 1.0)
-	return frag.FieldRange(cond.Op, field.BitDepth(), uint64(value-field.Min))
+		// Find field.
+		field := f.Field(fieldName)
+		if field == nil {
+			return nil, ErrFieldNotFound
+		} else if predicates[1] < field.Min || predicates[0] > field.Max {
+			return NewBitmap(), nil
+		}
+
+		// Adjust predicates to range.
+		baseValueMin := uint64(0)
+		baseValueMax := uint64(0)
+		if predicates[0] > field.Min {
+			baseValueMin = uint64(predicates[0] - field.Min)
+		}
+		// Make sure the high value in our BETWEEN does not exceed BitDepth.
+		if predicates[1] > field.Max {
+			baseValueMax = uint64(field.Max - field.Min)
+		} else if predicates[1] > field.Min {
+			baseValueMax = uint64(predicates[1] - field.Min)
+		}
+
+		// Retrieve fragment.
+		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		if frag == nil {
+			return NewBitmap(), nil
+		}
+
+		return frag.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
+
+	} else {
+
+		// Only support integers for now.
+		value, ok := cond.Value.(int64)
+		if !ok {
+			return nil, errors.New("Range(): conditions only support integer values")
+		}
+
+		// Find field.
+		field := f.Field(fieldName)
+		if field == nil {
+			return nil, ErrFieldNotFound
+		}
+
+		// Adjust predicate to range.
+		baseValue := uint64(0)
+		if cond.Op == pql.GT || cond.Op == pql.GTE {
+			if value > field.Max {
+				return NewBitmap(), nil
+			} else if value > field.Min {
+				baseValue = uint64(value - field.Min)
+			}
+		} else if cond.Op == pql.LT || cond.Op == pql.LTE {
+			if value < field.Min {
+				return NewBitmap(), nil
+			} else if value > field.Max {
+				baseValue = uint64(field.Max - field.Min)
+			} else {
+				baseValue = uint64(value - field.Min)
+			}
+		} else if cond.Op == pql.EQ {
+			baseValue = uint64(value - field.Min)
+		}
+
+		// Retrieve fragment.
+		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		if frag == nil {
+			return NewBitmap(), nil
+		}
+
+		f.Stats.Count("range:field", 1, 1.0)
+		return frag.FieldRange(cond.Op, field.BitDepth(), baseValue)
+	}
 }
 
 // executeUnionSlice executes a union() call for a local slice.
