@@ -1312,11 +1312,13 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Send request to remote node.
+	start := time.Now()
 	resp, err := e.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	e.Holder.logger().Printf("Query '%v' to %v took %v", q.String(), node.Host, time.Since(start))
 
 	// Read response into buffer.
 	body, err := ioutil.ReadAll(resp.Body)
