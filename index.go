@@ -129,16 +129,16 @@ func (i *Index) SetColumnLabel(v string) error {
 
 // ColumnLabel returns the column label.
 func (i *Index) ColumnLabel() string {
-	i.mu.Lock()
+	i.mu.RLock()
 	v := i.columnLabel
-	i.mu.Unlock()
+	i.mu.RUnlock()
 	return v
 }
 
 // Options returns all options for this index.
 func (i *Index) Options() IndexOptions {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 	return i.options()
 }
 
