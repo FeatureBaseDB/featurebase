@@ -731,21 +731,11 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		field := f.Field(fieldName)
 		if field == nil {
 			return nil, ErrFieldNotFound
-		} else if predicates[1] < field.Min || predicates[0] > field.Max {
-			return NewBitmap(), nil
 		}
 
-		// Adjust predicates to range.
-		baseValueMin := uint64(0)
-		baseValueMax := uint64(0)
-		if predicates[0] > field.Min {
-			baseValueMin = uint64(predicates[0] - field.Min)
-		}
-		// Make sure the high value in our BETWEEN does not exceed BitDepth.
-		if predicates[1] > field.Max {
-			baseValueMax = uint64(field.Max - field.Min)
-		} else if predicates[1] > field.Min {
-			baseValueMax = uint64(predicates[1] - field.Min)
+		baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicates[0], predicates[1])
+		if outOfRange {
+			return NewBitmap(), nil
 		}
 
 		// Retrieve fragment.
@@ -770,24 +760,9 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 			return nil, ErrFieldNotFound
 		}
 
-		// Adjust predicate to range.
-		baseValue := uint64(0)
-		if cond.Op == pql.GT || cond.Op == pql.GTE {
-			if value > field.Max {
-				return NewBitmap(), nil
-			} else if value > field.Min {
-				baseValue = uint64(value - field.Min)
-			}
-		} else if cond.Op == pql.LT || cond.Op == pql.LTE {
-			if value < field.Min {
-				return NewBitmap(), nil
-			} else if value > field.Max {
-				baseValue = uint64(field.Max - field.Min)
-			} else {
-				baseValue = uint64(value - field.Min)
-			}
-		} else if cond.Op == pql.EQ {
-			baseValue = uint64(value - field.Min)
+		baseValue, outOfRange := field.BaseValue(cond.Op, value)
+		if outOfRange {
+			return NewBitmap(), nil
 		}
 
 		// Retrieve fragment.
