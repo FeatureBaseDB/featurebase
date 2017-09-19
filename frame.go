@@ -43,7 +43,7 @@ const (
 
 // Frame represents a container for views.
 type Frame struct {
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	path        string
 	index       string
 	name        string
@@ -404,8 +404,8 @@ func (f *Frame) Close() error {
 
 // Schema returns the frame's current schema.
 func (f *Frame) Schema() *FrameSchema {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.schema
 }
 
@@ -506,8 +506,8 @@ func (f *Frame) ViewPath(name string) string {
 
 // View returns a view in the frame by name.
 func (f *Frame) View(name string) *View {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.view(name)
 }
 

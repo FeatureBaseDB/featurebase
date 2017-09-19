@@ -37,7 +37,7 @@ const (
 
 // Index represents a container for frames.
 type Index struct {
-	mu   sync.Mutex
+	mu   sync.RWMutex
 	path string
 	name string
 
@@ -359,8 +359,8 @@ func (i *Index) InputDefinitionPath() string {
 
 // Frame returns a frame in the index by name.
 func (i *Index) Frame(name string) *Frame {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 	return i.frame(name)
 }
 
