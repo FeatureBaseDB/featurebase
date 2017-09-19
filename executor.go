@@ -1554,9 +1554,7 @@ func (e *Executor) mapperLocal(ctx context.Context, slices []uint64, mapFn mapFu
 	ch := make(chan mapResponse, len(slices))
 
 	for _, slice := range slices {
-		fmt.Printf("launching gr for slice: %v\n", slice)
 		go func(slice uint64) {
-			fmt.Printf("started gr for slice: %v\n", slice)
 			result, err := mapFn(slice)
 
 			// Return response to the channel.
