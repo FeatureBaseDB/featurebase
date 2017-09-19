@@ -174,8 +174,8 @@ func (v *View) Close() error {
 
 // MaxSlice returns the max slice in the view.
 func (v *View) MaxSlice() uint64 {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	v.mu.RLock()
+	defer v.mu.RUnlock()
 
 	var max uint64
 	for slice := range v.fragments {

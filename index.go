@@ -276,8 +276,8 @@ func (i *Index) MaxSlice() uint64 {
 	if i == nil {
 		return 0
 	}
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 
 	max := i.remoteMaxSlice
 	for _, f := range i.frames {
@@ -302,8 +302,8 @@ func (i *Index) MaxInverseSlice() uint64 {
 	if i == nil {
 		return 0
 	}
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 
 	max := i.remoteMaxInverseSlice
 	for _, f := range i.frames {
@@ -323,8 +323,8 @@ func (i *Index) SetRemoteMaxInverseSlice(v uint64) {
 
 // TimeQuantum returns the default time quantum for the index.
 func (i *Index) TimeQuantum() TimeQuantum {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 	return i.timeQuantum
 }
 
@@ -380,8 +380,8 @@ func (i *Index) inputDefinition(name string) *InputDefinition { return i.inputDe
 
 // Frames returns a list of all frames in the index.
 func (i *Index) Frames() []*Frame {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 
 	a := make([]*Frame, 0, len(i.frames))
 	for _, f := range i.frames {
