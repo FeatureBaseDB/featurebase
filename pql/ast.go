@@ -227,6 +227,31 @@ func (cond *Condition) String() string {
 	return fmt.Sprintf("%s %s", cond.Op.String(), FormatValue(cond.Value))
 }
 
+// IntSliceValue reads cond.Value as a slice of uint64.
+// If the value is a slice of uint64 it will convert
+// it to []int64. Otherwise, if it is not a []int64 it will return an error.
+func (cond *Condition) IntSliceValue() ([]int64, error) {
+	val := cond.Value
+
+	switch tval := val.(type) {
+	case []interface{}:
+		ret := make([]int64, len(tval))
+		for i, v := range tval {
+			switch tv := v.(type) {
+			case int64:
+				ret[i] = tv
+			case uint64:
+				ret[i] = int64(tv)
+			default:
+				return nil, fmt.Errorf("unexpected value type %T in IntSliceValue, val %v", tv, tv)
+			}
+		}
+		return ret, nil
+	default:
+		return nil, fmt.Errorf("unexpected type %T in IntSliceValue, val %v", tval, tval)
+	}
+}
+
 func FormatValue(v interface{}) string {
 	switch v := v.(type) {
 	case string:

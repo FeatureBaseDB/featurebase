@@ -747,9 +747,59 @@ func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Bitmap,
 	}
 
 	// Adjust predicate to range.
-	baseValue := uint64(predicate - field.Min)
+	baseValue := uint64(0)
+	if op == pql.GT || op == pql.GTE {
+		if predicate > field.Max {
+			return NewBitmap(), nil
+		} else if predicate > field.Min {
+			baseValue = uint64(predicate - field.Min)
+		}
+	} else if op == pql.LT || op == pql.LTE {
+		if predicate < field.Min {
+			return NewBitmap(), nil
+		} else if predicate > field.Max {
+			baseValue = uint64(field.Max - field.Min)
+		} else {
+			baseValue = uint64(predicate - field.Min)
+		}
+	} else if op == pql.EQ {
+		baseValue = uint64(predicate - field.Min)
+	}
 
 	return view.FieldRange(op, field.BitDepth(), baseValue)
+}
+
+func (f *Frame) FieldRangeBetween(name string, predicateMin, predicateMax int64) (*Bitmap, error) {
+	// Retrieve and validate field.
+	field := f.Field(name)
+	if field == nil {
+		return nil, ErrFieldNotFound
+	} else if predicateMin > predicateMax {
+		return nil, ErrInvalidBetweenValue
+	} else if predicateMax < field.Min || predicateMin > field.Max {
+		return nil, nil
+	}
+
+	// Retrieve field's view.
+	view := f.View(ViewFieldPrefix + name)
+	if view == nil {
+		return nil, nil
+	}
+
+	// Adjust predicates to range.
+	baseValueMin := uint64(0)
+	baseValueMax := uint64(0)
+	if predicateMin > field.Min {
+		baseValueMin = uint64(predicateMin - field.Min)
+	}
+	// Make sure the high value in our BETWEEN does not exceed BitDepth.
+	if predicateMax > field.Max {
+		baseValueMax = uint64(field.Max - field.Min)
+	} else if predicateMax > field.Min {
+		baseValueMax = uint64(predicateMax - field.Min)
+	}
+
+	return view.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
 }
 
 // Import bulk imports data.

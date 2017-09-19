@@ -42,6 +42,7 @@ func TestScanner_Scan(t *testing.T) {
 		{name: "LTE", s: `<=`, tok: pql.LTE, lit: `<=`},
 		{name: "GT", s: `>`, tok: pql.GT, lit: `>`},
 		{name: "GTE", s: `>=`, tok: pql.GTE, lit: `>=`},
+		{name: "BETWEEN", s: `><`, tok: pql.BETWEEN, lit: `><`},
 		{name: "COMMA", s: `,`, tok: pql.COMMA, lit: `,`},
 		{name: "LPAREN", s: `(`, tok: pql.LPAREN, lit: `(`},
 		{name: "RPAREN", s: `)`, tok: pql.RPAREN, lit: `)`},

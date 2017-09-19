@@ -60,6 +60,7 @@ var (
 	ErrFieldValueTooLow       = errors.New("field value too low")
 	ErrFieldValueTooHigh      = errors.New("field value too high")
 	ErrInvalidRangeOperation  = errors.New("invalid range operation")
+	ErrInvalidBetweenValue    = errors.New("invalid value for between operation")
 
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")

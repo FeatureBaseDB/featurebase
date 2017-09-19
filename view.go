@@ -329,6 +329,20 @@ func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitma
 	return bm, nil
 }
 
+// FieldRangeBetween returns bitmaps with a field value encoding matching any
+// value between predicateMin and predicateMax.
+func (v *View) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Bitmap, error) {
+	bm := NewBitmap()
+	for _, frag := range v.Fragments() {
+		other, err := frag.FieldRangeBetween(bitDepth, predicateMin, predicateMax)
+		if err != nil {
+			return nil, err
+		}
+		bm = bm.Union(other)
+	}
+	return bm, nil
+}
+
 // IsInverseView returns true if the view is used for storing an inverted representation.
 func IsInverseView(name string) bool {
 	return strings.HasPrefix(name, ViewInverse)
