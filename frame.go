@@ -166,9 +166,9 @@ func (f *Frame) SetRowLabel(v string) error {
 
 // RowLabel returns the row label.
 func (f *Frame) RowLabel() string {
-	f.mu.Lock()
+	f.mu.RLock()
 	v := f.rowLabel
-	f.mu.Unlock()
+	f.mu.RUnlock()
 	return v
 }
 
@@ -217,8 +217,8 @@ func (f *Frame) CacheSize() uint32 {
 
 // Options returns all options for this frame.
 func (f *Frame) Options() FrameOptions {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.options()
 }
 
