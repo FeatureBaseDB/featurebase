@@ -746,24 +746,9 @@ func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Bitmap,
 		return nil, nil
 	}
 
-	// Adjust predicate to range.
-	baseValue := uint64(0)
-	if op == pql.GT || op == pql.GTE {
-		if predicate > field.Max {
-			return NewBitmap(), nil
-		} else if predicate > field.Min {
-			baseValue = uint64(predicate - field.Min)
-		}
-	} else if op == pql.LT || op == pql.LTE {
-		if predicate < field.Min {
-			return NewBitmap(), nil
-		} else if predicate > field.Max {
-			baseValue = uint64(field.Max - field.Min)
-		} else {
-			baseValue = uint64(predicate - field.Min)
-		}
-	} else if op == pql.EQ {
-		baseValue = uint64(predicate - field.Min)
+	baseValue, outOfRange := field.BaseValue(op, predicate)
+	if outOfRange {
+		return NewBitmap(), nil
 	}
 
 	return view.FieldRange(op, field.BitDepth(), baseValue)
@@ -776,8 +761,6 @@ func (f *Frame) FieldRangeBetween(name string, predicateMin, predicateMax int64)
 		return nil, ErrFieldNotFound
 	} else if predicateMin > predicateMax {
 		return nil, ErrInvalidBetweenValue
-	} else if predicateMax < field.Min || predicateMin > field.Max {
-		return nil, nil
 	}
 
 	// Retrieve field's view.
@@ -786,17 +769,9 @@ func (f *Frame) FieldRangeBetween(name string, predicateMin, predicateMax int64)
 		return nil, nil
 	}
 
-	// Adjust predicates to range.
-	baseValueMin := uint64(0)
-	baseValueMax := uint64(0)
-	if predicateMin > field.Min {
-		baseValueMin = uint64(predicateMin - field.Min)
-	}
-	// Make sure the high value in our BETWEEN does not exceed BitDepth.
-	if predicateMax > field.Max {
-		baseValueMax = uint64(field.Max - field.Min)
-	} else if predicateMax > field.Min {
-		baseValueMax = uint64(predicateMax - field.Min)
+	baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicateMin, predicateMax)
+	if outOfRange {
+		return NewBitmap(), nil
 	}
 
 	return view.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
@@ -1047,6 +1022,58 @@ func (f *Field) BitDepth() uint {
 		}
 	}
 	return 63
+}
+
+// BaseValue adjusts the value to align with the range for Field for a certain
+// operation type.
+// TODO: there is an edge case for GT and LT where this returns a baseValue
+// that does not fully encompass the range.
+// ex: Field.Min = 0, Field.Max = 1023
+// BaseValue(LT, 2000) returns 1023, which will perform "LT 1023" and effectively
+// exclude any columns with value = 1023.
+// Note that in this case (because the range uses the full BitDepth 0 to 1023),
+// we can't simply return 1024.
+// In order to make this work, we effectively need to change the operator to LTE.
+func (f *Field) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
+	if op == pql.GT || op == pql.GTE {
+		if value > f.Max {
+			return baseValue, true
+		} else if value > f.Min {
+			baseValue = uint64(value - f.Min)
+		}
+	} else if op == pql.LT || op == pql.LTE {
+		if value < f.Min {
+			return baseValue, true
+		} else if value > f.Max {
+			baseValue = uint64(f.Max - f.Min)
+		} else {
+			baseValue = uint64(value - f.Min)
+		}
+	} else if op == pql.EQ {
+		if value < f.Min || value > f.Max {
+			return baseValue, true
+		}
+		baseValue = uint64(value - f.Min)
+	}
+	return baseValue, false
+}
+
+// BaseValueBetween adjusts the min/max value to align with the range for Field.
+func (f *Field) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
+	if max < f.Min || min > f.Max {
+		return baseValueMin, baseValueMax, true
+	}
+	// Adjust min/max to range.
+	if min > f.Min {
+		baseValueMin = uint64(min - f.Min)
+	}
+	// Make sure the high value of the BETWEEN does not exceed BitDepth.
+	if max > f.Max {
+		baseValueMax = uint64(f.Max - f.Min)
+	} else if max > f.Min {
+		baseValueMax = uint64(max - f.Min)
+	}
+	return baseValueMin, baseValueMax, false
 }
 
 func ValidateField(f *Field) error {
