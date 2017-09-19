@@ -92,8 +92,12 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 		// Determine slices and inverseSlices for use in e.executeCall().
 		if needsSlices {
 			// Round up the number of slices.
-			maxSlice := e.Holder.Index(index).MaxSlice()
-			maxInverseSlice := e.Holder.Index(index).MaxInverseSlice()
+			idx := e.Holder.Index(index)
+			if idx == nil {
+				return nil, ErrIndexNotFound
+			}
+			maxSlice := idx.MaxSlice()
+			maxInverseSlice := idx.MaxInverseSlice()
 
 			// Generate a slices of all slices.
 			slices = make([]uint64, maxSlice+1)
@@ -108,10 +112,6 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 			}
 
 			// Fetch column label from index.
-			idx := e.Holder.Index(index)
-			if idx == nil {
-				return nil, ErrIndexNotFound
-			}
 			columnLabel = idx.ColumnLabel()
 		}
 	}
