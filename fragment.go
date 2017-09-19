@@ -67,7 +67,7 @@ const (
 
 // Fragment represents the intersection of a frame and slice in an index.
 type Fragment struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	// Composite identifiers
 	index string
@@ -586,8 +586,8 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 // FieldSum returns the sum of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
 	// Compute count based on the existance bit.
 	row := f.row(uint64(bitDepth), true, true)
