@@ -113,8 +113,8 @@ func (f *Frame) RowAttrStore() *AttrStore { return f.rowAttrStore }
 
 // MaxSlice returns the max slice in the frame.
 func (f *Frame) MaxSlice() uint64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
 	var max uint64
 	for _, view := range f.views {
@@ -129,8 +129,8 @@ func (f *Frame) MaxSlice() uint64 {
 
 // MaxInverseSlice returns the max inverse slice in the frame.
 func (f *Frame) MaxInverseSlice() uint64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
 	view := f.views[ViewInverse]
 	if view == nil {
