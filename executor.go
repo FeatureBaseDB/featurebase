@@ -524,27 +524,23 @@ func (e *Executor) executeDifferenceSlice(ctx context.Context, index string, c *
 }
 
 func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
-	/*
-		// Fetch column label from index.
-		idx := e.Holder.Index(index)
-		if idx == nil {
-			return nil, ErrIndexNotFound
-		}
-		columnLabel := idx.ColumnLabel()
+	// Fetch column label from index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+	columnLabel := idx.ColumnLabel()
 
-		// Fetch frame & row label based on argument.
-		frame, _ := c.Args["frame"].(string)
-		if frame == "" {
-			frame = DefaultFrame
-		}
-		f := e.Holder.Frame(index, frame)
-		if f == nil {
-			return nil, ErrFrameNotFound
-		}
-		rowLabel := f.RowLabel()
-	*/
-	rowLabel := DefaultRowLabel
-	columnLabel := DefaultColumnLabel
+	// Fetch frame & row label based on argument.
+	frame, _ := c.Args["frame"].(string)
+	if frame == "" {
+		frame = DefaultFrame
+	}
+	f := e.Holder.Frame(index, frame)
+	if f == nil {
+		return nil, ErrFrameNotFound
+	}
+	rowLabel := f.RowLabel()
 
 	// Return an error if both the row and column label are specified.
 	rowID, rowOK, rowErr := c.UintArg(rowLabel)
@@ -558,19 +554,10 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 		return nil, fmt.Errorf("Bitmap() must specify either %s or %s values", rowLabel, columnLabel)
 	}
 
-	frame, _ := c.Args["frame"].(string)
-	if frame == "" {
-		frame = DefaultFrame
-	}
 	// Determine row or column orientation.
 	view, id := ViewStandard, rowID
 	if columnOK {
 		view, id = ViewInverse, columnID
-		// Fetch frame & row label based on argument.
-		f := e.Holder.Frame(index, frame)
-		if f == nil {
-			return nil, ErrFrameNotFound
-		}
 		if !f.InverseEnabled() {
 			return nil, fmt.Errorf("Bitmap() cannot retrieve columns unless inverse storage enabled")
 		}
@@ -1505,7 +1492,9 @@ func (e *Executor) mapperLocal(ctx context.Context, slices []uint64, mapFn mapFu
 	ch := make(chan mapResponse, len(slices))
 
 	for _, slice := range slices {
+		e.Holder.logger().Printf("launching gr for slice: %v", slice)
 		go func(slice uint64) {
+			e.Holder.logger().Printf("started gr for slice: %v", slice)
 			result, err := mapFn(slice)
 
 			// Return response to the channel.
