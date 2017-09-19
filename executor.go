@@ -1554,13 +1554,17 @@ func (e *Executor) mapperLocal(ctx context.Context, slices []uint64, mapFn mapFu
 	ch := make(chan mapResponse, len(slices))
 
 	for _, slice := range slices {
-		result, err := mapFn(slice)
+		e.Holder.logger().Printf("launching gr for slice: %v", slice)
+		go func(slice uint64) {
+			e.Holder.logger().Printf("started gr for slice: %v", slice)
+			result, err := mapFn(slice)
 
-		// Return response to the channel.
-		select {
-		case <-ctx.Done():
-		case ch <- mapResponse{result: result, err: err}:
-		}
+			// Return response to the channel.
+			select {
+			case <-ctx.Done():
+			case ch <- mapResponse{result: result, err: err}:
+			}
+		}(slice)
 	}
 
 	// Reduce results
