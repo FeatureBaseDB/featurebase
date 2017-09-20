@@ -586,11 +586,8 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 // FieldSum returns the sum of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
 	// Compute count based on the existance bit.
-	row := f.row(uint64(bitDepth), true, true)
+	row := f.Row(uint64(bitDepth))
 	if filter != nil {
 		count = row.IntersectionCount(filter)
 	} else {
@@ -605,7 +602,7 @@ func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, e
 	//   10*(2^0) + 4*(2^1) + 3*(2^2) = 30
 	//
 	for i := uint(0); i < bitDepth; i++ {
-		row := f.row(uint64(i), true, true)
+		row := f.Row(uint64(i))
 		cnt := uint64(0)
 		if filter != nil {
 			cnt = row.IntersectionCount(filter)
