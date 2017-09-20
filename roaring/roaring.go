@@ -966,7 +966,7 @@ const RunMaxSize = 2048
 // an array or RLE container is used, depending on the contents. For containers
 // with more than 4,096 values, the values are encoded into bitmaps.
 type container struct {
-	container_type byte         // number of integers in container
+	container_type byte         // array, bitmap, or run
 	n              int          // number of integers in container
 	array          []uint16     // used for array containers
 	bitmap         []uint64     // used for bitmap containers
@@ -1623,6 +1623,19 @@ func (c *container) clone() *container {
 		copy(other.runs, c.runs)
 	}
 
+	return other
+}
+
+// flipBitmap returns a new bitmap containter containing the inverse of all
+// bits in c.
+func (c *container) flipBitmap() *container {
+	other := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+
+	for i, bitmap := range c.bitmap {
+		other.bitmap[i] = ^bitmap
+	}
+
+	other.n = other.count()
 	return other
 }
 
@@ -2520,6 +2533,10 @@ func differenceRunArray(a, b *container) *container {
 func differenceRunBitmap(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
+	}
+	// If a is full, difference is the flip of b.
+	if a.runs[0].start == 0 && a.runs[0].last == 65535 {
+		return b.flipBitmap()
 	}
 	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
 	return differenceRunIterator(a, itr)
