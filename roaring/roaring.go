@@ -2532,45 +2532,34 @@ func differenceRunArray(a, b *container) *container {
 // differenceRunBitmap computes the difference of an run from a bitmap.
 func differenceRunBitmap(a, b *container) *container {
 	// If a is full, difference is the flip of b.
-	if a.runs[0].start == 0 && a.runs[0].last == 65535 {
+	if a.n == 65536 {
 		return b.flipBitmap()
 	}
 
-	output := &container{container_type: ContainerRun}
-	output.n = a.n
-	for j := 0; j < len(a.runs); j++ {
-		run := a.runs[j]
-		for bit := a.runs[j].start; bit <= a.runs[j].last; bit++ {
-			if b.bitmapContains(bit) {
-				output.n--
-				if run.start == bit {
-					run.start++
-				} else if bit == run.last {
-					run.last--
-				} else {
-					run.last = bit - 1
-					if run.last >= run.start {
-						output.runs = append(output.runs, run)
-					}
-					run.start = bit + 1
-					run.last = a.runs[j].last
-				}
-				if run.start > run.last {
-					break
-				}
-			}
-		}
-		if run.start <= run.last {
-			output.runs = append(output.runs, run)
+	output := &container{container_type: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
+	for _, run := range a.runs {
+		x := run.start / 64                                 // start index into b.bitmap
+		y := run.last / 64                                  // end index into b.bitmap
+		var L uint64 = maxBitmap >> (64 - (run.start % 64)) // on mask for low bits out of range
+		var H uint64 = maxBitmap << ((run.last % 64) + 1)   // on mask for high bits out of range
 
+		if x == y {
+			bits := ^(b.bitmap[x] | L | H)
+			output.bitmap[x] |= bits
+			output.n += int(popcnt(bits))
+			continue
 		}
-	}
+		output.bitmap[x] |= ^(b.bitmap[x] | L)
+		output.n += int(popcnt(^(b.bitmap[x] | L)))
+		for i := x + 1; i < y; i++ {
 
-	if output.n < ArrayMaxSize && int(len(output.runs)) > output.n/2 {
-		output.runToArray()
-	} else if len(output.runs) > RunMaxSize {
-		output.runToBitmap()
+			output.bitmap[i] = ^b.bitmap[i]
+			output.n += int(popcnt(output.bitmap[i]))
+		}
+		output.bitmap[y] |= ^(b.bitmap[y] | H)
+		output.n += int(popcnt(^(b.bitmap[y] | H)))
 	}
+	output.Optimize()
 	return output
 }
 

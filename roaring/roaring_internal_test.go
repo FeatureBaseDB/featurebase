@@ -1465,13 +1465,20 @@ func TestDifferenceRunArray(t *testing.T) {
 	}
 }
 func MakeBitmap(start []uint64) []uint64 {
-
 	b := make([]uint64, bitmapN)
 	for i, v := range start {
 		b[i] = v
 
 	}
 	return b
+}
+
+func bitmap(positions ...uint64) []uint64 {
+	ret := make([]uint64, bitmapN)
+	for _, pos := range positions {
+		ret[pos/64] |= 1 << (pos % 64)
+	}
+	return ret
 }
 
 func TestDifferenceRunBitmap(t *testing.T) {
@@ -1523,6 +1530,68 @@ func TestDifferenceRunBitmap(t *testing.T) {
 		ret := differenceRunBitmap(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
+		}
+	}
+}
+
+func TestDifferenceRunBitmapOutputBitmap(t *testing.T) {
+	a := &container{}
+	b := &container{bitmap: make([]uint64, bitmapN)}
+	tests := []struct {
+		runs   []interval16
+		bitmap []uint64
+		exp    []uint64
+	}{
+		{
+			runs:   []interval16{{start: 0, last: 65535}},
+			bitmap: bitmapEvens(),
+			exp:    bitmapOdds(),
+		},
+		{
+			runs:   []interval16{{start: 0, last: 65535}},
+			bitmap: bitmapOdds(),
+			exp:    bitmapEvens(),
+		},
+	}
+	for i, test := range tests {
+		a.runs = test.runs
+		a.n = a.runCountRange(0, 65535)
+		b.bitmap = test.bitmap
+		b.n = b.bitmapCountRange(0, 65535)
+		ret := differenceRunBitmap(a, b)
+		if !reflect.DeepEqual(ret.bitmap, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %#v", i, test.exp[:10], ret)
+		}
+	}
+}
+
+func TestDifferenceRunBitmapOutputArray(t *testing.T) {
+	a := &container{container_type: ContainerRun}
+	b := &container{container_type: ContainerBitmap}
+	tests := []struct {
+		runs   []interval16
+		bitmap []uint64
+		exp    []uint16
+	}{
+		{
+			runs:   []interval16{{start: 10, last: 20}},
+			bitmap: bitmap(2, 10, 12, 14, 16, 18, 22, 100),
+			exp:    []uint16{11, 13, 15, 17, 19, 20},
+		},
+		{
+			runs:   []interval16{{start: 17, last: 20}, {start: 62, last: 66}, {start: 98, last: 100}},
+			bitmap: bitmap(2, 18, 22, 63, 65, 81, 100),
+			exp:    []uint16{17, 19, 20, 62, 64, 66, 98, 99},
+		},
+	}
+	for i, test := range tests {
+		a.runs = test.runs
+		a.n = a.runCountRange(0, 65535)
+		b.bitmap = test.bitmap
+		b.n = b.bitmapCountRange(0, 65535)
+		ret := differenceRunBitmap(a, b)
+		if !reflect.DeepEqual(ret.array, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
 		}
 	}
 }
