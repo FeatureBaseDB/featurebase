@@ -1464,6 +1464,15 @@ func TestDifferenceRunArray(t *testing.T) {
 		}
 	}
 }
+func MakeBitmap(start []uint64) []uint64 {
+
+	b := make([]uint64, bitmapN)
+	for i, v := range start {
+		b[i] = v
+
+	}
+	return b
+}
 
 func TestDifferenceRunBitmap(t *testing.T) {
 	a := &container{}
@@ -1475,32 +1484,32 @@ func TestDifferenceRunBitmap(t *testing.T) {
 	}{
 		{
 			runs:   []interval16{{start: 0, last: 63}},
-			bitmap: []uint64{0x0000FFFF000000F0},
+			bitmap: MakeBitmap([]uint64{0x0000FFFF000000F0}),
 			exp:    []interval16{{start: 0, last: 3}, {start: 8, last: 31}, {start: 48, last: 63}},
 		},
 		{
 			runs:   []interval16{{start: 0, last: 63}},
-			bitmap: []uint64{0x8000000000000000},
+			bitmap: MakeBitmap([]uint64{0x8000000000000000}),
 			exp:    []interval16{{start: 0, last: 62}},
 		},
 		{
 			runs:   []interval16{{start: 0, last: 63}},
-			bitmap: []uint64{0x0000000000000001},
+			bitmap: MakeBitmap([]uint64{0x0000000000000001}),
 			exp:    []interval16{{start: 1, last: 63}},
 		},
 		{
 			runs:   []interval16{{start: 0, last: 63}},
-			bitmap: []uint64{0x0, 0x0000000000000001},
+			bitmap: MakeBitmap([]uint64{0x0, 0x0000000000000001}),
 			exp:    []interval16{{start: 0, last: 63}},
 		},
 		{
 			runs:   []interval16{{start: 0, last: 65}},
-			bitmap: []uint64{0x0, 0x0000000000000001},
+			bitmap: MakeBitmap([]uint64{0x0, 0x0000000000000001}),
 			exp:    []interval16{{start: 0, last: 63}, {start: 65, last: 65}},
 		},
 		{
 			runs:   []interval16{{start: 0, last: 65}},
-			bitmap: []uint64{0x0, 0x8000000000000000},
+			bitmap: MakeBitmap([]uint64{0x0, 0x8000000000000000}),
 			exp:    []interval16{{start: 0, last: 65}},
 		},
 	}

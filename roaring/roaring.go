@@ -2531,15 +2531,46 @@ func differenceRunArray(a, b *container) *container {
 
 // differenceRunBitmap computes the difference of an run from a bitmap.
 func differenceRunBitmap(a, b *container) *container {
-	if a.n == 0 || b.n == 0 {
-		return a.clone()
-	}
 	// If a is full, difference is the flip of b.
 	if a.runs[0].start == 0 && a.runs[0].last == 65535 {
 		return b.flipBitmap()
 	}
-	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
-	return differenceRunIterator(a, itr)
+	output := &container{container_type: ContainerRun}
+	output.n = a.n
+	for j := 0; j < len(a.runs); j++ {
+		run := a.runs[j]
+		for bit := a.runs[j].start; bit <= a.runs[j].last; bit++ {
+			if b.bitmapContains(bit) {
+				output.n--
+				if run.start == bit {
+					run.start++
+				} else if bit == run.last {
+					run.last--
+				} else {
+					run.last = bit - 1
+					if run.last >= run.start {
+						output.runs = append(output.runs, run)
+					}
+					run.start = bit + 1
+					run.last = a.runs[j].last
+				}
+				if run.start > run.last {
+					break
+				}
+			}
+		}
+		if run.start <= run.last {
+			output.runs = append(output.runs, run)
+
+		}
+	}
+
+	if output.n < ArrayMaxSize && int(len(output.runs)) > output.n/2 {
+		output.runToArray()
+	} else if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
+	}
+	return output
 }
 
 func differenceRunIterator(a *container, itr containerIterator) *container {
