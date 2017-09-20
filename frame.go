@@ -874,6 +874,11 @@ func (f *Frame) ImportValue(fieldName string, columnIDs, values []uint64) error 
 	dataByFragment := make(map[importKey]importValueData)
 	for i := range columnIDs {
 		columnID, value := columnIDs[i], values[i]
+		if int64(value) > field.Max {
+			return fmt.Errorf("%v, columnID=%v, value=%v", ErrFieldValueTooHigh, columnID, value)
+		} else if int64(value) < field.Min {
+			return fmt.Errorf("%v, columnID=%v, value=%v", ErrFieldValueTooLow, columnID, value)
+		}
 
 		// Attach value to each field view.
 		for _, name := range []string{viewName} {
