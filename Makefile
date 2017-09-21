@@ -51,7 +51,6 @@ pilosa: vendor
 	go build -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
 release-build: vendor
-	mkdir -p build/pilosa-$(IDENTIFIER)
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
 	cp LICENSE README.md build/pilosa-$(IDENTIFIER)
 	tar -cvz -C build -f build/pilosa-$(IDENTIFIER).tar.gz pilosa-$(IDENTIFIER)/
@@ -63,7 +62,6 @@ release:
 	make release-build GOOS=darwin GOARCH=amd64
 
 prerelease-build: vendor
-	mkdir -p build/pilosa-master
 	make pilosa FLAGS="-o build/pilosa-master-$(GOOS)-$(GOARCH)/pilosa"
 	cp LICENSE README.md build/pilosa-master-$(GOOS)-$(GOARCH)
 	tar -cvz -C build -f build/pilosa-master-$(GOOS)-$(GOARCH).tar.gz pilosa-master-$(GOOS)-$(GOARCH)/
