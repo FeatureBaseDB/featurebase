@@ -166,10 +166,11 @@ func (f *Frame) SetRowLabel(v string) error {
 
 // RowLabel returns the row label.
 func (f *Frame) RowLabel() string {
-	f.mu.RLock()
-	v := f.rowLabel
-	f.mu.RUnlock()
-	return v
+	return DefaultRowLabel
+	// f.mu.RLock()
+	// v := f.rowLabel
+	// f.mu.RUnlock()
+	// return v
 }
 
 // CacheType returns the caching mode for the frame.

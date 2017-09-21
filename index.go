@@ -129,10 +129,11 @@ func (i *Index) SetColumnLabel(v string) error {
 
 // ColumnLabel returns the column label.
 func (i *Index) ColumnLabel() string {
-	i.mu.RLock()
-	v := i.columnLabel
-	i.mu.RUnlock()
-	return v
+	return DefaultColumnLabel
+	// i.mu.RLock()
+	// v := i.columnLabel
+	// i.mu.RUnlock()
+	// return v
 }
 
 // Options returns all options for this index.
@@ -629,7 +630,7 @@ type IndexOptions struct {
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
-// Encode converts i into its internal representation.
+// Encodne converts i into its internal representation.
 func (i *IndexOptions) Encode() *internal.IndexMeta {
 	return &internal.IndexMeta{
 		ColumnLabel: i.ColumnLabel,
