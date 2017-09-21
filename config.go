@@ -42,14 +42,14 @@ const (
 	// DefaultMaxWritesPerRequest is the default number of writes per request.
 	DefaultMaxWritesPerRequest = 5000
 
-	// DefaultPushPullInterval is the push pull interval.
-	DefaultPushPullInterval = 15 * time.Second
+	// DefaultGossipPushPullInterval is the push pull interval.
+	DefaultGossipPushPullInterval = 15 * time.Second
 
 	// DefaultGossipInterval is the Gossip interval.
 	DefaultGossipInterval = 100 * time.Millisecond
 
-	// DefaultProbeInterval is the Gossip Probe intercal.
-	DefaultProbeInterval = time.Second
+	// DefaultGossipProbeInterval is the Gossip Probe intercal.
+	DefaultGossipProbeInterval = time.Second
 )
 
 // ClusterTypes set of cluster types.
@@ -107,9 +107,9 @@ func NewConfig() *Config {
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics
 
-	c.GossipPushPullInterval = Duration(DefaultPushPullInterval)
+	c.GossipPushPullInterval = Duration(DefaultGossipPushPullInterval)
 	c.GossipInterval = Duration(DefaultGossipInterval)
-	c.GossipProbeInterval = Duration(DefaultProbeInterval)
+	c.GossipProbeInterval = Duration(DefaultGossipProbeInterval)
 	c.GossipPort = DefaultGossipPort
 	c.GossipSeed = DefaultHost + ":" + DefaultGossipPort
 	return c
