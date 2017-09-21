@@ -245,38 +245,38 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 }
 
 // Ensure program can set column attributes with columnLabel option.
-func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
-	m := MustRunMain()
-	defer m.Close()
+// func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
+// 	m := MustRunMain()
+// 	defer m.Close()
 
-	// Create frames.
-	client := m.Client()
-	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{ColumnLabel: "col"}); err != nil && err != pilosa.ErrIndexExists {
-		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "i", "x", pilosa.FrameOptions{}); err != nil {
-		t.Fatal(err)
-	}
+// 	// Create frames.
+// 	client := m.Client()
+// 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{ColumnLabel: "col"}); err != nil && err != pilosa.ErrIndexExists {
+// 		t.Fatal(err)
+// 	} else if err := client.CreateFrame(context.Background(), "i", "x", pilosa.FrameOptions{}); err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Set bits on row.
-	if _, err := m.Query("i", "", `SetBit(rowID=1, frame="x", col=100)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(rowID=1, frame="x", col=101)`); err != nil {
-		t.Fatal(err)
-	}
+// 	// Set bits on row.
+// 	if _, err := m.Query("i", "", `SetBit(rowID=1, frame="x", col=100)`); err != nil {
+// 		t.Fatal(err)
+// 	} else if _, err := m.Query("i", "", `SetBit(rowID=1, frame="x", col=101)`); err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Set column attributes.
-	if _, err := m.Query("i", "", `SetColumnAttrs(col=100, foo="bar")`); err != nil {
-		t.Fatal(err)
-	}
+// 	// Set column attributes.
+// 	if _, err := m.Query("i", "", `SetColumnAttrs(col=100, foo="bar")`); err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	// Query row.
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(rowID=1, frame="x")`); err != nil {
-		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
-		t.Fatalf("unexpected result: %s", res)
-	}
+// 	// Query row.
+// 	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(rowID=1, frame="x")`); err != nil {
+// 		t.Fatal(err)
+// 	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+// 		t.Fatalf("unexpected result: %s", res)
+// 	}
 
-}
+// }
 
 // Ensure program can set bits on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
