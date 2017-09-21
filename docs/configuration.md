@@ -146,8 +146,6 @@ Any flag that has a value that is a comma separated list on the command line bec
 * Config:
 
     ```toml
-    [cluster]
-    type = "gossip"
     gossip-seed = "localhost:11101"
     ```
 
