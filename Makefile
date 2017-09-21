@@ -1,4 +1,4 @@
-.PHONY: dep docker pilosa crossbuild install generate statik release test cover cover-pkg cover-viz
+.PHONY: dep docker pilosa release-build prerelease-build release prerelease prerelease-upload install generate statik test cover cover-pkg cover-viz
 
 DEP := $(shell command -v dep 2>/dev/null)
 STATIK := $(shell command -v statik 2>/dev/null)
@@ -50,17 +50,28 @@ cover-viz: cover
 pilosa: vendor
 	go build -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
-crossbuild: vendor
-	mkdir -p build/pilosa-$(IDENTIFIER)
+release-build: vendor
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
 	cp LICENSE README.md build/pilosa-$(IDENTIFIER)
 	tar -cvz -C build -f build/pilosa-$(IDENTIFIER).tar.gz pilosa-$(IDENTIFIER)/
 	@echo "Created release build: build/pilosa-$(IDENTIFIER).tar.gz"
 
 release:
-	make crossbuild GOOS=linux GOARCH=amd64
-	make crossbuild GOOS=linux GOARCH=386
-	make crossbuild GOOS=darwin GOARCH=amd64
+	make release-build GOOS=linux GOARCH=amd64
+	make release-build GOOS=linux GOARCH=386
+	make release-build GOOS=darwin GOARCH=amd64
+
+prerelease-build: vendor
+	make pilosa FLAGS="-o build/pilosa-master-$(GOOS)-$(GOARCH)/pilosa"
+	cp LICENSE README.md build/pilosa-master-$(GOOS)-$(GOARCH)
+	tar -cvz -C build -f build/pilosa-master-$(GOOS)-$(GOARCH).tar.gz pilosa-master-$(GOOS)-$(GOARCH)/
+	@echo "Created pre-release build: build/pilosa-master-$(GOOS)-$(GOARCH).tar.gz"
+
+prerelease:
+	make prerelease-build GOOS=linux GOARCH=amd64
+
+prerelease-upload: prerelease
+	aws s3 cp build/pilosa-master-linux-amd64.tar.gz s3://build.pilosa.com/pilosa-master-linux-amd64.tar.gz --acl public-read
 
 install: vendor
 	go install -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
