@@ -92,6 +92,7 @@ type Fragment struct {
 
 	// Cache containing full rows (not just counts).
 	rowCache BitmapCache
+	rcmu     sync.RWMutex
 
 	// Cached checksums for each block.
 	checksums map[int][]byte
@@ -345,14 +346,16 @@ func (f *Fragment) logger() *log.Logger { return log.New(f.LogOutput, "", log.Ls
 
 // Row returns a row by ID.
 func (f *Fragment) Row(rowID uint64) *Bitmap {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.row(rowID, true, true)
 }
 
 func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *Bitmap {
 	if checkRowCache {
+		f.rcmu.RLock()
 		r, ok := f.rowCache.Fetch(rowID)
+		f.rcmu.RUnlock()
 		if ok && r != nil {
 			return r
 		}
@@ -375,7 +378,9 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *B
 	bm.InvalidateCount()
 
 	if updateRowCache {
+		f.rcmu.Lock()
 		f.rowCache.Add(rowID, bm)
+		f.rcmu.Unlock()
 	}
 
 	return bm
