@@ -23,10 +23,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -145,29 +143,12 @@ func (m *Command) SetupServer() error {
 	}
 	m.Server.Host = bindWithDefaults
 
-	// Set internal port (string).
-	gossipPortStr := pilosa.DefaultGossipPort
-	if m.Config.GossipPort != "" {
-		gossipPortStr = m.Config.GossipPort
-	}
-
 	switch m.Config.Cluster.Type {
 	case pilosa.ClusterGossip:
-		gossipPort, err := strconv.Atoi(gossipPortStr)
+		gossipNodeSet, err := gossip.NewGossipNodeSet(bindWithDefaults, m.Config, m.Server)
 		if err != nil {
 			return err
 		}
-		gossipSeed := pilosa.DefaultHost + ":" + pilosa.DefaultGossipPort
-		if m.Config.GossipSeed != "" {
-			gossipSeed = m.Config.GossipSeed
-		}
-
-		// get the host portion of addr to use for binding
-		gossipHost, _, err := net.SplitHostPort(bindWithDefaults)
-		if err != nil {
-			gossipHost = m.Config.Bind
-		}
-		gossipNodeSet := gossip.NewGossipNodeSet(bindWithDefaults, gossipHost, gossipPort, gossipSeed, m.Server)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet
@@ -194,13 +175,13 @@ func GetLogWriter(path string, defaultWriter io.Writer) (io.Writer, error) {
 	// This is split out so it can be used in NewServeCmd as well as SetupServer
 	if path == "" {
 		return defaultWriter, nil
-	} else {
-		logFile, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
-		if err != nil {
-			return nil, err
-		}
-		return logFile, nil
 	}
+
+	logFile, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	if err != nil {
+		return nil, err
+	}
+	return logFile, nil
 }
 
 // Close shuts down the server.

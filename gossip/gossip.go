@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"strconv"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -123,12 +125,20 @@ type gossipConfig struct {
 }
 
 // NewGossipNodeSet returns a new instance of GossipNodeSet.
-func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, server *pilosa.Server) *GossipNodeSet {
+func NewGossipNodeSet(name string, cfg *pilosa.Config, server *pilosa.Server) (*GossipNodeSet, error) {
 	g := &GossipNodeSet{
 		LogOutput: server.LogOutput,
 	}
+	gossipSeed := cfg.GossipSeed
+	gossipPort, err := strconv.Atoi(cfg.GossipPort)
+	if err != nil {
+		return nil, err
+	}
+	gossipHost, _, err := net.SplitHostPort(name)
+	if err != nil {
+		gossipHost = cfg.Bind
+	}
 
-	//TODO: pull memberlist config from pilosa.cfg file
 	g.config = &gossipConfig{
 		memberlistConfig: memberlist.DefaultLocalConfig(),
 		gossipSeed:       gossipSeed,
@@ -139,10 +149,13 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	g.config.memberlistConfig.AdvertiseAddr = pilosa.HostToIP(gossipHost)
 	g.config.memberlistConfig.AdvertisePort = gossipPort
 	g.config.memberlistConfig.Delegate = g
+	g.config.memberlistConfig.PushPullInterval = time.Duration(cfg.GossipPushPullInterval)
+	g.config.memberlistConfig.GossipInterval = time.Duration(cfg.GossipInterval)
+	g.config.memberlistConfig.ProbeInterval = time.Duration(cfg.GossipProbeInterval)
 
 	g.statusHandler = server
 
-	return g
+	return g, nil
 }
 
 // SendSync implementation of the Broadcaster interface.
