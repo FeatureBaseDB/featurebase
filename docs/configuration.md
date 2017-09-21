@@ -65,6 +65,17 @@ Any flag that has a value that is a comma separated list on the command line bec
     bind = localhost:10101
     ```
 
+#### Data Dir
+
+* Description: Directory to store Pilosa data files.
+* Flag: `--data-dir="~/.pilosa"`
+* Env: `PILOSA_DATA_DIR="~/.pilosa"`
+* Config:
+
+    ```toml
+    data-dir = "~/.pilosa"
+    ```
+
 #### Gossip Port
 
 * Description: Port to which Pilosa should bind for internal communication.
@@ -74,6 +85,17 @@ Any flag that has a value that is a comma separated list on the command line bec
 
     ```toml
     gossip-port = 11101
+    ```
+
+#### Gossip Seed
+
+* Description: When using the gossip [Cluster Type]({{< ref "#cluster-type" >}}), this specifies which internal host should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip-seed` for all three nodes can be configured to be the address of `node0`.
+* Flag: `--gossip-seed="localhost:11101"`
+* Env: `PILOSA_GOSSIP_SEED="localhost:11101"`
+* Config:
+
+    ```toml
+    gossip-seed = "localhost:11101"
     ```
 
 #### Cluster Hosts
@@ -125,28 +147,6 @@ Any flag that has a value that is a comma separated list on the command line bec
     ```toml
     [cluster]
     type = "gossip"
-    ```
-
-#### Data Dir
-
-* Description: Directory to store Pilosa data files.
-* Flag: `--data-dir="~/.pilosa"`
-* Env: `PILOSA_DATA_DIR="~/.pilosa"`
-* Config:
-
-    ```toml
-    data-dir = "~/.pilosa"
-    ```
-
-#### Gossip Seed
-
-* Description: When using the gossip [Cluster Type]({{< ref "#cluster-type" >}}), this specifies which internal host should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip-seed` for all three nodes can be configured to be the address of `node0`.
-* Flag: `--gossip-seed="localhost:11101"`
-* Env: `PILOSA_GOSSIP_SEED="localhost:11101"`
-* Config:
-
-    ```toml
-    gossip-seed = "localhost:11101"
     ```
 
 #### Profile CPU
