@@ -238,7 +238,7 @@ func (f *Fragment) openStorage() error {
 
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
-	f.rowCache = nil
+	f.rowCache = NewShardedCache(100)
 
 	return nil
 
@@ -347,7 +347,7 @@ func (f *Fragment) logger() *log.Logger { return log.New(f.LogOutput, "", log.Ls
 func (f *Fragment) Row(rowID uint64) *Bitmap {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.row(rowID, false, false)
+	return f.row(rowID, true, true)
 }
 
 func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *Bitmap {
@@ -367,7 +367,7 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *B
 	// This causes unexpected results when we cache the row and try to use it later.
 	bm := &Bitmap{
 		segments: []BitmapSegment{{
-			data:     *data,
+			data:     *data.Clone(),
 			slice:    f.slice,
 			writable: false,
 		}},
@@ -416,7 +416,7 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	}
 
 	// Get the row from row cache or fragment.storage.
-	bm := f.row(rowID, false, false)
+	bm := f.row(rowID, true, true)
 	bm.SetBit(columnID)
 
 	// Update the cache.
@@ -468,7 +468,7 @@ func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	}
 
 	// Get the row from cache or fragment.storage.
-	bm := f.row(rowID, false, false)
+	bm := f.row(rowID, true, true)
 	bm.ClearBit(columnID)
 
 	// Update the cache.
