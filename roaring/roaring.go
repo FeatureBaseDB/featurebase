@@ -2550,6 +2550,7 @@ func differenceRunArray(a, b *container) *container {
 				continue
 			}
 			output.runs = append(output.runs, interval16{start: start, last: vb - 1})
+			output.n += int(vb - start)
 			start = vb + 1
 			bidx++
 			if bidx >= len(b.array) {
@@ -2560,6 +2561,7 @@ func differenceRunArray(a, b *container) *container {
 
 		if start <= run.last {
 			output.runs = append(output.runs, interval16{start: start, last: run.last})
+			output.n += int(run.last - start + 1)
 		}
 	}
 	output.Optimize()
