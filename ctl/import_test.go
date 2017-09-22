@@ -71,11 +71,9 @@ func TestImportCommand_Run(t *testing.T) {
 	s.Handler.Holder = hldr.Holder
 	cm.Host = s.Host()
 
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", strings.NewReader("")))
-
 	cm.Index = "i"
 	cm.Frame = "f"
+	cm.CreateSchema = true
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
 	if err != nil {
