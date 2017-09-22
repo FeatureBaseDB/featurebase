@@ -361,7 +361,7 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *B
 		}
 		f.rcmu.Lock()
 		defer f.rcmu.Unlock()
-		r, ok := f.rowCache.Fetch(rowID)
+		r, ok = f.rowCache.Fetch(rowID)
 		if ok && r != nil {
 			return r
 		}
