@@ -763,7 +763,7 @@ func TestDifferenceMixed(t *testing.T) {
 	res := difference(a, b)
 
 	if !reflect.DeepEqual(res.array, []uint16{5, 7, 9}) {
-		t.Fatalf("test #1 expected %v, but got %v", []uint16{5, 7, 9}, res.array)
+		t.Fatalf("test #1 expected %v, but got %#v", []uint16{5, 7, 9}, res)
 	}
 
 	res = difference(b, a)
