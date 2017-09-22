@@ -47,7 +47,7 @@ It will load existing data from the configured
 directory, and start listening client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			runtime.SetBlockProfileRate(10000000) // every 10 ms
+			runtime.SetBlockProfileRate(1000000) // every 1 ms
 			logOutput, err := server.GetLogWriter(Server.Config.LogPath, stderr)
 			if err != nil {
 				return err
