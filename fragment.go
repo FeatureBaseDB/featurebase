@@ -91,6 +91,7 @@ type Fragment struct {
 	maxRowID uint64
 
 	// Cache containing full rows (not just counts).
+	rcmu     sync.RWMutex
 	rowCache BitmapCache
 
 	// Cached checksums for each block.
@@ -238,7 +239,7 @@ func (f *Fragment) openStorage() error {
 
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
-	f.rowCache = NewShardedCache(100)
+	f.rowCache = &SimpleCache{make(map[uint64]*Bitmap)}
 
 	return nil
 
@@ -352,6 +353,14 @@ func (f *Fragment) Row(rowID uint64) *Bitmap {
 
 func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *Bitmap {
 	if checkRowCache {
+		f.rcmu.RLock()
+		r, ok := f.rowCache.Fetch(rowID)
+		f.rcmu.RUnlock()
+		if ok && r != nil {
+			return r
+		}
+		f.rcmu.Lock()
+		defer f.rcmu.Unlock()
 		r, ok := f.rowCache.Fetch(rowID)
 		if ok && r != nil {
 			return r
@@ -375,6 +384,10 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *B
 	bm.InvalidateCount()
 
 	if updateRowCache {
+		if !checkRowCache {
+			f.rcmu.Lock()
+			defer f.rcmu.Unlock()
+		}
 		f.rowCache.Add(rowID, bm)
 	}
 

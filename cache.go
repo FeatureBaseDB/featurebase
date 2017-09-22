@@ -458,8 +458,7 @@ func (p uint64Slice) merge(other []uint64) []uint64 {
 	return ret
 }
 
-// BitmapCache provides an interface for caching full bitmaps. Implementations
-// must be threadsafe.
+// BitmapCache provides an interface for caching full bitmaps.
 type BitmapCache interface {
 	Fetch(id uint64) (*Bitmap, bool)
 	Add(id uint64, b *Bitmap)
@@ -471,55 +470,49 @@ type BitmapCache interface {
 // A read-heavy use case would cause the cache to get bigger, potentially causing the
 // node to run out of memory.
 type SimpleCache struct {
-	mu    sync.RWMutex
 	cache map[uint64]*Bitmap
 }
 
 // Fetch retrieves the bitmap at the id in the cache.
 func (s *SimpleCache) Fetch(id uint64) (*Bitmap, bool) {
-	s.mu.RLock()
 	m, ok := s.cache[id]
-	s.mu.RUnlock()
 	return m, ok
 }
 
 // Add adds the bitmap to the cache, keyed on the id.
 func (s *SimpleCache) Add(id uint64, b *Bitmap) {
-	s.mu.Lock()
 	s.cache[id] = b
-	s.mu.Unlock()
 }
 
-type ShardedCache struct {
-	mus    []sync.RWMutex
-	caches []map[uint64]*Bitmap
-	size   uint64
-}
+// type ShardedCache struct {
+// 	caches []map[uint64]*Bitmap
+// 	size   uint64
+// }
 
-func NewShardedCache(size uint64) *ShardedCache {
-	sc := &ShardedCache{
-		mus:    make([]sync.RWMutex, int(size)),
-		caches: make([]map[uint64]*Bitmap, int(size)),
-		size:   size,
-	}
-	for i := 0; i < int(size); i++ {
-		sc.caches[i] = make(map[uint64]*Bitmap)
-	}
-	return sc
-}
+// func NewShardedCache(size uint64) *ShardedCache {
+// 	sc := &ShardedCache{
+// 		mus:    make([]sync.RWMutex, int(size)),
+// 		caches: make([]map[uint64]*Bitmap, int(size)),
+// 		size:   size,
+// 	}
+// 	for i := 0; i < int(size); i++ {
+// 		sc.caches[i] = make(map[uint64]*Bitmap)
+// 	}
+// 	return sc
+// }
 
-func (s *ShardedCache) Fetch(id uint64) (*Bitmap, bool) {
-	s.mus[id%s.size].RLock()
-	m, ok := s.caches[id%s.size][id]
-	s.mus[id%s.size].RUnlock()
-	return m, ok
-}
+// func (s *ShardedCache) Fetch(id uint64) (*Bitmap, bool) {
+// 	s.mus[id%s.size].RLock()
+// 	m, ok := s.caches[id%s.size][id]
+// 	s.mus[id%s.size].RUnlock()
+// 	return m, ok
+// }
 
-func (s *ShardedCache) Add(id uint64, b *Bitmap) {
-	s.mus[id%s.size].Lock()
-	s.caches[id%s.size][id] = b
-	s.mus[id%s.size].Unlock()
-}
+// func (s *ShardedCache) Add(id uint64, b *Bitmap) {
+// 	s.mus[id%s.size].Lock()
+// 	s.caches[id%s.size][id] = b
+// 	s.mus[id%s.size].Unlock()
+// }
 
 // NopCache represents a no-op Cache implementation.
 type NopCache struct {
