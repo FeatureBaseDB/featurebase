@@ -444,7 +444,6 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 			output.keys = append(output.keys, key)
 			output.containers = append(output.containers, container)
 		}
-
 	}
 	return output
 }
@@ -893,6 +892,13 @@ func (itr *Iterator) Next() (v uint64, eof bool) {
 			if itr.j == -1 {
 				itr.j++
 			}
+
+			// If the container is empty, move to the next container.
+			if len(c.runs) == 0 {
+				itr.i, itr.j = itr.i+1, -1
+				continue
+			}
+
 			r := c.runs[itr.j]
 			runLength := int(r.last - r.start)
 
