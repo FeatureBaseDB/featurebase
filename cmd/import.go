@@ -20,6 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/ctl"
 )
 
@@ -49,12 +50,20 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 			return nil
 		},
 	}
+
 	flags := importCmd.Flags()
 	flags.StringVarP(&Importer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Importer.Index, "index", "i", "", "Pilosa index to import into.")
 	flags.StringVarP(&Importer.Frame, "frame", "f", "", "Frame to import into.")
 	flags.IntVarP(&Importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
 	flags.BoolVarP(&Importer.Sort, "sort", "", false, "Enables sorting before import.")
+	flags.BoolVarP(&Importer.CreateSchema, "create", "e", false, "Create the schema if it does not exist before import.")
+	flags.Var(&Importer.IndexOptions.TimeQuantum, "index-time-quantum", "Time quantum for the index")
+	flags.Var(&Importer.FrameOptions.TimeQuantum, "frame-time-quantum", "Time quantum for the frame")
+	flags.BoolVar(&Importer.FrameOptions.InverseEnabled, "frame-inverse-enabled", false, "Enable inverse frame")
+	flags.BoolVar(&Importer.FrameOptions.RangeEnabled, "frame-range-enabled", false, "Enabled range encoded frame")
+	flags.StringVar(&Importer.FrameOptions.CacheType, "frame-cache-type", pilosa.CacheTypeRanked, "Cache type for the frame; valid values: none, lru, ranked")
+	flags.Uint32Var(&Importer.FrameOptions.CacheSize, "frame-cache-size", 50000, "Cache size for the frame")
 
 	return importCmd
 }
