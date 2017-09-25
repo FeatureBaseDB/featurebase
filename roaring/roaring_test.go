@@ -951,17 +951,55 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 // Ensure iterator can iterate over all the values on the bitmap.
 // TODO duplicate for all container types
 func TestIterator(t *testing.T) {
-	itr := roaring.NewBitmap(1, 2, 3).Iterator()
-	itr.Seek(0)
+	t.Run("bitmap", func(t *testing.T) {
+		itr := roaring.NewBitmap(1, 2, 3).Iterator()
+		itr.Seek(0)
 
-	var a []uint64
-	for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
-		a = append(a, v)
-	}
+		var a []uint64
+		for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
+			a = append(a, v)
+		}
 
-	if !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
-		t.Fatalf("unexpected values: %+v", a)
-	}
+		if !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
+			t.Fatalf("unexpected values: %+v", a)
+		}
+	})
+
+	t.Run("run", func(t *testing.T) {
+		bm1 := roaring.NewBitmap()
+		for i := uint64(0); i < 11; i += 1 {
+			bm1.Add(i)
+		}
+		bm1.Optimize()
+
+		bm2 := roaring.NewBitmap()
+		for i := uint64(0); i < 12; i += 1 {
+			bm2.Add(i)
+		}
+		bm2.Optimize()
+
+		for _, tt := range []struct {
+			bm       *roaring.Bitmap
+			expected []uint64
+		}{
+			{bm1, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}},
+			{bm2, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}},
+			{bm1.Difference(bm2), []uint64{}},
+			{bm2.Difference(bm1), []uint64{11}},
+		} {
+			itr := tt.bm.Iterator()
+			itr.Seek(0)
+
+			a := []uint64{}
+			for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
+				a = append(a, v)
+			}
+
+			if !reflect.DeepEqual(a, tt.expected) {
+				t.Fatalf("unexpected values: %#v %#v", a, tt.expected)
+			}
+		}
+	})
 }
 
 // testBM creates a bitmap with 3 containers: array, bitmap, and run.
