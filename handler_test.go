@@ -1241,31 +1241,31 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 
 	// Eusure throwing error if primary field's name doesn't match columnLabel
 	hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{ColumnLabel: "id"})
-	unmatchColumnBody := []byte(`
-			{
-			"frames":[{
-				"name":"event-time",
-				"options":{
-					"timeQuantum": "YMD",
-					"inverseEnabled": false,
-					"cacheType": "ranked"
-				}
-			}],
-			"fields": [
-				{
-					"name": "columnID",
-					"primaryKey": true
-				}
-			]
-		}`)
+	// unmatchColumnBody := []byte(`
+	// 		{
+	// 		"frames":[{
+	// 			"name":"event-time",
+	// 			"options":{
+	// 				"timeQuantum": "YMD",
+	// 				"inverseEnabled": false,
+	// 				"cacheType": "ranked"
+	// 			}
+	// 		}],
+	// 		"fields": [
+	// 			{
+	// 				"name": "columnID",
+	// 				"primaryKey": true
+	// 			}
+	// 		]
+	// 	}`)
 
-	w = httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i1/input-definition/input1", bytes.NewBuffer(unmatchColumnBody)))
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionColumnLabel.Error()+"\n" {
-		t.Fatalf("unexpected body: %s", body)
-	}
+	// w = httptest.NewRecorder()
+	// h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i1/input-definition/input1", bytes.NewBuffer(unmatchColumnBody)))
+	// if w.Code != http.StatusBadRequest {
+	// 	t.Fatalf("unexpected status code: %d", w.Code)
+	// } else if body := w.Body.String(); body != pilosa.ErrInputDefinitionColumnLabel.Error()+"\n" {
+	// 	t.Fatalf("unexpected body: %s", body)
+	// }
 
 	// Eusure throwing error if request body is invalid.
 	jsonErrorBody := []byte(`

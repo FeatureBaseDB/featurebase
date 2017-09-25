@@ -484,6 +484,36 @@ func (s *SimpleCache) Add(id uint64, b *Bitmap) {
 	s.cache[id] = b
 }
 
+// type ShardedCache struct {
+// 	caches []map[uint64]*Bitmap
+// 	size   uint64
+// }
+
+// func NewShardedCache(size uint64) *ShardedCache {
+// 	sc := &ShardedCache{
+// 		mus:    make([]sync.RWMutex, int(size)),
+// 		caches: make([]map[uint64]*Bitmap, int(size)),
+// 		size:   size,
+// 	}
+// 	for i := 0; i < int(size); i++ {
+// 		sc.caches[i] = make(map[uint64]*Bitmap)
+// 	}
+// 	return sc
+// }
+
+// func (s *ShardedCache) Fetch(id uint64) (*Bitmap, bool) {
+// 	s.mus[id%s.size].RLock()
+// 	m, ok := s.caches[id%s.size][id]
+// 	s.mus[id%s.size].RUnlock()
+// 	return m, ok
+// }
+
+// func (s *ShardedCache) Add(id uint64, b *Bitmap) {
+// 	s.mus[id%s.size].Lock()
+// 	s.caches[id%s.size][id] = b
+// 	s.mus[id%s.size].Unlock()
+// }
+
 // NopCache represents a no-op Cache implementation.
 type NopCache struct {
 	stats StatsClient

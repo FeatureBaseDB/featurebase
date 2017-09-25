@@ -41,6 +41,15 @@ const (
 
 	// DefaultMaxWritesPerRequest is the default number of writes per request.
 	DefaultMaxWritesPerRequest = 5000
+
+	// DefaultGossipPushPullInterval is the push pull interval.
+	DefaultGossipPushPullInterval = 15 * time.Second
+
+	// DefaultGossipInterval is the Gossip interval.
+	DefaultGossipInterval = 100 * time.Millisecond
+
+	// DefaultGossipProbeInterval is the Gossip Probe intercal.
+	DefaultGossipProbeInterval = time.Second
 )
 
 // ClusterTypes set of cluster types.
@@ -48,10 +57,13 @@ var ClusterTypes = []string{ClusterNone, ClusterStatic, ClusterGossip}
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir    string `toml:"data-dir"`
-	Bind       string `toml:"bind"`
-	GossipPort string `toml:"gossip-port"`
-	GossipSeed string `toml:"gossip-seed"`
+	DataDir                string   `toml:"data-dir"`
+	Bind                   string   `toml:"bind"`
+	GossipPort             string   `toml:"gossip-port"`
+	GossipSeed             string   `toml:"gossip-seed"`
+	GossipPushPullInterval Duration `toml:"gossip-push-pull-interval"`
+	GossipInterval         Duration `toml:"gossip-interval"`
+	GossipProbeInterval    Duration `toml:"gossip-probe-interval"`
 
 	Cluster struct {
 		ReplicaN      int      `toml:"replicas"`
@@ -94,6 +106,12 @@ func NewConfig() *Config {
 	c.Cluster.Hosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics
+
+	c.GossipPushPullInterval = Duration(DefaultGossipPushPullInterval)
+	c.GossipInterval = Duration(DefaultGossipInterval)
+	c.GossipProbeInterval = Duration(DefaultGossipProbeInterval)
+	c.GossipPort = DefaultGossipPort
+	c.GossipSeed = DefaultHost + ":" + DefaultGossipPort
 	return c
 }
 

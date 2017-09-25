@@ -28,10 +28,13 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVarP(&srv.Config.Bind, "bind", "b", ":10101", "Default URI on which pilosa should listen.")
 	flags.StringVarP(&srv.Config.GossipPort, "gossip-port", "", "", "Port to which pilosa should bind for internal state sharing.")
 	flags.StringVarP(&srv.Config.GossipSeed, "gossip-seed", "", "", "Host with which to seed the gossip membership.")
+	flags.DurationVarP((*time.Duration)(&srv.Config.GossipPushPullInterval), "gossip-push-pull-interval", "", 15*time.Second, "Polling interval for gossip.")
+	flags.DurationVarP((*time.Duration)(&srv.Config.GossipInterval), "gossip-interval", "", 100*time.Millisecond, "Gossip interval.")
+	flags.DurationVarP((*time.Duration)(&srv.Config.GossipProbeInterval), "gossip-probe-interval", "", time.Second, "Probe interval for gossip.")
 	flags.IntVarP(&srv.Config.MaxWritesPerRequest, "max-writes-per-request", "", srv.Config.MaxWritesPerRequest, "Number of write commands per request.")
 	flags.IntVarP(&srv.Config.Cluster.ReplicaN, "cluster.replicas", "", 1, "Number of hosts each piece of data should be stored on.")
 	flags.StringSliceVarP(&srv.Config.Cluster.Hosts, "cluster.hosts", "", []string{}, "Comma separated list of hosts in cluster.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Cluster.PollInterval), "cluster.poll-interval", "", time.Minute, "Polling interval for cluster.") // TODO what actually is this?
+	flags.DurationVarP((*time.Duration)(&srv.Config.Cluster.PollInterval), "cluster.poll-interval", "", time.Minute, "Polling interval for cluster.") // Max Slice Poll interval TODO: move to Gossip
 	flags.DurationVarP((*time.Duration)(&srv.Config.Cluster.LongQueryTime), "cluster.long-query-time", "", time.Minute, "Long Query Time.")
 	flags.StringVarP(&srv.Config.Plugins.Path, "plugins.path", "", "", "Path to plugin directory.")
 	flags.StringVar(&srv.Config.LogPath, "log-path", "", "Log path")

@@ -38,7 +38,7 @@ const (
 
 // Holder represents a container for indexes.
 type Holder struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	// Indexes by name.
 	indexes map[string]*Index
@@ -183,8 +183,8 @@ func (h *Holder) IndexPath(name string) string { return filepath.Join(h.Path, na
 
 // Index returns the index by name.
 func (h *Holder) Index(name string) *Index {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	return h.index(name)
 }
 

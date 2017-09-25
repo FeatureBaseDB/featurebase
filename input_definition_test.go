@@ -203,14 +203,14 @@ func TestHandleAction(t *testing.T) {
 		name     string
 		value    interface{}
 		expected uint64
-		err 	 string
+		err      string
 	}{
 		{name: "integer single-row-bool", action: pilosa.InputSingleRowBool, value: 1, err: "single-row-boolean value"},
-		{name: "string single-row-bool", action: pilosa.InputSingleRowBool,value: "1", err: "single-row-boolean value 1 must equate to a Bool"},
-		{name: "string value-to-row", action: pilosa.InputValueToRow,value: "25", err: "value-to-row value must equate to an integer"},
-		{name: "string mapping", action: pilosa.InputMapping,value: "test", err: "Value test does not exist in definition map"},
-		{name: "int mapping", action: pilosa.InputMapping,value: 25, err: "Mapping value must be a string"},
-		{name: "invalid action", action: "test",value: true, err: "Unrecognized Value Destination"},
+		{name: "string single-row-bool", action: pilosa.InputSingleRowBool, value: "1", err: "single-row-boolean value 1 must equate to a Bool"},
+		{name: "string value-to-row", action: pilosa.InputValueToRow, value: "25", err: "value-to-row value must equate to an integer"},
+		{name: "string mapping", action: pilosa.InputMapping, value: "test", err: "Value test does not exist in definition map"},
+		{name: "int mapping", action: pilosa.InputMapping, value: 25, err: "Mapping value must be a string"},
+		{name: "invalid action", action: "test", value: true, err: "Unrecognized Value Destination"},
 	}
 	for _, r := range tests {
 		t.Run(r.name, func(t *testing.T) {
@@ -226,6 +226,9 @@ func TestHandleAction(t *testing.T) {
 	value = true
 	action.ValueDestination = pilosa.InputSingleRowBool
 	b, err := pilosa.HandleAction(action, value, colID, timestamp)
+	if err != nil {
+		t.Fatalf("err with HandleAction: %v", err)
+	}
 	if b != nil {
 		if b.ColumnID != 0 {
 			t.Fatalf("Unexpected ColumnID %v", b.ColumnID)
