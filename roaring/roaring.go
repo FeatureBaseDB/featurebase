@@ -617,18 +617,38 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	// Read key count in bytes sizeof(cookie):(sizeof(cookie)+sizeof(uint32)).
 	keyN := binary.LittleEndian.Uint32(data[4:8])
-	b.keys = make([]uint64, keyN)
-	b.containers = make([]*container, keyN)
+
+	if len(b.keys) == 0 {
+		b.keys = make([]uint64, 0, keyN)
+		b.containers = make([]*container, 0, keyN)
+	} else if int(keyN) < len(b.keys) { //shrink
+		// nil out to allow to be GCed
+		for i := range b.containers[keyN:] {
+			b.containers[int(keyN)+i] = nil
+		}
+		b.keys = b.keys[:keyN]
+		b.containers = b.containers[:keyN]
+	}
 
 	headerSize := headerBaseSize
 
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
-		b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
-		b.containers[i] = &container{
-			container_type: byte(binary.LittleEndian.Uint16(buf[8:10])),
-			n:              int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
-			mapped:         true,
+		// Reuse memory if possible
+		if i >= len(b.keys) {
+			b.keys = append(b.keys, binary.LittleEndian.Uint64(buf[0:8]))
+			b.containers = append(b.containers, &container{
+				container_type: byte(binary.LittleEndian.Uint16(buf[8:10])),
+				n:              int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
+				mapped:         true,
+			})
+		} else {
+			b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
+			c := b.containers[i]
+			c.container_type = byte(binary.LittleEndian.Uint16(buf[8:10]))
+			c.n = int(binary.LittleEndian.Uint16(buf[10:12])) + 1
+			c.mapped = true
+
 		}
 	}
 	opsOffset := headerSize + int(keyN)*12
