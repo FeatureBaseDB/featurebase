@@ -167,6 +167,7 @@ print("User 14 or 19 starred, written in language 1:", mutually_starred)
 
 # Set user 99999 as a stargazer for repository 77777
 client.query(stargazer.setbit(99999, 77777))`
+```
 
 ### Java
 
