@@ -477,7 +477,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 
 	f.rangeEnabled = opt.RangeEnabled
-	fmt.Println("CREATE FRAME", opt.RangeEnabled)
 
 	// Set schema & save.
 	f.schema = &FrameSchema{

@@ -842,14 +842,13 @@ func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (h *Handler) handleGetFrameField(w http.ResponseWriter, r *http.Request)  {
+func (h *Handler) handleGetFrameField(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
 	index := h.Holder.index(indexName)
 	frame := index.frame(frameName)
 	schema, err := frame.GetFields()
-	fmt.Printf("%+v\n", schema)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

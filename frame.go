@@ -441,8 +441,8 @@ func (f *Frame) CreateField(field *Field) error {
 
 // GetFields list all the fields.
 func (f *Frame) GetFields() (*FrameSchema, error) {
-	//f.mu.Lock()
-	//defer f.mu.Unlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	// Ensure frame supports fields.
 	if !f.RangeEnabled() {
@@ -452,8 +452,6 @@ func (f *Frame) GetFields() (*FrameSchema, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("HERE")
-	fmt.Printf("%+v\n", f.schema)
 	return f.schema, nil
 }
 
@@ -463,7 +461,7 @@ func (f *Frame) DeleteField(name string) error {
 	defer f.mu.Unlock()
 
 	// Ensure frame supports fields.
-	if f.rangeEnabled {
+	if !f.rangeEnabled {
 		return ErrFrameFieldsNotAllowed
 	}
 
