@@ -462,6 +462,9 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 	f.cacheType = opt.CacheType
 
+	// Set range enabled
+	f.rangeEnabled = opt.RangeEnabled
+
 	// Set options.
 	if opt.RowLabel != "" {
 		f.rowLabel = opt.RowLabel
