@@ -118,6 +118,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameField).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/view/{view}", handler.handleDeleteView).Methods("DELETE")
@@ -839,6 +840,28 @@ func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request)
 	if err := json.NewEncoder(w).Encode(deleteFrameFieldResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+}
+
+func (h *Handler) handleGetFrameField(w http.ResponseWriter, r *http.Request)  {
+	indexName := mux.Vars(r)["index"]
+	frameName := mux.Vars(r)["frame"]
+
+	index := h.Holder.index(indexName)
+	frame := index.frame(frameName)
+	schema, err := frame.GetFields()
+	fmt.Printf("%+v\n", schema)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(getFrameFieldsResponse{Fields: schema.Fields}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type getFrameFieldsResponse struct {
+	Fields []*Field `json:"fields,omitempty"`
 }
 
 type deleteFrameFieldRequest struct{}

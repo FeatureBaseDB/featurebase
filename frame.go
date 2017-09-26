@@ -425,7 +425,7 @@ func (f *Frame) CreateField(field *Field) error {
 	defer f.mu.Unlock()
 
 	// Ensure frame supports fields.
-	if f.rangeEnabled {
+	if !f.rangeEnabled {
 		return ErrFrameFieldsNotAllowed
 	}
 
@@ -435,8 +435,26 @@ func (f *Frame) CreateField(field *Field) error {
 		return err
 	}
 	f.schema = schema
-
+	f.saveSchema()
 	return nil
+}
+
+// GetFields list all the fields.
+func (f *Frame) GetFields() (*FrameSchema, error) {
+	//f.mu.Lock()
+	//defer f.mu.Unlock()
+
+	// Ensure frame supports fields.
+	if !f.RangeEnabled() {
+		return nil, nil
+	}
+	err := f.loadSchema()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("HERE")
+	fmt.Printf("%+v\n", f.schema)
+	return f.schema, nil
 }
 
 // DeleteField deletes an existing field on the schema.
