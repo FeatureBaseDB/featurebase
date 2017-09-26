@@ -425,7 +425,7 @@ func (f *Frame) CreateField(field *Field) error {
 	defer f.mu.Unlock()
 
 	// Ensure frame supports fields.
-	if f.rangeEnabled {
+	if !f.rangeEnabled {
 		return ErrFrameFieldsNotAllowed
 	}
 
@@ -445,7 +445,7 @@ func (f *Frame) DeleteField(name string) error {
 	defer f.mu.Unlock()
 
 	// Ensure frame supports fields.
-	if f.rangeEnabled {
+	if !f.rangeEnabled {
 		return ErrFrameFieldsNotAllowed
 	}
 
