@@ -43,7 +43,7 @@ const (
 
 // Frame represents a container for views.
 type Frame struct {
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	path        string
 	index       string
 	name        string
@@ -113,8 +113,8 @@ func (f *Frame) RowAttrStore() *AttrStore { return f.rowAttrStore }
 
 // MaxSlice returns the max slice in the frame.
 func (f *Frame) MaxSlice() uint64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
 	var max uint64
 	for _, view := range f.views {
@@ -129,8 +129,8 @@ func (f *Frame) MaxSlice() uint64 {
 
 // MaxInverseSlice returns the max inverse slice in the frame.
 func (f *Frame) MaxInverseSlice() uint64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
 	view := f.views[ViewInverse]
 	if view == nil {
@@ -166,9 +166,9 @@ func (f *Frame) SetRowLabel(v string) error {
 
 // RowLabel returns the row label.
 func (f *Frame) RowLabel() string {
-	f.mu.Lock()
+	f.mu.RLock()
 	v := f.rowLabel
-	f.mu.Unlock()
+	f.mu.RUnlock()
 	return v
 }
 
@@ -217,8 +217,8 @@ func (f *Frame) CacheSize() uint32 {
 
 // Options returns all options for this frame.
 func (f *Frame) Options() FrameOptions {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.options()
 }
 
@@ -404,8 +404,8 @@ func (f *Frame) Close() error {
 
 // Schema returns the frame's current schema.
 func (f *Frame) Schema() *FrameSchema {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.schema
 }
 
@@ -506,8 +506,8 @@ func (f *Frame) ViewPath(name string) string {
 
 // View returns a view in the frame by name.
 func (f *Frame) View(name string) *View {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.view(name)
 }
 
