@@ -223,15 +223,15 @@ func (f *Frame) Options() FrameOptions {
 }
 
 func (f *Frame) options() FrameOptions {
-	opt := FrameOptions{
+	return FrameOptions{
 		RowLabel:       f.rowLabel,
 		InverseEnabled: f.inverseEnabled,
 		RangeEnabled:   f.rangeEnabled,
 		CacheType:      f.cacheType,
 		CacheSize:      f.cacheSize,
 		TimeQuantum:    f.timeQuantum,
+		Fields:         f.schema.Fields,
 	}
-	return opt
 }
 
 // Open opens and initializes the frame.
@@ -940,16 +940,10 @@ func encodeFrames(a []*Frame) []*internal.Frame {
 
 // encodeFrame converts f into its internal representation.
 func encodeFrame(f *Frame) *internal.Frame {
+	fo := f.options()
 	return &internal.Frame{
 		Name: f.name,
-		Meta: &internal.FrameMeta{
-			RowLabel:       f.rowLabel,
-			InverseEnabled: f.inverseEnabled,
-			RangeEnabled:   f.rangeEnabled,
-			CacheType:      f.cacheType,
-			CacheSize:      f.cacheSize,
-			TimeQuantum:    string(f.timeQuantum),
-		},
+		Meta: fo.Encode(),
 	}
 }
 
@@ -991,6 +985,7 @@ func (o *FrameOptions) Encode() *internal.FrameMeta {
 		CacheType:      o.CacheType,
 		CacheSize:      o.CacheSize,
 		TimeQuantum:    string(o.TimeQuantum),
+		Fields:         encodeFields(o.Fields),
 	}
 }
 

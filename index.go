@@ -616,12 +616,10 @@ func EncodeIndexes(a []*Index) []*internal.Index {
 
 // encodeIndex converts d into its internal representation.
 func encodeIndex(d *Index) *internal.Index {
+	io := d.options()
 	return &internal.Index{
-		Name: d.name,
-		Meta: &internal.IndexMeta{
-			ColumnLabel: d.columnLabel,
-			TimeQuantum: string(d.timeQuantum),
-		},
+		Name:     d.name,
+		Meta:     io.Encode(),
 		MaxSlice: d.MaxSlice(),
 		Frames:   encodeFrames(d.Frames()),
 	}
