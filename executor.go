@@ -715,28 +715,65 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		fieldName, cond = k, vv
 	}
 
-	// Only support integers for now.
-	value, ok := cond.Value.(int64)
-	if !ok {
-		return nil, errors.New("Range(): conditions only support integer values")
-	}
+	if cond.Op == pql.BETWEEN {
 
-	// Find field.
-	field := f.Field(fieldName)
-	if field == nil {
-		return nil, ErrFieldNotFound
-	} else if value < field.Min || value > field.Max {
-		return NewBitmap(), nil
-	}
+		predicates, err := cond.IntSliceValue()
+		if err != nil {
+			return nil, err
+		}
 
-	// Retrieve fragment.
-	frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
-	if frag == nil {
-		return NewBitmap(), nil
-	}
+		// Only support two integers for the between operation.
+		if len(predicates) != 2 {
+			return nil, errors.New("Range(): BETWEEN condition requires exactly two integer values")
+		}
 
-	f.Stats.Count("range:field", 1, 1.0)
-	return frag.FieldRange(cond.Op, field.BitDepth(), uint64(value-field.Min))
+		// Find field.
+		field := f.Field(fieldName)
+		if field == nil {
+			return nil, ErrFieldNotFound
+		}
+
+		baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicates[0], predicates[1])
+		if outOfRange {
+			return NewBitmap(), nil
+		}
+
+		// Retrieve fragment.
+		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		if frag == nil {
+			return NewBitmap(), nil
+		}
+
+		return frag.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
+
+	} else {
+
+		// Only support integers for now.
+		value, ok := cond.Value.(int64)
+		if !ok {
+			return nil, errors.New("Range(): conditions only support integer values")
+		}
+
+		// Find field.
+		field := f.Field(fieldName)
+		if field == nil {
+			return nil, ErrFieldNotFound
+		}
+
+		baseValue, outOfRange := field.BaseValue(cond.Op, value)
+		if outOfRange {
+			return NewBitmap(), nil
+		}
+
+		// Retrieve fragment.
+		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		if frag == nil {
+			return NewBitmap(), nil
+		}
+
+		f.Stats.Count("range:field", 1, 1.0)
+		return frag.FieldRange(cond.Op, field.BitDepth(), baseValue)
+	}
 }
 
 // executeUnionSlice executes a union() call for a local slice.

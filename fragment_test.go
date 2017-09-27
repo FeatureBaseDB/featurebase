@@ -378,6 +378,54 @@ func TestFragment_FieldRange(t *testing.T) {
 			t.Fatalf("unexpected bits: %+v", b.Bits())
 		}
 	})
+
+	t.Run("BETWEEN", func(t *testing.T) {
+		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		defer f.Close()
+
+		// Set values.
+		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.SetFieldValue(3000, bitDepth, 2817); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.SetFieldValue(4000, bitDepth, 301); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.SetFieldValue(5000, bitDepth, 1); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.SetFieldValue(6000, bitDepth, 0); err != nil {
+			t.Fatal(err)
+		}
+
+		// Query for fields greater than (ending with unset bit).
+		if b, err := f.FieldRangeBetween(bitDepth, 300, 2817); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 2000, 3000, 4000}) {
+			t.Fatalf("unexpected bits: %+v", b.Bits())
+		}
+
+		// Query for fields greater than (ending with set bit).
+		if b, err := f.FieldRangeBetween(bitDepth, 301, 2817); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000, 4000}) {
+			t.Fatalf("unexpected bits: %+v", b.Bits())
+		}
+
+		// Query for fields greater than or equal to (ending with unset bit).
+		if b, err := f.FieldRangeBetween(bitDepth, 301, 2816); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 4000}) {
+			t.Fatalf("unexpected bits: %+v", b.Bits())
+		}
+
+		// Query for fields greater than or equal to (ending with set bit).
+		if b, err := f.FieldRangeBetween(bitDepth, 300, 2816); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 2000, 4000}) {
+			t.Fatalf("unexpected bits: %+v", b.Bits())
+		}
+	})
 }
 
 // Ensure a fragment can snapshot correctly.

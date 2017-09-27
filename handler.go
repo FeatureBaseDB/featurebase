@@ -106,6 +106,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
 	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
+	router.HandleFunc("/import-value", handler.handlePostImportValue).Methods("POST")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
 	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET")
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
@@ -1181,6 +1182,76 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	err = f.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
 		h.logger().Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
+		return
+	}
+
+	// Marshal response object.
+	buf, e := proto.Marshal(&internal.ImportResponse{Err: errorString(err)})
+	if e != nil {
+		http.Error(w, fmt.Sprintf("marshal import response: %s", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Write response.
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	w.Write(buf)
+}
+
+// handlePostImportValue handles /import-value requests.
+func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Marshal into request object.
+	var req internal.ImportValueRequest
+	if err := proto.Unmarshal(body, &req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Validate that this handler owns the slice.
+	if !h.Cluster.OwnsFragment(h.Host, req.Index, req.Slice) {
+		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, req.Index, req.Slice)
+		http.Error(w, mesg, http.StatusPreconditionFailed)
+		return
+	}
+
+	// Find the Index.
+	h.logger().Println("importing:", req.Index, req.Frame, req.Slice)
+	index := h.Holder.Index(req.Index)
+	if index == nil {
+		h.logger().Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrIndexNotFound.Error())
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Retrieve frame.
+	f := index.Frame(req.Frame)
+	if f == nil {
+		h.logger().Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrFrameNotFound.Error())
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Import into fragment.
+	err = f.ImportValue(req.Field, req.ColumnIDs, req.Values)
+	if err != nil {
+		h.logger().Printf("import error: index=%s, frame=%s, slice=%d, field=%s, bits=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
 		return
 	}
 

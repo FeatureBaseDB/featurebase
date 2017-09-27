@@ -37,7 +37,7 @@ const (
 
 // Index represents a container for frames.
 type Index struct {
-	mu   sync.Mutex
+	mu   sync.RWMutex
 	path string
 	name string
 
@@ -129,10 +129,24 @@ func (i *Index) SetColumnLabel(v string) error {
 
 // ColumnLabel returns the column label.
 func (i *Index) ColumnLabel() string {
-	i.mu.Lock()
+	i.mu.RLock()
 	v := i.columnLabel
-	i.mu.Unlock()
+	i.mu.RUnlock()
 	return v
+}
+
+// Options returns all options for this index.
+func (i *Index) Options() IndexOptions {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	return i.options()
+}
+
+func (i *Index) options() IndexOptions {
+	return IndexOptions{
+		ColumnLabel: i.columnLabel,
+		TimeQuantum: i.timeQuantum,
+	}
 }
 
 // Open opens and initializes the index.
@@ -262,8 +276,8 @@ func (i *Index) MaxSlice() uint64 {
 	if i == nil {
 		return 0
 	}
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 
 	max := i.remoteMaxSlice
 	for _, f := range i.frames {
@@ -288,8 +302,8 @@ func (i *Index) MaxInverseSlice() uint64 {
 	if i == nil {
 		return 0
 	}
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 
 	max := i.remoteMaxInverseSlice
 	for _, f := range i.frames {
@@ -309,8 +323,8 @@ func (i *Index) SetRemoteMaxInverseSlice(v uint64) {
 
 // TimeQuantum returns the default time quantum for the index.
 func (i *Index) TimeQuantum() TimeQuantum {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 	return i.timeQuantum
 }
 
@@ -345,8 +359,8 @@ func (i *Index) InputDefinitionPath() string {
 
 // Frame returns a frame in the index by name.
 func (i *Index) Frame(name string) *Frame {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 	return i.frame(name)
 }
 
@@ -366,8 +380,8 @@ func (i *Index) inputDefinition(name string) *InputDefinition { return i.inputDe
 
 // Frames returns a list of all frames in the index.
 func (i *Index) Frames() []*Frame {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 
 	a := make([]*Frame, 0, len(i.frames))
 	for _, f := range i.frames {
@@ -471,6 +485,8 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 
 	f.inverseEnabled = opt.InverseEnabled
+	f.rangeEnabled = opt.RangeEnabled
+
 	if err := f.saveMeta(); err != nil {
 		f.Close()
 		return nil, err
@@ -643,6 +659,11 @@ type importKey struct {
 type importData struct {
 	RowIDs    []uint64
 	ColumnIDs []uint64
+}
+
+type importValueData struct {
+	ColumnIDs []uint64
+	Values    []uint64
 }
 
 // CreateInputDefinition creates a new input definition.

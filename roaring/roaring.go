@@ -422,24 +422,25 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 	ki, ci := b.keys, b.containers
 	kj, cj := other.keys, other.containers
 
+	ni, nj := len(ki), len(kj)
+	i, j := 0, 0
 	for {
 		var key uint64
 		var container *container
 
-		ni, nj := len(ki), len(kj)
-		if ni == 0 { // eof(i)
+		if ni == i { // eof(i)
 			break
-		} else if nj == 0 || ki[0] < kj[0] { // eof(j) or i < j
-			key, container = ki[0], ci[0].clone()
-			ki, ci = ki[1:], ci[1:]
+		} else if nj == j || ki[i] < kj[j] { // eof(j) or i < j
+			key, container = ki[i], ci[i].clone()
+			i++
 			output.keys = append(output.keys, key)
 			output.containers = append(output.containers, container)
-		} else if nj > 0 && ki[0] > kj[0] { // i > j
-			kj, cj = kj[1:], cj[1:]
+		} else if nj > j && ki[i] > kj[j] { // i > j
+			j++
 		} else { // i == j
-			key, container = ki[0], difference(ci[0], cj[0])
-			ki, ci = ki[1:], ci[1:]
-			kj, cj = kj[1:], cj[1:]
+			key, container = ki[i], difference(ci[i], cj[j])
+			i++
+			j++
 			output.keys = append(output.keys, key)
 			output.containers = append(output.containers, container)
 		}
@@ -1861,48 +1862,6 @@ func intersectionCountBitmapRun(a, b *container) (n int) {
 	return n
 }
 
-func intersectionCountArrayBitmapOld(a, b *container) (n uint64) {
-	// Copy array header so we can shrink it.
-	array := a.array
-	if len(array) == 0 {
-		return 0
-	}
-
-	// Iterate over bitmap and find matching bits.
-	for i, bn := uint16(0), uint16(len(b.bitmap)); i < bn; i++ {
-		v := b.bitmap[i]
-
-		// Ignore if bytes are empty or array is done.
-		if v == 0 {
-			continue
-		}
-
-		// Check each bit.
-		for j := uint16(0); j < 64; j++ {
-			if v&(1<<j) == 0 {
-				continue
-			}
-
-			// Search array until match.
-			bv := (i * 64) + j
-			for {
-				if len(array) == 0 {
-					return n
-				} else if array[0] < bv {
-					array = array[1:]
-				} else if array[0] == bv {
-					n++
-					break
-				} else {
-					break
-				}
-			}
-		}
-	}
-
-	return n
-}
-
 func intersectionCountArrayBitmap(a, b *container) (n int) {
 	for _, val := range a.array {
 		i := val >> 6
@@ -2091,49 +2050,29 @@ func intersectBitmapRun(a, b *container) *container {
 
 func intersectArrayBitmap(a, b *container) *container {
 	output := &container{container_type: ContainerArray}
-	itra := newArrayIterator(a.array)
-	itrb := newBitmapIterator(b.bitmap)
-	va, eof1 := itra.next()
-	vb, eof2 := itrb.next()
-	for {
-		if eof1 || eof2 {
-			break
-		}
-
-		if va < vb {
-			va, eof1 = itra.next()
-		} else if va > vb {
-			vb, eof2 = itrb.next()
-		} else {
-			output.add(va)
-			va, eof1 = itra.next()
-			vb, eof2 = itrb.next()
+	for _, va := range a.array {
+		bmidx := va / 64
+		bidx := va % 64
+		mask := uint64(1) << bidx
+		b := b.bitmap[bmidx]
+		if b&mask > 0 {
+			output.array = append(output.array, va)
 		}
 	}
+	output.n = len(output.array)
 	return output
 }
 
 func intersectBitmapBitmap(a, b *container) *container {
 	output := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
-	itr0 := newBitmapIterator(a.bitmap)
-	itr1 := newBitmapIterator(b.bitmap)
-	va, eof1 := itr0.next()
-	vb, eof2 := itr1.next()
-	for {
-		if eof1 || eof2 {
-			break
-		}
 
-		if va < vb {
-			va, eof1 = itr0.next()
-		} else if va > vb {
-			vb, eof2 = itr1.next()
-		} else {
-			output.add(va)
-			va, eof1 = itr0.next()
-			vb, eof2 = itr1.next()
-		}
+	for i := range a.bitmap {
+		v := a.bitmap[i] & b.bitmap[i]
+		output.bitmap[i] = v
+		output.n += int(popcount(v))
+
 	}
+	output.Optimize()
 	return output
 }
 
@@ -2372,31 +2311,11 @@ func (c *container) bitmapZeroRange(i, j uint64) {
 }
 
 func unionArrayBitmap(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
-	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
-	for i := 0; ; {
-		vb, eof := itr.next()
-		if i >= len(a.array) && eof {
-			break
-		} else if i >= len(a.array) {
-			output.add(vb)
-			continue
-		} else if eof {
-			output.add(a.array[i])
-			i++
-			continue
-		}
-
-		va := a.array[i]
-		if va < vb {
-			output.add(va)
-			i++
-			itr.unread()
-		} else if va > vb {
-			output.add(vb)
-		} else {
-			output.add(va)
-			i++
+	output := b.clone()
+	for _, v := range a.array {
+		if !output.bitmapContains(v) {
+			output.bitmap[v/64] |= (1 << uint64(v%64))
+			output.n++
 		}
 	}
 	return output
@@ -2543,15 +2462,46 @@ func differenceRunArray(a, b *container) *container {
 
 // differenceRunBitmap computes the difference of an run from a bitmap.
 func differenceRunBitmap(a, b *container) *container {
-	if a.n == 0 || b.n == 0 {
-		return a.clone()
-	}
 	// If a is full, difference is the flip of b.
 	if a.runs[0].start == 0 && a.runs[0].last == 65535 {
 		return b.flipBitmap()
 	}
-	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
-	return differenceRunIterator(a, itr)
+	output := &container{container_type: ContainerRun}
+	output.n = a.n
+	for j := 0; j < len(a.runs); j++ {
+		run := a.runs[j]
+		for bit := a.runs[j].start; bit <= a.runs[j].last; bit++ {
+			if b.bitmapContains(bit) {
+				output.n--
+				if run.start == bit {
+					run.start++
+				} else if bit == run.last {
+					run.last--
+				} else {
+					run.last = bit - 1
+					if run.last >= run.start {
+						output.runs = append(output.runs, run)
+					}
+					run.start = bit + 1
+					run.last = a.runs[j].last
+				}
+				if run.start > run.last {
+					break
+				}
+			}
+		}
+		if run.start <= run.last {
+			output.runs = append(output.runs, run)
+
+		}
+	}
+
+	if output.n < ArrayMaxSize && int(len(output.runs)) > output.n/2 {
+		output.runToArray()
+	} else if len(output.runs) > RunMaxSize {
+		output.runToBitmap()
+	}
+	return output
 }
 
 func differenceRunIterator(a *container, itr containerIterator) *container {
@@ -2675,83 +2625,46 @@ func differenceRunRun(a, b *container) *container {
 
 func differenceArrayBitmap(a, b *container) *container {
 	output := &container{container_type: ContainerArray}
-	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
-	for i := 0; i < len(a.array); {
-		va := a.array[i]
-		vb, eof := itr.next()
-		if eof {
-			output.add(va)
-			i++
-			continue
-		}
+	for _, va := range a.array {
+		bmidx := va / 64
+		bidx := va % 64
+		mask := uint64(1) << bidx
+		b := b.bitmap[bmidx]
 
-		if va < vb {
-			output.add(va)
-			i++
-			itr.unread()
-		} else if va > vb {
-			// nop
-		} else {
-			i++
+		if mask&^b > 0 {
+			output.array = append(output.array, va)
 		}
 	}
+	output.n = len(output.array)
 	return output
 }
 
 func differenceBitmapArray(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
-	itr := newBufBitmapIterator(newBitmapIterator(a.bitmap))
-	i := 0
-	va, eof := itr.next()
-	for {
-		if eof {
-			break
-		}
+	output := a.clone()
 
-		if i >= len(b.array) {
-			output.add(va)
-			va, eof = itr.next()
-			continue
+	for _, v := range b.array {
+		if output.bitmapContains(v) {
+			output.bitmap[v/64] &^= (uint64(1) << uint(v%64))
+			output.n--
 		}
-
-		vb := b.array[i]
-		if va < vb {
-			output.add(va)
-			va, eof = itr.next()
-		} else if va > vb {
-			i++
-		} else {
-			i++
-			va, eof = itr.next()
-		}
+	}
+	if output.n < ArrayMaxSize {
+		output.bitmapToArray()
 	}
 	return output
 }
 
 func differenceBitmapBitmap(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
-	itr0 := newBufBitmapIterator(newBitmapIterator(a.bitmap))
-	itr1 := newBufBitmapIterator(newBitmapIterator(b.bitmap))
-	v0, eof0 := itr0.next()
-	v1, eof1 := itr1.next()
-	for {
-		if eof0 {
-			break
-		} else if eof1 {
-			output.add(v0)
-			v0, eof0 = itr0.next()
-			continue
-		}
-		if v0 < v1 {
-			output.add(v0)
-			v0, eof0 = itr0.next()
-		} else if v0 > v1 {
-			v1, eof1 = itr1.next()
-		} else {
-			v0, eof0 = itr0.next()
-			v1, eof1 = itr1.next()
+	output := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
 
-		}
+	for i := range a.bitmap {
+		v := a.bitmap[i] & (^b.bitmap[i])
+		output.bitmap[i] = v
+		output.n += int(popcount(v))
+
+	}
+	if output.n < ArrayMaxSize {
+		output.bitmapToArray()
 	}
 	return output
 }

@@ -226,6 +226,9 @@ func TestHandleAction(t *testing.T) {
 	value = true
 	action.ValueDestination = pilosa.InputSingleRowBool
 	b, err := pilosa.HandleAction(action, value, colID, timestamp)
+	if err != nil {
+		t.Fatalf("err with HandleAction: %v", err)
+	}
 	if b != nil {
 		if b.ColumnID != 0 {
 			t.Fatalf("Unexpected ColumnID %v", b.ColumnID)
@@ -248,6 +251,9 @@ func TestHandleAction(t *testing.T) {
 	action.ValueDestination = pilosa.InputSetTimestamp
 	t.Run("nil bit", func(t *testing.T) {
 		b, err = pilosa.HandleAction(action, value, colID, timestamp)
+		if err != nil {
+			t.Fatalf("err with HandleAction: %v", err)
+		}
 		if b != nil {
 			t.Fatalf("Expected nil bit is set")
 		}

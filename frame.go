@@ -43,7 +43,7 @@ const (
 
 // Frame represents a container for views.
 type Frame struct {
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	path        string
 	index       string
 	name        string
@@ -113,8 +113,8 @@ func (f *Frame) RowAttrStore() *AttrStore { return f.rowAttrStore }
 
 // MaxSlice returns the max slice in the frame.
 func (f *Frame) MaxSlice() uint64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
 	var max uint64
 	for _, view := range f.views {
@@ -129,8 +129,8 @@ func (f *Frame) MaxSlice() uint64 {
 
 // MaxInverseSlice returns the max inverse slice in the frame.
 func (f *Frame) MaxInverseSlice() uint64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
 	view := f.views[ViewInverse]
 	if view == nil {
@@ -166,9 +166,9 @@ func (f *Frame) SetRowLabel(v string) error {
 
 // RowLabel returns the row label.
 func (f *Frame) RowLabel() string {
-	f.mu.Lock()
+	f.mu.RLock()
 	v := f.rowLabel
-	f.mu.Unlock()
+	f.mu.RUnlock()
 	return v
 }
 
@@ -217,8 +217,8 @@ func (f *Frame) CacheSize() uint32 {
 
 // Options returns all options for this frame.
 func (f *Frame) Options() FrameOptions {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.options()
 }
 
@@ -404,8 +404,8 @@ func (f *Frame) Close() error {
 
 // Schema returns the frame's current schema.
 func (f *Frame) Schema() *FrameSchema {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.schema
 }
 
@@ -425,7 +425,7 @@ func (f *Frame) CreateField(field *Field) error {
 	defer f.mu.Unlock()
 
 	// Ensure frame supports fields.
-	if !f.rangeEnabled {
+	if !f.RangeEnabled() {
 		return ErrFrameFieldsNotAllowed
 	}
 
@@ -461,7 +461,7 @@ func (f *Frame) DeleteField(name string) error {
 	defer f.mu.Unlock()
 
 	// Ensure frame supports fields.
-	if !f.rangeEnabled {
+	if !f.RangeEnabled() {
 		return ErrFrameFieldsNotAllowed
 	}
 
@@ -522,8 +522,8 @@ func (f *Frame) ViewPath(name string) string {
 
 // View returns a view in the frame by name.
 func (f *Frame) View(name string) *View {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.view(name)
 }
 
@@ -762,10 +762,35 @@ func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Bitmap,
 		return nil, nil
 	}
 
-	// Adjust predicate to range.
-	baseValue := uint64(predicate - field.Min)
+	baseValue, outOfRange := field.BaseValue(op, predicate)
+	if outOfRange {
+		return NewBitmap(), nil
+	}
 
 	return view.FieldRange(op, field.BitDepth(), baseValue)
+}
+
+func (f *Frame) FieldRangeBetween(name string, predicateMin, predicateMax int64) (*Bitmap, error) {
+	// Retrieve and validate field.
+	field := f.Field(name)
+	if field == nil {
+		return nil, ErrFieldNotFound
+	} else if predicateMin > predicateMax {
+		return nil, ErrInvalidBetweenValue
+	}
+
+	// Retrieve field's view.
+	view := f.View(ViewFieldPrefix + name)
+	if view == nil {
+		return nil, nil
+	}
+
+	baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicateMin, predicateMax)
+	if outOfRange {
+		return NewBitmap(), nil
+	}
+
+	return view.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
 }
 
 // Import bulk imports data.
@@ -840,6 +865,63 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 		}
 
 		if err := frag.Import(data.RowIDs, data.ColumnIDs); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ImportValue bulk imports range-encoded value data.
+func (f *Frame) ImportValue(fieldName string, columnIDs, values []uint64) error {
+	// Verify that this frame is range-encoded.
+	if !f.RangeEnabled() {
+		return fmt.Errorf("Frame not RangeEnabled: %s", f.name)
+	}
+
+	viewName := ViewFieldPrefix + fieldName
+	// Get the field so we know bitDepth.
+	field := f.Field(fieldName)
+	if field == nil {
+		return fmt.Errorf("Field does not exist: %s", fieldName)
+	}
+
+	// Split import data by fragment.
+	dataByFragment := make(map[importKey]importValueData)
+	for i := range columnIDs {
+		columnID, value := columnIDs[i], values[i]
+		if int64(value) > field.Max {
+			return fmt.Errorf("%v, columnID=%v, value=%v", ErrFieldValueTooHigh, columnID, value)
+		} else if int64(value) < field.Min {
+			return fmt.Errorf("%v, columnID=%v, value=%v", ErrFieldValueTooLow, columnID, value)
+		}
+
+		// Attach value to each field view.
+		for _, name := range []string{viewName} {
+			key := importKey{View: name, Slice: columnID / SliceWidth}
+			data := dataByFragment[key]
+			data.ColumnIDs = append(data.ColumnIDs, columnID)
+			data.Values = append(data.Values, value)
+			dataByFragment[key] = data
+		}
+	}
+
+	// Import into each fragment.
+	for key, data := range dataByFragment {
+
+		// The view must already exist (i.e. we can't create it)
+		// because we need to know bitDepth (based on min/max value).
+		view, err := f.CreateViewIfNotExists(key.View)
+		if err != nil {
+			return err
+		}
+
+		frag, err := view.CreateFragmentIfNotExists(key.Slice)
+		if err != nil {
+			return err
+		}
+
+		if err := frag.ImportValue(data.ColumnIDs, data.Values, field.BitDepth()); err != nil {
 			return err
 		}
 	}
@@ -1013,6 +1095,58 @@ func (f *Field) BitDepth() uint {
 		}
 	}
 	return 63
+}
+
+// BaseValue adjusts the value to align with the range for Field for a certain
+// operation type.
+// TODO: there is an edge case for GT and LT where this returns a baseValue
+// that does not fully encompass the range.
+// ex: Field.Min = 0, Field.Max = 1023
+// BaseValue(LT, 2000) returns 1023, which will perform "LT 1023" and effectively
+// exclude any columns with value = 1023.
+// Note that in this case (because the range uses the full BitDepth 0 to 1023),
+// we can't simply return 1024.
+// In order to make this work, we effectively need to change the operator to LTE.
+func (f *Field) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
+	if op == pql.GT || op == pql.GTE {
+		if value > f.Max {
+			return baseValue, true
+		} else if value > f.Min {
+			baseValue = uint64(value - f.Min)
+		}
+	} else if op == pql.LT || op == pql.LTE {
+		if value < f.Min {
+			return baseValue, true
+		} else if value > f.Max {
+			baseValue = uint64(f.Max - f.Min)
+		} else {
+			baseValue = uint64(value - f.Min)
+		}
+	} else if op == pql.EQ {
+		if value < f.Min || value > f.Max {
+			return baseValue, true
+		}
+		baseValue = uint64(value - f.Min)
+	}
+	return baseValue, false
+}
+
+// BaseValueBetween adjusts the min/max value to align with the range for Field.
+func (f *Field) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
+	if max < f.Min || min > f.Max {
+		return baseValueMin, baseValueMax, true
+	}
+	// Adjust min/max to range.
+	if min > f.Min {
+		baseValueMin = uint64(min - f.Min)
+	}
+	// Make sure the high value of the BETWEEN does not exceed BitDepth.
+	if max > f.Max {
+		baseValueMax = uint64(f.Max - f.Min)
+	} else if max > f.Min {
+		baseValueMax = uint64(max - f.Min)
+	}
+	return baseValueMin, baseValueMax, false
 }
 
 func ValidateField(f *Field) error {
