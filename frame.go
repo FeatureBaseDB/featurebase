@@ -435,8 +435,26 @@ func (f *Frame) CreateField(field *Field) error {
 		return err
 	}
 	f.schema = schema
-
+	f.saveSchema()
 	return nil
+}
+
+// GetFields returns a list of all the fields in the frame.
+func (f *Frame) GetFields() (*FrameSchema, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	// Ensure the frame supports fields.
+	if !f.RangeEnabled() {
+		return nil, ErrFrameFieldsNotAllowed
+	}
+
+	err := f.loadSchema()
+	if err != nil {
+		return nil, err
+	}
+
+	return f.schema, nil
 }
 
 // DeleteField deletes an existing field on the schema.

@@ -1030,6 +1030,76 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 	})
 }
 
+func TestHandler_Frame_GetFields(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	s := test.NewServer()
+	s.Handler.Holder = hldr.Holder
+	defer s.Close()
+
+	t.Run("OK", func(t *testing.T) {
+		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		if err != nil {
+			t.Fatal(err)
+		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 1, Max: 100}); err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.Get(s.URL + "/index/i/frame/f/fields")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err != nil {
+			t.Fatal(err)
+		} else if resp.StatusCode != http.StatusOK {
+			t.Fatalf("unexpected status code: %d", resp.StatusCode)
+		}
+
+		var fields FrameFields
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = json.Unmarshal([]byte(body), &fields); err != nil {
+			t.Fatal(err)
+		}
+		field := fields.Fields[0]
+		if field.Name != "x" {
+			t.Fatalf("expected field's name: x, actuall name: %v", field.Name)
+		} else if field.Min != 1 {
+			t.Fatalf("expected field's min: x, actuall min: %v", field.Min)
+		} else if field.Max != 100 {
+			t.Fatalf("expected field's max: x, actuall max: %v", field.Max)
+		}
+
+	})
+
+	t.Run("ErrFrameFieldNotAllowed", func(t *testing.T) {
+		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		_, err := idx.CreateFrameIfNotExists("f1", pilosa.FrameOptions{RangeEnabled: false})
+
+		resp, err := http.Get(s.URL + "/index/i/frame/f1/fields")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err != nil {
+			t.Fatal(err)
+		} else if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("unexpected status code: %d", resp.StatusCode)
+		} else if body, err := ioutil.ReadAll(resp.Body); err != nil {
+			t.Fatal(err)
+		} else if strings.TrimSpace(string(body)) != `frame fields not allowed` {
+			t.Fatalf("unexpected body: %q", body)
+		}
+	})
+
+}
+
+type FrameFields struct {
+	Fields []pilosa.Field
+}
+
 // Ensure the handler can backup a fragment and then restore it.
 func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	hldr := test.MustOpenHolder()
