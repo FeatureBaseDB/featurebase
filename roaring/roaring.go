@@ -1862,48 +1862,6 @@ func intersectionCountBitmapRun(a, b *container) (n int) {
 	return n
 }
 
-func intersectionCountArrayBitmapOld(a, b *container) (n uint64) {
-	// Copy array header so we can shrink it.
-	array := a.array
-	if len(array) == 0 {
-		return 0
-	}
-
-	// Iterate over bitmap and find matching bits.
-	for i, bn := uint16(0), uint16(len(b.bitmap)); i < bn; i++ {
-		v := b.bitmap[i]
-
-		// Ignore if bytes are empty or array is done.
-		if v == 0 {
-			continue
-		}
-
-		// Check each bit.
-		for j := uint16(0); j < 64; j++ {
-			if v&(1<<j) == 0 {
-				continue
-			}
-
-			// Search array until match.
-			bv := (i * 64) + j
-			for {
-				if len(array) == 0 {
-					return n
-				} else if array[0] < bv {
-					array = array[1:]
-				} else if array[0] == bv {
-					n++
-					break
-				} else {
-					break
-				}
-			}
-		}
-	}
-
-	return n
-}
-
 func intersectionCountArrayBitmap(a, b *container) (n int) {
 	for _, val := range a.array {
 		i := val >> 6
@@ -2090,30 +2048,6 @@ func intersectBitmapRun(a, b *container) *container {
 	return output
 }
 
-func intersectArrayBitmapOld(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
-	itra := newArrayIterator(a.array)
-	itrb := newBitmapIterator(b.bitmap)
-	va, eof1 := itra.next()
-	vb, eof2 := itrb.next()
-	for {
-		if eof1 || eof2 {
-			break
-		}
-
-		if va < vb {
-			va, eof1 = itra.next()
-		} else if va > vb {
-			vb, eof2 = itrb.next()
-		} else {
-			output.add(va)
-			va, eof1 = itra.next()
-			vb, eof2 = itrb.next()
-		}
-	}
-	return output
-}
-
 func intersectArrayBitmap(a, b *container) *container {
 	output := &container{container_type: ContainerArray}
 	for _, va := range a.array {
@@ -2138,9 +2072,7 @@ func intersectBitmapBitmap(a, b *container) *container {
 		output.n += int(popcount(v))
 
 	}
-	if output.n < ArrayMaxSize {
-		output.bitmapToArray()
-	}
+	output.Optimize()
 	return output
 }
 
@@ -2386,7 +2318,6 @@ func unionArrayBitmap(a, b *container) *container {
 			output.n++
 		}
 	}
-
 	return output
 }
 
