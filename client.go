@@ -415,6 +415,94 @@ func (c *Client) importNode(ctx context.Context, node *Node, buf []byte) error {
 	return nil
 }
 
+// ImportValue bulk imports field values for a single slice to a host.
+func (c *Client) ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error {
+	if index == "" {
+		return ErrIndexRequired
+	} else if frame == "" {
+		return ErrFrameRequired
+	}
+
+	buf, err := MarshalImportValuePayload(index, frame, field, slice, vals)
+	if err != nil {
+		return fmt.Errorf("Error Creating Payload: %s", err)
+	}
+
+	// Retrieve a list of nodes that own the slice.
+	nodes, err := c.FragmentNodes(ctx, index, slice)
+	if err != nil {
+		return fmt.Errorf("slice nodes: %s", err)
+	}
+
+	// Import to each node.
+	for _, node := range nodes {
+		if err := c.importValueNode(ctx, node, buf); err != nil {
+			return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+		}
+	}
+
+	return nil
+}
+
+// MarshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
+func MarshalImportValuePayload(index, frame, field string, slice uint64, vals []FieldValue) ([]byte, error) {
+	// Separate row and column IDs to reduce allocations.
+	columnIDs := FieldValues(vals).ColumnIDs()
+	values := FieldValues(vals).Values()
+
+	// Marshal bits to protobufs.
+	buf, err := proto.Marshal(&internal.ImportValueRequest{
+		Index:     index,
+		Frame:     frame,
+		Slice:     slice,
+		Field:     field,
+		ColumnIDs: columnIDs,
+		Values:    values,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal import request: %s", err)
+	}
+	return buf, nil
+}
+
+// importValueNode sends a pre-marshaled import request to a node.
+func (c *Client) importValueNode(ctx context.Context, node *Node, buf []byte) error {
+	// Create URL & HTTP request.
+	u := url.URL{Scheme: "http", Host: node.Host, Path: "/import-value"}
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+
+	// Execute request against the host.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Read body and unmarshal response.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	} else if resp.StatusCode != http.StatusOK {
+		return errors.New(string(body))
+	}
+
+	var isresp internal.ImportResponse
+	if err := proto.Unmarshal(body, &isresp); err != nil {
+		return fmt.Errorf("unmarshal import response: %s", err)
+	} else if s := isresp.Err; s != "" {
+		return errors.New(s)
+	}
+
+	return nil
+}
+
 // ExportCSV bulk exports data for a single slice from a host to CSV format.
 func (c *Client) ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error {
 	if index == "" {
@@ -1085,6 +1173,57 @@ func (p Bits) GroupBySlice() map[uint64][]Bit {
 	for slice, bits := range m {
 		sort.Sort(Bits(bits))
 		m[slice] = bits
+	}
+
+	return m
+}
+
+// FieldValues represents the value for a column within a
+// range-encoded frame.
+type FieldValue struct {
+	ColumnID uint64
+	Value    uint64
+}
+
+// FieldValues represents a slice of field values.
+type FieldValues []FieldValue
+
+func (p FieldValues) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+func (p FieldValues) Len() int      { return len(p) }
+
+func (p FieldValues) Less(i, j int) bool {
+	return p[i].ColumnID < p[j].ColumnID
+}
+
+// ColumnIDs returns a slice of all the column IDs.
+func (p FieldValues) ColumnIDs() []uint64 {
+	other := make([]uint64, len(p))
+	for i := range p {
+		other[i] = p[i].ColumnID
+	}
+	return other
+}
+
+// Values returns a slice of all the values.
+func (p FieldValues) Values() []uint64 {
+	other := make([]uint64, len(p))
+	for i := range p {
+		other[i] = p[i].Value
+	}
+	return other
+}
+
+// GroupBySlice returns a map of field values by slice.
+func (p FieldValues) GroupBySlice() map[uint64][]FieldValue {
+	m := make(map[uint64][]FieldValue)
+	for _, val := range p {
+		slice := val.ColumnID / SliceWidth
+		m[slice] = append(m[slice], val)
+	}
+
+	for slice, vals := range m {
+		sort.Sort(FieldValues(vals))
+		m[slice] = vals
 	}
 
 	return m
