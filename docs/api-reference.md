@@ -162,12 +162,28 @@ The request payload is in JSON, and may contain the `options` field. The `option
 * `inverseEnabled` (boolean): Enables [the inverted view]({{< ref "data-model.md#inverse" >}}) for this frame if `true`.
 * `cacheType` (string): [ranked]({{< ref "data-model.md#ranked" >}}) or [LRU]({{< ref "data-model.md#lru" >}}) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
+* `rangeEnabled` (boolean): Enables range-encoded fields in this frame.
+* `fields` (array): List of range-encoded fields.
+
+Each individual `field` contains the following:
+* `name` (string): Field name.
+* `type` (string): Field type, currently only "int" is supported.
+* `min` (int): Minimum of the value range stored in this field.
+* `max` (int): Maximum of the value range stored in this field.
+
+Integer fields are stored as n-bit range-encoded values. Pilosa can use up to a 64-bit integer with one bit reserved for the non-null bitmap leaving up to a 63-bit signed integer represented between `min` and `max`.
 
 Request:
 ```
 curl localhost:10101/index/user/frame/language \
      -X POST \
      -d '{"options": {"rowLabel": "language_id"}}'
+```
+
+```
+curl localhost:10101/index/repository/frame/stats \
+    -X POST \
+    -d '{"rangeEnabled": true, "fields": [{"name": "pullrequests", "type": "int", "min": 0, "max": 1000000}]}'
 ```
 
 Response:
@@ -216,6 +232,29 @@ Request:
 curl localhost:10101/index/user/frame/language/time-quantum \
      -X POST \
      -d '{"timeQuantum": "YM"}'
+```
+
+Response:
+```
+{}
+```
+
+### Create Field
+
+`POST /index/<index-name>/frame/<frame-name>/field/<field-name>`
+
+Creates a new field to store integer values in the given frame.
+
+The request payload is JSON, and it must contain the fields `type`, `min`, `max`.
+* `type` (string): Field type, currently only "int" is supported.
+* `min` (int): Minimum of the value range stored in this field.
+* `max` (int): Maximum of the value range stored in this field.
+
+Request:
+```
+curl localhost:10101/index/repository/frame/stats/field/pullrequests \
+    -X POST \
+    -d '{"type": "int", "min": 0, "max": 1000000}'
 ```
 
 Response:
