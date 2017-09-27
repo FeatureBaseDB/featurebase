@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statsd"
 )
@@ -41,7 +42,8 @@ func init() {
 
 const (
 	// DefaultDataDir is the default data directory.
-	DefaultDataDir = "~/.pilosa"
+	DefaultDataDir          = "~/.pilosa"
+	DefaultDiagnosticServer = "https://requestb.in/w3uukzw3"
 )
 
 // Command represents the state of the pilosa server command.
@@ -222,12 +224,20 @@ func (m *Command) Close() error {
 
 // NewStatsClient creates a stats client from the config
 func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
+	ms := make(pilosa.MultiStatsClient, 1)
+	d := diagnostics.New(DefaultDiagnosticServer)
+	d.SetVersion(pilosa.Version)
+	ms[0] = d
+
 	switch name {
 	case "expvar":
-		return pilosa.NewExpvarStatsClient(), nil
+		ms = append(ms, pilosa.NewExpvarStatsClient())
 	case "statsd":
-		return statsd.NewStatsClient(host)
-	default:
-		return pilosa.NopStatsClient, nil
+		r, err := statsd.NewStatsClient(host)
+		if err != nil {
+			return nil, err
+		}
+		ms = append(ms, r)
 	}
+	return ms, nil
 }
