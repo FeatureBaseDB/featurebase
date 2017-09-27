@@ -202,10 +202,10 @@ func (s *Server) Addr() net.Addr {
 	return s.ln.Addr()
 }
 
+// Logger returns a logger that writes to LogOutput
 func (s *Server) Logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
 
 func (s *Server) monitorAntiEntropy() {
-	t := time.Now()
 	ticker := time.NewTicker(s.AntiEntropyInterval)
 	defer ticker.Stop()
 
@@ -219,7 +219,7 @@ func (s *Server) monitorAntiEntropy() {
 		case <-ticker.C:
 			s.Holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
-
+		t := time.Now()
 		s.Logger().Printf("holder sync beginning")
 
 		// Initialize syncer with local holder and remote client.
@@ -237,9 +237,9 @@ func (s *Server) monitorAntiEntropy() {
 
 		// Record successful sync in log.
 		s.Logger().Printf("holder sync complete")
+		dif := time.Since(t)
+		s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
 	}
-	dif := time.Since(t)
-	s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
 }
 
 // monitorMaxSlices periodically pulls the highest slice from each node in the cluster.
@@ -486,7 +486,13 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 
 // monitorRuntime periodically polls the Go runtime metrics.
 func (s *Server) monitorRuntime() {
-	// Disable metrics when poll interval is zero
+	s.Holder.Stats.Set("Host", s.Host, 1.0)
+	s.Holder.Stats.Set("Cluster", strings.Join(s.Cluster.NodeSetHosts(), ","), 1.0)
+	s.Holder.Stats.Set("NumNodes", strconv.Itoa(len(s.Cluster.Nodes)), 1.0)
+	s.Holder.Stats.Set("NumCPU", strconv.Itoa(runtime.NumCPU()), 1.0)
+	// TODO should we force this to run for diagnostics?
+
+	// Disable metrics when poll interval is zero.
 	if s.MetricInterval <= 0 {
 		return
 	}
@@ -506,18 +512,18 @@ func (s *Server) monitorRuntime() {
 		case <-s.closing:
 			return
 		case <-gcn.AfterGC():
-			// GC just ran
+			// GC just ran.
 			s.Holder.Stats.Count("garbage_collection", 1, 1.0)
 		case <-ticker.C:
 		}
 
-		// Record the number of go routines
+		// Record the number of go routines.
 		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 
-		// Open File handles
+		// Open File handles.
 		s.Holder.Stats.Gauge("OpenFiles", float64(CountOpenFiles()), 1.0)
 
-		// Runtime memory metrics
+		// Runtime memory metrics.
 		runtime.ReadMemStats(&m)
 		s.Holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
 		s.Holder.Stats.Gauge("HeapInuse", float64(m.HeapInuse), 1.0)
@@ -527,7 +533,7 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-// CountOpenFiles on opperating systems that support lsof
+// CountOpenFiles on operating systems that support lsof.
 func CountOpenFiles() int {
 	count := 0
 
