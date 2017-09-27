@@ -287,7 +287,7 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 }
 
 // Ensure client can bulk import value data.
-func TestClient_Importalue(t *testing.T) {
+func TestClient_ImportValue(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
