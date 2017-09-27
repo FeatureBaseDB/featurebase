@@ -161,7 +161,14 @@ func (c *Call) String() string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, "%v=%s", key, FormatValue(c.Args[key]))
+		// If the Arg value is a Condition, then don't include
+		// the equal sign in the string representation.
+		switch v := c.Args[key].(type) {
+		case *Condition:
+			fmt.Fprintf(&buf, "%v %s", key, v.String())
+		default:
+			fmt.Fprintf(&buf, "%v=%s", key, FormatValue(v))
+		}
 	}
 
 	// Write closing.
