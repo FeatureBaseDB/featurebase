@@ -54,9 +54,7 @@ curl localhost:10101/schema
 
 Before we can import data or run queries, we need to create our indexes and the frames within them. Let's create the repository index first:
 ```
-curl localhost:10101/index/repository \
-     -X POST \
-     -d '{"options": {"columnLabel": "repo_id"}}'
+curl localhost:10101/index/repository -X POST
 ```
 
 Repository IDs are the main focus of the `repository` index, so we chose `repo_id` as the column label.
@@ -65,8 +63,7 @@ Let's create the `stargazer` frame which has user IDs of stargazers as its rows:
 ```
 curl localhost:10101/index/repository/frame/stargazer \
      -X POST \
-     -d '{"options": {"rowLabel": "stargazer_id", 
-                      "timeQuantum": "YMD",
+     -d '{"options": {"timeQuantum": "YMD",
                       "inverseEnabled": true}}'
 ```
 
@@ -78,8 +75,7 @@ Next up is the `language` frame, which will contain IDs for programming language
 ```
 curl localhost:10101/index/repository/frame/language \
      -X POST \
-     -d '{"options": {"rowLabel": "language_id",
-                      "inverseEnabled": true}}'
+     -d '{"options": {"inverseEnabled": true}}'
 ```
 
 #### Import Data From CSV Files
@@ -121,7 +117,7 @@ Which repositories did user 14 star:
 ```
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'Bitmap(frame="stargazer", stargazer_id=14)'
+     -d 'Bitmap(frame="stargazer", rowID=14)'
 ```
 
 What are the top 5 languages in the sample data:
@@ -135,28 +131,28 @@ Which repositories were starred by user 14 and 19:
 ```
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'Intersect(Bitmap(frame="stargazer", stargazer_id=14), Bitmap(frame="stargazer", stargazer_id=19))'
+     -d 'Intersect(Bitmap(frame="stargazer", rowID=14), Bitmap(frame="stargazer", rowID=19))'
 ```
 
 Which repositories were starred by user 14 or 19:
 ```
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'Union(Bitmap(frame="stargazer", stargazer_id=14), Bitmap(frame="stargazer", stargazer_id=19))'
+     -d 'Union(Bitmap(frame="stargazer", rowID=14), Bitmap(frame="stargazer", rowID=19))'
 ```
 
 Which repositories were starred by user 14 and 19 and also were written in language 1:
 ```
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'Intersect(Bitmap(frame="stargazer", stargazer_id=14), Bitmap(frame="stargazer", stargazer_id=19), Bitmap(frame="language", language_id=1))'
+     -d 'Intersect(Bitmap(frame="stargazer", rowID=14), Bitmap(frame="stargazer", rowID=19), Bitmap(frame="language", rowID=1))'
 ```
 
 Set user 99999 as a stargazer for repository 77777:
 ```
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'SetBit(frame="stargazer", repo_id=77777, stargazer_id=99999)'
+     -d 'SetBit(frame="stargazer", columnID=77777, rowID=99999)'
 ```
 
 ### What's Next?

@@ -31,13 +31,17 @@ import (
 func main() {
     // Let's create Index and Frame objects, which will contain the settings
     // for the corresponding indexes and frames.
-    repositoryOptions, := &pilosa.ColumnOptions{ColumnLabel: "repo_id"}
-    repository, _ := pilosa.NewIndex("repository", repositoryOptions)
+    repository, _ := pilosa.NewIndex("repository", nil)
 
-    stargazerOptions := &pilosa.RowOptions{RowLabel: "stargazer_id"}
+    stargazerOptions := &pilosa.RowOptions{
+        TimeQuantum: pilosa.TimeQuantumYearMonthDay,
+        InverseEnabled: true,
+    }
     stargazer, _ := repository.Frame("stargazer", stargazerOptions)
 
-    languageOptions := &pilosa.RowOptions{RowLabel: "language_id"}
+    languageOptions := &pilosa.RowOptions{
+        InverseEnabled: true,
+    }
     language, _ := repository.Frame("language", languageOptions)
 
     // We will just use the default client which assumes the server is at http://localhost:10101
@@ -99,13 +103,15 @@ We are going to use the index you have created in the [Getting Started](../getti
 Error handling has been omitted in the example below for brevity.
 
 ```python
-from pilosa import Index, Client, PilosaError
+from pilosa import Index, Client, PilosaError, TimeQuantum
 
 # Let's create Index and Frame objects, which will contain the settings
 # for the corresponding indexes and frames.
-repository = Index("repository", column_label="repo_id")
-stargazer = repository.frame("stargazer", row_label="stargazer_id")
-language = repository.frame("language", row_label="language_id")
+repository = Index("repository")
+stargazer = repository.frame("stargazer",
+                             time_quantum=TimeQuantum.YEAR_MONTH_DAY,
+                             inverse_enabled=True)
+language = repository.frame("language", inverse_enabled=True)
 
 # We will just use the default client which assumes the server is at http://localhost:10101
 client = Client()
@@ -161,18 +167,17 @@ public class StarTrace {
     public static void main(String[] args) {
         // Let's create Index and Frame objects, which will contain the settings
         // for the corresponding indexes and frames.
-        IndexOptions repositoryOptions = IndexOptions.builder()
-            .setColumnLabel("repo_id")
-            .build();
+        IndexOptions repositoryOptions = IndexOptions.withDefaults();
         Index repository = Index.withName("repository", repositoryOptions);
 
         FrameOptions stargazerOptions = FrameOptions.builder()
-            .setRowLabel("stargazer_id")
+            .setTimeQuantum(TimeQuantum.YEAR_MONTH_DAY)
+            .setInverseEnabled(true)
             .build();
         Frame stargazer = repository.frame("stargazer", stargazerOptions);
 
         FrameOptions languageOptions = FrameOptions.builder()
-            .setRowLabel("language_id")
+            .setInverseEnabled(true)
             .build();        
         Frame language = repository.frame("language", languageOptions);
 

@@ -47,13 +47,13 @@ Creates an index with the given name.
 
 The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which may contain the following fields:
 
-* `columnLabel` (string): column label of the index.
+* `timeQuantum` (string): time quantum of the index.
 
 Request:
 ```
 curl localhost:10101/index/user \
      -X POST \
-     -d '{"options": {"columnLabel": "user_id"}}'
+     -d '{"options": {"timeQuantum": "YMDH"}}'
 ```
 
 Response:
@@ -87,7 +87,7 @@ Request:
 ```
 curl localhost:10101/index/user/query \
      -X POST \
-     -d 'Bitmap(frame="language", id=5)'
+     -d 'Bitmap(frame="language", rowID=5)'
 ```
 
 Response:
@@ -105,7 +105,7 @@ Request:
 ```
 curl "localhost:10101/index/user/query?columnAttrs=true&slices=0,1" \
      -X POST \
-     -d 'Bitmap(frame="language", id=5)'
+     -d 'Bitmap(frame="language", rowID=5)'
 ```
 Response:
 ```
@@ -157,7 +157,6 @@ Creates a frame in the given index with the given name.
 
 The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which may contain the following fields:
 
-* `rowLabel` (string): Row label of the frame.
 * `timeQuantum` (string): [Time Quantum]({{< ref "data-model.md#time-quantum" >}}) for this frame.
 * `inverseEnabled` (boolean): Enables [the inverted view]({{< ref "data-model.md#inverse" >}}) for this frame if `true`.
 * `cacheType` (string): [ranked]({{< ref "data-model.md#ranked" >}}) or [LRU]({{< ref "data-model.md#lru" >}}) caching on this frame. Default is `lru`.
@@ -167,7 +166,7 @@ Request:
 ```
 curl localhost:10101/index/user/frame/language \
      -X POST \
-     -d '{"options": {"rowLabel": "language_id"}}'
+     -d '{"options": {"inverseEnabled": true}}'
 ```
 
 Response:
@@ -231,7 +230,6 @@ Creates an input definition in the given index with the given name.
  
 The request payload is JSON, and it must contain the fields `frames` and `fields`. `frames` is an array of frames used within this input definition.  Each frame must contain a `name` and may contain the following options:
  
-* `rowLabel` (string): Row label of the frame.
 * `timeQuantum` (string): [Time Quantum]({{< ref "data-model.md#time-quantum" >}}) for this frame.
 * `inverseEnabled` (boolean): Enables [the inverted view]({{< ref "data-model.md#inverse" >}}) for this frame if `true`.
 * `cacheType` (string): [ranked]({{< ref "data-model.md#ranked" >}}) or [LRU]({{< ref "data-model.md#lru" >}}) caching on this frame. Default is `lru`.
@@ -260,7 +258,7 @@ curl localhost:10101/index/user/input-definition/stargazer-input \
             "frames":[
                 {
                     "name": "language",
-                    "options": {"rowLabel": "language_id"}
+                    "options": {"inverseEnabled": true}
                 }
             ],
             "fields":[
@@ -304,7 +302,7 @@ curl -XGET localhost:10101/index/user/input-definition/stargazer-input
 
 Response:
 ```
-{"frames":[{"name":"language","options":{"rowLabel":"language_id"}}],"fields":[{"name":"repo_id","primaryKey":true},{"name":"language_id","actions":[{"frame":"language","valueDestination":"mapping","valueMap":{"Go":5,"Python":17,"C++":10}}]}]}
+{"frames":[{"name":"language","options":{"inverseEnabled":true}}],"fields":[{"name":"repo_id","primaryKey":true},{"name":"language_id","actions":[{"frame":"language","valueDestination":"mapping","valueMap":{"Go":5,"Python":17,"C++":10}}]}]}
 ```
 
 ### Remove input definition
