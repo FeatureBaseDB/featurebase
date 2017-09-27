@@ -420,3 +420,83 @@ Range(frame="stargazer", stargazer_id=1, start="2010-01-01T00:00", end="2017-03-
 Returns `{{"attrs":{},"bits":[10]}`
 
 * bits are repositories which were starred by user 1 from 2010-01-01 to 2017-03-02
+
+
+#### Range (BSI)
+
+**Spec:**
+
+```
+Range(<frame=STRING>, <FIELD_NAME, COMPARISON_OPERATOR, integer> )
+```
+
+**Description:**
+
+The to `Range` query is overloaded to also work on `field` values.
+Returns bits that are true for the comparison operator
+
+**Result Type:** object with attrs and bits
+
+
+**Examples:**
+
+In our source data commitactivity was counted over the last year.
+This Range query finds all repositories that had that many commits.
+
+```
+Range(frame="stats", commitactivity > 100)
+```
+
+Returns `{{"attrs":{},"bits":[10]}`
+
+* bits are repositories which had at least 100 commits in the last year.
+
+
+#### Sum
+
+**Spec:**
+
+```
+Sum(<frame=STRING>, <field=STRING>)
+```
+
+**Description:**
+
+Returns the computed sum of all `field` values across the bits in a `frame` plus the count of bitmaps with a field value.
+
+**Result Type:** object with sum and count.
+
+**Examples:**
+
+Query the size of all repositories.
+```
+Sum(frame="stats", field="diskusage")
+```
+
+Return `{"sum":10,"count":3}`
+
+* Result is the size of all repositories in kilobytes, plus the number of repositories.
+
+
+#### SetFieldValue
+
+**Spec:**
+
+```
+SetFieldValue(<COL_LABEL=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
+```
+
+**Description:**
+
+`SetFieldValue` assigns an integer value with the specified field name to the `columnID` in the given `frame`. The `field` values is encoded across the bits in a `frame`.
+
+**Result Type:** null
+
+SetFieldValue queries always return `null` upon success.
+
+**Examples:**
+
+Set the number of pull requests of repository 10.
+```
+SetFieldValue(col=10, frame="stats", "pullrequests"=2)
+```
