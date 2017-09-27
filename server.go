@@ -565,6 +565,12 @@ func (s *Server) monitorDiagnostics() {
 
 // monitorRuntime periodically polls the Go runtime metrics.
 func (s *Server) monitorRuntime() {
+	s.Holder.Stats.Set("Host", s.Host, 1.0)
+	s.Holder.Stats.Set("Cluster", strings.Join(s.Cluster.NodeSetHosts(), ","), 1.0)
+	s.Holder.Stats.Set("NumNodes", strconv.Itoa(len(s.Cluster.Nodes)), 1.0)
+	s.Holder.Stats.Set("NumCPU", strconv.Itoa(runtime.NumCPU()), 1.0)
+	// TODO should we force this to run for diagnostics?
+
 	// Disable metrics when poll interval is zero.
 	if s.MetricInterval <= 0 {
 		return
@@ -614,7 +620,7 @@ func (s *Server) createDefaultClient() {
 	s.defaultClient = &http.Client{Transport: transport}
 }
 
-// CountOpenFiles on opperating systems that support lsof
+// CountOpenFiles on operating systems that support lsof.
 func CountOpenFiles() int {
 	count := 0
 
