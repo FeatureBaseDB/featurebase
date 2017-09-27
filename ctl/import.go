@@ -38,6 +38,13 @@ type ImportCommand struct {
 	Index string `json:"index"`
 	Frame string `json:"frame"`
 
+	// Options for index & frame to be created if they don't exist
+	IndexOptions pilosa.IndexOptions
+	FrameOptions pilosa.FrameOptions
+
+	// CreateSchema ensures the schema exists before import
+	CreateSchema bool
+
 	// Filenames to import from.
 	Paths []string `json:"paths"`
 
@@ -57,8 +64,7 @@ type ImportCommand struct {
 // NewImportCommand returns a new instance of ImportCommand.
 func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand {
 	return &ImportCommand{
-		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
-
+		CmdIO:      pilosa.NewCmdIO(stdin, stdout, stderr),
 		BufferSize: 10000000,
 	}
 }
@@ -83,6 +89,13 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	}
 	cmd.Client = client
 
+	if cmd.CreateSchema {
+		err := cmd.ensureSchema(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Import each path and import by slice.
 	for _, path := range cmd.Paths {
 		// Parse path into bits.
@@ -92,6 +105,18 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		}
 	}
 
+	return nil
+}
+
+func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
+	err := cmd.Client.EnsureIndex(ctx, cmd.Index, cmd.IndexOptions)
+	if err != nil {
+		return fmt.Errorf("Error Creating Index: %s", err)
+	}
+	err = cmd.Client.EnsureFrame(ctx, cmd.Index, cmd.Frame, cmd.FrameOptions)
+	if err != nil {
+		return fmt.Errorf("Error Creating Frame: %s", err)
+	}
 	return nil
 }
 

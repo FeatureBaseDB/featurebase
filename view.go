@@ -43,7 +43,7 @@ func IsValidView(name string) bool {
 
 // View represents a container for frame data.
 type View struct {
-	mu    sync.Mutex
+	mu    sync.RWMutex
 	path  string
 	index string
 	frame string
@@ -174,8 +174,8 @@ func (v *View) Close() error {
 
 // MaxSlice returns the max slice in the view.
 func (v *View) MaxSlice() uint64 {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	v.mu.RLock()
+	defer v.mu.RUnlock()
 
 	var max uint64
 	for slice := range v.fragments {
@@ -194,8 +194,8 @@ func (v *View) FragmentPath(slice uint64) string {
 
 // Fragment returns a fragment in the view by slice.
 func (v *View) Fragment(slice uint64) *Fragment {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	v.mu.RLock()
+	defer v.mu.RUnlock()
 	return v.fragment(slice)
 }
 

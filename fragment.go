@@ -67,7 +67,7 @@ const (
 
 // Fragment represents the intersection of a frame and slice in an index.
 type Fragment struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	// Composite identifiers
 	index string
@@ -187,8 +187,9 @@ func (f *Fragment) Open() error {
 // openStorage opens the storage bitmap.
 func (f *Fragment) openStorage() error {
 	// Create a roaring bitmap to serve as storage for the slice.
-	f.storage = roaring.NewBitmap()
-
+	if f.storage == nil {
+		f.storage = roaring.NewBitmap()
+	}
 	// Open the data file to be mmap'd and used as an ops log.
 	file, err := os.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -312,7 +313,8 @@ func (f *Fragment) close() error {
 
 func (f *Fragment) closeStorage() error {
 	// Clear the storage bitmap so it doesn't access the closed mmap.
-	f.storage = roaring.NewBitmap()
+
+	//f.storage = roaring.NewBitmap()
 
 	// Unmap the file.
 	if f.storageData != nil {
@@ -543,11 +545,8 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 // FieldSum returns the sum of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	// Compute count based on the existance bit.
-	row := f.row(uint64(bitDepth), true, true)
+	row := f.Row(uint64(bitDepth))
 	if filter != nil {
 		row = row.Intersect(filter)
 	}
@@ -561,7 +560,7 @@ func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, e
 	//   10*(2^0) + 4*(2^1) + 3*(2^2) = 30
 	//
 	for i := uint(0); i < bitDepth; i++ {
-		row := f.row(uint64(i), true, true)
+		row := f.Row(uint64(i))
 		if filter != nil {
 			row = row.Intersect(filter)
 		}

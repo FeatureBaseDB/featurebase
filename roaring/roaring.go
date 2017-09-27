@@ -617,18 +617,38 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	// Read key count in bytes sizeof(cookie):(sizeof(cookie)+sizeof(uint32)).
 	keyN := binary.LittleEndian.Uint32(data[4:8])
-	b.keys = make([]uint64, keyN)
-	b.containers = make([]*container, keyN)
+
+	if len(b.keys) == 0 {
+		b.keys = make([]uint64, 0, keyN)
+		b.containers = make([]*container, 0, keyN)
+	} else if int(keyN) < len(b.keys) { //shrink
+		// nil out to allow to be GCed
+		for i := range b.containers[keyN:] {
+			b.containers[int(keyN)+i] = nil
+		}
+		b.keys = b.keys[:keyN]
+		b.containers = b.containers[:keyN]
+	}
 
 	headerSize := headerBaseSize
 
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
-		b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
-		b.containers[i] = &container{
-			container_type: byte(binary.LittleEndian.Uint16(buf[8:10])),
-			n:              int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
-			mapped:         true,
+		// Reuse memory if possible
+		if i >= len(b.keys) {
+			b.keys = append(b.keys, binary.LittleEndian.Uint64(buf[0:8]))
+			b.containers = append(b.containers, &container{
+				container_type: byte(binary.LittleEndian.Uint16(buf[8:10])),
+				n:              int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
+				mapped:         true,
+			})
+		} else {
+			b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
+			c := b.containers[i]
+			c.container_type = byte(binary.LittleEndian.Uint16(buf[8:10]))
+			c.n = int(binary.LittleEndian.Uint16(buf[10:12])) + 1
+			c.mapped = true
+
 		}
 	}
 	opsOffset := headerSize + int(keyN)*12
@@ -945,7 +965,7 @@ const RunMaxSize = 2048
 // an array or RLE container is used, depending on the contents. For containers
 // with more than 4,096 values, the values are encoded into bitmaps.
 type container struct {
-	container_type byte         // number of integers in container
+	container_type byte         // array, bitmap, or run
 	n              int          // number of integers in container
 	array          []uint16     // used for array containers
 	bitmap         []uint64     // used for bitmap containers
@@ -1602,6 +1622,19 @@ func (c *container) clone() *container {
 		copy(other.runs, c.runs)
 	}
 
+	return other
+}
+
+// flipBitmap returns a new bitmap containter containing the inverse of all
+// bits in c.
+func (c *container) flipBitmap() *container {
+	other := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+
+	for i, bitmap := range c.bitmap {
+		other.bitmap[i] = ^bitmap
+	}
+
+	other.n = other.count()
 	return other
 }
 
@@ -2512,6 +2545,10 @@ func differenceRunArray(a, b *container) *container {
 func differenceRunBitmap(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
+	}
+	// If a is full, difference is the flip of b.
+	if a.runs[0].start == 0 && a.runs[0].last == 65535 {
+		return b.flipBitmap()
 	}
 	itr := newBufBitmapIterator(newBitmapIterator(b.bitmap))
 	return differenceRunIterator(a, itr)

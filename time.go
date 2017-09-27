@@ -53,6 +53,23 @@ func (q TimeQuantum) Valid() bool {
 	}
 }
 
+// The following methods are required to implement pflag Value interface.
+
+// Set sets the time quantum value.
+func (q *TimeQuantum) Set(value string) error {
+	*q = TimeQuantum(value)
+	return nil
+}
+
+func (q TimeQuantum) String() string {
+	return string(q)
+}
+
+// Type returns the type of a time quantum value.
+func (q TimeQuantum) Type() string {
+	return "TimeQuantum"
+}
+
 // ParseTimeQuantum parses v into a time quantum.
 func ParseTimeQuantum(v string) (TimeQuantum, error) {
 	q := TimeQuantum(strings.ToUpper(v))

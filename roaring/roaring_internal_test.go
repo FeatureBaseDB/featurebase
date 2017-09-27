@@ -1869,6 +1869,38 @@ func TestXorRunRun(t *testing.T) {
 	}
 }
 
+func TestBitmapFlip(t *testing.T) {
+	c := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+
+	ttable := []struct {
+		original uint64
+		flipped  uint64
+	}{
+		{0x0000000000000000, 0xFFFFFFFFFFFFFFFF},
+		{0xFFFFFFFFFFFFFFFF, 0x0000000000000000},
+		{0xFFFFFFFFFFFFFFF0, 0x000000000000000F},
+		{0xFFFFFFEFFFFFFFFF, 0x0000001000000000},
+		{0x0000001000000000, 0xFFFFFFEFFFFFFFFF},
+	}
+
+	expectedN := int(65536)
+	for i, tt := range ttable {
+		c.bitmap[i] = tt.original
+		expectedN -= int(popcount(tt.original))
+	}
+
+	o := c.flipBitmap()
+
+	for i, tt := range ttable {
+		if o.bitmap[i] != tt.flipped {
+			t.Fatalf("bitmapFlip calculation. expected %v, got %v", tt.flipped, o.bitmap[i])
+		}
+	}
+	if o.n != expectedN {
+		t.Fatalf("bitmapFlip calculation. expected count %v, got %v", expectedN, o.n)
+	}
+}
+
 func TestBitmapXorRange(t *testing.T) {
 	c := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
 	tests := []struct {

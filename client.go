@@ -339,6 +339,22 @@ func (c *Client) Import(ctx context.Context, index, frame string, slice uint64, 
 	return nil
 }
 
+func (c *Client) EnsureIndex(ctx context.Context, name string, options IndexOptions) error {
+	err := c.CreateIndex(ctx, name, options)
+	if err == nil || err == ErrIndexExists {
+		return nil
+	}
+	return err
+}
+
+func (c *Client) EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error {
+	err := c.CreateFrame(ctx, indexName, frameName, options)
+	if err == nil || err == ErrFrameExists {
+		return nil
+	}
+	return err
+}
+
 // MarshalImportPayload marshalls the import parameters into a protobuf byte slice.
 func MarshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
