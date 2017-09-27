@@ -689,10 +689,6 @@ func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality b
 }
 
 func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Bitmap, error) {
-	return f.fieldRangeBetween(bitDepth, predicateMin, predicateMax)
-}
-
-func (f *Fragment) fieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Bitmap, error) {
 	b := f.Row(uint64(bitDepth))
 	keep1 := NewBitmap() // GTE
 	keep2 := NewBitmap() // LTE
