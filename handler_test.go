@@ -1072,13 +1072,28 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 		} else if field.Max != 100 {
 			t.Fatalf("expected field's max: x, actuall max: %v", field.Max)
 		}
-		//
-		//
-		//if field := f.Field("x"); field != nil {
-		//	t.Fatalf("expected nil field, got: %#v", field)
-		//}
 
 	})
+
+	t.Run("ErrFrameFieldNotAllowed", func(t *testing.T) {
+		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		_, err := idx.CreateFrameIfNotExists("f1", pilosa.FrameOptions{RangeEnabled: false})
+
+		resp, err := http.Get(s.URL + "/index/i/frame/f1/fields")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err != nil {
+			t.Fatal(err)
+		} else if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("unexpected status code: %d", resp.StatusCode)
+		} else if body, err := ioutil.ReadAll(resp.Body); err != nil {
+			t.Fatal(err)
+		} else if strings.TrimSpace(string(body)) != `frame fields not allowed` {
+			t.Fatalf("unexpected body: %q", body)
+		}
+	})
+
 }
 
 type FrameFields struct {

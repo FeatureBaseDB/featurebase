@@ -446,7 +446,7 @@ func (f *Frame) GetFields() (*FrameSchema, error) {
 
 	// Ensure frame supports fields.
 	if !f.RangeEnabled() {
-		return nil, nil
+		return nil, ErrFrameFieldsNotAllowed
 	}
 	err := f.loadSchema()
 	if err != nil {

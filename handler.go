@@ -849,7 +849,10 @@ func (h *Handler) handleGetFrameField(w http.ResponseWriter, r *http.Request) {
 	index := h.Holder.index(indexName)
 	frame := index.frame(frameName)
 	schema, err := frame.GetFields()
-	if err != nil {
+	if err == ErrFrameFieldsNotAllowed {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
