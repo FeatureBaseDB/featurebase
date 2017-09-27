@@ -439,19 +439,21 @@ func (f *Frame) CreateField(field *Field) error {
 	return nil
 }
 
-// GetFields list all the fields.
+// GetFields returns a list of all the fields in the frame.
 func (f *Frame) GetFields() (*FrameSchema, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
-	// Ensure frame supports fields.
+	// Ensure the frame supports fields.
 	if !f.RangeEnabled() {
 		return nil, ErrFrameFieldsNotAllowed
 	}
+
 	err := f.loadSchema()
 	if err != nil {
 		return nil, err
 	}
+
 	return f.schema, nil
 }
 
