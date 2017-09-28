@@ -2457,13 +2457,52 @@ func differenceBitmapRun(a, b *container) *container {
 	return output
 }
 
-// differenceRunArray computes the difference of an run from a array.
+// differenceRunArray subtracts the bits in an array container from a run
+// container.
 func differenceRunArray(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
 	}
-	itr := newArrayIterator(b.array)
-	return differenceRunIterator(a, itr)
+	output := &container{runs: make([]interval16, 0, len(a.runs)), container_type: ContainerRun}
+
+	bidx := 0
+	vb := b.array[bidx]
+	for _, run := range a.runs {
+		start := run.start
+		for vb < run.start {
+			bidx++
+			if bidx >= len(b.array) {
+				break
+			}
+			vb = b.array[bidx]
+		}
+		for vb >= run.start && vb <= run.last {
+			if vb == start {
+				start++
+				bidx++
+				if bidx >= len(b.array) {
+					break
+				}
+				vb = b.array[bidx]
+				continue
+			}
+			output.runs = append(output.runs, interval16{start: start, last: vb - 1})
+			output.n += int(vb - start)
+			start = vb + 1
+			bidx++
+			if bidx >= len(b.array) {
+				break
+			}
+			vb = b.array[bidx]
+		}
+
+		if start <= run.last {
+			output.runs = append(output.runs, interval16{start: start, last: run.last})
+			output.n += int(run.last - start + 1)
+		}
+	}
+	output.Optimize()
+	return output
 }
 
 // differenceRunBitmap computes the difference of an run from a bitmap.
