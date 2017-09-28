@@ -18,9 +18,7 @@ Input definitions allow users to define a schema based on their data and to prov
 Before creating a schema, let's create the repository index first:
 
 ```
-curl localhost:10101/index/repository \
-     -X POST \
-     -d '{"options": {"columnLabel": "repo_id"}}'
+curl localhost:10101/index/repository -X POST
 ```
 Then we can send the following input definition as JSON to Pilosa. The sample input defintion schema for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started), `input-definition.json` file
 
@@ -32,7 +30,6 @@ curl localhost:10101/index/repository/input-definition/stargazer \
                  {
                      "name": "language", 
                      "options": {
-                         "rowLabel": "language_id",
                          "inverseEnabled": true, 
                          "timeQuantum": "YMD"
                      }
@@ -40,7 +37,6 @@ curl localhost:10101/index/repository/input-definition/stargazer \
                  {
                      "name": "stargazer", 
                      "options": {
-                         "rowLabel": "stargazer_id",
                          "inverseEnabled": true, 
                          "timeQuantum": "YMD"
                      }
@@ -127,9 +123,9 @@ The data input above is equivalent to the following `SetBit()` operations:
 ```
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114)
-         SetBit(frame="stargazer", repo_id=91720568, stargazer_id=513114, timestamp="2017-05-18T20:40")
-         SetBit(frame="language", repo_id=91720568, language_id=5)
-         SetBit(frame="language", repo_id=95122322, language_id=17)
+     -d 'SetBit(frame="stargazer", columnID=91720568, rowID=513114)
+         SetBit(frame="stargazer", columnID=91720568, rowID=513114, timestamp="2017-05-18T20:40")
+         SetBit(frame="language", columnID=91720568, rowID=5)
+         SetBit(frame="language", columnID=95122322, rowID=17)
      '
 ```

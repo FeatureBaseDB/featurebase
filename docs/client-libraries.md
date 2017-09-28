@@ -105,7 +105,7 @@ We are going to use the index you have created in the [Getting Started](../getti
 Error handling has been omitted in the example below for brevity.
 
 ```python
-from pilosa import Index, Client, PilosaError
+from pilosa import Index, Client, PilosaError, TimeQuantum
 
 # We will just use the default client which assumes the server is at http://localhost:10101
 client = Client()
