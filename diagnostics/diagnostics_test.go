@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -140,4 +141,27 @@ func compareJSON(a, b []byte) (bool, error) {
 		return false, err
 	}
 	return reflect.DeepEqual(j1, j2), nil
+}
+
+func BenchmarkDiagnostics(b *testing.B) {
+	// Mock server.
+	server := httptest.NewServer(nil)
+	defer server.Close()
+
+	// Create a new client.
+	d := diagnostics.New(server.URL)
+	d.SetLogger(ioutil.Discard)
+	defer d.Close()
+
+	prev := runtime.GOMAXPROCS(4)
+	defer runtime.GOMAXPROCS(prev)
+
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			d.Count("cc", 1, 1.0)
+			d.Gauge("gg", 10, 1.0)
+		}
+	})
 }
