@@ -57,8 +57,6 @@ Before we can import data or run queries, we need to create our indexes and the 
 curl localhost:10101/index/repository -X POST
 ```
 
-Repository IDs are the main focus of the `repository` index, so we chose `repo_id` as the column label.
-
 Let's create the `stargazer` frame which has user IDs of stargazers as its rows:
 ```
 curl localhost:10101/index/repository/frame/stargazer \
