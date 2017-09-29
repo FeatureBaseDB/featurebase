@@ -49,7 +49,7 @@ curl localhost:10101/index/repository/query \
 * `UINT` An unsigned integer (e.g. 42839)
 * `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`
 * `ATTR_VALUE` Can be a string, float, integer, or bool.
-* `BITMAP_CALL` Any query which returns a bitmap, such as `Bitmap`, `Union`, `Difference`, `Intersect`, `Range`
+* `BITMAP_CALL` Any query which returns a bitmap, such as `Bitmap`, `Union`, `Difference`, `Intersect`, `Range`, `Xor`
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`)
 
 ### Write Operations
@@ -305,7 +305,37 @@ Return `{"attrs":{},"bits":[30]}`
 
 * Bits are repositories that were starred by user 2 BUT NOT user 1
 
+
+#### Xor
+
+**Spec:**
+
+```
+Xor([BITMAP_CALL ...])
+```
+
+**Description:**
+
+Xor performs a logical XOR on the results of each `BITMAP_CALL` query passed to it.
+
+**Result Type:** object with attrs and bits
+
+attrs will always be empty
+
+**Examples:**
+
+Query all repositories that are contributed by multiple users
+```
+Xor(Bitmap(frame="stargazer", stargazer_id=21), Bitmap(frame="stargazer", stargazer_id=24))
+```
+
+Returns `{"attrs":{},"bits":[1,362,376,386,392,419,428,464,468,486,487,489,491,505,509]}`.
+
+* Bits are repositories that were starred by either user 21 OR user 24 exclusively
+
+
 #### Count
+
 **Spec:**
 
 ```
@@ -420,3 +450,85 @@ Range(frame="stargazer", rowID=1, start="2010-01-01T00:00", end="2017-03-02T03:0
 Returns `{{"attrs":{},"bits":[10]}`
 
 * bits are repositories which were starred by user 1 from 2010-01-01 to 2017-03-02
+
+
+#### Range (BSI)
+
+**Spec:**
+
+```
+Range(<frame=STRING>, <FIELD_NAME, COMPARISON_OPERATOR, integer> )
+```
+
+**Description:**
+
+The to `Range` query is overloaded to also work on `field` values.
+Returns bits that are true for the comparison operator
+
+**Result Type:** object with attrs and bits
+
+
+**Examples:**
+
+In our source data commitactivity was counted over the last year.
+This Range query finds all repositories that had that many commits.
+
+```
+Range(frame="stats", commitactivity > 100)
+```
+
+Returns `{{"attrs":{},"bits":[10]}`
+
+* bits are repositories which had at least 100 commits in the last year.
+
+
+#### Sum
+
+**Spec:**
+
+```
+Sum(<frame=STRING>, <field=STRING>)
+```
+
+**Description:**
+
+Returns the computed sum of all `field` values across the bits in a `frame` plus the count of bitmaps with a field value.
+
+**Result Type:** object with sum and count.
+
+**Examples:**
+
+Query the size of all repositories.
+```
+Sum(frame="stats", field="diskusage")
+```
+
+Return `{"sum":10,"count":3}`
+
+* Result is the size of all repositories in kilobytes, plus the number of repositories.
+
+
+#### SetFieldValue
+
+**Spec:**
+
+```
+SetFieldValue(<COL_LABEL=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
+```
+
+**Description:**
+
+`SetFieldValue` assigns an integer value with the specified field name to the `columnID` in the given `frame`.
+
+ `field` values across the bits in a `frame`.
+
+**Result Type:** null
+
+SetFieldValue queries always return `null` upon success.
+
+**Examples:**
+
+Set the number of pull requests of repository 10.
+```
+SetFieldValue(col=10, frame="stats", "pullrequests"=2)
+```
