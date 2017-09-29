@@ -3,7 +3,7 @@ title = "Administration"
 weight = 13
 nav = [
     "Installing in production",
-    "Imports and Exports",
+    "Importing and Exporting Data",
     "Versioning",
     "Backup/restore",
 ]
@@ -52,7 +52,7 @@ The import API expects a csv of RowID,ColumnID's.
 When importing large datasets remember it is much faster to pre sort the data by RowID and then by ColumnID in ascending order. You can use the `--sort` flag to do that. Also, avoid querying Pilosa until the import is complete, otherwise you will experience inconsistent results.
 
 ```
-pilosa import --sort -d project -f stargazer project-stargazer.csv
+pilosa import --sort -i project -f stargazer project-stargazer.csv
 ```
 
 #### Exporting
