@@ -168,10 +168,10 @@ The request payload is in JSON, and may contain the `options` field. The `option
 Each individual `field` contains the following:
 * `name` (string): Field name.
 * `type` (string): Field type, currently only "int" is supported.
-* `min` (int): Minimum of the value range stored in this field.
-* `max` (int): Maximum of the value range stored in this field.
+* `min` (int): Minimum value allowed for this field.
+* `max` (int): Maximum value allowed for this field.
 
-Integer fields are stored as n-bit range-encoded values. Pilosa can use up to a 64-bit integer with one bit reserved for the non-null bitmap leaving up to a 63-bit signed integer represented between `min` and `max`.
+Integer fields are stored as n-bit range-encoded values. Pilosa supports 63-bit, signed integers with values between `min` and `max`.
 
 Request:
 ```
@@ -247,8 +247,8 @@ Creates a new field to store integer values in the given frame.
 
 The request payload is JSON, and it must contain the fields `type`, `min`, `max`.
 * `type` (string): Field type, currently only "int" is supported.
-* `min` (int): Minimum of the value range stored in this field.
-* `max` (int): Maximum of the value range stored in this field.
+* `min` (int): Minimum value allowed for this field.
+* `max` (int): Maximum value allowed for this field.
 
 Request:
 ```
