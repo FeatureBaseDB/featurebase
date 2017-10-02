@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -60,12 +61,16 @@ type Server struct {
 	// Host is replaced with actual host after opening if port is ":0".
 	Network string
 	Host    string
+	Scheme  string
 	Cluster *Cluster
 
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
 	PollingInterval     time.Duration
 	MetricInterval      time.Duration
+
+	// TLS configuration
+	TLS TLSConfig
 
 	// Misc options.
 	MaxWritesPerRequest int
@@ -99,23 +104,40 @@ func NewServer() *Server {
 
 // Open opens and initializes the server.
 func (s *Server) Open() error {
-	// Require a port in the hostname.
-	host, port, err := net.SplitHostPort(s.Host)
-	if err != nil {
-		return err
-	} else if port == "" {
-		port = DefaultPort
+	var ln net.Listener
+	var err error
+
+	// If bind URI has the https scheme, enable TLS
+	if s.Scheme == "https" {
+		if s.TLS.CertificatePath == "" {
+			return errors.New("certificate path is required for TLS sockets")
+		}
+		if s.TLS.CertificateKeyPath == "" {
+			return errors.New("certificate key path is required for TLS sockets")
+		}
+		cert, err := tls.LoadX509KeyPair(s.TLS.CertificatePath, s.TLS.CertificateKeyPath)
+		if err != nil {
+			return err
+		}
+		config := tls.Config{Certificates: []tls.Certificate{cert}}
+		ln, err = tls.Listen("tcp", s.Host, &config)
+		if err != nil {
+			return err
+		}
+	} else if s.Scheme == "http" {
+		// Open HTTP listener to determine port (if specified as :0).
+		ln, err = net.Listen(s.Network, s.Host)
+		if err != nil {
+			return fmt.Errorf("net.Listen: %v", err)
+		}
+	} else {
+		return fmt.Errorf("unsupported scheme: %s", s.Scheme)
 	}
 
-	// Open HTTP listener to determine port (if specified as :0).
-	ln, err := net.Listen(s.Network, ":"+port)
-	if err != nil {
-		return fmt.Errorf("net.Listen: %v", err)
-	}
 	s.ln = ln
 
 	// Determine hostname based on listening port.
-	s.Host = net.JoinHostPort(host, strconv.Itoa(s.ln.Addr().(*net.TCPAddr).Port))
+	// s.Host = net.JoinHostPort(uri.Host(), strconv.Itoa(s.ln.Addr().(*net.TCPAddr).Port))
 
 	// Create local node if no cluster is specified.
 	if len(s.Cluster.Nodes) == 0 {

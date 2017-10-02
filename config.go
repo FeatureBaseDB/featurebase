@@ -46,6 +46,14 @@ const (
 // ClusterTypes set of cluster types.
 var ClusterTypes = []string{ClusterNone, ClusterStatic, ClusterGossip}
 
+// TLSConfig contains TLS configuration
+type TLSConfig struct {
+	// CertificatePath contains the path to the certificate (.crt or .pem file)
+	CertificatePath string `toml:"certificate-path"`
+	// CertificateKeyPath contains the path to the certificate key (.key file)
+	CertificateKeyPath string `toml:"certificate-key-path"`
+}
+
 // Config represents the configuration for the command.
 type Config struct {
 	DataDir    string `toml:"data-dir"`
@@ -80,6 +88,8 @@ type Config struct {
 		Host         string   `toml:"host"`
 		PollInterval Duration `toml:"poll-interval"`
 	} `toml:"metric"`
+
+	TLS TLSConfig
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -94,6 +104,7 @@ func NewConfig() *Config {
 	c.Cluster.Hosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics
+	c.TLS = TLSConfig{}
 	return c
 }
 
@@ -109,7 +120,7 @@ func (c *Config) Validate() error {
 			if err != nil {
 				return err
 			}
-			if !foundItem(c.Cluster.Hosts, bindWithDefaults) {
+			if !foundItem(c.Cluster.Hosts, bindWithDefaults.ListenAddress()) {
 				return ErrConfigHostsMissing
 			}
 		}

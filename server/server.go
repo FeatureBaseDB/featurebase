@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -143,7 +142,8 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return err
 	}
-	m.Server.Host = bindWithDefaults
+	m.Server.Host = bindWithDefaults.ListenAddress()
+	m.Server.Scheme = bindWithDefaults.Scheme()
 
 	// Set internal port (string).
 	gossipPortStr := pilosa.DefaultGossipPort
@@ -163,11 +163,8 @@ func (m *Command) SetupServer() error {
 		}
 
 		// get the host portion of addr to use for binding
-		gossipHost, _, err := net.SplitHostPort(bindWithDefaults)
-		if err != nil {
-			gossipHost = m.Config.Bind
-		}
-		gossipNodeSet := gossip.NewGossipNodeSet(bindWithDefaults, gossipHost, gossipPort, gossipSeed, m.Server)
+		gossipHost := bindWithDefaults.Host()
+		gossipNodeSet := gossip.NewGossipNodeSet(bindWithDefaults.ListenAddress(), gossipHost, gossipPort, gossipSeed, m.Server)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet
@@ -186,6 +183,7 @@ func (m *Command) SetupServer() error {
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
 	m.Server.Cluster.LongQueryTime = time.Duration(m.Config.Cluster.LongQueryTime)
+	m.Server.TLS = m.Config.TLS
 	return nil
 }
 

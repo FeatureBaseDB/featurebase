@@ -102,12 +102,13 @@ func TestNormalizeAddress(t *testing.T) {
 		{addr: "[invalid][addr]:port", err: "missing port in address"},
 	}
 	for _, test := range tests {
-		actual, err := pilosa.NormalizeAddress(test.addr)
+		uri, err := pilosa.NewURIFromAddress(test.addr)
 		if err != nil {
 			if !strings.Contains(err.Error(), test.err) {
 				t.Errorf("expected error: %v, but got: %v", test.err, err)
 			}
 		} else {
+			actual := uri.ListenAddress()
 			if !reflect.DeepEqual(actual, test.expected) {
 				t.Errorf("expected: %v, but got: %v", test.expected, actual)
 			}
