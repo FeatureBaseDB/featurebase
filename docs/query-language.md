@@ -457,7 +457,7 @@ Returns `{{"attrs":{},"bits":[10]}`
 **Spec:**
 
 ```
-Sum(<frame=STRING>, <field=STRING>, [BITMAP_CALL])
+Sum([BITMAP_CALL], <frame=STRING>, <field=STRING>)
 ```
 
 **Description:**
