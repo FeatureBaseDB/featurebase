@@ -20,8 +20,8 @@ This version contains 59 contributions from 9 contributors. There are 61 files c
 - Add documentation for BSI ([#861](https://github.com/pilosa/pilosa/pull/861))
 - Add BETWEEN for Range queries ([#847](https://github.com/pilosa/pilosa/pull/847))
 - Add Xor support for PQL ([#789](https://github.com/pilosa/pilosa/pull/789))
-- Enables auto-creating the schema on imports ([#837](https://github.com/pilosa/pilosa/pull/837))
-- Updated client library docs ([#831](https://github.com/pilosa/pilosa/pull/831))
+- Enable auto-creating the schema on imports ([#837](https://github.com/pilosa/pilosa/pull/837))
+- Update client library docs ([#831](https://github.com/pilosa/pilosa/pull/831))
 - Handle SIGTERM signal ([#830](https://github.com/pilosa/pilosa/pull/830))
 - Add cluster config example to docs ([#806](https://github.com/pilosa/pilosa/pull/806))
 - Add ability to suprress attributes and bits in Bitmap queries ([#783](https://github.com/pilosa/pilosa/pull/783))
@@ -33,7 +33,7 @@ This version contains 59 contributions from 9 contributors. There are 61 files c
 - Fix cache invalidation bug ([#795](https://github.com/pilosa/pilosa/pull/795))
 - Set container.n in differenceRunRun ([#794](https://github.com/pilosa/pilosa/pull/794))
 - Fix infinite loop in bitmap-to-array conversion ([#779](https://github.com/pilosa/pilosa/pull/779))
-- Fix Countrange bug ([#773](https://github.com/pilosa/pilosa/pull/773))
+- Fix CountRange bug ([#773](https://github.com/pilosa/pilosa/pull/773))
 
 ### Removed
 
@@ -41,7 +41,7 @@ This version contains 59 contributions from 9 contributors. There are 61 files c
 
 ### Performance
 
-- Refactor differencerunarray ([#859](https://github.com/pilosa/pilosa/pull/859))
+- Refactor differenceRunArray ([#859](https://github.com/pilosa/pilosa/pull/859))
 - Update fragment.FieldSum to use roaring IntersectionCount() ([#841](https://github.com/pilosa/pilosa/pull/841))
 - Add roaring optimizations ([#842](https://github.com/pilosa/pilosa/pull/842))
 - Convert lock to read lock ([#848](https://github.com/pilosa/pilosa/pull/848))
