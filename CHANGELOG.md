@@ -24,7 +24,7 @@ This version contains 59 contributions from 9 contributors. There are 61 files c
 - Update client library docs ([#831](https://github.com/pilosa/pilosa/pull/831))
 - Handle SIGTERM signal ([#830](https://github.com/pilosa/pilosa/pull/830))
 - Add cluster config example to docs ([#806](https://github.com/pilosa/pilosa/pull/806))
-- Add ability to suprress attributes and bits in Bitmap queries ([#783](https://github.com/pilosa/pilosa/pull/783))
+- Add ability to suppress attributes and bits in Bitmap queries ([#783](https://github.com/pilosa/pilosa/pull/783))
 
 ### Fixed
 
