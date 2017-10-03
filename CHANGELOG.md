@@ -16,7 +16,7 @@ This version contains 59 contributions from 9 contributors. There are 61 files c
 - Modify import endpoint to handle BSI field values ([#840](https://github.com/pilosa/pilosa/pull/840))
 - Add field Range() support to Executor ([#791](https://github.com/pilosa/pilosa/pull/791))
 - Support PQL Range() queries for fields ([#755](https://github.com/pilosa/pilosa/pull/755))
-- Add Sum() and Average() field queries ([#778](https://github.com/pilosa/pilosa/pull/778))
+- Add Sum() field query ([#778](https://github.com/pilosa/pilosa/pull/778))
 - Add documentation for BSI ([#861](https://github.com/pilosa/pilosa/pull/861))
 - Add BETWEEN for Range queries ([#847](https://github.com/pilosa/pilosa/pull/847))
 - Add Xor support for PQL ([#789](https://github.com/pilosa/pilosa/pull/789))
@@ -24,7 +24,7 @@ This version contains 59 contributions from 9 contributors. There are 61 files c
 - Update client library docs ([#831](https://github.com/pilosa/pilosa/pull/831))
 - Handle SIGTERM signal ([#830](https://github.com/pilosa/pilosa/pull/830))
 - Add cluster config example to docs ([#806](https://github.com/pilosa/pilosa/pull/806))
-- Add ability to suppress attributes and bits in Bitmap queries ([#783](https://github.com/pilosa/pilosa/pull/783))
+- Add ability to exclude attributes and bits in Bitmap queries ([#783](https://github.com/pilosa/pilosa/pull/783))
 
 ### Fixed
 
@@ -35,7 +35,7 @@ This version contains 59 contributions from 9 contributors. There are 61 files c
 - Fix infinite loop in bitmap-to-array conversion ([#779](https://github.com/pilosa/pilosa/pull/779))
 - Fix CountRange bug ([#773](https://github.com/pilosa/pilosa/pull/773))
 
-### Removed
+### Deprecated
 
 - Remove support for row/column labels ([#839](https://github.com/pilosa/pilosa/pull/839))
 
