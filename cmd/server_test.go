@@ -44,7 +44,7 @@ func TestServerConfig(t *testing.T) {
 	tests := []commandTest{
 		// TEST 0
 		{
-			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "example.com:10111,example.com:10110", "--bind", "example.com:10111"},
+			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:10111,localhost:10110", "--bind", "localhost:10111"},
 			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER.POLL_INTERVAL": "3m2s"},
 			cfgFileContent: `
 	data-dir = "/tmp/myFileDatadir"
@@ -61,9 +61,9 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.DataDir, actualDataDir)
-				v.Check(cmd.Server.Config.Bind, "example.com:10111")
+				v.Check(cmd.Server.Config.Bind, "localhost:10111")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
-				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"example.com:10111", "example.com:10110"})
+				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:10111", "localhost:10110"})
 				v.Check(cmd.Server.Config.Cluster.PollInterval, pilosa.Duration(time.Second*182))
 				return v.Error()
 			},
@@ -71,7 +71,7 @@ func TestServerConfig(t *testing.T) {
 		// TEST 1
 		{
 			args: []string{"server", "--anti-entropy.interval", "9m0s"},
-			env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "example.com:1110,example.com:1111", "PILOSA_BIND": "example.com:1110"},
+			env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "localhost:1110,localhost:1111", "PILOSA_BIND": "localhost:1110"},
 			cfgFileContent: `
 	bind = "localhost:0"
 	data-dir = "` + actualDataDir + `"
@@ -85,7 +85,7 @@ func TestServerConfig(t *testing.T) {
 	`,
 			validation: func() error {
 				v := validator{}
-				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"example.com:1110", "example.com:1111"})
+				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:1110", "localhost:1111"})
 				v.Check(cmd.Server.Config.Plugins.Path, "/var/sloth")
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*9))
 				return v.Error()
