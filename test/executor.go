@@ -18,6 +18,7 @@ func NewExecutor(holder *pilosa.Holder, cluster *pilosa.Cluster) *Executor {
 	e := &Executor{Executor: pilosa.NewExecutor()}
 	e.Holder = holder
 	e.Cluster = cluster
+	e.Scheme = cluster.Nodes[0].Scheme
 	e.Host = cluster.Nodes[0].Host
 	return e
 }

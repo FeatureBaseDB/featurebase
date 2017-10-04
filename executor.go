@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"sort"
 	"time"
 
@@ -44,6 +43,7 @@ type Executor struct {
 	Holder *Holder
 
 	// Local hostname & cluster configuration.
+	Scheme  string
 	Host    string
 	Cluster *Cluster
 
@@ -1337,11 +1337,9 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 	}
 
 	// Create HTTP request.
-	req, err := http.NewRequest("POST", (&url.URL{
-		Scheme: node.Scheme,
-		Host:   node.Host,
-		Path:   fmt.Sprintf("/index/%s/query", index),
-	}).String(), bytes.NewReader(buf))
+	u := nodePathToURL(node, fmt.Sprintf("/index/%s/query", index))
+	u.Scheme = e.Scheme
+	req, err := http.NewRequest("POST", (&u).String(), bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
 	}

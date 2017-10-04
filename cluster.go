@@ -57,6 +57,16 @@ func (n *Node) SetState(s string) {
 	n.status.State = s
 }
 
+// URI returns the pilosa.URI corresponding to this node
+func (n *Node) URI() (*URI, error) {
+	uri, err := NewURIFromAddress(n.Host)
+	if err != nil {
+		return nil, err
+	}
+	uri.SetScheme(n.Scheme)
+	return uri, nil
+}
+
 // Nodes represents a list of nodes.
 type Nodes []*Node
 

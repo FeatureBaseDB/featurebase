@@ -832,6 +832,7 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	// Create secondary server and update second cluster node.
 	s := test.NewServer()
 	defer s.Close()
+	c.Nodes[1].Scheme = "http"
 	c.Nodes[1].Host = s.Host()
 
 	// Mock secondary server's executor to verify arguments and return a bitmap.

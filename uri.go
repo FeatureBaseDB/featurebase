@@ -72,6 +72,10 @@ func (u *URI) Scheme() string {
 	return u.scheme
 }
 
+func (u *URI) SetScheme(scheme string) {
+	u.scheme = scheme
+}
+
 // Host returns the host of this URI.
 func (u *URI) Host() string {
 	return u.host
@@ -99,7 +103,11 @@ func (u *URI) Normalize() string {
 
 // HostPort returns the address suitable for passing to `net.Listener.Listen`
 func (u *URI) HostPort() string {
-	return fmt.Sprintf("%s:%d", u.host, u.port)
+	if u == nil {
+		return ""
+	}
+	s := fmt.Sprintf("%s:%d", u.host, u.port)
+	return s
 }
 
 // Equals returns true if the checked URI is equivalent to this URI.

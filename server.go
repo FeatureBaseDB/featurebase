@@ -172,6 +172,7 @@ func (s *Server) Open() error {
 	// Create executor for executing queries.
 	e := NewExecutor()
 	e.Holder = s.Holder
+	e.Scheme = s.Host.Scheme()
 	e.Host = s.Host.HostPort()
 	e.Cluster = s.Cluster
 	e.MaxWritesPerRequest = s.MaxWritesPerRequest

@@ -59,7 +59,11 @@ func TestExportCommand_Run(t *testing.T) {
 	defer hldr.Close()
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.Host()
+	uri, err := pilosa.NewURIFromAddress(s.Host())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Handler.Host = uri
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -71,7 +75,7 @@ func TestExportCommand_Run(t *testing.T) {
 	cm.Index = "i"
 	cm.Frame = "f"
 	cm.View = pilosa.ViewStandard
-	err := cm.Run(context.Background())
+	err = cm.Run(context.Background())
 	if err != nil {
 		t.Fatalf("Export Run doesn't work: %s", err)
 	}

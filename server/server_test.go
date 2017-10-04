@@ -288,8 +288,8 @@ func TestMain_FrameRestore(t *testing.T) {
 
 	// Update cluster config.
 	m0.Server.Cluster.Nodes = []*pilosa.Node{
-		{Host: m0.Server.Host.HostPort()},
-		{Host: m1.Server.Host.HostPort()},
+		{Scheme: "http", Host: m0.Server.Host.HostPort()},
+		{Scheme: "http", Host: m1.Server.Host.HostPort()},
 	}
 	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
 

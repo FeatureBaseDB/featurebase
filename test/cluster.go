@@ -14,6 +14,7 @@ func NewCluster(n int) *pilosa.Cluster {
 
 	for i := 0; i < n; i++ {
 		c.Nodes = append(c.Nodes, &pilosa.Node{
+			Scheme: "http",
 			Host: fmt.Sprintf("host%d", i),
 		})
 	}
