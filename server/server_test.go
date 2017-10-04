@@ -53,7 +53,7 @@ func TestMain_Set_Quick(t *testing.T) {
 		defer m.Close()
 
 		// Create client.
-		client, err := pilosa.NewClient(m.Server.Host)
+		client, err := pilosa.NewClient(m.Server.Host.HostPort())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -288,8 +288,8 @@ func TestMain_FrameRestore(t *testing.T) {
 
 	// Update cluster config.
 	m0.Server.Cluster.Nodes = []*pilosa.Node{
-		{Host: m0.Server.Host},
-		{Host: m1.Server.Host},
+		{Host: m0.Server.Host.HostPort()},
+		{Host: m1.Server.Host.HostPort()},
 	}
 	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
 
@@ -326,14 +326,14 @@ func TestMain_FrameRestore(t *testing.T) {
 	defer m2.Close()
 
 	// Import from first cluster.
-	client, err := pilosa.NewClient(m2.Server.Host)
+	client, err := pilosa.NewClient(m2.Server.Host.HostPort())
 	if err != nil {
 		t.Fatal(err)
 	} else if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
 	} else if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
-	} else if err := client.RestoreFrame(context.Background(), m0.Server.Host, "i", "f"); err != nil {
+	} else if err := client.RestoreFrame(context.Background(), m0.Server.Host.HostPort(), "i", "f"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -427,17 +427,17 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Update cluster config
 	m0.Server.Cluster.Nodes = []*pilosa.Node{
-		{Host: m0.Server.Host},
-		{Host: m1.Server.Host},
+		{Host: m0.Server.Host.HostPort()},
+		{Host: m1.Server.Host.HostPort()},
 	}
 	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
 
 	// Configure node0
 
 	// get the host portion of addr to use for binding
-	gossipHost, _, err := net.SplitHostPort(m0.Server.Host)
+	gossipHost, _, err := net.SplitHostPort(m0.Server.Host.HostPort())
 	if err != nil {
-		gossipHost = m0.Server.Host
+		gossipHost = m0.Server.Host.HostPort()
 	}
 	gossipPort, err := strconv.Atoi(freePorts[0])
 	if err != nil {
@@ -445,7 +445,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	}
 	gossipSeed := gossipHost + ":" + freePorts[0]
 
-	gossipNodeSet0 := gossip.NewGossipNodeSet(m0.Server.Host, gossipHost, gossipPort, gossipSeed, m0.Server)
+	gossipNodeSet0 := gossip.NewGossipNodeSet(m0.Server.Host.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server)
 	m0.Server.Cluster.NodeSet = gossipNodeSet0
 	m0.Server.Broadcaster = gossipNodeSet0
 	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
@@ -463,16 +463,16 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	// Configure node1
 
 	// get the host portion of addr to use for binding
-	gossipHost, _, err = net.SplitHostPort(m1.Server.Host)
+	gossipHost, _, err = net.SplitHostPort(m1.Server.Host.HostPort())
 	if err != nil {
-		gossipHost = m1.Server.Host
+		gossipHost = m1.Server.Host.HostPort()
 	}
 	gossipPort, err = strconv.Atoi(freePorts[1])
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	gossipNodeSet1 := gossip.NewGossipNodeSet(m1.Server.Host, gossipHost, gossipPort, gossipSeed, m1.Server)
+	gossipNodeSet1 := gossip.NewGossipNodeSet(m1.Server.Host.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server)
 	m1.Server.Cluster.NodeSet = gossipNodeSet1
 	m1.Server.Broadcaster = gossipNodeSet1
 	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
@@ -697,7 +697,7 @@ func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
 
 // Client returns a client to connect to the program.
 func (m *Main) Client() *pilosa.Client {
-	client, err := pilosa.NewClient(m.Server.Host)
+	client, err := pilosa.NewClient(m.Server.Host.HostPort())
 	if err != nil {
 		panic(err)
 	}

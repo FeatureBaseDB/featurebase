@@ -82,6 +82,11 @@ func (u *URI) Port() uint16 {
 	return u.port
 }
 
+// SetPort updates the port
+func (u *URI) SetPort(port uint16) {
+	u.port = port
+}
+
 // Normalize returns the address in a form usable by a HTTP client.
 func (u *URI) Normalize() string {
 	scheme := u.scheme
@@ -92,8 +97,8 @@ func (u *URI) Normalize() string {
 	return fmt.Sprintf("%s://%s:%d", scheme, u.host, u.port)
 }
 
-// ListenAddress returns the address suitable for passing to `net.Listener.Listen`
-func (u *URI) ListenAddress() string {
+// HostPort returns the address suitable for passing to `net.Listener.Listen`
+func (u *URI) HostPort() string {
 	return fmt.Sprintf("%s:%d", u.host, u.port)
 }
 

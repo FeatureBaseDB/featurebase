@@ -120,7 +120,7 @@ func (c *Config) Validate() error {
 			if err != nil {
 				return err
 			}
-			if !foundItem(c.Cluster.Hosts, bindWithDefaults.ListenAddress()) {
+			if !foundItem(c.Cluster.Hosts, bindWithDefaults.HostPort()) {
 				return ErrConfigHostsMissing
 			}
 		}

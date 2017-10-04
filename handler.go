@@ -56,7 +56,7 @@ type Handler struct {
 	StatusHandler StatusHandler
 
 	// Local hostname & cluster configuration.
-	Host    string
+	Host    *URI
 	Cluster *Cluster
 
 	Router *mux.Router
@@ -1166,7 +1166,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.Host, req.Index, req.Slice) {
+	if !h.Cluster.OwnsFragment(h.Host.HostPort(), req.Index, req.Slice) {
 		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, req.Index, req.Slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
@@ -1236,7 +1236,7 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.Host, req.Index, req.Slice) {
+	if !h.Cluster.OwnsFragment(h.Host.HostPort(), req.Index, req.Slice) {
 		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, req.Index, req.Slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
@@ -1302,7 +1302,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.Host, index, slice) {
+	if !h.Cluster.OwnsFragment(h.Host.HostPort(), index, slice) {
 		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Host, index, slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
@@ -1490,16 +1490,21 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	frameName := mux.Vars(r)["frame"]
 
 	q := r.URL.Query()
-	host := q.Get("host")
+	hostStr := q.Get("host")
 
 	// Validate query parameters.
-	if host == "" {
+	if hostStr == "" {
 		http.Error(w, "host required", http.StatusBadRequest)
 		return
 	}
 
+	host, err := NewURIFromAddress(hostStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
 	// Create a client for the remote cluster.
-	client, err := NewClient(host)
+	client, err := NewClientFromURI(host)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1529,7 +1534,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	// Loop over each slice and import it if this node owns it.
 	for slice := uint64(0); slice <= maxSlices[indexName]; slice++ {
 		// Ignore this slice if we don't own it.
-		if !h.Cluster.OwnsFragment(h.Host, indexName, slice) {
+		if !h.Cluster.OwnsFragment(h.Host.HostPort(), indexName, slice) {
 			continue
 		}
 

@@ -1338,7 +1338,7 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 
 	// Create HTTP request.
 	req, err := http.NewRequest("POST", (&url.URL{
-		Scheme: "http",
+		Scheme: node.Scheme,
 		Host:   node.Host,
 		Path:   fmt.Sprintf("/index/%s/query", index),
 	}).String(), bytes.NewReader(buf))

@@ -99,7 +99,7 @@ func (m *Command) Run(args ...string) (err error) {
 		return fmt.Errorf("server.Open: %v", err)
 	}
 
-	m.Server.Logger().Printf("Listening as http://%s\n", m.Server.Host)
+	m.Server.Logger().Printf("Listening as %s\n", m.Server.Host.Normalize())
 	return nil
 }
 
@@ -142,8 +142,7 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return err
 	}
-	m.Server.Host = bindWithDefaults.ListenAddress()
-	m.Server.Scheme = bindWithDefaults.Scheme()
+	m.Server.Host = bindWithDefaults
 
 	// Set internal port (string).
 	gossipPortStr := pilosa.DefaultGossipPort
@@ -164,7 +163,7 @@ func (m *Command) SetupServer() error {
 
 		// get the host portion of addr to use for binding
 		gossipHost := bindWithDefaults.Host()
-		gossipNodeSet := gossip.NewGossipNodeSet(bindWithDefaults.ListenAddress(), gossipHost, gossipPort, gossipSeed, m.Server)
+		gossipNodeSet := gossip.NewGossipNodeSet(bindWithDefaults.HostPort(), gossipHost, gossipPort, gossipSeed, m.Server)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet

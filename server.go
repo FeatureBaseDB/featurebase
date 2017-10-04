@@ -60,8 +60,7 @@ type Server struct {
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
 	Network string
-	Host    string
-	Scheme  string
+	Host    *URI
 	Cluster *Cluster
 
 	// Background monitoring intervals.
@@ -108,7 +107,7 @@ func (s *Server) Open() error {
 	var err error
 
 	// If bind URI has the https scheme, enable TLS
-	if s.Scheme == "https" {
+	if s.Host.Scheme() == "https" {
 		if s.TLS.CertificatePath == "" {
 			return errors.New("certificate path is required for TLS sockets")
 		}
@@ -120,28 +119,33 @@ func (s *Server) Open() error {
 			return err
 		}
 		config := tls.Config{Certificates: []tls.Certificate{cert}}
-		ln, err = tls.Listen("tcp", s.Host, &config)
+		ln, err = tls.Listen("tcp", s.Host.HostPort(), &config)
 		if err != nil {
 			return err
 		}
-	} else if s.Scheme == "http" {
+	} else if s.Host.Scheme() == "http" {
 		// Open HTTP listener to determine port (if specified as :0).
-		ln, err = net.Listen(s.Network, s.Host)
+		ln, err = net.Listen(s.Network, s.Host.HostPort())
 		if err != nil {
 			return fmt.Errorf("net.Listen: %v", err)
 		}
 	} else {
-		return fmt.Errorf("unsupported scheme: %s", s.Scheme)
+		return fmt.Errorf("unsupported scheme: %s", s.Host.Scheme())
 	}
 
 	s.ln = ln
 
-	// Determine hostname based on listening port.
-	// s.Host = net.JoinHostPort(uri.Host(), strconv.Itoa(s.ln.Addr().(*net.TCPAddr).Port))
+	if s.Host.Port() == 0 {
+		// If the port is 0, it is set automatically.
+		// Find out automatically set port and update the host.
+		s.Host.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
+	}
 
 	// Create local node if no cluster is specified.
 	if len(s.Cluster.Nodes) == 0 {
-		s.Cluster.Nodes = []*Node{{Host: s.Host}}
+		s.Cluster.Nodes = []*Node{
+			{Scheme: s.Host.Scheme(), Host: s.Host.HostPort()},
+		}
 	}
 
 	for i, n := range s.Cluster.Nodes {
@@ -168,7 +172,7 @@ func (s *Server) Open() error {
 	// Create executor for executing queries.
 	e := NewExecutor()
 	e.Holder = s.Holder
-	e.Host = s.Host
+	e.Host = s.Host.HostPort()
 	e.Cluster = s.Cluster
 	e.MaxWritesPerRequest = s.MaxWritesPerRequest
 
@@ -283,8 +287,8 @@ func (s *Server) monitorMaxSlices() {
 
 		oldmaxslices := s.Holder.MaxSlices()
 		for _, node := range s.Cluster.Nodes {
-			if s.Host != node.Host {
-				maxSlices, _ := checkMaxSlices(node.Host)
+			if s.Host.HostPort() != node.Host {
+				maxSlices, _ := checkMaxSlices(node.Scheme, node.Host)
 				for index, newmax := range maxSlices {
 					// if we don't know about an index locally, log an error because
 					// indexes should be created and synced prior to slice creation
@@ -386,14 +390,14 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	}
 
 	ns := internal.NodeStatus{
-		Host:    s.Host,
+		Host:    s.Host.HostPort(),
 		State:   NodeStateUp,
 		Indexes: EncodeIndexes(s.Holder.Indexes()),
 	}
 
 	// Append Slice list per this Node's indexes
 	for _, index := range ns.Indexes {
-		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Host)
+		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Host.HostPort())
 	}
 
 	return &ns, nil
@@ -406,7 +410,7 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	node := s.Cluster.NodeByHost(s.Host)
+	node := s.Cluster.NodeByHost(s.Host.HostPort())
 	node.SetStatus(ns.(*internal.NodeStatus))
 
 	// Update NodeState for all nodes.
@@ -416,7 +420,7 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 		// the local node as UP.
 		// TODO: we should be able to remove this check if/when cluster.Nodes and
 		// cluster.NodeSet are unified.
-		if host == s.Host {
+		if host == s.Host.HostPort() {
 			nodeState = NodeStateUp
 		}
 		node := s.Cluster.NodeByHost(host)
@@ -463,11 +467,11 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	return nil
 }
 
-func checkMaxSlices(hostport string) (map[string]uint64, error) {
+func checkMaxSlices(scheme string, hostPort string) (map[string]uint64, error) {
 	// Create HTTP request.
 	req, err := http.NewRequest("GET", (&url.URL{
-		Scheme: "http",
-		Host:   hostport,
+		Scheme: scheme,
+		Host:   hostPort,
 		Path:   "/slices/max",
 	}).String(), nil)
 
