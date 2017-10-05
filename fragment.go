@@ -730,6 +730,11 @@ func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality b
 	return b, nil
 }
 
+// FieldNotNull returns the not-null row (stored at bitDepth).
+func (f *Fragment) FieldNotNull(bitDepth uint) (*Bitmap, error) {
+	return f.Row(uint64(bitDepth)), nil
+}
+
 func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Bitmap, error) {
 	b := f.Row(uint64(bitDepth))
 	keep1 := NewBitmap() // GTE

@@ -727,6 +727,10 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 			return nil, errors.New("Range(): BETWEEN condition requires exactly two integer values")
 		}
 
+		// The reason we don't just call:
+		//     return f.FieldRangeBetween(fieldName, predicates[0], predicates[1])
+		// here is because we need the call to be slice-specific.
+
 		// Find field.
 		field := f.Field(fieldName)
 		if field == nil {
@@ -742,6 +746,12 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
 		if frag == nil {
 			return NewBitmap(), nil
+		}
+
+		// If the query is asking for the entire valid range, just return
+		// the not-null bitmap for the field.
+		if predicates[0] <= field.Min && predicates[1] >= field.Max {
+			return frag.FieldNotNull(field.BitDepth())
 		}
 
 		return frag.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)

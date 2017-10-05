@@ -796,6 +796,23 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		}
 	})
 
+	t.Run("BETWEEN", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo >< [1, 1000])`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	// Ensure that the FieldNotNull code path gets run.
+	t.Run("FieldNotNull", func(t *testing.T) {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo >< [0, 1000])`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Bitmap).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
 	t.Run("BelowMin", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 0)`), nil, nil); err != nil {
 			t.Fatal(err)
