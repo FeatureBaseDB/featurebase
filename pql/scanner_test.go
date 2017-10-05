@@ -38,6 +38,7 @@ func TestScanner_Scan(t *testing.T) {
 
 		{name: "ASSIGN", s: `=`, tok: pql.ASSIGN, lit: `=`},
 		{name: "EQ", s: `==`, tok: pql.EQ, lit: `==`},
+		{name: "NEQ", s: `!=`, tok: pql.NEQ, lit: `!=`},
 		{name: "LT", s: `<`, tok: pql.LT, lit: `<`},
 		{name: "LTE", s: `<=`, tok: pql.LTE, lit: `<=`},
 		{name: "GT", s: `>`, tok: pql.GT, lit: `>`},

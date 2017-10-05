@@ -715,7 +715,30 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		fieldName, cond = k, vv
 	}
 
-	if cond.Op == pql.BETWEEN {
+	// EQ null           (not implemented: flip frag.FieldNotNull with max ColumnID)
+	// NEQ null          frag.FieldNotNull()
+	// BETWEEN a,b(in)   BETWEEN/frag.FieldRangeBetween()
+	// BETWEEN a,b(out)  BETWEEN/frag.FieldNotNull()
+	// EQ <int>          frag.FieldRange
+	// NEQ <int>         (not implemented: frag.FieldRange)
+
+	// Handle `!= null`.
+	if cond.Op == pql.NEQ && cond.Value == nil {
+		// Find field.
+		field := f.Field(fieldName)
+		if field == nil {
+			return nil, ErrFieldNotFound
+		}
+
+		// Retrieve fragment.
+		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		if frag == nil {
+			return NewBitmap(), nil
+		}
+
+		return frag.FieldNotNull(field.BitDepth())
+
+	} else if cond.Op == pql.BETWEEN {
 
 		predicates, err := cond.IntSliceValue()
 		if err != nil {
