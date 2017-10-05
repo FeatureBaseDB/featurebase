@@ -78,7 +78,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 #### Gossip Port
 
-* Description: Port to which Pilosa should bind for internal communication.
+* Description: Port to which Pilosa should bind for internal communication. Each node in the cluster must use a different gossip port.
 * Flag: `--gossip-port=11101`
 * Env: `PILOSA_GOSSIP_PORT=11101`
 * Config:
@@ -226,7 +226,7 @@ A three node cluster could be minimally configured as follows:
 
     data-dir = "/home/pilosa/data"
     bind = "node1.pilosa.com:10101"
-    gossip-port = 12000
+    gossip-port = 12001
     gossip-seed = "node0.pilosa.com:12000"
 
     [cluster]
@@ -238,7 +238,7 @@ A three node cluster could be minimally configured as follows:
 
     data-dir = "/home/pilosa/data"
     bind = "node2.pilosa.com:10101"
-    gossip-port = 12000
+    gossip-port = 12002
     gossip-seed = "node0.pilosa.com:12000"
 
     [cluster]
