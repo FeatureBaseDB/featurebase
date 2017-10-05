@@ -112,12 +112,12 @@ Internally Pilosa stores each BSI `field` as a `view` within a `frame`. The 'row
 For example, the following `SetFieldValue()` queries will result in the data described in the illustration below:
 
 ```
-SetFieldValue(col=1, frame="A", "field0"=1)
-SetFieldValue(col=2, frame="A", "field0"=2)
-SetFieldValue(col=3, frame="A", "field0"=3)
-SetFieldValue(col=4, frame="A", "field0"=7)
-SetFieldValue(col=2, frame="A", "field1"=1)
-SetFieldValue(col=3, frame="A", "field1"=6)
+SetFieldValue(col=1, frame="A", field0=1)
+SetFieldValue(col=2, frame="A", field0=2)
+SetFieldValue(col=3, frame="A", field0=3)
+SetFieldValue(col=4, frame="A", field0=7)
+SetFieldValue(col=2, frame="A", field1=1)
+SetFieldValue(col=3, frame="A", field1=6)
 ```
 
 ![BSI diagram](/img/docs/frame-bsi.svg)
