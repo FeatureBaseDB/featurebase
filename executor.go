@@ -794,7 +794,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		}
 
 		baseValue, outOfRange := field.BaseValue(cond.Op, value)
-		if outOfRange {
+		if outOfRange && cond.Op != pql.NEQ {
 			return NewBitmap(), nil
 		}
 
@@ -802,6 +802,11 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
 		if frag == nil {
 			return NewBitmap(), nil
+		}
+
+		// outOfRange for NEQ should return all not-null.
+		if outOfRange && cond.Op == pql.NEQ {
+			return frag.FieldNotNull(field.BitDepth())
 		}
 
 		f.Stats.Count("range:field", 1, 1.0)

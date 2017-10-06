@@ -777,6 +777,13 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1, SliceWidth + 2}, result[0].(*pilosa.Bitmap).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
+		// NEQ -<int>
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo != -20)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Bitmap).Bits()) {
+			//t.Fatalf("unexpected result: %s", spew.Sdump(result))
+			t.Fatalf("unexpected result: %s", result[0].(*pilosa.Bitmap).Bits())
+		}
 	})
 
 	t.Run("LT", func(t *testing.T) {
