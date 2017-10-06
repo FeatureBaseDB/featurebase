@@ -720,7 +720,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 	// BETWEEN a,b(in)   BETWEEN/frag.FieldRangeBetween()
 	// BETWEEN a,b(out)  BETWEEN/frag.FieldNotNull()
 	// EQ <int>          frag.FieldRange
-	// NEQ <int>         (not implemented: frag.FieldRange)
+	// NEQ <int>         frag.FieldRange
 
 	// Handle `!= null`.
 	if cond.Op == pql.NEQ && cond.Value == nil {

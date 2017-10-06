@@ -619,6 +619,8 @@ func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*B
 	switch op {
 	case pql.EQ:
 		return f.fieldRangeEQ(bitDepth, predicate)
+	case pql.NEQ:
+		return f.fieldRangeNEQ(bitDepth, predicate)
 	case pql.LT, pql.LTE:
 		return f.fieldRangeLT(bitDepth, predicate, op == pql.LTE)
 	case pql.GT, pql.GTE:
@@ -643,6 +645,22 @@ func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Bitmap, error
 			b = b.Difference(row)
 		}
 	}
+
+	return b, nil
+}
+
+func (f *Fragment) fieldRangeNEQ(bitDepth uint, predicate uint64) (*Bitmap, error) {
+	// Start with set of columns with values set.
+	b := f.Row(uint64(bitDepth))
+
+	// Get the equal bitmap.
+	eq, err := f.fieldRangeEQ(bitDepth, predicate)
+	if err != nil {
+		return nil, err
+	}
+
+	// Not-null minus the equal bitmap.
+	b = b.Difference(eq)
 
 	return b, nil
 }
