@@ -1119,7 +1119,7 @@ func (f *Field) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRan
 		} else {
 			baseValue = uint64(value - f.Min)
 		}
-	} else if op == pql.EQ {
+	} else if op == pql.EQ || op == pql.NEQ {
 		if value < f.Min || value > f.Max {
 			return baseValue, true
 		}

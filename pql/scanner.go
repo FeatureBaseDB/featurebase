@@ -66,6 +66,12 @@ func (s *Scanner) Scan() (tok Token, pos Pos, lit string) {
 		}
 		s.unread()
 		return ASSIGN, pos, string(ch)
+	case '!':
+		if next := s.read(); next == '=' {
+			return NEQ, pos, "!="
+		}
+		s.unread()
+		return ASSIGN, pos, string(ch)
 	case '<':
 		if next := s.read(); next == '=' {
 			return LTE, pos, "<="

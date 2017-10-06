@@ -715,7 +715,30 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		fieldName, cond = k, vv
 	}
 
-	if cond.Op == pql.BETWEEN {
+	// EQ null           (not implemented: flip frag.FieldNotNull with max ColumnID)
+	// NEQ null          frag.FieldNotNull()
+	// BETWEEN a,b(in)   BETWEEN/frag.FieldRangeBetween()
+	// BETWEEN a,b(out)  BETWEEN/frag.FieldNotNull()
+	// EQ <int>          frag.FieldRange
+	// NEQ <int>         frag.FieldRange
+
+	// Handle `!= null`.
+	if cond.Op == pql.NEQ && cond.Value == nil {
+		// Find field.
+		field := f.Field(fieldName)
+		if field == nil {
+			return nil, ErrFieldNotFound
+		}
+
+		// Retrieve fragment.
+		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		if frag == nil {
+			return NewBitmap(), nil
+		}
+
+		return frag.FieldNotNull(field.BitDepth())
+
+	} else if cond.Op == pql.BETWEEN {
 
 		predicates, err := cond.IntSliceValue()
 		if err != nil {
@@ -726,6 +749,10 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		if len(predicates) != 2 {
 			return nil, errors.New("Range(): BETWEEN condition requires exactly two integer values")
 		}
+
+		// The reason we don't just call:
+		//     return f.FieldRangeBetween(fieldName, predicates[0], predicates[1])
+		// here is because we need the call to be slice-specific.
 
 		// Find field.
 		field := f.Field(fieldName)
@@ -742,6 +769,12 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
 		if frag == nil {
 			return NewBitmap(), nil
+		}
+
+		// If the query is asking for the entire valid range, just return
+		// the not-null bitmap for the field.
+		if predicates[0] <= field.Min && predicates[1] >= field.Max {
+			return frag.FieldNotNull(field.BitDepth())
 		}
 
 		return frag.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
@@ -761,7 +794,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		}
 
 		baseValue, outOfRange := field.BaseValue(cond.Op, value)
-		if outOfRange {
+		if outOfRange && cond.Op != pql.NEQ {
 			return NewBitmap(), nil
 		}
 
@@ -769,6 +802,11 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
 		if frag == nil {
 			return NewBitmap(), nil
+		}
+
+		// outOfRange for NEQ should return all not-null.
+		if outOfRange && cond.Op == pql.NEQ {
+			return frag.FieldNotNull(field.BitDepth())
 		}
 
 		f.Stats.Count("range:field", 1, 1.0)
