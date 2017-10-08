@@ -69,7 +69,7 @@ type Server struct {
 	MetricInterval      time.Duration
 
 	// TLS configuration
-	TLS TLSConfig
+	TLS *tls.Config
 
 	// Misc options.
 	MaxWritesPerRequest int
@@ -107,19 +107,8 @@ func (s *Server) Open() error {
 	var err error
 
 	// If bind URI has the https scheme, enable TLS
-	if s.Host.Scheme() == "https" {
-		if s.TLS.CertificatePath == "" {
-			return errors.New("certificate path is required for TLS sockets")
-		}
-		if s.TLS.CertificateKeyPath == "" {
-			return errors.New("certificate key path is required for TLS sockets")
-		}
-		cert, err := tls.LoadX509KeyPair(s.TLS.CertificatePath, s.TLS.CertificateKeyPath)
-		if err != nil {
-			return err
-		}
-		config := tls.Config{Certificates: []tls.Certificate{cert}}
-		ln, err = tls.Listen("tcp", s.Host.HostPort(), &config)
+	if s.Host.Scheme() == "https" && s.TLS != nil {
+		ln, err = tls.Listen("tcp", s.Host.HostPort(), s.TLS)
 		if err != nil {
 			return err
 		}
@@ -255,6 +244,7 @@ func (s *Server) monitorAntiEntropy() {
 		syncer.Host = s.Host
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
+		syncer.ClientOptions = &ClientOptions{TLS: s.TLS}
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {

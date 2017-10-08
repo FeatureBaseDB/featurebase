@@ -52,7 +52,7 @@ func NewBenchCommand(stdin io.Reader, stdout, stderr io.Writer) *BenchCommand {
 // Run executes the bench command.
 func (cmd *BenchCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host)
+	client, err := pilosa.NewClient(cmd.Host, nil)
 	if err != nil {
 		return err
 	}

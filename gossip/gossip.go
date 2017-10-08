@@ -48,7 +48,7 @@ type GossipNodeSet struct {
 func (g *GossipNodeSet) Nodes() []*pilosa.Node {
 	a := make([]*pilosa.Node, 0, g.memberlist.NumMembers())
 	for _, n := range g.memberlist.Members() {
-		a = append(a, &pilosa.Node{Host: n.Name})
+		a = append(a, &pilosa.Node{Scheme: "gossip", Host: n.Name})
 	}
 	return a
 }
@@ -77,7 +77,7 @@ func (g *GossipNodeSet) Open() error {
 	}
 
 	// attach to gossip seed node
-	nodes := []*pilosa.Node{&pilosa.Node{Host: g.config.gossipSeed}} //TODO: support a list of seeds
+	nodes := []*pilosa.Node{&pilosa.Node{Scheme: "gossip", Host: g.config.gossipSeed}} //TODO: support a list of seeds
 	err = g.joinWithRetry(pilosa.Nodes(nodes).Hosts())
 	if err != nil {
 		return err

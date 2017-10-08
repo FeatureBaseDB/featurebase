@@ -55,7 +55,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	}
 
 	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host)
+	client, err := pilosa.NewClient(cmd.Host, nil)
 	if err != nil {
 		return err
 	}

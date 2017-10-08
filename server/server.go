@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"crypto/tls"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statsd"
@@ -110,11 +111,24 @@ func (m *Command) SetupServer() error {
 		return err
 	}
 
+	uri, err := pilosa.AddressWithDefaults(m.Config.Bind)
+	if err != nil {
+		return err
+	}
+	m.Server.Host = uri
+
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 
-	for _, hostport := range m.Config.Cluster.Hosts {
-		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
+	for _, address := range m.Config.Cluster.Hosts {
+		uri, err := pilosa.NewURIFromAddress(address)
+		if err != nil {
+			return err
+		}
+		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{
+			Scheme: uri.Scheme(),
+			Host:   uri.HostPort(),
+		})
 	}
 	m.Server.Cluster = cluster
 
@@ -138,11 +152,21 @@ func (m *Command) SetupServer() error {
 	// Copy configuration flags.
 	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
 
-	bindWithDefaults, err := pilosa.AddressWithDefaults(m.Config.Bind)
-	if err != nil {
-		return err
+	// Setup TLS
+	if uri.Scheme() == "https" {
+		if m.Config.TLS.CertificatePath == "" {
+			return errors.New("certificate path is required for TLS sockets")
+		}
+		if m.Config.TLS.CertificateKeyPath == "" {
+			return errors.New("certificate key path is required for TLS sockets")
+		}
+		cert, err := tls.LoadX509KeyPair(m.Config.TLS.CertificatePath, m.Config.TLS.CertificateKeyPath)
+		if err != nil {
+			return err
+		}
+		m.Server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+		m.Server.Handler.ClientOptions = &pilosa.ClientOptions{TLS: m.Server.TLS}
 	}
-	m.Server.Host = bindWithDefaults
 
 	// Set internal port (string).
 	gossipPortStr := pilosa.DefaultGossipPort
@@ -162,8 +186,8 @@ func (m *Command) SetupServer() error {
 		}
 
 		// get the host portion of addr to use for binding
-		gossipHost := bindWithDefaults.Host()
-		gossipNodeSet := gossip.NewGossipNodeSet(bindWithDefaults.HostPort(), gossipHost, gossipPort, gossipSeed, m.Server)
+		gossipHost := uri.Host()
+		gossipNodeSet := gossip.NewGossipNodeSet(uri.HostPort(), gossipHost, gossipPort, gossipSeed, m.Server)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet
@@ -182,7 +206,6 @@ func (m *Command) SetupServer() error {
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
 	m.Server.Cluster.LongQueryTime = time.Duration(m.Config.Cluster.LongQueryTime)
-	m.Server.TLS = m.Config.TLS
 	return nil
 }
 

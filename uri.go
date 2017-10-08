@@ -22,12 +22,14 @@ import (
 	"strings"
 )
 
-var addressRegexp = regexp.MustCompile("^(([+a-z]+):\\/\\/)?([0-9a-z.-]+)?(:([0-9]+))?$")
+var schemeRegexp = regexp.MustCompile("^[+a-z]+$")
+var hostRegexp = regexp.MustCompile("^[0-9a-z.-]+$|^\\[[:0-9a-fA-F]+\\]$")
+var addressRegexp = regexp.MustCompile("^(([+a-z]+):\\/\\/)?([0-9a-z.-]+|\\[[:0-9a-fA-F]+\\])?(:([0-9]+))?$")
 
 // URI represents a Pilosa URI.
 // A Pilosa URI consists of three parts:
 // 1) Scheme: Protocol of the URI. Default: http.
-// 2) Host: Hostname or IP URI. Default: localhost.
+// 2) Host: Hostname or IP URI. Default: localhost. IPv6 addresses should be written in brackets, e.g., `[fd42:4201:f86b:7e09:216:3eff:fefa:ed80]`.
 // 3) Port: Port of the URI. Default: 10101.
 //
 // All parts of the URI are optional. The following are equivalent:
@@ -41,6 +43,7 @@ type URI struct {
 	scheme string
 	host   string
 	port   uint16
+	error  error
 }
 
 // DefaultURI creates and returns the default URI.
@@ -54,17 +57,28 @@ func DefaultURI() *URI {
 
 // NewURIFromHostPort returns a URI with specified host and port.
 func NewURIFromHostPort(host string, port uint16) (*URI, error) {
-	// TODO: validate host
-	return &URI{
-		scheme: "http",
-		host:   host,
-		port:   port,
-	}, nil
+	uri := DefaultURI()
+	err := uri.SetHost(host)
+	if err != nil {
+		return nil, err
+	}
+	uri.SetPort(port)
+	return uri, nil
 }
 
 // NewURIFromAddress parses the passed address and returns a URI.
 func NewURIFromAddress(address string) (*URI, error) {
-	return parseAddress(address)
+	uri, err := parseAddress(address)
+	if err != nil {
+		return &URI{error: err}, err
+	}
+	return uri, err
+}
+
+// URIFromAddress creates a URI from the given address.
+func URIFromAddress(host string) *URI {
+	uri, _ := NewURIFromAddress(host)
+	return uri
 }
 
 // Scheme returns the scheme of this URI.
@@ -72,8 +86,14 @@ func (u *URI) Scheme() string {
 	return u.scheme
 }
 
-func (u *URI) SetScheme(scheme string) {
+// SetScheme sets the scheme of this URI.
+func (u *URI) SetScheme(scheme string) error {
+	m := schemeRegexp.FindStringSubmatch(scheme)
+	if m == nil {
+		return errors.New("invalid scheme")
+	}
 	u.scheme = scheme
+	return nil
 }
 
 // Host returns the host of this URI.
@@ -81,14 +101,34 @@ func (u *URI) Host() string {
 	return u.host
 }
 
+// SetHost sets the host of this URI.
+func (u *URI) SetHost(host string) error {
+	m := hostRegexp.FindStringSubmatch(host)
+	if m == nil {
+		return errors.New("invalid host")
+	}
+	u.host = host
+	return nil
+}
+
 // Port returns the port of this URI.
 func (u *URI) Port() uint16 {
 	return u.port
 }
 
-// SetPort updates the port
+// SetPort sets the port of this URI.
 func (u *URI) SetPort(port uint16) {
 	u.port = port
+}
+
+// HostPort returns `Host:Port`
+func (u *URI) HostPort() string {
+	// XXX: The following is just to make TestHandler_Status; remove it
+	if u == nil {
+		return ""
+	}
+	s := fmt.Sprintf("%s:%d", u.host, u.port)
+	return s
 }
 
 // Normalize returns the address in a form usable by a HTTP client.
@@ -101,15 +141,6 @@ func (u *URI) Normalize() string {
 	return fmt.Sprintf("%s://%s:%d", scheme, u.host, u.port)
 }
 
-// HostPort returns the address suitable for passing to `net.Listener.Listen`
-func (u *URI) HostPort() string {
-	if u == nil {
-		return ""
-	}
-	s := fmt.Sprintf("%s:%d", u.host, u.port)
-	return s
-}
-
 // Equals returns true if the checked URI is equivalent to this URI.
 func (u URI) Equals(other *URI) bool {
 	if other == nil {
@@ -118,6 +149,33 @@ func (u URI) Equals(other *URI) bool {
 	return u.scheme == other.scheme &&
 		u.host == other.host &&
 		u.port == other.port
+}
+
+// Error returns the error if this URI has one.
+func (u *URI) Error() error {
+	return u.error
+}
+
+// Valid returns true if this is a valid URI.
+func (u *URI) Valid() bool {
+	return u != nil && u.error == nil
+}
+
+// The following methods are required to implement pflag Value interface.
+
+// Set sets the time quantum value.
+func (u *URI) Set(value string) error {
+	uri, err := NewURIFromAddress(value)
+	if err != nil {
+		return err
+	}
+	*u = *uri
+	return nil
+}
+
+// Type returns the type of a time quantum value.
+func (u URI) Type() string {
+	return "URI"
 }
 
 func parseAddress(address string) (uri *URI, err error) {
@@ -137,7 +195,7 @@ func parseAddress(address string) (uri *URI, err error) {
 	if m[5] != "" {
 		port, err = strconv.Atoi(m[5])
 		if err != nil {
-			return nil, errors.New("error converting port string to int")
+			return nil, errors.New("converting port string to int")
 		}
 	}
 	uri = &URI{

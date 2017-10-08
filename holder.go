@@ -417,8 +417,9 @@ func (h *Holder) logger() *log.Logger { return log.New(h.LogOutput, "", log.Lstd
 type HolderSyncer struct {
 	Holder *Holder
 
-	Host    *URI
-	Cluster *Cluster
+	Host          *URI
+	Cluster       *Cluster
+	ClientOptions *ClientOptions
 
 	// Signals that the sync should stop.
 	Closing <-chan struct{}
@@ -504,7 +505,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.Host.HostPort()) {
-		client, err := NewClient(node.Host)
+		client, err := NewClient(node.Host, s.ClientOptions)
 		if err != nil {
 			return err
 		}
@@ -549,7 +550,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.Host.HostPort()) {
-		client, err := NewClient(node.Host)
+		client, err := NewClient(node.Host, s.ClientOptions)
 		if err != nil {
 			return err
 		}
@@ -602,10 +603,11 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 
 	// Sync fragments together.
 	fs := FragmentSyncer{
-		Fragment: frag,
-		Host:     s.Host.HostPort(),
-		Cluster:  s.Cluster,
-		Closing:  s.Closing,
+		Fragment:      frag,
+		Host:          s.Host.HostPort(),
+		Cluster:       s.Cluster,
+		Closing:       s.Closing,
+		ClientOptions: s.ClientOptions,
 	}
 	if err := fs.SyncFragment(); err != nil {
 		return err

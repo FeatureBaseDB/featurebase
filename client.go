@@ -31,13 +31,20 @@ import (
 	"strconv"
 	"time"
 
+	"crypto/tls"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
 
+// ClientOptions represents the configuration for a Client
+type ClientOptions struct {
+	TLS *tls.Config
+}
+
 // Client represents a client to the Pilosa cluster.
 type Client struct {
-	host *URI
+	host    *URI
+	options *ClientOptions
 
 	// The client to use for HTTP communication.
 	// Defaults to the http.DefaultClient.
@@ -45,7 +52,7 @@ type Client struct {
 }
 
 // NewClient returns a new instance of Client to connect to host.
-func NewClient(host string) (*Client, error) {
+func NewClient(host string, options *ClientOptions) (*Client, error) {
 	if host == "" {
 		return nil, ErrHostRequired
 	}
@@ -55,16 +62,24 @@ func NewClient(host string) (*Client, error) {
 		return nil, err
 	}
 
-	return NewClientFromURI(uri)
+	return NewClientFromURI(uri, options)
 }
 
-func NewClientFromURI(uri *URI) (*Client, error) {
+func NewClientFromURI(uri *URI, options *ClientOptions) (*Client, error) {
 	if uri == nil {
 		return nil, ErrHostRequired
 	}
+	if options == nil {
+		options = &ClientOptions{}
+	}
+	transport := &http.Transport{}
+	if options.TLS != nil {
+		transport.TLSClientConfig = options.TLS
+	}
+	client := &http.Client{Transport: transport}
 	return &Client{
 		host:       uri,
-		HTTPClient: http.DefaultClient,
+		HTTPClient: client,
 	}, nil
 }
 

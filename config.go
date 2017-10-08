@@ -14,7 +14,9 @@
 
 package pilosa
 
-import "time"
+import (
+	"time"
+)
 
 // Cluster types.
 const (
@@ -120,13 +122,26 @@ func (c *Config) Validate() error {
 			if err != nil {
 				return err
 			}
-			if !foundItem(c.Cluster.Hosts, bindWithDefaults.HostPort()) {
+			if !c.foundHost(bindWithDefaults) {
 				return ErrConfigHostsMissing
 			}
 		}
 	}
 
 	return nil
+}
+
+func (c *Config) foundHost(host *URI) bool {
+	for _, clusterHost := range c.Cluster.Hosts {
+		uri, err := NewURIFromAddress(clusterHost)
+		if err != nil {
+			continue
+		}
+		if host.Equals(uri) {
+			return true
+		}
+	}
+	return false
 }
 
 // Duration is a TOML wrapper type for time.Duration.

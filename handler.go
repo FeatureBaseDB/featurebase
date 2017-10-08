@@ -58,6 +58,7 @@ type Handler struct {
 	// Local hostname & cluster configuration.
 	Host    *URI
 	Cluster *Cluster
+	ClientOptions *ClientOptions
 
 	Router *mux.Router
 
@@ -1504,7 +1505,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create a client for the remote cluster.
-	client, err := NewClientFromURI(host)
+	client, err := NewClientFromURI(host, h.ClientOptions)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

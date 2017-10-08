@@ -86,7 +86,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		return errors.New("path required")
 	}
 	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host)
+	client, err := pilosa.NewClient(cmd.Host, nil)
 	if err != nil {
 		return err
 	}

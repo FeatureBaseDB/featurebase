@@ -75,7 +75,6 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
 			t.Fatalf("unexpected bits: %+v", bits)
 		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{}) {
-			fmt.Println("ATTRS", attrs)
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
 	})
