@@ -1,4 +1,4 @@
-FROM golang:1.8.3 as builder
+FROM golang:1.9.1 as builder
 
 ARG ldflags=''
 
