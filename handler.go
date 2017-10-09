@@ -134,6 +134,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
+	router.HandleFunc("/recalculatecaches", handler.handleRecalculateCaches).Methods("POST")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
@@ -1960,6 +1961,11 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 		}
 	}
 	return setBits, nil
+}
+
+func (h *Handler) handleRecalculateCaches(w http.ResponseWriter, r *http.Request) {
+	h.Holder.RecalculateCaches()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // GetTimeStamp retrieves unix timestamp from Input data.

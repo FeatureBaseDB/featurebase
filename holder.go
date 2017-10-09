@@ -361,6 +361,28 @@ func (h *Holder) flushCaches() {
 	}
 }
 
+// RecalculateCaches calls RecalculateCache on every fragment of every frame of
+// every index. This is probably not practical to call in real-world workloads,
+// but makes writing integration tests much eaiser, since one doesn't have to
+// wait 10 seconds after setting bits to get expected response.
+func (h *Holder) RecalculateCaches() {
+	for _, index := range h.Indexes() {
+		for _, frame := range index.Frames() {
+			for _, view := range frame.Views() {
+				for _, fragment := range view.Fragments() {
+					select {
+					case <-h.closing:
+						return
+					default:
+					}
+
+					fragment.RecalculateCache()
+				}
+			}
+		}
+	}
+}
+
 // setFileLimit attempts to set the open file limit to the FileLimit constant defined above.
 func (h *Holder) setFileLimit() {
 	oldLimit := &syscall.Rlimit{}
