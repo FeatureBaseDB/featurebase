@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.1] - 2017-10-09
+
+This version contains 3 contributions from 3 contributors. There are 14 files changed, 221 insertions, and 52 deletions.
+
+### Changed
+
+- Update dependencies and Go version ([#878](https://github.com/pilosa/pilosa/pull/878))
+
+### Performance
+
+- Leverage not-null field to make BETWEEN queries more efficient ([#874](https://github.com/pilosa/pilosa/pull/874))
+
 ## [0.7.0] - 2017-10-03
 
 This version contains 59 contributions from 9 contributors. There are 61 files changed, 5207 insertions, and 1054 deletions.
