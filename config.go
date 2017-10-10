@@ -54,6 +54,8 @@ type TLSConfig struct {
 	CertificatePath string `toml:"certificate-path"`
 	// CertificateKeyPath contains the path to the certificate key (.key file)
 	CertificateKeyPath string `toml:"certificate-key-path"`
+	// SkipVerify disables verification for self-signed certificates
+	SkipVerify bool `toml:"skip-verify"`
 }
 
 // Config represents the configuration for the command.

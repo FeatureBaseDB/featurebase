@@ -54,7 +54,7 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 
 	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor()
+		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr[0].Holder
 		e.Scheme = cluster.Nodes[0].Scheme
 		e.Host = cluster.Nodes[0].Host
@@ -62,7 +62,7 @@ func TestClient_MultiNode(t *testing.T) {
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor()
+		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr[1].Holder
 		e.Scheme = cluster.Nodes[1].Scheme
 		e.Host = cluster.Nodes[1].Host
@@ -70,7 +70,7 @@ func TestClient_MultiNode(t *testing.T) {
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor()
+		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr[2].Holder
 		e.Scheme = cluster.Nodes[2].Scheme
 		e.Host = cluster.Nodes[2].Host

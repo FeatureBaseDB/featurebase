@@ -164,7 +164,10 @@ func (m *Command) SetupServer() error {
 		if err != nil {
 			return err
 		}
-		m.Server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+		m.Server.TLS = &tls.Config{
+			Certificates:       []tls.Certificate{cert},
+			InsecureSkipVerify: m.Config.TLS.SkipVerify,
+		}
 		m.Server.Handler.ClientOptions = &pilosa.ClientOptions{TLS: m.Server.TLS}
 	}
 

@@ -75,6 +75,8 @@ type Server struct {
 	MaxWritesPerRequest int
 
 	LogOutput io.Writer
+
+	defaultClient *http.Client
 }
 
 // NewServer returns a new instance of Server.
@@ -158,8 +160,11 @@ func (s *Server) Open() error {
 		return fmt.Errorf("opening NodeSet: %v", err)
 	}
 
+	// Create default HTTP client
+	s.createDefaultClient()
+
 	// Create executor for executing queries.
-	e := NewExecutor()
+	e := NewExecutor(&ClientOptions{TLS: s.TLS})
 	e.Holder = s.Holder
 	e.Scheme = s.Host.Scheme()
 	e.Host = s.Host.HostPort()
@@ -279,7 +284,7 @@ func (s *Server) monitorMaxSlices() {
 		oldmaxslices := s.Holder.MaxSlices()
 		for _, node := range s.Cluster.Nodes {
 			if s.Host.HostPort() != node.Host {
-				maxSlices, _ := checkMaxSlices(node.Scheme, node.Host)
+				maxSlices, _ := s.checkMaxSlices(node.Scheme, node.Host)
 				for index, newmax := range maxSlices {
 					// if we don't know about an index locally, log an error because
 					// indexes should be created and synced prior to slice creation
@@ -458,7 +463,7 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	return nil
 }
 
-func checkMaxSlices(scheme string, hostPort string) (map[string]uint64, error) {
+func (s *Server) checkMaxSlices(scheme string, hostPort string) (map[string]uint64, error) {
 	// Create HTTP request.
 	req, err := http.NewRequest("GET", (&url.URL{
 		Scheme: scheme,
@@ -475,8 +480,7 @@ func checkMaxSlices(scheme string, hostPort string) (map[string]uint64, error) {
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 
-	// Send request to remote node.
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.defaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -544,6 +548,14 @@ func (s *Server) monitorRuntime() {
 		s.Holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
 		s.Holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
 	}
+}
+
+func (s *Server) createDefaultClient() {
+	transport := &http.Transport{}
+	if s.TLS != nil {
+		transport.TLSClientConfig = s.TLS
+	}
+	s.defaultClient = &http.Client{Transport: transport}
 }
 
 // CountOpenFiles on opperating systems that support lsof

@@ -47,7 +47,6 @@ type Client struct {
 	options *ClientOptions
 
 	// The client to use for HTTP communication.
-	// Defaults to the http.DefaultClient.
 	HTTPClient *http.Client
 }
 

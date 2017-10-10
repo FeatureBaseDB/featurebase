@@ -55,9 +55,17 @@ type Executor struct {
 }
 
 // NewExecutor returns a new instance of Executor.
-func NewExecutor() *Executor {
+func NewExecutor(clientOptions *ClientOptions) *Executor {
+	if clientOptions == nil {
+		clientOptions = &ClientOptions{}
+	}
+	transport := &http.Transport{}
+	if clientOptions.TLS != nil {
+		transport.TLSClientConfig = clientOptions.TLS
+	}
+	client := &http.Client{Transport: transport}
 	return &Executor{
-		HTTPClient: http.DefaultClient,
+		HTTPClient: client,
 	}
 }
 
