@@ -206,6 +206,42 @@ Any flag that has a value that is a comma separated list on the command line bec
     poll-interval = "0m15s"
     ```
 
+##### TLS Certificate
+
+* Description: Path to the TLS certificate to use for serving HTTPS. Usually has one of`.crt` or `.pem` extensions.
+* Flag: `tls.certificate=/srv/pilosa/certs/server.crt`
+* Env: `PILOSA_TLS_CERTIFICATE=/srv/pilosa/certs/server.crt`
+* Config:
+
+    ```toml
+    [tls]
+    certificate = "/srv/pilosa/certs/server.crt"
+    ```
+
+##### TLS Certificate Key
+
+* Description: Path to the TLS certificate key to use for serving HTTPS. Usually has the `.key` extension.
+* Flag: `tls.key=/srv/pilosa/certs/server.key`
+* Env: `PILOSA_TLS_KEY=/srv/pilosa/certs/server.key`
+* Config:
+
+    ```toml
+    [tls]
+    key = "/srv/pilosa/certs/server.key"
+    ```
+
+##### TLS Skip Verify
+
+* Description: Disables verification for checking TLS certificates. This configuration item is mainly useful for using self-signed certificates for a Pilosa cluster. Do not use in production since it makes man-in-the-middle attacks trivial.
+* Flag: `tls.skip-verify`
+* Env: `PILOSA_TLS_SKIP_VERIFY`
+* Config:
+
+    ```toml
+    [tls]
+    skip-verify = true
+    ```
+
 ### Example Cluster Configuration
 
 A three node cluster could be minimally configured as follows:
