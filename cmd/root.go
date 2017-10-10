@@ -91,7 +91,7 @@ func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error 
 
 	// add env to viper
 	v.SetEnvPrefix(envPrefix)
-	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	v.AutomaticEnv()
 
 	c := v.GetString("config")
