@@ -281,3 +281,56 @@ A three node cluster could be minimally configured as follows:
       replicas = 1
       type = "gossip"
       hosts = ["node0.pilosa.com:10101","node1.pilosa.com:10101","node2.pilosa.com:10101"]
+
+
+### Example Cluster Configuration (HTTPS)
+
+The same cluster which uses HTTPS instead of HTTP can be configured as follows. Note that we explicitly specify `https` as the protocol in `bind` and `cluster.hosts` configuration: 
+
+#### Node 0
+
+    data-dir = "/home/pilosa/data"
+    bind = "https://node0.pilosa.com:10101"
+    gossip-port = 12000
+    gossip-seed = "node0.pilosa.com:12000"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["https://node0.pilosa.com:10101","https://node1.pilosa.com:10101","https://node2.pilosa.com:10101"]
+
+    [tls]
+      certificate = "/home/pilosa/private/server.crt"
+      key = "/home/pilosa/private/server.key"
+
+#### Node 1
+
+    data-dir = "/home/pilosa/data"
+    bind = "https://node1.pilosa.com:10101"
+    gossip-port = 12000
+    gossip-seed = "node0.pilosa.com:12000"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["https://node0.pilosa.com:10101","https://node1.pilosa.com:10101","https://node2.pilosa.com:10101"]
+
+    [tls]
+      certificate = "/home/pilosa/private/server.crt"
+      key = "/home/pilosa/private/server.key"
+      
+#### Node 2
+
+    data-dir = "/home/pilosa/data"
+    bind = "https://node2.pilosa.com:10101"
+    gossip-port = 12000
+    gossip-seed = "node0.pilosa.com:12000"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["https://node0.pilosa.com:10101","https://node1.pilosa.com:10101","https://node2.pilosa.com:10101"]
+
+    [tls]
+      certificate = "/home/pilosa/private/server.crt"
+      key = "/home/pilosa/private/server.key"
