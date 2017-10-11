@@ -412,3 +412,14 @@ Response:
 {"version":"v0.6.0"}
 ```
 
+### Recalculate Caches
+
+`POST /recalculatecaches`
+
+Recalculates the caches on demand. The cache is recalculated every 10
+secondes by default. This endpoint can be used to recalculate the cache
+before the 10 second interval. This should probably only be used in
+integration tests and not in a typical production workflow.
+
+Response: `204 No Content`
+
