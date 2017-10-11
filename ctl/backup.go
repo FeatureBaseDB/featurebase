@@ -57,7 +57,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) error {
 	}
 
 	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host, nil)
+	client, err := CommandClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -82,4 +82,12 @@ func (cmd *BackupCommand) Run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (cmd *BackupCommand) TLSHost() string {
+	return cmd.Host
+}
+
+func (cmd *BackupCommand) TLSConfiguration() pilosa.TLSConfig {
+	return cmd.TLS
 }

@@ -42,7 +42,5 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVarP(&srv.Config.Metric.Service, "metric.service", "", "nop", "Default URI on which pilosa should listen.")
 	flags.StringVarP(&srv.Config.Metric.Host, "metric.host", "", "", "Default URI to send metrics.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Metric.PollInterval), "metric.poll-interval", "", time.Minute*0, "Polling interval metrics.")
-	flags.StringVarP(&srv.Config.TLS.CertificatePath, "tls.certificate", "", "", "TLS certificate path (usually has the .crt or .pem extension")
-	flags.StringVarP(&srv.Config.TLS.CertificateKeyPath, "tls.key", "", "", "TLS certificate key path (usually has the .key extension")
-	flags.BoolVarP(&srv.Config.TLS.SkipVerify, "tls.skip-verify", "", false, "Skip TLS certificate verification (not secure)")
+	SetTLSConfig(flags, &srv.Config.TLS.CertificatePath, &srv.Config.TLS.CertificateKeyPath, &srv.Config.TLS.SkipVerify)
 }

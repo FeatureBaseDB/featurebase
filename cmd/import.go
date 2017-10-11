@@ -65,6 +65,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.BoolVar(&Importer.FrameOptions.RangeEnabled, "frame-range-enabled", false, "Enabled range encoded frame")
 	flags.StringVar(&Importer.FrameOptions.CacheType, "frame-cache-type", pilosa.CacheTypeRanked, "Cache type for the frame; valid values: none, lru, ranked")
 	flags.Uint32Var(&Importer.FrameOptions.CacheSize, "frame-cache-size", 50000, "Cache size for the frame")
+	ctl.SetTLSConfig(flags, &Importer.TLS.CertificatePath, &Importer.TLS.CertificateKeyPath, &Importer.TLS.SkipVerify)
 
 	return importCmd
 }

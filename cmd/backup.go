@@ -19,9 +19,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/spf13/cobra"
-
 	"github.com/pilosa/pilosa/ctl"
+	"github.com/spf13/cobra"
 )
 
 var Backuper *ctl.BackupCommand
@@ -47,6 +46,7 @@ Backs up the view from across the cluster into a single file.
 	flags.StringVarP(&Backuper.Frame, "frame", "f", "", "Frame to backup.")
 	flags.StringVarP(&Backuper.View, "view", "v", "", "View to backup.")
 	flags.StringVarP(&Backuper.Path, "output-file", "o", "", "File to write backup to - default stdout")
+	ctl.SetTLSConfig(flags, &Backuper.TLS.CertificatePath, &Backuper.TLS.CertificateKeyPath, &Backuper.TLS.SkipVerify)
 
 	return backupCmd
 }

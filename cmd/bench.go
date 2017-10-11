@@ -47,6 +47,7 @@ Executes a benchmark for a given operation against the index.
 	flags.StringVarP(&Bencher.Frame, "frame", "f", "", "Frame to benchmark.")
 	flags.StringVarP(&Bencher.Op, "operation", "o", "set-bit", "Operation to perform: choose from [set-bit]")
 	flags.IntVarP(&Bencher.N, "num", "n", 0, "Number of operations to perform.")
+	ctl.SetTLSConfig(flags, &Bencher.TLS.CertificatePath, &Bencher.TLS.CertificateKeyPath, &Bencher.TLS.SkipVerify)
 
 	return benchCmd
 }

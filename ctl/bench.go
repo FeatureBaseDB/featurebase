@@ -40,6 +40,8 @@ type BenchCommand struct {
 
 	// Standard input/output
 	*pilosa.CmdIO
+
+	TLS pilosa.TLSConfig
 }
 
 // NewBenchCommand returns a new instance of BenchCommand.
@@ -52,7 +54,7 @@ func NewBenchCommand(stdin io.Reader, stdout, stderr io.Writer) *BenchCommand {
 // Run executes the bench command.
 func (cmd *BenchCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host, nil)
+	client, err := CommandClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -99,4 +101,12 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 	fmt.Fprintf(cmd.Stdout, "Executed %d operations in %s (%0.3f op/sec)\n", cmd.N, elapsed, float64(cmd.N)/elapsed.Seconds())
 
 	return nil
+}
+
+func (cmd *BenchCommand) TLSHost() string {
+	return cmd.Host
+}
+
+func (cmd *BenchCommand) TLSConfiguration() pilosa.TLSConfig {
+	return cmd.TLS
 }

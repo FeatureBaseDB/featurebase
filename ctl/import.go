@@ -62,6 +62,8 @@ type ImportCommand struct {
 
 	// Standard input/output
 	*pilosa.CmdIO
+
+	TLS pilosa.TLSConfig
 }
 
 // NewImportCommand returns a new instance of ImportCommand.
@@ -86,7 +88,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		return errors.New("path required")
 	}
 	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host, nil)
+	client, err := CommandClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -337,4 +339,12 @@ func (cmd *ImportCommand) importFieldValues(ctx context.Context, vals []pilosa.F
 	}
 
 	return nil
+}
+
+func (cmd *ImportCommand) TLSHost() string {
+	return cmd.Host
+}
+
+func (cmd *ImportCommand) TLSConfiguration() pilosa.TLSConfig {
+	return cmd.TLS
 }
