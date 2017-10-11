@@ -392,6 +392,13 @@ func (i *Index) Frames() []*Frame {
 	return a
 }
 
+// RecalculateCaches recalculates caches on every frame in the index.
+func (i *Index) RecalculateCaches() {
+	for _, frame := range i.Frames() {
+		frame.RecalculateCaches()
+	}
+}
+
 // CreateFrame creates a frame.
 func (i *Index) CreateFrame(name string, opt FrameOptions) (*Frame, error) {
 	i.mu.Lock()
