@@ -1792,7 +1792,7 @@ func TestHandler_RecalculateCaches(t *testing.T) {
 	h.Cluster = test.NewCluster(1)
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/recalculatecaches", nil))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/recalculate-caches", nil))
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}

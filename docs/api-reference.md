@@ -414,12 +414,14 @@ Response:
 
 ### Recalculate Caches
 
-`POST /recalculatecaches`
+`POST /recalculate-caches`
 
 Recalculates the caches on demand. The cache is recalculated every 10
-secondes by default. This endpoint can be used to recalculate the cache
+seconds by default. This endpoint can be used to recalculate the cache
 before the 10 second interval. This should probably only be used in
-integration tests and not in a typical production workflow.
+integration tests and not in a typical production workflow. Note that
+in a multi-node cluster, the cache is only recalculated on the node
+that receives the request.
 
 Response: `204 No Content`
 
