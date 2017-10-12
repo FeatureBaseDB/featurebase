@@ -66,7 +66,7 @@ func NewServer() *Server {
 	if err != nil {
 		panic(err)
 	}
-	s.Handler.Host = uri
+	s.Handler.URI = uri
 
 	// Handler test messages can no-op.
 	s.Handler.Broadcaster = pilosa.NopBroadcaster
@@ -85,14 +85,14 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	}
 
 	ns := internal.NodeStatus{
-		Host:    s.Handler.Handler.Host.HostPort(),
+		Host:    s.Handler.Handler.URI.HostPort(),
 		State:   pilosa.NodeStateUp,
 		Indexes: pilosa.EncodeIndexes(s.Handler.Holder.Indexes()),
 	}
 
 	// Append Slice list per this Node's indexes
 	for _, index := range ns.Indexes {
-		index.Slices = s.Handler.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Handler.Host.HostPort())
+		index.Slices = s.Handler.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Handler.URI.HostPort())
 	}
 
 	return &ns, nil

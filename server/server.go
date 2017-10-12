@@ -100,7 +100,7 @@ func (m *Command) Run(args ...string) (err error) {
 		return fmt.Errorf("server.Open: %v", err)
 	}
 
-	m.Server.Logger().Printf("Listening as %s\n", m.Server.Host.Normalize())
+	m.Server.Logger().Printf("Listening as %s\n", m.Server.URI.Normalize())
 	return nil
 }
 
@@ -115,7 +115,7 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return err
 	}
-	m.Server.Host = uri
+	m.Server.URI = uri
 
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN

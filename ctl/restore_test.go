@@ -52,7 +52,7 @@ func TestRestoreCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Handler.Host = uri
+	s.Handler.URI = uri
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder

@@ -383,7 +383,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	}
 	syncer := pilosa.HolderSyncer{
 		Holder:  hldr0.Holder,
-		Host:    uri,
+		URI:     uri,
 		Cluster: cluster,
 	}
 

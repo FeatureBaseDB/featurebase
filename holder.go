@@ -417,7 +417,7 @@ func (h *Holder) logger() *log.Logger { return log.New(h.LogOutput, "", log.Lstd
 type HolderSyncer struct {
 	Holder *Holder
 
-	Host          *URI
+	URI           *URI
 	Cluster       *Cluster
 	ClientOptions *ClientOptions
 
@@ -468,7 +468,7 @@ func (s *HolderSyncer) SyncHolder() error {
 
 				for slice := uint64(0); slice <= s.Holder.Index(di.Name).MaxSlice(); slice++ {
 					// Ignore slices that this host doesn't own.
-					if !s.Cluster.OwnsFragment(s.Host.HostPort(), di.Name, slice) {
+					if !s.Cluster.OwnsFragment(s.URI.HostPort(), di.Name, slice) {
 						continue
 					}
 
@@ -504,7 +504,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 	}
 
 	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.Host.HostPort()) {
+	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.URI.HostPort()) {
 		client, err := NewClient(node.Host, s.ClientOptions)
 		if err != nil {
 			return err
@@ -549,7 +549,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 	}
 
 	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.Host.HostPort()) {
+	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.URI.HostPort()) {
 		client, err := NewClient(node.Host, s.ClientOptions)
 		if err != nil {
 			return err
@@ -604,7 +604,7 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 	// Sync fragments together.
 	fs := FragmentSyncer{
 		Fragment:      frag,
-		Host:          s.Host.HostPort(),
+		Host:          s.URI.HostPort(),
 		Cluster:       s.Cluster,
 		Closing:       s.Closing,
 		ClientOptions: s.ClientOptions,

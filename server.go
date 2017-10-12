@@ -60,7 +60,7 @@ type Server struct {
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
 	Network string
-	Host    *URI
+	URI     *URI
 	Cluster *Cluster
 
 	// Background monitoring intervals.
@@ -109,33 +109,33 @@ func (s *Server) Open() error {
 	var err error
 
 	// If bind URI has the https scheme, enable TLS
-	if s.Host.Scheme() == "https" && s.TLS != nil {
-		ln, err = tls.Listen("tcp", s.Host.HostPort(), s.TLS)
+	if s.URI.Scheme() == "https" && s.TLS != nil {
+		ln, err = tls.Listen("tcp", s.URI.HostPort(), s.TLS)
 		if err != nil {
 			return err
 		}
-	} else if s.Host.Scheme() == "http" {
+	} else if s.URI.Scheme() == "http" {
 		// Open HTTP listener to determine port (if specified as :0).
-		ln, err = net.Listen(s.Network, s.Host.HostPort())
+		ln, err = net.Listen(s.Network, s.URI.HostPort())
 		if err != nil {
 			return fmt.Errorf("net.Listen: %v", err)
 		}
 	} else {
-		return fmt.Errorf("unsupported scheme: %s", s.Host.Scheme())
+		return fmt.Errorf("unsupported scheme: %s", s.URI.Scheme())
 	}
 
 	s.ln = ln
 
-	if s.Host.Port() == 0 {
+	if s.URI.Port() == 0 {
 		// If the port is 0, it is set automatically.
 		// Find out automatically set port and update the host.
-		s.Host.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
+		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
 	}
 
 	// Create local node if no cluster is specified.
 	if len(s.Cluster.Nodes) == 0 {
 		s.Cluster.Nodes = []*Node{
-			{Scheme: s.Host.Scheme(), Host: s.Host.HostPort()},
+			{Scheme: s.URI.Scheme(), Host: s.URI.HostPort()},
 		}
 	}
 
@@ -166,15 +166,15 @@ func (s *Server) Open() error {
 	// Create executor for executing queries.
 	e := NewExecutor(&ClientOptions{TLS: s.TLS})
 	e.Holder = s.Holder
-	e.Scheme = s.Host.Scheme()
-	e.Host = s.Host.HostPort()
+	e.Scheme = s.URI.Scheme()
+	e.Host = s.URI.HostPort()
 	e.Cluster = s.Cluster
 	e.MaxWritesPerRequest = s.MaxWritesPerRequest
 
 	// Initialize HTTP handler.
 	s.Handler.Broadcaster = s.Broadcaster
 	s.Handler.StatusHandler = s
-	s.Handler.Host = s.Host
+	s.Handler.URI = s.URI
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
@@ -246,7 +246,7 @@ func (s *Server) monitorAntiEntropy() {
 		// Initialize syncer with local holder and remote client.
 		var syncer HolderSyncer
 		syncer.Holder = s.Holder
-		syncer.Host = s.Host
+		syncer.URI = s.URI
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
 		syncer.ClientOptions = &ClientOptions{TLS: s.TLS}
@@ -283,7 +283,7 @@ func (s *Server) monitorMaxSlices() {
 
 		oldmaxslices := s.Holder.MaxSlices()
 		for _, node := range s.Cluster.Nodes {
-			if s.Host.HostPort() != node.Host {
+			if s.URI.HostPort() != node.Host {
 				maxSlices, _ := s.checkMaxSlices(node.Scheme, node.Host)
 				for index, newmax := range maxSlices {
 					// if we don't know about an index locally, log an error because
@@ -386,14 +386,14 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	}
 
 	ns := internal.NodeStatus{
-		Host:    s.Host.HostPort(),
+		Host:    s.URI.HostPort(),
 		State:   NodeStateUp,
 		Indexes: EncodeIndexes(s.Holder.Indexes()),
 	}
 
 	// Append Slice list per this Node's indexes
 	for _, index := range ns.Indexes {
-		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Host.HostPort())
+		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.URI.HostPort())
 	}
 
 	return &ns, nil
@@ -406,7 +406,7 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	node := s.Cluster.NodeByHost(s.Host.HostPort())
+	node := s.Cluster.NodeByHost(s.URI.HostPort())
 	node.SetStatus(ns.(*internal.NodeStatus))
 
 	// Update NodeState for all nodes.
@@ -416,7 +416,7 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 		// the local node as UP.
 		// TODO: we should be able to remove this check if/when cluster.Nodes and
 		// cluster.NodeSet are unified.
-		if host == s.Host.HostPort() {
+		if host == s.URI.HostPort() {
 			nodeState = NodeStateUp
 		}
 		node := s.Cluster.NodeByHost(host)

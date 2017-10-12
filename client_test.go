@@ -35,7 +35,7 @@ func createCluster(c *pilosa.Cluster) ([]*test.Server, []*test.Holder) {
 	for i := 0; i < numNodes; i++ {
 		hldr[i] = test.MustOpenHolder()
 		server[i] = test.NewServer()
-		server[i].Handler.Host = server[i].HostURI()
+		server[i].Handler.URI = server[i].HostURI()
 		server[i].Handler.Cluster = c
 		server[i].Handler.Cluster.Nodes[i].Host = server[i].Host()
 		server[i].Handler.Holder = hldr[i].Holder
@@ -210,7 +210,7 @@ func TestClient_Import(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.HostURI()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -261,7 +261,7 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.HostURI()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -310,7 +310,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.HostURI()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -348,7 +348,7 @@ func TestClient_BackupRestore(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.HostURI()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -413,7 +413,7 @@ func TestClient_BackupInverseView(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.HostURI()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -450,7 +450,7 @@ func TestClient_BackupInvalidView(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.HostURI()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -479,7 +479,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.HostURI()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
