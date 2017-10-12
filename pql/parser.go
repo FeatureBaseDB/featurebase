@@ -165,7 +165,7 @@ func (p *Parser) parseArgs() (map[string]interface{}, error) {
 		var op Token
 		switch tok, pos, lit := p.scanIgnoreWhitespace(); tok {
 		case ASSIGN:
-		case EQ, LT, LTE, GT, GTE, BETWEEN:
+		case EQ, NEQ, LT, LTE, GT, GTE, BETWEEN:
 			op = tok
 		default:
 			return nil, parseErrorf(pos, "expected equals sign or comparison operator, found %q", lit)

@@ -1782,3 +1782,19 @@ func MustReadAll(r io.Reader) []byte {
 	}
 	return buf
 }
+
+func TestHandler_RecalculateCaches(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	h := test.NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = test.NewCluster(1)
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/recalculate-caches", nil))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+
+}

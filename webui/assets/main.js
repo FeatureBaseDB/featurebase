@@ -253,7 +253,12 @@ function populate_version() {
     var node = document.getElementById('server-version')
 
     xhr.onload = function() {
-      version = JSON.parse(xhr.responseText)['version']
+      var version = JSON.parse(xhr.responseText)['version']
+      var version_major_minor = /(v\d+\.\d+)/.exec(version)[0]
+      var doc_link = document.getElementById('nav-documentation')
+      doc_link.onclick = function() {
+        window.open('https://www.pilosa.com/docs/' + version_major_minor + '/introduction/')
+      }
       node.innerHTML = version
     }
     xhr.send(null)

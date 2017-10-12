@@ -5,6 +5,63 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.1] - 2017-10-09
+
+This version contains 3 contributions from 3 contributors. There are 14 files changed, 221 insertions, and 52 deletions.
+
+### Changed
+
+- Update dependencies and Go version ([#878](https://github.com/pilosa/pilosa/pull/878))
+
+### Performance
+
+- Leverage not-null field to make BETWEEN queries more efficient ([#874](https://github.com/pilosa/pilosa/pull/874))
+
+## [0.7.0] - 2017-10-03
+
+This version contains 59 contributions from 9 contributors. There are 61 files changed, 5207 insertions, and 1054 deletions.
+
+### Added
+
+- Add HTTP API for fields ([#811](https://github.com/pilosa/pilosa/pull/811), [#856](https://github.com/pilosa/pilosa/pull/856))
+- Add HTTP API for delete views ([#785](https://github.com/pilosa/pilosa/pull/785))
+- Modify import endpoint to handle BSI field values ([#840](https://github.com/pilosa/pilosa/pull/840))
+- Add field Range() support to Executor ([#791](https://github.com/pilosa/pilosa/pull/791))
+- Support PQL Range() queries for fields ([#755](https://github.com/pilosa/pilosa/pull/755))
+- Add Sum() field query ([#778](https://github.com/pilosa/pilosa/pull/778))
+- Add documentation for BSI ([#861](https://github.com/pilosa/pilosa/pull/861))
+- Add BETWEEN for Range queries ([#847](https://github.com/pilosa/pilosa/pull/847))
+- Add Xor support for PQL ([#789](https://github.com/pilosa/pilosa/pull/789))
+- Enable auto-creating the schema on imports ([#837](https://github.com/pilosa/pilosa/pull/837))
+- Update client library docs ([#831](https://github.com/pilosa/pilosa/pull/831))
+- Handle SIGTERM signal ([#830](https://github.com/pilosa/pilosa/pull/830))
+- Add cluster config example to docs ([#806](https://github.com/pilosa/pilosa/pull/806))
+- Add ability to exclude attributes and bits in Bitmap queries ([#783](https://github.com/pilosa/pilosa/pull/783))
+
+### Fixed
+
+- Fix panic when iterating over an empty run container ([#860](https://github.com/pilosa/pilosa/pull/860))
+- Fix row id zero bug ([#814](https://github.com/pilosa/pilosa/pull/814))
+- Fix cache invalidation bug ([#795](https://github.com/pilosa/pilosa/pull/795))
+- Set container.n in differenceRunRun ([#794](https://github.com/pilosa/pilosa/pull/794))
+- Fix infinite loop in bitmap-to-array conversion ([#779](https://github.com/pilosa/pilosa/pull/779))
+- Fix CountRange bug ([#773](https://github.com/pilosa/pilosa/pull/773))
+
+### Deprecated
+
+- Remove support for row/column labels ([#839](https://github.com/pilosa/pilosa/pull/839))
+
+### Performance
+
+- Refactor differenceRunArray ([#859](https://github.com/pilosa/pilosa/pull/859))
+- Update fragment.FieldSum to use roaring IntersectionCount() ([#841](https://github.com/pilosa/pilosa/pull/841))
+- Add roaring optimizations ([#842](https://github.com/pilosa/pilosa/pull/842))
+- Convert lock to read lock ([#848](https://github.com/pilosa/pilosa/pull/848))
+- Reduce Lock calls in executor ([#846](https://github.com/pilosa/pilosa/pull/846))
+- Implement container.flipBitmap() to improve differenceRunBitmap() ([#849](https://github.com/pilosa/pilosa/pull/849))
+- Reuse container storage on UnmarshalBinary to improve memory utilization ([#820](https://github.com/pilosa/pilosa/pull/820))
+- Improve WriteTo performance ([#812](https://github.com/pilosa/pilosa/pull/812))
+
 ## [0.6.0] - 2017-08-11
 
 This version contains 14 contributions from 5 contributors. There are 28 files changed, 4,936 insertions, and 692 deletions.

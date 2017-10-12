@@ -283,6 +283,29 @@ func TestFragment_FieldRange(t *testing.T) {
 		}
 	})
 
+	t.Run("NEQ", func(t *testing.T) {
+		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		defer f.Close()
+
+		// Set values.
+		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+			t.Fatal(err)
+		}
+
+		// Query for inequality.
+		if b, err := f.FieldRange(pql.NEQ, bitDepth, 300); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000}) {
+			t.Fatalf("unexpected bits: %+v", b.Bits())
+		}
+	})
+
 	t.Run("LT", func(t *testing.T) {
 		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 		defer f.Close()

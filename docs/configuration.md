@@ -46,7 +46,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 * Description: Interval at which the cluster will run its anti-entropy routine which makes sure that all replicas of each fragment are in sync.
 * Flag: `--anti-entropy.interval="10m0s"`
-* Env: `PILOSA_ANTI_ENTROPY.INTERVAL="10m0s"`
+* Env: `PILOSA_ANTI_ENTROPY_INTERVAL="10m0s"`
 * Config:
 
     ```toml
@@ -102,7 +102,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 * Description: List of hosts in the cluster. Multiple hosts should be comma separated in the flag and env forms.
 * Flag: `--cluster.hosts="localhost:10101"`
-* Env: `PILOSA_CLUSTER.HOSTS="localhost:10101"`
+* Env: `PILOSA_CLUSTER_HOSTS="localhost:10101"`
 * Config:
 
     ```toml
@@ -114,7 +114,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 * Description: Polling interval for cluster.
 * Flag: `cluster.poll-interval="1m0s"`
-* Env: `PILOSA_CLUSTER.POLL_INTERVAL="1m0s"`
+* Env: `PILOSA_CLUSTER_POLL_INTERVAL="1m0s"`
 * Config:
 
     ```toml
@@ -126,7 +126,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 * Description: Number of hosts each piece of data should be stored on. 
 * Flag: `cluster.replicas=1`
-* Env: `PILOSA_CLUSTER.REPLICAS=1`
+* Env: `PILOSA_CLUSTER_REPLICAS=1`
 * Config:
 
     ```toml
@@ -141,7 +141,7 @@ Any flag that has a value that is a comma separated list on the command line bec
   * http - Messages are transmitted over HTTP.
   * gossip - Messages are transmitted over TCP. Cluster status and node state are kept in sync via internode gossip.
 * Flag: `cluster.type="gossip"`
-* Env: `PILOSA_CLUSTER.TYPE="gossip"`
+* Env: `PILOSA_CLUSTER_TYPE="gossip"`
 * Config:
 
     ```toml
@@ -153,7 +153,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 * Description: If this is set to a path, collect a cpu profile and store it there.
 * Flag: `--profile.cpu="/path/to/somewhere"`
-* Env: `PILOSA_PROFILE.CPU="/path/to/somewhere"`
+* Env: `PILOSA_PROFILE_CPU="/path/to/somewhere"`
 * Config:
 
     ```toml
@@ -165,7 +165,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 * Description: Amount of time to collect cpu profiling data if `profile.cpu` is set.
 * Flag: `--profile.cpu-time="30s"`
-* Env: `PILOSA_PROFILE.CPU_TIME="30s"
+* Env: `PILOSA_PROFILE_CPU_TIME="30s"
 * Config:
 
     ```toml
@@ -175,7 +175,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 ##### Metric Service
 * Description: Which stats service to use (StatsD or ExpVar).
 * Flag: `--metric.service=statsd`
-* Env: `PILOSA_METRIC.SERVICE=statsd'
+* Env: `PILOSA_METRIC_SERVICE=statsd'
 * Config:
 
     ```toml
@@ -186,7 +186,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 ##### Metric Host
 * Description: Address of the StatsD service host.
 * Flag: `--metric.host=localhost:8125`
-* Env: `PILOSA_METRIC.HOST=localhost:8125'
+* Env: `PILOSA_METRIC_HOST=localhost:8125'
 * Config:
 
     ```toml
@@ -198,7 +198,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 * Description: Polling interval for runtime metrics.
 * Flag: `metric.poll-interval=”0m15s”`
-* Env: `PILOSA_METRIC.POLL_INTERVAL=0m15s`
+* Env: `PILOSA_METRIC_POLL_INTERVAL=0m15s`
 * Config:
 
     ```toml

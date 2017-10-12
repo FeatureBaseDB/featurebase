@@ -213,6 +213,13 @@ func (v *View) Fragments() []*Fragment {
 	return other
 }
 
+// RecalculateCaches recalculates the cache on every fragment in the view.
+func (v *View) RecalculateCaches() {
+	for _, fragment := range v.Fragments() {
+		fragment.RecalculateCache()
+	}
+}
+
 // CreateFragmentIfNotExists returns a fragment in the view by slice.
 func (v *View) CreateFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	v.mu.Lock()

@@ -420,3 +420,83 @@ Range(frame="stargazer", rowID=1, start="2010-01-01T00:00", end="2017-03-02T03:0
 Returns `{{"attrs":{},"bits":[10]}`
 
 * bits are repositories which were starred by user 1 from 2010-01-01 to 2017-03-02
+
+
+#### Range (BSI)
+
+**Spec:**
+
+```
+Range(<frame=STRING>, <FIELD_NAME, COMPARISON_OPERATOR, integer> )
+```
+
+**Description:**
+
+The `Range` query is overloaded to work on `field` values as well as `timestamp` values.
+Returns bits that are true for the comparison operator.
+
+**Result Type:** object with attrs and bits
+
+
+**Examples:**
+
+In our source data, commitactivity was counted over the last year.
+The following Range query returns all repositories having more than 100 commits.
+
+```
+Range(frame="stats", commitactivity > 100)
+```
+
+Returns `{{"attrs":{},"bits":[10]}`
+
+* bits are repositories which had at least 100 commits in the last year.
+
+
+#### Sum
+
+**Spec:**
+
+```
+Sum([BITMAP_CALL], <frame=STRING>, <field=STRING>)
+```
+
+**Description:**
+
+Returns the count and computed sum of all bitmap encoded integer values across the `field` in this `frame`. The optional Bitmap call filters the bits used in this computation.
+
+**Result Type:** object with the computed sum and count of the bitmap field.
+
+**Examples:**
+
+Query the size of all repositories.
+```
+Sum(frame="stats", field="diskusage")
+```
+
+Return `{"sum":10,"count":3}`
+
+* Result is the size of all repositories in kilobytes, plus the number of repositories.
+
+
+#### SetFieldValue
+
+**Spec:**
+
+```
+SetFieldValue(<COL_LABEL=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
+```
+
+**Description:**
+
+`SetFieldValue` assigns an integer value with the specified field name to the `columnID` in the given `frame`.
+
+**Result Type:** null
+
+SetFieldValue returns `null` upon success.
+
+**Examples:**
+
+Set the number of pull requests of repository 10.
+```
+SetFieldValue(col=10, frame="stats", pullrequests=2)
+```

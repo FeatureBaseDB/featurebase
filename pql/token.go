@@ -39,6 +39,7 @@ const (
 
 	ASSIGN  // =
 	EQ      // ==
+	NEQ     // !=
 	LT      // <
 	LTE     // <=
 	GT      // >
@@ -64,6 +65,7 @@ var tokens = [...]string{
 
 	ASSIGN:  "=",
 	EQ:      "==",
+	NEQ:     "!=",
 	LT:      "<",
 	LTE:     "<=",
 	GT:      ">",
