@@ -41,6 +41,9 @@ const (
 
 	// DefaultMaxWritesPerRequest is the default number of writes per request.
 	DefaultMaxWritesPerRequest = 5000
+
+	// DefaultMaxClientConnections is zero, which means no connection limit.
+	DefaultMaxClientConnections = 0
 )
 
 // ClusterTypes set of cluster types.
@@ -80,13 +83,16 @@ type Config struct {
 		Host         string   `toml:"host"`
 		PollInterval Duration `toml:"poll-interval"`
 	} `toml:"metric"`
+
+	MaxClientConnections int `toml:"max-client-connections"`
 }
 
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Bind:                DefaultHost + ":" + DefaultPort,
-		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
+		Bind:                 DefaultHost + ":" + DefaultPort,
+		MaxWritesPerRequest:  DefaultMaxWritesPerRequest,
+		MaxClientConnections: DefaultMaxClientConnections,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.Type = DefaultClusterType

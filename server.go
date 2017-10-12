@@ -68,7 +68,8 @@ type Server struct {
 	MetricInterval      time.Duration
 
 	// Misc options.
-	MaxWritesPerRequest int
+	MaxWritesPerRequest  int
+	MaxClientConnections int
 
 	LogOutput io.Writer
 }
@@ -85,9 +86,10 @@ func NewServer() *Server {
 
 		Network: "tcp",
 
-		AntiEntropyInterval: DefaultAntiEntropyInterval,
-		PollingInterval:     DefaultPollingInterval,
-		MetricInterval:      0,
+		AntiEntropyInterval:  DefaultAntiEntropyInterval,
+		PollingInterval:      DefaultPollingInterval,
+		MetricInterval:       0,
+		MaxClientConnections: 0,
 
 		LogOutput: os.Stderr,
 	}
@@ -163,7 +165,12 @@ func (s *Server) Open() error {
 
 	// Serve HTTP.
 	go func() {
-		err := http.Serve(ln, s.Handler)
+		listener := ln
+		if s.MaxClientConnections > 0 {
+			listener = NewBoundListener(ln,s.MaxClientConnections)
+		}
+		err := http.Serve(listener, s.Handler)
+
 		if err != nil {
 			s.Logger().Printf("HTTP handler terminated with error: %s\n", err)
 		}
