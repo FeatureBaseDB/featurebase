@@ -85,12 +85,15 @@ type Config struct {
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Bind:                DefaultHost + ":" + DefaultPort,
+		DataDir:             "~/.pilosa",
+		Bind:                ":" + DefaultPort,
+		GossipPort:          DefaultGossipPort,
 		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.Type = DefaultClusterType
 	c.Cluster.PollInterval = Duration(DefaultPollingInterval)
+	c.Cluster.LongQueryTime = Duration(time.Minute)
 	c.Cluster.Hosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics

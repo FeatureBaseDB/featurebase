@@ -11,7 +11,7 @@ import (
 func Test_NewConfig(t *testing.T) {
 	c := pilosa.NewConfig()
 
-	c.Cluster.Hosts = []string{c.Bind, "localhost:10102"}
+	c.Cluster.Hosts = []string{"localhost:10101", "localhost:10102"}
 
 	// Change cluster type from the default (gossip) to an invalid string.
 	c.Cluster.Type = "invalid-type"
