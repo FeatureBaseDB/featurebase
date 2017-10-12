@@ -45,7 +45,7 @@ func TestServerConfig(t *testing.T) {
 		// TEST 0
 		{
 			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "example.com:10111,example.com:10110", "--bind", "example.com:10111"},
-			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER.POLL_INTERVAL": "3m2s"},
+			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER_POLL_INTERVAL": "3m2s"},
 			cfgFileContent: `
 	data-dir = "/tmp/myFileDatadir"
 	bind = "localhost:0"
@@ -71,7 +71,7 @@ func TestServerConfig(t *testing.T) {
 		// TEST 1
 		{
 			args: []string{"server", "--anti-entropy.interval", "9m0s"},
-			env:  map[string]string{"PILOSA_CLUSTER.HOSTS": "example.com:1110,example.com:1111", "PILOSA_BIND": "example.com:1110"},
+			env:  map[string]string{"PILOSA_CLUSTER_HOSTS": "example.com:1110,example.com:1111", "PILOSA_BIND": "example.com:1110"},
 			cfgFileContent: `
 	bind = "localhost:0"
 	data-dir = "` + actualDataDir + `"
@@ -94,7 +94,7 @@ func TestServerConfig(t *testing.T) {
 		// TEST 2
 		{
 			args: []string{"server", "--log-path", logFile.Name(), "--cluster.type", "static"},
-			env:  map[string]string{"PILOSA_PROFILE.CPU_TIME": "1m"},
+			env:  map[string]string{"PILOSA_PROFILE_CPU_TIME": "1m"},
 			cfgFileContent: `
 	bind = "localhost:19444"
 	data-dir = "` + actualDataDir + `"
