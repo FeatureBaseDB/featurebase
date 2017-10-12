@@ -43,7 +43,6 @@ type URI struct {
 	scheme string
 	host   string
 	port   uint16
-	error  error
 }
 
 // DefaultURI creates and returns the default URI.
@@ -70,15 +69,9 @@ func NewURIFromHostPort(host string, port uint16) (*URI, error) {
 func NewURIFromAddress(address string) (*URI, error) {
 	uri, err := parseAddress(address)
 	if err != nil {
-		return &URI{error: err}, err
+		return nil, err
 	}
 	return uri, err
-}
-
-// URIFromAddress creates a URI from the given address.
-func URIFromAddress(host string) *URI {
-	uri, _ := NewURIFromAddress(host)
-	return uri
 }
 
 // Scheme returns the scheme of this URI.
@@ -149,16 +142,6 @@ func (u URI) Equals(other *URI) bool {
 	return u.scheme == other.scheme &&
 		u.host == other.host &&
 		u.port == other.port
-}
-
-// Error returns the error if this URI has one.
-func (u *URI) Error() error {
-	return u.error
-}
-
-// Valid returns true if this is a valid URI.
-func (u *URI) Valid() bool {
-	return u != nil && u.error == nil
 }
 
 // The following methods are required to implement pflag Value interface.

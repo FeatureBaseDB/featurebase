@@ -60,52 +60,15 @@ func TestNewURIFromAddress(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Can't parse address: %s, %s", item.address, err)
 		}
-		if uri.Error() != nil {
-			t.Fatalf("Valid addresses shouldn't have attached errors")
-		}
-		if !uri.Valid() {
-			t.Fatalf("Valid() should return true for valid addresses")
-		}
-		compare(t, uri, item.scheme, item.host, item.port)
-	}
-}
-
-func TestURIFromAddress(t *testing.T) {
-	for _, item := range validFixture() {
-		uri := URIFromAddress(item.address)
-		if uri.Error() != nil {
-			t.Fatalf("Can't parse address: %s, %s", item.address, uri.Error())
-		}
-		if !uri.Valid() {
-			t.Fatalf("Valid() should return true for valid addresses")
-		}
 		compare(t, uri, item.scheme, item.host, item.port)
 	}
 }
 
 func TestNewURIFromAddressInvalidAddress(t *testing.T) {
 	for _, addr := range invalidFixture() {
-		uri, err := NewURIFromAddress(addr)
+		_, err := NewURIFromAddress(addr)
 		if err == nil {
 			t.Fatalf("Invalid address should return an error: %s", addr)
-		}
-		if uri.Error() == nil {
-			t.Fatalf("Invalid addreseses should have attached errors")
-		}
-		if uri.Valid() {
-			t.Fatalf("Valid() should return false for invalid addresses")
-		}
-	}
-}
-
-func TestURIFromAddressInvalidAddress(t *testing.T) {
-	for _, addr := range invalidFixture() {
-		uri := URIFromAddress(addr)
-		if uri.Error() == nil {
-			t.Fatalf("Invalid address should return an error: %s", addr)
-		}
-		if uri.Valid() {
-			t.Fatalf("Valid() should return false for invalid addresses")
 		}
 	}
 }
