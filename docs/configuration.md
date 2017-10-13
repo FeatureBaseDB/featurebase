@@ -79,23 +79,36 @@ Any flag that has a value that is a comma separated list on the command line bec
 #### Gossip Port
 
 * Description: Port to which Pilosa should bind for internal communication.
-* Flag: `--gossip-port=11101`
+* Flag: `--gossip.port=11101`
 * Env: `PILOSA_GOSSIP_PORT=11101`
 * Config:
 
     ```toml
-    gossip-port = 11101
+    [gossip]
+      port = 11101
     ```
 
 #### Gossip Seed
 
 * Description: When using the gossip [Cluster Type]({{< ref "#cluster-type" >}}), this specifies which internal host should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip-seed` for all three nodes can be configured to be the address of `node0`.
-* Flag: `--gossip-seed="localhost:11101"`
+* Flag: `--gossip.seed="localhost:11101"`
 * Env: `PILOSA_GOSSIP_SEED="localhost:11101"`
 * Config:
 
     ```toml
-    gossip-seed = "localhost:11101"
+    [gossip]
+      seed = "localhost:11101"
+    ```
+
+#### Gossip Key
+
+* Description: Path to the file which contains the key to encrypt gossip communication. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256 encryption. You can read from `/dev/random` device on UNIX-like systems to create the key file; e.g., `head -c 32 /dev/random > gossip.key32` creates a key file to use AES-256.  
+* Flag: `--gossip.key="/var/secret/gossip.key32"`
+* Env: `PILOSA_GOSSIP_KEY="/var/secret/gossip.key32"`
+* Config:
+    ```toml
+    [gossip]
+      key = "/var/secret/gossip.key32"
     ```
 
 #### Cluster Hosts
@@ -250,8 +263,10 @@ A three node cluster could be minimally configured as follows:
 
     data-dir = "/home/pilosa/data"
     bind = "node0.pilosa.com:10101"
-    gossip-port = 12000
-    gossip-seed = "node0.pilosa.com:12000"
+    
+    [gossip]
+      port = 12000
+      seed = "node0.pilosa.com:12000"
 
     [cluster]
       replicas = 1
@@ -262,8 +277,10 @@ A three node cluster could be minimally configured as follows:
 
     data-dir = "/home/pilosa/data"
     bind = "node1.pilosa.com:10101"
-    gossip-port = 12000
-    gossip-seed = "node0.pilosa.com:12000"
+    
+    [gossip]
+      port = 12000
+      seed = "node0.pilosa.com:12000"
 
     [cluster]
       replicas = 1
@@ -274,8 +291,10 @@ A three node cluster could be minimally configured as follows:
 
     data-dir = "/home/pilosa/data"
     bind = "node2.pilosa.com:10101"
-    gossip-port = 12000
-    gossip-seed = "node0.pilosa.com:12000"
+    
+    [gossip]
+      port = 12000
+      seed = "node0.pilosa.com:12000"
 
     [cluster]
       replicas = 1
@@ -285,14 +304,17 @@ A three node cluster could be minimally configured as follows:
 
 ### Example Cluster Configuration (HTTPS)
 
-The same cluster which uses HTTPS instead of HTTP can be configured as follows. Note that we explicitly specify `https` as the protocol in `bind` and `cluster.hosts` configuration: 
+The same cluster which uses HTTPS instead of HTTP can be configured as follows. Note that we explicitly specify `https` as the protocol in `bind` and `cluster.hosts` configuration. It is not required to use a gossip key but it is highly recommended: 
 
 #### Node 0
 
     data-dir = "/home/pilosa/data"
     bind = "https://node0.pilosa.com:10101"
-    gossip-port = 12000
-    gossip-seed = "node0.pilosa.com:12000"
+
+    [gossip]
+      port = 12000
+      seed = "node0.pilosa.com:12000"
+      key = "/home/pilosa/private/gossip.key32"
 
     [cluster]
       replicas = 1
@@ -307,8 +329,11 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     data-dir = "/home/pilosa/data"
     bind = "https://node1.pilosa.com:10101"
-    gossip-port = 12000
-    gossip-seed = "node0.pilosa.com:12000"
+
+    [gossip]
+      port = 12000
+      seed = "node0.pilosa.com:12000"
+      key = "/home/pilosa/private/gossip.key32"
 
     [cluster]
       replicas = 1
@@ -323,8 +348,11 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     data-dir = "/home/pilosa/data"
     bind = "https://node2.pilosa.com:10101"
-    gossip-port = 12000
-    gossip-seed = "node0.pilosa.com:12000"
+
+    [gossip]
+      port = 12000
+      seed = "node0.pilosa.com:12000"
+      key = "/home/pilosa/private/gossip.key32"
 
     [cluster]
       replicas = 1

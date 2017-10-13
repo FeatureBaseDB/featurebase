@@ -60,10 +60,18 @@ type TLSConfig struct {
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir    string `toml:"data-dir"`
-	Bind       string `toml:"bind"`
+	DataDir string `toml:"data-dir"`
+	Bind    string `toml:"bind"`
+	// GossipPort DEPRECATED
 	GossipPort string `toml:"gossip-port"`
+	// GossipSeed DEPRECATED
 	GossipSeed string `toml:"gossip-seed"`
+
+	Gossip struct {
+		Port string `toml:"port"`
+		Seed string `toml:"seed"`
+		Key  string `toml:"key"`
+	} `toml:"gossip"`
 
 	Cluster struct {
 		ReplicaN      int      `toml:"replicas"`
