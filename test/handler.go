@@ -62,7 +62,11 @@ func NewServer() *Server {
 	s.Server = httptest.NewServer(s.Handler.Handler)
 
 	// Update handler to use hostname.
-	s.Handler.Host = s.Host()
+	uri, err := pilosa.NewURIFromAddress(s.Host())
+	if err != nil {
+		panic(err)
+	}
+	s.Handler.URI = uri
 
 	// Handler test messages can no-op.
 	s.Handler.Broadcaster = pilosa.NopBroadcaster
@@ -81,14 +85,14 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	}
 
 	ns := internal.NodeStatus{
-		Host:    s.Handler.Handler.Host,
+		Host:    s.Handler.Handler.URI.HostPort(),
 		State:   pilosa.NodeStateUp,
 		Indexes: pilosa.EncodeIndexes(s.Handler.Holder.Indexes()),
 	}
 
 	// Append Slice list per this Node's indexes
 	for _, index := range ns.Indexes {
-		index.Slices = s.Handler.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Handler.Host)
+		index.Slices = s.Handler.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Handler.URI.HostPort())
 	}
 
 	return &ns, nil
@@ -106,6 +110,14 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error { return nil }
 
 // Host returns the hostname of the running server.
 func (s *Server) Host() string { return MustParseURLHost(s.URL) }
+
+func (s *Server) HostURI() *pilosa.URI {
+	uri, err := pilosa.NewURIFromAddress(s.URL)
+	if err != nil {
+		panic(err)
+	}
+	return uri
+}
 
 // MustParseURLHost parses rawurl and returns the hostname. Panic on error.
 func MustParseURLHost(rawurl string) string {

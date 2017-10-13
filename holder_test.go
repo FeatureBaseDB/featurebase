@@ -314,8 +314,9 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	defer s.Close()
 	s.Handler.Holder = hldr1.Holder
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor()
+		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr1.Holder
+		e.Scheme = cluster.Nodes[1].Scheme
 		e.Host = cluster.Nodes[1].Host
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
@@ -376,9 +377,13 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr0.Index("y").SetRemoteMaxSlice(3)
 
 	// Set up syncer.
+	uri, err := cluster.Nodes[0].URI()
+	if err != nil {
+		t.Fatal(err)
+	}
 	syncer := pilosa.HolderSyncer{
 		Holder:  hldr0.Holder,
-		Host:    cluster.Nodes[0].Host,
+		URI:     uri,
 		Cluster: cluster,
 	}
 

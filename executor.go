@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"sort"
 	"time"
 
@@ -44,6 +43,7 @@ type Executor struct {
 	Holder *Holder
 
 	// Local hostname & cluster configuration.
+	Scheme  string
 	Host    string
 	Cluster *Cluster
 
@@ -55,9 +55,17 @@ type Executor struct {
 }
 
 // NewExecutor returns a new instance of Executor.
-func NewExecutor() *Executor {
+func NewExecutor(clientOptions *ClientOptions) *Executor {
+	if clientOptions == nil {
+		clientOptions = &ClientOptions{}
+	}
+	transport := &http.Transport{}
+	if clientOptions.TLS != nil {
+		transport.TLSClientConfig = clientOptions.TLS
+	}
+	client := &http.Client{Transport: transport}
 	return &Executor{
-		HTTPClient: http.DefaultClient,
+		HTTPClient: client,
 	}
 }
 
@@ -1375,11 +1383,9 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 	}
 
 	// Create HTTP request.
-	req, err := http.NewRequest("POST", (&url.URL{
-		Scheme: "http",
-		Host:   node.Host,
-		Path:   fmt.Sprintf("/index/%s/query", index),
-	}).String(), bytes.NewReader(buf))
+	u := nodePathToURL(node, fmt.Sprintf("/index/%s/query", index))
+	u.Scheme = e.Scheme
+	req, err := http.NewRequest("POST", (&u).String(), bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
 	}

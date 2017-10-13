@@ -35,7 +35,7 @@ func createCluster(c *pilosa.Cluster) ([]*test.Server, []*test.Holder) {
 	for i := 0; i < numNodes; i++ {
 		hldr[i] = test.MustOpenHolder()
 		server[i] = test.NewServer()
-		server[i].Handler.Host = server[i].Host()
+		server[i].Handler.URI = server[i].HostURI()
 		server[i].Handler.Cluster = c
 		server[i].Handler.Cluster.Nodes[i].Host = server[i].Host()
 		server[i].Handler.Holder = hldr[i].Holder
@@ -54,22 +54,25 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 
 	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor()
+		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr[0].Holder
+		e.Scheme = cluster.Nodes[0].Scheme
 		e.Host = cluster.Nodes[0].Host
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor()
+		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr[1].Holder
+		e.Scheme = cluster.Nodes[1].Scheme
 		e.Host = cluster.Nodes[1].Host
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor()
+		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr[2].Holder
+		e.Scheme = cluster.Nodes[2].Scheme
 		e.Host = cluster.Nodes[2].Host
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
@@ -207,7 +210,7 @@ func TestClient_Import(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.Host()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -258,7 +261,7 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.Host()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -307,7 +310,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.Host()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -345,7 +348,7 @@ func TestClient_BackupRestore(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.Host()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -410,7 +413,7 @@ func TestClient_BackupInverseView(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.Host()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -447,7 +450,7 @@ func TestClient_BackupInvalidView(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.Host()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -476,7 +479,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.Host()
+	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder

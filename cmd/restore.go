@@ -48,6 +48,7 @@ Restores a view to the cluster from a backup file.
 	flags.StringVarP(&Restorer.Frame, "frame", "f", "", "Frame to restore into.")
 	flags.StringVarP(&Restorer.View, "view", "v", "", "View to restore into.")
 	flags.StringVarP(&Restorer.Path, "input-file", "d", "", "File to restore data from.")
+	ctl.SetTLSConfig(flags, &Restorer.TLS.CertificatePath, &Restorer.TLS.CertificateKeyPath, &Restorer.TLS.SkipVerify)
 
 	return restoreCmd
 }

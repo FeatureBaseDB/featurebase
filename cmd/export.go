@@ -55,6 +55,7 @@ The file does not contain any headers.
 	flags.StringVarP(&Exporter.Frame, "frame", "f", "", "Frame to export")
 	flags.StringVarP(&Exporter.View, "view", "v", "standard", "View to export - default standard")
 	flags.StringVarP(&Exporter.Path, "output-file", "o", "", "File to write export to - default stdout")
+	ctl.SetTLSConfig(flags, &Exporter.TLS.CertificatePath, &Exporter.TLS.CertificateKeyPath, &Exporter.TLS.SkipVerify)
 
 	return exportCmd
 }

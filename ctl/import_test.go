@@ -65,7 +65,11 @@ func TestImportCommand_Run(t *testing.T) {
 	defer hldr.Close()
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.Host()
+	uri, err := pilosa.NewURIFromAddress(s.Host())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Handler.URI = uri
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder
@@ -101,7 +105,11 @@ func TestImportCommand_RunValue(t *testing.T) {
 	defer hldr.Close()
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Host = s.Host()
+	uri, err := pilosa.NewURIFromAddress(s.Host())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Handler.URI = uri
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].Host = s.Host()
 	s.Handler.Holder = hldr.Holder

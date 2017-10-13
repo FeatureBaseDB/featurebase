@@ -38,6 +38,8 @@ type RestoreCommand struct {
 
 	// Standard input/output
 	*pilosa.CmdIO
+
+	TLS pilosa.TLSConfig
 }
 
 // NewRestoreCommand returns a new instance of RestoreCommand.
@@ -55,7 +57,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	}
 
 	// Create a client to the server.
-	client, err := pilosa.NewClient(cmd.Host)
+	client, err := CommandClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -73,4 +75,12 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (cmd *RestoreCommand) TLSHost() string {
+	return cmd.Host
+}
+
+func (cmd *RestoreCommand) TLSConfiguration() pilosa.TLSConfig {
+	return cmd.TLS
 }

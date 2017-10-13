@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -59,7 +60,7 @@ type Server struct {
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
 	Network string
-	Host    string
+	URI     *URI
 	Cluster *Cluster
 
 	// Background monitoring intervals.
@@ -67,10 +68,15 @@ type Server struct {
 	PollingInterval     time.Duration
 	MetricInterval      time.Duration
 
+	// TLS configuration
+	TLS *tls.Config
+
 	// Misc options.
 	MaxWritesPerRequest int
 
 	LogOutput io.Writer
+
+	defaultClient *http.Client
 }
 
 // NewServer returns a new instance of Server.
@@ -99,27 +105,38 @@ func NewServer() *Server {
 
 // Open opens and initializes the server.
 func (s *Server) Open() error {
-	// Require a port in the hostname.
-	host, port, err := net.SplitHostPort(s.Host)
-	if err != nil {
-		return err
-	} else if port == "" {
-		port = DefaultPort
+	var ln net.Listener
+	var err error
+
+	// If bind URI has the https scheme, enable TLS
+	if s.URI.Scheme() == "https" && s.TLS != nil {
+		ln, err = tls.Listen("tcp", s.URI.HostPort(), s.TLS)
+		if err != nil {
+			return err
+		}
+	} else if s.URI.Scheme() == "http" {
+		// Open HTTP listener to determine port (if specified as :0).
+		ln, err = net.Listen(s.Network, s.URI.HostPort())
+		if err != nil {
+			return fmt.Errorf("net.Listen: %v", err)
+		}
+	} else {
+		return fmt.Errorf("unsupported scheme: %s", s.URI.Scheme())
 	}
 
-	// Open HTTP listener to determine port (if specified as :0).
-	ln, err := net.Listen(s.Network, ":"+port)
-	if err != nil {
-		return fmt.Errorf("net.Listen: %v", err)
-	}
 	s.ln = ln
 
-	// Determine hostname based on listening port.
-	s.Host = net.JoinHostPort(host, strconv.Itoa(s.ln.Addr().(*net.TCPAddr).Port))
+	if s.URI.Port() == 0 {
+		// If the port is 0, it is set automatically.
+		// Find out automatically set port and update the host.
+		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
+	}
 
 	// Create local node if no cluster is specified.
 	if len(s.Cluster.Nodes) == 0 {
-		s.Cluster.Nodes = []*Node{{Host: s.Host}}
+		s.Cluster.Nodes = []*Node{
+			{Scheme: s.URI.Scheme(), Host: s.URI.HostPort()},
+		}
 	}
 
 	for i, n := range s.Cluster.Nodes {
@@ -143,17 +160,21 @@ func (s *Server) Open() error {
 		return fmt.Errorf("opening NodeSet: %v", err)
 	}
 
+	// Create default HTTP client
+	s.createDefaultClient()
+
 	// Create executor for executing queries.
-	e := NewExecutor()
+	e := NewExecutor(&ClientOptions{TLS: s.TLS})
 	e.Holder = s.Holder
-	e.Host = s.Host
+	e.Scheme = s.URI.Scheme()
+	e.Host = s.URI.HostPort()
 	e.Cluster = s.Cluster
 	e.MaxWritesPerRequest = s.MaxWritesPerRequest
 
 	// Initialize HTTP handler.
 	s.Handler.Broadcaster = s.Broadcaster
 	s.Handler.StatusHandler = s
-	s.Handler.Host = s.Host
+	s.Handler.URI = s.URI
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
@@ -225,9 +246,10 @@ func (s *Server) monitorAntiEntropy() {
 		// Initialize syncer with local holder and remote client.
 		var syncer HolderSyncer
 		syncer.Holder = s.Holder
-		syncer.Host = s.Host
+		syncer.URI = s.URI
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
+		syncer.ClientOptions = &ClientOptions{TLS: s.TLS}
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {
@@ -261,8 +283,8 @@ func (s *Server) monitorMaxSlices() {
 
 		oldmaxslices := s.Holder.MaxSlices()
 		for _, node := range s.Cluster.Nodes {
-			if s.Host != node.Host {
-				maxSlices, _ := checkMaxSlices(node.Host)
+			if s.URI.HostPort() != node.Host {
+				maxSlices, _ := s.checkMaxSlices(node.Scheme, node.Host)
 				for index, newmax := range maxSlices {
 					// if we don't know about an index locally, log an error because
 					// indexes should be created and synced prior to slice creation
@@ -364,14 +386,14 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	}
 
 	ns := internal.NodeStatus{
-		Host:    s.Host,
+		Host:    s.URI.HostPort(),
 		State:   NodeStateUp,
 		Indexes: EncodeIndexes(s.Holder.Indexes()),
 	}
 
 	// Append Slice list per this Node's indexes
 	for _, index := range ns.Indexes {
-		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Host)
+		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.URI.HostPort())
 	}
 
 	return &ns, nil
@@ -384,7 +406,7 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	node := s.Cluster.NodeByHost(s.Host)
+	node := s.Cluster.NodeByHost(s.URI.HostPort())
 	node.SetStatus(ns.(*internal.NodeStatus))
 
 	// Update NodeState for all nodes.
@@ -394,7 +416,7 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 		// the local node as UP.
 		// TODO: we should be able to remove this check if/when cluster.Nodes and
 		// cluster.NodeSet are unified.
-		if host == s.Host {
+		if host == s.URI.HostPort() {
 			nodeState = NodeStateUp
 		}
 		node := s.Cluster.NodeByHost(host)
@@ -441,11 +463,11 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	return nil
 }
 
-func checkMaxSlices(hostport string) (map[string]uint64, error) {
+func (s *Server) checkMaxSlices(scheme string, hostPort string) (map[string]uint64, error) {
 	// Create HTTP request.
 	req, err := http.NewRequest("GET", (&url.URL{
-		Scheme: "http",
-		Host:   hostport,
+		Scheme: scheme,
+		Host:   hostPort,
 		Path:   "/slices/max",
 	}).String(), nil)
 
@@ -458,8 +480,7 @@ func checkMaxSlices(hostport string) (map[string]uint64, error) {
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 
-	// Send request to remote node.
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.defaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -527,6 +548,14 @@ func (s *Server) monitorRuntime() {
 		s.Holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
 		s.Holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
 	}
+}
+
+func (s *Server) createDefaultClient() {
+	transport := &http.Transport{}
+	if s.TLS != nil {
+		transport.TLSClientConfig = s.TLS
+	}
+	s.defaultClient = &http.Client{Transport: transport}
 }
 
 // CountOpenFiles on opperating systems that support lsof

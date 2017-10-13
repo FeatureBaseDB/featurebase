@@ -172,15 +172,6 @@ func ContainsSubstring(a string, list []string) bool {
 	return false
 }
 
-// NormalizeAddress converts addr into a valid "IP4:port" string.
-func NormalizeAddress(addr string) (string, error) {
-	host, port, err := hostPortWithDefaults(addr)
-	if err != nil {
-		return "", err
-	}
-	return net.JoinHostPort(HostToIP(host), port), nil
-}
-
 // HostToIP converts host to an IP4 address based on net.LookupIP().
 func HostToIP(host string) string {
 	// if host is not an IP addr, check net.LookupIP()
@@ -201,39 +192,10 @@ func HostToIP(host string) string {
 
 // AddressWithDefaults converts addr into a valid address,
 // using defaults when necessary.
-func AddressWithDefaults(addr string) (string, error) {
-	host, port, err := hostPortWithDefaults(addr)
-	if err != nil {
-		return "", err
+func AddressWithDefaults(addr string) (*URI, error) {
+	if addr == "" {
+		return DefaultURI(), nil
+	} else {
+		return NewURIFromAddress(addr)
 	}
-	return net.JoinHostPort(host, port), nil
-}
-
-// hostPortWithDefaults returns the host and port portions of addr
-// using defaults when necessary.
-func hostPortWithDefaults(addr string) (host, port string, err error) {
-	// check for a colon between host and port
-	if !hasPort(addr) {
-		addr += ":"
-	}
-
-	// break into host, port
-	host, port, err = net.SplitHostPort(addr)
-	if err != nil {
-		return host, port, err
-	}
-
-	// use defaults when not provided
-	if host == "" {
-		host = DefaultHost
-	}
-	if port == "" {
-		port = DefaultPort
-	}
-
-	return host, port, nil
-}
-
-func hasPort(s string) bool {
-	return strings.LastIndex(s, ":") > strings.LastIndex(s, "]")
 }

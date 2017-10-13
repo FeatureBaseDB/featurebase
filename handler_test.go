@@ -1183,7 +1183,7 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if w.Body.String() != `[{"host":"host2"},{"host":"host0"}]`+"\n" {
+	} else if w.Body.String() != `[{"scheme":"http","host":"host2"},{"scheme":"http","host":"host0"}]`+"\n" {
 		t.Fatalf("unexpected body: %q", w.Body.String())
 	}
 }

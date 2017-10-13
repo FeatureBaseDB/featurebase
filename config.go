@@ -14,7 +14,9 @@
 
 package pilosa
 
-import "time"
+import (
+	"time"
+)
 
 // Cluster types.
 const (
@@ -45,6 +47,16 @@ const (
 
 // ClusterTypes set of cluster types.
 var ClusterTypes = []string{ClusterNone, ClusterStatic, ClusterGossip}
+
+// TLSConfig contains TLS configuration
+type TLSConfig struct {
+	// CertificatePath contains the path to the certificate (.crt or .pem file)
+	CertificatePath string `toml:"certificate-path"`
+	// CertificateKeyPath contains the path to the certificate key (.key file)
+	CertificateKeyPath string `toml:"certificate-key-path"`
+	// SkipVerify disables verification for self-signed certificates
+	SkipVerify bool `toml:"skip-verify"`
+}
 
 // Config represents the configuration for the command.
 type Config struct {
@@ -80,6 +92,8 @@ type Config struct {
 		Host         string   `toml:"host"`
 		PollInterval Duration `toml:"poll-interval"`
 	} `toml:"metric"`
+
+	TLS TLSConfig
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -94,6 +108,7 @@ func NewConfig() *Config {
 	c.Cluster.Hosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics
+	c.TLS = TLSConfig{}
 	return c
 }
 
@@ -109,13 +124,26 @@ func (c *Config) Validate() error {
 			if err != nil {
 				return err
 			}
-			if !foundItem(c.Cluster.Hosts, bindWithDefaults) {
+			if !c.foundHost(bindWithDefaults) {
 				return ErrConfigHostsMissing
 			}
 		}
 	}
 
 	return nil
+}
+
+func (c *Config) foundHost(host *URI) bool {
+	for _, clusterHost := range c.Cluster.Hosts {
+		uri, err := NewURIFromAddress(clusterHost)
+		if err != nil {
+			continue
+		}
+		if host.Equals(uri) {
+			return true
+		}
+	}
+	return false
 }
 
 // Duration is a TOML wrapper type for time.Duration.

@@ -1677,8 +1677,9 @@ func (h *blockHasher) WriteValue(v uint64) {
 type FragmentSyncer struct {
 	Fragment *Fragment
 
-	Host    string
-	Cluster *Cluster
+	Host          string
+	Cluster       *Cluster
+	ClientOptions *ClientOptions
 
 	Closing <-chan struct{}
 }
@@ -1713,7 +1714,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		}
 
 		// Retrieve remote blocks.
-		client, err := NewClient(node.Host)
+		client, err := NewClient(node.Host, s.ClientOptions)
 		if err != nil {
 			return err
 		}
@@ -1792,7 +1793,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 			return nil
 		}
 
-		client, err := NewClient(node.Host)
+		client, err := NewClient(node.Host, s.ClientOptions)
 		if err != nil {
 			return err
 		}

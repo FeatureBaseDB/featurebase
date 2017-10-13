@@ -206,6 +206,42 @@ Any flag that has a value that is a comma separated list on the command line bec
     poll-interval = "0m15s"
     ```
 
+##### TLS Certificate
+
+* Description: Path to the TLS certificate to use for serving HTTPS. Usually has one of`.crt` or `.pem` extensions.
+* Flag: `tls.certificate=/srv/pilosa/certs/server.crt`
+* Env: `PILOSA_TLS_CERTIFICATE=/srv/pilosa/certs/server.crt`
+* Config:
+
+    ```toml
+    [tls]
+    certificate = "/srv/pilosa/certs/server.crt"
+    ```
+
+##### TLS Certificate Key
+
+* Description: Path to the TLS certificate key to use for serving HTTPS. Usually has the `.key` extension.
+* Flag: `tls.key=/srv/pilosa/certs/server.key`
+* Env: `PILOSA_TLS_KEY=/srv/pilosa/certs/server.key`
+* Config:
+
+    ```toml
+    [tls]
+    key = "/srv/pilosa/certs/server.key"
+    ```
+
+##### TLS Skip Verify
+
+* Description: Disables verification for checking TLS certificates. This configuration item is mainly useful for using self-signed certificates for a Pilosa cluster. Do not use in production since it makes man-in-the-middle attacks trivial.
+* Flag: `tls.skip-verify`
+* Env: `PILOSA_TLS_SKIP_VERIFY`
+* Config:
+
+    ```toml
+    [tls]
+    skip-verify = true
+    ```
+
 ### Example Cluster Configuration
 
 A three node cluster could be minimally configured as follows:
@@ -245,3 +281,56 @@ A three node cluster could be minimally configured as follows:
       replicas = 1
       type = "gossip"
       hosts = ["node0.pilosa.com:10101","node1.pilosa.com:10101","node2.pilosa.com:10101"]
+
+
+### Example Cluster Configuration (HTTPS)
+
+The same cluster which uses HTTPS instead of HTTP can be configured as follows. Note that we explicitly specify `https` as the protocol in `bind` and `cluster.hosts` configuration: 
+
+#### Node 0
+
+    data-dir = "/home/pilosa/data"
+    bind = "https://node0.pilosa.com:10101"
+    gossip-port = 12000
+    gossip-seed = "node0.pilosa.com:12000"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["https://node0.pilosa.com:10101","https://node1.pilosa.com:10101","https://node2.pilosa.com:10101"]
+
+    [tls]
+      certificate = "/home/pilosa/private/server.crt"
+      key = "/home/pilosa/private/server.key"
+
+#### Node 1
+
+    data-dir = "/home/pilosa/data"
+    bind = "https://node1.pilosa.com:10101"
+    gossip-port = 12000
+    gossip-seed = "node0.pilosa.com:12000"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["https://node0.pilosa.com:10101","https://node1.pilosa.com:10101","https://node2.pilosa.com:10101"]
+
+    [tls]
+      certificate = "/home/pilosa/private/server.crt"
+      key = "/home/pilosa/private/server.key"
+      
+#### Node 2
+
+    data-dir = "/home/pilosa/data"
+    bind = "https://node2.pilosa.com:10101"
+    gossip-port = 12000
+    gossip-seed = "node0.pilosa.com:12000"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["https://node0.pilosa.com:10101","https://node1.pilosa.com:10101","https://node2.pilosa.com:10101"]
+
+    [tls]
+      certificate = "/home/pilosa/private/server.crt"
+      key = "/home/pilosa/private/server.key"

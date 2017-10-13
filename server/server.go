@@ -23,13 +23,13 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"crypto/tls"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statsd"
@@ -100,7 +100,7 @@ func (m *Command) Run(args ...string) (err error) {
 		return fmt.Errorf("server.Open: %v", err)
 	}
 
-	m.Server.Logger().Printf("Listening as http://%s\n", m.Server.Host)
+	m.Server.Logger().Printf("Listening as %s\n", m.Server.URI.Normalize())
 	return nil
 }
 
@@ -111,11 +111,24 @@ func (m *Command) SetupServer() error {
 		return err
 	}
 
+	uri, err := pilosa.AddressWithDefaults(m.Config.Bind)
+	if err != nil {
+		return err
+	}
+	m.Server.URI = uri
+
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 
-	for _, hostport := range m.Config.Cluster.Hosts {
-		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{Host: hostport})
+	for _, address := range m.Config.Cluster.Hosts {
+		uri, err := pilosa.NewURIFromAddress(address)
+		if err != nil {
+			return err
+		}
+		cluster.Nodes = append(cluster.Nodes, &pilosa.Node{
+			Scheme: uri.Scheme(),
+			Host:   uri.HostPort(),
+		})
 	}
 	m.Server.Cluster = cluster
 
@@ -139,11 +152,24 @@ func (m *Command) SetupServer() error {
 	// Copy configuration flags.
 	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
 
-	bindWithDefaults, err := pilosa.AddressWithDefaults(m.Config.Bind)
-	if err != nil {
-		return err
+	// Setup TLS
+	if uri.Scheme() == "https" {
+		if m.Config.TLS.CertificatePath == "" {
+			return errors.New("certificate path is required for TLS sockets")
+		}
+		if m.Config.TLS.CertificateKeyPath == "" {
+			return errors.New("certificate key path is required for TLS sockets")
+		}
+		cert, err := tls.LoadX509KeyPair(m.Config.TLS.CertificatePath, m.Config.TLS.CertificateKeyPath)
+		if err != nil {
+			return err
+		}
+		m.Server.TLS = &tls.Config{
+			Certificates:       []tls.Certificate{cert},
+			InsecureSkipVerify: m.Config.TLS.SkipVerify,
+		}
+		m.Server.Handler.ClientOptions = &pilosa.ClientOptions{TLS: m.Server.TLS}
 	}
-	m.Server.Host = bindWithDefaults
 
 	// Set internal port (string).
 	gossipPortStr := pilosa.DefaultGossipPort
@@ -163,11 +189,8 @@ func (m *Command) SetupServer() error {
 		}
 
 		// get the host portion of addr to use for binding
-		gossipHost, _, err := net.SplitHostPort(bindWithDefaults)
-		if err != nil {
-			gossipHost = m.Config.Bind
-		}
-		gossipNodeSet := gossip.NewGossipNodeSet(bindWithDefaults, gossipHost, gossipPort, gossipSeed, m.Server)
+		gossipHost := uri.Host()
+		gossipNodeSet := gossip.NewGossipNodeSet(uri.HostPort(), gossipHost, gossipPort, gossipSeed, m.Server)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet

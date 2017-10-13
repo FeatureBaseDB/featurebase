@@ -11,7 +11,7 @@ type Client struct {
 
 // MustNewClient returns a new instance of Client. Panic on error.
 func MustNewClient(host string) *Client {
-	c, err := pilosa.NewClient(host)
+	c, err := pilosa.NewClient(host, nil)
 	if err != nil {
 		panic(err)
 	}
