@@ -16,7 +16,7 @@
 - [Getting Started](#getting-started)
 - [Data Model](#data-model)
 - [Query Language](#query-language)
-- [Client Libraries](#client-drivers)
+- [Client Libraries](#client-libraries)
 - [Get Support](#get-support)
 - [Contributing](#contributing)
 
