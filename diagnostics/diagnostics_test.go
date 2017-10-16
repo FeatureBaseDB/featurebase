@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/pilosa/pilosa/diagnostics"
 )
@@ -24,31 +23,17 @@ func TestDiagnosticsClient(t *testing.T) {
 	d.SetLogger(ioutil.Discard)
 	defer d.Close()
 
-	dur, _ := time.ParseDuration("123us")
-	d.CountWithCustomTags("ct", 1, 1.0, []string{"foo:bar"})
-	d.Count("cc", 1, 1.0)
-	d.Gauge("gg", 10, 1.0)
-	d.Histogram("hh", 1, 1.0)
-	d.Timing("tt", dur, 1.0)
-	d.Set("ss", "ss", 1.0)
+	d.Set("gg", 10)
+	d.Set("ss", "ss")
 
-	d1 := d.WithTags("test")
-	if !reflect.DeepEqual(d, d1) {
-		t.Fatalf("Diagnostics is a singleton")
-	}
-
-	if s := d.Tags(); s != nil {
-		t.Fatalf("No Diagnostics Tags")
-	}
-
-	data, err := d.MarshalJSON()
+	data, err := d.Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Test the recorded metrics, note that some types are skipped.
 	var eq bool
-	output1 := []byte(`{"ct":1,"cc":1,"gg":"10","ss":"ss"}`)
+	output1 := []byte(`{"gg":10,"ss":"ss"}`)
 	if eq, err = compareJSON(data, output1); err != nil {
 		t.Fatal(err)
 	}
@@ -58,12 +43,12 @@ func TestDiagnosticsClient(t *testing.T) {
 
 	// Test the metrics after a flush.
 	d.Flush()
-	data, err = d.MarshalJSON()
+	data, err = d.Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	output2 := []byte(`{"gg":"10","ss":"ss","uptime":"0"}`)
+	output2 := []byte(`{"gg":10,"ss":"ss","uptime":0}`)
 	if eq, err = compareJSON(data, output2); err != nil {
 		t.Fatal(err)
 	}
@@ -160,8 +145,8 @@ func BenchmarkDiagnostics(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			d.Count("cc", 1, 1.0)
-			d.Gauge("gg", 10, 1.0)
+			d.Set("cc", 1)
+			d.Set("gg", "test")
 		}
 	})
 }

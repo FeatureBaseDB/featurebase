@@ -13,16 +13,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa"
+	"github.com/sony/gobreaker"
 )
 
-// TODO: white list of statsd metrics to use
 // TODO: unique Cluster ID
-// TODO: how should this be disabled, config
 
 // Default interval to sync diagnostics metrics.
 const (
-	DefaultDiagnosticsInterval = 10 * time.Second
+	DefaultDiagnosticsInterval = 1 * time.Hour
 	DefaultVersionCheckURL     = "https://diagnostics.pilosa.com/v0/version"
 )
 
@@ -42,17 +40,20 @@ type Diagnostics struct {
 	startTime  int64
 	start      time.Time
 
-	counts  map[string]int64
-	metrics map[string]string
+	metrics map[string]interface{}
 
 	client   *http.Client
 	interval time.Duration
 
+	cb        *gobreaker.CircuitBreaker
 	logOutput io.Writer
 }
 
 // New returns a pointer to a new Diagnostics Client given an addr in the format "hostname:port".
 func New(host string) *Diagnostics {
+	var st gobreaker.Settings
+	st.Timeout = DefaultDiagnosticsInterval * 2
+
 	return &Diagnostics{
 		closing:    make(chan struct{}),
 		host:       host,
@@ -60,17 +61,17 @@ func New(host string) *Diagnostics {
 		startTime:  time.Now().Unix(),
 		start:      time.Now(),
 		client:     http.DefaultClient,
-		counts:     make(map[string]int64),
-		metrics:    make(map[string]string),
+		metrics:    make(map[string]interface{}),
 		interval:   DefaultDiagnosticsInterval,
 		logOutput:  ioutil.Discard,
+		cb:         gobreaker.NewCircuitBreaker(st),
 	}
 }
 
 // SetVersion of locally running Pilosa Cluster to check against master.
 func (d *Diagnostics) SetVersion(v string) {
 	d.version = v
-	d.Set("Version", v, 1.0)
+	d.Set("Version", v)
 }
 
 // schedule start the diagnostics service ticker.
@@ -92,35 +93,28 @@ func (d *Diagnostics) schedule() {
 // Flush sends the current metrics.
 func (d *Diagnostics) Flush() error {
 	d.mu.Lock()
-	d.metrics["uptime"] = strconv.FormatInt((time.Now().Unix() - d.startTime), 10)
-
-	buf, _ := d.MarshalJSON()
-	d.Reset()
+	d.metrics["uptime"] = (time.Now().Unix() - d.startTime)
+	buf, _ := d.Encode()
 	d.mu.Unlock()
 
-	// d.logger().Println(string(buf))
-	req, err := http.NewRequest("POST", d.host, bytes.NewReader(buf))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	_, err := d.cb.Execute(func() (interface{}, error) {
+		req, err := http.NewRequest("POST", d.host, bytes.NewReader(buf))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := d.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
 
-	// TODO verify response
-	// Read response into buffer.
-	// body, err := ioutil.ReadAll(resp.Body)
-	// if err != nil {
-	// 	return err
-	// }
+		// TODO verify response
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return body, nil
+	})
 
-	// TODO circuit breaker
-	return nil
-}
-
-// Reset clears the incremented metrics.
-func (d *Diagnostics) Reset() {
-	d.counts = make(map[string]int64)
+	return err
 }
 
 // Open starts the diagnostics metric go routine.
@@ -175,88 +169,16 @@ func (d *Diagnostics) CompareVersion(value string) error {
 	return nil
 }
 
-// MarshalJSON custom marshall string and int maps together.
-func (d *Diagnostics) MarshalJSON() ([]byte, error) {
-	buffer := bytes.NewBufferString("{")
-	length := len(d.counts)
-	count := 0
-
-	for key, value := range d.counts {
-		jsonValue, err := json.Marshal(value)
-		if err != nil {
-			return nil, err
-		}
-		buffer.WriteString(fmt.Sprintf("\"%s\":%s", key, string(jsonValue)))
-		count++
-		if count < length {
-			buffer.WriteString(",")
-		}
-	}
-	if length > 0 {
-		buffer.WriteString(",")
-	}
-	length = len(d.metrics)
-	count = 0
-	for key, value := range d.metrics {
-		jsonValue, err := json.Marshal(value)
-		if err != nil {
-			return nil, err
-		}
-		buffer.WriteString(fmt.Sprintf("\"%s\":%s", key, string(jsonValue)))
-		count++
-		if count < length {
-			buffer.WriteString(",")
-		}
-	}
-
-	buffer.WriteString("}")
-	return buffer.Bytes(), nil
-}
-
-// Stats interface implementation.
-
-// Tags no-op.
-func (d *Diagnostics) Tags() []string {
-	return nil
-}
-
-// WithTags no-op.
-func (d *Diagnostics) WithTags(tags ...string) pilosa.StatsClient {
-	return d
-}
-
-// Count tracks the number of times something occurs per diagnostic period.
-func (d *Diagnostics) Count(name string, value int64, rate float64) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.counts[name] += value
-}
-
-// CountWithCustomTags Tracks the number of times something occurs per diagnostic period.
-func (d *Diagnostics) CountWithCustomTags(name string, value int64, rate float64, tags []string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.counts[name] += value
-}
-
-// Gauge records the value of a metric.
-func (d *Diagnostics) Gauge(name string, value float64, rate float64) {
-	d.Set(name, strconv.FormatFloat(value, 'f', -1, 64), rate)
-}
-
-// Histogram is a no-op.
-func (d *Diagnostics) Histogram(name string, value float64, rate float64) {
+// Encode metrics maps into the json message format
+func (d *Diagnostics) Encode() ([]byte, error) {
+	return json.Marshal(d.metrics)
 }
 
 // Set adds a key value metric.
-func (d *Diagnostics) Set(name string, value string, rate float64) {
+func (d *Diagnostics) Set(name string, value interface{}) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.metrics[name] = value
-}
-
-// Timing no-op.
-func (d *Diagnostics) Timing(name string, value time.Duration, rate float64) {
 }
 
 // SetLogger Set the logger output type.
