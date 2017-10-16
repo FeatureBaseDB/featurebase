@@ -62,7 +62,7 @@ type Server struct {
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
 	Network     string
-	URI     	*URI
+	URI         *URI
 	Cluster     *Cluster
 	diagnostics *diagnostics.Diagnostics
 
@@ -99,7 +99,7 @@ func NewServer() *Server {
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
 		MetricInterval:      0,
-		DiagnosticInterval:  diagnostics.DefaultDiagnosticsInterval
+		DiagnosticInterval:  diagnostics.DefaultDiagnosticsInterval,
 
 		LogOutput: os.Stderr,
 	}
@@ -522,43 +522,48 @@ func (s *Server) monitorDiagnostics() {
 
 	s.diagnostics.SetLogger(s.LogOutput)
 	s.diagnostics.SetVersion(Version)
-	s.diagnostics.Set("Host", s.Host)
+	s.diagnostics.Set("Host", s.URI.host)
 	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeSetHosts(), ","))
 	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	// TODO: unique cluster ID
 
+	// Flush the diagnostics metrics at startup, then on each tick interval
+	flush := func() {
+		numFrames := 0
+		numSlices := uint64(0)
+		for _, index := range s.Holder.Indexes() {
+			numSlices += index.MaxSlice() + 1
+			for _, f := range index.Frames() {
+				numFrames++
+				if f.rangeEnabled {
+					s.diagnostics.Set("BSIEnabled", true)
+				}
+				if f.timeQuantum != "" {
+					s.diagnostics.Set("TimeQuantumEnabled", true)
+				}
+			}
+		}
+
+		s.diagnostics.Set("NumIndexes", len(s.Holder.Indexes()))
+		s.diagnostics.Set("NumFrames", numFrames)
+		s.diagnostics.Set("NumSlices", numSlices)
+		s.diagnostics.Set("OpenFiles", CountOpenFiles())
+		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
+		s.diagnostics.CheckVersion()
+		s.diagnostics.Flush()
+	}
+
 	ticker := time.NewTicker(s.DiagnosticInterval)
 	defer ticker.Stop()
-
+	flush()
 	for {
 		// Wait for tick or a close.
 		select {
 		case <-s.closing:
 			return
 		case <-ticker.C:
-			numFrames := 0
-			numSlices := uint64(0)
-			for _, index := range s.Holder.Indexes() {
-				numSlices += index.MaxSlice() + 1
-				for _, f := range index.Frames() {
-					numFrames++
-					if f.rangeEnabled {
-						s.diagnostics.Set("BSIEnabled", true)
-					}
-					if f.timeQuantum != "" {
-						s.diagnostics.Set("TimeQuantumEnabled", true)
-					}
-				}
-			}
-
-			s.diagnostics.Set("NumIndexes", len(s.Holder.Indexes()))
-			s.diagnostics.Set("NumFrames", numFrames)
-			s.diagnostics.Set("NumSlices", numSlices)
-			s.diagnostics.Set("OpenFiles", CountOpenFiles())
-			s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
-			s.diagnostics.CheckVersion()
-			s.diagnostics.Flush()
+			flush()
 		}
 	}
 }
