@@ -34,6 +34,7 @@ import (
 
 	"github.com/CAFxX/gcnotifier"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
 )
 
@@ -41,6 +42,7 @@ import (
 const (
 	DefaultAntiEntropyInterval = 10 * time.Minute
 	DefaultPollingInterval     = 60 * time.Second
+	DefaultDiagnosticServer    = "https://diagnostics.pilosa.com/v0/diagnostics"
 )
 
 // Server represents a holder wrapped by a running HTTP server.
@@ -59,14 +61,16 @@ type Server struct {
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
-	Network string
-	URI     *URI
-	Cluster *Cluster
+	Network     string
+	URI     	*URI
+	Cluster     *Cluster
+	diagnostics *diagnostics.Diagnostics
 
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
 	PollingInterval     time.Duration
 	MetricInterval      time.Duration
+	DiagnosticInterval  time.Duration
 
 	// TLS configuration
 	TLS *tls.Config
@@ -88,12 +92,14 @@ func NewServer() *Server {
 		Handler:           NewHandler(),
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
+		diagnostics:       diagnostics.New(DefaultDiagnosticServer),
 
 		Network: "tcp",
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
 		MetricInterval:      0,
+		DiagnosticInterval:  diagnostics.DefaultDiagnosticsInterval
 
 		LogOutput: os.Stderr,
 	}
@@ -191,10 +197,11 @@ func (s *Server) Open() error {
 	}()
 
 	// Start background monitoring.
-	s.wg.Add(3)
+	s.wg.Add(4)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
+	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
 
 	return nil
 }
@@ -507,14 +514,57 @@ func (s *Server) checkMaxSlices(scheme string, hostPort string) (map[string]uint
 	return pb.MaxSlices, nil
 }
 
+// monitorDiagnostics periodically polls the the Pilosa Indexes for cluster info.
+func (s *Server) monitorDiagnostics() {
+	if s.DiagnosticInterval <= 0 {
+		return
+	}
+
+	s.diagnostics.SetLogger(s.LogOutput)
+	s.diagnostics.SetVersion(Version)
+	s.diagnostics.Set("Host", s.Host)
+	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeSetHosts(), ","))
+	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
+	s.diagnostics.Set("NumCPU", runtime.NumCPU())
+	// TODO: unique cluster ID
+
+	ticker := time.NewTicker(s.DiagnosticInterval)
+	defer ticker.Stop()
+
+	for {
+		// Wait for tick or a close.
+		select {
+		case <-s.closing:
+			return
+		case <-ticker.C:
+			numFrames := 0
+			numSlices := uint64(0)
+			for _, index := range s.Holder.Indexes() {
+				numSlices += index.MaxSlice() + 1
+				for _, f := range index.Frames() {
+					numFrames++
+					if f.rangeEnabled {
+						s.diagnostics.Set("BSIEnabled", true)
+					}
+					if f.timeQuantum != "" {
+						s.diagnostics.Set("TimeQuantumEnabled", true)
+					}
+				}
+			}
+
+			s.diagnostics.Set("NumIndexes", len(s.Holder.Indexes()))
+			s.diagnostics.Set("NumFrames", numFrames)
+			s.diagnostics.Set("NumSlices", numSlices)
+			s.diagnostics.Set("OpenFiles", CountOpenFiles())
+			s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
+			s.diagnostics.CheckVersion()
+			s.diagnostics.Flush()
+		}
+	}
+}
+
 // monitorRuntime periodically polls the Go runtime metrics.
 func (s *Server) monitorRuntime() {
-	s.Holder.Stats.Set("Host", s.Host, 1.0)
-	s.Holder.Stats.Set("Cluster", strings.Join(s.Cluster.NodeSetHosts(), ","), 1.0)
-	s.Holder.Stats.Set("NumNodes", strconv.Itoa(len(s.Cluster.Nodes)), 1.0)
-	s.Holder.Stats.Set("NumCPU", strconv.Itoa(runtime.NumCPU()), 1.0)
-	// TODO should we force this to run for diagnostics?
-
 	// Disable metrics when poll interval is zero.
 	if s.MetricInterval <= 0 {
 		return
