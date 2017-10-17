@@ -286,34 +286,6 @@ func (c *Client) ExecuteQuery(ctx context.Context, index string, queryRequest *i
 	return qresp, nil
 }
 
-// ExecutePQL executes query string against index on the server.
-func (c *Client) ExecutePQL(ctx context.Context, index, query string) (interface{}, error) {
-	u := uriPathToURL(c.defaultURI, "/query")
-	u.RawQuery = url.Values{"index": {index}}.Encode()
-
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader([]byte(query)))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "pilosa/"+Version)
-
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
-
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	} else if resp.StatusCode != http.StatusOK {
-		return nil, errors.New(string(body))
-	}
-	return string(body), nil
-
-}
-
 // Import bulk imports bits for a single slice to a host.
 func (c *Client) Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error {
 	if index == "" {
