@@ -18,10 +18,9 @@ import (
 
 // TODO: unique Cluster ID
 
-// Default interval to sync diagnostics metrics.
+// Default version check URL.
 const (
-	DefaultDiagnosticsInterval = 1 * time.Hour
-	DefaultVersionCheckURL     = "https://diagnostics.pilosa.com/v0/version"
+	DefaultVersionCheckURL = "https://diagnostics.pilosa.com/v0/version"
 )
 
 type versionResponse struct {
@@ -51,8 +50,6 @@ type Diagnostics struct {
 
 // New returns a pointer to a new Diagnostics Client given an addr in the format "hostname:port".
 func New(host string) *Diagnostics {
-	var st gobreaker.Settings
-	st.Timeout = DefaultDiagnosticsInterval * 2
 
 	return &Diagnostics{
 		closing:    make(chan struct{}),
@@ -62,9 +59,7 @@ func New(host string) *Diagnostics {
 		start:      time.Now(),
 		client:     http.DefaultClient,
 		metrics:    make(map[string]interface{}),
-		interval:   DefaultDiagnosticsInterval,
 		logOutput:  ioutil.Discard,
-		cb:         gobreaker.NewCircuitBreaker(st),
 	}
 }
 
@@ -72,6 +67,11 @@ func New(host string) *Diagnostics {
 func (d *Diagnostics) SetVersion(v string) {
 	d.version = v
 	d.Set("Version", v)
+}
+
+// SetInterval of the diagnostic go routine and match with the circuit breaker timeout.
+func (d *Diagnostics) SetInterval(i time.Duration) {
+	d.interval = i
 }
 
 // schedule start the diagnostics service ticker.
@@ -117,10 +117,13 @@ func (d *Diagnostics) Flush() error {
 	return err
 }
 
-// Open starts the diagnostics metric go routine.
+// Open configures the circuit breaker used by the HTTP client.
 func (d *Diagnostics) Open() {
-	d.wg.Add(1)
-	go func() { defer d.wg.Done(); d.schedule() }()
+	var st gobreaker.Settings
+	if d.interval > 0 {
+		st.Timeout = d.interval * 2
+	}
+	d.cb = gobreaker.NewCircuitBreaker(st)
 }
 
 // Close notify goroutine to stop.
@@ -169,7 +172,7 @@ func (d *Diagnostics) CompareVersion(value string) error {
 	return nil
 }
 
-// Encode metrics maps into the json message format
+// Encode metrics maps into the json message format.
 func (d *Diagnostics) Encode() ([]byte, error) {
 	return json.Marshal(d.metrics)
 }
