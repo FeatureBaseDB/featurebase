@@ -99,7 +99,7 @@ func NewServer() *Server {
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		PollingInterval:     DefaultPollingInterval,
 		MetricInterval:      0,
-		DiagnosticInterval:  diagnostics.DefaultDiagnosticsInterval,
+		DiagnosticInterval:  0,
 
 		LogOutput: os.Stderr,
 	}
@@ -522,6 +522,8 @@ func (s *Server) monitorDiagnostics() {
 
 	s.diagnostics.SetLogger(s.LogOutput)
 	s.diagnostics.SetVersion(Version)
+	s.diagnostics.SetInterval(s.DiagnosticInterval)
+	s.diagnostics.Open()
 	s.diagnostics.Set("Host", s.URI.host)
 	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeSetHosts(), ","))
 	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))

@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"crypto/tls"
+
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statsd"
@@ -143,6 +144,7 @@ func (m *Command) SetupServer() error {
 	m.Server.Holder.Path = m.Config.DataDir
 	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollInterval)
 	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	m.Server.DiagnosticInterval = time.Duration(m.Config.Metric.DiagnosticInterval)
 	if err != nil {
 		return err
 	}
