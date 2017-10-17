@@ -36,13 +36,13 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// ClientOptions represents the configuration for a Client
+// ClientOptions represents the configuration for a InternalHTTPClient
 type ClientOptions struct {
 	TLS *tls.Config
 }
 
-// Client represents a client to the Pilosa cluster.
-type Client struct {
+// InternalHTTPClient represents a client to the Pilosa cluster.
+type InternalHTTPClient struct {
 	defaultURI *URI
 	options    *ClientOptions
 
@@ -50,8 +50,8 @@ type Client struct {
 	HTTPClient *http.Client
 }
 
-// NewClient returns a new instance of Client to connect to host.
-func NewClient(host string, options *ClientOptions) (*Client, error) {
+// NewClient returns a new instance of InternalHTTPClient to connect to host.
+func NewClient(host string, options *ClientOptions) (*InternalHTTPClient, error) {
 	if host == "" {
 		return nil, ErrHostRequired
 	}
@@ -65,7 +65,7 @@ func NewClient(host string, options *ClientOptions) (*Client, error) {
 	return client, nil
 }
 
-func NewClientFromURI(defaultURI *URI, options *ClientOptions) *Client {
+func NewClientFromURI(defaultURI *URI, options *ClientOptions) *InternalHTTPClient {
 	if options == nil {
 		options = &ClientOptions{}
 	}
@@ -74,27 +74,27 @@ func NewClientFromURI(defaultURI *URI, options *ClientOptions) *Client {
 		transport.TLSClientConfig = options.TLS
 	}
 	client := &http.Client{Transport: transport}
-	return &Client{
+	return &InternalHTTPClient{
 		defaultURI: defaultURI,
 		HTTPClient: client,
 	}
 }
 
 // Host returns the host the client was initialized with.
-func (c *Client) Host() *URI { return c.defaultURI }
+func (c *InternalHTTPClient) Host() *URI { return c.defaultURI }
 
 // MaxSliceByIndex returns the number of slices on a server by index.
-func (c *Client) MaxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
+func (c *InternalHTTPClient) MaxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
 	return c.maxSliceByIndex(ctx, false)
 }
 
 // MaxInverseSliceByIndex returns the number of inverse slices on a server by index.
-func (c *Client) MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64, error) {
+func (c *InternalHTTPClient) MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64, error) {
 	return c.maxSliceByIndex(ctx, true)
 }
 
 // maxSliceByIndex returns the number of slices on a server by index.
-func (c *Client) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
+func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := uriPathToURL(c.clientURI(ctx), "/slices/max")
 	u.RawQuery = (&url.Values{
@@ -127,7 +127,7 @@ func (c *Client) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]
 }
 
 // Schema returns all index and frame schema information.
-func (c *Client) Schema(ctx context.Context) ([]*IndexInfo, error) {
+func (c *InternalHTTPClient) Schema(ctx context.Context) ([]*IndexInfo, error) {
 	// Execute request against the host.
 	u := c.defaultURI.Path("/schema")
 
@@ -156,7 +156,7 @@ func (c *Client) Schema(ctx context.Context) ([]*IndexInfo, error) {
 }
 
 // CreateIndex creates a new index on the server.
-func (c *Client) CreateIndex(ctx context.Context, index string, opt IndexOptions) error {
+func (c *InternalHTTPClient) CreateIndex(ctx context.Context, index string, opt IndexOptions) error {
 	// Encode query request.
 	buf, err := json.Marshal(&postIndexRequest{
 		Options: opt,
@@ -201,7 +201,7 @@ func (c *Client) CreateIndex(ctx context.Context, index string, opt IndexOptions
 }
 
 // FragmentNodes returns a list of nodes that own a slice.
-func (c *Client) FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error) {
+func (c *InternalHTTPClient) FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error) {
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/fragment/nodes")
 	u.RawQuery = (url.Values{"index": {index}, "slice": {strconv.FormatUint(slice, 10)}}).Encode()
@@ -232,7 +232,7 @@ func (c *Client) FragmentNodes(ctx context.Context, index string, slice uint64) 
 }
 
 // ExecuteQuery executes query against index on the server.
-func (c *Client) ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (c *InternalHTTPClient) ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
 	if index == "" {
 		return nil, ErrIndexRequired
 	} else if queryRequest.Query == "" {
@@ -283,7 +283,7 @@ func (c *Client) ExecuteQuery(ctx context.Context, index string, queryRequest *i
 }
 
 // Import bulk imports bits for a single slice to a host.
-func (c *Client) Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error {
+func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
@@ -311,7 +311,7 @@ func (c *Client) Import(ctx context.Context, index, frame string, slice uint64, 
 	return nil
 }
 
-func (c *Client) EnsureIndex(ctx context.Context, name string, options IndexOptions) error {
+func (c *InternalHTTPClient) EnsureIndex(ctx context.Context, name string, options IndexOptions) error {
 	err := c.CreateIndex(ctx, name, options)
 	if err == nil || err == ErrIndexExists {
 		return nil
@@ -319,7 +319,7 @@ func (c *Client) EnsureIndex(ctx context.Context, name string, options IndexOpti
 	return err
 }
 
-func (c *Client) EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error {
+func (c *InternalHTTPClient) EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error {
 	err := c.CreateFrame(ctx, indexName, frameName, options)
 	if err == nil || err == ErrFrameExists {
 		return nil
@@ -350,7 +350,7 @@ func marshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte
 }
 
 // importNode sends a pre-marshaled import request to a node.
-func (c *Client) importNode(ctx context.Context, node *Node, buf []byte) error {
+func (c *InternalHTTPClient) importNode(ctx context.Context, node *Node, buf []byte) error {
 	// Create URL & HTTP request.
 	u := nodePathToURL(node, "/import")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
@@ -388,7 +388,7 @@ func (c *Client) importNode(ctx context.Context, node *Node, buf []byte) error {
 }
 
 // ImportValue bulk imports field values for a single slice to a host.
-func (c *Client) ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error {
+func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
@@ -438,7 +438,7 @@ func marshalImportValuePayload(index, frame, field string, slice uint64, vals []
 }
 
 // importValueNode sends a pre-marshaled import request to a node.
-func (c *Client) importValueNode(ctx context.Context, node *Node, buf []byte) error {
+func (c *InternalHTTPClient) importValueNode(ctx context.Context, node *Node, buf []byte) error {
 	// Create URL & HTTP request.
 	u := nodePathToURL(node, "/import-value")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
@@ -476,7 +476,7 @@ func (c *Client) importValueNode(ctx context.Context, node *Node, buf []byte) er
 }
 
 // ExportCSV bulk exports data for a single slice from a host to CSV format.
-func (c *Client) ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error {
+func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
@@ -508,7 +508,7 @@ func (c *Client) ExportCSV(ctx context.Context, index, frame, view string, slice
 }
 
 // exportNode copies a CSV export from a node to w.
-func (c *Client) exportNodeCSV(ctx context.Context, node *Node, index, frame, view string, slice uint64, w io.Writer) error {
+func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *Node, index, frame, view string, slice uint64, w io.Writer) error {
 	// Create URL.
 	u := nodePathToURL(node, "/export")
 	u.RawQuery = url.Values{
@@ -547,7 +547,7 @@ func (c *Client) exportNodeCSV(ctx context.Context, node *Node, index, frame, vi
 }
 
 // BackupTo backs up an entire frame from a cluster to w.
-func (c *Client) BackupTo(ctx context.Context, w io.Writer, index, frame, view string) error {
+func (c *InternalHTTPClient) BackupTo(ctx context.Context, w io.Writer, index, frame, view string) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
@@ -588,7 +588,7 @@ func (c *Client) BackupTo(ctx context.Context, w io.Writer, index, frame, view s
 }
 
 // backupSliceTo backs up a single slice to tw.
-func (c *Client) backupSliceTo(ctx context.Context, tw *tar.Writer, index, frame, view string, slice uint64) error {
+func (c *InternalHTTPClient) backupSliceTo(ctx context.Context, tw *tar.Writer, index, frame, view string, slice uint64) error {
 	// Return error if unable to backup from any slice.
 	r, err := c.BackupSlice(ctx, index, frame, view, slice)
 	if err != nil {
@@ -626,7 +626,7 @@ func (c *Client) backupSliceTo(ctx context.Context, tw *tar.Writer, index, frame
 
 // BackupSlice retrieves a streaming backup from a single slice.
 // This function tries slice owners until one succeeds.
-func (c *Client) BackupSlice(ctx context.Context, index, frame, view string, slice uint64) (io.ReadCloser, error) {
+func (c *InternalHTTPClient) BackupSlice(ctx context.Context, index, frame, view string, slice uint64) (io.ReadCloser, error) {
 	// Retrieve a list of nodes that own the slice.
 	nodes, err := c.FragmentNodes(ctx, index, slice)
 	if err != nil {
@@ -649,7 +649,7 @@ func (c *Client) BackupSlice(ctx context.Context, index, frame, view string, sli
 	return nil, fmt.Errorf("unable to connect to any owner")
 }
 
-func (c *Client) backupSliceNode(ctx context.Context, index, frame, view string, slice uint64, node *Node) (io.ReadCloser, error) {
+func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame, view string, slice uint64, node *Node) (io.ReadCloser, error) {
 	u := nodePathToURL(node, "/fragment/data")
 	u.RawQuery = url.Values{
 		"index": {index},
@@ -685,7 +685,7 @@ func (c *Client) backupSliceNode(ctx context.Context, index, frame, view string,
 }
 
 // RestoreFrom restores a frame from a backup file to an entire cluster.
-func (c *Client) RestoreFrom(ctx context.Context, r io.Reader, index, frame, view string) error {
+func (c *InternalHTTPClient) RestoreFrom(ctx context.Context, r io.Reader, index, frame, view string) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
@@ -724,7 +724,7 @@ func (c *Client) RestoreFrom(ctx context.Context, r io.Reader, index, frame, vie
 }
 
 // restoreSliceFrom restores a single slice to all owning nodes.
-func (c *Client) restoreSliceFrom(ctx context.Context, buf []byte, index, frame, view string, slice uint64) error {
+func (c *InternalHTTPClient) restoreSliceFrom(ctx context.Context, buf []byte, index, frame, view string, slice uint64) error {
 	// Retrieve a list of nodes that own the slice.
 	nodes, err := c.FragmentNodes(ctx, index, slice)
 	if err != nil {
@@ -765,7 +765,7 @@ func (c *Client) restoreSliceFrom(ctx context.Context, buf []byte, index, frame,
 }
 
 // CreateFrame creates a new frame on the server.
-func (c *Client) CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error {
+func (c *InternalHTTPClient) CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error {
 	if index == "" {
 		return ErrIndexRequired
 	}
@@ -814,7 +814,7 @@ func (c *Client) CreateFrame(ctx context.Context, index, frame string, opt Frame
 }
 
 // RestoreFrame restores an entire frame from a host in another cluster.
-func (c *Client) RestoreFrame(ctx context.Context, host, index, frame string) error {
+func (c *InternalHTTPClient) RestoreFrame(ctx context.Context, host, index, frame string) error {
 	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/restore", index, frame))
 	u.RawQuery = url.Values{
 		"host": {host},
@@ -844,7 +844,7 @@ func (c *Client) RestoreFrame(ctx context.Context, host, index, frame string) er
 }
 
 // FrameViews returns a list of view names for a frame.
-func (c *Client) FrameViews(ctx context.Context, index, frame string) ([]string, error) {
+func (c *InternalHTTPClient) FrameViews(ctx context.Context, index, frame string) ([]string, error) {
 	// Create URL & HTTP request.
 	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/views", index, frame))
 	req, err := http.NewRequest("GET", u.String(), nil)
@@ -881,7 +881,7 @@ func (c *Client) FrameViews(ctx context.Context, index, frame string) ([]string,
 
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
-func (c *Client) FragmentBlocks(ctx context.Context, index, frame, view string, slice uint64) ([]FragmentBlock, error) {
+func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, index, frame, view string, slice uint64) ([]FragmentBlock, error) {
 	u := uriPathToURL(c.defaultURI, "/fragment/blocks")
 	u.RawQuery = url.Values{
 		"index": {index},
@@ -923,7 +923,7 @@ func (c *Client) FragmentBlocks(ctx context.Context, index, frame, view string, 
 }
 
 // BlockData returns row/column id pairs for a block.
-func (c *Client) BlockData(ctx context.Context, index, frame, view string, slice uint64, block int) ([]uint64, []uint64, error) {
+func (c *InternalHTTPClient) BlockData(ctx context.Context, index, frame, view string, slice uint64, block int) ([]uint64, []uint64, error) {
 	buf, err := proto.Marshal(&internal.BlockDataRequest{
 		Index: index,
 		Frame: frame,
@@ -971,7 +971,7 @@ func (c *Client) BlockData(ctx context.Context, index, frame, view string, slice
 }
 
 // ColumnAttrDiff returns data from differing blocks on a remote host.
-func (c *Client) ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+func (c *InternalHTTPClient) ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/attr/diff", index))
 
 	// Encode request.
@@ -1011,7 +1011,7 @@ func (c *Client) ColumnAttrDiff(ctx context.Context, index string, blks []AttrBl
 }
 
 // RowAttrDiff returns data from differing blocks on a remote host.
-func (c *Client) RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/attr/diff", index, frame))
 
 	// Encode request.
@@ -1052,7 +1052,7 @@ func (c *Client) RowAttrDiff(ctx context.Context, index, frame string, blks []At
 	return rsp.Attrs, nil
 }
 
-func (c *Client) clientURI(ctx context.Context) *URI {
+func (c *InternalHTTPClient) clientURI(ctx context.Context) *URI {
 	clientURI := c.defaultURI
 	if contextURI, ok := ctx.Value("uri").(*URI); ok {
 		clientURI = contextURI

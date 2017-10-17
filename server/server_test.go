@@ -696,7 +696,7 @@ func (m *Main) Reopen() error {
 func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
 
 // Client returns a client to connect to the program.
-func (m *Main) Client() *pilosa.Client {
+func (m *Main) Client() *pilosa.InternalHTTPClient {
 	client, err := pilosa.NewClient(m.Server.URI.HostPort(), nil)
 	if err != nil {
 		panic(err)
