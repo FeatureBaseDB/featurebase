@@ -61,10 +61,11 @@ func NewClient(host string, options *ClientOptions) (*Client, error) {
 		return nil, err
 	}
 
-	return NewClientFromURI(uri, options)
+	client := NewClientFromURI(uri, options)
+	return client, nil
 }
 
-func NewClientFromURI(defaultURI *URI, options *ClientOptions) (*Client, error) {
+func NewClientFromURI(defaultURI *URI, options *ClientOptions) *Client {
 	if options == nil {
 		options = &ClientOptions{}
 	}
@@ -76,7 +77,7 @@ func NewClientFromURI(defaultURI *URI, options *ClientOptions) (*Client, error) 
 	return &Client{
 		defaultURI: defaultURI,
 		HTTPClient: client,
-	}, nil
+	}
 }
 
 // Host returns the host the client was initialized with.

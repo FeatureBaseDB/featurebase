@@ -55,12 +55,8 @@ func NewExecutor(clientOptions *ClientOptions) (*Executor, error) {
 	if clientOptions == nil {
 		clientOptions = &ClientOptions{}
 	}
-	client, err := NewClientFromURI(nil, clientOptions)
-	if err != nil {
-		return nil, err
-	}
 	return &Executor{
-		client: client,
+		client: NewClientFromURI(nil, clientOptions),
 	}, nil
 }
 
