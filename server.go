@@ -164,7 +164,10 @@ func (s *Server) Open() error {
 	s.createDefaultClient()
 
 	// Create executor for executing queries.
-	e := NewExecutor(&ClientOptions{TLS: s.TLS})
+	e, err := NewExecutor(&ClientOptions{TLS: s.TLS})
+	if err != nil {
+		return err
+	}
 	e.Holder = s.Holder
 	e.Scheme = s.URI.Scheme()
 	e.Host = s.URI.HostPort()

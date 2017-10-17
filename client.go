@@ -43,8 +43,8 @@ type ClientOptions struct {
 
 // Client represents a client to the Pilosa cluster.
 type Client struct {
-	host    *URI
-	options *ClientOptions
+	defaultURI *URI
+	options    *ClientOptions
 
 	// The client to use for HTTP communication.
 	HTTPClient *http.Client
@@ -64,10 +64,7 @@ func NewClient(host string, options *ClientOptions) (*Client, error) {
 	return NewClientFromURI(uri, options)
 }
 
-func NewClientFromURI(uri *URI, options *ClientOptions) (*Client, error) {
-	if uri == nil {
-		return nil, ErrHostRequired
-	}
+func NewClientFromURI(defaultURI *URI, options *ClientOptions) (*Client, error) {
 	if options == nil {
 		options = &ClientOptions{}
 	}
@@ -77,13 +74,13 @@ func NewClientFromURI(uri *URI, options *ClientOptions) (*Client, error) {
 	}
 	client := &http.Client{Transport: transport}
 	return &Client{
-		host:       uri,
+		defaultURI: defaultURI,
 		HTTPClient: client,
 	}, nil
 }
 
 // Host returns the host the client was initialized with.
-func (c *Client) Host() *URI { return c.host }
+func (c *Client) Host() *URI { return c.defaultURI }
 
 // MaxSliceByIndex returns the number of slices on a server by index.
 func (c *Client) MaxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
@@ -98,7 +95,7 @@ func (c *Client) MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64,
 // maxSliceByIndex returns the number of slices on a server by index.
 func (c *Client) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.host, "/slices/max")
+	u := uriPathToURL(c.defaultURI, "/slices/max")
 	u.RawQuery = (&url.Values{
 		"inverse": {strconv.FormatBool(inverse)},
 	}).Encode()
@@ -131,7 +128,7 @@ func (c *Client) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]
 // Schema returns all index and frame schema information.
 func (c *Client) Schema(ctx context.Context) ([]*IndexInfo, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.host, "/schema")
+	u := uriPathToURL(c.defaultURI, "/schema")
 
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
@@ -168,7 +165,7 @@ func (c *Client) CreateIndex(ctx context.Context, index string, opt IndexOptions
 	}
 
 	// Create URL & HTTP request.
-	u := uriPathToURL(c.host, fmt.Sprintf("/index/%s", index))
+	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s", index))
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return err
@@ -205,7 +202,7 @@ func (c *Client) CreateIndex(ctx context.Context, index string, opt IndexOptions
 // FragmentNodes returns a list of nodes that own a slice.
 func (c *Client) FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.host, "/fragment/nodes")
+	u := uriPathToURL(c.defaultURI, "/fragment/nodes")
 	u.RawQuery = (url.Values{"index": {index}, "slice": {strconv.FormatUint(slice, 10)}}).Encode()
 
 	// Build request.
@@ -234,28 +231,30 @@ func (c *Client) FragmentNodes(ctx context.Context, index string, slice uint64) 
 }
 
 // ExecuteQuery executes query against index on the server.
-func (c *Client) ExecuteQuery(ctx context.Context, index, query string, allowRedirect bool) (result interface{}, err error) {
+func (c *Client) ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
 	if index == "" {
 		return nil, ErrIndexRequired
-	} else if query == "" {
+	} else if queryRequest.Query == "" {
 		return nil, ErrQueryRequired
 	}
 
-	// Encode query request.
-	buf, err := proto.Marshal(&internal.QueryRequest{
-		Query:  query,
-		Remote: !allowRedirect,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal: %s", err)
-	}
-
-	// Create URL & HTTP request.
-	u := uriPathToURL(c.host, fmt.Sprintf("/index/%s/query", index))
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
+	// Encode request object.
+	buf, err := proto.Marshal(queryRequest)
 	if err != nil {
 		return nil, err
 	}
+
+	// Create HTTP request.
+	clientURI := c.defaultURI
+	if contextURI, ok := ctx.Value("uri").(*URI); ok {
+		clientURI = contextURI
+	}
+	u := clientURI.Path(fmt.Sprintf("/index/%s/query", index))
+	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
+	if err != nil {
+		return nil, err
+	}
+
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Accept", "application/x-protobuf")
@@ -276,8 +275,8 @@ func (c *Client) ExecuteQuery(ctx context.Context, index, query string, allowRed
 		return nil, errors.New(string(body))
 	}
 
-	var qresp internal.QueryResponse
-	if err := proto.Unmarshal(body, &qresp); err != nil {
+	qresp := &internal.QueryResponse{}
+	if err := proto.Unmarshal(body, qresp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %s", err)
 	} else if s := qresp.Err; s != "" {
 		return nil, errors.New(s)
@@ -288,7 +287,7 @@ func (c *Client) ExecuteQuery(ctx context.Context, index, query string, allowRed
 
 // ExecutePQL executes query string against index on the server.
 func (c *Client) ExecutePQL(ctx context.Context, index, query string) (interface{}, error) {
-	u := uriPathToURL(c.host, "/query")
+	u := uriPathToURL(c.defaultURI, "/query")
 	u.RawQuery = url.Values{"index": {index}}.Encode()
 
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader([]byte(query)))
@@ -811,7 +810,7 @@ func (c *Client) CreateFrame(ctx context.Context, index, frame string, opt Frame
 	}
 
 	// Create URL & HTTP request.
-	u := uriPathToURL(c.host, fmt.Sprintf("/index/%s/frame/%s", index, frame))
+	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s", index, frame))
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return err
@@ -847,7 +846,7 @@ func (c *Client) CreateFrame(ctx context.Context, index, frame string, opt Frame
 
 // RestoreFrame restores an entire frame from a host in another cluster.
 func (c *Client) RestoreFrame(ctx context.Context, host, index, frame string) error {
-	u := uriPathToURL(c.host, fmt.Sprintf("/index/%s/frame/%s/restore", index, frame))
+	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/restore", index, frame))
 	u.RawQuery = url.Values{
 		"host": {host},
 	}.Encode()
@@ -878,7 +877,7 @@ func (c *Client) RestoreFrame(ctx context.Context, host, index, frame string) er
 // FrameViews returns a list of view names for a frame.
 func (c *Client) FrameViews(ctx context.Context, index, frame string) ([]string, error) {
 	// Create URL & HTTP request.
-	u := uriPathToURL(c.host, fmt.Sprintf("/index/%s/frame/%s/views", index, frame))
+	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/views", index, frame))
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, err
@@ -914,7 +913,7 @@ func (c *Client) FrameViews(ctx context.Context, index, frame string) ([]string,
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
 func (c *Client) FragmentBlocks(ctx context.Context, index, frame, view string, slice uint64) ([]FragmentBlock, error) {
-	u := uriPathToURL(c.host, "/fragment/blocks")
+	u := uriPathToURL(c.defaultURI, "/fragment/blocks")
 	u.RawQuery = url.Values{
 		"index": {index},
 		"frame": {frame},
@@ -967,7 +966,7 @@ func (c *Client) BlockData(ctx context.Context, index, frame, view string, slice
 		return nil, nil, err
 	}
 
-	u := uriPathToURL(c.host, "/fragment/block/data")
+	u := uriPathToURL(c.defaultURI, "/fragment/block/data")
 	req, err := http.NewRequest("GET", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return nil, nil, err
@@ -1004,7 +1003,7 @@ func (c *Client) BlockData(ctx context.Context, index, frame, view string, slice
 
 // ColumnAttrDiff returns data from differing blocks on a remote host.
 func (c *Client) ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
-	u := uriPathToURL(c.host, fmt.Sprintf("/index/%s/attr/diff", index))
+	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/attr/diff", index))
 
 	// Encode request.
 	buf, err := json.Marshal(postIndexAttrDiffRequest{Blocks: blks})
@@ -1044,7 +1043,7 @@ func (c *Client) ColumnAttrDiff(ctx context.Context, index string, blks []AttrBl
 
 // RowAttrDiff returns data from differing blocks on a remote host.
 func (c *Client) RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
-	u := uriPathToURL(c.host, fmt.Sprintf("/index/%s/frame/%s/attr/diff", index, frame))
+	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/attr/diff", index, frame))
 
 	// Encode request.
 	buf, err := json.Marshal(postFrameAttrDiffRequest{Blocks: blks})
@@ -1228,4 +1227,8 @@ func nodePathToURL(node *Node, path string) url.URL {
 		Host:   node.Host,
 		Path:   path,
 	}
+}
+
+type InternalClient interface {
+	ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
 }
