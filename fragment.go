@@ -1782,7 +1782,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 	// Read pairs from each remote block.
 	var pairSets []PairSet
-	var clients []*Client
+	var clients []InternalClient
 	for _, node := range s.Cluster.FragmentNodes(f.Index(), f.Slice()) {
 		if s.Host == node.Host {
 			continue

@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -35,6 +34,7 @@ import (
 	"github.com/CAFxX/gcnotifier"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"golang.org/x/net/context"
 )
 
 // Default server settings.
@@ -76,7 +76,7 @@ type Server struct {
 
 	LogOutput io.Writer
 
-	defaultClient *http.Client
+	defaultClient InternalClient
 }
 
 // NewServer returns a new instance of Server.
@@ -483,31 +483,13 @@ func (s *Server) checkMaxSlices(scheme string, hostPort string) (map[string]uint
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 
-	resp, err := s.defaultClient.Do(req)
+	nodeURI, err := NewURIFromAddress(hostPort)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	// Read response into buffer.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check status code.
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status checkMaxSlices: code=%d, err=%s, req=%v", resp.StatusCode, body, req)
-	}
-
-	// Decode response object.
-	pb := internal.MaxSlicesResponse{}
-
-	if err = proto.Unmarshal(body, &pb); err != nil {
-		return nil, err
-	}
-
-	return pb.MaxSlices, nil
+	nodeURI.SetScheme(scheme)
+	ctx := context.WithValue(context.Background(), "uri", nodeURI)
+	return s.defaultClient.MaxSliceByIndex(ctx)
 }
 
 // monitorRuntime periodically polls the Go runtime metrics.
@@ -558,7 +540,7 @@ func (s *Server) createDefaultClient() {
 	if s.TLS != nil {
 		transport.TLSClientConfig = s.TLS
 	}
-	s.defaultClient = &http.Client{Transport: transport}
+	s.defaultClient = NewClientFromURI(nil, &ClientOptions{TLS: s.TLS})
 }
 
 // CountOpenFiles on opperating systems that support lsof

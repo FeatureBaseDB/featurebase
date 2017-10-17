@@ -96,7 +96,7 @@ func (c *Client) MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64,
 // maxSliceByIndex returns the number of slices on a server by index.
 func (c *Client) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.defaultURI, "/slices/max")
+	u := uriPathToURL(c.clientURI(ctx), "/slices/max")
 	u.RawQuery = (&url.Values{
 		"inverse": {strconv.FormatBool(inverse)},
 	}).Encode()
@@ -129,10 +129,10 @@ func (c *Client) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]
 // Schema returns all index and frame schema information.
 func (c *Client) Schema(ctx context.Context) ([]*IndexInfo, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.defaultURI, "/schema")
+	u := c.defaultURI.Path("/schema")
 
 	// Build request.
-	req, err := http.NewRequest("GET", u.String(), nil)
+	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -246,11 +246,7 @@ func (c *Client) ExecuteQuery(ctx context.Context, index string, queryRequest *i
 	}
 
 	// Create HTTP request.
-	clientURI := c.defaultURI
-	if contextURI, ok := ctx.Value("uri").(*URI); ok {
-		clientURI = contextURI
-	}
-	u := clientURI.Path(fmt.Sprintf("/index/%s/query", index))
+	u := c.clientURI(ctx).Path(fmt.Sprintf("/index/%s/query", index))
 	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
@@ -294,7 +290,7 @@ func (c *Client) Import(ctx context.Context, index, frame string, slice uint64, 
 		return ErrFrameRequired
 	}
 
-	buf, err := MarshalImportPayload(index, frame, slice, bits)
+	buf, err := marshalImportPayload(index, frame, slice, bits)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -331,8 +327,8 @@ func (c *Client) EnsureFrame(ctx context.Context, indexName string, frameName st
 	return err
 }
 
-// MarshalImportPayload marshalls the import parameters into a protobuf byte slice.
-func MarshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte, error) {
+// marshalImportPayload marshalls the import parameters into a protobuf byte slice.
+func marshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	rowIDs := Bits(bits).RowIDs()
 	columnIDs := Bits(bits).ColumnIDs()
@@ -399,7 +395,7 @@ func (c *Client) ImportValue(ctx context.Context, index, frame, field string, sl
 		return ErrFrameRequired
 	}
 
-	buf, err := MarshalImportValuePayload(index, frame, field, slice, vals)
+	buf, err := marshalImportValuePayload(index, frame, field, slice, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -420,8 +416,8 @@ func (c *Client) ImportValue(ctx context.Context, index, frame, field string, sl
 	return nil
 }
 
-// MarshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
-func MarshalImportValuePayload(index, frame, field string, slice uint64, vals []FieldValue) ([]byte, error) {
+// marshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
+func marshalImportValuePayload(index, frame, field string, slice uint64, vals []FieldValue) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	columnIDs := FieldValues(vals).ColumnIDs()
 	values := FieldValues(vals).Values()
@@ -1056,6 +1052,14 @@ func (c *Client) RowAttrDiff(ctx context.Context, index, frame string, blks []At
 	return rsp.Attrs, nil
 }
 
+func (c *Client) clientURI(ctx context.Context) *URI {
+	clientURI := c.defaultURI
+	if contextURI, ok := ctx.Value("uri").(*URI); ok {
+		clientURI = contextURI
+	}
+	return clientURI
+}
+
 // Bit represents the location of a single bit.
 type Bit struct {
 	RowID     uint64
@@ -1203,5 +1207,25 @@ func nodePathToURL(node *Node, path string) url.URL {
 }
 
 type InternalClient interface {
+	MaxSliceByIndex(ctx context.Context) (map[string]uint64, error)
+	MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64, error)
+	Schema(ctx context.Context) ([]*IndexInfo, error)
+	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
+	FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error)
 	ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
+	Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error
+	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
+	EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error
+	ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error
+	ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error
+	BackupTo(ctx context.Context, w io.Writer, index, frame, view string) error
+	BackupSlice(ctx context.Context, index, frame, view string, slice uint64) (io.ReadCloser, error)
+	RestoreFrom(ctx context.Context, r io.Reader, index, frame, view string) error
+	CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error
+	RestoreFrame(ctx context.Context, host, index, frame string) error
+	FrameViews(ctx context.Context, index, frame string) ([]string, error)
+	FragmentBlocks(ctx context.Context, index, frame, view string, slice uint64) ([]FragmentBlock, error)
+	BlockData(ctx context.Context, index, frame, view string, slice uint64, block int) ([]uint64, []uint64, error)
+	ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
+	RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 }

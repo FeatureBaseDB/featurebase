@@ -71,7 +71,7 @@ func (cmd *BenchCommand) Run(ctx context.Context) error {
 }
 
 // runSetBit executes a benchmark of random SetBit() operations.
-func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) error {
+func (cmd *BenchCommand) runSetBit(ctx context.Context, client pilosa.InternalClient) error {
 	if cmd.N == 0 {
 		return errors.New("operation count required")
 	} else if cmd.Index == "" {
