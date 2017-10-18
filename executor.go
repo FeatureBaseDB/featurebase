@@ -56,7 +56,7 @@ func NewExecutor(clientOptions *ClientOptions) *Executor {
 		clientOptions = &ClientOptions{}
 	}
 	return &Executor{
-		client: NewClientFromURI(nil, clientOptions),
+		client: NewInternalHTTPClientFromURI(nil, clientOptions),
 	}
 }
 

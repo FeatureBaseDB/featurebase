@@ -537,7 +537,7 @@ func (s *Server) createDefaultClient() {
 	if s.TLS != nil {
 		transport.TLSClientConfig = s.TLS
 	}
-	s.defaultClient = NewClientFromURI(nil, &ClientOptions{TLS: s.TLS})
+	s.defaultClient = NewInternalHTTPClientFromURI(nil, &ClientOptions{TLS: s.TLS})
 }
 
 // CountOpenFiles on opperating systems that support lsof

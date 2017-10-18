@@ -61,11 +61,11 @@ func NewInternalHTTPClient(host string, options *ClientOptions) (*InternalHTTPCl
 		return nil, err
 	}
 
-	client := NewClientFromURI(uri, options)
+	client := NewInternalHTTPClientFromURI(uri, options)
 	return client, nil
 }
 
-func NewClientFromURI(defaultURI *URI, options *ClientOptions) *InternalHTTPClient {
+func NewInternalHTTPClientFromURI(defaultURI *URI, options *ClientOptions) *InternalHTTPClient {
 	if options == nil {
 		options = &ClientOptions{}
 	}

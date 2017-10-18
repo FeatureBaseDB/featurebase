@@ -1506,7 +1506,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create a client for the remote cluster.
-	client := NewClientFromURI(host, h.ClientOptions)
+	client := NewInternalHTTPClientFromURI(host, h.ClientOptions)
 
 	// Determine the maximum number of slices.
 	maxSlices, err := client.MaxSliceByIndex(r.Context())
