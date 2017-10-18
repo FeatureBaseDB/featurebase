@@ -206,6 +206,19 @@ Any flag that has a value that is a comma separated list on the command line bec
     poll-interval = "0m15s"
     ```
 
+##### Metric Diagnostics Interval
+
+* Description: Diagnostic reporting interval. To disable diagnostics set to zero.
+* Flag: `metric.diagnostics=”60m0s”`
+* Env: `PILOSA_METRIC_DIAGNOSTICS=60m0s`
+* Config:
+
+    ```toml
+    [metric]
+    diagnostics = "60m0s"
+    ```
+
+
 ##### TLS Certificate
 
 * Description: Path to the TLS certificate to use for serving HTTPS. Usually has one of`.crt` or `.pem` extensions.
