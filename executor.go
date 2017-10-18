@@ -51,13 +51,13 @@ type Executor struct {
 }
 
 // NewExecutor returns a new instance of Executor.
-func NewExecutor(clientOptions *ClientOptions) (*Executor, error) {
+func NewExecutor(clientOptions *ClientOptions) *Executor {
 	if clientOptions == nil {
 		clientOptions = &ClientOptions{}
 	}
 	return &Executor{
 		client: NewClientFromURI(nil, clientOptions),
-	}, nil
+	}
 }
 
 // Execute executes a PQL query.

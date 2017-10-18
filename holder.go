@@ -515,7 +515,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.URI.HostPort()) {
-		client, err := NewClient(node.Host, s.ClientOptions)
+		client, err := NewInternalHTTPClient(node.Host, s.ClientOptions)
 		if err != nil {
 			return err
 		}
@@ -560,7 +560,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.URI.HostPort()) {
-		client, err := NewClient(node.Host, s.ClientOptions)
+		client, err := NewInternalHTTPClient(node.Host, s.ClientOptions)
 		if err != nil {
 			return err
 		}

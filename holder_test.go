@@ -314,10 +314,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	defer s.Close()
 	s.Handler.Holder = hldr1.Holder
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e, err := pilosa.NewExecutor(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr1.Holder
 		e.Scheme = cluster.Nodes[1].Scheme
 		e.Host = cluster.Nodes[1].Host

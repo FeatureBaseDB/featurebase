@@ -50,8 +50,8 @@ type InternalHTTPClient struct {
 	HTTPClient *http.Client
 }
 
-// NewClient returns a new instance of InternalHTTPClient to connect to host.
-func NewClient(host string, options *ClientOptions) (*InternalHTTPClient, error) {
+// NewInternalHTTPClient returns a new instance of InternalHTTPClient to connect to host.
+func NewInternalHTTPClient(host string, options *ClientOptions) (*InternalHTTPClient, error) {
 	if host == "" {
 		return nil, ErrHostRequired
 	}

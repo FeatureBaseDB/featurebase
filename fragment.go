@@ -1714,7 +1714,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		}
 
 		// Retrieve remote blocks.
-		client, err := NewClient(node.Host, s.ClientOptions)
+		client, err := NewInternalHTTPClient(node.Host, s.ClientOptions)
 		if err != nil {
 			return err
 		}
@@ -1793,7 +1793,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 			return nil
 		}
 
-		client, err := NewClient(node.Host, s.ClientOptions)
+		client, err := NewInternalHTTPClient(node.Host, s.ClientOptions)
 		if err != nil {
 			return err
 		}

@@ -34,7 +34,7 @@ func CommandClient(cmd CommandWithTLSSupport) (*pilosa.InternalHTTPClient, error
 		}
 		clientOptions = &pilosa.ClientOptions{TLS: TLSConfig}
 	}
-	client, err := pilosa.NewClient(cmd.TLSHost(), clientOptions)
+	client, err := pilosa.NewInternalHTTPClient(cmd.TLSHost(), clientOptions)
 	if err != nil {
 		return nil, err
 	}
