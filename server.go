@@ -139,9 +139,14 @@ func (s *Server) Open() error {
 		}
 	}
 
+	// Find the Node ID and append that tag to stats.
 	for i, n := range s.Cluster.Nodes {
-		if s.Cluster.NodeByHost(n.Host) != nil {
-			s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
+		uri, err := n.URI()
+		if err == nil {
+			if *uri == *s.URI {
+				s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
+				break
+			}
 		}
 	}
 
