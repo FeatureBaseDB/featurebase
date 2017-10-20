@@ -144,19 +144,19 @@ Let's open three terminal windows and run each node in its window. This will ena
 Switch to the first terminal window, change to the project directory and start the first node:
 ```
 cd $HOME/pilosa-tls-tutorial
-pilosa -c node1.config.toml
+pilosa server -c node1.config.toml
 ```
 
 Switch to the second terminal window, change to the project directory and start the second node:
 ```
 cd $HOME/pilosa-tls-tutorial
-pilosa -c node2.config.toml
+pilosa server -c node2.config.toml
 ```
 
 Switch to the third terminal window, change to the project directory and start the third node:
 ```
 cd $HOME/pilosa-tls-tutorial
-pilosa -c node3.config.toml
+pilosa server -c node3.config.toml
 ```
 
 Let's ensure that all three Pilosa servers are runnning and they are connected:
