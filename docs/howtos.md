@@ -107,7 +107,7 @@ Create `node3.config.toml` in the project directory and paste the following in i
 # node3.config.toml
 
 data-dir = "node3_data"
-bind = "https://01.pilosa.local:10503"
+bind = "https://03.pilosa.local:10503"
 
 [cluster]
 hosts = ["https://01.pilosa.local:10501", "https://02.pilosa.local:10502", "https://03.pilosa.local:10503"]
@@ -136,6 +136,15 @@ Before running the cluster, let's make sure `01.pilosa.local`, `02.pilosa.local`
 ```
 sudo sh -c 'printf "\n127.0.0.1 01.pilosa.local 02.pilosa.local 03.pilosa.local\n" >> /etc/hosts'
 ```
+
+Ensure we can access the hosts in the cluster:
+```
+ping -c 1 01.pilosa.local
+ping -c 1 02.pilosa.local
+ping -c 1 03.pilosa.local
+```
+
+If any of the commands above return `ping: unknown host`, check your `/etc/hosts` contains the failed hostname.
 
 #### Running the Cluster
 
@@ -166,7 +175,10 @@ curl -k --ipv4 https://01.pilosa.local:10501/status
 
 The `-k` flag is used to tell curl that it shouldn't bother with checking the certificate the server provides and `--ipv4` workarounds an issue on MacOS where the curl requests take a long time if the address resolves to `127.0.0.1`. You can leave it out on Linux and WSL.
 
-The output to the command above should show that all nodes are `UP`.
+All nodes should be in the `UP` state:
+```
+{"status":{"Nodes":[{"Host":"01.pilosa.local:10501","State":"UP"},{"Host":"02.pilosa.local:10502","State":"UP"},{"Host":"03.pilosa.local:10503","State":"UP"}]}}
+```
 
 #### Running Queries
 
