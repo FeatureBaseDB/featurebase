@@ -125,7 +125,7 @@ key = "pilosa.local.gossip32"
 
 Here is some explanation of the configuration items:
 * `data-dir` points to the directory where the Pilosa server writes its data. If it doesn't exist, the server will create it.
-* `bind` is the address which the server listenes to for incoming requests. The address is composed of three parts, the scheme, host, and port. The default scheme is `http` so we explicitly specify `https` to use the HTTPS protocol for communication between nodes.
+* `bind` is the address to which the server listens for incoming requests. The address is composed of three parts: scheme, host, and port. The default scheme is `http` so we explicitly specify `https` to use the HTTPS protocol for communication between nodes.
 * `[cluster]` section contains the settings for a cluster. `hosts` field is the most important, which contains the list of addresses of other nodes. See [Cluster Configuration](https://www.pilosa.com/docs/latest/configuration/#cluster-hosts) for other settings.
 * `[tls]` section contains the TLS settings, including the path to the SSL certificate and the corresponding key. Set `skip-verify` to `true` in order to disable host name verification and other security measures. Do not set `skip-verify` to `true` on production servers.
 * `[gossip]` section contains settings for the Gossip protocol. `seed` is the host and port for the main gossip node which coordinates other nodes. The `port` setting is the gossip listen address for the node. It should be different for each node, if the cluster is running on the same computer, otherwise you can set it to the same value. Finally, the `key` points to the gossip encryption key we created before.
