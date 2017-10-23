@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/gob"
@@ -788,6 +789,25 @@ func (c *Client) RestoreFrom(ctx context.Context, r io.Reader) error {
 
 				}
 			}
+		} else if parts[0] == "colattr" {
+			var buf bytes.Buffer
+			if _, err = io.CopyN(&buf, tr, hdr.Size); err != nil {
+				return err
+			}
+			_, err = c.SetRawColumnAttrs(ctx, parts[1], bufio.NewReader(&buf))
+			if err != nil {
+				return err
+			}
+
+		} else if parts[0] == "rowattr" {
+			var buf bytes.Buffer
+			if _, err = io.CopyN(&buf, tr, hdr.Size); err != nil {
+				return err
+			}
+			_, err = c.SetRawRowAttrs(ctx, parts[1], parts[2], bufio.NewReader(&buf))
+			if err != nil {
+				return err
+			}
 
 		} else if parts[0] == "data" {
 
@@ -1143,6 +1163,109 @@ func (c *Client) RowAttrDiff(ctx context.Context, index, frame string, blks []At
 		return nil, err
 	}
 	return rsp.Attrs, nil
+}
+
+func (c *Client) getContents(ctx context.Context, u url.URL) ([]byte, error) {
+	// Build request.
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	// Execute request.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Return error if status is not OK.
+	switch resp.StatusCode {
+	case http.StatusOK: // ok
+	case http.StatusNotFound:
+		return nil, ErrIndexNotFound
+	default:
+		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
+	}
+
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	if _, err = io.Copy(w, resp.Body); err != nil {
+		return nil, err
+	}
+	w.Flush()
+	return buf.Bytes(), nil
+
+}
+
+// FetchRawColumnAttrs retrieves the raw bolt data file contents of the Column Attributes
+func (c *Client) FetchRawColumnAttrs(ctx context.Context, indexName string) ([]byte, error) {
+	u := url.URL{
+		Scheme: c.Host().Scheme(),
+		Host:   c.Host().Host(),
+		Path:   fmt.Sprintf("/index/%s/attr", indexName),
+	}
+	return c.getContents(ctx, u)
+}
+
+// FetchRawRowAttrs retrieves the raw bolt data file contents of the Row Attributes for the given frame
+func (c *Client) FetchRawRowAttrs(ctx context.Context, indexName, frameName string) ([]byte, error) {
+	u := url.URL{
+		Scheme: c.Host().Scheme(),
+		Host:   c.Host().Host(),
+		Path:   fmt.Sprintf("/index/%s/frame/%s/attr", indexName, frameName),
+	}
+	return c.getContents(ctx, u)
+}
+func (c *Client) setContents(ctx context.Context, u url.URL, boltfile io.Reader) ([]byte, error) {
+	// Build request.
+	req, err := http.NewRequest("POST", u.String(), boltfile)
+	if err != nil {
+		return nil, err
+	}
+	// Execute request.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Return error if status is not OK.
+	switch resp.StatusCode {
+	case http.StatusOK: // ok
+	case http.StatusNotFound:
+		return nil, ErrIndexNotFound
+	default:
+		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
+	}
+
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	if _, err = io.Copy(w, resp.Body); err != nil {
+		return nil, err
+	}
+	w.Flush()
+	return buf.Bytes(), nil
+
+}
+
+// SetRawColumnAttrs retrieves the raw bolt data file contents of the Column Attributes
+func (c *Client) SetRawColumnAttrs(ctx context.Context, indexName string, boltfile io.Reader) ([]byte, error) {
+	u := url.URL{
+		Scheme: c.host.Scheme(),
+		Host:   c.host.Host(),
+		Path:   fmt.Sprintf("/index/%s/attr", indexName),
+	}
+	return c.setContents(ctx, u, boltfile)
+}
+
+// FetchRawRowAttrs retrieves the raw bolt data file contents of the Row Attributes for the given frame
+func (c *Client) SetRawRowAttrs(ctx context.Context, indexName, frameName string, boltfile io.Reader) ([]byte, error) {
+	u := url.URL{
+		Scheme: c.host.Scheme(),
+		Host:   c.host.Host(),
+		Path:   fmt.Sprintf("/index/%s/frame/%s/attr", indexName, frameName),
+	}
+	return c.setContents(ctx, u, boltfile)
 }
 
 // Bit represents the location of a single bit.
