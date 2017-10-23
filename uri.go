@@ -144,6 +144,11 @@ func (u URI) Equals(other *URI) bool {
 		u.port == other.port
 }
 
+// Path returns URI with path
+func (u *URI) Path(path string) string {
+	return fmt.Sprintf("%s%s", u.Normalize(), path)
+}
+
 // The following methods are required to implement pflag Value interface.
 
 // Set sets the time quantum value.

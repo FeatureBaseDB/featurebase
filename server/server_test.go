@@ -53,7 +53,7 @@ func TestMain_Set_Quick(t *testing.T) {
 		defer m.Close()
 
 		// Create client.
-		client, err := pilosa.NewClient(m.Server.URI.HostPort(), nil)
+		client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -326,7 +326,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	defer m2.Close()
 
 	// Import from first cluster.
-	client, err := pilosa.NewClient(m2.Server.URI.HostPort(), nil)
+	client, err := pilosa.NewInternalHTTPClient(m2.Server.URI.HostPort(), nil)
 	if err != nil {
 		t.Fatal(err)
 	} else if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
@@ -696,8 +696,8 @@ func (m *Main) Reopen() error {
 func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
 
 // Client returns a client to connect to the program.
-func (m *Main) Client() *pilosa.Client {
-	client, err := pilosa.NewClient(m.Server.URI.HostPort(), nil)
+func (m *Main) Client() *pilosa.InternalHTTPClient {
+	client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), nil)
 	if err != nil {
 		panic(err)
 	}

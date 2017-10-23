@@ -140,15 +140,17 @@ func TestClient_MultiNode(t *testing.T) {
 	client[2] = test.MustNewClient(s[2].Host())
 
 	topN := 4
-	q := fmt.Sprintf(`TopN(frame="%s", n=%d)`, "f", topN)
-
-	result, err := client[0].ExecuteQuery(context.Background(), "i", q, true)
+	queryRequest := &internal.QueryRequest{
+		Query:  fmt.Sprintf(`TopN(frame="%s", n=%d)`, "f", topN),
+		Remote: false,
+	}
+	result, err := client[0].ExecuteQuery(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Check the results before every node has the correct max slice value.
-	pairs := result.(internal.QueryResponse).Results[0].Pairs
+	pairs := result.Results[0].Pairs
 	for _, pair := range pairs {
 		if pair.Key == 22 && pair.Count != 3 {
 			t.Fatalf("Invalid Cluster wide MaxSlice prevents accurate calculation of %s", pair)
@@ -160,13 +162,13 @@ func TestClient_MultiNode(t *testing.T) {
 	hldr[1].Index("i").SetRemoteMaxSlice(maxSlice)
 	hldr[2].Index("i").SetRemoteMaxSlice(maxSlice)
 
-	result, err = client[0].ExecuteQuery(context.Background(), "i", q, true)
+	result, err = client[0].ExecuteQuery(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Test must return exactly N results.
-	if len(result.(internal.QueryResponse).Results[0].Pairs) != topN {
+	if len(result.Results[0].Pairs) != topN {
 		t.Fatalf("unexpected number of TopN results: %s", spew.Sdump(result))
 	}
 	p := []*internal.Pair{
@@ -176,15 +178,15 @@ func TestClient_MultiNode(t *testing.T) {
 		{Key: 99, Count: 7}}
 
 	// Valdidate the Top 4 result counts.
-	if !reflect.DeepEqual(result.(internal.QueryResponse).Results[0].Pairs, p) {
+	if !reflect.DeepEqual(result.Results[0].Pairs, p) {
 		t.Fatalf("Invalid TopN result set: %s", spew.Sdump(result))
 	}
 
-	result1, err := client[1].ExecuteQuery(context.Background(), "i", q, true)
+	result1, err := client[1].ExecuteQuery(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result2, err := client[2].ExecuteQuery(context.Background(), "i", q, true)
+	result2, err := client[2].ExecuteQuery(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
