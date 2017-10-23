@@ -12,7 +12,7 @@ nav = [
 
 #### Introduction
 
-Pilosa supports encrypting the communication between and to nodes in a cluster using TLS. In this tutorial, we will be setting up a three node Pilosa cluster running on the same computer. The same steps can be used for a multi-computer cluster but that requires setting up firewalls and other platform-specific setup which is out of the scope of this tutorial.
+Pilosa supports encrypting the communication between and to nodes in a cluster using TLS. In this tutorial, we will be setting up a three node Pilosa cluster running on the same computer. The same steps can be used for a multi-computer cluster but that requires setting up firewalls and other platform-specific configuration which is out of the scope of this tutorial.
 
 This tutorial assumes that you are using a UNIX-like system, such as Linux or MacOS. [Windows Subsystem for Linux (WSL)](https://msdn.microsoft.com/en-us/commandline/wsl/about) works equally well on Windows 10 systems.
 
@@ -34,7 +34,7 @@ mkdir $HOME/pilosa-tls-tutorial && cd $_
 
 Securing a Pilosa cluster consists of securing the communication between nodes using TLS and Gossip encryption. [Pilosa Enterprise](https://www.pilosa.com/enterprise/) additionally supports authentication and other security features, but those are not covered in this tutorial.
 
-The first step is acquiring an SSL certificate. You can buy a commercial certificate or retrieve a Let's Encrypt certificiate but we will be using a self signed certificate for practical reasons. Using self-signed certificates is not recommended in production, since that makes man in the middle attacks easy.
+The first step is acquiring an SSL certificate. You can buy a commercial certificate or retrieve a Let's Encrypt certificiate but we will be using a self signed certificate for practical reasons. Using self-signed certificates is not recommended in production, since it makes man in the middle attacks easy.
 
 The following command creates a 2048bit self-signed wildcard certificate for `*.pilosa.local` which expires 10 years later.
 
@@ -124,15 +124,15 @@ key = "pilosa.local.gossip32"
 ```
 
 Here is some explanation of the configuration items:
-* `data-dir` points to the directory where the Pilosa server writes its data. If it doesn't exist, the server will created it.
-* `bind` is the address which the server listenes to for incoming requests. The address is composed of three parts, the scheme, host and port. The default scheme is `http` so we explicitly specify `https` to use the HTTPS protocol for communication between nodes.
+* `data-dir` points to the directory where the Pilosa server writes its data. If it doesn't exist, the server will create it.
+* `bind` is the address which the server listenes to for incoming requests. The address is composed of three parts, the scheme, host, and port. The default scheme is `http` so we explicitly specify `https` to use the HTTPS protocol for communication between nodes.
 * `[cluster]` section contains the settings for a cluster. `hosts` field is the most important, which contains the list of addresses of other nodes. See [Cluster Configuration](https://www.pilosa.com/docs/latest/configuration/#cluster-hosts) for other settings.
 * `[tls]` section contains the TLS settings, including the path to the SSL certificate and the corresponding key. Set `skip-verify` to `true` in order to disable host name verification and other security measures. Do not set `skip-verify` to `true` on production servers.
 * `[gossip]` section contains settings for the Gossip protocol. `seed` is the host and port for the main gossip node which coordinates other nodes. The `port` setting is the gossip listen address for the node. It should be different for each node, if the cluster is running on the same computer, otherwise you can set it to the same value. Finally, the `key` points to the gossip encryption key we created before.
 
 #### Final Touches Before Running the Cluster
 
-Before running the cluster, let's make sure `01.pilosa.local`, `02.pilosa.local` and `03.pilosa.local` resolves to an IP address. If you are running the cluster on your computer, it is adequate to add them to your `/etc/hosts`. Below is one of the many ways of doing that (mind the `>>`):
+Before running the cluster, let's make sure that `01.pilosa.local`, `02.pilosa.local` and `03.pilosa.local` resolve to an IP address. If you are running the cluster on your computer, it is adequate to add them to your `/etc/hosts`. Below is one of the many ways of doing that (mind the `>>`):
 ```
 sudo sh -c 'printf "\n127.0.0.1 01.pilosa.local 02.pilosa.local 03.pilosa.local\n" >> /etc/hosts'
 ```
@@ -144,7 +144,7 @@ ping -c 1 02.pilosa.local
 ping -c 1 03.pilosa.local
 ```
 
-If any of the commands above return `ping: unknown host`, check your `/etc/hosts` contains the failed hostname.
+If any of the commands above return `ping: unknown host`, make sure your `/etc/hosts` contains the failed hostname.
 
 #### Running the Cluster
 
