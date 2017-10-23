@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"crypto/tls"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -1206,6 +1207,12 @@ func nodePathToURL(node *Node, path string) url.URL {
 	}
 }
 
+// InternalClient should be implemented by any struct that enables any transport between nodes
+// TODO: Refactor
+// Note from Travis: Typically an interface containing more than two or three methods is an indication that
+// something hasn't been architected correctly.
+// While I understand that putting the entire Client behind an interface might require this many methods,
+// I don't want to let it go unquestioned.
 type InternalClient interface {
 	MaxSliceByIndex(ctx context.Context) (map[string]uint64, error)
 	MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64, error)
