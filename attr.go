@@ -19,6 +19,8 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"fmt"
+	"io"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -282,7 +284,7 @@ func (s *AttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, erro
 		if err := proto.Unmarshal(v, &pb); err != nil {
 			return nil, err
 		}
-		m[btou64(k)] = decodeAttrs(pb.GetAttrs())
+		m[btou64(k)] = DecodeAttrs(pb.GetAttrs())
 	}
 
 	return m, nil
@@ -299,7 +301,7 @@ func txAttrs(tx *bolt.Tx, id uint64) (map[string]interface{}, error) {
 	if err := proto.Unmarshal(v, &pb); err != nil {
 		return nil, err
 	}
-	return decodeAttrs(pb.GetAttrs()), nil
+	return DecodeAttrs(pb.GetAttrs()), nil
 }
 
 // txUpdateAttrs updates the attributes for an id.
@@ -362,7 +364,7 @@ func encodeAttrs(m map[string]interface{}) []*internal.Attr {
 	return a
 }
 
-func decodeAttrs(pb []*internal.Attr) map[string]interface{} {
+func DecodeAttrs(pb []*internal.Attr) map[string]interface{} {
 	m := make(map[string]interface{}, len(pb))
 	for i := range pb {
 		key, value := decodeAttr(pb[i])
@@ -551,4 +553,36 @@ func mapContains(m, subset map[string]interface{}) bool {
 		}
 	}
 	return true
+}
+
+// Path returns path to the store's data file.
+func (s *AttrStore) GetAttributeData(w io.Writer) error {
+	s.db.Sync()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, err := os.Open(s.path)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, r)
+	return err
+}
+
+func (s *AttrStore) SetAttributeData(r io.ReadCloser) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Close()
+	w, err := os.Create(s.path)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, r)
+	if err != nil {
+		return err
+	}
+	err = w.Close()
+	if err != nil {
+		return err
+	}
+	return s.Open()
 }
