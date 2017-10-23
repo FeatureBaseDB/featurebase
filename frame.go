@@ -964,8 +964,9 @@ func (p frameSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // FrameInfo represents schema information for a frame.
 type FrameInfo struct {
-	Name  string      `json:"name"`
-	Views []*ViewInfo `json:"views,omitempty"`
+	Name    string       `json:"name"`
+	Views   []*ViewInfo  `json:"views,omitempty"`
+	Options FrameOptions `json:"options,omitempty"`
 }
 
 type frameInfoSlice []*FrameInfo

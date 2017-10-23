@@ -117,6 +117,8 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/attr", handler.handleGetFrameAttr).Methods("GET")
+	router.HandleFunc("/index/{index}/frame/{frame}/attr", handler.handlePostFrameAttr).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
@@ -130,6 +132,8 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
 	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
+	router.HandleFunc("/index/{index}/attr", handler.handleGetIndexAttributes).Methods("GET")
+	router.HandleFunc("/index/{index}/attr", handler.handlePostIndexAttributes).Methods("POST")
 	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
@@ -1992,4 +1996,83 @@ func GetTimeStamp(data map[string]interface{}, timeField string) (int64, error) 
 	}
 
 	return v.Unix(), nil
+}
+func (h *Handler) handleGetIndexAttributes(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+	db := index.ColumnAttrStore()
+	if db == nil {
+		h.logger().Printf("No Column Attribute Store")
+	}
+
+	if err := db.GetAttributeData(w); err != nil {
+		h.logger().Printf("write response error: %s", err)
+	}
+
+}
+
+func (h *Handler) handlePostIndexAttributes(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+	db := index.ColumnAttrStore()
+	if db == nil {
+		h.logger().Printf("No Column Attribute Store")
+	}
+	if err := db.SetAttributeData(r.Body); err != nil {
+		h.logger().Printf("write response error: %s", err)
+	}
+}
+
+func (h *Handler) handleGetFrameAttr(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	frameName := mux.Vars(r)["frame"]
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+	frame := index.Frame(frameName)
+	if frame == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+	db := frame.RowAttrStore()
+	if db == nil {
+		h.logger().Printf("No Frame Attribute Store %s/%s", index, frame)
+	}
+	if err := db.GetAttributeData(w); err != nil {
+		h.logger().Printf("write response error: %s", err)
+	}
+}
+
+func (h *Handler) handlePostFrameAttr(w http.ResponseWriter, r *http.Request) {
+	indexName := mux.Vars(r)["index"]
+	frameName := mux.Vars(r)["frame"]
+	// Find index.
+	index := h.Holder.Index(indexName)
+	if index == nil {
+		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+		return
+	}
+	frame := index.Frame(frameName)
+	if frame == nil {
+		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
+		return
+	}
+	db := frame.RowAttrStore()
+	if db == nil {
+		h.logger().Printf("No Frame Attribute Store %s/%s", index, frame)
+	}
+	if err := db.SetAttributeData(r.Body); err != nil {
+		h.logger().Printf("write response error: %s", err)
+	}
 }

@@ -59,13 +59,10 @@ func TestRestoreCommand_Run(t *testing.T) {
 
 	cm := NewRestoreCommand(stdin, stdout, stderr)
 	cm.Path = file.Name()
-	cm.Index = "i"
-	cm.Frame = "f"
-	cm.View = pilosa.ViewStandard
 	cm.Host = s.Host()
 	cm.Run(context.Background())
 	if err != nil {
-		t.Fatalf("Backup Run doesn't work: %s", err)
+		t.Fatalf("Restore Run doesn't work: %s", err)
 	}
 }
 

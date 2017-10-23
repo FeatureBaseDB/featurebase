@@ -17,7 +17,10 @@ package ctl
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -57,13 +60,113 @@ func TestBackupCommand_Run(t *testing.T) {
 	cm := NewBackupCommand(stdin, stdout, stderr)
 	file, err := ioutil.TempFile("", "import.csv")
 
-	cm.Index = "i"
 	cm.Host = s.Host()
-	cm.Frame = "f"
-	cm.View = pilosa.ViewStandard
 	cm.Path = file.Name()
 	err = cm.Run(context.Background())
 	if err != nil {
 		t.Fatalf("Command not working, error: '%s'", err)
 	}
+}
+
+func TestBackupRestore_Run(t *testing.T) {
+	s := MustNewRunningServer(t)
+	host := "http://" + s.Server.Addr().String()
+	//create index
+	resp, err := http.Post(host+"/index/i", "application/json", nil)
+	if err != nil {
+		t.Fatalf("getting status: %v", err)
+	}
+	//create normal frame
+	resp, err = http.Post(host+"/index/i/frame/f", "application/json", nil)
+	if err != nil {
+		t.Fatalf("getting status: %v", err)
+	}
+	// set a bit in two different slices
+	resp, err = http.Post(host+"/index/i/query", "application/json", strings.NewReader("SetBit(rowID=1,frame=f,columnID=0)SetBit(rowID=1,frame=f,columnID=1048577)"))
+	if err != nil {
+		t.Fatalf("getting status: %v", err)
+	}
+	// set an bitmap attribute
+	resp, err = http.Post(host+"/index/i/query", "application/json", strings.NewReader("SetRowAttrs(frame=f, rowID=1, hasAttribute=true)"))
+	if err != nil {
+		t.Fatalf("getting status: %v", err)
+	}
+	// create bsi frame
+	fieldOptions := `{"options":{"rangeEnabled": true, "fields": [{"name": "field0", "type": "int", "min": 0, "max": 1000},{"name": "field1", "type": "int", "min": 0, "max": 1000}]}}`
+	resp, err = http.Post(host+"/index/i/frame/bsi", "application/json", strings.NewReader(fieldOptions))
+	if err != nil {
+		t.Fatalf("getting status: %v", err)
+	}
+	// set a value
+	resp, err = http.Post(host+"/index/i/query", "application/json", strings.NewReader("SetFieldValue(columnID=1, frame=bsi, field0=400)SetFieldValue(columnID=1048577, frame=bsi, field0=20)"))
+	if err != nil {
+		t.Fatalf("getting status: %v", err)
+	}
+	fmt.Println(resp)
+	// run backup
+	buf := bytes.Buffer{}
+	stdin, stdout, stderr := GetIO(buf)
+	file, err := ioutil.TempFile("", "backtest")
+	backup := NewBackupCommand(stdin, stdout, stderr)
+
+	backup.Host = s.Server.Addr().String()
+	backup.Path = file.Name()
+	err = backup.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Backup Command not working, error: '%s'", err)
+	}
+	err = file.Close()
+	if err != nil {
+		t.Fatalf("Closing Backup File, error: '%s'", err)
+	}
+	err = s.Close()
+	if err != nil {
+		t.Fatalf("Closing Server, error: '%s'", err)
+	}
+	//zap the data
+	s = MustNewRunningServer(t)
+	host = "http://" + s.Server.Addr().String()
+	// run restore
+	restore := NewRestoreCommand(stdin, stdout, stderr)
+	restore.Path = backup.Path + ".pak"
+	restore.Host = s.Server.Addr().String()
+	err = restore.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Restore Command not working, error: '%s'", err)
+	}
+
+	// check bits in normal frame
+	resp, err = http.Post(host+"/index/i/query", "application/json", strings.NewReader("Bitmap(rowID=1,frame=f)"))
+
+	if err != nil {
+		t.Fatalf("getting status: %v", err)
+	}
+	res, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("reading body: %v", err)
+	}
+	expected := `{"results":[{"attrs":{"hasAttribute":true},"bits":[0,1048577]}]}`
+	if strings.Compare(string(res), expected) == 0 {
+
+		t.Fatalf("Unexpected Result %s vs %s", string(res), expected)
+	}
+	// check bitmap attribute
+	// check bsi value
+	resp, err = http.Post(host+"/index/i/query", "application/json", strings.NewReader("Sum(frame=bsi,field=field0)"))
+
+	if err != nil {
+		t.Fatalf("getting status: %v", err)
+	}
+	res, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("reading body: %v", err)
+	}
+	expected = `{"results":[{"sum":420,"count":2}]}`
+	if strings.Compare(string(res), expected) == 0 {
+
+		t.Fatalf("Unexpected Result %s vs %s", string(res), expected)
+	}
+
+	s.Close()
+
 }

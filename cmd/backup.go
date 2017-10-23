@@ -31,7 +31,7 @@ func NewBackupCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Use:   "backup",
 		Short: "Backup data from pilosa.",
 		Long: `
-Backs up the view from across the cluster into a single file.
+Backs across the cluster into a single compressed file.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := Backuper.Run(context.Background()); err != nil {
@@ -42,9 +42,6 @@ Backs up the view from across the cluster into a single file.
 	}
 	flags := backupCmd.Flags()
 	flags.StringVarP(&Backuper.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
-	flags.StringVarP(&Backuper.Index, "index", "i", "", "Pilosa index to backup.")
-	flags.StringVarP(&Backuper.Frame, "frame", "f", "", "Frame to backup.")
-	flags.StringVarP(&Backuper.View, "view", "v", "", "View to backup.")
 	flags.StringVarP(&Backuper.Path, "output-file", "o", "", "File to write backup to - default stdout")
 	ctl.SetTLSConfig(flags, &Backuper.TLS.CertificatePath, &Backuper.TLS.CertificateKeyPath, &Backuper.TLS.SkipVerify)
 

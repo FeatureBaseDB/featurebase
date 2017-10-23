@@ -105,7 +105,7 @@ func TestHandler_Schema(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0"},{"name":"f1","views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","views":[{"name":"standard"}]}]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0","options":{"rowLabel":"rowID","cacheType":"ranked","cacheSize":50000}},{"name":"f1","views":[{"name":"inverse"},{"name":"standard"}],"options":{"rowLabel":"rowID","inverseEnabled":true,"cacheType":"ranked","cacheSize":50000}}]},{"name":"i1","frames":[{"name":"f0","views":[{"name":"standard"}],"options":{"rowLabel":"rowID","cacheType":"ranked","cacheSize":50000}}]}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }

@@ -15,23 +15,23 @@
 package ctl
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/gob"
 	"errors"
 	"io"
+	"log"
 	"os"
+	"time"
 
 	"github.com/pilosa/pilosa"
 )
 
-// BackupCommand represents a command for backing up a view.
 type BackupCommand struct {
 	// Destination host and port.
 	Host string
-
-	// Name of the index, frame, view to backup.
-	Index string
-	Frame string
-	View  string
 
 	// Output file to write to.
 	Path string
@@ -42,15 +42,13 @@ type BackupCommand struct {
 	TLS pilosa.TLSConfig
 }
 
-// NewBackupCommand returns a new instance of BackupCommand.
 func NewBackupCommand(stdin io.Reader, stdout, stderr io.Writer) *BackupCommand {
 	return &BackupCommand{
 		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 	}
 }
 
-// Run executes the backup.
-func (cmd *BackupCommand) Run(ctx context.Context) error {
+func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	// Validate arguments.
 	if cmd.Path == "" {
 		return errors.New("output file required")
@@ -62,26 +60,61 @@ func (cmd *BackupCommand) Run(ctx context.Context) error {
 		return err
 	}
 
-	// Open output file.
-	f, err := os.Create(cmd.Path)
+	schema, err := client.Schema(ctx)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
-	// Begin streaming backup.
-	if err := client.BackupTo(ctx, f, cmd.Index, cmd.Frame, cmd.View); err != nil {
+	var w = cmd.Stdout
+	if cmd.Path != "" {
+
+		filename := cmd.Path + ".pak"
+		log.Println("Creating:", filename)
+		f, err := os.Create(filename)
+		defer f.Close()
+		if err != nil {
+			return err
+		}
+		w = f
+	}
+	gw := gzip.NewWriter(w)
+	tw := tar.NewWriter(gw)
+	//need to encode schema
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err = enc.Encode(schema)
+	if err != nil {
+		return
+	}
+	//store the schema in the tar file
+	data := buf.Bytes()
+	if err := tw.WriteHeader(&tar.Header{
+		Name:    "schema/schema.gob",
+		Mode:    0666,
+		Size:    int64(len(data)),
+		ModTime: time.Now(),
+	}); err != nil {
 		return err
 	}
-
-	// Sync & close file to ensure durability.
-	if err := f.Sync(); err != nil {
-		return err
-	} else if err = f.Close(); err != nil {
-		return err
+	if _, err = tw.Write(data); err != nil {
+		return
 	}
 
-	return nil
+	for _, index := range schema {
+		for _, frame := range index.Frames {
+			for _, view := range frame.Views {
+				log.Println("Backing up:", index.Name, frame.Name, view.Name)
+				if err = client.BackupTo(ctx, tw, index.Name, frame.Name, view.Name); err != nil {
+					return
+				}
+			}
+
+		}
+	}
+	tw.Close()
+	gw.Flush()
+	gw.Close()
+	return
 }
 
 func (cmd *BackupCommand) TLSHost() string {

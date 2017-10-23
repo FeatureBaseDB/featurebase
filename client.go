@@ -18,6 +18,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,11 +30,17 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"crypto/tls"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+)
+
+var (
+	ErrInvalidBackupFormat = errors.New("Invalid Backup Format")
 )
 
 // ClientOptions represents the configuration for a Client
@@ -579,26 +586,23 @@ func (c *Client) exportNodeCSV(ctx context.Context, node *Node, index, frame, vi
 }
 
 // BackupTo backs up an entire frame from a cluster to w.
-func (c *Client) BackupTo(ctx context.Context, w io.Writer, index, frame, view string) error {
+func (c *Client) BackupTo(ctx context.Context, tw *tar.Writer, index, frame, view string) (err error) {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
 	}
 
-	// Create tar writer around writer.
-	tw := tar.NewWriter(w)
-
 	// Find the maximum number of slices.
 	var maxSlices map[string]uint64
-	var err error
-	if view == ViewStandard {
-		maxSlices, err = c.MaxSliceByIndex(ctx)
-	} else if view == ViewInverse {
+	if view == ViewInverse {
 		maxSlices, err = c.MaxInverseSliceByIndex(ctx)
 	} else {
+		maxSlices, err = c.MaxSliceByIndex(ctx)
+	} /* else { //TODO validate view
 		return ErrInvalidView
 	}
+	*/
 
 	if err != nil {
 		return fmt.Errorf("slice n: %s", err)
@@ -606,17 +610,11 @@ func (c *Client) BackupTo(ctx context.Context, w io.Writer, index, frame, view s
 
 	// Backup every slice to the tar file.
 	for i := uint64(0); i <= maxSlices[index]; i++ {
-		if err := c.backupSliceTo(ctx, tw, index, frame, view, i); err != nil {
-			return err
+		if err = c.backupSliceTo(ctx, tw, index, frame, view, i); err != nil {
+			return
 		}
 	}
-
-	// Close tar file.
-	if err := tw.Close(); err != nil {
-		return err
-	}
-
-	return nil
+	return
 }
 
 // backupSliceTo backs up a single slice to tw.
@@ -640,7 +638,7 @@ func (c *Client) backupSliceTo(ctx context.Context, tw *tar.Writer, index, frame
 
 	// Write slice file header.
 	if err := tw.WriteHeader(&tar.Header{
-		Name:    strconv.FormatUint(slice, 10),
+		Name:    fmt.Sprintf("data/%s/%s/%s/%d", index, frame, view, slice),
 		Mode:    0666,
 		Size:    int64(len(data)),
 		ModTime: time.Now(),
@@ -717,11 +715,25 @@ func (c *Client) backupSliceNode(ctx context.Context, index, frame, view string,
 }
 
 // RestoreFrom restores a frame from a backup file to an entire cluster.
-func (c *Client) RestoreFrom(ctx context.Context, r io.Reader, index, frame, view string) error {
-	if index == "" {
-		return ErrIndexRequired
-	} else if frame == "" {
-		return ErrFrameRequired
+func (c *Client) RestoreFrom(ctx context.Context, r io.Reader) error {
+	post := func(url string, jsonBytes []byte) (err error) {
+		log.Println("POSTING", url)
+		log.Println("DATA", string(jsonBytes))
+
+		res, err := http.Post(url, "application/json; charset=utf-8", bytes.NewBuffer(jsonBytes))
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+
+		// Return error if response not OK.
+		if res.StatusCode != http.StatusOK {
+			return fmt.Errorf("unexpected status code: url=%s, code=%d", url, res.StatusCode)
+		}
+
+		//need to look at the body?
+		_, err = ioutil.ReadAll(res.Body)
+		return err
 	}
 
 	// Create tar reader around input.
@@ -737,20 +749,69 @@ func (c *Client) RestoreFrom(ctx context.Context, r io.Reader, index, frame, vie
 		}
 
 		// Parse slice from entry name.
-		slice, err := strconv.ParseUint(hdr.Name, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid backup entry: %s", hdr.Name)
-		}
+		log.Println("READING", hdr.Name)
+		parts := strings.Split(hdr.Name, "/")
+		if parts[0] == "schema" {
+			var buf bytes.Buffer
+			dec := gob.NewDecoder(&buf)
+			if _, err = io.CopyN(&buf, tr, hdr.Size); err != nil {
+				return err
+			}
+			var schema []*IndexInfo
+			err = dec.Decode(&schema)
 
-		// Read file into buffer.
-		var buf bytes.Buffer
-		if _, err := io.CopyN(&buf, tr, hdr.Size); err != nil {
-			return err
-		}
+			for i := range schema {
+				idx := schema[i]
+				//create index
+				nodes, err := c.FragmentNodes(ctx, idx.Name, 0)
+				if err != nil {
+					return err
+				}
+				endPoint := fmt.Sprintf("/index/%s", idx.Name)
+				url := nodePathToURL(nodes[0], endPoint)
+				err = post(url.String(), []byte{})
+				if err != nil {
+					return err
+				}
 
-		// Restore file to all nodes that own it.
-		if err := c.restoreSliceFrom(ctx, buf.Bytes(), index, frame, view, slice); err != nil {
-			return err
+				for _, frame := range idx.Frames {
+					endPoint := fmt.Sprintf("/index/%s/frame/%s", idx.Name, frame.Name)
+					frameURL := nodePathToURL(nodes[0], endPoint)
+					frameOptionsJSON, err := json.Marshal(map[string]interface{}{"options": frame.Options})
+					if err != nil {
+						return err
+					}
+					err = post(frameURL.String(), frameOptionsJSON)
+					if err != nil {
+						return err
+					}
+
+				}
+			}
+
+		} else if parts[0] == "data" {
+
+			index := parts[1]
+			frame := parts[2]
+			view := parts[3]
+			slice, err := strconv.ParseUint(parts[4], 10, 64)
+
+			if err != nil {
+				return fmt.Errorf("invalid backup entry: %s", hdr.Name)
+			}
+
+			// Read file into buffer.
+			var buf bytes.Buffer
+			if _, err := io.CopyN(&buf, tr, hdr.Size); err != nil {
+				return err
+			}
+
+			// Restore file to all nodes that own it.
+			if err := c.restoreSliceFrom(ctx, buf.Bytes(), index, frame, view, slice); err != nil {
+				return err
+			}
+		} else {
+			return ErrInvalidBackupFormat
 		}
 	}
 }
@@ -1150,7 +1211,7 @@ func (p Bits) GroupBySlice() map[uint64][]Bit {
 	return m
 }
 
-// FieldValues represents the value for a column within a
+// FieldValue represents the value for a column within a
 // range-encoded frame.
 type FieldValue struct {
 	ColumnID uint64
