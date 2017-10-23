@@ -445,7 +445,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	}
 	gossipSeed := gossipHost + ":" + freePorts[0]
 
-	gossipNodeSet0 := gossip.NewGossipNodeSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server)
+	gossipNodeSet0 := gossip.NewGossipNodeSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server, nil)
 	m0.Server.Cluster.NodeSet = gossipNodeSet0
 	m0.Server.Broadcaster = gossipNodeSet0
 	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
@@ -472,7 +472,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	gossipNodeSet1 := gossip.NewGossipNodeSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server)
+	gossipNodeSet1 := gossip.NewGossipNodeSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server, nil)
 	m1.Server.Cluster.NodeSet = gossipNodeSet1
 	m1.Server.Broadcaster = gossipNodeSet1
 	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster

@@ -33,6 +33,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statsd"
+	"io/ioutil"
 )
 
 func init() {
@@ -173,7 +174,10 @@ func (m *Command) SetupServer() error {
 
 	// Set internal port (string).
 	gossipPortStr := pilosa.DefaultGossipPort
-	if m.Config.GossipPort != "" {
+	// Config.GossipPort is deprecated, so Config.Gossip.Port has priority
+	if m.Config.Gossip.Port != "" {
+		gossipPortStr = m.Config.Gossip.Port
+	} else if m.Config.GossipPort != "" {
 		gossipPortStr = m.Config.GossipPort
 	}
 
@@ -184,13 +188,24 @@ func (m *Command) SetupServer() error {
 			return err
 		}
 		gossipSeed := pilosa.DefaultHost + ":" + pilosa.DefaultGossipPort
-		if m.Config.GossipSeed != "" {
+		// Config.GossipSeed is deprecated, so Config.Gossip.Seed has priority
+		if m.Config.Gossip.Seed != "" {
+			gossipSeed = m.Config.Gossip.Seed
+		} else if m.Config.GossipSeed != "" {
 			gossipSeed = m.Config.GossipSeed
+		}
+
+		var gossipKey []byte
+		if m.Config.Gossip.Key != "" {
+			gossipKey, err = ioutil.ReadFile(m.Config.Gossip.Key)
+			if err != nil {
+				return err
+			}
 		}
 
 		// get the host portion of addr to use for binding
 		gossipHost := uri.Host()
-		gossipNodeSet := gossip.NewGossipNodeSet(uri.HostPort(), gossipHost, gossipPort, gossipSeed, m.Server)
+		gossipNodeSet := gossip.NewGossipNodeSet(uri.HostPort(), gossipHost, gossipPort, gossipSeed, m.Server, gossipKey)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet
