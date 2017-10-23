@@ -386,6 +386,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	}
 
 	ns := internal.NodeStatus{
+		Scheme:  s.URI.Scheme(),
 		Host:    s.URI.HostPort(),
 		State:   NodeStateUp,
 		Indexes: EncodeIndexes(s.Holder.Indexes()),

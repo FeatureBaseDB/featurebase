@@ -116,6 +116,7 @@ message NodeStatus {
     string Host = 1;
     string State = 2;
     repeated Index Indexes = 3;
+    string Scheme = 4;
 }
 
 message ClusterStatus {
