@@ -208,3 +208,7 @@ The same response should be returned when querying other nodes in the cluster:
 ```
 curl -k --ipv4 https://02.pilosa.local:10502/index/sample-index/query -d 'Bitmap(frame="sample-frame", rowID=1)'
 ```
+
+#### What's Next?
+
+Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](https://www.pilosa.com/docs/latest/configuration/) to see the available options to configure Pilosa.
