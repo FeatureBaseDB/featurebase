@@ -78,7 +78,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 #### Gossip Port
 
-* Description: Port to which Pilosa should bind for internal communication.
+* Description: Port to which Pilosa should bind for internal communication. If there are more than one Pilosa servers are running on the same host, their gossip ports should be different.
 * Flag: `--gossip.port=11101`
 * Env: `PILOSA_GOSSIP_PORT=11101`
 * Config:
@@ -257,7 +257,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 ### Example Cluster Configuration
 
-A three node cluster could be minimally configured as follows:
+A three node cluster running on different hosts could be minimally configured as follows:
 
 #### Node 0
 
@@ -358,6 +358,67 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
       replicas = 1
       type = "gossip"
       hosts = ["https://node0.pilosa.com:10101","https://node1.pilosa.com:10101","https://node2.pilosa.com:10101"]
+
+    [tls]
+      certificate = "/home/pilosa/private/server.crt"
+      key = "/home/pilosa/private/server.key"
+
+### Example Cluster Configuration (HTTPS, same host)
+
+You can run a cluster on the same host using the configuration above with a few changes. Gossip port and bind adress should be different for each node and a data directory should be accessed only by a single node.
+
+#### Node 0
+
+    data-dir = "/home/pilosa/data0"
+    bind = "https://localhost:10100"
+
+    [gossip]
+      port = 12000
+      seed = "localhost:12000"
+      key = "/home/pilosa/private/gossip.key32"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["https://localhost:10100","https://localhost:10101","https://localhost:10102"]
+
+    [tls]
+      certificate = "/home/pilosa/private/server.crt"
+      key = "/home/pilosa/private/server.key"
+
+#### Node 1
+
+    data-dir = "/home/pilosa/data1"
+    bind = "https://localhost:10101"
+
+    [gossip]
+      port = 12001
+      seed = "localhost:12000"
+      key = "/home/pilosa/private/gossip.key32"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["https://localhost:10100","https://localhost:10101","https://localhost:10102"]
+
+    [tls]
+      certificate = "/home/pilosa/private/server.crt"
+      key = "/home/pilosa/private/server.key"
+      
+#### Node 2
+
+    data-dir = "/home/pilosa/data2"
+    bind = "https://localhost:10102"
+
+    [gossip]
+      port = 12002
+      seed = "locahost:12000"
+      key = "/home/pilosa/private/gossip.key32"
+
+    [cluster]
+      replicas = 1
+      type = "gossip"
+      hosts = ["https://localhost:10100","https://localhost:10101","https://localhost:10102"]
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
