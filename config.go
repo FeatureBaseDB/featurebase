@@ -43,9 +43,6 @@ const (
 
 	// DefaultMaxWritesPerRequest is the default number of writes per request.
 	DefaultMaxWritesPerRequest = 5000
-
-	// DefaultDiagnosticsInterval is the default sync frequency diagnostic metrics.
-	DefaultDiagnosticsInterval = 1 * time.Hour
 )
 
 // ClusterTypes set of cluster types.
@@ -91,10 +88,10 @@ type Config struct {
 	LogPath string `toml:"log-path"`
 
 	Metric struct {
-		Service            string   `toml:"service"`
-		Host               string   `toml:"host"`
-		PollInterval       Duration `toml:"poll-interval"`
-		DiagnosticInterval Duration `toml:"diagnostics"`
+		Service      string   `toml:"service"`
+		Host         string   `toml:"host"`
+		PollInterval Duration `toml:"poll-interval"`
+		Diagnostics  bool     `toml:"diagnostics"`
 	} `toml:"metric"`
 
 	TLS TLSConfig
@@ -112,7 +109,7 @@ func NewConfig() *Config {
 	c.Cluster.Hosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics
-	c.Metric.DiagnosticInterval = Duration(DefaultDiagnosticsInterval)
+	c.Metric.Diagnostics = true
 	c.TLS = TLSConfig{}
 	return c
 }

@@ -206,16 +206,16 @@ Any flag that has a value that is a comma separated list on the command line bec
     poll-interval = "0m15s"
     ```
 
-##### Metric Diagnostics Interval
+##### Metric Diagnostics
 
-* Description: Diagnostic reporting interval. To disable diagnostics set to zero.
-* Flag: `metric.diagnostics=”60m0s”`
-* Env: `PILOSA_METRIC_DIAGNOSTICS=60m0s`
+* Description: Enable diagnostic reporting. To disable diagnostics set to false.
+* Flag: `metric.diagnostics`
+* Env: `PILOSA_METRIC_DIAGNOSTICS`
 * Config:
 
     ```toml
     [metric]
-    diagnostics = "60m0s"
+    diagnostics = true
     ```
 
 
