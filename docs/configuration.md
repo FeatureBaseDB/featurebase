@@ -78,7 +78,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 #### Gossip Port
 
-* Description: Port to which Pilosa should bind for internal communication. If there are more than one Pilosa servers are running on the same host, their gossip ports should be different.
+* Description: Port to which Pilosa should bind for internal communication. If more than one Pilosa server is running on the same host, the gossip port for each server must be unique.
 * Flag: `--gossip.port=11101`
 * Env: `PILOSA_GOSSIP_PORT=11101`
 * Config:
