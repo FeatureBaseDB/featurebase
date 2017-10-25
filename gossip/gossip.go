@@ -48,7 +48,9 @@ type GossipNodeSet struct {
 func (g *GossipNodeSet) Nodes() []*pilosa.Node {
 	a := make([]*pilosa.Node, 0, g.memberlist.NumMembers())
 	for _, n := range g.memberlist.Members() {
-		a = append(a, &pilosa.Node{Scheme: "gossip", Host: n.Name})
+		uri, _ := pilosa.NewURIFromAddress(n.Name)
+		// TODO don't swallow the error above
+		a = append(a, &pilosa.Node{URI: *uri})
 	}
 	return a
 }
@@ -78,9 +80,15 @@ func (g *GossipNodeSet) Open() error {
 		RetransmitMult: 3,
 	}
 
+	uri, err := pilosa.NewURIFromAddress(g.config.gossipSeed)
+	if err != nil {
+		return err
+	}
+
 	// attach to gossip seed node
-	nodes := []*pilosa.Node{&pilosa.Node{Scheme: "gossip", Host: g.config.gossipSeed}} //TODO: support a list of seeds
-	err = g.joinWithRetry(pilosa.Nodes(nodes).Hosts())
+	nodes := []*pilosa.Node{&pilosa.Node{URI: *uri}} //TODO: support a list of seeds
+
+	err = g.joinWithRetry(pilosa.URISet(pilosa.Nodes(nodes).URIs()).ToHostPortStrings())
 	if err != nil {
 		return err
 	}
@@ -205,7 +213,7 @@ func (g *GossipNodeSet) SendTo(to *pilosa.Node, pb proto.Message) error {
 
 	// Get the memberlist.Node from the pilosa.Node.
 	for _, node := range mlist.Members() {
-		if node.Name == to.Host {
+		if node.Name == to.URI.String() {
 			return mlist.SendToTCP(node, msg)
 		}
 	}
@@ -322,9 +330,12 @@ func (g *GossipEventReceiver) listen() {
 			continue
 		}
 
+		uri, _ := pilosa.NewURIFromAddress(e.Node.Name)
+		// TODO: don't swallow this error
+
 		ne := &pilosa.NodeEvent{
 			Event: nodeEventType,
-			Host:  e.Node.Name,
+			URI:   *uri,
 		}
 		g.eventHandler.ReceiveEvent(ne)
 	}

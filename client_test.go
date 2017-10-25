@@ -37,7 +37,7 @@ func createCluster(c *pilosa.Cluster) ([]*test.Server, []*test.Holder) {
 		server[i] = test.NewServer()
 		server[i].Handler.URI = server[i].HostURI()
 		server[i].Handler.Cluster = c
-		server[i].Handler.Cluster.Nodes[i].Host = server[i].Host()
+		server[i].Handler.Cluster.Nodes[i].URI = server[i].HostURI()
 		server[i].Handler.Holder = hldr[i].Holder
 	}
 	return server, hldr
@@ -56,24 +56,21 @@ func TestClient_MultiNode(t *testing.T) {
 	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr[0].Holder
-		e.Scheme = cluster.Nodes[0].Scheme
-		e.Host = cluster.Nodes[0].Host
+		e.URI = cluster.Nodes[0].URI
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr[1].Holder
-		e.Scheme = cluster.Nodes[1].Scheme
-		e.Host = cluster.Nodes[1].Host
+		e.URI = cluster.Nodes[1].URI
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr[2].Holder
-		e.Scheme = cluster.Nodes[2].Scheme
-		e.Host = cluster.Nodes[2].Host
+		e.URI = cluster.Nodes[2].URI
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
@@ -81,7 +78,7 @@ func TestClient_MultiNode(t *testing.T) {
 	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and slice width increment would reveal a different TopN.
 	sliceNums := []uint64{1, 2, 6}
 	for i, num := range sliceNums {
-		owns := s[i].Handler.Handler.Cluster.OwnsSlices("i", 20, s[i].Host())
+		owns := s[i].Handler.Handler.Cluster.OwnsSlices("i", 20, s[i].HostURI())
 		ownsNum := false
 		for _, ownNum := range owns {
 			if ownNum == num {
@@ -212,7 +209,7 @@ func TestClient_Import(t *testing.T) {
 	defer s.Close()
 	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
 
 	// Send import request.
@@ -263,7 +260,7 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 	defer s.Close()
 	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
 
 	// Send import request.
@@ -312,7 +309,7 @@ func TestClient_ImportValue(t *testing.T) {
 	defer s.Close()
 	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
 
 	// Send import request.
@@ -350,7 +347,7 @@ func TestClient_BackupRestore(t *testing.T) {
 	defer s.Close()
 	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
 
 	c := test.MustNewClient(s.Host())
@@ -415,7 +412,7 @@ func TestClient_BackupInverseView(t *testing.T) {
 	defer s.Close()
 	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
 
 	c := test.MustNewClient(s.Host())
@@ -452,7 +449,7 @@ func TestClient_BackupInvalidView(t *testing.T) {
 	defer s.Close()
 	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
 
 	c := test.MustNewClient(s.Host())
@@ -481,7 +478,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	defer s.Close()
 	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
 
 	// Retrieve blocks.

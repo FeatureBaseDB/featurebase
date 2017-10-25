@@ -64,13 +64,13 @@ func NewServer() *Server {
 	if err != nil {
 		panic(err)
 	}
-	s.Handler.URI = uri
+	s.Handler.URI = *uri
 
 	// Handler test messages can no-op.
 	s.Handler.Broadcaster = pilosa.NopBroadcaster
 	// Create a default cluster on the handler
 	s.Handler.Cluster = NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Cluster.Nodes[0].URI = *uri
 
 	return s
 }
@@ -111,12 +111,12 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error { return nil }
 // Host returns the hostname of the running server.
 func (s *Server) Host() string { return MustParseURLHost(s.URL) }
 
-func (s *Server) HostURI() *pilosa.URI {
+func (s *Server) HostURI() pilosa.URI {
 	uri, err := pilosa.NewURIFromAddress(s.URL)
 	if err != nil {
 		panic(err)
 	}
-	return uri
+	return *uri
 }
 
 // MustParseURLHost parses rawurl and returns the hostname. Panic on error.

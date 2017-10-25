@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"crypto/tls"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -336,7 +337,7 @@ func (c *Client) Import(ctx context.Context, index, frame string, slice uint64, 
 	// Import to each node.
 	for _, node := range nodes {
 		if err := c.importNode(ctx, node, buf); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
 
@@ -441,7 +442,7 @@ func (c *Client) ImportValue(ctx context.Context, index, frame, field string, sl
 	// Import to each node.
 	for _, node := range nodes {
 		if err := c.importValueNode(ctx, node, buf); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
 
@@ -529,7 +530,7 @@ func (c *Client) ExportCSV(ctx context.Context, index, frame, view string, slice
 		node := nodes[i]
 
 		if err := c.exportNodeCSV(ctx, node, index, frame, view, slice, w); err != nil {
-			e = fmt.Errorf("export node: host=%s, err=%s", node.Host, err)
+			e = fmt.Errorf("export node: host=%s, err=%s", node.URI, err)
 			continue
 		} else {
 			return nil
@@ -710,7 +711,7 @@ func (c *Client) backupSliceNode(ctx context.Context, index, frame, view string,
 		return nil, ErrFragmentNotFound
 	} else if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("unexpected backup status code: host=%s, code=%d", node.Host, resp.StatusCode)
+		return nil, fmt.Errorf("unexpected backup status code: host=%s, code=%d", node.URI, resp.StatusCode)
 	}
 
 	return resp.Body, nil
@@ -789,7 +790,7 @@ func (c *Client) restoreSliceFrom(ctx context.Context, buf []byte, index, frame,
 
 		// Return error if response not OK.
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("unexpected status code: host=%s, code=%d", node.Host, resp.StatusCode)
+			return fmt.Errorf("unexpected status code: host=%s, code=%d", node.URI, resp.StatusCode)
 		}
 	}
 
@@ -1224,8 +1225,8 @@ func uriPathToURL(uri *URI, path string) url.URL {
 
 func nodePathToURL(node *Node, path string) url.URL {
 	return url.URL{
-		Scheme: node.Scheme,
-		Host:   node.Host,
+		Scheme: node.URI.Scheme(),
+		Host:   node.URI.Host(),
 		Path:   path,
 	}
 }

@@ -20,6 +20,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/pilosa/pilosa/internal"
 )
 
 var schemeRegexp = regexp.MustCompile("^[+a-z]+$")
@@ -67,11 +69,7 @@ func NewURIFromHostPort(host string, port uint16) (*URI, error) {
 
 // NewURIFromAddress parses the passed address and returns a URI.
 func NewURIFromAddress(address string) (*URI, error) {
-	uri, err := parseAddress(address)
-	if err != nil {
-		return nil, err
-	}
-	return uri, err
+	return parseAddress(address)
 }
 
 // Scheme returns the scheme of this URI.
@@ -134,14 +132,17 @@ func (u *URI) Normalize() string {
 	return fmt.Sprintf("%s://%s:%d", scheme, u.host, u.port)
 }
 
+// String returns the address as a string.
+func (u URI) String() string {
+	return fmt.Sprintf("%s://%s:%d", u.scheme, u.host, u.port)
+}
+
 // Equals returns true if the checked URI is equivalent to this URI.
 func (u URI) Equals(other *URI) bool {
 	if other == nil {
 		return false
 	}
-	return u.scheme == other.scheme &&
-		u.host == other.host &&
-		u.port == other.port
+	return u == *other
 }
 
 // The following methods are required to implement pflag Value interface.
@@ -187,4 +188,50 @@ func parseAddress(address string) (uri *URI, err error) {
 		port:   uint16(port),
 	}
 	return uri, nil
+}
+
+// Encode converts o into its internal representation.
+func (u URI) Encode() *internal.URI {
+	return encodeURI(u)
+}
+
+func encodeURI(u URI) *internal.URI {
+	return &internal.URI{
+		Scheme: u.scheme,
+		Host:   u.host,
+		Port:   uint32(u.port),
+	}
+}
+
+func decodeURI(i *internal.URI) URI {
+	if i == nil {
+		return URI{}
+	}
+	return URI{
+		scheme: i.Scheme,
+		host:   i.Host,
+		port:   uint16(i.Port),
+	}
+}
+
+func encodeURIs(a []URI) []*internal.URI {
+	if len(a) == 0 {
+		return nil
+	}
+	other := make([]*internal.URI, len(a))
+	for i := range a {
+		other[i] = encodeURI(a[i])
+	}
+	return other
+}
+
+func decodeURIs(a []*internal.URI) []URI {
+	if len(a) == 0 {
+		return nil
+	}
+	other := make([]URI, len(a))
+	for i := range a {
+		other[i] = decodeURI(a[i])
+	}
+	return other
 }

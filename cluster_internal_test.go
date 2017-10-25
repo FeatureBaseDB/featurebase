@@ -23,8 +23,16 @@ import (
 func TestFragCombos(t *testing.T) {
 
 	c := NewCluster()
-	c.AddNode("host0")
-	c.AddNode("host1")
+	uri0, err := NewURIFromAddress("host0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	uri1, err := NewURIFromAddress("host1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.AddNode(*uri0)
+	c.AddNode(*uri1)
 
 	tests := []struct {
 		idx        string
@@ -37,8 +45,8 @@ func TestFragCombos(t *testing.T) {
 			maxSlice:   uint64(2),
 			frameViews: viewsByFrame{"f": []string{"v1", "v2"}},
 			expected: fragsByHost{
-				"host0": []frag{{"f", "v1", uint64(0)}, {"f", "v2", uint64(0)}},
-				"host1": []frag{{"f", "v1", uint64(1)}, {"f", "v2", uint64(1)}, {"f", "v1", uint64(2)}, {"f", "v2", uint64(2)}},
+				URI{"http", "host0", 10101}: []frag{{"f", "v1", uint64(0)}, {"f", "v2", uint64(0)}},
+				URI{"http", "host1", 10101}: []frag{{"f", "v1", uint64(1)}, {"f", "v2", uint64(1)}, {"f", "v1", uint64(2)}, {"f", "v2", uint64(2)}},
 			},
 		},
 		{
@@ -46,8 +54,8 @@ func TestFragCombos(t *testing.T) {
 			maxSlice:   uint64(3),
 			frameViews: viewsByFrame{"f": []string{"v0"}},
 			expected: fragsByHost{
-				"host0": []frag{{"f", "v0", uint64(1)}, {"f", "v0", uint64(2)}},
-				"host1": []frag{{"f", "v0", uint64(0)}, {"f", "v0", uint64(3)}},
+				URI{"http", "host0", 10101}: []frag{{"f", "v0", uint64(1)}, {"f", "v0", uint64(2)}},
+				URI{"http", "host1", 10101}: []frag{{"f", "v0", uint64(0)}, {"f", "v0", uint64(3)}},
 			},
 		},
 	}

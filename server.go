@@ -60,7 +60,7 @@ type Server struct {
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
 	Network string
-	URI     *URI
+	URI     URI
 	Cluster *Cluster
 
 	// Background monitoring intervals.
@@ -135,19 +135,21 @@ func (s *Server) Open() error {
 	// Set Cluster URI.
 	s.Cluster.URI = s.URI
 
-	// Create local node if no cluster is specified.
-	if len(s.Cluster.Nodes) == 0 {
-		s.Cluster.Nodes = []*Node{
-			{Scheme: s.URI.Scheme(), Host: s.URI.HostPort()},
+	/*
+		// Create local node if no cluster is specified.
+		if len(s.Cluster.Nodes) == 0 {
+			s.Cluster.Nodes = []*Node{
+				{Scheme: s.URI.Scheme(), Host: s.URI.HostPort()},
+			}
 		}
-	}
 
-	// TODO: nodes aren't here yet. May need to merge new stats code anyway.
-	for i, n := range s.Cluster.Nodes {
-		if s.Cluster.NodeByHost(n.Host) != nil {
-			s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
+		// TODO: nodes aren't here yet. May need to merge new stats code anyway.
+		for i, n := range s.Cluster.Nodes {
+			if s.Cluster.NodeByHost(n.Host) != nil {
+				s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
+			}
 		}
-	}
+	*/
 
 	// Open holder.
 	s.Holder.LogOutput = s.LogOutput
@@ -171,8 +173,7 @@ func (s *Server) Open() error {
 	// Create executor for executing queries.
 	e := NewExecutor(&ClientOptions{TLS: s.TLS})
 	e.Holder = s.Holder
-	e.Scheme = s.URI.Scheme()
-	e.Host = s.URI.HostPort()
+	e.URI = s.URI
 	e.Cluster = s.Cluster
 	e.MaxWritesPerRequest = s.MaxWritesPerRequest
 
@@ -288,8 +289,8 @@ func (s *Server) monitorMaxSlices() {
 
 		oldmaxslices := s.Holder.MaxSlices()
 		for _, node := range s.Cluster.Nodes {
-			if s.URI.HostPort() != node.Host {
-				maxSlices, _ := s.checkMaxSlices(node.Scheme, node.Host)
+			if s.URI != node.URI {
+				maxSlices, _ := s.checkMaxSlices(node.URI)
 				for index, newmax := range maxSlices {
 					// if we don't know about an index locally, log an error because
 					// indexes should be created and synced prior to slice creation
@@ -404,16 +405,16 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	}
 
 	ns := internal.NodeStatus{
-		Host:     s.URI.HostPort(),
-		State:    s.State(),
-		Indexes:  EncodeIndexes(s.Holder.Indexes()),
-		HostList: s.Cluster.HostList(),
+		URI:     encodeURI(s.URI),
+		State:   s.State(),
+		Indexes: EncodeIndexes(s.Holder.Indexes()),
+		URISet:  encodeURIs(s.Cluster.URISet()),
 	}
 
 	// TODO: get rid of this
 	// Append Slice list per this Node's indexes
 	for _, index := range ns.Indexes {
-		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.URI.HostPort())
+		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.URI)
 	}
 
 	return &ns, nil
@@ -440,15 +441,16 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 
 	// Ignore status updates from self.
-	if s.URI.HostPort() == ns.Host {
+	if s.URI == decodeURI(ns.URI) {
 		return nil
 	}
-	fmt.Printf("mergeRemoteStatus on (%s) from (%s)\n", s.URI.HostPort(), ns.Host)
+	fmt.Printf("mergeRemoteStatus on (%s) from (%s)\n", s.URI, ns.URI)
 
 	// Update Node.state.
 	// Node can be nil if a merge occurs (via gossip) before the coordinator has
 	// a chance to broadcast the existence of the node.
-	if node := s.Cluster.NodeByHost(ns.Host); node != nil {
+	uri := decodeURI(ns.URI)
+	if node := s.Cluster.NodeByURI(uri); node != nil {
 		node.SetStatus(ns)
 	}
 
@@ -475,11 +477,11 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	return nil
 }
 
-func (s *Server) checkMaxSlices(scheme string, hostPort string) (map[string]uint64, error) {
+func (s *Server) checkMaxSlices(uri URI) (map[string]uint64, error) {
 	// Create HTTP request.
 	req, err := http.NewRequest("GET", (&url.URL{
-		Scheme: scheme,
-		Host:   hostPort,
+		Scheme: uri.Scheme(),
+		Host:   uri.HostPort(),
 		Path:   "/slices/max",
 	}).String(), nil)
 

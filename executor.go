@@ -43,8 +43,7 @@ type Executor struct {
 	Holder *Holder
 
 	// Local hostname & cluster configuration.
-	Scheme  string
-	Host    string
+	URI     URI
 	Cluster *Cluster
 
 	// Client used for remote HTTP requests.
@@ -962,7 +961,7 @@ func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql
 	ret := false
 	for _, node := range e.Cluster.FragmentNodes(index, slice) {
 		// Update locally if host matches.
-		if node.Host == e.Host {
+		if node.URI == e.URI {
 			val, err := f.ClearBit(view, rowID, colID, nil)
 			if err != nil {
 				return false, err
@@ -1067,7 +1066,7 @@ func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.C
 
 	for _, node := range e.Cluster.FragmentNodes(index, slice) {
 		// Update locally if host matches.
-		if node.Host == e.Host {
+		if node.URI == e.URI {
 			val, err := f.SetBit(view, rowID, colID, timestamp)
 			if err != nil {
 				return false, err
@@ -1146,7 +1145,7 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	nodes := Nodes(e.Cluster.Nodes).FilterURI(e.URI)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1204,7 +1203,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	nodes := Nodes(e.Cluster.Nodes).FilterURI(e.URI)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1291,7 +1290,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	nodes := Nodes(e.Cluster.Nodes).FilterURI(e.URI)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1350,7 +1349,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	nodes := Nodes(e.Cluster.Nodes).FilterURI(e.URI)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1384,7 +1383,6 @@ func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Qu
 
 	// Create HTTP request.
 	u := nodePathToURL(node, fmt.Sprintf("/index/%s/query", index))
-	u.Scheme = e.Scheme
 	req, err := http.NewRequest("POST", (&u).String(), bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
@@ -1492,7 +1490,7 @@ func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64,
 	if !opt.Remote {
 		nodes = Nodes(e.Cluster.Nodes).Clone()
 	} else {
-		nodes = []*Node{e.Cluster.NodeByHost(e.Host)}
+		nodes = []*Node{e.Cluster.NodeByURI(e.URI)}
 	}
 
 	// Start mapping across all primary owners.
@@ -1548,7 +1546,7 @@ func (e *Executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 			resp := mapResponse{node: n, slices: nodeSlices}
 
 			// Send local slices to mapper, otherwise remote exec.
-			if n.Host == e.Host {
+			if n.URI == e.URI {
 				resp.result, resp.err = e.mapperLocal(ctx, nodeSlices, mapFn, reduceFn)
 			} else if !opt.Remote {
 				results, err := e.exec(ctx, n, index, &pql.Query{Calls: []*pql.Call{c}}, nodeSlices, opt)

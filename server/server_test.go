@@ -288,8 +288,8 @@ func TestMain_FrameRestore(t *testing.T) {
 
 	// Update cluster config.
 	m0.Server.Cluster.Nodes = []*pilosa.Node{
-		{Scheme: "http", Host: m0.Server.URI.HostPort()},
-		{Scheme: "http", Host: m1.Server.URI.HostPort()},
+		{URI: m0.Server.URI},
+		{URI: m1.Server.URI},
 	}
 	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
 
@@ -427,8 +427,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Update cluster config
 	m0.Server.Cluster.Nodes = []*pilosa.Node{
-		{Host: m0.Server.URI.HostPort()},
-		{Host: m1.Server.URI.HostPort()},
+		{URI: m0.Server.URI},
+		{URI: m1.Server.URI},
 	}
 	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
 
@@ -445,9 +445,9 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	}
 	gossipSeed := gossipHost + ":" + freePorts[0]
 
-	topology := &pilosa.Topology{HostList: []string{m0.Server.URI.HostPort(), m1.Server.URI.HostPort()}}
+	topology := &pilosa.Topology{URISet: []pilosa.URI{m0.Server.URI, m1.Server.URI}}
 
-	m0.Server.Cluster.Coordinator = m0.Server.URI.HostPort()
+	m0.Server.Cluster.Coordinator = m0.Server.URI
 	m0.Server.Cluster.Topology = topology
 	m0.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
 
@@ -478,7 +478,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m1.Server.Cluster.Coordinator = m0.Server.URI.HostPort()
+	m1.Server.Cluster.Coordinator = m0.Server.URI
 	m1.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
 
 	gossipNodeSet1 := gossip.NewGossipNodeSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server, nil)

@@ -112,17 +112,22 @@ message DeleteInputDefinitionMessage {
     string Name = 2;
 }
 
+message URI {
+    string Scheme = 1;
+    string Host = 2;
+    uint32 Port = 3;
+}
+
 message NodeStatus {
-    string Host = 1;
+    URI URI = 1;
     string State = 2;
     repeated Index Indexes = 3;
-    repeated string HostList = 4;
+    repeated URI URISet = 4;
 }
 
 message ClusterStatus {
     string State = 1;
-    repeated string HostList = 2;
-    //repeated NodeStatus NodeStatuses = 3;
+    repeated URI URISet = 2;
 }
 
 message FrameSchema {
@@ -144,13 +149,13 @@ message DeleteViewMessage {
 
 message ResizeInstruction {
     int64 JobID = 1;
-    string Host = 2;
-    string Coordinator = 3;
+    URI URI = 2;
+    URI Coordinator = 3;
     repeated ResizeSource Sources = 4;
 }
 
 message ResizeSource {
-    string Host = 1;
+    URI URI = 1;
     string Index = 2;
     string Frame = 3;
     string View = 4;
@@ -159,10 +164,10 @@ message ResizeSource {
 
 message ResizeInstructionComplete {
     int64 JobID = 1;
-    string Host = 2;
+    URI URI = 2;
 }
 
 message Topology {
-    repeated string HostList = 1;
+    repeated URI URISet = 1;
 }
 

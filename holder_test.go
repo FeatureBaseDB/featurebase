@@ -347,16 +347,21 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(nil)
 		e.Holder = hldr1.Holder
-		e.Scheme = cluster.Nodes[1].Scheme
-		e.Host = cluster.Nodes[1].Host
+		e.URI = cluster.Nodes[1].URI
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 
 	// Mock 2-node, fully replicated cluster.
 	cluster.ReplicaN = 2
-	cluster.Nodes[0].Host = "localhost:0"
-	cluster.Nodes[1].Host = test.MustParseURLHost(s.URL)
+
+	uri, err := pilosa.NewURIFromAddress(s.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cluster.Nodes[0].URI = test.NewURIFromHostPort("localhost", 0)
+	cluster.Nodes[1].URI = *uri
 
 	// Create frames on nodes.
 	for _, hldr := range []*test.Holder{hldr0, hldr1} {
@@ -408,13 +413,9 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr0.Index("y").SetRemoteMaxSlice(3)
 
 	// Set up syncer.
-	uri, err := cluster.Nodes[0].URI()
-	if err != nil {
-		t.Fatal(err)
-	}
 	syncer := pilosa.HolderSyncer{
 		Holder:  hldr0.Holder,
-		URI:     uri,
+		URI:     cluster.Nodes[0].URI,
 		Cluster: cluster,
 	}
 

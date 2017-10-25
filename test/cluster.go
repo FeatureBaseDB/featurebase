@@ -22,8 +22,7 @@ func NewCluster(n int) *pilosa.Cluster {
 
 	for i := 0; i < n; i++ {
 		c.Nodes = append(c.Nodes, &pilosa.Node{
-			Scheme: "http",
-			Host: fmt.Sprintf("host%d", i),
+			URI: NewURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 	}
 
@@ -47,3 +46,19 @@ type ConstHasher struct {
 func NewConstHasher(i int) *ConstHasher { return &ConstHasher{i: i} }
 
 func (h *ConstHasher) Hash(key uint64, n int) int { return h.i }
+
+// NewURI is a test URI creator that intentionally swallows errors.
+func NewURI(scheme, host string, port uint16) pilosa.URI {
+	uri := pilosa.DefaultURI()
+	uri.SetScheme(scheme)
+	uri.SetHost(host)
+	uri.SetPort(port)
+	return *uri
+}
+
+func NewURIFromHostPort(host string, port uint16) pilosa.URI {
+	uri := pilosa.DefaultURI()
+	uri.SetHost(host)
+	uri.SetPort(port)
+	return *uri
+}

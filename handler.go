@@ -56,7 +56,7 @@ type Handler struct {
 	StatusHandler StatusHandler
 
 	// Local hostname & cluster configuration.
-	URI           *URI
+	URI           URI
 	Cluster       *Cluster
 	ClientOptions *ClientOptions
 
@@ -1168,7 +1168,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.URI.HostPort(), req.Index, req.Slice) {
+	if !h.Cluster.OwnsFragment(h.URI, req.Index, req.Slice) {
 		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, req.Index, req.Slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
@@ -1238,7 +1238,7 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.URI.HostPort(), req.Index, req.Slice) {
+	if !h.Cluster.OwnsFragment(h.URI, req.Index, req.Slice) {
 		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, req.Index, req.Slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
@@ -1304,7 +1304,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.URI.HostPort(), index, slice) {
+	if !h.Cluster.OwnsFragment(h.URI, index, slice) {
 		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, index, slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
@@ -1536,7 +1536,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	// Loop over each slice and import it if this node owns it.
 	for slice := uint64(0); slice <= maxSlices[indexName]; slice++ {
 		// Ignore this slice if we don't own it.
-		if !h.Cluster.OwnsFragment(h.URI.HostPort(), indexName, slice) {
+		if !h.Cluster.OwnsFragment(h.URI, indexName, slice) {
 			continue
 		}
 

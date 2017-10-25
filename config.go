@@ -29,7 +29,7 @@ const (
 	// DefaultHost is the default hostname to use.
 	DefaultHost = "localhost"
 
-	// DefaultPort is the default port use with the hostname.
+	// DefaultPort is the default port to use with the hostname.
 	DefaultPort = "10101"
 
 	// DefaultClusterType sets the node intercommunication method.

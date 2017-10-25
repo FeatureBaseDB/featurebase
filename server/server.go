@@ -102,7 +102,7 @@ func (m *Command) Run(args ...string) (err error) {
 		return fmt.Errorf("server.Open: %v", err)
 	}
 
-	m.Server.Logger().Printf("Listening as %s\n", m.Server.URI.Normalize())
+	m.Server.Logger().Printf("Listening as %s\n", m.Server.URI)
 	return nil
 }
 
@@ -114,10 +114,11 @@ func (m *Command) SetupServer() error {
 	}
 
 	uri, err := pilosa.AddressWithDefaults(m.Config.Bind)
+
 	if err != nil {
 		return err
 	}
-	m.Server.URI = uri
+	m.Server.URI = *uri
 
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
@@ -181,11 +182,11 @@ func (m *Command) SetupServer() error {
 	}
 
 	// Set the coordinator node.
-	uri, err = pilosa.AddressWithDefaults(m.Config.Cluster.Coordinator)
+	curi, err := pilosa.AddressWithDefaults(m.Config.Cluster.Coordinator)
 	if err != nil {
 		return err
 	}
-	m.Server.Cluster.Coordinator = uri.HostPort()
+	m.Server.Cluster.Coordinator = *curi
 
 	// Set internal port (string).
 	gossipPortStr := pilosa.DefaultGossipPort
@@ -220,8 +221,8 @@ func (m *Command) SetupServer() error {
 
 		// get the host portion of addr to use for binding
 		gossipHost := uri.Host()
-		gossipNodeSet := gossip.NewGossipNodeSet(uri.HostPort(), gossipHost, gossipPort, gossipSeed, m.Server, gossipKey)
 		m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
+		gossipNodeSet := gossip.NewGossipNodeSet(uri.String(), gossipHost, gossipPort, gossipSeed, m.Server, gossipKey)
 		m.Server.Cluster.NodeSet = gossipNodeSet
 		m.Server.Broadcaster = gossipNodeSet
 		m.Server.BroadcastReceiver = gossipNodeSet

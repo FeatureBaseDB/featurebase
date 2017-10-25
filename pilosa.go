@@ -162,8 +162,8 @@ func StringInSlice(a string, list []string) bool {
 	return false
 }
 
-// SlicesAreEqual determines if two string slices are equal.
-func SlicesAreEqual(a, b []string) bool {
+// URISlicesAreEqual determines if two string slices are equal.
+func URISlicesAreEqual(a, b []URI) bool {
 
 	if a == nil && b == nil {
 		return true
