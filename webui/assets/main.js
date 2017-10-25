@@ -344,12 +344,11 @@ function render_status(status) {
     tbody = document.createElement("tbody")
     table.appendChild(tbody)
     var caption = document.createElement("caption")
-    caption.innerHTML = indexes[n]["Name"] + " (Column Label: " + indexes[n]["Meta"]["ColumnLabel"] + ")"
+    caption.innerHTML = indexes[n]["Name"]
     table.appendChild(caption)
 
     var header = document.createElement('tr')
     markup = `<th>Name</th>
-    <th>Row Label</th>
     <th>Cache Type</th>
     <th>Cache Size</th>`
     header.innerHTML = markup
@@ -360,7 +359,6 @@ function render_status(status) {
       for(var m=0; m<frames.length; m++) {
         var row = document.createElement("tr")
         row.innerHTML = `<td>${frames[m]["Name"]}</td>
-        <td>${frames[m]["Meta"]["RowLabel"]}</td>
         <td>${frames[m]["Meta"]["CacheType"]}</td>
         <td>${frames[m]["Meta"]["CacheSize"]}</td>`
         tbody.appendChild(row)
