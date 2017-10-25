@@ -55,7 +55,7 @@ const (
 type Node struct {
 	//Scheme string `json:"scheme"`
 	//Host   string `json:"host"` // HostPort
-	URI URI // TODO: add json tags: `json:"uri"`
+	URI URI `json:"uri"`
 
 	status *internal.NodeStatus `json:"status"`
 }
@@ -220,7 +220,6 @@ func (c *Cluster) AddHost(uri URI) error {
 	// add to cluster
 	_, added := c.AddNode(uri)
 	if !added {
-		fmt.Println("NOT added")
 		return nil
 	}
 
@@ -229,12 +228,10 @@ func (c *Cluster) AddHost(uri URI) error {
 		return fmt.Errorf("Cluster.Topology is nil")
 	}
 	if !c.Topology.AddURI(uri) {
-		fmt.Println("call top.AddHost()")
 		return nil
 	}
 
 	// save topology
-	fmt.Println("calll c.saveTop()")
 	return c.saveTopology()
 }
 
@@ -974,7 +971,6 @@ func (c *Cluster) loadTopology() error {
 
 // saveTopology writes the current topology to disk.
 func (c *Cluster) saveTopology() error {
-	fmt.Println("saveTopology", filepath.Join(c.Path, ".topology"))
 	if buf, err := proto.Marshal(encodeTopology(c.Topology)); err != nil {
 		return err
 	} else if err := ioutil.WriteFile(filepath.Join(c.Path, ".topology"), buf, 0666); err != nil {

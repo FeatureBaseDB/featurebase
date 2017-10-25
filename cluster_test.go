@@ -22,6 +22,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -91,38 +92,6 @@ func TestHasher(t *testing.T) {
 	}
 }
 
-/* TODO travis: fix test
-// Ensure cluster can compare its Nodes and Members
-func TestCluster_NodeStates(t *testing.T) {
-	c := pilosa.Cluster{
-		Nodes: []*pilosa.Node{
-			{Host: "serverA:1000"},
-			{Host: "serverB:1000"},
-			{Host: "serverC:1000"},
-		},
-		NodeSet: &pilosa.StaticNodeSet{},
-	}
-
-	err := c.NodeSet.(*pilosa.StaticNodeSet).Join([]*pilosa.Node{
-		&pilosa.Node{Host: "serverA:1000"},
-		&pilosa.Node{Host: "serverC:1000"},
-		&pilosa.Node{Host: "serverD:1000"},
-	})
-	if err != nil {
-		t.Fatalf("unexpected gossiper nodes: %s", err)
-	}
-
-	// Verify a DOWN node is reported, and extraneous nodes are ignored
-	if a := c.NodeStates(); !reflect.DeepEqual(a, map[string]string{
-		"serverA:1000": pilosa.NodeStateUp,
-		"serverB:1000": pilosa.NodeStateDown,
-		"serverC:1000": pilosa.NodeStateUp,
-	}) {
-		t.Fatalf("unexpected node state: %s", spew.Sdump(a))
-	}
-}
-*/
-
 // Ensure OwnsSlices can find the actual slice list for node and index.
 func TestCluster_OwnsSlices(t *testing.T) {
 	c := test.NewCluster(5)
@@ -133,35 +102,37 @@ func TestCluster_OwnsSlices(t *testing.T) {
 	}
 }
 
-// TODO travis: fix these tests
-/*
 func TestCluster_Nodes(t *testing.T) {
+	uri0 := test.NewURIFromHostPort("node0", 0)
+	uri1 := test.NewURIFromHostPort("node1", 0)
+	uri2 := test.NewURIFromHostPort("node2", 0)
+	uri3 := test.NewURIFromHostPort("node3", 0)
 
 	nodes := []*pilosa.Node{
-		{URI: test.NewURIFromHostPort("node0", 0)},
-		{URI: test.NewURIFromHostPort("node1", 0)},
-		{URI: test.NewURIFromHostPort("node2", 0)},
+		{URI: uri0},
+		{URI: uri1},
+		{URI: uri2},
 	}
 
 	t.Run("URISet", func(t *testing.T) {
 		actual := pilosa.Nodes(nodes).URIs()
-		expected := []string{"node0", "node1", "node2"}
+		expected := []pilosa.URI{uri0, uri1, uri2}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
 	})
 
 	t.Run("Filter", func(t *testing.T) {
-		actual := pilosa.Nodes(pilosa.Nodes(nodes).Filter(nodes[1])).Hosts()
-		expected := []string{"node0", "node2"}
+		actual := pilosa.Nodes(pilosa.Nodes(nodes).Filter(nodes[1])).URIs()
+		expected := []pilosa.URI{uri0, uri2}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
 	})
 
-	t.Run("FilterHost", func(t *testing.T) {
-		actual := pilosa.Nodes(pilosa.Nodes(nodes).FilterHost("node1")).Hosts()
-		expected := []string{"node0", "node2"}
+	t.Run("FilterURI", func(t *testing.T) {
+		actual := pilosa.Nodes(pilosa.Nodes(nodes).FilterURI(uri1)).URIs()
+		expected := []pilosa.URI{uri0, uri2}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
@@ -178,9 +149,9 @@ func TestCluster_Nodes(t *testing.T) {
 		}
 	})
 
-	t.Run("ContainsHost", func(t *testing.T) {
-		actualTrue := pilosa.Nodes(nodes).ContainsHost("node1")
-		actualFalse := pilosa.Nodes(nodes).ContainsHost("nodeX")
+	t.Run("ContainsURI", func(t *testing.T) {
+		actualTrue := pilosa.Nodes(nodes).ContainsURI(uri1)
+		actualFalse := pilosa.Nodes(nodes).ContainsURI(uri3)
 		if !reflect.DeepEqual(actualTrue, true) {
 			t.Errorf("expected: %v, but got: %v", true, actualTrue)
 		}
@@ -191,8 +162,8 @@ func TestCluster_Nodes(t *testing.T) {
 
 	t.Run("Clone", func(t *testing.T) {
 		clone := pilosa.Nodes(nodes).Clone()
-		actual := pilosa.Nodes(clone).Hosts()
-		expected := []string{"node0", "node1", "node2"}
+		actual := pilosa.Nodes(clone).URIs()
+		expected := []pilosa.URI{uri0, uri1, uri2}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
@@ -200,19 +171,21 @@ func TestCluster_Nodes(t *testing.T) {
 }
 
 func TestCluster_Coordinator(t *testing.T) {
+	uri1 := test.NewURIFromHostPort("node1", 0)
+	uri2 := test.NewURIFromHostPort("node2", 0)
 
 	c1 := *pilosa.NewCluster()
-	c1.Host = "host0:port0"
-	c1.Coordinator = "host0:port0"
+	c1.URI = uri1
+	c1.Coordinator = uri1
 	c2 := *pilosa.NewCluster()
-	c2.Host = "host1:port1"
-	c2.Coordinator = "host0:port0"
+	c2.URI = uri2
+	c2.Coordinator = uri1
 
 	t.Run("IsCoordinator", func(t *testing.T) {
 		if !c1.IsCoordinator() {
-			t.Errorf("!IsCoordinator error: %v", c1.Host)
+			t.Errorf("!IsCoordinator error: %v", c1.URI)
 		} else if c2.IsCoordinator() {
-			t.Errorf("IsCoordinator error: %v", c2.Host)
+			t.Errorf("IsCoordinator error: %v", c2.URI)
 		}
 	})
 }
@@ -220,34 +193,39 @@ func TestCluster_Coordinator(t *testing.T) {
 func TestCluster_Topology(t *testing.T) {
 	c1 := test.NewCluster(1)
 
+	uri1 := test.NewURIFromHostPort("node1", 0)
+	uri2 := test.NewURIFromHostPort("node2", 0)
+	base := test.NewURIFromHostPort("host0", 0)
+	invalid := test.NewURIFromHostPort("invalid", 0)
+
 	t.Run("AddHost", func(t *testing.T) {
-		err := c1.AddHost("abc")
+		err := c1.AddHost(uri1)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// add the same host.
-		err = c1.AddHost("abc")
+		err = c1.AddHost(uri1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = c1.AddHost("xyz")
+		err = c1.AddHost(uri2)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		actual := pilosa.Nodes(c1.Nodes).Hosts()
-		expected := []string{"abc", "host0", "xyz"}
+		actual := pilosa.Nodes(c1.Nodes).URIs()
+		expected := []pilosa.URI{base, uri1, uri2}
 
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
 	})
 
-	t.Run("ContainsHost", func(t *testing.T) {
-		if !c1.Topology.ContainsHost("abc") {
-			t.Errorf("!ContainsHost error: %v", "abc")
-		} else if c1.Topology.ContainsHost("invalidHost") {
-			t.Errorf("ContainsHost error: %v", "invalidHost")
+	t.Run("ContainsURI", func(t *testing.T) {
+		if !c1.Topology.ContainsURI(uri1) {
+			t.Errorf("!ContainsHost error: %v", uri1)
+		} else if c1.Topology.ContainsURI(invalid) {
+			t.Errorf("ContainsHost error: %v", invalid)
 		}
 	})
 }
@@ -290,23 +268,33 @@ func TestCluster_Resize(t *testing.T) {
 		c2 := test.NewCluster(4)
 		c2.ReplicaN = 2
 
-		expected := map[string][]*internal.ResizeSource{
-			"host0": []*internal.ResizeSource{
-				{Host: "host1", Index: "i", Frame: "f", View: "inverse", Slice: 5},
+		u0 := test.NewURIFromHostPort("host0", 0)
+		u1 := test.NewURIFromHostPort("host1", 0)
+		u2 := test.NewURIFromHostPort("host2", 0)
+		u3 := test.NewURIFromHostPort("host3", 0)
+
+		uri0 := u0.Encode()
+		uri1 := u1.Encode()
+		uri2 := u2.Encode()
+		//uri3 := u3.Encode()
+
+		expected := map[pilosa.URI][]*internal.ResizeSource{
+			u0: []*internal.ResizeSource{
+				{URI: uri1, Index: "i", Frame: "f", View: "inverse", Slice: 5},
 			},
-			"host1": []*internal.ResizeSource{
-				{Host: "host2", Index: "i", Frame: "f", View: "v", Slice: 0},
-				{Host: "host2", Index: "i", Frame: "f", View: "inverse", Slice: 0},
+			u1: []*internal.ResizeSource{
+				{URI: uri2, Index: "i", Frame: "f", View: "v", Slice: 0},
+				{URI: uri2, Index: "i", Frame: "f", View: "inverse", Slice: 0},
 			},
-			"host2": []*internal.ResizeSource{
-				{Host: "host0", Index: "i", Frame: "f", View: "inverse", Slice: 3},
+			u2: []*internal.ResizeSource{
+				{URI: uri0, Index: "i", Frame: "f", View: "inverse", Slice: 3},
 			},
-			"host3": []*internal.ResizeSource{
-				{Host: "host0", Index: "i", Frame: "f", View: "v", Slice: 1},
-				{Host: "host1", Index: "i", Frame: "f", View: "v", Slice: 2},
-				{Host: "host0", Index: "i", Frame: "f", View: "inverse", Slice: 1},
-				{Host: "host1", Index: "i", Frame: "f", View: "inverse", Slice: 2},
-				{Host: "host1", Index: "i", Frame: "f", View: "inverse", Slice: 5},
+			u3: []*internal.ResizeSource{
+				{URI: uri0, Index: "i", Frame: "f", View: "v", Slice: 1},
+				{URI: uri1, Index: "i", Frame: "f", View: "v", Slice: 2},
+				{URI: uri0, Index: "i", Frame: "f", View: "inverse", Slice: 1},
+				{URI: uri1, Index: "i", Frame: "f", View: "inverse", Slice: 2},
+				{URI: uri1, Index: "i", Frame: "f", View: "inverse", Slice: 5},
 			},
 		}
 
@@ -316,4 +304,3 @@ func TestCluster_Resize(t *testing.T) {
 		}
 	})
 }
-*/

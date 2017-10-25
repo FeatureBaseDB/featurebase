@@ -1226,7 +1226,7 @@ func uriPathToURL(uri *URI, path string) url.URL {
 func nodePathToURL(node *Node, path string) url.URL {
 	return url.URL{
 		Scheme: node.URI.Scheme(),
-		Host:   node.URI.Host(),
+		Host:   node.URI.HostPort(),
 		Path:   path,
 	}
 }

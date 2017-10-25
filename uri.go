@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -234,4 +235,33 @@ func decodeURIs(a []*internal.URI) []URI {
 		other[i] = decodeURI(a[i])
 	}
 	return other
+}
+
+// MarshalJSON marshals URI into a JSON-encoded byte slice.
+func (u *URI) MarshalJSON() ([]byte, error) {
+	var output struct {
+		Scheme string `json:"scheme,omitempty"`
+		Host   string `json:"host,omitempty"`
+		Port   uint16 `json:"port,omitempty"`
+	}
+	output.Scheme = u.scheme
+	output.Host = u.host
+	output.Port = u.port
+
+	return json.Marshal(output)
+}
+
+func (u *URI) UnmarshalJSON(b []byte) error {
+	var input struct {
+		Scheme string `json:"scheme,omitempty"`
+		Host   string `json:"host,omitempty"`
+		Port   uint16 `json:"port,omitempty"`
+	}
+	if err := json.Unmarshal(b, &input); err != nil {
+		return err
+	}
+	u.scheme = input.Scheme
+	u.host = input.Host
+	u.port = input.Port
+	return nil
 }

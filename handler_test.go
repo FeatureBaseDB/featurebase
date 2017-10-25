@@ -74,7 +74,6 @@ func TestHandler_NotFound(t *testing.T) {
 	}
 }
 
-/* TODO travis: fix test
 // Ensure the handler can return the schema.
 func TestHandler_Schema(t *testing.T) {
 	hldr := test.MustOpenHolder()
@@ -107,6 +106,7 @@ func TestHandler_Schema(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0"},{"name":"f1","views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","views":[{"name":"standard"}]}]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0","options":{"rowLabel":"rowID","cacheType":"ranked","cacheSize":50000}},{"name":"f1","options":{"rowLabel":"rowID","inverseEnabled":true,"cacheType":"ranked","cacheSize":50000},"views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","options":{"rowLabel":"rowID","cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -147,11 +147,10 @@ func TestHandler_Status(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/status", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"status":{"State":"UP","Indexes":[{"Name":"i0","Meta":{"ColumnLabel":"columnID"},"Frames":[{"Name":"f0","Meta":{"RowLabel":"rowID","CacheType":"ranked","CacheSize":50000}},{"Name":"f1","Meta":{"RowLabel":"rowID","InverseEnabled":true,"CacheType":"ranked","CacheSize":50000}}]},{"Name":"i1","Meta":{"ColumnLabel":"columnID"},"Frames":[{"Name":"f0","Meta":{"RowLabel":"rowID","CacheType":"ranked","CacheSize":50000}}]}]}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"status":{"State":"NORMAL","URISet":[{"Scheme":"http","Host":"localhost","Port":10101}]}}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
-*/
 
 // Ensure the handler can return the maxslice map.
 func TestHandler_MaxSlices(t *testing.T) {
@@ -1185,7 +1184,7 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if w.Body.String() != `[{"scheme":"http","host":"host2"},{"scheme":"http","host":"host0"}]`+"\n" {
+	} else if w.Body.String() != `[{"uri":{"scheme":"http","host":"host2"}},{"uri":{"scheme":"http","host":"host0"}}]`+"\n" {
 		t.Fatalf("unexpected body: %q", w.Body.String())
 	}
 }

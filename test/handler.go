@@ -11,6 +11,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
 
@@ -75,35 +76,19 @@ func NewServer() *Server {
 	return s
 }
 
-/* TODO travis: fix this test
-// LocalStatus returns the state of the local node as well as the
-// holder (indexes/frames) according to the local node.
+// LocalStatus exists so that test.Server implements StatusHandler.
 func (s *Server) LocalStatus() (proto.Message, error) {
-	if s.Handler.Holder == nil {
-		return nil, errors.New("Server.Holder is nil")
-	}
-
-	ns := internal.NodeStatus{
-		Host:    s.Handler.Handler.URI.HostPort(),
-		State:   pilosa.NodeStateUp,
-		Indexes: pilosa.EncodeIndexes(s.Handler.Holder.Indexes()),
-	}
-
-	// Append Slice list per this Node's indexes
-	for _, index := range ns.Indexes {
-		index.Slices = s.Handler.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Handler.URI.HostPort())
-	}
-
-	return &ns, nil
+	return nil, nil
 }
 
-// ClusterStatus returns the NodeState for all nodes in the cluster.
+// ClusterStatus exists so that test.Server implements StatusHandler.
 func (s *Server) ClusterStatus() (proto.Message, error) {
-	// Assuming we are only testing this with one Node
-	// So just return its status
-	return s.LocalStatus()
+	uri := pilosa.DefaultURI()
+	return &internal.ClusterStatus{
+		State:  pilosa.NodeStateNormal,
+		URISet: []*internal.URI{uri.Encode()},
+	}, nil
 }
-*/
 
 // HandleRemoteStatus just need to implement a nop to complete the Interface
 func (s *Server) HandleRemoteStatus(pb proto.Message) error { return nil }
