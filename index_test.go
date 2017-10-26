@@ -106,25 +106,21 @@ func TestIndex_CreateFrame(t *testing.T) {
 				},
 			}); err != nil {
 				t.Fatal(err)
-			} else if !reflect.DeepEqual(f.Schema(), &pilosa.FrameSchema{
-				Fields: []*pilosa.Field{
-					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
-					{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
-				},
+			} else if !reflect.DeepEqual(f.Fields(), []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
+				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
 			}) {
-				t.Fatalf("unexpected schema: %#v", f.Schema())
+				t.Fatalf("unexpected fields: %#v", f.Fields())
 			}
 
 			// Reopen the index & verify the fields are loaded.
 			if err := index.Reopen(); err != nil {
 				t.Fatal(err)
-			} else if f := index.Frame("f"); !reflect.DeepEqual(f.Schema(), &pilosa.FrameSchema{
-				Fields: []*pilosa.Field{
-					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
-					{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
-				},
+			} else if f := index.Frame("f"); !reflect.DeepEqual(f.Fields(), []*pilosa.Field{
+				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
+				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
 			}) {
-				t.Fatalf("unexpected schema after reopen: %#v", f.Schema())
+				t.Fatalf("unexpected fields after reopen: %#v", f.Fields())
 			}
 		})
 
