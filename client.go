@@ -719,7 +719,6 @@ func (c *Client) backupSliceNode(ctx context.Context, index, frame, view string,
 func (c *Client) RestoreFrom(ctx context.Context, r io.Reader) error {
 	post := func(url string, jsonBytes []byte) (err error) {
 		log.Println("POSTING", url)
-		log.Println("DATA", string(jsonBytes))
 
 		res, err := http.Post(url, "application/json; charset=utf-8", bytes.NewBuffer(jsonBytes))
 		if err != nil {

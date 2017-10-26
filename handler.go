@@ -1173,7 +1173,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 	// Validate that this handler owns the slice.
 	if !h.Cluster.OwnsFragment(h.URI.HostPort(), req.Index, req.Slice) {
-		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, req.Index, req.Slice)
+		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI.Host(), req.Index, req.Slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
 	}
@@ -1243,7 +1243,7 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 
 	// Validate that this handler owns the slice.
 	if !h.Cluster.OwnsFragment(h.URI.HostPort(), req.Index, req.Slice) {
-		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, req.Index, req.Slice)
+		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI.Host(), req.Index, req.Slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
 	}
@@ -1309,7 +1309,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 
 	// Validate that this handler owns the slice.
 	if !h.Cluster.OwnsFragment(h.URI.HostPort(), index, slice) {
-		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, index, slice)
+		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI.Host(), index, slice)
 		http.Error(w, mesg, http.StatusPreconditionFailed)
 		return
 	}
@@ -2047,7 +2047,7 @@ func (h *Handler) handleGetFrameAttr(w http.ResponseWriter, r *http.Request) {
 	}
 	db := frame.RowAttrStore()
 	if db == nil {
-		h.logger().Printf("No Frame Attribute Store %s/%s", index, frame)
+		h.logger().Printf("No Frame Attribute Store %s/%s", indexName, frameName)
 	}
 	if err := db.GetAttributeData(w); err != nil {
 		h.logger().Printf("write response error: %s", err)
@@ -2070,7 +2070,7 @@ func (h *Handler) handlePostFrameAttr(w http.ResponseWriter, r *http.Request) {
 	}
 	db := frame.RowAttrStore()
 	if db == nil {
-		h.logger().Printf("No Frame Attribute Store %s/%s", index, frame)
+		h.logger().Printf("No Frame Attribute Store %s/%s", indexName, frameName)
 	}
 	if err := db.SetAttributeData(r.Body); err != nil {
 		h.logger().Printf("write response error: %s", err)
