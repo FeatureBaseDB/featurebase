@@ -43,12 +43,10 @@ const (
 
 // Frame represents a container for views.
 type Frame struct {
-	mu          sync.RWMutex
-	path        string
-	index       string
-	name        string
-	timeQuantum TimeQuantum
-	schema      *FrameSchema
+	mu    sync.RWMutex
+	path  string
+	index string
+	name  string
 
 	views map[string]*View
 
@@ -58,14 +56,14 @@ type Frame struct {
 	broadcaster Broadcaster
 	Stats       StatsClient
 
-	// Frame settings.
+	// Frame options.
 	rowLabel       string
-	cacheType      string
 	inverseEnabled bool
+	cacheType      string
+	cacheSize      uint32
+	timeQuantum    TimeQuantum
 	rangeEnabled   bool
-
-	// Cache size for ranked frames
-	cacheSize uint32
+	fields         []*Field
 
 	LogOutput io.Writer
 }
@@ -78,10 +76,9 @@ func NewFrame(path, index, name string) (*Frame, error) {
 	}
 
 	return &Frame{
-		path:   path,
-		index:  index,
-		name:   name,
-		schema: &FrameSchema{},
+		path:  path,
+		index: index,
+		name:  name,
 
 		views:        make(map[string]*View),
 		rowAttrStore: NewAttrStore(filepath.Join(path, ".data")),
@@ -91,9 +88,11 @@ func NewFrame(path, index, name string) (*Frame, error) {
 
 		rowLabel:       DefaultRowLabel,
 		inverseEnabled: DefaultInverseEnabled,
-		rangeEnabled:   DefaultRangeEnabled,
 		cacheType:      DefaultCacheType,
 		cacheSize:      DefaultCacheSize,
+		//timeQuantum
+		rangeEnabled: DefaultRangeEnabled,
+		//fields
 
 		LogOutput: ioutil.Discard,
 	}, nil
@@ -230,7 +229,7 @@ func (f *Frame) options() FrameOptions {
 		CacheType:      f.cacheType,
 		CacheSize:      f.cacheSize,
 		TimeQuantum:    f.timeQuantum,
-		Fields:         f.schema.Fields,
+		Fields:         f.fields,
 	}
 }
 
@@ -243,8 +242,6 @@ func (f *Frame) Open() error {
 		}
 
 		if err := f.loadMeta(); err != nil {
-			return err
-		} else if err := f.loadSchema(); err != nil {
 			return err
 		}
 
@@ -304,12 +301,13 @@ func (f *Frame) loadMeta() error {
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
 	if os.IsNotExist(err) {
-		f.timeQuantum = ""
 		f.rowLabel = DefaultRowLabel
-		f.cacheType = DefaultCacheType
 		f.inverseEnabled = DefaultInverseEnabled
-		f.rangeEnabled = DefaultRangeEnabled
+		f.cacheType = DefaultCacheType
 		f.cacheSize = DefaultCacheSize
+		f.timeQuantum = ""
+		f.rangeEnabled = DefaultRangeEnabled
+		//f.fields
 		return nil
 	} else if err != nil {
 		return err
@@ -320,17 +318,16 @@ func (f *Frame) loadMeta() error {
 	}
 
 	// Copy metadata fields.
-	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.rowLabel = pb.RowLabel
 	f.inverseEnabled = pb.InverseEnabled
-	f.rangeEnabled = pb.RangeEnabled
-	f.cacheSize = pb.CacheSize
-
-	// Copy cache type.
 	f.cacheType = pb.CacheType
 	if f.cacheType == "" {
 		f.cacheType = DefaultCacheType
 	}
+	f.cacheSize = pb.CacheSize
+	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
+	f.rangeEnabled = pb.RangeEnabled
+	f.fields = decodeFields(pb.Fields)
 
 	return nil
 }
@@ -349,35 +346,6 @@ func (f *Frame) saveMeta() error {
 		return err
 	}
 
-	return nil
-}
-
-// loadSchema reads the schema for the frame.
-func (f *Frame) loadSchema() error {
-	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".schema"))
-	if os.IsNotExist(err) {
-		f.schema = &FrameSchema{}
-		return nil
-	} else if err != nil {
-		return err
-	}
-
-	var pb internal.FrameSchema
-	if err := proto.Unmarshal(buf, &pb); err != nil {
-		return err
-	}
-	f.schema = decodeFrameSchema(&pb)
-
-	return nil
-}
-
-// saveSchema writes the current schema to disk.
-func (f *Frame) saveSchema() error {
-	if buf, err := proto.Marshal(encodeFrameSchema(f.schema)); err != nil {
-		return err
-	} else if err := ioutil.WriteFile(filepath.Join(f.path, ".schema"), buf, 0666); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -402,16 +370,11 @@ func (f *Frame) Close() error {
 	return nil
 }
 
-// Schema returns the frame's current schema.
-func (f *Frame) Schema() *FrameSchema {
+// Field returns a field by name.
+func (f *Frame) Field(name string) *Field {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.schema
-}
-
-// Field returns a field from the schema by name.
-func (f *Frame) Field(name string) *Field {
-	for _, field := range f.Schema().Fields {
+	for _, field := range f.fields {
 		if field.Name == name {
 			return field
 		}
@@ -419,7 +382,24 @@ func (f *Frame) Field(name string) *Field {
 	return nil
 }
 
-// CreateField creates a new field on the schema.
+// Fields returns the fields on the frame.
+func (f *Frame) Fields() []*Field {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.fields
+}
+
+// HasField returns true if a field exists on the frame.
+func (f *Frame) HasField(name string) bool {
+	for _, fld := range f.fields {
+		if fld.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// CreateField creates a new field on the frame.
 func (f *Frame) CreateField(field *Field) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -429,18 +409,35 @@ func (f *Frame) CreateField(field *Field) error {
 		return ErrFrameFieldsNotAllowed
 	}
 
-	// Copy schema and append field.
-	schema := f.schema.Clone()
-	if err := schema.AddField(field); err != nil {
+	// Append field.
+	if err := f.addField(field); err != nil {
 		return err
 	}
-	f.schema = schema
-	f.saveSchema()
+	f.saveMeta()
+	return nil
+}
+
+// addField adds a single field to fields.
+func (f *Frame) addField(field *Field) error {
+	if err := ValidateField(field); err != nil {
+		return err
+	} else if f.HasField(field.Name) {
+		return ErrFieldExists
+	}
+
+	// Add field to list.
+	f.fields = append(f.fields, field)
+
+	// Sort fields by name.
+	sort.Slice(f.fields, func(i, j int) bool {
+		return f.fields[i].Name < f.fields[j].Name
+	})
+
 	return nil
 }
 
 // GetFields returns a list of all the fields in the frame.
-func (f *Frame) GetFields() (*FrameSchema, error) {
+func (f *Frame) GetFields() ([]*Field, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
@@ -449,12 +446,12 @@ func (f *Frame) GetFields() (*FrameSchema, error) {
 		return nil, ErrFrameFieldsNotAllowed
 	}
 
-	err := f.loadSchema()
+	err := f.loadMeta()
 	if err != nil {
 		return nil, err
 	}
 
-	return f.schema, nil
+	return f.fields, nil
 }
 
 // DeleteField deletes an existing field on the schema.
@@ -467,12 +464,10 @@ func (f *Frame) DeleteField(name string) error {
 		return ErrFrameFieldsNotAllowed
 	}
 
-	// Copy schema and remove field.
-	schema := f.schema.Clone()
-	if err := schema.DeleteField(name); err != nil {
+	// Remove field.
+	if err := f.deleteField(name); err != nil {
 		return err
 	}
-	f.schema = schema
 
 	// Remove views.
 	viewName := ViewFieldPrefix + name
@@ -487,6 +482,18 @@ func (f *Frame) DeleteField(name string) error {
 	}
 
 	return nil
+}
+
+// deleteField removes a single field from fields.
+func (f *Frame) deleteField(name string) error {
+	for i, field := range f.fields {
+		if field.Name == name {
+			copy(f.fields[i:], f.fields[i+1:])
+			f.fields, f.fields[len(f.fields)-1] = f.fields[:len(f.fields)-1], nil
+			return nil
+		}
+	}
+	return ErrFieldNotFound
 }
 
 // TimeQuantum returns the time quantum for the frame.
@@ -1018,77 +1025,6 @@ func decodeFrameOptions(options *internal.FrameMeta) *FrameOptions {
 		CacheSize:      options.CacheSize,
 		TimeQuantum:    TimeQuantum(options.TimeQuantum),
 		Fields:         decodeFields(options.Fields),
-	}
-}
-
-// FrameSchema represents the list of fields on a frame.
-type FrameSchema struct {
-	Fields []*Field
-}
-
-// Clone returns a copy of s.
-func (s *FrameSchema) Clone() *FrameSchema {
-	other := &FrameSchema{Fields: make([]*Field, len(s.Fields))}
-	copy(other.Fields, s.Fields)
-	return other
-}
-
-// HasField returns true if a field exists on the schema.
-func (s *FrameSchema) HasField(name string) bool {
-	for _, f := range s.Fields {
-		if f.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// AddField adds a single field to the schema.
-func (s *FrameSchema) AddField(field *Field) error {
-	if err := ValidateField(field); err != nil {
-		return err
-	} else if s.HasField(field.Name) {
-		return ErrFieldExists
-	}
-
-	// Add field to list.
-	s.Fields = append(s.Fields, field)
-
-	// Sort fields by name.
-	sort.Slice(s.Fields, func(i, j int) bool {
-		return s.Fields[i].Name < s.Fields[j].Name
-	})
-
-	return nil
-}
-
-// DeleteField removes a single field from the schema.
-func (s *FrameSchema) DeleteField(name string) error {
-	for i, field := range s.Fields {
-		if field.Name == name {
-			copy(s.Fields[i:], s.Fields[i+1:])
-			s.Fields, s.Fields[len(s.Fields)-1] = s.Fields[:len(s.Fields)-1], nil
-			return nil
-		}
-	}
-	return ErrFieldNotFound
-}
-
-func encodeFrameSchema(schema *FrameSchema) *internal.FrameSchema {
-	if schema == nil {
-		return nil
-	}
-	return &internal.FrameSchema{
-		Fields: encodeFields(schema.Fields),
-	}
-}
-
-func decodeFrameSchema(schema *internal.FrameSchema) *FrameSchema {
-	if schema == nil {
-		return nil
-	}
-	return &FrameSchema{
-		Fields: decodeFields(schema.Fields),
 	}
 }
 

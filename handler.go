@@ -861,7 +861,7 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schema, err := frame.GetFields()
+	fields, err := frame.GetFields()
 	if err == ErrFrameFieldsNotAllowed {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -871,7 +871,7 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(getFrameFieldsResponse{Fields: schema.Fields}); err != nil {
+	if err := json.NewEncoder(w).Encode(getFrameFieldsResponse{Fields: fields}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }

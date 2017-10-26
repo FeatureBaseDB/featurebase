@@ -494,18 +494,12 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	f.inverseEnabled = opt.InverseEnabled
 	f.rangeEnabled = opt.RangeEnabled
 
-	if err := f.saveMeta(); err != nil {
-		f.Close()
-		return nil, err
-	}
-
 	f.rangeEnabled = opt.RangeEnabled
 
-	// Set schema & save.
-	f.schema = &FrameSchema{
-		Fields: opt.Fields,
-	}
-	if err := f.saveSchema(); err != nil {
+	// Set fields.
+	f.fields = opt.Fields
+
+	if err := f.saveMeta(); err != nil {
 		f.Close()
 		return nil, err
 	}
