@@ -78,7 +78,6 @@ type Config struct {
 		ReplicaN      int      `toml:"replicas"`
 		Type          string   `toml:"type"`
 		Hosts         []string `toml:"hosts"`
-		PollInterval  Duration `toml:"poll-interval"`
 		LongQueryTime Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
@@ -113,7 +112,6 @@ func NewConfig() *Config {
 	}
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.Type = DefaultClusterType
-	c.Cluster.PollInterval = Duration(DefaultPollingInterval)
 	c.Cluster.Hosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics

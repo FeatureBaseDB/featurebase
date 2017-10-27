@@ -26,6 +26,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/pilosa/pilosa/internal"
 )
 
 const (
@@ -183,6 +185,21 @@ func (h *Holder) Schema() []*IndexInfo {
 	}
 	sort.Sort(indexInfoSlice(a))
 	return a
+}
+
+// EncodeMaxSlices creates and internal representation of max slices.
+func (h *Holder) EncodeMaxSlices() *internal.MaxSlices {
+	return &internal.MaxSlices{
+		Standard: h.MaxSlices(),
+		Inverse:  h.MaxInverseSlices(),
+	}
+}
+
+// EncodeSchema creates and internal representation of schema.
+func (h *Holder) EncodeSchema() *internal.Schema {
+	return &internal.Schema{
+		Indexes: EncodeIndexes(h.Indexes()),
+	}
 }
 
 // IndexPath returns the path where a given index is stored.

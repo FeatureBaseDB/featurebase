@@ -124,19 +124,6 @@ func (m *Command) SetupServer() error {
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 	cluster.IndexReporter = m.Server.Holder
 
-	/*
-		// TODO travis: get rid of this URI code
-		for _, address := range m.Config.Cluster.Hosts {
-			uri, err := pilosa.NewURIFromAddress(address)
-			if err != nil {
-				return err
-			}
-			cluster.Nodes = append(cluster.Nodes, &pilosa.Node{
-				Scheme: uri.Scheme(),
-				Host:   uri.HostPort(),
-			})
-		}
-	*/
 	m.Server.Cluster = cluster
 
 	// Setup logging output.
