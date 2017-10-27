@@ -131,7 +131,7 @@ Each Pilosa cluster is configured by default to share anonymous usage details wi
 <strong id="open_files">OpenFiles:</strong> Open file handle count.
 <strong id="go_routines">GoRoutines:</strong> Go routine count.
 
-You can opt-out of the Pilosa diagnostics reporting by setting either the `metric.diagnostics` configuration option to false, using the `PILOSA_METRIC_DIAGNOSTICS` environment variable, or the TOML configuration file `[metric]` `diagnostics` option.
+You can opt-out of the Pilosa diagnostics reporting by setting either the command line configuration option `--metric.diagnostics=false`, use the `PILOSA_METRIC_DIAGNOSTICS` environment variable, or the TOML configuration file `[metric]` `diagnostics` option.
 
 #### Metrics
 

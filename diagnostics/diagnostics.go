@@ -30,14 +30,15 @@ type versionResponse struct {
 
 // Diagnostics represents a client to the Pilosa cluster.
 type Diagnostics struct {
-	mu         sync.Mutex
-	wg         sync.WaitGroup
-	closing    chan struct{}
-	host       string
-	VersionURL string
-	version    string
-	startTime  int64
-	start      time.Time
+	mu          sync.Mutex
+	wg          sync.WaitGroup
+	closing     chan struct{}
+	host        string
+	VersionURL  string
+	version     string
+	lastVersion string
+	startTime   int64
+	start       time.Time
 
 	metrics map[string]interface{}
 
@@ -124,6 +125,8 @@ func (d *Diagnostics) Open() {
 		st.Timeout = d.interval * 2
 	}
 	d.cb = gobreaker.NewCircuitBreaker(st)
+
+	d.logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every hour. More information here: https://www.pilosa.com/docs/latest/administration/")
 }
 
 // Close notify goroutine to stop.
@@ -149,6 +152,12 @@ func (d *Diagnostics) CheckVersion() error {
 		return fmt.Errorf("json decode: %s", err)
 	}
 
+	// Same a version as last test
+	if rsp.Version == d.lastVersion {
+		return nil
+	}
+
+	d.lastVersion = rsp.Version
 	if err := d.CompareVersion(rsp.Version); err != nil {
 		d.logger().Printf("%s\n", err.Error())
 	}
@@ -162,9 +171,9 @@ func (d *Diagnostics) CompareVersion(value string) error {
 	localVersion := VersionSegments(d.version)
 
 	if localVersion[0] < currentVersion[0] { //Major
-		return fmt.Errorf("Warning: You are running an older version of Pilosa %s. The latest Major release is %s", d.version, value)
+		return fmt.Errorf("Warning: You are running Pilosa %s, but a newer version is available %s", d.version, value)
 	} else if localVersion[1] < currentVersion[1] { // Minor
-		return fmt.Errorf("Warning: You are running an older version of Pilosa %s. The latest Minor release is %s", d.version, value)
+		return fmt.Errorf("Warning: You are running Pilosa %s. The latest Minor release is %s", d.version, value)
 	} else if localVersion[2] < currentVersion[2] { // Patch
 		return fmt.Errorf("There is a new patch relese of Pilosa availbale: %s", value)
 	}
