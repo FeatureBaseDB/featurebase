@@ -100,9 +100,6 @@ func (c *Client) MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64,
 func (c *Client) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := uriPathToURL(c.host, "/slices/max")
-	u.RawQuery = (&url.Values{
-		"inverse": {strconv.FormatBool(inverse)},
-	}).Encode()
 
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
@@ -119,14 +116,17 @@ func (c *Client) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]
 	}
 	defer resp.Body.Close()
 
-	var rsp sliceMaxResponse
+	var rsp getSlicesMaxResponse
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
 	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
-	return rsp.MaxSlices, nil
+	if inverse {
+		return rsp.Inverse, nil
+	}
+	return rsp.Standard, nil
 }
 
 // Schema returns all index and frame schema information.

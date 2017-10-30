@@ -53,24 +53,7 @@ const (
 
 // Node represents a node in the cluster.
 type Node struct {
-	//Scheme string `json:"scheme"`
-	//Host   string `json:"host"` // HostPort
 	URI URI `json:"uri"`
-
-	status *internal.NodeStatus `json:"status"`
-}
-
-// SetStatus sets the NodeStatus.
-func (n *Node) SetStatus(s *internal.NodeStatus) {
-	n.status = s
-}
-
-// SetState sets the Node.status.state.
-func (n *Node) SetState(s string) {
-	if n.status == nil {
-		n.status = &internal.NodeStatus{}
-	}
-	n.status.State = s
 }
 
 // Nodes represents a list of nodes.
@@ -242,13 +225,12 @@ func (c *Cluster) URISet() []URI {
 
 func (c *Cluster) setState(state string) {
 	c.State = state
-	localNode := c.localNode()
-	localNode.SetState(state)
 }
 
-func (c *Cluster) localNode() *Node {
-	return c.NodeByURI(c.URI)
-}
+// localNode is not being used.
+//func (c *Cluster) localNode() *Node {
+//	return c.NodeByURI(c.URI)
+//}
 
 // Status returns the internal ClusterStatus representation.
 func (c *Cluster) Status() *internal.ClusterStatus {
@@ -257,17 +239,6 @@ func (c *Cluster) Status() *internal.ClusterStatus {
 		URISet: encodeURIs(c.URISet()),
 	}
 }
-
-/*
-// encodeNodeStatuses converts a into its internal representation.
-func encodeNodeStatuses(a []*Node) []*internal.NodeStatus {
-	other := make([]*internal.NodeStatus, len(a))
-	for i := range a {
-		other[i] = a[i].status
-	}
-	return other
-}
-*/
 
 // NodeByURI returns a node reference by uri.
 func (c *Cluster) NodeByURI(uri URI) *Node {
@@ -609,7 +580,7 @@ func (c *Cluster) handleJoiningHost(uri URI) error {
 
 func (c *Cluster) setStateAndBroadcast(state string) error {
 	c.setState(state)
-	// Broadcast status changes to the cluster.
+	// Broadcast cluster status changes to the cluster.
 	return c.Broadcaster.SendSync(c.Status())
 }
 

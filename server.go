@@ -19,11 +19,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -40,7 +38,6 @@ import (
 // Default server settings.
 const (
 	DefaultAntiEntropyInterval = 10 * time.Minute
-	DefaultPollingInterval     = 60 * time.Second
 )
 
 // Server represents a holder wrapped by a running HTTP server.
@@ -65,7 +62,6 @@ type Server struct {
 
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
-	PollingInterval     time.Duration
 	MetricInterval      time.Duration
 
 	// TLS configuration
@@ -92,7 +88,6 @@ func NewServer() *Server {
 		Network: "tcp",
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
-		PollingInterval:     DefaultPollingInterval,
 		MetricInterval:      0,
 
 		LogOutput: os.Stderr,
@@ -198,9 +193,8 @@ func (s *Server) Open() error {
 
 	/*
 		// Start background monitoring.
-		s.wg.Add(3)
+		s.wg.Add(2)
 		go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
-		go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
 		go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	*/
 
@@ -273,39 +267,6 @@ func (s *Server) monitorAntiEntropy() {
 	}
 	dif := time.Since(t)
 	s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
-}
-
-// monitorMaxSlices periodically pulls the highest slice from each node in the cluster.
-func (s *Server) monitorMaxSlices() {
-	ticker := time.NewTicker(s.PollingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.closing:
-			return
-		case <-ticker.C:
-		}
-
-		oldmaxslices := s.Holder.MaxSlices()
-		for _, node := range s.Cluster.Nodes {
-			if s.URI != node.URI {
-				maxSlices, _ := s.checkMaxSlices(node.URI)
-				for index, newmax := range maxSlices {
-					// if we don't know about an index locally, log an error because
-					// indexes should be created and synced prior to slice creation
-					if localIndex := s.Holder.Index(index); localIndex != nil {
-						if newmax > oldmaxslices[index] {
-							oldmaxslices[index] = newmax
-							localIndex.SetRemoteMaxSlice(newmax)
-						}
-					} else {
-						s.Logger().Printf("Local Index not found: %s", index)
-					}
-				}
-			}
-		}
-	}
 }
 
 // ReceiveMessage represents an implementation of BroadcastHandler.
@@ -392,10 +353,16 @@ func (s *Server) State() string {
 	return s.Cluster.State
 }
 
-// LocalStatus returns the state of the local node as well as the
-// holder (indexes/frames) according to the local node.
-// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 // Server implements StatusHandler.
+// LocalStatus is used to periodically sync information
+// between nodes. Under normal conditions, nodes should
+// remain in sync through Broadcast messages. For cases
+// where a node fails to receive a Broadcast message, or
+// when a new (empty) node needs to get in sync with the
+// rest of the cluster, two things are shared via gossip:
+// - MaxSlice/MaxInverseSlice by Index
+// - Schema
+// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 func (s *Server) LocalStatus() (proto.Message, error) {
 	if s.Cluster == nil {
 		return nil, errors.New("Server.Cluster is nil")
@@ -405,61 +372,66 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	}
 
 	ns := internal.NodeStatus{
-		URI:     encodeURI(s.URI),
-		State:   s.State(),
-		Indexes: EncodeIndexes(s.Holder.Indexes()),
-		URISet:  encodeURIs(s.Cluster.URISet()),
-	}
-
-	// TODO: get rid of this
-	// Append Slice list per this Node's indexes
-	for _, index := range ns.Indexes {
-		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.URI)
+		URI:       encodeURI(s.URI),
+		MaxSlices: s.Holder.EncodeMaxSlices(),
+		Schema:    s.Holder.EncodeSchema(),
 	}
 
 	return &ns, nil
 }
 
-// ClusterStatus returns the NodeState for all nodes in the cluster.
+// ClusterStatus returns the ClusterState and URISet for the cluster.
 func (s *Server) ClusterStatus() (proto.Message, error) {
-	// Update local Node.state.
-	ns, err := s.LocalStatus()
-	if err != nil {
-		return nil, err
-	}
-	localNode := s.Cluster.localNode()
-	localNode.SetStatus(ns.(*internal.NodeStatus))
-
 	return s.Cluster.Status(), nil
 }
 
-// HandleRemoteStatus receives incoming NodeState from remote nodes.
+// HandleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 	return s.mergeRemoteStatus(pb.(*internal.NodeStatus))
 }
 
 func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
-
 	// Ignore status updates from self.
 	if s.URI == decodeURI(ns.URI) {
 		return nil
 	}
-	fmt.Printf("mergeRemoteStatus on (%s) from (%s)\n", s.URI, ns.URI)
 
-	// Update Node.state.
-	// Node can be nil if a merge occurs (via gossip) before the coordinator has
-	// a chance to broadcast the existence of the node.
-	uri := decodeURI(ns.URI)
-	if node := s.Cluster.NodeByURI(uri); node != nil {
-		node.SetStatus(ns)
+	// Sync maxSlices (standard).
+	oldmaxslices := s.Holder.MaxSlices()
+	for index, newMax := range ns.MaxSlices.Standard {
+		localIndex := s.Holder.Index(index)
+		// if we don't know about an index locally, log an error because
+		// indexes should be created and synced prior to slice creation
+		if localIndex == nil {
+			s.Logger().Printf("Local Index not found: %s", index)
+			continue
+		}
+		if newMax > oldmaxslices[index] {
+			oldmaxslices[index] = newMax
+			localIndex.SetRemoteMaxSlice(newMax)
+		}
 	}
 
-	// Create indexes that don't exist.
-	for _, index := range ns.Indexes {
-		opt := IndexOptions{
-			ColumnLabel: index.Meta.ColumnLabel,
-			TimeQuantum: TimeQuantum(index.Meta.TimeQuantum),
+	// Sync maxSlices (inverse).
+	oldMaxInverseSlices := s.Holder.MaxInverseSlices()
+	for index, newMaxInverse := range ns.MaxSlices.Inverse {
+		localIndex := s.Holder.Index(index)
+		// if we don't know about an index locally, log an error because
+		// indexes should be created and synced prior to slice creation
+		if localIndex == nil {
+			s.Logger().Printf("Local Index not found: %s", index)
+			continue
 		}
+		if newMaxInverse > oldMaxInverseSlices[index] {
+			oldMaxInverseSlices[index] = newMaxInverse
+			localIndex.SetRemoteMaxSlice(newMaxInverse)
+		}
+	}
+
+	// Sync schema.
+	// Create indexes that don't exist.
+	for _, index := range ns.Schema.Indexes {
+		opt := IndexOptions{}
 		idx, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
 		if err != nil {
 			return err
@@ -472,53 +444,10 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 				return err
 			}
 		}
+		// TODO: Create inputDefinitions that don't exist.
 	}
 
 	return nil
-}
-
-func (s *Server) checkMaxSlices(uri URI) (map[string]uint64, error) {
-	// Create HTTP request.
-	req, err := http.NewRequest("GET", (&url.URL{
-		Scheme: uri.Scheme(),
-		Host:   uri.HostPort(),
-		Path:   "/slices/max",
-	}).String(), nil)
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Require protobuf encoding.
-	req.Header.Set("Accept", "application/x-protobuf")
-	req.Header.Set("Content-Type", "application/x-protobuf")
-	req.Header.Set("User-Agent", "pilosa/"+Version)
-
-	resp, err := s.defaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Read response into buffer.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check status code.
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status checkMaxSlices: code=%d, err=%s, req=%v", resp.StatusCode, body, req)
-	}
-
-	// Decode response object.
-	pb := internal.MaxSlicesResponse{}
-
-	if err = proto.Unmarshal(body, &pb); err != nil {
-		return nil, err
-	}
-
-	return pb.MaxSlices, nil
 }
 
 // monitorRuntime periodically polls the Go runtime metrics.

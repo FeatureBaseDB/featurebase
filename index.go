@@ -392,6 +392,20 @@ func (i *Index) Frames() []*Frame {
 	return a
 }
 
+// InputDefinitions returns a list of all inputDefinitions in the index.
+func (i *Index) InputDefinitions() []*InputDefinition {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
+	a := make([]*InputDefinition, 0, len(i.inputDefinitions))
+	for _, d := range i.inputDefinitions {
+		a = append(a, d)
+	}
+	//sort.Sort(inputDefintionSlice(a)) // TODO
+
+	return a
+}
+
 // RecalculateCaches recalculates caches on every frame in the index.
 func (i *Index) RecalculateCaches() {
 	for _, frame := range i.Frames() {
@@ -617,12 +631,10 @@ func EncodeIndexes(a []*Index) []*internal.Index {
 
 // encodeIndex converts d into its internal representation.
 func encodeIndex(d *Index) *internal.Index {
-	io := d.options()
 	return &internal.Index{
-		Name:     d.name,
-		Meta:     io.Encode(),
-		MaxSlice: d.MaxSlice(),
-		Frames:   encodeFrames(d.Frames()),
+		Name:             d.name,
+		Frames:           encodeFrames(d.Frames()),
+		InputDefinitions: encodeInputDefinitions(d.InputDefinitions()),
 	}
 }
 
@@ -716,7 +728,6 @@ func (i *Index) newInputDefinition(name string) (*InputDefinition, error) {
 	if err != nil {
 		return nil, err
 	}
-	inputDef.broadcaster = i.broadcaster
 	return inputDef, nil
 }
 

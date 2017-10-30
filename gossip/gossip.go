@@ -148,8 +148,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	g.config.memberlistConfig.BindPort = gossipPort
 	g.config.memberlistConfig.AdvertiseAddr = pilosa.HostToIP(gossipHost)
 	g.config.memberlistConfig.AdvertisePort = gossipPort
-	// TODO travis: pause node status (remove this next line)
-	g.config.memberlistConfig.PushPullInterval = 0 * time.Millisecond
+	//g.config.memberlistConfig.PushPullInterval = 15 * time.Second // Default is 15s in DefaultLocalConfig.
 	g.config.memberlistConfig.Delegate = g
 	g.config.memberlistConfig.SecretKey = secretKey
 	g.config.memberlistConfig.Events = server.Cluster.EventReceiver.(memberlist.EventDelegate)

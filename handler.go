@@ -132,7 +132,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
-	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
+	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
@@ -216,13 +216,16 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 // handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
-	status, err := h.StatusHandler.ClusterStatus()
+	pb, err := h.StatusHandler.ClusterStatus()
 	if err != nil {
 		h.logger().Printf("cluster status error: %s", err)
 		return
 	}
+
+	cs := pb.(*internal.ClusterStatus)
 	if err := json.NewEncoder(w).Encode(getStatusResponse{
-		Status: status,
+		State:  cs.State,
+		URISet: decodeURIs(cs.URISet),
 	}); err != nil {
 		h.logger().Printf("write status response error: %s", err)
 	}
@@ -233,7 +236,8 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	Status proto.Message `json:"status"`
+	State  string `json:"state"`
+	URISet []URI  `json:"uri-set"`
 }
 
 // handlePostQuery handles /query requests.
@@ -305,31 +309,19 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
-	var ms map[string]uint64
-	if inverse, _ := strconv.ParseBool(r.URL.Query().Get("inverse")); inverse {
-		ms = h.Holder.MaxInverseSlices()
-	} else {
-		ms = h.Holder.MaxSlices()
+// handleGetSlicesMax handles GET /schema requests.
+func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
+	if err := json.NewEncoder(w).Encode(getSlicesMaxResponse{
+		Standard: h.Holder.MaxSlices(),
+		Inverse:  h.Holder.MaxInverseSlices(),
+	}); err != nil {
+		h.logger().Printf("write slices-max response error: %s", err)
 	}
-	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
-		pb := &internal.MaxSlicesResponse{
-			MaxSlices: ms,
-		}
-		if buf, err := proto.Marshal(pb); err != nil {
-			h.logger().Printf("protobuf marshal error: %s", err)
-		} else if _, err := w.Write(buf); err != nil {
-			h.logger().Printf("stream write error: %s", err)
-		}
-		return
-	}
-	json.NewEncoder(w).Encode(sliceMaxResponse{
-		MaxSlices: ms,
-	})
 }
 
-type sliceMaxResponse struct {
-	MaxSlices map[string]uint64 `json:"maxSlices"`
+type getSlicesMaxResponse struct {
+	Standard map[string]uint64 `json:"standard"`
+	Inverse  map[string]uint64 `json:"inverse"`
 }
 
 // handleGetIndexes handles GET /index request.

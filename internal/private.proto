@@ -38,8 +38,9 @@ message Cache {
 	repeated uint64 IDs = 1;
 }
 
-message MaxSlicesResponse {
-    map<string, uint64> MaxSlices = 1;
+message MaxSlices {
+    map<string, uint64> Standard = 1;
+    map<string, uint64> Inverse = 2;
 }
 
 message CreateSliceMessage {
@@ -71,14 +72,16 @@ message DeleteFrameMessage {
 message Frame {
     string Name = 1;
     FrameMeta Meta = 2;
+    repeated string Views = 3;
+}
+
+message Schema {
+    repeated Index Indexes = 1;
 }
 
 message Index {
     string Name = 1;
-    IndexMeta Meta = 2;
-    uint64 MaxSlice = 3;
     repeated Frame Frames = 4;
-    repeated uint64 Slices = 5;
     repeated InputDefinition InputDefinitions = 6;
 }
 
@@ -120,9 +123,8 @@ message URI {
 
 message NodeStatus {
     URI URI = 1;
-    string State = 2;
-    repeated Index Indexes = 3;
-    repeated URI URISet = 4;
+    MaxSlices MaxSlices = 2;
+    Schema Schema = 3;
 }
 
 message ClusterStatus {
