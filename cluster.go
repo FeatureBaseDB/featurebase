@@ -569,11 +569,15 @@ func (c *Cluster) handleJoiningHost(uri URI) error {
 	jobResult := <-j.result
 	switch jobResult {
 	case ResizeJobStateDone:
-		c.CompleteCurrentJob(ResizeJobStateDone)
+		if err := c.CompleteCurrentJob(ResizeJobStateDone); err != nil {
+			return err
+		}
 		// Add uri to the cluster.
 		return c.AddNode(uri)
 	case ResizeJobStateAborted:
-		c.CompleteCurrentJob(ResizeJobStateAborted)
+		if err := c.CompleteCurrentJob(ResizeJobStateAborted); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -691,14 +695,15 @@ func (c *Cluster) generateResizeJob(addURI URI) *ResizeJob {
 
 // CompleteCurrentJob sets the state of the current ResizeJob
 // then removes the pointer to currentJob.
-func (c *Cluster) CompleteCurrentJob(state string) {
+func (c *Cluster) CompleteCurrentJob(state string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.currentJob == nil {
-		return
+		return fmt.Errorf("no resize job currently running")
 	}
 	c.currentJob.SetState(state)
 	c.currentJob = nil
+	return nil
 }
 
 // followResizeInstruction is run by any node that receives a ResizeInstruction.

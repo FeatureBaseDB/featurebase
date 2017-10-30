@@ -152,6 +152,24 @@ func TestHandler_Status(t *testing.T) {
 	}
 }
 
+// Ensure the handler can abort a cluster resize.
+func TestHandler_ClusterResizeAbort(t *testing.T) {
+
+	t.Run("No resize job", func(t *testing.T) {
+		h := test.NewHandler()
+		h.Cluster = test.NewCluster(1)
+
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/cluster/resize/abort", nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if body := w.Body.String(); body != `{"info":"no resize job currently running"}`+"\n" {
+			t.Fatalf("unexpected body: %s", body)
+		}
+	})
+
+}
+
 // Ensure the handler can return the maxslice map.
 func TestHandler_MaxSlices(t *testing.T) {
 	hldr := test.MustOpenHolder()

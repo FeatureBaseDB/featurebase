@@ -98,6 +98,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
+	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
@@ -1889,6 +1890,35 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
+}
+
+//handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
+func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Request) {
+	var msg string
+
+	if err := func() error {
+		if !h.Cluster.IsCoordinator() {
+			return fmt.Errorf("abort requests must be made on the coordinator node")
+		}
+		err := h.Cluster.CompleteCurrentJob(ResizeJobStateAborted)
+		if err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
+		msg = err.Error()
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(clusterResizeAbortResponse{
+		Info: msg,
+	}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type clusterResizeAbortResponse struct {
+	Info string `json:"info"`
 }
 
 // InputJSONDataParser validates input json file and executes SetBit.
