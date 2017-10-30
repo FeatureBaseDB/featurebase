@@ -147,7 +147,7 @@ func TestHandler_Status(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/status", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"status":{"State":"NORMAL","URISet":[{"Scheme":"http","Host":"localhost","Port":10101}]}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"state":"NORMAL","uri-set":[{"scheme":"http","host":"localhost","port":10101}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -172,7 +172,7 @@ func TestHandler_MaxSlices(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/slices/max", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"maxSlices":{"i0":3,"i1":0}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"standard":{"i0":3,"i1":0},"inverse":{"i0":0,"i1":0}}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -213,7 +213,7 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/slices/max?inverse=true", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"maxSlices":{"i0":3,"i1":0}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"standard":{"i0":0,"i1":0},"inverse":{"i0":3,"i1":0}}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }

@@ -38,10 +38,6 @@ message Cache {
 	repeated uint64 IDs = 1;
 }
 
-//message MaxSlicesResponse {
-//    map<string, uint64> MaxSlices = 1;
-//}
-
 message MaxSlices {
     map<string, uint64> Standard = 1;
     map<string, uint64> Inverse = 2;
