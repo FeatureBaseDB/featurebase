@@ -649,8 +649,3 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 
 	return nil
 }
-
-type IndexReporter interface {
-	HasData() bool
-	Indexes() []*Index
-}

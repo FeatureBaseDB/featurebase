@@ -129,7 +129,7 @@ message NodeStatus {
 
 message ClusterStatus {
     string State = 1;
-    repeated URI URISet = 2;
+    repeated URI NodeSet = 2;
 }
 
 message Field {
@@ -163,9 +163,10 @@ message ResizeSource {
 message ResizeInstructionComplete {
     int64 JobID = 1;
     URI URI = 2;
+    string Error = 3;
 }
 
 message Topology {
-    repeated URI URISet = 1;
+    repeated URI NodeSet = 1;
 }
 

@@ -15,7 +15,9 @@
 package pilosa
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -39,10 +41,10 @@ const (
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
 
-	// NodeState represents node state returned in /status endpoint for a node in the cluster.
-	NodeStateStarting = "STARTING"
-	NodeStateNormal   = "NORMAL"
-	NodeStateResizing = "RESIZING"
+	// ClusterState represents the state returned in the /status endpoint.
+	ClusterStateStarting = "STARTING"
+	ClusterStateNormal   = "NORMAL"
+	ClusterStateResizing = "RESIZING"
 
 	// ResizeJob states.
 	ResizeJobStateRunning = "RUNNING"
@@ -127,9 +129,9 @@ func (h ByHost) Less(i, j int) bool { return h[i].URI.String() < h[j].URI.String
 
 // Cluster represents a collection of nodes.
 type Cluster struct {
-	URI     URI
-	Nodes   []*Node // TODO phase this out?
-	NodeSet NodeSet
+	URI       URI
+	Nodes     []*Node // TODO phase this out?
+	MemberSet MemberSet
 
 	// Hashing algorithm used to assign partitions to nodes.
 	Hasher Hasher
@@ -151,10 +153,10 @@ type Cluster struct {
 	Topology *Topology
 
 	// Required for cluster Resize.
-	State         string
-	Coordinator   URI
-	IndexReporter IndexReporter
-	Broadcaster   Broadcaster
+	State       string
+	Coordinator URI
+	Holder      *Holder
+	Broadcaster Broadcaster
 
 	joiningURIs chan URI
 
@@ -196,12 +198,12 @@ func (c *Cluster) IsCoordinator() bool {
 	return c.Coordinator == c.URI
 }
 
-// AddHost adds a node to the Cluster and updates and saves the
+// AddNode adds a node to the Cluster and updates and saves the
 // new topology.
-func (c *Cluster) AddHost(uri URI) error {
+func (c *Cluster) AddNode(uri URI) error {
 
 	// add to cluster
-	_, added := c.AddNode(uri)
+	_, added := c.AddNodeBasicSorted(uri)
 	if !added {
 		return nil
 	}
@@ -218,8 +220,8 @@ func (c *Cluster) AddHost(uri URI) error {
 	return c.saveTopology()
 }
 
-// URISet returns the list of uris in the cluster.
-func (c *Cluster) URISet() []URI {
+// NodeSet returns the list of uris in the cluster.
+func (c *Cluster) NodeSet() []URI {
 	return Nodes(c.Nodes).URIs()
 }
 
@@ -235,8 +237,8 @@ func (c *Cluster) setState(state string) {
 // Status returns the internal ClusterStatus representation.
 func (c *Cluster) Status() *internal.ClusterStatus {
 	return &internal.ClusterStatus{
-		State:  c.State,
-		URISet: encodeURIs(c.URISet()),
+		State:   c.State,
+		NodeSet: encodeURIs(c.NodeSet()),
 	}
 }
 
@@ -250,9 +252,9 @@ func (c *Cluster) NodeByURI(uri URI) *Node {
 	return nil
 }
 
-// AddNode adds a node to the cluster, sorted by uri.
+// AddNodeBasicSorted adds a node to the cluster, sorted by uri.
 // Returns a pointer to the node and true if the node was added.
-func (c *Cluster) AddNode(uri URI) (*Node, bool) {
+func (c *Cluster) AddNodeBasicSorted(uri URI) (*Node, bool) {
 	n := c.NodeByURI(uri)
 	if n != nil {
 		return n, false
@@ -497,7 +499,7 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 
 func (c *Cluster) Open() error {
 	// Cluster always comes up in state STARTING until cluster membership is determined.
-	c.State = NodeStateStarting
+	c.State = ClusterStateStarting
 
 	// Load topology file if it exists.
 	if err := c.loadTopology(); err != nil {
@@ -511,13 +513,11 @@ func (c *Cluster) Open() error {
 			return fmt.Errorf("considerTopology: %v", err)
 		}
 		// Add the local node to the cluster and update state.
-		fmt.Println("IS Coord")
-		c.AddHost(c.URI)
+		c.AddNode(c.URI)
 		c.setState(state)
 	} else {
 		// Add the local node to the cluster.
-		fmt.Println("NOT Coord")
-		c.AddHost(c.URI)
+		c.AddNode(c.URI)
 	}
 
 	// Start the EventReceiver.
@@ -525,9 +525,9 @@ func (c *Cluster) Open() error {
 		return fmt.Errorf("starting EventReceiver: %v", err)
 	}
 
-	// Open NodeSet communication.
-	if err := c.NodeSet.Open(); err != nil {
-		return fmt.Errorf("opening NodeSet: %v", err)
+	// Open MemberSet communication.
+	if err := c.MemberSet.Open(); err != nil {
+		return fmt.Errorf("opening MemberSet: %v", err)
 	}
 
 	// Listen for cluster-resize events.
@@ -546,11 +546,11 @@ func (c *Cluster) Close() error {
 }
 
 func (c *Cluster) needTopologyAgreement() bool {
-	return c.State == NodeStateStarting && !URISlicesAreEqual(c.Topology.URISet, c.URISet())
+	return c.State == ClusterStateStarting && !URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
 }
 
 func (c *Cluster) haveTopologyAgreement() bool {
-	return URISlicesAreEqual(c.Topology.URISet, c.URISet())
+	return URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
 }
 
 func (c *Cluster) handleJoiningHost(uri URI) error {
@@ -571,7 +571,7 @@ func (c *Cluster) handleJoiningHost(uri URI) error {
 	case ResizeJobStateDone:
 		c.CompleteCurrentJob(ResizeJobStateDone)
 		// Add uri to the cluster.
-		return c.AddHost(uri)
+		return c.AddNode(uri)
 	case ResizeJobStateAborted:
 		c.CompleteCurrentJob(ResizeJobStateAborted)
 	}
@@ -605,7 +605,7 @@ func (c *Cluster) listenForJoins() {
 		// Only change state to NORMAL if we have successfully added at least one host.
 		if uriJoined {
 			// Put the cluster back to state NORMAL and broadcast.
-			if err := c.setStateAndBroadcast(NodeStateNormal); err != nil {
+			if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
 				c.logger().Printf("setStateAndBroadcast error: err=%s", err)
 			}
 		}
@@ -662,10 +662,10 @@ func (c *Cluster) generateResizeJob(addURI URI) *ResizeJob {
 	toCluster.Hasher = c.Hasher
 	toCluster.PartitionN = c.PartitionN
 	toCluster.ReplicaN = c.ReplicaN
-	toCluster.AddNode(addURI)
+	toCluster.AddNodeBasicSorted(addURI)
 
 	// Add to the ResizeJob the instructions for each index.
-	for _, idx := range c.IndexReporter.Indexes() {
+	for _, idx := range c.Holder.Indexes() {
 		// dataDiff is map[string][]*internal.ResizeSource, where string is
 		// a host in toCluster.
 		dataDiff := c.DataDiff(toCluster, idx)
@@ -704,22 +704,72 @@ func (c *Cluster) CompleteCurrentJob(state string) {
 // followResizeInstruction is run by any node that receives a ResizeInstruction.
 func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
 	go func() {
-		// Request each source file in ResizeSources.
-		for _, src := range instr.Sources {
-			/************************************************************/
-			// TODO travis: get the data files from other nodes.
-			fmt.Printf("\n**** Get slice %d for index %s from host %s ****\n\n", src.Slice, src.Index, src.URI)
-			for i := 0; i <= 4; i++ {
-				fmt.Printf(" %d", i)
-				time.Sleep(1 * time.Second)
-			}
-			fmt.Println("")
-			/************************************************************/
-		}
-
+		// Prepare the return message.
 		complete := &internal.ResizeInstructionComplete{
 			JobID: instr.JobID,
 			URI:   instr.URI,
+			Error: "",
+		}
+
+		// Stop processing on any error.
+		if err := func() error {
+			// Create a client for calling remote nodes.
+			client, err := NewClientFromURI(&c.URI, nil) // TODO: ClientOptions
+			if err != nil {
+				return err
+			}
+
+			// Request each source file in ResizeSources.
+			for _, src := range instr.Sources {
+				fmt.Printf("\n**** Get slice %d for index %s from host %s ****\n\n", src.Slice, src.Index, src.URI)
+
+				srcURI := decodeURI(src.URI)
+
+				// TODO: there's a possible race condition here;
+				// if NodeStatus has not been shared with the joining
+				// node (and the schema created locally), then
+				// the following Frame() lookup could fail.
+
+				// Retrieve frame.
+				f := c.Holder.Frame(src.Index, src.Frame)
+				if f == nil {
+					return ErrFrameNotFound
+				}
+
+				// Create view.
+				v, err := f.CreateViewIfNotExists(src.View)
+				if err != nil {
+					return err
+				}
+
+				// Create the local fragment.
+				frag, err := v.CreateFragmentIfNotExists(src.Slice)
+				if err != nil {
+					return err
+				}
+
+				// Stream slice from remote node.
+				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
+				if err != nil {
+					return err
+				} else if rd == nil {
+					return fmt.Errorf("slice %v doesn't exist on host: %s", src.Slice, src.URI)
+				}
+
+				// Write to local frame and always close reader.
+				if err := func() error {
+					defer rd.Close()
+					if _, err := frag.ReadFrom(rd); err != nil {
+						return err
+					}
+					return nil
+				}(); err != nil {
+					return err
+				}
+			}
+			return nil
+		}(); err != nil {
+			complete.Error = err.Error()
 		}
 
 		node := &Node{
@@ -732,7 +782,14 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
 }
 
 func (c *Cluster) MarkResizeInstructionComplete(complete *internal.ResizeInstructionComplete) error {
+
 	j := c.Job(complete.JobID)
+
+	// Abort the job if an error exists in the complete object.
+	if complete.Error != "" {
+		j.result <- ResizeJobStateAborted
+		return errors.New(complete.Error)
+	}
 
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -870,9 +927,9 @@ func (j *ResizeJob) distributeResizeInstructions() error {
 	return nil
 }
 
-type URISet []URI
+type NodeSet []URI
 
-func (u URISet) ToHostPortStrings() []string {
+func (u NodeSet) ToHostPortStrings() []string {
 	other := make([]string, 0, len(u))
 	for _, uri := range u {
 		other = append(other, uri.HostPort())
@@ -882,8 +939,8 @@ func (u URISet) ToHostPortStrings() []string {
 
 // Topology represents the list of hosts in the cluster.
 type Topology struct {
-	mu     sync.RWMutex
-	URISet []URI
+	mu      sync.RWMutex
+	NodeSet []URI
 }
 
 func NewTopology() *Topology {
@@ -898,7 +955,7 @@ func (t *Topology) ContainsURI(uri URI) bool {
 }
 
 func (t *Topology) containsURI(uri URI) bool {
-	for _, turi := range t.URISet {
+	for _, turi := range t.NodeSet {
 		if turi == uri {
 			return true
 		}
@@ -906,14 +963,14 @@ func (t *Topology) containsURI(uri URI) bool {
 	return false
 }
 
-// AddHost adds the uri to the topology and returns true if added.
+// AddNode adds the uri to the topology and returns true if added.
 func (t *Topology) AddURI(uri URI) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.containsURI(uri) {
 		return false
 	}
-	t.URISet = append(t.URISet, uri)
+	t.NodeSet = append(t.NodeSet, uri)
 	return true
 }
 
@@ -955,7 +1012,7 @@ func encodeTopology(topology *Topology) *internal.Topology {
 		return nil
 	}
 	return &internal.Topology{
-		URISet: encodeURIs(topology.URISet),
+		NodeSet: encodeURIs(topology.NodeSet),
 	}
 }
 
@@ -965,30 +1022,30 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 	}
 
 	t := &Topology{
-		URISet: decodeURIs(topology.URISet),
+		NodeSet: decodeURIs(topology.NodeSet),
 	}
 	return t, nil
 }
 
 func (c *Cluster) considerTopology() (string, error) {
 	// If there is no .topology file, it's safe to go to state NORMAL.
-	if len(c.Topology.URISet) == 0 {
-		return NodeStateNormal, nil
+	if len(c.Topology.NodeSet) == 0 {
+		return ClusterStateNormal, nil
 	}
 
 	// The local node (coordinator) must be in the .topology.
 	if !c.Topology.ContainsURI(c.Coordinator) {
-		return "", fmt.Errorf("coordinator %s is not in topology: %v", c.Coordinator, c.Topology.URISet)
+		return "", fmt.Errorf("coordinator %s is not in topology: %v", c.Coordinator, c.Topology.NodeSet)
 	}
 
 	// If local node is the only thing in .topology, continue to state NORMAL.
-	if len(c.Topology.URISet) == 1 {
-		return NodeStateNormal, nil
+	if len(c.Topology.NodeSet) == 1 {
+		return ClusterStateNormal, nil
 	}
 
 	// Keep the cluster in state "STARTING" until hearing from all nodes.
 	// Topology contains 2+ hosts.
-	return NodeStateStarting, nil
+	return ClusterStateStarting, nil
 }
 
 // ReceiveEvent represents an implementation of EventHandler.
@@ -1012,14 +1069,14 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 			}
 
 			uri := e.URI
-			if err := c.AddHost(uri); err != nil {
+			if err := c.AddNode(uri); err != nil {
 				return err
 			}
 
-			// If the result of the previous AddHost completed the joining of nodes
+			// If the result of the previous AddNode completed the joining of nodes
 			// in the topology, then change the state to NORMAL.
 			if c.haveTopologyAgreement() {
-				return c.setStateAndBroadcast(NodeStateNormal)
+				return c.setStateAndBroadcast(ClusterStateNormal)
 			}
 
 			return nil
@@ -1031,17 +1088,17 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 		}
 
 		// If the index does not yet have data, go ahead and add the node.
-		if !c.IndexReporter.HasData() {
+		if !c.Holder.HasData() {
 			uri := e.URI
-			if err := c.AddHost(uri); err != nil {
+			if err := c.AddNode(uri); err != nil {
 				return err
 			}
-			return c.setStateAndBroadcast(NodeStateNormal)
+			return c.setStateAndBroadcast(ClusterStateNormal)
 		}
 
 		// If the cluster has data, we need to change to RESIZING and
 		// kick off the resizing process.
-		if err := c.setStateAndBroadcast(NodeStateResizing); err != nil {
+		if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
 			return err
 		}
 		c.joiningURIs <- e.URI
@@ -1061,8 +1118,8 @@ func (c *Cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
 		return nil
 	}
 
-	for _, uri := range decodeURIs(cs.URISet) {
-		c.AddHost(uri)
+	for _, uri := range decodeURIs(cs.NodeSet) {
+		c.AddNode(uri)
 	}
 	c.setState(cs.State)
 

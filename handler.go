@@ -224,8 +224,8 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 
 	cs := pb.(*internal.ClusterStatus)
 	if err := json.NewEncoder(w).Encode(getStatusResponse{
-		State:  cs.State,
-		URISet: decodeURIs(cs.URISet),
+		State:   cs.State,
+		NodeSet: decodeURIs(cs.NodeSet),
 	}); err != nil {
 		h.logger().Printf("write status response error: %s", err)
 	}
@@ -236,8 +236,8 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State  string `json:"state"`
-	URISet []URI  `json:"uri-set"`
+	State   string `json:"state"`
+	NodeSet []URI  `json:"nodes"`
 }
 
 // handlePostQuery handles /query requests.
@@ -1347,7 +1347,7 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetFragmentBackup handles GET /fragment/data requests.
+// handleGetFragmentData handles GET /fragment/data requests.
 func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) {
 	// Read slice parameter.
 	q := r.URL.Query()
@@ -1370,7 +1370,7 @@ func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// handlePostFragmentRestore handles POST /fragment/data requests.
+// handlePostFragmentData handles POST /fragment/data requests.
 func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request) {
 	// Read slice parameter.
 	q := r.URL.Query()
@@ -1408,7 +1408,7 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetFragmentData handles GET /fragment/block/data requests.
+// handleGetFragmentBlockData handles GET /fragment/block/data requests.
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
 	// Read request object.
 	var req internal.BlockDataRequest

@@ -114,7 +114,7 @@ func TestCluster_Nodes(t *testing.T) {
 		{URI: uri2},
 	}
 
-	t.Run("URISet", func(t *testing.T) {
+	t.Run("NodeSet", func(t *testing.T) {
 		actual := pilosa.Nodes(nodes).URIs()
 		expected := []pilosa.URI{uri0, uri1, uri2}
 		if !reflect.DeepEqual(actual, expected) {
@@ -198,17 +198,17 @@ func TestCluster_Topology(t *testing.T) {
 	base := test.NewURIFromHostPort("host0", 0)
 	invalid := test.NewURIFromHostPort("invalid", 0)
 
-	t.Run("AddHost", func(t *testing.T) {
-		err := c1.AddHost(uri1)
+	t.Run("AddNode", func(t *testing.T) {
+		err := c1.AddNode(uri1)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// add the same host.
-		err = c1.AddHost(uri1)
+		err = c1.AddNode(uri1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = c1.AddHost(uri2)
+		err = c1.AddNode(uri2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -261,7 +261,6 @@ func TestCluster_Resize(t *testing.T) {
 
 		// Cluster 1
 		c1 := test.NewCluster(3)
-		c1.IndexReporter = h1
 		c1.ReplicaN = 2
 
 		// Cluster 2

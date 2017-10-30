@@ -22,37 +22,37 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// NodeSet represents an interface for Node membership and inter-node communication.
-type NodeSet interface {
+// MemberSet represents an interface for Node membership and inter-node communication.
+type MemberSet interface {
 	// Returns a list of all Nodes in the cluster
 	Nodes() []*Node
 
-	// Open starts any network activity implemented by the NodeSet
+	// Open starts any network activity implemented by the MemberSet
 	Open() error
 }
 
-// StaticNodeSet represents a basic NodeSet for testing.
-type StaticNodeSet struct {
+// StaticMemberSet represents a basic MemberSet for testing.
+type StaticMemberSet struct {
 	nodes []*Node
 }
 
-// NewStaticNodeSet creates a statically defined NodeSet.
-func NewStaticNodeSet() *StaticNodeSet {
-	return &StaticNodeSet{}
+// NewStaticMemberSet creates a statically defined MemberSet.
+func NewStaticMemberSet() *StaticMemberSet {
+	return &StaticMemberSet{}
 }
 
-// Nodes implements the NodeSet interface and returns a list of nodes in the cluster.
-func (s *StaticNodeSet) Nodes() []*Node {
+// Nodes implements the MemberSet interface and returns a list of nodes in the cluster.
+func (s *StaticMemberSet) Nodes() []*Node {
 	return s.nodes
 }
 
-// Open implements the NodeSet interface to start network activity, but for a static NodeSet it does nothing.
-func (s *StaticNodeSet) Open() error {
+// Open implements the MemberSet interface to start network activity, but for a static MemberSet it does nothing.
+func (s *StaticMemberSet) Open() error {
 	return nil
 }
 
-// Join sets the NodeSet nodes to the slice of Nodes passed in.
-func (s *StaticNodeSet) Join(nodes []*Node) error {
+// Join sets the MemberSet nodes to the slice of Nodes passed in.
+func (s *StaticMemberSet) Join(nodes []*Node) error {
 	s.nodes = nodes
 	return nil
 }

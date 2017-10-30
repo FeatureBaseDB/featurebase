@@ -380,7 +380,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	return &ns, nil
 }
 
-// ClusterStatus returns the ClusterState and URISet for the cluster.
+// ClusterStatus returns the ClusterState and NodeSet for the cluster.
 func (s *Server) ClusterStatus() (proto.Message, error) {
 	return s.Cluster.Status(), nil
 }
@@ -394,6 +394,25 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	// Ignore status updates from self.
 	if s.URI == decodeURI(ns.URI) {
 		return nil
+	}
+
+	// Sync schema.
+	// Create indexes that don't exist.
+	for _, index := range ns.Schema.Indexes {
+		opt := IndexOptions{}
+		idx, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
+		if err != nil {
+			return err
+		}
+		// Create frames that don't exist.
+		for _, f := range index.Frames {
+			opt := decodeFrameOptions(f.Meta)
+			_, err := idx.CreateFrameIfNotExists(f.Name, *opt)
+			if err != nil {
+				return err
+			}
+		}
+		// TODO: Create inputDefinitions that don't exist.
 	}
 
 	// Sync maxSlices (standard).
@@ -426,25 +445,6 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 			oldMaxInverseSlices[index] = newMaxInverse
 			localIndex.SetRemoteMaxSlice(newMaxInverse)
 		}
-	}
-
-	// Sync schema.
-	// Create indexes that don't exist.
-	for _, index := range ns.Schema.Indexes {
-		opt := IndexOptions{}
-		idx, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
-		if err != nil {
-			return err
-		}
-		// Create frames that don't exist.
-		for _, f := range index.Frames {
-			opt := decodeFrameOptions(f.Meta)
-			_, err := idx.CreateFrameIfNotExists(f.Name, *opt)
-			if err != nil {
-				return err
-			}
-		}
-		// TODO: Create inputDefinitions that don't exist.
 	}
 
 	return nil
@@ -525,7 +525,7 @@ func CountOpenFiles() int {
 }
 
 // StatusHandler specifies the methods which an object must implement to share
-// state in the cluster. These are used by the GossipNodeSet to implement the
+// state in the cluster. These are used by the GossipMemberSet to implement the
 // LocalState and MergeRemoteState methods of memberlist.Delegate
 type StatusHandler interface {
 	LocalStatus() (proto.Message, error)

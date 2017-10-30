@@ -122,7 +122,7 @@ func (m *Command) SetupServer() error {
 
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
-	cluster.IndexReporter = m.Server.Holder
+	cluster.Holder = m.Server.Holder
 
 	m.Server.Cluster = cluster
 
@@ -209,15 +209,15 @@ func (m *Command) SetupServer() error {
 		// get the host portion of addr to use for binding
 		gossipHost := uri.Host()
 		m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
-		gossipNodeSet := gossip.NewGossipNodeSet(uri.String(), gossipHost, gossipPort, gossipSeed, m.Server, gossipKey)
-		m.Server.Cluster.NodeSet = gossipNodeSet
-		m.Server.Broadcaster = gossipNodeSet
-		m.Server.BroadcastReceiver = gossipNodeSet
+		gossipMemberSet := gossip.NewGossipMemberSet(uri.String(), gossipHost, gossipPort, gossipSeed, m.Server, gossipKey)
+		m.Server.Cluster.MemberSet = gossipMemberSet
+		m.Server.Broadcaster = gossipMemberSet
+		m.Server.BroadcastReceiver = gossipMemberSet
 	case pilosa.ClusterStatic, pilosa.ClusterNone:
 		m.Server.Broadcaster = pilosa.NopBroadcaster
-		m.Server.Cluster.NodeSet = pilosa.NewStaticNodeSet()
+		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet()
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
-		err := m.Server.Cluster.NodeSet.(*pilosa.StaticNodeSet).Join(m.Server.Cluster.Nodes)
+		err := m.Server.Cluster.MemberSet.(*pilosa.StaticMemberSet).Join(m.Server.Cluster.Nodes)
 		if err != nil {
 			return err
 		}

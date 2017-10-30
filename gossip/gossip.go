@@ -28,10 +28,10 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// GossipNodeSet represents a gossip implementation of NodeSet using memberlist
-// GossipNodeSet also represents a gossip implementation of pilosa.Broadcaster
-// GossipNodeSet also represents an implementation of memberlist.Delegate
-type GossipNodeSet struct {
+// GossipMemberSet represents a gossip implementation of MemberSet using memberlist
+// GossipMemberSet also represents a gossip implementation of pilosa.Broadcaster
+// GossipMemberSet also represents an implementation of memberlist.Delegate
+type GossipMemberSet struct {
 	memberlist *memberlist.Memberlist
 	handler    pilosa.BroadcastHandler
 
@@ -44,8 +44,8 @@ type GossipNodeSet struct {
 	LogOutput io.Writer
 }
 
-// Nodes implements the NodeSet interface and returns a list of nodes in the cluster.
-func (g *GossipNodeSet) Nodes() []*pilosa.Node {
+// Nodes implements the MemberSet interface and returns a list of nodes in the cluster.
+func (g *GossipMemberSet) Nodes() []*pilosa.Node {
 	a := make([]*pilosa.Node, 0, g.memberlist.NumMembers())
 	for _, n := range g.memberlist.Members() {
 		uri, _ := pilosa.NewURIFromAddress(n.Name)
@@ -56,15 +56,15 @@ func (g *GossipNodeSet) Nodes() []*pilosa.Node {
 }
 
 // Start implements the BroadcastReceiver interface and sets the BroadcastHandler.
-func (g *GossipNodeSet) Start(h pilosa.BroadcastHandler) error {
+func (g *GossipMemberSet) Start(h pilosa.BroadcastHandler) error {
 	g.handler = h
 	return nil
 }
 
-// Open implements the NodeSet interface to start network activity.
-func (g *GossipNodeSet) Open() error {
+// Open implements the MemberSet interface to start network activity.
+func (g *GossipMemberSet) Open() error {
 	if g.handler == nil {
-		return fmt.Errorf("opening GossipNodeSet: you must call Start(pilosa.BroadcastHandler) before calling Open()")
+		return fmt.Errorf("opening GossipMemberSet: you must call Start(pilosa.BroadcastHandler) before calling Open()")
 	}
 
 	err := error(nil)
@@ -88,7 +88,7 @@ func (g *GossipNodeSet) Open() error {
 	// attach to gossip seed node
 	nodes := []*pilosa.Node{&pilosa.Node{URI: *uri}} //TODO: support a list of seeds
 
-	err = g.joinWithRetry(pilosa.URISet(pilosa.Nodes(nodes).URIs()).ToHostPortStrings())
+	err = g.joinWithRetry(pilosa.NodeSet(pilosa.Nodes(nodes).URIs()).ToHostPortStrings())
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (g *GossipNodeSet) Open() error {
 }
 
 // joinWithRetry wraps the standard memberlist Join function in a retry.
-func (g *GossipNodeSet) joinWithRetry(hosts []string) error {
+func (g *GossipMemberSet) joinWithRetry(hosts []string) error {
 	err := retry(60, 2*time.Second, func() error {
 		_, err := g.memberlist.Join(hosts)
 		return err
@@ -120,8 +120,8 @@ func retry(attempts int, sleep time.Duration, fn func() error) (err error) {
 	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
 
-// logger returns a logger for the GossipNodeSet.
-func (g *GossipNodeSet) logger() *log.Logger {
+// logger returns a logger for the GossipMemberSet.
+func (g *GossipMemberSet) logger() *log.Logger {
 	return log.New(g.LogOutput, "", log.LstdFlags)
 }
 
@@ -132,9 +132,9 @@ type gossipConfig struct {
 	memberlistConfig *memberlist.Config
 }
 
-// NewGossipNodeSet returns a new instance of GossipNodeSet.
-func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed string, server *pilosa.Server, secretKey []byte) *GossipNodeSet {
-	g := &GossipNodeSet{
+// NewGossipMemberSet returns a new instance of GossipMemberSet.
+func NewGossipMemberSet(name string, gossipHost string, gossipPort int, gossipSeed string, server *pilosa.Server, secretKey []byte) *GossipMemberSet {
+	g := &GossipMemberSet{
 		LogOutput: server.LogOutput,
 	}
 
@@ -148,7 +148,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	g.config.memberlistConfig.BindPort = gossipPort
 	g.config.memberlistConfig.AdvertiseAddr = pilosa.HostToIP(gossipHost)
 	g.config.memberlistConfig.AdvertisePort = gossipPort
-	//g.config.memberlistConfig.PushPullInterval = 15 * time.Second // Default is 15s in DefaultLocalConfig.
+	g.config.memberlistConfig.PushPullInterval = 0 * time.Second // Default is 15s in DefaultLocalConfig. // TODO travis: change this from 0
 	g.config.memberlistConfig.Delegate = g
 	g.config.memberlistConfig.SecretKey = secretKey
 	g.config.memberlistConfig.Events = server.Cluster.EventReceiver.(memberlist.EventDelegate)
@@ -159,7 +159,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 }
 
 // SendSync implementation of the Broadcaster interface.
-func (g *GossipNodeSet) SendSync(pb proto.Message) error {
+func (g *GossipMemberSet) SendSync(pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
 		return err
@@ -187,7 +187,7 @@ func (g *GossipNodeSet) SendSync(pb proto.Message) error {
 }
 
 // SendAsync implementation of the Broadcaster interface.
-func (g *GossipNodeSet) SendAsync(pb proto.Message) error {
+func (g *GossipMemberSet) SendAsync(pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
 		return err
@@ -202,7 +202,7 @@ func (g *GossipNodeSet) SendAsync(pb proto.Message) error {
 }
 
 // SendTo implementation of the Broadcaster interface.
-func (g *GossipNodeSet) SendTo(to *pilosa.Node, pb proto.Message) error {
+func (g *GossipMemberSet) SendTo(to *pilosa.Node, pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
 		return err
@@ -221,13 +221,13 @@ func (g *GossipNodeSet) SendTo(to *pilosa.Node, pb proto.Message) error {
 }
 
 // NodeMeta implementation of the memberlist.Delegate interface.
-func (g *GossipNodeSet) NodeMeta(limit int) []byte {
+func (g *GossipMemberSet) NodeMeta(limit int) []byte {
 	return []byte{}
 }
 
 // NotifyMsg implementation of the memberlist.Delegate interface
 // called when a user-data message is received.
-func (g *GossipNodeSet) NotifyMsg(b []byte) {
+func (g *GossipMemberSet) NotifyMsg(b []byte) {
 	m, err := pilosa.UnmarshalMessage(b)
 	if err != nil {
 		g.logger().Printf("unmarshal message error: %s", err)
@@ -241,13 +241,13 @@ func (g *GossipNodeSet) NotifyMsg(b []byte) {
 
 // GetBroadcasts implementation of the memberlist.Delegate interface
 // called when user data messages can be broadcast.
-func (g *GossipNodeSet) GetBroadcasts(overhead, limit int) [][]byte {
+func (g *GossipMemberSet) GetBroadcasts(overhead, limit int) [][]byte {
 	return g.broadcasts.GetBroadcasts(overhead, limit)
 }
 
 // LocalState implementation of the memberlist.Delegate interface
 // sends this Node's state data.
-func (g *GossipNodeSet) LocalState(join bool) []byte {
+func (g *GossipMemberSet) LocalState(join bool) []byte {
 	pb, err := g.statusHandler.LocalStatus()
 	if err != nil {
 		g.logger().Printf("error getting local state, err=%s", err)
@@ -265,7 +265,7 @@ func (g *GossipNodeSet) LocalState(join bool) []byte {
 
 // MergeRemoteState implementation of the memberlist.Delegate interface
 // receive and process the remote side's LocalState.
-func (g *GossipNodeSet) MergeRemoteState(buf []byte, join bool) {
+func (g *GossipMemberSet) MergeRemoteState(buf []byte, join bool) {
 	// Unmarshal nodestate data.
 	var pb internal.NodeStatus
 	if err := proto.Unmarshal(buf, &pb); err != nil {
