@@ -31,8 +31,8 @@ func TestFragCombos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.AddNode(*uri0)
-	c.AddNode(*uri1)
+	c.AddNodeBasicSorted(*uri0)
+	c.AddNodeBasicSorted(*uri1)
 
 	tests := []struct {
 		idx        string

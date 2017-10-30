@@ -224,8 +224,8 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 
 	cs := pb.(*internal.ClusterStatus)
 	if err := json.NewEncoder(w).Encode(getStatusResponse{
-		State:  cs.State,
-		URISet: decodeURIs(cs.URISet),
+		State:   cs.State,
+		NodeSet: decodeURIs(cs.NodeSet),
 	}); err != nil {
 		h.logger().Printf("write status response error: %s", err)
 	}
@@ -236,8 +236,8 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State  string `json:"state"`
-	URISet []URI  `json:"uri-set"`
+	State   string `json:"state"`
+	NodeSet []URI  `json:"nodes"`
 }
 
 // handlePostQuery handles /query requests.

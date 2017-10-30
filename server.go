@@ -380,7 +380,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	return &ns, nil
 }
 
-// ClusterStatus returns the ClusterState and URISet for the cluster.
+// ClusterStatus returns the ClusterState and NodeSet for the cluster.
 func (s *Server) ClusterStatus() (proto.Message, error) {
 	return s.Cluster.Status(), nil
 }
@@ -525,7 +525,7 @@ func CountOpenFiles() int {
 }
 
 // StatusHandler specifies the methods which an object must implement to share
-// state in the cluster. These are used by the GossipNodeSet to implement the
+// state in the cluster. These are used by the GossipMemberSet to implement the
 // LocalState and MergeRemoteState methods of memberlist.Delegate
 type StatusHandler interface {
 	LocalStatus() (proto.Message, error)

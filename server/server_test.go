@@ -445,18 +445,18 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	}
 	gossipSeed := gossipHost + ":" + freePorts[0]
 
-	topology := &pilosa.Topology{URISet: []pilosa.URI{m0.Server.URI, m1.Server.URI}}
+	topology := &pilosa.Topology{NodeSet: []pilosa.URI{m0.Server.URI, m1.Server.URI}}
 
 	m0.Server.Cluster.Coordinator = m0.Server.URI
 	m0.Server.Cluster.Topology = topology
 	m0.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
 
-	gossipNodeSet0 := gossip.NewGossipNodeSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server, nil)
-	m0.Server.Cluster.NodeSet = gossipNodeSet0
-	m0.Server.Broadcaster = gossipNodeSet0
+	gossipMemberSet0 := gossip.NewGossipMemberSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server, nil)
+	m0.Server.Cluster.MemberSet = gossipMemberSet0
+	m0.Server.Broadcaster = gossipMemberSet0
 	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
 	m0.Server.Holder.Broadcaster = m0.Server.Broadcaster
-	m0.Server.BroadcastReceiver = gossipNodeSet0
+	m0.Server.BroadcastReceiver = gossipMemberSet0
 
 	if err := m0.Server.BroadcastReceiver.Start(m0.Server); err != nil {
 		t.Fatal(err)
@@ -481,12 +481,12 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	m1.Server.Cluster.Coordinator = m0.Server.URI
 	m1.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
 
-	gossipNodeSet1 := gossip.NewGossipNodeSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server, nil)
-	m1.Server.Cluster.NodeSet = gossipNodeSet1
-	m1.Server.Broadcaster = gossipNodeSet1
+	gossipMemberSet1 := gossip.NewGossipMemberSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server, nil)
+	m1.Server.Cluster.MemberSet = gossipMemberSet1
+	m1.Server.Broadcaster = gossipMemberSet1
 	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
 	m1.Server.Holder.Broadcaster = m1.Server.Broadcaster
-	m1.Server.BroadcastReceiver = gossipNodeSet1
+	m1.Server.BroadcastReceiver = gossipMemberSet1
 
 	if err := m1.Server.BroadcastReceiver.Start(m1.Server); err != nil {
 		t.Fatal(err)

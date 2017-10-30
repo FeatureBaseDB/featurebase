@@ -147,7 +147,7 @@ func TestHandler_Status(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/status", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"state":"NORMAL","uri-set":[{"scheme":"http","host":"localhost","port":10101}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"state":"NORMAL","nodes":[{"scheme":"http","host":"localhost","port":10101}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
