@@ -443,7 +443,7 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 		}
 		if newMaxInverse > oldMaxInverseSlices[index] {
 			oldMaxInverseSlices[index] = newMaxInverse
-			localIndex.SetRemoteMaxSlice(newMaxInverse)
+			localIndex.SetRemoteMaxInverseSlice(newMaxInverse)
 		}
 	}
 
