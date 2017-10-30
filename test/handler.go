@@ -85,7 +85,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 func (s *Server) ClusterStatus() (proto.Message, error) {
 	uri := pilosa.DefaultURI()
 	return &internal.ClusterStatus{
-		State:   pilosa.NodeStateNormal,
+		State:   pilosa.ClusterStateNormal,
 		NodeSet: []*internal.URI{uri.Encode()},
 	}, nil
 }

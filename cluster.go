@@ -41,10 +41,10 @@ const (
 	// DefaultReplicaN is the default number of replicas per partition.
 	DefaultReplicaN = 1
 
-	// NodeState represents node state returned in /status endpoint for a node in the cluster.
-	NodeStateStarting = "STARTING"
-	NodeStateNormal   = "NORMAL"
-	NodeStateResizing = "RESIZING"
+	// ClusterState represents the state returned in the /status endpoint.
+	ClusterStateStarting = "STARTING"
+	ClusterStateNormal   = "NORMAL"
+	ClusterStateResizing = "RESIZING"
 
 	// ResizeJob states.
 	ResizeJobStateRunning = "RUNNING"
@@ -499,7 +499,7 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 
 func (c *Cluster) Open() error {
 	// Cluster always comes up in state STARTING until cluster membership is determined.
-	c.State = NodeStateStarting
+	c.State = ClusterStateStarting
 
 	// Load topology file if it exists.
 	if err := c.loadTopology(); err != nil {
@@ -546,7 +546,7 @@ func (c *Cluster) Close() error {
 }
 
 func (c *Cluster) needTopologyAgreement() bool {
-	return c.State == NodeStateStarting && !URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
+	return c.State == ClusterStateStarting && !URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
 }
 
 func (c *Cluster) haveTopologyAgreement() bool {
@@ -605,7 +605,7 @@ func (c *Cluster) listenForJoins() {
 		// Only change state to NORMAL if we have successfully added at least one host.
 		if uriJoined {
 			// Put the cluster back to state NORMAL and broadcast.
-			if err := c.setStateAndBroadcast(NodeStateNormal); err != nil {
+			if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
 				c.logger().Printf("setStateAndBroadcast error: err=%s", err)
 			}
 		}
@@ -1025,7 +1025,7 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 func (c *Cluster) considerTopology() (string, error) {
 	// If there is no .topology file, it's safe to go to state NORMAL.
 	if len(c.Topology.NodeSet) == 0 {
-		return NodeStateNormal, nil
+		return ClusterStateNormal, nil
 	}
 
 	// The local node (coordinator) must be in the .topology.
@@ -1035,12 +1035,12 @@ func (c *Cluster) considerTopology() (string, error) {
 
 	// If local node is the only thing in .topology, continue to state NORMAL.
 	if len(c.Topology.NodeSet) == 1 {
-		return NodeStateNormal, nil
+		return ClusterStateNormal, nil
 	}
 
 	// Keep the cluster in state "STARTING" until hearing from all nodes.
 	// Topology contains 2+ hosts.
-	return NodeStateStarting, nil
+	return ClusterStateStarting, nil
 }
 
 // ReceiveEvent represents an implementation of EventHandler.
@@ -1071,7 +1071,7 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 			// If the result of the previous AddNode completed the joining of nodes
 			// in the topology, then change the state to NORMAL.
 			if c.haveTopologyAgreement() {
-				return c.setStateAndBroadcast(NodeStateNormal)
+				return c.setStateAndBroadcast(ClusterStateNormal)
 			}
 
 			return nil
@@ -1088,12 +1088,12 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 			if err := c.AddNode(uri); err != nil {
 				return err
 			}
-			return c.setStateAndBroadcast(NodeStateNormal)
+			return c.setStateAndBroadcast(ClusterStateNormal)
 		}
 
 		// If the cluster has data, we need to change to RESIZING and
 		// kick off the resizing process.
-		if err := c.setStateAndBroadcast(NodeStateResizing); err != nil {
+		if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
 			return err
 		}
 		c.joiningURIs <- e.URI
