@@ -396,6 +396,25 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 		return nil
 	}
 
+	// Sync schema.
+	// Create indexes that don't exist.
+	for _, index := range ns.Schema.Indexes {
+		opt := IndexOptions{}
+		idx, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
+		if err != nil {
+			return err
+		}
+		// Create frames that don't exist.
+		for _, f := range index.Frames {
+			opt := decodeFrameOptions(f.Meta)
+			_, err := idx.CreateFrameIfNotExists(f.Name, *opt)
+			if err != nil {
+				return err
+			}
+		}
+		// TODO: Create inputDefinitions that don't exist.
+	}
+
 	// Sync maxSlices (standard).
 	oldmaxslices := s.Holder.MaxSlices()
 	for index, newMax := range ns.MaxSlices.Standard {
@@ -426,25 +445,6 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 			oldMaxInverseSlices[index] = newMaxInverse
 			localIndex.SetRemoteMaxSlice(newMaxInverse)
 		}
-	}
-
-	// Sync schema.
-	// Create indexes that don't exist.
-	for _, index := range ns.Schema.Indexes {
-		opt := IndexOptions{}
-		idx, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
-		if err != nil {
-			return err
-		}
-		// Create frames that don't exist.
-		for _, f := range index.Frames {
-			opt := decodeFrameOptions(f.Meta)
-			_, err := idx.CreateFrameIfNotExists(f.Name, *opt)
-			if err != nil {
-				return err
-			}
-		}
-		// TODO: Create inputDefinitions that don't exist.
 	}
 
 	return nil

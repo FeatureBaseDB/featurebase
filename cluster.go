@@ -725,6 +725,11 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
 
 				srcURI := decodeURI(src.URI)
 
+				// TODO: there's a possible race condition here;
+				// if NodeStatus has not been shared with the joining
+				// node (and the schema created locally), then
+				// the following Frame() lookup could fail.
+
 				// Retrieve frame.
 				f := c.Holder.Frame(src.Index, src.Frame)
 				if f == nil {
