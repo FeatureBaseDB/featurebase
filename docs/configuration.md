@@ -27,10 +27,9 @@ Every command line flag has a corresponding environment variable. The environmen
 
 ### Config file
 
-The config file is in the [toml format](https://github.com/toml-lang/toml) and has exactly the same options available as the flags and environment variables. Any flag which contains a dot (".") denotes nesting within the config file, so the two flags `--cluster.poll-interval=2m0s` and `--cluster.replicas=1` look like this in the config file:
+The config file is in the [toml format](https://github.com/toml-lang/toml) and has exactly the same options available as the flags and environment variables. Any flag which contains a dot (".") denotes nesting within the config file, so the two flag `--cluster.replicas=1` looks like this in the config file:
 ```toml
 [cluster]
-  poll-interval = "2m0s"
   replicas = 1
 ```
 
@@ -121,18 +120,6 @@ Any flag that has a value that is a comma separated list on the command line bec
     ```toml
     [cluster]
     hosts = ["localhost:10101"]
-    ```
-
-#### Cluster Poll Interval
-
-* Description: Polling interval for cluster.
-* Flag: `cluster.poll-interval="1m0s"`
-* Env: `PILOSA_CLUSTER_POLL_INTERVAL="1m0s"`
-* Config:
-
-    ```toml
-    [cluster]
-    poll-interval = "1m0s"
     ```
 
 #### Cluster Replicas
