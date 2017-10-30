@@ -1347,7 +1347,7 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetFragmentBackup handles GET /fragment/data requests.
+// handleGetFragmentData handles GET /fragment/data requests.
 func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) {
 	// Read slice parameter.
 	q := r.URL.Query()
@@ -1370,7 +1370,7 @@ func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// handlePostFragmentRestore handles POST /fragment/data requests.
+// handlePostFragmentData handles POST /fragment/data requests.
 func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request) {
 	// Read slice parameter.
 	q := r.URL.Query()
@@ -1408,7 +1408,7 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetFragmentData handles GET /fragment/block/data requests.
+// handleGetFragmentBlockData handles GET /fragment/block/data requests.
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
 	// Read request object.
 	var req internal.BlockDataRequest

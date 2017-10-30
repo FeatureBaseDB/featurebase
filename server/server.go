@@ -122,7 +122,7 @@ func (m *Command) SetupServer() error {
 
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
-	cluster.IndexReporter = m.Server.Holder
+	cluster.Holder = m.Server.Holder
 
 	m.Server.Cluster = cluster
 

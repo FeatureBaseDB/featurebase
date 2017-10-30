@@ -163,6 +163,7 @@ message ResizeSource {
 message ResizeInstructionComplete {
     int64 JobID = 1;
     URI URI = 2;
+    string Error = 3;
 }
 
 message Topology {

@@ -682,6 +682,13 @@ func (c *Client) BackupSlice(ctx context.Context, index, frame, view string, sli
 	return nil, fmt.Errorf("unable to connect to any owner")
 }
 
+func (c *Client) RetrieveSliceFromURI(ctx context.Context, index, frame, view string, slice uint64, uri URI) (io.ReadCloser, error) {
+	node := &Node{
+		URI: uri,
+	}
+	return c.backupSliceNode(ctx, index, frame, view, slice, node)
+}
+
 func (c *Client) backupSliceNode(ctx context.Context, index, frame, view string, slice uint64, node *Node) (io.ReadCloser, error) {
 	u := nodePathToURL(node, "/fragment/data")
 	u.RawQuery = url.Values{

@@ -15,7 +15,9 @@
 package pilosa
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -151,10 +153,10 @@ type Cluster struct {
 	Topology *Topology
 
 	// Required for cluster Resize.
-	State         string
-	Coordinator   URI
-	IndexReporter IndexReporter
-	Broadcaster   Broadcaster
+	State       string
+	Coordinator URI
+	Holder      *Holder
+	Broadcaster Broadcaster
 
 	joiningURIs chan URI
 
@@ -511,12 +513,10 @@ func (c *Cluster) Open() error {
 			return fmt.Errorf("considerTopology: %v", err)
 		}
 		// Add the local node to the cluster and update state.
-		fmt.Println("IS Coord")
 		c.AddHost(c.URI)
 		c.setState(state)
 	} else {
 		// Add the local node to the cluster.
-		fmt.Println("NOT Coord")
 		c.AddHost(c.URI)
 	}
 
@@ -665,7 +665,7 @@ func (c *Cluster) generateResizeJob(addURI URI) *ResizeJob {
 	toCluster.AddNode(addURI)
 
 	// Add to the ResizeJob the instructions for each index.
-	for _, idx := range c.IndexReporter.Indexes() {
+	for _, idx := range c.Holder.Indexes() {
 		// dataDiff is map[string][]*internal.ResizeSource, where string is
 		// a host in toCluster.
 		dataDiff := c.DataDiff(toCluster, idx)
@@ -704,22 +704,67 @@ func (c *Cluster) CompleteCurrentJob(state string) {
 // followResizeInstruction is run by any node that receives a ResizeInstruction.
 func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
 	go func() {
-		// Request each source file in ResizeSources.
-		for _, src := range instr.Sources {
-			/************************************************************/
-			// TODO travis: get the data files from other nodes.
-			fmt.Printf("\n**** Get slice %d for index %s from host %s ****\n\n", src.Slice, src.Index, src.URI)
-			for i := 0; i <= 4; i++ {
-				fmt.Printf(" %d", i)
-				time.Sleep(1 * time.Second)
-			}
-			fmt.Println("")
-			/************************************************************/
-		}
-
+		// Prepare the return message.
 		complete := &internal.ResizeInstructionComplete{
 			JobID: instr.JobID,
 			URI:   instr.URI,
+			Error: "",
+		}
+
+		// Stop processing on any error.
+		if err := func() error {
+			// Create a client for calling remote nodes.
+			client, err := NewClientFromURI(&c.URI, nil) // TODO: ClientOptions
+			if err != nil {
+				return err
+			}
+
+			// Request each source file in ResizeSources.
+			for _, src := range instr.Sources {
+				fmt.Printf("\n**** Get slice %d for index %s from host %s ****\n\n", src.Slice, src.Index, src.URI)
+
+				srcURI := decodeURI(src.URI)
+
+				// Retrieve frame.
+				f := c.Holder.Frame(src.Index, src.Frame)
+				if f == nil {
+					return ErrFrameNotFound
+				}
+
+				// Create view.
+				v, err := f.CreateViewIfNotExists(src.View)
+				if err != nil {
+					return err
+				}
+
+				// Create the local fragment.
+				frag, err := v.CreateFragmentIfNotExists(src.Slice)
+				if err != nil {
+					return err
+				}
+
+				// Stream slice from remote node.
+				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
+				if err != nil {
+					return err
+				} else if rd == nil {
+					return fmt.Errorf("slice %v doesn't exist on host: %s", src.Slice, src.URI)
+				}
+
+				// Write to local frame and always close reader.
+				if err := func() error {
+					defer rd.Close()
+					if _, err := frag.ReadFrom(rd); err != nil {
+						return err
+					}
+					return nil
+				}(); err != nil {
+					return err
+				}
+			}
+			return nil
+		}(); err != nil {
+			complete.Error = err.Error()
 		}
 
 		node := &Node{
@@ -732,7 +777,14 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
 }
 
 func (c *Cluster) MarkResizeInstructionComplete(complete *internal.ResizeInstructionComplete) error {
+
 	j := c.Job(complete.JobID)
+
+	// Abort the job if an error exists in the complete object.
+	if complete.Error != "" {
+		j.result <- ResizeJobStateAborted
+		return errors.New(complete.Error)
+	}
 
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -1031,7 +1083,7 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 		}
 
 		// If the index does not yet have data, go ahead and add the node.
-		if !c.IndexReporter.HasData() {
+		if !c.Holder.HasData() {
 			uri := e.URI
 			if err := c.AddHost(uri); err != nil {
 				return err

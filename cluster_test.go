@@ -261,7 +261,6 @@ func TestCluster_Resize(t *testing.T) {
 
 		// Cluster 1
 		c1 := test.NewCluster(3)
-		c1.IndexReporter = h1
 		c1.ReplicaN = 2
 
 		// Cluster 2
