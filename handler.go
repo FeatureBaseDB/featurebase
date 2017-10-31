@@ -95,25 +95,29 @@ func NewHandler() *Handler {
 	return handler
 }
 
-// BuildRouters creates a Gorilla Mux http routers for both normal and restricted enpoints.
+// BuildRouters creates Gorilla Mux http routers for both normal and restricted endpoints.
 func BuildRouters(handler *Handler) {
+	// Normal router.
 	router := mux.NewRouter()
 	loadCommon(router, handler)
 	loadNormal(router, handler)
 	handler.NormalRouter = router
+
+	// Restricted router.
 	router = mux.NewRouter()
 	loadCommon(router, handler)
 	loadRestricted(router, handler)
 	handler.RestrictedRouter = router
+
 	handler.SetNormal()
 }
 
-// SetNormal a method of the SecurityManager interface which provides normal URI routing
+// SetNormal is a method of the SecurityManager interface which provides normal URI routing.
 func (h *Handler) SetNormal() {
 	h.Router = h.NormalRouter
 }
 
-// SetRestricted a method of the SecurityManager interface which provides restricted URI routing
+// SetRestricted is a method of the SecurityManager interface which provides restricted URI routing.
 func (h *Handler) SetRestricted() {
 	h.Router = h.RestrictedRouter
 }

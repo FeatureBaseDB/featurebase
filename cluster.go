@@ -186,7 +186,7 @@ func NewCluster() *Cluster {
 		closing:     make(chan struct{}),
 
 		LogOutput: os.Stderr,
-		prefect:   &DefaultSecurityManager{},
+		prefect:   &NopSecurityManager{},
 	}
 }
 
@@ -228,20 +228,20 @@ func (c *Cluster) NodeSet() []URI {
 }
 
 func (c *Cluster) setState(state string) {
-	if c.State != state { //only on new state, perform routing change
-		switch state {
-		case ClusterStateResizing:
-			c.prefect.SetRestricted()
-		case ClusterStateNormal:
-			c.prefect.SetNormal()
-			// Don't change routing for these new states
-			// ClusterStateStarting
-			// ResizeJobStateRunning
-			// ResizeJobStateDone
-			// ResizeJobStateAborted
-
-		}
+	// Ignore cases where the state hasn't changed.
+	if state == c.State {
+		return
 	}
+
+	switch state {
+	case ClusterStateResizing:
+		c.prefect.SetRestricted()
+	case ClusterStateNormal:
+		c.prefect.SetNormal()
+		// Don't change routing for these states:
+		// - ClusterStateStarting
+	}
+
 	c.State = state
 }
 
