@@ -299,7 +299,7 @@ func TestClient_ImportValue(t *testing.T) {
 	fld := pilosa.Field{
 		Name: "fld",
 		Type: pilosa.FieldTypeInt,
-		Min:  0,
+		Min:  -100,
 		Max:  100,
 	}
 
@@ -320,7 +320,7 @@ func TestClient_ImportValue(t *testing.T) {
 	// Send import request.
 	c := test.MustNewClient(s.Host())
 	if err := c.ImportValue(context.Background(), "i", "f", fld.Name, 0, []pilosa.FieldValue{
-		{ColumnID: 1, Value: 10},
+		{ColumnID: 1, Value: -10},
 		{ColumnID: 2, Value: 20},
 		{ColumnID: 3, Value: 40},
 	}); err != nil {
@@ -333,7 +333,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify data.
-	if sum != 70 || cnt != 3 {
+	if sum != 50 || cnt != 3 {
 		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=70, cnt=3", sum, cnt)
 	}
 }
