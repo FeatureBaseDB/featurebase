@@ -125,6 +125,7 @@ func loadCommon(router *mux.Router, handler *Handler) {
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
+	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET")
 	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 }
 
@@ -141,7 +142,6 @@ func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
 	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
 	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET")
-	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET")
 	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
 	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
