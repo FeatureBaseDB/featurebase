@@ -293,7 +293,7 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 		val.ColumnID = columnID
 
 		// Parse field value.
-		value, err := strconv.ParseUint(record[1], 10, 64)
+		value, err := strconv.ParseInt(record[1], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid value on row %d: %q", rnum, record[1])
 		}

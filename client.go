@@ -1131,7 +1131,7 @@ func (p Bits) GroupBySlice() map[uint64][]Bit {
 // range-encoded frame.
 type FieldValue struct {
 	ColumnID uint64
-	Value    uint64
+	Value    int64
 }
 
 // FieldValues represents a slice of field values.
@@ -1154,8 +1154,8 @@ func (p FieldValues) ColumnIDs() []uint64 {
 }
 
 // Values returns a slice of all the values.
-func (p FieldValues) Values() []uint64 {
-	other := make([]uint64, len(p))
+func (p FieldValues) Values() []int64 {
+	other := make([]int64, len(p))
 	for i := range p {
 		other[i] = p[i].Value
 	}
