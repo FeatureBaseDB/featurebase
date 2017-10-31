@@ -60,7 +60,9 @@ type Handler struct {
 	Cluster       *Cluster
 	ClientOptions *ClientOptions
 
-	Router *mux.Router
+	Router           *mux.Router
+	NormalRouter     *mux.Router
+	RestrictedRouter *mux.Router
 
 	// The execution engine for running queries.
 	Executor interface {
@@ -89,14 +91,49 @@ func NewHandler() *Handler {
 	handler := &Handler{
 		LogOutput: os.Stderr,
 	}
-	handler.Router = NewRouter(handler)
+	BuildRouters(handler)
 	return handler
 }
 
-// NewRouter creates a Gorilla Mux http router.
-func NewRouter(handler *Handler) *mux.Router {
+// BuildRouters creates a Gorilla Mux http routers for both normal and restricted enpoints.
+func BuildRouters(handler *Handler) {
 	router := mux.NewRouter()
-	router.HandleFunc("/", handler.handleWebUI).Methods("GET")
+	loadCommon(router, handler)
+	loadNormal(router, handler)
+	handler.NormalRouter = router
+	router = mux.NewRouter()
+	loadCommon(router, handler)
+	loadRestricted(router, handler)
+	handler.RestrictedRouter = router
+	handler.SetNormal()
+}
+
+// SetNormal a method of the SecurityManager interface which provides normal URI routing
+func (h *Handler) SetNormal() {
+	h.Router = h.NormalRouter
+}
+
+// SetRestricted a method of the SecurityManager interface which provides restricted URI routing
+func (h *Handler) SetRestricted() {
+	h.Router = h.RestrictedRouter
+}
+
+func loadCommon(router *mux.Router, handler *Handler) {
+	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
+	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
+	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
+	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
+	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
+	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
+	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
+}
+
+func loadRestricted(router *mux.Router, handler *Handler) {
+	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
+	router.NotFoundHandler = http.HandlerFunc(handler.reportRestricted)
+}
+
+func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
@@ -131,11 +168,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
 	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
-	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
-	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
-	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
-	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
-	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
@@ -144,7 +176,10 @@ func NewRouter(handler *Handler) *mux.Router {
 	// For now we just do it for the most commonly used handler, /query
 	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
 
-	return router
+}
+
+func (h *Handler) reportRestricted(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "not allowed during resize", http.StatusMethodNotAllowed)
 }
 
 func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
