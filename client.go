@@ -793,7 +793,7 @@ func (c *Client) RestoreFrom(ctx context.Context, r io.Reader) error {
 			if _, err = io.CopyN(&buf, tr, hdr.Size); err != nil {
 				return err
 			}
-			_, err = c.SetRawColumnAttrs(ctx, parts[1], bufio.NewReader(&buf))
+			err = c.SetRawColumnAttrs(ctx, parts[1], bufio.NewReader(&buf))
 			if err != nil {
 				return err
 			}
@@ -803,7 +803,7 @@ func (c *Client) RestoreFrom(ctx context.Context, r io.Reader) error {
 			if _, err = io.CopyN(&buf, tr, hdr.Size); err != nil {
 				return err
 			}
-			_, err = c.SetRawRowAttrs(ctx, parts[1], parts[2], bufio.NewReader(&buf))
+			err = c.SetRawRowAttrs(ctx, parts[1], parts[2], bufio.NewReader(&buf))
 			if err != nil {
 				return err
 			}
@@ -1248,23 +1248,43 @@ func (c *Client) setContents(ctx context.Context, u url.URL, boltfile io.Reader)
 }
 
 // SetRawColumnAttrs retrieves the raw bolt data file contents of the Column Attributes
-func (c *Client) SetRawColumnAttrs(ctx context.Context, indexName string, boltfile io.Reader) ([]byte, error) {
-	u := url.URL{
-		Scheme: c.host.Scheme(),
-		Host:   c.host.Host(),
-		Path:   fmt.Sprintf("/index/%s/attr", indexName),
+func (c *Client) SetRawColumnAttrs(ctx context.Context, indexName string, boltfile io.Reader) (err error) {
+	hosts, err := c.Hosts(ctx)
+	if err != nil {
+		return
 	}
-	return c.setContents(ctx, u, boltfile)
+	for _, uri := range hosts {
+		u := url.URL{
+			Scheme: uri.Scheme,
+			Host:   uri.Host,
+			Path:   fmt.Sprintf("/index/%s/attr", indexName),
+		}
+		_, err = c.setContents(ctx, u, boltfile)
+		if err != nil {
+			return
+		}
+	}
+	return
 }
 
 // FetchRawRowAttrs retrieves the raw bolt data file contents of the Row Attributes for the given frame
-func (c *Client) SetRawRowAttrs(ctx context.Context, indexName, frameName string, boltfile io.Reader) ([]byte, error) {
-	u := url.URL{
-		Scheme: c.host.Scheme(),
-		Host:   c.host.Host(),
-		Path:   fmt.Sprintf("/index/%s/frame/%s/attr", indexName, frameName),
+func (c *Client) SetRawRowAttrs(ctx context.Context, indexName, frameName string, boltfile io.Reader) (err error) {
+	hosts, err := c.Hosts(ctx)
+	if err != nil {
+		return
 	}
-	return c.setContents(ctx, u, boltfile)
+	for _, uri := range hosts {
+		u := url.URL{
+			Scheme: uri.Scheme,
+			Host:   uri.Host,
+			Path:   fmt.Sprintf("/index/%s/frame/%s/attr", indexName, frameName),
+		}
+		_, err = c.setContents(ctx, u, boltfile)
+		if err != nil {
+			return
+		}
+	}
+	return
 }
 
 // Bit represents the location of a single bit.
@@ -1411,4 +1431,38 @@ func nodePathToURL(node *Node, path string) url.URL {
 		Host:   node.Host,
 		Path:   path,
 	}
+}
+
+func (c *Client) Hosts(ctx context.Context) ([]struct {
+	Scheme string `json:"scheme"`
+	Host   string `json:"host"`
+}, error) {
+	// Execute request against the host.
+	u := uriPathToURL(c.host, "/hosts")
+
+	// Build request.
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+
+	// Execute request.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var rsp []struct {
+		Scheme string `json:"scheme"`
+		Host   string `json:"host"`
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
+	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+	return rsp, nil
 }
