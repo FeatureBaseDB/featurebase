@@ -67,7 +67,7 @@ func NewExecutor() *Executor {
 					DualStack: true,
 				}).DialContext,
 				MaxIdleConns:          1000,
-				MaxIdleConnsPerHost:   200,
+				MaxIdleConnsPerHost:   80,
 				IdleConnTimeout:       90 * time.Second,
 				TLSHandshakeTimeout:   10 * time.Second,
 				ExpectContinueTimeout: 1 * time.Second,
