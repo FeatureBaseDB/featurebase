@@ -126,7 +126,7 @@ func (d *Diagnostics) Open() {
 	}
 	d.cb = gobreaker.NewCircuitBreaker(st)
 
-	d.logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every hour. More information here: https://www.pilosa.com/docs/latest/administration/")
+	d.logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every hour. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics")
 }
 
 // Close notify goroutine to stop.
@@ -171,11 +171,11 @@ func (d *Diagnostics) CompareVersion(value string) error {
 	localVersion := VersionSegments(d.version)
 
 	if localVersion[0] < currentVersion[0] { //Major
-		return fmt.Errorf("Warning: You are running Pilosa %s, but a newer version is available %s", d.version, value)
+		return fmt.Errorf("Warning: You are running Pilosa %s. A newer version (%s) is available: https://github.com/pilosa/pilosa/releases", d.version, value)
 	} else if localVersion[1] < currentVersion[1] { // Minor
-		return fmt.Errorf("Warning: You are running Pilosa %s. The latest Minor release is %s", d.version, value)
+		return fmt.Errorf("Warning: You are running Pilosa %s. The latest Minor release is %s: https://github.com/pilosa/pilosa/releases", d.version, value)
 	} else if localVersion[2] < currentVersion[2] { // Patch
-		return fmt.Errorf("There is a new patch relese of Pilosa availbale: %s", value)
+		return fmt.Errorf("There is a new patch release of Pilosa availbale: %s: https://github.com/pilosa/pilosa/releases", value)
 	}
 
 	return nil

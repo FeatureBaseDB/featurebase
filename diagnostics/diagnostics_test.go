@@ -76,12 +76,12 @@ func TestDiagnosticsVersion_Compare(t *testing.T) {
 	version := "v0.1.1"
 	d.SetVersion(version)
 
-	err := d.CompareVersion("1.7.0")
-	if !strings.Contains(err.Error(), "a newer version is available ") {
+	err := d.CompareVersion("v1.7.0")
+	if !strings.Contains(err.Error(), "A newer version") {
 		t.Fatalf("Expected a newer version is available, actual error: %s", err)
 	}
 	err = d.CompareVersion("1.7.0")
-	if !strings.Contains(err.Error(), "a newer version is available ") {
+	if !strings.Contains(err.Error(), "A newer version") {
 		t.Fatalf("Expected a newer version is available, actual error: %s", err)
 	}
 	err = d.CompareVersion("0.7.0")
@@ -89,7 +89,7 @@ func TestDiagnosticsVersion_Compare(t *testing.T) {
 		t.Fatalf("Expected Minor Version Missmatch, actual error: %s", err)
 	}
 	err = d.CompareVersion("0.1.2")
-	if !strings.Contains(err.Error(), "There is a new patch relese of Pilosa") {
+	if !strings.Contains(err.Error(), "There is a new patch release of Pilosa") {
 		t.Fatalf("Expected Patch Version Missmatch, actual error: %s", err)
 	}
 	err = d.CompareVersion("0.1.1")
