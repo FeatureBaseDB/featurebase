@@ -167,6 +167,7 @@ type Cluster struct {
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
+	prefect SecurityManager
 
 	// The writer for any logging.
 	LogOutput io.Writer
@@ -185,6 +186,7 @@ func NewCluster() *Cluster {
 		closing:     make(chan struct{}),
 
 		LogOutput: os.Stderr,
+		prefect:   &NopSecurityManager{},
 	}
 }
 
@@ -226,6 +228,20 @@ func (c *Cluster) NodeSet() []URI {
 }
 
 func (c *Cluster) setState(state string) {
+	// Ignore cases where the state hasn't changed.
+	if state == c.State {
+		return
+	}
+
+	switch state {
+	case ClusterStateResizing:
+		c.prefect.SetRestricted()
+	case ClusterStateNormal:
+		c.prefect.SetNormal()
+		// Don't change routing for these states:
+		// - ClusterStateStarting
+	}
+
 	c.State = state
 }
 
