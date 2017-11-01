@@ -162,6 +162,12 @@
   revision = "e2103e2c35297fb7e17febb81e49b312087a2372"
 
 [[projects]]
+  name = "github.com/sony/gobreaker"
+  packages = ["."]
+  revision = "e9556a45379ef1da12e54847edb2fb3d7d566f36"
+  version = "0.3.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/spf13/afero"
   packages = [".","mem"]
@@ -230,6 +236,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "e8e78a7c61547d8f4d967c8deac9334b3151e7c10c4f7909e80758956e9c8204"
+  inputs-digest = "0a7eaef315413bc55acf42c5566982fb71be8c11f33162127953572738967b35"
   solver-name = "gps-cdcl"
   solver-version = 1
