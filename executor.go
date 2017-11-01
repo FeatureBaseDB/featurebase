@@ -54,7 +54,7 @@ type Executor struct {
 	MaxWritesPerRequest int
 }
 
-// NewExecutor returns a new instance of Executor.
+// NewExecutor returns a new instance of Executor. blah
 func NewExecutor() *Executor {
 	return &Executor{
 		HTTPClient: http.DefaultClient,
