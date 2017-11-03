@@ -150,6 +150,7 @@ message ResizeInstruction {
     URI URI = 2;
     URI Coordinator = 3;
     repeated ResizeSource Sources = 4;
+    Schema Schema = 5;
 }
 
 message ResizeSource {
