@@ -781,7 +781,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Bitmap).Bits()) {
 			//t.Fatalf("unexpected result: %s", spew.Sdump(result))
-			t.Fatalf("unexpected result: %s", result[0].(*pilosa.Bitmap).Bits())
+			t.Fatalf("unexpected result: %v", result[0].(*pilosa.Bitmap).Bits())
 		}
 	})
 

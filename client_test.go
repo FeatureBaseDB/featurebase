@@ -87,7 +87,7 @@ func TestClient_MultiNode(t *testing.T) {
 			}
 		}
 		if !ownsNum {
-			t.Fatalf("Trying to use slice %d on host %s, but it doesn't own that slice. It owns %s", num, s[i].Host(), owns)
+			t.Fatalf("Trying to use slice %d on host %s, but it doesn't own that slice. It owns %v", num, s[i].Host(), owns)
 		}
 	}
 
