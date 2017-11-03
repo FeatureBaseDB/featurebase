@@ -550,6 +550,18 @@ func (f *Frame) Views() []*View {
 	return other
 }
 
+// viewNames returns a list of all views (as a string) in the frame.
+func (f *Frame) viewNames() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	other := make([]string, 0, len(f.views))
+	for viewName, _ := range f.views {
+		other = append(other, viewName)
+	}
+	return other
+}
+
 // RecalculateCaches recalculates caches on every view in the frame.
 func (f *Frame) RecalculateCaches() {
 	for _, view := range f.Views() {
@@ -958,8 +970,9 @@ func encodeFrames(a []*Frame) []*internal.Frame {
 func encodeFrame(f *Frame) *internal.Frame {
 	fo := f.options()
 	return &internal.Frame{
-		Name: f.name,
-		Meta: fo.Encode(),
+		Name:  f.name,
+		Meta:  fo.Encode(),
+		Views: f.viewNames(),
 	}
 }
 

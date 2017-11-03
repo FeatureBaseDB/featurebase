@@ -204,6 +204,10 @@ func encodeURI(u URI) *internal.URI {
 	}
 }
 
+func DecodeURI(i *internal.URI) URI {
+	return decodeURI(i)
+}
+
 func decodeURI(i *internal.URI) URI {
 	if i == nil {
 		return URI{}

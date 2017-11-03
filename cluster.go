@@ -727,8 +727,8 @@ func (c *Cluster) CompleteCurrentJob(state string) error {
 	return nil
 }
 
-// followResizeInstruction is run by any node that receives a ResizeInstruction.
-func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
+// FollowResizeInstruction is run by any node that receives a ResizeInstruction.
+func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) error {
 	go func() {
 		// Prepare the return message.
 		complete := &internal.ResizeInstructionComplete{
@@ -740,31 +740,9 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
 		// Stop processing on any error.
 		if err := func() error {
 
-			// TODO: move this schema creation code to a method on Holder.
 			// Sync the schema received in the resize instruction.
-			// Create indexes that don't exist.
-			for _, index := range instr.Schema.Indexes {
-				opt := IndexOptions{}
-				idx, err := c.Holder.CreateIndexIfNotExists(index.Name, opt)
-				if err != nil {
-					return err
-				}
-				// Create frames that don't exist.
-				for _, f := range index.Frames {
-					opt := decodeFrameOptions(f.Meta)
-					frame, err := idx.CreateFrameIfNotExists(f.Name, *opt)
-					if err != nil {
-						return err
-					}
-					// Create views that don't exist.
-					for _, v := range f.Views {
-						_, err := frame.CreateViewIfNotExists(v)
-						if err != nil {
-							return err
-						}
-					}
-				}
-				// TODO: Create inputDefinitions that don't exist.
+			if err := c.Holder.ApplySchema(instr.Schema); err != nil {
+				return err
 			}
 
 			// Create a client for calling remote nodes.
@@ -775,7 +753,7 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
 
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {
-				fmt.Printf("\n**** Get slice %d for index %s from host %s ****\n\n", src.Slice, src.Index, src.URI)
+				c.logger().Printf("\n**** Get slice %d for index %s from host %s ****\n\n", src.Slice, src.Index, src.URI)
 
 				srcURI := decodeURI(src.URI)
 
@@ -828,6 +806,7 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
 			c.logger().Printf("sending resizeInstructionComplete error: err=%s", err)
 		}
 	}()
+	return nil
 }
 
 func (c *Cluster) MarkResizeInstructionComplete(complete *internal.ResizeInstructionComplete) error {
@@ -921,11 +900,10 @@ func (j *ResizeJob) setState(state string) {
 
 // Run distributes ResizeInstructions.
 func (j *ResizeJob) Run() error {
-	j.mu.RLock()
-	defer j.mu.RUnlock()
-
 	// Set job state to RUNNING.
+	j.mu.RLock()
 	j.setState(ResizeJobStateRunning)
+	j.mu.RUnlock()
 
 	// Job can be considered done in the case where it doesn't require any action.
 	if !j.urisArePending() {
@@ -978,6 +956,10 @@ func (j *ResizeJob) distributeResizeInstructions() error {
 
 type NodeSet []URI
 
+func (n NodeSet) Len() int           { return len(n) }
+func (n NodeSet) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
+func (n NodeSet) Less(i, j int) bool { return n[i].String() < n[j].String() }
+
 func (u NodeSet) ToHostPortStrings() []string {
 	other := make([]string, 0, len(u))
 	for _, uri := range u {
@@ -1012,7 +994,7 @@ func (t *Topology) containsURI(uri URI) bool {
 	return false
 }
 
-// AddNode adds the uri to the topology and returns true if added.
+// AddURI adds the uri to the topology and returns true if added.
 func (t *Topology) AddURI(uri URI) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -1021,6 +1003,11 @@ func (t *Topology) AddURI(uri URI) bool {
 	}
 	t.NodeSet = append(t.NodeSet, uri)
 	return true
+}
+
+// Encode converts t into its internal representation.
+func (t *Topology) Encode() *internal.Topology {
+	return encodeTopology(t)
 }
 
 // loadTopology reads the topology for the node.
@@ -1117,8 +1104,7 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 				return fmt.Errorf("host is not in topology: %v", e.URI)
 			}
 
-			uri := e.URI
-			if err := c.AddNode(uri); err != nil {
+			if err := c.AddNode(e.URI); err != nil {
 				return err
 			}
 
@@ -1138,8 +1124,7 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 
 		// If the index does not yet have data, go ahead and add the node.
 		if !c.Holder.HasData() {
-			uri := e.URI
-			if err := c.AddNode(uri); err != nil {
+			if err := c.AddNode(e.URI); err != nil {
 				return err
 			}
 			return c.setStateAndBroadcast(ClusterStateNormal)
@@ -1161,7 +1146,7 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 	return nil
 }
 
-func (c *Cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
+func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 	// Ignore status updates from self (coordinator).
 	if c.IsCoordinator() {
 		return nil
