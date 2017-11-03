@@ -684,6 +684,8 @@ func (c *Cluster) generateResizeJob(addURI URI) *ResizeJob {
 	toCluster.ReplicaN = c.ReplicaN
 	toCluster.AddNodeBasicSorted(addURI)
 
+	pbSchema := c.Holder.EncodeSchema()
+
 	// Add to the ResizeJob the instructions for each index.
 	for _, idx := range c.Holder.Indexes() {
 		// dataDiff is map[string][]*internal.ResizeSource, where string is
@@ -696,11 +698,14 @@ func (c *Cluster) generateResizeJob(addURI URI) *ResizeJob {
 				j.URIs[uri] = true
 				continue
 			}
+			// TODO: we can probably consilidate the instructions that go to the same
+			// node but apply to different indexes. (i.e. don't nest this in the Indexes() loop)
 			instr := &internal.ResizeInstruction{
 				JobID:       j.ID,
 				URI:         uri.Encode(),
 				Coordinator: encodeURI(c.Coordinator),
 				Sources:     sources,
+				Schema:      pbSchema,
 			}
 			j.Instructions = append(j.Instructions, instr)
 		}
@@ -734,6 +739,34 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
 
 		// Stop processing on any error.
 		if err := func() error {
+
+			// TODO: move this schema creation code to a method on Holder.
+			// Sync the schema received in the resize instruction.
+			// Create indexes that don't exist.
+			for _, index := range instr.Schema.Indexes {
+				opt := IndexOptions{}
+				idx, err := c.Holder.CreateIndexIfNotExists(index.Name, opt)
+				if err != nil {
+					return err
+				}
+				// Create frames that don't exist.
+				for _, f := range index.Frames {
+					opt := decodeFrameOptions(f.Meta)
+					frame, err := idx.CreateFrameIfNotExists(f.Name, *opt)
+					if err != nil {
+						return err
+					}
+					// Create views that don't exist.
+					for _, v := range f.Views {
+						_, err := frame.CreateViewIfNotExists(v)
+						if err != nil {
+							return err
+						}
+					}
+				}
+				// TODO: Create inputDefinitions that don't exist.
+			}
+
 			// Create a client for calling remote nodes.
 			client, err := NewClientFromURI(&c.URI, nil) // TODO: ClientOptions
 			if err != nil {
@@ -745,11 +778,6 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) {
 				fmt.Printf("\n**** Get slice %d for index %s from host %s ****\n\n", src.Slice, src.Index, src.URI)
 
 				srcURI := decodeURI(src.URI)
-
-				// TODO: there's a possible race condition here;
-				// if NodeStatus has not been shared with the joining
-				// node (and the schema created locally), then
-				// the following Frame() lookup could fail.
 
 				// Retrieve frame.
 				f := c.Holder.Frame(src.Index, src.Frame)
