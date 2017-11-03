@@ -901,9 +901,7 @@ func (j *ResizeJob) setState(state string) {
 // Run distributes ResizeInstructions.
 func (j *ResizeJob) Run() error {
 	// Set job state to RUNNING.
-	j.mu.RLock()
-	j.setState(ResizeJobStateRunning)
-	j.mu.RUnlock()
+	j.SetState(ResizeJobStateRunning)
 
 	// Job can be considered done in the case where it doesn't require any action.
 	if !j.urisArePending() {

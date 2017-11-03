@@ -160,7 +160,7 @@ func (t *TestCluster) AddNode(saveTopology bool) error {
 			return err
 		}
 
-		// Wait for the NodeAdd job to finish.
+		// Wait for the AddNode job to finish.
 		if c.State != pilosa.ClusterStateNormal {
 			t.resizeDone = make(chan struct{})
 			<-t.resizeDone
