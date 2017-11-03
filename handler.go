@@ -924,7 +924,7 @@ func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
 
 	// Delete the view.
 	if err := f.DeleteView(viewName); err != nil {
-		// Ingore this error becuase views do not exist on all nodes due to slice distribution.
+		// Ingore this error because views do not exist on all nodes due to slice distribution.
 		if err != ErrInvalidView {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1169,8 +1169,8 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 	// Validate that this handler owns the slice.
 	if !h.Cluster.OwnsFragment(h.URI.HostPort(), req.Index, req.Slice) {
-		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, req.Index, req.Slice)
-		http.Error(w, mesg, http.StatusPreconditionFailed)
+		msg := fmt.Sprintf("host does not own slice %v-%s slice:%d", h.URI, req.Index, req.Slice)
+		http.Error(w, msg, http.StatusPreconditionFailed)
 		return
 	}
 
@@ -1239,8 +1239,8 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 
 	// Validate that this handler owns the slice.
 	if !h.Cluster.OwnsFragment(h.URI.HostPort(), req.Index, req.Slice) {
-		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, req.Index, req.Slice)
-		http.Error(w, mesg, http.StatusPreconditionFailed)
+		msg := fmt.Sprintf("host does not own slice %v-%s slice:%d", h.URI, req.Index, req.Slice)
+		http.Error(w, msg, http.StatusPreconditionFailed)
 		return
 	}
 
@@ -1305,8 +1305,8 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 
 	// Validate that this handler owns the slice.
 	if !h.Cluster.OwnsFragment(h.URI.HostPort(), index, slice) {
-		mesg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, index, slice)
-		http.Error(w, mesg, http.StatusPreconditionFailed)
+		msg := fmt.Sprintf("host does not own slice %v-%s slice:%d", h.URI, index, slice)
+		http.Error(w, msg, http.StatusPreconditionFailed)
 		return
 	}
 
@@ -1760,7 +1760,7 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Validation the input definition with the curent index's ColumnLabel.
+	// Validation the input definition with the current index's ColumnLabel.
 	if err := req.Validate(index.ColumnLabel()); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
