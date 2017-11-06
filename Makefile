@@ -1,4 +1,4 @@
-.PHONY: dep docker pilosa release-build prerelease-build release prerelease prerelease-upload install generate statik test cover cover-pkg cover-viz
+.PHONY: dep docker pilosa release-build prerelease-build release prerelease prerelease-upload install generate statik test cover cover-pkg cover-viz clean docker-build
 
 DEP := $(shell command -v dep 2>/dev/null)
 STATIK := $(shell command -v statik 2>/dev/null)
@@ -11,6 +11,9 @@ BUILD_TIME=`date -u +%FT%T%z`
 LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME)"
 
 default: test pilosa
+
+clean:
+	rm -rf vendor build
 
 $(GOPATH)/bin:
 	mkdir $(GOPATH)/bin
@@ -51,15 +54,19 @@ pilosa: vendor
 	go build -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
 release-build: vendor
+ifdef DOCKER_BUILD
+	make docker-build FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
+else
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
+endif
 	cp LICENSE README.md build/pilosa-$(IDENTIFIER)
 	tar -cvz -C build -f build/pilosa-$(IDENTIFIER).tar.gz pilosa-$(IDENTIFIER)/
 	@echo "Created release build: build/pilosa-$(IDENTIFIER).tar.gz"
 
 release:
-	make release-build GOOS=linux GOARCH=amd64
-	make release-build GOOS=linux GOARCH=386
 	make release-build GOOS=darwin GOARCH=amd64
+	make release-build GOOS=linux GOARCH=amd64 DOCKER_BUILD=1
+	make release-build GOOS=linux GOARCH=386 DOCKER_BUILD=1
 
 prerelease-build: vendor
 	make pilosa FLAGS="-o build/pilosa-master-$(GOOS)-$(GOARCH)/pilosa"
@@ -99,3 +106,6 @@ endif
 docker:
 	docker build -t "pilosa:$(VERSION)" --build-arg ldflags=$(LDFLAGS) .
 	@echo "Created image: pilosa:$(VERSION)"
+
+docker-build:
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:latest go build -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
