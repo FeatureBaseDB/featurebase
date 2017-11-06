@@ -187,6 +187,35 @@ func (h *Holder) Schema() []*IndexInfo {
 	return a
 }
 
+// ApplySchema applies an internal Schema to Holder.
+func (h *Holder) ApplySchema(schema *internal.Schema) error {
+	// Create indexes that don't exist.
+	for _, index := range schema.Indexes {
+		opt := IndexOptions{}
+		idx, err := h.CreateIndexIfNotExists(index.Name, opt)
+		if err != nil {
+			return err
+		}
+		// Create frames that don't exist.
+		for _, f := range index.Frames {
+			opt := decodeFrameOptions(f.Meta)
+			frame, err := idx.CreateFrameIfNotExists(f.Name, *opt)
+			if err != nil {
+				return err
+			}
+			// Create views that don't exist.
+			for _, v := range f.Views {
+				_, err := frame.CreateViewIfNotExists(v)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		// TODO: Create inputDefinitions that don't exist.
+	}
+	return nil
+}
+
 // EncodeMaxSlices creates and internal representation of max slices.
 func (h *Holder) EncodeMaxSlices() *internal.MaxSlices {
 	return &internal.MaxSlices{

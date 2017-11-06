@@ -332,12 +332,15 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.ClusterStatus:
-		err := s.Cluster.mergeClusterStatus(obj)
+		err := s.Cluster.MergeClusterStatus(obj)
 		if err != nil {
 			return err
 		}
 	case *internal.ResizeInstruction:
-		s.Cluster.followResizeInstruction(obj)
+		err := s.Cluster.FollowResizeInstruction(obj)
+		if err != nil {
+			return err
+		}
 	case *internal.ResizeInstructionComplete:
 		err := s.Cluster.MarkResizeInstructionComplete(obj)
 		if err != nil {
@@ -397,22 +400,8 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	}
 
 	// Sync schema.
-	// Create indexes that don't exist.
-	for _, index := range ns.Schema.Indexes {
-		opt := IndexOptions{}
-		idx, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
-		if err != nil {
-			return err
-		}
-		// Create frames that don't exist.
-		for _, f := range index.Frames {
-			opt := decodeFrameOptions(f.Meta)
-			_, err := idx.CreateFrameIfNotExists(f.Name, *opt)
-			if err != nil {
-				return err
-			}
-		}
-		// TODO: Create inputDefinitions that don't exist.
+	if err := s.Holder.ApplySchema(ns.Schema); err != nil {
+		return err
 	}
 
 	// Sync maxSlices (standard).

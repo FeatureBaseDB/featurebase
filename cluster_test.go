@@ -15,6 +15,7 @@
 package pilosa_test
 
 import (
+	"bytes"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -213,7 +214,7 @@ func TestCluster_Topology(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		actual := pilosa.Nodes(c1.Nodes).URIs()
+		actual := c1.NodeSet()
 		expected := []pilosa.URI{base, uri1, uri2}
 
 		if !reflect.DeepEqual(actual, expected) {
@@ -300,6 +301,251 @@ func TestCluster_Resize(t *testing.T) {
 		actual := c1.DataDiff(c2, i)
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
+		}
+	})
+}
+
+// TestTestCluster ensures that general cluster functionality works as expected.
+func TestCluster_ResizeStates(t *testing.T) {
+
+	/* test conditions:
+	x- single node, no data, comes up in NORMAL with topology
+	x- single node, in topology, comes up NORMAL
+	x- single node, not in topology, raises error
+	x- two node, no data, comes up in NORMAL, with topology
+	x- two node, in topology, comes up NORMAL
+	x- two node, STARTING, not in topology, raises error
+	x- two node, NORMAL, not in topology, triggers resize
+	x- resize of nodes with data moves data appropriately
+	*/
+
+	t.Run("Single node, no data", func(t *testing.T) {
+		tc := test.NewTestCluster(1)
+
+		// Open TestCluster.
+		if err := tc.Open(); err != nil {
+			t.Fatal(err)
+		}
+
+		node := tc.Clusters[0]
+
+		// Ensure that node comes up in state NORMAL.
+		if node.State != pilosa.ClusterStateNormal {
+			t.Errorf("expected state: %v, but got: %v", pilosa.ClusterStateNormal, node.State)
+		}
+
+		expectedTop := &pilosa.Topology{
+			NodeSet: []pilosa.URI{node.URI},
+		}
+
+		// Verify topology file.
+		if !reflect.DeepEqual(node.Topology, expectedTop) {
+			t.Errorf("expected topology: %v, but got: %v", expectedTop, node.Topology)
+		}
+
+		// Close TestCluster.
+		if err := tc.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Single node, in topology", func(t *testing.T) {
+		tc := test.NewTestCluster(0)
+		tc.AddNode(false)
+
+		node := tc.Clusters[0]
+
+		// write topology to data file
+		top := &pilosa.Topology{
+			NodeSet: []pilosa.URI{node.URI},
+		}
+		tc.WriteTopology(node.Path, top)
+
+		// Open TestCluster.
+		if err := tc.Open(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Ensure that node comes up in state NORMAL.
+		if node.State != pilosa.ClusterStateNormal {
+			t.Errorf("expected state: %v, but got: %v", pilosa.ClusterStateNormal, node.State)
+		}
+
+		// Close TestCluster.
+		if err := tc.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Single node, not in topology", func(t *testing.T) {
+		tc := test.NewTestCluster(0)
+		tc.AddNode(false)
+
+		node := tc.Clusters[0]
+
+		// write topology to data file
+		top := &pilosa.Topology{
+			NodeSet: []pilosa.URI{
+				test.NewURIFromHostPort("some-other-host", 0),
+			},
+		}
+		tc.WriteTopology(node.Path, top)
+
+		// Open TestCluster.
+		expected := "considerTopology: coordinator http://host0:0 is not in topology: [http://some-other-host:0]"
+		err := tc.Open()
+		if err == nil || err.Error() != expected {
+			t.Errorf("did not receive expected error: %s", expected)
+		}
+
+		// Close TestCluster.
+		if err := tc.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Multiple nodes, no data", func(t *testing.T) {
+		tc := test.NewTestCluster(0)
+		tc.AddNode(false)
+
+		// Open TestCluster.
+		if err := tc.Open(); err != nil {
+			t.Fatal(err)
+		}
+
+		tc.AddNode(false)
+
+		node0 := tc.Clusters[0]
+		node1 := tc.Clusters[1]
+
+		// Ensure that nodes comes up in state NORMAL.
+		if node0.State != pilosa.ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State)
+		} else if node1.State != pilosa.ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node1.State)
+		}
+
+		expectedTop := &pilosa.Topology{
+			NodeSet: []pilosa.URI{node0.URI, node1.URI},
+		}
+
+		// Verify topology file.
+		if !reflect.DeepEqual(node0.Topology, expectedTop) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop, node0.Topology)
+		} else if !reflect.DeepEqual(node1.Topology, expectedTop) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop, node1.Topology)
+		}
+
+		// Close TestCluster.
+		if err := tc.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Multiple nodes, in/not in topology", func(t *testing.T) {
+		tc := test.NewTestCluster(0)
+		tc.AddNode(false)
+		node0 := tc.Clusters[0]
+
+		u0 := test.NewURIFromHostPort("host0", 0)
+		//u1 := test.NewURIFromHostPort("host1", 0)
+		u2 := test.NewURIFromHostPort("host2", 0)
+
+		// write topology to data file
+		top := &pilosa.Topology{
+			NodeSet: []pilosa.URI{u0, u2},
+		}
+		tc.WriteTopology(node0.Path, top)
+
+		// Open TestCluster.
+		if err := tc.Open(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Ensure that node is in state STARTING before the other node joins.
+		if node0.State != pilosa.ClusterStateStarting {
+			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateStarting, node0.State)
+		}
+
+		// Expect an error by adding a node not in the topology.
+		expectedError := "host is not in topology: http://host1:0"
+		err := tc.AddNode(false)
+		if err == nil || err.Error() != expectedError {
+			t.Errorf("did not receive expected error: %s", expectedError)
+		}
+
+		tc.AddNode(false)
+		node2 := tc.Clusters[2]
+
+		// Ensure that node comes up in state NORMAL.
+		if node0.State != pilosa.ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State)
+		} else if node2.State != pilosa.ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node2.State)
+		}
+
+		// Close TestCluster.
+		if err := tc.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Multiple nodes, with data", func(t *testing.T) {
+		tc := test.NewTestCluster(0)
+		tc.AddNode(false)
+
+		// Open TestCluster.
+		if err := tc.Open(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Add Data to node0.
+		tc.CreateFrame("i", "f", pilosa.FrameOptions{})
+		tc.SetBit("i", "f", "standard", 1, 101, nil)
+		tc.SetBit("i", "f", "standard", 1, 1300000, nil)
+
+		// AddNode needs to block until the resize process has completed.
+		tc.AddNode(false)
+
+		node0 := tc.Clusters[0]
+		node1 := tc.Clusters[1]
+
+		// Ensure that nodes comes up in state NORMAL.
+		if node0.State != pilosa.ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State)
+		} else if node1.State != pilosa.ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node1.State)
+		}
+
+		expectedTop := &pilosa.Topology{
+			NodeSet: []pilosa.URI{node0.URI, node1.URI},
+		}
+
+		// Verify topology file.
+		if !reflect.DeepEqual(node0.Topology, expectedTop) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop, node0.Topology)
+		} else if !reflect.DeepEqual(node1.Topology, expectedTop) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop, node1.Topology)
+		}
+
+		// Verify that node-1 contains the fragment (i/f/standard/1) transferred from node-0.
+		node0Frame := node0.Holder.Frame("i", "f")
+		node0View := node0Frame.View("standard")
+		node0Fragment := node0View.Fragment(1)
+
+		node1Frame := node1.Holder.Frame("i", "f")
+		node1View := node1Frame.View("standard")
+		node1Fragment := node1View.Fragment(1)
+
+		// Ensure checksums are the same.
+		orig := node0Fragment.Checksum()
+		if chksum := node1Fragment.Checksum(); !bytes.Equal(chksum, orig) {
+			t.Fatalf("expected checksum to match: %x - %x", chksum, orig)
+		}
+
+		// Close TestCluster.
+		if err := tc.Close(); err != nil {
+			t.Fatal(err)
 		}
 	})
 }
