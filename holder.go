@@ -123,11 +123,14 @@ func (h *Holder) Open() error {
 	h.wg.Add(1)
 	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
 
+	h.Stats.Open()
 	return nil
 }
 
 // Close closes all open fragments.
 func (h *Holder) Close() error {
+	h.Stats.Close()
+
 	// Notify goroutines of closing and wait for completion.
 	close(h.closing)
 	h.wg.Wait()

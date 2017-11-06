@@ -99,6 +99,7 @@ type Config struct {
 		Service      string   `toml:"service"`
 		Host         string   `toml:"host"`
 		PollInterval Duration `toml:"poll-interval"`
+		Diagnostics  bool     `toml:"diagnostics"`
 	} `toml:"metric"`
 
 	TLS TLSConfig
@@ -116,6 +117,7 @@ func NewConfig() *Config {
 	c.Cluster.Hosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics
+	c.Metric.Diagnostics = true
 	c.TLS = TLSConfig{}
 	return c
 }

@@ -58,6 +58,9 @@ func NewStatsClient(host string) (*StatsClient, error) {
 	}, nil
 }
 
+// Open no-op
+func (c *StatsClient) Open() {}
+
 // Close closes the connection to the agent.
 func (c *StatsClient) Close() error {
 	return c.client.Close()
