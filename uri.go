@@ -43,9 +43,9 @@ var addressRegexp = regexp.MustCompile("^(([+a-z]+):\\/\\/)?([0-9a-z.-]+|\\[[:0-
 // 	localhost
 // 	:10101
 type URI struct {
-	scheme string
-	host   string
-	port   uint16
+	scheme string `json:"scheme"`
+	host   string `json:"host"`
+	port   uint16 `json:"port"`
 }
 
 // DefaultURI creates and returns the default URI.
