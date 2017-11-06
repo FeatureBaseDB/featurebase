@@ -305,7 +305,7 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		} else if !exists {
 			t.Fatal("expected value to exist")
 		} else if value != 25 {
-			t.Fatal("unexpected value: %v", value)
+			t.Fatalf("unexpected value: %v", value)
 		}
 
 		if value, exists, err := f.FieldValue(10, "field1"); err != nil {
@@ -313,7 +313,7 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		} else if !exists {
 			t.Fatal("expected value to exist")
 		} else if value != 2 {
-			t.Fatal("unexpected value: %v", value)
+			t.Fatalf("unexpected value: %v", value)
 		}
 
 		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
@@ -321,7 +321,7 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		} else if !exists {
 			t.Fatal("expected value to exist")
 		} else if value != 10 {
-			t.Fatal("unexpected value: %v", value)
+			t.Fatalf("unexpected value: %v", value)
 		}
 	})
 
