@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -70,7 +71,19 @@ func NewInternalHTTPClientFromURI(defaultURI *URI, options *ClientOptions) *Inte
 	if options == nil {
 		options = &ClientOptions{}
 	}
-	transport := &http.Transport{}
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          1000,
+		MaxIdleConnsPerHost:   200,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 	if options.TLS != nil {
 		transport.TLSClientConfig = options.TLS
 	}
