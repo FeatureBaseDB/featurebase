@@ -454,8 +454,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	if opt.RangeEnabled {
 		if opt.InverseEnabled {
 			return nil, ErrInverseRangeNotAllowed
-		} else if opt.CacheType != "" && opt.CacheType != CacheTypeNone {
-			return nil, ErrRangeCacheNotAllowed
 		}
 	} else {
 		if len(opt.Fields) > 0 {

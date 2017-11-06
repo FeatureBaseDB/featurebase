@@ -500,15 +500,17 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Add Bit Data to node0.
-		tc.CreateFrame("i", "f", pilosa.FrameOptions{})
+		if err := tc.CreateFrame("i", "f", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		}
 		tc.SetBit("i", "f", "standard", 1, 101, nil)
 		tc.SetBit("i", "f", "standard", 1, 1300000, nil)
 
 		// Add Field Data to node0.
-		tc.CreateFrame("i", "fields", pilosa.FrameOptions{
+		if err := tc.CreateFrame("i", "fields", pilosa.FrameOptions{
 			InverseEnabled: false,
 			RangeEnabled:   true,
-			CacheType:      pilosa.CacheTypeNone,
+			//CacheType:      pilosa.CacheTypeNone,
 			Fields: []*pilosa.Field{
 				{
 					Name: "fld0",
@@ -517,14 +519,18 @@ func TestCluster_ResizeStates(t *testing.T) {
 					Max:  100,
 				},
 			},
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 		tc.SetFieldValue("i", "fields", 1, "fld0", -10)
 		tc.SetFieldValue("i", "fields", 1, "fld0", 10)
 		tc.SetFieldValue("i", "fields", 1300000, "fld0", -99)
 		tc.SetFieldValue("i", "fields", 1300000, "fld0", 99)
 
 		// AddNode needs to block until the resize process has completed.
-		tc.AddNode(false)
+		if err := tc.AddNode(false); err != nil {
+			t.Fatal(err)
+		}
 
 		node0 := tc.Clusters[0]
 		node1 := tc.Clusters[1]

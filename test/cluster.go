@@ -179,7 +179,6 @@ func (t *TestCluster) AddNode(saveTopology bool) error {
 			URI:   c.URI,
 		}
 
-		//go coord.ReceiveEvent(ev)
 		if err := coord.ReceiveEvent(ev); err != nil {
 			return err
 		}
@@ -320,7 +319,10 @@ func (t *TestCluster) SendAsync(pb proto.Message) error {
 func (t *TestCluster) SendTo(to *pilosa.Node, pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.ResizeInstruction:
-		t.FollowResizeInstruction(obj)
+		err := t.FollowResizeInstruction(obj)
+		if err != nil {
+			return err
+		}
 	case *internal.ResizeInstructionComplete:
 		coord := t.clusterByURI(to.URI)
 		go coord.MarkResizeInstructionComplete(obj)
@@ -338,50 +340,58 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 		Error: "",
 	}
 
-	// figure out which node it was meant for, then call the operation on that cluster
-	// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
-	instrURI := pilosa.DecodeURI(instr.URI)
-	destCluster := t.clusterByURI(instrURI)
+	// Stop processing on any error.
+	if err := func() error {
 
-	// Sync the schema received in the resize instruction.
-	if err := destCluster.Holder.ApplySchema(instr.Schema); err != nil {
-		return err
-	}
+		// figure out which node it was meant for, then call the operation on that cluster
+		// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
+		instrURI := pilosa.DecodeURI(instr.URI)
+		destCluster := t.clusterByURI(instrURI)
 
-	for _, src := range instr.Sources {
-		srcURI := pilosa.DecodeURI(src.URI)
-		srcCluster := t.clusterByURI(srcURI)
+		// Sync the schema received in the resize instruction.
+		if err := destCluster.Holder.ApplySchema(instr.Schema); err != nil {
+			return err
+		}
 
-		srcFragment := srcCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
-		destFragment := destCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
-		if destFragment == nil {
-			// Create fragment on destination if it doesn't exist.
-			f := destCluster.Holder.Frame(src.Index, src.Frame)
-			v := f.View(src.View)
-			var err error
-			destFragment, err = v.CreateFragmentIfNotExists(src.Slice)
-			if err != nil {
+		for _, src := range instr.Sources {
+			srcURI := pilosa.DecodeURI(src.URI)
+			srcCluster := t.clusterByURI(srcURI)
+
+			srcFragment := srcCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
+			destFragment := destCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
+			if destFragment == nil {
+				// Create fragment on destination if it doesn't exist.
+				f := destCluster.Holder.Frame(src.Index, src.Frame)
+				v := f.View(src.View)
+				var err error
+				destFragment, err = v.CreateFragmentIfNotExists(src.Slice)
+				if err != nil {
+					return err
+				}
+			}
+
+			buf := bytes.NewBuffer(nil)
+
+			bw := bufio.NewWriter(buf)
+			br := bufio.NewReader(buf)
+
+			// Get the fragment from source.
+			if _, err := srcFragment.WriteTo(bw); err != nil {
+				return err
+			}
+
+			// Flush the bufio.buf to the io.Writer (buf).
+			bw.Flush()
+
+			// Write data to destination.
+			if _, err := destFragment.ReadFrom(br); err != nil {
 				return err
 			}
 		}
 
-		buf := bytes.NewBuffer(nil)
-
-		bw := bufio.NewWriter(buf)
-		br := bufio.NewReader(buf)
-
-		// Get the fragment from source.
-		if _, err := srcFragment.WriteTo(bw); err != nil {
-			return err
-		}
-
-		// Flush the bufio.buf to the io.Writer (buf).
-		bw.Flush()
-
-		// Write data to destination.
-		if _, err := destFragment.ReadFrom(br); err != nil {
-			return err
-		}
+		return nil
+	}(); err != nil {
+		complete.Error = err.Error()
 	}
 
 	node := &pilosa.Node{

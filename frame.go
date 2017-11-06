@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -584,6 +585,12 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 	}
 
 	view := f.newView(f.ViewPath(name), name)
+
+	// Never keep a cache for field views.
+	if strings.HasPrefix(name, ViewFieldPrefix) {
+		view.cacheType = CacheTypeNone
+	}
+
 	if err := view.Open(); err != nil {
 		return nil, err
 	}

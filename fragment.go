@@ -254,6 +254,7 @@ func (f *Fragment) openCache() error {
 		f.cache = NewLRUCache(f.CacheSize)
 	case CacheTypeNone:
 		f.cache = NewNopCache()
+		return nil
 	default:
 		return ErrInvalidCacheType
 	}
@@ -1448,6 +1449,10 @@ func (f *Fragment) FlushCache() error {
 
 func (f *Fragment) flushCache() error {
 	if f.cache == nil {
+		return nil
+	}
+
+	if f.CacheType == CacheTypeNone {
 		return nil
 	}
 
