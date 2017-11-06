@@ -129,6 +129,30 @@ func (t *TestCluster) SetBit(index, frame, view string, rowID, colID uint64, x *
 	return nil
 }
 
+func (t *TestCluster) SetFieldValue(index, frame string, columnID uint64, name string, value int64) error {
+	// Determine which node should receive the SetFieldValue.
+	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
+	slice := columnID / pilosa.SliceWidth
+	nodes := c0.FragmentNodes(index, slice)
+
+	for _, node := range nodes {
+		c := t.clusterByURI(node.URI)
+		if c == nil {
+			continue
+		}
+		f := c.Holder.Frame(index, frame)
+		if f == nil {
+			return fmt.Errorf("index/frame does not exist: %s/%s", index, frame)
+		}
+		_, err := f.SetFieldValue(columnID, name, value)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (t *TestCluster) clusterByURI(uri pilosa.URI) *pilosa.Cluster {
 	for _, c := range t.Clusters {
 		if c.URI == uri {

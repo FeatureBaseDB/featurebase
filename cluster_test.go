@@ -499,10 +499,29 @@ func TestCluster_ResizeStates(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Add Data to node0.
+		// Add Bit Data to node0.
 		tc.CreateFrame("i", "f", pilosa.FrameOptions{})
 		tc.SetBit("i", "f", "standard", 1, 101, nil)
 		tc.SetBit("i", "f", "standard", 1, 1300000, nil)
+
+		// Add Field Data to node0.
+		tc.CreateFrame("i", "fields", pilosa.FrameOptions{
+			InverseEnabled: false,
+			RangeEnabled:   true,
+			CacheType:      pilosa.CacheTypeNone,
+			Fields: []*pilosa.Field{
+				{
+					Name: "fld0",
+					Type: pilosa.FieldTypeInt,
+					Min:  -100,
+					Max:  100,
+				},
+			},
+		})
+		tc.SetFieldValue("i", "fields", 1, "fld0", -10)
+		tc.SetFieldValue("i", "fields", 1, "fld0", 10)
+		tc.SetFieldValue("i", "fields", 1300000, "fld0", -99)
+		tc.SetFieldValue("i", "fields", 1300000, "fld0", 99)
 
 		// AddNode needs to block until the resize process has completed.
 		tc.AddNode(false)
@@ -528,6 +547,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop, node1.Topology)
 		}
 
+		// Bits
 		// Verify that node-1 contains the fragment (i/f/standard/1) transferred from node-0.
 		node0Frame := node0.Holder.Frame("i", "f")
 		node0View := node0Frame.View("standard")
@@ -540,7 +560,23 @@ func TestCluster_ResizeStates(t *testing.T) {
 		// Ensure checksums are the same.
 		orig := node0Fragment.Checksum()
 		if chksum := node1Fragment.Checksum(); !bytes.Equal(chksum, orig) {
-			t.Fatalf("expected checksum to match: %x - %x", chksum, orig)
+			t.Fatalf("expected standard view checksum to match: %x - %x", chksum, orig)
+		}
+
+		// Values
+		// Verify that node-1 contains the fragment (i/fields/field_fld0/1) transferred from node-0.
+		node0Frame = node0.Holder.Frame("i", "fields")
+		node0View = node0Frame.View("field_fld0")
+		node0Fragment = node0View.Fragment(1)
+
+		node1Frame = node1.Holder.Frame("i", "fields")
+		node1View = node1Frame.View("field_fld0")
+		node1Fragment = node1View.Fragment(1)
+
+		// Ensure checksums are the same.
+		orig = node0Fragment.Checksum()
+		if chksum := node1Fragment.Checksum(); !bytes.Equal(chksum, orig) {
+			t.Fatalf("expected field view checksum to match: %x - %x", chksum, orig)
 		}
 
 		// Close TestCluster.
