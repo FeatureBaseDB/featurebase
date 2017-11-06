@@ -130,21 +130,13 @@ func (s *Server) Open() error {
 	// Set Cluster URI.
 	s.Cluster.URI = s.URI
 
-	/*
-		// Create local node if no cluster is specified.
-		if len(s.Cluster.Nodes) == 0 {
-			s.Cluster.Nodes = []*Node{
-				{Scheme: s.URI.Scheme(), Host: s.URI.HostPort()},
-			}
+	// Find the Node ID and append that tag to stats.
+	for i, n := range s.Cluster.Nodes {
+		if n.URI == s.URI {
+			s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
+			break
 		}
-
-		// TODO: nodes aren't here yet. May need to merge new stats code anyway.
-		for i, n := range s.Cluster.Nodes {
-			if s.Cluster.NodeByHost(n.Host) != nil {
-				s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
-			}
-		}
-	*/
+	}
 
 	// Open holder.
 	s.Holder.LogOutput = s.LogOutput
