@@ -1,4 +1,4 @@
-.PHONY: dep docker pilosa release-build prerelease-build release prerelease prerelease-upload install generate statik test cover cover-pkg cover-viz clean docker-build
+.PHONY: dep docker pilosa release-build prerelease-build release prerelease prerelease-upload install generate statik test cover cover-pkg cover-viz clean docker-build docker-test
 
 DEP := $(shell command -v dep 2>/dev/null)
 STATIK := $(shell command -v statik 2>/dev/null)
@@ -9,6 +9,7 @@ CLONE_URL=github.com/pilosa/pilosa
 PKGS := $(shell cd $(GOPATH)/src/$(CLONE_URL); go list ./... | grep -v vendor)
 BUILD_TIME=`date -u +%FT%T%z`
 LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME)"
+DOCKER_GOLANG_IMAGE=golang:latest
 
 default: test pilosa
 
@@ -108,4 +109,7 @@ docker:
 	@echo "Created image: pilosa:$(VERSION)"
 
 docker-build:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:latest go build -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) $(DOCKER_GOLANG_IMAGE) go build -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+
+docker-test:
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) $(DOCKER_GOLANG_IMAGE) go test $(TESTFLAGS) $(PKGS)
