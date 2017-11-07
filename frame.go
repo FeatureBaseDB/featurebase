@@ -901,7 +901,7 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 }
 
 // ImportValue bulk imports range-encoded value data.
-func (f *Frame) ImportValue(fieldName string, columnIDs, values []uint64) error {
+func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64) error {
 	// Verify that this frame is range-encoded.
 	if !f.RangeEnabled() {
 		return fmt.Errorf("Frame not RangeEnabled: %s", f.name)
@@ -949,7 +949,12 @@ func (f *Frame) ImportValue(fieldName string, columnIDs, values []uint64) error 
 			return err
 		}
 
-		if err := frag.ImportValue(data.ColumnIDs, data.Values, field.BitDepth()); err != nil {
+		baseValues := make([]uint64, len(data.Values))
+		for i, value := range data.Values {
+			baseValues[i] = uint64(value - field.Min)
+		}
+
+		if err := frag.ImportValue(data.ColumnIDs, baseValues, field.BitDepth()); err != nil {
 			return err
 		}
 	}

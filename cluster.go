@@ -746,10 +746,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 			}
 
 			// Create a client for calling remote nodes.
-			client, err := NewClientFromURI(&c.URI, nil) // TODO: ClientOptions
-			if err != nil {
-				return err
-			}
+			client := NewInternalHTTPClientFromURI(&c.URI, nil) // TODO: ClientOptions
 
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {
@@ -962,6 +959,14 @@ func (u NodeSet) ToHostPortStrings() []string {
 	other := make([]string, 0, len(u))
 	for _, uri := range u {
 		other = append(other, uri.HostPort())
+	}
+	return other
+}
+
+func (u NodeSet) ToStrings() []string {
+	other := make([]string, 0, len(u))
+	for _, uri := range u {
+		other = append(other, uri.String())
 	}
 	return other
 }

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/internal"
 )
 
 // BenchCommand represents a command for benchmarking index operations.
@@ -70,7 +71,7 @@ func (cmd *BenchCommand) Run(ctx context.Context) error {
 }
 
 // runSetBit executes a benchmark of random SetBit() operations.
-func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) error {
+func (cmd *BenchCommand) runSetBit(ctx context.Context, client pilosa.InternalClient) error {
 	if cmd.N == 0 {
 		return errors.New("operation count required")
 	} else if cmd.Index == "" {
@@ -89,9 +90,11 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client *pilosa.Client) e
 		rowID := rand.Intn(maxRowID)
 		columnID := rand.Intn(maxColumnID)
 
-		q := fmt.Sprintf(`SetBit(id=%d, frame="%s", columnID=%d)`, rowID, cmd.Frame, columnID)
-
-		if _, err := client.ExecuteQuery(ctx, cmd.Index, q, true); err != nil {
+		queryRequest := &internal.QueryRequest{
+			Query:  fmt.Sprintf(`SetBit(id=%d, frame="%s", columnID=%d)`, rowID, cmd.Frame, columnID),
+			Remote: false,
+		}
+		if _, err := client.ExecuteQuery(ctx, cmd.Index, queryRequest); err != nil {
 			return err
 		}
 	}

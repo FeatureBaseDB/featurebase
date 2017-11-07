@@ -125,11 +125,14 @@ func (h *Holder) Open() error {
 	h.wg.Add(1)
 	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
 
+	h.Stats.Open()
 	return nil
 }
 
 // Close closes all open fragments.
 func (h *Holder) Close() error {
+	h.Stats.Close()
+
 	// Notify goroutines of closing and wait for completion.
 	close(h.closing)
 	h.wg.Wait()
@@ -568,10 +571,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterURI(s.URI) {
-		client, err := NewClientFromURI(&node.URI, s.ClientOptions)
-		if err != nil {
-			return err
-		}
+		client := NewInternalHTTPClientFromURI(&node.URI, s.ClientOptions)
 
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
@@ -613,10 +613,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterURI(s.URI) {
-		client, err := NewClientFromURI(&node.URI, s.ClientOptions)
-		if err != nil {
-			return err
-		}
+		client := NewInternalHTTPClientFromURI(&node.URI, s.ClientOptions)
 
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.

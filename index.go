@@ -674,7 +674,7 @@ type importData struct {
 
 type importValueData struct {
 	ColumnIDs []uint64
-	Values    []uint64
+	Values    []int64
 }
 
 // CreateInputDefinition creates a new input definition.

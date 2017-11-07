@@ -83,6 +83,17 @@ func TestNormalizedAddress(t *testing.T) {
 	}
 }
 
+func TestURIPath(t *testing.T) {
+	uri, err := NewURIFromAddress("http+protobuf://big-data.pilosa.com:6888")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := "http://big-data.pilosa.com:6888/index/foo"
+	if uri.Path("/index/foo") != target {
+		t.Fatalf("%s != %s", uri.Path("/index/foo"), target)
+	}
+}
+
 func TestEquals(t *testing.T) {
 	uri1 := DefaultURI()
 	if uri1.Equals(nil) {

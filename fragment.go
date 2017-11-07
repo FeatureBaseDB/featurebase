@@ -1714,10 +1714,8 @@ func (s *FragmentSyncer) SyncFragment() error {
 		}
 
 		// Retrieve remote blocks.
-		client, err := NewClientFromURI(&node.URI, s.ClientOptions)
-		if err != nil {
-			return err
-		}
+		client := NewInternalHTTPClientFromURI(&node.URI, s.ClientOptions)
+
 		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return err
@@ -1782,7 +1780,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 	// Read pairs from each remote block.
 	var pairSets []PairSet
-	var clients []*Client
+	var clients []InternalClient
 	for _, node := range s.Cluster.FragmentNodes(f.Index(), f.Slice()) {
 		if s.URI == node.URI {
 			continue
@@ -1793,10 +1791,8 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 			return nil
 		}
 
-		client, err := NewClientFromURI(&node.URI, s.ClientOptions)
-		if err != nil {
-			return err
-		}
+		client := NewInternalHTTPClientFromURI(&node.URI, s.ClientOptions)
+
 		clients = append(clients, client)
 
 		// Only sync the standard block.
@@ -1848,7 +1844,11 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		}
 
 		// Execute query.
-		_, err := clients[i].ExecuteQuery(context.Background(), f.Index(), buf.String(), false)
+		queryRequest := &internal.QueryRequest{
+			Query:  buf.String(),
+			Remote: true,
+		}
+		_, err := clients[i].ExecuteQuery(context.Background(), f.Index(), queryRequest)
 		if err != nil {
 			return err
 		}
