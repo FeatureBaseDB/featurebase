@@ -78,7 +78,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 #### Log Path
 
-* Description: Path of log file
+* Description: Path of log file.
 * Flag: `--log-path="/path/to/logfile"`
 * Env: `PILOSA_LOG_PATH="/path/to/logfile"`
 * Config:
