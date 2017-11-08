@@ -112,6 +112,27 @@ Note: This will only work when the replication factor is >= 2
 - Restart the cluster
 - Wait for the 1st sync (10 minutes) to validate Index connections
 
+#### Diagnostics
+
+Each Pilosa cluster is configured by default to share anonymous usage details with Pilosa Corp. These metrics allow us to understand how Pilosa is used by the community and improve the technology to suit your needs. Diagnostics are sent to Pilosa every hour. Each of the metrics are detailed below as well as opt-out instructions.
+
+<strong id="version">Version:</strong> Version string of the build.
+<strong id="host">Host:</strong> Host URI.
+<strong id="cluster">Cluster:</strong> List of nodes in the Cluster. 
+<strong id="num_nodes">NumNodes:</strong> Number of nodes in the Cluster.
+<strong id="num_cpu">NumCPU:</strong> Number of Cores per Node
+<strong id="bsa_enabled">BSIEnabled:</strong> Bit Slice Index Frames in use.
+<strong id="time_quantum_enabled">TimeQuantumEnabled:</strong> Time Quantum Frames in use.
+<strong id="inverse_enabled">InverseEnabled:</strong> Inverse Frames in use.
+<strong id="num_indexes">NumIndexes:</strong> Number of Indexes in the Cluster.
+<strong id="num_frames">NumFrames:</strong> Number of Frames in the Cluster.
+<strong id="num_slices">NumSlices:</strong> Number of Slices in the Cluster.
+<strong id="num_views">NumViews:</strong> Number of Views in the Cluster.
+<strong id="open_files">OpenFiles:</strong> Open file handle count.
+<strong id="go_routines">GoRoutines:</strong> Go routine count.
+
+You can opt-out of the Pilosa diagnostics reporting by setting either the command line configuration option `--metric.diagnostics=false`, use the `PILOSA_METRIC_DIAGNOSTICS` environment variable, or the TOML configuration file `[metric]` `diagnostics` option.
+
 #### Metrics
 
 Pilosa can be configured to emit metrics pertaining to its internal processes in one of two formats: Expvar or StatsD. Metric recording is disabled by default.

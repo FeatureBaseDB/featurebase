@@ -58,6 +58,12 @@ type StatsClient interface {
 
 	// SetLogger Set the logger output type
 	SetLogger(logger io.Writer)
+
+	// Starts the service
+	Open()
+
+	// Closes the client
+	Close() error
 }
 
 // NopStatsClient represents a client that doesn't do anything.
@@ -74,6 +80,8 @@ func (c *nopStatsClient) Histogram(name string, value float64, rate float64)    
 func (c *nopStatsClient) Set(name string, value string, rate float64)                               {}
 func (c *nopStatsClient) Timing(name string, value time.Duration, rate float64)                     {}
 func (c *nopStatsClient) SetLogger(logger io.Writer)                                                {}
+func (c *nopStatsClient) Open()                                                                     {}
+func (c *nopStatsClient) Close() error                                                              { return nil }
 
 // ExpvarStatsClient writes stats out to expvars.
 type ExpvarStatsClient struct {
@@ -145,9 +153,15 @@ func (c *ExpvarStatsClient) Timing(name string, value time.Duration, rate float6
 	c.mu.Unlock()
 }
 
-// SetLogger has no logger
+// SetLogger has no logger.
 func (c *ExpvarStatsClient) SetLogger(logger io.Writer) {
 }
+
+// Open no-op.
+func (c *ExpvarStatsClient) Open() {}
+
+// Close no-op.
+func (c *ExpvarStatsClient) Close() error { return nil }
 
 // MultiStatsClient joins multiple stats clients together.
 type MultiStatsClient []StatsClient
@@ -211,11 +225,29 @@ func (a MultiStatsClient) Timing(name string, value time.Duration, rate float64)
 	}
 }
 
-// SetLogger Sets the StatsD logger output type
+// SetLogger Sets the StatsD logger output type.
 func (a MultiStatsClient) SetLogger(logger io.Writer) {
 	for _, c := range a {
 		c.SetLogger(logger)
 	}
+}
+
+// Open starts the stat service.
+func (a MultiStatsClient) Open() {
+	for _, c := range a {
+		c.Open()
+	}
+}
+
+// Close shuts down the stats clients.
+func (a MultiStatsClient) Close() error {
+	for _, c := range a {
+		err := c.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // UnionStringSlice returns a sorted set of tags which combine a & b.

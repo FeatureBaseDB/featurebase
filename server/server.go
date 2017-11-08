@@ -44,6 +44,9 @@ func init() {
 const (
 	// DefaultDataDir is the default data directory.
 	DefaultDataDir = "~/.pilosa"
+
+	// DefaultDiagnosticsInterval is the default sync frequency diagnostic metrics.
+	DefaultDiagnosticsInterval = 1 * time.Hour
 )
 
 // Command represents the state of the pilosa server command.
@@ -139,6 +142,9 @@ func (m *Command) SetupServer() error {
 	m.Server.Logger().Printf("Using data from: %s\n", m.Config.DataDir)
 	m.Server.Holder.Path = m.Config.DataDir
 	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollInterval)
+	if m.Config.Metric.Diagnostics {
+		m.Server.DiagnosticInterval = time.Duration(DefaultDiagnosticsInterval)
+	}
 	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
 	if err != nil {
 		return err

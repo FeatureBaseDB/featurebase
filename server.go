@@ -32,12 +32,15 @@ import (
 
 	"github.com/CAFxX/gcnotifier"
 	"github.com/gogo/protobuf/proto"
+	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
 )
 
 // Default server settings.
 const (
 	DefaultAntiEntropyInterval = 10 * time.Minute
+	DefaultPollingInterval     = 60 * time.Second
+	DefaultDiagnosticServer    = "https://diagnostics.pilosa.com/v0/diagnostics"
 )
 
 // Server represents a holder wrapped by a running HTTP server.
@@ -56,13 +59,15 @@ type Server struct {
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
-	Network string
-	URI     URI
-	Cluster *Cluster
+	Network     string
+	URI         URI
+	Cluster     *Cluster
+	diagnostics *diagnostics.Diagnostics
 
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
 	MetricInterval      time.Duration
+	DiagnosticInterval  time.Duration
 
 	// TLS configuration
 	TLS *tls.Config
@@ -72,7 +77,7 @@ type Server struct {
 
 	LogOutput io.Writer
 
-	defaultClient *http.Client
+	defaultClient InternalClient
 }
 
 // NewServer returns a new instance of Server.
@@ -84,11 +89,13 @@ func NewServer() *Server {
 		Handler:           NewHandler(),
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
+		diagnostics:       diagnostics.New(DefaultDiagnosticServer),
 
 		Network: "tcp",
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		MetricInterval:      0,
+		DiagnosticInterval:  0,
 
 		LogOutput: os.Stderr,
 	}
@@ -183,12 +190,11 @@ func (s *Server) Open() error {
 		}
 	}()
 
-	/*
-		// Start background monitoring.
-		s.wg.Add(2)
-		go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
-		go func() { defer s.wg.Done(); s.monitorRuntime() }()
-	*/
+	// Start background monitoring.
+	s.wg.Add(3)
+	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
+	go func() { defer s.wg.Done(); s.monitorRuntime() }()
+	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
 
 	return nil
 }
@@ -220,10 +226,10 @@ func (s *Server) Addr() net.Addr {
 	return s.ln.Addr()
 }
 
+// Logger returns a logger that writes to LogOutput
 func (s *Server) Logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
 
 func (s *Server) monitorAntiEntropy() {
-	t := time.Now()
 	ticker := time.NewTicker(s.AntiEntropyInterval)
 	defer ticker.Stop()
 
@@ -237,7 +243,7 @@ func (s *Server) monitorAntiEntropy() {
 		case <-ticker.C:
 			s.Holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
-
+		t := time.Now()
 		s.Logger().Printf("holder sync beginning")
 
 		// Initialize syncer with local holder and remote client.
@@ -256,9 +262,9 @@ func (s *Server) monitorAntiEntropy() {
 
 		// Record successful sync in log.
 		s.Logger().Printf("holder sync complete")
+		dif := time.Since(t)
+		s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
 	}
-	dif := time.Since(t)
-	s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
 }
 
 // ReceiveMessage represents an implementation of BroadcastHandler.
@@ -431,9 +437,66 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	return nil
 }
 
+// monitorDiagnostics periodically polls the the Pilosa Indexes for cluster info.
+func (s *Server) monitorDiagnostics() {
+	if s.DiagnosticInterval <= 0 {
+		s.Logger().Printf("diagnostics disabled")
+		return
+	}
+
+	s.diagnostics.SetLogger(s.LogOutput)
+	s.diagnostics.SetVersion(Version)
+	s.diagnostics.SetInterval(s.DiagnosticInterval)
+	s.diagnostics.Open()
+	s.diagnostics.Set("Host", s.URI.host)
+	s.diagnostics.Set("Cluster", strings.Join(NodeSet(s.Cluster.NodeSet()).ToStrings(), ","))
+	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
+	s.diagnostics.Set("NumCPU", runtime.NumCPU())
+	// TODO: unique cluster ID
+
+	// Flush the diagnostics metrics at startup, then on each tick interval
+	flush := func() {
+		numFrames := 0
+		numSlices := uint64(0)
+		for _, index := range s.Holder.Indexes() {
+			numSlices += index.MaxSlice() + 1
+			for _, f := range index.Frames() {
+				numFrames++
+				if f.rangeEnabled {
+					s.diagnostics.Set("BSIEnabled", true)
+				}
+				if f.timeQuantum != "" {
+					s.diagnostics.Set("TimeQuantumEnabled", true)
+				}
+			}
+		}
+
+		s.diagnostics.Set("NumIndexes", len(s.Holder.Indexes()))
+		s.diagnostics.Set("NumFrames", numFrames)
+		s.diagnostics.Set("NumSlices", numSlices)
+		s.diagnostics.Set("OpenFiles", CountOpenFiles())
+		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
+		s.diagnostics.CheckVersion()
+		s.diagnostics.Flush()
+	}
+
+	ticker := time.NewTicker(s.DiagnosticInterval)
+	defer ticker.Stop()
+	flush()
+	for {
+		// Wait for tick or a close.
+		select {
+		case <-s.closing:
+			return
+		case <-ticker.C:
+			flush()
+		}
+	}
+}
+
 // monitorRuntime periodically polls the Go runtime metrics.
 func (s *Server) monitorRuntime() {
-	// Disable metrics when poll interval is zero
+	// Disable metrics when poll interval is zero.
 	if s.MetricInterval <= 0 {
 		return
 	}
@@ -453,18 +516,18 @@ func (s *Server) monitorRuntime() {
 		case <-s.closing:
 			return
 		case <-gcn.AfterGC():
-			// GC just ran
+			// GC just ran.
 			s.Holder.Stats.Count("garbage_collection", 1, 1.0)
 		case <-ticker.C:
 		}
 
-		// Record the number of go routines
+		// Record the number of go routines.
 		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 
-		// Open File handles
+		// Open File handles.
 		s.Holder.Stats.Gauge("OpenFiles", float64(CountOpenFiles()), 1.0)
 
-		// Runtime memory metrics
+		// Runtime memory metrics.
 		runtime.ReadMemStats(&m)
 		s.Holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
 		s.Holder.Stats.Gauge("HeapInuse", float64(m.HeapInuse), 1.0)
@@ -479,10 +542,10 @@ func (s *Server) createDefaultClient() {
 	if s.TLS != nil {
 		transport.TLSClientConfig = s.TLS
 	}
-	s.defaultClient = &http.Client{Transport: transport}
+	s.defaultClient = NewInternalHTTPClientFromURI(nil, &ClientOptions{TLS: s.TLS})
 }
 
-// CountOpenFiles on opperating systems that support lsof
+// CountOpenFiles on operating systems that support lsof.
 func CountOpenFiles() int {
 	count := 0
 
