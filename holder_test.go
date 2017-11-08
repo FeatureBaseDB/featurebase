@@ -45,6 +45,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrIndexPermission", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -95,6 +98,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFramePermission", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -151,6 +157,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrViewPermission", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -172,6 +181,9 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrViewFragmentsMkdir", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -194,6 +206,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -240,6 +255,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFragmentCachePermission", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
