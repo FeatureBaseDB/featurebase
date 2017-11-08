@@ -80,13 +80,10 @@ func TestServerConfig(t *testing.T) {
 		hosts = [
 			"localhost:19444",
 		]
-	[plugins]
-		path = "/var/sloth"
 	`,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:1110", "localhost:1111"})
-				v.Check(cmd.Server.Config.Plugins.Path, "/var/sloth")
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*9))
 				return v.Error()
 			},

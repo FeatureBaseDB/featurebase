@@ -81,10 +81,6 @@ type Config struct {
 		LongQueryTime Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 
-	Plugins struct {
-		Path string `toml:"path"`
-	} `toml:"plugins"`
-
 	AntiEntropy struct {
 		Interval Duration `toml:"interval"`
 	} `toml:"anti-entropy"`

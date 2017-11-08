@@ -363,18 +363,6 @@ func TestConfig_Parse_DataDir(t *testing.T) {
 	}
 }
 
-// Ensure the "plugins" config can be parsed.
-func TestConfig_Parse_Plugins(t *testing.T) {
-	if c, err := ParseConfig(`
-[plugins]
-path = "/path/to/plugins"
-`); err != nil {
-		t.Fatal(err)
-	} else if c.Plugins.Path != "/path/to/plugins" {
-		t.Fatalf("unexpected path: %s", c.Plugins.Path)
-	}
-}
-
 // tempMkdir makes a temporary directory
 func tempMkdir(t *testing.T) string {
 	dir, err := ioutil.TempDir("", "pilosatemp")
