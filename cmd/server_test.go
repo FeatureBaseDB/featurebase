@@ -45,10 +45,11 @@ func TestServerConfig(t *testing.T) {
 		// TEST 0
 		{
 			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:10111,localhost:10110", "--bind", "localhost:10111"},
-			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER_POLL_INTERVAL": "3m2s"},
+			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER_POLL_INTERVAL": "3m2s", "PILOSA_CLUSTER_LONG_QUERY_TIME": "1m30s", "PILOSA_MAX_WRITES_PER_REQUEST": "2000"},
 			cfgFileContent: `
 	data-dir = "/tmp/myFileDatadir"
 	bind = "localhost:0"
+	max-writes-per-request = 3000
 
 	[cluster]
 		poll-interval = "45s"
@@ -57,6 +58,7 @@ func TestServerConfig(t *testing.T) {
 		hosts = [
 			"localhost:19444",
 		]
+		long-query-time = "1m10s"
 	`,
 			validation: func() error {
 				v := validator{}
@@ -65,6 +67,8 @@ func TestServerConfig(t *testing.T) {
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:10111", "localhost:10110"})
 				v.Check(cmd.Server.Config.Cluster.PollInterval, pilosa.Duration(time.Second*182))
+				v.Check(cmd.Server.Config.Cluster.LongQueryTime, pilosa.Duration(time.Second*90))
+				v.Check(cmd.Server.Config.MaxWritesPerRequest, 2000)
 				return v.Error()
 			},
 		},
