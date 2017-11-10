@@ -1524,14 +1524,19 @@ func TestDifferenceRunBitmap(t *testing.T) {
 			bitmap: MakeBitmap([]uint64{0x0, 0x8000000000000000}),
 			exp:    []interval16{{start: 0, last: 65}},
 		},
+		{
+			runs:   []interval16{{start: 1, last: 65535}},
+			bitmap: MakeBitmap([]uint64{0x0000000000000001}),
+			exp:    []interval16{{start: 1, last: 65535}},
+		},
 	}
 	for i, test := range tests {
 		a.runs = test.runs
-		a.n = a.runCountRange(0, 100)
+		a.n = a.runCountRange(0, 65535)
 		for i, v := range test.bitmap {
 			b.bitmap[i] = v
 		}
-		b.n = b.bitmapCountRange(0, 100)
+		b.n = b.bitmapCountRange(0, 65535)
 		ret := differenceRunBitmap(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)

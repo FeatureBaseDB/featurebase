@@ -2508,7 +2508,7 @@ func differenceRunArray(a, b *container) *container {
 // differenceRunBitmap computes the difference of an run from a bitmap.
 func differenceRunBitmap(a, b *container) *container {
 	// If a is full, difference is the flip of b.
-	if a.runs[0].start == 0 && a.runs[0].last == 65535 {
+	if len(a.runs) > 0 && a.runs[0].start == 0 && a.runs[0].last == 65535 {
 		return b.flipBitmap()
 	}
 	output := &container{container_type: ContainerRun}
@@ -2533,6 +2533,9 @@ func differenceRunBitmap(a, b *container) *container {
 				if run.start > run.last {
 					break
 				}
+			}
+			if bit == 65535 { //overflow
+				break
 			}
 		}
 		if run.start <= run.last {
