@@ -55,6 +55,18 @@ When importing large datasets remember it is much faster to pre sort the data by
 pilosa import --sort -i project -f stargazer project-stargazer.csv
 ```
 
+##### Importing Field Values
+
+If you are using [BSI Range-Encoding](../data-model/#bsi-range-encoding) field values, you can import field values for a single frame and single field using `--field`. The CSV file should be in the format `ColumnID,Value`.
+
+```
+pilosa import -i project -f stargazer --field star_count project-stargazer-counts.csv
+```
+
+<div class="note">
+    <p>Note that you must first create a frame with Range Encoding enabled and a field. View <a href="../api-reference/#create-frame">Create Frame</a> for more details.</p>
+</div>
+
 #### Exporting
 
 Exporting Data to csv can be performed on a live instance of Pilosa. You need to specify the Index, Frame, and View(default is standard). The API also expects the slice number, but the `pilosa export` sub command will export all slices within a Frame. The data will be in csv format RowID,ColumnID and sorted by column ID.
