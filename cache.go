@@ -215,7 +215,7 @@ func (c *RankCache) IDs() []uint64 {
 	return a
 }
 
-// Invalidate recalculates the the entries by rank.
+// Invalidate recalculates the entries by rank.
 func (c *RankCache) Invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()

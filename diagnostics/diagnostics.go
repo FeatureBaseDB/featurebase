@@ -175,7 +175,7 @@ func (d *Diagnostics) CompareVersion(value string) error {
 	} else if localVersion[1] < currentVersion[1] { // Minor
 		return fmt.Errorf("Warning: You are running Pilosa %s. The latest Minor release is %s: https://github.com/pilosa/pilosa/releases", d.version, value)
 	} else if localVersion[2] < currentVersion[2] { // Patch
-		return fmt.Errorf("There is a new patch release of Pilosa availbale: %s: https://github.com/pilosa/pilosa/releases", value)
+		return fmt.Errorf("There is a new patch release of Pilosa available: %s: https://github.com/pilosa/pilosa/releases", value)
 	}
 
 	return nil
