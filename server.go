@@ -497,7 +497,7 @@ func (s *Server) checkMaxSlices(scheme string, hostPort string) (map[string]uint
 	return s.defaultClient.MaxSliceByIndex(ctx)
 }
 
-// monitorDiagnostics periodically polls the the Pilosa Indexes for cluster info.
+// monitorDiagnostics periodically polls the Pilosa Indexes for cluster info.
 func (s *Server) monitorDiagnostics() {
 	if s.DiagnosticInterval <= 0 {
 		s.Logger().Printf("diagnostics disabled")
