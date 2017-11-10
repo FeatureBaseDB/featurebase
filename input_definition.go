@@ -90,7 +90,8 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 		inputFrame := InputFrame{
 			Name: fr.Name,
 			Options: FrameOptions{
-				RowLabel:       frameMeta.RowLabel,
+				// Deprecating row labels per #810. So, setting the default row label here.
+				RowLabel:       DefaultRowLabel,
 				InverseEnabled: frameMeta.InverseEnabled,
 				CacheSize:      frameMeta.CacheSize,
 				CacheType:      frameMeta.CacheType,
@@ -100,8 +101,11 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 		i.frames = append(i.frames, inputFrame)
 	}
 
+	primaryKeyGiven := false
+
 	for _, field := range pb.Fields {
 		var actions []Action
+		fieldName := field.Name
 		for _, action := range field.InputDefinitionActions {
 			actions = append(actions, Action{
 				Frame:            action.Frame,
@@ -111,12 +115,25 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 			})
 		}
 
+		if field.PrimaryKey {
+			// Deprecating column labels per #810.
+			// So, setting the default column label here.
+			fieldName = DefaultColumnLabel
+			primaryKeyGiven = true
+		}
+
 		inputField := InputDefinitionField{
-			Name:       field.Name,
+			Name:       fieldName,
 			PrimaryKey: field.PrimaryKey,
 			Actions:    actions,
 		}
 		i.fields = append(i.fields, inputField)
+	}
+
+	if len(pb.Fields) > 0 && !primaryKeyGiven {
+		// primary field is required if there are other fields.
+		// add it if it doesn't exist.
+		i.fields = append(i.fields, InputDefDefaultPrimaryKeyField())
 	}
 
 	return nil
@@ -265,7 +282,7 @@ type InputDefinitionInfo struct {
 }
 
 // Validate the InputDefinitionInfo data.
-func (i *InputDefinitionInfo) Validate(columnLabel string) error {
+func (i *InputDefinitionInfo) Validate() error {
 	numPrimaryKey := 0
 	accountRowID := make(map[string]uint64)
 
@@ -298,9 +315,6 @@ func (i *InputDefinitionInfo) Validate(columnLabel string) error {
 		}
 		if field.PrimaryKey {
 			numPrimaryKey++
-			if field.Name != columnLabel {
-				return ErrInputDefinitionColumnLabel
-			}
 		} else if len(field.Actions) == 0 {
 			return ErrInputDefinitionActionRequired
 		}
@@ -321,7 +335,16 @@ func (i *InputDefinitionInfo) Encode() *internal.InputDefinition {
 	for _, f := range i.Frames {
 		def.Frames = append(def.Frames, f.Encode())
 	}
+	primaryKeyGiven := false
 	for _, f := range i.Fields {
+		if f.PrimaryKey {
+			f.Name = DefaultColumnLabel
+			primaryKeyGiven = true
+		}
+		def.Fields = append(def.Fields, f.Encode())
+	}
+	if len(i.Fields) > 0 && !primaryKeyGiven {
+		f := InputDefDefaultPrimaryKeyField()
 		def.Fields = append(def.Fields, f.Encode())
 	}
 	return &def
@@ -378,4 +401,12 @@ func HandleAction(a Action, value interface{}, colID uint64, timestamp int64) (*
 		return nil, fmt.Errorf("Unrecognized Value Destination: %s in Action", a.ValueDestination)
 	}
 	return &bit, err
+}
+
+func InputDefDefaultPrimaryKeyField() InputDefinitionField {
+	return InputDefinitionField{
+		Name:       DefaultColumnLabel,
+		PrimaryKey: true,
+		Actions:    []Action{},
+	}
 }

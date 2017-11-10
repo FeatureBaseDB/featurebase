@@ -1760,8 +1760,7 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Validation the input definition with the curent index's ColumnLabel.
-	if err := req.Validate(index.ColumnLabel()); err != nil {
+	if err := req.Validate(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1908,10 +1907,13 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 	for _, field := range inputDef.Fields() {
 		validFields[field.Name] = true
 		if field.PrimaryKey {
-			columnLabel := field.Name
-			value, ok := req[columnLabel]
+			primaryKey := field.Name
+			if primaryKey != DefaultColumnLabel {
+				return nil, fmt.Errorf("Primary key field should have the name: %s", DefaultColumnLabel)
+			}
+			value, ok := req[primaryKey]
 			if !ok {
-				return nil, fmt.Errorf("columnLabel required")
+				return nil, fmt.Errorf("primary key does not exist")
 			}
 			rawValue, ok := value.(float64) // The default JSON marshalling will interpret this as a float
 			if !ok {
