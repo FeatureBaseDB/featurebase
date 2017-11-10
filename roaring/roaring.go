@@ -2513,12 +2513,20 @@ func differenceRunBitmap(a, b *container) *container {
 	}
 	output := &container{container_type: ContainerRun}
 	output.n = a.n
+	if len(a.runs) == 0 {
+		return output
+	}
 	for j := 0; j < len(a.runs); j++ {
 		run := a.runs[j]
+		add := true
 		for bit := a.runs[j].start; bit <= a.runs[j].last; bit++ {
 			if b.bitmapContains(bit) {
 				output.n--
 				if run.start == bit {
+					if bit == 65535 { //overflow
+						add = false
+					}
+
 					run.start++
 				} else if bit == run.last {
 					run.last--
@@ -2534,13 +2542,15 @@ func differenceRunBitmap(a, b *container) *container {
 					break
 				}
 			}
+
 			if bit == 65535 { //overflow
 				break
 			}
 		}
 		if run.start <= run.last {
-			output.runs = append(output.runs, run)
-
+			if add {
+				output.runs = append(output.runs, run)
+			}
 		}
 	}
 
