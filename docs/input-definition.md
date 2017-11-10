@@ -44,6 +44,9 @@ curl localhost:10101/index/repository/input-definition/stargazer \
              ],
              "fields": [
                  {
+                     "primaryKey": true
+                 },
+                 {
                      "actions": [
                          {
                              "frame": "language", 

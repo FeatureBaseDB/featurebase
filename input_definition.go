@@ -131,9 +131,7 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 	}
 
 	if len(pb.Fields) > 0 && !primaryKeyGiven {
-		// primary field is required if there are other fields.
-		// add it if it doesn't exist.
-		i.fields = append(i.fields, InputDefDefaultPrimaryKeyField())
+		return ErrInputDefinitionHasPrimaryKey
 	}
 
 	return nil
@@ -335,16 +333,7 @@ func (i *InputDefinitionInfo) Encode() *internal.InputDefinition {
 	for _, f := range i.Frames {
 		def.Frames = append(def.Frames, f.Encode())
 	}
-	primaryKeyGiven := false
 	for _, f := range i.Fields {
-		if f.PrimaryKey {
-			f.Name = DefaultColumnLabel
-			primaryKeyGiven = true
-		}
-		def.Fields = append(def.Fields, f.Encode())
-	}
-	if len(i.Fields) > 0 && !primaryKeyGiven {
-		f := InputDefDefaultPrimaryKeyField()
 		def.Fields = append(def.Fields, f.Encode())
 	}
 	return &def
@@ -401,12 +390,4 @@ func HandleAction(a Action, value interface{}, colID uint64, timestamp int64) (*
 		return nil, fmt.Errorf("Unrecognized Value Destination: %s in Action", a.ValueDestination)
 	}
 	return &bit, err
-}
-
-func InputDefDefaultPrimaryKeyField() InputDefinitionField {
-	return InputDefinitionField{
-		Name:       DefaultColumnLabel,
-		PrimaryKey: true,
-		Actions:    []Action{},
-	}
 }

@@ -64,6 +64,9 @@ func TestInputDefinition_Encoding(t *testing.T) {
 			}],
 			"fields": [
 				{
+					"primaryKey": true
+				},
+				{
 					"name": "cabType",
 					"actions": [
 						{
@@ -92,9 +95,9 @@ func TestInputDefinition_Encoding(t *testing.T) {
 		t.Fatalf("unexpected frame meta data: %v", internalDef)
 	} else if len(internalDef.Fields) != 2 {
 		t.Fatalf("unexpected number of Fields: %d", len(internalDef.Fields))
-	} else if len(internalDef.Fields[0].InputDefinitionActions) != 1 {
+	} else if len(internalDef.Fields[1].InputDefinitionActions) != 1 {
 		t.Fatalf("unexpected number of Actions: %v", internalDef.Fields[1].InputDefinitionActions)
-	} else if internalDef.Fields[0].InputDefinitionActions[0].ValueDestination != "mapping" {
+	} else if internalDef.Fields[1].InputDefinitionActions[0].ValueDestination != "mapping" {
 		t.Fatalf("unexpected ValueDestination: %v", internalDef.Fields[1].InputDefinitionActions[0])
 	}
 }
