@@ -546,10 +546,6 @@ func (c *Cluster) Open() error {
 		return fmt.Errorf("opening MemberSet: %v", err)
 	}
 
-	// Listen for cluster-resize events.
-	c.wg.Add(1)
-	go func() { defer c.wg.Done(); c.listenForJoins() }()
-
 	return nil
 }
 
@@ -604,6 +600,12 @@ func (c *Cluster) setStateAndBroadcast(state string) error {
 	return c.Broadcaster.SendSync(c.Status())
 }
 
+// ListenForJoins handles cluster-resize events.
+func (c *Cluster) ListenForJoins() {
+	c.wg.Add(1)
+	go func() { defer c.wg.Done(); c.listenForJoins() }()
+}
+
 func (c *Cluster) listenForJoins() {
 	var uriJoined bool
 
@@ -634,8 +636,8 @@ func (c *Cluster) listenForJoins() {
 		select {
 		case <-c.closing:
 			return
-		case host := <-c.joiningURIs:
-			err := c.handleJoiningHost(host)
+		case uri := <-c.joiningURIs:
+			err := c.handleJoiningHost(uri)
 			if err != nil {
 				c.logger().Printf("handleJoiningHost error: err=%s", err)
 				continue

@@ -145,10 +145,12 @@ func (s *Server) Open() error {
 		}
 	}
 
-	// Open holder.
+	// Peek at the holder to determine if there is data on disk.
+	// Don't actually load the data until after the Cluster
+	// management starts.
 	s.Holder.LogOutput = s.LogOutput
-	if err := s.Holder.Open(); err != nil {
-		return fmt.Errorf("opening Holder: %v", err)
+	if err := s.Holder.Peek(); err != nil {
+		return fmt.Errorf("peeking at the Holder: %v", err)
 	}
 
 	// Start the BroadcastReceiver.
@@ -160,6 +162,18 @@ func (s *Server) Open() error {
 	if err := s.Cluster.Open(); err != nil {
 		return fmt.Errorf("opening Cluster: %v", err)
 	}
+
+	// Open holder.
+	if err := s.Holder.Open(); err != nil {
+		return fmt.Errorf("opening Holder: %v", err)
+	}
+
+	// Listen for joining nodes.
+	// This needs to start after the Holder has opened so that nodes can join
+	// the cluster without waiting for data to load on the coordinator. Before
+	// this starts, the joins are queued up in the Cluster.joiningURIs buffered
+	// channel.
+	s.Cluster.ListenForJoins()
 
 	// Create default HTTP client
 	s.createDefaultClient()
