@@ -492,7 +492,7 @@ func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exi
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// If existance bit is unset then ignore remaining bits.
+	// If existence bit is unset then ignore remaining bits.
 	if v, err := f.bit(uint64(bitDepth), columnID); err != nil {
 		return 0, false, err
 	} else if !v {
@@ -586,7 +586,7 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 // FieldSum returns the sum of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err error) {
-	// Compute count based on the existance bit.
+	// Compute count based on the existence bit.
 	row := f.Row(uint64(bitDepth))
 	if filter != nil {
 		count = row.IntersectionCount(filter)
@@ -615,6 +615,7 @@ func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, e
 	return sum, count, nil
 }
 
+// FieldRange returns bitmaps with a field value encoding matching the predicate.
 func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitmap, error) {
 	switch op {
 	case pql.EQ:
@@ -753,6 +754,7 @@ func (f *Fragment) FieldNotNull(bitDepth uint) (*Bitmap, error) {
 	return f.Row(uint64(bitDepth)), nil
 }
 
+// FieldRangeBetween returns bitmaps with a field value encoding matching any value between predicateMin and predicateMax.
 func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Bitmap, error) {
 	b := f.Row(uint64(bitDepth))
 	keep1 := NewBitmap() // GTE
@@ -1825,36 +1827,43 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	// Write updates to remote blocks.
 	for i := 0; i < len(clients); i++ {
 		set, clear := sets[i], clears[i]
+		count := 0
 
 		// Ignore if there are no differences.
 		if len(set.ColumnIDs) == 0 && len(clear.ColumnIDs) == 0 {
 			continue
 		}
 
-		// Generate query with sets & clears.
-		var buf bytes.Buffer
+		// Generate query with sets & clears, and group the requests to not exceed MaxWritesPerRequest.
+		total := len(set.ColumnIDs) + len(clear.ColumnIDs)
+		buffers := make([]bytes.Buffer, int(math.Ceil(float64(total)/float64(s.Cluster.MaxWritesPerRequest))))
 
 		// Only sync the standard block.
 		for j := 0; j < len(set.ColumnIDs); j++ {
-			fmt.Fprintf(&buf, "SetBit(frame=%q, rowID=%d, columnID=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "SetBit(frame=%q, rowID=%d, columnID=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
+			count++
 		}
 		for j := 0; j < len(clear.ColumnIDs); j++ {
-			fmt.Fprintf(&buf, "ClearBit(frame=%q, rowID=%d, columnID=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "ClearBit(frame=%q, rowID=%d, columnID=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
+			count++
 		}
 
-		// Verify sync is not prematurely closing.
-		if s.isClosing() {
-			return nil
-		}
+		// Iterate over the buffers.
+		for k := 0; k < len(buffers); k++ {
+			// Verify sync is not prematurely closing.
+			if s.isClosing() {
+				return nil
+			}
 
-		// Execute query.
-		queryRequest := &internal.QueryRequest{
-			Query:  buf.String(),
-			Remote: true,
-		}
-		_, err := clients[i].ExecuteQuery(context.Background(), f.Index(), queryRequest)
-		if err != nil {
-			return err
+			// Execute query.
+			queryRequest := &internal.QueryRequest{
+				Query:  buffers[k].String(),
+				Remote: true,
+			}
+			_, err := clients[i].ExecuteQuery(context.Background(), f.Index(), queryRequest)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
