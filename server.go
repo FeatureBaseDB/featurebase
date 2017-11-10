@@ -149,9 +149,7 @@ func (s *Server) Open() error {
 	// Don't actually load the data until after the Cluster
 	// management starts.
 	s.Holder.LogOutput = s.LogOutput
-	if err := s.Holder.Peek(); err != nil {
-		return fmt.Errorf("peeking at the Holder: %v", err)
-	}
+	s.Holder.Peek()
 
 	// Start the BroadcastReceiver.
 	if err := s.BroadcastReceiver.Start(s); err != nil {

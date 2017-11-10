@@ -266,6 +266,60 @@ func TestHolder_Open(t *testing.T) {
 	})
 }
 
+func TestHolder_HasData(t *testing.T) {
+	t.Run("IndexDirectory", func(t *testing.T) {
+		h := test.MustOpenHolder()
+		defer h.Close()
+
+		if h.HasData() {
+			t.Fatal("expected HasData to return false")
+		}
+
+		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		}
+
+		if !h.HasData() {
+			t.Fatal("expected HasData to return true")
+		}
+	})
+
+	t.Run("Peek", func(t *testing.T) {
+		h := test.NewHolder()
+
+		if hasData := h.Peek(); hasData != false {
+			t.Fatal("expected Peek to return false")
+		} else if h.HasData() {
+			t.Fatal("expected HasData to return false")
+		}
+
+		// Create an index directory to indicate data exists.
+		if err := os.Mkdir(h.IndexPath("test"), 0777); err != nil {
+			t.Fatal(err)
+		}
+
+		if hasData := h.Peek(); hasData != true {
+			t.Fatal("expected Peek to return true")
+		} else if !h.HasData() {
+			t.Fatal("expected HasData to return true")
+		}
+	})
+
+	t.Run("Peek at missing directory", func(t *testing.T) {
+		h := test.NewHolder()
+
+		// Ensure that hasData is false when trying to peek into
+		// a directory that doesn't exist.
+		h.Path = "bad-path"
+
+		if hasData := h.Peek(); hasData != false {
+			t.Fatal("expected Peek to return false")
+		} else if h.HasData() {
+			t.Fatal("expected HasData to return false")
+		}
+	})
+}
+
 /*
 func TestHolder_Schema(t *testing.T) {
 	t.Run("Schema", func(t *testing.T) {

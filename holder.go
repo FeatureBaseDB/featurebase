@@ -80,21 +80,20 @@ func NewHolder() *Holder {
 
 // Peek reads the root data directory for the holder
 // without actually loading any data into memory.
-func (h *Holder) Peek() error {
-	if err := os.MkdirAll(h.Path, 0777); err != nil {
-		return err
-	}
+// HasData is returned, and h.hasData is set.
+func (h *Holder) Peek() bool {
+	h.hasData = false
 
 	// Open path to read all index directories.
 	f, err := os.Open(h.Path)
 	if err != nil {
-		return err
+		return false
 	}
 	defer f.Close()
 
 	fis, err := f.Readdir(0)
 	if err != nil {
-		return err
+		return false
 	}
 
 	for _, fi := range fis {
@@ -105,7 +104,7 @@ func (h *Holder) Peek() error {
 		break
 	}
 
-	return nil
+	return h.hasData
 }
 
 // Open initializes the root data directory for the holder.
