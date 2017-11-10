@@ -308,17 +308,6 @@ func TestCluster_Resize(t *testing.T) {
 // TestTestCluster ensures that general cluster functionality works as expected.
 func TestCluster_ResizeStates(t *testing.T) {
 
-	/* test conditions:
-	x- single node, no data, comes up in NORMAL with topology
-	x- single node, in topology, comes up NORMAL
-	x- single node, not in topology, raises error
-	x- two node, no data, comes up in NORMAL, with topology
-	x- two node, in topology, comes up NORMAL
-	x- two node, STARTING, not in topology, raises error
-	x- two node, NORMAL, not in topology, triggers resize
-	x- resize of nodes with data moves data appropriately
-	*/
-
 	t.Run("Single node, no data", func(t *testing.T) {
 		tc := test.NewTestCluster(1)
 

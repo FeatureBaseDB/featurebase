@@ -255,6 +255,13 @@ func (t *TestCluster) Open() error {
 			return err
 		}
 	}
+
+	// Start the listener on the coordinator.
+	if len(t.Clusters) == 0 {
+		return nil
+	}
+	t.Clusters[0].ListenForJoins()
+
 	return nil
 }
 
