@@ -15,6 +15,7 @@
 package gossip
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -46,6 +47,9 @@ type GossipNodeSet struct {
 
 // Nodes implements the NodeSet interface and returns a list of nodes in the cluster.
 func (g *GossipNodeSet) Nodes() []*pilosa.Node {
+	if g.memberlist == nil {
+		return []*pilosa.Node{}
+	}
 	a := make([]*pilosa.Node, 0, g.memberlist.NumMembers())
 	for _, n := range g.memberlist.Members() {
 		a = append(a, &pilosa.Node{Scheme: "gossip", Host: n.Name})
@@ -151,6 +155,10 @@ func (g *GossipNodeSet) SendSync(pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
 		return err
+	}
+
+	if g.memberlist == nil {
+		return errors.New("SendSync memberlist is nil")
 	}
 
 	mlist := g.memberlist
