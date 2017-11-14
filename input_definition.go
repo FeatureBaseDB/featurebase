@@ -105,7 +105,6 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 
 	for _, field := range pb.Fields {
 		var actions []Action
-		fieldName := field.Name
 		for _, action := range field.InputDefinitionActions {
 			actions = append(actions, Action{
 				Frame:            action.Frame,
@@ -116,14 +115,11 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 		}
 
 		if field.PrimaryKey {
-			// Deprecating column labels per #810.
-			// So, setting the default column label here.
-			fieldName = DefaultColumnLabel
 			primaryKeyGiven = true
 		}
 
 		inputField := InputDefinitionField{
-			Name:       fieldName,
+			Name:       field.Name,
 			PrimaryKey: field.PrimaryKey,
 			Actions:    actions,
 		}
@@ -296,6 +292,9 @@ func (i *InputDefinitionInfo) Validate() error {
 
 	// Validate columnLabel and duplicate primaryKey.
 	for _, field := range i.Fields {
+		if field.Name == "" {
+			return ErrInputDefinitionNameRequired
+		}
 		for _, action := range field.Actions {
 			if err := action.Validate(); err != nil {
 				return err

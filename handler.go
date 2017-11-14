@@ -1907,11 +1907,7 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 	for _, field := range inputDef.Fields() {
 		validFields[field.Name] = true
 		if field.PrimaryKey {
-			primaryKey := field.Name
-			if primaryKey != DefaultColumnLabel {
-				return nil, fmt.Errorf("Primary key field should have the name: %s", DefaultColumnLabel)
-			}
-			value, ok := req[primaryKey]
+			value, ok := req[field.Name]
 			if !ok {
 				return nil, fmt.Errorf("primary key does not exist")
 			}

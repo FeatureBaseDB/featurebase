@@ -64,6 +64,7 @@ func TestInputDefinition_Encoding(t *testing.T) {
 			}],
 			"fields": [
 				{
+					"name": "id",
 					"primaryKey": true
 				},
 				{
@@ -173,7 +174,7 @@ func TestActionValidation(t *testing.T) {
 		t.Fatalf("Expected duplicate rowID with other field error, actual error: %s", err)
 	}
 
-	field = pilosa.InputDefinitionField{PrimaryKey: true}
+	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true}
 	field1 = pilosa.InputDefinitionField{Name: "test", PrimaryKey: false}
 	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field, field1}}
 	err = info.Validate()
