@@ -427,7 +427,7 @@ Returns `{{"attrs":{},"bits":[10]}`
 **Spec:**
 
 ```
-Range(<frame=STRING>, <FIELD_NAME, COMPARISON_OPERATOR, integer> )
+Range(<frame=STRING>, <FIELD_NAME, COMPARISON_OPERATOR, COMPARISON_VALUE> )
 ```
 
 **Description:**
@@ -441,7 +441,7 @@ Returns bits that are true for the comparison operator.
 **Examples:**
 
 In our source data, commitactivity was counted over the last year.
-The following Range query returns all repositories having more than 100 commits.
+The following greater-than (GT) Range query returns all repositories having more than 100 commits.
 
 ```
 Range(frame="stats", commitactivity > 100)
@@ -451,6 +451,13 @@ Returns `{{"attrs":{},"bits":[10]}`
 
 * bits are repositories which had at least 100 commits in the last year.
 
+Similar syntax is supported for less-than (LT or `<`), less-than-or-equal (LTE or `<=`), and greater-than-or-equal (GTE or `>=`). An interval with both bounds can be specified with the "BETWEEN" operator `><`, and a two-element list containing the lower and upper bounds of the interval:
+
+```
+Range(frame="stats", commitactivity >< [100, 200])
+```
+
+This is conceptually equivalent to the interval 100 < commitactivity < 200, but this chained comparison syntax is not currently supported. BETWEEN queries syntax is restricted to greater-than and less-than, but any valid interval on the integers can be represented this way.
 
 #### Sum
 
