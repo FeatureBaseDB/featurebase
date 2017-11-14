@@ -44,6 +44,7 @@ curl localhost:10101/index/repository/input-definition/stargazer \
              ],
              "fields": [
                  {
+                     "name": "repo_id", 
                      "primaryKey": true
                  },
                  {
@@ -104,7 +105,7 @@ curl localhost:10101/index/repository/input/stargazer \
      -X POST \
      -d '[
              {
-                 "columnID": 91720568, 
+                 "repo_id": 91720568, 
                  "language_id": "Go", 
                  "stargazer_id": 513114,
                  "time_value": "2017-05-18T20:40"
