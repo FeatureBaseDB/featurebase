@@ -309,14 +309,14 @@ func TestIndex_CreateInputDefinition(t *testing.T) {
 	// Create Input Definition.
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
-	fields := internal.InputDefinitionField{PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
-	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
+	field := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
+	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
 	inputDef, err := index.CreateInputDefinition(&def)
 	if err != nil {
 		t.Fatal(err)
 	} else if inputDef.Frames()[0].Name != frames.Name {
 		t.Fatalf("unexpected input definition frames %v", inputDef.Frames())
-	} else if inputDef.Fields()[0].Name != pilosa.DefaultColumnLabel {
+	} else if inputDef.Fields()[0].Name != field.Name {
 		t.Fatalf("unexpected input definition actions %v", inputDef.Fields())
 	}
 }

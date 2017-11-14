@@ -1587,7 +1587,7 @@ func TestHandler_CreateInput(t *testing.T) {
 	}
 	inputBody := []byte(`
 			[{
-				"columnID": 1,
+				"id": 1,
 				"cabType": "yellow",
 				"distanceMiles": 8,
 				"withPet": true,
@@ -1668,14 +1668,14 @@ func TestInput_JSON(t *testing.T) {
 		err  string
 	}{
 		{json: `[{
-				"columnID": 1,
+				"id": 1,
 				"cabType": "yellow",
 				"distanceMiles": 8,
 				"nofield": true
 				}]`,
 			err: "field not found: nofield"},
 		{json: `[{
-				"columnID": "abc",
+				"id": "abc",
 				"cabType": "yellow",
 				"distanceMiles": 8,
 				"withPet": true
@@ -1688,21 +1688,21 @@ func TestInput_JSON(t *testing.T) {
 				}]`,
 			err: "primary key does not exist"},
 		{json: `[{
-				"columnID": 1,
+				"id": 1,
 				"cabType": "yellow",
 				"distanceMiles": 8,
 				"withPet": true
 				}`,
 			err: "unexpected EOF"},
 		{json: `[{
-				"columnID": 1,
+				"id": 1,
 				"cabType": "yellow",
 				"distanceMiles": 8,
 				"noFrame": 1
 				}]`,
 			err: "Frame not found: foo"},
 		{json: `[{
-				"columnID": 1,
+				"id": 1,
 				"cabType": "yellow",
 				"distanceMiles": 8,
 				"time_value": 12345
