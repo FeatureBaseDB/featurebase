@@ -1309,7 +1309,7 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 		t.Fatalf("unexpected body: %s", body)
 	}
 
-	// Eusure throwing error if primary field's name doesn't match columnLabel
+	// Ensure throwing error if there's no primary key
 	hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{ColumnLabel: "id"})
 	unmatchColumnBody := []byte(`
 			{
@@ -1323,8 +1323,17 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 			}],
 			"fields": [
 				{
-					"name": "columnID",
-					"primaryKey": true
+					"name": "foo",
+					"actions": [
+						{
+							"frame": "cab-type",
+							"valueDestination": "mapping",
+							"valueMap": {
+								"Green": 1,
+								"Yellow": 2
+							}
+						}
+					]
 				}
 			]
 		}`)
@@ -1333,7 +1342,7 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i1/input-definition/input1", bytes.NewBuffer(unmatchColumnBody)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionColumnLabel.Error()+"\n" {
+	} else if body := w.Body.String(); body != pilosa.ErrInputDefinitionHasPrimaryKey.Error()+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 
@@ -1677,7 +1686,7 @@ func TestInput_JSON(t *testing.T) {
 				"distanceMiles": 8,
 				"withPet": true
 				}]`,
-			err: "columnLabel required"},
+			err: "primary key does not exist"},
 		{json: `[{
 				"id": 1,
 				"cabType": "yellow",
