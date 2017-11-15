@@ -44,6 +44,7 @@ type Holder struct {
 
 	// Indexes by name.
 	indexes map[string]*Index
+	hasData bool
 
 	Broadcaster Broadcaster
 	// Close management
@@ -75,6 +76,35 @@ func NewHolder() *Holder {
 
 		LogOutput: os.Stderr,
 	}
+}
+
+// Peek reads the root data directory for the holder
+// without actually loading any data into memory.
+// HasData is returned, and h.hasData is set.
+func (h *Holder) Peek() bool {
+	h.hasData = false
+
+	// Open path to read all index directories.
+	f, err := os.Open(h.Path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	fis, err := f.Readdir(0)
+	if err != nil {
+		return false
+	}
+
+	for _, fi := range fis {
+		if !fi.IsDir() {
+			continue
+		}
+		h.hasData = true
+		break
+	}
+
+	return h.hasData
 }
 
 // Open initializes the root data directory for the holder.
@@ -149,7 +179,7 @@ func (h *Holder) Close() error {
 // This is used to determine if the rebalancing of data is necessary
 // when a node joins the cluster.
 func (h *Holder) HasData() bool {
-	return len(h.indexes) > 0
+	return h.hasData || len(h.indexes) > 0
 }
 
 // MaxSlices returns MaxSlice map for all indexes.
