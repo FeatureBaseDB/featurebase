@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.7.2] - 2017-11-15
+
+This version contains 1 contribution from 1 contributor. There is 1 file changed, 16 insertions, and 1 deletion.
+
+### Changed
+
+- Bump HTTP client's MaxIdleConns and MaxIdleConnsPerHost ([#920](https://github.com/pilosa/pilosa/pull/920))
+
 ## [0.7.1] - 2017-10-09
 
 This version contains 3 contributions from 3 contributors. There are 14 files changed, 221 insertions, and 52 deletions.
@@ -163,3 +171,5 @@ This version contains 53 contributions from 13 contributors (including 4 volunte
 [Unreleased]: https://github.com/pilosa/pilosa/compare/v0.5...HEAD
 [0.4.0]: https://github.com/pilosa/pilosa/compare/v0.3...v0.4
 [0.5.0]: https://github.com/pilosa/pilosa/compare/v0.4...v0.5
+[0.6.0]: https://github.com/pilosa/pilosa/compare/v0.5...v0.6
+[0.7.0]: https://github.com/pilosa/pilosa/compare/v0.6...v0.7
