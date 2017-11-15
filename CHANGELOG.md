@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.1] - 2017-11-15
+
+This version contains 2 contributions from 2 contributors. There are 4 files changed, 27 insertions, and 14 deletions.
+
+### Fixed
+
+- Fix CountOpenFiles() fatal crash ([#969](https://github.com/pilosa/pilosa/pull/969))
+- Fix version check when local is greater than pilosa.com ([#968](https://github.com/pilosa/pilosa/pull/968))
+
 ## [0.8.0] - 2017-11-15
 
 This version contains 31 contributions from 8 contributors. There are 84 files changed, 3,732 insertions, and 1,428 deletions.

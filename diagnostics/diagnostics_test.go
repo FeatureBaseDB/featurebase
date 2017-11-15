@@ -96,6 +96,11 @@ func TestDiagnosticsVersion_Compare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Versions should match")
 	}
+	d.SetVersion("v1.7.0")
+	err = d.CompareVersion("0.7.2")
+	if err != nil {
+		t.Fatalf("Local version is greater")
+	}
 }
 
 func TestDiagnosticsVersion_Check(t *testing.T) {

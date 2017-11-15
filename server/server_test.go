@@ -373,10 +373,14 @@ func tempMkdir(t *testing.T) string {
 func TestCountOpenFiles(t *testing.T) {
 	// Windows is not supported yet
 	if runtime.GOOS == "windows" {
-		return
+		t.Skip("Skipping unsupported CountOpenFiles test on Windows.")
 	}
-	if pilosa.CountOpenFiles() == 0 {
-		t.Error("Invalid open file handle count")
+	count, err := pilosa.CountOpenFiles()
+	if err != nil {
+		t.Errorf("CountOpenFiles failed: %s", err)
+	}
+	if count == 0 {
+		t.Error("CountOpenFiles returned invalid value 0.")
 	}
 }
 
