@@ -200,6 +200,16 @@ func (c *Cluster) IsCoordinator() bool {
 	return c.Coordinator == c.URI
 }
 
+// SetCoordinator updates the Coordinator to new if it is
+// currently old. Returns true if the Coordinator changed.
+func (c *Cluster) SetCoordinator(oldURI, newURI URI) bool {
+	if c.Coordinator == oldURI && oldURI != newURI {
+		c.Coordinator = newURI
+		return true
+	}
+	return false
+}
+
 // AddNode adds a node to the Cluster and updates and saves the
 // new topology.
 func (c *Cluster) AddNode(uri URI) error {

@@ -356,6 +356,8 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
+	case *internal.SetCoordinatorMessage:
+		s.Cluster.SetCoordinator(DecodeURI(obj.Old), DecodeURI(obj.New))
 	}
 
 	return nil
