@@ -534,7 +534,10 @@ func (s *Server) monitorDiagnostics() {
 		s.diagnostics.Set("NumIndexes", len(s.Holder.Indexes()))
 		s.diagnostics.Set("NumFrames", numFrames)
 		s.diagnostics.Set("NumSlices", numSlices)
-		s.diagnostics.Set("OpenFiles", CountOpenFiles())
+		openFiles, err := CountOpenFiles()
+		if err == nil {
+			s.diagnostics.Set("OpenFiles", openFiles)
+		}
 		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
 		s.diagnostics.CheckVersion()
 		s.diagnostics.Flush()
@@ -584,8 +587,11 @@ func (s *Server) monitorRuntime() {
 		// Record the number of go routines.
 		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 
+		openFiles, err := CountOpenFiles()
 		// Open File handles.
-		s.Holder.Stats.Gauge("OpenFiles", float64(CountOpenFiles()), 1.0)
+		if err == nil {
+			s.Holder.Stats.Gauge("OpenFiles", float64(openFiles), 1.0)
+		}
 
 		// Runtime memory metrics.
 		runtime.ReadMemStats(&m)
@@ -606,26 +612,24 @@ func (s *Server) createDefaultClient() {
 }
 
 // CountOpenFiles on operating systems that support lsof.
-func CountOpenFiles() int {
-	count := 0
-
+func CountOpenFiles() (int, error) {
 	switch runtime.GOOS {
 	case "darwin", "linux", "unix", "freebsd":
 		// -b option avoid kernel blocks
 		pid := os.Getpid()
 		out, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("lsof -b -p %v", pid)).Output()
 		if err != nil {
-			log.Fatal(err)
+			return 0, fmt.Errorf("calling lsof: %s", err)
 		}
 		// only count lines with our pid, avoiding warning messages from -b
 		lines := strings.Split(string(out), strconv.Itoa(pid))
-		count = len(lines)
+		return len(lines), nil
 	case "windows":
 		// TODO: count open file handles on windows
+		return 0, errors.New("CountOpenFiles() on Windows is not supported")
 	default:
-
+		return 0, errors.New("CountOpenFiles() on this OS is not supported")
 	}
-	return count
 }
 
 // StatusHandler specifies two methods which an object must implement to share
