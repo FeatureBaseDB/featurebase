@@ -46,18 +46,18 @@ func main() {
 	}
 
 	// We need to refer to indexes and frames before we can use them in a query.
-	repository, _ := schema.Index("repository", nil)
-	stargazer, _ := repository.Frame("stargazer", nil)
-	language, _ := repository.Frame("language", nil)
+	repository, _ := schema.Index("repository")
+	stargazer, _ := repository.Frame("stargazer")
+	language, _ := repository.Frame("language")
 
 	var response *pilosa.QueryResponse
 
 	// Which repositories did user 14 star:
-	response, _ = client.Query(stargazer.Bitmap(14), nil)
+	response, _ = client.Query(stargazer.Bitmap(14))
 	fmt.Println("User 14 starred: ", response.Result().Bitmap.Bits)
 
 	// What are the top 5 languages in the sample data?
-	response, err = client.Query(language.TopN(5), nil)
+	response, err = client.Query(language.TopN(5))
 	languageIDs := []uint64{}
 	for _, item := range response.Result().CountItems {
 		languageIDs = append(languageIDs, item.ID)
@@ -68,16 +68,14 @@ func main() {
 	response, _ = client.Query(
 		repository.Intersect(
 			stargazer.Bitmap(14),
-			stargazer.Bitmap(19)),
-		nil)
+			stargazer.Bitmap(19)))
 	fmt.Println("Both user 14 and 19 starred:", response.Result().Bitmap.Bits)
 
 	// Which repositories were starred by user 14 or 19:
 	response, _ = client.Query(
 		repository.Union(
 			stargazer.Bitmap(14),
-			stargazer.Bitmap(19)),
-		nil)
+			stargazer.Bitmap(19)))
 	fmt.Println("User 14 or 19 starred:", response.Result().Bitmap.Bits)
 
 	// Which repositories were starred by user 14 or 19 and were written in language 1:
@@ -87,12 +85,11 @@ func main() {
 				stargazer.Bitmap(14),
 				stargazer.Bitmap(19),
 			),
-			language.Bitmap(1),
-		), nil)
+			language.Bitmap(1)))
 	fmt.Println("User 14 or 19 starred, written in language 1:", response.Result().Bitmap.Bits)
 
 	// Set user 99999 as a stargazer for repository 77777?
-	client.Query(stargazer.SetBit(99999, 77777), nil)
+	client.Query(stargazer.SetBit(99999, 77777))
 }
 ```
 
