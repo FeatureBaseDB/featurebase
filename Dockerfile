@@ -18,4 +18,4 @@ EXPOSE 10101
 VOLUME /data
 
 ENTRYPOINT ["/pilosa"]
-CMD ["server", "--data-dir", "/data"]
+CMD ["server", "--data-dir", "/data", "--bind", "0.0.0.0:10101"]
