@@ -123,6 +123,7 @@ func (h *Handler) SetRestricted() {
 }
 
 func loadCommon(router *mux.Router, handler *Handler) {
+	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
@@ -140,7 +141,6 @@ func loadRestricted(router *mux.Router, handler *Handler) {
 
 func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
-	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
@@ -1927,7 +1927,67 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
+// handlePostClusterResizeSetCoordinator handles POST /cluster/resize/set-coordinator request.
+func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req setCoordinatorRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	oldURI := h.Cluster.Coordinator
+
+	var newURI *URI
+	if err := func() error {
+		newURI, err = NewURIFromAddress(req.Address)
+		if err != nil {
+			return fmt.Errorf("problem with set-coordinator address: %s", err)
+		}
+
+		//if !Nodes(h.Cluster.Nodes).ContainsURI(*newURI) {
+		//	return fmt.Errorf("set-coordinator node does not exist: %s", newURI)
+		//}
+
+		// Send the set-coordinator message to all nodes.
+		err := h.Broadcaster.SendSync(
+			&internal.SetCoordinatorMessage{
+				Old: (&h.Cluster.Coordinator).Encode(),
+				New: newURI.Encode(),
+			})
+		if err != nil {
+			return fmt.Errorf("problem sending SetCoordinator message: %s", err)
+		}
+
+		// Set Coordinator on local node.
+		h.Cluster.SetCoordinator(oldURI, *newURI)
+
+		return nil
+	}(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(setCoordinatorResponse{
+		Old: &oldURI,
+		New: newURI,
+	}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type setCoordinatorRequest struct {
+	Address string `json:"address"`
+}
+
+type setCoordinatorResponse struct {
+	Old *URI `json:"old"`
+	New *URI `json:"new"`
+}
+
+// handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
 func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Request) {
 	var msg string
 

@@ -167,6 +167,11 @@ message ResizeInstructionComplete {
     string Error = 3;
 }
 
+message SetCoordinatorMessage {
+    URI Old = 1;
+    URI New = 2;
+}
+
 message Topology {
     repeated URI NodeSet = 1;
 }

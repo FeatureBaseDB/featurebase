@@ -305,7 +305,7 @@ func TestCluster_Resize(t *testing.T) {
 	})
 }
 
-// TestTestCluster ensures that general cluster functionality works as expected.
+// Ensure that general cluster functionality works as expected.
 func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Single node, no data", func(t *testing.T) {
@@ -535,6 +535,35 @@ func TestCluster_ResizeStates(t *testing.T) {
 		// Close TestCluster.
 		if err := tc.Close(); err != nil {
 			t.Fatal(err)
+		}
+	})
+}
+
+// Ensures that coordinator can be changed.
+func TestCluster_SetCoordinator(t *testing.T) {
+	t.Run("SetCoordinator", func(t *testing.T) {
+		c := test.NewCluster(1)
+		oldURI, err := pilosa.NewURIFromAddress("localhost:8888")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.Coordinator = *oldURI
+
+		newURI, err := pilosa.NewURIFromAddress("localhost:9999")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set coordinator to the same value.
+		c.SetCoordinator(c.Coordinator, *oldURI)
+		if c.Coordinator != *oldURI {
+			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, *oldURI)
+		}
+
+		// Set coordinator to a new value.
+		c.SetCoordinator(c.Coordinator, *newURI)
+		if c.Coordinator != *newURI {
+			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, *newURI)
 		}
 	})
 }
