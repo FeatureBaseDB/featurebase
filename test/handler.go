@@ -32,6 +32,8 @@ func NewHandler() *Handler {
 	// Handler test messages can no-op.
 	h.Broadcaster = pilosa.NopBroadcaster
 
+	h.SetNormal()
+
 	return h
 }
 

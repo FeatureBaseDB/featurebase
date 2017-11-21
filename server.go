@@ -151,28 +151,6 @@ func (s *Server) Open() error {
 	s.Holder.LogOutput = s.LogOutput
 	s.Holder.Peek()
 
-	// Start the BroadcastReceiver.
-	if err := s.BroadcastReceiver.Start(s); err != nil {
-		return fmt.Errorf("starting BroadcastReceiver: %v", err)
-	}
-
-	// Open Cluster management.
-	if err := s.Cluster.Open(); err != nil {
-		return fmt.Errorf("opening Cluster: %v", err)
-	}
-
-	// Open holder.
-	if err := s.Holder.Open(); err != nil {
-		return fmt.Errorf("opening Holder: %v", err)
-	}
-
-	// Listen for joining nodes.
-	// This needs to start after the Holder has opened so that nodes can join
-	// the cluster without waiting for data to load on the coordinator. Before
-	// this starts, the joins are queued up in the Cluster.joiningURIs buffered
-	// channel.
-	s.Cluster.ListenForJoins()
-
 	// Create default HTTP client
 	s.createDefaultClient()
 
@@ -191,6 +169,8 @@ func (s *Server) Open() error {
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
 
+	s.Cluster.prefect = s.Handler
+
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster
 
@@ -201,6 +181,29 @@ func (s *Server) Open() error {
 			s.Logger().Printf("HTTP handler terminated with error: %s\n", err)
 		}
 	}()
+
+	// Start the BroadcastReceiver.
+	if err := s.BroadcastReceiver.Start(s); err != nil {
+		return fmt.Errorf("starting BroadcastReceiver: %v", err)
+	}
+
+	// Open Cluster management.
+	if err := s.Cluster.Open(); err != nil {
+		return fmt.Errorf("opening Cluster: %v", err)
+	}
+
+	// Open holder.
+	if err := s.Holder.Open(); err != nil {
+		return fmt.Errorf("opening Holder: %v", err)
+	}
+	s.Cluster.setNodeState(NodeStateReady)
+
+	// Listen for joining nodes.
+	// This needs to start after the Holder has opened so that nodes can join
+	// the cluster without waiting for data to load on the coordinator. Before
+	// this starts, the joins are queued up in the Cluster.joiningURIs buffered
+	// channel.
+	s.Cluster.ListenForJoins()
 
 	// Start background monitoring.
 	s.wg.Add(3)
@@ -358,6 +361,11 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 	case *internal.SetCoordinatorMessage:
 		s.Cluster.SetCoordinator(DecodeURI(obj.Old), DecodeURI(obj.New))
+	case *internal.NodeStateMessage:
+		err := s.Cluster.ReceiveNodeState(DecodeURI(obj.URI), obj.State)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

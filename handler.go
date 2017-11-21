@@ -109,7 +109,7 @@ func BuildRouters(handler *Handler) {
 	loadRestricted(router, handler)
 	handler.RestrictedRouter = router
 
-	handler.SetNormal()
+	handler.SetRestricted()
 }
 
 // SetNormal is a method of the SecurityManager interface which provides normal URI routing.
@@ -184,7 +184,7 @@ func loadNormal(router *mux.Router, handler *Handler) {
 }
 
 func (h *Handler) reportRestricted(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "not allowed during resize", http.StatusMethodNotAllowed)
+	http.Error(w, fmt.Sprintf("not allowed in cluster state %s", h.Cluster.State), http.StatusMethodNotAllowed)
 }
 
 func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {

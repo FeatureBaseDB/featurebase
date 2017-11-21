@@ -253,8 +253,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node.Topology, expectedTop) {
-			t.Errorf("expected topology: %v, but got: %v", expectedTop, node.Topology)
+		if !reflect.DeepEqual(node.Topology.NodeSet, expectedTop.NodeSet) {
+			t.Errorf("expected topology: %v, but got: %v", expectedTop.NodeSet, node.Topology.NodeSet)
 		}
 
 		// Close TestCluster.
@@ -344,10 +344,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology, expectedTop) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop, node0.Topology)
-		} else if !reflect.DeepEqual(node1.Topology, expectedTop) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop, node1.Topology)
+		if !reflect.DeepEqual(node0.Topology.NodeSet, expectedTop.NodeSet) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeSet, node0.Topology.NodeSet)
+		} else if !reflect.DeepEqual(node1.Topology.NodeSet, expectedTop.NodeSet) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeSet, node1.Topology.NodeSet)
 		}
 
 		// Close TestCluster.
@@ -436,10 +436,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology, expectedTop) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop, node0.Topology)
-		} else if !reflect.DeepEqual(node1.Topology, expectedTop) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop, node1.Topology)
+		if !reflect.DeepEqual(node0.Topology.NodeSet, expectedTop.NodeSet) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeSet, node0.Topology.NodeSet)
+		} else if !reflect.DeepEqual(node1.Topology.NodeSet, expectedTop.NodeSet) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeSet, node1.Topology.NodeSet)
 		}
 
 		// Verify that node-1 contains the fragment (i/f/standard/1) transferred from node-0.

@@ -46,6 +46,10 @@ const (
 	ClusterStateNormal   = "NORMAL"
 	ClusterStateResizing = "RESIZING"
 
+	// NodeState represents the state of a node during startup.
+	NodeStateLoading = "LOADING"
+	NodeStateReady   = "READY"
+
 	// ResizeJob states.
 	ResizeJobStateRunning = "RUNNING"
 	// Final states.
@@ -283,6 +287,41 @@ func (c *Cluster) setState(state string) {
 	}
 
 	c.State = state
+}
+
+func (c *Cluster) setNodeState(state string) {
+	if c.IsCoordinator() {
+		c.Topology.nodeStates[c.URI] = state
+		return
+	}
+
+	// Send node state to coordinator.
+	ns := &internal.NodeStateMessage{
+		URI:   c.URI.Encode(),
+		State: state,
+	}
+
+	node := &Node{
+		URI: c.Coordinator,
+	}
+	if err := c.Broadcaster.SendTo(node, ns); err != nil {
+		c.logger().Printf("sending node state error: err=%s", err)
+	}
+}
+
+func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
+	if !c.IsCoordinator() {
+		return nil
+	}
+
+	c.Topology.nodeStates[uri] = state
+
+	// Set cluster state to NORMAL.
+	if c.haveTopologyAgreement() && c.allNodesReady() {
+		return c.setStateAndBroadcast(ClusterStateNormal)
+	}
+
+	return nil
 }
 
 // localNode is not being used.
@@ -691,6 +730,15 @@ func (c *Cluster) needTopologyAgreement() bool {
 
 func (c *Cluster) haveTopologyAgreement() bool {
 	return URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
+}
+
+func (c *Cluster) allNodesReady() bool {
+	for _, uri := range c.Topology.NodeSet {
+		if c.Topology.nodeStates[uri] != NodeStateReady {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
@@ -1130,10 +1178,16 @@ func (u NodeSet) ToStrings() []string {
 type Topology struct {
 	mu      sync.RWMutex
 	NodeSet []URI
+
+	// nodeStates holds the state of each node according to
+	// the coordinator. Used during startup and data load.
+	nodeStates map[URI]string
 }
 
 func NewTopology() *Topology {
-	return &Topology{}
+	return &Topology{
+		nodeStates: make(map[URI]string),
+	}
 }
 
 // ContainsURI returns true if uri matches one of the topology's uris.
@@ -1241,9 +1295,9 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 		return nil, nil
 	}
 
-	t := &Topology{
-		NodeSet: decodeURIs(topology.NodeSet),
-	}
+	t := NewTopology()
+	t.NodeSet = decodeURIs(topology.NodeSet)
+
 	return t, nil
 }
 
@@ -1302,9 +1356,19 @@ func (c *Cluster) nodeJoin(uri URI) error {
 			return err
 		}
 
-		// If the result of the previous AddNode completed the joining of nodes
-		// in the topology, then change the state to NORMAL.
-		if c.haveTopologyAgreement() {
+		// Only change to normal if there is no existing data. Otherwise,
+		// the coordinator needs to wait to receive READY messages (nodeStates)
+		// from remote nodes before setting the cluster to state NORMAL.
+		if !c.Holder.HasData() {
+			// If the result of the previous AddNode completed the joining of nodes
+			// in the topology, then change the state to NORMAL.
+			if c.haveTopologyAgreement() {
+				return c.setStateAndBroadcast(ClusterStateNormal)
+			}
+			return nil
+		}
+
+		if c.haveTopologyAgreement() && c.allNodesReady() {
 			return c.setStateAndBroadcast(ClusterStateNormal)
 		}
 
