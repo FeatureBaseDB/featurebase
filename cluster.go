@@ -876,31 +876,41 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 
 	pbSchema := c.Holder.EncodeSchema()
 
-	// Add to the ResizeJob the instructions for each index.
+	// multiIndex is a map of sources for each node in toCluster.
+	// Initialize the map with all the nodes in toCluster.
+	multiIndex := make(map[URI][]*internal.ResizeSource)
+	for _, n := range toCluster.Nodes {
+		multiIndex[n.URI] = nil
+	}
+
+	// Add to m the instructions for each index.
 	for _, idx := range c.Holder.Indexes() {
-		// fragSources is map[URI][]*internal.ResizeSource.
 		fragSources, err := c.fragSources(toCluster, idx)
 		if err != nil {
 			return nil, err
 		}
 
 		for u, sources := range fragSources {
-			// If a host doesn't need to request data, mark it as complete.
-			if len(sources) == 0 {
-				j.URIs[u] = true
-				continue
+			for _, src := range sources {
+				multiIndex[u] = append(multiIndex[u], src)
 			}
-			// TODO: we can probably consolidate the instructions that go to the same
-			// node but apply to different indexes. (i.e. don't nest this in the Indexes() loop)
-			instr := &internal.ResizeInstruction{
-				JobID:       j.ID,
-				URI:         u.Encode(),
-				Coordinator: encodeURI(c.Coordinator),
-				Sources:     sources,
-				Schema:      pbSchema, // Include the schema to ensure it's in sync on the receiving node.
-			}
-			j.Instructions = append(j.Instructions, instr)
 		}
+	}
+
+	for u, sources := range multiIndex {
+		// If a host doesn't need to request data, mark it as complete.
+		if len(sources) == 0 {
+			j.URIs[u] = true
+			continue
+		}
+		instr := &internal.ResizeInstruction{
+			JobID:       j.ID,
+			URI:         u.Encode(),
+			Coordinator: encodeURI(c.Coordinator),
+			Sources:     sources,
+			Schema:      pbSchema, // Include the schema to ensure it's in sync on the receiving node.
+		}
+		j.Instructions = append(j.Instructions, instr)
 	}
 
 	return j, nil

@@ -51,6 +51,11 @@ type Server struct {
 	wg      sync.WaitGroup
 	closing chan struct{}
 
+	// joining is held open until this node
+	// receives ClusterStatus from the coordinator.
+	joining chan struct{}
+	joined  bool
+
 	// Data storage and HTTP interface.
 	Holder            *Holder
 	Handler           *Handler
@@ -84,6 +89,7 @@ type Server struct {
 func NewServer() *Server {
 	s := &Server{
 		closing: make(chan struct{}),
+		joining: make(chan struct{}),
 
 		Holder:            NewHolder(),
 		Handler:           NewHandler(),
@@ -192,6 +198,12 @@ func (s *Server) Open() error {
 		return fmt.Errorf("opening Cluster: %v", err)
 	}
 
+	// If not coordinator then wait for ClusterStatus from coordinator.
+	if !s.Cluster.IsCoordinator() {
+		s.Logger().Printf("wait for joining to complete")
+		<-s.joining
+	}
+
 	// Open holder.
 	if err := s.Holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
@@ -214,6 +226,13 @@ func (s *Server) Open() error {
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
 
 	return nil
+}
+
+func (s *Server) markAsJoined() {
+	if !s.joined {
+		s.joined = true
+		close(s.joining)
+	}
 }
 
 // Close closes the server and waits for it to shutdown.
@@ -351,6 +370,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
+		s.markAsJoined()
 	case *internal.ResizeInstruction:
 		err := s.Cluster.FollowResizeInstruction(obj)
 		if err != nil {
