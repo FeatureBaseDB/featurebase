@@ -831,6 +831,7 @@ func (c *Cluster) listenForJoins() {
 // added/removed. It also saves a reference to the ResizeJob in the `jobs` map
 // for future lookup by JobID.
 func (c *Cluster) generateResizeJob(nodeAction nodeAction) (*ResizeJob, error) {
+	c.logger().Printf("generateResizeJob: %v", nodeAction)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -838,6 +839,7 @@ func (c *Cluster) generateResizeJob(nodeAction nodeAction) (*ResizeJob, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.logger().Printf("generated ResizeJob: %d", j.ID)
 
 	// Save job in jobs map for future reference.
 	c.jobs[j.ID] = j
@@ -1049,6 +1051,14 @@ type ResizeJob struct {
 
 	mu    sync.RWMutex
 	state string
+
+	// The writer for any logging.
+	LogOutput io.Writer
+}
+
+// logger returns a logger for the resize job.
+func (j *ResizeJob) logger() *log.Logger {
+	return log.New(j.LogOutput, "", log.LstdFlags)
 }
 
 // NewResizeJob returns a new instance of ResizeJob.
@@ -1076,10 +1086,11 @@ func NewResizeJob(existingURIs []URI, uri URI, action string) *ResizeJob {
 	}
 
 	return &ResizeJob{
-		ID:     rand.Int63(),
-		URIs:   uris,
-		action: action,
-		result: make(chan string),
+		ID:        rand.Int63(),
+		URIs:      uris,
+		action:    action,
+		result:    make(chan string),
+		LogOutput: os.Stderr,
 	}
 }
 
@@ -1141,6 +1152,7 @@ func (j *ResizeJob) urisArePending() bool {
 }
 
 func (j *ResizeJob) distributeResizeInstructions() error {
+	j.logger().Printf("distributeResizeInstructions for job %d", j.ID)
 	// Loop through the ResizeInstructions in ResizeJob and send to each host.
 	for _, instr := range j.Instructions {
 		// Because the node may not be in the cluster yet, create
@@ -1148,6 +1160,7 @@ func (j *ResizeJob) distributeResizeInstructions() error {
 		node := &Node{
 			URI: decodeURI(instr.URI),
 		}
+		j.logger().Printf("send resize instructions: %v", instr)
 		if err := j.Broadcaster.SendTo(node, instr); err != nil {
 			return err
 		}
