@@ -27,7 +27,7 @@ curl -OL https://github.com/pilosa/getting-started/raw/master/input_definition.j
 
 Run the following to create the input definition:
 ```
-curl localhost:10101/index/repository/input-definition/stargazer -d @json_input.json 
+curl localhost:10101/index/repository/input-definition/stargazer -d @input_definition.json 
 ```
 
 Instead of creating a `stargazer` frame and a `language` frame individually like in [Getting Started](../getting-started/), we can create multiple frames in one input definition.
