@@ -286,13 +286,13 @@ func (c *Cluster) setState(state string) {
 		// - ClusterStateStarting
 	}
 
+	c.logger().Printf("Change cluster state from %s to %s", c.State, state)
 	c.State = state
 }
 
-func (c *Cluster) setNodeState(state string) {
+func (c *Cluster) SetNodeState(state string) error {
 	if c.IsCoordinator() {
-		c.Topology.nodeStates[c.URI] = state
-		return
+		return c.ReceiveNodeState(c.URI, state)
 	}
 
 	// Send node state to coordinator.
@@ -305,8 +305,10 @@ func (c *Cluster) setNodeState(state string) {
 		URI: c.Coordinator,
 	}
 	if err := c.Broadcaster.SendTo(node, ns); err != nil {
-		c.logger().Printf("sending node state error: err=%s", err)
+		return fmt.Errorf("sending node state error: err=%s", err)
 	}
+
+	return nil
 }
 
 func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
@@ -691,17 +693,14 @@ func (c *Cluster) Open() error {
 
 	// Only the coordinator needs to consider the .topology file.
 	if c.IsCoordinator() {
-		state, err := c.considerTopology()
+		err := c.considerTopology()
 		if err != nil {
 			return fmt.Errorf("considerTopology: %v", err)
 		}
-		// Add the local node to the cluster and update state.
-		c.AddNode(c.URI)
-		c.setState(state)
-	} else {
-		// Add the local node to the cluster.
-		c.AddNode(c.URI)
 	}
+
+	// Add the local node to the cluster.
+	c.AddNode(c.URI)
 
 	// Start the EventReceiver.
 	if err := c.EventReceiver.Start(c); err != nil {
@@ -921,6 +920,10 @@ func (c *Cluster) CompleteCurrentJob(state string) error {
 // FollowResizeInstruction is run by any node that receives a ResizeInstruction.
 func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) error {
 	go func() {
+
+		// Make sure the holder has opened.
+		<-c.Holder.opened
+
 		// Prepare the return message.
 		complete := &internal.ResizeInstructionComplete{
 			JobID: instr.JobID,
@@ -1273,6 +1276,11 @@ func (c *Cluster) loadTopology() error {
 
 // saveTopology writes the current topology to disk.
 func (c *Cluster) saveTopology() error {
+
+	if err := os.MkdirAll(c.Path, 0777); err != nil {
+		return err
+	}
+
 	if buf, err := proto.Marshal(encodeTopology(c.Topology)); err != nil {
 		return err
 	} else if err := ioutil.WriteFile(filepath.Join(c.Path, ".topology"), buf, 0666); err != nil {
@@ -1301,25 +1309,25 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 	return t, nil
 }
 
-func (c *Cluster) considerTopology() (string, error) {
-	// If there is no .topology file, it's safe to go to state NORMAL.
+func (c *Cluster) considerTopology() error {
+	// If there is no .topology file, it's safe to proceed.
 	if len(c.Topology.NodeSet) == 0 {
-		return ClusterStateNormal, nil
+		return nil
 	}
 
 	// The local node (coordinator) must be in the .topology.
 	if !c.Topology.ContainsURI(c.Coordinator) {
-		return "", fmt.Errorf("coordinator %s is not in topology: %v", c.Coordinator, c.Topology.NodeSet)
+		return fmt.Errorf("coordinator %s is not in topology: %v", c.Coordinator, c.Topology.NodeSet)
 	}
 
-	// If local node is the only thing in .topology, continue to state NORMAL.
-	if len(c.Topology.NodeSet) == 1 {
-		return ClusterStateNormal, nil
-	}
+	// If local node is the only thing in .topology, continue.
+	//if len(c.Topology.NodeSet) == 1 {
+	//	return nil
+	//}
 
 	// Keep the cluster in state "STARTING" until hearing from all nodes.
 	// Topology contains 2+ hosts.
-	return ClusterStateStarting, nil
+	return nil
 }
 
 // ReceiveEvent represents an implementation of EventHandler.

@@ -196,13 +196,15 @@ func (s *Server) Open() error {
 	if err := s.Holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
-	s.Cluster.setNodeState(NodeStateReady)
+	if err := s.Cluster.SetNodeState(NodeStateReady); err != nil {
+		return fmt.Errorf("setting nodeState: %v", err)
+	}
 
 	// Listen for joining nodes.
 	// This needs to start after the Holder has opened so that nodes can join
 	// the cluster without waiting for data to load on the coordinator. Before
-	// this starts, the joins are queued up in the Cluster.joiningURIs buffered
-	// channel.
+	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
+	// buffered channel.
 	s.Cluster.ListenForJoins()
 
 	// Start background monitoring.
