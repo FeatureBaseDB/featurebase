@@ -301,10 +301,7 @@ func (c *Cluster) SetNodeState(state string) error {
 		State: state,
 	}
 
-	node := &Node{
-		URI: c.Coordinator,
-	}
-	if err := c.Broadcaster.SendTo(node, ns); err != nil {
+	if err := c.sendTo(c.Coordinator, ns); err != nil {
 		return fmt.Errorf("sending node state error: err=%s", err)
 	}
 
@@ -779,6 +776,14 @@ func (c *Cluster) setStateAndBroadcast(state string) error {
 	return c.Broadcaster.SendSync(c.Status())
 }
 
+func (c *Cluster) sendTo(to URI, msg proto.Message) error {
+	node := &Node{URI: to}
+	if err := c.Broadcaster.SendTo(node, msg); err != nil {
+		return err
+	}
+	return nil
+}
+
 // ListenForJoins handles cluster-resize events.
 func (c *Cluster) ListenForJoins() {
 	c.wg.Add(1)
@@ -876,14 +881,14 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 
 	pbSchema := c.Holder.EncodeSchema()
 
-	// multiIndex is a map of sources for each node in toCluster.
-	// Initialize the map with all the nodes in toCluster.
+	// multiIndex is a map of sources initialized with all the nodes in toCluster.
 	multiIndex := make(map[URI][]*internal.ResizeSource)
+
 	for _, n := range toCluster.Nodes {
 		multiIndex[n.URI] = nil
 	}
 
-	// Add to m the instructions for each index.
+	// Add to multiIndex the instructions for each index.
 	for _, idx := range c.Holder.Indexes() {
 		fragSources, err := c.fragSources(toCluster, idx)
 		if err != nil {
@@ -1002,10 +1007,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 			complete.Error = err.Error()
 		}
 
-		node := &Node{
-			URI: decodeURI(instr.Coordinator),
-		}
-		if err := c.Broadcaster.SendTo(node, complete); err != nil {
+		if err := c.sendTo(decodeURI(instr.Coordinator), complete); err != nil {
 			c.logger().Printf("sending resizeInstructionComplete error: err=%s", err)
 		}
 	}()
@@ -1401,6 +1403,10 @@ func (c *Cluster) nodeJoin(uri URI) error {
 
 		if c.haveTopologyAgreement() && c.allNodesReady() {
 			return c.setStateAndBroadcast(ClusterStateNormal)
+		} else {
+			// Send the status to the remote node. This lets the remote node
+			// know that it can proceed with opening its Holder.
+			return c.sendTo(uri, c.Status())
 		}
 
 		return nil
