@@ -166,12 +166,18 @@ type Cluster struct {
 	Topology *Topology
 
 	// Required for cluster Resize.
+	Static      bool // Static is primarily used for testing in a non-gossip environment.
 	State       string
 	Coordinator URI
 	Holder      *Holder
 	Broadcaster Broadcaster
 
 	joiningLeavingNodes chan nodeAction
+
+	// joining is held open until this node
+	// receives ClusterStatus from the coordinator.
+	joining chan struct{}
+	joined  bool
 
 	mu         sync.RWMutex
 	jobs       map[int64]*ResizeJob
@@ -197,6 +203,7 @@ func NewCluster() *Cluster {
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
 		jobs:                make(map[int64]*ResizeJob),
 		closing:             make(chan struct{}),
+		joining:             make(chan struct{}),
 
 		LogOutput: os.Stderr,
 		prefect:   &NopSecurityManager{},
@@ -210,7 +217,7 @@ func (c *Cluster) logger() *log.Logger {
 
 // IsCoordinator is true if this node is the coordinator.
 func (c *Cluster) IsCoordinator() bool {
-	return c.Coordinator == c.URI
+	return c.Static || c.Coordinator == c.URI
 }
 
 // SetCoordinator updates the Coordinator to new if it is
@@ -709,6 +716,12 @@ func (c *Cluster) Open() error {
 		return fmt.Errorf("opening MemberSet: %v", err)
 	}
 
+	// If not coordinator then wait for ClusterStatus from coordinator.
+	if !c.IsCoordinator() {
+		c.logger().Printf("wait for joining to complete")
+		<-c.joining
+	}
+
 	return nil
 }
 
@@ -720,15 +733,28 @@ func (c *Cluster) Close() error {
 	return nil
 }
 
+func (c *Cluster) MarkAsJoined() {
+	if !c.joined {
+		c.joined = true
+		close(c.joining)
+	}
+}
+
 func (c *Cluster) needTopologyAgreement() bool {
 	return c.State == ClusterStateStarting && !URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
 }
 
 func (c *Cluster) haveTopologyAgreement() bool {
+	if c.Static {
+		return true
+	}
 	return URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
 }
 
 func (c *Cluster) allNodesReady() bool {
+	if c.Static {
+		return true
+	}
 	for _, uri := range c.Topology.NodeSet {
 		if c.Topology.nodeStates[uri] != NodeStateReady {
 			return false
@@ -1335,6 +1361,10 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 }
 
 func (c *Cluster) considerTopology() error {
+	if c.Static {
+		return nil
+	}
+
 	// If there is no .topology file, it's safe to proceed.
 	if len(c.Topology.NodeSet) == 0 {
 		return nil

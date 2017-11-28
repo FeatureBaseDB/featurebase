@@ -63,7 +63,7 @@ type Command struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	// running will be closed once Command.Run is finished.
+	// Started will be closed once Command.Run is finished.
 	Started chan struct{}
 	// Done will be closed when Command.Close() is called
 	Done chan struct{}
@@ -220,6 +220,18 @@ func (m *Command) SetupServer() error {
 		m.Server.Broadcaster = gossipMemberSet
 		m.Server.BroadcastReceiver = gossipMemberSet
 	case pilosa.ClusterStatic, pilosa.ClusterNone:
+
+		m.Server.Cluster.Static = true
+		for _, address := range m.Config.Cluster.Hosts {
+			uri, err := pilosa.NewURIFromAddress(address)
+			if err != nil {
+				return err
+			}
+			cluster.Nodes = append(cluster.Nodes, &pilosa.Node{
+				URI: *uri,
+			})
+		}
+
 		m.Server.Broadcaster = pilosa.NopBroadcaster
 		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet()
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
