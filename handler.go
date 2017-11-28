@@ -2010,8 +2010,6 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 		// TODO: prevent removing the coordinator node
 
 		// Start the resize process (similar to NodeJoin)
-		// TODO: this currently blocks. we should leverage listenForJoins() in cluster
-		// by converted it to a channel of nodeAction {URI, action}.
 		err := h.Cluster.NodeLeave(*removeURI)
 		if err != nil {
 			return err
