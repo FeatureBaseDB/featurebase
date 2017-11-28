@@ -103,3 +103,7 @@ func (h *SimpleBroadcastHandler) ReceiveMessage(pb proto.Message) error {
 	h.receivedMessage = pb.(proto.Message)
 	return nil
 }
+
+func (h *SimpleBroadcastHandler) SendSync(pb proto.Message) error {
+	return nil
+}
