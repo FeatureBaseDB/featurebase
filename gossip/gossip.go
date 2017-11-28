@@ -148,7 +148,7 @@ func NewGossipMemberSet(name string, gossipHost string, gossipPort int, gossipSe
 	g.config.memberlistConfig.BindPort = gossipPort
 	g.config.memberlistConfig.AdvertiseAddr = pilosa.HostToIP(gossipHost)
 	g.config.memberlistConfig.AdvertisePort = gossipPort
-	//g.config.memberlistConfig.PushPullInterval = 0 * time.Second // Default is 15s in DefaultLocalConfig. // TODO travis: change this from 0
+	//g.config.memberlistConfig.PushPullInterval = 0 * time.Second // Default is 15s in DefaultLocalConfig.
 	g.config.memberlistConfig.Delegate = g
 	g.config.memberlistConfig.SecretKey = secretKey
 	g.config.memberlistConfig.Events = server.Cluster.EventReceiver.(memberlist.EventDelegate)
@@ -336,7 +336,7 @@ func (g *GossipEventReceiver) listen() {
 			Event: nodeEventType,
 			URI:   *uri,
 		}
-		g.eventHandler.ReceiveEvent(ne)
+		_ = g.eventHandler.ReceiveEvent(ne) // TODO: don't swallow this error
 	}
 }
 

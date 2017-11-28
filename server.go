@@ -432,29 +432,16 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 
 // HandleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) HandleRemoteStatus(pb proto.Message) error {
+	// Ignore NodeStatus messages until the cluster is in a Normal state.
+	if s.Cluster.State != ClusterStateNormal {
+		return nil
+	}
 	return s.mergeRemoteStatus(pb.(*internal.NodeStatus))
 }
 
 func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	// Ignore status updates from self.
 	if s.URI == decodeURI(ns.URI) {
-		return nil
-	}
-
-	// If this node is still STARTING, don't apply remote status.
-	// There is an issue where starting up a cluster with existing
-	// data will error on `flock: resource temporarily unavailable`.
-	// This is because the ApplySchema creates/opens indexes before
-	// Holder.Open() has run. When Holder.Open() runs later, the
-	// fragment files are locked.
-	// TODO: There is still a race condition where the coordinator
-	// changes state to NORMAL, broadcasts that to the remote node,
-	// the remote node receives a `NodeStatus` (with schema) before
-	// running `Holder.Open()`. In that case, state would be NORMAL,
-	// meaning this check wouldn't pass, and `Holder.Open()` still
-	// hasn't run. We may need to track whether `Holder.Open()` has
-	// run, and use that to determine if we bail here.
-	if s.Cluster.State == ClusterStateStarting {
 		return nil
 	}
 

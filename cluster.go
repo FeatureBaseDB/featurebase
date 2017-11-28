@@ -1382,7 +1382,9 @@ func (c *Cluster) nodeJoin(uri URI) error {
 	if c.needTopologyAgreement() {
 		// A host that is not part of the topology can't be added to the STARTING cluster.
 		if !c.Topology.ContainsURI(uri) {
-			return fmt.Errorf("host is not in topology: %v", uri)
+			err := fmt.Sprintf("host is not in topology: %v", uri)
+			c.logger().Print(err)
+			return errors.New(err)
 		}
 
 		if err := c.AddNode(uri); err != nil {
