@@ -284,6 +284,10 @@ func (c *Cluster) setState(state string) {
 		return
 	}
 
+	c.logger().Printf("Change cluster state from %s to %s", c.State, state)
+
+	var doCleanup bool
+
 	switch state {
 	case ClusterStateResizing:
 		c.prefect.SetRestricted()
@@ -291,10 +295,28 @@ func (c *Cluster) setState(state string) {
 		c.prefect.SetNormal()
 		// Don't change routing for these states:
 		// - ClusterStateStarting
+
+		// If state is RESIZING -> NORMAL then run cleanup.
+		if c.State == ClusterStateResizing {
+			doCleanup = true
+		}
 	}
 
-	c.logger().Printf("Change cluster state from %s to %s", c.State, state)
 	c.State = state
+
+	// It's safe to do a cleanup after state changes back to normal.
+	if doCleanup {
+		var cleaner HolderCleaner
+		cleaner.URI = c.URI
+		cleaner.Holder = c.Holder
+		cleaner.Cluster = c
+		cleaner.Closing = c.closing
+
+		// Clean holder.
+		if err := cleaner.CleanHolder(); err != nil {
+			c.logger().Printf("holder clean error: err=%s", err)
+		}
+	}
 }
 
 func (c *Cluster) SetNodeState(state string) error {
@@ -315,8 +337,16 @@ func (c *Cluster) SetNodeState(state string) error {
 	return nil
 }
 
+// ReceiveNodeState set node state in Topology in order for the
+// Coordinator to keep track of, during startup, which nodes have
+// finished opening their Holder.
 func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
 	if !c.IsCoordinator() {
+		return nil
+	}
+
+	// This method is really only useful during initial startup.
+	if c.State != ClusterStateStarting {
 		return nil
 	}
 
@@ -649,7 +679,7 @@ func (c *Cluster) PartitionNodes(partitionID int) []*Node {
 	return nodes
 }
 
-// OwnsSlices find the set of slices owned by the node per Index
+// OwnsSlices finds the set of slices owned by the node per Index
 func (c *Cluster) OwnsSlices(index string, maxSlice uint64, uri URI) []uint64 {
 	var slices []uint64
 	for i := uint64(0); i <= maxSlice; i++ {
@@ -658,6 +688,22 @@ func (c *Cluster) OwnsSlices(index string, maxSlice uint64, uri URI) []uint64 {
 		nodeIndex := c.Hasher.Hash(uint64(p), len(c.Nodes))
 		if c.Nodes[nodeIndex].URI == uri {
 			slices = append(slices, i)
+		}
+	}
+	return slices
+}
+
+// ContainsSlices is like OwnsSlices, but it includes replicas.
+func (c *Cluster) ContainsSlices(index string, maxSlice uint64, uri URI) []uint64 {
+	var slices []uint64
+	for i := uint64(0); i <= maxSlice; i++ {
+		p := c.Partition(index, i)
+		// Determine the nodes for partition.
+		nodes := c.PartitionNodes(p)
+		for _, node := range nodes {
+			if node.URI == uri {
+				slices = append(slices, i)
+			}
 		}
 	}
 	return slices
