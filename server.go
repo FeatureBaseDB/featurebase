@@ -36,6 +36,7 @@ import (
 	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 )
 
 // Default server settings.
@@ -311,76 +312,28 @@ func (s *Server) monitorMaxSlices() {
 
 // ReceiveMessage represents an implementation of BroadcastHandler.
 func (s *Server) ReceiveMessage(pb proto.Message) error {
-	switch obj := pb.(type) {
-	case *internal.CreateSliceMessage:
-		idx := s.Holder.Index(obj.Index)
-		if idx == nil {
-			return fmt.Errorf("Local Index not found: %s", obj.Index)
-		}
-		if obj.IsInverse {
-			idx.SetRemoteMaxInverseSlice(obj.Slice)
-		} else {
-			idx.SetRemoteMaxSlice(obj.Slice)
-		}
-	case *internal.CreateIndexMessage:
-		opt := IndexOptions{
-			ColumnLabel: obj.Meta.ColumnLabel,
-			TimeQuantum: TimeQuantum(obj.Meta.TimeQuantum),
-		}
-		_, err := s.Holder.CreateIndex(obj.Index, opt)
+	return s.Handler.ProcessClusterMessage(pb)
+}
+
+// SendSync represents an implementation of BroadcastHandler.
+func (s *Server) SendSync(pb proto.Message) error {
+	var eg errgroup.Group
+	for _, node := range s.Cluster.Nodes {
+		uri, err := node.URI()
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteIndexMessage:
-		if err := s.Holder.DeleteIndex(obj.Index); err != nil {
-			return err
-		}
-	case *internal.CreateFrameMessage:
-		idx := s.Holder.Index(obj.Index)
-		if idx == nil {
-			return fmt.Errorf("Local Index not found: %s", obj.Index)
-		}
-		opt := FrameOptions{
-			RowLabel:       obj.Meta.RowLabel,
-			InverseEnabled: obj.Meta.InverseEnabled,
-			RangeEnabled:   obj.Meta.RangeEnabled,
-			CacheType:      obj.Meta.CacheType,
-			CacheSize:      obj.Meta.CacheSize,
-			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
-			Fields:         decodeFields(obj.Meta.Fields),
-		}
-		_, err := idx.CreateFrame(obj.Frame, opt)
-		if err != nil {
-			return err
-		}
-	case *internal.DeleteFrameMessage:
-		idx := s.Holder.Index(obj.Index)
-		if err := idx.DeleteFrame(obj.Frame); err != nil {
-			return err
-		}
-	case *internal.CreateInputDefinitionMessage:
-		idx := s.Holder.Index(obj.Index)
-		if idx == nil {
-			return fmt.Errorf("Local Index not found: %s", obj.Index)
-		}
-		idx.CreateInputDefinition(obj.Definition)
-	case *internal.DeleteInputDefinitionMessage:
-		idx := s.Holder.Index(obj.Index)
-		err := idx.DeleteInputDefinition(obj.Name)
-		if err != nil {
-			return err
-		}
-	case *internal.DeleteViewMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
-		if f == nil {
-			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
-		}
-		err := f.DeleteView(obj.View)
-		if err != nil {
-			return err
+
+		// Don't forward the message to ourselves
+		if *s.URI != *uri {
+			ctx := context.WithValue(context.Background(), "uri", uri)
+			eg.Go(func() error {
+				return s.defaultClient.ClusterMessage(ctx, pb)
+			})
 		}
 	}
-	return nil
+
+	return eg.Wait()
 }
 
 // LocalStatus returns the state of the local node as well as the
@@ -608,7 +561,7 @@ func (s *Server) createDefaultClient() {
 	if s.TLS != nil {
 		transport.TLSClientConfig = s.TLS
 	}
-	s.defaultClient = NewInternalHTTPClientFromURI(nil, &ClientOptions{TLS: s.TLS})
+	s.defaultClient = NewInternalHTTPClientFromURI(s.URI, &ClientOptions{TLS: s.TLS})
 }
 
 // CountOpenFiles on operating systems that support lsof.
