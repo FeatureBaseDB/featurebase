@@ -484,6 +484,8 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		h.logger().Printf("problem sending CreateIndex message: %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// Encode response.
@@ -1990,20 +1992,12 @@ func GetTimeStamp(data map[string]interface{}, timeField string) (int64, error) 
 }
 
 func (h *Handler) handleClusterMessage(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("**handleClusterMessage**")
-	fmt.Printf("%v\n", r.Header)
-
 	// Verify that request is only communicating over protobufs.
 	if r.Header.Get("Content-Type") != "application/x-protobuf" {
 		fmt.Println("**unsupported media type**")
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
 	}
-	// else if r.Header.Get("Accept") != "application/x-protobuf" {
-	// 	fmt.Println("**Not acceptable**")
-	// 	http.Error(w, "Not acceptable", http.StatusNotAcceptable)
-	// 	return
-	// }
 
 	// Read entire body.
 	body, err := ioutil.ReadAll(r.Body)
@@ -2019,6 +2013,7 @@ func (h *Handler) handleClusterMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Forward the error message.
 	err = h.ProcessClusterMessage(pb)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -2046,7 +2041,6 @@ func (h *Handler) ProcessClusterMessage(pb proto.Message) error {
 			idx.SetRemoteMaxSlice(obj.Slice)
 		}
 	case *internal.CreateIndexMessage:
-		fmt.Printf("*** Create Index %v ***\n", obj.Index)
 		opt := IndexOptions{
 			ColumnLabel: obj.Meta.ColumnLabel,
 			TimeQuantum: TimeQuantum(obj.Meta.TimeQuantum),
