@@ -304,6 +304,8 @@ func (c *Cluster) setState(state string) {
 
 	c.State = state
 
+	// TODO: consider NOT running cleanup on an active node that has
+	// been removed.
 	// It's safe to do a cleanup after state changes back to normal.
 	if doCleanup {
 		var cleaner HolderCleaner
@@ -529,7 +531,7 @@ func (c *Cluster) diff(other *Cluster) (action string, uri URI, err error) {
 				break
 			}
 		}
-	} else if len(c.Nodes) > len(other.Nodes) {
+	} else if lenFrom > lenTo {
 		// Removing a node.
 		if lenFrom-lenTo > 1 {
 			return action, uri, errors.New("removing more than one node at a time is not supported")
@@ -1274,6 +1276,16 @@ func (u NodeSet) ToStrings() []string {
 	return other
 }
 
+// ContainsURI returns true if uri matches one of the nodesets's uris.
+func (n NodeSet) ContainsURI(uri URI) bool {
+	for _, nuri := range n {
+		if nuri == uri {
+			return true
+		}
+	}
+	return false
+}
+
 // Topology represents the list of hosts in the cluster.
 type Topology struct {
 	mu      sync.RWMutex
@@ -1298,12 +1310,7 @@ func (t *Topology) ContainsURI(uri URI) bool {
 }
 
 func (t *Topology) containsURI(uri URI) bool {
-	for _, turi := range t.NodeSet {
-		if turi == uri {
-			return true
-		}
-	}
-	return false
+	return NodeSet(t.NodeSet).ContainsURI(uri)
 }
 
 func (t *Topology) positionByURI(uri URI) int {
@@ -1557,9 +1564,25 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 		return nil
 	}
 
-	for _, uri := range decodeURIs(cs.NodeSet) {
-		c.AddNode(uri)
+	officialURIs := decodeURIs(cs.NodeSet)
+
+	// Add all nodes from the coordinator.
+	for _, uri := range officialURIs {
+		if err := c.AddNode(uri); err != nil {
+			return err
+		}
 	}
+
+	// Remove any nodes not specified by the coordinator.
+	for _, uri := range c.NodeSet() {
+		if NodeSet(officialURIs).ContainsURI(uri) {
+			continue
+		}
+		if err := c.RemoveNode(uri); err != nil {
+			return err
+		}
+	}
+
 	c.setState(cs.State)
 
 	return nil
