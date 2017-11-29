@@ -109,7 +109,7 @@ func BuildRouters(handler *Handler) {
 	loadRestricted(router, handler)
 	handler.RestrictedRouter = router
 
-	handler.SetNormal()
+	handler.SetRestricted()
 }
 
 // SetNormal is a method of the SecurityManager interface which provides normal URI routing.
@@ -141,6 +141,7 @@ func loadRestricted(router *mux.Router, handler *Handler) {
 
 func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
+	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
@@ -183,7 +184,7 @@ func loadNormal(router *mux.Router, handler *Handler) {
 }
 
 func (h *Handler) reportRestricted(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "not allowed during resize", http.StatusMethodNotAllowed)
+	http.Error(w, fmt.Sprintf("not allowed in cluster state %s", h.Cluster.State), http.StatusMethodNotAllowed)
 }
 
 func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
@@ -1985,6 +1986,55 @@ type setCoordinatorRequest struct {
 type setCoordinatorResponse struct {
 	Old *URI `json:"old"`
 	New *URI `json:"new"`
+}
+
+// handlePostClusterResizeRemoveNode handles POST /cluster/resize/remove-node request.
+func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *http.Request) {
+	// Decode request.
+	var req removeNodeRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var removeURI *URI
+	if err := func() error {
+		removeURI, err = NewURIFromAddress(req.Address)
+		if err != nil {
+			return fmt.Errorf("problem with remove node address: %s", err)
+		}
+
+		// TODO: make sure the address is in the cluster
+
+		// TODO: prevent removing the coordinator node
+
+		// Start the resize process (similar to NodeJoin)
+		err := h.Cluster.NodeLeave(*removeURI)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode response.
+	if err := json.NewEncoder(w).Encode(removeNodeResponse{
+		Remove: removeURI,
+	}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type removeNodeRequest struct {
+	Address string `json:"address"`
+}
+
+type removeNodeResponse struct {
+	Remove *URI `json:"remove"`
 }
 
 // handlePostClusterResizeAbort handles POST /cluster/resize/abort request.

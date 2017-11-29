@@ -780,7 +780,6 @@ func (i *Index) openInputDefinitions() error {
 				return nil
 			}
 		}
-
 	}
 	return nil
 }

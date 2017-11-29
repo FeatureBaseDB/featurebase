@@ -46,6 +46,9 @@ type Holder struct {
 	indexes map[string]*Index
 	hasData bool
 
+	// opened channel is closed once Open() completes.
+	opened chan struct{}
+
 	Broadcaster Broadcaster
 	// Close management
 	wg      sync.WaitGroup
@@ -68,6 +71,8 @@ func NewHolder() *Holder {
 	return &Holder{
 		indexes: make(map[string]*Index),
 		closing: make(chan struct{}, 0),
+
+		opened: make(chan struct{}),
 
 		Broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
@@ -156,6 +161,8 @@ func (h *Holder) Open() error {
 	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
 
 	h.Stats.Open()
+
+	close(h.opened)
 	return nil
 }
 

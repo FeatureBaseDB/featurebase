@@ -121,6 +121,11 @@ message URI {
     uint32 Port = 3;
 }
 
+message NodeStateMessage {
+    URI URI = 1;
+    string State = 2;
+}
+
 message NodeStatus {
     URI URI = 1;
     MaxSlices MaxSlices = 2;

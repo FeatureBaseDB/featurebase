@@ -250,8 +250,13 @@ func (t *TestCluster) SetState(state string) {
 // Open opens all clusters in the test cluster.
 func (t *TestCluster) Open() error {
 	for _, c := range t.Clusters {
-		err := c.Open()
-		if err != nil {
+		if err := c.Open(); err != nil {
+			return err
+		}
+		if err := c.Holder.Open(); err != nil {
+			return err
+		}
+		if err := c.SetNodeState(pilosa.NodeStateReady); err != nil {
 			return err
 		}
 	}

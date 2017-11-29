@@ -12,11 +12,7 @@ type NopSecurityManager struct {
 }
 
 // SetRestricted no-op.
-func (sdm *NopSecurityManager) SetRestricted() {
-
-}
+func (sdm *NopSecurityManager) SetRestricted() {}
 
 // SetNormal no-op.
-func (sdm *NopSecurityManager) SetNormal() {
-
-}
+func (sdm *NopSecurityManager) SetNormal() {}

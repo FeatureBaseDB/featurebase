@@ -23,7 +23,6 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -231,80 +230,6 @@ func TestCluster_Topology(t *testing.T) {
 	})
 }
 
-// Ensure DataDiff can generate the expected source map.
-func TestCluster_Resize(t *testing.T) {
-	// Given two clusters, ensure DataDiff can determine the sources of data
-	// needed in order to respond to queries.
-	t.Run("DataDiff", func(t *testing.T) {
-
-		// Holder
-		h1 := test.NewHolder()
-		i, err := h1.CreateIndex("i", pilosa.IndexOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		f, err := i.CreateFrame("f", pilosa.FrameOptions{InverseEnabled: true})
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = f.CreateViewIfNotExists("v")
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = f.CreateViewIfNotExists("inverse")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Set max slices.
-		i.SetRemoteMaxSlice(2)
-		i.SetRemoteMaxInverseSlice(5)
-
-		// Cluster 1
-		c1 := test.NewCluster(3)
-		c1.ReplicaN = 2
-
-		// Cluster 2
-		c2 := test.NewCluster(4)
-		c2.ReplicaN = 2
-
-		u0 := test.NewURIFromHostPort("host0", 0)
-		u1 := test.NewURIFromHostPort("host1", 0)
-		u2 := test.NewURIFromHostPort("host2", 0)
-		u3 := test.NewURIFromHostPort("host3", 0)
-
-		uri0 := u0.Encode()
-		uri1 := u1.Encode()
-		uri2 := u2.Encode()
-		//uri3 := u3.Encode()
-
-		expected := map[pilosa.URI][]*internal.ResizeSource{
-			u0: []*internal.ResizeSource{
-				{URI: uri1, Index: "i", Frame: "f", View: "inverse", Slice: 5},
-			},
-			u1: []*internal.ResizeSource{
-				{URI: uri2, Index: "i", Frame: "f", View: "v", Slice: 0},
-				{URI: uri2, Index: "i", Frame: "f", View: "inverse", Slice: 0},
-			},
-			u2: []*internal.ResizeSource{
-				{URI: uri0, Index: "i", Frame: "f", View: "inverse", Slice: 3},
-			},
-			u3: []*internal.ResizeSource{
-				{URI: uri0, Index: "i", Frame: "f", View: "v", Slice: 1},
-				{URI: uri1, Index: "i", Frame: "f", View: "v", Slice: 2},
-				{URI: uri0, Index: "i", Frame: "f", View: "inverse", Slice: 1},
-				{URI: uri1, Index: "i", Frame: "f", View: "inverse", Slice: 2},
-				{URI: uri1, Index: "i", Frame: "f", View: "inverse", Slice: 5},
-			},
-		}
-
-		actual := c1.DataDiff(c2, i)
-		if !reflect.DeepEqual(actual, expected) {
-			t.Errorf("expected: %v, but got: %v", expected, actual)
-		}
-	})
-}
-
 // Ensure that general cluster functionality works as expected.
 func TestCluster_ResizeStates(t *testing.T) {
 
@@ -328,8 +253,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node.Topology, expectedTop) {
-			t.Errorf("expected topology: %v, but got: %v", expectedTop, node.Topology)
+		if !reflect.DeepEqual(node.Topology.NodeSet, expectedTop.NodeSet) {
+			t.Errorf("expected topology: %v, but got: %v", expectedTop.NodeSet, node.Topology.NodeSet)
 		}
 
 		// Close TestCluster.
@@ -419,10 +344,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology, expectedTop) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop, node0.Topology)
-		} else if !reflect.DeepEqual(node1.Topology, expectedTop) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop, node1.Topology)
+		if !reflect.DeepEqual(node0.Topology.NodeSet, expectedTop.NodeSet) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeSet, node0.Topology.NodeSet)
+		} else if !reflect.DeepEqual(node1.Topology.NodeSet, expectedTop.NodeSet) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeSet, node1.Topology.NodeSet)
 		}
 
 		// Close TestCluster.
@@ -511,10 +436,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology, expectedTop) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop, node0.Topology)
-		} else if !reflect.DeepEqual(node1.Topology, expectedTop) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop, node1.Topology)
+		if !reflect.DeepEqual(node0.Topology.NodeSet, expectedTop.NodeSet) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeSet, node0.Topology.NodeSet)
+		} else if !reflect.DeepEqual(node1.Topology.NodeSet, expectedTop.NodeSet) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeSet, node1.Topology.NodeSet)
 		}
 
 		// Verify that node-1 contains the fragment (i/f/standard/1) transferred from node-0.
