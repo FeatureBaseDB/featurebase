@@ -136,6 +136,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
+	router.HandleFunc("/cluster/message", handler.handleClusterMessage).Methods("POST")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
@@ -483,6 +484,8 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		h.logger().Printf("problem sending CreateIndex message: %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// Encode response.
@@ -1986,4 +1989,114 @@ func GetTimeStamp(data map[string]interface{}, timeField string) (int64, error) 
 	}
 
 	return v.Unix(), nil
+}
+
+func (h *Handler) handleClusterMessage(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		fmt.Println("**unsupported media type**")
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Marshal into request object.
+	pb, err := UnmarshalMessage(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Forward the error message.
+	err = h.ProcessClusterMessage(pb)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type defaultClusterMessageResponse struct{}
+
+// ProcessClusterMessage Process Cluster messages from API handler and Gossip BroadcastHandler.
+func (h *Handler) ProcessClusterMessage(pb proto.Message) error {
+	switch obj := pb.(type) {
+	case *internal.CreateSliceMessage:
+		idx := h.Holder.Index(obj.Index)
+		if idx == nil {
+			return fmt.Errorf("Local Index not found: %s", obj.Index)
+		}
+		if obj.IsInverse {
+			idx.SetRemoteMaxInverseSlice(obj.Slice)
+		} else {
+			idx.SetRemoteMaxSlice(obj.Slice)
+		}
+	case *internal.CreateIndexMessage:
+		opt := IndexOptions{
+			ColumnLabel: obj.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(obj.Meta.TimeQuantum),
+		}
+		_, err := h.Holder.CreateIndex(obj.Index, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteIndexMessage:
+		if err := h.Holder.DeleteIndex(obj.Index); err != nil {
+			return err
+		}
+	case *internal.CreateFrameMessage:
+		idx := h.Holder.Index(obj.Index)
+		if idx == nil {
+			return fmt.Errorf("Local Index not found: %s", obj.Index)
+		}
+		opt := FrameOptions{
+			RowLabel:       obj.Meta.RowLabel,
+			InverseEnabled: obj.Meta.InverseEnabled,
+			RangeEnabled:   obj.Meta.RangeEnabled,
+			CacheType:      obj.Meta.CacheType,
+			CacheSize:      obj.Meta.CacheSize,
+			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
+			Fields:         decodeFields(obj.Meta.Fields),
+		}
+		_, err := idx.CreateFrame(obj.Frame, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteFrameMessage:
+		idx := h.Holder.Index(obj.Index)
+		if err := idx.DeleteFrame(obj.Frame); err != nil {
+			return err
+		}
+	case *internal.CreateInputDefinitionMessage:
+		idx := h.Holder.Index(obj.Index)
+		if idx == nil {
+			return fmt.Errorf("Local Index not found: %s", obj.Index)
+		}
+		idx.CreateInputDefinition(obj.Definition)
+	case *internal.DeleteInputDefinitionMessage:
+		idx := h.Holder.Index(obj.Index)
+		err := idx.DeleteInputDefinition(obj.Name)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteViewMessage:
+		f := h.Holder.Frame(obj.Index, obj.Frame)
+		if f == nil {
+			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
+		}
+		err := f.DeleteView(obj.View)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

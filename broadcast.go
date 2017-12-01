@@ -86,6 +86,7 @@ func (c *nopBroadcaster) SendAsync(pb proto.Message) error {
 // handle broadcast messages. (Hint: this is implemented by pilosa.Server)
 type BroadcastHandler interface {
 	ReceiveMessage(pb proto.Message) error
+	SendSync(pb proto.Message) error
 }
 
 // BroadcastReceiver is the interface for the object which will listen for and
