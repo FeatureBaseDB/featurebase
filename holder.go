@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -430,9 +431,9 @@ func (h *Holder) logger() *log.Logger { return log.New(h.LogOutput, "", log.Lstd
 type HolderSyncer struct {
 	Holder *Holder
 
-	URI           *URI
-	Cluster       *Cluster
-	ClientOptions *ClientOptions
+	URI          *URI
+	Cluster      *Cluster
+	RemoteClient *http.Client
 
 	// Signals that the sync should stop.
 	Closing <-chan struct{}
@@ -518,7 +519,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.URI.HostPort()) {
-		client, err := NewInternalHTTPClient(node.Host, s.ClientOptions)
+		client, err := NewInternalHTTPClient(node.Host, s.RemoteClient)
 		if err != nil {
 			return err
 		}
@@ -563,7 +564,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.URI.HostPort()) {
-		client, err := NewInternalHTTPClient(node.Host, s.ClientOptions)
+		client, err := NewInternalHTTPClient(node.Host, s.RemoteClient)
 		if err != nil {
 			return err
 		}
@@ -616,11 +617,11 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 
 	// Sync fragments together.
 	fs := FragmentSyncer{
-		Fragment:      frag,
-		Host:          s.URI.HostPort(),
-		Cluster:       s.Cluster,
-		Closing:       s.Closing,
-		ClientOptions: s.ClientOptions,
+		Fragment:     frag,
+		Host:         s.URI.HostPort(),
+		Cluster:      s.Cluster,
+		Closing:      s.Closing,
+		RemoteClient: s.RemoteClient,
 	}
 	if err := fs.SyncFragment(); err != nil {
 		return err

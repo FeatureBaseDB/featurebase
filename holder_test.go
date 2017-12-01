@@ -320,7 +320,7 @@ func TestHolder_DeleteIndex(t *testing.T) {
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
 	cluster := test.NewCluster(2)
-
+	client := pilosa.GetHTTPClient(nil)
 	// Create a local holder.
 	hldr0 := test.MustOpenHolder()
 	defer hldr0.Close()
@@ -332,7 +332,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	defer s.Close()
 	s.Handler.Holder = hldr1.Holder
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(nil)
+		e := pilosa.NewExecutor(client)
 		e.Holder = hldr1.Holder
 		e.Scheme = cluster.Nodes[1].Scheme
 		e.Host = cluster.Nodes[1].Host
@@ -400,9 +400,10 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	syncer := pilosa.HolderSyncer{
-		Holder:  hldr0.Holder,
-		URI:     uri,
-		Cluster: cluster,
+		Holder:       hldr0.Holder,
+		URI:          uri,
+		Cluster:      cluster,
+		RemoteClient: pilosa.GetHTTPClient(nil),
 	}
 
 	if err := syncer.SyncHolder(); err != nil {
