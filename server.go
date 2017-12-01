@@ -345,13 +345,15 @@ func (s *Server) SendSync(pb proto.Message) error {
 			return err
 		}
 
-		// Don't forward the message to ourselves
-		if *s.URI != *uri {
-			ctx := context.WithValue(context.Background(), "uri", uri)
-			eg.Go(func() error {
-				return s.defaultClient.ClusterMessage(ctx, pb)
-			})
+		// Don't forward the message to ourselves.
+		if *s.URI == *uri {
+			continue
 		}
+
+		ctx := context.WithValue(context.Background(), "uri", uri)
+		eg.Go(func() error {
+			return s.defaultClient.ClusterMessage(ctx, pb)
+		})
 	}
 
 	return eg.Wait()
