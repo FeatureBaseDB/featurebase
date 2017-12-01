@@ -25,7 +25,6 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -46,14 +45,13 @@ type ClientOptions struct {
 // InternalHTTPClient represents a client to the Pilosa cluster.
 type InternalHTTPClient struct {
 	defaultURI *URI
-	options    *ClientOptions
 
 	// The client to use for HTTP communication.
 	HTTPClient *http.Client
 }
 
 // NewInternalHTTPClient returns a new instance of InternalHTTPClient to connect to host.
-func NewInternalHTTPClient(host string, options *ClientOptions) (*InternalHTTPClient, error) {
+func NewInternalHTTPClient(host string, remoteClient *http.Client) (*InternalHTTPClient, error) {
 	if host == "" {
 		return nil, ErrHostRequired
 	}
@@ -63,34 +61,14 @@ func NewInternalHTTPClient(host string, options *ClientOptions) (*InternalHTTPCl
 		return nil, err
 	}
 
-	client := NewInternalHTTPClientFromURI(uri, options)
+	client := NewInternalHTTPClientFromURI(uri, remoteClient)
 	return client, nil
 }
 
-func NewInternalHTTPClientFromURI(defaultURI *URI, options *ClientOptions) *InternalHTTPClient {
-	if options == nil {
-		options = &ClientOptions{}
-	}
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          1000,
-		MaxIdleConnsPerHost:   200,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-	if options.TLS != nil {
-		transport.TLSClientConfig = options.TLS
-	}
-	client := &http.Client{Transport: transport}
+func NewInternalHTTPClientFromURI(defaultURI *URI, remoteClient *http.Client) *InternalHTTPClient {
 	return &InternalHTTPClient{
 		defaultURI: defaultURI,
-		HTTPClient: client,
+		HTTPClient: remoteClient,
 	}
 }
 

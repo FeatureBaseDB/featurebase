@@ -1,6 +1,8 @@
 package test
 
 import (
+	"net/http"
+
 	"github.com/pilosa/pilosa"
 )
 
@@ -10,8 +12,8 @@ type Client struct {
 }
 
 // MustNewClient returns a new instance of Client. Panic on error.
-func MustNewClient(host string) *Client {
-	c, err := pilosa.NewInternalHTTPClient(host, nil)
+func MustNewClient(host string, h *http.Client) *Client {
+	c, err := pilosa.NewInternalHTTPClient(host, h)
 	if err != nil {
 		panic(err)
 	}
