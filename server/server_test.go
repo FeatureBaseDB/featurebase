@@ -22,19 +22,19 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"net"
 	"net/http"
 	"os"
 	"reflect"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
@@ -384,20 +384,14 @@ func TestCountOpenFiles(t *testing.T) {
 	}
 }
 
-/* TODO: Fix this test. See #951.
 // Ensure program can send/receive broadcast messages.
 func TestMain_SendReceiveMessage(t *testing.T) {
+
 	m0 := MustRunMain()
 	defer m0.Close()
 
 	m1 := MustRunMain()
 	defer m1.Close()
-
-	// Get available ports for internal messaging
-	freePorts, err := availablePorts(2)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// Update cluster config
 	m0.Server.Cluster.Nodes = []*pilosa.Node{
@@ -409,17 +403,14 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	// Configure node0
 
 	// get the host portion of addr to use for binding
-	gossipHost, _, err := net.SplitHostPort(m0.Server.URI.HostPort())
-	if err != nil {
-		gossipHost = m0.Server.URI.HostPort()
-	}
-	gossipPort, err := strconv.Atoi(freePorts[0])
+	gossipHost := m0.Server.URI.Host()
+	gossipPort := 0
+	gossipSeed := ""
+
+	gossipNodeSet0, err := gossip.NewGossipNodeSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	gossipSeed := gossipHost + ":" + freePorts[0]
-
-	gossipNodeSet0 := gossip.NewGossipNodeSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server, nil)
 	m0.Server.Cluster.NodeSet = gossipNodeSet0
 	m0.Server.Broadcaster = gossipNodeSet0
 	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
@@ -437,16 +428,14 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	// Configure node1
 
 	// get the host portion of addr to use for binding
-	gossipHost, _, err = net.SplitHostPort(m1.Server.URI.HostPort())
-	if err != nil {
-		gossipHost = m1.Server.URI.HostPort()
-	}
-	gossipPort, err = strconv.Atoi(freePorts[1])
+	gossipHost = m1.Server.URI.Host()
+	gossipPort = 0
+	gossipSeed = gossipNodeSet0.Seed()
+
+	gossipNodeSet1, err := gossip.NewGossipNodeSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	gossipNodeSet1 := gossip.NewGossipNodeSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server, nil)
 	m1.Server.Cluster.NodeSet = gossipNodeSet1
 	m1.Server.Broadcaster = gossipNodeSet1
 	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
@@ -565,37 +554,6 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	if frame1 == nil {
 		t.Fatal("frame not found")
 	}
-}
-*/
-
-// availablePorts returns a slice of ports that can be used for testing.
-func availablePorts(cnt int) ([]string, error) {
-	rtn := []string{}
-
-	for i := 0; i < cnt; i++ {
-		port, err := getPort()
-		if err != nil {
-			return nil, err
-		}
-		rtn = append(rtn, strconv.Itoa(port))
-	}
-	return rtn, nil
-}
-
-// Ask the kernel for a free open port that is ready to use
-func getPort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	if err != nil {
-		return 0, err
-	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-
-	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // Main represents a test wrapper for main.Main.
