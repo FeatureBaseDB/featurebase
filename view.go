@@ -282,7 +282,7 @@ func (v *View) DeleteFragment(slice uint64) error {
 		return ErrFragmentNotFound
 	}
 
-	v.logger().Printf("delete fragment: %d", slice)
+	v.logger().Printf("delete fragment: (%s/%s/%s) %d", v.index, v.frame, v.name, slice)
 
 	// Close data files before deletion.
 	if err := fragment.Close(); err != nil {
