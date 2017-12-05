@@ -28,6 +28,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"sort"
 	"sync"
@@ -1682,9 +1683,9 @@ func (h *blockHasher) WriteValue(v uint64) {
 type FragmentSyncer struct {
 	Fragment *Fragment
 
-	URI           URI
-	Cluster       *Cluster
-	ClientOptions *ClientOptions
+	URI          URI
+	Cluster      *Cluster
+	RemoteClient *http.Client
 
 	Closing <-chan struct{}
 }
@@ -1719,8 +1720,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		}
 
 		// Retrieve remote blocks.
-		client := NewInternalHTTPClientFromURI(&node.URI, s.ClientOptions)
-
+		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
 		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return err
@@ -1796,8 +1796,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 			return nil
 		}
 
-		client := NewInternalHTTPClientFromURI(&node.URI, s.ClientOptions)
-
+		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
 		clients = append(clients, client)
 
 		// Only sync the standard block.

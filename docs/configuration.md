@@ -75,6 +75,28 @@ Any flag that has a value that is a comma separated list on the command line bec
     data-dir = "~/.pilosa"
     ```
 
+#### Log Path
+
+* Description: Path of log file.
+* Flag: `--log-path="/path/to/logfile"`
+* Env: `PILOSA_LOG_PATH="/path/to/logfile"`
+* Config:
+
+    ```toml
+    log_path = "/path/to/logfile"
+    ```
+
+#### Max Writes Per Request
+
+* Description: Maximum number of mutating commands allowed per request. This includes SetBit, ClearBit, SetRowAttrs, SetColumnAttrs, and SetFieldValue.
+* Flag: `--max-writes-per-request=5000`
+* Env: `PILOSA_MAX_WRITES_PER_REQUEST=5000`
+* Config:
+
+    ```toml
+    max-writes-per-request = 5000
+    ```
+
 #### Gossip Port
 
 * Description: Port to which Pilosa should bind for internal communication.
@@ -120,6 +142,30 @@ Any flag that has a value that is a comma separated list on the command line bec
     ```toml
     [cluster]
     hosts = ["localhost:10101"]
+    ```
+
+#### Cluster Poll Interval
+
+* Description: Polling interval for cluster.
+* Flag: `cluster.poll-interval="1m0s"`
+* Env: `PILOSA_CLUSTER_POLL_INTERVAL="1m0s"`
+* Config:
+
+    ```toml
+    [cluster]
+    poll-interval = "1m0s"
+    ```
+
+#### Cluster Long Query Time
+
+* Description: Duration that will trigger log and stat messages for slow queries.
+* Flag: `cluster.long-query-time="1m0s"`
+* Env: `PILOSA_CLUSTER_LONG_QUERY_TIME="1m0s"`
+* Config:
+
+    ```toml
+    [cluster]
+    long-query-time = "1m0s"
     ```
 
 #### Cluster Replicas

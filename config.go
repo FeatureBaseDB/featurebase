@@ -78,12 +78,9 @@ type Config struct {
 		ReplicaN      int      `toml:"replicas"`
 		Type          string   `toml:"type"`
 		Hosts         []string `toml:"hosts"`
+		PollInterval  Duration `toml:"poll-interval"`
 		LongQueryTime Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
-
-	Plugins struct {
-		Path string `toml:"path"`
-	} `toml:"plugins"`
 
 	AntiEntropy struct {
 		Interval Duration `toml:"interval"`

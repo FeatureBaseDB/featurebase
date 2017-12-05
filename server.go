@@ -56,6 +56,7 @@ type Server struct {
 	Handler           *Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
+	RemoteClient      *http.Client
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
@@ -152,10 +153,10 @@ func (s *Server) Open() error {
 	s.Holder.Peek()
 
 	// Create default HTTP client
-	s.createDefaultClient()
+	s.createDefaultClient(s.RemoteClient)
 
 	// Create executor for executing queries.
-	e := NewExecutor(&ClientOptions{TLS: s.TLS})
+	e := NewExecutor(s.RemoteClient)
 	e.Holder = s.Holder
 	e.URI = s.URI
 	e.Cluster = s.Cluster
@@ -242,6 +243,25 @@ func (s *Server) Addr() net.Addr {
 	}
 	return s.ln.Addr()
 }
+func GetHTTPClient(t *tls.Config) *http.Client {
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          1000,
+		MaxIdleConnsPerHost:   200,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	if t != nil {
+		transport.TLSClientConfig = t
+	}
+	return &http.Client{Transport: transport}
+}
 
 // Logger returns a logger that writes to LogOutput
 func (s *Server) Logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
@@ -269,7 +289,7 @@ func (s *Server) monitorAntiEntropy() {
 		syncer.URI = s.URI
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
-		syncer.ClientOptions = &ClientOptions{TLS: s.TLS}
+		syncer.RemoteClient = s.RemoteClient
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {
@@ -466,7 +486,7 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	return nil
 }
 
-// monitorDiagnostics periodically polls the the Pilosa Indexes for cluster info.
+// monitorDiagnostics periodically polls the Pilosa Indexes for cluster info.
 func (s *Server) monitorDiagnostics() {
 	if s.DiagnosticInterval <= 0 {
 		s.Logger().Printf("diagnostics disabled")
@@ -503,7 +523,10 @@ func (s *Server) monitorDiagnostics() {
 		s.diagnostics.Set("NumIndexes", len(s.Holder.Indexes()))
 		s.diagnostics.Set("NumFrames", numFrames)
 		s.diagnostics.Set("NumSlices", numSlices)
-		s.diagnostics.Set("OpenFiles", CountOpenFiles())
+		openFiles, err := CountOpenFiles()
+		if err == nil {
+			s.diagnostics.Set("OpenFiles", openFiles)
+		}
 		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
 		s.diagnostics.CheckVersion()
 		s.diagnostics.Flush()
@@ -553,8 +576,11 @@ func (s *Server) monitorRuntime() {
 		// Record the number of go routines.
 		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 
+		openFiles, err := CountOpenFiles()
 		// Open File handles.
-		s.Holder.Stats.Gauge("OpenFiles", float64(CountOpenFiles()), 1.0)
+		if err == nil {
+			s.Holder.Stats.Gauge("OpenFiles", float64(openFiles), 1.0)
+		}
 
 		// Runtime memory metrics.
 		runtime.ReadMemStats(&m)
@@ -566,35 +592,29 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-func (s *Server) createDefaultClient() {
-	transport := &http.Transport{}
-	if s.TLS != nil {
-		transport.TLSClientConfig = s.TLS
-	}
-	s.defaultClient = NewInternalHTTPClientFromURI(nil, &ClientOptions{TLS: s.TLS})
+func (s *Server) createDefaultClient(remoteClient *http.Client) {
+	s.defaultClient = NewInternalHTTPClientFromURI(nil, remoteClient)
 }
 
 // CountOpenFiles on operating systems that support lsof.
-func CountOpenFiles() int {
-	count := 0
-
+func CountOpenFiles() (int, error) {
 	switch runtime.GOOS {
 	case "darwin", "linux", "unix", "freebsd":
 		// -b option avoid kernel blocks
 		pid := os.Getpid()
 		out, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("lsof -b -p %v", pid)).Output()
 		if err != nil {
-			log.Fatal(err)
+			return 0, fmt.Errorf("calling lsof: %s", err)
 		}
 		// only count lines with our pid, avoiding warning messages from -b
 		lines := strings.Split(string(out), strconv.Itoa(pid))
-		count = len(lines)
+		return len(lines), nil
 	case "windows":
 		// TODO: count open file handles on windows
+		return 0, errors.New("CountOpenFiles() on Windows is not supported")
 	default:
-
+		return 0, errors.New("CountOpenFiles() on this OS is not supported")
 	}
-	return count
 }
 
 // StatusHandler specifies the methods which an object must implement to share

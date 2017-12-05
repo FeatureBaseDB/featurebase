@@ -56,9 +56,9 @@ type Handler struct {
 	StatusHandler StatusHandler
 
 	// Local hostname & cluster configuration.
-	URI           URI
-	Cluster       *Cluster
-	ClientOptions *ClientOptions
+	URI          URI
+	Cluster      *Cluster
+	RemoteClient *http.Client
 
 	Router           *mux.Router
 	NormalRouter     *mux.Router
@@ -1539,7 +1539,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create a client for the remote cluster.
-	client := NewInternalHTTPClientFromURI(host, h.ClientOptions)
+	client := NewInternalHTTPClientFromURI(host, h.RemoteClient)
 
 	// Determine the maximum number of slices.
 	maxSlices, err := client.MaxSliceByIndex(r.Context())
@@ -1793,8 +1793,7 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Validation the input definition with the current index's ColumnLabel.
-	if err := req.Validate(index.ColumnLabel()); err != nil {
+	if err := req.Validate(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -2079,10 +2078,9 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 	for _, field := range inputDef.Fields() {
 		validFields[field.Name] = true
 		if field.PrimaryKey {
-			columnLabel := field.Name
-			value, ok := req[columnLabel]
+			value, ok := req[field.Name]
 			if !ok {
-				return nil, fmt.Errorf("columnLabel required")
+				return nil, fmt.Errorf("primary key does not exist")
 			}
 			rawValue, ok := value.(float64) // The default JSON marshalling will interpret this as a float
 			if !ok {

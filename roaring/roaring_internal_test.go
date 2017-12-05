@@ -1485,6 +1485,12 @@ func MakeBitmap(start []uint64) []uint64 {
 	}
 	return b
 }
+func MakeLastBitSet() []uint64 {
+	obj := NewBitmap(65535)
+	c := obj.container(0)
+	c.arrayToBitmap()
+	return c.bitmap
+}
 
 func TestDifferenceRunBitmap(t *testing.T) {
 	a := &container{}
@@ -1524,14 +1530,24 @@ func TestDifferenceRunBitmap(t *testing.T) {
 			bitmap: MakeBitmap([]uint64{0x0, 0x8000000000000000}),
 			exp:    []interval16{{start: 0, last: 65}},
 		},
+		{
+			runs:   []interval16{{start: 1, last: 65535}},
+			bitmap: MakeBitmap([]uint64{0x0000000000000001}),
+			exp:    []interval16{{start: 1, last: 65535}},
+		},
+		{
+			runs:   []interval16{{start: 0, last: 65533}, {start: 65535, last: 65535}},
+			bitmap: MakeLastBitSet(),
+			exp:    []interval16{{start: 0, last: 65533}},
+		},
 	}
 	for i, test := range tests {
 		a.runs = test.runs
-		a.n = a.runCountRange(0, 100)
+		a.n = a.runCountRange(0, 65536)
 		for i, v := range test.bitmap {
 			b.bitmap[i] = v
 		}
-		b.n = b.bitmapCountRange(0, 100)
+		b.n = b.bitmapCountRange(0, 65536)
 		ret := differenceRunBitmap(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)

@@ -92,6 +92,8 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 		i.frames = append(i.frames, inputFrame)
 	}
 
+	primaryKeyGiven := false
+
 	for _, field := range pb.Fields {
 		var actions []Action
 		for _, action := range field.InputDefinitionActions {
@@ -103,12 +105,20 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 			})
 		}
 
+		if field.PrimaryKey {
+			primaryKeyGiven = true
+		}
+
 		inputField := InputDefinitionField{
 			Name:       field.Name,
 			PrimaryKey: field.PrimaryKey,
 			Actions:    actions,
 		}
 		i.fields = append(i.fields, inputField)
+	}
+
+	if len(pb.Fields) > 0 && !primaryKeyGiven {
+		return ErrInputDefinitionHasPrimaryKey
 	}
 
 	return nil
@@ -257,7 +267,7 @@ type InputDefinitionInfo struct {
 }
 
 // Validate the InputDefinitionInfo data.
-func (i *InputDefinitionInfo) Validate(columnLabel string) error {
+func (i *InputDefinitionInfo) Validate() error {
 	numPrimaryKey := 0
 	accountRowID := make(map[string]uint64)
 
@@ -273,6 +283,9 @@ func (i *InputDefinitionInfo) Validate(columnLabel string) error {
 
 	// Validate columnLabel and duplicate primaryKey.
 	for _, field := range i.Fields {
+		if field.Name == "" {
+			return ErrInputDefinitionNameRequired
+		}
 		for _, action := range field.Actions {
 			if err := action.Validate(); err != nil {
 				return err
@@ -290,9 +303,6 @@ func (i *InputDefinitionInfo) Validate(columnLabel string) error {
 		}
 		if field.PrimaryKey {
 			numPrimaryKey++
-			if field.Name != columnLabel {
-				return ErrInputDefinitionColumnLabel
-			}
 		} else if len(field.Actions) == 0 {
 			return ErrInputDefinitionActionRequired
 		}
