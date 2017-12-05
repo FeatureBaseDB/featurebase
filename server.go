@@ -58,6 +58,7 @@ type Server struct {
 	Handler           *Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
+	RemoteClient      *http.Client
 
 	// Cluster configuration.
 	// Host is replaced with actual host after opening if port is ":0".
@@ -167,10 +168,10 @@ func (s *Server) Open() error {
 	}
 
 	// Create default HTTP client
-	s.createDefaultClient()
+	s.createDefaultClient(s.RemoteClient)
 
 	// Create executor for executing queries.
-	e := NewExecutor(&ClientOptions{TLS: s.TLS})
+	e := NewExecutor(s.RemoteClient)
 	e.Holder = s.Holder
 	e.Scheme = s.URI.Scheme()
 	e.Host = s.URI.HostPort()
@@ -229,6 +230,25 @@ func (s *Server) Addr() net.Addr {
 	}
 	return s.ln.Addr()
 }
+func GetHTTPClient(t *tls.Config) *http.Client {
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          1000,
+		MaxIdleConnsPerHost:   200,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	if t != nil {
+		transport.TLSClientConfig = t
+	}
+	return &http.Client{Transport: transport}
+}
 
 // Logger returns a logger that writes to LogOutput
 func (s *Server) Logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
@@ -256,7 +276,7 @@ func (s *Server) monitorAntiEntropy() {
 		syncer.URI = s.URI
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
-		syncer.ClientOptions = &ClientOptions{TLS: s.TLS}
+		syncer.RemoteClient = s.RemoteClient
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {
@@ -603,12 +623,8 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-func (s *Server) createDefaultClient() {
-	transport := &http.Transport{}
-	if s.TLS != nil {
-		transport.TLSClientConfig = s.TLS
-	}
-	s.defaultClient = NewInternalHTTPClientFromURI(nil, &ClientOptions{TLS: s.TLS})
+func (s *Server) createDefaultClient(remoteClient *http.Client) {
+	s.defaultClient = NewInternalHTTPClientFromURI(nil, remoteClient)
 }
 
 // CountOpenFiles on operating systems that support lsof.

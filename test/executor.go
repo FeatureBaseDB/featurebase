@@ -1,6 +1,7 @@
 package test
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/pilosa/pilosa"
@@ -12,10 +13,16 @@ type Executor struct {
 	*pilosa.Executor
 }
 
+var remoteClient *http.Client
+
+func init() {
+	remoteClient = pilosa.GetHTTPClient(nil)
+}
+
 // NewExecutor returns a new instance of Executor.
 // The executor always matches the hostname of the first cluster node.
 func NewExecutor(holder *pilosa.Holder, cluster *pilosa.Cluster) *Executor {
-	executor := pilosa.NewExecutor(nil)
+	executor := pilosa.NewExecutor(remoteClient)
 	e := &Executor{Executor: executor}
 	e.Holder = holder
 	e.Cluster = cluster

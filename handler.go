@@ -56,9 +56,9 @@ type Handler struct {
 	StatusHandler StatusHandler
 
 	// Local hostname & cluster configuration.
-	URI           *URI
-	Cluster       *Cluster
-	ClientOptions *ClientOptions
+	URI          *URI
+	Cluster      *Cluster
+	RemoteClient *http.Client
 
 	Router *mux.Router
 
@@ -1506,7 +1506,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create a client for the remote cluster.
-	client := NewInternalHTTPClientFromURI(host, h.ClientOptions)
+	client := NewInternalHTTPClientFromURI(host, h.RemoteClient)
 
 	// Determine the maximum number of slices.
 	maxSlices, err := client.MaxSliceByIndex(r.Context())
