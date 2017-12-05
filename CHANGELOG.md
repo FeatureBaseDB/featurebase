@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.2] - 2017-12-05
+
+This version contains 1 contribution from 1 contributor. There are 15 files changed, 127 insertions, and 98 deletions.
+
+### Fixed
+
+- Modify initialization of HTTP client so only one instance is created ([#994](https://github.com/pilosa/pilosa/pull/994))
+
 ## [0.8.1] - 2017-11-15
 
 This version contains 2 contributions from 2 contributors. There are 4 files changed, 27 insertions, and 14 deletions.
