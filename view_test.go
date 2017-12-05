@@ -17,6 +17,7 @@ package pilosa_test
 import (
 	"io/ioutil"
 	"os"
+	"testing"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/test"
@@ -30,14 +31,13 @@ type View struct {
 
 // NewView returns a new instance of View with a temporary path.
 func NewView(index, frame, name string) *View {
-	file, err := ioutil.TempFile("", "pilosa-view-")
+	path, err := ioutil.TempDir("", "pilosa-view-")
 	if err != nil {
 		panic(err)
 	}
-	file.Close()
 
 	v := &View{
-		View:         pilosa.NewView(file.Name(), index, frame, name, pilosa.DefaultCacheSize),
+		View:         pilosa.NewView(path, index, frame, name, pilosa.DefaultCacheSize),
 		RowAttrStore: test.MustOpenAttrStore(),
 	}
 	v.View.RowAttrStore = v.RowAttrStore.AttrStore
@@ -91,5 +91,38 @@ func (v *View) MustClearBits(rowID uint64, columnIDs ...uint64) {
 		if _, err := v.ClearBit(rowID, columnID); err != nil {
 			panic(err)
 		}
+	}
+}
+
+// Ensure view can open and retrieve a fragment.
+func TestView_DeleteFragment(t *testing.T) {
+	v := MustOpenView("i", "f", "v")
+	defer v.Close()
+
+	slice := uint64(9)
+
+	// Create fragment.
+	fragment, err := v.CreateFragmentIfNotExists(slice)
+	if err != nil {
+		t.Fatal(err)
+	} else if fragment == nil {
+		t.Fatal("expected fragment")
+	}
+
+	err = v.DeleteFragment(slice)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if v.Fragment(slice) != nil {
+		t.Fatal("fragment still exists in view")
+	}
+
+	// Recreate fragment with same slice, verify that the old fragment was not reused.
+	fragment2, err := v.CreateFragmentIfNotExists(slice)
+	if err != nil {
+		t.Fatal(err)
+	} else if fragment == fragment2 {
+		t.Fatal("failed to create new fragment")
 	}
 }

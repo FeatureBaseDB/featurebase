@@ -712,3 +712,65 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 
 	return nil
 }
+
+// HolderCleaner removes fragments and data files that are no longer used.
+type HolderCleaner struct {
+	URI URI
+
+	Holder  *Holder
+	Cluster *Cluster
+
+	// Signals that the sync should stop.
+	Closing <-chan struct{}
+}
+
+// IsClosing returns true if the cleaner has been marked to close.
+func (c *HolderCleaner) IsClosing() bool {
+	select {
+	case <-c.Closing:
+		return true
+	default:
+		return false
+	}
+}
+
+// CleanHolder compares the holder with the cluster state and removes
+// any unnecessary fragments and files.
+func (c *HolderCleaner) CleanHolder() error {
+	for _, index := range c.Holder.Indexes() {
+		// Verify cleaner has not closed.
+		if c.IsClosing() {
+			return nil
+		}
+
+		// Get the fragments that node is responsible for (based on hash(index, node)).
+		containedSlices := c.Cluster.ContainsSlices(index.Name(), index.MaxSlice(), c.URI)
+
+		// Get the fragments registered in memory.
+		for _, frame := range index.Frames() {
+			for _, view := range frame.Views() {
+				for _, fragment := range view.Fragments() {
+					fragSlice := fragment.Slice()
+					// Ignore fragments that should be present.
+					if uint64InSlice(fragSlice, containedSlices) {
+						continue
+					}
+					// Delete fragment.
+					if err := view.DeleteFragment(fragSlice); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func uint64InSlice(i uint64, s []uint64) bool {
+	for _, o := range s {
+		if i == o {
+			return true
+		}
+	}
+	return false
+}

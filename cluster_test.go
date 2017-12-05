@@ -102,6 +102,17 @@ func TestCluster_OwnsSlices(t *testing.T) {
 	}
 }
 
+// Ensure ContainsSlices can find the actual slice list for node and index.
+func TestCluster_ContainsSlices(t *testing.T) {
+	c := test.NewCluster(5)
+	c.ReplicaN = 3
+	slices := c.ContainsSlices("test", 10, test.NewURIFromHostPort("host2", 0))
+
+	if !reflect.DeepEqual(slices, []uint64{0, 2, 3, 5, 6, 9, 10}) {
+		t.Fatalf("unexpected slices for node's index: %v", slices)
+	}
+}
+
 func TestCluster_Nodes(t *testing.T) {
 	uri0 := test.NewURIFromHostPort("node0", 0)
 	uri1 := test.NewURIFromHostPort("node1", 0)
@@ -407,6 +418,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 	t.Run("Multiple nodes, with data", func(t *testing.T) {
 		tc := test.NewTestCluster(0)
 		tc.AddNode(false)
+		node0 := tc.Clusters[0]
 
 		// Open TestCluster.
 		if err := tc.Open(); err != nil {
@@ -441,15 +453,23 @@ func TestCluster_ResizeStates(t *testing.T) {
 		tc.SetFieldValue("i", "fields", 1300000, "fld0", -99)
 		tc.SetFieldValue("i", "fields", 1300000, "fld0", 99)
 
-		// AddNode needs to block until the resize process has completed.
-		if err := tc.AddNode(false); err != nil {
-			t.Fatal(err)
-		}
+		// Before starting the resize, get the CheckSum to use for
+		// comparison later.
+		node0Frame := node0.Holder.Frame("i", "f")
+		node0View := node0Frame.View("standard")
+		node0Fragment := node0View.Fragment(1)
+		node0Checksum := node0Fragment.Checksum()
 
-		node0 := tc.Clusters[0]
+		node0Frame = node0.Holder.Frame("i", "fields")
+		node0View = node0Frame.View("field_fld0")
+		node0Fragment = node0View.Fragment(1)
+		node0ChecksumFld := node0Fragment.Checksum()
+
+		// AddNode needs to block until the resize process has completed.
+		tc.AddNode(false)
 		node1 := tc.Clusters[1]
 
-		// Ensure that nodes comes up in state NORMAL.
+		// Ensure that nodes come up in state NORMAL.
 		if node0.State != pilosa.ClusterStateNormal {
 			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State)
 		} else if node1.State != pilosa.ClusterStateNormal {
@@ -469,34 +489,24 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// Bits
 		// Verify that node-1 contains the fragment (i/f/standard/1) transferred from node-0.
-		node0Frame := node0.Holder.Frame("i", "f")
-		node0View := node0Frame.View("standard")
-		node0Fragment := node0View.Fragment(1)
-
 		node1Frame := node1.Holder.Frame("i", "f")
 		node1View := node1Frame.View("standard")
 		node1Fragment := node1View.Fragment(1)
 
 		// Ensure checksums are the same.
-		orig := node0Fragment.Checksum()
-		if chksum := node1Fragment.Checksum(); !bytes.Equal(chksum, orig) {
-			t.Fatalf("expected standard view checksum to match: %x - %x", chksum, orig)
+		if chksum := node1Fragment.Checksum(); !bytes.Equal(chksum, node0Checksum) {
+			t.Fatalf("expected standard view checksum to match: %x - %x", chksum, node0Checksum)
 		}
 
 		// Values
 		// Verify that node-1 contains the fragment (i/fields/field_fld0/1) transferred from node-0.
-		node0Frame = node0.Holder.Frame("i", "fields")
-		node0View = node0Frame.View("field_fld0")
-		node0Fragment = node0View.Fragment(1)
-
 		node1Frame = node1.Holder.Frame("i", "fields")
 		node1View = node1Frame.View("field_fld0")
 		node1Fragment = node1View.Fragment(1)
 
 		// Ensure checksums are the same.
-		orig = node0Fragment.Checksum()
-		if chksum := node1Fragment.Checksum(); !bytes.Equal(chksum, orig) {
-			t.Fatalf("expected field view checksum to match: %x - %x", chksum, orig)
+		if chksum := node1Fragment.Checksum(); !bytes.Equal(chksum, node0ChecksumFld) {
+			t.Fatalf("expected checksum to match: %x - %x", chksum, node0ChecksumFld)
 		}
 
 		// Close TestCluster.

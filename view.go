@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -118,6 +119,9 @@ func (v *View) Open() error {
 
 	return nil
 }
+
+// logger returns a logger instance for the view.
+func (v *View) logger() *log.Logger { return log.New(v.LogOutput, "", log.LstdFlags) }
 
 // openFragments opens and initializes the fragments inside the view.
 func (v *View) openFragments() error {
@@ -268,6 +272,36 @@ func (v *View) newFragment(path string, slice uint64) *Fragment {
 	frag.LogOutput = v.LogOutput
 	frag.stats = v.stats.WithTags(fmt.Sprintf("slice:%d", slice))
 	return frag
+}
+
+// DeleteFragment removes the fragment from the view.
+func (v *View) DeleteFragment(slice uint64) error {
+
+	fragment := v.fragments[slice]
+	if fragment == nil {
+		return ErrFragmentNotFound
+	}
+
+	v.logger().Printf("delete fragment: (%s/%s/%s) %d", v.index, v.frame, v.name, slice)
+
+	// Close data files before deletion.
+	if err := fragment.Close(); err != nil {
+		return err
+	}
+
+	// Delete fragment file.
+	if err := os.Remove(fragment.Path()); err != nil {
+		return err
+	}
+
+	// Delete fragment cache file.
+	if err := os.Remove(fragment.CachePath()); err != nil {
+		v.logger().Printf("no cache file to delete for slice %d", slice)
+	}
+
+	delete(v.fragments, slice)
+
+	return nil
 }
 
 // SetBit sets a bit within the view.
