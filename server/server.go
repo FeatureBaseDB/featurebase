@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -30,7 +31,6 @@ import (
 	"time"
 
 	"crypto/tls"
-	"io/ioutil"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
@@ -156,6 +156,7 @@ func (m *Command) SetupServer() error {
 	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
 
 	// Setup TLS
+	var TLSConfig *tls.Config
 	if uri.Scheme() == "https" {
 		if m.Config.TLS.CertificatePath == "" {
 			return errors.New("certificate path is required for TLS sockets")
@@ -171,8 +172,15 @@ func (m *Command) SetupServer() error {
 			Certificates:       []tls.Certificate{cert},
 			InsecureSkipVerify: m.Config.TLS.SkipVerify,
 		}
-		m.Server.Handler.ClientOptions = &pilosa.ClientOptions{TLS: m.Server.TLS}
+
+		// TODO Review this location
+
+		TLSConfig = m.Server.TLS
+
 	}
+	c := pilosa.GetHTTPClient(TLSConfig)
+	m.Server.RemoteClient = c
+	m.Server.Handler.RemoteClient = c
 
 	// Set the coordinator node.
 	curi, err := pilosa.AddressWithDefaults(m.Config.Cluster.Coordinator)

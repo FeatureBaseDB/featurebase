@@ -427,7 +427,7 @@ Returns `{{"attrs":{},"bits":[10]}`
 **Spec:**
 
 ```
-Range(<frame=STRING>, <FIELD_NAME, COMPARISON_OPERATOR, integer> )
+Range(<frame=STRING>, <FIELD_NAME, COMPARISON_OPERATOR, COMPARISON_VALUE> )
 ```
 
 **Description:**
@@ -441,7 +441,7 @@ Returns bits that are true for the comparison operator.
 **Examples:**
 
 In our source data, commitactivity was counted over the last year.
-The following Range query returns all repositories having more than 100 commits.
+The following greater-than Range query returns all repositories having more than 100 commits.
 
 ```
 Range(frame="stats", commitactivity > 100)
@@ -451,6 +451,25 @@ Returns `{{"attrs":{},"bits":[10]}`
 
 * bits are repositories which had at least 100 commits in the last year.
 
+BSI range queries support the following operators:
+
+ Operator | Name                          | Value              
+----------|-------------------------------|--------------------
+ `>`      | greater-than, GT              | integer            
+ `<`      | less-than, LT                 | integer            
+ `<=`     | less-than-or-equal-to, LTE    | integer            
+ `>=`     | greater-than-or-equal-to, GTE | integer            
+ `==`     | equal-to, EQ                  | integer            
+ `!=`     | not-equal-to, NEQ             | integer or `null`  
+ `><`     | between, BETWEEN              | [integer, integer] 
+
+The `BETWEEN` query specifies an interval with both bounds, using `><` operator, and a two-element list containing the lower and upper bounds of the interval:
+
+```
+Range(frame="stats", commitactivity >< [100, 200])
+```
+
+This is conceptually equivalent to the interval 100 <= commitactivity <= 200, but this chained comparison syntax is not currently supported. `BETWEEN` query syntax is restricted to greater-than-or-equal-to and less-than-or-equal-to, but any valid interval on the integers can be represented this way.
 
 #### Sum
 

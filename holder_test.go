@@ -45,6 +45,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrIndexPermission", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -95,6 +98,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFramePermission", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -151,6 +157,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrViewPermission", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -172,6 +181,9 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrViewFragmentsMkdir", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -194,6 +206,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -240,6 +255,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFragmentCachePermission", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("Skipping permissions test since user is root.")
+		}
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -387,7 +405,7 @@ func TestHolder_DeleteIndex(t *testing.T) {
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
 	cluster := test.NewCluster(2)
-
+	client := pilosa.GetHTTPClient(nil)
 	// Create a local holder.
 	hldr0 := test.MustOpenHolder()
 	defer hldr0.Close()
@@ -399,7 +417,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	defer s.Close()
 	s.Handler.Holder = hldr1.Holder
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(nil)
+		e := pilosa.NewExecutor(client)
 		e.Holder = hldr1.Holder
 		e.URI = cluster.Nodes[1].URI
 		e.Cluster = cluster
@@ -468,9 +486,10 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	// Set up syncer.
 	syncer := pilosa.HolderSyncer{
-		Holder:  hldr0.Holder,
-		URI:     cluster.Nodes[0].URI,
-		Cluster: cluster,
+		Holder:       hldr0.Holder,
+		URI:          cluster.Nodes[0].URI,
+		Cluster:      cluster,
+		RemoteClient: pilosa.GetHTTPClient(nil),
 	}
 
 	if err := syncer.SyncHolder(); err != nil {
