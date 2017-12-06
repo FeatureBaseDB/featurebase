@@ -20,70 +20,14 @@ Before creating a schema, let's create the repository index first:
 ```
 curl localhost:10101/index/repository -X POST
 ```
-Then we can send the following input definition as JSON to Pilosa. The sample input defintion schema for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started), `input-definition.json` file
-
+The sample input definition schema for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started) in the `input_definition.json` file. Download it using:
 ```
-curl localhost:10101/index/repository/input-definition/stargazer \
-     -X POST \
-     -d '{
-            "frames": [
-                 {
-                     "name": "language", 
-                     "options": {
-                         "inverseEnabled": true, 
-                         "timeQuantum": "YMD"
-                     }
-                 }, 
-                 {
-                     "name": "stargazer", 
-                     "options": {
-                         "inverseEnabled": true, 
-                         "timeQuantum": "YMD"
-                     }
-                 }
-             ],
-             "fields": [
-                 {
-                     "name": "repo_id", 
-                     "primaryKey": true
-                 },
-                 {
-                     "actions": [
-                         {
-                             "frame": "language", 
-                             "valueDestination": "mapping", 
-                             "valueMap": {
-                                 "C": 7, 
-                                 "C#": 27, 
-                                 "Go": 5, 
-                                 "Java": 21, 
-                                 "JavaScript": 13, 
-                                 "Python": 17
-                             }
-                         }
-                     ], 
-                     "name": "language_id"
-                 }, 
-                 {
-                     "actions": [
-                         {
-                             "frame": "stargazer", 
-                             "valueDestination": "value-to-row"
-                         }
-                     ], 
-                     "name": "stargazer_id"
-                 },
-                 {
-                      "actions": [
-                          {
-                              "frame": "stargazer", 
-                              "valueDestination": "set-timestamp"
-                          }
-                      ], 
-                      "name": "time_value"
-                  }
-             ] 
-         }'
+curl -OL https://github.com/pilosa/getting-started/raw/master/input_definition.json
+```
+
+Run the following to create the input definition:
+```
+curl localhost:10101/index/repository/input-definition/stargazer -d @input_definition.json 
 ```
 
 Instead of creating a `stargazer` frame and a `language` frame individually like in [Getting Started](../getting-started/), we can create multiple frames in one input definition.
@@ -96,25 +40,14 @@ We can also set `repo_id` for multiple frames at the same time by providing fiel
 
 ### Import Data
 
-The sample data for the "Star Trace" project is at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started). 
-
-If you import data using an input definition, download the `json-input.json` file in that repo, then run the following request using the input definition created above:
-
+The sample data for the input definition we created above is in the `json_input.json` file at [Pilosa Getting Started repository](https://github.com/pilosa/getting-started). Download it using:
 ```
-curl localhost:10101/index/repository/input/stargazer \
-     -X POST \
-     -d '[
-             {
-                 "repo_id": 91720568, 
-                 "language_id": "Go", 
-                 "stargazer_id": 513114,
-                 "time_value": "2017-05-18T20:40"
-             }, 
-             {
-                 "language_id": "Python", 
-                 "repo_id": 95122322
-             }
-         ]'
+curl -OL https://github.com/pilosa/getting-started/raw/master/json_input.json
+```
+
+Then run the following to import it:
+```
+curl localhost:10101/index/repository/input/stargazer -d @json_input.json 
 ```
 
 As defined in the input definition, field name `language_id` maps language to a corresponding id defined in `valueMap` and sets the appropriate bit in the `language` frame.  The value corresponding to field name `stargazer_id` is added to the `stargazer` frame as rowID.
