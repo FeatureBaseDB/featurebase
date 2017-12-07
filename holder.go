@@ -133,6 +133,7 @@ func (h *Holder) Open() error {
 		return err
 	}
 
+	h.logger().Printf("Holder Start")
 	for _, fi := range fis {
 		if !fi.IsDir() {
 			continue
@@ -156,6 +157,7 @@ func (h *Holder) Open() error {
 		}
 		h.indexes[index.Name()] = index
 	}
+	h.logger().Printf("Holder Complete")
 
 	// Periodically flush cache.
 	h.wg.Add(1)

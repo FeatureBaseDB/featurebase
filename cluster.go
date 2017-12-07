@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -190,6 +191,9 @@ type Cluster struct {
 
 	// The writer for any logging.
 	LogOutput io.Writer
+
+	//
+	RemoteClient *http.Client
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
@@ -332,6 +336,7 @@ func (c *Cluster) SetNodeState(state string) error {
 		State: state,
 	}
 
+	c.logger().Printf("Sending State %s (%s)", state, c.Coordinator)
 	if err := c.sendTo(c.Coordinator, ns); err != nil {
 		return fmt.Errorf("sending node state error: err=%s", err)
 	}
@@ -343,6 +348,8 @@ func (c *Cluster) SetNodeState(state string) error {
 // Coordinator to keep track of, during startup, which nodes have
 // finished opening their Holder.
 func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
+
+	c.logger().Printf("Receiving State %s (%s)", state, uri.String())
 	if !c.IsCoordinator() {
 		return nil
 	}
@@ -353,9 +360,11 @@ func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
 	}
 
 	c.Topology.nodeStates[uri] = state
+	c.logger().Printf("Receiving State %s (%s)", state, uri)
 
 	// Set cluster state to NORMAL.
 	if c.haveTopologyAgreement() && c.allNodesReady() {
+		c.logger().Printf("Broadcasting ClusterStateNormal")
 		return c.setStateAndBroadcast(ClusterStateNormal)
 	}
 
@@ -1031,7 +1040,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 			}
 
 			// Create a client for calling remote nodes.
-			client := NewInternalHTTPClientFromURI(&c.URI, nil) // TODO: ClientOptions
+			client := NewInternalHTTPClientFromURI(&c.URI, c.RemoteClient) // TODO: ClientOptions
 
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {
@@ -1330,6 +1339,12 @@ func (t *Topology) AddURI(uri URI) bool {
 		return false
 	}
 	t.NodeSet = append(t.NodeSet, uri)
+
+	sort.Slice(t.NodeSet,
+		func(i, j int) bool {
+			return t.NodeSet[i].String() < t.NodeSet[j].String()
+		})
+
 	return true
 }
 
@@ -1409,6 +1424,10 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 
 	t := NewTopology()
 	t.NodeSet = decodeURIs(topology.NodeSet)
+	sort.Slice(t.NodeSet,
+		func(i, j int) bool {
+			return t.NodeSet[i].String() < t.NodeSet[j].String()
+		})
 
 	return t, nil
 }
