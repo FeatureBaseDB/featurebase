@@ -805,8 +805,6 @@ func (c *Cluster) haveTopologyAgreement() bool {
 	if c.Static {
 		return true
 	}
-	c.logger().Printf("haveTopologyAgreement")
-	c.logger().Printf(" (%v)(%v)", c.Topology.NodeSet, c.NodeSet())
 	return URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
 }
 
@@ -814,9 +812,7 @@ func (c *Cluster) allNodesReady() bool {
 	if c.Static {
 		return true
 	}
-	c.logger().Printf("allNodesReady")
 	for _, uri := range c.Topology.NodeSet {
-		c.logger().Printf("allNodesReady: %s,%s", uri.String(), c.Topology.nodeStates[uri])
 		if c.Topology.nodeStates[uri] != NodeStateReady {
 			return false
 		}
@@ -1343,6 +1339,12 @@ func (t *Topology) AddURI(uri URI) bool {
 		return false
 	}
 	t.NodeSet = append(t.NodeSet, uri)
+
+	sort.Slice(t.NodeSet,
+		func(i, j int) bool {
+			return t.NodeSet[i].String() < t.NodeSet[j].String()
+		})
+
 	return true
 }
 
@@ -1422,6 +1424,10 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 
 	t := NewTopology()
 	t.NodeSet = decodeURIs(topology.NodeSet)
+	sort.Slice(t.NodeSet,
+		func(i, j int) bool {
+			return t.NodeSet[i].String() < t.NodeSet[j].String()
+		})
 
 	return t, nil
 }
