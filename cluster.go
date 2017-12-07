@@ -336,7 +336,7 @@ func (c *Cluster) SetNodeState(state string) error {
 		State: state,
 	}
 
-	c.logger().Printf("Sending State %s (%s)", state, c.Coordinator.String())
+	c.logger().Printf("Sending State %s (%s)", state, c.Coordinator)
 	if err := c.sendTo(c.Coordinator, ns); err != nil {
 		return fmt.Errorf("sending node state error: err=%s", err)
 	}
@@ -360,7 +360,7 @@ func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
 	}
 
 	c.Topology.nodeStates[uri] = state
-	c.logger().Printf("Receiving State %s (%s)", state, uri.String())
+	c.logger().Printf("Receiving State %s (%s)", state, uri)
 
 	// Set cluster state to NORMAL.
 	if c.haveTopologyAgreement() && c.allNodesReady() {
