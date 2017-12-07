@@ -336,6 +336,7 @@ func (c *Cluster) SetNodeState(state string) error {
 		State: state,
 	}
 
+	c.logger().Printf("Sending State %s (%s)", state, c.Coordinator.String())
 	if err := c.sendTo(c.Coordinator, ns); err != nil {
 		return fmt.Errorf("sending node state error: err=%s", err)
 	}
@@ -347,6 +348,8 @@ func (c *Cluster) SetNodeState(state string) error {
 // Coordinator to keep track of, during startup, which nodes have
 // finished opening their Holder.
 func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
+
+	c.logger().Printf("Receiving State %s (%s)", state, uri.String())
 	if !c.IsCoordinator() {
 		return nil
 	}
@@ -357,9 +360,11 @@ func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
 	}
 
 	c.Topology.nodeStates[uri] = state
+	c.logger().Printf("Receiving State %s (%s)", state, uri.String())
 
 	// Set cluster state to NORMAL.
 	if c.haveTopologyAgreement() && c.allNodesReady() {
+		c.logger().Printf("Broadcasting ClusterStateNormal")
 		return c.setStateAndBroadcast(ClusterStateNormal)
 	}
 
@@ -800,6 +805,8 @@ func (c *Cluster) haveTopologyAgreement() bool {
 	if c.Static {
 		return true
 	}
+	c.logger().Printf("haveTopologyAgreement")
+	c.logger().Printf(" (%v)(%v)", c.Topology.NodeSet, c.NodeSet())
 	return URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
 }
 
@@ -807,7 +814,9 @@ func (c *Cluster) allNodesReady() bool {
 	if c.Static {
 		return true
 	}
+	c.logger().Printf("allNodesReady")
 	for _, uri := range c.Topology.NodeSet {
+		c.logger().Printf("allNodesReady: %s,%s", uri.String(), c.Topology.nodeStates[uri])
 		if c.Topology.nodeStates[uri] != NodeStateReady {
 			return false
 		}
@@ -1035,7 +1044,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 			}
 
 			// Create a client for calling remote nodes.
-			client := NewInternalHTTPClientFromURI(&c.URI, GetHTTPClient(nil)) // TODO: ClientOptions
+			client := NewInternalHTTPClientFromURI(&c.URI, c.RemoteClient) // TODO: ClientOptions
 
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {

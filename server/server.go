@@ -181,6 +181,7 @@ func (m *Command) SetupServer() error {
 	c := pilosa.GetHTTPClient(TLSConfig)
 	m.Server.RemoteClient = c
 	m.Server.Handler.RemoteClient = c
+	m.Server.Cluster.RemoteClient = c
 
 	// Set the coordinator node.
 	curi, err := pilosa.AddressWithDefaults(m.Config.Cluster.Coordinator)
