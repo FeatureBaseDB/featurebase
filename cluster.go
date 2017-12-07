@@ -24,6 +24,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -190,6 +191,9 @@ type Cluster struct {
 
 	// The writer for any logging.
 	LogOutput io.Writer
+
+	//
+	RemoteClient *http.Client
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
@@ -1031,7 +1035,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 			}
 
 			// Create a client for calling remote nodes.
-			client := NewInternalHTTPClientFromURI(&c.URI, nil) // TODO: ClientOptions
+			client := NewInternalHTTPClientFromURI(&c.URI, GetHTTPClient(nil)) // TODO: ClientOptions
 
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {
