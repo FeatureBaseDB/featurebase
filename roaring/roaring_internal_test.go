@@ -1267,8 +1267,8 @@ func TestBitmapZeroRange(t *testing.T) {
 }
 
 func TestUnionBitmapRun(t *testing.T) {
-	a := &container{bitmap: make([]uint64, bitmapN)}
-	b := &container{}
+	a := &container{container_type: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
+	b := &container{container_type: ContainerRun}
 	tests := []struct {
 		bitmap []uint64
 		runs   []interval16
@@ -1288,6 +1288,7 @@ func TestUnionBitmapRun(t *testing.T) {
 		}
 		a.n = a.bitmapCountRange(0, 65535)
 		b.runs = test.runs
+		b.n = b.runCountRange(0, 65535)
 		ret := unionBitmapRun(a, b)
 		if ret.isArray() {
 			ret.arrayToBitmap()
@@ -1556,8 +1557,8 @@ func TestDifferenceRunBitmap(t *testing.T) {
 }
 
 func TestDifferenceBitmapRun(t *testing.T) {
-	a := &container{bitmap: make([]uint64, bitmapN)}
-	b := &container{}
+	a := &container{container_type: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
+	b := &container{container_type: ContainerRun}
 	tests := []struct {
 		bitmap []uint64
 		runs   []interval16
