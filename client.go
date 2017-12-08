@@ -1048,7 +1048,7 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 func (c *InternalHTTPClient) SendMessage(ctx context.Context, pb proto.Message) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshaling message: %v", err)
 	}
 
 	u := uriPathToURL(ctx.Value("uri").(*URI), "/cluster/message")
@@ -1059,21 +1059,21 @@ func (c *InternalHTTPClient) SendMessage(ctx context.Context, pb proto.Message) 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return err
+		return fmt.Errorf("executing http request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	// Read body.
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("reading response body: %v", err)
 	}
 
 	// Return error if status is not OK.
 	switch resp.StatusCode {
 	case http.StatusOK: // ok
 	default:
-		return errors.New(string(body))
+		return fmt.Errorf("unexpected response status code: %d: %s", resp.StatusCode, body)
 	}
 
 	return nil
