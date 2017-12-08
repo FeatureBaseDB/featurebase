@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -59,6 +61,11 @@ func (g *GossipMemberSet) Nodes() []*pilosa.Node {
 func (g *GossipMemberSet) Start(h pilosa.BroadcastHandler) error {
 	g.handler = h
 	return nil
+}
+
+// Seed returns the gossipSeed determined by the config.
+func (g *GossipMemberSet) Seed() string {
+	return g.config.gossipSeed
 }
 
 // Open implements the MemberSet interface to start network activity.
@@ -132,20 +139,90 @@ type gossipConfig struct {
 	memberlistConfig *memberlist.Config
 }
 
+// newTransport returns a NetTransport based on the memberlist configuration.
+// It will dynamically bind to a port if conf.BindPort is 0.
+// This is useful for test cases where specifiying a port is not reasonable.
+func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
+	if conf.LogOutput != nil && conf.Logger != nil {
+		return nil, fmt.Errorf("Cannot specify both LogOutput and Logger. Please choose a single log configuration setting.")
+	}
+
+	logDest := conf.LogOutput
+	if logDest == nil {
+		logDest = os.Stderr
+	}
+
+	logger := conf.Logger
+	if logger == nil {
+		logger = log.New(logDest, "", log.LstdFlags)
+	}
+
+	nc := &memberlist.NetTransportConfig{
+		BindAddrs: []string{conf.BindAddr},
+		BindPort:  conf.BindPort,
+		Logger:    logger,
+	}
+
+	// See comment below for details about the retry in here.
+	makeNetRetry := func(limit int) (*memberlist.NetTransport, error) {
+		var err error
+		for try := 0; try < limit; try++ {
+			var nt *memberlist.NetTransport
+			if nt, err = memberlist.NewNetTransport(nc); err == nil {
+				return nt, nil
+			}
+			if strings.Contains(err.Error(), "address already in use") {
+				logger.Printf("[DEBUG] Got bind error: %v", err)
+				continue
+			}
+		}
+
+		return nil, fmt.Errorf("failed to obtain an address: %v", err)
+	}
+
+	// The dynamic bind port operation is inherently racy because
+	// even though we are using the kernel to find a port for us, we
+	// are attempting to bind multiple protocols (and potentially
+	// multiple addresses) with the same port number. We build in a
+	// few retries here since this often gets transient errors in
+	// busy unit tests.
+	limit := 1
+	if conf.BindPort == 0 {
+		limit = 10
+	}
+
+	nt, err := makeNetRetry(limit)
+	if err != nil {
+		return nil, fmt.Errorf("Could not set up network transport: %v", err)
+	}
+	if conf.BindPort == 0 {
+		port := nt.GetAutoBindPort()
+		conf.BindPort = port
+		conf.AdvertisePort = port
+		logger.Printf("[DEBUG] Using dynamic bind port %d", port)
+	}
+
+	return nt, nil
+}
+
 // NewGossipMemberSet returns a new instance of GossipMemberSet.
-func NewGossipMemberSet(name string, gossipHost string, gossipPort int, gossipSeed string, server *pilosa.Server, secretKey []byte) *GossipMemberSet {
+func NewGossipMemberSet(name string, gossipHost string, gossipPort int, gossipSeed string, server *pilosa.Server, secretKey []byte) (*GossipMemberSet, error) {
 	g := &GossipMemberSet{
 		LogOutput: server.LogOutput,
 	}
 
+	conf := memberlist.DefaultLocalConfig()
+	conf.BindPort = gossipPort
+	conf.AdvertisePort = gossipPort
+
 	//TODO: pull memberlist config from pilosa.cfg file
 	g.config = &gossipConfig{
-		memberlistConfig: memberlist.DefaultLocalConfig(),
+		memberlistConfig: conf,
 		gossipSeed:       gossipSeed,
 	}
+
 	g.config.memberlistConfig.Name = name
 	g.config.memberlistConfig.BindAddr = gossipHost
-	g.config.memberlistConfig.BindPort = gossipPort
 	g.config.memberlistConfig.AdvertiseAddr = pilosa.HostToIP(gossipHost)
 	g.config.memberlistConfig.AdvertisePort = gossipPort
 	//g.config.memberlistConfig.PushPullInterval = 0 * time.Second // Default is 15s in DefaultLocalConfig.
@@ -155,7 +232,19 @@ func NewGossipMemberSet(name string, gossipHost string, gossipPort int, gossipSe
 
 	g.statusHandler = server
 
-	return g
+	// set up the transport
+	transport, err := newTransport(g.config.memberlistConfig)
+	if err != nil {
+		return nil, err
+	}
+	g.config.memberlistConfig.Transport = transport
+
+	// If no gossipSeed is provided, use local host:port.
+	if gossipSeed == "" {
+		g.config.gossipSeed = fmt.Sprintf("%s:%d", gossipHost, g.config.memberlistConfig.BindPort)
+	}
+
+	return g, nil
 }
 
 // SendSync implementation of the Broadcaster interface.

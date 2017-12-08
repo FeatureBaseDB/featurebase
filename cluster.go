@@ -159,6 +159,9 @@ type Cluster struct {
 	// Threshold for logging long-running queries
 	LongQueryTime time.Duration
 
+	// Maximum number of SetBit() or ClearBit() commands per request.
+	MaxWritesPerRequest int
+
 	// EventReceiver receives NodeEvents pertaining to node membership.
 	EventReceiver EventReceiver
 
@@ -199,10 +202,11 @@ type Cluster struct {
 // NewCluster returns a new instance of Cluster with defaults.
 func NewCluster() *Cluster {
 	return &Cluster{
-		Hasher:        &jmphasher{},
-		PartitionN:    DefaultPartitionN,
-		ReplicaN:      DefaultReplicaN,
-		EventReceiver: NopEventReceiver,
+		Hasher:              &jmphasher{},
+		PartitionN:          DefaultPartitionN,
+		ReplicaN:            DefaultReplicaN,
+		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
+		EventReceiver:       NopEventReceiver,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
 		jobs:                make(map[int64]*ResizeJob),

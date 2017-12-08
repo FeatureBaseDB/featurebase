@@ -224,7 +224,10 @@ func (m *Command) SetupServer() error {
 		// get the host portion of addr to use for binding
 		gossipHost := uri.Host()
 		m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
-		gossipMemberSet := gossip.NewGossipMemberSet(uri.String(), gossipHost, gossipPort, gossipSeed, m.Server, gossipKey)
+		gossipMemberSet, err := gossip.NewGossipMemberSet(uri.String(), gossipHost, gossipPort, gossipSeed, m.Server, gossipKey)
+		if err != nil {
+			return err
+		}
 		m.Server.Cluster.MemberSet = gossipMemberSet
 		m.Server.Broadcaster = gossipMemberSet
 		m.Server.BroadcastReceiver = gossipMemberSet
