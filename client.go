@@ -1044,8 +1044,8 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 	return rsp.Attrs, nil
 }
 
-// ClusterMessage posts a Gossip message synchronously.
-func (c *InternalHTTPClient) ClusterMessage(ctx context.Context, pb proto.Message) error {
+// SendMessage posts a message synchronously.
+func (c *InternalHTTPClient) SendMessage(ctx context.Context, pb proto.Message) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
 		return err
@@ -1261,5 +1261,5 @@ type InternalClient interface {
 	BlockData(ctx context.Context, index, frame, view string, slice uint64, block int) ([]uint64, []uint64, error)
 	ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
-	ClusterMessage(ctx context.Context, pb proto.Message) error
+	SendMessage(ctx context.Context, pb proto.Message) error
 }

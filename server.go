@@ -46,6 +46,11 @@ const (
 	DefaultDiagnosticServer    = "https://diagnostics.pilosa.com/v0/diagnostics"
 )
 
+// Ensure Server implements interfaces.
+var _ Broadcaster = &Server{}
+var _ BroadcastHandler = &Server{}
+var _ StatusHandler = &Server{}
+
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
 	ln net.Listener
@@ -59,6 +64,7 @@ type Server struct {
 	Handler           *Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
+	Gossiper          Gossiper
 	RemoteClient      *http.Client
 
 	// Cluster configuration.
@@ -182,6 +188,7 @@ func (s *Server) Open() error {
 
 	// Initialize HTTP handler.
 	s.Handler.Broadcaster = s.Broadcaster
+	s.Handler.BroadcastHandler = s
 	s.Handler.StatusHandler = s
 	s.Handler.URI = s.URI
 	s.Handler.Cluster = s.Cluster
@@ -333,10 +340,79 @@ func (s *Server) monitorMaxSlices() {
 
 // ReceiveMessage represents an implementation of BroadcastHandler.
 func (s *Server) ReceiveMessage(pb proto.Message) error {
-	return s.Handler.ProcessClusterMessage(pb)
+	switch obj := pb.(type) {
+	case *internal.CreateSliceMessage:
+		idx := s.Holder.Index(obj.Index)
+		if idx == nil {
+			return fmt.Errorf("Local Index not found: %s", obj.Index)
+		}
+		if obj.IsInverse {
+			idx.SetRemoteMaxInverseSlice(obj.Slice)
+		} else {
+			idx.SetRemoteMaxSlice(obj.Slice)
+		}
+	case *internal.CreateIndexMessage:
+		opt := IndexOptions{
+			ColumnLabel: obj.Meta.ColumnLabel,
+			TimeQuantum: TimeQuantum(obj.Meta.TimeQuantum),
+		}
+		_, err := s.Holder.CreateIndex(obj.Index, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteIndexMessage:
+		if err := s.Holder.DeleteIndex(obj.Index); err != nil {
+			return err
+		}
+	case *internal.CreateFrameMessage:
+		idx := s.Holder.Index(obj.Index)
+		if idx == nil {
+			return fmt.Errorf("Local Index not found: %s", obj.Index)
+		}
+		opt := FrameOptions{
+			RowLabel:       obj.Meta.RowLabel,
+			InverseEnabled: obj.Meta.InverseEnabled,
+			RangeEnabled:   obj.Meta.RangeEnabled,
+			CacheType:      obj.Meta.CacheType,
+			CacheSize:      obj.Meta.CacheSize,
+			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
+			Fields:         decodeFields(obj.Meta.Fields),
+		}
+		_, err := idx.CreateFrame(obj.Frame, opt)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteFrameMessage:
+		idx := s.Holder.Index(obj.Index)
+		if err := idx.DeleteFrame(obj.Frame); err != nil {
+			return err
+		}
+	case *internal.CreateInputDefinitionMessage:
+		idx := s.Holder.Index(obj.Index)
+		if idx == nil {
+			return fmt.Errorf("Local Index not found: %s", obj.Index)
+		}
+		idx.CreateInputDefinition(obj.Definition)
+	case *internal.DeleteInputDefinitionMessage:
+		idx := s.Holder.Index(obj.Index)
+		err := idx.DeleteInputDefinition(obj.Name)
+		if err != nil {
+			return err
+		}
+	case *internal.DeleteViewMessage:
+		f := s.Holder.Frame(obj.Index, obj.Frame)
+		if f == nil {
+			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
+		}
+		err := f.DeleteView(obj.View)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// SendSync represents an implementation of BroadcastHandler.
+// SendSync represents an implementation of Broadcaster.
 func (s *Server) SendSync(pb proto.Message) error {
 	var eg errgroup.Group
 	for _, node := range s.Cluster.Nodes {
@@ -352,11 +428,16 @@ func (s *Server) SendSync(pb proto.Message) error {
 
 		ctx := context.WithValue(context.Background(), "uri", uri)
 		eg.Go(func() error {
-			return s.defaultClient.ClusterMessage(ctx, pb)
+			return s.defaultClient.SendMessage(ctx, pb)
 		})
 	}
 
 	return eg.Wait()
+}
+
+// SendAsync represents an implementation of Broadcaster.
+func (s *Server) SendAsync(pb proto.Message) error {
+	return s.Gossiper.SendAsync(pb)
 }
 
 // LocalStatus returns the state of the local node as well as the

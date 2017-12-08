@@ -28,6 +28,11 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
+// Ensure GossipNodeSet implements interfaces.
+var _ pilosa.BroadcastReceiver = &GossipNodeSet{}
+var _ pilosa.Gossiper = &GossipNodeSet{}
+var _ memberlist.Delegate = &GossipNodeSet{}
+
 // GossipNodeSet represents a gossip implementation of NodeSet using memberlist
 // GossipNodeSet also represents a gossip implementation of pilosa.Broadcaster
 // GossipNodeSet also represents an implementation of memberlist.Delegate
@@ -232,13 +237,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	return g, nil
 }
 
-// SendSync implementation of the Broadcaster interface.
-func (g *GossipNodeSet) SendSync(pb proto.Message) error {
-	// Use the SendSync implementation in Server.
-	return g.handler.SendSync(pb)
-}
-
-// SendAsync implementation of the Broadcaster interface.
+// SendAsync implementation of the Gossiper interface.
 func (g *GossipNodeSet) SendAsync(pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
