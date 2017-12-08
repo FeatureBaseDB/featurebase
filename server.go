@@ -34,6 +34,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
+
+	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 )
 
 // Default server settings.
@@ -42,6 +45,11 @@ const (
 	DefaultPollingInterval     = 60 * time.Second
 	DefaultDiagnosticServer    = "https://diagnostics.pilosa.com/v0/diagnostics"
 )
+
+// Ensure Server implements interfaces.
+var _ Broadcaster = &Server{}
+var _ BroadcastHandler = &Server{}
+var _ StatusHandler = &Server{}
 
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
@@ -56,6 +64,7 @@ type Server struct {
 	Handler           *Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
+	Gossiper          Gossiper
 	RemoteClient      *http.Client
 
 	// Cluster configuration.
@@ -165,6 +174,7 @@ func (s *Server) Open() error {
 
 	// Initialize HTTP handler.
 	s.Handler.Broadcaster = s.Broadcaster
+	s.Handler.BroadcastHandler = s
 	s.Handler.StatusHandler = s
 	s.Handler.URI = s.URI
 	s.Handler.Cluster = s.Cluster
@@ -395,9 +405,33 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 	return nil
 }
 
-// State returns the cluster state according to this node.
-func (s *Server) State() string {
-	return s.Cluster.State
+// SendSync represents an implementation of Broadcaster.
+func (s *Server) SendSync(pb proto.Message) error {
+	var eg errgroup.Group
+	for _, node := range s.Cluster.Nodes {
+		// Don't forward the message to ourselves.
+		if s.URI == node.URI {
+			continue
+		}
+
+		ctx := context.WithValue(context.Background(), "uri", &node.URI)
+		eg.Go(func() error {
+			return s.defaultClient.SendMessage(ctx, pb)
+		})
+	}
+
+	return eg.Wait()
+}
+
+// SendAsync represents an implementation of Broadcaster.
+func (s *Server) SendAsync(pb proto.Message) error {
+	return s.Gossiper.SendAsync(pb)
+}
+
+// SendTo represents an implementation of Broadcaster.
+func (s *Server) SendTo(to *Node, pb proto.Message) error {
+	ctx := context.WithValue(context.Background(), "uri", to.URI)
+	return s.defaultClient.SendMessage(ctx, pb)
 }
 
 // Server implements StatusHandler.

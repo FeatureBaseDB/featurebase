@@ -418,7 +418,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	m0.Server.Cluster.MemberSet = gossipMemberSet0
-	m0.Server.Broadcaster = gossipMemberSet0
+	m0.Server.Broadcaster = m0.Server
+	m0.Server.Gossiper = gossipMemberSet0
 	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
 	m0.Server.Holder.Broadcaster = m0.Server.Broadcaster
 	m0.Server.BroadcastReceiver = gossipMemberSet0
@@ -446,7 +447,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	m1.Server.Cluster.MemberSet = gossipMemberSet1
-	m1.Server.Broadcaster = gossipMemberSet1
+	m1.Server.Broadcaster = m1.Server
+	m1.Server.Gossiper = gossipMemberSet1
 	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
 	m1.Server.Holder.Broadcaster = m1.Server.Broadcaster
 	m1.Server.BroadcastReceiver = gossipMemberSet1

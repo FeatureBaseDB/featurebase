@@ -66,6 +66,7 @@ type Broadcaster interface {
 
 func init() {
 	NopBroadcaster = &nopBroadcaster{}
+	NopGossiper = &nopGossiper{}
 }
 
 // NopBroadcaster represents a Broadcaster that doesn't do anything.
@@ -73,13 +74,13 @@ var NopBroadcaster Broadcaster
 
 type nopBroadcaster struct{}
 
-// SendSync is a no-op implemenetation of Broadcaster SendSync method.
-func (c *nopBroadcaster) SendSync(pb proto.Message) error {
+// SendSync A no-op implemenetation of Broadcaster SendSync method.
+func (n *nopBroadcaster) SendSync(pb proto.Message) error {
 	return nil
 }
 
-// SendAsync is a no-op implemenetation of Broadcaster SendAsync method.
-func (c *nopBroadcaster) SendAsync(pb proto.Message) error {
+// SendAsync A no-op implemenetation of Broadcaster SendAsync method.
+func (n *nopBroadcaster) SendAsync(pb proto.Message) error {
 	return nil
 }
 
@@ -111,6 +112,21 @@ func (n *nopBroadcastReceiver) Start(b BroadcastHandler) error { return nil }
 
 // NopBroadcastReceiver is a no-op implementation of the BroadcastReceiver.
 var NopBroadcastReceiver = &nopBroadcastReceiver{}
+
+// Gossiper is an interface for sharing messages via gossip.
+type Gossiper interface {
+	SendAsync(pb proto.Message) error
+}
+
+// NopBroadcaster represents a Broadcaster that doesn't do anything.
+var NopGossiper Gossiper
+
+type nopGossiper struct{}
+
+// SendAsync A no-op implemenetation of Gossiper SendAsync method.
+func (n *nopGossiper) SendAsync(pb proto.Message) error {
+	return nil
+}
 
 // Broadcast message types.
 const (

@@ -229,8 +229,9 @@ func (m *Command) SetupServer() error {
 			return err
 		}
 		m.Server.Cluster.MemberSet = gossipMemberSet
-		m.Server.Broadcaster = gossipMemberSet
+		m.Server.Broadcaster = m.Server
 		m.Server.BroadcastReceiver = gossipMemberSet
+		m.Server.Gossiper = gossipMemberSet
 	case pilosa.ClusterStatic, pilosa.ClusterNone:
 
 		m.Server.Cluster.Static = true
@@ -247,6 +248,7 @@ func (m *Command) SetupServer() error {
 		m.Server.Broadcaster = pilosa.NopBroadcaster
 		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet()
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
+		m.Server.Gossiper = pilosa.NopGossiper
 		err := m.Server.Cluster.MemberSet.(*pilosa.StaticMemberSet).Join(m.Server.Cluster.Nodes)
 		if err != nil {
 			return err

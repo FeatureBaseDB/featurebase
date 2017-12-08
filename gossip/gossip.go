@@ -30,9 +30,12 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// GossipMemberSet represents a gossip implementation of MemberSet using memberlist
-// GossipMemberSet also represents a gossip implementation of pilosa.Broadcaster
-// GossipMemberSet also represents an implementation of memberlist.Delegate
+// Ensure GossipMemberSet implements interfaces.
+var _ pilosa.BroadcastReceiver = &GossipMemberSet{}
+var _ pilosa.Gossiper = &GossipMemberSet{}
+var _ memberlist.Delegate = &GossipMemberSet{}
+
+// GossipMemberSet represents a gossip implementation of MemberSet using memberlist.
 type GossipMemberSet struct {
 	memberlist *memberlist.Memberlist
 	handler    pilosa.BroadcastHandler
@@ -275,7 +278,7 @@ func (g *GossipMemberSet) SendSync(pb proto.Message) error {
 	return eg.Wait()
 }
 
-// SendAsync implementation of the Broadcaster interface.
+// SendAsync implementation of the Gossiper interface.
 func (g *GossipMemberSet) SendAsync(pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
@@ -287,25 +290,6 @@ func (g *GossipMemberSet) SendAsync(pb proto.Message) error {
 		notify: nil,
 	}
 	g.broadcasts.QueueBroadcast(b)
-	return nil
-}
-
-// SendTo implementation of the Broadcaster interface.
-func (g *GossipMemberSet) SendTo(to *pilosa.Node, pb proto.Message) error {
-	msg, err := pilosa.MarshalMessage(pb)
-	if err != nil {
-		return err
-	}
-
-	mlist := g.memberlist
-
-	// Get the memberlist.Node from the pilosa.Node.
-	for _, node := range mlist.Members() {
-		if node.Name == to.URI.String() {
-			return mlist.SendToTCP(node, msg)
-		}
-	}
-
 	return nil
 }
 
