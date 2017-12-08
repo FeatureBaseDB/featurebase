@@ -22,13 +22,16 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 )
+
+// Ensure GossipNodeSet implements interfaces.
+var _ pilosa.BroadcastReceiver = &GossipNodeSet{}
+var _ pilosa.Gossiper = &GossipNodeSet{}
+var _ memberlist.Delegate = &GossipNodeSet{}
 
 // GossipNodeSet represents a gossip implementation of NodeSet using memberlist
 // GossipNodeSet also represents a gossip implementation of pilosa.Broadcaster
@@ -234,35 +237,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 	return g, nil
 }
 
-// SendSync implementation of the Broadcaster interface.
-func (g *GossipNodeSet) SendSync(pb proto.Message) error {
-	msg, err := pilosa.MarshalMessage(pb)
-	if err != nil {
-		return err
-	}
-
-	mlist := g.memberlist
-
-	// Direct sends the message directly to every node.
-	// An error from any node raises an error on the entire operation.
-	//
-	// Gossip uses the gossip protocol to eventually deliver the message
-	// to every node.
-	var eg errgroup.Group
-	for _, n := range mlist.Members() {
-		// Don't send the message to the local node.
-		if n == mlist.LocalNode() {
-			continue
-		}
-		node := n
-		eg.Go(func() error {
-			return mlist.SendToTCP(node, msg)
-		})
-	}
-	return eg.Wait()
-}
-
-// SendAsync implementation of the Broadcaster interface.
+// SendAsync implementation of the Gossiper interface.
 func (g *GossipNodeSet) SendAsync(pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {

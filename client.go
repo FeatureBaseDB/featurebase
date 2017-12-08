@@ -1044,6 +1044,41 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 	return rsp.Attrs, nil
 }
 
+// SendMessage posts a message synchronously.
+func (c *InternalHTTPClient) SendMessage(ctx context.Context, pb proto.Message) error {
+	msg, err := MarshalMessage(pb)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %v", err)
+	}
+
+	u := uriPathToURL(ctx.Value("uri").(*URI), "/cluster/message")
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(msg))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+
+	// Execute request.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return fmt.Errorf("executing http request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Read body.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("reading response body: %v", err)
+	}
+
+	// Return error if status is not OK.
+	switch resp.StatusCode {
+	case http.StatusOK: // ok
+	default:
+		return fmt.Errorf("unexpected response status code: %d: %s", resp.StatusCode, body)
+	}
+
+	return nil
+}
+
 func (c *InternalHTTPClient) clientURI(ctx context.Context) *URI {
 	clientURI := c.defaultURI
 	if contextURI, ok := ctx.Value("uri").(*URI); ok {
@@ -1226,4 +1261,5 @@ type InternalClient interface {
 	BlockData(ctx context.Context, index, frame, view string, slice uint64, block int) ([]uint64, []uint64, error)
 	ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
+	SendMessage(ctx context.Context, pb proto.Message) error
 }

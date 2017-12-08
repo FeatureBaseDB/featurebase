@@ -226,12 +226,14 @@ func (m *Command) SetupServer() error {
 			return err
 		}
 		m.Server.Cluster.NodeSet = gossipNodeSet
-		m.Server.Broadcaster = gossipNodeSet
+		m.Server.Broadcaster = m.Server
 		m.Server.BroadcastReceiver = gossipNodeSet
+		m.Server.Gossiper = gossipNodeSet
 	case pilosa.ClusterStatic, pilosa.ClusterNone:
 		m.Server.Broadcaster = pilosa.NopBroadcaster
 		m.Server.Cluster.NodeSet = pilosa.NewStaticNodeSet()
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
+		m.Server.Gossiper = pilosa.NopGossiper
 		err := m.Server.Cluster.NodeSet.(*pilosa.StaticNodeSet).Join(m.Server.Cluster.Nodes)
 		if err != nil {
 			return err
