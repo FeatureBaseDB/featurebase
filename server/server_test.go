@@ -618,8 +618,6 @@ func (m *Main) Reopen() error {
 	m.Server.Network = *test.Network
 	m.Config = config
 
-	println("dbg/network", *test.Network)
-
 	// Run new program.
 	if err := m.Run(); err != nil {
 		return err
