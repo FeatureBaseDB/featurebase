@@ -59,6 +59,9 @@ type Server struct {
 	wg      sync.WaitGroup
 	closing chan struct{}
 
+	// Unique name identifying the server.
+	Name string
+
 	// Data storage and HTTP interface.
 	Holder            *Holder
 	Handler           *Handler
@@ -117,31 +120,12 @@ func NewServer() *Server {
 
 // Open opens and initializes the server.
 func (s *Server) Open() error {
-	var ln net.Listener
-	var err error
-
-	// If bind URI has the https scheme, enable TLS
-	if s.URI.Scheme() == "https" && s.TLS != nil {
-		ln, err = tls.Listen("tcp", s.URI.HostPort(), s.TLS)
-		if err != nil {
+	s.Logger().Printf("open server")
+	// s.ln can be configured prior to Open() via s.OpenListener().
+	if s.ln == nil {
+		if err := s.OpenListener(); err != nil {
 			return err
 		}
-	} else if s.URI.Scheme() == "http" {
-		// Open HTTP listener to determine port (if specified as :0).
-		ln, err = net.Listen(s.Network, s.URI.HostPort())
-		if err != nil {
-			return fmt.Errorf("net.Listen: %v", err)
-		}
-	} else {
-		return fmt.Errorf("unsupported scheme: %s", s.URI.Scheme())
-	}
-
-	s.ln = ln
-
-	if s.URI.Port() == 0 {
-		// If the port is 0, it is set automatically.
-		// Find out automatically set port and update the host.
-		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
 	}
 
 	// Set Cluster URI.
@@ -170,6 +154,9 @@ func (s *Server) Open() error {
 	e.URI = s.URI
 	e.Cluster = s.Cluster
 	e.MaxWritesPerRequest = s.MaxWritesPerRequest
+
+	// Cluster settings.
+	s.Cluster.Broadcaster = s.Broadcaster
 	s.Cluster.MaxWritesPerRequest = s.MaxWritesPerRequest
 
 	// Initialize HTTP handler.
@@ -188,7 +175,7 @@ func (s *Server) Open() error {
 
 	// Serve HTTP.
 	go func() {
-		err := http.Serve(ln, s.Handler)
+		err := http.Serve(s.ln, s.Handler)
 		if err != nil {
 			s.Logger().Printf("HTTP handler terminated with error: %s\n", err)
 		}
@@ -197,6 +184,11 @@ func (s *Server) Open() error {
 	// Start the BroadcastReceiver.
 	if err := s.BroadcastReceiver.Start(s); err != nil {
 		return fmt.Errorf("starting BroadcastReceiver: %v", err)
+	}
+
+	// If a Coordinator is not specified, then default to s.URI.
+	if s.Cluster.Coordinator.Port() == 0 {
+		s.Cluster.Coordinator = s.URI
 	}
 
 	// Open Cluster management.
@@ -224,6 +216,48 @@ func (s *Server) Open() error {
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
+
+	return nil
+}
+
+// OpenListener opens a listener for the Server.
+func (s *Server) OpenListener() error {
+	s.Logger().Printf("open server listener: %s", s.URI)
+	if s.ln != nil {
+		return fmt.Errorf("a listener already exists for server: %s", s.URI)
+	}
+
+	var ln net.Listener
+	var err error
+
+	// If bind URI has the https scheme, enable TLS
+	if s.URI.Scheme() == "https" && s.TLS != nil {
+		ln, err = tls.Listen("tcp", s.URI.HostPort(), s.TLS)
+		if err != nil {
+			return err
+		}
+	} else if s.URI.Scheme() == "http" {
+		// Open HTTP listener to determine port (if specified as :0).
+		ln, err = net.Listen(s.Network, s.URI.HostPort())
+		if err != nil {
+			return fmt.Errorf("net.Listen: %v", err)
+		}
+	} else {
+		return fmt.Errorf("unsupported scheme: %s", s.URI.Scheme())
+	}
+
+	s.ln = ln
+
+	if s.URI.Port() == 0 {
+		// If the port is 0, it is set automatically.
+		// Find out automatically set port and update the host.
+		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
+	}
+
+	// If name is not provided in the config, default to the URI.
+	if s.Name == "" {
+		s.Name = s.URI.String()
+	}
 
 	return nil
 }
@@ -382,7 +416,6 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
-		s.Cluster.MarkAsJoined()
 	case *internal.ResizeInstruction:
 		err := s.Cluster.FollowResizeInstruction(obj)
 		if err != nil {
@@ -409,6 +442,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 func (s *Server) SendSync(pb proto.Message) error {
 	var eg errgroup.Group
 	for _, node := range s.Cluster.Nodes {
+		s.Logger().Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
 		if s.URI == node.URI {
 			continue
@@ -430,7 +464,8 @@ func (s *Server) SendAsync(pb proto.Message) error {
 
 // SendTo represents an implementation of Broadcaster.
 func (s *Server) SendTo(to *Node, pb proto.Message) error {
-	ctx := context.WithValue(context.Background(), "uri", to.URI)
+	s.Logger().Printf("SendTo: %s", to.URI)
+	ctx := context.WithValue(context.Background(), "uri", &to.URI)
 	return s.defaultClient.SendMessage(ctx, pb)
 }
 

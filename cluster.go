@@ -31,6 +31,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
@@ -241,6 +243,7 @@ func (c *Cluster) SetCoordinator(oldURI, newURI URI) bool {
 // AddNode adds a node to the Cluster and updates and saves the
 // new topology.
 func (c *Cluster) AddNode(uri URI) error {
+	c.logger().Printf("add node %s to cluster on %s", uri, c.URI)
 
 	// add to cluster
 	_, added := c.addNodeBasicSorted(uri)
@@ -292,7 +295,7 @@ func (c *Cluster) setState(state string) {
 		return
 	}
 
-	c.logger().Printf("Change cluster state from %s to %s", c.State, state)
+	c.logger().Printf("change cluster state from %s to %s on %s", c.State, state, c.URI)
 
 	var doCleanup bool
 
@@ -352,8 +355,6 @@ func (c *Cluster) SetNodeState(state string) error {
 // Coordinator to keep track of, during startup, which nodes have
 // finished opening their Holder.
 func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
-
-	c.logger().Printf("Receiving State %s (%s)", state, uri.String())
 	if !c.IsCoordinator() {
 		return nil
 	}
@@ -364,11 +365,10 @@ func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
 	}
 
 	c.Topology.nodeStates[uri] = state
-	c.logger().Printf("Receiving State %s (%s)", state, uri)
+	c.logger().Printf("received state %s (%s)", state, uri)
 
 	// Set cluster state to NORMAL.
 	if c.haveTopologyAgreement() && c.allNodesReady() {
-		c.logger().Printf("Broadcasting ClusterStateNormal")
 		return c.setStateAndBroadcast(ClusterStateNormal)
 	}
 
@@ -765,7 +765,10 @@ func (c *Cluster) Open() error {
 	}
 
 	// Add the local node to the cluster.
+	//NEXT
+	//if c.URI.Port() != 0 {
 	c.AddNode(c.URI)
+	//}
 
 	// Start the EventReceiver.
 	if err := c.EventReceiver.Start(c); err != nil {
@@ -781,6 +784,7 @@ func (c *Cluster) Open() error {
 	if !c.IsCoordinator() {
 		c.logger().Printf("wait for joining to complete")
 		<-c.joining
+		c.logger().Printf("joining has completed")
 	}
 
 	return nil
@@ -794,7 +798,8 @@ func (c *Cluster) Close() error {
 	return nil
 }
 
-func (c *Cluster) MarkAsJoined() {
+func (c *Cluster) markAsJoined() {
+	c.logger().Printf("mark node as joined (received coordinator update)")
 	if !c.joined {
 		c.joined = true
 		close(c.joining)
@@ -830,14 +835,24 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 		return err
 	}
 
-	// Run the job.
-	err = j.Run()
-	if err != nil {
+	// j.Run() runs in a goroutine because in the case where the
+	// job requires no action, it immediately writes to the j.result
+	// channel, which is not consumed until the code below.
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return j.Run()
+	})
+
+	// Wait for the ResizeJob to finish or be aborted.
+	c.logger().Printf("wait for jobResult")
+	jobResult := <-j.result
+
+	// Make sure j.Run() didn't return an error.
+	if eg.Wait() != nil {
 		return err
 	}
 
-	// Wait for the ResizeJob to finish or be aborted.
-	jobResult := <-j.result
+	c.logger().Printf("received jobResult: %s", jobResult)
 	switch jobResult {
 	case ResizeJobStateDone:
 		if err := c.CompleteCurrentJob(ResizeJobStateDone); err != nil {
@@ -860,6 +875,7 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 func (c *Cluster) setStateAndBroadcast(state string) error {
 	c.setState(state)
 	// Broadcast cluster status changes to the cluster.
+	c.logger().Printf("broadcasting ClusterStatus: %s", state)
 	return c.Broadcaster.SendSync(c.Status())
 }
 
@@ -996,11 +1012,12 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 			continue
 		}
 		instr := &internal.ResizeInstruction{
-			JobID:       j.ID,
-			URI:         u.Encode(),
-			Coordinator: encodeURI(c.Coordinator),
-			Sources:     sources,
-			Schema:      pbSchema, // Include the schema to ensure it's in sync on the receiving node.
+			JobID:         j.ID,
+			URI:           u.Encode(),
+			Coordinator:   encodeURI(c.Coordinator),
+			Sources:       sources,
+			Schema:        pbSchema, // Include the schema to ensure it's in sync on the receiving node.
+			ClusterStatus: c.Status(),
 		}
 		j.Instructions = append(j.Instructions, instr)
 	}
@@ -1023,6 +1040,17 @@ func (c *Cluster) CompleteCurrentJob(state string) error {
 
 // FollowResizeInstruction is run by any node that receives a ResizeInstruction.
 func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) error {
+	c.logger().Printf("follow resize instruction on %s", c.URI)
+	// Make sure the cluster status on this node agrees with the Coordinator
+	// before attempting a resize.
+	if err := c.MergeClusterStatus(instr.ClusterStatus); err != nil {
+		return err
+	}
+
+	c.logger().Printf("MergeClusterStatus done, start goroutine")
+
+	// The actual resizing runs in a goroutine because we don't want to block
+	// the distribution of other ResizeInstructions to the rest of the cluster.
 	go func() {
 
 		// Make sure the holder has opened.
@@ -1039,6 +1067,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 		if err := func() error {
 
 			// Sync the schema received in the resize instruction.
+			c.logger().Printf("Holder ApplySchema")
 			if err := c.Holder.ApplySchema(instr.Schema); err != nil {
 				return err
 			}
@@ -1048,7 +1077,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {
-				c.logger().Printf("\n**** Get slice %d for index %s from host %s ****\n\n", src.Slice, src.Index, src.URI)
+				c.logger().Printf("get slice %d for index %s from host %s", src.Slice, src.Index, src.URI)
 
 				srcURI := decodeURI(src.URI)
 
@@ -1071,8 +1100,18 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				}
 
 				// Stream slice from remote node.
+				c.logger().Printf("retrieve slice %d for index %s from host %s", src.Slice, src.Index, src.URI)
 				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
 				if err != nil {
+					// For now it is an acceptable error if the fragment is not found
+					// on the remote node. This occurs when a slice has been skipped and
+					// therefore doesn't contain data. The coordinator correctly determined
+					// the resize instruction to retrieve the slice, but it doesn't have data.
+					// TODO: figure out a way to distinguish from "fragment not found" errors
+					// which are true errors and which simply mean the fragment doesn't have data.
+					if err == ErrFragmentNotFound {
+						return nil
+					}
 					return err
 				} else if rd == nil {
 					return fmt.Errorf("slice %v doesn't exist on host: %s", src.Slice, src.URI)
@@ -1213,15 +1252,18 @@ func (j *ResizeJob) setState(state string) {
 
 // Run distributes ResizeInstructions.
 func (j *ResizeJob) Run() error {
+	j.logger().Printf("run ResizeJob")
 	// Set job state to RUNNING.
 	j.SetState(ResizeJobStateRunning)
 
 	// Job can be considered done in the case where it doesn't require any action.
 	if !j.urisArePending() {
+		j.logger().Printf("ResizeJob contains no pending tasks; mark as done")
 		j.result <- ResizeJobStateDone
 		return nil
 	}
 
+	j.logger().Printf("distribute tasks for ResizeJob")
 	err := j.distributeResizeInstructions()
 	if err != nil {
 		j.result <- ResizeJobStateAborted
@@ -1470,6 +1512,7 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 
 	switch e.Event {
 	case NodeJoin:
+		c.logger().Printf("received NodeJoin event: %v", e)
 		// Ignore the event if this is not the coordinator.
 		if !c.IsCoordinator() {
 			return nil
@@ -1582,6 +1625,7 @@ func (c *Cluster) nodeLeave(uri URI) error {
 }
 
 func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
+	c.logger().Printf("merge cluster status: %v", cs)
 	// Ignore status updates from self (coordinator).
 	if c.IsCoordinator() {
 		return nil
@@ -1596,8 +1640,13 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 		}
 	}
 
-	// Remove any nodes not specified by the coordinator.
+	// Remove any nodes not specified by the coordinator
+	// except for self.
 	for _, uri := range c.NodeSet() {
+		// Don't remove this node.
+		if uri == c.URI {
+			continue
+		}
 		if NodeSet(officialURIs).ContainsURI(uri) {
 			continue
 		}
@@ -1607,6 +1656,8 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 	}
 
 	c.setState(cs.State)
+
+	c.markAsJoined()
 
 	return nil
 }

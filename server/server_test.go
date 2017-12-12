@@ -636,6 +636,81 @@ func (m *Main) Reopen() error {
 	return nil
 }
 
+// RunWithTransport runs Main and returns the dynamically allocated gossip port.
+func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coordinator *pilosa.URI) (seed string, coord pilosa.URI, err error) {
+	defer close(m.Started)
+
+	m.Config.Cluster.Type = "gossip"
+
+	/*
+		TEST:
+		- SetupServer (just static settings from config)
+		- OpenListener (sets Server.Name to use in gossip)
+		- NewTransport (gossip)
+		- SetupNetworking (does the gossip or static stuff) - uses Server.Name
+		- Open server
+
+		PRODUCTION:
+		- SetupServer (just static settings from config)
+		- SetupNetworking (does the gossip or static stuff) - calls NewTransport
+		- Open server - calls OpenListener
+	*/
+
+	// SetupServer
+	err = m.SetupServer()
+	if err != nil {
+		return seed, coord, err
+	}
+
+	// Open server listener.
+	// This is used to set Server.Name, which is used as the node
+	// name for identifying a memberlist node.
+	err = m.Server.OpenListener()
+	if err != nil {
+		return seed, coord, err
+	}
+
+	// Open gossip transport to use in SetupServer.
+	transport, err := gossip.NewTransport(host, bindPort)
+	if err != nil {
+		return seed, coord, err
+	}
+	m.GossipTransport = transport
+
+	if joinSeed != "" {
+		m.Config.Gossip.Seed = joinSeed
+	} else {
+		m.Config.Gossip.Seed = transport.URI.String()
+	}
+	seed = m.Config.Gossip.Seed
+
+	// SetupNetworking
+	err = m.SetupNetworking()
+	if err != nil {
+		return seed, coord, err
+	}
+
+	if err = m.Server.BroadcastReceiver.Start(m.Server); err != nil {
+		return seed, coord, err
+	}
+
+	if coordinator != nil {
+		coord = *coordinator
+	} else {
+		coord = m.Server.URI
+	}
+	m.Server.Cluster.Coordinator = coord
+	m.Server.Cluster.Static = false
+
+	// Initialize server.
+	err = m.Server.Open()
+	if err != nil {
+		return seed, coord, err
+	}
+
+	return seed, coord, nil
+}
+
 // URL returns the base URL string for accessing the running program.
 func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
 
