@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.3] - 2017-12-12
+
+This version contains 1 contribution from 1 contributor. There are 2 files changed, 59 insertions, and 42 deletions.
+
+### Fixed
+
+- Protect against accessing pointers to memory which was unmapped ([#1000](https://github.com/pilosa/pilosa/pull/1000))
+
 ## [0.8.2] - 2017-12-05
 
 This version contains 1 contribution from 1 contributor. There are 15 files changed, 127 insertions, and 98 deletions.
