@@ -11,7 +11,7 @@ addons:
 before_install:
   - go get github.com/mattn/goveralls
 script:
-  - make vendor && $HOME/gopath/bin/goveralls -service=travis-ci -ignore "internal/internal.go,internal/public.pb.go,internal/private.pb.go"
+  - make vendor && $HOME/gopath/bin/goveralls -v -service=travis-ci -ignore "internal/internal.go,internal/public.pb.go,internal/private.pb.go"
 before_deploy:
   - pip install awscli --user `whoami`
 deploy:
