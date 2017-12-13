@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -37,6 +38,7 @@ var _ memberlist.Delegate = &GossipMemberSet{}
 
 // GossipMemberSet represents a gossip implementation of MemberSet using memberlist.
 type GossipMemberSet struct {
+	mu         sync.RWMutex
 	memberlist *memberlist.Memberlist
 	handler    pilosa.BroadcastHandler
 
@@ -51,6 +53,9 @@ type GossipMemberSet struct {
 
 // Nodes implements the MemberSet interface and returns a list of nodes in the cluster.
 func (g *GossipMemberSet) Nodes() []*pilosa.Node {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
 	a := make([]*pilosa.Node, 0, g.memberlist.NumMembers())
 	for _, n := range g.memberlist.Members() {
 		uri, _ := pilosa.NewURIFromAddress(n.Name)
@@ -78,13 +83,17 @@ func (g *GossipMemberSet) Open() error {
 	}
 
 	err := error(nil)
+	g.mu.Lock()
 	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
+	g.mu.Unlock()
 	if err != nil {
 		return err
 	}
 
 	g.broadcasts = &memberlist.TransmitLimitedQueue{
 		NumNodes: func() int {
+			g.mu.RLock()
+			defer g.mu.RUnlock()
 			return g.memberlist.NumMembers()
 		},
 		RetransmitMult: 3,
@@ -98,7 +107,9 @@ func (g *GossipMemberSet) Open() error {
 	// attach to gossip seed node
 	nodes := []*pilosa.Node{&pilosa.Node{URI: *uri}} //TODO: support a list of seeds
 
+	g.mu.RLock()
 	err = g.joinWithRetry(pilosa.NodeSet(pilosa.Nodes(nodes).URIs()).ToHostPortStrings())
+	g.mu.RUnlock()
 	if err != nil {
 		return err
 	}

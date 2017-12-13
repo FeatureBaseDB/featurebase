@@ -156,7 +156,9 @@ func (h *Holder) Open() error {
 			}
 			return fmt.Errorf("open index: name=%s, err=%s", index.Name(), err)
 		}
+		h.mu.Lock()
 		h.indexes[index.Name()] = index
+		h.mu.Unlock()
 	}
 	h.logger().Printf("open holder: complete")
 
@@ -190,6 +192,8 @@ func (h *Holder) Close() error {
 // This is used to determine if the rebalancing of data is necessary
 // when a node joins the cluster.
 func (h *Holder) HasData() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	return h.hasData || len(h.indexes) > 0
 }
 
