@@ -45,15 +45,9 @@ Response:
 
 Creates an index with the given name.
 
-The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which may contain the following fields:
-
-* `timeQuantum` (string): time quantum of the index.
-
 Request:
 ```
-curl localhost:10101/index/user \
-     -X POST \
-     -d '{"options": {"timeQuantum": "YMDH"}}'
+curl -XPOST localhost:10101/index/user
 ```
 
 Response:
@@ -116,38 +110,6 @@ Response:
 ```
 
 By default, all bits and attributes (*for `Bitmap` queries only*) are returned. In order to suppress returning bits, set `excludeBits` query argument to `true`; to suppress returning attributes, set `excludeAttrs` query argument to `true`.
-
-### Change index time quantum
-
-`PATCH /index/<index-name>/time-quantum`
-
-Changes the time quantum for the given index. This endpoint should be called at most once right after creating a database.
-
-The payload is in JSON with the format: `{"timeQuantum": "${TIME_QUANTUM}"}`. Valid time quantum values are:
-
-* (Empty string)
-* Y: year
-* M: month
-* D: day
-* H: hour
-* YM: year and month
-* MD: month and day
-* DH: day and hour
-* YMD: year, month and day
-* MDH: month, day and hour
-* YMDH: year, month, day and hour
-
-Request:
-```
-curl localhost:10101/index/user/time-quantum \
-     -X POST \
-     -d '{"timeQuantum": "YM"}'
-```
-
-Response:
-```
-{}
-```
 
 ### Create frame
 
