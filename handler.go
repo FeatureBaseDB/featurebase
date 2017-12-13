@@ -124,6 +124,7 @@ func (h *Handler) SetRestricted() {
 }
 
 func loadCommon(router *mux.Router, handler *Handler) {
+	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
@@ -175,7 +176,6 @@ func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
 	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
-	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:

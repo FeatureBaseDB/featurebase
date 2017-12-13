@@ -156,6 +156,7 @@ message ResizeInstruction {
     URI Coordinator = 3;
     repeated ResizeSource Sources = 4;
     Schema Schema = 5;
+    ClusterStatus ClusterStatus = 6;
 }
 
 message ResizeSource {

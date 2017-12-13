@@ -88,6 +88,7 @@ func NewHolder() *Holder {
 // without actually loading any data into memory.
 // HasData is returned, and h.hasData is set.
 func (h *Holder) Peek() bool {
+	h.logger().Printf("peek at holder path: %s", h.Path)
 	h.hasData = false
 
 	// Open path to read all index directories.
@@ -117,6 +118,7 @@ func (h *Holder) Peek() bool {
 func (h *Holder) Open() error {
 	h.setFileLimit()
 
+	h.logger().Printf("open holder path: %s", h.Path)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return err
 	}
@@ -133,7 +135,6 @@ func (h *Holder) Open() error {
 		return err
 	}
 
-	h.logger().Printf("Holder Start")
 	for _, fi := range fis {
 		if !fi.IsDir() {
 			continue
@@ -155,9 +156,11 @@ func (h *Holder) Open() error {
 			}
 			return fmt.Errorf("open index: name=%s, err=%s", index.Name(), err)
 		}
+		h.mu.Lock()
 		h.indexes[index.Name()] = index
+		h.mu.Unlock()
 	}
-	h.logger().Printf("Holder Complete")
+	h.logger().Printf("open holder: complete")
 
 	// Periodically flush cache.
 	h.wg.Add(1)
@@ -189,6 +192,8 @@ func (h *Holder) Close() error {
 // This is used to determine if the rebalancing of data is necessary
 // when a node joins the cluster.
 func (h *Holder) HasData() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	return h.hasData || len(h.indexes) > 0
 }
 

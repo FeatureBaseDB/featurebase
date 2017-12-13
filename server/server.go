@@ -60,6 +60,9 @@ type Command struct {
 	CPUProfile string
 	CPUTime    time.Duration
 
+	// Gossip transport
+	GossipTransport *gossip.Transport
+
 	// Standard input/output
 	*pilosa.CmdIO
 
@@ -100,6 +103,12 @@ func (m *Command) Run(args ...string) (err error) {
 		return err
 	}
 
+	// SetupNetworking
+	err = m.SetupNetworking()
+	if err != nil {
+		return err
+	}
+
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
 		return fmt.Errorf("server.Open: %v", err)
@@ -122,6 +131,11 @@ func (m *Command) SetupServer() error {
 		return err
 	}
 	m.Server.URI = *uri
+
+	// If using a dynamically allocated port, server.Name will get set later.
+	if m.Config.Bind != "localhost:0" {
+		m.Server.Name = m.Server.URI.String()
+	}
 
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
@@ -183,24 +197,41 @@ func (m *Command) SetupServer() error {
 	m.Server.Handler.RemoteClient = c
 	m.Server.Cluster.RemoteClient = c
 
+	// Default coordintor to port 0 when not specified so that coordinator
+	// can be set to the value of server.URI after server binds to a port.
+	// This would only be useful in a one-node cluster.
+	coord := m.Config.Cluster.Coordinator
+	if coord == "" {
+		coord = ":0"
+	}
+
 	// Set the coordinator node.
-	curi, err := pilosa.AddressWithDefaults(m.Config.Cluster.Coordinator)
+	curi, err := pilosa.AddressWithDefaults(coord)
 	if err != nil {
 		return err
 	}
 	m.Server.Cluster.Coordinator = *curi
 
-	// Set internal port (string).
-	gossipPortStr := pilosa.DefaultGossipPort
-	// Config.GossipPort is deprecated, so Config.Gossip.Port has priority
-	if m.Config.Gossip.Port != "" {
-		gossipPortStr = m.Config.Gossip.Port
-	} else if m.Config.GossipPort != "" {
-		gossipPortStr = m.Config.GossipPort
-	}
+	// Set configuration options.
+	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
+	m.Server.Cluster.LongQueryTime = time.Duration(m.Config.Cluster.LongQueryTime)
+	return nil
+}
 
+// SetupNetworking sets up internode communication based on the configuration.
+func (m *Command) SetupNetworking() error {
 	switch m.Config.Cluster.Type {
 	case pilosa.ClusterGossip:
+
+		// Set internal port (string).
+		gossipPortStr := pilosa.DefaultGossipPort
+		// Config.GossipPort is deprecated, so Config.Gossip.Port has priority
+		if m.Config.Gossip.Port != "" {
+			gossipPortStr = m.Config.Gossip.Port
+		} else if m.Config.GossipPort != "" {
+			gossipPortStr = m.Config.GossipPort
+		}
+
 		gossipPort, err := strconv.Atoi(gossipPortStr)
 		if err != nil {
 			return err
@@ -222,9 +253,22 @@ func (m *Command) SetupServer() error {
 		}
 
 		// get the host portion of addr to use for binding
-		gossipHost := uri.Host()
+		gossipHost := m.Server.URI.Host()
+		var transport *gossip.Transport
+		if m.GossipTransport != nil {
+			transport = m.GossipTransport
+		} else {
+			transport, err = gossip.NewTransport(gossipHost, gossipPort)
+			if err != nil {
+				return err
+			}
+		}
+
 		m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
-		gossipMemberSet, err := gossip.NewGossipMemberSet(uri.String(), gossipHost, gossipPort, gossipSeed, m.Server, gossipKey)
+		if m.Server.Name == "" {
+			return fmt.Errorf("must provide a valid name for gossip membership")
+		}
+		gossipMemberSet, err := gossip.NewGossipMemberSetWithTransport(m.Server.Name, gossipHost, transport, gossipSeed, m.Server, gossipKey)
 		if err != nil {
 			return err
 		}
@@ -233,14 +277,13 @@ func (m *Command) SetupServer() error {
 		m.Server.BroadcastReceiver = gossipMemberSet
 		m.Server.Gossiper = gossipMemberSet
 	case pilosa.ClusterStatic, pilosa.ClusterNone:
-
 		m.Server.Cluster.Static = true
 		for _, address := range m.Config.Cluster.Hosts {
 			uri, err := pilosa.NewURIFromAddress(address)
 			if err != nil {
 				return err
 			}
-			cluster.Nodes = append(cluster.Nodes, &pilosa.Node{
+			m.Server.Cluster.Nodes = append(m.Server.Cluster.Nodes, &pilosa.Node{
 				URI: *uri,
 			})
 		}
@@ -256,13 +299,6 @@ func (m *Command) SetupServer() error {
 	default:
 		return fmt.Errorf("'%v' is not a supported value for broadcaster type", m.Config.Cluster.Type)
 	}
-
-	// Cluster management needs.
-	m.Server.Cluster.Broadcaster = m.Server.Broadcaster
-
-	// Set configuration options.
-	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
-	m.Server.Cluster.LongQueryTime = time.Duration(m.Config.Cluster.LongQueryTime)
 	return nil
 }
 

@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -37,6 +38,7 @@ var _ memberlist.Delegate = &GossipMemberSet{}
 
 // GossipMemberSet represents a gossip implementation of MemberSet using memberlist.
 type GossipMemberSet struct {
+	mu         sync.RWMutex
 	memberlist *memberlist.Memberlist
 	handler    pilosa.BroadcastHandler
 
@@ -51,6 +53,9 @@ type GossipMemberSet struct {
 
 // Nodes implements the MemberSet interface and returns a list of nodes in the cluster.
 func (g *GossipMemberSet) Nodes() []*pilosa.Node {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
 	a := make([]*pilosa.Node, 0, g.memberlist.NumMembers())
 	for _, n := range g.memberlist.Members() {
 		uri, _ := pilosa.NewURIFromAddress(n.Name)
@@ -78,13 +83,17 @@ func (g *GossipMemberSet) Open() error {
 	}
 
 	err := error(nil)
+	g.mu.Lock()
 	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
+	g.mu.Unlock()
 	if err != nil {
 		return err
 	}
 
 	g.broadcasts = &memberlist.TransmitLimitedQueue{
 		NumNodes: func() int {
+			g.mu.RLock()
+			defer g.mu.RUnlock()
 			return g.memberlist.NumMembers()
 		},
 		RetransmitMult: 3,
@@ -98,7 +107,9 @@ func (g *GossipMemberSet) Open() error {
 	// attach to gossip seed node
 	nodes := []*pilosa.Node{&pilosa.Node{URI: *uri}} //TODO: support a list of seeds
 
+	g.mu.RLock()
 	err = g.joinWithRetry(pilosa.NodeSet(pilosa.Nodes(nodes).URIs()).ToHostPortStrings())
+	g.mu.RUnlock()
 	if err != nil {
 		return err
 	}
@@ -142,81 +153,26 @@ type gossipConfig struct {
 	memberlistConfig *memberlist.Config
 }
 
-// newTransport returns a NetTransport based on the memberlist configuration.
-// It will dynamically bind to a port if conf.BindPort is 0.
-// This is useful for test cases where specifiying a port is not reasonable.
-func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
-	if conf.LogOutput != nil && conf.Logger != nil {
-		return nil, fmt.Errorf("Cannot specify both LogOutput and Logger. Please choose a single log configuration setting.")
-	}
+// NewGossipMemberSetWithTransport returns a new instance of GossipMemberSet given a Transport.
+func NewGossipMemberSetWithTransport(name string, gossipHost string, transport *Transport, gossipSeed string, server *pilosa.Server, secretKey []byte) (*GossipMemberSet, error) {
+	port := transport.Net.GetAutoBindPort()
 
-	logDest := conf.LogOutput
-	if logDest == nil {
-		logDest = os.Stderr
-	}
-
-	logger := conf.Logger
-	if logger == nil {
-		logger = log.New(logDest, "", log.LstdFlags)
-	}
-
-	nc := &memberlist.NetTransportConfig{
-		BindAddrs: []string{conf.BindAddr},
-		BindPort:  conf.BindPort,
-		Logger:    logger,
-	}
-
-	// See comment below for details about the retry in here.
-	makeNetRetry := func(limit int) (*memberlist.NetTransport, error) {
-		var err error
-		for try := 0; try < limit; try++ {
-			var nt *memberlist.NetTransport
-			if nt, err = memberlist.NewNetTransport(nc); err == nil {
-				return nt, nil
-			}
-			if strings.Contains(err.Error(), "address already in use") {
-				logger.Printf("[DEBUG] Got bind error: %v", err)
-				continue
-			}
-		}
-
-		return nil, fmt.Errorf("failed to obtain an address: %v", err)
-	}
-
-	// The dynamic bind port operation is inherently racy because
-	// even though we are using the kernel to find a port for us, we
-	// are attempting to bind multiple protocols (and potentially
-	// multiple addresses) with the same port number. We build in a
-	// few retries here since this often gets transient errors in
-	// busy unit tests.
-	limit := 1
-	if conf.BindPort == 0 {
-		limit = 10
-	}
-
-	nt, err := makeNetRetry(limit)
-	if err != nil {
-		return nil, fmt.Errorf("Could not set up network transport: %v", err)
-	}
-	if conf.BindPort == 0 {
-		port := nt.GetAutoBindPort()
-		conf.BindPort = port
-		conf.AdvertisePort = port
-		logger.Printf("[DEBUG] Using dynamic bind port %d", port)
-	}
-
-	return nt, nil
-}
-
-// NewGossipMemberSet returns a new instance of GossipMemberSet.
-func NewGossipMemberSet(name string, gossipHost string, gossipPort int, gossipSeed string, server *pilosa.Server, secretKey []byte) (*GossipMemberSet, error) {
 	g := &GossipMemberSet{
 		LogOutput: server.LogOutput,
 	}
 
+	// memberlist config
 	conf := memberlist.DefaultLocalConfig()
-	conf.BindPort = gossipPort
-	conf.AdvertisePort = gossipPort
+	conf.Transport = transport.Net
+	conf.BindPort = port
+	conf.AdvertisePort = port
+	conf.Name = name
+	conf.BindAddr = gossipHost
+	conf.AdvertiseAddr = pilosa.HostToIP(gossipHost)
+	//conf.PushPullInterval = 0 * time.Second // Default is 15s in DefaultLocalConfig.
+	conf.Delegate = g
+	conf.SecretKey = secretKey
+	conf.Events = server.Cluster.EventReceiver.(memberlist.EventDelegate)
 
 	//TODO: pull memberlist config from pilosa.cfg file
 	g.config = &gossipConfig{
@@ -224,30 +180,25 @@ func NewGossipMemberSet(name string, gossipHost string, gossipPort int, gossipSe
 		gossipSeed:       gossipSeed,
 	}
 
-	g.config.memberlistConfig.Name = name
-	g.config.memberlistConfig.BindAddr = gossipHost
-	g.config.memberlistConfig.AdvertiseAddr = pilosa.HostToIP(gossipHost)
-	g.config.memberlistConfig.AdvertisePort = gossipPort
-	//g.config.memberlistConfig.PushPullInterval = 0 * time.Second // Default is 15s in DefaultLocalConfig.
-	g.config.memberlistConfig.Delegate = g
-	g.config.memberlistConfig.SecretKey = secretKey
-	g.config.memberlistConfig.Events = server.Cluster.EventReceiver.(memberlist.EventDelegate)
-
 	g.statusHandler = server
-
-	// set up the transport
-	transport, err := newTransport(g.config.memberlistConfig)
-	if err != nil {
-		return nil, err
-	}
-	g.config.memberlistConfig.Transport = transport
 
 	// If no gossipSeed is provided, use local host:port.
 	if gossipSeed == "" {
-		g.config.gossipSeed = fmt.Sprintf("%s:%d", gossipHost, g.config.memberlistConfig.BindPort)
+		g.config.gossipSeed = fmt.Sprintf("%s:%d", gossipHost, port)
 	}
 
 	return g, nil
+}
+
+// NewGossipMemberSet returns a new instance of GossipMemberSet given a gossip port.
+func NewGossipMemberSet(name string, gossipHost string, gossipPort int, gossipSeed string, server *pilosa.Server, secretKey []byte) (*GossipMemberSet, error) {
+	// set up the transport
+	transport, err := NewTransport(gossipHost, gossipPort)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewGossipMemberSetWithTransport(name, gossipHost, transport, gossipSeed, server, secretKey)
 }
 
 // SendSync implementation of the Broadcaster interface.
@@ -431,4 +382,103 @@ func (b *broadcast) Finished() {
 	if b.notify != nil {
 		close(b.notify)
 	}
+}
+
+// Transport is a gossip transport for binding to a port.
+type Transport struct {
+	//memberlist.Transport
+	Net *memberlist.NetTransport
+	URI *pilosa.URI
+}
+
+// NewTransport returns a NetTransport based on the given host and port.
+// It will dynamically bind to a port if port is 0.
+// This is useful for test cases where specifiying a port is not reasonable.
+//func NewTransport(host string, port int) (*memberlist.NetTransport, error) {
+func NewTransport(host string, port int) (*Transport, error) {
+	// memberlist config
+	conf := memberlist.DefaultLocalConfig()
+	conf.BindAddr = host
+	conf.BindPort = port
+	conf.AdvertisePort = port
+
+	net, err := newTransport(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	uri, err := pilosa.NewURIFromHostPort(host, uint16(net.GetAutoBindPort()))
+	if err != nil {
+		return nil, err
+	}
+
+	return &Transport{
+		Net: net,
+		URI: uri,
+	}, nil
+}
+
+// newTransport returns a NetTransport based on the memberlist configuration.
+// It will dynamically bind to a port if conf.BindPort is 0.
+func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
+	if conf.LogOutput != nil && conf.Logger != nil {
+		return nil, fmt.Errorf("Cannot specify both LogOutput and Logger. Please choose a single log configuration setting.")
+	}
+
+	logDest := conf.LogOutput
+	if logDest == nil {
+		logDest = os.Stderr
+	}
+
+	logger := conf.Logger
+	if logger == nil {
+		logger = log.New(logDest, "", log.LstdFlags)
+	}
+
+	nc := &memberlist.NetTransportConfig{
+		BindAddrs: []string{conf.BindAddr},
+		BindPort:  conf.BindPort,
+		Logger:    logger,
+	}
+
+	// See comment below for details about the retry in here.
+	makeNetRetry := func(limit int) (*memberlist.NetTransport, error) {
+		var err error
+		for try := 0; try < limit; try++ {
+			var nt *memberlist.NetTransport
+			if nt, err = memberlist.NewNetTransport(nc); err == nil {
+				return nt, nil
+			}
+			if strings.Contains(err.Error(), "address already in use") {
+				logger.Printf("[DEBUG] Got bind error: %v", err)
+				continue
+			}
+		}
+
+		return nil, fmt.Errorf("failed to obtain an address: %v", err)
+	}
+
+	// The dynamic bind port operation is inherently racy because
+	// even though we are using the kernel to find a port for us, we
+	// are attempting to bind multiple protocols (and potentially
+	// multiple addresses) with the same port number. We build in a
+	// few retries here since this often gets transient errors in
+	// busy unit tests.
+	limit := 1
+	if conf.BindPort == 0 {
+		limit = 10
+	}
+
+	nt, err := makeNetRetry(limit)
+	if err != nil {
+		return nil, fmt.Errorf("Could not set up network transport: %v", err)
+	}
+	if conf.BindPort == 0 {
+		port := nt.GetAutoBindPort()
+		conf.BindPort = port
+		conf.AdvertisePort = port
+		logger.Printf("[DEBUG] Using dynamic bind port %d", port)
+	}
+
+	return nt, nil
 }
