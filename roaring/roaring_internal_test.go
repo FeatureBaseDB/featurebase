@@ -1714,7 +1714,8 @@ func TestDifferenceRunRun(t *testing.T) {
 
 func TestWriteReadArray(t *testing.T) {
 	ca := &container{array: []uint16{1, 10, 100, 1000}, n: 4, containerType: ContainerArray}
-	ba := &Bitmap{keys: []uint64{0}, containers: []*container{ca}}
+	ba := &Bitmap{}
+	ba.conts.Put(0, ca)
 	ba2 := &Bitmap{}
 	var buf bytes.Buffer
 	_, err := ba.WriteTo(&buf)
@@ -1725,8 +1726,8 @@ func TestWriteReadArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error unmarshaling: %v", err)
 	}
-	if !reflect.DeepEqual(ba2.containers[0].array, ca.array) {
-		t.Fatalf("array test expected %x, but got %x", ca.array, ba2.containers[0].array)
+	if !reflect.DeepEqual(ba2.conts.Get(0).array, ca.array) {
+		t.Fatalf("array test expected %x, but got %x", ca.array, ba2.conts.Get(0).array)
 	}
 }
 
@@ -1736,7 +1737,8 @@ func TestWriteReadBitmap(t *testing.T) {
 	for i := 0; i < 129; i++ {
 		cb.bitmap[i] = 0x5555555555555555
 	}
-	bb := &Bitmap{keys: []uint64{0}, containers: []*container{cb}}
+	bb := &Bitmap{}
+	bb.conts.Put(0, cb)
 	bb2 := &Bitmap{}
 	var buf bytes.Buffer
 	_, err := bb.WriteTo(&buf)
@@ -1747,8 +1749,8 @@ func TestWriteReadBitmap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error unmarshaling: %v", err)
 	}
-	if !reflect.DeepEqual(bb2.containers[0].bitmap, cb.bitmap) {
-		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.containers[0].bitmap)
+	if !reflect.DeepEqual(bb2.conts.Get(0).bitmap, cb.bitmap) {
+		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.conts.Get(0).bitmap)
 	}
 }
 
@@ -1758,7 +1760,8 @@ func TestWriteReadFullBitmap(t *testing.T) {
 	for i := 0; i < bitmapN; i++ {
 		cb.bitmap[i] = 0xffffffffffffffff
 	}
-	bb := &Bitmap{keys: []uint64{0}, containers: []*container{cb}}
+	bb := &Bitmap{}
+	bb.conts.Put(0, cb)
 	bb2 := &Bitmap{}
 	var buf bytes.Buffer
 	_, err := bb.WriteTo(&buf)
@@ -1769,21 +1772,22 @@ func TestWriteReadFullBitmap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error unmarshaling: %v", err)
 	}
-	if !reflect.DeepEqual(bb2.containers[0].bitmap, cb.bitmap) {
-		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.containers[0].bitmap)
+	if !reflect.DeepEqual(bb2.conts.Get(0).bitmap, cb.bitmap) {
+		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.conts.Get(0).bitmap)
 	}
 
-	if bb2.containers[0].n != cb.n {
-		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.containers[0].n)
+	if bb2.conts.Get(0).n != cb.n {
+		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.conts.Get(0).n)
 	}
-	if bb2.containers[0].count() != cb.count() {
-		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.containers[0].n)
+	if bb2.conts.Get(0).count() != cb.count() {
+		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.conts.Get(0).n)
 	}
 }
 
 func TestWriteReadRun(t *testing.T) {
 	cr := &container{runs: []interval16{{start: 3, last: 13}, {start: 100, last: 109}}, n: 21, containerType: ContainerRun}
-	br := &Bitmap{keys: []uint64{0}, containers: []*container{cr}}
+	br := &Bitmap{}
+	br.conts.Put(0, cr)
 	br2 := &Bitmap{}
 	var buf bytes.Buffer
 	_, err := br.WriteTo(&buf)
@@ -1794,8 +1798,8 @@ func TestWriteReadRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error unmarshaling: %v", err)
 	}
-	if !reflect.DeepEqual(br2.containers[0].runs, cr.runs) {
-		t.Fatalf("run test expected %x, but got %x", cr.runs, br2.containers[0].runs)
+	if !reflect.DeepEqual(br2.conts.Get(0).runs, cr.runs) {
+		t.Fatalf("run test expected %x, but got %x", cr.runs, br2.conts.Get(0).runs)
 	}
 }
 
@@ -2086,34 +2090,34 @@ func TestXorBitmapRun(t *testing.T) {
 func TestIteratorArray(t *testing.T) {
 	// use values that span two containers
 	b := NewBitmap(0, 1, 10, 100, 1000, 10000, 90000, 100000)
-	if !b.containers[0].isArray() {
+	if !b.conts.Get(0).isArray() {
 		t.Fatalf("wrong container type")
 	}
 
 	itr := b.Iterator()
-	if !(itr.i == 0 && itr.j == -1) {
+	if !(itr.key == 0 && itr.j == -1) {
 		t.Fatalf("iterator did not zero correctly: %v\n", itr)
 	}
 
 	itr.Seek(1000)
-	if !(itr.i == 0 && itr.j == 3) {
+	if !(itr.key == 0 && itr.j == 3) {
 		t.Fatalf("iterator did not seek correctly: %v\n", itr)
 	}
 
 	itr.Seek(10000)
 	itr.Next()
 	val, eof := itr.Next()
-	if !(itr.i == 1 && itr.j == 0 && val == 90000 && !eof) {
+	if !(itr.key == 1 && itr.j == 0 && val == 90000 && !eof) {
 		t.Fatalf("iterator did not next correctly across containers: %v\n", itr)
 	}
 
 	itr.Seek(80000)
-	if !(itr.i == 1 && itr.j == -1) {
+	if !(itr.key == 1 && itr.j == -1) {
 		t.Fatalf("iterator did not seek missing value correctly: %v\n", itr)
 	}
 
 	itr.Seek(100000)
-	if !(itr.i == 1 && itr.j == 0) {
+	if !(itr.key == 1 && itr.j == 0) {
 		t.Fatalf("iterator did not seek correctly in multiple containers: %v\n", itr)
 	}
 
@@ -2139,34 +2143,34 @@ func TestIteratorBitmap(t *testing.T) {
 	for i := uint64(75000); i < 75100; i++ {
 		b.Add(i)
 	}
-	if !b.containers[0].isBitmap() {
+	if !b.conts.Get(0).isBitmap() {
 		t.Fatalf("wrong container type")
 	}
 
 	itr := b.Iterator()
-	if !(itr.i == 0 && itr.j == -1) {
+	if !(itr.key == 0 && itr.j == -1) {
 		t.Fatalf("iterator did not zero correctly: %v\n", itr)
 	}
 
 	itr.Seek(65000)
-	if !(itr.i == 0 && itr.j == 64999) {
+	if !(itr.key == 0 && itr.j == 64999) {
 		t.Fatalf("iterator did not seek correctly: %v\n", itr)
 	}
 
 	itr.Seek(65535)
 	itr.Next()
 	val, eof := itr.Next()
-	if !(itr.i == 1 && itr.j == 0 && val == 65536 && !eof) {
+	if !(itr.key == 1 && itr.j == 0 && val == 65536 && !eof) {
 		t.Fatalf("iterator did not next correctly across containers: %v\n", itr)
 	}
 
 	itr.Seek(74000)
-	if !(itr.i == 1 && itr.j == 8463) {
+	if !(itr.key == 1 && itr.j == 8463) {
 		t.Fatalf("iterator did not seek missing value correctly: %v\n", itr)
 	}
 
 	itr.Seek(70999)
-	if !(itr.i == 1 && itr.j == 5462) {
+	if !(itr.key == 1 && itr.j == 5462) {
 		t.Fatalf("iterator did not seek correctly in multiple containers: %v\n", itr)
 	}
 
@@ -2185,17 +2189,17 @@ func TestIteratorBitmap(t *testing.T) {
 func TestIteratorRuns(t *testing.T) {
 	b := NewBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 100003, 100004, 100005)
 	b.Optimize()
-	if !b.containers[0].isRun() {
+	if !b.conts.Get(0).isRun() {
 		t.Fatalf("wrong container type")
 	}
 
 	itr := b.Iterator()
-	if !(itr.i == 0 && itr.j == 0 && itr.k == -1) {
+	if !(itr.key == 0 && itr.j == 0 && itr.k == -1) {
 		t.Fatalf("iterator did not zero correctly: %v\n", itr)
 	}
 
 	itr.Seek(4)
-	if !(itr.i == 0 && itr.j == 0 && itr.k == 3) {
+	if !(itr.key == 0 && itr.j == 0 && itr.k == 3) {
 		t.Fatalf("iterator did not seek correctly: %v\n", itr)
 	}
 	itr.Next()
@@ -2218,22 +2222,22 @@ func TestIteratorRuns(t *testing.T) {
 	}
 
 	itr.Seek(500)
-	if !(itr.i == 0 && itr.j == 1 && itr.k == -1) {
+	if !(itr.key == 0 && itr.j == 1 && itr.k == -1) {
 		t.Fatalf("iterator did not seek missing value correctly: %v\n", itr)
 	}
 
 	itr.Seek(1004)
-	if !(itr.i == 0 && itr.j == 1 && itr.k == 3) {
+	if !(itr.key == 0 && itr.j == 1 && itr.k == 3) {
 		t.Fatalf("iterator did not seek correctly in multiple runs: %v\n", itr)
 	}
 
 	itr.Seek(1005)
-	if !(itr.i == 0 && itr.j == 1 && itr.k == 4) {
+	if !(itr.key == 0 && itr.j == 1 && itr.k == 4) {
 		t.Fatalf("iterator did not seek correctly to end of run: %v\n", itr)
 	}
 
 	itr.Seek(100005)
-	if !(itr.i == 1 && itr.j == 0 && itr.k == 4) {
+	if !(itr.key == 1 && itr.j == 0 && itr.k == 4) {
 		t.Fatalf("iterator did not seek correctly in multiple containers: %v\n", itr)
 	}
 

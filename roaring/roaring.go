@@ -62,10 +62,42 @@ const (
 	maxContainerVal = 0xffff
 )
 
+type Containers interface {
+	// Get returns nil if the key does not exist.
+	Get(key uint64) *container
+
+	// Put adds the container at key.
+	Put(key uint64, c *container)
+
+	// Remove takes the container at key out.
+	Remove(key uint64)
+
+	// GetOrCreate returns the container at key, creating a new empty container if necessary.
+	GetOrCreate(key uint64) *container
+
+	// Clone does a deep copy of Containers, including cloning all containers contained.
+	Clone() Containers
+
+	// Last returns the highest key and associated container.
+	Last() (key uint64, c *container)
+
+	// Size returns the number of containers stored.
+	Size() int
+
+	// Iterator returns a Contiterator which after a call to Next(), a call to Value() will
+	// return the first container at or after key. found will be true if a
+	// container is found at key.
+	Iterator(key uint64) (citer Contiterator, found bool)
+}
+
+type Contiterator interface {
+	Next() bool
+	Value() (uint64, *container)
+}
+
 // Bitmap represents a roaring bitmap.
 type Bitmap struct {
-	keys       []uint64     // keys for containers
-	containers []*container // array, bitmap and RLE containers
+	conts Containers
 
 	// Number of operations written to the writer.
 	opN int
@@ -90,14 +122,7 @@ func (b *Bitmap) Clone() *Bitmap {
 
 	// Create a copy of the bitmap structure.
 	other := &Bitmap{
-		keys:       make([]uint64, len(b.keys)),
-		containers: make([]*container, len(b.containers)),
-	}
-
-	// Copy keys & clone containers.
-	copy(other.keys, b.keys)
-	for i, c := range b.containers {
-		other.containers[i] = c.clone()
+		conts: b.conts.Clone(),
 	}
 
 	return other
@@ -127,20 +152,13 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 
 func (b *Bitmap) add(v uint64) bool {
 	hb := highbits(v)
-	i := search64(b.keys, hb)
-
-	// If index is negative then there's not an exact match
-	// and a container needs to be added.
-	if i < 0 {
-		b.insertAt(hb, newContainer(), -i-1)
-		i = -i - 1
-	}
-	return b.containers[i].add(lowbits(v))
+	cont := b.conts.GetOrCreate(hb)
+	return cont.add(lowbits(v))
 }
 
 // Contains returns true if v is in the bitmap.
 func (b *Bitmap) Contains(v uint64) bool {
-	c := b.container(highbits(v))
+	c := b.conts.Get(highbits(v))
 	if c == nil {
 		return false
 	}
@@ -168,76 +186,75 @@ func (b *Bitmap) Remove(a ...uint64) (changed bool, err error) {
 }
 
 func (b *Bitmap) remove(v uint64) bool {
-	hb := highbits(v)
-	i := search64(b.keys, hb)
-	if i < 0 {
+	c := b.conts.Get(highbits(v))
+	if c == nil {
 		return false
 	}
-	return b.containers[i].remove(lowbits(v))
+	// TODO - do nil check inside c.remove?
+	return c.remove(lowbits(v))
 }
 
 // Max returns the highest value in the bitmap.
 // Returns zero if the bitmap is empty.
 func (b *Bitmap) Max() uint64 {
-	if len(b.keys) == 0 {
+	if b.conts.Size() == 0 {
 		return 0
 	}
 
-	hb := b.keys[len(b.keys)-1]
-	lb := b.containers[len(b.containers)-1].max()
+	hb, c := b.conts.Last()
+	lb := c.max()
 	return hb<<16 | uint64(lb)
 }
 
 // Count returns the number of bits set in the bitmap.
 func (b *Bitmap) Count() (n uint64) {
-	for _, container := range b.containers {
-		n += uint64(container.n)
+	citer, _ := b.conts.Iterator(0)
+	for citer.Next() {
+		_, c := citer.Value()
+		n += uint64(c.n)
 	}
 	return n
 }
 
 // CountRange returns the number of bits set between [start, end).
 func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
-	if len(b.keys) == 0 {
+	if b.conts.Size() == 0 {
 		return
 	}
 
 	skey := highbits(start)
 	ekey := highbits(end)
 
-	i := search64(b.keys, skey)
-	j := search64(b.keys, ekey)
-
+	citer, found := b.conts.Iterator(highbits(start))
 	// If range is entirely in one container then just count that range.
-	if i >= 0 && i == j {
-		return uint64(b.containers[i].countRange(int(lowbits(start)), int(lowbits(end))))
+	if found && skey == ekey {
+		citer.Next()
+		_, c := citer.Value()
+		return uint64(c.countRange(int(lowbits(start)), int(lowbits(end))))
 	}
 
-	if i < 0 {
-		// start's container did not exist
-		// set i to the index of the first container we have with values higher than start
-		i = -i - 1
-	} else {
-		// Count first partial container and advance i so we don't recount it
-		n += uint64(b.containers[i].countRange(int(lowbits(start)), maxContainerVal+1))
-		i++
+	for citer.Next() {
+		k, c := citer.Value()
+		if k < skey {
+			// TODO remove once we've validated this stuff works
+			panic("should be impossible for k to be less than skey")
+		}
+		if k == skey {
+			n += uint64(c.countRange(int(lowbits(start)), maxContainerVal+1))
+			continue
+		}
+		if k < ekey {
+			n += uint64(c.n)
+			continue
+		}
+		if k == ekey {
+			n += uint64(c.countRange(0, int(lowbits(end))))
+			break
+		}
+		if k > ekey {
+			break
+		}
 	}
-
-	// Count last container.
-	if j < 0 {
-		// end's container did not exist
-		// set j to the index of the first container with values higher than end (or len(containers))
-		j = -j - 1
-	} else {
-		// end's container exists, count it up to end
-		n += uint64(b.containers[j].countRange(0, int(lowbits(end))))
-	}
-
-	// Count containers in between.
-	for x := i; x < j; x++ {
-		n += uint64(b.containers[x].n)
-	}
-
 	return n
 }
 
@@ -295,44 +312,21 @@ func (b *Bitmap) OffsetRange(offset, start, end uint64) *Bitmap {
 
 	off := highbits(offset)
 	hi0, hi1 := highbits(start), highbits(end)
-
-	// Find starting container.
-	n := len(b.containers)
-	i := sort.Search(n, func(i int) bool { return b.keys[i] >= hi0 })
-
+	citer, _ := b.conts.Iterator(hi0)
 	var other Bitmap
-	for ; i < n; i++ {
-		key := b.keys[i]
-
-		// If we've exceeded the upper bound then exit.
-		if key >= hi1 {
+	for citer.Next() {
+		k, c := citer.Value()
+		if k >= hi1 {
 			break
 		}
-
-		// Otherwise append container with offset key.
-		other.keys = append(other.keys, off+(key-hi0))
-		other.containers = append(other.containers, b.containers[i])
+		other.conts.Put(off+(k-hi0), c)
 	}
 	return &other
 }
 
 // container returns the container with the given key.
 func (b *Bitmap) container(key uint64) *container {
-	i := search64(b.keys, key)
-	if i < 0 {
-		return nil
-	}
-	return b.containers[i]
-}
-
-func (b *Bitmap) insertAt(key uint64, c *container, i int) {
-	b.keys = append(b.keys, 0)
-	copy(b.keys[i+1:], b.keys[i:])
-	b.keys[i] = key
-
-	b.containers = append(b.containers, nil)
-	copy(b.containers[i+1:], b.containers[i:])
-	b.containers[i] = c
+	return b.conts.Get(key)
 }
 
 // IntersectionCount returns the number of set bits that would result in an
@@ -340,15 +334,23 @@ func (b *Bitmap) insertAt(key uint64, c *container, i int) {
 // intersecting the two and counting the result.
 func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 	var n uint64
-	for i, j := 0, 0; i < len(b.containers) && j < len(other.containers); {
-		ki, kj := b.keys[i], other.keys[j]
+	iiter, _ := b.conts.Iterator(0)
+	jiter, _ := b.conts.Iterator(0)
+	i, j := iiter.Next(), jiter.Next()
+	ki, ci := iiter.Value()
+	kj, cj := jiter.Value()
+	for i && j {
 		if ki < kj {
-			i++
+			i = iiter.Next()
+			ki, ci = iiter.Value()
 		} else if ki > kj {
-			j++
+			j = jiter.Next()
+			kj, cj = jiter.Value()
 		} else {
-			n += uint64(intersectionCount(b.containers[i], other.containers[j]))
-			i, j = i+1, j+1
+			n += uint64(intersectionCount(ci, cj))
+			i, j = iiter.Next(), jiter.Next()
+			ki, ci = iiter.Value()
+			kj, cj = jiter.Value()
 		}
 	}
 	return n
@@ -357,30 +359,25 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 // Intersect returns the intersection of b and other.
 func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	output := &Bitmap{}
-
-	ki, ci := b.keys, b.containers
-	kj, cj := other.keys, other.containers
-	for {
-		var key uint64
-		var container *container
-
-		ni, nj := len(ki), len(kj)
-		if ni == 0 && nj == 0 { // eof(i,j)
-			break
-		} else if ni == 0 || (nj != 0 && ki[0] > kj[0]) { // eof(i) or i > j
-			kj, cj = kj[1:], cj[1:]
-		} else if nj == 0 || (ki[0] < kj[0]) { // eof(j) or i < j
-			ki, ci = ki[1:], ci[1:]
-		} else { // i == j
-			key, container = ki[0], intersect(ci[0], cj[0])
-			ki, ci = ki[1:], ci[1:]
-			kj, cj = kj[1:], cj[1:]
-			output.keys = append(output.keys, key)
-			output.containers = append(output.containers, container)
+	iiter, _ := b.conts.Iterator(0)
+	jiter, _ := b.conts.Iterator(0)
+	i, j := iiter.Next(), jiter.Next()
+	ki, ci := iiter.Value()
+	kj, cj := jiter.Value()
+	for i && j {
+		if ki < kj {
+			i = iiter.Next()
+			ki, ci = iiter.Value()
+		} else if ki > kj {
+			j = jiter.Next()
+			kj, cj = jiter.Value()
+		} else { // ki == kj
+			output.conts.Put(ki, intersect(ci, cj))
+			i, j = iiter.Next(), jiter.Next()
+			ki, ci = iiter.Value()
+			kj, cj = jiter.Value()
 		}
-
 	}
-
 	return output
 }
 
@@ -388,32 +385,27 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 	output := &Bitmap{}
 
-	ki, ci := b.keys, b.containers
-	kj, cj := other.keys, other.containers
-
-	for {
-		var key uint64
-		var container *container
-
-		ni, nj := len(ki), len(kj)
-		if ni == 0 && nj == 0 { // eof(i,j)
-			break
-		} else if ni == 0 || (nj != 0 && ki[0] > kj[0]) { // eof(i) or i > j
-			key, container = kj[0], cj[0].clone()
-			kj, cj = kj[1:], cj[1:]
-		} else if nj == 0 || (ki[0] < kj[0]) { // eof(j) or i < j
-			key, container = ki[0], ci[0].clone()
-			ki, ci = ki[1:], ci[1:]
-		} else { // i == j
-			key, container = ki[0], union(ci[0], cj[0])
-			ki, ci = ki[1:], ci[1:]
-			kj, cj = kj[1:], cj[1:]
+	iiter, _ := b.conts.Iterator(0)
+	jiter, _ := b.conts.Iterator(0)
+	i, j := iiter.Next(), jiter.Next()
+	ki, ci := iiter.Value()
+	kj, cj := jiter.Value()
+	for i || j {
+		if !j || ki < kj {
+			output.conts.Put(ki, ci.clone())
+			i = iiter.Next()
+			ki, ci = iiter.Value()
+		} else if !i || ki > kj {
+			output.conts.Put(kj, cj.clone())
+			j = jiter.Next()
+			kj, cj = jiter.Value()
+		} else { // ki == kj
+			output.conts.Put(ki, union(ci, cj))
+			i, j = iiter.Next(), jiter.Next()
+			ki, ci = iiter.Value()
+			kj, cj = jiter.Value()
 		}
-
-		output.keys = append(output.keys, key)
-		output.containers = append(output.containers, container)
 	}
-
 	return output
 }
 
@@ -421,30 +413,24 @@ func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 	output := &Bitmap{}
 
-	ki, ci := b.keys, b.containers
-	kj, cj := other.keys, other.containers
-
-	ni, nj := len(ki), len(kj)
-	i, j := 0, 0
-	for {
-		var key uint64
-		var container *container
-
-		if ni == i { // eof(i)
-			break
-		} else if nj == j || ki[i] < kj[j] { // eof(j) or i < j
-			key, container = ki[i], ci[i].clone()
-			i++
-			output.keys = append(output.keys, key)
-			output.containers = append(output.containers, container)
-		} else if nj > j && ki[i] > kj[j] { // i > j
-			j++
-		} else { // i == j
-			key, container = ki[i], difference(ci[i], cj[j])
-			i++
-			j++
-			output.keys = append(output.keys, key)
-			output.containers = append(output.containers, container)
+	iiter, _ := b.conts.Iterator(0)
+	jiter, _ := b.conts.Iterator(0)
+	i, j := iiter.Next(), jiter.Next()
+	ki, ci := iiter.Value()
+	kj, cj := jiter.Value()
+	for i || j {
+		if !j || ki < kj {
+			output.conts.Put(ki, ci.clone())
+			i = iiter.Next()
+			ki, ci = iiter.Value()
+		} else if !i || ki > kj {
+			j = jiter.Next()
+			kj, cj = jiter.Value()
+		} else { // ki == kj
+			output.conts.Put(ki, difference(ci, cj))
+			i, j = iiter.Next(), jiter.Next()
+			ki, ci = iiter.Value()
+			kj, cj = jiter.Value()
 		}
 	}
 	return output
@@ -454,68 +440,57 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 	output := &Bitmap{}
 
-	ki, ci := b.keys, b.containers
-	kj, cj := other.keys, other.containers
-
-	for {
-		var key uint64
-		var container *container
-
-		ni, nj := len(ki), len(kj)
-		if ni == 0 && nj == 0 { // eof(i,j)
-			break
-		} else if ni == 0 || (nj != 0 && ki[0] > kj[0]) { // eof(i) or i > j
-			key, container = kj[0], cj[0].clone()
-			kj, cj = kj[1:], cj[1:]
-		} else if nj == 0 || (ki[0] < kj[0]) { // eof(j) or i < j
-			key, container = ki[0], ci[0].clone()
-			ki, ci = ki[1:], ci[1:]
-		} else { // i == j
-			key, container = ki[0], xor(ci[0], cj[0])
-			ki, ci = ki[1:], ci[1:]
-			kj, cj = kj[1:], cj[1:]
+	iiter, _ := b.conts.Iterator(0)
+	jiter, _ := b.conts.Iterator(0)
+	i, j := iiter.Next(), jiter.Next()
+	ki, ci := iiter.Value()
+	kj, cj := jiter.Value()
+	for i || j {
+		if !j || ki < kj {
+			output.conts.Put(ki, ci.clone())
+			i = iiter.Next()
+			ki, ci = iiter.Value()
+		} else if !i || ki > kj {
+			output.conts.Put(kj, cj.clone())
+			j = jiter.Next()
+			kj, cj = jiter.Value()
+		} else { // ki == kj
+			output.conts.Put(ki, xor(ci, cj))
+			i, j = iiter.Next(), jiter.Next()
+			ki, ci = iiter.Value()
+			kj, cj = jiter.Value()
 		}
-
-		output.keys = append(output.keys, key)
-		output.containers = append(output.containers, container)
 	}
-
 	return output
 }
 
 // removeEmptyContainers deletes all containers that have a count of zero.
 func (b *Bitmap) removeEmptyContainers() {
-	for i := 0; i < len(b.containers); {
-		c := b.containers[i]
-
+	citer, _ := b.conts.Iterator(0)
+	for citer.Next() {
+		k, c := citer.Value()
 		if c.n == 0 {
-			b.keys = append(b.keys[:i], b.keys[i+1:]...)
-
-			copy(b.containers[i:], b.containers[i+1:])
-			b.containers[len(b.containers)-1] = nil
-			b.containers = b.containers[:len(b.containers)-1]
-			continue
+			b.conts.Remove(k)
 		}
-
-		i++
 	}
 }
 func (b *Bitmap) countEmptyContainers() int {
 	result := 0
-	for i := 0; i < len(b.containers); {
-		c := b.containers[i]
-
+	citer, _ := b.conts.Iterator(0)
+	for citer.Next() {
+		_, c := citer.Value()
 		if c.n == 0 {
 			result++
 		}
-		i++
 	}
 	return result
 }
 
 // Optimize converts array and bitmap containers to run containers as necessary.
 func (b *Bitmap) Optimize() {
-	for _, c := range b.containers {
+	citer, _ := b.conts.Iterator(0)
+	for citer.Next() {
+		_, c := citer.Value()
 		c.Optimize()
 	}
 }
@@ -561,7 +536,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	// Remove empty containers before persisting.
 	//b.removeEmptyContainers()
 
-	containerCount := len(b.keys) - b.countEmptyContainers()
+	containerCount := b.conts.Size() - b.countEmptyContainers()
 	headerSize := headerBaseSize
 	byte2 := make([]byte, 2)
 	byte4 := make([]byte, 4)
@@ -580,9 +555,9 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Descriptive header section: encode keys and cardinality.
 	// Key and cardinality are stored interleaved here, 12 bytes per container.
-	for i, key := range b.keys {
-		c := b.containers[i]
-
+	citer, _ := b.conts.Iterator(0)
+	for citer.Next() {
+		key, c := citer.Value()
 		// Verify container count before writing.
 		// TODO: instead of commenting this out, we need to make it a configuration option
 		//count := c.count()
@@ -592,17 +567,20 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 			ew.WriteUint16(byte2, uint16(c.containerType))
 			ew.WriteUint16(byte2, uint16(c.n-1))
 		}
+
 	}
 
 	// Offset header section: write the offset for each container block.
 	// 4 bytes per container.
 	offset := uint32(headerSize + (containerCount * (8 + 2 + 2 + 4)))
-	for _, c := range b.containers {
-
+	citer, _ = b.conts.Iterator(0)
+	for citer.Next() {
+		_, c := citer.Value()
 		if c.n > 0 {
 			ew.WriteUint32(byte4, offset)
 			offset += uint32(c.size())
 		}
+
 	}
 	if ew.err != nil {
 		return int64(ew.n), ew.err
@@ -611,7 +589,9 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	n = int64(headerSize + (containerCount * (8 + 2 + 2 + 4)))
 
 	// Container storage section: write each container block.
-	for _, c := range b.containers {
+	citer, _ = b.conts.Iterator(0)
+	for citer.Next() {
+		_, c := citer.Value()
 		if c.n > 0 {
 			nn, err := c.WriteTo(w)
 			n += nn
@@ -620,7 +600,6 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 			}
 		}
 	}
-
 	return n, nil
 }
 
@@ -644,42 +623,20 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	// Read key count in bytes sizeof(cookie):(sizeof(cookie)+sizeof(uint32)).
 	keyN := binary.LittleEndian.Uint32(data[4:8])
 
-	if len(b.keys) == 0 {
-		b.keys = make([]uint64, 0, keyN)
-		b.containers = make([]*container, 0, keyN)
-	} else if int(keyN) < len(b.keys) { //shrink
-		// nil out to allow to be GCed
-		for i := range b.containers[keyN:] {
-			b.containers[int(keyN)+i] = nil
-		}
-		b.keys = b.keys[:keyN]
-		b.containers = b.containers[:keyN]
-	}
-
 	headerSize := headerBaseSize
 
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
-		// Reuse memory if possible
-		if i >= len(b.keys) {
-			b.keys = append(b.keys, binary.LittleEndian.Uint64(buf[0:8]))
-			b.containers = append(b.containers, &container{
-				containerType: byte(binary.LittleEndian.Uint16(buf[8:10])),
-				n:             int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
-				mapped:        true,
-			})
-		} else {
-			b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
-			c := b.containers[i]
-			c.containerType = byte(binary.LittleEndian.Uint16(buf[8:10]))
-			c.n = int(binary.LittleEndian.Uint16(buf[10:12])) + 1
-			c.mapped = true
-
-		}
+		b.conts.Put(binary.LittleEndian.Uint64(buf[0:8]), &container{
+			containerType: byte(binary.LittleEndian.Uint16(buf[8:10])),
+			n:             int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
+			mapped:        true,
+		})
 	}
 	opsOffset := headerSize + int(keyN)*12
 
 	// Read container offsets and attach data.
+	citer, _ := b.conts.Iterator(0)
 	for i, buf := 0, data[opsOffset:]; i < int(keyN); i, buf = i+1, buf[4:] {
 		offset := binary.LittleEndian.Uint32(buf[0:4])
 		// Verify the offset is within the bounds of the input data.
@@ -688,7 +645,8 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		}
 
 		// Map byte slice directly to the container data.
-		c := b.containers[i]
+		citer.Next()
+		_, c := citer.Value()
 		switch c.containerType {
 		case ContainerRun:
 			c.array = nil
@@ -760,15 +718,16 @@ func (b *Bitmap) Iterator() *Iterator {
 func (b *Bitmap) Info() BitmapInfo {
 	info := BitmapInfo{
 		OpN:        b.opN,
-		Containers: make([]ContainerInfo, len(b.containers)),
+		Containers: make([]ContainerInfo, 0, b.conts.Size()),
 	}
 
-	for i, c := range b.containers {
+	citer, _ := b.conts.Iterator(0)
+	for citer.Next() {
+		k, c := citer.Value()
 		ci := c.info()
-		ci.Key = b.keys[i]
-		info.Containers[i] = ci
+		ci.Key = k
+		info.Containers = append(info.Containers, ci)
 	}
-
 	return info
 }
 
@@ -776,16 +735,12 @@ func (b *Bitmap) Info() BitmapInfo {
 func (b *Bitmap) Check() error {
 	var a ErrorList
 
-	// Check keys/containers match. Return immediately if this happens.
-	if len(b.keys) != len(b.containers) {
-		a.Append(fmt.Errorf("key/container count mismatch: %d != %d", len(b.keys), len(b.containers)))
-		return a
-	}
-
 	// Check each container.
-	for i, c := range b.containers {
+	citer, _ := b.conts.Iterator(0)
+	for citer.Next() {
+		k, c := citer.Value()
 		if err := c.check(); err != nil {
-			a.AppendWithPrefix(err, fmt.Sprintf("%d/", b.keys[i]))
+			a.AppendWithPrefix(err, fmt.Sprintf("%d/", k))
 		}
 	}
 
@@ -831,12 +786,12 @@ type BitmapInfo struct {
 
 // Iterator represents an iterator over a Bitmap.
 type Iterator struct {
-	bitmap  *Bitmap
-	i, j, k int // i: container; j: array index, bit index, or run index; k: offset within the run
+	bitmap *Bitmap
+	citer  Contiterator
+	key    uint64
+	c      *container
+	j, k   int // i: container; j: array index, bit index, or run index; k: offset within the run
 }
-
-// eof returns true if the iterator is at the end of the bitmap.
-func (itr *Iterator) eof() bool { return itr.i >= len(itr.bitmap.containers) }
 
 // Seek moves to the first value equal to or greater than `seek`.
 func (itr *Iterator) Seek(seek uint64) {
@@ -845,45 +800,45 @@ func (itr *Iterator) Seek(seek uint64) {
 	itr.k = -1
 
 	// Move to the correct container.
-	itr.i = search64(itr.bitmap.keys, highbits(seek))
-	if itr.i < 0 {
-		itr.i = -itr.i - 1
+	itr.citer, _ = itr.bitmap.conts.Iterator(seek)
+	if !itr.citer.Next() {
+		itr.c = nil
+		return // eof
 	}
-	if itr.eof() {
-		return
-	}
+	itr.key, itr.c = itr.citer.Value()
 
 	// Move to the correct value index inside the container.
 	lb := lowbits(seek)
-	if itr.i >= len(itr.bitmap.containers) {
-		panic(fmt.Sprintf("data Corruption %d %d %d", itr.i, len(itr.bitmap.containers), seek))
-	}
-	c := itr.bitmap.containers[itr.i]
-	if c.isArray() {
+	if itr.c.isArray() {
 		// Find index in the container.
-		itr.j = search32(c.array, lb)
+		itr.j = search32(itr.c.array, lb)
 		if itr.j < 0 {
 			itr.j = -itr.j - 1
 		}
-		if itr.j < len(c.array) {
+		if itr.j < len(itr.c.array) {
 			itr.j--
 			return
 		}
 
 		// If it's at the end of the container then move to the next one.
-		itr.i, itr.j = itr.i+1, -1
+		if !itr.citer.Next() {
+			itr.c = nil
+			return
+		}
+		itr.key, itr.c = itr.citer.Value()
+		itr.j = -1
 		return
 	}
 
-	if c.isRun() {
+	if itr.c.isRun() {
 		if seek == 0 {
-			itr.i, itr.j, itr.k = 0, 0, -1
+			itr.j, itr.k = 0, -1
 		}
 
-		j, contains := binSearchRuns(lb, c.runs)
+		j, contains := binSearchRuns(lb, itr.c.runs)
 		if contains {
 			itr.j = j
-			itr.k = int(lb) - int(c.runs[j].start) - 1
+			itr.k = int(lb) - int(itr.c.runs[j].start) - 1
 		} else {
 			// Set iterator to next value in the Bitmap.
 			itr.j = j
@@ -900,24 +855,27 @@ func (itr *Iterator) Seek(seek uint64) {
 // Next returns the next value in the bitmap.
 // Returns eof as true if there are no values left in the iterator.
 func (itr *Iterator) Next() (v uint64, eof bool) {
+	if itr.c == nil {
+		return
+	}
 	// Iterate over containers until we find the next value or EOF.
 	for {
-		if itr.eof() {
-			return 0, true
-		}
-
-		c := itr.bitmap.containers[itr.i]
-		if c.isArray() {
-			if itr.j >= c.n-1 {
+		if itr.c.isArray() {
+			if itr.j >= itr.c.n-1 {
 				// Reached end of array, move to the next container.
-				itr.i, itr.j = itr.i+1, -1
+				if !itr.citer.Next() {
+					itr.c = nil
+					return 0, true
+				}
+				itr.key, itr.c = itr.citer.Value()
+				itr.j = -1
 				continue
 			}
 			itr.j++
 			return itr.peek(), false
 		}
 
-		if c.isRun() {
+		if itr.c.isRun() {
 			// Because itr.j for an array container defaults to -1
 			// but defaults to 0 for a run container, we need to
 			// standardize on treating -1 as our default value for itr.j.
@@ -930,12 +888,17 @@ func (itr *Iterator) Next() (v uint64, eof bool) {
 			}
 
 			// If the container is empty, move to the next container.
-			if len(c.runs) == 0 {
-				itr.i, itr.j = itr.i+1, -1
+			if len(itr.c.runs) == 0 {
+				if !itr.citer.Next() {
+					itr.c = nil
+					return 0, true
+				}
+				itr.key, itr.c = itr.citer.Value()
+				itr.j = -1
 				continue
 			}
 
-			r := c.runs[itr.j]
+			r := itr.c.runs[itr.j]
 			runLength := int(r.last - r.start)
 
 			if itr.k >= runLength {
@@ -943,9 +906,14 @@ func (itr *Iterator) Next() (v uint64, eof bool) {
 				itr.j, itr.k = itr.j+1, -1
 			}
 
-			if itr.j >= len(c.runs) {
+			if itr.j >= len(itr.c.runs) {
 				// Reached end of runs, move to the next container.
-				itr.i, itr.j = itr.i+1, -1
+				if !itr.citer.Next() {
+					itr.c = nil
+					return 0, true
+				}
+				itr.key, itr.c = itr.citer.Value()
+				itr.j = -1
 				continue
 			}
 
@@ -959,40 +927,51 @@ func (itr *Iterator) Next() (v uint64, eof bool) {
 		// Find first non-zero bit in current bitmap, if possible.
 		hb := itr.j >> 6
 
-		if hb >= len(c.bitmap) {
-			itr.i, itr.j = itr.i+1, -1
+		if hb >= len(itr.c.bitmap) {
+			if !itr.citer.Next() {
+				itr.c = nil
+				return 0, true
+			}
+			itr.key, itr.c = itr.citer.Value()
+			itr.j = -1
 			continue
 		}
-		lb := c.bitmap[hb] >> (uint(itr.j) % 64)
+		lb := itr.c.bitmap[hb] >> (uint(itr.j) % 64)
 		if lb != 0 {
 			itr.j = itr.j + trailingZeroN(lb)
 			return itr.peek(), false
 		}
 
 		// Otherwise iterate through remaining bitmaps to find next bit.
-		for hb++; hb < len(c.bitmap); hb++ {
-			if c.bitmap[hb] != 0 {
-				itr.j = hb<<6 + trailingZeroN(c.bitmap[hb])
+		for hb++; hb < len(itr.c.bitmap); hb++ {
+			if itr.c.bitmap[hb] != 0 {
+				itr.j = hb<<6 + trailingZeroN(itr.c.bitmap[hb])
 				return itr.peek(), false
 			}
 		}
 
 		// If no bits found then move to the next container.
-		itr.i, itr.j = itr.i+1, -1
+		if !itr.citer.Next() {
+			itr.c = nil
+			return 0, true
+		}
+		itr.key, itr.c = itr.citer.Value()
+		itr.j = -1
 	}
 }
 
 // peek returns the current value.
 func (itr *Iterator) peek() uint64 {
-	key := itr.bitmap.keys[itr.i]
-	c := itr.bitmap.containers[itr.i]
-	if c.isArray() {
-		return key<<16 | uint64(c.array[itr.j])
+	if itr.c == nil {
+		return 0
 	}
-	if c.isRun() {
-		return key<<16 | uint64(c.runs[itr.j].start+uint16(itr.k))
+	if itr.c.isArray() {
+		return itr.key<<16 | uint64(itr.c.array[itr.j])
 	}
-	return key<<16 | uint64(itr.j)
+	if itr.c.isRun() {
+		return itr.key<<16 | uint64(itr.c.runs[itr.j].start+uint16(itr.k))
+	}
+	return itr.key<<16 | uint64(itr.j)
 }
 
 // ArrayMaxSize represents the maximum size of array containers.
