@@ -523,18 +523,40 @@ func (b *Bitmap) Optimize() {
 }
 
 //hoping this in-lines
-func WriteUint16(w io.Writer, b []byte, v uint16) (int, error) {
-	binary.LittleEndian.PutUint16(b, v)
-	return w.Write(b)
-}
-func WriteUint32(w io.Writer, b []byte, v uint32) (int, error) {
-	binary.LittleEndian.PutUint32(b, v)
-	return w.Write(b)
+
+type errWriter struct {
+	w   io.Writer
+	err error
+	n   int
 }
 
-func WriteUint64(w io.Writer, b []byte, v uint64) (int, error) {
+func (ew *errWriter) WriteUint16(w io.Writer, b []byte, v uint16) {
+	if ew.err != nil {
+		return
+	}
+	var n int
+	binary.LittleEndian.PutUint16(b, v)
+	n, ew.err = w.Write(b)
+	ew.n += n
+}
+func (ew *errWriter) WriteUint32(w io.Writer, b []byte, v uint32) {
+	if ew.err != nil {
+		return
+	}
+	var n int
+	binary.LittleEndian.PutUint32(b, v)
+	n, ew.err = w.Write(b)
+	ew.n += n
+}
+
+func (ew *errWriter) WriteUint64(w io.Writer, b []byte, v uint64) {
+	if ew.err != nil {
+		return
+	}
+	var n int
 	binary.LittleEndian.PutUint64(b, v)
-	return w.Write(b)
+	n, ew.err = w.Write(b)
+	ew.n += n
 }
 
 // WriteTo writes b to w.
@@ -552,9 +574,13 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	// Build header before writing individual container blocks.
 	// Metadata for each container is 8+2+2+4 = sizeof(key) + sizeof(containerType)+sizeof(cardinality) + sizeof(file offset)
 	// Cookie header section.
+	ew := &errWriter{
+		w: w,
+		n: 0,
+	}
 
-	WriteUint32(w, byte4, cookie)
-	WriteUint32(w, byte4, uint32(containerCount))
+	ew.WriteUint32(w, byte4, cookie)
+	ew.WriteUint32(w, byte4, uint32(containerCount))
 
 	// Descriptive header section: encode keys and cardinality.
 	// Key and cardinality are stored interleaved here, 12 bytes per container.
@@ -566,9 +592,9 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		//count := c.count()
 		//assert(c.count() == c.n, "cannot write container count, mismatch: count=%d, n=%d", count, c.n)
 		if c.n > 0 {
-			WriteUint64(w, byte8, uint64(key))
-			WriteUint16(w, byte2, uint16(c.containerType))
-			WriteUint16(w, byte2, uint16(c.n-1))
+			ew.WriteUint64(w, byte8, uint64(key))
+			ew.WriteUint16(w, byte2, uint16(c.containerType))
+			ew.WriteUint16(w, byte2, uint16(c.n-1))
 		}
 	}
 
@@ -578,15 +604,15 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	for _, c := range b.containers {
 
 		if c.n > 0 {
-			WriteUint32(w, byte4, uint32(offset))
+			ew.WriteUint32(w, byte4, uint32(offset))
 			offset += uint32(c.size())
 		}
 	}
+	if ew.err != nil {
+		return int64(ew.n), ew.err
+	}
 
 	n = int64(headerSize + (containerCount * (8 + 2 + 2 + 4)))
-	if err != nil {
-		return n, err
-	}
 
 	// Container storage section: write each container block.
 	for _, c := range b.containers {
@@ -1692,8 +1718,8 @@ func (c *container) runWriteTo(w io.Writer) (n int64, err error) {
 		return 0, nil
 	}
 	var byte2 [2]byte
-
-	_, err = WriteUint16(w, byte2[:], uint16(len(c.runs)))
+	binary.LittleEndian.PutUint16(byte2[:], uint16(len(c.runs)))
+	_, err = w.Write(byte2[:])
 	if err != nil {
 		return 0, err
 	}
