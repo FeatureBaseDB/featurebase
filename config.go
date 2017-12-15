@@ -26,6 +26,9 @@ const (
 )
 
 const (
+	// DefaultDataDir is the default data directory.
+	DefaultDataDir = "~/.pilosa"
+
 	// DefaultHost is the default hostname to use.
 	DefaultHost = "localhost"
 
@@ -106,6 +109,8 @@ const (
 	DefaultGossipGossipInterval      = 200 * time.Millisecond
 	DefaultGossipGossipNodes         = 3
 	DefaultGossipGossipToTheDeadTime = 30 * time.Second
+
+	DefaultMetricPollInterval = 0 * time.Minute
 )
 
 // ClusterTypes set of cluster types.
@@ -130,6 +135,23 @@ type Config struct {
 	// GossipSeed DEPRECATED
 	GossipSeed string `toml:"gossip-seed"`
 
+	// Limits the number of mutating commands that can be in a single request to
+	// the server. This includes SetBit, ClearBit, SetRowAttrs & SetColumnAttrs.
+	MaxWritesPerRequest int `toml:"max-writes-per-request"`
+
+	LogPath string `toml:"log-path"`
+
+	// TLS
+	TLS TLSConfig
+
+	Cluster struct {
+		Coordinator   string   `toml:"coordinator"`
+		ReplicaN      int      `toml:"replicas"`
+		Type          string   `toml:"type"`
+		Hosts         []string `toml:"hosts"`
+		LongQueryTime Duration `toml:"long-query-time"`
+	} `toml:"cluster"`
+
 	Gossip struct {
 		Port                string   `toml:"port"`
 		Seed                string   `toml:"seed"`
@@ -144,24 +166,9 @@ type Config struct {
 		GossipToTheDeadTime Duration `toml:"gossip-to-the-dead-time"`
 	} `toml:"gossip"`
 
-	Cluster struct {
-		Coordinator   string   `toml:"coordinator"`
-		ReplicaN      int      `toml:"replicas"`
-		Type          string   `toml:"type"`
-		Hosts         []string `toml:"hosts"`
-		PollInterval  Duration `toml:"poll-interval"`
-		LongQueryTime Duration `toml:"long-query-time"`
-	} `toml:"cluster"`
-
 	AntiEntropy struct {
 		Interval Duration `toml:"interval"`
 	} `toml:"anti-entropy"`
-
-	// Limits the number of mutating commands that can be in a single request to
-	// the server. This includes SetBit, ClearBit, SetRowAttrs & SetColumnAttrs.
-	MaxWritesPerRequest int `toml:"max-writes-per-request"`
-
-	LogPath string `toml:"log-path"`
 
 	Metric struct {
 		Service      string   `toml:"service"`
@@ -169,25 +176,29 @@ type Config struct {
 		PollInterval Duration `toml:"poll-interval"`
 		Diagnostics  bool     `toml:"diagnostics"`
 	} `toml:"metric"`
-
-	TLS TLSConfig
 }
 
 // NewConfig returns an instance of Config with default options.
 func NewConfig() *Config {
 	c := &Config{
-		Bind:                DefaultHost + ":" + DefaultPort,
+		DataDir:             DefaultDataDir,
+		Bind:                ":" + DefaultPort,
 		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
+		// LogPath: "",
+		TLS: TLSConfig{},
 	}
+
+	// Cluster config.
+	// c.Cluster.Coordinator = ""
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.Type = DefaultClusterType
 	c.Cluster.Hosts = []string{}
-	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
-	c.Metric.Service = DefaultMetrics
-	c.Metric.Diagnostics = true
-	c.TLS = TLSConfig{}
+	c.Cluster.LongQueryTime = Duration(time.Minute)
 
-	// Gossip related config.
+	// Gossip config.
+	// c.Gossip.Port = ""
+	// c.Gossip.Seed = ""
+	// c.Gossip.Key = ""
 	c.Gossip.StreamTimeout = Duration(DefaultGossipStreamTimeout)
 	c.Gossip.SuspicionMult = DefaultGossipSuspicionMult
 	c.Gossip.PushPullInterval = Duration(DefaultGossipPushPullInterval)
@@ -196,6 +207,15 @@ func NewConfig() *Config {
 	c.Gossip.GossipNodes = DefaultGossipGossipNodes
 	c.Gossip.GossipInterval = Duration(DefaultGossipGossipInterval)
 	c.Gossip.GossipToTheDeadTime = Duration(DefaultGossipGossipToTheDeadTime)
+
+	// AntiEntropy config.
+	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
+
+	// Metric config.
+	c.Metric.Service = DefaultMetrics
+	// c.Metric.Host = ""
+	c.Metric.PollInterval = Duration(DefaultMetricPollInterval)
+	c.Metric.Diagnostics = true
 
 	return c
 }
