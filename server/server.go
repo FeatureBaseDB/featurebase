@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -236,21 +235,6 @@ func (m *Command) SetupNetworking() error {
 		if err != nil {
 			return err
 		}
-		gossipSeed := pilosa.DefaultHost + ":" + pilosa.DefaultGossipPort
-		// Config.GossipSeed is deprecated, so Config.Gossip.Seed has priority
-		if m.Config.Gossip.Seed != "" {
-			gossipSeed = m.Config.Gossip.Seed
-		} else if m.Config.GossipSeed != "" {
-			gossipSeed = m.Config.GossipSeed
-		}
-
-		var gossipKey []byte
-		if m.Config.Gossip.Key != "" {
-			gossipKey, err = ioutil.ReadFile(m.Config.Gossip.Key)
-			if err != nil {
-				return err
-			}
-		}
 
 		// get the host portion of addr to use for binding
 		gossipHost := m.Server.URI.Host()
@@ -268,7 +252,7 @@ func (m *Command) SetupNetworking() error {
 		if m.Server.Name == "" {
 			return fmt.Errorf("must provide a valid name for gossip membership")
 		}
-		gossipMemberSet, err := gossip.NewGossipMemberSetWithTransport(m.Server.Name, gossipHost, transport, gossipSeed, m.Server, gossipKey)
+		gossipMemberSet, err := gossip.NewGossipMemberSetWithTransport(m.Server.Name, m.Config, transport, m.Server)
 		if err != nil {
 			return err
 		}

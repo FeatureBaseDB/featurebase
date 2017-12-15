@@ -17,8 +17,11 @@ package gossip
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -154,51 +157,82 @@ type gossipConfig struct {
 }
 
 // NewGossipMemberSetWithTransport returns a new instance of GossipMemberSet given a Transport.
-func NewGossipMemberSetWithTransport(name string, gossipHost string, transport *Transport, gossipSeed string, server *pilosa.Server, secretKey []byte) (*GossipMemberSet, error) {
-	port := transport.Net.GetAutoBindPort()
+func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport *Transport, server *pilosa.Server) (*GossipMemberSet, error) {
 
 	g := &GossipMemberSet{
 		LogOutput: server.LogOutput,
 	}
 
+	port := transport.Net.GetAutoBindPort()
+	host, _, err := net.SplitHostPort(cfg.Bind)
+	if err != nil {
+		return nil, err
+	}
+
+	var gossipKey []byte
+	if cfg.Gossip.Key != "" {
+		gossipKey, err = ioutil.ReadFile(cfg.Gossip.Key)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// memberlist config
 	conf := memberlist.DefaultLocalConfig()
 	conf.Transport = transport.Net
+	conf.Name = name
+	conf.BindAddr = host
 	conf.BindPort = port
 	conf.AdvertisePort = port
-	conf.Name = name
-	conf.BindAddr = gossipHost
-	conf.AdvertiseAddr = pilosa.HostToIP(gossipHost)
-	//conf.PushPullInterval = 0 * time.Second // Default is 15s in DefaultLocalConfig.
+	conf.AdvertiseAddr = pilosa.HostToIP(host)
+	//
+	conf.TCPTimeout = time.Duration(cfg.Gossip.StreamTimeout)
+	conf.SuspicionMult = cfg.Gossip.SuspicionMult
+	conf.PushPullInterval = time.Duration(cfg.Gossip.PushPullInterval)
+	conf.ProbeTimeout = time.Duration(cfg.Gossip.ProbeTimeout)
+	conf.ProbeInterval = time.Duration(cfg.Gossip.ProbeInterval)
+	conf.GossipNodes = cfg.Gossip.GossipNodes
+	conf.GossipInterval = time.Duration(cfg.Gossip.GossipInterval)
+	conf.GossipToTheDeadTime = time.Duration(cfg.Gossip.GossipToTheDeadTime)
+	//
 	conf.Delegate = g
-	conf.SecretKey = secretKey
+	conf.SecretKey = gossipKey
 	conf.Events = server.Cluster.EventReceiver.(memberlist.EventDelegate)
 
-	//TODO: pull memberlist config from pilosa.cfg file
 	g.config = &gossipConfig{
 		memberlistConfig: conf,
-		gossipSeed:       gossipSeed,
+		gossipSeed:       cfg.Gossip.Seed,
 	}
 
 	g.statusHandler = server
 
 	// If no gossipSeed is provided, use local host:port.
-	if gossipSeed == "" {
-		g.config.gossipSeed = fmt.Sprintf("%s:%d", gossipHost, port)
+	if cfg.Gossip.Seed == "" {
+		g.config.gossipSeed = fmt.Sprintf("%s:%d", host, port)
 	}
 
 	return g, nil
 }
 
 // NewGossipMemberSet returns a new instance of GossipMemberSet given a gossip port.
-func NewGossipMemberSet(name string, gossipHost string, gossipPort int, gossipSeed string, server *pilosa.Server, secretKey []byte) (*GossipMemberSet, error) {
-	// set up the transport
-	transport, err := NewTransport(gossipHost, gossipPort)
+func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server) (*GossipMemberSet, error) {
+
+	port, err := strconv.Atoi(cfg.Gossip.Port)
+	if err != nil {
+		return nil, err
+	}
+	host, _, err := net.SplitHostPort(cfg.Bind)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewGossipMemberSetWithTransport(name, gossipHost, transport, gossipSeed, server, secretKey)
+	// Set up the transport.
+	transport, err := NewTransport(host, port)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewGossipMemberSetWithTransport(name, cfg, transport, server)
 }
 
 // SendSync implementation of the Broadcaster interface.
@@ -472,12 +506,6 @@ func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
 	nt, err := makeNetRetry(limit)
 	if err != nil {
 		return nil, fmt.Errorf("Could not set up network transport: %v", err)
-	}
-	if conf.BindPort == 0 {
-		port := nt.GetAutoBindPort()
-		conf.BindPort = port
-		conf.AdvertisePort = port
-		logger.Printf("[DEBUG] Using dynamic bind port %d", port)
 	}
 
 	return nt, nil

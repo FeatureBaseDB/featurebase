@@ -27,7 +27,7 @@ import (
 )
 
 // Ensure program can send/receive broadcast messages.
-func TestMain_XSendReceiveMessage(t *testing.T) {
+func TestMain_SendReceiveMessage(t *testing.T) {
 
 	m0 := MustRunMain()
 	defer m0.Close()
@@ -45,14 +45,13 @@ func TestMain_XSendReceiveMessage(t *testing.T) {
 	// Configure node0
 
 	// get the host portion of addr to use for binding
-	gossipHost := m0.Server.URI.Host()
-	gossipPort := 0
-	gossipSeed := ""
+	m0.Config.Gossip.Port = "0"
+	m0.Config.Gossip.Seed = ""
 
 	m0.Server.Cluster.Coordinator = m0.Server.URI
 	m0.Server.Cluster.Topology = &pilosa.Topology{NodeSet: []pilosa.URI{m0.Server.URI, m1.Server.URI}}
 	m0.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
-	gossipMemberSet0, err := gossip.NewGossipMemberSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server, nil)
+	gossipMemberSet0, err := gossip.NewGossipMemberSet(m0.Server.URI.HostPort(), m0.Config, m0.Server)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,13 +73,12 @@ func TestMain_XSendReceiveMessage(t *testing.T) {
 	// Configure node1
 
 	// get the host portion of addr to use for binding
-	gossipHost = m1.Server.URI.Host()
-	gossipPort = 0
-	gossipSeed = gossipMemberSet0.Seed()
+	m1.Config.Gossip.Port = "0"
+	m1.Config.Gossip.Seed = gossipMemberSet0.Seed()
 
 	m1.Server.Cluster.Coordinator = m0.Server.URI
 	m1.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
-	gossipMemberSet1, err := gossip.NewGossipMemberSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server, nil)
+	gossipMemberSet1, err := gossip.NewGossipMemberSet(m1.Server.URI.HostPort(), m1.Config, m1.Server)
 	if err != nil {
 		t.Fatal(err)
 	}
