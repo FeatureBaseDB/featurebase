@@ -522,40 +522,38 @@ func (b *Bitmap) Optimize() {
 	}
 }
 
-//hoping this in-lines
-
 type errWriter struct {
 	w   io.Writer
 	err error
 	n   int
 }
 
-func (ew *errWriter) WriteUint16(w io.Writer, b []byte, v uint16) {
+func (ew *errWriter) WriteUint16(b []byte, v uint16) {
 	if ew.err != nil {
 		return
 	}
 	var n int
 	binary.LittleEndian.PutUint16(b, v)
-	n, ew.err = w.Write(b)
+	n, ew.err = ew.w.Write(b)
 	ew.n += n
 }
-func (ew *errWriter) WriteUint32(w io.Writer, b []byte, v uint32) {
+func (ew *errWriter) WriteUint32(b []byte, v uint32) {
 	if ew.err != nil {
 		return
 	}
 	var n int
 	binary.LittleEndian.PutUint32(b, v)
-	n, ew.err = w.Write(b)
+	n, ew.err = ew.w.Write(b)
 	ew.n += n
 }
 
-func (ew *errWriter) WriteUint64(w io.Writer, b []byte, v uint64) {
+func (ew *errWriter) WriteUint64(b []byte, v uint64) {
 	if ew.err != nil {
 		return
 	}
 	var n int
 	binary.LittleEndian.PutUint64(b, v)
-	n, ew.err = w.Write(b)
+	n, ew.err = ew.w.Write(b)
 	ew.n += n
 }
 
@@ -579,8 +577,8 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		n: 0,
 	}
 
-	ew.WriteUint32(w, byte4, cookie)
-	ew.WriteUint32(w, byte4, uint32(containerCount))
+	ew.WriteUint32(byte4, cookie)
+	ew.WriteUint32(byte4, uint32(containerCount))
 
 	// Descriptive header section: encode keys and cardinality.
 	// Key and cardinality are stored interleaved here, 12 bytes per container.
@@ -592,9 +590,9 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		//count := c.count()
 		//assert(c.count() == c.n, "cannot write container count, mismatch: count=%d, n=%d", count, c.n)
 		if c.n > 0 {
-			ew.WriteUint64(w, byte8, uint64(key))
-			ew.WriteUint16(w, byte2, uint16(c.containerType))
-			ew.WriteUint16(w, byte2, uint16(c.n-1))
+			ew.WriteUint64(byte8, uint64(key))
+			ew.WriteUint16(byte2, uint16(c.containerType))
+			ew.WriteUint16(byte2, uint16(c.n-1))
 		}
 	}
 
@@ -604,7 +602,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	for _, c := range b.containers {
 
 		if c.n > 0 {
-			ew.WriteUint32(w, byte4, uint32(offset))
+			ew.WriteUint32(byte4, uint32(offset))
 			offset += uint32(c.size())
 		}
 	}
