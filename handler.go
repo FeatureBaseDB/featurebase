@@ -51,14 +51,15 @@ import (
 
 // Handler represents an HTTP handler.
 type Handler struct {
-	Holder        *Holder
-	Broadcaster   Broadcaster
-	StatusHandler StatusHandler
+	Holder           *Holder
+	Broadcaster      Broadcaster
+	BroadcastHandler BroadcastHandler
+	StatusHandler    StatusHandler
 
 	// Local hostname & cluster configuration.
-	URI           *URI
-	Cluster       *Cluster
-	ClientOptions *ClientOptions
+	URI          *URI
+	Cluster      *Cluster
+	RemoteClient *http.Client
 
 	Router *mux.Router
 
@@ -140,6 +141,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
+	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
@@ -487,6 +489,8 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		h.logger().Printf("problem sending CreateIndex message: %s", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// Encode response.
@@ -1510,11 +1514,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create a client for the remote cluster.
-	client, err := NewClientFromURI(host, h.ClientOptions)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	client := NewInternalHTTPClientFromURI(host, h.RemoteClient)
 
 	// Determine the maximum number of slices.
 	maxSlices, err := client.MaxSliceByIndex(r.Context())
@@ -1768,8 +1768,7 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Validation the input definition with the curent index's ColumnLabel.
-	if err := req.Validate(index.ColumnLabel()); err != nil {
+	if err := req.Validate(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1916,10 +1915,9 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 	for _, field := range inputDef.Fields() {
 		validFields[field.Name] = true
 		if field.PrimaryKey {
-			columnLabel := field.Name
-			value, ok := req[columnLabel]
+			value, ok := req[field.Name]
 			if !ok {
-				return nil, fmt.Errorf("columnLabel required")
+				return nil, fmt.Errorf("primary key does not exist")
 			}
 			rawValue, ok := value.(float64) // The default JSON marshalling will interpret this as a float
 			if !ok {
@@ -1997,6 +1995,7 @@ func GetTimeStamp(data map[string]interface{}, timeField string) (int64, error) 
 
 	return v.Unix(), nil
 }
+
 func (h *Handler) handleGetIndexAttributes(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	index := h.Holder.Index(indexName)
@@ -2076,3 +2075,39 @@ func (h *Handler) handlePostFrameAttr(w http.ResponseWriter, r *http.Request) {
 		h.logger().Printf("write response error: %s", err)
 	}
 }
+
+func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		fmt.Println("**unsupported media type**")
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Marshal into request object.
+	pb, err := UnmarshalMessage(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Forward the error message.
+	err = h.BroadcastHandler.ReceiveMessage(pb)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+type defaultClusterMessageResponse struct{}

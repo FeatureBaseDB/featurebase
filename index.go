@@ -666,7 +666,7 @@ type importData struct {
 
 type importValueData struct {
 	ColumnIDs []uint64
-	Values    []uint64
+	Values    []int64
 }
 
 // CreateInputDefinition creates a new input definition.
@@ -685,7 +685,8 @@ func (i *Index) createInputDefinition(pb *internal.InputDefinition) (*InputDefin
 
 	for _, fr := range pb.Frames {
 		opt := FrameOptions{
-			RowLabel:       fr.Meta.RowLabel,
+			// Deprecating row labels per #810. So, setting the default row label here.
+			RowLabel:       DefaultRowLabel,
 			InverseEnabled: fr.Meta.InverseEnabled,
 			CacheType:      fr.Meta.CacheType,
 			CacheSize:      fr.Meta.CacheSize,

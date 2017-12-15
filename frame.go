@@ -882,7 +882,7 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 }
 
 // ImportValue bulk imports range-encoded value data.
-func (f *Frame) ImportValue(fieldName string, columnIDs, values []uint64) error {
+func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64) error {
 	// Verify that this frame is range-encoded.
 	if !f.RangeEnabled() {
 		return fmt.Errorf("Frame not RangeEnabled: %s", f.name)
@@ -930,7 +930,12 @@ func (f *Frame) ImportValue(fieldName string, columnIDs, values []uint64) error 
 			return err
 		}
 
-		if err := frag.ImportValue(data.ColumnIDs, data.Values, field.BitDepth()); err != nil {
+		baseValues := make([]uint64, len(data.Values))
+		for i, value := range data.Values {
+			baseValues[i] = uint64(value - field.Min)
+		}
+
+		if err := frag.ImportValue(data.ColumnIDs, baseValues, field.BitDepth()); err != nil {
 			return err
 		}
 	}
@@ -1104,7 +1109,7 @@ func (f *Field) BitDepth() uint {
 
 // BaseValue adjusts the value to align with the range for Field for a certain
 // operation type.
-// TODO: there is an edge case for GT and LT where this returns a baseValue
+// Note: There is an edge case for GT and LT where this returns a baseValue
 // that does not fully encompass the range.
 // ex: Field.Min = 0, Field.Max = 1023
 // BaseValue(LT, 2000) returns 1023, which will perform "LT 1023" and effectively
@@ -1112,6 +1117,8 @@ func (f *Field) BitDepth() uint {
 // Note that in this case (because the range uses the full BitDepth 0 to 1023),
 // we can't simply return 1024.
 // In order to make this work, we effectively need to change the operator to LTE.
+// Executor.executeFieldRangeSlice() takes this into account and returns
+// `frag.FieldNotNull(field.BitDepth())` in such instances.
 func (f *Field) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
 	if op == pql.GT || op == pql.GTE {
 		if value > f.Max {

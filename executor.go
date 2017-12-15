@@ -15,16 +15,13 @@
 package pilosa
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"sort"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
@@ -47,25 +44,17 @@ type Executor struct {
 	Host    string
 	Cluster *Cluster
 
-	// Client used for remote HTTP requests.
-	HTTPClient *http.Client
+	// Client used for remote requests.
+	client InternalClient
 
 	// Maximum number of SetBit() or ClearBit() commands per request.
 	MaxWritesPerRequest int
 }
 
 // NewExecutor returns a new instance of Executor.
-func NewExecutor(clientOptions *ClientOptions) *Executor {
-	if clientOptions == nil {
-		clientOptions = &ClientOptions{}
-	}
-	transport := &http.Transport{}
-	if clientOptions.TLS != nil {
-		transport.TLSClientConfig = clientOptions.TLS
-	}
-	client := &http.Client{Transport: transport}
+func NewExecutor(remoteClient *http.Client) *Executor {
 	return &Executor{
-		HTTPClient: client,
+		client: NewInternalHTTPClientFromURI(nil, remoteClient),
 	}
 }
 
@@ -812,6 +801,12 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 			return NewBitmap(), nil
 		}
 
+		// LT[E] and GT[E] should return all not-null if selected range fully encompases valid field range.
+		if (cond.Op == pql.LT && value > field.Max) || (cond.Op == pql.LTE && value >= field.Max) ||
+			(cond.Op == pql.GT && value < field.Min) || (cond.Op == pql.GTE && value <= field.Min) {
+			return frag.FieldNotNull(field.BitDepth())
+		}
+
 		// outOfRange for NEQ should return all not-null.
 		if outOfRange && cond.Op == pql.NEQ {
 			return frag.FieldNotNull(field.BitDepth())
@@ -977,7 +972,7 @@ func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.exec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt); err != nil {
+		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt); err != nil {
 			return false, err
 		} else {
 			ret = res[0].(bool)
@@ -1083,7 +1078,7 @@ func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.C
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.exec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt); err != nil {
+		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt); err != nil {
 			return false, err
 		} else {
 			ret = res[0].(bool)
@@ -1150,7 +1145,7 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
-			_, err := e.exec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
+			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
 			resp <- err
 		}(node)
 	}
@@ -1208,7 +1203,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
-			_, err := e.exec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
+			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
 			resp <- err
 		}(node)
 	}
@@ -1295,7 +1290,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
-			_, err := e.exec(ctx, node, index, &pql.Query{Calls: calls}, nil, opt)
+			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: calls}, nil, opt)
 			resp <- err
 		}(node)
 	}
@@ -1354,7 +1349,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
-			_, err := e.exec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
+			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
 			resp <- err
 		}(node)
 	}
@@ -1370,52 +1365,21 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 }
 
 // exec executes a PQL query remotely for a set of slices on a node.
-func (e *Executor) exec(ctx context.Context, node *Node, index string, q *pql.Query, slices []uint64, opt *ExecOptions) (results []interface{}, err error) {
+func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, slices []uint64, opt *ExecOptions) (results []interface{}, err error) {
 	// Encode request object.
 	pbreq := &internal.QueryRequest{
 		Query:  q.String(),
 		Slices: slices,
 		Remote: true,
 	}
-	buf, err := proto.Marshal(pbreq)
+	uri, err := NewURIFromAddress(node.Host)
 	if err != nil {
 		return nil, err
 	}
-
-	// Create HTTP request.
-	u := nodePathToURL(node, fmt.Sprintf("/index/%s/query", index))
-	u.Scheme = e.Scheme
-	req, err := http.NewRequest("POST", (&u).String(), bytes.NewReader(buf))
+	uri.SetScheme(node.Scheme)
+	ctx = context.WithValue(ctx, "uri", uri)
+	pb, err := e.client.ExecuteQuery(ctx, index, pbreq)
 	if err != nil {
-		return nil, err
-	}
-
-	// Require protobuf encoding.
-	req.Header.Set("Accept", "application/x-protobuf")
-	req.Header.Set("Content-Type", "application/x-protobuf")
-	req.Header.Set("User-Agent", "pilosa/"+Version)
-
-	// Send request to remote node.
-	resp, err := e.HTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Read response into buffer.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check status code.
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status Executor.exec: code=%d, err=%s, req: %v", resp.StatusCode, body, req)
-	}
-
-	// Decode response object.
-	var pb internal.QueryResponse
-	if err := proto.Unmarshal(body, &pb); err != nil {
 		return nil, err
 	}
 
@@ -1551,7 +1515,7 @@ func (e *Executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 			if n.Host == e.Host {
 				resp.result, resp.err = e.mapperLocal(ctx, nodeSlices, mapFn, reduceFn)
 			} else if !opt.Remote {
-				results, err := e.exec(ctx, n, index, &pql.Query{Calls: []*pql.Call{c}}, nodeSlices, opt)
+				results, err := e.remoteExec(ctx, n, index, &pql.Query{Calls: []*pql.Call{c}}, nodeSlices, opt)
 				if len(results) > 0 {
 					resp.result = results[0]
 				}

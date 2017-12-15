@@ -134,6 +134,11 @@ func (u *URI) Normalize() string {
 	return fmt.Sprintf("%s://%s:%d", scheme, u.host, u.port)
 }
 
+// String returns the address as a string.
+func (u URI) String() string {
+	return fmt.Sprintf("%s://%s:%d", u.scheme, u.host, u.port)
+}
+
 // Equals returns true if the checked URI is equivalent to this URI.
 func (u URI) Equals(other *URI) bool {
 	if other == nil {
@@ -142,6 +147,11 @@ func (u URI) Equals(other *URI) bool {
 	return u.scheme == other.scheme &&
 		u.host == other.host &&
 		u.port == other.port
+}
+
+// Path returns URI with path
+func (u *URI) Path(path string) string {
+	return fmt.Sprintf("%s%s", u.Normalize(), path)
 }
 
 // The following methods are required to implement pflag Value interface.

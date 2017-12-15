@@ -1,4 +1,4 @@
-FROM golang:1.9.1 as builder
+FROM golang:1.9.2 as builder
 
 ARG ldflags=''
 
@@ -18,4 +18,4 @@ EXPOSE 10101
 VOLUME /data
 
 ENTRYPOINT ["/pilosa"]
-CMD ["server", "--data-dir", "/data"]
+CMD ["server", "--data-dir", "/data", "--bind", "http://0.0.0.0:10101"]

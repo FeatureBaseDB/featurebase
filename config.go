@@ -60,10 +60,18 @@ type TLSConfig struct {
 
 // Config represents the configuration for the command.
 type Config struct {
-	DataDir    string `toml:"data-dir"`
-	Bind       string `toml:"bind"`
+	DataDir string `toml:"data-dir"`
+	Bind    string `toml:"bind"`
+	// GossipPort DEPRECATED
 	GossipPort string `toml:"gossip-port"`
+	// GossipSeed DEPRECATED
 	GossipSeed string `toml:"gossip-seed"`
+
+	Gossip struct {
+		Port string `toml:"port"`
+		Seed string `toml:"seed"`
+		Key  string `toml:"key"`
+	} `toml:"gossip"`
 
 	Cluster struct {
 		ReplicaN      int      `toml:"replicas"`
@@ -72,10 +80,6 @@ type Config struct {
 		PollInterval  Duration `toml:"poll-interval"`
 		LongQueryTime Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
-
-	Plugins struct {
-		Path string `toml:"path"`
-	} `toml:"plugins"`
 
 	AntiEntropy struct {
 		Interval Duration `toml:"interval"`
@@ -91,6 +95,7 @@ type Config struct {
 		Service      string   `toml:"service"`
 		Host         string   `toml:"host"`
 		PollInterval Duration `toml:"poll-interval"`
+		Diagnostics  bool     `toml:"diagnostics"`
 	} `toml:"metric"`
 
 	TLS TLSConfig
@@ -108,6 +113,7 @@ func NewConfig() *Config {
 	c.Cluster.Hosts = []string{}
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
 	c.Metric.Service = DefaultMetrics
+	c.Metric.Diagnostics = true
 	c.TLS = TLSConfig{}
 	return c
 }

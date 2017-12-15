@@ -79,5 +79,5 @@ message ImportValueRequest {
 	uint64 Slice = 3;
 	string Field = 4;
 	repeated uint64 ColumnIDs = 5;
-	repeated uint64 Values = 6;
+	repeated int64 Values = 6;
 }

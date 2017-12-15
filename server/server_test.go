@@ -22,14 +22,11 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
@@ -53,7 +50,7 @@ func TestMain_Set_Quick(t *testing.T) {
 		defer m.Close()
 
 		// Create client.
-		client, err := pilosa.NewClient(m.Server.URI.HostPort(), nil)
+		client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -326,7 +323,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	defer m2.Close()
 
 	// Import from first cluster.
-	client, err := pilosa.NewClient(m2.Server.URI.HostPort(), nil)
+	client, err := pilosa.NewInternalHTTPClient(m2.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
 	if err != nil {
 		t.Fatal(err)
 	} else if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
@@ -363,18 +360,6 @@ func TestConfig_Parse_DataDir(t *testing.T) {
 	}
 }
 
-// Ensure the "plugins" config can be parsed.
-func TestConfig_Parse_Plugins(t *testing.T) {
-	if c, err := ParseConfig(`
-[plugins]
-path = "/path/to/plugins"
-`); err != nil {
-		t.Fatal(err)
-	} else if c.Plugins.Path != "/path/to/plugins" {
-		t.Fatalf("unexpected path: %s", c.Plugins.Path)
-	}
-}
-
 // tempMkdir makes a temporary directory
 func tempMkdir(t *testing.T) string {
 	dir, err := ioutil.TempDir("", "pilosatemp")
@@ -387,43 +372,26 @@ func tempMkdir(t *testing.T) string {
 // Ensure the file handle count is working
 func TestCountOpenFiles(t *testing.T) {
 	// Windows is not supported yet
-	supported := []string{"darwin", "linux", "unix", "freebsd"}
-	sort.Strings(supported)
-	i := sort.Search(len(supported),
-		func(i int) bool { return supported[i] >= runtime.GOOS })
-	if i == len(supported) {
-		return
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping unsupported CountOpenFiles test on Windows.")
 	}
-
-	// Create directory store temp file
-	testDir := tempMkdir(t)
-	defer os.RemoveAll(testDir)
-
-	count := pilosa.CountOpenFiles()
-	testFile := filepath.Join(testDir, "test.txt")
-	_, err := os.Create(testFile)
+	count, err := pilosa.CountOpenFiles()
 	if err != nil {
-		t.Fatalf("create test file failed: %s", err)
+		t.Errorf("CountOpenFiles failed: %s", err)
 	}
-
-	if pilosa.CountOpenFiles() < count+1 {
-		t.Error("Invalid open file handle count")
+	if count == 0 {
+		t.Error("CountOpenFiles returned invalid value 0.")
 	}
 }
 
 // Ensure program can send/receive broadcast messages.
 func TestMain_SendReceiveMessage(t *testing.T) {
+
 	m0 := MustRunMain()
 	defer m0.Close()
 
 	m1 := MustRunMain()
 	defer m1.Close()
-
-	// Get available ports for internal messaging
-	freePorts, err := availablePorts(2)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// Update cluster config
 	m0.Server.Cluster.Nodes = []*pilosa.Node{
@@ -435,19 +403,17 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	// Configure node0
 
 	// get the host portion of addr to use for binding
-	gossipHost, _, err := net.SplitHostPort(m0.Server.URI.HostPort())
-	if err != nil {
-		gossipHost = m0.Server.URI.HostPort()
-	}
-	gossipPort, err := strconv.Atoi(freePorts[0])
+	gossipHost := m0.Server.URI.Host()
+	gossipPort := 0
+	gossipSeed := ""
+
+	gossipNodeSet0, err := gossip.NewGossipNodeSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	gossipSeed := gossipHost + ":" + freePorts[0]
-
-	gossipNodeSet0 := gossip.NewGossipNodeSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server)
 	m0.Server.Cluster.NodeSet = gossipNodeSet0
-	m0.Server.Broadcaster = gossipNodeSet0
+	m0.Server.Broadcaster = m0.Server
+	m0.Server.Gossiper = gossipNodeSet0
 	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
 	m0.Server.Holder.Broadcaster = m0.Server.Broadcaster
 	m0.Server.BroadcastReceiver = gossipNodeSet0
@@ -463,18 +429,17 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	// Configure node1
 
 	// get the host portion of addr to use for binding
-	gossipHost, _, err = net.SplitHostPort(m1.Server.URI.HostPort())
-	if err != nil {
-		gossipHost = m1.Server.URI.HostPort()
-	}
-	gossipPort, err = strconv.Atoi(freePorts[1])
+	gossipHost = m1.Server.URI.Host()
+	gossipPort = 0
+	gossipSeed = gossipNodeSet0.Seed()
+
+	gossipNodeSet1, err := gossip.NewGossipNodeSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	gossipNodeSet1 := gossip.NewGossipNodeSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server)
 	m1.Server.Cluster.NodeSet = gossipNodeSet1
-	m1.Server.Broadcaster = gossipNodeSet1
+	m1.Server.Broadcaster = m1.Server
+	m1.Server.Gossiper = gossipNodeSet1
 	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
 	m1.Server.Holder.Broadcaster = m1.Server.Broadcaster
 	m1.Server.BroadcastReceiver = gossipNodeSet1
@@ -593,36 +558,6 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	}
 }
 
-// availablePorts returns a slice of ports that can be used for testing.
-func availablePorts(cnt int) ([]string, error) {
-	rtn := []string{}
-
-	for i := 0; i < cnt; i++ {
-		port, err := getPort()
-		if err != nil {
-			return nil, err
-		}
-		rtn = append(rtn, strconv.Itoa(port))
-	}
-	return rtn, nil
-}
-
-// Ask the kernel for a free open port that is ready to use
-func getPort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	if err != nil {
-		return 0, err
-	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-
-	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
 // Main represents a test wrapper for main.Main.
 type Main struct {
 	*server.Command
@@ -696,8 +631,8 @@ func (m *Main) Reopen() error {
 func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
 
 // Client returns a client to connect to the program.
-func (m *Main) Client() *pilosa.Client {
-	client, err := pilosa.NewClient(m.Server.URI.HostPort(), nil)
+func (m *Main) Client() *pilosa.InternalHTTPClient {
+	client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
 	if err != nil {
 		panic(err)
 	}

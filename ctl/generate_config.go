@@ -60,9 +60,6 @@ max-writes-per-request = 5000
   service = "statsd"
   host = "127.0.0.1:8125"
   poll-interval = "0m15s"
-	
-[plugins]
-  path = ""
 `)+"\n")
 	return nil
 }

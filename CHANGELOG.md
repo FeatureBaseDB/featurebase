@@ -5,6 +5,76 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.3] - 2017-12-12
+
+This version contains 1 contribution from 1 contributor. There are 2 files changed, 59 insertions, and 42 deletions.
+
+### Fixed
+
+- Protect against accessing pointers to memory which was unmapped ([#1000](https://github.com/pilosa/pilosa/pull/1000))
+
+## [0.8.2] - 2017-12-05
+
+This version contains 1 contribution from 1 contributor. There are 15 files changed, 127 insertions, and 98 deletions.
+
+### Fixed
+
+- Modify initialization of HTTP client so only one instance is created ([#994](https://github.com/pilosa/pilosa/pull/994))
+
+## [0.8.1] - 2017-11-15
+
+This version contains 2 contributions from 2 contributors. There are 4 files changed, 27 insertions, and 14 deletions.
+
+### Fixed
+
+- Fix CountOpenFiles() fatal crash ([#969](https://github.com/pilosa/pilosa/pull/969))
+- Fix version check when local is greater than pilosa.com ([#968](https://github.com/pilosa/pilosa/pull/968))
+
+## [0.8.0] - 2017-11-15
+
+This version contains 31 contributions from 8 contributors. There are 84 files changed, 3,732 insertions, and 1,428 deletions.
+
+### Added
+
+- Diagnostics ([#895](https://github.com/pilosa/pilosa/pull/895))
+- Add docker-build make target for repeatable Docker-based builds ([#933](https://github.com/pilosa/pilosa/pull/933))
+- Add documentation on importing field values; fixes #924 ([#938](https://github.com/pilosa/pilosa/pull/938))
+- Add flag documentation and tests, remove "plugins.path" ([#942](https://github.com/pilosa/pilosa/pull/942))
+- Add TLS support ([#867](https://github.com/pilosa/pilosa/pull/867))
+- Add TLS cluster how to ([#898](https://github.com/pilosa/pilosa/pull/898))
+- Add support for gossip encryption ([#889](https://github.com/pilosa/pilosa/pull/889))
+- Add Recalculate Caches endpoint ([#881](https://github.com/pilosa/pilosa/pull/881))
+- Add search-friendly documentation for BSI range query syntax ([#955](https://github.com/pilosa/pilosa/pull/955))
+
+### Changed
+
+- Remove unneeded Gopkg.toml constraints and update all dependencies ([#943](https://github.com/pilosa/pilosa/pull/943))
+- Remove row and column labels in webUI ([#884](https://github.com/pilosa/pilosa/pull/884))
+- Internal Client refactoring ([#892](https://github.com/pilosa/pilosa/pull/892))
+- Remove column/row labels for input definition ([#945](https://github.com/pilosa/pilosa/pull/945))
+- Update dependencies and Go version ([#878](https://github.com/pilosa/pilosa/pull/878))
+
+### Fixed
+
+- Skip permissions test when run as root. Fixes #940 ([#941](https://github.com/pilosa/pilosa/pull/941))
+- Address "connection reset" issues in client ([#934](https://github.com/pilosa/pilosa/pull/934))
+- Fix field value import: Use signed int and respect field minimum ([#919](https://github.com/pilosa/pilosa/pull/919))
+- Constrain BoltDB to version rather than specific revision ([#887](https://github.com/pilosa/pilosa/pull/887))
+- Fix bug in environment variable format ([#882](https://github.com/pilosa/pilosa/pull/882))
+- Fix overflow in differenceRunBitmap ([#949](https://github.com/pilosa/pilosa/pull/949))
+
+### Performance
+
+- Use FieldNotNull to improve efficiency of BETWEEN queries ([#874](https://github.com/pilosa/pilosa/pull/874))
+
+## [0.7.2] - 2017-11-15
+
+This version contains 1 contribution from 1 contributor. There is 1 file changed, 16 insertions, and 1 deletion.
+
+### Changed
+
+- Bump HTTP client's MaxIdleConns and MaxIdleConnsPerHost ([#920](https://github.com/pilosa/pilosa/pull/920))
+
 ## [0.7.1] - 2017-10-09
 
 This version contains 3 contributions from 3 contributors. There are 14 files changed, 221 insertions, and 52 deletions.
@@ -163,3 +233,6 @@ This version contains 53 contributions from 13 contributors (including 4 volunte
 [Unreleased]: https://github.com/pilosa/pilosa/compare/v0.5...HEAD
 [0.4.0]: https://github.com/pilosa/pilosa/compare/v0.3...v0.4
 [0.5.0]: https://github.com/pilosa/pilosa/compare/v0.4...v0.5
+[0.6.0]: https://github.com/pilosa/pilosa/compare/v0.5...v0.6
+[0.7.0]: https://github.com/pilosa/pilosa/compare/v0.6...v0.7
+[0.8.0]: https://github.com/pilosa/pilosa/compare/v0.7...v0.8

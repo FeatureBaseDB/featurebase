@@ -30,6 +30,9 @@ import (
 	"time"
 
 	"crypto/tls"
+
+	"io/ioutil"
+
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statsd"
@@ -42,6 +45,9 @@ func init() {
 const (
 	// DefaultDataDir is the default data directory.
 	DefaultDataDir = "~/.pilosa"
+
+	// DefaultDiagnosticsInterval is the default sync frequency diagnostic metrics.
+	DefaultDiagnosticsInterval = 1 * time.Hour
 )
 
 // Command represents the state of the pilosa server command.
@@ -142,6 +148,9 @@ func (m *Command) SetupServer() error {
 	m.Server.Logger().Printf("Using data from: %s\n", m.Config.DataDir)
 	m.Server.Holder.Path = m.Config.DataDir
 	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollInterval)
+	if m.Config.Metric.Diagnostics {
+		m.Server.DiagnosticInterval = time.Duration(DefaultDiagnosticsInterval)
+	}
 	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
 	if err != nil {
 		return err
@@ -153,6 +162,7 @@ func (m *Command) SetupServer() error {
 	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
 
 	// Setup TLS
+	var TLSConfig *tls.Config
 	if uri.Scheme() == "https" {
 		if m.Config.TLS.CertificatePath == "" {
 			return errors.New("certificate path is required for TLS sockets")
@@ -168,12 +178,22 @@ func (m *Command) SetupServer() error {
 			Certificates:       []tls.Certificate{cert},
 			InsecureSkipVerify: m.Config.TLS.SkipVerify,
 		}
-		m.Server.Handler.ClientOptions = &pilosa.ClientOptions{TLS: m.Server.TLS}
+
+		// TODO Review this location
+
+		TLSConfig = m.Server.TLS
+
 	}
+	c := pilosa.GetHTTPClient(TLSConfig)
+	m.Server.RemoteClient = c
+	m.Server.Handler.RemoteClient = c
 
 	// Set internal port (string).
 	gossipPortStr := pilosa.DefaultGossipPort
-	if m.Config.GossipPort != "" {
+	// Config.GossipPort is deprecated, so Config.Gossip.Port has priority
+	if m.Config.Gossip.Port != "" {
+		gossipPortStr = m.Config.Gossip.Port
+	} else if m.Config.GossipPort != "" {
 		gossipPortStr = m.Config.GossipPort
 	}
 
@@ -184,20 +204,36 @@ func (m *Command) SetupServer() error {
 			return err
 		}
 		gossipSeed := pilosa.DefaultHost + ":" + pilosa.DefaultGossipPort
-		if m.Config.GossipSeed != "" {
+		// Config.GossipSeed is deprecated, so Config.Gossip.Seed has priority
+		if m.Config.Gossip.Seed != "" {
+			gossipSeed = m.Config.Gossip.Seed
+		} else if m.Config.GossipSeed != "" {
 			gossipSeed = m.Config.GossipSeed
+		}
+
+		var gossipKey []byte
+		if m.Config.Gossip.Key != "" {
+			gossipKey, err = ioutil.ReadFile(m.Config.Gossip.Key)
+			if err != nil {
+				return err
+			}
 		}
 
 		// get the host portion of addr to use for binding
 		gossipHost := uri.Host()
-		gossipNodeSet := gossip.NewGossipNodeSet(uri.HostPort(), gossipHost, gossipPort, gossipSeed, m.Server)
+		gossipNodeSet, err := gossip.NewGossipNodeSet(uri.HostPort(), gossipHost, gossipPort, gossipSeed, m.Server, gossipKey)
+		if err != nil {
+			return err
+		}
 		m.Server.Cluster.NodeSet = gossipNodeSet
-		m.Server.Broadcaster = gossipNodeSet
+		m.Server.Broadcaster = m.Server
 		m.Server.BroadcastReceiver = gossipNodeSet
+		m.Server.Gossiper = gossipNodeSet
 	case pilosa.ClusterStatic, pilosa.ClusterNone:
 		m.Server.Broadcaster = pilosa.NopBroadcaster
 		m.Server.Cluster.NodeSet = pilosa.NewStaticNodeSet()
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
+		m.Server.Gossiper = pilosa.NopGossiper
 		err := m.Server.Cluster.NodeSet.(*pilosa.StaticNodeSet).Join(m.Server.Cluster.Nodes)
 		if err != nil {
 			return err

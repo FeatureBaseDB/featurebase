@@ -344,3 +344,5 @@ func (c *MockStats) Histogram(name string, value float64, rate float64)    {}
 func (c *MockStats) Set(name string, value string, rate float64)           {}
 func (c *MockStats) Timing(name string, value time.Duration, rate float64) {}
 func (c *MockStats) SetLogger(logger io.Writer)                            {}
+func (c *MockStats) Open()                                                 {}
+func (c *MockStats) Close() error                                          { return nil }

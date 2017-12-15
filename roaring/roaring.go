@@ -665,13 +665,19 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		c := b.containers[i]
 		switch c.container_type {
 		case ContainerRun:
+			c.array = nil
+			c.bitmap = nil
 			runCount := binary.LittleEndian.Uint16(data[offset : offset+runCountHeaderSize])
 			c.runs = (*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount]
 			opsOffset = int(offset) + runCountHeaderSize + len(c.runs)*interval16Size
 		case ContainerArray:
+			c.runs = nil
+			c.bitmap = nil
 			c.array = (*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n]
 			opsOffset = int(offset) + len(c.array)*2 // sizeof(uint32)
 		case ContainerBitmap:
+			c.array = nil
+			c.runs = nil
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
 			opsOffset = int(offset) + len(c.bitmap)*8 // sizeof(uint64)
 		}
@@ -1019,17 +1025,16 @@ func (c *container) unmap() {
 		return
 	}
 
-	if c.array != nil {
+	switch c.container_type {
+	case ContainerArray:
 		tmp := make([]uint16, len(c.array))
 		copy(tmp, c.array)
 		c.array = tmp
-	}
-	if c.bitmap != nil {
+	case ContainerBitmap:
 		tmp := make([]uint64, len(c.bitmap))
 		copy(tmp, c.bitmap)
 		c.bitmap = tmp
-	}
-	if c.runs != nil {
+	case ContainerRun:
 		tmp := make([]interval16, len(c.runs))
 		copy(tmp, c.runs)
 		c.runs = tmp
@@ -1614,21 +1619,17 @@ func (c *container) runToArray() {
 func (c *container) clone() *container {
 	other := &container{n: c.n, container_type: c.container_type}
 
-	if c.array != nil {
+	switch c.container_type {
+	case ContainerArray:
 		other.array = make([]uint16, len(c.array))
 		copy(other.array, c.array)
-	}
-
-	if c.bitmap != nil {
+	case ContainerBitmap:
 		other.bitmap = make([]uint64, len(c.bitmap))
 		copy(other.bitmap, c.bitmap)
-	}
-
-	if c.runs != nil {
+	case ContainerRun:
 		other.runs = make([]interval16, len(c.runs))
 		copy(other.runs, c.runs)
 	}
-
 	return other
 }
 
@@ -2508,17 +2509,25 @@ func differenceRunArray(a, b *container) *container {
 // differenceRunBitmap computes the difference of an run from a bitmap.
 func differenceRunBitmap(a, b *container) *container {
 	// If a is full, difference is the flip of b.
-	if a.runs[0].start == 0 && a.runs[0].last == 65535 {
+	if len(a.runs) > 0 && a.runs[0].start == 0 && a.runs[0].last == 65535 {
 		return b.flipBitmap()
 	}
 	output := &container{container_type: ContainerRun}
 	output.n = a.n
+	if len(a.runs) == 0 {
+		return output
+	}
 	for j := 0; j < len(a.runs); j++ {
 		run := a.runs[j]
+		add := true
 		for bit := a.runs[j].start; bit <= a.runs[j].last; bit++ {
 			if b.bitmapContains(bit) {
 				output.n--
 				if run.start == bit {
+					if bit == 65535 { //overflow
+						add = false
+					}
+
 					run.start++
 				} else if bit == run.last {
 					run.last--
@@ -2534,10 +2543,15 @@ func differenceRunBitmap(a, b *container) *container {
 					break
 				}
 			}
+
+			if bit == 65535 { //overflow
+				break
+			}
 		}
 		if run.start <= run.last {
-			output.runs = append(output.runs, run)
-
+			if add {
+				output.runs = append(output.runs, run)
+			}
 		}
 	}
 
