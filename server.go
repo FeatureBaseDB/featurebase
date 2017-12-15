@@ -73,6 +73,7 @@ type Server struct {
 	URI         *URI
 	Cluster     *Cluster
 	diagnostics *diagnostics.Diagnostics
+	ClusterID   string
 
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
@@ -205,6 +206,15 @@ func (s *Server) Open() error {
 			s.Logger().Printf("HTTP handler terminated with error: %s\n", err)
 		}
 	}()
+
+	// load local ID
+	if err := s.Holder.loadLocalID(); err != nil {
+		s.Logger().Println(err)
+	}
+
+	if err := s.loadClusterID(); err != nil {
+		s.Logger().Println(err)
+	}
 
 	// Start background monitoring.
 	s.wg.Add(4)
@@ -569,7 +579,8 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeSetHosts(), ","))
 	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
-	// TODO: unique cluster ID
+	s.diagnostics.Set("LocalID", s.Holder.LocalID)
+	s.diagnostics.Set("ClusterID", s.ClusterID)
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {
@@ -662,6 +673,25 @@ func (s *Server) monitorRuntime() {
 
 func (s *Server) createDefaultClient(remoteClient *http.Client) {
 	s.defaultClient = NewInternalHTTPClientFromURI(nil, remoteClient)
+}
+
+func (s *Server) loadClusterID() error {
+	// If this is the first node in the cluster, set the ClusterID to its ID
+	node0URI, err := s.Cluster.Nodes[0].URI()
+	if err == nil {
+		if s.URI.Equals(node0URI) {
+			s.ClusterID = s.Holder.LocalID
+			return nil
+		}
+	} else {
+		return err
+	}
+	if clusterID, err := s.defaultClient.NodeID(node0URI); err == nil {
+		s.ClusterID = clusterID
+		return nil
+	} else {
+		return err
+	}
 }
 
 // CountOpenFiles on operating systems that support lsof.

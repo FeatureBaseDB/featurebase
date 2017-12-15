@@ -138,6 +138,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
+	router.HandleFunc("/id", handler.handleGetID).Methods("GET")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
@@ -2023,6 +2024,13 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 
 	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+func (h *Handler) handleGetID(w http.ResponseWriter, r *http.Request) {
+	_, err := w.Write([]byte(h.Holder.LocalID))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 

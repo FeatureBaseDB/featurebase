@@ -1087,6 +1087,30 @@ func (c *InternalHTTPClient) clientURI(ctx context.Context) *URI {
 	return clientURI
 }
 
+func (c *InternalHTTPClient) NodeID(uri *URI) (string, error) {
+	u := uriPathToURL(uri, "/id")
+	req, err := http.NewRequest("GET", u.String(), nil)
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("executing http request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Read body.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading response body: %v", err)
+	}
+
+	// Return error if status is not OK.
+	switch resp.StatusCode {
+	case http.StatusOK: // ok
+	default:
+		return "", fmt.Errorf("unexpected response status code: %d: %s", resp.StatusCode, body)
+	}
+	return string(body), nil
+}
+
 // Bit represents the location of a single bit.
 type Bit struct {
 	RowID     uint64
@@ -1262,4 +1286,5 @@ type InternalClient interface {
 	ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	SendMessage(ctx context.Context, pb proto.Message) error
+	NodeID(uri *URI) (string, error)
 }
