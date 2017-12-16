@@ -19,14 +19,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	uuid "github.com/satori/go.uuid"
 )
 
 const (
@@ -59,6 +64,8 @@ type Holder struct {
 	CacheFlushInterval time.Duration
 
 	LogOutput io.Writer
+
+	LocalID string
 }
 
 // NewHolder returns a new instance of Holder.
@@ -425,6 +432,24 @@ func (h *Holder) setFileLimit() {
 }
 
 func (h *Holder) logger() *log.Logger { return log.New(h.LogOutput, "", log.LstdFlags) }
+
+func (h *Holder) loadLocalID() error {
+	idPath := path.Join(h.Path, "ID")
+	localID := ""
+	localIDBytes, err := ioutil.ReadFile(idPath)
+	if err == nil {
+		localID = strings.TrimSpace(string(localIDBytes))
+	} else {
+		u := uuid.NewV4()
+		localID = u.String()
+		err = ioutil.WriteFile(idPath, []byte(localID), 0600)
+		if err != nil {
+			return err
+		}
+	}
+	h.LocalID = localID
+	return nil
+}
 
 // HolderSyncer is an active anti-entropy tool that compares the local holder
 // with a remote holder based on block checksums and resolves differences.
