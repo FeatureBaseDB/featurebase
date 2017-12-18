@@ -1197,7 +1197,7 @@ func BenchmarkContainerInsideOut(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewBitmap()
 		for col := uint64(0); col < NumColums; col++ {
-			for row := uint64(0); row < middle; row++ {
+			for row := uint64(1); row <= middle; row++ {
 				bm.Add((middle+row)*pilosa.SliceWidth + (col * MaxContainerVal))
 				bm.Add((middle-row)*pilosa.SliceWidth + (col * MaxContainerVal))
 			}
