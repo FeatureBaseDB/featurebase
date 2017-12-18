@@ -1062,31 +1062,6 @@ var benchmarkBitmapIntersectionCountData struct {
 	a, b *roaring.Bitmap
 }
 
-func BenchmarkBitmap_IntersectionCount_ArrayBitmap(b *testing.B) {
-	data := &benchmarkBitmapIntersectionCountData
-	if data.a == nil {
-		const max = (1 << 24) / 64
-
-		// Build bitmap with array container.
-		data.a = roaring.NewBitmap()
-		for i, n := 0, rand.Intn(roaring.ArrayMaxSize); i < n; i++ {
-			data.a.Add(uint64(rand.Intn(max)))
-		}
-
-		// Build bitmap with bitmap container.
-		data.b = roaring.NewBitmap()
-		for i, n := 0, roaring.ArrayMaxSize*2; i < n; i++ {
-			data.b.Add(uint64(i * 3))
-		}
-	}
-
-	// Reset timer & benchmark.
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		data.a.IntersectionCount(data.b)
-	}
-}
-
 // GenerateUint64Slice generates between [0, n) random uint64 numbers between min and max.
 func GenerateUint64Slice(n int, min, max uint64, sorted bool, rand *rand.Rand) []uint64 {
 	a := make([]uint64, rand.Intn(n))
@@ -1135,5 +1110,120 @@ func TestBitmap_Intersect(t *testing.T) {
 	result := bm0.Intersect(bm0)
 	if bm0.Count() != result.Count() {
 		t.Fatalf("Counts do not match %d %d", bm0.Count(), result.Count())
+	}
+}
+
+func BenchmarkBitmap_IntersectionCount_ArrayBitmap(b *testing.B) {
+	data := &benchmarkBitmapIntersectionCountData
+	if data.a == nil {
+		const max = (1 << 24) / 64
+
+		// Build bitmap with array container.
+		data.a = roaring.NewBitmap()
+		for i, n := 0, rand.Intn(roaring.ArrayMaxSize); i < n; i++ {
+			data.a.Add(uint64(rand.Intn(max)))
+		}
+
+		// Build bitmap with bitmap container.
+		data.b = roaring.NewBitmap()
+		for i, n := 0, roaring.ArrayMaxSize*2; i < n; i++ {
+			data.b.Add(uint64(i * 3))
+		}
+	}
+
+	// Reset timer & benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		data.a.IntersectionCount(data.b)
+	}
+}
+
+const (
+	NumRows         = uint64(10000)
+	NumColums       = uint64(4)
+	MaxContainerVal = 0xffff
+)
+
+func BenchmarkContainerLinear(b *testing.B) {
+	// run the Fib function b.N times
+	for n := 0; n < b.N; n++ {
+		b := roaring.NewBitmap()
+		for row := uint64(0); row < NumRows; row++ {
+			for col := uint64(0); col < NumColums; col += 1 {
+				b.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
+			}
+		}
+	}
+}
+
+func BenchmarkContainerReverse(b *testing.B) {
+	// run the Fib function b.N times
+	for n := 0; n < b.N; n++ {
+		b := roaring.NewBitmap()
+		for row := NumRows; row > 0; row-- {
+			for col := NumColums; col > 0; col -= 1 {
+				b.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
+			}
+		}
+	}
+}
+
+func BenchmarkContainerColumn(b *testing.B) {
+	// run the Fib function b.N times
+	for n := 0; n < b.N; n++ {
+		b := roaring.NewBitmap()
+		for col := uint64(0); col < NumColums; col += 1 {
+			for row := uint64(0); row < NumRows; row++ {
+				b.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
+			}
+		}
+	}
+}
+
+func BenchmarkContainerOutsideIn(b *testing.B) {
+	// run the Fib function b.N times
+	for n := 0; n < b.N; n++ {
+		b := roaring.NewBitmap()
+
+		for col := uint64(0); col < NumColums; col += 1 {
+			for row := uint64(0); row < (NumRows - row); row++ {
+				b.Add(row*pilosa.SliceWidth + (col * pilosa.SliceWidth))
+				b.Add((NumRows-row)*pilosa.SliceWidth + (col * MaxContainerVal))
+			}
+		}
+	}
+}
+
+func BenchmarkContainerInsideOut(b *testing.B) {
+	// run the Fib function b.N times
+	middle := NumRows / uint64(2)
+	for n := 0; n < b.N; n++ {
+		b := roaring.NewBitmap()
+		for col := uint64(0); col < NumColums; col += uint64(1) {
+			for row := uint64(0); row < middle; row++ {
+				b.Add((middle+row)*pilosa.SliceWidth + (col * MaxContainerVal))
+				b.Add((middle-row)*pilosa.SliceWidth + (col * MaxContainerVal))
+			}
+		}
+	}
+}
+
+func BenchmarkSLiceAscending(b *testing.B) {
+	// run the Fib function b.N times
+	for n := 0; n < b.N; n++ {
+		b := roaring.NewBitmap()
+		for col := uint64(0); col < pilosa.SliceWidth; col++ {
+			b.Add(col)
+		}
+	}
+}
+
+func BenchmarkSLiceDescending(b *testing.B) {
+	// run the Fib function b.N times
+	for n := 0; n < b.N; n++ {
+		b := roaring.NewBitmap()
+		for col := uint64(pilosa.SliceWidth); col > uint64(0); col-- {
+			b.Add(col)
+		}
 	}
 }
