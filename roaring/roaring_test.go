@@ -35,8 +35,8 @@ func TestBitmapClone(t *testing.T) {
 		b.Add(i)
 	}
 	c := b.Clone()
-	if !reflect.DeepEqual(b, c) {
-		t.Fatalf("Clone Objects not equal\n")
+	if err := roaring.BitmapsEqual(b, c); err != nil {
+		t.Fatalf("Clone Objects not equal: %v\n", err)
 	}
 	d := func() *roaring.Bitmap { //anybody know how to declare a nil value?
 		return nil
@@ -363,7 +363,7 @@ func TestBitmap_RunCountRange(t *testing.T) {
 	}
 }
 
-func TestBitmap_Intersection(t *testing.T) {
+func TestBitmap_Intersectionz(t *testing.T) {
 	bm0 := roaring.NewBitmap(0, 2683177)
 	bm1 := roaring.NewBitmap()
 	for i := uint64(628); i < 2683301; i++ {

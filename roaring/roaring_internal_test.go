@@ -1714,9 +1714,9 @@ func TestDifferenceRunRun(t *testing.T) {
 
 func TestWriteReadArray(t *testing.T) {
 	ca := &container{array: []uint16{1, 10, 100, 1000}, n: 4, containerType: ContainerArray}
-	ba := &Bitmap{}
+	ba := NewBitmap()
 	ba.conts.Put(0, ca)
-	ba2 := &Bitmap{}
+	ba2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := ba.WriteTo(&buf)
 	if err != nil {
@@ -1737,9 +1737,9 @@ func TestWriteReadBitmap(t *testing.T) {
 	for i := 0; i < 129; i++ {
 		cb.bitmap[i] = 0x5555555555555555
 	}
-	bb := &Bitmap{}
+	bb := NewBitmap()
 	bb.conts.Put(0, cb)
-	bb2 := &Bitmap{}
+	bb2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := bb.WriteTo(&buf)
 	if err != nil {
@@ -1760,9 +1760,9 @@ func TestWriteReadFullBitmap(t *testing.T) {
 	for i := 0; i < bitmapN; i++ {
 		cb.bitmap[i] = 0xffffffffffffffff
 	}
-	bb := &Bitmap{}
+	bb := NewBitmap()
 	bb.conts.Put(0, cb)
-	bb2 := &Bitmap{}
+	bb2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := bb.WriteTo(&buf)
 	if err != nil {
@@ -1786,9 +1786,9 @@ func TestWriteReadFullBitmap(t *testing.T) {
 
 func TestWriteReadRun(t *testing.T) {
 	cr := &container{runs: []interval16{{start: 3, last: 13}, {start: 100, last: 109}}, n: 21, containerType: ContainerRun}
-	br := &Bitmap{}
+	br := NewBitmap()
 	br.conts.Put(0, cr)
-	br2 := &Bitmap{}
+	br2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := br.WriteTo(&buf)
 	if err != nil {
@@ -2101,7 +2101,7 @@ func TestIteratorArray(t *testing.T) {
 
 	itr.Seek(1000)
 	if !(itr.key == 0 && itr.j == 3) {
-		t.Fatalf("iterator did not seek correctly: %v\n", itr)
+		t.Fatalf("iterator did not seek correctly: %#v\n", itr)
 	}
 
 	itr.Seek(10000)

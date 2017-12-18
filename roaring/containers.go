@@ -1,8 +1,6 @@
 package roaring
 
-import (
-	"github.com/pilosa/fast-skiplist"
-)
+import "github.com/pilosa/fast-skiplist"
 
 func NewSkipListContainers() *SkipListContainers {
 	return &SkipListContainers{
@@ -15,7 +13,12 @@ type SkipListContainers struct {
 }
 
 func (slc *SkipListContainers) Get(key uint64) *container {
-	return slc.list.Get(key).Value().(*container)
+	var c *container
+	el := slc.list.Get(key)
+	if el != nil {
+		c = el.Value().(*container)
+	}
+	return c
 }
 
 func (slc *SkipListContainers) Put(key uint64, c *container) {
@@ -43,6 +46,9 @@ func (slc *SkipListContainers) Clone() Containers {
 }
 
 func (slc *SkipListContainers) Last() (key uint64, c *container) {
+	if slc.list.Length() == 0 {
+		return 0, nil
+	}
 	el := slc.list.Last()
 	return el.Key(), el.Value().(*container)
 }
@@ -53,14 +59,13 @@ func (slc *SkipListContainers) Size() int {
 
 func (slc *SkipListContainers) Iterator(key uint64) (citer Contiterator, found bool) {
 	el := slc.list.GetNext(key)
-	if el.Key() == key {
+	if el != nil && el.Key() == key {
 		found = true
 	}
 
 	return &SLCIterator{
 		el: el,
 	}, found
-
 }
 
 type SLCIterator struct {
@@ -81,5 +86,8 @@ func (i *SLCIterator) Next() bool {
 }
 
 func (i *SLCIterator) Value() (uint64, *container) {
+	if !i.started || i.el == nil {
+		return 0, nil
+	}
 	return i.el.Key(), i.el.Value().(*container)
 }
