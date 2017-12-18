@@ -1149,7 +1149,7 @@ func BenchmarkContainerLinear(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewBitmap()
 		for row := uint64(0); row < NumRows; row++ {
-			for col := uint64(0); col < NumColums; col += 1 {
+			for col := uint64(0); col < NumColums; col++ {
 				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
 			}
 		}
@@ -1185,7 +1185,7 @@ func BenchmarkContainerOutsideIn(b *testing.B) {
 
 		for col := uint64(0); col < NumColums; col++ {
 			for row := uint64(0); row < middle; row++ {
-				bm.Add(row*pilosa.SliceWidth + (col * pilosa.SliceWidth))
+				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
 				bm.Add((NumRows-row)*pilosa.SliceWidth + (col * MaxContainerVal))
 			}
 		}
