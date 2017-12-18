@@ -211,6 +211,11 @@ func (s *Server) Open() error {
 	// buffered channel.
 	s.Cluster.ListenForJoins()
 
+	// Load local ID.
+	if err := s.Holder.loadNodeID(); err != nil {
+		s.Logger().Println(err)
+	}
+
 	// Start background monitoring.
 	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
@@ -571,7 +576,8 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Set("Cluster", strings.Join(NodeSet(s.Cluster.NodeSet()).ToStrings(), ","))
 	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
-	// TODO: unique cluster ID
+	s.diagnostics.Set("NodeID", s.Holder.NodeID)
+	s.diagnostics.Set("ClusterID", s.Cluster.ID)
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {

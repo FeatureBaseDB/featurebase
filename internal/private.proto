@@ -135,6 +135,7 @@ message NodeStatus {
 message ClusterStatus {
     string State = 1;
     repeated URI NodeSet = 2;
+    string ClusterID = 3;
 }
 
 message Field {
@@ -180,5 +181,6 @@ message SetCoordinatorMessage {
 
 message Topology {
     repeated URI NodeSet = 1;
+    string ClusterID = 2;
 }
 

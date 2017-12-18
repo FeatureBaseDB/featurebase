@@ -126,14 +126,15 @@ func (h *Handler) SetRestricted() {
 func loadCommon(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
-	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
-	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
-	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
-	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET")
 	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
+	router.HandleFunc("/id", handler.handleGetID).Methods("GET")
+	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
+	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
+	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
+	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 }
 
 func loadRestricted(router *mux.Router, handler *Handler) {
@@ -2194,6 +2195,13 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 
 	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
+	}
+}
+
+func (h *Handler) handleGetID(w http.ResponseWriter, r *http.Request) {
+	_, err := w.Write([]byte(h.Holder.NodeID))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 

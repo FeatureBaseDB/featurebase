@@ -665,13 +665,19 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		c := b.containers[i]
 		switch c.container_type {
 		case ContainerRun:
+			c.array = nil
+			c.bitmap = nil
 			runCount := binary.LittleEndian.Uint16(data[offset : offset+runCountHeaderSize])
 			c.runs = (*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount]
 			opsOffset = int(offset) + runCountHeaderSize + len(c.runs)*interval16Size
 		case ContainerArray:
+			c.runs = nil
+			c.bitmap = nil
 			c.array = (*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n]
 			opsOffset = int(offset) + len(c.array)*2 // sizeof(uint32)
 		case ContainerBitmap:
+			c.array = nil
+			c.runs = nil
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
 			opsOffset = int(offset) + len(c.bitmap)*8 // sizeof(uint64)
 		}
@@ -1019,17 +1025,16 @@ func (c *container) unmap() {
 		return
 	}
 
-	if c.array != nil {
+	switch c.container_type {
+	case ContainerArray:
 		tmp := make([]uint16, len(c.array))
 		copy(tmp, c.array)
 		c.array = tmp
-	}
-	if c.bitmap != nil {
+	case ContainerBitmap:
 		tmp := make([]uint64, len(c.bitmap))
 		copy(tmp, c.bitmap)
 		c.bitmap = tmp
-	}
-	if c.runs != nil {
+	case ContainerRun:
 		tmp := make([]interval16, len(c.runs))
 		copy(tmp, c.runs)
 		c.runs = tmp
@@ -1614,21 +1619,17 @@ func (c *container) runToArray() {
 func (c *container) clone() *container {
 	other := &container{n: c.n, container_type: c.container_type}
 
-	if c.array != nil {
+	switch c.container_type {
+	case ContainerArray:
 		other.array = make([]uint16, len(c.array))
 		copy(other.array, c.array)
-	}
-
-	if c.bitmap != nil {
+	case ContainerBitmap:
 		other.bitmap = make([]uint64, len(c.bitmap))
 		copy(other.bitmap, c.bitmap)
-	}
-
-	if c.runs != nil {
+	case ContainerRun:
 		other.runs = make([]interval16, len(c.runs))
 		copy(other.runs, c.runs)
 	}
-
 	return other
 }
 

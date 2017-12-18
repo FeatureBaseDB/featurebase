@@ -35,6 +35,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	uuid "github.com/satori/go.uuid"
 )
 
 const (
@@ -145,6 +146,7 @@ type nodeAction struct {
 
 // Cluster represents a collection of nodes.
 type Cluster struct {
+	ID        string
 	URI       URI
 	Nodes     []*Node // TODO phase this out?
 	MemberSet MemberSet
@@ -289,6 +291,17 @@ func (c *Cluster) NodeSet() []URI {
 	return Nodes(c.Nodes).URIs()
 }
 
+func (c *Cluster) setID(id string) {
+	// Don't overwrite ClusterID.
+	if c.ID != "" {
+		return
+	}
+	c.ID = id
+
+	// Make sure the Topology is updated.
+	c.Topology.ClusterID = c.ID
+}
+
 func (c *Cluster) setState(state string) {
 	// Ignore cases where the state hasn't changed.
 	if state == c.State {
@@ -351,7 +364,7 @@ func (c *Cluster) SetNodeState(state string) error {
 	return nil
 }
 
-// ReceiveNodeState set node state in Topology in order for the
+// ReceiveNodeState sets node state in Topology in order for the
 // Coordinator to keep track of, during startup, which nodes have
 // finished opening their Holder.
 func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
@@ -383,8 +396,9 @@ func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
 // Status returns the internal ClusterStatus representation.
 func (c *Cluster) Status() *internal.ClusterStatus {
 	return &internal.ClusterStatus{
-		State:   c.State,
-		NodeSet: encodeURIs(c.NodeSet()),
+		ClusterID: c.ID,
+		State:     c.State,
+		NodeSet:   encodeURIs(c.NodeSet()),
 	}
 }
 
@@ -756,6 +770,8 @@ func (c *Cluster) Open() error {
 		return fmt.Errorf("load topology: %v", err)
 	}
 
+	c.ID = c.Topology.ClusterID
+
 	// Only the coordinator needs to consider the .topology file.
 	if c.IsCoordinator() {
 		err := c.considerTopology()
@@ -765,10 +781,7 @@ func (c *Cluster) Open() error {
 	}
 
 	// Add the local node to the cluster.
-	//NEXT
-	//if c.URI.Port() != 0 {
 	c.AddNode(c.URI)
-	//}
 
 	// Start the EventReceiver.
 	if err := c.EventReceiver.Start(c); err != nil {
@@ -1346,6 +1359,8 @@ type Topology struct {
 	mu      sync.RWMutex
 	NodeSet []URI
 
+	ClusterID string
+
 	// nodeStates holds the state of each node according to
 	// the coordinator. Used during startup and data load.
 	nodeStates map[URI]string
@@ -1459,7 +1474,8 @@ func encodeTopology(topology *Topology) *internal.Topology {
 		return nil
 	}
 	return &internal.Topology{
-		NodeSet: encodeURIs(topology.NodeSet),
+		ClusterID: topology.ClusterID,
+		NodeSet:   encodeURIs(topology.NodeSet),
 	}
 }
 
@@ -1469,6 +1485,7 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 	}
 
 	t := NewTopology()
+	t.ClusterID = topology.ClusterID
 	t.NodeSet = decodeURIs(topology.NodeSet)
 	sort.Slice(t.NodeSet,
 		func(i, j int) bool {
@@ -1479,6 +1496,16 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 }
 
 func (c *Cluster) considerTopology() error {
+
+	c.ID = c.Topology.ClusterID
+
+	// Create ClusterID if one does not already exist.
+	if c.ID == "" {
+		u := uuid.NewV4()
+		c.ID = u.String()
+		c.Topology.ClusterID = c.ID
+	}
+
 	if c.Static {
 		return nil
 	}
@@ -1630,6 +1657,9 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 	if c.IsCoordinator() {
 		return nil
 	}
+
+	// Set ClusterID.
+	c.setID(cs.ClusterID)
 
 	officialURIs := decodeURIs(cs.NodeSet)
 
