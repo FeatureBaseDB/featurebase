@@ -584,24 +584,7 @@ func (s *Server) monitorDiagnostics() {
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {
-		numFrames := 0
-		numSlices := uint64(0)
-		for _, index := range s.Holder.Indexes() {
-			numSlices += index.MaxSlice() + 1
-			for _, f := range index.Frames() {
-				numFrames++
-				if f.rangeEnabled {
-					s.diagnostics.Set("BSIEnabled", true)
-				}
-				if f.timeQuantum != "" {
-					s.diagnostics.Set("TimeQuantumEnabled", true)
-				}
-			}
-		}
-
-		s.diagnostics.Set("NumIndexes", len(s.Holder.Indexes()))
-		s.diagnostics.Set("NumFrames", numFrames)
-		s.diagnostics.Set("NumSlices", numSlices)
+		enrichDiagnosticsWithSchemaProperties(s.diagnostics, s.Holder)
 		openFiles, err := CountOpenFiles()
 		if err == nil {
 			s.diagnostics.Set("OpenFiles", openFiles)
@@ -722,4 +705,41 @@ type StatusHandler interface {
 	LocalStatus() (proto.Message, error)
 	ClusterStatus() (proto.Message, error)
 	HandleRemoteStatus(proto.Message) error
+}
+
+type diagnosticsFrameProperties struct {
+	BSIFieldCount      int
+	TimeQuantumEnabled bool
+}
+
+func enrichDiagnosticsWithSchemaProperties(d *diagnostics.Diagnostics, holder *Holder) {
+	// NOTE: this function is not in the diagnostics package, since circular imports are not allowed.
+	var numSlices uint64
+	numFrames := 0
+	numIndexes := 0
+	bsiFieldCount := 0
+	timeQuantumEnabled := false
+
+	for _, index := range holder.Indexes() {
+		numSlices += index.MaxSlice() + 1
+		numIndexes += 1
+		for _, frame := range index.Frames() {
+			numFrames += 1
+			if frame.rangeEnabled {
+				if fields, err := frame.GetFields(); err == nil {
+					bsiFieldCount += len(fields.Fields)
+				}
+			}
+			if frame.TimeQuantum() != "" {
+				timeQuantumEnabled = true
+			}
+		}
+	}
+
+	d.Set("NumIndexes", numIndexes)
+	d.Set("NumFrames", numFrames)
+	d.Set("NumSlices", numSlices)
+	d.Set("BSIFieldCount", bsiFieldCount)
+	d.Set("BSIEnabled", bsiFieldCount > 0)
+	d.Set("TimeQuantumEnaled", timeQuantumEnabled)
 }
