@@ -189,11 +189,12 @@ func (b *Bitmap) createSegmentIfNotExists(slice uint64) *BitmapSegment {
 	}
 
 	// Insert new segment.
-	b.segments = append(b.segments, BitmapSegment{})
+	b.segments = append(b.segments, BitmapSegment{data: *roaring.NewBitmap()})
 	if i < len(b.segments) {
 		copy(b.segments[i+1:], b.segments[i:])
 	}
 	b.segments[i] = BitmapSegment{
+		data:     *roaring.NewBitmap(),
 		slice:    slice,
 		writable: true,
 	}
