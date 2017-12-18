@@ -21,6 +21,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/StackExchange/wmi"
+  packages = ["."]
+  revision = "ea383cf3ba6ec950874b8486cd72356d007c768f"
+
+[[projects]]
+  branch = "master"
   name = "github.com/armon/go-metrics"
   packages = ["."]
   revision = "9a4b6e10bed6220a1665955aa2b75afc91eb10b3"
@@ -42,6 +48,12 @@
   packages = ["."]
   revision = "629574ca2a5df945712d3079857300b5e4da0236"
   version = "v1.4.2"
+
+[[projects]]
+  name = "github.com/go-ole/go-ole"
+  packages = [".","oleutil"]
+  revision = "0e87ea779d9deb219633b828a023b32e1244dd57"
+  version = "v1.2.0"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -170,6 +182,12 @@
   revision = "e2103e2c35297fb7e17febb81e49b312087a2372"
 
 [[projects]]
+  name = "github.com/shirou/gopsutil"
+  packages = ["host","internal/common","mem","process"]
+  revision = "bfe3c2e8f406bf352bc8df81f98c752224867349"
+  version = "v2.17.11"
+
+[[projects]]
   name = "github.com/sony/gobreaker"
   packages = ["."]
   revision = "e9556a45379ef1da12e54847edb2fb3d7d566f36"
@@ -226,7 +244,7 @@
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
-  packages = ["unix"]
+  packages = ["unix","windows"]
   revision = "1e2299c37cc91a509f1b12369872d27be0ce98a6"
 
 [[projects]]
@@ -244,6 +262,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "210f654a7a072d5751f0814e4d71ef0758dd53b3dc59ed462619396ef8621d81"
+  inputs-digest = "ac5bf8adcbd75986cd1b3252a745167a5447602c575eaabd0e69f2ed6b0c57d2"
   solver-name = "gps-cdcl"
   solver-version = 1

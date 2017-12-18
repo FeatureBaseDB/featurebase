@@ -581,6 +581,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("LocalID", s.Holder.LocalID)
 	s.diagnostics.Set("ClusterID", s.ClusterID)
+	s.diagnostics.EnrichWithOSInfo()
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {
@@ -607,6 +608,7 @@ func (s *Server) monitorDiagnostics() {
 			s.diagnostics.Set("OpenFiles", openFiles)
 		}
 		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
+		s.diagnostics.EnrichWithMemoryInfo()
 		s.diagnostics.CheckVersion()
 		s.diagnostics.Flush()
 	}

@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/shirou/gopsutil/host"
+	"github.com/shirou/gopsutil/mem"
 	"github.com/sony/gobreaker"
 )
 
@@ -201,6 +203,41 @@ func (d *Diagnostics) SetLogger(logger io.Writer) {
 // logger returns a logger that writes to LogOutput.
 func (d *Diagnostics) logger() *log.Logger {
 	return log.New(d.logOutput, "", log.LstdFlags)
+}
+
+// EnrichWithOSInfo adds OS information to the diagnostics payload.
+func (d *Diagnostics) EnrichWithOSInfo() {
+	osInfo, err := host.Info()
+	if err != nil {
+		d.logOutput.Write([]byte(err.Error()))
+	}
+	d.Set("HostUptime", osInfo.Uptime)
+
+	platform, family, version, err := host.PlatformInformation()
+	if err != nil {
+		d.logOutput.Write([]byte(err.Error()))
+	}
+	d.Set("OSPlatform", platform)
+	d.Set("OSFamily", family)
+	d.Set("OSVersion", version)
+
+	kernelVersion, err := host.KernelVersion()
+	if err != nil {
+		d.logOutput.Write([]byte(err.Error()))
+	}
+	d.Set("OSKernelVersion", kernelVersion)
+}
+
+// EnrichWithMemoryInfo adds memory information to the diagnostics payload.
+func (d *Diagnostics) EnrichWithMemoryInfo() {
+	memory, err := mem.VirtualMemory()
+	if err != nil {
+		d.logOutput.Write([]byte(err.Error()))
+	}
+	d.Set("MemFree", memory.Free)
+	d.Set("MemTotal", memory.Total)
+	d.Set("MemUsed", memory.Used)
+
 }
 
 // VersionSegments returns the numeric segments of the version as a slice of ints.
