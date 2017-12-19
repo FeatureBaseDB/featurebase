@@ -797,7 +797,7 @@ func (b *Bitmap) Check() error {
 	return a
 }
 
-//Perform a logical negate of the bits in the range [start,end].
+// Flip performs a logical negate of the bits in the range [start,end].
 func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 	result := NewBitmap()
 	itr := b.Iterator()
@@ -997,10 +997,10 @@ func (itr *Iterator) peek() uint64 {
 	return uint64(key)<<16 | uint64(itr.j)
 }
 
-// The maximum size of array containers.
+// ArrayMaxSize represents the maximum size of array containers.
 const ArrayMaxSize = 4096
 
-// The maximum size of run length encoded containers.
+// RunMaxSize represents the maximum size of run length encoded containers.
 const RunMaxSize = 2048
 
 // container represents a container for uint32 integers.
