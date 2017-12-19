@@ -1177,8 +1177,8 @@ func BenchmarkContainerLinear(b *testing.B) {
 
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewBitmap()
-		for row := uint64(0); row < NumRows; row++ {
-			for col := uint64(0); col < NumColums; col++ {
+		for row := uint64(1); row < NumRows; row++ {
+			for col := uint64(1); col < NumColums; col++ {
 				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
 			}
 		}
@@ -1188,8 +1188,8 @@ func BenchmarkContainerLinear(b *testing.B) {
 func BenchmarkContainerReverse(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewBitmap()
-		for row := NumRows - 1; row > 0; row-- {
-			for col := NumColums; col > 0; col-- {
+		for row := NumRows - 1; row >= 1; row-- {
+			for col := NumColums - 1; col >= 1; col-- {
 				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
 			}
 		}
@@ -1199,8 +1199,8 @@ func BenchmarkContainerReverse(b *testing.B) {
 func BenchmarkContainerColumn(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewBitmap()
-		for col := uint64(0); col < NumColums; col++ {
-			for row := uint64(0); row < NumRows; row++ {
+		for col := uint64(1); col < NumColums; col++ {
+			for row := uint64(1); row < NumRows; row++ {
 				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
 			}
 		}
@@ -1212,8 +1212,8 @@ func BenchmarkContainerOutsideIn(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewBitmap()
 
-		for col := uint64(0); col < NumColums; col++ {
-			for row := uint64(0); row < middle; row++ {
+		for col := uint64(1); col < NumColums; col++ {
+			for row := uint64(1); row < middle; row++ {
 				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
 				bm.Add((NumRows-row)*pilosa.SliceWidth + (col * MaxContainerVal))
 			}
@@ -1225,7 +1225,7 @@ func BenchmarkContainerInsideOut(b *testing.B) {
 	middle := NumRows / uint64(2)
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewBitmap()
-		for col := uint64(0); col < NumColums; col++ {
+		for col := uint64(1); col < NumColums; col++ {
 			for row := uint64(1); row <= middle; row++ {
 				bm.Add((middle+row)*pilosa.SliceWidth + (col * MaxContainerVal))
 				bm.Add((middle-row)*pilosa.SliceWidth + (col * MaxContainerVal))
