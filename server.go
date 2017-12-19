@@ -211,7 +211,7 @@ func (s *Server) Open() error {
 	// buffered channel.
 	s.Cluster.ListenForJoins()
 
-	// Load local ID.
+	// Load NodeID.
 	if err := s.Holder.loadNodeID(); err != nil {
 		s.Logger().Println(err)
 	}
