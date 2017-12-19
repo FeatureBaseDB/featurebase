@@ -2,13 +2,13 @@
 title = "Tutorials"
 weight = 4
 nav = [
-    "How To Setup a Secure Cluster",
+    "How To Set Up a Secure Cluster",
 ]
 +++
 
 ## Tutorials
 
-### How To Setup a Secure Cluster
+### How To Set Up a Secure Cluster
 
 #### Introduction
 
