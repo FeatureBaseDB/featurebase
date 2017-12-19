@@ -1120,13 +1120,13 @@ func BenchmarkBitmap_IntersectionCount_ArrayBitmap(b *testing.B) {
 
 		// Build bitmap with array container.
 		data.a = roaring.NewBitmap()
-		for i, n := 0, rand.Intn(roaring.ArrayMaxSize); i < n; i++ {
+		for i, n := 0, 2*roaring.ArrayMaxSize/3; i < n; i++ {
 			data.a.Add(uint64(rand.Intn(max)))
 		}
 
 		// Build bitmap with bitmap container.
 		data.b = roaring.NewBitmap()
-		for i, n := 0, roaring.ArrayMaxSize*2; i < n; i++ {
+		for i, n := 0, MaxContainerVal/3; i < n; i++ {
 			data.b.Add(uint64(i * 3))
 		}
 	}
@@ -1140,7 +1140,7 @@ func BenchmarkBitmap_IntersectionCount_ArrayBitmap(b *testing.B) {
 
 const (
 	NumRows         = uint64(10000)
-	NumColums       = uint64(4)
+	NumColums       = uint64(16)
 	MaxContainerVal = 0xffff
 )
 
@@ -1205,7 +1205,7 @@ func BenchmarkContainerInsideOut(b *testing.B) {
 	}
 }
 
-func BenchmarkSLiceAscending(b *testing.B) {
+func BenchmarkSliceAscending(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewBitmap()
 		for col := uint64(0); col < pilosa.SliceWidth; col++ {
@@ -1214,7 +1214,7 @@ func BenchmarkSLiceAscending(b *testing.B) {
 	}
 }
 
-func BenchmarkSLiceDescending(b *testing.B) {
+func BenchmarkSliceDescending(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewBitmap()
 		for col := uint64(pilosa.SliceWidth); col > uint64(0); col-- {
