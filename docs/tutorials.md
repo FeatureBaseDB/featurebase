@@ -218,7 +218,7 @@ Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administ
 
 #### Introduction
 
-Pilosa can store integer values associated to the columns in an index, and those values are used to support range and aggregate queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those potients.
+Pilosa can store integer values associated to the columns in an index, and those values are used to support range and aggregate queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
 
 First, create an index called `patients`:
 ```
@@ -251,6 +251,7 @@ curl localhost:10101/index/patients/frame/measurements/field/tcells \
 <div class="note">
 It's possible to create a frame with multiple fields in a single step. To do that, you just include a "fields" attribute to the frame options like the example below:
 </div>
+
 ```
 curl localhost:10101/index/patients/frame/measurements \
      -X POST \
@@ -304,6 +305,8 @@ You should get the following results:
 ```
 {"results":[{"attrs":{},"bits":[2,6,9]}]}
 ```
+
+You can find a list of supported range operators in the [Range Query](../query-language/#range-bsi) documentation.
 
 To find the average age of all patients, run a `Sum` query:
 ```
