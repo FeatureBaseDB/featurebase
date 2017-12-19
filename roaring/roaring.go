@@ -718,18 +718,18 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		}
 
 		// Unmarshal the op and apply it.
-		var op op
-		if err := op.UnmarshalBinary(buf); err != nil {
+		var opr op
+		if err := opr.UnmarshalBinary(buf); err != nil {
 			// FIXME(benbjohnson): return error with position so file can be trimmed.
 			return err
 		}
-		op.apply(b)
+		opr.apply(b)
 
 		// Increase the op count.
 		b.opN++
 
 		// Move the buffer forward.
-		buf = buf[op.size():]
+		buf = buf[opr.size():]
 	}
 
 	return nil
@@ -2978,38 +2978,6 @@ func popcount(x uint64) (n uint64) {
 	return x >> 56
 }
 
-// bitmapIterator represents an iterator over container bitmap values.
-type bitmapIterator struct {
-	bitmap []uint64
-	i      int
-}
-
-// Returns eof as true if there are no values left in the iterator.
-func (itr *bitmapIterator) next() (v uint16, eof bool) {
-	if itr.i+1 >= len(itr.bitmap)*64 {
-		return 0, true
-	}
-	itr.i++
-
-	// Find first non-zero bit in current bitmap, if possible.
-	hb := itr.i >> 6
-	lb := itr.bitmap[hb] >> (uint(itr.i) % 64)
-	if lb != 0 {
-		itr.i = itr.i + trailingZeroN(lb)
-		return uint16(itr.i), false
-	}
-
-	// Otherwise iterate through remaining bitmaps to find next bit.
-	for hb++; hb < len(itr.bitmap); hb++ {
-		if itr.bitmap[hb] != 0 {
-			itr.i = hb<<6 + trailingZeroN(itr.bitmap[hb])
-			return uint16(itr.i), false
-		}
-	}
-
-	return 0, true
-}
-
 // ErrorList represents a list of errors.
 type ErrorList []error
 
@@ -3042,13 +3010,6 @@ func (a *ErrorList) AppendWithPrefix(err error, prefix string) {
 		}
 	default:
 		*a = append(*a, fmt.Errorf("%s%s", prefix, err))
-	}
-}
-
-// assert panics with a formatted message if condition is false.
-func assert(condition bool, format string, a ...interface{}) {
-	if !condition {
-		panic(fmt.Sprintf(format, a...))
 	}
 }
 
