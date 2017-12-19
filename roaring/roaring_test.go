@@ -1059,7 +1059,34 @@ func TestBitmapBufIterator(t *testing.T) {
 }
 
 var benchmarkBitmapIntersectionCountData struct {
-	a, b *roaring.Bitmap
+	a, b, r *roaring.Bitmap
+}
+
+func getBenchData() *struct{ a, b, r *roaring.Bitmap } {
+	data := &benchmarkBitmapIntersectionCountData
+	if data.a == nil {
+		const max = (1 << 24) / 64
+
+		// Build bitmap with array container.
+		data.a = roaring.NewBitmap()
+		for i, n := 0, 2*roaring.ArrayMaxSize/3; i < n; i++ {
+			data.a.Add(uint64(rand.Intn(max)))
+		}
+
+		// Build bitmap with bitmap container.
+		data.b = roaring.NewBitmap()
+		for i, n := 0, MaxContainerVal/3; i < n; i++ {
+			data.b.Add(uint64(i * 3))
+		}
+
+		// build bitmap with run container
+		data.r = roaring.NewBitmap()
+		for i, n := 0, MaxContainerVal; i < n; i++ {
+			data.r.Add(uint64(i))
+		}
+
+	}
+	return data
 }
 
 // GenerateUint64Slice generates between [0, n) random uint64 numbers between min and max.
@@ -1113,24 +1140,26 @@ func TestBitmap_Intersect(t *testing.T) {
 	}
 }
 
-func BenchmarkBitmap_IntersectionCount_ArrayBitmap(b *testing.B) {
-	data := &benchmarkBitmapIntersectionCountData
-	if data.a == nil {
-		const max = (1 << 24) / 64
-
-		// Build bitmap with array container.
-		data.a = roaring.NewBitmap()
-		for i, n := 0, 2*roaring.ArrayMaxSize/3; i < n; i++ {
-			data.a.Add(uint64(rand.Intn(max)))
-		}
-
-		// Build bitmap with bitmap container.
-		data.b = roaring.NewBitmap()
-		for i, n := 0, MaxContainerVal/3; i < n; i++ {
-			data.b.Add(uint64(i * 3))
-		}
+func BenchmarkBitmap_IntersectionCount_ArrayRun(b *testing.B) {
+	data := getBenchData()
+	// Reset timer & benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		data.a.IntersectionCount(data.r)
 	}
+}
 
+func BenchmarkBitmap_IntersectionCount_BitmapRun(b *testing.B) {
+	data := getBenchData()
+	// Reset timer & benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		data.b.IntersectionCount(data.r)
+	}
+}
+
+func BenchmarkBitmap_IntersectionCount_ArrayBitmap(b *testing.B) {
+	data := getBenchData()
 	// Reset timer & benchmark.
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
