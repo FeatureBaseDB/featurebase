@@ -740,6 +740,5 @@ func enrichDiagnosticsWithSchemaProperties(d *diagnostics.Diagnostics, holder *H
 	d.Set("NumFrames", numFrames)
 	d.Set("NumSlices", numSlices)
 	d.Set("BSIFieldCount", bsiFieldCount)
-	d.Set("BSIEnabled", bsiFieldCount > 0)
-	d.Set("TimeQuantumEnaled", timeQuantumEnabled)
+	d.Set("TimeQuantumEnabled", timeQuantumEnabled)
 }
