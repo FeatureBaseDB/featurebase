@@ -2,13 +2,13 @@
 title = "Tutorials"
 weight = 4
 nav = [
-    "How To Setup a Secure Cluster",
+    "How To Set Up a Secure Cluster",
 ]
 +++
 
 ## Tutorials
 
-### How To Setup a Secure Cluster
+### How To Set Up a Secure Cluster
 
 #### Introduction
 
@@ -212,3 +212,121 @@ curl -k --ipv4 https://02.pilosa.local:10502/index/sample-index/query -d 'Bitmap
 #### What's Next?
 
 Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](https://www.pilosa.com/docs/latest/configuration/) to see the available options to configure Pilosa.
+
+
+### Integer Fields Values
+
+#### Introduction
+
+Pilosa can store integer values associated to the columns in an index, and those values are used to support range and aggregate queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
+
+First, create an index called `patients`:
+```
+curl localhost:10101/index/patients \
+     -X POST 
+```
+
+Next, create a frame in the `patients` index called `measurements` which will represent information gathered about each patient.
+```
+curl localhost:10101/index/patients/frame/measurements \
+     -X POST \
+     -d '{"options":{"rangeEnabled": true}}'
+```
+
+In addition to storing rows of bits, a frame can also contain fields that store integer values. The next step creates three fields (`age`, `weight`, `tcells`) in the `measurements` frame.
+```
+curl localhost:10101/index/patients/frame/measurements/field/age \
+     -X POST \
+     -d '{"type": "int", "min": 0, "max": 120}'
+
+curl localhost:10101/index/patients/frame/measurements/field/weight \
+     -X POST \
+     -d '{"type": "int", "min": 0, "max": 500}'
+
+curl localhost:10101/index/patients/frame/measurements/field/tcells \
+     -X POST \
+     -d '{"type": "int", "min": 0, "max": 2000}'
+```
+
+<div class="note">
+It's possible to create a frame with multiple fields in a single step. To do that, you just include a "fields" attribute to the frame options like the example below:
+</div>
+
+```
+curl localhost:10101/index/patients/frame/measurements \
+     -X POST \
+     -d '{"options":{
+              "rangeEnabled": true,
+              "fields": [
+                  {"name": "age", "type": "int", "min": 0, "max": 120},
+                  {"name": "weight", "type": "int", "min": 0, "max": 500},
+                  {"name": "tcells", "type": "int", "min": 0, "max": 2000}
+              ]
+         }}'
+```
+
+Next, let's populate our fields with data. There are two ways to get data into fields: use the `SetFieldValue()` PQL function to set fields individually, or use the `pilosa import` command to import many values at once. First, let's set some field data using PQL.
+
+This query sets the age, weight, and t-cell count for the patient with ID `1` in our system:
+```
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'SetFieldValue(columnID=1, frame="measurements", age=34, weight=128, tcells=1145)'
+```
+
+In the case where we need to load a lot of data at once, we can use the `pilosa import` command. This method lets us import data into Pilosa from a CSV file.
+
+Assuming we have a file called `ages.csv` that is structured like this:
+```
+1,34
+2,57
+3,19
+4,40
+5,32
+6,71
+7,28
+8,33
+9,63
+```
+where the first column of the CSV represents the patient `ID` and the second column represents the patient's`age`, then we can import the data into our `age` field by running this command:
+```
+pilosa import -i patients -f measurements --field age ages.csv
+```
+
+Now that we have some data in our index, let's run a few queries to demonstrate how to use that data.
+
+In order to find all patients over the age of 40, then simply run a `Range` query against the `age` field.
+```
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Range(frame="measurements", age > 40)'
+```
+You should get the following results:
+```
+{"results":[{"attrs":{},"bits":[2,6,9]}]}
+```
+
+You can find a list of supported range operators in the [Range Query](../query-language/#range-bsi) documentation.
+
+To find the average age of all patients, run a `Sum` query:
+```
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Sum(frame="measurements", field="age")'
+```
+The results you get from the `Sum` query contain the `sum` of all values as well as the `count` of columns with a value. To get the average you can just divide `sum` by `count`.
+```
+{"results":[{"sum":377,"count":9}]}
+```
+
+You can also provide a filter to the `Sum()` function, to find the average age of all patients over 40.
+```
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Sum(Range(frame="measurements", age > 40), frame="measurements", field="age")'
+```
+Notice in this case that the count is only `3` because of the `age > 40` filter applied to the query.
+```
+{"results":[{"sum":191,"count":3}]}
+```
+
