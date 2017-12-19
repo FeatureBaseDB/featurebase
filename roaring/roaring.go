@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// package roaring implements roaring bitmaps with support for incremental changes.
+// Package roaring implements roaring bitmaps with support for incremental changes.
 package roaring
 
 import (
@@ -50,11 +50,15 @@ const (
 	// bitmapN is the number of values in a container.bitmap.
 	bitmapN = (1 << 16) / 64
 
-	// manual allocation size tuned to our average client data
-	manualAlloc     = 524288
-	ContainerArray  = byte(1)
+	//ContainerArray indicates a container of bit position values
+	ContainerArray = byte(1)
+
+	//ContainerBitmap indicates a container of bits packed in a uint64 array block
 	ContainerBitmap = byte(2)
-	ContainerRun    = byte(3)
+
+	//ContainerRun  indicates a container of run encoded bits
+	ContainerRun = byte(3)
+
 	maxContainerVal = 0xffff
 )
 
@@ -216,7 +220,7 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 	} else {
 		// Count first partial container and advance i so we don't recount it
 		n += uint64(b.containers[i].countRange(int(lowbits(start)), maxContainerVal+1))
-		i += 1
+		i++
 	}
 
 	// Count last container.
@@ -546,7 +550,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	byte8 := make([]byte, 8)
 
 	// Build header before writing individual container blocks.
-	// Metadata for each container is 8+2+2+4 = sizeof(key) + sizeof(container_type)+sizeof(cardinality) + sizeof(file offset)
+	// Metadata for each container is 8+2+2+4 = sizeof(key) + sizeof(containerType)+sizeof(cardinality) + sizeof(file offset)
 	// Cookie header section.
 
 	WriteUint32(w, byte4, cookie)
@@ -563,7 +567,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 		//assert(c.count() == c.n, "cannot write container count, mismatch: count=%d, n=%d", count, c.n)
 		if c.n > 0 {
 			WriteUint64(w, byte8, uint64(key))
-			WriteUint16(w, byte2, uint16(c.container_type))
+			WriteUint16(w, byte2, uint16(c.containerType))
 			WriteUint16(w, byte2, uint16(c.n-1))
 		}
 	}
@@ -638,14 +642,14 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		if i >= len(b.keys) {
 			b.keys = append(b.keys, binary.LittleEndian.Uint64(buf[0:8]))
 			b.containers = append(b.containers, &container{
-				container_type: byte(binary.LittleEndian.Uint16(buf[8:10])),
-				n:              int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
-				mapped:         true,
+				containerType: byte(binary.LittleEndian.Uint16(buf[8:10])),
+				n:             int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
+				mapped:        true,
 			})
 		} else {
 			b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
 			c := b.containers[i]
-			c.container_type = byte(binary.LittleEndian.Uint16(buf[8:10]))
+			c.containerType = byte(binary.LittleEndian.Uint16(buf[8:10]))
 			c.n = int(binary.LittleEndian.Uint16(buf[10:12])) + 1
 			c.mapped = true
 
@@ -663,7 +667,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 		// Map byte slice directly to the container data.
 		c := b.containers[i]
-		switch c.container_type {
+		switch c.containerType {
 		case ContainerRun:
 			c.array = nil
 			c.bitmap = nil
@@ -982,12 +986,12 @@ const RunMaxSize = 2048
 // an array or RLE container is used, depending on the contents. For containers
 // with more than 4,096 values, the values are encoded into bitmaps.
 type container struct {
-	container_type byte         // array, bitmap, or run
-	n              int          // number of integers in container
-	array          []uint16     // used for array containers
-	bitmap         []uint64     // used for bitmap containers
-	runs           []interval16 // used for RLE containers
-	mapped         bool         // mapped directly to a byte slice when true
+	containerType byte         // array, bitmap, or run
+	n             int          // number of integers in container
+	array         []uint16     // used for array containers
+	bitmap        []uint64     // used for bitmap containers
+	runs          []interval16 // used for RLE containers
+	mapped        bool         // mapped directly to a byte slice when true
 }
 
 type interval16 struct {
@@ -1002,22 +1006,22 @@ func (iv interval16) runlen() int {
 
 // newContainer returns a new instance of container.
 func newContainer() *container {
-	return &container{container_type: ContainerArray}
+	return &container{containerType: ContainerArray}
 }
 
 // isArray returns true if the container is an array container.
 func (c *container) isArray() bool {
-	return c.container_type == ContainerArray
+	return c.containerType == ContainerArray
 }
 
 // isBitmap returns true if the container is a bitmap container.
 func (c *container) isBitmap() bool {
-	return c.container_type == ContainerBitmap
+	return c.containerType == ContainerBitmap
 }
 
 // isRun returns true if the container is a run-length-encoded container.
 func (c *container) isRun() bool {
-	return c.container_type == ContainerRun
+	return c.containerType == ContainerRun
 }
 
 // unmap creates copies of the containers data in the heap.
@@ -1029,7 +1033,7 @@ func (c *container) unmap() {
 		return
 	}
 
-	switch c.container_type {
+	switch c.containerType {
 	case ContainerArray:
 		tmp := make([]uint16, len(c.array))
 		copy(tmp, c.array)
@@ -1207,7 +1211,7 @@ func (c *container) runAdd(v uint16) bool {
 	c.unmap()
 	if iv.last < v {
 		if iv.last == v-1 {
-			c.runs[i].last += 1
+			c.runs[i].last++
 		} else {
 			c.runs = append(c.runs, interval16{start: v, last: v})
 		}
@@ -1219,10 +1223,10 @@ func (c *container) runAdd(v uint16) bool {
 			return true
 		}
 		// just before an interval
-		c.runs[i].start -= 1
+		c.runs[i].start--
 	} else if i > 0 && v-1 == c.runs[i-1].last {
 		// just after an interval
-		c.runs[i-1].last += 1
+		c.runs[i-1].last++
 	} else {
 		// alone
 		newIv := interval16{start: v, last: v}
@@ -1256,7 +1260,7 @@ func (c *container) arrayCountRuns() (r int) {
 	prev := -2
 	for _, v := range c.array {
 		if prev+1 != int(v) {
-			r += 1
+			r++
 		}
 		prev = int(v)
 	}
@@ -1395,9 +1399,9 @@ func (c *container) runRemove(v uint16) bool {
 	if v == c.runs[i].last && v == c.runs[i].start {
 		c.runs = append(c.runs[:i], c.runs[i+1:]...)
 	} else if v == c.runs[i].last {
-		c.runs[i].last -= 1
+		c.runs[i].last--
 	} else if v == c.runs[i].start {
-		c.runs[i].start += 1
+		c.runs[i].start++
 	} else if v > c.runs[i].start {
 		last := c.runs[i].last
 		c.runs[i].last = v - 1
@@ -1453,7 +1457,7 @@ func (c *container) runMax() uint16 {
 // bitmapToArray converts from bitmap format to array format.
 func (c *container) bitmapToArray() {
 	c.array = make([]uint16, 0, c.n)
-	c.container_type = ContainerArray
+	c.containerType = ContainerArray
 
 	// return early if empty
 	if c.n == 0 {
@@ -1476,7 +1480,7 @@ func (c *container) bitmapToArray() {
 // arrayToBitmap converts from array format to bitmap format.
 func (c *container) arrayToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
-	c.container_type = ContainerBitmap
+	c.containerType = ContainerBitmap
 
 	// return early if empty
 	if c.n == 0 {
@@ -1495,7 +1499,7 @@ func (c *container) arrayToBitmap() {
 // runToBitmap converts from RLE format to bitmap format.
 func (c *container) runToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
-	c.container_type = ContainerBitmap
+	c.containerType = ContainerBitmap
 
 	// return early if empty
 	if c.n == 0 {
@@ -1517,7 +1521,7 @@ func (c *container) runToBitmap() {
 
 // bitmapToRun converts from bitmap format to RLE format.
 func (c *container) bitmapToRun() {
-	c.container_type = ContainerRun
+	c.containerType = ContainerRun
 	// return early if empty
 	if c.n == 0 {
 		c.runs = make([]interval16, 0)
@@ -1573,7 +1577,7 @@ func (c *container) bitmapToRun() {
 
 // arrayToRun converts from array format to RLE format.
 func (c *container) arrayToRun() {
-	c.container_type = ContainerRun
+	c.containerType = ContainerRun
 	// return early if empty
 	if c.n == 0 {
 		c.runs = make([]interval16, 0)
@@ -1600,7 +1604,7 @@ func (c *container) arrayToRun() {
 
 // runToArray converts from RLE format to array format.
 func (c *container) runToArray() {
-	c.container_type = ContainerArray
+	c.containerType = ContainerArray
 	c.array = make([]uint16, 0, c.n)
 
 	// return early if empty
@@ -1621,9 +1625,9 @@ func (c *container) runToArray() {
 
 // clone returns a copy of c.
 func (c *container) clone() *container {
-	other := &container{n: c.n, container_type: c.container_type}
+	other := &container{n: c.n, containerType: c.containerType}
 
-	switch c.container_type {
+	switch c.containerType {
 	case ContainerArray:
 		other.array = make([]uint16, len(c.array))
 		copy(other.array, c.array)
@@ -1640,7 +1644,7 @@ func (c *container) clone() *container {
 // flipBitmap returns a new bitmap containter containing the inverse of all
 // bits in c.
 func (c *container) flipBitmap() *container {
-	other := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+	other := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
 
 	for i, bitmap := range c.bitmap {
 		other.bitmap[i] = ^bitmap
@@ -1918,7 +1922,7 @@ func intersect(a, b *container) *container {
 }
 
 func intersectArrayArray(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
+	output := &container{containerType: ContainerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.array[i], b.array[j]
@@ -1939,7 +1943,7 @@ func intersectArrayArray(a, b *container) *container {
 // container. The return is always an array container (since it's guaranteed to
 // be low-cardinality)
 func intersectArrayRun(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
+	output := &container{containerType: ContainerArray}
 	na, nb := len(a.array), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.array[i], b.runs[j]
@@ -1958,7 +1962,7 @@ func intersectArrayRun(a, b *container) *container {
 
 // intersectRunRun computes the intersect of two run containers.
 func intersectRunRun(a, b *container) *container {
-	output := &container{container_type: ContainerRun}
+	output := &container{containerType: ContainerRun}
 	na, nb := len(a.runs), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.runs[i], b.runs[j]
@@ -2000,7 +2004,7 @@ func intersectBitmapRun(a, b *container) *container {
 	var output *container
 	if b.n < ArrayMaxSize {
 		// output is array container
-		output = &container{container_type: ContainerArray}
+		output = &container{containerType: ContainerArray}
 		for _, iv := range b.runs {
 			for i := iv.start; i <= iv.last; i++ {
 				if a.bitmapContains(i) {
@@ -2018,8 +2022,8 @@ func intersectBitmapRun(a, b *container) *container {
 		// bitmap that are in the runs. alternately, we could zero out ranges in
 		// the bitmap which are between runs.
 		output = &container{
-			bitmap:         make([]uint64, bitmapN),
-			container_type: ContainerBitmap,
+			bitmap:        make([]uint64, bitmapN),
+			containerType: ContainerBitmap,
 		}
 		for j := 0; j < len(b.runs); j++ {
 			vb := b.runs[j]
@@ -2060,7 +2064,7 @@ func intersectBitmapRun(a, b *container) *container {
 }
 
 func intersectArrayBitmap(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
+	output := &container{containerType: ContainerArray}
 	for _, va := range a.array {
 		bmidx := va / 64
 		bidx := va % 64
@@ -2075,7 +2079,7 @@ func intersectArrayBitmap(a, b *container) *container {
 }
 
 func intersectBitmapBitmap(a, b *container) *container {
-	output := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+	output := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
 
 	for i := range a.bitmap {
 		v := a.bitmap[i] & b.bitmap[i]
@@ -2116,7 +2120,7 @@ func union(a, b *container) *container {
 }
 
 func unionArrayArray(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
+	output := &container{containerType: ContainerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; ; {
 		if i >= na && j >= nb {
@@ -2152,7 +2156,7 @@ func unionArrayRun(a, b *container) *container {
 	if b.n == maxContainerVal {
 		return b.clone()
 	}
-	output := &container{container_type: ContainerRun}
+	output := &container{containerType: ContainerRun}
 	na, nb := len(a.array), len(b.runs)
 	var vb interval16
 	var va uint16
@@ -2189,18 +2193,18 @@ func (c *container) runAppendInterval(v interval16) int {
 	if len(c.runs) == 0 {
 		c.runs = append(c.runs, v)
 		return int(v.last-v.start) + 1
-	} else {
-		last := c.runs[len(c.runs)-1]
-		if last.last == maxContainerVal { //protect against overflow
-			return 0
-		}
-		if last.last+1 >= v.start && v.last > last.last {
-			c.runs[len(c.runs)-1].last = v.last
-			return int(v.last - last.last)
-		} else if last.last+1 < v.start {
-			c.runs = append(c.runs, v)
-			return int(v.last-v.start) + 1
-		}
+	}
+
+	last := c.runs[len(c.runs)-1]
+	if last.last == maxContainerVal { //protect against overflow
+		return 0
+	}
+	if last.last+1 >= v.start && v.last > last.last {
+		c.runs[len(c.runs)-1].last = v.last
+		return int(v.last - last.last)
+	} else if last.last+1 < v.start {
+		c.runs = append(c.runs, v)
+		return int(v.last-v.start) + 1
 	}
 	return 0
 }
@@ -2214,8 +2218,8 @@ func unionRunRun(a, b *container) *container {
 	}
 	na, nb := len(a.runs), len(b.runs)
 	output := &container{
-		runs:           make([]interval16, 0, na+nb),
-		container_type: ContainerRun,
+		runs:          make([]interval16, 0, na+nb),
+		containerType: ContainerRun,
 	}
 	var va, vb interval16
 	for i, j := 0, 0; i < na || j < nb; {
@@ -2334,8 +2338,8 @@ func unionArrayBitmap(a, b *container) *container {
 
 func unionBitmapBitmap(a, b *container) *container {
 	output := &container{
-		bitmap:         make([]uint64, bitmapN),
-		container_type: ContainerBitmap,
+		bitmap:        make([]uint64, bitmapN),
+		containerType: ContainerBitmap,
 	}
 
 	for i := 0; i < bitmapN; i++ {
@@ -2377,7 +2381,7 @@ func difference(a, b *container) *container {
 
 // differenceArrayArray computes the difference bween two arrays.
 func differenceArrayArray(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
+	output := &container{containerType: ContainerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; i < na; {
 		va := a.array[i]
@@ -2408,7 +2412,7 @@ func differenceArrayRun(a, b *container) *container {
 		return a.clone()
 	}
 
-	output := &container{array: make([]uint16, 0, a.n), container_type: ContainerArray}
+	output := &container{array: make([]uint16, 0, a.n), containerType: ContainerArray}
 	// cardinality upper bound: card(A)
 
 	i := 0 // array index
@@ -2468,7 +2472,7 @@ func differenceRunArray(a, b *container) *container {
 	if a.n == 0 || b.n == 0 {
 		return a.clone()
 	}
-	output := &container{runs: make([]interval16, 0, len(a.runs)), container_type: ContainerRun}
+	output := &container{runs: make([]interval16, 0, len(a.runs)), containerType: ContainerRun}
 
 	bidx := 0
 	vb := b.array[bidx]
@@ -2524,7 +2528,7 @@ func differenceRunBitmap(a, b *container) *container {
 	if len(a.runs) > 0 && a.runs[0].start == 0 && a.runs[0].last == 65535 {
 		return b.flipBitmap()
 	}
-	output := &container{container_type: ContainerRun}
+	output := &container{containerType: ContainerRun}
 	output.n = a.n
 	if len(a.runs) == 0 {
 		return output
@@ -2577,7 +2581,7 @@ func differenceRunBitmap(a, b *container) *container {
 
 func differenceRunIterator(a *container, itr containerIterator) *container {
 
-	output := &container{runs: make([]interval16, 0, a.n), container_type: ContainerRun}
+	output := &container{runs: make([]interval16, 0, a.n), containerType: ContainerRun}
 
 	vb, eof := itr.next()
 	j := 0
@@ -2645,7 +2649,7 @@ func differenceRunRun(a, b *container) *container {
 	alen := len(a.runs)
 	blen := len(b.runs)
 
-	output := &container{runs: make([]interval16, 0, alen+blen), container_type: ContainerRun} // TODO allocate max then truncate? or something else
+	output := &container{runs: make([]interval16, 0, alen+blen), containerType: ContainerRun} // TODO allocate max then truncate? or something else
 	// cardinality upper bound: sum of number of runs
 	// each B-run could split an A-run in two, up to len(b.runs) times
 
@@ -2695,7 +2699,7 @@ func differenceRunRun(a, b *container) *container {
 }
 
 func differenceArrayBitmap(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
+	output := &container{containerType: ContainerArray}
 	for _, va := range a.array {
 		bmidx := va / 64
 		bidx := va % 64
@@ -2726,7 +2730,7 @@ func differenceBitmapArray(a, b *container) *container {
 }
 
 func differenceBitmapBitmap(a, b *container) *container {
-	output := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+	output := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
 
 	for i := range a.bitmap {
 		v := a.bitmap[i] & (^b.bitmap[i])
@@ -2769,7 +2773,7 @@ func xor(a, b *container) *container {
 }
 
 func xorArrayArray(a, b *container) *container {
-	output := &container{container_type: ContainerArray}
+	output := &container{containerType: ContainerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; i < na || j < nb; {
 		if i < na && j >= nb {
@@ -2816,8 +2820,8 @@ func xorArrayBitmap(a, b *container) *container {
 
 func xorBitmapBitmap(a, b *container) *container {
 	output := &container{
-		bitmap:         make([]uint64, bitmapN),
-		container_type: ContainerBitmap,
+		bitmap:        make([]uint64, bitmapN),
+		containerType: ContainerBitmap,
 	}
 	for i := 0; i < bitmapN; i++ {
 		v := a.bitmap[i] ^ b.bitmap[i]
@@ -3165,20 +3169,20 @@ func assert(condition bool, format string, a ...interface{}) {
 
 // xorArrayRun computes the exclusive or of an array and a run container.
 func xorArrayRun(a, b *container) *container {
-	output := &container{container_type: ContainerRun}
+	output := &container{containerType: ContainerRun}
 	na, nb := len(a.array), len(b.runs)
 	var vb interval16
 	var va uint16
-	last_i, last_j := -1, -1
+	lastI, lastJ := -1, -1
 	for i, j := 0, 0; i < na || j < nb; {
-		if i < na && i != last_i {
+		if i < na && i != lastI {
 			va = a.array[i]
 		}
-		if j < nb && j != last_j {
+		if j < nb && j != lastJ {
 			vb = b.runs[j]
 		}
-		last_i = i
-		last_j = j
+		lastI = i
+		lastJ = j
 
 		if i < na && (j >= nb || va < vb.start) { //before
 			output.n += output.runAppendInterval(interval16{start: va, last: va})
@@ -3228,91 +3232,91 @@ func xorArrayRun(a, b *container) *container {
 }
 
 // xorCompare computes first exclusive run between two runs.
-func xorCompare(x *xorstm) (r1 interval16, has_data bool) {
-	has_data = false
-	if !x.va_valid || !x.vb_valid {
-		if x.vb_valid {
-			x.vb_valid = false
+func xorCompare(x *xorstm) (r1 interval16, hasData bool) {
+	hasData = false
+	if !x.vaValid || !x.vbValid {
+		if x.vbValid {
+			x.vbValid = false
 			r1 = x.vb
-			has_data = true
+			hasData = true
 			return
 		}
-		if x.va_valid {
-			x.va_valid = false
+		if x.vaValid {
+			x.vaValid = false
 			r1 = x.va
-			has_data = true
+			hasData = true
 			return
 		}
 		return
 	}
 
 	if x.va.last < x.vb.start { //va  before
-		x.va_valid = false
+		x.vaValid = false
 		r1 = x.va
-		has_data = true
+		hasData = true
 	} else if x.vb.last < x.va.start { //vb before
-		x.vb_valid = false
+		x.vbValid = false
 		r1 = x.vb
-		has_data = true
+		hasData = true
 	} else if x.va.start == x.vb.start && x.va.last == x.vb.last { // Equal
-		x.va_valid = false
-		x.vb_valid = false
+		x.vaValid = false
+		x.vbValid = false
 	} else if x.va.start <= x.vb.start && x.va.last >= x.vb.last { //vb inside
-		x.vb_valid = false
+		x.vbValid = false
 		if x.va.start != x.vb.start {
 			r1 = interval16{start: x.va.start, last: x.vb.start - 1}
-			has_data = true
+			hasData = true
 		}
 
 		if x.vb.last == maxContainerVal { // Check for overflow
-			x.va_valid = false
+			x.vaValid = false
 
 		} else {
 			x.va.start = x.vb.last + 1
 			if x.va.start > x.va.last {
-				x.va_valid = false
+				x.vaValid = false
 			}
 		}
 
 	} else if x.vb.start <= x.va.start && x.vb.last >= x.va.last { //va inside
-		x.va_valid = false
+		x.vaValid = false
 		if x.vb.start != x.va.start {
 			r1 = interval16{start: x.vb.start, last: x.va.start - 1}
-			has_data = true
+			hasData = true
 		}
 
 		if x.va.last == maxContainerVal { //check for overflow
-			x.vb_valid = false
+			x.vbValid = false
 		} else {
 			x.vb.start = x.va.last + 1
 			if x.vb.start > x.vb.last {
-				x.vb_valid = false
+				x.vbValid = false
 			}
 		}
 
 	} else if x.va.start < x.vb.start && x.va.last <= x.vb.last { //va first overlap
-		x.va_valid = false
+		x.vaValid = false
 		r1 = interval16{start: x.va.start, last: x.vb.start - 1}
-		has_data = true
+		hasData = true
 		if x.va.last == maxContainerVal { // check for overflow
-			x.vb_valid = false
+			x.vbValid = false
 		} else {
 			x.vb.start = x.va.last + 1
 			if x.vb.start > x.vb.last {
-				x.vb_valid = false
+				x.vbValid = false
 			}
 		}
 	} else if x.vb.start < x.va.start && x.vb.last <= x.va.last { //vb first overlap
-		x.vb_valid = false
+		x.vbValid = false
 		r1 = interval16{start: x.vb.start, last: x.va.start - 1}
-		has_data = true
+		hasData = true
 
 		if x.vb.last == maxContainerVal { // check for overflow
-			x.va_valid = false
+			x.vaValid = false
 		} else {
 			x.va.start = x.vb.last + 1
 			if x.va.start > x.va.last {
-				x.va_valid = false
+				x.vaValid = false
 			}
 		}
 	}
@@ -3321,8 +3325,8 @@ func xorCompare(x *xorstm) (r1 interval16, has_data bool) {
 
 //stm  is state machine used to "xor" iterate over runs.
 type xorstm struct {
-	va_valid, vb_valid bool
-	va, vb             interval16
+	vaValid, vbValid bool
+	va, vb           interval16
 }
 
 // xorRunRun computes the exclusive or of two run containers.
@@ -3336,30 +3340,30 @@ func xorRunRun(a, b *container) *container {
 	}
 	output := &container{}
 
-	last_i, last_j := -1, -1
+	lastI, lastJ := -1, -1
 
 	state := &xorstm{}
 
 	for i, j := 0, 0; i < na || j < nb; {
-		if i < na && last_i != i {
+		if i < na && lastI != i {
 			state.va = a.runs[i]
-			state.va_valid = true
+			state.vaValid = true
 		}
 
-		if j < nb && last_j != j {
+		if j < nb && lastJ != j {
 			state.vb = b.runs[j]
-			state.vb_valid = true
+			state.vbValid = true
 		}
-		last_i, last_j = i, j
+		lastI, lastJ = i, j
 
 		r1, ok := xorCompare(state)
 		if ok {
 			output.n += output.runAppendInterval(r1)
 		}
-		if !state.va_valid {
+		if !state.vaValid {
 			i++
 		}
-		if !state.vb_valid {
+		if !state.vbValid {
 			j++
 		}
 
