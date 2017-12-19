@@ -1159,7 +1159,7 @@ func BenchmarkContainerLinear(b *testing.B) {
 func BenchmarkContainerReverse(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewBitmap()
-		for row := NumRows; row > 0; row-- {
+		for row := NumRows - 1; row > 0; row-- {
 			for col := NumColums; col > 0; col-- {
 				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
 			}
