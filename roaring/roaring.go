@@ -98,7 +98,7 @@ type Contiterator interface {
 
 // Bitmap represents a roaring bitmap.
 type Bitmap struct {
-	conts Containers
+	conts *SkipListContainers
 
 	// Number of operations written to the writer.
 	opN int

@@ -37,7 +37,7 @@ func (slc *SkipListContainers) GetOrCreate(key uint64) *container {
 	return el.Value().(*container)
 }
 
-func (slc *SkipListContainers) Clone() Containers {
+func (slc *SkipListContainers) Clone() *SkipListContainers {
 	nslc := NewSkipListContainers()
 	for c := slc.list.Front(); c != nil; c = c.Next() {
 		nslc.list.Set(c.Key(), c.Value().(*container).clone())
