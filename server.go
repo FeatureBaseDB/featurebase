@@ -512,7 +512,18 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 	if s.Cluster.State != ClusterStateNormal {
 		return nil
 	}
-	return s.mergeRemoteStatus(pb.(*internal.NodeStatus))
+
+	go func() {
+		// Make sure the holder has opened.
+		<-s.Holder.opened
+
+		err := s.mergeRemoteStatus(pb.(*internal.NodeStatus))
+		if err != nil {
+			s.Logger().Printf("merge remote status: %s", err)
+		}
+	}()
+
+	return nil
 }
 
 func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
