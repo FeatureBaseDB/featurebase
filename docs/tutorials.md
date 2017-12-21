@@ -2,14 +2,15 @@
 title = "Tutorials"
 weight = 4
 nav = [
-    "How To Set Up a Secure Cluster",
-    "Integer Field Values",
+    "Setting Up a Secure Cluster",
+    "Using Integer Field Values",
+    "Storing Row and Column Attributes",
 ]
 +++
 
 ## Tutorials
 
-### How To Set Up a Secure Cluster
+### Setting Up a Secure Cluster
 
 #### Introduction
 
@@ -215,7 +216,7 @@ curl -k --ipv4 https://02.pilosa.local:10502/index/sample-index/query -d 'Bitmap
 Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](https://www.pilosa.com/docs/latest/configuration/) to see the available options to configure Pilosa.
 
 
-### Integer Field Values
+### Using Integer Field Values
 
 #### Introduction
 
@@ -331,3 +332,126 @@ Notice in this case that the count is only `3` because of the `age > 40` filter 
 {"results":[{"sum":191,"count":3}]}
 ```
 
+### Storing Row and Column Attributes
+
+#### Introduction
+
+Pilosa can store arbitrary values associated to any row or column. In Pilosa, these are referred to as `attributes`, and they can be of type `string`, `integer`, `boolean`, or `float`. In this tutorial we will store some attribute data and then run some queries that return that data.
+
+First, create an index called `books` to use for this tutorial:
+```
+curl localhost:10101/index/books \
+     -X POST
+```
+
+Next, create a frame in the `books` index called `members` which will represent library members who have read books.
+```
+curl localhost:10101/index/books/frame/members \
+     -X POST \
+     -d '{}'
+```
+
+Now, let's add some books to our index.
+```
+curl localhost:10101/index/books/query \
+     -X POST \
+     -d 'SetColumnAttrs(columnID=1, name="To Kill a Mockingbird", year=1960)
+         SetColumnAttrs(columnID=2, name="No Name in the Street", year=1972)
+         SetColumnAttrs(columnID=3, name="The Tipping Point", year=2000)
+         SetColumnAttrs(columnID=4, name="Out Stealing Horses", year=2003)
+         SetColumnAttrs(columnID=5, name="The Forever War", year=2008)'
+```
+
+And add some members.
+```
+curl localhost:10101/index/books/query \
+     -X POST \
+     -d 'SetRowAttrs(frame="members", rowID=10001, fullName="John Smith")
+         SetRowAttrs(frame="members", rowID=10002, fullName="Sue Perkins")
+         SetRowAttrs(frame="members", rowID=10003, fullName="Jennifer Hawks")
+         SetRowAttrs(frame="members", rowID=10004, fullName="Pedro Vazquez")
+         SetRowAttrs(frame="members", rowID=10005, fullName="Pat Washington")'
+```
+
+At this point we can query one of the `member` records by querying that row.
+```
+curl localhost:10101/index/books/query \
+     -X POST \
+     -d 'Bitmap(frame="members", rowID=10002)'
+```
+You should get the following result set:
+```
+{"results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[]}]}
+```
+
+Now let's add some data to the matrix such that each pair represents a member who has read that book.
+```
+curl localhost:10101/index/books/query \
+     -X POST \
+     -d 'SetBit(frame="members", rowID=10001, columnID=3)
+         SetBit(frame="members", rowID=10001, columnID=5)
+
+         SetBit(frame="members", rowID=10002, columnID=1)
+         SetBit(frame="members", rowID=10002, columnID=2)
+         SetBit(frame="members", rowID=10002, columnID=4)
+
+         SetBit(frame="members", rowID=10003, columnID=3)
+
+         SetBit(frame="members", rowID=10004, columnID=4)
+         SetBit(frame="members", rowID=10004, columnID=5)
+
+         SetBit(frame="members", rowID=10005, columnID=1)
+         SetBit(frame="members", rowID=10005, columnID=2)
+         SetBit(frame="members", rowID=10005, columnID=3)
+         SetBit(frame="members", rowID=10005, columnID=4)
+         SetBit(frame="members", rowID=10005, columnID=5)'
+```
+
+Now pull the record for `Sue Perkins` again.
+```
+curl localhost:10101/index/books/query \
+     -X POST \
+     -d 'Bitmap(frame="members", rowID=10002)'
+```
+Notice that the result set now contains a list of integers in the `bits` attribute. These integers match the column IDs of the books that Sue has read.
+```
+{"results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[1,2,4]}]}
+```
+
+In order to retrieve the attribute information that we stored for each book, we need to add a URL parameter `columnAttrs=true` to the query.
+```
+curl localhost:10101/index/books/query?columnAttrs=true \
+     -X POST \
+     -d 'Bitmap(frame="members", rowID=10002)'
+```
+
+Here, the `book` attributes will be included in the result set at the `columnAttrs` attribute.
+
+```
+{
+  "results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[1,2,4]}],
+  "columnAttrs":[
+    {"id":1,"attrs":{"name":"To Kill a Mockingbird","year":1960}},
+    {"id":2,"attrs":{"name":"No Name in the Street","year":1972}},
+    {"id":4,"attrs":{"name":"Out Stealing Horses","year":2003}}
+  ]
+}
+```
+
+Finally, if we want to find out which books were read by both `Sue` and `Pedro`, we just perform an `Intersect` query on those two members:
+```
+curl localhost:10101/index/books/query?columnAttrs=true \
+     -X POST \
+     -d 'Intersect(Bitmap(frame="members", rowID=10002), Bitmap(frame="members", rowID=10004))'
+```
+
+```
+{
+  "results":[{"attrs":{},"bits":[4]}],
+  "columnAttrs":[
+    {"id":4,"attrs":{"name":"Out Stealing Horses","year":2003}}
+  ]
+}
+```
+
+Notice that we don't get row attributes on a complex query, but we still get the column attributes—in this case book information.
