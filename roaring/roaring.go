@@ -1216,16 +1216,18 @@ func (c *container) runAdd(v uint16) bool {
 		c.runs = []interval16{{start: v, last: v}}
 		return true
 	}
-	i := 0
-	var iv interval16
-	for i, iv = range c.runs {
-		if iv.last >= v {
-			break
-		}
+	i := sort.Search(len(c.runs),
+		func(i int) bool { return c.runs[i].last >= v })
+
+	if i == len(c.runs){
+       i--
 	}
-	if v >= iv.start && iv.last >= v {
+
+	iv:=c.runs[i]
+	if v>= iv.start && iv.last>=v{
 		return false
 	}
+	
 	c.unmap()
 	if iv.last < v {
 		if iv.last == v-1 {
