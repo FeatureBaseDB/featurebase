@@ -362,12 +362,7 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 
 // Intersect returns the intersection of b and other.
 func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
-<<<<<<< 49aec2dc4c2137c459c5ff4902609b93cfc72933
-	output := &Bitmap{}
-=======
 	output := NewBitmap()
-
->>>>>>> fix a bunch of bugs and add some tests
 	iiter, _ := b.conts.Iterator(0)
 	jiter, _ := other.conts.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
