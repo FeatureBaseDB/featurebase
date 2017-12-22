@@ -237,24 +237,6 @@ curl localhost:10101/index/patients/frame/measurements \
 
 In addition to storing rows of bits, a frame can also contain fields that store integer values. The next step creates three fields (`age`, `weight`, `tcells`) in the `measurements` frame.
 ```
-curl localhost:10101/index/patients/frame/measurements/field/age \
-     -X POST \
-     -d '{"type": "int", "min": 0, "max": 120}'
-
-curl localhost:10101/index/patients/frame/measurements/field/weight \
-     -X POST \
-     -d '{"type": "int", "min": 0, "max": 500}'
-
-curl localhost:10101/index/patients/frame/measurements/field/tcells \
-     -X POST \
-     -d '{"type": "int", "min": 0, "max": 2000}'
-```
-
-<div class="note">
-It's possible to create a frame with multiple fields in a single step. To do that, you just include a "fields" attribute to the frame options like the example below:
-</div>
-
-```
 curl localhost:10101/index/patients/frame/measurements \
      -X POST \
      -d '{"options":{
@@ -266,6 +248,8 @@ curl localhost:10101/index/patients/frame/measurements \
               ]
          }}'
 ```
+
+If you need to, you can add fields to an existing frame by posting to the [Create Field endpoint](../api-reference/#create-field).
 
 Next, let's populate our fields with data. There are two ways to get data into fields: use the `SetFieldValue()` PQL function to set fields individually, or use the `pilosa import` command to import many values at once. First, let's set some field data using PQL.
 
