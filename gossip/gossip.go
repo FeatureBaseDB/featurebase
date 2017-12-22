@@ -130,7 +130,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 
 	//TODO: pull memberlist config from pilosa.cfg file
 	g.config = &gossipConfig{
-		memberlistConfig: memberlist.DefaultLocalConfig(),
+		memberlistConfig: memberlist.DefaultWANConfig(),
 		gossipSeed:       gossipSeed,
 	}
 	g.config.memberlistConfig.Name = name
