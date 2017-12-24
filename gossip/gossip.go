@@ -204,7 +204,7 @@ func NewGossipNodeSet(name string, gossipHost string, gossipPort int, gossipSeed
 		LogOutput: server.LogOutput,
 	}
 
-	conf := memberlist.DefaultLocalConfig()
+	conf := memberlist.DefaultWANConfig()
 	conf.BindPort = gossipPort
 	conf.AdvertisePort = gossipPort
 
