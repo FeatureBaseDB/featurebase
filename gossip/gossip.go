@@ -82,7 +82,7 @@ func (g *GossipMemberSet) Seed() string {
 // Open implements the MemberSet interface to start network activity.
 func (g *GossipMemberSet) Open() error {
 	if g.handler == nil {
-		return fmt.Errorf("opening GossipMemberSet: you must call Start(pilosa.BroadcastHandler) before calling Open()")
+		return fmt.Errorf("must call Start(pilosa.BroadcastHandler) before calling Open()")
 	}
 
 	err := error(nil)
@@ -90,7 +90,7 @@ func (g *GossipMemberSet) Open() error {
 	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
 	g.mu.Unlock()
 	if err != nil {
-		return err
+		return fmt.Errorf("creating memberlist: %s", err)
 	}
 
 	g.broadcasts = &memberlist.TransmitLimitedQueue{
@@ -104,7 +104,7 @@ func (g *GossipMemberSet) Open() error {
 
 	uri, err := pilosa.NewURIFromAddress(g.config.gossipSeed)
 	if err != nil {
-		return err
+		return fmt.Errorf("new uri from address: %s", err)
 	}
 
 	// attach to gossip seed node
@@ -114,7 +114,7 @@ func (g *GossipMemberSet) Open() error {
 	err = g.joinWithRetry(pilosa.NodeSet(pilosa.Nodes(nodes).URIs()).ToHostPortStrings())
 	g.mu.RUnlock()
 	if err != nil {
-		return err
+		return fmt.Errorf("joining member set: %s", err)
 	}
 	return nil
 }
@@ -166,14 +166,14 @@ func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport 
 	port := transport.Net.GetAutoBindPort()
 	host, _, err := net.SplitHostPort(cfg.Bind)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("split host port: %s", err)
 	}
 
 	var gossipKey []byte
 	if cfg.Gossip.Key != "" {
 		gossipKey, err = ioutil.ReadFile(cfg.Gossip.Key)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reading gossip key: %s", err)
 		}
 	}
 
@@ -219,17 +219,17 @@ func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server) 
 
 	port, err := strconv.Atoi(cfg.Gossip.Port)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert port: %s", err)
 	}
 	host, _, err := net.SplitHostPort(cfg.Bind)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("split host port: %s", err)
 	}
 
 	// Set up the transport.
 	transport, err := NewTransport(host, port)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new tranport: %s", err)
 	}
 
 	return NewGossipMemberSetWithTransport(name, cfg, transport, server)
@@ -239,7 +239,7 @@ func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server) 
 func (g *GossipMemberSet) SendSync(pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal message: %s", err)
 	}
 
 	mlist := g.memberlist
@@ -267,7 +267,7 @@ func (g *GossipMemberSet) SendSync(pb proto.Message) error {
 func (g *GossipMemberSet) SendAsync(pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal message: %s", err)
 	}
 
 	b := &broadcast{
@@ -438,12 +438,12 @@ func NewTransport(host string, port int) (*Transport, error) {
 
 	net, err := newTransport(conf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new transport: %s", err)
 	}
 
 	uri, err := pilosa.NewURIFromHostPort(host, uint16(net.GetAutoBindPort()))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new uri from host port: %s", err)
 	}
 
 	return &Transport{
