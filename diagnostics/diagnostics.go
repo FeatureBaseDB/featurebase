@@ -96,7 +96,7 @@ func (d *Diagnostics) schedule() {
 // Flush sends the current metrics.
 func (d *Diagnostics) Flush() error {
 	d.mu.Lock()
-	d.metrics["uptime"] = (time.Now().Unix() - d.startTime)
+	d.metrics["Uptime"] = (time.Now().Unix() - d.startTime)
 	buf, _ := d.Encode()
 	d.mu.Unlock()
 
