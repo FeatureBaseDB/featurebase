@@ -594,6 +594,7 @@ func NewMain() *Main {
 // MustRunMain returns a new, running Main. Panic on error.
 func MustRunMain() *Main {
 	m := NewMain()
+	m.Config.Metric.Diagnostics = false // Disable diagnostics.
 	if err := m.Run(); err != nil {
 		panic(err)
 	}
