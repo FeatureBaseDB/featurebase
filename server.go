@@ -42,7 +42,6 @@ import (
 // Default server settings.
 const (
 	DefaultAntiEntropyInterval = 10 * time.Minute
-	DefaultPollingInterval     = 60 * time.Second
 	DefaultDiagnosticServer    = "https://diagnostics.pilosa.com/v0/diagnostics"
 )
 
