@@ -278,7 +278,7 @@ func (h *Holder) EncodeMaxSlices() *internal.MaxSlices {
 	}
 }
 
-// EncodeSchema creates and internal representation of schema.
+// EncodeSchema creates an internal representation of schema.
 func (h *Holder) EncodeSchema() *internal.Schema {
 	return &internal.Schema{
 		Indexes: EncodeIndexes(h.Indexes()),
