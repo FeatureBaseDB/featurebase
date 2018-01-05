@@ -995,8 +995,6 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 		toCluster.addNodeBasicSorted(nodeAction.uri)
 	}
 
-	pbSchema := c.Holder.EncodeSchema()
-
 	// multiIndex is a map of sources initialized with all the nodes in toCluster.
 	multiIndex := make(map[URI][]*internal.ResizeSource)
 
@@ -1029,7 +1027,7 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 			URI:           u.Encode(),
 			Coordinator:   encodeURI(c.Coordinator),
 			Sources:       sources,
-			Schema:        pbSchema, // Include the schema to ensure it's in sync on the receiving node.
+			Schema:        c.Holder.EncodeSchema(), // Include the schema to ensure it's in sync on the receiving node.
 			ClusterStatus: c.Status(),
 		}
 		j.Instructions = append(j.Instructions, instr)
