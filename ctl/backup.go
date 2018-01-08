@@ -96,12 +96,16 @@ func (cmd *BackupCommand) Run(ctx context.Context) (err error) {
 	}); err != nil {
 		return err
 	}
+	log.Println("GO")
 	if _, err = tw.Write(data); err != nil {
 		return
 	}
 
+	log.Println("MORE", schema)
 	for _, index := range schema {
+		log.Println(index)
 		for _, frame := range index.Frames {
+			log.Println(frame, frame.Views)
 			for _, view := range frame.Views {
 				log.Println("Backing up:", index.Name, frame.Name, view.Name)
 				if err = client.BackupTo(ctx, tw, index.Name, frame.Name, view.Name); err != nil {

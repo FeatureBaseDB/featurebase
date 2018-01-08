@@ -574,7 +574,61 @@ func (c *InternalHTTPClient) BackupTo(ctx context.Context, tw *tar.Writer, index
 			return
 		}
 	}
+	c.backupRowAttr(ctx, tw, index, frame)
 	return
+}
+
+func (c *InternalHTTPClient) backupColAttr(ctx context.Context, tw *tar.Writer, index string) error {
+	//fetch the raw bolt file
+
+	// add it to the tar
+	data, err := c.FetchRawColumnAttrs(ctx, index)
+	if err != nil {
+		return fmt.Errorf("backup ColAttr: err=%s", err)
+	}
+
+	// Write slice file header.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:    fmt.Sprintf("colattr/%s", index),
+		Mode:    0666,
+		Size:    int64(len(data)),
+		ModTime: time.Now(),
+	}); err != nil {
+		return err
+	}
+
+	// Write buffer to file.
+	if _, err := tw.Write(data); err != nil {
+		return fmt.Errorf("write buffer: %s", err)
+	}
+
+	return nil
+}
+func (c *InternalHTTPClient) backupRowAttr(ctx context.Context, tw *tar.Writer, index, frame string) error {
+	//fetch the raw bolt file
+
+	// add it to the tar
+	data, err := c.FetchRawRowAttrs(ctx, index, frame)
+	if err != nil {
+		return fmt.Errorf("backup RowAttr: err=%s", err)
+	}
+
+	// Write slice file header.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:    fmt.Sprintf("rowattr/%s/%s", index, frame),
+		Mode:    0666,
+		Size:    int64(len(data)),
+		ModTime: time.Now(),
+	}); err != nil {
+		return err
+	}
+
+	// Write buffer to file.
+	if _, err := tw.Write(data); err != nil {
+		return fmt.Errorf("write buffer: %s", err)
+	}
+
+	return nil
 }
 
 // backupSliceTo backs up a single slice to tw.
