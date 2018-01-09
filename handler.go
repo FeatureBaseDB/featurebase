@@ -538,11 +538,27 @@ type patchIndexTimeQuantumResponse struct{}
 
 // handlePostIndexAttrDiff handles POST /index/attr/diff requests.
 func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
 	indexName := mux.Vars(r)["index"]
 
-	// Decode request.
-	var req postIndexAttrDiffRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Marshal into request object.
+	var req internal.AttrBlockRequest
+	if err := proto.Unmarshal(body, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -563,7 +579,7 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 
 	// Read all attributes from all mismatched blocks.
 	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
+	for _, blockID := range AttrBlocks(blks).Diff(decodeAttrBlocks(req.Blocks)) {
 		// Retrieve block data.
 		m, err := index.ColumnAttrStore().BlockData(blockID)
 		if err != nil {
@@ -577,20 +593,17 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(postIndexAttrDiffResponse{
-		Attrs: attrs,
-	}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+	// Marshal response object.
+	buf, err := proto.Marshal(&internal.AttrBlockResponse{
+		Attrs: encodeAttrsMap(attrs),
+	})
+
+	// Write response.
+	if err != nil {
+		h.logger().Printf("row attr response encoding error: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 	}
-}
-
-type postIndexAttrDiffRequest struct {
-	Blocks []AttrBlock `json:"blocks"`
-}
-
-type postIndexAttrDiffResponse struct {
-	Attrs map[uint64]map[string]interface{} `json:"attrs"`
+	w.Write(buf)
 }
 
 // handlePostFrame handles POST /frame request.
@@ -956,12 +969,28 @@ type getFrameViewsResponse struct {
 
 // handlePostFrameAttrDiff handles POST /frame/attr/diff requests.
 func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
-	// Decode request.
-	var req postFrameAttrDiffRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Marshal into request object.
+	var req internal.AttrBlockRequest
+	if err := proto.Unmarshal(body, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -982,7 +1011,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 
 	// Read all attributes from all mismatched blocks.
 	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
+	for _, blockID := range AttrBlocks(blks).Diff(decodeAttrBlocks(req.Blocks)) {
 		// Retrieve block data.
 		m, err := f.RowAttrStore().BlockData(blockID)
 		if err != nil {
@@ -996,20 +1025,17 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(postFrameAttrDiffResponse{
-		Attrs: attrs,
-	}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+	// Marshal response object.
+	buf, err := proto.Marshal(&internal.AttrBlockResponse{
+		Attrs: encodeAttrsMap(attrs),
+	})
+
+	// Write response.
+	if err != nil {
+		h.logger().Printf("row attr response encoding error: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 	}
-}
-
-type postFrameAttrDiffRequest struct {
-	Blocks []AttrBlock `json:"blocks"`
-}
-
-type postFrameAttrDiffResponse struct {
-	Attrs map[uint64]map[string]interface{} `json:"attrs"`
+	w.Write(buf)
 }
 
 // readColumnAttrSets returns a list of column attribute objects by id.
