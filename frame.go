@@ -533,8 +533,8 @@ func (f *Frame) view(name string) *View { return f.views[name] }
 
 // Views returns a list of all views in the frame.
 func (f *Frame) Views() []*View {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 
 	other := make([]*View, 0, len(f.views))
 	for _, view := range f.views {

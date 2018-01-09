@@ -80,6 +80,7 @@ type Server struct {
 	MaxWritesPerRequest int
 
 	LogOutput io.Writer
+	logger    *log.Logger
 
 	defaultClient InternalClient
 }
@@ -104,9 +105,9 @@ func NewServer() *Server {
 
 		LogOutput: os.Stderr,
 	}
+	s.logger = log.New(s.LogOutput, "", log.LstdFlags)
 
 	s.Handler.Holder = s.Holder
-
 	return s
 }
 
@@ -252,7 +253,7 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 }
 
 // Logger returns a logger that writes to LogOutput
-func (s *Server) Logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
+func (s *Server) Logger() *log.Logger { return s.logger }
 
 func (s *Server) monitorAntiEntropy() {
 	ticker := time.NewTicker(s.AntiEntropyInterval)
