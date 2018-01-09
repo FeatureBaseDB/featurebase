@@ -9,3 +9,10 @@
 [[constraint]]
   name = "github.com/shirou/gopsutil"
   version = "2.17.11"
+
+[[constraint]]
+  # Required: the root import path of the project being constrained.
+  name = "github.com/DataDog/datadog-go"
+  # Recommended: the version constraint to enforce for the project.
+  # Only one of "branch", "version" or "revision" can be specified.
+  branch = "master"
