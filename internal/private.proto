@@ -139,3 +139,13 @@ message DeleteViewMessage {
     string Frame = 2;
     string View = 3;
 }
+
+// AttrBlock represents a checksummed block of the attribute store.
+message AttrBlock {
+    uint64 ID = 1;
+    bytes Checksum = 2;
+}
+
+message AttrBlockRequest {
+    repeated AttrBlock Blocks = 1;
+}

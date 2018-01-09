@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -793,20 +794,53 @@ func TestHandler_Index_AttrStore_Diff(t *testing.T) {
 	blks = blks[1:]
 	blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
 
+	// Encode request object.
+	buf, err := proto.Marshal(&internal.AttrBlockRequest{
+		Blocks: pilosa.EncodeAttrBlocks(blks),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Send block checksums to determine diff.
-	resp, err := http.Post(
+	client := &http.Client{}
+	req, err := http.NewRequest(
+		"POST",
 		s.URL+"/index/i/attr/diff",
-		"application/json",
-		strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
+		bytes.NewReader(buf),
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 
-	// Read and validate body.
-	if body := string(test.MustReadAll(resp.Body)); body != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
-		t.Fatalf("unexpected body: %s", body)
+	// Read body.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Decode response object.
+	abresp := &internal.AttrBlockResponse{}
+	if err := proto.Unmarshal(body, abresp); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := pilosa.DecodeAttrsMap(abresp.Attrs)
+
+	exp := make(map[uint64]map[string]interface{})
+	exp[1] = map[string]interface{}{"bar": int64(2), "foo": int64(1)}
+	exp[200] = map[string]interface{}{"snowman": "☃"}
+
+	if !reflect.DeepEqual(rec, exp) {
+		t.Fatalf("\nexpected: %s\n\ngot: %s\n", exp, rec)
 	}
 }
 
@@ -843,20 +877,53 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 	blks = blks[1:]
 	blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
 
+	// Encode request object.
+	buf, err := proto.Marshal(&internal.AttrBlockRequest{
+		Blocks: pilosa.EncodeAttrBlocks(blks),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Send block checksums to determine diff.
-	resp, err := http.Post(
+	client := &http.Client{}
+	req, err := http.NewRequest(
+		"POST",
 		s.URL+"/index/i/frame/meta/attr/diff",
-		"application/json",
-		strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
+		bytes.NewReader(buf),
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 
-	// Read and validate body.
-	if body := string(test.MustReadAll(resp.Body)); body != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
-		t.Fatalf("unexpected body: %s", body)
+	// Read body.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Decode response object.
+	abresp := &internal.AttrBlockResponse{}
+	if err := proto.Unmarshal(body, abresp); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := pilosa.DecodeAttrsMap(abresp.Attrs)
+
+	exp := make(map[uint64]map[string]interface{})
+	exp[1] = map[string]interface{}{"bar": int64(2), "foo": int64(1)}
+	exp[200] = map[string]interface{}{"snowman": "☃"}
+
+	if !reflect.DeepEqual(rec, exp) {
+		t.Fatalf("\nexpected: %s\n\ngot: %s\n", exp, rec)
 	}
 }
 
