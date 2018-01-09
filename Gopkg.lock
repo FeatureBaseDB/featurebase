@@ -183,15 +183,9 @@
 
 [[projects]]
   name = "github.com/shirou/gopsutil"
-  packages = ["cpu","host","internal/common","mem","net","process"]
+  packages = ["host","internal/common","mem","process"]
   revision = "bfe3c2e8f406bf352bc8df81f98c752224867349"
   version = "v2.17.11"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/shirou/w32"
-  packages = ["."]
-  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
 
 [[projects]]
   name = "github.com/sony/gobreaker"
