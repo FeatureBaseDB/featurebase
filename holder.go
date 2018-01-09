@@ -196,15 +196,14 @@ func (h *Holder) index(name string) *Index { return h.indexes[name] }
 
 // Indexes returns a list of all indexes in the holder.
 func (h *Holder) Indexes() []*Index {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
+	h.mu.RLock()
 	a := make([]*Index, 0, len(h.indexes))
 	for _, index := range h.indexes {
 		a = append(a, index)
 	}
-	sort.Sort(indexSlice(a))
+	h.mu.RUnlock()
 
+	sort.Sort(indexSlice(a))
 	return a
 }
 
