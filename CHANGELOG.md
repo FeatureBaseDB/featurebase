@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.4] - 2018-01-10
+
+This version contains 4 contributions from 3 contributors. There are 17 files changed, 974 insertions, and 221 deletions.
+
+### Fixed
+
+- Group the write operations in syncBlock by MaxWritesPerRequest ([#1038](https://github.com/pilosa/pilosa/pull/1038))
+- Change gossip config from memberlist.DefaultLocalConfig to memberlist.DefaultWANConfig ([#1033](https://github.com/pilosa/pilosa/pull/1033))
+
+### Performance
+
+- Change AttrBlock handler calls to support protobuf instead of json ([#1046](https://github.com/pilosa/pilosa/pull/1046))
+- Use RLock instead of Lock in a few places ([#1042](https://github.com/pilosa/pilosa/pull/1042))
+
 ## [0.8.3] - 2017-12-12
 
 This version contains 1 contribution from 1 contributor. There are 2 files changed, 59 insertions, and 42 deletions.
