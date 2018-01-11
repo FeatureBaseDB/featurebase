@@ -459,6 +459,9 @@ type HolderSyncer struct {
 	Cluster      *Cluster
 	RemoteClient *http.Client
 
+	// Stats
+	Stats StatsClient
+
 	// Signals that the sync should stop.
 	Closing <-chan struct{}
 }
@@ -475,6 +478,7 @@ func (s *HolderSyncer) IsClosing() bool {
 
 // SyncHolder compares the holder on host with the local holder and resolves differences.
 func (s *HolderSyncer) SyncHolder() error {
+	ti := time.Now()
 	// Iterate over schema in sorted order.
 	for _, di := range s.Holder.Schema() {
 		// Verify syncer has not closed.
@@ -487,6 +491,7 @@ func (s *HolderSyncer) SyncHolder() error {
 			return fmt.Errorf("index sync error: index=%s, err=%s", di.Name, err)
 		}
 
+		tf := time.Now()
 		for _, fi := range di.Frames {
 			// Verify syncer has not closed.
 			if s.IsClosing() {
@@ -521,7 +526,11 @@ func (s *HolderSyncer) SyncHolder() error {
 					}
 				}
 			}
+			s.Stats.Histogram("syncFrame", float64(time.Since(tf)), 1.0)
+			tf = time.Now() // reset tf
 		}
+		s.Stats.Histogram("syncIndex", float64(time.Since(ti)), 1.0)
+		ti = time.Now() // reset ti
 	}
 
 	return nil
@@ -534,12 +543,14 @@ func (s *HolderSyncer) syncIndex(index string) error {
 	if idx == nil {
 		return nil
 	}
+	indexTag := fmt.Sprintf("index:%s", index)
 
 	// Read block checksums.
 	blks, err := idx.ColumnAttrStore().Blocks()
 	if err != nil {
 		return err
 	}
+	s.Stats.CountWithCustomTags("ColumnAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag})
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.URI.HostPort()) {
@@ -556,6 +567,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 		} else if len(m) == 0 {
 			continue
 		}
+		s.Stats.CountWithCustomTags("ColumnAttrDiff", int64(len(m)), 1.0, []string{indexTag, node.Host})
 
 		// Update local copy.
 		if err := idx.ColumnAttrStore().SetBulkAttrs(m); err != nil {
@@ -579,12 +591,15 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 	if f == nil {
 		return nil
 	}
+	indexTag := fmt.Sprintf("index:%s", index)
+	frameTag := fmt.Sprintf("frame:%s", name)
 
 	// Read block checksums.
 	blks, err := f.RowAttrStore().Blocks()
 	if err != nil {
 		return err
 	}
+	s.Stats.CountWithCustomTags("RowAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag, frameTag})
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterHost(s.URI.HostPort()) {
@@ -603,6 +618,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 		} else if len(m) == 0 {
 			continue
 		}
+		s.Stats.CountWithCustomTags("RowAttrDiff", int64(len(m)), 1.0, []string{indexTag, frameTag, node.Host})
 
 		// Update local copy.
 		if err := f.RowAttrStore().SetBulkAttrs(m); err != nil {

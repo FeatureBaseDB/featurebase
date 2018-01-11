@@ -302,6 +302,7 @@ func (s *Server) monitorAntiEntropy() {
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
 		syncer.RemoteClient = s.RemoteClient
+		syncer.Stats = s.Holder.Stats.WithTags("HolderSyncer")
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {
