@@ -8,41 +8,113 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa/server"
+	"github.com/pkg/errors"
 )
 
 func MustNewRunningServer(t *testing.T) *server.Command {
-	s := server.NewCommand(&bytes.Buffer{}, ioutil.Discard, ioutil.Discard)
-	s.Config.Bind = ":0"
-	port := strconv.Itoa(MustOpenPort(t))
-	s.Config.GossipPort = port
-	s.Config.GossipSeed = "localhost:" + port
-	td, err := ioutil.TempDir("", "")
+	s, err := newServer()
 	if err != nil {
-		t.Fatalf("error creating temp data directory: %v", err)
+		t.Fatalf("getting new server: %v", err)
 	}
-	s.Config.DataDir = td
+
 	err = s.Run()
 	if err != nil {
-		t.Fatalf("error running new pilosa server: %v", err)
+		t.Fatalf("running new pilosa server: %v", err)
 	}
 	return s
 }
 
-func MustOpenPort(t *testing.T) int {
+func newServer() (*server.Command, error) {
+	s := server.NewCommand(&bytes.Buffer{}, ioutil.Discard, ioutil.Discard)
+
+	port, err := openPort()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting port")
+	}
+	s.Config.Bind = "localhost:" + strconv.Itoa(port)
+
+	gport, err := openPort()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting gossip port")
+	}
+	s.Config.GossipPort = strconv.Itoa(gport)
+
+	s.Config.GossipSeed = "localhost:" + s.Config.GossipPort
+	s.Config.Cluster.Type = "gossip"
+	td, err := ioutil.TempDir("", "")
+	if err != nil {
+		return nil, errors.Wrap(err, "temp dir")
+	}
+	s.Config.DataDir = td
+	return s, nil
+}
+
+func openPort() (int, error) {
 	addr, err := net.ResolveTCPAddr("tcp", ":0")
 	if err != nil {
-		t.Fatalf("resolving new port addr: %v", err)
+		return 0, errors.Wrap(err, "resolving new port addr")
 	}
-
 	l, err := net.ListenTCP("tcp", addr)
 	if err != nil {
-		t.Fatalf("listening to get new port: %v", err)
+		return 0, errors.Wrap(err, "listening to get new port")
 	}
-	defer func() {
-		err := l.Close()
+	port := l.Addr().(*net.TCPAddr).Port
+	err = l.Close()
+	if err != nil {
+		return port, errors.Wrap(err, "closing listener")
+	}
+	return port, nil
+
+}
+
+func MustOpenPort(t *testing.T) int {
+	port, err := openPort()
+	if err != nil {
+		t.Fatalf("allocating new port: %v", err)
+	}
+	return port
+}
+
+type Cluster struct {
+	Servers []*server.Command
+}
+
+func MustNewServerCluster(t *testing.T, size int) *Cluster {
+	cluster, err := NewServerCluster(size)
+	if err != nil {
+		t.Fatalf("new cluster: %v", err)
+	}
+	return cluster
+}
+
+func NewServerCluster(size int) (cluster *Cluster, err error) {
+	cluster = &Cluster{
+		Servers: make([]*server.Command, size),
+	}
+	hosts := make([]string, size)
+	for i := 0; i < size; i++ {
+		s, err := newServer()
 		if err != nil {
-			t.Logf("error closing listener in MustOpenPort: %v", err)
+			return nil, errors.Wrap(err, "new server")
 		}
-	}()
-	return l.Addr().(*net.TCPAddr).Port
+		cluster.Servers[i] = s
+		hosts[i] = s.Config.Bind
+		s.Config.GossipSeed = cluster.Servers[0].Config.GossipSeed
+
+	}
+
+	for _, s := range cluster.Servers {
+		s.Config.Cluster.Hosts = hosts
+	}
+	for i, s := range cluster.Servers {
+		err := s.Run()
+		if err != nil {
+			for j := 0; j <= i; j++ {
+				cluster.Servers[j].Close()
+			}
+			return nil, errors.Wrapf(err, "starting server %d of %d. Config: %#v", i+1, size, s.Config)
+		}
+	}
+
+	return cluster, nil
 }
