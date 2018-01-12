@@ -49,20 +49,29 @@ type Diagnostics struct {
 
 	cb        *gobreaker.CircuitBreaker
 	logOutput io.Writer
+
+	clientDiagnostics *ClientDiagnostics
+}
+
+type ClientDiagnosticsInfo struct {
+	Client   string `json:"client,omitempty"`
+	Runtime  string `json:"runtime,omitempty"`
+	Platform string `json:"platform,omitempty"`
 }
 
 // New returns a pointer to a new Diagnostics Client given an addr in the format "hostname:port".
 func New(host string) *Diagnostics {
 
 	return &Diagnostics{
-		closing:    make(chan struct{}),
-		host:       host,
-		VersionURL: DefaultVersionCheckURL,
-		startTime:  time.Now().Unix(),
-		start:      time.Now(),
-		client:     http.DefaultClient,
-		metrics:    make(map[string]interface{}),
-		logOutput:  ioutil.Discard,
+		closing:           make(chan struct{}),
+		host:              host,
+		VersionURL:        DefaultVersionCheckURL,
+		startTime:         time.Now().Unix(),
+		start:             time.Now(),
+		client:            http.DefaultClient,
+		metrics:           make(map[string]interface{}),
+		logOutput:         ioutil.Discard,
+		clientDiagnostics: NewClientDiagnostics(),
 	}
 }
 
@@ -97,6 +106,7 @@ func (d *Diagnostics) schedule() {
 func (d *Diagnostics) Flush() error {
 	d.mu.Lock()
 	d.metrics["Uptime"] = (time.Now().Unix() - d.startTime)
+	d.enrichWithClientDiagnostics()
 	buf, _ := d.Encode()
 	d.mu.Unlock()
 
@@ -240,6 +250,39 @@ func (d *Diagnostics) EnrichWithMemoryInfo() {
 
 }
 
+// AddClientDiagnostics adds client info to the diagnostics payload.
+func (d *Diagnostics) AddClientDiagnostics(info ClientDiagnosticsInfo) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if info.Client != "" {
+		d.clientDiagnostics.client[info.Client] = true
+	}
+	if info.Runtime != "" {
+		d.clientDiagnostics.runtime[info.Runtime] = true
+	}
+	if info.Platform != "" {
+		d.clientDiagnostics.platform[info.Platform] = true
+	}
+}
+
+func (d *Diagnostics) enrichWithClientDiagnostics() {
+	clientInfo := []string{}
+	for k, _ := range d.clientDiagnostics.client {
+		clientInfo = append(clientInfo, k)
+	}
+	d.metrics["ClientInfo"] = clientInfo
+	clientRuntime := []string{}
+	for k, _ := range d.clientDiagnostics.runtime {
+		clientRuntime = append(clientRuntime, k)
+	}
+	d.metrics["ClientRuntime"] = clientRuntime
+	clientPlatform := []string{}
+	for k, _ := range d.clientDiagnostics.platform {
+		clientPlatform = append(clientPlatform, k)
+	}
+	d.metrics["ClientPlatform"] = clientPlatform
+}
+
 // VersionSegments returns the numeric segments of the version as a slice of ints.
 func VersionSegments(segments string) []int {
 	segments = strings.Trim(segments, "v")
@@ -250,4 +293,22 @@ func VersionSegments(segments string) []int {
 		segmentSlice[i], _ = strconv.Atoi(v)
 	}
 	return segmentSlice
+}
+
+// ClientDiagnostics contains client diagnostics information
+type ClientDiagnostics struct {
+	// unique clients, e.g., go-pilosa/0.8.0-16-g46c8a62
+	client map[string]bool
+	// unique runtimes, e.g., go1.9.1
+	runtime map[string]bool
+	// unique platforms, e.g., linux/amd64
+	platform map[string]bool
+}
+
+func NewClientDiagnostics() *ClientDiagnostics {
+	return &ClientDiagnostics{
+		client:   map[string]bool{},
+		runtime:  map[string]bool{},
+		platform: map[string]bool{},
+	}
 }
