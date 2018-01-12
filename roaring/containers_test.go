@@ -5,19 +5,19 @@ import (
 )
 
 func TestContainersIterator(t *testing.T) {
-	slc := NewSkipListContainers()
-	itr, found := slc.Iterator(0)
+	btc := NewBTreeContainers()
+	itr, found := btc.Iterator(0)
 	if found {
-		t.Fatalf("shouldn't have found 0 in empty slc")
+		t.Fatalf("shouldn't have found 0 in empty btc")
 	}
 	if itr.Next() {
-		t.Fatal("Next() should be false for empty slc")
+		t.Fatal("Next() should be false for empty btc")
 	}
 
-	slc.Put(1, &container{n: 1})
-	slc.Put(2, &container{n: 2})
+	btc.Put(1, &container{n: 1})
+	btc.Put(2, &container{n: 2})
 
-	itr, found = slc.Iterator(0)
+	itr, found = btc.Iterator(0)
 	if found {
 		t.Fatalf("shouldn't have found 0")
 	}
@@ -39,11 +39,11 @@ func TestContainersIterator(t *testing.T) {
 		t.Fatalf("itr should be done, but got true")
 	}
 
-	slc.Put(3, &container{n: 3})
-	slc.Put(5, &container{n: 5})
-	slc.Put(6, &container{n: 6})
+	btc.Put(3, &container{n: 3})
+	btc.Put(5, &container{n: 5})
+	btc.Put(6, &container{n: 6})
 
-	itr, found = slc.Iterator(3)
+	itr, found = btc.Iterator(3)
 	if !itr.Next() {
 		t.Fatalf("3 should be next, but got false")
 	}
@@ -60,7 +60,7 @@ func TestContainersIterator(t *testing.T) {
 		t.Fatalf("Wrong k/v, exp: 5,5 got: %v,%v", key, val.n)
 	}
 
-	itr, found = slc.Iterator(4)
+	itr, found = btc.Iterator(4)
 	if found {
 		t.Fatalf("shouldn't have found 4")
 	}
