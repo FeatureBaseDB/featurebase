@@ -39,6 +39,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
+	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 
@@ -48,6 +49,8 @@ import (
 	_ "github.com/pilosa/pilosa/statik"
 	"github.com/rakyll/statik/fs"
 )
+
+const clientDiagnosticsMaxBodyLength = 2048 // bytes
 
 // Handler represents an HTTP handler.
 type Handler struct {
@@ -70,6 +73,9 @@ type Handler struct {
 
 	// The writer for any logging.
 	LogOutput io.Writer
+
+	// reference to the diagnostics struct of the server
+	diagnostics *diagnostics.Diagnostics
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -135,7 +141,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
-	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
+	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET", "POST")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
 	router.HandleFunc("/id", handler.handleGetID).Methods("GET")
@@ -1596,6 +1602,25 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 		Version: Version,
 	}); err != nil {
 		h.logger().Printf("write version response error: %s", err)
+	}
+	if r.Method == "POST" {
+		clientInfo := diagnostics.ClientDiagnosticsInfo{}
+		if r.ContentLength > clientDiagnosticsMaxBodyLength {
+			h.logger().Println("client diagnostics payload is too big")
+			return
+		}
+		payload := make([]byte, r.ContentLength)
+		payloadLength, err := r.Body.Read(payload)
+		if err != nil && err != io.EOF {
+			h.logger().Printf("error reading diagnostics payload: %s", err)
+			return
+		}
+		err = json.Unmarshal(payload[:payloadLength], &clientInfo)
+		if err != nil {
+			h.logger().Printf("error unmarshalling diagnostics payload: %s", err)
+			return
+		}
+		h.diagnostics.AddClientDiagnostics(clientInfo)
 	}
 }
 
