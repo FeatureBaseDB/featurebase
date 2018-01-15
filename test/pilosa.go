@@ -41,6 +41,7 @@ func newServer() (*server.Command, error) {
 
 	s.Config.GossipSeed = "localhost:" + s.Config.GossipPort
 	s.Config.Cluster.Type = "gossip"
+	s.Config.Metric.Diagnostics = false
 	td, err := ioutil.TempDir("", "")
 	if err != nil {
 		return nil, errors.Wrap(err, "temp dir")
