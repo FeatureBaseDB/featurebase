@@ -1161,9 +1161,13 @@ func TestHandler_Version(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := test.MustNewHTTPRequest("GET", "/version", nil)
 	h.ServeHTTP(w, r)
+	version := pilosa.Version
+	if strings.HasPrefix(version, "v") {
+		version = version[1:]
+	}
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if w.Body.String() != `{"version":"`+pilosa.Version+`"}`+"\n" {
+	} else if w.Body.String() != `{"version":"`+version+`"}`+"\n" {
 		t.Fatalf("unexpected body: %q", w.Body.String())
 	}
 }
