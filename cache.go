@@ -314,19 +314,22 @@ func (p BitmapPairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
 // Pair holds an id/count pair.
 type Pair struct {
 	ID    uint64 `json:"id"`
+	Key   string `json:"key,omitempty"`
 	Count uint64 `json:"count"`
 }
 
 func encodePair(p Pair) *internal.Pair {
 	return &internal.Pair{
-		Key:   p.ID,
+		ID:    p.ID,
+		Key:   p.Key,
 		Count: p.Count,
 	}
 }
 
 func decodePair(pb *internal.Pair) Pair {
 	return Pair{
-		ID:    pb.Key,
+		ID:    pb.ID,
+		Key:   pb.Key,
 		Count: pb.Count,
 	}
 }
