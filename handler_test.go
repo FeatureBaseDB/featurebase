@@ -541,7 +541,7 @@ func TestHandler_Query_Pairs_JSON(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`TopN(frame=x, n=2)`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"results":[[{"id":1,"count":2},{"id":3,"count":4}]]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[[{"id":1,"key":"","count":2},{"id":3,"key":"","count":4}]]}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
 }
