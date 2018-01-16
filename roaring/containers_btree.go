@@ -24,15 +24,28 @@ type BTreeContainers struct {
 }
 
 func (btc *BTreeContainers) Get(key uint64) *container {
+	// Check the last* cache for same container.
+	if key == btc.lastKey && btc.lastContainer != nil {
+		return btc.lastContainer
+	}
+
 	var c *container
 	el, ok := btc.tree.Get(key)
 	if ok {
 		c = el.(*container)
+		btc.lastKey = key
+		btc.lastContainer = c
 	}
 	return c
 }
 
 func (btc *BTreeContainers) Put(key uint64, c *container) {
+	// If a mapped container is added to the tree, reset the
+	// lastContainer cache so that the cache is not pointing
+	// at a read-only mmap.
+	if c.mapped {
+		btc.lastContainer = nil
+	}
 	btc.tree.Set(key, c)
 }
 
@@ -73,7 +86,6 @@ func (btc *BTreeContainers) Clone() Containers {
 		}
 		nbtc.tree.Set(k, v.(*container).clone())
 	}
-
 	return nbtc
 }
 
