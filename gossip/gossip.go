@@ -26,6 +26,7 @@ import (
 	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 )
 
 // Ensure GossipNodeSet implements interfaces.
@@ -76,7 +77,7 @@ func (g *GossipNodeSet) Open() error {
 	}
 	ml, err := memberlist.Create(g.config.memberlistConfig)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating memberlist")
 	}
 	g.memberlist = ml
 	g.broadcasts = &memberlist.TransmitLimitedQueue{
@@ -90,7 +91,7 @@ func (g *GossipNodeSet) Open() error {
 	nodes := []*pilosa.Node{&pilosa.Node{Scheme: "gossip", Host: g.config.gossipSeed}} //TODO: support a list of seeds
 	err = g.joinWithRetry(pilosa.Nodes(nodes).Hosts())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "joinWithRetry")
 	}
 	return nil
 }

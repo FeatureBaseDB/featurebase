@@ -164,6 +164,12 @@
   version = "v1.0.1"
 
 [[projects]]
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
+  version = "v0.8.0"
+
+[[projects]]
   name = "github.com/rakyll/statik"
   packages = ["fs"]
   revision = "fd36b3595eb2ec8da4b8153b107f7ea08504899d"
@@ -262,6 +268,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2e353a12454268d89afe6d06c6021631b577bfd62dede36458f34397ab34fa17"
+  inputs-digest = "d91110a10c830f7a9cc439b9578840d97d9921e84d08242316da8d4a18c68c56"
   solver-name = "gps-cdcl"
   solver-version = 1
