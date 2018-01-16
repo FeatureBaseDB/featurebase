@@ -27,13 +27,13 @@ func MustNewRunningServer(t *testing.T) *server.Command {
 func newServer() (*server.Command, error) {
 	s := server.NewCommand(&bytes.Buffer{}, ioutil.Discard, ioutil.Discard)
 
-	port, err := openPort()
+	port, err := findPort()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting port")
 	}
 	s.Config.Bind = "localhost:" + strconv.Itoa(port)
 
-	gport, err := openPort()
+	gport, err := findPort()
 	if err != nil {
 		return nil, errors.Wrap(err, "getting gossip port")
 	}
@@ -50,7 +50,7 @@ func newServer() (*server.Command, error) {
 	return s, nil
 }
 
-func openPort() (int, error) {
+func findPort() (int, error) {
 	addr, err := net.ResolveTCPAddr("tcp", ":0")
 	if err != nil {
 		return 0, errors.Wrap(err, "resolving new port addr")
@@ -68,8 +68,8 @@ func openPort() (int, error) {
 
 }
 
-func MustOpenPort(t *testing.T) int {
-	port, err := openPort()
+func MustFindPort(t *testing.T) int {
+	port, err := findPort()
 	if err != nil {
 		t.Fatalf("allocating new port: %v", err)
 	}
