@@ -4,6 +4,7 @@ DEP := $(shell command -v dep 2>/dev/null)
 STATIK := $(shell command -v statik 2>/dev/null)
 PROTOC := $(shell command -v protoc 2>/dev/null)
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
+STATUS := $(shell git status --porcelain)
 IDENTIFIER := $(VERSION)-$(GOOS)-$(GOARCH)
 CLONE_URL=github.com/pilosa/pilosa
 PKGS := $(shell cd $(GOPATH)/src/$(CLONE_URL); go list ./... | grep -v vendor)
@@ -65,9 +66,13 @@ endif
 	@echo "Created release build: build/pilosa-$(IDENTIFIER).tar.gz"
 
 release:
+ifeq ($(STATUS),"")
 	make release-build GOOS=darwin GOARCH=amd64
 	make release-build GOOS=linux GOARCH=amd64 DOCKER_BUILD=1
 	make release-build GOOS=linux GOARCH=386 DOCKER_BUILD=1
+else
+	@echo "Will not create release with unclean git status."
+endif
 
 prerelease-build: vendor
 	make pilosa FLAGS="-o build/pilosa-master-$(GOOS)-$(GOARCH)/pilosa"

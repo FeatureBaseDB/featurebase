@@ -88,6 +88,7 @@ type Server struct {
 	MaxWritesPerRequest int
 
 	LogOutput io.Writer
+	logger    *log.Logger
 
 	defaultClient InternalClient
 }
@@ -111,9 +112,9 @@ func NewServer() *Server {
 
 		LogOutput: os.Stderr,
 	}
+	s.logger = log.New(s.LogOutput, "", log.LstdFlags)
 
 	s.Handler.Holder = s.Holder
-
 	return s
 }
 
@@ -313,7 +314,7 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 }
 
 // Logger returns a logger that writes to LogOutput
-func (s *Server) Logger() *log.Logger { return log.New(s.LogOutput, "", log.LstdFlags) }
+func (s *Server) Logger() *log.Logger { return s.logger }
 
 func (s *Server) monitorAntiEntropy() {
 	ticker := time.NewTicker(s.AntiEntropyInterval)
@@ -339,6 +340,7 @@ func (s *Server) monitorAntiEntropy() {
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
 		syncer.RemoteClient = s.RemoteClient
+		syncer.Stats = s.Holder.Stats.WithTags("HolderSyncer")
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {
@@ -588,32 +590,17 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.Holder.NodeID)
 	s.diagnostics.Set("ClusterID", s.Cluster.ID)
+	s.diagnostics.EnrichWithOSInfo()
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {
-		numFrames := 0
-		numSlices := uint64(0)
-		for _, index := range s.Holder.Indexes() {
-			numSlices += index.MaxSlice() + 1
-			for _, f := range index.Frames() {
-				numFrames++
-				if f.rangeEnabled {
-					s.diagnostics.Set("BSIEnabled", true)
-				}
-				if f.timeQuantum != "" {
-					s.diagnostics.Set("TimeQuantumEnabled", true)
-				}
-			}
-		}
-
-		s.diagnostics.Set("NumIndexes", len(s.Holder.Indexes()))
-		s.diagnostics.Set("NumFrames", numFrames)
-		s.diagnostics.Set("NumSlices", numSlices)
+		enrichDiagnosticsWithSchemaProperties(s.diagnostics, s.Holder)
 		openFiles, err := CountOpenFiles()
 		if err == nil {
 			s.diagnostics.Set("OpenFiles", openFiles)
 		}
 		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
+		s.diagnostics.EnrichWithMemoryInfo()
 		s.diagnostics.CheckVersion()
 		s.diagnostics.Flush()
 	}
@@ -710,4 +697,40 @@ type StatusHandler interface {
 	LocalStatus() (proto.Message, error)
 	ClusterStatus() (proto.Message, error)
 	HandleRemoteStatus(proto.Message) error
+}
+
+type diagnosticsFrameProperties struct {
+	BSIFieldCount      int
+	TimeQuantumEnabled bool
+}
+
+func enrichDiagnosticsWithSchemaProperties(d *diagnostics.Diagnostics, holder *Holder) {
+	// NOTE: this function is not in the diagnostics package, since circular imports are not allowed.
+	var numSlices uint64
+	numFrames := 0
+	numIndexes := 0
+	bsiFieldCount := 0
+	timeQuantumEnabled := false
+
+	for _, index := range holder.Indexes() {
+		numSlices += index.MaxSlice() + 1
+		numIndexes += 1
+		for _, frame := range index.Frames() {
+			numFrames += 1
+			if frame.rangeEnabled {
+				if fields, err := frame.GetFields(); err == nil {
+					bsiFieldCount += len(fields)
+				}
+			}
+			if frame.TimeQuantum() != "" {
+				timeQuantumEnabled = true
+			}
+		}
+	}
+
+	d.Set("NumIndexes", numIndexes)
+	d.Set("NumFrames", numFrames)
+	d.Set("NumSlices", numSlices)
+	d.Set("BSIFieldCount", bsiFieldCount)
+	d.Set("TimeQuantumEnabled", timeQuantumEnabled)
 }

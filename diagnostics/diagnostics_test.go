@@ -49,7 +49,7 @@ func TestDiagnosticsClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	output2 := []byte(`{"gg":10,"ss":"ss","uptime":0}`)
+	output2 := []byte(`{"gg":10,"ss":"ss","Uptime":0}`)
 	if eq, err = compareJSON(data, output2); err != nil {
 		t.Fatal(err)
 	}

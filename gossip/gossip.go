@@ -32,6 +32,7 @@ import (
 	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 )
 
 // Ensure GossipMemberSet implements interfaces.
@@ -90,7 +91,7 @@ func (g *GossipMemberSet) Open() error {
 	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
 	g.mu.Unlock()
 	if err != nil {
-		return fmt.Errorf("creating memberlist: %s", err)
+		return errors.Wrap(err, "creating memberlist")
 	}
 
 	g.broadcasts = &memberlist.TransmitLimitedQueue{
@@ -114,7 +115,7 @@ func (g *GossipMemberSet) Open() error {
 	err = g.joinWithRetry(pilosa.NodeSet(pilosa.Nodes(nodes).URIs()).ToHostPortStrings())
 	g.mu.RUnlock()
 	if err != nil {
-		return fmt.Errorf("joining member set: %s", err)
+		return errors.Wrap(err, "joinWithRetry")
 	}
 	return nil
 }
@@ -178,7 +179,7 @@ func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport 
 	}
 
 	// memberlist config
-	conf := memberlist.DefaultLocalConfig()
+	conf := memberlist.DefaultWANConfig()
 	conf.Transport = transport.Net
 	conf.Name = name
 	conf.BindAddr = host
@@ -216,7 +217,6 @@ func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport 
 
 // NewGossipMemberSet returns a new instance of GossipMemberSet given a gossip port.
 func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server) (*GossipMemberSet, error) {
-
 	port, err := strconv.Atoi(cfg.Gossip.Port)
 	if err != nil {
 		return nil, fmt.Errorf("convert port: %s", err)
@@ -431,7 +431,7 @@ type Transport struct {
 //func NewTransport(host string, port int) (*memberlist.NetTransport, error) {
 func NewTransport(host string, port int) (*Transport, error) {
 	// memberlist config
-	conf := memberlist.DefaultLocalConfig()
+	conf := memberlist.DefaultWANConfig()
 	conf.BindAddr = host
 	conf.BindPort = port
 	conf.AdvertisePort = port
