@@ -47,6 +47,25 @@ func (btc *BTreeContainers) Put(key uint64, c *container) {
 	btc.tree.Set(key, c)
 }
 
+func (btc *BTreeContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
+	f := func(oldV *container, exists bool) (*container, bool) {
+		// update the existing container
+		if exists {
+			oldV.containerType = containerType
+			oldV.n = n
+			oldV.mapped = mapped
+			return oldV, true
+		}
+		return &container{
+			containerType: containerType,
+			n:             n,
+			mapped:        mapped,
+		}, true
+	}
+
+	btc.tree.Put(key, f)
+}
+
 func (btc *BTreeContainers) Remove(key uint64) {
 	btc.tree.Delete(key)
 }

@@ -70,6 +70,10 @@ type Containers interface {
 	// Put adds the container at key.
 	Put(key uint64, c *container)
 
+	// PutContainerValues updates an existing container at key.
+	// If a container does not exist for key, a new one is allocated.
+	PutContainerValues(key uint64, containerType byte, n int, mapped bool)
+
 	// Remove takes the container at key out.
 	Remove(key uint64)
 
@@ -631,11 +635,11 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
-		b.conts.Put(binary.LittleEndian.Uint64(buf[0:8]), &container{
-			containerType: byte(binary.LittleEndian.Uint16(buf[8:10])),
-			n:             int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
-			mapped:        true,
-		})
+		b.conts.PutContainerValues(
+			binary.LittleEndian.Uint64(buf[0:8]),
+			byte(binary.LittleEndian.Uint16(buf[8:10])),
+			int(binary.LittleEndian.Uint16(buf[10:12]))+1,
+			true)
 	}
 	opsOffset := headerSize + int(keyN)*12
 

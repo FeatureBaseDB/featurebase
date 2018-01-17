@@ -25,6 +25,9 @@ func (slc *SkipListContainers) Put(key uint64, c *container) {
 	slc.list.Set(key, c)
 }
 
+func (slc *SkipListContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
+}
+
 func (slc *SkipListContainers) Remove(key uint64) {
 	slc.list.Remove(key)
 }
