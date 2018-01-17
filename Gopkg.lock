@@ -14,10 +14,16 @@
   revision = "39b0596a2da3c92787b3319c6b5425a474b4e0da"
 
 [[projects]]
+  branch = "master"
   name = "github.com/DataDog/datadog-go"
   packages = ["statsd"]
-  revision = "0ddda6bee21174ef6c4873647cb0d6ec9cba996f"
-  version = "1.1.0"
+  revision = "4d2e5696ebe914940bd7459d2266fb7d555ea1b7"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/StackExchange/wmi"
+  packages = ["."]
+  revision = "ea383cf3ba6ec950874b8486cd72356d007c768f"
 
 [[projects]]
   branch = "master"
@@ -44,10 +50,16 @@
   version = "v1.4.2"
 
 [[projects]]
+  name = "github.com/go-ole/go-ole"
+  packages = [".","oleutil"]
+  revision = "0e87ea779d9deb219633b828a023b32e1244dd57"
+  version = "v1.2.0"
+
+[[projects]]
   name = "github.com/gogo/protobuf"
   packages = ["proto"]
-  revision = "342cbe0a04158f6dcb03ca0079991a51a4248c02"
-  version = "v0.5"
+  revision = "100ba4e885062801d56799d78530b73b178a78f3"
+  version = "v0.4"
 
 [[projects]]
   branch = "master"
@@ -152,6 +164,12 @@
   version = "v1.0.1"
 
 [[projects]]
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
+  version = "v0.8.0"
+
+[[projects]]
   name = "github.com/rakyll/statik"
   packages = ["fs"]
   revision = "fd36b3595eb2ec8da4b8153b107f7ea08504899d"
@@ -168,6 +186,12 @@
   name = "github.com/sean-/seed"
   packages = ["."]
   revision = "e2103e2c35297fb7e17febb81e49b312087a2372"
+
+[[projects]]
+  name = "github.com/shirou/gopsutil"
+  packages = ["host","internal/common","mem","process"]
+  revision = "bfe3c2e8f406bf352bc8df81f98c752224867349"
+  version = "v2.17.11"
 
 [[projects]]
   name = "github.com/sony/gobreaker"
@@ -226,7 +250,7 @@
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
-  packages = ["unix"]
+  packages = ["unix","windows"]
   revision = "1e2299c37cc91a509f1b12369872d27be0ce98a6"
 
 [[projects]]
@@ -244,6 +268,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "210f654a7a072d5751f0814e4d71ef0758dd53b3dc59ed462619396ef8621d81"
+  inputs-digest = "d91110a10c830f7a9cc439b9578840d97d9921e84d08242316da8d4a18c68c56"
   solver-name = "gps-cdcl"
   solver-version = 1

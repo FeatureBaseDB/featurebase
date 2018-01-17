@@ -490,6 +490,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 		URI:          cluster.Nodes[0].URI,
 		Cluster:      cluster,
 		RemoteClient: pilosa.GetHTTPClient(nil),
+		Stats:        pilosa.NopStatsClient,
 	}
 
 	if err := syncer.SyncHolder(); err != nil {

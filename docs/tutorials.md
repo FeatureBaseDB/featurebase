@@ -2,13 +2,15 @@
 title = "Tutorials"
 weight = 4
 nav = [
-    "How To Setup a Secure Cluster",
+    "Setting Up a Secure Cluster",
+    "Using Integer Field Values",
+    "Storing Row and Column Attributes",
 ]
 +++
 
 ## Tutorials
 
-### How To Setup a Secure Cluster
+### Setting Up a Secure Cluster
 
 #### Introduction
 
@@ -212,3 +214,228 @@ curl -k --ipv4 https://02.pilosa.local:10502/index/sample-index/query -d 'Bitmap
 #### What's Next?
 
 Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](https://www.pilosa.com/docs/latest/configuration/) to see the available options to configure Pilosa.
+
+
+### Using Integer Field Values
+
+#### Introduction
+
+Pilosa can store integer values associated to the columns in an index, and those values are used to support range and aggregate queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
+
+First, create an index called `patients`:
+```
+curl localhost:10101/index/patients \
+     -X POST 
+```
+
+Next, create a frame in the `patients` index called `measurements` which will represent information gathered about each patient.
+```
+curl localhost:10101/index/patients/frame/measurements \
+     -X POST \
+     -d '{"options":{"rangeEnabled": true}}'
+```
+
+In addition to storing rows of bits, a frame can also contain fields that store integer values. The next step creates three fields (`age`, `weight`, `tcells`) in the `measurements` frame.
+```
+curl localhost:10101/index/patients/frame/measurements \
+     -X POST \
+     -d '{"options":{
+              "rangeEnabled": true,
+              "fields": [
+                  {"name": "age", "type": "int", "min": 0, "max": 120},
+                  {"name": "weight", "type": "int", "min": 0, "max": 500},
+                  {"name": "tcells", "type": "int", "min": 0, "max": 2000}
+              ]
+         }}'
+```
+
+If you need to, you can add fields to an existing frame by posting to the [Create Field endpoint](../api-reference/#create-field).
+
+Next, let's populate our fields with data. There are two ways to get data into fields: use the `SetFieldValue()` PQL function to set fields individually, or use the `pilosa import` command to import many values at once. First, let's set some field data using PQL.
+
+This query sets the age, weight, and t-cell count for the patient with ID `1` in our system:
+```
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'SetFieldValue(columnID=1, frame="measurements", age=34, weight=128, tcells=1145)'
+```
+
+In the case where we need to load a lot of data at once, we can use the `pilosa import` command. This method lets us import data into Pilosa from a CSV file.
+
+Assuming we have a file called `ages.csv` that is structured like this:
+```
+1,34
+2,57
+3,19
+4,40
+5,32
+6,71
+7,28
+8,33
+9,63
+```
+where the first column of the CSV represents the patient `ID` and the second column represents the patient's`age`, then we can import the data into our `age` field by running this command:
+```
+pilosa import -i patients -f measurements --field age ages.csv
+```
+
+Now that we have some data in our index, let's run a few queries to demonstrate how to use that data.
+
+In order to find all patients over the age of 40, then simply run a `Range` query against the `age` field.
+```
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Range(frame="measurements", age > 40)'
+```
+You should get the following results:
+```
+{"results":[{"attrs":{},"bits":[2,6,9]}]}
+```
+
+You can find a list of supported range operators in the [Range Query](../query-language/#range-bsi) documentation.
+
+To find the average age of all patients, run a `Sum` query:
+```
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Sum(frame="measurements", field="age")'
+```
+The results you get from the `Sum` query contain the `sum` of all values as well as the `count` of columns with a value. To get the average you can just divide `sum` by `count`.
+```
+{"results":[{"sum":377,"count":9}]}
+```
+
+You can also provide a filter to the `Sum()` function, to find the average age of all patients over 40.
+```
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Sum(Range(frame="measurements", age > 40), frame="measurements", field="age")'
+```
+Notice in this case that the count is only `3` because of the `age > 40` filter applied to the query.
+```
+{"results":[{"sum":191,"count":3}]}
+```
+
+### Storing Row and Column Attributes
+
+#### Introduction
+
+Pilosa can store arbitrary values associated to any row or column. In Pilosa, these are referred to as `attributes`, and they can be of type `string`, `integer`, `boolean`, or `float`. In this tutorial we will store some attribute data and then run some queries that return that data.
+
+First, create an index called `books` to use for this tutorial:
+```
+curl localhost:10101/index/books \
+     -X POST
+```
+
+Next, create a frame in the `books` index called `members` which will represent library members who have read books.
+```
+curl localhost:10101/index/books/frame/members \
+     -X POST \
+     -d '{}'
+```
+
+Now, let's add some books to our index.
+```
+curl localhost:10101/index/books/query \
+     -X POST \
+     -d 'SetColumnAttrs(columnID=1, name="To Kill a Mockingbird", year=1960)
+         SetColumnAttrs(columnID=2, name="No Name in the Street", year=1972)
+         SetColumnAttrs(columnID=3, name="The Tipping Point", year=2000)
+         SetColumnAttrs(columnID=4, name="Out Stealing Horses", year=2003)
+         SetColumnAttrs(columnID=5, name="The Forever War", year=2008)'
+```
+
+And add some members.
+```
+curl localhost:10101/index/books/query \
+     -X POST \
+     -d 'SetRowAttrs(frame="members", rowID=10001, fullName="John Smith")
+         SetRowAttrs(frame="members", rowID=10002, fullName="Sue Perkins")
+         SetRowAttrs(frame="members", rowID=10003, fullName="Jennifer Hawks")
+         SetRowAttrs(frame="members", rowID=10004, fullName="Pedro Vazquez")
+         SetRowAttrs(frame="members", rowID=10005, fullName="Pat Washington")'
+```
+
+At this point we can query one of the `member` records by querying that row.
+```
+curl localhost:10101/index/books/query \
+     -X POST \
+     -d 'Bitmap(frame="members", rowID=10002)'
+```
+You should get the following result set:
+```
+{"results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[]}]}
+```
+
+Now let's add some data to the matrix such that each pair represents a member who has read that book.
+```
+curl localhost:10101/index/books/query \
+     -X POST \
+     -d 'SetBit(frame="members", rowID=10001, columnID=3)
+         SetBit(frame="members", rowID=10001, columnID=5)
+
+         SetBit(frame="members", rowID=10002, columnID=1)
+         SetBit(frame="members", rowID=10002, columnID=2)
+         SetBit(frame="members", rowID=10002, columnID=4)
+
+         SetBit(frame="members", rowID=10003, columnID=3)
+
+         SetBit(frame="members", rowID=10004, columnID=4)
+         SetBit(frame="members", rowID=10004, columnID=5)
+
+         SetBit(frame="members", rowID=10005, columnID=1)
+         SetBit(frame="members", rowID=10005, columnID=2)
+         SetBit(frame="members", rowID=10005, columnID=3)
+         SetBit(frame="members", rowID=10005, columnID=4)
+         SetBit(frame="members", rowID=10005, columnID=5)'
+```
+
+Now pull the record for `Sue Perkins` again.
+```
+curl localhost:10101/index/books/query \
+     -X POST \
+     -d 'Bitmap(frame="members", rowID=10002)'
+```
+Notice that the result set now contains a list of integers in the `bits` attribute. These integers match the column IDs of the books that Sue has read.
+```
+{"results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[1,2,4]}]}
+```
+
+In order to retrieve the attribute information that we stored for each book, we need to add a URL parameter `columnAttrs=true` to the query.
+```
+curl localhost:10101/index/books/query?columnAttrs=true \
+     -X POST \
+     -d 'Bitmap(frame="members", rowID=10002)'
+```
+
+Here, the `book` attributes will be included in the result set at the `columnAttrs` attribute.
+
+```
+{
+  "results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[1,2,4]}],
+  "columnAttrs":[
+    {"id":1,"attrs":{"name":"To Kill a Mockingbird","year":1960}},
+    {"id":2,"attrs":{"name":"No Name in the Street","year":1972}},
+    {"id":4,"attrs":{"name":"Out Stealing Horses","year":2003}}
+  ]
+}
+```
+
+Finally, if we want to find out which books were read by both `Sue` and `Pedro`, we just perform an `Intersect` query on those two members:
+```
+curl localhost:10101/index/books/query?columnAttrs=true \
+     -X POST \
+     -d 'Intersect(Bitmap(frame="members", rowID=10002), Bitmap(frame="members", rowID=10004))'
+```
+
+```
+{
+  "results":[{"attrs":{},"bits":[4]}],
+  "columnAttrs":[
+    {"id":4,"attrs":{"name":"Out Stealing Horses","year":2003}}
+  ]
+}
+```
+
+Notice that we don't get row attributes on a complex query, but we still get the column attributes—in this case book information.

@@ -4,11 +4,13 @@ package internal;
 
 message Bitmap {
 	repeated uint64 Bits = 1;
+	repeated string Keys = 3;
 	repeated Attr Attrs = 2;
 }
 
 message Pair {
-	uint64 Key = 1;
+	uint64 ID = 1;
+	string Key = 3;
 	uint64 Count = 2;
 }
 
@@ -25,6 +27,7 @@ message Bit {
 
 message ColumnAttrSet {
 	uint64 ID = 1;
+	string Key = 3;
 	repeated Attr Attrs = 2;
 }
 

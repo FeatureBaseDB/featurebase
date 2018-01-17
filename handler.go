@@ -1623,10 +1623,15 @@ func (h *Handler) handleGetHosts(w http.ResponseWriter, r *http.Request) {
 
 // handleGetVersion handles /version requests.
 func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
+	version := Version
+	if strings.HasPrefix(version, "v") {
+		// make the version string semver-compatible
+		version = version[1:]
+	}
 	if err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
-		Version: Version,
+		Version: version,
 	}); err != nil {
 		h.logger().Printf("write version response error: %s", err)
 	}
