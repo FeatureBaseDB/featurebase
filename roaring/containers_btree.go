@@ -2,8 +2,6 @@ package roaring
 
 import (
 	"io"
-
-	btree "github.com/pilosa/b"
 )
 
 func cmp(a, b uint64) int {
@@ -12,12 +10,12 @@ func cmp(a, b uint64) int {
 
 func NewBTreeContainers() *BTreeContainers {
 	return &BTreeContainers{
-		tree: btree.TreeNew(cmp),
+		tree: TreeNew(cmp),
 	}
 }
 
 type BTreeContainers struct {
-	tree *btree.Tree
+	tree *Tree
 
 	lastKey       uint64
 	lastContainer *container
@@ -32,7 +30,7 @@ func (btc *BTreeContainers) Get(key uint64) *container {
 	var c *container
 	el, ok := btc.tree.Get(key)
 	if ok {
-		c = el.(*container)
+		c = el
 		btc.lastKey = key
 		btc.lastContainer = c
 	}
@@ -68,7 +66,7 @@ func (btc *BTreeContainers) GetOrCreate(key uint64) *container {
 		return cont
 	}
 
-	btc.lastContainer = v.(*container)
+	btc.lastContainer = v
 	return btc.lastContainer
 }
 
@@ -84,7 +82,7 @@ func (btc *BTreeContainers) Clone() Containers {
 		if err == io.EOF {
 			break
 		}
-		nbtc.tree.Set(k, v.(*container).clone())
+		nbtc.tree.Set(k, v.clone())
 	}
 	return nbtc
 }
@@ -94,7 +92,7 @@ func (btc *BTreeContainers) Last() (key uint64, c *container) {
 		return 0, nil
 	}
 	k, v := btc.tree.Last()
-	return k, v.(*container)
+	return k, v
 }
 
 func (btc *BTreeContainers) Size() int {
@@ -113,9 +111,9 @@ func (btc *BTreeContainers) Iterator(key uint64) (citer Contiterator, found bool
 }
 
 type BTCIterator struct {
-	e   *btree.Enumerator
-	key interface{}
-	val interface{}
+	e   *Enumerator
+	key uint64
+	val *container
 }
 
 func (i *BTCIterator) Next() bool {
@@ -133,5 +131,5 @@ func (i *BTCIterator) Value() (uint64, *container) {
 	if i.val == nil {
 		return 0, nil
 	}
-	return i.key.(uint64), i.val.(*container)
+	return i.key, i.val
 }
