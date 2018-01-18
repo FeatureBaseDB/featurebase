@@ -348,6 +348,22 @@ func txUpdateAttrs(tx *bolt.Tx, id uint64, m map[string]interface{}) (map[string
 	return attr, nil
 }
 
+func encodeAttrsMap(m map[uint64]map[string]interface{}) map[uint64]*internal.AttrMap {
+	r := make(map[uint64]*internal.AttrMap, len(m))
+	for k, v := range m {
+		r[k] = &internal.AttrMap{Attrs: encodeAttrs(v)}
+	}
+	return r
+}
+
+func DecodeAttrsMap(m map[uint64]*internal.AttrMap) map[uint64]map[string]interface{} {
+	r := make(map[uint64]map[string]interface{}, len(m))
+	for k, v := range m {
+		r[k] = decodeAttrs(v.Attrs)
+	}
+	return r
+}
+
 func encodeAttrs(m map[string]interface{}) []*internal.Attr {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -436,6 +452,38 @@ var emptyMap = make(map[string]interface{})
 type AttrBlock struct {
 	ID       uint64 `json:"id"`
 	Checksum []byte `json:"checksum"`
+}
+
+// EncodeAttrBlocks converts a into its internal representation.
+func EncodeAttrBlocks(a []AttrBlock) []*internal.AttrBlock {
+	other := make([]*internal.AttrBlock, len(a))
+	for i := range a {
+		other[i] = encodeAttrBlock(&a[i])
+	}
+	return other
+}
+
+// encodeAttrBlock converts b into its internal representation.
+func encodeAttrBlock(b *AttrBlock) *internal.AttrBlock {
+	return &internal.AttrBlock{
+		ID:       b.ID,
+		Checksum: b.Checksum,
+	}
+}
+
+func decodeAttrBlocks(a []*internal.AttrBlock) []AttrBlock {
+	other := make([]AttrBlock, len(a))
+	for i := range a {
+		other[i] = decodeAttrBlock(a[i])
+	}
+	return other
+}
+
+func decodeAttrBlock(b *internal.AttrBlock) AttrBlock {
+	return AttrBlock{
+		ID:       b.ID,
+		Checksum: b.Checksum,
+	}
 }
 
 // AttrBlocks represents a list of blocks.

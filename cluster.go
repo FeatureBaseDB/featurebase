@@ -144,14 +144,18 @@ type Cluster struct {
 
 	// Threshold for logging long-running queries
 	LongQueryTime time.Duration
+
+	// Maximum number of SetBit() or ClearBit() commands per request.
+	MaxWritesPerRequest int
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
 func NewCluster() *Cluster {
 	return &Cluster{
-		Hasher:     &jmphasher{},
-		PartitionN: DefaultPartitionN,
-		ReplicaN:   DefaultReplicaN,
+		Hasher:              &jmphasher{},
+		PartitionN:          DefaultPartitionN,
+		ReplicaN:            DefaultReplicaN,
+		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
 	}
 }
 

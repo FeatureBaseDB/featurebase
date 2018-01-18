@@ -25,7 +25,6 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -46,14 +45,13 @@ type ClientOptions struct {
 // InternalHTTPClient represents a client to the Pilosa cluster.
 type InternalHTTPClient struct {
 	defaultURI *URI
-	options    *ClientOptions
 
 	// The client to use for HTTP communication.
 	HTTPClient *http.Client
 }
 
 // NewInternalHTTPClient returns a new instance of InternalHTTPClient to connect to host.
-func NewInternalHTTPClient(host string, options *ClientOptions) (*InternalHTTPClient, error) {
+func NewInternalHTTPClient(host string, remoteClient *http.Client) (*InternalHTTPClient, error) {
 	if host == "" {
 		return nil, ErrHostRequired
 	}
@@ -63,34 +61,14 @@ func NewInternalHTTPClient(host string, options *ClientOptions) (*InternalHTTPCl
 		return nil, err
 	}
 
-	client := NewInternalHTTPClientFromURI(uri, options)
+	client := NewInternalHTTPClientFromURI(uri, remoteClient)
 	return client, nil
 }
 
-func NewInternalHTTPClientFromURI(defaultURI *URI, options *ClientOptions) *InternalHTTPClient {
-	if options == nil {
-		options = &ClientOptions{}
-	}
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          1000,
-		MaxIdleConnsPerHost:   200,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-	if options.TLS != nil {
-		transport.TLSClientConfig = options.TLS
-	}
-	client := &http.Client{Transport: transport}
+func NewInternalHTTPClientFromURI(defaultURI *URI, remoteClient *http.Client) *InternalHTTPClient {
 	return &InternalHTTPClient{
 		defaultURI: defaultURI,
-		HTTPClient: client,
+		HTTPClient: remoteClient,
 	}
 }
 
@@ -988,10 +966,12 @@ func (c *InternalHTTPClient) BlockData(ctx context.Context, index, frame, view s
 func (c *InternalHTTPClient) ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/attr/diff", index))
 
-	// Encode request.
-	buf, err := json.Marshal(postIndexAttrDiffRequest{Blocks: blks})
+	// Encode request object.
+	buf, err := proto.Marshal(&internal.AttrBlockRequest{
+		Blocks: EncodeAttrBlocks(blks),
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal column attr block request: %s", err)
 	}
 
 	// Build request.
@@ -999,7 +979,9 @@ func (c *InternalHTTPClient) ColumnAttrDiff(ctx context.Context, index string, b
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request.
@@ -1016,22 +998,31 @@ func (c *InternalHTTPClient) ColumnAttrDiff(ctx context.Context, index string, b
 		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
 	}
 
-	// Decode response object.
-	var rsp postIndexAttrDiffResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+	// Read body.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
 	}
-	return rsp.Attrs, nil
+
+	// Decode response object.
+	abresp := &internal.AttrBlockResponse{}
+	if err := proto.Unmarshal(body, abresp); err != nil {
+		return nil, fmt.Errorf("unmarshal attribute block response: %s", err)
+	}
+
+	return DecodeAttrsMap(abresp.Attrs), nil
 }
 
 // RowAttrDiff returns data from differing blocks on a remote host.
 func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/attr/diff", index, frame))
 
-	// Encode request.
-	buf, err := json.Marshal(postFrameAttrDiffRequest{Blocks: blks})
+	// Encode request object.
+	buf, err := proto.Marshal(&internal.AttrBlockRequest{
+		Blocks: EncodeAttrBlocks(blks),
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal row attr block request: %s", err)
 	}
 
 	// Build request.
@@ -1039,7 +1030,9 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 
 	// Execute request.
@@ -1058,12 +1051,19 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
 	}
 
-	// Decode response object.
-	var rsp postFrameAttrDiffResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+	// Read body.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
 	}
-	return rsp.Attrs, nil
+
+	// Decode response object.
+	abresp := &internal.AttrBlockResponse{}
+	if err := proto.Unmarshal(body, abresp); err != nil {
+		return nil, fmt.Errorf("unmarshal attribute block response: %s", err)
+	}
+
+	return DecodeAttrsMap(abresp.Attrs), nil
 }
 
 func (c *InternalHTTPClient) clientURI(ctx context.Context) *URI {

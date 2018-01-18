@@ -81,3 +81,7 @@ message ImportValueRequest {
 	repeated uint64 ColumnIDs = 5;
 	repeated int64 Values = 6;
 }
+
+message AttrBlockResponse {
+    map<uint64, AttrMap> Attrs = 1;
+}

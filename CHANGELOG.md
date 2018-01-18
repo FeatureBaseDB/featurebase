@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.4] - 2018-01-10
+
+This version contains 4 contributions from 3 contributors. There are 17 files changed, 974 insertions, and 221 deletions.
+
+### Fixed
+
+- Group the write operations in syncBlock by MaxWritesPerRequest ([#1038](https://github.com/pilosa/pilosa/pull/1038))
+- Change gossip config from memberlist.DefaultLocalConfig to memberlist.DefaultWANConfig ([#1033](https://github.com/pilosa/pilosa/pull/1033))
+
+### Performance
+
+- Change AttrBlock handler calls to support protobuf instead of json ([#1046](https://github.com/pilosa/pilosa/pull/1046))
+- Use RLock instead of Lock in a few places ([#1042](https://github.com/pilosa/pilosa/pull/1042))
+
+## [0.8.3] - 2017-12-12
+
+This version contains 1 contribution from 1 contributor. There are 2 files changed, 59 insertions, and 42 deletions.
+
+### Fixed
+
+- Protect against accessing pointers to memory which was unmapped ([#1000](https://github.com/pilosa/pilosa/pull/1000))
+
+## [0.8.2] - 2017-12-05
+
+This version contains 1 contribution from 1 contributor. There are 15 files changed, 127 insertions, and 98 deletions.
+
+### Fixed
+
+- Modify initialization of HTTP client so only one instance is created ([#994](https://github.com/pilosa/pilosa/pull/994))
+
+## [0.8.1] - 2017-11-15
+
+This version contains 2 contributions from 2 contributors. There are 4 files changed, 27 insertions, and 14 deletions.
+
+### Fixed
+
+- Fix CountOpenFiles() fatal crash ([#969](https://github.com/pilosa/pilosa/pull/969))
+- Fix version check when local is greater than pilosa.com ([#968](https://github.com/pilosa/pilosa/pull/968))
+
 ## [0.8.0] - 2017-11-15
 
 This version contains 31 contributions from 8 contributors. There are 84 files changed, 3,732 insertions, and 1,428 deletions.
