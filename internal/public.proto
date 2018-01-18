@@ -41,7 +41,7 @@ message Attr {
 }
 
 message AttrMap {
-    repeated Attr Attrs = 1;
+	repeated Attr Attrs = 1;
 }
 
 message QueryRequest {
@@ -75,6 +75,14 @@ message ImportRequest {
 	repeated uint64 RowIDs = 4;
 	repeated uint64 ColumnIDs = 5;
 	repeated int64 Timestamps = 6;
+}
+
+message ImportKRequest {
+	string Index = 1;
+	string Frame = 2;
+	repeated string RowKeys = 3;
+	repeated string ColumnKeys = 4;
+	repeated int64 Timestamps = 5;
 }
 
 message ImportValueRequest {
