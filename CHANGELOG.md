@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.5] - 2018-01-18
+
+This version contains 1 contribution from 1 contributor. There is 1 file changed, 1 insertion, and 0 deletions.
+
+### Fixed
+
+- Bind Docker container on all interfaces ([#1061](https://github.com/pilosa/pilosa/pull/1061))
+
 ## [0.8.4] - 2018-01-10
 
 This version contains 4 contributions from 3 contributors. There are 17 files changed, 974 insertions, and 221 deletions.
