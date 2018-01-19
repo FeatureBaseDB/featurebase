@@ -303,15 +303,15 @@ func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, sl
 	return nil
 }
 
-// ImportK bulk imports bitKs to a host.
-func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, bitKs []BitK) error {
+// ImportK bulk imports bits to a host.
+func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, bits []Bit) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
 	}
 
-	buf, err := marshalImportKPayload(index, frame, bitKs)
+	buf, err := marshalImportPayloadK(index, frame, bits)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -367,15 +367,15 @@ func marshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte
 	return buf, nil
 }
 
-// marshalImportKPayload marshalls the import parameters into a protobuf byte slice.
-func marshalImportKPayload(index, frame string, bitKs []BitK) ([]byte, error) {
+// marshalImportPayloadK marshalls the import parameters into a protobuf byte slice.
+func marshalImportPayloadK(index, frame string, bits []Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
-	rowKeys := BitKs(bitKs).RowKeys()
-	columnKeys := BitKs(bitKs).ColumnKeys()
-	timestamps := BitKs(bitKs).Timestamps()
+	rowKeys := Bits(bits).RowKeys()
+	columnKeys := Bits(bits).ColumnKeys()
+	timestamps := Bits(bits).Timestamps()
 
 	// Marshal bits to protobufs.
-	buf, err := proto.Marshal(&internal.ImportKRequest{
+	buf, err := proto.Marshal(&internal.ImportRequest{
 		Index:      index,
 		Frame:      frame,
 		RowKeys:    rowKeys,
@@ -1162,6 +1162,8 @@ func (c *InternalHTTPClient) NodeID(uri *URI) (string, error) {
 type Bit struct {
 	RowID     uint64
 	ColumnID  uint64
+	RowKey    string
+	ColumnKey string
 	Timestamp int64
 }
 
@@ -1199,6 +1201,24 @@ func (p Bits) ColumnIDs() []uint64 {
 	return other
 }
 
+// RowKeys returns a slice of all the row keys.
+func (p Bits) RowKeys() []string {
+	other := make([]string, len(p))
+	for i := range p {
+		other[i] = p[i].RowKey
+	}
+	return other
+}
+
+// ColumnKeys returns a slice of all the column keys.
+func (p Bits) ColumnKeys() []string {
+	other := make([]string, len(p))
+	for i := range p {
+		other[i] = p[i].ColumnKey
+	}
+	return other
+}
+
 // Timestamps returns a slice of all the timestamps.
 func (p Bits) Timestamps() []int64 {
 	other := make([]int64, len(p))
@@ -1222,43 +1242,6 @@ func (p Bits) GroupBySlice() map[uint64][]Bit {
 	}
 
 	return m
-}
-
-// BitK represents the location of a single bit as string keys.
-type BitK struct {
-	RowKey    string
-	ColumnKey string
-	Timestamp int64
-}
-
-// BitKs represents a slice of bitKs.
-type BitKs []BitK
-
-// RowKeys returns a slice of all the row Keys.
-func (p BitKs) RowKeys() []string {
-	other := make([]string, len(p))
-	for i := range p {
-		other[i] = p[i].RowKey
-	}
-	return other
-}
-
-// ColumnKeys returns a slice of all the column Keys.
-func (p BitKs) ColumnKeys() []string {
-	other := make([]string, len(p))
-	for i := range p {
-		other[i] = p[i].ColumnKey
-	}
-	return other
-}
-
-// Timestamps returns a slice of all the timestamps.
-func (p BitKs) Timestamps() []int64 {
-	other := make([]int64, len(p))
-	for i := range p {
-		other[i] = p[i].Timestamp
-	}
-	return other
 }
 
 // FieldValues represents the value for a column within a
@@ -1355,7 +1338,7 @@ type InternalClient interface {
 	FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error)
 	ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
 	Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error
-	ImportK(ctx context.Context, index, frame string, bitKs []BitK) error
+	ImportK(ctx context.Context, index, frame string, bits []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error
 	ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error
