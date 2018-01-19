@@ -47,23 +47,31 @@ func (btc *BTreeContainers) Put(key uint64, c *container) {
 	btc.tree.Set(key, c)
 }
 
-func (btc *BTreeContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
-	f := func(oldV *container, exists bool) (*container, bool) {
-		// update the existing container
-		if exists {
-			oldV.containerType = containerType
-			oldV.n = n
-			oldV.mapped = mapped
-			return oldV, true
-		}
-		return &container{
-			containerType: containerType,
-			n:             n,
-			mapped:        mapped,
-		}, true
-	}
+type updater struct {
+	key           uint64
+	containerType byte
+	n             int
+	mapped        bool
+}
 
-	btc.tree.Put(key, f)
+func (u updater) update(oldV *container, exists bool) (*container, bool) {
+	// update the existing container
+	if exists {
+		oldV.containerType = u.containerType
+		oldV.n = u.n
+		oldV.mapped = u.mapped
+		return oldV, true
+	}
+	return &container{
+		containerType: u.containerType,
+		n:             u.n,
+		mapped:        u.mapped,
+	}, true
+}
+
+func (btc *BTreeContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
+	a := updater{key, containerType, n, mapped}
+	btc.tree.Put(key, a.update)
 }
 
 func (btc *BTreeContainers) Remove(key uint64) {
