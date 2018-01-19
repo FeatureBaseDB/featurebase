@@ -1090,6 +1090,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 
 	// Reset timer and execute benchmark.
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		err := f.Snapshot()
 		if err != nil {
