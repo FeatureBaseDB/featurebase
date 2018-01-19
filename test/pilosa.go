@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
-	"strconv"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -48,18 +46,6 @@ func NewMain() *Main {
 
 	return m
 }
-
-/*
-// MustRunMain returns a new, running Main. Panic on error.
-func MustRunMain() *Main {
-	m := NewMain()
-	m.Config.Metric.Diagnostics = false // Disable diagnostics.
-	if err := m.Run(); err != nil {
-		panic(err)
-	}
-	return m
-}
-*/
 
 // Close closes the program and removes the underlying data directory.
 func (m *Main) Close() error {
@@ -143,71 +129,6 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coor
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
-
-func MustNewRunningServer(t *testing.T) *server.Command {
-	s, err := newServer()
-	if err != nil {
-		t.Fatalf("getting new server: %v", err)
-	}
-
-	err = s.Run()
-	if err != nil {
-		t.Fatalf("running new pilosa server: %v", err)
-	}
-	return s
-}
-
-func newServer() (*server.Command, error) {
-	s := server.NewCommand(&bytes.Buffer{}, ioutil.Discard, ioutil.Discard)
-
-	port, err := findPort()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting port")
-	}
-	s.Config.Bind = "localhost:" + strconv.Itoa(port)
-
-	gport, err := findPort()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting gossip port")
-	}
-	s.Config.GossipPort = strconv.Itoa(gport)
-
-	s.Config.GossipSeed = "localhost:" + s.Config.GossipPort
-	s.Config.Cluster.Type = "gossip"
-	s.Config.Metric.Diagnostics = false
-	td, err := ioutil.TempDir("", "")
-	if err != nil {
-		return nil, errors.Wrap(err, "temp dir")
-	}
-	s.Config.DataDir = td
-	return s, nil
-}
-
-func findPort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", ":0")
-	if err != nil {
-		return 0, errors.Wrap(err, "resolving new port addr")
-	}
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, errors.Wrap(err, "listening to get new port")
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	err = l.Close()
-	if err != nil {
-		return port, errors.Wrap(err, "closing listener")
-	}
-	return port, nil
-
-}
-
-func MustFindPort(t *testing.T) int {
-	port, err := findPort()
-	if err != nil {
-		t.Fatalf("allocating new port: %v", err)
-	}
-	return port
-}
 
 type Cluster struct {
 	Servers []*Main
