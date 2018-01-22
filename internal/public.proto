@@ -60,6 +60,7 @@ message QueryResponse {
 }
 
 message QueryResult {
+	uint32 Type = 6;
 	Bitmap Bitmap = 1;
 	uint64 N = 2;
 	repeated Pair Pairs = 3;
