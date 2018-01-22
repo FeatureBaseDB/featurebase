@@ -1625,6 +1625,15 @@ func (h *Handler) logger() *log.Logger {
 	return log.New(h.LogOutput, "", log.LstdFlags)
 }
 
+// QueryResult types.
+const (
+	QueryResultTypeBitmap uint32 = iota
+	QueryResultTypePairs
+	QueryResultTypeSumCount
+	QueryResultTypeUint64
+	QueryResultTypeBool
+)
+
 // QueryRequest represent a request to process a query.
 type QueryRequest struct {
 	// Index to execute query against.
@@ -1704,14 +1713,19 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 
 		switch result := resp.Results[i].(type) {
 		case *Bitmap:
+			pb.Results[i].Type = QueryResultTypeBitmap
 			pb.Results[i].Bitmap = encodeBitmap(result)
 		case []Pair:
+			pb.Results[i].Type = QueryResultTypePairs
 			pb.Results[i].Pairs = encodePairs(result)
 		case SumCount:
+			pb.Results[i].Type = QueryResultTypeSumCount
 			pb.Results[i].SumCount = encodeSumCount(result)
 		case uint64:
+			pb.Results[i].Type = QueryResultTypeUint64
 			pb.Results[i].N = result
 		case bool:
+			pb.Results[i].Type = QueryResultTypeBool
 			pb.Results[i].Changed = result
 		}
 	}
