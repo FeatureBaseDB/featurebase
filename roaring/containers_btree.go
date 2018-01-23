@@ -60,7 +60,7 @@ func (u updater) update(oldV *container, exists bool) (*container, bool) {
 		oldV.containerType = u.containerType
 		oldV.n = u.n
 		oldV.mapped = u.mapped
-		return oldV, true
+		return oldV, false
 	}
 	return &container{
 		containerType: u.containerType,
