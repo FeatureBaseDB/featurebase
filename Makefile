@@ -34,7 +34,8 @@ Gopkg.lock: dep Gopkg.toml
 	dep ensure
 
 test: vendor
-	go test $(PKGS) $(TESTFLAGS)
+	#go test $(PKGS) $(TESTFLAGS)
+	go test github.com/pilosa/pilosa/server --run TestMain_FrameRestore
 
 cover: vendor
 	mkdir -p build/coverage
