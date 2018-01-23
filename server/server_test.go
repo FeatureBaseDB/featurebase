@@ -276,17 +276,15 @@ func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
 
 // Ensure program can set bits on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
-	m0 := MustRunMain()
-	// TODO: this test used to start a two node cluster, but there was a race
-	// condition with anti-entropy. We need some general code for starting up
-	// arbitrarily sized Pilosa clusters for testing, and then we should
-	// re-instate the multi-node nature of this test.
+	mains1 := NewMainArrayWithCluster(2)
+	m0 := mains1[0]
 
 	// Create frames.
 	client := m0.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create index:", err)
-	} else if err := client.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+	}
+	if err := client.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal("create frame:", err)
 	}
 
@@ -311,18 +309,22 @@ func TestMain_FrameRestore(t *testing.T) {
 	}
 
 	// Start second cluster.
-	m2 := MustRunMain()
+	mains2 := NewMainArrayWithCluster(2)
+	m2 := mains2[0]
 	defer m2.Close()
 
 	// Import from first cluster.
 	client, err := pilosa.NewInternalHTTPClient(m2.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
 	if err != nil {
 		t.Fatal("new client:", err)
-	} else if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+	}
+	if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create new index:", err)
-	} else if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+	}
+	if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal("create new frame:", err)
-	} else if err := client.RestoreFrame(context.Background(), m0.Server.URI.HostPort(), "i", "f"); err != nil {
+	}
+	if err := client.RestoreFrame(context.Background(), m0.Server.URI.HostPort(), "i", "f"); err != nil {
 		t.Fatal("restore frame:", err)
 	}
 
@@ -407,6 +409,18 @@ func NewMain() *Main {
 	}
 
 	return m
+}
+
+func NewMainArrayWithCluster(size int) []*Main {
+	cluster, err := test.NewServerCluster(size)
+	if err != nil {
+		panic(err)
+	}
+	mainArray := make([]*Main, size)
+	for i := 0; i < size; i++ {
+		mainArray[i] = &Main{Command: cluster.Servers[i]}
+	}
+	return mainArray
 }
 
 // MustRunMain returns a new, running Main. Panic on error.
