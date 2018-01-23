@@ -48,6 +48,9 @@ type ImportCommand struct {
 	// For Range-Encoded fields, name of the Field to import into.
 	Field string `json:"field"`
 
+	// Indicates that the payload should be treated as string keys.
+	StringKeys bool `json:"StringKeys"`
+
 	// Filenames to import from.
 	Paths []string `json:"paths"`
 
@@ -131,7 +134,11 @@ func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
 	if cmd.Field != "" {
 		return cmd.bufferFieldValues(ctx, path)
 	} else {
-		return cmd.bufferBits(ctx, path)
+		if cmd.StringKeys {
+			return cmd.bufferBitsK(ctx, path)
+		} else {
+			return cmd.bufferBits(ctx, path)
+		}
 	}
 }
 
@@ -240,7 +247,102 @@ func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) err
 	}
 
 	return nil
+}
 
+// bufferBitsK buffers slices of keys to be imported as a batch.
+func (cmd *ImportCommand) bufferBitsK(ctx context.Context, path string) error {
+	a := make([]pilosa.Bit, 0, cmd.BufferSize)
+
+	var r *csv.Reader
+
+	if path != "-" {
+		// Open file for reading.
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		// Read rows as bits.
+		r = csv.NewReader(f)
+	} else {
+		r = csv.NewReader(cmd.Stdin)
+	}
+
+	r.FieldsPerRecord = -1
+	rnum := 0
+	for {
+		rnum++
+
+		// Read CSV row.
+		record, err := r.Read()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+
+		// Ignore blank rows.
+		if record[0] == "" {
+			continue
+		} else if len(record) < 2 {
+			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
+		}
+
+		var bit pilosa.Bit
+
+		// Parse row key.
+		if record[0] == "" {
+			return fmt.Errorf("invalid row key on row %d: %q", rnum, record[0])
+		}
+		bit.RowKey = record[0]
+
+		// Parse column key.
+		if record[1] == "" {
+			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[1])
+		}
+		bit.ColumnKey = record[1]
+
+		// Parse time, if exists.
+		if len(record) > 2 && record[2] != "" {
+			t, err := time.Parse(pilosa.TimeFormat, record[2])
+			if err != nil {
+				return fmt.Errorf("invalid timestamp on row %d: %q", rnum, record[2])
+			}
+			bit.Timestamp = t.UnixNano()
+		}
+
+		a = append(a, bit)
+
+		// If we've reached the buffer size then import bits.
+		if len(a) == cmd.BufferSize {
+			if err := cmd.importBitsK(ctx, a); err != nil {
+				return err
+			}
+			a = a[:0]
+		}
+	}
+
+	// If there are still bitKs in the buffer then flush them.
+	if err := cmd.importBitsK(ctx, a); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// importBitsK sends batches of bitKs to the server.
+func (cmd *ImportCommand) importBitsK(ctx context.Context, bits []pilosa.Bit) error {
+	logger := log.New(cmd.Stderr, "", log.LstdFlags)
+
+	// TODO: does it help to sort the rowKeys?
+
+	logger.Printf("importing keys: n=%d", len(bits))
+	if err := cmd.Client.ImportK(ctx, cmd.Index, cmd.Frame, bits); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // bufferFieldValues buffers slices of fieldValues to be imported as a batch.
