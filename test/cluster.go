@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -77,6 +78,8 @@ type TestCluster struct {
 
 	common *commonClusterSettings
 
+	mu         sync.RWMutex
+	resizing   bool
 	resizeDone chan struct{}
 }
 
@@ -186,6 +189,9 @@ func (t *TestCluster) AddNode(saveTopology bool) error {
 		// Wait for the AddNode job to finish.
 		if c.State() != pilosa.ClusterStateNormal {
 			t.resizeDone = make(chan struct{})
+			t.mu.Lock()
+			t.resizing = true
+			t.mu.Unlock()
 			<-t.resizeDone
 		}
 	}
@@ -314,9 +320,11 @@ func (t *TestCluster) SendSync(pb proto.Message) error {
 		for _, c := range t.Clusters {
 			c.MergeClusterStatus(obj)
 		}
-		if obj.State == pilosa.ClusterStateNormal && t.resizeDone != nil {
+		t.mu.RLock()
+		if obj.State == pilosa.ClusterStateNormal && t.resizing {
 			close(t.resizeDone)
 		}
+		t.mu.RUnlock()
 	}
 
 	return nil
