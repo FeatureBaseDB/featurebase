@@ -1627,7 +1627,8 @@ func (h *Handler) logger() *log.Logger {
 
 // QueryResult types.
 const (
-	QueryResultTypeBitmap uint32 = iota
+	QueryResultTypeNil uint32 = iota
+	QueryResultTypeBitmap
 	QueryResultTypePairs
 	QueryResultTypeSumCount
 	QueryResultTypeUint64
@@ -1727,6 +1728,8 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 		case bool:
 			pb.Results[i].Type = QueryResultTypeBool
 			pb.Results[i].Changed = result
+		case nil:
+			pb.Results[i].Type = QueryResultTypeNil
 		}
 	}
 
