@@ -24,15 +24,16 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gossip"
+	"github.com/pilosa/pilosa/test"
 )
 
 // Ensure program can send/receive broadcast messages.
 func TestMain_SendReceiveMessage(t *testing.T) {
 
-	m0 := MustRunMain()
+	m0 := test.MustRunMain()
 	defer m0.Close()
 
-	m1 := MustRunMain()
+	m1 := test.MustRunMain()
 	defer m1.Close()
 
 	// Update cluster config
@@ -205,7 +206,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 // Ensure that an empty node comes up in a NORMAL state.
 func TestClusterResize_EmptyNode(t *testing.T) {
-	m0 := MustRunMain()
+	m0 := test.MustRunMain()
 	defer m0.Close()
 
 	if m0.Server.Cluster.State != pilosa.ClusterStateNormal {
@@ -216,7 +217,7 @@ func TestClusterResize_EmptyNode(t *testing.T) {
 // Ensure that a cluster of empty nodes comes up in a NORMAL state.
 func TestClusterResize_EmptyNodes(t *testing.T) {
 	// Configure node0
-	m0 := NewMain()
+	m0 := test.NewMain()
 	defer m0.Close()
 
 	gossipHost := "localhost"
@@ -227,7 +228,7 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 	}
 
 	// Configure node1
-	m1 := NewMain()
+	m1 := test.NewMain()
 	defer m1.Close()
 
 	seed, coord, err = m1.RunWithTransport(gossipHost, gossipPort, seed, &coord)
@@ -246,7 +247,7 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("NoData", func(t *testing.T) {
 		// Configure node0
-		m0 := NewMain()
+		m0 := test.NewMain()
 		defer m0.Close()
 
 		seed, coord, err := m0.RunWithTransport("localhost", 0, "", nil)
@@ -255,7 +256,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Configure node1
-		m1 := NewMain()
+		m1 := test.NewMain()
 		defer m1.Close()
 
 		var eg errgroup.Group
@@ -280,7 +281,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 	})
 	t.Run("WithIndex", func(t *testing.T) {
 		// Configure node0
-		m0 := NewMain()
+		m0 := test.NewMain()
 		defer m0.Close()
 
 		seed, coord, err := m0.RunWithTransport("localhost", 0, "", nil)
@@ -299,7 +300,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Configure node1
-		m1 := NewMain()
+		m1 := test.NewMain()
 		defer m1.Close()
 
 		var eg errgroup.Group
@@ -326,7 +327,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("ContinuousSlices", func(t *testing.T) {
 
 		// Configure node0
-		m0 := NewMain()
+		m0 := test.NewMain()
 		defer m0.Close()
 
 		seed, coord, err := m0.RunWithTransport("localhost", 0, "", nil)
@@ -354,7 +355,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Configure node1
-		m1 := NewMain()
+		m1 := test.NewMain()
 		defer m1.Close()
 
 		var eg errgroup.Group
@@ -381,7 +382,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("SkippedSlice", func(t *testing.T) {
 
 		// Configure node0
-		m0 := NewMain()
+		m0 := test.NewMain()
 		defer m0.Close()
 
 		seed, coord, err := m0.RunWithTransport("localhost", 0, "", nil)
@@ -409,7 +410,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Configure node1
-		m1 := NewMain()
+		m1 := test.NewMain()
 		defer m1.Close()
 
 		var eg errgroup.Group

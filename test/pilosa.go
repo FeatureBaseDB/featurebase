@@ -2,9 +2,12 @@ package test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -47,10 +50,51 @@ func NewMain() *Main {
 	return m
 }
 
+func NewMainArrayWithCluster(size int) []*Main {
+	cluster, err := NewServerCluster(size)
+	if err != nil {
+		panic(err)
+	}
+	mainArray := make([]*Main, size)
+	for i := 0; i < size; i++ {
+		mainArray[i] = cluster.Servers[i]
+	}
+	return mainArray
+}
+
+// MustRunMain returns a new, running Main. Panic on error.
+func MustRunMain() *Main {
+	m := NewMain()
+	m.Config.Metric.Diagnostics = false // Disable diagnostics.
+	if err := m.Run(); err != nil {
+		panic(err)
+	}
+	return m
+}
+
 // Close closes the program and removes the underlying data directory.
 func (m *Main) Close() error {
 	defer os.RemoveAll(m.Config.DataDir)
 	return m.Command.Close()
+}
+
+// Reopen closes the program and reopens it.
+func (m *Main) Reopen() error {
+	if err := m.Command.Close(); err != nil {
+		return err
+	}
+
+	// Create new main with the same config.
+	config := m.Config
+	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
+	m.Server.Network = *Network
+	m.Config = config
+
+	// Run new program.
+	if err := m.Run(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RunWithTransport runs Main and returns the dynamically allocated gossip port.
@@ -128,6 +172,36 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coor
 	return seed, coord, nil
 }
 
+// URL returns the base URL string for accessing the running program.
+func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
+
+// Client returns a client to connect to the program.
+func (m *Main) Client() *pilosa.InternalHTTPClient {
+	client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+// Query executes a query against the program through the HTTP API.
+func (m *Main) Query(index, rawQuery, query string) (string, error) {
+	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+	return resp.Body, nil
+}
+
+// CreateDefinition.
+func (m *Main) CreateDefinition(index, def, query string) (string, error) {
+	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/input-definition/%s", index, def), query)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+	return resp.Body, nil
+}
+
 ////////////////////////////////////////////////////////////////////////////////////
 
 type Cluster struct {
@@ -168,4 +242,30 @@ func NewServerCluster(size int) (cluster *Cluster, err error) {
 	}
 
 	return cluster, nil
+}
+
+// MustDo executes http.Do() with an http.NewRequest(). Panic on error.
+func MustDo(method, urlStr string, body string) *httpResponse {
+	req, err := http.NewRequest(method, urlStr, strings.NewReader(body))
+	if err != nil {
+		panic(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	buf, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	return &httpResponse{Response: resp, Body: string(buf)}
+}
+
+// httpResponse is a wrapper for http.Response that holds the Body as a string.
+type httpResponse struct {
+	*http.Response
+	Body string
 }
