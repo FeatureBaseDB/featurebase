@@ -184,7 +184,7 @@ func (t *TestCluster) AddNode(saveTopology bool) error {
 		}
 
 		// Wait for the AddNode job to finish.
-		if c.State != pilosa.ClusterStateNormal {
+		if c.State() != pilosa.ClusterStateNormal {
 			t.resizeDone = make(chan struct{})
 			<-t.resizeDone
 		}
@@ -266,7 +266,7 @@ func NewTestCluster(n int) *TestCluster {
 // SetState sets the state of the cluster on each node.
 func (t *TestCluster) SetState(state string) {
 	for _, c := range t.Clusters {
-		c.State = state
+		c.SetState(state)
 	}
 }
 
