@@ -1176,7 +1176,7 @@ const (
 func BenchmarkContainerLinear(b *testing.B) {
 
 	for n := 0; n < b.N; n++ {
-		bm := roaring.NewBitmap()
+		bm := roaring.NewBitmapBtree()
 		for row := uint64(1); row < NumRows; row++ {
 			for col := uint64(1); col < NumColums; col++ {
 				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
@@ -1187,7 +1187,7 @@ func BenchmarkContainerLinear(b *testing.B) {
 
 func BenchmarkContainerReverse(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		bm := roaring.NewBitmap()
+		bm := roaring.NewBitmapBtree()
 		for row := NumRows - 1; row >= 1; row-- {
 			for col := NumColums - 1; col >= 1; col-- {
 				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
@@ -1198,7 +1198,7 @@ func BenchmarkContainerReverse(b *testing.B) {
 
 func BenchmarkContainerColumn(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		bm := roaring.NewBitmap()
+		bm := roaring.NewBitmapBtree()
 		for col := uint64(1); col < NumColums; col++ {
 			for row := uint64(1); row < NumRows; row++ {
 				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
@@ -1210,7 +1210,7 @@ func BenchmarkContainerColumn(b *testing.B) {
 func BenchmarkContainerOutsideIn(b *testing.B) {
 	middle := NumRows / uint64(2)
 	for n := 0; n < b.N; n++ {
-		bm := roaring.NewBitmap()
+		bm := roaring.NewBitmapBtree()
 
 		for col := uint64(1); col < NumColums; col++ {
 			for row := uint64(1); row < middle; row++ {
@@ -1224,7 +1224,7 @@ func BenchmarkContainerOutsideIn(b *testing.B) {
 func BenchmarkContainerInsideOut(b *testing.B) {
 	middle := NumRows / uint64(2)
 	for n := 0; n < b.N; n++ {
-		bm := roaring.NewBitmap()
+		bm := roaring.NewBitmapBtree()
 		for col := uint64(1); col < NumColums; col++ {
 			for row := uint64(1); row <= middle; row++ {
 				bm.Add((middle+row)*pilosa.SliceWidth + (col * MaxContainerVal))

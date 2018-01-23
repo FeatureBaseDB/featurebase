@@ -5,7 +5,8 @@ import (
 )
 
 func TestContainersIterator(t *testing.T) {
-	btc := NewBTreeContainers()
+	//btc := NewBTreeContainers()
+	btc := NewSliceContainers()
 	itr, found := btc.Iterator(0)
 	if found {
 		t.Fatalf("shouldn't have found 0 in empty btc")

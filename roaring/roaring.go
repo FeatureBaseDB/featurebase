@@ -114,6 +114,14 @@ type Bitmap struct {
 // NewBitmap returns a Bitmap with an initial set of values.
 func NewBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
+		conts: NewSliceContainers(),
+	}
+	b.Add(a...)
+	return b
+}
+
+func NewBitmapBtree(a ...uint64) *Bitmap {
+	b := &Bitmap{
 		conts: NewBTreeContainers(),
 	}
 	b.Add(a...)
