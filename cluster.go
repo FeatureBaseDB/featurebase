@@ -17,6 +17,7 @@ package pilosa
 import (
 	"encoding/binary"
 	"hash/fnv"
+	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/internal"
@@ -41,16 +42,21 @@ type Node struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
 
+	mu     sync.Mutex
 	status *internal.NodeStatus `json:"status"`
 }
 
 // SetStatus sets the NodeStatus.
 func (n *Node) SetStatus(s *internal.NodeStatus) {
+	n.mu.Lock()
 	n.status = s
+	n.mu.Unlock()
 }
 
 // SetState sets the Node.status.state.
 func (n *Node) SetState(s string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	if n.status == nil {
 		n.status = &internal.NodeStatus{}
 	}
