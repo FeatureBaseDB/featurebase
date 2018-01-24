@@ -42,8 +42,15 @@ type Node struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
 
-	mu     sync.Mutex
+	mu     sync.RWMutex
 	status *internal.NodeStatus `json:"status"`
+}
+
+// Status gets the NodeStatus.
+func (n *Node) Status() *internal.NodeStatus {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.status
 }
 
 // SetStatus sets the NodeStatus.
@@ -203,7 +210,7 @@ func (c *Cluster) Status() *internal.ClusterStatus {
 func encodeClusterStatus(a []*Node) []*internal.NodeStatus {
 	other := make([]*internal.NodeStatus, len(a))
 	for i := range a {
-		other[i] = a[i].status
+		other[i] = a[i].Status()
 	}
 	return other
 }
