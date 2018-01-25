@@ -175,7 +175,7 @@ type Cluster struct {
 
 	// Required for cluster Resize.
 	Static      bool // Static is primarily used for testing in a non-gossip environment.
-	State       string
+	state       string
 	Coordinator URI
 	Holder      *Holder
 	Broadcaster Broadcaster
@@ -302,9 +302,21 @@ func (c *Cluster) setID(id string) {
 	c.Topology.ClusterID = c.ID
 }
 
+func (c *Cluster) State() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.state
+}
+
+func (c *Cluster) SetState(state string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.setState(state)
+}
+
 func (c *Cluster) setState(state string) {
 	// Ignore cases where the state hasn't changed.
-	if state == c.State {
+	if state == c.state {
 		return
 	}
 
@@ -321,12 +333,12 @@ func (c *Cluster) setState(state string) {
 		// - ClusterStateStarting
 
 		// If state is RESIZING -> NORMAL then run cleanup.
-		if c.State == ClusterStateResizing {
+		if c.state == ClusterStateResizing {
 			doCleanup = true
 		}
 	}
 
-	c.State = state
+	c.state = state
 
 	// TODO: consider NOT running cleanup on an active node that has
 	// been removed.
@@ -373,7 +385,7 @@ func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
 	}
 
 	// This method is really only useful during initial startup.
-	if c.State != ClusterStateStarting {
+	if c.State() != ClusterStateStarting {
 		return nil
 	}
 
@@ -397,7 +409,7 @@ func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
 func (c *Cluster) Status() *internal.ClusterStatus {
 	return &internal.ClusterStatus{
 		ClusterID: c.ID,
-		State:     c.State,
+		State:     c.state,
 		NodeSet:   encodeURIs(c.NodeSet()),
 	}
 }
@@ -763,7 +775,7 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 
 func (c *Cluster) Open() error {
 	// Cluster always comes up in state STARTING until cluster membership is determined.
-	c.State = ClusterStateStarting
+	c.state = ClusterStateStarting
 
 	// Load topology file if it exists.
 	if err := c.loadTopology(); err != nil {
@@ -820,7 +832,7 @@ func (c *Cluster) markAsJoined() {
 }
 
 func (c *Cluster) needTopologyAgreement() bool {
-	return c.State == ClusterStateStarting && !URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
+	return c.State() == ClusterStateStarting && !URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
 }
 
 func (c *Cluster) haveTopologyAgreement() bool {
@@ -886,7 +898,7 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 }
 
 func (c *Cluster) setStateAndBroadcast(state string) error {
-	c.setState(state)
+	c.SetState(state)
 	// Broadcast cluster status changes to the cluster.
 	c.logger().Printf("broadcasting ClusterStatus: %s", state)
 	return c.Broadcaster.SendSync(c.Status())
@@ -1618,7 +1630,7 @@ func (c *Cluster) NodeLeave(uri URI) error {
 		return fmt.Errorf("Node removal requests are only valid on the Coordinator node: %s", c.Coordinator)
 	}
 
-	if c.State != ClusterStateNormal {
+	if c.State() != ClusterStateNormal {
 		return fmt.Errorf("Cluster must be in state %s to remove a node. Current state: %s", ClusterStateNormal, c.State)
 	}
 
@@ -1683,7 +1695,7 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 		}
 	}
 
-	c.setState(cs.State)
+	c.SetState(cs.State)
 
 	c.markAsJoined()
 

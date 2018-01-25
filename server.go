@@ -510,7 +510,7 @@ func (s *Server) ClusterStatus() (proto.Message, error) {
 // HandleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
-	if s.Cluster.State != ClusterStateNormal {
+	if s.Cluster.State() != ClusterStateNormal {
 		return nil
 	}
 

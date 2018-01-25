@@ -255,8 +255,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node := tc.Clusters[0]
 
 		// Ensure that node comes up in state NORMAL.
-		if node.State != pilosa.ClusterStateNormal {
-			t.Errorf("expected state: %v, but got: %v", pilosa.ClusterStateNormal, node.State)
+		if node.State() != pilosa.ClusterStateNormal {
+			t.Errorf("expected state: %v, but got: %v", pilosa.ClusterStateNormal, node.State())
 		}
 
 		expectedTop := &pilosa.Topology{
@@ -292,8 +292,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that node comes up in state NORMAL.
-		if node.State != pilosa.ClusterStateNormal {
-			t.Errorf("expected state: %v, but got: %v", pilosa.ClusterStateNormal, node.State)
+		if node.State() != pilosa.ClusterStateNormal {
+			t.Errorf("expected state: %v, but got: %v", pilosa.ClusterStateNormal, node.State())
 		}
 
 		// Close TestCluster.
@@ -344,10 +344,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node1 := tc.Clusters[1]
 
 		// Ensure that nodes comes up in state NORMAL.
-		if node0.State != pilosa.ClusterStateNormal {
-			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State)
-		} else if node1.State != pilosa.ClusterStateNormal {
-			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node1.State)
+		if node0.State() != pilosa.ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State())
+		} else if node1.State() != pilosa.ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node1.State())
 		}
 
 		expectedTop := &pilosa.Topology{
@@ -388,8 +388,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that node is in state STARTING before the other node joins.
-		if node0.State != pilosa.ClusterStateStarting {
-			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateStarting, node0.State)
+		if node0.State() != pilosa.ClusterStateStarting {
+			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateStarting, node0.State())
 		}
 
 		// Expect an error by adding a node not in the topology.
@@ -403,10 +403,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node2 := tc.Clusters[2]
 
 		// Ensure that node comes up in state NORMAL.
-		if node0.State != pilosa.ClusterStateNormal {
-			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State)
-		} else if node2.State != pilosa.ClusterStateNormal {
-			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node2.State)
+		if node0.State() != pilosa.ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State())
+		} else if node2.State() != pilosa.ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node2.State())
 		}
 
 		// Close TestCluster.
@@ -470,10 +470,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node1 := tc.Clusters[1]
 
 		// Ensure that nodes come up in state NORMAL.
-		if node0.State != pilosa.ClusterStateNormal {
-			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State)
-		} else if node1.State != pilosa.ClusterStateNormal {
-			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node1.State)
+		if node0.State() != pilosa.ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State())
+		} else if node1.State() != pilosa.ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node1.State())
 		}
 
 		expectedTop := &pilosa.Topology{
