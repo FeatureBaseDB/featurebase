@@ -356,6 +356,8 @@ func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
+	} else if rt := resp.Results[0].Type; rt != pilosa.QueryResultTypeUint64 {
+		t.Fatalf("unexpected response type: %s", resp.Results[0].Type)
 	} else if n := resp.Results[0].N; n != 100 {
 		t.Fatalf("unexpected n: %d", n)
 	}
@@ -442,6 +444,8 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
+	} else if rt := resp.Results[0].Type; rt != pilosa.QueryResultTypeBitmap {
+		t.Fatalf("unexpected response type: %s", resp.Results[0].Type)
 	} else if bits := resp.Results[0].Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
 		t.Fatalf("unexpected bits: %+v", bits)
 	} else if attrs := resp.Results[0].Bitmap.Attrs; len(attrs) != 3 {
@@ -501,6 +505,8 @@ func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
 	}
 	if bits := resp.Results[0].Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
 		t.Fatalf("unexpected bits: %+v", bits)
+	} else if rt := resp.Results[0].Type; rt != pilosa.QueryResultTypeBitmap {
+		t.Fatalf("unexpected response type: %s", resp.Results[0].Type)
 	} else if attrs := resp.Results[0].Bitmap.Attrs; len(attrs) != 3 {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
 	} else if k, v := attrs[0].Key, attrs[0].StringValue; k != "a" || v != "b" {
@@ -572,6 +578,8 @@ func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
+	} else if rt := resp.Results[0].Type; rt != pilosa.QueryResultTypePairs {
+		t.Fatalf("unexpected response type: %s", resp.Results[0].Type)
 	} else if a := resp.Results[0].GetPairs(); len(a) != 2 {
 		t.Fatalf("unexpected pair length: %d", len(a))
 	}

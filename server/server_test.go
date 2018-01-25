@@ -34,7 +34,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
@@ -277,17 +276,15 @@ func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
 
 // Ensure program can set bits on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
-	m0 := MustRunMain()
-	// TODO: this test used to start a two node cluster, but there was a race
-	// condition with anti-entropy. We need some general code for starting up
-	// arbitrarily sized Pilosa clusters for testing, and then we should
-	// re-instate the multi-node nature of this test.
+	mains1 := NewMainArrayWithCluster(2)
+	m0 := mains1[0]
 
 	// Create frames.
 	client := m0.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create index:", err)
-	} else if err := client.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+	}
+	if err := client.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal("create frame:", err)
 	}
 
@@ -312,18 +309,22 @@ func TestMain_FrameRestore(t *testing.T) {
 	}
 
 	// Start second cluster.
-	m2 := MustRunMain()
+	mains2 := NewMainArrayWithCluster(2)
+	m2 := mains2[0]
 	defer m2.Close()
 
 	// Import from first cluster.
 	client, err := pilosa.NewInternalHTTPClient(m2.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
 	if err != nil {
 		t.Fatal("new client:", err)
-	} else if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+	}
+	if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create new index:", err)
-	} else if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+	}
+	if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal("create new frame:", err)
-	} else if err := client.RestoreFrame(context.Background(), m0.Server.URI.HostPort(), "i", "f"); err != nil {
+	}
+	if err := client.RestoreFrame(context.Background(), m0.Server.URI.HostPort(), "i", "f"); err != nil {
 		t.Fatal("restore frame:", err)
 	}
 
@@ -379,75 +380,12 @@ func TestCountOpenFiles(t *testing.T) {
 
 // Ensure program can send/receive broadcast messages.
 func TestMain_SendReceiveMessage(t *testing.T) {
-	t.SkipNow()
-	// TODO re-enable this test when we have a better way of
-	// creating a multi-node cluster that doesn't have data races.
-	m0 := MustRunMain()
+	mains := NewMainArrayWithCluster(2)
+	m0 := mains[0]
 	defer m0.Close()
 
-	m1 := MustRunMain()
+	m1 := mains[1]
 	defer m1.Close()
-
-	// Update cluster config
-	m0.Server.Cluster.Nodes = []*pilosa.Node{
-		{Host: m0.Server.URI.HostPort()},
-		{Host: m1.Server.URI.HostPort()},
-	}
-	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
-
-	// Configure node0
-
-	// get the host portion of addr to use for binding
-	gossipHost := m0.Server.URI.Host()
-	gossipPort := 0
-	gossipSeed := ""
-
-	gossipNodeSet0, err := gossip.NewGossipNodeSet(m0.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m0.Server, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m0.Server.Cluster.NodeSet = gossipNodeSet0
-	m0.Server.Broadcaster = m0.Server
-	m0.Server.Gossiper = gossipNodeSet0
-	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
-	m0.Server.Holder.Broadcaster = m0.Server.Broadcaster
-	m0.Server.BroadcastReceiver = gossipNodeSet0
-
-	if err := m0.Server.BroadcastReceiver.Start(m0.Server); err != nil {
-		t.Fatal(err)
-	}
-	// Open NodeSet communication
-	if err := m0.Server.Cluster.NodeSet.Open(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Configure node1
-
-	// get the host portion of addr to use for binding
-	gossipHost = m1.Server.URI.Host()
-	gossipPort = 0
-	gossipSeed = gossipNodeSet0.Seed()
-
-	gossipNodeSet1, err := gossip.NewGossipNodeSet(m1.Server.URI.HostPort(), gossipHost, gossipPort, gossipSeed, m1.Server, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m1.Server.Cluster.NodeSet = gossipNodeSet1
-	m1.Server.Broadcaster = m1.Server
-	m1.Server.Gossiper = gossipNodeSet1
-	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
-	m1.Server.Holder.Broadcaster = m1.Server.Broadcaster
-	m1.Server.BroadcastReceiver = gossipNodeSet1
-
-	if err := m1.Server.BroadcastReceiver.Start(m1.Server); err != nil {
-		t.Fatal(err)
-	}
-	// Open NodeSet communication
-	if err := m1.Server.Cluster.NodeSet.Open(); err != nil {
-		t.Fatal(err)
-	}
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// Expected indexes and Frames
 	expected := map[string][]string{
@@ -586,6 +524,18 @@ func NewMain() *Main {
 	return m
 }
 
+func NewMainArrayWithCluster(size int) []*Main {
+	cluster, err := test.NewServerCluster(size)
+	if err != nil {
+		panic(err)
+	}
+	mainArray := make([]*Main, size)
+	for i := 0; i < size; i++ {
+		mainArray[i] = &Main{Command: cluster.Servers[i]}
+	}
+	return mainArray
+}
+
 // MustRunMain returns a new, running Main. Panic on error.
 func MustRunMain() *Main {
 	m := NewMain()
@@ -613,8 +563,6 @@ func (m *Main) Reopen() error {
 	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
 	m.Server.Network = *test.Network
 	m.Config = config
-
-	println("dbg/network", *test.Network)
 
 	// Run new program.
 	if err := m.Run(); err != nil {

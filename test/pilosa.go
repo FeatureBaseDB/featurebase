@@ -101,6 +101,7 @@ func NewServerCluster(size int) (cluster *Cluster, err error) {
 		cluster.Servers[i] = s
 		hosts[i] = s.Config.Bind
 		s.Config.GossipSeed = cluster.Servers[0].Config.GossipSeed
+		s.Config.Metric.Diagnostics = false // Disable diagnostics.
 
 	}
 

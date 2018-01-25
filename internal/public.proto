@@ -4,11 +4,13 @@ package internal;
 
 message Bitmap {
 	repeated uint64 Bits = 1;
+	repeated string Keys = 3;
 	repeated Attr Attrs = 2;
 }
 
 message Pair {
-	uint64 Key = 1;
+	uint64 ID = 1;
+	string Key = 3;
 	uint64 Count = 2;
 }
 
@@ -25,6 +27,7 @@ message Bit {
 
 message ColumnAttrSet {
 	uint64 ID = 1;
+	string Key = 3;
 	repeated Attr Attrs = 2;
 }
 
@@ -38,7 +41,7 @@ message Attr {
 }
 
 message AttrMap {
-    repeated Attr Attrs = 1;
+	repeated Attr Attrs = 1;
 }
 
 message QueryRequest {
@@ -57,6 +60,7 @@ message QueryResponse {
 }
 
 message QueryResult {
+	uint32 Type = 6;
 	Bitmap Bitmap = 1;
 	uint64 N = 2;
 	repeated Pair Pairs = 3;
@@ -70,6 +74,8 @@ message ImportRequest {
 	uint64 Slice = 3;
 	repeated uint64 RowIDs = 4;
 	repeated uint64 ColumnIDs = 5;
+	repeated string RowKeys = 7;
+	repeated string ColumnKeys = 8;
 	repeated int64 Timestamps = 6;
 }
 
@@ -79,5 +85,6 @@ message ImportValueRequest {
 	uint64 Slice = 3;
 	string Field = 4;
 	repeated uint64 ColumnIDs = 5;
+	repeated string ColumnKeys = 7;
 	repeated int64 Values = 6;
 }

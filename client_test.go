@@ -160,7 +160,7 @@ func TestClient_MultiNode(t *testing.T) {
 	// Check the results before every node has the correct max slice value.
 	pairs := result.Results[0].Pairs
 	for _, pair := range pairs {
-		if pair.Key == 22 && pair.Count != 3 {
+		if pair.ID == 22 && pair.Count != 3 {
 			t.Fatalf("Invalid Cluster wide MaxSlice prevents accurate calculation of %s", pair)
 		}
 	}
@@ -180,10 +180,10 @@ func TestClient_MultiNode(t *testing.T) {
 		t.Fatalf("unexpected number of TopN results: %s", spew.Sdump(result))
 	}
 	p := []*internal.Pair{
-		{Key: 100, Count: 12},
-		{Key: 22, Count: 11},
-		{Key: 98, Count: 8},
-		{Key: 99, Count: 7}}
+		{ID: 100, Count: 12},
+		{ID: 22, Count: 11},
+		{ID: 98, Count: 8},
+		{ID: 99, Count: 7}}
 
 	// Valdidate the Top 4 result counts.
 	if !reflect.DeepEqual(result.Results[0].Pairs, p) {
