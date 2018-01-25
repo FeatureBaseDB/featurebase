@@ -303,6 +303,31 @@ func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, sl
 	return nil
 }
 
+// ImportK bulk imports bits to a host.
+func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, bits []Bit) error {
+	if index == "" {
+		return ErrIndexRequired
+	} else if frame == "" {
+		return ErrFrameRequired
+	}
+
+	buf, err := marshalImportPayloadK(index, frame, bits)
+	if err != nil {
+		return fmt.Errorf("Error Creating Payload: %s", err)
+	}
+
+	node := &Node{
+		URI: *c.defaultURI,
+	}
+
+	// Import to node.
+	if err := c.importNode(ctx, node, buf); err != nil {
+		return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
+	}
+
+	return nil
+}
+
 func (c *InternalHTTPClient) EnsureIndex(ctx context.Context, name string, options IndexOptions) error {
 	err := c.CreateIndex(ctx, name, options)
 	if err == nil || err == ErrIndexExists {
@@ -333,6 +358,27 @@ func marshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte
 		Slice:      slice,
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
+		Timestamps: timestamps,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal import request: %s", err)
+	}
+	return buf, nil
+}
+
+// marshalImportPayloadK marshalls the import parameters into a protobuf byte slice.
+func marshalImportPayloadK(index, frame string, bits []Bit) ([]byte, error) {
+	// Separate row and column IDs to reduce allocations.
+	rowKeys := Bits(bits).RowKeys()
+	columnKeys := Bits(bits).ColumnKeys()
+	timestamps := Bits(bits).Timestamps()
+
+	// Marshal bits to protobufs.
+	buf, err := proto.Marshal(&internal.ImportRequest{
+		Index:      index,
+		Frame:      frame,
+		RowKeys:    rowKeys,
+		ColumnKeys: columnKeys,
 		Timestamps: timestamps,
 	})
 	if err != nil {
@@ -1124,6 +1170,8 @@ func (c *InternalHTTPClient) NodeID(uri *URI) (string, error) {
 type Bit struct {
 	RowID     uint64
 	ColumnID  uint64
+	RowKey    string
+	ColumnKey string
 	Timestamp int64
 }
 
@@ -1157,6 +1205,24 @@ func (p Bits) ColumnIDs() []uint64 {
 	other := make([]uint64, len(p))
 	for i := range p {
 		other[i] = p[i].ColumnID
+	}
+	return other
+}
+
+// RowKeys returns a slice of all the row keys.
+func (p Bits) RowKeys() []string {
+	other := make([]string, len(p))
+	for i := range p {
+		other[i] = p[i].RowKey
+	}
+	return other
+}
+
+// ColumnKeys returns a slice of all the column keys.
+func (p Bits) ColumnKeys() []string {
+	other := make([]string, len(p))
+	for i := range p {
+		other[i] = p[i].ColumnKey
 	}
 	return other
 }
@@ -1280,6 +1346,7 @@ type InternalClient interface {
 	FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error)
 	ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
 	Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error
+	ImportK(ctx context.Context, index, frame string, bits []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error
 	ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error
