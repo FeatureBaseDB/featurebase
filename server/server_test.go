@@ -317,16 +317,20 @@ func TestMain_FrameRestore(t *testing.T) {
 	if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal("create new frame:", err)
 	}
+	m2.Server.Logger().Printf("...RestoreFrame start")
 	if err := client2.RestoreFrame(context.Background(), m0.Server.URI.HostPort(), "i", "f"); err != nil {
 		t.Fatal("restore frame:", err)
 	}
+	m2.Server.Logger().Printf("...RestoreFrame end")
 
 	// Query row on second cluster.
+	m2.Server.Logger().Printf("...Query start")
 	if res, err := m2.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
 		t.Fatal("another bitmap query:", err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("2unexpected result: %s", res)
 	}
+	m2.Server.Logger().Printf("...Query end")
 }
 
 // Ensure the host can be parsed.

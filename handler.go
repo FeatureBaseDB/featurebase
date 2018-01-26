@@ -1526,6 +1526,10 @@ type getFragmentBlocksResponse struct {
 
 // handlePostFrameRestore handles POST /frame/restore requests.
 func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request) {
+	h.logger().Printf("...handlePostFrameRestore start")
+	defer func() {
+		h.logger().Printf("...handlePostFrameRestore end")
+	}()
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
