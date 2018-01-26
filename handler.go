@@ -1582,6 +1582,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 			continue
 		}
 
+		h.logger().Printf("...HPR: loop over views")
 		// Loop over view names.
 		for _, view := range views {
 			h.logger().Printf("...HPR: do view: %#v", view)
