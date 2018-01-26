@@ -307,7 +307,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	defer m2.Close()
 
 	// Import from first cluster.
-	client, err := pilosa.NewInternalHTTPClient(m2.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	client2, err := pilosa.NewInternalHTTPClient(m2.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
 	if err != nil {
 		t.Fatal("new client:", err)
 	}
@@ -317,7 +317,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal("create new frame:", err)
 	}
-	if err := client.RestoreFrame(context.Background(), m0.Server.URI.HostPort(), "i", "f"); err != nil {
+	if err := client2.RestoreFrame(context.Background(), m0.Server.URI.HostPort(), "i", "f"); err != nil {
 		t.Fatal("restore frame:", err)
 	}
 
