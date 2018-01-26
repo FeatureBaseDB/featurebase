@@ -1558,6 +1558,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve frame.
+	h.logger().Printf("...HPR: retrieve frame")
 	f := h.Holder.Frame(indexName, frameName)
 	if f == nil {
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
@@ -1565,14 +1566,17 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve list of all views.
+	h.logger().Printf("...HPR: retrieve views")
 	views, err := client.FrameViews(r.Context(), indexName, frameName)
 	if err != nil {
 		http.Error(w, "cannot retrieve frame views: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	h.logger().Printf("...HPR: loop over slices")
 	// Loop over each slice and import it if this node owns it.
 	for slice := uint64(0); slice <= maxSlices[indexName]; slice++ {
+		h.logger().Printf("...HPR: do slice: %d", slice)
 		// Ignore this slice if we don't own it.
 		if !h.Cluster.OwnsFragment(h.URI, indexName, slice) {
 			continue
@@ -1580,6 +1584,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 
 		// Loop over view names.
 		for _, view := range views {
+			h.logger().Printf("...HPR: do view: %#v", view)
 			// Create view.
 			v, err := f.CreateViewIfNotExists(view)
 			if err != nil {
