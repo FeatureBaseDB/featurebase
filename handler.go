@@ -1570,6 +1570,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	// Retrieve list of all views.
 	h.logger().Printf("...HPR: retrieve views")
 	views, err := client.FrameViews(r.Context(), indexName, frameName)
+	h.logger().Printf("...views from remote cluster: %v", views)
 	if err != nil {
 		http.Error(w, "cannot retrieve frame views: "+err.Error(), http.StatusInternalServerError)
 		return
