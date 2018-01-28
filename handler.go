@@ -1536,6 +1536,8 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	q := r.URL.Query()
 	hostStr := q.Get("host")
 
+	h.logger().Printf("h.Cluster.Nodes: %s, %v, %v", hostStr, h.Cluster.Nodes[0], h.Cluster.Nodes[1])
+
 	// Validate query parameters.
 	if hostStr == "" {
 		http.Error(w, "host required", http.StatusBadRequest)
