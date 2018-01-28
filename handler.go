@@ -1579,6 +1579,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 		h.logger().Printf("...HPR: do slice: %d", slice)
 		// Ignore this slice if we don't own it.
 		if !h.Cluster.OwnsFragment(h.URI, indexName, slice) {
+			h.logger().Printf("...HPR: doesn't own fragment: %s, %d", indexName, slice)
 			continue
 		}
 
