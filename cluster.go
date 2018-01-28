@@ -694,6 +694,13 @@ func (c *Cluster) FragmentNodes(index string, slice uint64) []*Node {
 
 // OwnsFragment returns true if a host owns a fragment.
 func (c *Cluster) OwnsFragment(uri URI, index string, slice uint64) bool {
+	c.logger().Printf("OwnsFragment: %s, %s, %d", uri, index, slice)
+	x := c.FragmentNodes(index, slice)
+	c.logger().Printf("FragmentNodes: %#v", x)
+	c.logger().Printf("len FragmentNodes: %d", len(x))
+	if len(x) > 0 {
+		c.logger().Printf("FragmentNodes[0]: %v", x[0])
+	}
 	return Nodes(c.FragmentNodes(index, slice)).ContainsURI(uri)
 }
 

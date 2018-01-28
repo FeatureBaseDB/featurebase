@@ -1,6 +1,5 @@
 language: go
 go:
-  - 1.8
   - 1.9
 env:
   global: # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
