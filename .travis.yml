@@ -9,7 +9,8 @@ env:
 install:
   - make vendor
 script:
-  - make test
+  - go test -v github.com/pilosa/pilosa/server --run TestMain_FrameRestore
+#- make test
 # TODO: When we drop support for Go <1.10, we should use `-coverprofile=` on both `go test` and `goveralls` so the test suite doesn't run twice. See https://github.com/pilosa/pilosa/issues/1009
 after_success:
   - go get github.com/mattn/goveralls

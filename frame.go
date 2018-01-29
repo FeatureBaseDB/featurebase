@@ -571,7 +571,30 @@ func (f *Frame) RecalculateCaches() {
 }
 
 // CreateViewIfNotExists returns the named view, creating it if necessary.
+// Additionally, a CreateViewMessage is sent to the cluster.
 func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
+
+	view, err := f.CreateViewIfNotExistsBase(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Broadcast view creation to the cluster.
+	err = f.broadcaster.SendSync(
+		&internal.CreateViewMessage{
+			Index: f.index,
+			Frame: f.name,
+			View:  name,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return view, nil
+}
+
+// CreateViewIfNotExistsBase returns the named view, creating it if necessary.
+func (f *Frame) CreateViewIfNotExistsBase(name string) (*View, error) {
 	// Don't create inverse views if they are not enabled.
 	if !f.InverseEnabled() && IsInverseView(name) {
 		return nil, ErrFrameInverseDisabled
