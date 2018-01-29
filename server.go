@@ -408,6 +408,15 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
+	case *internal.CreateViewMessage:
+		f := s.Holder.Frame(obj.Index, obj.Frame)
+		if f == nil {
+			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
+		}
+		_, err := f.CreateViewIfNotExistsBase(obj.View)
+		if err != nil {
+			return err
+		}
 	case *internal.DeleteViewMessage:
 		f := s.Holder.Frame(obj.Index, obj.Frame)
 		if f == nil {
