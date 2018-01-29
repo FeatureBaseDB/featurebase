@@ -270,10 +270,11 @@ func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
 // Ensure program can set bits on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
 	mains1 := test.NewMainArrayWithCluster(2)
-	m0 := mains1[0]
+	m10 := mains1[0]
+	m11 := mains1[1]
 
 	// Create frames.
-	client := m0.Client()
+	client := m10.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create index:", err)
 	}
@@ -282,7 +283,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	}
 
 	// Write data on first cluster.
-	if _, err := m0.Query("i", "", `
+	if _, err := m10.Query("i", "", `
 		SetBit(rowID=1, frame="f", columnID=100)
 		SetBit(rowID=1, frame="f", columnID=1000)
 		SetBit(rowID=1, frame="f", columnID=100000)
@@ -295,7 +296,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	}
 
 	// Query row on first cluster.
-	if res, err := m0.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
+	if res, err := m10.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
 		t.Fatal("bitmap query:", err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -303,34 +304,47 @@ func TestMain_FrameRestore(t *testing.T) {
 
 	// Start second cluster.
 	mains2 := test.NewMainArrayWithCluster(2)
-	m2 := mains2[0]
-	defer m2.Close()
+	m20 := mains2[0]
+	defer m20.Close()
+	m21 := mains2[1]
+	defer m21.Close()
 
 	// Import from first cluster.
-	client2, err := pilosa.NewInternalHTTPClient(m2.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	client20, err := pilosa.NewInternalHTTPClient(m20.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
 	if err != nil {
 		t.Fatal("new client:", err)
 	}
-	if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+	client21, err := pilosa.NewInternalHTTPClient(m21.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	if err != nil {
+		t.Fatal("new client:", err)
+	}
+
+	if err := m20.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create new index:", err)
 	}
-	if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+	if err := m20.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal("create new frame:", err)
 	}
-	m2.Server.Logger().Printf("...RestoreFrame start")
-	if err := client2.RestoreFrame(context.Background(), m0.Server.URI.HostPort(), "i", "f"); err != nil {
+
+	m20.Server.Logger().Printf("...RestoreFrame start m20")
+	if err := client20.RestoreFrame(context.Background(), m10.Server.URI.HostPort(), "i", "f"); err != nil {
 		t.Fatal("restore frame:", err)
 	}
-	m2.Server.Logger().Printf("...RestoreFrame end")
+	m20.Server.Logger().Printf("...RestoreFrame end m20")
+	m21.Server.Logger().Printf("...RestoreFrame start m21")
+	if err := client21.RestoreFrame(context.Background(), m11.Server.URI.HostPort(), "i", "f"); err != nil {
+		t.Fatal("restore frame:", err)
+	}
+	m21.Server.Logger().Printf("...RestoreFrame end m21")
 
 	// Query row on second cluster.
-	m2.Server.Logger().Printf("...Query start")
-	if res, err := m2.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
+	m20.Server.Logger().Printf("...Query start")
+	if res, err := m20.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
 		t.Fatal("another bitmap query:", err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("2unexpected result: %s", res)
 	}
-	m2.Server.Logger().Printf("...Query end")
+	m20.Server.Logger().Printf("...Query end")
 }
 
 // Ensure the host can be parsed.
