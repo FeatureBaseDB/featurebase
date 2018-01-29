@@ -143,6 +143,7 @@ const (
 	MessageTypeResizeInstructionComplete = 11
 	MessageTypeSetCoordinator            = 12
 	MessageTypeNodeState                 = 13
+	MessageTypeCreateView                = 14
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
@@ -163,6 +164,8 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeCreateInputDefinition
 	case *internal.DeleteInputDefinitionMessage:
 		typ = MessageTypeDeleteInputDefinition
+	case *internal.CreateViewMessage:
+		typ = MessageTypeCreateView
 	case *internal.DeleteViewMessage:
 		typ = MessageTypeDeleteView
 	case *internal.ClusterStatus:
@@ -205,6 +208,8 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.CreateInputDefinitionMessage{}
 	case MessageTypeDeleteInputDefinition:
 		m = &internal.DeleteInputDefinitionMessage{}
+	case MessageTypeCreateView:
+		m = &internal.CreateViewMessage{}
 	case MessageTypeDeleteView:
 		m = &internal.DeleteViewMessage{}
 	case MessageTypeClusterStatus:
