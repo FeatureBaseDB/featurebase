@@ -130,19 +130,20 @@ func (n *nopGossiper) SendAsync(pb proto.Message) error {
 
 // Broadcast message types.
 const (
-	MessageTypeCreateSlice               = 1
-	MessageTypeCreateIndex               = 2
-	MessageTypeDeleteIndex               = 3
-	MessageTypeCreateFrame               = 4
-	MessageTypeDeleteFrame               = 5
-	MessageTypeCreateInputDefinition     = 6
-	MessageTypeDeleteInputDefinition     = 7
-	MessageTypeDeleteView                = 8
-	MessageTypeClusterStatus             = 9
-	MessageTypeResizeInstruction         = 10
-	MessageTypeResizeInstructionComplete = 11
-	MessageTypeSetCoordinator            = 12
-	MessageTypeNodeState                 = 13
+	MessageTypeCreateSlice = iota
+	MessageTypeCreateIndex
+	MessageTypeDeleteIndex
+	MessageTypeCreateFrame
+	MessageTypeDeleteFrame
+	MessageTypeCreateView
+	MessageTypeDeleteView
+	MessageTypeCreateInputDefinition
+	MessageTypeDeleteInputDefinition
+	MessageTypeClusterStatus
+	MessageTypeResizeInstruction
+	MessageTypeResizeInstructionComplete
+	MessageTypeSetCoordinator
+	MessageTypeNodeState
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
@@ -159,12 +160,14 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeCreateFrame
 	case *internal.DeleteFrameMessage:
 		typ = MessageTypeDeleteFrame
+	case *internal.CreateViewMessage:
+		typ = MessageTypeCreateView
+	case *internal.DeleteViewMessage:
+		typ = MessageTypeDeleteView
 	case *internal.CreateInputDefinitionMessage:
 		typ = MessageTypeCreateInputDefinition
 	case *internal.DeleteInputDefinitionMessage:
 		typ = MessageTypeDeleteInputDefinition
-	case *internal.DeleteViewMessage:
-		typ = MessageTypeDeleteView
 	case *internal.ClusterStatus:
 		typ = MessageTypeClusterStatus
 	case *internal.ResizeInstruction:
@@ -201,12 +204,14 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.CreateFrameMessage{}
 	case MessageTypeDeleteFrame:
 		m = &internal.DeleteFrameMessage{}
+	case MessageTypeCreateView:
+		m = &internal.CreateViewMessage{}
+	case MessageTypeDeleteView:
+		m = &internal.DeleteViewMessage{}
 	case MessageTypeCreateInputDefinition:
 		m = &internal.CreateInputDefinitionMessage{}
 	case MessageTypeDeleteInputDefinition:
 		m = &internal.DeleteInputDefinitionMessage{}
-	case MessageTypeDeleteView:
-		m = &internal.DeleteViewMessage{}
 	case MessageTypeClusterStatus:
 		m = &internal.ClusterStatus{}
 	case MessageTypeResizeInstruction:
