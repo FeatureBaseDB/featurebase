@@ -20,6 +20,7 @@
 - [Get Support](#get-support)
 - [Contributing](#contributing)
 
+Are you using Pilosa? [Let us know](https://github.com/pilosa/pilosa/issues/1074)!
 
 ## Docs
 
