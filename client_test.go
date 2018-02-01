@@ -36,10 +36,10 @@ func createCluster(c *pilosa.Cluster) ([]*test.Server, []*test.Holder) {
 	for i := 0; i < numNodes; i++ {
 		hldr[i] = test.MustOpenHolder()
 		server[i] = test.NewServer()
-		server[i].Handler.URI = server[i].HostURI()
 		server[i].Handler.Cluster = c
 		server[i].Handler.Cluster.Nodes[i].URI = server[i].HostURI()
 		server[i].Handler.Holder = hldr[i].Holder
+		server[i].Handler.Node = server[i].Handler.Cluster.Nodes[i]
 	}
 	return server, hldr
 }
@@ -64,21 +64,21 @@ func TestClient_MultiNode(t *testing.T) {
 	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(defaultClient)
 		e.Holder = hldr[0].Holder
-		e.URI = cluster.Nodes[0].URI
+		e.Node = cluster.Nodes[0]
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(defaultClient)
 		e.Holder = hldr[1].Holder
-		e.URI = cluster.Nodes[1].URI
+		e.Node = cluster.Nodes[1]
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(defaultClient)
 		e.Holder = hldr[2].Holder
-		e.URI = cluster.Nodes[2].URI
+		e.Node = cluster.Nodes[2]
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
@@ -217,10 +217,10 @@ func TestClient_Import(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
+	s.Handler.Node = s.Handler.Cluster.Nodes[0]
 
 	// Send import request.
 	c := test.MustNewClient(s.Host(), defaultClient)
@@ -268,10 +268,10 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
+	s.Handler.Node = s.Handler.Cluster.Nodes[0]
 
 	// Send import request.
 	c := test.MustNewClient(s.Host(), defaultClient)
@@ -317,10 +317,10 @@ func TestClient_ImportValue(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
+	s.Handler.Node = s.Handler.Cluster.Nodes[0]
 
 	// Send import request.
 	c := test.MustNewClient(s.Host(), defaultClient)
@@ -355,10 +355,10 @@ func TestClient_BackupRestore(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
+	s.Handler.Node = s.Handler.Cluster.Nodes[0]
 
 	c := test.MustNewClient(s.Host(), defaultClient)
 
@@ -420,10 +420,10 @@ func TestClient_BackupInverseView(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
+	s.Handler.Node = s.Handler.Cluster.Nodes[0]
 
 	c := test.MustNewClient(s.Host(), defaultClient)
 
@@ -457,10 +457,10 @@ func TestClient_BackupInvalidView(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
+	s.Handler.Node = s.Handler.Cluster.Nodes[0]
 
 	c := test.MustNewClient(s.Host(), defaultClient)
 
@@ -486,10 +486,10 @@ func TestClient_FragmentBlocks(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.URI = s.HostURI()
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.Holder = hldr.Holder
+	s.Handler.Node = s.Handler.Cluster.Nodes[0]
 
 	// Retrieve blocks.
 	c := test.MustNewClient(s.Host(), defaultClient)

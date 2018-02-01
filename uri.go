@@ -57,6 +57,16 @@ func DefaultURI() *URI {
 	}
 }
 
+type URIs []URI
+
+func (u URIs) HostPortStrings() []string {
+	s := make([]string, len(u))
+	for i, a := range u {
+		s[i] = a.HostPort()
+	}
+	return s
+}
+
 // NewURIFromHostPort returns a URI with specified host and port.
 func NewURIFromHostPort(host string, port uint16) (*URI, error) {
 	uri := DefaultURI()

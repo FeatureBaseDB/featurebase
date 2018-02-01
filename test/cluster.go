@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
-	"sort"
 	"sync"
 	"time"
 
@@ -30,9 +29,13 @@ func NewCluster(n int) *pilosa.Cluster {
 
 	for i := 0; i < n; i++ {
 		c.Nodes = append(c.Nodes, &pilosa.Node{
+			ID:  fmt.Sprintf("node%d", i),
 			URI: NewURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 	}
+
+	c.Node = c.Nodes[0]
+	c.Coordinator = c.Nodes[0].URI
 
 	return c
 }
@@ -84,7 +87,7 @@ type TestCluster struct {
 }
 
 type commonClusterSettings struct {
-	NodeSet pilosa.NodeSet
+	Nodes []*pilosa.Node
 }
 
 func (t *TestCluster) CreateIndex(name string) error {
@@ -115,7 +118,7 @@ func (t *TestCluster) SetBit(index, frame, view string, rowID, colID uint64, x *
 	nodes := c0.FragmentNodes(index, slice)
 
 	for _, node := range nodes {
-		c := t.clusterByURI(node.URI)
+		c := t.clusterByID(node.ID)
 		if c == nil {
 			continue
 		}
@@ -139,7 +142,7 @@ func (t *TestCluster) SetFieldValue(index, frame string, columnID uint64, name s
 	nodes := c0.FragmentNodes(index, slice)
 
 	for _, node := range nodes {
-		c := t.clusterByURI(node.URI)
+		c := t.clusterByID(node.ID)
 		if c == nil {
 			continue
 		}
@@ -156,9 +159,9 @@ func (t *TestCluster) SetFieldValue(index, frame string, columnID uint64, name s
 	return nil
 }
 
-func (t *TestCluster) clusterByURI(uri pilosa.URI) *pilosa.Cluster {
+func (t *TestCluster) clusterByID(id string) *pilosa.Cluster {
 	for _, c := range t.Clusters {
-		if c.URI == uri {
+		if c.Node.ID == id {
 			return c
 		}
 	}
@@ -179,7 +182,7 @@ func (t *TestCluster) AddNode(saveTopology bool) error {
 		coord := t.Clusters[0]
 		ev := &pilosa.NodeEvent{
 			Event: pilosa.NodeJoin,
-			URI:   c.URI,
+			Node:  c.Node,
 		}
 
 		if err := coord.ReceiveEvent(ev); err != nil {
@@ -211,11 +214,20 @@ func (t *TestCluster) WriteTopology(path string, top *pilosa.Topology) error {
 
 func (t *TestCluster) addCluster(i int, saveTopology bool) (*pilosa.Cluster, error) {
 
+	id := fmt.Sprintf("node%d", i)
 	uri := NewURI("http", fmt.Sprintf("host%d", i), uint16(0))
 
+	node := &pilosa.Node{
+		ID:  id,
+		URI: uri,
+	}
+
 	// add URI to common
-	t.common.NodeSet = append(t.common.NodeSet, uri)
-	sort.Sort(t.common.NodeSet)
+	//t.common.NodeIDs = append(t.common.NodeIDs, id)
+	//sort.Sort(t.common.NodeIDs)
+
+	// add node to common
+	t.common.Nodes = append(t.common.Nodes, node)
 
 	// create node-specific temp directory
 	path, err := ioutil.TempDir("", fmt.Sprintf("pilosa-cluster-node-%d-", i))
@@ -235,14 +247,14 @@ func (t *TestCluster) addCluster(i int, saveTopology bool) (*pilosa.Cluster, err
 	c.Topology = pilosa.NewTopology()
 	c.Holder = h
 	c.MemberSet = pilosa.NewStaticMemberSet()
-	c.URI = uri
-	c.Coordinator = t.common.NodeSet[0] // the first node is the coordinator
+	c.Node = node
+	c.Coordinator = t.common.Nodes[0].URI // the first node is the coordinator
 	c.Broadcaster = t
 
 	// add nodes
 	if saveTopology {
-		for _, u := range t.common.NodeSet {
-			c.AddNode(u)
+		for _, n := range t.common.Nodes {
+			c.AddNode(n)
 		}
 	}
 
@@ -344,7 +356,7 @@ func (t *TestCluster) SendTo(to *pilosa.Node, pb proto.Message) error {
 			return err
 		}
 	case *internal.ResizeInstructionComplete:
-		coord := t.clusterByURI(to.URI)
+		coord := t.clusterByID(to.ID)
 		go coord.MarkResizeInstructionComplete(obj)
 	}
 	return nil
@@ -356,7 +368,7 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 	// Prepare the return message.
 	complete := &internal.ResizeInstructionComplete{
 		JobID: instr.JobID,
-		URI:   instr.URI,
+		Node:  instr.Node,
 		Error: "",
 	}
 
@@ -365,8 +377,8 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 
 		// figure out which node it was meant for, then call the operation on that cluster
 		// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
-		instrURI := pilosa.DecodeURI(instr.URI)
-		destCluster := t.clusterByURI(instrURI)
+		instrNode := pilosa.DecodeNode(instr.Node)
+		destCluster := t.clusterByID(instrNode.ID)
 
 		// Sync the schema received in the resize instruction.
 		if err := destCluster.Holder.ApplySchema(instr.Schema); err != nil {
@@ -374,8 +386,8 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 		}
 
 		for _, src := range instr.Sources {
-			srcURI := pilosa.DecodeURI(src.URI)
-			srcCluster := t.clusterByURI(srcURI)
+			srcNode := pilosa.DecodeNode(src.Node)
+			srcCluster := t.clusterByID(srcNode.ID)
 
 			srcFragment := srcCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
 			destFragment := destCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
@@ -414,9 +426,7 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 		complete.Error = err.Error()
 	}
 
-	node := &pilosa.Node{
-		URI: pilosa.DecodeURI(instr.Coordinator),
-	}
+	node := pilosa.DecodeNode(instr.Coordinator)
 	if err := t.SendTo(node, complete); err != nil {
 		return err
 	}

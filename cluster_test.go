@@ -106,7 +106,7 @@ func TestCluster_OwnsSlices(t *testing.T) {
 func TestCluster_ContainsSlices(t *testing.T) {
 	c := test.NewCluster(5)
 	c.ReplicaN = 3
-	slices := c.ContainsSlices("test", 10, test.NewURIFromHostPort("host2", 0))
+	slices := c.ContainsSlices("test", 10, c.Nodes[2])
 
 	if !reflect.DeepEqual(slices, []uint64{0, 2, 3, 5, 6, 9, 10}) {
 		t.Fatalf("unexpected slices for node's index: %v", slices)
@@ -119,15 +119,16 @@ func TestCluster_Nodes(t *testing.T) {
 	uri2 := test.NewURIFromHostPort("node2", 0)
 	uri3 := test.NewURIFromHostPort("node3", 0)
 
-	nodes := []*pilosa.Node{
-		{URI: uri0},
-		{URI: uri1},
-		{URI: uri2},
-	}
+	node0 := &pilosa.Node{ID: "node0", URI: uri0}
+	node1 := &pilosa.Node{ID: "node1", URI: uri1}
+	node2 := &pilosa.Node{ID: "node2", URI: uri2}
+	node3 := &pilosa.Node{ID: "node3", URI: uri3}
 
-	t.Run("NodeSet", func(t *testing.T) {
-		actual := pilosa.Nodes(nodes).URIs()
-		expected := []pilosa.URI{uri0, uri1, uri2}
+	nodes := []*pilosa.Node{node0, node1, node2}
+
+	t.Run("NodeIDs", func(t *testing.T) {
+		actual := pilosa.Nodes(nodes).IDs()
+		expected := []string{node0.ID, node1.ID, node2.ID}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
@@ -150,19 +151,8 @@ func TestCluster_Nodes(t *testing.T) {
 	})
 
 	t.Run("Contains", func(t *testing.T) {
-		actualTrue := pilosa.Nodes(nodes).Contains(nodes[1])
-		actualFalse := pilosa.Nodes(nodes).Contains(&pilosa.Node{})
-		if !reflect.DeepEqual(actualTrue, true) {
-			t.Errorf("expected: %v, but got: %v", true, actualTrue)
-		}
-		if !reflect.DeepEqual(actualFalse, false) {
-			t.Errorf("expected: %v, but got: %v", false, actualTrue)
-		}
-	})
-
-	t.Run("ContainsURI", func(t *testing.T) {
-		actualTrue := pilosa.Nodes(nodes).ContainsURI(uri1)
-		actualFalse := pilosa.Nodes(nodes).ContainsURI(uri3)
+		actualTrue := pilosa.Nodes(nodes).Contains(node1)
+		actualFalse := pilosa.Nodes(nodes).Contains(node3)
 		if !reflect.DeepEqual(actualTrue, true) {
 			t.Errorf("expected: %v, but got: %v", true, actualTrue)
 		}
@@ -185,58 +175,66 @@ func TestCluster_Coordinator(t *testing.T) {
 	uri1 := test.NewURIFromHostPort("node1", 0)
 	uri2 := test.NewURIFromHostPort("node2", 0)
 
+	node1 := &pilosa.Node{ID: "node1", URI: uri1}
+	node2 := &pilosa.Node{ID: "node2", URI: uri2}
+
 	c1 := *pilosa.NewCluster()
-	c1.URI = uri1
-	c1.Coordinator = uri1
+	c1.Node = node1
+	c1.Coordinator = node1.URI
 	c2 := *pilosa.NewCluster()
-	c2.URI = uri2
-	c2.Coordinator = uri1
+	c2.Node = node2
+	c2.Coordinator = node1.URI
 
 	t.Run("IsCoordinator", func(t *testing.T) {
 		if !c1.IsCoordinator() {
-			t.Errorf("!IsCoordinator error: %v", c1.URI)
+			t.Errorf("!IsCoordinator error: %v", c1.Node)
 		} else if c2.IsCoordinator() {
-			t.Errorf("IsCoordinator error: %v", c2.URI)
+			t.Errorf("IsCoordinator error: %v", c2.Node)
 		}
 	})
 }
 
 func TestCluster_Topology(t *testing.T) {
-	c1 := test.NewCluster(1)
+	c1 := test.NewCluster(1) // automatically creates Node{ID: "node0"}
 
-	uri1 := test.NewURIFromHostPort("node1", 0)
-	uri2 := test.NewURIFromHostPort("node2", 0)
-	base := test.NewURIFromHostPort("host0", 0)
+	uri0 := test.NewURIFromHostPort("host0", 0)
+	uri1 := test.NewURIFromHostPort("host1", 0)
+	uri2 := test.NewURIFromHostPort("host2", 0)
 	invalid := test.NewURIFromHostPort("invalid", 0)
 
+	node0 := &pilosa.Node{ID: "node0", URI: uri0}
+	node1 := &pilosa.Node{ID: "node1", URI: uri1}
+	node2 := &pilosa.Node{ID: "node2", URI: uri2}
+	nodeinvalid := &pilosa.Node{ID: "nodeinvalid", URI: invalid}
+
 	t.Run("AddNode", func(t *testing.T) {
-		err := c1.AddNode(uri1)
+		err := c1.AddNode(node1)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// add the same host.
-		err = c1.AddNode(uri1)
+		err = c1.AddNode(node1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = c1.AddNode(uri2)
+		err = c1.AddNode(node2)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		actual := c1.NodeSet()
-		expected := []pilosa.URI{base, uri1, uri2}
+		actual := c1.NodeIDs()
+		expected := []string{node0.ID, node1.ID, node2.ID}
 
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
 	})
 
-	t.Run("ContainsURI", func(t *testing.T) {
-		if !c1.Topology.ContainsURI(uri1) {
-			t.Errorf("!ContainsHost error: %v", uri1)
-		} else if c1.Topology.ContainsURI(invalid) {
-			t.Errorf("ContainsHost error: %v", invalid)
+	t.Run("ContainsID", func(t *testing.T) {
+		if !c1.Topology.ContainsID(node1.ID) {
+			t.Errorf("!ContainsHost error: %v", node1.ID)
+		} else if c1.Topology.ContainsID(nodeinvalid.ID) {
+			t.Errorf("ContainsHost error: %v", nodeinvalid.ID)
 		}
 	})
 }
@@ -260,12 +258,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		expectedTop := &pilosa.Topology{
-			NodeSet: []pilosa.URI{node.URI},
+			NodeIDs: []string{node.Node.ID},
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node.Topology.NodeSet, expectedTop.NodeSet) {
-			t.Errorf("expected topology: %v, but got: %v", expectedTop.NodeSet, node.Topology.NodeSet)
+		if !reflect.DeepEqual(node.Topology.NodeIDs, expectedTop.NodeIDs) {
+			t.Errorf("expected topology: %v, but got: %v", expectedTop.NodeIDs, node.Topology.NodeIDs)
 		}
 
 		// Close TestCluster.
@@ -282,7 +280,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// write topology to data file
 		top := &pilosa.Topology{
-			NodeSet: []pilosa.URI{node.URI},
+			NodeIDs: []string{node.Node.ID},
 		}
 		tc.WriteTopology(node.Path, top)
 
@@ -310,14 +308,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// write topology to data file
 		top := &pilosa.Topology{
-			NodeSet: []pilosa.URI{
-				test.NewURIFromHostPort("some-other-host", 0),
-			},
+			NodeIDs: []string{"some-other-host"},
 		}
 		tc.WriteTopology(node.Path, top)
 
 		// Open TestCluster.
-		expected := "considerTopology: coordinator http://host0:0 is not in topology: [http://some-other-host:0]"
+		expected := "considerTopology: coordinator node0 is not in topology: [some-other-host]"
 		err := tc.Open()
 		if err == nil || err.Error() != expected {
 			t.Errorf("did not receive expected error: %s", expected)
@@ -351,14 +347,14 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		expectedTop := &pilosa.Topology{
-			NodeSet: []pilosa.URI{node0.URI, node1.URI},
+			NodeIDs: []string{node0.Node.ID, node1.Node.ID},
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology.NodeSet, expectedTop.NodeSet) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeSet, node0.Topology.NodeSet)
-		} else if !reflect.DeepEqual(node1.Topology.NodeSet, expectedTop.NodeSet) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeSet, node1.Topology.NodeSet)
+		if !reflect.DeepEqual(node0.Topology.NodeIDs, expectedTop.NodeIDs) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeIDs, node0.Topology.NodeIDs)
+		} else if !reflect.DeepEqual(node1.Topology.NodeIDs, expectedTop.NodeIDs) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeIDs, node1.Topology.NodeIDs)
 		}
 
 		// Close TestCluster.
@@ -372,13 +368,9 @@ func TestCluster_ResizeStates(t *testing.T) {
 		tc.AddNode(false)
 		node0 := tc.Clusters[0]
 
-		u0 := test.NewURIFromHostPort("host0", 0)
-		//u1 := test.NewURIFromHostPort("host1", 0)
-		u2 := test.NewURIFromHostPort("host2", 0)
-
 		// write topology to data file
 		top := &pilosa.Topology{
-			NodeSet: []pilosa.URI{u0, u2},
+			NodeIDs: []string{"node0", "node2"},
 		}
 		tc.WriteTopology(node0.Path, top)
 
@@ -393,7 +385,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Expect an error by adding a node not in the topology.
-		expectedError := "host is not in topology: http://host1:0"
+		expectedError := "host is not in topology: node1"
 		err := tc.AddNode(false)
 		if err == nil || err.Error() != expectedError {
 			t.Errorf("did not receive expected error: %s", expectedError)
@@ -477,14 +469,14 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		expectedTop := &pilosa.Topology{
-			NodeSet: []pilosa.URI{node0.URI, node1.URI},
+			NodeIDs: []string{node0.Node.ID, node1.Node.ID},
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology.NodeSet, expectedTop.NodeSet) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeSet, node0.Topology.NodeSet)
-		} else if !reflect.DeepEqual(node1.Topology.NodeSet, expectedTop.NodeSet) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeSet, node1.Topology.NodeSet)
+		if !reflect.DeepEqual(node0.Topology.NodeIDs, expectedTop.NodeIDs) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeIDs, node0.Topology.NodeIDs)
+		} else if !reflect.DeepEqual(node1.Topology.NodeIDs, expectedTop.NodeIDs) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeIDs, node1.Topology.NodeIDs)
 		}
 
 		// Bits
@@ -519,28 +511,23 @@ func TestCluster_ResizeStates(t *testing.T) {
 // Ensures that coordinator can be changed.
 func TestCluster_SetCoordinator(t *testing.T) {
 	t.Run("SetCoordinator", func(t *testing.T) {
-		c := test.NewCluster(1)
-		oldURI, err := pilosa.NewURIFromAddress("localhost:8888")
-		if err != nil {
-			t.Fatal(err)
-		}
-		c.Coordinator = *oldURI
+		c := test.NewCluster(2)
 
-		newURI, err := pilosa.NewURIFromAddress("localhost:9999")
-		if err != nil {
-			t.Fatal(err)
-		}
+		oldNode := c.Nodes[0]
+		newNode := c.Nodes[1]
 
 		// Set coordinator to the same value.
-		c.SetCoordinator(c.Coordinator, *oldURI)
-		if c.Coordinator != *oldURI {
-			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, *oldURI)
+		if set := c.SetCoordinator(oldNode, oldNode); set {
+			t.Errorf("did not expect coordinator to change")
+		} else if c.Coordinator != oldNode.URI {
+			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, oldNode.URI)
 		}
 
 		// Set coordinator to a new value.
-		c.SetCoordinator(c.Coordinator, *newURI)
-		if c.Coordinator != *newURI {
-			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, *newURI)
+		if set := c.SetCoordinator(oldNode, newNode); !set {
+			t.Errorf("expected coordinator to change")
+		} else if c.Coordinator != newNode.URI {
+			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, newNode.URI)
 		}
 	})
 }

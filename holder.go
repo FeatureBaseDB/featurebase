@@ -69,8 +69,6 @@ type Holder struct {
 	CacheFlushInterval time.Duration
 
 	LogOutput io.Writer
-
-	NodeID string
 }
 
 // NewHolder returns a new instance of Holder.
@@ -528,25 +526,29 @@ func (h *Holder) setFileLimit() {
 
 func (h *Holder) logger() *log.Logger { return log.New(h.LogOutput, "", log.LstdFlags) }
 
-func (h *Holder) loadNodeID() error {
+func (h *Holder) loadNodeID() (string, error) {
 	idPath := path.Join(h.Path, "ID")
 	nodeID := ""
-	nodeIDBytes, err := ioutil.ReadFile(idPath)
-	if err == nil {
-		h.NodeID = strings.TrimSpace(string(nodeIDBytes))
-	} else if os.IsNotExist(err) {
-		u := uuid.NewV4()
-		nodeID = u.String()
-		err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
-		if err != nil {
-			return err
-		}
-		h.NodeID = nodeID
-	} else if err != nil {
-		return err
+
+	h.logger().Printf("load NodeID: %s", idPath)
+	if err := os.MkdirAll(h.Path, 0777); err != nil {
+		return "", err
 	}
 
-	return nil
+	nodeIDBytes, err := ioutil.ReadFile(idPath)
+	if err == nil {
+		nodeID = strings.TrimSpace(string(nodeIDBytes))
+	} else if os.IsNotExist(err) {
+		nodeID = uuid.NewV4().String()
+		err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
+		if err != nil {
+			return "", err
+		}
+	} else if err != nil {
+		return "", err
+	}
+
+	return nodeID, nil
 }
 
 // HolderSyncer is an active anti-entropy tool that compares the local holder
@@ -554,7 +556,7 @@ func (h *Holder) loadNodeID() error {
 type HolderSyncer struct {
 	Holder *Holder
 
-	URI          URI
+	Node         *Node
 	Cluster      *Cluster
 	RemoteClient *http.Client
 
@@ -610,7 +612,7 @@ func (s *HolderSyncer) SyncHolder() error {
 
 				for slice := uint64(0); slice <= s.Holder.Index(di.Name).MaxSlice(); slice++ {
 					// Ignore slices that this host doesn't own.
-					if !s.Cluster.OwnsFragment(s.URI, di.Name, slice) {
+					if !s.Cluster.OwnsFragment(s.Node.ID, di.Name, slice) {
 						continue
 					}
 
@@ -652,7 +654,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 	s.Stats.CountWithCustomTags("ColumnAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag})
 
 	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.Nodes).FilterURI(s.URI) {
+	for _, node := range Nodes(s.Cluster.Nodes).FilterID(s.Node.ID) {
 		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
 
 		// Retrieve attributes from differing blocks.
@@ -663,7 +665,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 		} else if len(m) == 0 {
 			continue
 		}
-		s.Stats.CountWithCustomTags("ColumnAttrDiff", int64(len(m)), 1.0, []string{indexTag, node.URI.HostPort()})
+		s.Stats.CountWithCustomTags("ColumnAttrDiff", int64(len(m)), 1.0, []string{indexTag, node.ID})
 
 		// Update local copy.
 		if err := idx.ColumnAttrStore().SetBulkAttrs(m); err != nil {
@@ -698,7 +700,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 	s.Stats.CountWithCustomTags("RowAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag, frameTag})
 
 	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.Nodes).FilterURI(s.URI) {
+	for _, node := range Nodes(s.Cluster.Nodes).FilterID(s.Node.ID) {
 		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
 
 		// Retrieve attributes from differing blocks.
@@ -711,7 +713,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 		} else if len(m) == 0 {
 			continue
 		}
-		s.Stats.CountWithCustomTags("RowAttrDiff", int64(len(m)), 1.0, []string{indexTag, frameTag, node.URI.HostPort()})
+		s.Stats.CountWithCustomTags("RowAttrDiff", int64(len(m)), 1.0, []string{indexTag, frameTag, node.ID})
 
 		// Update local copy.
 		if err := f.RowAttrStore().SetBulkAttrs(m); err != nil {
@@ -751,7 +753,7 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 	// Sync fragments together.
 	fs := FragmentSyncer{
 		Fragment:     frag,
-		URI:          s.URI,
+		Node:         s.Node,
 		Cluster:      s.Cluster,
 		Closing:      s.Closing,
 		RemoteClient: s.RemoteClient,
@@ -765,7 +767,7 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 
 // HolderCleaner removes fragments and data files that are no longer used.
 type HolderCleaner struct {
-	URI URI
+	Node *Node
 
 	Holder  *Holder
 	Cluster *Cluster
@@ -794,7 +796,7 @@ func (c *HolderCleaner) CleanHolder() error {
 		}
 
 		// Get the fragments that node is responsible for (based on hash(index, node)).
-		containedSlices := c.Cluster.ContainsSlices(index.Name(), index.MaxSlice(), c.URI)
+		containedSlices := c.Cluster.ContainsSlices(index.Name(), index.MaxSlice(), c.Node)
 
 		// Get the fragments registered in memory.
 		for _, frame := range index.Frames() {

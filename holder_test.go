@@ -419,7 +419,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(client)
 		e.Holder = hldr1.Holder
-		e.URI = cluster.Nodes[1].URI
+		e.Node = cluster.Nodes[1]
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
@@ -487,7 +487,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	// Set up syncer.
 	syncer := pilosa.HolderSyncer{
 		Holder:       hldr0.Holder,
-		URI:          cluster.Nodes[0].URI,
+		Node:         cluster.Nodes[0],
 		Cluster:      cluster,
 		RemoteClient: pilosa.GetHTTPClient(nil),
 		Stats:        pilosa.NopStatsClient,
@@ -586,7 +586,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 
 	// Set up cleaner for replication 2.
 	cleaner2 := pilosa.HolderCleaner{
-		URI:     cluster.Nodes[0].URI,
+		Node:    cluster.Nodes[0],
 		Holder:  hldr0.Holder,
 		Cluster: cluster,
 	}
@@ -629,7 +629,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 
 	// Set up cleaner for replication 1.
 	cleaner1 := pilosa.HolderCleaner{
-		URI:     cluster.Nodes[0].URI,
+		Node:    cluster.Nodes[0],
 		Holder:  hldr0.Holder,
 		Cluster: cluster,
 	}

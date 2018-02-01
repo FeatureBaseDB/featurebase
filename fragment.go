@@ -1685,7 +1685,7 @@ func (h *blockHasher) WriteValue(v uint64) {
 type FragmentSyncer struct {
 	Fragment *Fragment
 
-	URI          URI
+	Node         *Node
 	Cluster      *Cluster
 	RemoteClient *http.Client
 
@@ -1715,7 +1715,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 	blockSets := make([][]FragmentBlock, 0, len(nodes))
 	for _, node := range nodes {
 		// Read local blocks.
-		if node.URI == s.URI {
+		if node.ID == s.Node.ID {
 			b := s.Fragment.Blocks()
 			blockSets = append(blockSets, b)
 			continue
@@ -1789,7 +1789,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	var pairSets []PairSet
 	var clients []InternalClient
 	for _, node := range s.Cluster.FragmentNodes(f.Index(), f.Slice()) {
-		if s.URI == node.URI {
+		if s.Node.ID == node.ID {
 			continue
 		}
 

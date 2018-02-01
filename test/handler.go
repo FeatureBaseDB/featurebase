@@ -67,13 +67,14 @@ func NewServer() *Server {
 	if err != nil {
 		panic(err)
 	}
-	s.Handler.URI = *uri
 
 	// Handler test messages can no-op.
 	s.Handler.Broadcaster = pilosa.NopBroadcaster
 	// Create a default cluster on the handler
 	s.Handler.Cluster = NewCluster(1)
 	s.Handler.Cluster.Nodes[0].URI = *uri
+
+	s.Handler.Node = s.Handler.Cluster.Nodes[0]
 
 	return s
 }
@@ -85,10 +86,16 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 
 // ClusterStatus exists so that test.Server implements StatusHandler.
 func (s *Server) ClusterStatus() (proto.Message, error) {
+	id := "test-node"
 	uri := pilosa.DefaultURI()
+	node := &pilosa.Node{
+		ID:  id,
+		URI: *uri,
+	}
 	return &internal.ClusterStatus{
-		State:   pilosa.ClusterStateNormal,
-		NodeSet: []*internal.URI{uri.Encode()},
+		ClusterID: "",
+		State:     pilosa.ClusterStateNormal,
+		Nodes:     pilosa.EncodeNodes([]*pilosa.Node{node}),
 	}, nil
 }
 

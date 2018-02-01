@@ -38,8 +38,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Update cluster config
 	m0.Server.Cluster.Nodes = []*pilosa.Node{
-		{URI: m0.Server.URI},
-		{URI: m1.Server.URI},
+		{ID: m0.Server.NodeID, URI: m0.Server.URI},
+		{ID: m1.Server.NodeID, URI: m1.Server.URI},
 	}
 	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
 
@@ -50,7 +50,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	m0.Config.Gossip.Seed = ""
 
 	m0.Server.Cluster.Coordinator = m0.Server.URI
-	m0.Server.Cluster.Topology = &pilosa.Topology{NodeSet: []pilosa.URI{m0.Server.URI, m1.Server.URI}}
+	m0.Server.Cluster.Topology = &pilosa.Topology{NodeIDs: []string{m0.Server.NodeID, m1.Server.NodeID}}
 	m0.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
 	gossipMemberSet0, err := gossip.NewGossipMemberSet(m0.Server.URI.HostPort(), m0.Config, m0.Server)
 	if err != nil {

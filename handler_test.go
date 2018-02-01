@@ -147,7 +147,7 @@ func TestHandler_Status(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/status", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"state":"NORMAL","nodes":[{"scheme":"http","host":"localhost","port":10101}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"state":"NORMAL","nodes":[{"id":"test-node","uri":{"scheme":"http","host":"localhost","port":10101}}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -1215,8 +1215,8 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if w.Body.String() != `[{"uri":{"scheme":"http","host":"host2"}},{"uri":{"scheme":"http","host":"host0"}}]`+"\n" {
-		t.Fatalf("unexpected body: %q", w.Body.String())
+	} else if body := w.Body.String(); body != `[{"id":"node2","uri":{"scheme":"http","host":"host2"}},{"id":"node0","uri":{"scheme":"http","host":"host0"}}]`+"\n" {
+		t.Fatalf("unexpected body: %q", body)
 	}
 }
 

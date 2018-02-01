@@ -50,7 +50,9 @@ func TestBackupCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Handler.URI = *uri
+	node := &pilosa.Node{ID: "node", URI: *uri}
+
+	s.Handler.Node = node
 	s.Handler.Cluster = test.NewCluster(1)
 	s.Handler.Cluster.Nodes[0].URI = *uri
 	s.Handler.Holder = hldr.Holder

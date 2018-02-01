@@ -57,7 +57,7 @@ type Handler struct {
 	StatusHandler    StatusHandler
 
 	// Local hostname & cluster configuration.
-	URI          URI
+	Node         *Node
 	Cluster      *Cluster
 	RemoteClient *http.Client
 
@@ -268,8 +268,8 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 
 	cs := pb.(*internal.ClusterStatus)
 	if err := json.NewEncoder(w).Encode(getStatusResponse{
-		State:   cs.State,
-		NodeSet: decodeURIs(cs.NodeSet),
+		State: cs.State,
+		Nodes: DecodeNodes(cs.Nodes),
 	}); err != nil {
 		h.logger().Printf("write status response error: %s", err)
 	}
@@ -280,8 +280,8 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State   string `json:"state"`
-	NodeSet []URI  `json:"nodes"`
+	State string  `json:"state"`
+	Nodes []*Node `json:"nodes"`
 }
 
 // handlePostQuery handles /query requests.
@@ -1206,8 +1206,8 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.URI, req.Index, req.Slice) {
-		msg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, req.Index, req.Slice)
+	if !h.Cluster.OwnsFragment(h.Node.ID, req.Index, req.Slice) {
+		msg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Node.ID, req.Index, req.Slice)
 		http.Error(w, msg, http.StatusPreconditionFailed)
 		return
 	}
@@ -1276,8 +1276,8 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.URI, req.Index, req.Slice) {
-		msg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, req.Index, req.Slice)
+	if !h.Cluster.OwnsFragment(h.Node.ID, req.Index, req.Slice) {
+		msg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Node.ID, req.Index, req.Slice)
 		http.Error(w, msg, http.StatusPreconditionFailed)
 		return
 	}
@@ -1342,8 +1342,8 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.URI, index, slice) {
-		msg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.URI, index, slice)
+	if !h.Cluster.OwnsFragment(h.Node.ID, index, slice) {
+		msg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Node.ID, index, slice)
 		http.Error(w, msg, http.StatusPreconditionFailed)
 		return
 	}
@@ -1570,7 +1570,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	// Loop over each slice and import it if this node owns it.
 	for slice := uint64(0); slice <= maxSlices[indexName]; slice++ {
 		// Ignore this slice if we don't own it.
-		if !h.Cluster.OwnsFragment(h.URI, indexName, slice) {
+		if !h.Cluster.OwnsFragment(h.Node.ID, indexName, slice) {
 			continue
 		}
 
@@ -1964,31 +1964,30 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 		return
 	}
 
-	oldURI := h.Cluster.Coordinator
+	oldNode := h.Cluster.nodeByURI(h.Cluster.Coordinator)
+	if oldNode == nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	newNode := h.Cluster.nodeByID(req.ID)
+	if newNode == nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	var newURI *URI
 	if err := func() error {
-		newURI, err = NewURIFromAddress(req.Address)
-		if err != nil {
-			return fmt.Errorf("problem with set-coordinator address: %s", err)
-		}
-
-		//if !Nodes(h.Cluster.Nodes).ContainsURI(*newURI) {
-		//	return fmt.Errorf("set-coordinator node does not exist: %s", newURI)
-		//}
-
 		// Send the set-coordinator message to all nodes.
 		err := h.Broadcaster.SendSync(
 			&internal.SetCoordinatorMessage{
-				Old: (&h.Cluster.Coordinator).Encode(),
-				New: newURI.Encode(),
+				Old: EncodeNode(oldNode),
+				New: EncodeNode(newNode),
 			})
 		if err != nil {
 			return fmt.Errorf("problem sending SetCoordinator message: %s", err)
 		}
 
 		// Set Coordinator on local node.
-		h.Cluster.SetCoordinator(oldURI, *newURI)
+		_ = h.Cluster.SetCoordinator(oldNode, newNode)
 
 		return nil
 	}(); err != nil {
@@ -1998,20 +1997,20 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(setCoordinatorResponse{
-		Old: &oldURI,
-		New: newURI,
+		Old: oldNode,
+		New: newNode,
 	}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
 type setCoordinatorRequest struct {
-	Address string `json:"address"`
+	ID string `json:"id"`
 }
 
 type setCoordinatorResponse struct {
-	Old *URI `json:"old"`
-	New *URI `json:"new"`
+	Old *Node `json:"old"`
+	New *Node `json:"new"`
 }
 
 // handlePostClusterResizeRemoveNode handles POST /cluster/resize/remove-node request.
@@ -2024,19 +2023,16 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 		return
 	}
 
-	var removeURI *URI
+	removeNode := h.Cluster.nodeByID(req.ID)
+	if removeNode == nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err := func() error {
-		removeURI, err = NewURIFromAddress(req.Address)
-		if err != nil {
-			return fmt.Errorf("problem with remove node address: %s", err)
-		}
-
-		// TODO: make sure the address is in the cluster
-
 		// TODO: prevent removing the coordinator node
 
 		// Start the resize process (similar to NodeJoin)
-		err := h.Cluster.NodeLeave(*removeURI)
+		err := h.Cluster.NodeLeave(removeNode)
 		if err != nil {
 			return err
 		}
@@ -2049,18 +2045,18 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(removeNodeResponse{
-		Remove: removeURI,
+		Remove: removeNode,
 	}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
 type removeNodeRequest struct {
-	Address string `json:"address"`
+	ID string `json:"id"`
 }
 
 type removeNodeResponse struct {
-	Remove *URI `json:"remove"`
+	Remove *Node `json:"remove"`
 }
 
 // handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
@@ -2221,7 +2217,7 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) handleGetID(w http.ResponseWriter, r *http.Request) {
-	_, err := w.Write([]byte(h.Holder.NodeID))
+	_, err := w.Write([]byte(h.Cluster.Node.ID))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

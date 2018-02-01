@@ -121,21 +121,26 @@ message URI {
     uint32 Port = 3;
 }
 
+message Node {
+    string ID = 1;
+    URI URI = 2;
+}
+
 message NodeStateMessage {
-    URI URI = 1;
+    string NodeID = 1;
     string State = 2;
 }
 
 message NodeStatus {
-    URI URI = 1;
+    Node Node = 1;
     MaxSlices MaxSlices = 2;
     Schema Schema = 3;
 }
 
 message ClusterStatus {
-    string State = 1;
-    repeated URI NodeSet = 2;
-    string ClusterID = 3;
+    string ClusterID = 1;
+    string State = 2;
+    repeated Node Nodes = 3;
 }
 
 message Field {
@@ -159,15 +164,15 @@ message DeleteViewMessage {
 
 message ResizeInstruction {
     int64 JobID = 1;
-    URI URI = 2;
-    URI Coordinator = 3;
+    Node Node = 2;
+    Node Coordinator = 3;
     repeated ResizeSource Sources = 4;
     Schema Schema = 5;
     ClusterStatus ClusterStatus = 6;
 }
 
 message ResizeSource {
-    URI URI = 1;
+    Node Node = 1;
     string Index = 2;
     string Frame = 3;
     string View = 4;
@@ -176,17 +181,17 @@ message ResizeSource {
 
 message ResizeInstructionComplete {
     int64 JobID = 1;
-    URI URI = 2;
+    Node Node = 2;
     string Error = 3;
 }
 
 message SetCoordinatorMessage {
-    URI Old = 1;
-    URI New = 2;
+    Node Old = 1;
+    Node New = 2;
 }
 
 message Topology {
-    repeated URI NodeSet = 1;
-    string ClusterID = 2;
+    string ClusterID = 1;
+    repeated string NodeIDs = 2;
 }
 
