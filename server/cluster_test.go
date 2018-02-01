@@ -222,7 +222,7 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 
 	gossipHost := "localhost"
 	gossipPort := 0
-	seed, coord, err := m0.RunWithTransport(gossipHost, gossipPort, "", nil)
+	seed, coord, err := m0.RunWithTransport(gossipHost, gossipPort, "", pilosa.URI{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 	m1 := test.NewMain()
 	defer m1.Close()
 
-	seed, coord, err = m1.RunWithTransport(gossipHost, gossipPort, seed, &coord)
+	seed, coord, err = m1.RunWithTransport(gossipHost, gossipPort, seed, coord)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0 := test.NewMain()
 		defer m0.Close()
 
-		seed, coord, err := m0.RunWithTransport("localhost", 0, "", nil)
+		seed, coord, err := m0.RunWithTransport("localhost", 0, "", pilosa.URI{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -261,7 +261,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		var eg errgroup.Group
 		eg.Go(func() error {
-			_, _, err = m1.RunWithTransport("localhost", 0, seed, &coord)
+			_, _, err = m1.RunWithTransport("localhost", 0, seed, coord)
 			if err != nil {
 				return err
 			}
@@ -284,7 +284,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0 := test.NewMain()
 		defer m0.Close()
 
-		seed, coord, err := m0.RunWithTransport("localhost", 0, "", nil)
+		seed, coord, err := m0.RunWithTransport("localhost", 0, "", pilosa.URI{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -305,7 +305,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		var eg errgroup.Group
 		eg.Go(func() error {
-			_, _, err = m1.RunWithTransport("localhost", 0, seed, &coord)
+			_, _, err = m1.RunWithTransport("localhost", 0, seed, coord)
 			if err != nil {
 				return err
 			}
@@ -330,7 +330,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0 := test.NewMain()
 		defer m0.Close()
 
-		seed, coord, err := m0.RunWithTransport("localhost", 0, "", nil)
+		seed, coord, err := m0.RunWithTransport("localhost", 0, "", pilosa.URI{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -360,7 +360,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		var eg errgroup.Group
 		eg.Go(func() error {
-			_, _, err = m1.RunWithTransport("localhost", 0, seed, &coord)
+			_, _, err = m1.RunWithTransport("localhost", 0, seed, coord)
 			if err != nil {
 				return err
 			}
@@ -385,7 +385,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		m0 := test.NewMain()
 		defer m0.Close()
 
-		seed, coord, err := m0.RunWithTransport("localhost", 0, "", nil)
+		seed, coord, err := m0.RunWithTransport("localhost", 0, "", pilosa.URI{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -415,7 +415,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		var eg errgroup.Group
 		eg.Go(func() error {
-			_, _, err = m1.RunWithTransport("localhost", 0, seed, &coord)
+			_, _, err = m1.RunWithTransport("localhost", 0, seed, coord)
 			if err != nil {
 				return err
 			}
