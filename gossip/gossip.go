@@ -384,8 +384,7 @@ func (g *GossipEventReceiver) listen() {
 		// Get the node from the event.Node meta data.
 		var n internal.Node
 		if err := proto.Unmarshal(e.Node.Meta, &n); err != nil {
-			// TODO: consider logging error
-			continue
+			panic("failed to unmarshal event node meta data")
 		}
 		node := pilosa.DecodeNode(&n)
 

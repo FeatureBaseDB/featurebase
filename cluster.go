@@ -633,12 +633,12 @@ func (c *Cluster) diff(other *Cluster) (action string, nodeID string, err error)
 	lenTo := len(other.Nodes)
 	// Determine if a node is being added or removed.
 	if lenFrom == lenTo {
-		return action, nodeID, errors.New("clusters are the same size")
+		return "", "", errors.New("clusters are the same size")
 	}
 	if lenFrom < lenTo {
 		// Adding a node.
 		if lenTo-lenFrom > 1 {
-			return action, nodeID, errors.New("adding more than one node at a time is not supported")
+			return "", "", errors.New("adding more than one node at a time is not supported")
 		}
 		action = ResizeJobActionAdd
 		// Determine the node ID that is being added.
@@ -651,7 +651,7 @@ func (c *Cluster) diff(other *Cluster) (action string, nodeID string, err error)
 	} else if lenFrom > lenTo {
 		// Removing a node.
 		if lenFrom-lenTo > 1 {
-			return action, nodeID, errors.New("removing more than one node at a time is not supported")
+			return "", "", errors.New("removing more than one node at a time is not supported")
 		}
 		action = ResizeJobActionRemove
 		// Determine the node ID that is being removed.
