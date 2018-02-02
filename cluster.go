@@ -297,22 +297,16 @@ func (c *Cluster) IsCoordinator() bool {
 	return c.Static || c.Coordinator == c.Node.URI
 }
 
-// SetCoordinator updates the Coordinator to new if it is
-// currently old. Returns true if the Coordinator changed.
-func (c *Cluster) SetCoordinator(o, n *Node) bool {
-	// Get old node.
-	oldNode := c.nodeByID(o.ID)
-	if oldNode == nil {
-		return false
-	}
-
+// SetCoordinator updates the Coordinator to n.
+// Returns true if the Coordinator changed.
+func (c *Cluster) SetCoordinator(n *Node) bool {
 	// Get new node.
 	newNode := c.nodeByID(n.ID)
 	if newNode == nil {
 		return false
 	}
 
-	if c.Coordinator == oldNode.URI && oldNode != newNode {
+	if c.Coordinator != newNode.URI {
 		c.Coordinator = newNode.URI
 		return true
 	}

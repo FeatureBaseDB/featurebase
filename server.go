@@ -442,7 +442,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.SetCoordinatorMessage:
-		s.Cluster.SetCoordinator(DecodeNode(obj.Old), DecodeNode(obj.New))
+		s.Cluster.SetCoordinator(DecodeNode(obj.New))
 	case *internal.NodeStateMessage:
 		err := s.Cluster.ReceiveNodeState(obj.NodeID, obj.State)
 		if err != nil {

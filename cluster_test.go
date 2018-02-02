@@ -517,14 +517,14 @@ func TestCluster_SetCoordinator(t *testing.T) {
 		newNode := c.Nodes[1]
 
 		// Set coordinator to the same value.
-		if set := c.SetCoordinator(oldNode, oldNode); set {
+		if c.SetCoordinator(oldNode) {
 			t.Errorf("did not expect coordinator to change")
 		} else if c.Coordinator != oldNode.URI {
 			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, oldNode.URI)
 		}
 
 		// Set coordinator to a new value.
-		if set := c.SetCoordinator(oldNode, newNode); !set {
+		if !c.SetCoordinator(newNode) {
 			t.Errorf("expected coordinator to change")
 		} else if c.Coordinator != newNode.URI {
 			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, newNode.URI)

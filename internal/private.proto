@@ -186,8 +186,7 @@ message ResizeInstructionComplete {
 }
 
 message SetCoordinatorMessage {
-    Node Old = 1;
-    Node New = 2;
+    Node New = 1;
 }
 
 message Topology {

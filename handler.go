@@ -1964,11 +1964,6 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 		return
 	}
 
-	oldNode := h.Cluster.nodeByURI(h.Cluster.Coordinator)
-	if oldNode == nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 	newNode := h.Cluster.nodeByID(req.ID)
 	if newNode == nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1979,7 +1974,6 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 		// Send the set-coordinator message to all nodes.
 		err := h.Broadcaster.SendSync(
 			&internal.SetCoordinatorMessage{
-				Old: EncodeNode(oldNode),
 				New: EncodeNode(newNode),
 			})
 		if err != nil {
@@ -1987,7 +1981,7 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 		}
 
 		// Set Coordinator on local node.
-		_ = h.Cluster.SetCoordinator(oldNode, newNode)
+		_ = h.Cluster.SetCoordinator(newNode)
 
 		return nil
 	}(); err != nil {
@@ -1997,7 +1991,6 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(setCoordinatorResponse{
-		Old: oldNode,
 		New: newNode,
 	}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
