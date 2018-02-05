@@ -61,7 +61,7 @@ ifdef DOCKER_BUILD
 else
 	make pilosa FLAGS="-o build/pilosa-$(IDENTIFIER)/pilosa"
 endif
-	cp LICENSE README.md build/pilosa-$(IDENTIFIER)
+	cp NOTICE LICENSE README.md build/pilosa-$(IDENTIFIER)
 	tar -cvz -C build -f build/pilosa-$(IDENTIFIER).tar.gz pilosa-$(IDENTIFIER)/
 	@echo "Created release build: build/pilosa-$(IDENTIFIER).tar.gz"
 
@@ -76,7 +76,7 @@ endif
 
 prerelease-build: vendor
 	make pilosa FLAGS="-o build/pilosa-master-$(GOOS)-$(GOARCH)/pilosa"
-	cp LICENSE README.md build/pilosa-master-$(GOOS)-$(GOARCH)
+	cp NOTICE LICENSE README.md build/pilosa-master-$(GOOS)-$(GOARCH)
 	tar -cvz -C build -f build/pilosa-master-$(GOOS)-$(GOARCH).tar.gz pilosa-master-$(GOOS)-$(GOARCH)/
 	@echo "Created pre-release build: build/pilosa-master-$(GOOS)-$(GOARCH).tar.gz"
 
