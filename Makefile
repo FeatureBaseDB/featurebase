@@ -53,7 +53,7 @@ cover-viz: cover
 	go tool cover -html=build/coverage/all.out
 
 pilosa: vendor
-	go build -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+	go build -tags release -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
 release-build: vendor
 ifdef DOCKER_BUILD
@@ -114,7 +114,7 @@ docker:
 	@echo "Created image: pilosa:$(VERSION)"
 
 docker-build:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) $(DOCKER_GOLANG_IMAGE) go build -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) $(DOCKER_GOLANG_IMAGE) go build -tags release -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
 docker-test:
 	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) $(DOCKER_GOLANG_IMAGE) go test $(TESTFLAGS) $(PKGS)
