@@ -34,9 +34,12 @@ func TestFragCombos(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	node0 := &Node{ID: "node0", URI: *uri0}
+	node1 := &Node{ID: "node1", URI: *uri1}
+
 	c := NewCluster()
-	c.addNodeBasicSorted(*uri0)
-	c.addNodeBasicSorted(*uri1)
+	c.addNodeBasicSorted(node0)
+	c.addNodeBasicSorted(node1)
 
 	tests := []struct {
 		idx        string
@@ -49,8 +52,8 @@ func TestFragCombos(t *testing.T) {
 			maxSlice:   uint64(2),
 			frameViews: viewsByFrame{"f": []string{"v1", "v2"}},
 			expected: fragsByHost{
-				URI{"http", "host0", 10101}: []frag{{"f", "v1", uint64(0)}, {"f", "v2", uint64(0)}},
-				URI{"http", "host1", 10101}: []frag{{"f", "v1", uint64(1)}, {"f", "v2", uint64(1)}, {"f", "v1", uint64(2)}, {"f", "v2", uint64(2)}},
+				"node0": []frag{{"f", "v1", uint64(0)}, {"f", "v2", uint64(0)}},
+				"node1": []frag{{"f", "v1", uint64(1)}, {"f", "v2", uint64(1)}, {"f", "v1", uint64(2)}, {"f", "v2", uint64(2)}},
 			},
 		},
 		{
@@ -58,8 +61,8 @@ func TestFragCombos(t *testing.T) {
 			maxSlice:   uint64(3),
 			frameViews: viewsByFrame{"f": []string{"v0"}},
 			expected: fragsByHost{
-				URI{"http", "host0", 10101}: []frag{{"f", "v0", uint64(1)}, {"f", "v0", uint64(2)}},
-				URI{"http", "host1", 10101}: []frag{{"f", "v0", uint64(0)}, {"f", "v0", uint64(3)}},
+				"node0": []frag{{"f", "v0", uint64(1)}, {"f", "v0", uint64(2)}},
+				"node1": []frag{{"f", "v0", uint64(0)}, {"f", "v0", uint64(3)}},
 			},
 		},
 	}
@@ -106,34 +109,39 @@ func TestFragSources(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	node0 := &Node{ID: "node0", URI: *uri0}
+	node1 := &Node{ID: "node1", URI: *uri1}
+	node2 := &Node{ID: "node2", URI: *uri2}
+	node3 := &Node{ID: "node3", URI: *uri3}
+
 	c1 := NewCluster()
 	c1.ReplicaN = 1
-	c1.addNodeBasicSorted(*uri0)
-	c1.addNodeBasicSorted(*uri1)
+	c1.addNodeBasicSorted(node0)
+	c1.addNodeBasicSorted(node1)
 
 	c2 := NewCluster()
 	c2.ReplicaN = 1
-	c2.addNodeBasicSorted(*uri0)
-	c2.addNodeBasicSorted(*uri1)
-	c2.addNodeBasicSorted(*uri2)
+	c2.addNodeBasicSorted(node0)
+	c2.addNodeBasicSorted(node1)
+	c2.addNodeBasicSorted(node2)
 
 	c3 := NewCluster()
 	c3.ReplicaN = 2
-	c3.addNodeBasicSorted(*uri0)
-	c3.addNodeBasicSorted(*uri1)
+	c3.addNodeBasicSorted(node0)
+	c3.addNodeBasicSorted(node1)
 
 	c4 := NewCluster()
 	c4.ReplicaN = 2
-	c4.addNodeBasicSorted(*uri0)
-	c4.addNodeBasicSorted(*uri1)
-	c4.addNodeBasicSorted(*uri2)
+	c4.addNodeBasicSorted(node0)
+	c4.addNodeBasicSorted(node1)
+	c4.addNodeBasicSorted(node2)
 
 	c5 := NewCluster()
 	c5.ReplicaN = 2
-	c5.addNodeBasicSorted(*uri0)
-	c5.addNodeBasicSorted(*uri1)
-	c5.addNodeBasicSorted(*uri2)
-	c5.addNodeBasicSorted(*uri3)
+	c5.addNodeBasicSorted(node0)
+	c5.addNodeBasicSorted(node1)
+	c5.addNodeBasicSorted(node2)
+	c5.addNodeBasicSorted(node3)
 
 	idx := newIndexWithTempPath("i")
 	frame, err := idx.CreateFrameIfNotExists("f", FrameOptions{})
@@ -161,19 +169,19 @@ func TestFragSources(t *testing.T) {
 		from     *Cluster
 		to       *Cluster
 		idx      *Index
-		expected map[URI][]*internal.ResizeSource
+		expected map[string][]*internal.ResizeSource
 		err      string
 	}{
 		{
 			from: c1,
 			to:   c2,
 			idx:  idx,
-			expected: map[URI][]*internal.ResizeSource{
-				URI{"http", "host0", 10101}: []*internal.ResizeSource{},
-				URI{"http", "host1", 10101}: []*internal.ResizeSource{},
-				URI{"http", "host2", 10101}: []*internal.ResizeSource{
-					{&internal.URI{"http", "host0", 10101}, "i", "f", "standard", uint64(0)},
-					{&internal.URI{"http", "host1", 10101}, "i", "f", "standard", uint64(2)},
+			expected: map[string][]*internal.ResizeSource{
+				"node0": []*internal.ResizeSource{},
+				"node1": []*internal.ResizeSource{},
+				"node2": []*internal.ResizeSource{
+					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}}, "i", "f", "standard", uint64(0)},
+					{&internal.Node{"node1", &internal.URI{"http", "host1", 10101}}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -182,13 +190,13 @@ func TestFragSources(t *testing.T) {
 			from: c4,
 			to:   c3,
 			idx:  idx,
-			expected: map[URI][]*internal.ResizeSource{
-				URI{"http", "host0", 10101}: []*internal.ResizeSource{
-					{&internal.URI{"http", "host1", 10101}, "i", "f", "standard", uint64(1)},
+			expected: map[string][]*internal.ResizeSource{
+				"node0": []*internal.ResizeSource{
+					{&internal.Node{"node1", &internal.URI{"http", "host1", 10101}}, "i", "f", "standard", uint64(1)},
 				},
-				URI{"http", "host1", 10101}: []*internal.ResizeSource{
-					{&internal.URI{"http", "host0", 10101}, "i", "f", "standard", uint64(0)},
-					{&internal.URI{"http", "host0", 10101}, "i", "f", "standard", uint64(2)},
+				"node1": []*internal.ResizeSource{
+					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}}, "i", "f", "standard", uint64(0)},
+					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -197,15 +205,15 @@ func TestFragSources(t *testing.T) {
 			from: c5,
 			to:   c4,
 			idx:  idx,
-			expected: map[URI][]*internal.ResizeSource{
-				URI{"http", "host0", 10101}: []*internal.ResizeSource{
-					{&internal.URI{"http", "host2", 10101}, "i", "f", "standard", uint64(0)},
-					{&internal.URI{"http", "host2", 10101}, "i", "f", "standard", uint64(2)},
+			expected: map[string][]*internal.ResizeSource{
+				"node0": []*internal.ResizeSource{
+					{&internal.Node{"node2", &internal.URI{"http", "host2", 10101}}, "i", "f", "standard", uint64(0)},
+					{&internal.Node{"node2", &internal.URI{"http", "host2", 10101}}, "i", "f", "standard", uint64(2)},
 				},
-				URI{"http", "host1", 10101}: []*internal.ResizeSource{
-					{&internal.URI{"http", "host0", 10101}, "i", "f", "standard", uint64(3)},
+				"node1": []*internal.ResizeSource{
+					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}}, "i", "f", "standard", uint64(3)},
 				},
-				URI{"http", "host2", 10101}: []*internal.ResizeSource{},
+				"node2": []*internal.ResizeSource{},
 			},
 			err: "",
 		},
@@ -265,33 +273,37 @@ func TestResizeJob(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	node0 := &Node{ID: "node0", URI: *uri0}
+	node1 := &Node{ID: "node1", URI: *uri1}
+	node2 := &Node{ID: "node2", URI: *uri2}
+
 	tests := []struct {
-		existingURIs []URI
-		uri          URI
-		action       string
-		expectedURIs map[URI]bool
+		existingNodes []*Node
+		node          *Node
+		action        string
+		expectedIDs   map[string]bool
 	}{
 		{
-			existingURIs: []URI{*uri0, *uri1},
-			uri:          *uri2,
-			action:       ResizeJobActionAdd,
-			expectedURIs: map[URI]bool{*uri0: false, *uri1: false, *uri2: false},
+			existingNodes: []*Node{node0, node1},
+			node:          node2,
+			action:        ResizeJobActionAdd,
+			expectedIDs:   map[string]bool{node0.ID: false, node1.ID: false, node2.ID: false},
 		},
 		{
-			existingURIs: []URI{*uri0, *uri1, *uri2},
-			uri:          *uri2,
-			action:       ResizeJobActionRemove,
-			expectedURIs: map[URI]bool{*uri0: false, *uri1: false},
+			existingNodes: []*Node{node0, node1, node2},
+			node:          node2,
+			action:        ResizeJobActionRemove,
+			expectedIDs:   map[string]bool{node0.ID: false, node1.ID: false},
 		},
 	}
 	for _, test := range tests {
 
-		actual := NewResizeJob(test.existingURIs, test.uri, test.action)
+		actual := NewResizeJob(test.existingNodes, test.node, test.action)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(actual.URIs, test.expectedURIs) {
-			t.Errorf("expected: %v, but got: %v", test.expectedURIs, actual.URIs)
+		if !reflect.DeepEqual(actual.IDs, test.expectedIDs) {
+			t.Errorf("expected: %v, but got: %v", test.expectedIDs, actual.IDs)
 		}
 	}
 }

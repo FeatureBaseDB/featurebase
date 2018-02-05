@@ -24,11 +24,9 @@ import (
 
 // MemberSet represents an interface for Node membership and inter-node communication.
 type MemberSet interface {
-	// Returns a list of all Nodes in the cluster
-	Nodes() []*Node
-
 	// Open starts any network activity implemented by the MemberSet
-	Open() error
+	// Node is the local node, used for membership broadcasts.
+	Open(n *Node) error
 }
 
 // StaticMemberSet represents a basic MemberSet for testing.
@@ -41,13 +39,8 @@ func NewStaticMemberSet() *StaticMemberSet {
 	return &StaticMemberSet{}
 }
 
-// Nodes implements the MemberSet interface and returns a list of nodes in the cluster.
-func (s *StaticMemberSet) Nodes() []*Node {
-	return s.nodes
-}
-
 // Open implements the MemberSet interface to start network activity, but for a static MemberSet it does nothing.
-func (s *StaticMemberSet) Open() error {
+func (s *StaticMemberSet) Open(n *Node) error {
 	return nil
 }
 

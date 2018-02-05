@@ -58,9 +58,6 @@ type Server struct {
 	wg      sync.WaitGroup
 	closing chan struct{}
 
-	// Unique name identifying the server.
-	Name string
-
 	// Data storage and HTTP interface.
 	Holder            *Holder
 	Handler           *Handler
@@ -70,8 +67,8 @@ type Server struct {
 	RemoteClient      *http.Client
 
 	// Cluster configuration.
-	// Host is replaced with actual host after opening if port is ":0".
 	Network     string
+	NodeID      string
 	URI         URI
 	Cluster     *Cluster
 	diagnostics *diagnostics.Diagnostics
@@ -128,16 +125,15 @@ func (s *Server) Open() error {
 		}
 	}
 
-	// Set Cluster URI.
-	s.Cluster.URI = s.URI
+	// Get or create NodeID.
+	s.NodeID = s.LoadNodeID()
 
-	// Find the Node ID and append that tag to stats.
-	for i, n := range s.Cluster.Nodes {
-		if n.URI == s.URI {
-			s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
-			break
-		}
-	}
+	// Set Cluster Node.
+	node := &Node{ID: s.NodeID, URI: s.URI}
+	s.Cluster.Node = node
+
+	// Append the NodeID tag to stats.
+	s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
 
 	// Peek at the holder to determine if there is data on disk.
 	// Don't actually load the data until after the Cluster
@@ -151,7 +147,7 @@ func (s *Server) Open() error {
 	// Create executor for executing queries.
 	e := NewExecutor(s.RemoteClient)
 	e.Holder = s.Holder
-	e.URI = s.URI
+	e.Node = node
 	e.Cluster = s.Cluster
 	e.MaxWritesPerRequest = s.MaxWritesPerRequest
 
@@ -163,7 +159,7 @@ func (s *Server) Open() error {
 	s.Handler.Broadcaster = s.Broadcaster
 	s.Handler.BroadcastHandler = s
 	s.Handler.StatusHandler = s
-	s.Handler.URI = s.URI
+	s.Handler.Node = node
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
 	s.Handler.LogOutput = s.LogOutput
@@ -211,11 +207,6 @@ func (s *Server) Open() error {
 	// buffered channel.
 	s.Cluster.ListenForJoins()
 
-	// Load NodeID.
-	if err := s.Holder.loadNodeID(); err != nil {
-		s.Logger().Println(err)
-	}
-
 	// Start background monitoring.
 	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
@@ -259,11 +250,6 @@ func (s *Server) OpenListener() error {
 		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
 	}
 
-	// If name is not provided in the config, default to the URI.
-	if s.Name == "" {
-		s.Name = s.URI.String()
-	}
-
 	return nil
 }
 
@@ -284,6 +270,20 @@ func (s *Server) Close() error {
 	}
 
 	return nil
+}
+
+// LoadNodeID gets NodeID from disk, or creates a new value.
+// If server.NodeID is already set, a new ID is not created.
+func (s *Server) LoadNodeID() string {
+	if s.NodeID != "" {
+		return s.NodeID
+	}
+	nodeID, err := s.Holder.loadNodeID()
+	if err != nil {
+		s.Logger().Printf("loading NodeID: %v", err)
+		return s.NodeID
+	}
+	return nodeID
 }
 
 // Addr returns the address of the listener.
@@ -336,7 +336,7 @@ func (s *Server) monitorAntiEntropy() {
 		// Initialize syncer with local holder and remote client.
 		var syncer HolderSyncer
 		syncer.Holder = s.Holder
-		syncer.URI = s.URI
+		syncer.Node = s.Cluster.Node
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
 		syncer.RemoteClient = s.RemoteClient
@@ -442,9 +442,9 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.SetCoordinatorMessage:
-		s.Cluster.SetCoordinator(DecodeURI(obj.Old), DecodeURI(obj.New))
+		s.Cluster.SetCoordinator(DecodeNode(obj.New))
 	case *internal.NodeStateMessage:
-		err := s.Cluster.ReceiveNodeState(DecodeURI(obj.URI), obj.State)
+		err := s.Cluster.ReceiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
 			return err
 		}
@@ -503,7 +503,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	}
 
 	ns := internal.NodeStatus{
-		URI:       encodeURI(s.URI),
+		Node:      EncodeNode(s.Cluster.Node),
 		MaxSlices: s.Holder.EncodeMaxSlices(),
 		Schema:    s.Holder.EncodeSchema(),
 	}
@@ -538,7 +538,7 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 
 func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	// Ignore status updates from self.
-	if s.URI == decodeURI(ns.URI) {
+	if s.NodeID == DecodeNode(ns.Node).ID {
 		return nil
 	}
 
@@ -594,10 +594,10 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.SetInterval(s.DiagnosticInterval)
 	s.diagnostics.Open()
 	s.diagnostics.Set("Host", s.URI.host)
-	s.diagnostics.Set("Cluster", strings.Join(NodeSet(s.Cluster.NodeSet()).ToStrings(), ","))
+	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
-	s.diagnostics.Set("NodeID", s.Holder.NodeID)
+	s.diagnostics.Set("NodeID", s.NodeID)
 	s.diagnostics.Set("ClusterID", s.Cluster.ID)
 	s.diagnostics.EnrichWithOSInfo()
 

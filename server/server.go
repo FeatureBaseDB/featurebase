@@ -128,11 +128,6 @@ func (m *Command) SetupServer() error {
 	}
 	m.Server.URI = *uri
 
-	// If using a dynamically allocated port, server.Name will get set later.
-	if m.Config.Bind != "localhost:0" {
-		m.Server.Name = m.Server.URI.String()
-	}
-
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 	cluster.Holder = m.Server.Holder
@@ -218,7 +213,6 @@ func (m *Command) SetupServer() error {
 func (m *Command) SetupNetworking() error {
 	switch m.Config.Cluster.Type {
 	case pilosa.ClusterGossip:
-
 		// Set internal port (string).
 		gossipPortStr := pilosa.DefaultGossipPort
 		// Config.GossipPort is deprecated, so Config.Gossip.Port has priority
@@ -245,11 +239,10 @@ func (m *Command) SetupNetworking() error {
 			}
 		}
 
+		m.Server.NodeID = m.Server.LoadNodeID()
+
 		m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
-		if m.Server.Name == "" {
-			return fmt.Errorf("must provide a valid name for gossip membership")
-		}
-		gossipMemberSet, err := gossip.NewGossipMemberSetWithTransport(m.Server.Name, m.Config, transport, m.Server)
+		gossipMemberSet, err := gossip.NewGossipMemberSetWithTransport(m.Server.NodeID, m.Config, transport, m.Server)
 		if err != nil {
 			return err
 		}

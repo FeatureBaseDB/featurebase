@@ -27,7 +27,7 @@ const (
 // NodeEvent is a single event related to node activity in the cluster.
 type NodeEvent struct {
 	Event NodeEventType
-	URI   URI
+	Node  *Node
 }
 
 // EventHandler is the interface for the pilosa object which knows how to

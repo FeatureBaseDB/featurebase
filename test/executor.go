@@ -26,7 +26,7 @@ func NewExecutor(holder *pilosa.Holder, cluster *pilosa.Cluster) *Executor {
 	e := &Executor{Executor: executor}
 	e.Holder = holder
 	e.Cluster = cluster
-	e.URI = cluster.Nodes[0].URI
+	e.Node = cluster.Nodes[0]
 	return e
 }
 

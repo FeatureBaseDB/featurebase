@@ -43,6 +43,7 @@ var _ memberlist.Delegate = &GossipMemberSet{}
 // GossipMemberSet represents a gossip implementation of MemberSet using memberlist.
 type GossipMemberSet struct {
 	mu         sync.RWMutex
+	node       *pilosa.Node
 	memberlist *memberlist.Memberlist
 	handler    pilosa.BroadcastHandler
 
@@ -53,20 +54,6 @@ type GossipMemberSet struct {
 
 	// The writer for any logging.
 	LogOutput io.Writer
-}
-
-// Nodes implements the MemberSet interface and returns a list of nodes in the cluster.
-func (g *GossipMemberSet) Nodes() []*pilosa.Node {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	a := make([]*pilosa.Node, 0, g.memberlist.NumMembers())
-	for _, n := range g.memberlist.Members() {
-		uri, _ := pilosa.NewURIFromAddress(n.Name)
-		// TODO don't swallow the error above
-		a = append(a, &pilosa.Node{URI: *uri})
-	}
-	return a
 }
 
 // Start implements the BroadcastReceiver interface and sets the BroadcastHandler.
@@ -81,10 +68,12 @@ func (g *GossipMemberSet) Seed() string {
 }
 
 // Open implements the MemberSet interface to start network activity.
-func (g *GossipMemberSet) Open() error {
+func (g *GossipMemberSet) Open(n *pilosa.Node) error {
 	if g.handler == nil {
 		return fmt.Errorf("must call Start(pilosa.BroadcastHandler) before calling Open()")
 	}
+
+	g.node = n
 
 	err := error(nil)
 	g.mu.Lock()
@@ -112,7 +101,7 @@ func (g *GossipMemberSet) Open() error {
 	nodes := []*pilosa.Node{&pilosa.Node{URI: *uri}} //TODO: support a list of seeds
 
 	g.mu.RLock()
-	err = g.joinWithRetry(pilosa.NodeSet(pilosa.Nodes(nodes).URIs()).ToHostPortStrings())
+	err = g.joinWithRetry(pilosa.URIs(pilosa.Nodes(nodes).URIs()).HostPortStrings())
 	g.mu.RUnlock()
 	if err != nil {
 		return errors.Wrap(err, "joinWithRetry")
@@ -280,7 +269,12 @@ func (g *GossipMemberSet) SendAsync(pb proto.Message) error {
 
 // NodeMeta implementation of the memberlist.Delegate interface.
 func (g *GossipMemberSet) NodeMeta(limit int) []byte {
-	return []byte{}
+	buf, err := proto.Marshal(pilosa.EncodeNode(g.node))
+	if err != nil {
+		g.logger().Printf("marshal message error: %s", err)
+		return []byte{}
+	}
+	return buf
 }
 
 // NotifyMsg implementation of the memberlist.Delegate interface
@@ -387,14 +381,18 @@ func (g *GossipEventReceiver) listen() {
 			continue
 		}
 
-		uri, _ := pilosa.NewURIFromAddress(e.Node.Name)
-		// TODO: don't swallow this error
+		// Get the node from the event.Node meta data.
+		var n internal.Node
+		if err := proto.Unmarshal(e.Node.Meta, &n); err != nil {
+			panic("failed to unmarshal event node meta data")
+		}
+		node := pilosa.DecodeNode(&n)
 
 		ne := &pilosa.NodeEvent{
 			Event: nodeEventType,
-			URI:   *uri,
+			Node:  node,
 		}
-		_ = g.eventHandler.ReceiveEvent(ne) // TODO: don't swallow this error
+		_ = g.eventHandler.ReceiveEvent(ne)
 	}
 }
 

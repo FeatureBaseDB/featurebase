@@ -66,7 +66,47 @@ const (
 
 // Node represents a node in the cluster.
 type Node struct {
-	URI URI `json:"uri"`
+	ID  string `json:"id"`
+	URI URI    `json:"uri"`
+}
+
+func (n Node) String() string {
+	return fmt.Sprintf("Node: %s", n.ID)
+}
+
+// EncodeNodes converts a into its internal representation.
+func EncodeNodes(a []*Node) []*internal.Node {
+	other := make([]*internal.Node, len(a))
+	for i := range a {
+		other[i] = EncodeNode(a[i])
+	}
+	return other
+}
+
+// EncodeNode converts n into its internal representation.
+func EncodeNode(n *Node) *internal.Node {
+	return &internal.Node{
+		ID:  n.ID,
+		URI: n.URI.Encode(),
+	}
+}
+
+func DecodeNodes(a []*internal.Node) []*Node {
+	if len(a) == 0 {
+		return nil
+	}
+	other := make([]*Node, len(a))
+	for i := range a {
+		other[i] = DecodeNode(a[i])
+	}
+	return other
+}
+
+func DecodeNode(node *internal.Node) *Node {
+	return &Node{
+		ID:  node.ID,
+		URI: decodeURI(node.URI),
+	}
 }
 
 // Nodes represents a list of nodes.
@@ -82,10 +122,10 @@ func (a Nodes) Contains(n *Node) bool {
 	return false
 }
 
-// ContainsURI returns true if host matches one of the node's uri.
-func (a Nodes) ContainsURI(uri URI) bool {
+// ContainsID returns true if host matches one of the node's id.
+func (a Nodes) ContainsID(id string) bool {
 	for _, n := range a {
-		if n.URI == uri {
+		if n.ID == id {
 			return true
 		}
 	}
@@ -103,6 +143,17 @@ func (a Nodes) Filter(n *Node) []*Node {
 	return other
 }
 
+// FilterID returns a new list of nodes with ID removed.
+func (a Nodes) FilterID(id string) []*Node {
+	other := make([]*Node, 0, len(a))
+	for _, node := range a {
+		if node.ID != id {
+			other = append(other, node)
+		}
+	}
+	return other
+}
+
 // FilterURI returns a new list of nodes with URI removed.
 func (a Nodes) FilterURI(uri URI) []*Node {
 	other := make([]*Node, 0, len(a))
@@ -112,6 +163,15 @@ func (a Nodes) FilterURI(uri URI) []*Node {
 		}
 	}
 	return other
+}
+
+// IDs returns a list of all node IDs.
+func (a Nodes) IDs() []string {
+	ids := make([]string, len(a))
+	for i, n := range a {
+		ids[i] = n.ID
+	}
+	return ids
 }
 
 // URIs returns a list of all uris.
@@ -130,24 +190,24 @@ func (a Nodes) Clone() []*Node {
 	return other
 }
 
-// ByHost implements sort.Interface for []Node based on
-// the Host field.
-type ByHost []*Node
+// byID implements sort.Interface for []Node based on
+// the ID field.
+type byID []*Node
 
-func (h ByHost) Len() int           { return len(h) }
-func (h ByHost) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-func (h ByHost) Less(i, j int) bool { return h[i].URI.String() < h[j].URI.String() }
+func (h byID) Len() int           { return len(h) }
+func (h byID) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h byID) Less(i, j int) bool { return h[i].ID < h[j].ID }
 
 // nodeAction represents a node that is joining or leaving the cluster.
 type nodeAction struct {
-	uri    URI
+	node   *Node
 	action string
 }
 
 // Cluster represents a collection of nodes.
 type Cluster struct {
 	ID        string
-	URI       URI
+	Node      *Node
 	Nodes     []*Node // TODO phase this out?
 	MemberSet MemberSet
 
@@ -227,16 +287,27 @@ func (c *Cluster) logger() *log.Logger {
 	return log.New(c.LogOutput, "", log.LstdFlags)
 }
 
-// IsCoordinator is true if this node is the coordinator.
-func (c *Cluster) IsCoordinator() bool {
-	return c.Static || c.Coordinator == c.URI
+// Coordinator returns the coordinator node.
+func (c *Cluster) CoordinatorNode() *Node {
+	return c.nodeByURI(c.Coordinator)
 }
 
-// SetCoordinator updates the Coordinator to new if it is
-// currently old. Returns true if the Coordinator changed.
-func (c *Cluster) SetCoordinator(oldURI, newURI URI) bool {
-	if c.Coordinator == oldURI && oldURI != newURI {
-		c.Coordinator = newURI
+// IsCoordinator is true if this node is the coordinator.
+func (c *Cluster) IsCoordinator() bool {
+	return c.Static || c.Coordinator == c.Node.URI
+}
+
+// SetCoordinator updates the Coordinator to n.
+// Returns true if the Coordinator changed.
+func (c *Cluster) SetCoordinator(n *Node) bool {
+	// Get new node.
+	newNode := c.nodeByID(n.ID)
+	if newNode == nil {
+		return false
+	}
+
+	if c.Coordinator != newNode.URI {
+		c.Coordinator = newNode.URI
 		return true
 	}
 	return false
@@ -244,12 +315,11 @@ func (c *Cluster) SetCoordinator(oldURI, newURI URI) bool {
 
 // AddNode adds a node to the Cluster and updates and saves the
 // new topology.
-func (c *Cluster) AddNode(uri URI) error {
-	c.logger().Printf("add node %s to cluster on %s", uri, c.URI)
+func (c *Cluster) AddNode(node *Node) error {
+	c.logger().Printf("add node %s to cluster on %s", node, c.Node)
 
 	// add to cluster
-	_, added := c.addNodeBasicSorted(uri)
-	if !added {
+	if !c.addNodeBasicSorted(node) {
 		return nil
 	}
 
@@ -257,7 +327,7 @@ func (c *Cluster) AddNode(uri URI) error {
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
 	}
-	if !c.Topology.AddURI(uri) {
+	if !c.Topology.AddID(node.ID) {
 		return nil
 	}
 
@@ -267,10 +337,9 @@ func (c *Cluster) AddNode(uri URI) error {
 
 // RemoveNode removes a node from the Cluster and updates and saves the
 // new topology.
-func (c *Cluster) RemoveNode(uri URI) error {
+func (c *Cluster) RemoveNode(node *Node) error {
 	// remove from cluster
-	removed := c.removeNodeBasicSorted(uri)
-	if !removed {
+	if !c.removeNodeBasicSorted(node) {
 		return nil
 	}
 
@@ -278,7 +347,7 @@ func (c *Cluster) RemoveNode(uri URI) error {
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
 	}
-	if !c.Topology.RemoveURI(uri) {
+	if !c.Topology.RemoveID(node.ID) {
 		return nil
 	}
 
@@ -286,9 +355,9 @@ func (c *Cluster) RemoveNode(uri URI) error {
 	return c.saveTopology()
 }
 
-// NodeSet returns the list of uris in the cluster.
-func (c *Cluster) NodeSet() []URI {
-	return Nodes(c.Nodes).URIs()
+// NodeIDs returns the list of IDs in the cluster.
+func (c *Cluster) NodeIDs() []string {
+	return Nodes(c.Nodes).IDs()
 }
 
 func (c *Cluster) setID(id string) {
@@ -310,8 +379,8 @@ func (c *Cluster) State() string {
 
 func (c *Cluster) SetState(state string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.setState(state)
+	c.mu.Unlock()
 }
 
 func (c *Cluster) setState(state string) {
@@ -320,7 +389,7 @@ func (c *Cluster) setState(state string) {
 		return
 	}
 
-	c.logger().Printf("change cluster state from %s to %s on %s", c.State, state, c.URI)
+	c.logger().Printf("change cluster state from %s to %s on %s", c.state, state, c.Node.ID)
 
 	var doCleanup bool
 
@@ -345,7 +414,7 @@ func (c *Cluster) setState(state string) {
 	// It's safe to do a cleanup after state changes back to normal.
 	if doCleanup {
 		var cleaner HolderCleaner
-		cleaner.URI = c.URI
+		cleaner.Node = c.Node
 		cleaner.Holder = c.Holder
 		cleaner.Cluster = c
 		cleaner.Closing = c.closing
@@ -359,17 +428,17 @@ func (c *Cluster) setState(state string) {
 
 func (c *Cluster) SetNodeState(state string) error {
 	if c.IsCoordinator() {
-		return c.ReceiveNodeState(c.URI, state)
+		return c.ReceiveNodeState(c.Node.ID, state)
 	}
 
 	// Send node state to coordinator.
 	ns := &internal.NodeStateMessage{
-		URI:   c.URI.Encode(),
-		State: state,
+		NodeID: c.Node.ID,
+		State:  state,
 	}
 
 	c.logger().Printf("Sending State %s (%s)", state, c.Coordinator)
-	if err := c.sendTo(c.Coordinator, ns); err != nil {
+	if err := c.sendTo(c.CoordinatorNode(), ns); err != nil {
 		return fmt.Errorf("sending node state error: err=%s", err)
 	}
 
@@ -379,7 +448,7 @@ func (c *Cluster) SetNodeState(state string) error {
 // ReceiveNodeState sets node state in Topology in order for the
 // Coordinator to keep track of, during startup, which nodes have
 // finished opening their Holder.
-func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
+func (c *Cluster) ReceiveNodeState(nodeID string, state string) error {
 	if !c.IsCoordinator() {
 		return nil
 	}
@@ -389,8 +458,8 @@ func (c *Cluster) ReceiveNodeState(uri URI, state string) error {
 		return nil
 	}
 
-	c.Topology.nodeStates[uri] = state
-	c.logger().Printf("received state %s (%s)", state, uri)
+	c.Topology.nodeStates[nodeID] = state
+	c.logger().Printf("received state %s (%s)", state, nodeID)
 
 	// Set cluster state to NORMAL.
 	if c.haveTopologyAgreement() && c.allNodesReady() {
@@ -410,12 +479,22 @@ func (c *Cluster) Status() *internal.ClusterStatus {
 	return &internal.ClusterStatus{
 		ClusterID: c.ID,
 		State:     c.state,
-		NodeSet:   encodeURIs(c.NodeSet()),
+		Nodes:     EncodeNodes(c.Nodes),
 	}
 }
 
-// NodeByURI returns a node reference by uri.
-func (c *Cluster) NodeByURI(uri URI) *Node {
+// nodeByID returns a node reference by ID.
+func (c *Cluster) nodeByID(id string) *Node {
+	for _, n := range c.Nodes {
+		if n.ID == id {
+			return n
+		}
+	}
+	return nil
+}
+
+// nodeByURI returns a node reference by node URI.
+func (c *Cluster) nodeByURI(uri URI) *Node {
 	for _, n := range c.Nodes {
 		if n.URI == uri {
 			return n
@@ -424,37 +503,36 @@ func (c *Cluster) NodeByURI(uri URI) *Node {
 	return nil
 }
 
-// nodePositionByURI returns the position of the node in slice c.Nodes.
-func (c *Cluster) nodePositionByURI(uri URI) int {
+// nodePositionByID returns the position of the node in slice c.Nodes.
+func (c *Cluster) nodePositionByID(nodeID string) int {
 	for i, n := range c.Nodes {
-		if n.URI == uri {
+		if n.ID == nodeID {
 			return i
 		}
 	}
 	return -1
 }
 
-// addNodeBasicSorted adds a node to the cluster, sorted by uri.
+// addNodeBasicSorted adds a node to the cluster, sorted by id.
 // Returns a pointer to the node and true if the node was added.
-func (c *Cluster) addNodeBasicSorted(uri URI) (*Node, bool) {
-	n := c.NodeByURI(uri)
+func (c *Cluster) addNodeBasicSorted(node *Node) bool {
+	n := c.nodeByID(node.ID)
 	if n != nil {
-		return n, false
+		return false
 	}
 
-	n = &Node{URI: uri}
-	c.Nodes = append(c.Nodes, n)
+	c.Nodes = append(c.Nodes, node)
 
 	// All hosts must be merged in the same order on all nodes in the cluster.
-	sort.Sort(ByHost(c.Nodes))
+	sort.Sort(byID(c.Nodes))
 
-	return n, true
+	return true
 }
 
 // removeNodeBasicSorted removes a node from the cluster, maintaining
 // the sort order. Returns true if the node was removed.
-func (c *Cluster) removeNodeBasicSorted(uri URI) bool {
-	i := c.nodePositionByURI(uri)
+func (c *Cluster) removeNodeBasicSorted(node *Node) bool {
+	i := c.nodePositionByID(node.ID)
 	if i < 0 {
 		return false
 	}
@@ -492,7 +570,7 @@ func fragsDiff(a, b []frag) []frag {
 	return ret
 }
 
-type fragsByHost map[URI][]frag
+type fragsByHost map[string][]frag
 
 func (a fragsByHost) add(b fragsByHost) fragsByHost {
 	for k, v := range b {
@@ -539,7 +617,7 @@ func (c *Cluster) fragCombos(idx string, maxSlice uint64, frameViews viewsByFram
 			// for each frame/view combination:
 			for frame, views := range frameViews {
 				for _, view := range views {
-					t[n.URI] = append(t[n.URI], frag{frame, view, i})
+					t[n.ID] = append(t[n.ID], frag{frame, view, i})
 				}
 			}
 		}
@@ -550,57 +628,57 @@ func (c *Cluster) fragCombos(idx string, maxSlice uint64, frameViews viewsByFram
 // diff compares c with another cluster and determines if a node is being
 // added or removed. An error is returned for any case other than where
 // exactly one node is added or removed.
-func (c *Cluster) diff(other *Cluster) (action string, uri URI, err error) {
+func (c *Cluster) diff(other *Cluster) (action string, nodeID string, err error) {
 	lenFrom := len(c.Nodes)
 	lenTo := len(other.Nodes)
 	// Determine if a node is being added or removed.
 	if lenFrom == lenTo {
-		return action, uri, errors.New("clusters are the same size")
+		return "", "", errors.New("clusters are the same size")
 	}
 	if lenFrom < lenTo {
 		// Adding a node.
 		if lenTo-lenFrom > 1 {
-			return action, uri, errors.New("adding more than one node at a time is not supported")
+			return "", "", errors.New("adding more than one node at a time is not supported")
 		}
 		action = ResizeJobActionAdd
-		// Determine the URI that is being added.
+		// Determine the node ID that is being added.
 		for _, n := range other.Nodes {
-			if c.NodeByURI(n.URI) == nil {
-				uri = n.URI
+			if c.nodeByID(n.ID) == nil {
+				nodeID = n.ID
 				break
 			}
 		}
 	} else if lenFrom > lenTo {
 		// Removing a node.
 		if lenFrom-lenTo > 1 {
-			return action, uri, errors.New("removing more than one node at a time is not supported")
+			return "", "", errors.New("removing more than one node at a time is not supported")
 		}
 		action = ResizeJobActionRemove
-		// Determine the URI that is being removed.
+		// Determine the node ID that is being removed.
 		for _, n := range c.Nodes {
-			if other.NodeByURI(n.URI) == nil {
-				uri = n.URI
+			if other.nodeByID(n.ID) == nil {
+				nodeID = n.ID
 				break
 			}
 		}
 	}
-	return action, uri, nil
+	return action, nodeID, nil
 }
 
 // fragSources returns a list of ResizeSources - for each node in the `to` cluster -
 // required to move from cluster `c` to cluster `to`.
-func (c *Cluster) fragSources(to *Cluster, idx *Index) (map[URI][]*internal.ResizeSource, error) {
-	m := make(map[URI][]*internal.ResizeSource)
+func (c *Cluster) fragSources(to *Cluster, idx *Index) (map[string][]*internal.ResizeSource, error) {
+	m := make(map[string][]*internal.ResizeSource)
 
 	// Determine if a node is being added or removed.
-	action, diffURI, err := c.diff(to)
+	action, diffNodeID, err := c.diff(to)
 	if err != nil {
 		return nil, err
 	}
 
 	// Initialize the map with all the nodes in `to`.
 	for _, n := range to.Nodes {
-		m[n.URI] = nil
+		m[n.ID] = nil
 	}
 
 	// If a node is being added, the source can be confined to the
@@ -625,50 +703,50 @@ func (c *Cluster) fragSources(to *Cluster, idx *Index) (map[URI][]*internal.Resi
 	// srcFrags is the frag map based on a source cluster of replica = 1.
 	srcFrags := srcCluster.fragsByHost(idx)
 
-	// srcHostsByFrag is the inverse representation of srcFrags.
-	srcHostsByFrag := make(map[frag]URI)
-	for uri, frags := range srcFrags {
+	// srcNodesByFrag is the inverse representation of srcFrags.
+	srcNodesByFrag := make(map[frag]string)
+	for nodeID, frags := range srcFrags {
 		// If a node is being removed, don't consider it as a source.
-		if action == ResizeJobActionRemove && uri == diffURI {
+		if action == ResizeJobActionRemove && nodeID == diffNodeID {
 			continue
 		}
 		for _, frag := range frags {
-			srcHostsByFrag[frag] = uri
+			srcNodesByFrag[frag] = nodeID
 		}
 	}
 
-	// Get the frag diff for each host.
+	// Get the frag diff for each nodeID.
 	diffs := make(fragsByHost)
-	for host, frags := range tFrags {
-		if _, ok := fFrags[host]; ok {
-			diffs[host] = fragsDiff(frags, fFrags[host])
+	for nodeID, frags := range tFrags {
+		if _, ok := fFrags[nodeID]; ok {
+			diffs[nodeID] = fragsDiff(frags, fFrags[nodeID])
 		} else {
-			diffs[host] = frags
+			diffs[nodeID] = frags
 		}
 	}
 
 	// Get the ResizeSource for each diff.
-	for host, diff := range diffs {
-		m[host] = []*internal.ResizeSource{}
+	for nodeID, diff := range diffs {
+		m[nodeID] = []*internal.ResizeSource{}
 		for _, frag := range diff {
-			// If there is no valid source URI for a fragment,
+			// If there is no valid source node ID for a fragment,
 			// it likely means that the replica factor was not
 			// high enough for the remaining nodes to contain
 			// the fragment.
-			srcHost, ok := srcHostsByFrag[frag]
+			srcNodeID, ok := srcNodesByFrag[frag]
 			if !ok {
 				return nil, errors.New("not enough data to perform resize")
 			}
 
 			src := &internal.ResizeSource{
-				URI:   (srcHost).Encode(),
+				Node:  EncodeNode(c.nodeByID(srcNodeID)),
 				Index: idx.Name(),
 				Frame: frag.frame,
 				View:  frag.view,
 				Slice: frag.slice,
 			}
 
-			m[host] = append(m[host], src)
+			m[nodeID] = append(m[nodeID], src)
 		}
 	}
 
@@ -693,8 +771,8 @@ func (c *Cluster) FragmentNodes(index string, slice uint64) []*Node {
 }
 
 // OwnsFragment returns true if a host owns a fragment.
-func (c *Cluster) OwnsFragment(uri URI, index string, slice uint64) bool {
-	return Nodes(c.FragmentNodes(index, slice)).ContainsURI(uri)
+func (c *Cluster) OwnsFragment(nodeID string, index string, slice uint64) bool {
+	return Nodes(c.FragmentNodes(index, slice)).ContainsID(nodeID)
 }
 
 // PartitionNodes returns a list of nodes that own a partition.
@@ -735,14 +813,14 @@ func (c *Cluster) OwnsSlices(index string, maxSlice uint64, uri URI) []uint64 {
 }
 
 // ContainsSlices is like OwnsSlices, but it includes replicas.
-func (c *Cluster) ContainsSlices(index string, maxSlice uint64, uri URI) []uint64 {
+func (c *Cluster) ContainsSlices(index string, maxSlice uint64, node *Node) []uint64 {
 	var slices []uint64
 	for i := uint64(0); i <= maxSlice; i++ {
 		p := c.Partition(index, i)
 		// Determine the nodes for partition.
 		nodes := c.PartitionNodes(p)
-		for _, node := range nodes {
-			if node.URI == uri {
+		for _, n := range nodes {
+			if n.ID == node.ID {
 				slices = append(slices, i)
 			}
 		}
@@ -793,7 +871,7 @@ func (c *Cluster) Open() error {
 	}
 
 	// Add the local node to the cluster.
-	c.AddNode(c.URI)
+	c.AddNode(c.Node)
 
 	// Start the EventReceiver.
 	if err := c.EventReceiver.Start(c); err != nil {
@@ -801,7 +879,7 @@ func (c *Cluster) Open() error {
 	}
 
 	// Open MemberSet communication.
-	if err := c.MemberSet.Open(); err != nil {
+	if err := c.MemberSet.Open(c.Node); err != nil {
 		return fmt.Errorf("opening MemberSet: %v", err)
 	}
 
@@ -832,21 +910,21 @@ func (c *Cluster) markAsJoined() {
 }
 
 func (c *Cluster) needTopologyAgreement() bool {
-	return c.State() == ClusterStateStarting && !URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
+	return c.State() == ClusterStateStarting && !StringSlicesAreEqual(c.Topology.NodeIDs, c.NodeIDs())
 }
 
 func (c *Cluster) haveTopologyAgreement() bool {
 	if c.Static {
 		return true
 	}
-	return URISlicesAreEqual(c.Topology.NodeSet, c.NodeSet())
+	return StringSlicesAreEqual(c.Topology.NodeIDs, c.NodeIDs())
 }
 
 func (c *Cluster) allNodesReady() bool {
 	if c.Static {
 		return true
 	}
-	for _, uri := range c.Topology.NodeSet {
+	for _, uri := range c.Topology.NodeIDs {
 		if c.Topology.nodeStates[uri] != NodeStateReady {
 			return false
 		}
@@ -885,9 +963,9 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 		}
 		// Add/remove uri to/from the cluster.
 		if j.action == ResizeJobActionRemove {
-			return c.RemoveNode(nodeAction.uri)
+			return c.RemoveNode(nodeAction.node)
 		} else if j.action == ResizeJobActionAdd {
-			return c.AddNode(nodeAction.uri)
+			return c.AddNode(nodeAction.node)
 		}
 	case ResizeJobStateAborted:
 		if err := c.CompleteCurrentJob(ResizeJobStateAborted); err != nil {
@@ -904,8 +982,7 @@ func (c *Cluster) setStateAndBroadcast(state string) error {
 	return c.Broadcaster.SendSync(c.Status())
 }
 
-func (c *Cluster) sendTo(to URI, msg proto.Message) error {
-	node := &Node{URI: to}
+func (c *Cluster) sendTo(node *Node, msg proto.Message) error {
 	if err := c.Broadcaster.SendTo(node, msg); err != nil {
 		return err
 	}
@@ -991,8 +1068,7 @@ func (c *Cluster) generateResizeJob(nodeAction nodeAction) (*ResizeJob, error) {
 // Broadcaster is associated to the ResizeJob here for use in broadcasting
 // the resize instructions to other nodes in the cluster.
 func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, error) {
-
-	j := NewResizeJob(Nodes(c.Nodes).URIs(), nodeAction.uri, nodeAction.action)
+	j := NewResizeJob(c.Nodes, nodeAction.node, nodeAction.action)
 	j.Broadcaster = c.Broadcaster
 
 	// toCluster is a clone of Cluster with the new node added/removed for comparison.
@@ -1002,16 +1078,16 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 	toCluster.PartitionN = c.PartitionN
 	toCluster.ReplicaN = c.ReplicaN
 	if nodeAction.action == ResizeJobActionRemove {
-		toCluster.removeNodeBasicSorted(nodeAction.uri)
+		toCluster.removeNodeBasicSorted(nodeAction.node)
 	} else if nodeAction.action == ResizeJobActionAdd {
-		toCluster.addNodeBasicSorted(nodeAction.uri)
+		toCluster.addNodeBasicSorted(nodeAction.node)
 	}
 
 	// multiIndex is a map of sources initialized with all the nodes in toCluster.
-	multiIndex := make(map[URI][]*internal.ResizeSource)
+	multiIndex := make(map[string][]*internal.ResizeSource)
 
 	for _, n := range toCluster.Nodes {
-		multiIndex[n.URI] = nil
+		multiIndex[n.ID] = nil
 	}
 
 	// Add to multiIndex the instructions for each index.
@@ -1021,23 +1097,23 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 			return nil, err
 		}
 
-		for u, sources := range fragSources {
+		for id, sources := range fragSources {
 			for _, src := range sources {
-				multiIndex[u] = append(multiIndex[u], src)
+				multiIndex[id] = append(multiIndex[id], src)
 			}
 		}
 	}
 
-	for u, sources := range multiIndex {
+	for id, sources := range multiIndex {
 		// If a host doesn't need to request data, mark it as complete.
 		if len(sources) == 0 {
-			j.URIs[u] = true
+			j.IDs[id] = true
 			continue
 		}
 		instr := &internal.ResizeInstruction{
 			JobID:         j.ID,
-			URI:           u.Encode(),
-			Coordinator:   encodeURI(c.Coordinator),
+			Node:          EncodeNode(toCluster.nodeByID(id)),
+			Coordinator:   EncodeNode(c.CoordinatorNode()),
 			Sources:       sources,
 			Schema:        c.Holder.EncodeSchema(), // Include the schema to ensure it's in sync on the receiving node.
 			ClusterStatus: c.Status(),
@@ -1063,7 +1139,7 @@ func (c *Cluster) CompleteCurrentJob(state string) error {
 
 // FollowResizeInstruction is run by any node that receives a ResizeInstruction.
 func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) error {
-	c.logger().Printf("follow resize instruction on %s", c.URI)
+	c.logger().Printf("follow resize instruction on %s", c.Node.ID)
 	// Make sure the cluster status on this node agrees with the Coordinator
 	// before attempting a resize.
 	if err := c.MergeClusterStatus(instr.ClusterStatus); err != nil {
@@ -1082,7 +1158,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 		// Prepare the return message.
 		complete := &internal.ResizeInstructionComplete{
 			JobID: instr.JobID,
-			URI:   instr.URI,
+			Node:  instr.Node,
 			Error: "",
 		}
 
@@ -1096,13 +1172,13 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 			}
 
 			// Create a client for calling remote nodes.
-			client := NewInternalHTTPClientFromURI(&c.URI, c.RemoteClient) // TODO: ClientOptions
+			client := NewInternalHTTPClientFromURI(&c.Node.URI, c.RemoteClient) // TODO: ClientOptions
 
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {
-				c.logger().Printf("get slice %d for index %s from host %s", src.Slice, src.Index, src.URI)
+				c.logger().Printf("get slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
 
-				srcURI := decodeURI(src.URI)
+				srcURI := decodeURI(src.Node.URI)
 
 				// Retrieve frame.
 				f := c.Holder.Frame(src.Index, src.Frame)
@@ -1123,7 +1199,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				}
 
 				// Stream slice from remote node.
-				c.logger().Printf("retrieve slice %d for index %s from host %s", src.Slice, src.Index, src.URI)
+				c.logger().Printf("retrieve slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
 				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
@@ -1137,7 +1213,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 					}
 					return err
 				} else if rd == nil {
-					return fmt.Errorf("slice %v doesn't exist on host: %s", src.Slice, src.URI)
+					return fmt.Errorf("slice %v doesn't exist on host: %s", src.Slice, src.Node.URI)
 				}
 
 				// Write to local frame and always close reader.
@@ -1156,7 +1232,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 			complete.Error = err.Error()
 		}
 
-		if err := c.sendTo(decodeURI(instr.Coordinator), complete); err != nil {
+		if err := c.sendTo(DecodeNode(instr.Coordinator), complete); err != nil {
 			c.logger().Printf("sending resizeInstructionComplete error: err=%s", err)
 		}
 	}()
@@ -1180,12 +1256,10 @@ func (c *Cluster) MarkResizeInstructionComplete(complete *internal.ResizeInstruc
 		return fmt.Errorf("ResizeJob %d is no longer running", j.ID)
 	}
 
-	uri := decodeURI(complete.URI)
-
 	// Mark host complete.
-	j.URIs[uri] = true
+	j.IDs[complete.Node.ID] = true
 
-	if !j.urisArePending() {
+	if !j.nodesArePending() {
 		j.result <- ResizeJobStateDone
 	}
 
@@ -1203,7 +1277,7 @@ func (c *Cluster) job(id int64) *ResizeJob { return c.jobs[id] }
 
 type ResizeJob struct {
 	ID           int64
-	URIs         map[URI]bool
+	IDs          map[string]bool
 	Instructions []*internal.ResizeInstruction
 	Broadcaster  Broadcaster
 
@@ -1223,32 +1297,32 @@ func (j *ResizeJob) logger() *log.Logger {
 }
 
 // NewResizeJob returns a new instance of ResizeJob.
-func NewResizeJob(existingURIs []URI, uri URI, action string) *ResizeJob {
+func NewResizeJob(existingNodes []*Node, node *Node, action string) *ResizeJob {
 
 	// Build a map of uris to track their resize status.
 	// The value for a node will be set to true after that node
 	// has indicated that it has completed all resize instructions.
-	uris := make(map[URI]bool)
+	ids := make(map[string]bool)
 
 	if action == ResizeJobActionRemove {
-		for _, u := range existingURIs {
+		for _, n := range existingNodes {
 			// Exclude the removed node from the map.
-			if u == uri {
+			if n.ID == node.ID {
 				continue
 			}
-			uris[u] = false
+			ids[n.ID] = false
 		}
 	} else if action == ResizeJobActionAdd {
-		for _, u := range existingURIs {
-			uris[u] = false
+		for _, n := range existingNodes {
+			ids[n.ID] = false
 		}
 		// Include the added node in the map for tracking.
-		uris[uri] = false
+		ids[node.ID] = false
 	}
 
 	return &ResizeJob{
 		ID:        rand.Int63(),
-		URIs:      uris,
+		IDs:       ids,
 		action:    action,
 		result:    make(chan string),
 		LogOutput: os.Stderr,
@@ -1280,7 +1354,7 @@ func (j *ResizeJob) Run() error {
 	j.SetState(ResizeJobStateRunning)
 
 	// Job can be considered done in the case where it doesn't require any action.
-	if !j.urisArePending() {
+	if !j.nodesArePending() {
 		j.logger().Printf("ResizeJob contains no pending tasks; mark as done")
 		j.result <- ResizeJobStateDone
 		return nil
@@ -1305,9 +1379,9 @@ func (j *ResizeJob) isComplete() bool {
 	}
 }
 
-// urisArePending returns true if any uri is still working on the resize.
-func (j *ResizeJob) urisArePending() bool {
-	for _, complete := range j.URIs {
+// nodesArePending returns true if any node is still working on the resize.
+func (j *ResizeJob) nodesArePending() bool {
+	for _, complete := range j.IDs {
 		if !complete {
 			return true
 		}
@@ -1322,7 +1396,8 @@ func (j *ResizeJob) distributeResizeInstructions() error {
 		// Because the node may not be in the cluster yet, create
 		// a dummy node object to use in the SendTo() method.
 		node := &Node{
-			URI: decodeURI(instr.URI),
+			ID:  instr.Node.ID,
+			URI: decodeURI(instr.Node.URI),
 		}
 		j.logger().Printf("send resize instructions: %v", instr)
 		if err := j.Broadcaster.SendTo(node, instr); err != nil {
@@ -1332,32 +1407,16 @@ func (j *ResizeJob) distributeResizeInstructions() error {
 	return nil
 }
 
-type NodeSet []URI
+type NodeIDs []string
 
-func (n NodeSet) Len() int           { return len(n) }
-func (n NodeSet) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
-func (n NodeSet) Less(i, j int) bool { return n[i].String() < n[j].String() }
+func (n NodeIDs) Len() int           { return len(n) }
+func (n NodeIDs) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
+func (n NodeIDs) Less(i, j int) bool { return n[i] < n[j] }
 
-func (u NodeSet) ToHostPortStrings() []string {
-	other := make([]string, 0, len(u))
-	for _, uri := range u {
-		other = append(other, uri.HostPort())
-	}
-	return other
-}
-
-func (u NodeSet) ToStrings() []string {
-	other := make([]string, 0, len(u))
-	for _, uri := range u {
-		other = append(other, uri.String())
-	}
-	return other
-}
-
-// ContainsURI returns true if uri matches one of the nodesets's uris.
-func (n NodeSet) ContainsURI(uri URI) bool {
-	for _, nuri := range n {
-		if nuri == uri {
+// ContainsID returns true if idi matches one of the nodesets's IDs.
+func (n NodeIDs) ContainsID(id string) bool {
+	for _, nid := range n {
+		if nid == id {
 			return true
 		}
 	}
@@ -1367,71 +1426,71 @@ func (n NodeSet) ContainsURI(uri URI) bool {
 // Topology represents the list of hosts in the cluster.
 type Topology struct {
 	mu      sync.RWMutex
-	NodeSet []URI
+	NodeIDs []string
 
 	ClusterID string
 
 	// nodeStates holds the state of each node according to
 	// the coordinator. Used during startup and data load.
-	nodeStates map[URI]string
+	nodeStates map[string]string
 }
 
 func NewTopology() *Topology {
 	return &Topology{
-		nodeStates: make(map[URI]string),
+		nodeStates: make(map[string]string),
 	}
 }
 
-// ContainsURI returns true if uri matches one of the topology's uris.
-func (t *Topology) ContainsURI(uri URI) bool {
+// ContainsID returns true if id matches one of the topology's IDs.
+func (t *Topology) ContainsID(id string) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.containsURI(uri)
+	return t.containsID(id)
 }
 
-func (t *Topology) containsURI(uri URI) bool {
-	return NodeSet(t.NodeSet).ContainsURI(uri)
+func (t *Topology) containsID(id string) bool {
+	return NodeIDs(t.NodeIDs).ContainsID(id)
 }
 
-func (t *Topology) positionByURI(uri URI) int {
-	for i, turi := range t.NodeSet {
-		if turi == uri {
+func (t *Topology) positionByID(nodeID string) int {
+	for i, tid := range t.NodeIDs {
+		if tid == nodeID {
 			return i
 		}
 	}
 	return -1
 }
 
-// AddURI adds the uri to the topology and returns true if added.
-func (t *Topology) AddURI(uri URI) bool {
+// AddID adds the node ID to the topology and returns true if added.
+func (t *Topology) AddID(nodeID string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.containsURI(uri) {
+	if t.containsID(nodeID) {
 		return false
 	}
-	t.NodeSet = append(t.NodeSet, uri)
+	t.NodeIDs = append(t.NodeIDs, nodeID)
 
-	sort.Slice(t.NodeSet,
+	sort.Slice(t.NodeIDs,
 		func(i, j int) bool {
-			return t.NodeSet[i].String() < t.NodeSet[j].String()
+			return t.NodeIDs[i] < t.NodeIDs[j]
 		})
 
 	return true
 }
 
-// RemoveURI removes the uri from the topology and returns true if removed.
-func (t *Topology) RemoveURI(uri URI) bool {
+// RemoveID removes the node ID from the topology and returns true if removed.
+func (t *Topology) RemoveID(nodeID string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	i := t.positionByURI(uri)
+	i := t.positionByID(nodeID)
 	if i < 0 {
 		return false
 	}
 
-	copy(t.NodeSet[i:], t.NodeSet[i+1:])
-	t.NodeSet[len(t.NodeSet)-1] = URI{}
-	t.NodeSet = t.NodeSet[:len(t.NodeSet)-1]
+	copy(t.NodeIDs[i:], t.NodeIDs[i+1:])
+	t.NodeIDs[len(t.NodeIDs)-1] = ""
+	t.NodeIDs = t.NodeIDs[:len(t.NodeIDs)-1]
 
 	return true
 }
@@ -1485,7 +1544,7 @@ func encodeTopology(topology *Topology) *internal.Topology {
 	}
 	return &internal.Topology{
 		ClusterID: topology.ClusterID,
-		NodeSet:   encodeURIs(topology.NodeSet),
+		NodeIDs:   topology.NodeIDs,
 	}
 }
 
@@ -1496,19 +1555,16 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 
 	t := NewTopology()
 	t.ClusterID = topology.ClusterID
-	t.NodeSet = decodeURIs(topology.NodeSet)
-	sort.Slice(t.NodeSet,
+	t.NodeIDs = topology.NodeIDs
+	sort.Slice(t.NodeIDs,
 		func(i, j int) bool {
-			return t.NodeSet[i].String() < t.NodeSet[j].String()
+			return t.NodeIDs[i] < t.NodeIDs[j]
 		})
 
 	return t, nil
 }
 
 func (c *Cluster) considerTopology() error {
-
-	c.ID = c.Topology.ClusterID
-
 	// Create ClusterID if one does not already exist.
 	if c.ID == "" {
 		u := uuid.NewV4()
@@ -1521,17 +1577,17 @@ func (c *Cluster) considerTopology() error {
 	}
 
 	// If there is no .topology file, it's safe to proceed.
-	if len(c.Topology.NodeSet) == 0 {
+	if len(c.Topology.NodeIDs) == 0 {
 		return nil
 	}
 
 	// The local node (coordinator) must be in the .topology.
-	if !c.Topology.ContainsURI(c.Coordinator) {
-		return fmt.Errorf("coordinator %s is not in topology: %v", c.Coordinator, c.Topology.NodeSet)
+	if !c.Topology.ContainsID(c.Node.ID) {
+		return fmt.Errorf("coordinator %s is not in topology: %v", c.Node.ID, c.Topology.NodeIDs)
 	}
 
 	// If local node is the only thing in .topology, continue.
-	//if len(c.Topology.NodeSet) == 1 {
+	//if len(c.Topology.NodeIDs) == 1 {
 	//	return nil
 	//}
 
@@ -1543,7 +1599,7 @@ func (c *Cluster) considerTopology() error {
 // ReceiveEvent represents an implementation of EventHandler.
 func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 	// Ignore events sent from this node.
-	if e.URI == c.URI {
+	if e.Node.ID == c.Node.ID {
 		return nil
 	}
 
@@ -1554,7 +1610,7 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 		if !c.IsCoordinator() {
 			return nil
 		}
-		return c.nodeJoin(e.URI)
+		return c.nodeJoin(e.Node)
 	case NodeLeave:
 		// Automatic nodeLeave is intentionally not implemented.
 	case NodeUpdate:
@@ -1564,16 +1620,16 @@ func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
 	return nil
 }
 
-func (c *Cluster) nodeJoin(uri URI) error {
+func (c *Cluster) nodeJoin(node *Node) error {
 	if c.needTopologyAgreement() {
 		// A host that is not part of the topology can't be added to the STARTING cluster.
-		if !c.Topology.ContainsURI(uri) {
-			err := fmt.Sprintf("host is not in topology: %v", uri)
+		if !c.Topology.ContainsID(node.ID) {
+			err := fmt.Sprintf("host is not in topology: %s", node.ID)
 			c.logger().Print(err)
 			return errors.New(err)
 		}
 
-		if err := c.AddNode(uri); err != nil {
+		if err := c.AddNode(node); err != nil {
 			return err
 		}
 
@@ -1594,20 +1650,20 @@ func (c *Cluster) nodeJoin(uri URI) error {
 		} else {
 			// Send the status to the remote node. This lets the remote node
 			// know that it can proceed with opening its Holder.
-			return c.sendTo(uri, c.Status())
+			return c.sendTo(node, c.Status())
 		}
 
 		return nil
 	}
 
 	// Don't do anything else if the cluster already contains the node.
-	if c.NodeByURI(uri) != nil {
+	if c.nodeByID(node.ID) != nil {
 		return nil
 	}
 
 	// If the holder does not yet contain data, go ahead and add the node.
 	if !c.Holder.HasData() {
-		if err := c.AddNode(uri); err != nil {
+		if err := c.AddNode(node); err != nil {
 			return err
 		}
 		return c.setStateAndBroadcast(ClusterStateNormal)
@@ -1618,34 +1674,37 @@ func (c *Cluster) nodeJoin(uri URI) error {
 	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
 		return err
 	}
-	c.joiningLeavingNodes <- nodeAction{uri, ResizeJobActionAdd}
+	c.joiningLeavingNodes <- nodeAction{node, ResizeJobActionAdd}
 
 	return nil
 }
 
 // NodeLeave initiates the removal of a node from the cluster.
-func (c *Cluster) NodeLeave(uri URI) error {
+func (c *Cluster) NodeLeave(node *Node) error {
 	// Refuse the request if this is not the coordinator.
 	if !c.IsCoordinator() {
-		return fmt.Errorf("Node removal requests are only valid on the Coordinator node: %s", c.Coordinator)
+		return fmt.Errorf("Node removal requests are only valid on the Coordinator node: %s", c.CoordinatorNode().ID)
 	}
 
 	if c.State() != ClusterStateNormal {
 		return fmt.Errorf("Cluster must be in state %s to remove a node. Current state: %s", ClusterStateNormal, c.State)
 	}
 
-	return c.nodeLeave(uri)
+	return c.nodeLeave(node)
 }
 
-func (c *Cluster) nodeLeave(uri URI) error {
+func (c *Cluster) nodeLeave(node *Node) error {
+	// Get the actual node in the local cluster.
+	n := c.nodeByID(node.ID)
+
 	// Don't do anything else if the cluster doesn't contain the node.
-	if c.NodeByURI(uri) == nil {
+	if n == nil {
 		return nil
 	}
 
 	// If the holder does not yet contain data, go ahead and remove the node.
 	if !c.Holder.HasData() {
-		if err := c.RemoveNode(uri); err != nil {
+		if err := c.RemoveNode(n); err != nil {
 			return err
 		}
 		return c.setStateAndBroadcast(ClusterStateNormal)
@@ -1656,7 +1715,7 @@ func (c *Cluster) nodeLeave(uri URI) error {
 	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
 		return err
 	}
-	c.joiningLeavingNodes <- nodeAction{uri, ResizeJobActionRemove}
+	c.joiningLeavingNodes <- nodeAction{n, ResizeJobActionRemove}
 
 	return nil
 }
@@ -1671,26 +1730,32 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 	// Set ClusterID.
 	c.setID(cs.ClusterID)
 
-	officialURIs := decodeURIs(cs.NodeSet)
+	officialNodes := DecodeNodes(cs.Nodes)
 
 	// Add all nodes from the coordinator.
-	for _, uri := range officialURIs {
-		if err := c.AddNode(uri); err != nil {
+	for _, node := range officialNodes {
+		if err := c.AddNode(node); err != nil {
 			return err
 		}
 	}
 
 	// Remove any nodes not specified by the coordinator
-	// except for self.
-	for _, uri := range c.NodeSet() {
+	// except for self. Generate a list to remove first
+	// so that nodes aren't removed mid-loop.
+	nodeIDsToRemove := []string{}
+	for _, node := range c.Nodes {
 		// Don't remove this node.
-		if uri == c.URI {
+		if node.ID == c.Node.ID {
 			continue
 		}
-		if NodeSet(officialURIs).ContainsURI(uri) {
+		if Nodes(officialNodes).ContainsID(node.ID) {
 			continue
 		}
-		if err := c.RemoveNode(uri); err != nil {
+		nodeIDsToRemove = append(nodeIDsToRemove, node.ID)
+	}
+
+	for _, nodeID := range nodeIDsToRemove {
+		if err := c.RemoveNode(c.nodeByID(nodeID)); err != nil {
 			return err
 		}
 	}

@@ -69,9 +69,11 @@ func TestImportCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Handler.URI = *uri
+	node := &pilosa.Node{ID: "node", URI: *uri}
+
+	s.Handler.Node = node
 	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].URI = *uri
+	s.Handler.Cluster.Nodes[0] = node
 	s.Handler.Holder = hldr.Holder
 	cm.Host = s.Host()
 
@@ -109,9 +111,11 @@ func TestImportCommand_RunValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Handler.URI = *uri
+	node := &pilosa.Node{ID: "node", URI: *uri}
+
+	s.Handler.Node = node
 	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].URI = *uri
+	s.Handler.Cluster.Nodes[0] = node
 	s.Handler.Holder = hldr.Holder
 	cm.Host = s.Host()
 
