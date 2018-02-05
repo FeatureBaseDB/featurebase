@@ -120,7 +120,7 @@ func NewBitmap(a ...uint64) *Bitmap {
 	return b
 }
 
-func NewBitmapBTree(a ...uint64) *Bitmap {
+func NewBTreeBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		conts: NewBTreeContainers(),
 	}
