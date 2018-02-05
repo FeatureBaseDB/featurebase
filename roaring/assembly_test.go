@@ -42,7 +42,6 @@ func TestBSFQ_CompareGo(t *testing.T) {
 		}
 	*/
 }
-var Result uint64
 func BenchmarkBSF(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		BSFQ(uint64(i))
@@ -61,9 +60,12 @@ func BenchmarkPOPCNTQ(b *testing.B) {
 	}
 }
 
+// This value prevents the benchmarks from being optimized out
+var Result uint64
+
 func BenchmarkPopcount(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		Result=popcount(uint64(i))
+		Result = popcount(uint64(i))
 	}
 }
 
@@ -77,7 +79,7 @@ func BenchmarkPopcntAsm(b *testing.B) {
 func BenchmarkPopcntGo(b *testing.B) {
 	// run the Fib function b.N times
 	for n := 0; n < b.N; n++ {
-		Result=popcntGo(uint64(n))
+		Result = popcntGo(uint64(n))
 	}
 }
 

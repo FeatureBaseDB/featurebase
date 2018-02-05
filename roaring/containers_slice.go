@@ -27,7 +27,6 @@ func (sc *SliceContainers) Put(key uint64, c *container) {
 	if i < 0 {
 		sc.insertAt(key, c, -i-1)
 	} else {
-		//should this happen?
 		sc.containers[i] = c
 	}
 
@@ -42,7 +41,6 @@ func (sc *SliceContainers) PutContainerValues(key uint64, containerType byte, n 
 		c.mapped = mapped
 		sc.insertAt(key, c, -i-1)
 	} else {
-		//should this happen?
 		c := sc.containers[i]
 		c.containerType = containerType
 		c.n = n
