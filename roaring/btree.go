@@ -350,7 +350,6 @@ func (t *Tree) extract(q *d, i int) { // (r *container) {
 	}
 	q.d[q.c] = zde // GC
 	t.c--
-	return
 }
 
 func (t *Tree) find(q interface{}, k uint64) (i int, ok bool) {
