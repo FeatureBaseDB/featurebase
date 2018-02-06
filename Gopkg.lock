@@ -200,12 +200,6 @@
   version = "v2.17.11"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/shirou/w32"
-  packages = ["."]
-  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
-
-[[projects]]
   name = "github.com/sony/gobreaker"
   packages = ["."]
   revision = "e9556a45379ef1da12e54847edb2fb3d7d566f36"
