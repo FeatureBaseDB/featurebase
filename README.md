@@ -20,6 +20,7 @@
 - [Get Support](#get-support)
 - [Contributing](#contributing)
 
+Want to contribute? One of the easiest ways is to [tell us how you're using (or want to use) Pilosa](https://github.com/pilosa/pilosa/issues/1074). We learn from every discussion!
 
 ## Docs
 

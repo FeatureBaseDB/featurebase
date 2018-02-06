@@ -17,6 +17,7 @@ package pilosa
 import (
 	"encoding/binary"
 	"hash/fnv"
+	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/internal"
@@ -41,16 +42,28 @@ type Node struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
 
+	mu     sync.RWMutex
 	status *internal.NodeStatus `json:"status"`
+}
+
+// Status gets the NodeStatus.
+func (n *Node) Status() *internal.NodeStatus {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.status
 }
 
 // SetStatus sets the NodeStatus.
 func (n *Node) SetStatus(s *internal.NodeStatus) {
+	n.mu.Lock()
 	n.status = s
+	n.mu.Unlock()
 }
 
 // SetState sets the Node.status.state.
 func (n *Node) SetState(s string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	if n.status == nil {
 		n.status = &internal.NodeStatus{}
 	}
@@ -197,7 +210,7 @@ func (c *Cluster) Status() *internal.ClusterStatus {
 func encodeClusterStatus(a []*Node) []*internal.NodeStatus {
 	other := make([]*internal.NodeStatus, len(a))
 	for i := range a {
-		other[i] = a[i].status
+		other[i] = a[i].Status()
 	}
 	return other
 }

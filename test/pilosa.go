@@ -41,7 +41,6 @@ func newServer() (*server.Command, error) {
 
 	s.Config.GossipSeed = "localhost:" + s.Config.GossipPort
 	s.Config.Cluster.Type = "gossip"
-	s.Config.Metric.Diagnostics = false
 	td, err := ioutil.TempDir("", "")
 	if err != nil {
 		return nil, errors.Wrap(err, "temp dir")
@@ -101,7 +100,6 @@ func NewServerCluster(size int) (cluster *Cluster, err error) {
 		cluster.Servers[i] = s
 		hosts[i] = s.Config.Bind
 		s.Config.GossipSeed = cluster.Servers[0].Config.GossipSeed
-		s.Config.Metric.Diagnostics = false // Disable diagnostics.
 
 	}
 
