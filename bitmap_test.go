@@ -15,6 +15,7 @@
 package pilosa_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -23,14 +24,34 @@ import (
 
 // Ensure a bitmap can be merged
 func TestBitmap_Merge(t *testing.T) {
-	bm1 := pilosa.NewBitmap(1, 2, 3, SliceWidth+1, 2*SliceWidth)
-	bm2 := pilosa.NewBitmap(3, 4, 5)
-	bm1.Merge(bm2)
-
-	if bm1.Count() != 7 {
-		t.Fatalf("Count after merge %d != 7\n", bm1.Count())
+	tests := []struct {
+		bm1 *pilosa.Bitmap
+		bm2 *pilosa.Bitmap
+		exp uint64
+	}{
+		{
+			bm1: pilosa.NewBitmap(1, 2, 3, SliceWidth+1, 2*SliceWidth),
+			bm2: pilosa.NewBitmap(3, 4, 5),
+			exp: 7,
+		},
+		{
+			bm1: pilosa.NewBitmap(),
+			bm2: pilosa.NewBitmap(2, 66000, 70000, 70001, 70002, 70003, 70004),
+			exp: 7,
+		},
 	}
 
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("#%d:", i), func(t *testing.T) {
+			test.bm1.Merge(test.bm2)
+			if cnt := test.bm1.Count(); cnt != test.exp {
+				t.Fatalf("merged count %d is not %d", cnt, test.exp)
+			}
+			if length := len(test.bm1.Bits()); uint64(length) != test.exp {
+				t.Fatalf("merged length %d is not %d", length, test.exp)
+			}
+		})
+	}
 }
 
 // Ensure a bitmap can Xor'ed

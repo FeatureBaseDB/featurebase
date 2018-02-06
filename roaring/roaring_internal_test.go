@@ -2244,6 +2244,44 @@ func TestIteratorRuns(t *testing.T) {
 	}
 }
 
+func TestIteratorVarious(t *testing.T) {
+	tests := []struct {
+		bm  *Bitmap
+		exp uint64
+	}{
+		{
+			bm:  NewBitmap(3, 4, 5),
+			exp: 3,
+		},
+		{
+			bm:  bitmapVariousContainers(),
+			exp: 61221,
+		},
+		{
+			bm:  NewBitmap(2, 66000, 70000, 70001, 70002, 70003, 70004),
+			exp: 7,
+		},
+	}
+
+	for i, test := range tests {
+		test.bm.Optimize()
+		t.Run(fmt.Sprintf("#%d:", i), func(t *testing.T) {
+			if cnt := test.bm.Count(); cnt != test.exp {
+				t.Fatalf("merged count %d is not %d", cnt, test.exp)
+			}
+			iter := test.bm.Iterator()
+			bits := make([]uint64, 0, test.bm.Count())
+			for v, eof := iter.Next(); !eof; v, eof = iter.Next() {
+				bits = append(bits, v)
+			}
+			if length := len(bits); uint64(length) != test.exp {
+				t.Fatalf("length %d is not %d", length, test.exp)
+			}
+		})
+	}
+
+}
+
 func TestRunBinSearchContains(t *testing.T) {
 	tests := []struct {
 		runs  []interval16
@@ -2546,4 +2584,88 @@ func bitmapEvens() []uint64 {
 		bitmap[i] = 0x5555555555555555
 	}
 	return bitmap
+}
+
+var containerWidth uint64 = 65536
+
+// rleCont returns a slice of numbers all in the range starting from
+// container_width*num, and ending at container_width*(num+1)-1. If left is
+// true, then the first 100 bits will be set, if mid is true, 100 bits in the
+// middle will be set, if right is true, the last 100 bits will be set.
+// sets 100 bits per true
+func rleCont(num int, left, mid, right bool) []uint64 {
+	ret := make([]uint64, 0)
+	base := containerWidth * uint64(num)
+	if left {
+		for i := uint64(0); i < 100; i++ {
+			ret = append(ret, base+i)
+		}
+	}
+	if mid {
+		for i := containerWidth / 2; i < containerWidth/2+100; i++ {
+			ret = append(ret, base+i)
+		}
+	}
+	if right {
+		for i := containerWidth - 100; i < containerWidth; i++ {
+			ret = append(ret, base+i)
+		}
+	}
+	return ret
+}
+
+// sets 2 bits per true.
+func arrCont(num int, left, mid, right bool) []uint64 {
+	ret := make([]uint64, 0)
+	base := containerWidth * uint64(num)
+	if left {
+		ret = append(ret, base+0, base+2)
+	}
+	if mid {
+		half := containerWidth / 2
+		ret = append(ret, base+half, base+half+2)
+	}
+	if right {
+		ret = append(ret, base+containerWidth-3, base+containerWidth-1)
+	}
+	return ret
+}
+
+// sets 6667 bits per true.
+func bitCont(num int, left, mid, right bool) []uint64 {
+	ret := make([]uint64, 0)
+	base := containerWidth * uint64(num)
+	if left {
+		for i := uint64(0); i < 20001; i += 3 {
+			ret = append(ret, base+i)
+		}
+	}
+	if mid {
+		for i := uint64(21000); i < 41001; i += 3 {
+			ret = append(ret, base+i)
+		}
+	}
+	if right {
+		for i := uint64(45537); i <= 65535; i += 3 {
+			ret = append(ret, base+i)
+		}
+	}
+	return ret
+}
+
+func bitmapVariousContainers() *Bitmap {
+	bits := make([]uint64, 0)
+	bits = append(bits, rleCont(0, true, true, true)...)
+	bits = append(bits, rleCont(1, true, true, true)...)
+	bits = append(bits, arrCont(2, true, true, true)...)
+	bits = append(bits, arrCont(3, true, true, true)...)
+	bits = append(bits, bitCont(4, true, true, true)...)
+	bits = append(bits, bitCont(5, true, true, true)...)
+	bits = append(bits, rleCont(6, true, true, true)...)
+	bits = append(bits, bitCont(7, true, true, true)...)
+	bits = append(bits, arrCont(8, true, true, true)...)
+	bits = append(bits, rleCont(9, true, true, true)...)
+	bm := NewBitmap(bits...)
+	bm.Optimize()
+	return bm
 }
