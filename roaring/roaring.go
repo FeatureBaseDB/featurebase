@@ -111,8 +111,8 @@ type Bitmap struct {
 	OpWriter io.Writer
 }
 
-// NewBitmap returns a Bitmap with an initial set of values.
-func NewBitmap(a ...uint64) *Bitmap {
+// NewSliceBitmap returns a Bitmap with an initial set of values.
+func NewSliceBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		conts: NewSliceContainers(),
 	}
@@ -329,7 +329,7 @@ func (b *Bitmap) OffsetRange(offset, start, end uint64) *Bitmap {
 	off := highbits(offset)
 	hi0, hi1 := highbits(start), highbits(end)
 	citer, _ := b.conts.Iterator(hi0)
-	other := NewBitmap()
+	other := NewSliceBitmap()
 	for citer.Next() {
 		k, c := citer.Value()
 		if k >= hi1 {
@@ -374,7 +374,7 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 
 // Intersect returns the intersection of b and other.
 func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
-	output := NewBitmap()
+	output := NewSliceBitmap()
 	iiter, _ := b.conts.Iterator(0)
 	jiter, _ := other.conts.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
@@ -399,7 +399,7 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 
 // Union returns the bitwise union of b and other.
 func (b *Bitmap) Union(other *Bitmap) *Bitmap {
-	output := NewBitmap()
+	output := NewSliceBitmap()
 
 	iiter, _ := b.conts.Iterator(0)
 	jiter, _ := other.conts.Iterator(0)
@@ -427,7 +427,7 @@ func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 
 // Difference returns the difference of b and other.
 func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
-	output := NewBitmap()
+	output := NewSliceBitmap()
 
 	iiter, _ := b.conts.Iterator(0)
 	jiter, _ := other.conts.Iterator(0)
@@ -454,7 +454,7 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 
 // Xor returns the bitwise exclusive or of b and other.
 func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
-	output := NewBitmap()
+	output := NewSliceBitmap()
 
 	iiter, _ := b.conts.Iterator(0)
 	jiter, _ := other.conts.Iterator(0)
@@ -768,7 +768,7 @@ func (b *Bitmap) Check() error {
 
 // Flip performs a logical negate of the bits in the range [start,end].
 func (b *Bitmap) Flip(start, end uint64) *Bitmap {
-	result := NewBitmap()
+	result := NewSliceBitmap()
 	itr := b.Iterator()
 	v, eof := itr.Next()
 	//copy over previous bits.

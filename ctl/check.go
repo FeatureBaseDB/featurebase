@@ -88,7 +88,7 @@ func (cmd *CheckCommand) checkBitmapFile(path string) error {
 	defer syscall.Munmap(data)
 
 	// Attach the mmap file to the bitmap.
-	bm := roaring.NewBitmap()
+	bm := roaring.NewSliceBitmap()
 	if err := bm.UnmarshalBinary(data); err != nil {
 		return err
 	}

@@ -68,7 +68,7 @@ func (cmd *InspectCommand) Run(ctx context.Context) error {
 	// Attach the mmap file to the bitmap.
 	t := time.Now()
 	fmt.Fprintf(cmd.Stderr, "unmarshaling bitmap...")
-	bm := roaring.NewBitmap()
+	bm := roaring.NewSliceBitmap()
 	if err := bm.UnmarshalBinary(data); err != nil {
 		return err
 	}

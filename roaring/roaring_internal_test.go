@@ -1501,7 +1501,7 @@ func MakeBitmap(start []uint64) []uint64 {
 	return b
 }
 func MakeLastBitSet() []uint64 {
-	obj := NewBitmap(65535)
+	obj := NewSliceBitmap(65535)
 	c := obj.container(0)
 	c.arrayToBitmap()
 	return c.bitmap
@@ -1714,9 +1714,9 @@ func TestDifferenceRunRun(t *testing.T) {
 
 func TestWriteReadArray(t *testing.T) {
 	ca := &container{array: []uint16{1, 10, 100, 1000}, n: 4, containerType: ContainerArray}
-	ba := NewBitmap()
+	ba := NewSliceBitmap()
 	ba.conts.Put(0, ca)
-	ba2 := NewBitmap()
+	ba2 := NewSliceBitmap()
 	var buf bytes.Buffer
 	_, err := ba.WriteTo(&buf)
 	if err != nil {
@@ -1737,9 +1737,9 @@ func TestWriteReadBitmap(t *testing.T) {
 	for i := 0; i < 129; i++ {
 		cb.bitmap[i] = 0x5555555555555555
 	}
-	bb := NewBitmap()
+	bb := NewSliceBitmap()
 	bb.conts.Put(0, cb)
-	bb2 := NewBitmap()
+	bb2 := NewSliceBitmap()
 	var buf bytes.Buffer
 	_, err := bb.WriteTo(&buf)
 	if err != nil {
@@ -1760,9 +1760,9 @@ func TestWriteReadFullBitmap(t *testing.T) {
 	for i := 0; i < bitmapN; i++ {
 		cb.bitmap[i] = 0xffffffffffffffff
 	}
-	bb := NewBitmap()
+	bb := NewSliceBitmap()
 	bb.conts.Put(0, cb)
-	bb2 := NewBitmap()
+	bb2 := NewSliceBitmap()
 	var buf bytes.Buffer
 	_, err := bb.WriteTo(&buf)
 	if err != nil {
@@ -1786,9 +1786,9 @@ func TestWriteReadFullBitmap(t *testing.T) {
 
 func TestWriteReadRun(t *testing.T) {
 	cr := &container{runs: []interval16{{start: 3, last: 13}, {start: 100, last: 109}}, n: 21, containerType: ContainerRun}
-	br := NewBitmap()
+	br := NewSliceBitmap()
 	br.conts.Put(0, cr)
-	br2 := NewBitmap()
+	br2 := NewSliceBitmap()
 	var buf bytes.Buffer
 	_, err := br.WriteTo(&buf)
 	if err != nil {
@@ -2089,7 +2089,7 @@ func TestXorBitmapRun(t *testing.T) {
 
 func TestIteratorArray(t *testing.T) {
 	// use values that span two containers
-	b := NewBitmap(0, 1, 10, 100, 1000, 10000, 90000, 100000)
+	b := NewSliceBitmap(0, 1, 10, 100, 1000, 10000, 90000, 100000)
 	if !b.conts.Get(0).isArray() {
 		t.Fatalf("wrong container type")
 	}
@@ -2136,7 +2136,7 @@ func TestIteratorBitmap(t *testing.T) {
 	// use values that span two containers
 	// this dataset will update to bitmap after enough Adds,
 	// but won't update to RLE until Optimize() is called
-	b := NewBitmap()
+	b := NewSliceBitmap()
 	for i := uint64(61000); i < 71000; i++ {
 		b.Add(i)
 	}
@@ -2187,7 +2187,7 @@ func TestIteratorBitmap(t *testing.T) {
 }
 
 func TestIteratorRuns(t *testing.T) {
-	b := NewBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 100003, 100004, 100005)
+	b := NewSliceBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 100003, 100004, 100005)
 	b.Optimize()
 	if !b.conts.Get(0).isRun() {
 		t.Fatalf("wrong container type")
@@ -2403,7 +2403,7 @@ func TestRunBinSearch(t *testing.T) {
 	}
 }
 func TestBitmap_RemoveEmptyContainers(t *testing.T) {
-	bm1 := NewBitmap(1<<16, 2<<16, 3<<16)
+	bm1 := NewSliceBitmap(1<<16, 2<<16, 3<<16)
 	bm1.Remove(2 << 16)
 	if bm1.countEmptyContainers() != 1 {
 		t.Fatalf("Should be 1 empty container ")
@@ -2416,13 +2416,13 @@ func TestBitmap_RemoveEmptyContainers(t *testing.T) {
 }
 
 func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
-	bm1 := NewBitmap(1<<16, 2<<16, 3<<16)
+	bm1 := NewSliceBitmap(1<<16, 2<<16, 3<<16)
 	bm1.Remove(2 << 16)
 	var buf bytes.Buffer
 	if _, err := bm1.WriteTo(&buf); err != nil {
 		t.Fatalf("Failure to write to bitmap buffer. ")
 	}
-	bm0 := NewBitmap()
+	bm0 := NewSliceBitmap()
 	bm0.UnmarshalBinary(buf.Bytes())
 	if bm0.countEmptyContainers() != 0 {
 		t.Fatalf("Should be no empty containers ")
