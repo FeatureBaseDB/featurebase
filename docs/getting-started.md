@@ -66,8 +66,6 @@ curl localhost:10101/index/repository/frame/stargazer \
 
 Since our data contains time stamps for the time users starred repos, we set the *time quantum* for the `stargazer` frame in the options as well. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
 
-We set `inverseEnabled` to `true` in order to allow queries over columns as well as rows.
-
 Next up is the `language` frame, which will contain IDs for programming languages:
 ```
 curl localhost:10101/index/repository/frame/language -X POST
