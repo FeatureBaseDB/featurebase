@@ -23,7 +23,7 @@ Pilosa uses GNU/POSIX style flags. Most flags you specify as `--flagname=value` 
 
 ### Environment variables
 
-Every command line flag has a corresponding environment variable. The environment variable is the flag name in all caps, prefxed by `PILOSA_`, and with any dashes replaced by underscores. For example: `--flag-name` becomes `PILOSA_FLAG_NAME`.
+Every command line flag has a corresponding environment variable. The environment variable is the flag name in all caps, prefixed by `PILOSA_`, and with dots and dashes replaced by underscores. For example: `--scope.flag-name` becomes `PILOSA_SCOPE_FLAG_NAME`.
 
 ### Config file
 
