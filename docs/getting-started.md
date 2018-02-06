@@ -61,8 +61,7 @@ Let's create the `stargazer` frame which has user IDs of stargazers as its rows:
 ```
 curl localhost:10101/index/repository/frame/stargazer \
      -X POST \
-     -d '{"options": {"timeQuantum": "YMD",
-                      "inverseEnabled": true}}'
+     -d '{"options": {"timeQuantum": "YMD"}}'
 ```
 
 Since our data contains time stamps for the time users starred repos, we set the *time quantum* for the `stargazer` frame in the options as well. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
