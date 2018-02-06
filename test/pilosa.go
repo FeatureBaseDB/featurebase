@@ -124,8 +124,6 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coor
 	}
 
 	// Open server listener.
-	// This is used to set Server.Name, which is used as the node
-	// name for identifying a memberlist node.
 	err = m.Server.OpenListener()
 	if err != nil {
 		return seed, coord, err

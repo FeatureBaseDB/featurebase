@@ -6,7 +6,7 @@ COPY . /go/src/github.com/pilosa/pilosa
 
 RUN cd /go/src/github.com/pilosa/pilosa \
     && make vendor \
-    && CGO_ENABLED=0 go install -a -ldflags "$ldflags" github.com/pilosa/pilosa/cmd/pilosa
+    && CGO_ENABLED=0 go install -tags release -a -ldflags "$ldflags" github.com/pilosa/pilosa/cmd/pilosa
 
 FROM scratch
 

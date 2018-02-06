@@ -41,8 +41,8 @@ func init() {
 }
 
 const (
-	// DefaultDiagnosticsInterval is the default sync frequency diagnostic metrics.
-	DefaultDiagnosticsInterval = 1 * time.Hour
+	// DefaultDataDir is the default data directory.
+	DefaultDataDir = "~/.pilosa"
 )
 
 // Command represents the state of the pilosa server command.
