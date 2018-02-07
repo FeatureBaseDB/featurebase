@@ -166,8 +166,7 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 }
 
 func (b *Bitmap) add(v uint64) bool {
-	hb := highbits(v)
-	cont := b.conts.GetOrCreate(hb)
+	cont := b.conts.GetOrCreate(highbits(v))
 	return cont.add(lowbits(v))
 }
 
