@@ -2254,7 +2254,7 @@ func TestIteratorVarious(t *testing.T) {
 		exp uint64
 	}{
 		{
-			bm:  NewBitmap(3, 4, 5),
+			bm:  NewSliceBitmap(3, 4, 5),
 			exp: 3,
 		},
 		{
@@ -2262,7 +2262,7 @@ func TestIteratorVarious(t *testing.T) {
 			exp: 61221,
 		},
 		{
-			bm:  NewBitmap(2, 66000, 70000, 70001, 70002, 70003, 70004),
+			bm:  NewSliceBitmap(2, 66000, 70000, 70001, 70002, 70003, 70004),
 			exp: 7,
 		},
 	}
@@ -2669,7 +2669,7 @@ func bitmapVariousContainers() *Bitmap {
 	bits = append(bits, bitCont(7, true, true, true)...)
 	bits = append(bits, arrCont(8, true, true, true)...)
 	bits = append(bits, rleCont(9, true, true, true)...)
-	bm := NewBitmap(bits...)
+	bm := NewSliceBitmap(bits...)
 	bm.Optimize()
 	return bm
 }
