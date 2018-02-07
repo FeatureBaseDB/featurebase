@@ -814,6 +814,10 @@ func (itr *Iterator) eof() bool { return int(itr.i) >= len(itr.bitmap.containers
 
 // Seek moves to the first value equal to or greater than `seek`.
 func (itr *Iterator) Seek(seek uint64) {
+	// k should always be -1 unless we're seeking into a run container. Then the
+	// "if c.isRun" section will take care of it.
+	itr.k = -1
+
 	// Move to the correct container.
 	itr.i = search64(itr.bitmap.keys, highbits(seek))
 	if itr.i < 0 {
