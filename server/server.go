@@ -211,46 +211,7 @@ func (m *Command) SetupServer() error {
 
 // SetupNetworking sets up internode communication based on the configuration.
 func (m *Command) SetupNetworking() error {
-	switch m.Config.Cluster.Type {
-	case pilosa.ClusterGossip:
-		// Set internal port (string).
-		gossipPortStr := pilosa.DefaultGossipPort
-		// Config.GossipPort is deprecated, so Config.Gossip.Port has priority
-		if m.Config.Gossip.Port != "" {
-			gossipPortStr = m.Config.Gossip.Port
-		} else if m.Config.GossipPort != "" {
-			gossipPortStr = m.Config.GossipPort
-		}
-
-		gossipPort, err := strconv.Atoi(gossipPortStr)
-		if err != nil {
-			return err
-		}
-
-		// get the host portion of addr to use for binding
-		gossipHost := m.Server.URI.Host()
-		var transport *gossip.Transport
-		if m.GossipTransport != nil {
-			transport = m.GossipTransport
-		} else {
-			transport, err = gossip.NewTransport(gossipHost, gossipPort)
-			if err != nil {
-				return err
-			}
-		}
-
-		m.Server.NodeID = m.Server.LoadNodeID()
-
-		m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
-		gossipMemberSet, err := gossip.NewGossipMemberSetWithTransport(m.Server.NodeID, m.Config, transport, m.Server)
-		if err != nil {
-			return err
-		}
-		m.Server.Cluster.MemberSet = gossipMemberSet
-		m.Server.Broadcaster = m.Server
-		m.Server.BroadcastReceiver = gossipMemberSet
-		m.Server.Gossiper = gossipMemberSet
-	case pilosa.ClusterStatic, pilosa.ClusterNone:
+	if m.Config.Cluster.Disabled {
 		m.Server.Cluster.Static = true
 		for _, address := range m.Config.Cluster.Hosts {
 			uri, err := pilosa.NewURIFromAddress(address)
@@ -270,9 +231,46 @@ func (m *Command) SetupNetworking() error {
 		if err != nil {
 			return err
 		}
-	default:
-		return fmt.Errorf("'%v' is not a supported value for broadcaster type", m.Config.Cluster.Type)
+		return nil
 	}
+
+	// Set internal port (string).
+	gossipPortStr := pilosa.DefaultGossipPort
+	// Config.GossipPort is deprecated, so Config.Gossip.Port has priority
+	if m.Config.Gossip.Port != "" {
+		gossipPortStr = m.Config.Gossip.Port
+	} else if m.Config.GossipPort != "" {
+		gossipPortStr = m.Config.GossipPort
+	}
+
+	gossipPort, err := strconv.Atoi(gossipPortStr)
+	if err != nil {
+		return err
+	}
+
+	// get the host portion of addr to use for binding
+	gossipHost := m.Server.URI.Host()
+	var transport *gossip.Transport
+	if m.GossipTransport != nil {
+		transport = m.GossipTransport
+	} else {
+		transport, err = gossip.NewTransport(gossipHost, gossipPort)
+		if err != nil {
+			return err
+		}
+	}
+
+	m.Server.NodeID = m.Server.LoadNodeID()
+
+	m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
+	gossipMemberSet, err := gossip.NewGossipMemberSetWithTransport(m.Server.NodeID, m.Config, transport, m.Server)
+	if err != nil {
+		return err
+	}
+	m.Server.Cluster.MemberSet = gossipMemberSet
+	m.Server.Broadcaster = m.Server
+	m.Server.BroadcastReceiver = gossipMemberSet
+	m.Server.Gossiper = gossipMemberSet
 	return nil
 }
 

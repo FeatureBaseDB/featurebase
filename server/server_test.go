@@ -269,7 +269,7 @@ func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
 
 // Ensure program can set bits on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
-	mains1 := test.NewMainArrayWithCluster(2)
+	mains1 := test.MustRunMainWithCluster(t, 2)
 	m10 := mains1[0]
 	m11 := mains1[1]
 
@@ -303,7 +303,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	}
 
 	// Start second cluster.
-	mains2 := test.NewMainArrayWithCluster(2)
+	mains2 := test.MustRunMainWithCluster(t, 2)
 	m20 := mains2[0]
 	defer m20.Close()
 	m21 := mains2[1]

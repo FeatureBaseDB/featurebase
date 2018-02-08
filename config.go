@@ -35,8 +35,8 @@ const (
 	// DefaultPort is the default port to use with the hostname.
 	DefaultPort = "10101"
 
-	// DefaultClusterType sets the node intercommunication method.
-	DefaultClusterType = ClusterGossip
+	// DefaultClusterDisabled sets the node intercommunication method.
+	DefaultClusterDisabled = false
 
 	// DefaultMetrics sets the internal metrics to no-op.
 	DefaultMetrics = "nop"
@@ -113,9 +113,6 @@ const (
 	DefaultMetricPollInterval = 0 * time.Minute
 )
 
-// ClusterTypes set of cluster types.
-var ClusterTypes = []string{ClusterNone, ClusterStatic, ClusterGossip}
-
 // TLSConfig contains TLS configuration
 type TLSConfig struct {
 	// CertificatePath contains the path to the certificate (.crt or .pem file)
@@ -145,9 +142,9 @@ type Config struct {
 	TLS TLSConfig
 
 	Cluster struct {
+		Disabled      bool     `toml:"disabled"`
 		Coordinator   string   `toml:"coordinator"`
 		ReplicaN      int      `toml:"replicas"`
-		Type          string   `toml:"type"`
 		Hosts         []string `toml:"hosts"`
 		LongQueryTime Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
@@ -189,9 +186,9 @@ func NewConfig() *Config {
 	}
 
 	// Cluster config.
+	c.Cluster.Disabled = DefaultClusterDisabled
 	// c.Cluster.Coordinator = ""
 	c.Cluster.ReplicaN = DefaultReplicaN
-	c.Cluster.Type = DefaultClusterType
 	c.Cluster.Hosts = []string{}
 	c.Cluster.LongQueryTime = Duration(time.Minute)
 
@@ -222,36 +219,10 @@ func NewConfig() *Config {
 
 // Validate that all configuration permutations are compatible with each other.
 func (c *Config) Validate() error {
-	if !StringInSlice(c.Cluster.Type, ClusterTypes) {
-		return ErrConfigClusterTypeInvalid
+	if !c.Cluster.Disabled && len(c.Cluster.Hosts) > 0 {
+		return ErrConfigClusterEnabledHosts
 	}
-
-	if c.Cluster.Type == ClusterGossip {
-		if len(c.Cluster.Hosts) > 0 {
-			bindWithDefaults, err := AddressWithDefaults(c.Bind)
-			if err != nil {
-				return err
-			}
-			if !c.foundHost(bindWithDefaults) {
-				return ErrConfigHostsMissing
-			}
-		}
-	}
-
 	return nil
-}
-
-func (c *Config) foundHost(host *URI) bool {
-	for _, clusterHost := range c.Cluster.Hosts {
-		uri, err := NewURIFromAddress(clusterHost)
-		if err != nil {
-			continue
-		}
-		if host.Equals(uri) {
-			return true
-		}
-	}
-	return false
 }
 
 // Duration is a TOML wrapper type for time.Duration.

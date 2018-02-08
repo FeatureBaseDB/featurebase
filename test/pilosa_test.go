@@ -10,9 +10,9 @@ import (
 )
 
 func TestNewCluster(t *testing.T) {
-	cluster := test.MustNewServerCluster(t, 3)
+	cluster := test.MustRunMainWithCluster(t, 3)
 
-	response, err := http.Get("http://" + cluster.Servers[0].Server.Addr().String() + "/status")
+	response, err := http.Get("http://" + cluster[0].Server.Addr().String() + "/status")
 	if err != nil {
 		t.Fatalf("getting schema: %v", err)
 	}

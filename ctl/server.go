@@ -35,9 +35,9 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	SetTLSConfig(flags, &srv.Config.TLS.CertificatePath, &srv.Config.TLS.CertificateKeyPath, &srv.Config.TLS.SkipVerify)
 
 	// Cluster
+	flags.BoolVarP(&srv.Config.Cluster.Disabled, "cluster.disabled", "", srv.Config.Cluster.Disabled, "Disabled multi-node cluster communication (used for testing)")
 	flags.StringVarP(&srv.Config.Cluster.Coordinator, "cluster.coordinator", "", "", "Host that will act as cluster coordinator during startup and resizing.")
 	flags.IntVarP(&srv.Config.Cluster.ReplicaN, "cluster.replicas", "", 1, "Number of hosts each piece of data should be stored on.")
-	flags.StringVarP(&srv.Config.Cluster.Type, "cluster.type", "", "gossip", "Determine how the cluster handles membership and state sharing. Choose from [static, gossip]")
 	flags.StringSliceVarP(&srv.Config.Cluster.Hosts, "cluster.hosts", "", []string{}, "Comma separated list of hosts in cluster.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Cluster.LongQueryTime), "cluster.long-query-time", "", time.Minute, "Duration that will trigger log and stat messages for slow queries.")
 
