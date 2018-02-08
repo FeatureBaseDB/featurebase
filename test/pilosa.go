@@ -85,7 +85,7 @@ func runMainWithCluster(size int) ([]*Main, error) {
 	for i := 0; i < size; i++ {
 		m := NewMainWithCluster()
 
-		gossipSeed, coordinator, err = m.RunWithTransport(gossipHost, gossipPort, gossipSeed, &coordinator)
+		gossipSeed, coordinator, err = m.RunWithTransport(gossipHost, gossipPort, gossipSeed, coordinator)
 		if err != nil {
 			return nil, errors.Wrap(err, "RunWithTransport")
 		}
@@ -132,7 +132,7 @@ func (m *Main) Reopen() error {
 }
 
 // RunWithTransport runs Main and returns the dynamically allocated gossip port.
-func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coordinator *pilosa.URI) (seed string, coord pilosa.URI, err error) {
+func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coordinator pilosa.URI) (seed string, coord pilosa.URI, err error) {
 	defer close(m.Started)
 
 	/*
@@ -185,12 +185,7 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coor
 		return seed, coord, err
 	}
 
-	if coordinator != nil {
-		coord = *coordinator
-	} else {
-		coord = m.Server.URI
-	}
-	m.Server.Cluster.Coordinator = coord
+	m.Server.Cluster.Coordinator = coordinator
 	m.Server.Cluster.Static = false
 
 	// Initialize server.
@@ -199,7 +194,7 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coor
 		return seed, coord, err
 	}
 
-	return seed, coord, nil
+	return seed, m.Server.Cluster.Coordinator, nil
 }
 
 // URL returns the base URL string for accessing the running program.

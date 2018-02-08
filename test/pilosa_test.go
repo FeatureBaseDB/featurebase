@@ -10,7 +10,14 @@ import (
 )
 
 func TestNewCluster(t *testing.T) {
-	cluster := test.MustRunMainWithCluster(t, 3)
+	numNodes := 3
+	cluster := test.MustRunMainWithCluster(t, numNodes)
+	coordinator := cluster[0].Server.Cluster.Coordinator
+	for i := 1; i < numNodes; i++ {
+		if coordi := cluster[i].Server.Cluster.Coordinator; coordi != coordinator {
+			t.Fatalf("node %d does not have the same coordinator as node 0. '%v' and '%v' respectively", i, coordi, coordinator)
+		}
+	}
 
 	response, err := http.Get("http://" + cluster[0].Server.Addr().String() + "/status")
 	if err != nil {
