@@ -175,7 +175,7 @@ func (h *Holder) Schema() []*IndexInfo {
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{Name: index.Name()}
 		for _, frame := range index.Frames() {
-			fi := &FrameInfo{Name: frame.Name()}
+			fi := &FrameInfo{Name: frame.Name(), Options: frame.Options()}
 			for _, view := range frame.Views() {
 				fi.Views = append(fi.Views, &ViewInfo{Name: view.Name()})
 			}

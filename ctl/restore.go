@@ -15,6 +15,7 @@
 package ctl
 
 import (
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
@@ -27,11 +28,6 @@ import (
 type RestoreCommand struct {
 	// Destination host and port.
 	Host string
-
-	// Name of the index & frame to backup.
-	Index string
-	Frame string
-	View  string
 
 	// Import file to read from.
 	Path string
@@ -68,13 +64,13 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 		return err
 	}
 	defer f.Close()
-
-	// Restore backup file to the cluster.
-	if err := client.RestoreFrom(ctx, f, cmd.Index, cmd.Frame, cmd.View); err != nil {
+	gw, err := gzip.NewReader(f)
+	if err != nil {
 		return err
 	}
 
-	return nil
+	// Restore backup file to the cluster.
+	return client.RestoreFrom(ctx, gw)
 }
 
 func (cmd *RestoreCommand) TLSHost() string {

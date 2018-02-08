@@ -16,8 +16,10 @@ package pilosa
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,12 +31,17 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"crypto/tls"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+)
+
+var (
+	ErrInvalidBackupFormat = errors.New("Invalid Backup Format")
 )
 
 // ClientOptions represents the configuration for a InternalHTTPClient
@@ -586,26 +593,23 @@ func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *Node, inde
 }
 
 // BackupTo backs up an entire frame from a cluster to w.
-func (c *InternalHTTPClient) BackupTo(ctx context.Context, w io.Writer, index, frame, view string) error {
+func (c *InternalHTTPClient) BackupTo(ctx context.Context, tw *tar.Writer, index, frame, view string) (err error) {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
 	}
 
-	// Create tar writer around writer.
-	tw := tar.NewWriter(w)
-
 	// Find the maximum number of slices.
 	var maxSlices map[string]uint64
-	var err error
-	if view == ViewStandard {
-		maxSlices, err = c.MaxSliceByIndex(ctx)
-	} else if view == ViewInverse {
+	if view == ViewInverse {
 		maxSlices, err = c.MaxInverseSliceByIndex(ctx)
 	} else {
+		maxSlices, err = c.MaxSliceByIndex(ctx)
+	} /* else { //TODO validate view
 		return ErrInvalidView
 	}
+	*/
 
 	if err != nil {
 		return fmt.Errorf("slice n: %s", err)
@@ -613,14 +617,62 @@ func (c *InternalHTTPClient) BackupTo(ctx context.Context, w io.Writer, index, f
 
 	// Backup every slice to the tar file.
 	for i := uint64(0); i <= maxSlices[index]; i++ {
-		if err := c.backupSliceTo(ctx, tw, index, frame, view, i); err != nil {
-			return err
+		if err = c.backupSliceTo(ctx, tw, index, frame, view, i); err != nil {
+			return
 		}
 	}
+	c.backupRowAttr(ctx, tw, index, frame)
+	return
+}
 
-	// Close tar file.
-	if err := tw.Close(); err != nil {
+func (c *InternalHTTPClient) backupColAttr(ctx context.Context, tw *tar.Writer, index string) error {
+	//fetch the raw bolt file
+
+	// add it to the tar
+	data, err := c.FetchRawColumnAttrs(ctx, index)
+	if err != nil {
+		return fmt.Errorf("backup ColAttr: err=%s", err)
+	}
+
+	// Write slice file header.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:    fmt.Sprintf("colattr/%s", index),
+		Mode:    0666,
+		Size:    int64(len(data)),
+		ModTime: time.Now(),
+	}); err != nil {
 		return err
+	}
+
+	// Write buffer to file.
+	if _, err := tw.Write(data); err != nil {
+		return fmt.Errorf("write buffer: %s", err)
+	}
+
+	return nil
+}
+func (c *InternalHTTPClient) backupRowAttr(ctx context.Context, tw *tar.Writer, index, frame string) error {
+	//fetch the raw bolt file
+
+	// add it to the tar
+	data, err := c.FetchRawRowAttrs(ctx, index, frame)
+	if err != nil {
+		return fmt.Errorf("backup RowAttr: err=%s", err)
+	}
+
+	// Write slice file header.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:    fmt.Sprintf("rowattr/%s/%s", index, frame),
+		Mode:    0666,
+		Size:    int64(len(data)),
+		ModTime: time.Now(),
+	}); err != nil {
+		return err
+	}
+
+	// Write buffer to file.
+	if _, err := tw.Write(data); err != nil {
+		return fmt.Errorf("write buffer: %s", err)
 	}
 
 	return nil
@@ -647,7 +699,7 @@ func (c *InternalHTTPClient) backupSliceTo(ctx context.Context, tw *tar.Writer, 
 
 	// Write slice file header.
 	if err := tw.WriteHeader(&tar.Header{
-		Name:    strconv.FormatUint(slice, 10),
+		Name:    fmt.Sprintf("data/%s/%s/%s/%d", index, frame, view, slice),
 		Mode:    0666,
 		Size:    int64(len(data)),
 		ModTime: time.Now(),
@@ -724,11 +776,24 @@ func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame, 
 }
 
 // RestoreFrom restores a frame from a backup file to an entire cluster.
-func (c *InternalHTTPClient) RestoreFrom(ctx context.Context, r io.Reader, index, frame, view string) error {
-	if index == "" {
-		return ErrIndexRequired
-	} else if frame == "" {
-		return ErrFrameRequired
+func (c *InternalHTTPClient) RestoreFrom(ctx context.Context, r io.Reader) error {
+	post := func(url string, jsonBytes []byte) (err error) {
+		log.Println("POSTING", url)
+
+		res, err := http.Post(url, "application/json; charset=utf-8", bytes.NewBuffer(jsonBytes))
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+
+		// Return error if response not OK.
+		if res.StatusCode != http.StatusOK {
+			return fmt.Errorf("unexpected status code: url=%s, code=%d", url, res.StatusCode)
+		}
+
+		//need to look at the body?
+		_, err = ioutil.ReadAll(res.Body)
+		return err
 	}
 
 	// Create tar reader around input.
@@ -744,20 +809,88 @@ func (c *InternalHTTPClient) RestoreFrom(ctx context.Context, r io.Reader, index
 		}
 
 		// Parse slice from entry name.
-		slice, err := strconv.ParseUint(hdr.Name, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid backup entry: %s", hdr.Name)
-		}
+		log.Println("READING", hdr.Name)
+		parts := strings.Split(hdr.Name, "/")
+		if parts[0] == "schema" {
+			var buf bytes.Buffer
+			dec := gob.NewDecoder(&buf)
+			if _, err = io.CopyN(&buf, tr, hdr.Size); err != nil {
+				return err
+			}
+			var schema []*IndexInfo
+			err = dec.Decode(&schema)
 
-		// Read file into buffer.
-		var buf bytes.Buffer
-		if _, err := io.CopyN(&buf, tr, hdr.Size); err != nil {
-			return err
-		}
+			for i := range schema {
+				idx := schema[i]
+				//create index
+				nodes, err := c.FragmentNodes(ctx, idx.Name, 0)
+				if err != nil {
+					return err
+				}
+				endPoint := fmt.Sprintf("/index/%s", idx.Name)
+				url := nodePathToURL(nodes[0], endPoint)
+				err = post(url.String(), []byte{})
+				if err != nil {
+					return err
+				}
 
-		// Restore file to all nodes that own it.
-		if err := c.restoreSliceFrom(ctx, buf.Bytes(), index, frame, view, slice); err != nil {
-			return err
+				for _, frame := range idx.Frames {
+					endPoint := fmt.Sprintf("/index/%s/frame/%s", idx.Name, frame.Name)
+					frameURL := nodePathToURL(nodes[0], endPoint)
+					frameOptionsJSON, err := json.Marshal(map[string]interface{}{"options": frame.Options})
+					if err != nil {
+						return err
+					}
+					err = post(frameURL.String(), frameOptionsJSON)
+					if err != nil {
+						return err
+					}
+
+				}
+			}
+		} else if parts[0] == "colattr" {
+			var buf bytes.Buffer
+			if _, err = io.CopyN(&buf, tr, hdr.Size); err != nil {
+				return err
+			}
+			err = c.SetRawColumnAttrs(ctx, parts[1], bufio.NewReader(&buf))
+			if err != nil {
+				return err
+			}
+
+		} else if parts[0] == "rowattr" {
+			var buf bytes.Buffer
+			if _, err = io.CopyN(&buf, tr, hdr.Size); err != nil {
+				return err
+			}
+			err = c.SetRawRowAttrs(ctx, parts[1], parts[2], bufio.NewReader(&buf))
+			if err != nil {
+				return err
+			}
+
+		} else if parts[0] == "data" {
+
+			index := parts[1]
+			frame := parts[2]
+			view := parts[3]
+			slice, err := strconv.ParseUint(parts[4], 10, 64)
+
+			if err != nil {
+				return fmt.Errorf("invalid backup entry: %s", hdr.Name)
+			}
+
+			// Read file into buffer.
+			var buf bytes.Buffer
+			if _, err := io.CopyN(&buf, tr, hdr.Size); err != nil {
+				return err
+			}
+
+			// Restore file to all nodes that own it.
+			if err := c.restoreSliceFrom(ctx, buf.Bytes(), index, frame, view, slice); err != nil {
+				return err
+			}
+		} else {
+			return ErrInvalidBackupFormat
 		}
 	}
 }
@@ -1091,6 +1224,89 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 	return rsp.Attrs, nil
 }
 
+func (c *InternalHTTPClient) getContents(ctx context.Context, u url.URL) ([]byte, error) {
+	// Build request.
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	// Execute request.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Return error if status is not OK.
+	switch resp.StatusCode {
+	case http.StatusOK: // ok
+	case http.StatusNotFound:
+		return nil, ErrIndexNotFound
+	default:
+		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
+	}
+
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	if _, err = io.Copy(w, resp.Body); err != nil {
+		return nil, err
+	}
+	w.Flush()
+	return buf.Bytes(), nil
+
+}
+
+// FetchRawColumnAttrs retrieves the raw bolt data file contents of the Column Attributes
+func (c *InternalHTTPClient) FetchRawColumnAttrs(ctx context.Context, indexName string) ([]byte, error) {
+	u := url.URL{
+		Scheme: c.Host().Scheme(),
+		Host:   c.Host().Host(),
+		Path:   fmt.Sprintf("/index/%s/attr", indexName),
+	}
+	return c.getContents(ctx, u)
+}
+
+// FetchRawRowAttrs retrieves the raw bolt data file contents of the Row Attributes for the given frame
+func (c *InternalHTTPClient) FetchRawRowAttrs(ctx context.Context, indexName, frameName string) ([]byte, error) {
+	u := url.URL{
+		Scheme: c.Host().Scheme(),
+		Host:   c.Host().Host(),
+		Path:   fmt.Sprintf("/index/%s/frame/%s/attr", indexName, frameName),
+	}
+	return c.getContents(ctx, u)
+}
+func (c *InternalHTTPClient) setContents(ctx context.Context, u url.URL, boltfile io.Reader) ([]byte, error) {
+	// Build request.
+	req, err := http.NewRequest("POST", u.String(), boltfile)
+	if err != nil {
+		return nil, err
+	}
+	// Execute request.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Return error if status is not OK.
+	switch resp.StatusCode {
+	case http.StatusOK: // ok
+	case http.StatusNotFound:
+		return nil, ErrIndexNotFound
+	default:
+		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
+	}
+
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+	if _, err = io.Copy(w, resp.Body); err != nil {
+		return nil, err
+	}
+	w.Flush()
+	return buf.Bytes(), nil
+
+}
+
 // SendMessage posts a message synchronously.
 func (c *InternalHTTPClient) SendMessage(ctx context.Context, pb proto.Message) error {
 	msg, err := MarshalMessage(pb)
@@ -1124,6 +1340,46 @@ func (c *InternalHTTPClient) SendMessage(ctx context.Context, pb proto.Message) 
 	}
 
 	return nil
+}
+
+// SetRawColumnAttrs retrieves the raw bolt data file contents of the Column Attributes
+func (c *InternalHTTPClient) SetRawColumnAttrs(ctx context.Context, indexName string, boltfile io.Reader) (err error) {
+	hosts, err := c.Hosts(ctx)
+	if err != nil {
+		return
+	}
+	for _, uri := range hosts {
+		u := url.URL{
+			Scheme: uri.Scheme,
+			Host:   uri.Host,
+			Path:   fmt.Sprintf("/index/%s/attr", indexName),
+		}
+		_, err = c.setContents(ctx, u, boltfile)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+// FetchRawRowAttrs retrieves the raw bolt data file contents of the Row Attributes for the given frame
+func (c *InternalHTTPClient) SetRawRowAttrs(ctx context.Context, indexName, frameName string, boltfile io.Reader) (err error) {
+	hosts, err := c.Hosts(ctx)
+	if err != nil {
+		return
+	}
+	for _, uri := range hosts {
+		u := url.URL{
+			Scheme: uri.Scheme,
+			Host:   uri.Host,
+			Path:   fmt.Sprintf("/index/%s/frame/%s/attr", indexName, frameName),
+		}
+		_, err = c.setContents(ctx, u, boltfile)
+		if err != nil {
+			return
+		}
+	}
+	return
 }
 
 func (c *InternalHTTPClient) clientURI(ctx context.Context) *URI {
@@ -1244,7 +1500,7 @@ func (p Bits) GroupBySlice() map[uint64][]Bit {
 	return m
 }
 
-// FieldValues represents the value for a column within a
+// FieldValue represents the value for a column within a
 // range-encoded frame.
 type FieldValue struct {
 	ColumnID uint64
@@ -1324,6 +1580,40 @@ func nodePathToURL(node *Node, path string) url.URL {
 	}
 }
 
+func (c *InternalHTTPClient) Hosts(ctx context.Context) ([]struct {
+	Scheme string `json:"scheme"`
+	Host   string `json:"host"`
+}, error) {
+	// Execute request against the host.
+	u := uriPathToURL(c.Host(), "/hosts")
+
+	// Build request.
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+Version)
+
+	// Execute request.
+	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var rsp []struct {
+		Scheme string `json:"scheme"`
+		Host   string `json:"host"`
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
+	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+	return rsp, nil
+}
+
 // InternalClient should be implemented by any struct that enables any transport between nodes
 // TODO: Refactor
 // Note from Travis: Typically an interface containing more than two or three methods is an indication that
@@ -1343,9 +1633,9 @@ type InternalClient interface {
 	EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error
 	ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error
 	ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error
-	BackupTo(ctx context.Context, w io.Writer, index, frame, view string) error
+	BackupTo(ctx context.Context, tw *tar.Writer, index, frame, view string) error
 	BackupSlice(ctx context.Context, index, frame, view string, slice uint64) (io.ReadCloser, error)
-	RestoreFrom(ctx context.Context, r io.Reader, index, frame, view string) error
+	RestoreFrom(ctx context.Context, r io.Reader) error
 	CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error
 	RestoreFrame(ctx context.Context, host, index, frame string) error
 	FrameViews(ctx context.Context, index, frame string) ([]string, error)
