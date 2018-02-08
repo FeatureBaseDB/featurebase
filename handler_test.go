@@ -1839,3 +1839,30 @@ func TestHandler_RecalculateCaches(t *testing.T) {
 	}
 
 }
+
+func TestHandler_WebUI(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	h := test.NewHandler()
+	h.Holder = hldr.Holder
+	h.Cluster = test.NewCluster(1)
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "<title>Pilosa WebUI</title>") {
+		t.Fatalf("WebUI is not being served correctly.")
+	}
+
+	// If curl is the client, the response should be different
+	w = httptest.NewRecorder()
+	req := test.MustNewHTTPRequest("GET", "/", nil)
+	req.Header.Add("User-Agent", "curl/7.54.0")
+	h.ServeHTTP(w, req)
+	if !strings.Contains(w.Body.String(), "try the WebUI") {
+		t.Fatalf("WebUI is not being served correctly.")
+	}
+}
