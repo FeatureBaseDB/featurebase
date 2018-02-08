@@ -52,7 +52,7 @@ func TestServerConfig(t *testing.T) {
 	max-writes-per-request = 3000
 
 	[cluster]
-		type = "static"
+		disabled = true
 		replicas = 2
 		hosts = [
 			"localhost:19444",
@@ -78,7 +78,7 @@ func TestServerConfig(t *testing.T) {
 	bind = "localhost:0"
 	data-dir = "` + actualDataDir + `"
 	[cluster]
-		type = "static"
+		disabled = true
 		hosts = [
 			"localhost:19444",
 		]
@@ -92,7 +92,7 @@ func TestServerConfig(t *testing.T) {
 		},
 		// TEST 2
 		{
-			args: []string{"server", "--log-path", logFile.Name(), "--cluster.type", "static"},
+			args: []string{"server", "--log-path", logFile.Name(), "--cluster.disabled", "true"},
 			env:  map[string]string{"PILOSA_PROFILE_CPU_TIME": "1m"},
 			cfgFileContent: `
 	bind = "localhost:19444"

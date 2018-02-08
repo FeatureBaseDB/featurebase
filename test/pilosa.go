@@ -37,7 +37,7 @@ func NewMain() *Main {
 	m.Server.Network = *Network
 	m.Config.DataDir = path
 	m.Config.Bind = "localhost:0"
-	m.Config.Cluster.Type = "static"
+	m.Config.Cluster.Disabled = true
 	m.Command.Stdin = &m.Stdin
 	m.Command.Stdout = &m.Stdout
 	m.Command.Stderr = &m.Stderr
@@ -50,16 +50,50 @@ func NewMain() *Main {
 	return m
 }
 
-func NewMainArrayWithCluster(size int) []*Main {
-	cluster, err := NewServerCluster(size)
+// NewMainWithCluster returns a new instance of Main with clustering enabled.
+func NewMainWithCluster() *Main {
+	m := NewMain()
+	m.Config.Cluster.Disabled = false
+	return m
+}
+
+// MustRunMainWithCluster ruturns a running array of *Main where
+// all nodes are joined via memberlist (i.e. clustering enabled).
+func MustRunMainWithCluster(t *testing.T, size int) []*Main {
+	ma, err := runMainWithCluster(size)
 	if err != nil {
-		panic(err)
+		t.Fatalf("new main array with cluster: %v", err)
 	}
-	mainArray := make([]*Main, size)
+	return ma
+}
+
+// runMainWithCluster runs an array of *Main where all nodes are
+// joined via memberlist (i.e. clustering enabled).
+func runMainWithCluster(size int) ([]*Main, error) {
+	if size == 0 {
+		return nil, errors.New("cluster must contain at least one node")
+	}
+
+	mains := make([]*Main, size)
+
+	gossipHost := "localhost"
+	gossipPort := 0
+	var err error
+	var gossipSeed string
+	var coordinator pilosa.URI
+
 	for i := 0; i < size; i++ {
-		mainArray[i] = cluster.Servers[i]
+		m := NewMainWithCluster()
+
+		gossipSeed, coordinator, err = m.RunWithTransport(gossipHost, gossipPort, gossipSeed, &coordinator)
+		if err != nil {
+			return nil, errors.Wrap(err, "RunWithTransport")
+		}
+
+		mains[i] = m
 	}
-	return mainArray
+
+	return mains, nil
 }
 
 // MustRunMain returns a new, running Main. Panic on error.
@@ -100,8 +134,6 @@ func (m *Main) Reopen() error {
 // RunWithTransport runs Main and returns the dynamically allocated gossip port.
 func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coordinator *pilosa.URI) (seed string, coord pilosa.URI, err error) {
 	defer close(m.Started)
-
-	m.Config.Cluster.Type = "gossip"
 
 	/*
 	   TEST:
@@ -201,46 +233,6 @@ func (m *Main) CreateDefinition(index, def, query string) (string, error) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
-
-type Cluster struct {
-	Servers []*Main
-}
-
-func MustNewServerCluster(t *testing.T, size int) *Cluster {
-	cluster, err := NewServerCluster(size)
-	if err != nil {
-		t.Fatalf("new cluster: %v", err)
-	}
-	return cluster
-}
-
-func NewServerCluster(size int) (cluster *Cluster, err error) {
-	if size == 0 {
-		return nil, errors.New("cluster must contain at least one node")
-	}
-
-	cluster = &Cluster{
-		Servers: make([]*Main, size),
-	}
-
-	gossipHost := "localhost"
-	gossipPort := 0
-	var gossipSeed string
-	var coordinator pilosa.URI
-
-	for i := 0; i < size; i++ {
-		m := NewMain()
-
-		gossipSeed, coordinator, err = m.RunWithTransport(gossipHost, gossipPort, gossipSeed, &coordinator)
-		if err != nil {
-			return nil, errors.Wrap(err, "RunWithTransport")
-		}
-
-		cluster.Servers[i] = m
-	}
-
-	return cluster, nil
-}
 
 // MustDo executes http.Do() with an http.NewRequest(). Panic on error.
 func MustDo(method, urlStr string, body string) *httpResponse {

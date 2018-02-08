@@ -73,8 +73,7 @@ var (
 	ErrQueryRequired    = errors.New("query required")
 	ErrTooManyWrites    = errors.New("too many write commands")
 
-	ErrConfigClusterTypeInvalid = errors.New("invalid cluster type")
-	ErrConfigHostsMissing       = errors.New("missing bind address in cluster hosts")
+	ErrConfigClusterEnabledHosts = errors.New("providing hosts to a non-disabled cluster is not allowed")
 )
 
 // Regular expression to validate index and frame names.
