@@ -124,6 +124,8 @@ func (h *Handler) SetRestricted() {
 }
 
 func loadCommon(router *mux.Router, handler *Handler) {
+	router.HandleFunc("/", handler.handleWebUI).Methods("GET")
+	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
@@ -143,7 +145,6 @@ func loadRestricted(router *mux.Router, handler *Handler) {
 }
 
 func loadNormal(router *mux.Router, handler *Handler) {
-	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
