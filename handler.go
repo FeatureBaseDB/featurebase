@@ -1966,7 +1966,7 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 
 	newNode := h.Cluster.nodeByID(req.ID)
 	if newNode == nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Node with provided ID does not exist", http.StatusBadRequest)
 		return
 	}
 
