@@ -1075,3 +1075,26 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
+
+func BenchmarkFragment_Snapshot(b *testing.B) {
+	if *FragmentPath == "" {
+		b.Skip("no fragment specified")
+	}
+
+	// Open the fragment specified by the path.
+	f := pilosa.NewFragment(*FragmentPath, "i", "f", pilosa.ViewStandard, 0)
+	if err := f.Open(); err != nil {
+		b.Fatal(err)
+	}
+	defer f.Close()
+
+	// Reset timer and execute benchmark.
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		err := f.Snapshot()
+		if err != nil {
+			b.Fatalf("unexpected count (reopen): %s", err)
+		}
+	}
+}

@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"container/heap"
 	"context"
-	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -35,6 +34,8 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/cespare/xxhash"
 
 	"math"
 
@@ -1020,7 +1021,7 @@ type TopOptions struct {
 // Checksum returns a checksum for the entire fragment.
 // If two fragments have the same checksum then they have the same data.
 func (f *Fragment) Checksum() []byte {
-	h := sha1.New()
+	h := xxhash.New()
 	for _, block := range f.Blocks() {
 		h.Write(block.Checksum)
 	}
@@ -1660,7 +1661,7 @@ type blockHasher struct {
 func newBlockHasher() blockHasher {
 	return blockHasher{
 		blockID: -1,
-		hash:    sha1.New(),
+		hash:    xxhash.New(),
 	}
 }
 func (h *blockHasher) Reset() {
