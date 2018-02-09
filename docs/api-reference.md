@@ -13,13 +13,10 @@ nav = []
 
 Returns the schema of all indexes in JSON.
 
-Request:
-```
+``` request
 curl -XGET localhost:10101/index
 ```
-
-Response:
-```
+``` response
 {"indexes":[{"name":"user","frames":[{"name":"collab"}]}]}
 ```
 
@@ -29,13 +26,10 @@ Response:
 
 Returns the schema of the specified index in JSON.
 
-Request:
-```
+``` request
 curl -XGET localhost:10101/index/user
 ```
-
-Response:
-```
+``` response
 {"index":{"name":"user"}, "frames":[{"name":"collab"}]}]}
 ```
 
@@ -45,19 +39,10 @@ Response:
 
 Creates an index with the given name.
 
-The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which may contain the following fields:
-
-* `timeQuantum` (string): time quantum of the index.
-
-Request:
+`` request
+curl -XPOST localhost:10101/index/user
 ```
-curl localhost:10101/index/user \
-     -X POST \
-     -d '{"options": {"timeQuantum": "YMDH"}}'
-```
-
-Response:
-```
+``` response
 {}
 ```
 
@@ -67,13 +52,10 @@ Response:
 
 Removes the given index.
 
-Request:
-```
+``` request
 curl -XDELETE localhost:10101/index/user
 ```
-
-Response:
-```
+``` response
 {}
 ```
 
@@ -83,15 +65,12 @@ Response:
 
 Sends a query to the Pilosa server with the given index. The request body is UTF-8 encoded text and response body is in JSON by default.
 
-Request:
-```
+``` request
 curl localhost:10101/index/user/query \
      -X POST \
      -d 'Bitmap(frame="language", rowID=5)'
 ```
-
-Response:
-```
+``` response
 {"results":[{"attrs":{},"bits":[100]}]}
 ```
 
@@ -101,14 +80,12 @@ The response doesn't include column attributes by default. To return them, set t
 
 The query is executed for all [slices](../data-model#slice) by default. To use specified slices only, set the `slices` query argument to a comma-separated list of slice indices.
 
-Request:
-```
+``` request
 curl "localhost:10101/index/user/query?columnAttrs=true&slices=0,1" \
      -X POST \
      -d 'Bitmap(frame="language", rowID=5)'
 ```
-Response:
-```
+``` response
 {
   "results":[{"attrs":{},"bits":[100]}],
   "columnAttrs":[{"id":100,"attrs":{"name":"Klingon"}}]
@@ -172,21 +149,21 @@ Each individual `field` contains the following:
 
 Integer fields are stored as n-bit range-encoded values. Pilosa supports 63-bit, signed integers with values between `min` and `max`.
 
-Request:
-```
+``` request
 curl localhost:10101/index/user/frame/language \
      -X POST \
      -d '{"options": {"inverseEnabled": true}}'
 ```
-
+``` response
+{}
 ```
+
+``` request
 curl localhost:10101/index/repository/frame/stats \
     -X POST \
     -d '{"rangeEnabled": true, "fields": [{"name": "pullrequests", "type": "int", "min": 0, "max": 1000000}]}'
 ```
-
-Response:
-```
+``` response
 {}
 ```
 
@@ -196,13 +173,10 @@ Response:
 
 Removes the given frame.
 
-Request:
-```
+``` request
 curl -XDELETE localhost:10101/index/user/frame/language
 ```
-
-Response:
-```
+``` response
 {}
 ```
 
@@ -226,15 +200,12 @@ The payload is in JSON with the format: `{"timeQuantum": "${TIME_QUANTUM}"}`. Va
 * MDH: month, day and hour
 * YMDH: year, month, day and hour
 
-Request:
-```
+``` request
 curl localhost:10101/index/user/frame/language/time-quantum \
      -X POST \
      -d '{"timeQuantum": "YM"}'
 ```
-
-Response:
-```
+``` response
 {}
 ```
 
@@ -249,15 +220,12 @@ The request payload is JSON, and it must contain the fields `type`, `min`, `max`
 * `min` (int): Minimum value allowed for this field.
 * `max` (int): Maximum value allowed for this field.
 
-Request:
-```
+``` request
 curl localhost:10101/index/repository/frame/stats/field/pullrequests \
     -X POST \
     -d '{"type": "int", "min": 0, "max": 1000000}'
 ```
-
-Response:
-```
+``` response
 {}
 ```
 
@@ -289,8 +257,7 @@ The `action` describes how the field value will be processed.  Each `action` may
     - `mapping`: Map the value to a RowID in the `valueMap`.
 * `valueMap` (object): string and integer pairs used to map field values to RowID's.
  
-Request:
-```
+``` request
 curl localhost:10101/index/user/input-definition/stargazer-input \
     -X POST \
     -d '{
@@ -322,9 +289,7 @@ curl localhost:10101/index/user/input-definition/stargazer-input \
             ]
         }'
 ```
- 
-Response:
-```
+``` response
 {}
 ```
 
@@ -334,13 +299,10 @@ Response:
 
 Returns the given input definition as JSON.
 
-Request:
-```
+``` request
 curl -XGET localhost:10101/index/user/input-definition/stargazer-input
 ```
-
-Response:
-```
+``` response
 {"frames":[{"name":"language","options":{"inverseEnabled":true}}],"fields":[{"name":"repo_id","primaryKey":true},{"name":"language_id","actions":[{"frame":"language","valueDestination":"mapping","valueMap":{"Go":5,"Python":17,"C++":10}}]}]}
 ```
 
@@ -350,13 +312,10 @@ Response:
 
 Removes the given input definition.
 
-Request:
-```
+``` request
 curl -XDELETE localhost:10101/index/user/input-definition/stargazer-input
 ```
-
-Response:
-```
+``` response
 {}
 ```
 
@@ -368,15 +327,12 @@ Processes the JSON payload using the given input definition.
 
 The request payload is a JSON array of objects containing one field for the primary key that corresponds to the column label, and additional fields that will be handled by corresponding actions in the input definition.
 
-Request:
-```
+``` request
 curl localhost:10101/index/user/input/stargazer-input \
      -X POST \
      -d '[{"language_id": "Go", "repo_id": 92274475}]'
 ```
-
-Response:
-```
+``` response
 {}
 ```
 
@@ -386,13 +342,10 @@ Response:
 
 Returns the hosts in the cluster.
 
-Request:
-```
+``` request
 curl -XGET localhost:10101/hosts
 ```
-
-Response:
-```
+``` response
 [{"host":":10101"}]
 ```
 
@@ -402,13 +355,10 @@ Response:
 
 Returns the version of the Pilosa server.
 
-Request:
-```
+``` request
 curl -XGET localhost:10101/version
 ```
-
-Response:
-```
+``` response
 {"version":"v0.6.0"}
 ```
 
