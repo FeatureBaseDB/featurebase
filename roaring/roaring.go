@@ -2472,6 +2472,8 @@ func differenceRunArray(a, b *container) *container {
 
 	bidx := 0
 	vb := b.array[bidx]
+
+RUNLOOP:
 	for _, run := range a.runs {
 		start := run.start
 		for vb < run.start {
@@ -2483,6 +2485,9 @@ func differenceRunArray(a, b *container) *container {
 		}
 		for vb >= run.start && vb <= run.last {
 			if vb == start {
+				if vb == 65535 { // overflow
+					break RUNLOOP
+				}
 				start++
 				bidx++
 				if bidx >= len(b.array) {
@@ -2493,6 +2498,9 @@ func differenceRunArray(a, b *container) *container {
 			}
 			output.runs = append(output.runs, interval16{start: start, last: vb - 1})
 			output.n += int(vb - start)
+			if vb == 65535 { // overflow
+				break RUNLOOP
+			}
 			start = vb + 1
 			bidx++
 			if bidx >= len(b.array) {
