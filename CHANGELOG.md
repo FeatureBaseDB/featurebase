@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.6] - 2018-02-09
+
+This version contains 2 contributions from 2 contributors. There are 3 files changed, 171 insertions, and 6 deletions.
+
+### Fixed
+
+- avoid overflow bug in differenceRunArray (v0.8) ([#1106](https://github.com/pilosa/pilosa/pull/1106))
+- fix bug where count and bitmap queries could return different numbers ([#1083](https://github.com/pilosa/pilosa/pull/1083))
+
 ## [0.8.5] - 2018-01-18
 
 This version contains 1 contribution from 1 contributor. There is 1 file changed, 1 insertion, and 0 deletions.
