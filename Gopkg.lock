@@ -200,6 +200,12 @@
   version = "v2.17.11"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/shirou/w32"
+  packages = ["."]
+  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
+
+[[projects]]
   name = "github.com/sony/gobreaker"
   packages = ["."]
   revision = "e9556a45379ef1da12e54847edb2fb3d7d566f36"
@@ -274,6 +280,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "53ae0cdcbfa8419b233a0544d7ebb80614af3dd04bebdc0c8f2d3620a87efa91"
+  inputs-digest = "668c03e22d947dd7e24c4c5e07d7850ed0a2ea9a27d2af1fa0d1cff0e3743b0b"
   solver-name = "gps-cdcl"
   solver-version = 1
