@@ -1479,6 +1479,16 @@ func TestDifferenceRunArray(t *testing.T) {
 			array: []uint16{0, 9, 10, 11, 12, 13, 14, 17, 19, 25, 27},
 			exp:   []interval16{{start: 1, last: 8}, {start: 15, last: 16}, {start: 20, last: 24}, {start: 26, last: 26}, {start: 28, last: 28}},
 		},
+		{
+			runs:  []interval16{{start: 0, last: 20}, {start: 65533, last: 65535}},
+			array: []uint16{65533, 65534, 65535},
+			exp:   []interval16{{start: 0, last: 20}},
+		},
+		{
+			runs:  []interval16{{start: 0, last: 20}, {start: 65530, last: 65535}},
+			array: []uint16{37, 65535},
+			exp:   []interval16{{start: 0, last: 20}, {start: 65530, last: 65534}},
+		},
 	}
 	for i, test := range tests {
 		a.runs = test.runs
