@@ -249,12 +249,6 @@
 
 [[projects]]
   branch = "master"
-  name = "golang.org/x/net"
-  packages = ["context"]
-  revision = "a337091b0525af65de94df2eb7e98bd9962dcbe2"
-
-[[projects]]
-  branch = "master"
   name = "golang.org/x/sync"
   packages = ["errgroup"]
   revision = "fd80eb99c8f653c847d294a001bdf2a3a6f768f5"
