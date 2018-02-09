@@ -11,8 +11,8 @@ This version contains 2 contributions from 2 contributors. There are 3 files cha
 
 ### Fixed
 
-- avoid overflow bug in differenceRunArray (v0.8) ([#1106](https://github.com/pilosa/pilosa/pull/1106))
-- fix bug where count and bitmap queries could return different numbers ([#1083](https://github.com/pilosa/pilosa/pull/1083))
+- Fix overflow bug in differenceRunArray [#1106](https://github.com/pilosa/pilosa/pull/1106)
+- Fix bug where count and bitmap queries could return different numbers [#1083](https://github.com/pilosa/pilosa/pull/1083)
 
 ## [0.8.5] - 2018-01-18
 
