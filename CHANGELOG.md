@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.7] - 2018-02-12
+
+This version contains 1 contribution from 1 contributors. There are 2 files changed, 84 insertions, and 4 deletions.
+
+### Fixed
+
+- Fix a shift logic bug in bitmapZeroRange ([#1111](https://github.com/pilosa/pilosa/pull/1111))
+
 ## [0.8.6] - 2018-02-09
 
 This version contains 2 contributions from 2 contributors. There are 3 files changed, 171 insertions, and 6 deletions.
