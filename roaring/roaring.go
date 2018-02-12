@@ -2305,7 +2305,7 @@ func (c *container) bitmapZeroRange(i, j uint64) {
 	x := i >> 6
 	y := (j - 1) >> 6
 	var X uint64 = maxBitmap << (i % 64)
-	var Y uint64 = maxBitmap >> (64 - (j % 64))
+	var Y uint64 = maxBitmap >> (63 - ((j - 1) % 64))
 	if x == y {
 		c.n -= int(popcnt(c.bitmap[x] & (X & Y)))
 		c.bitmap[x] &= ^(X & Y)
