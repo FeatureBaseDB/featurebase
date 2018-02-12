@@ -220,7 +220,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     cpu-time = "30s"
     ```
 ##### Metric Service
-* Description: Which stats service to use (StatsD or ExpVar).
+* Description: Which stats service to use. Choose from [statsd, expvar].
 * Flag: `--metric.service=statsd`
 * Env: `PILOSA_METRIC_SERVICE=statsd'
 * Config:
