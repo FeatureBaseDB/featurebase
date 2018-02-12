@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 	"testing/quick"
 
@@ -383,6 +384,47 @@ func TestCountOpenFiles(t *testing.T) {
 	}
 }
 
+func TestMain_RecalculateHashes(t *testing.T) {
+	const clusterSize = 5
+	cluster := test.MustRunMainWithCluster(t, clusterSize)
+
+	// Create the schema.
+	client0 := cluster[0].Client()
+	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		t.Fatal("create index:", err)
+	}
+	if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{CacheType: "ranked"}); err != nil {
+		t.Fatal("create frame:", err)
+	}
+
+	// Set some bits
+	data := []string{}
+	for rowID := 1; rowID < 10; rowID++ {
+		for columnID := 1; columnID < 100; columnID++ {
+			data = append(data, fmt.Sprintf(`SetBit(rowID=%d, frame="f", columnID=%d)`, rowID, columnID))
+		}
+	}
+	if _, err := cluster[0].Query("i", "", strings.Join(data, "")); err != nil {
+		t.Fatal("setting bits:", err)
+	}
+
+	// Calculate caches on the first node
+	cluster[0].RecalculateCaches()
+	target := `{"results":[[{"id":7,"count":99},{"id":1,"count":99},{"id":9,"count":99},{"id":5,"count":99},{"id":4,"count":99},{"id":8,"count":99},{"id":2,"count":99},{"id":6,"count":99},{"id":3,"count":99}]]}`
+
+	// Run a TopN query on all nodes. The result should be the same as the target.
+	for _, m := range cluster {
+		res, err := m.Query("i", "", `TopN(frame="f")`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res = strings.TrimSpace(res)
+		if sortedString(target) != sortedString(res) {
+			t.Fatalf("%v != %v", target, res)
+		}
+	}
+}
+
 // SetCommand represents a command to set a bit.
 type SetCommand struct {
 	ID       uint64
@@ -446,6 +488,12 @@ func MustMarshalJSON(v interface{}) string {
 		panic(err)
 	}
 	return string(buf)
+}
+
+func sortedString(s string) string {
+	arr := strings.Split(s, "")
+	sort.Strings(arr)
+	return strings.Join(arr, "")
 }
 
 // uint64Slice represents a sortable slice of uint64 numbers.

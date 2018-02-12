@@ -194,3 +194,4 @@ message Topology {
     repeated string NodeIDs = 2;
 }
 
+message RecalculateCaches {}
