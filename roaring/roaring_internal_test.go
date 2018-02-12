@@ -1593,14 +1593,69 @@ func TestDifferenceBitmapRun(t *testing.T) {
 			runs:   []interval16{{start: 4, last: 7}, {start: 32, last: 47}},
 			exp:    []uint64{0xFFFF0000FFFFFF0F},
 		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFBF},
+			runs:   []interval16{{start: 0, last: 5}, {start: 7, last: 63}},
+			exp:    []uint64{0x0000000000000000},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFBF},
+			runs:   []interval16{{start: 0, last: 5}},
+			exp:    []uint64{0xFFFFFFFFFFFFFF80},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
+			runs:   []interval16{{start: 60, last: 63}},
+			exp:    []uint64{0x0FFFFFFFFFFFFFFF},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
+			runs:   []interval16{{start: 60, last: 65}},
+			exp:    []uint64{0x0FFFFFFFFFFFFFFF},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
+			runs:   []interval16{{start: 60, last: 65}, {start: 67, last: 72}, {start: 126, last: 130}},
+			exp:    []uint64{0x0FFFFFFFFFFFFFFF, 0x3FFFFFFFFFFFFE04, 0xFFFFFFFFFFFFFFF8},
+		},
+		{
+			bitmap: []uint64{0x0000000000000001},
+			runs:   []interval16{{start: 0, last: 0}},
+			exp:    []uint64{0x0000000000000000},
+		},
+		{
+			bitmap: []uint64{0x8000000000000000},
+			runs:   []interval16{{start: 63, last: 63}},
+			exp:    []uint64{0x0000000000000000},
+		},
+		{
+			bitmap: []uint64{0xC000000000000000, 0x0000000000000003},
+			runs:   []interval16{{start: 63, last: 64}},
+			exp:    []uint64{0x4000000000000000, 0x0000000000000002},
+		},
+		{
+			bitmap: []uint64{0x0000000000000000},
+			runs:   []interval16{{start: 5, last: 7}},
+			exp:    []uint64{0x0000000000000000},
+		},
+		{
+			bitmap: bitmapLast(),
+			runs:   []interval16{{start: 65535, last: 65535}},
+			exp:    bitmapEmpty(),
+		},
+		{
+			bitmap: bitmapFull(),
+			runs:   []interval16{{start: 0, last: 65535}},
+			exp:    bitmapEmpty(),
+		},
 	}
 	for i, test := range tests {
 		for i, v := range test.bitmap {
 			a.bitmap[i] = v
 		}
-		a.n = a.bitmapCountRange(0, 100)
+		a.n = a.bitmapCountRange(0, 65536)
 		b.runs = test.runs
-		b.n = b.runCountRange(0, 100)
+		b.n = b.runCountRange(0, 65536)
 		ret := differenceBitmapRun(a, b)
 		if !reflect.DeepEqual(ret.bitmap[:len(test.exp)], test.exp) {
 			t.Fatalf("test #%v expected \n%X, but got \n%X", i, test.exp, ret.bitmap[:len(test.exp)])
@@ -2438,7 +2493,7 @@ func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
 	}
 }
 
-func TestSearc64(t *testing.T) {
+func TestSearch64(t *testing.T) {
 	tests := []struct {
 		a     []uint64
 		value uint64
@@ -2592,6 +2647,31 @@ func bitmapEvens() []uint64 {
 	bitmap := make([]uint64, bitmapN)
 	for i := 0; i < bitmapN; i++ {
 		bitmap[i] = 0x5555555555555555
+	}
+	return bitmap
+}
+
+func bitmapLast() []uint64 {
+	bitmap := make([]uint64, bitmapN)
+	for i := 0; i < bitmapN-1; i++ {
+		bitmap[i] = 0
+	}
+	bitmap[bitmapN-1] = 0x8000000000000000
+	return bitmap
+}
+
+func bitmapFull() []uint64 {
+	bitmap := make([]uint64, bitmapN)
+	for i := 0; i < bitmapN; i++ {
+		bitmap[i] = 0xFFFFFFFFFFFFFFFF
+	}
+	return bitmap
+}
+
+func bitmapEmpty() []uint64 {
+	bitmap := make([]uint64, bitmapN)
+	for i := 0; i < bitmapN; i++ {
+		bitmap[i] = 0
 	}
 	return bitmap
 }
