@@ -227,6 +227,14 @@ func (m *Main) CreateDefinition(index, def, query string) (string, error) {
 	return resp.Body, nil
 }
 
+func (m *Main) RecalculateCaches() error {
+	resp := MustDo("POST", fmt.Sprintf("%s/recalculate-caches", m.URL()), "")
+	if resp.StatusCode != 204 {
+		return fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+	return nil
+}
+
 ////////////////////////////////////////////////////////////////////////////////////
 
 // MustDo executes http.Do() with an http.NewRequest(). Panic on error.

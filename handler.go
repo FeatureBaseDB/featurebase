@@ -2152,6 +2152,12 @@ func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, 
 }
 
 func (h *Handler) handleRecalculateCaches(w http.ResponseWriter, r *http.Request) {
+	err := h.Broadcaster.SendSync(&internal.RecalculateCaches{})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
+		return
+	}
 	h.Holder.RecalculateCaches()
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -448,6 +448,8 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
+	case *internal.RecalculateCaches:
+		s.Holder.RecalculateCaches()
 	}
 
 	return nil
