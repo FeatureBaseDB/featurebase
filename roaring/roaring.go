@@ -2178,7 +2178,7 @@ func unionArrayArray(a, b *container) *container {
 // unionArrayRun optimistically assumes that the result will be a run container,
 // and converts to a bitmap or array container afterwards if necessary.
 func unionArrayRun(a, b *container) *container {
-	if b.n == maxContainerVal {
+	if b.n == maxContainerVal+1 {
 		return b.clone()
 	}
 	output := &container{containerType: ContainerRun}
@@ -2235,10 +2235,10 @@ func (c *container) runAppendInterval(v interval16) int {
 }
 
 func unionRunRun(a, b *container) *container {
-	if a.n == maxContainerVal {
+	if a.n == maxContainerVal+1 {
 		return a.clone()
 	}
-	if b.n == maxContainerVal {
+	if b.n == maxContainerVal+1 {
 		return b.clone()
 	}
 	na, nb := len(a.runs), len(b.runs)
@@ -2269,8 +2269,11 @@ func unionRunRun(a, b *container) *container {
 }
 
 func unionBitmapRun(a, b *container) *container {
-	if b.n == maxContainerVal {
+	if b.n == maxContainerVal+1 {
 		return b.clone()
+	}
+	if a.n == maxContainerVal+1 {
+		return a.clone()
 	}
 	output := a.clone()
 	for j := 0; j < len(b.runs); j++ {
@@ -2286,7 +2289,7 @@ func (c *container) bitmapSetRange(i, j uint64) {
 	x := i >> 6
 	y := (j - 1) >> 6
 	var X uint64 = maxBitmap << (i % 64)
-	var Y uint64 = maxBitmap >> (64 - (j % 64))
+	var Y uint64 = maxBitmap >> (63 - ((j - 1) % 64))
 	xcnt := popcnt(X)
 	ycnt := popcnt(Y)
 	if x == y {
@@ -2309,7 +2312,7 @@ func (c *container) bitmapXorRange(i, j uint64) {
 	x := i >> 6
 	y := (j - 1) >> 6
 	var X uint64 = maxBitmap << (i % 64)
-	var Y uint64 = maxBitmap >> (64 - (j % 64))
+	var Y uint64 = maxBitmap >> (63 - ((j - 1) % 64))
 	if x == y {
 		cnt := popcnt(c.bitmap[x])
 		c.bitmap[x] ^= (X & Y) //// flip
@@ -2781,7 +2784,9 @@ func xorArrayBitmap(a, b *container) *container {
 		}
 	}
 
-	if output.count() < ArrayMaxSize {
+	// It's possible that output was converted from bitmap to array in output.remove()
+	// so we only do this conversion if output is still a bitmap container.
+	if output.containerType == ContainerBitmap && output.count() < ArrayMaxSize {
 		output.bitmapToArray()
 	}
 
@@ -3196,7 +3201,7 @@ func xorRunRun(a, b *container) *container {
 	if nb == 0 {
 		return a.clone()
 	}
-	output := &container{}
+	output := &container{containerType: ContainerRun}
 
 	lastI, lastJ := -1, -1
 
