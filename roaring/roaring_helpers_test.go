@@ -68,10 +68,7 @@ func arrayInnerBitsSet() []uint16 {
 }
 
 func arrayOuterBitsSet() []uint16 {
-	array := make([]uint16, 0)
-	array = append(array, uint16(0))
-	array = append(array, uint16(65535))
-	return array
+	return []uint16{0, 65535}
 }
 
 ////////////////// bitmap
@@ -100,39 +97,27 @@ func bitmapLastBitSet() []uint64 {
 }
 
 func bitmapFirstBitUnset() []uint64 {
-	bitmap := make([]uint64, bitmapN)
+	bitmap := bitmapFull()
 	bitmap[0] = 0xFFFFFFFFFFFFFFFE
-	for i := 1; i < bitmapN; i++ {
-		bitmap[i] = 0xFFFFFFFFFFFFFFFF
-	}
 	return bitmap
 }
 
 func bitmapLastBitUnset() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN-1; i++ {
-		bitmap[i] = 0xFFFFFFFFFFFFFFFF
-	}
+	bitmap := bitmapFull()
 	bitmap[bitmapN-1] = 0x7FFFFFFFFFFFFFFF
 	return bitmap
 }
 
 func bitmapInnerBitsSet() []uint64 {
-	bitmap := make([]uint64, bitmapN)
+	bitmap := bitmapFull()
 	bitmap[0] = 0xFFFFFFFFFFFFFFFE
-	for i := 1; i < bitmapN-1; i++ {
-		bitmap[i] = 0xFFFFFFFFFFFFFFFF
-	}
 	bitmap[bitmapN-1] = 0x7FFFFFFFFFFFFFFF
 	return bitmap
 }
 
 func bitmapOuterBitsSet() []uint64 {
-	bitmap := make([]uint64, bitmapN)
+	bitmap := bitmapEmpty()
 	bitmap[0] = 0x0000000000000001
-	for i := 1; i < bitmapN-1; i++ {
-		bitmap[i] = 0x0000000000000000
-	}
 	bitmap[bitmapN-1] = 0x8000000000000000
 	return bitmap
 }
