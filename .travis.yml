@@ -21,7 +21,7 @@ deploy:
     script: make prerelease-upload
     skip_cleanup: true
     on:
-      branch: master
+      all_branches: true
 matrix:
   allow_failures:
     - go: master
