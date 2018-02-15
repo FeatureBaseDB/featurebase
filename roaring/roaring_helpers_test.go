@@ -71,6 +71,22 @@ func arrayOuterBitsSet() []uint16 {
 	return []uint16{0, 65535}
 }
 
+func arrayOddBitsSet() []uint16 {
+	array := make([]uint16, containerWidth/2)
+	for i := 0; i < int(containerWidth/2); i++ {
+		array[i] = uint16(2*i + 1)
+	}
+	return array
+}
+
+func arrayEvenBitsSet() []uint16 {
+	array := make([]uint16, containerWidth/2)
+	for i := 0; i < int(containerWidth/2); i++ {
+		array[i] = uint16(2 * i)
+	}
+	return array
+}
+
 ////////////////// bitmap
 func bitmapEmpty() []uint64 {
 	return make([]uint64, bitmapN)
@@ -122,6 +138,22 @@ func bitmapOuterBitsSet() []uint64 {
 	return bitmap
 }
 
+func bitmapOddBitsSet() []uint64 {
+	bitmap := make([]uint64, bitmapN)
+	for i := 0; i < bitmapN; i++ {
+		bitmap[i] = 0xAAAAAAAAAAAAAAAA
+	}
+	return bitmap
+}
+
+func bitmapEvenBitsSet() []uint64 {
+	bitmap := make([]uint64, bitmapN)
+	for i := 0; i < bitmapN; i++ {
+		bitmap[i] = 0x5555555555555555
+	}
+	return bitmap
+}
+
 ////////////////// run
 func runEmpty() []interval16 {
 	return make([]interval16, 0)
@@ -170,6 +202,22 @@ func runOuterBitsSet() []interval16 {
 	return run
 }
 
+func runOddBitsSet() []interval16 {
+	run := make([]interval16, containerWidth/2)
+	for i := 0; i < int(containerWidth/2); i++ {
+		run[i] = interval16{start: uint16(2*i + 1), last: uint16(2*i + 1)}
+	}
+	return run
+}
+
+func runEvenBitsSet() []interval16 {
+	run := make([]interval16, containerWidth/2)
+	for i := 0; i < int(containerWidth/2); i++ {
+		run[i] = interval16{start: uint16(2 * i), last: uint16(2 * i)}
+	}
+	return run
+}
+
 ///////////////////////////////////////////////////////////////////////////
 
 type testOp struct {
@@ -211,6 +259,8 @@ func setupContainerTests() map[byte]map[string]*container {
 		"lastBitUnset":  doContainer(ContainerArray, arrayLastBitUnset()),
 		"innerBitsSet":  doContainer(ContainerArray, arrayInnerBitsSet()),
 		"outerBitsSet":  doContainer(ContainerArray, arrayOuterBitsSet()),
+		"oddBitsSet":    doContainer(ContainerArray, arrayOddBitsSet()),
+		"evenBitsSet":   doContainer(ContainerArray, arrayEvenBitsSet()),
 	}
 
 	// bitmap containers
@@ -223,6 +273,8 @@ func setupContainerTests() map[byte]map[string]*container {
 		"lastBitUnset":  doContainer(ContainerBitmap, bitmapLastBitUnset()),
 		"innerBitsSet":  doContainer(ContainerBitmap, bitmapInnerBitsSet()),
 		"outerBitsSet":  doContainer(ContainerBitmap, bitmapOuterBitsSet()),
+		"oddBitsSet":    doContainer(ContainerBitmap, bitmapOddBitsSet()),
+		"evenBitsSet":   doContainer(ContainerBitmap, bitmapEvenBitsSet()),
 	}
 
 	// run containers
@@ -235,6 +287,8 @@ func setupContainerTests() map[byte]map[string]*container {
 		"lastBitUnset":  doContainer(ContainerRun, runLastBitUnset()),
 		"innerBitsSet":  doContainer(ContainerRun, runInnerBitsSet()),
 		"outerBitsSet":  doContainer(ContainerRun, runOuterBitsSet()),
+		"oddBitsSet":    doContainer(ContainerRun, runOddBitsSet()),
+		"evenBitsSet":   doContainer(ContainerRun, runEvenBitsSet()),
 	}
 
 	return cts
