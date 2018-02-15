@@ -11,7 +11,8 @@ PKGS := $(shell cd $(GOPATH)/src/$(CLONE_URL); go list ./... | grep -v vendor)
 BUILD_TIME=`date -u +%FT%T%z`
 LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME)"
 DOCKER_GOLANG_IMAGE=golang:latest
-BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
+GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(GIT_BRANCH))
 BRANCH_IDENTIFIER := $(BRANCH)-$(GOOS)-$(GOARCH)
 
 default: test pilosa

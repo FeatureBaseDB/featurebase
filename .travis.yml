@@ -18,7 +18,7 @@ before_deploy:
   - pip install awscli --user `whoami`
 deploy:
   - provider: script
-    script: make prerelease-upload
+    script: make prerelease-upload GOOS=linux GOARCH=amd64
     skip_cleanup: true
     on:
       all_branches: true
