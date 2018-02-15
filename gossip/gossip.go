@@ -338,12 +338,16 @@ func (g *GossipMemberSet) MergeRemoteState(buf []byte, join bool) {
 type GossipEventReceiver struct {
 	ch           chan memberlist.NodeEvent
 	eventHandler pilosa.EventHandler
+
+	// The writer for any logging.
+	LogOutput io.Writer
 }
 
 // NewGossipEventReceiver returns a new instance of GossipEventReceiver.
-func NewGossipEventReceiver() *GossipEventReceiver {
+func NewGossipEventReceiver(logOutput io.Writer) *GossipEventReceiver {
 	return &GossipEventReceiver{
-		ch: make(chan memberlist.NodeEvent, 1),
+		ch:        make(chan memberlist.NodeEvent, 1),
+		LogOutput: logOutput,
 	}
 }
 
@@ -364,6 +368,11 @@ func (g *GossipEventReceiver) Start(h pilosa.EventHandler) error {
 	g.eventHandler = h
 	go g.listen()
 	return nil
+}
+
+// logger returns a logger for the GossipEventReceiver.
+func (g *GossipEventReceiver) logger() *log.Logger {
+	return log.New(g.LogOutput, "", log.LstdFlags)
 }
 
 func (g *GossipEventReceiver) listen() {
@@ -392,7 +401,9 @@ func (g *GossipEventReceiver) listen() {
 			Event: nodeEventType,
 			Node:  node,
 		}
-		_ = g.eventHandler.ReceiveEvent(ne)
+		if err := g.eventHandler.ReceiveEvent(ne); err != nil {
+			g.logger().Printf("receive event error: %s", err)
+		}
 	}
 }
 

@@ -405,6 +405,8 @@ func (c *Cluster) setState(state string) {
 		if c.state == ClusterStateResizing {
 			doCleanup = true
 		}
+	default:
+		panic(fmt.Sprintf("invalid cluster state: %s", state))
 	}
 
 	c.state = state

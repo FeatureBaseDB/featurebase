@@ -262,7 +262,7 @@ func (m *Command) SetupNetworking() error {
 
 	m.Server.NodeID = m.Server.LoadNodeID()
 
-	m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver()
+	m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m.Server.LogOutput)
 	gossipMemberSet, err := gossip.NewGossipMemberSetWithTransport(m.Server.NodeID, m.Config, transport, m.Server)
 	if err != nil {
 		return err
