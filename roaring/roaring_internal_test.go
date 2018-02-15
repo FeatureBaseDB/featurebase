@@ -1641,7 +1641,7 @@ func TestDifferenceBitmapRun(t *testing.T) {
 			exp:    []uint64{0x0000000000000000},
 		},
 		{
-			bitmap: bitmapLast(),
+			bitmap: bitmapLastBitSet(),
 			runs:   []interval16{{start: 65535, last: 65535}},
 			exp:    bitmapEmpty(),
 		},
@@ -1689,12 +1689,12 @@ func TestDifferenceBitmapArray(t *testing.T) {
 			exp:    []uint16{8, 9, 11, 12, 13, 14, 15},
 		},
 		{
-			bitmap: bitmapOdds(),
+			bitmap: bitmapOddBitsSet(),
 			array:  []uint16{0, 1, 2, 3, 4, 5, 6, 7, 10},
 			exp:    []uint16{9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63},
 		},
 		{
-			bitmap: bitmapOdds(),
+			bitmap: bitmapOddBitsSet(),
 			array:  []uint16{63},
 			exp:    []uint16{1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61},
 		},
@@ -2610,12 +2610,12 @@ func TestIntersectArrayBitmap(t *testing.T) {
 		},
 		{
 			array:  []uint16{0, 1, 63, 120, 543, 639, 12000, 65534, 65535},
-			bitmap: bitmapOdds(),
+			bitmap: bitmapOddBitsSet(),
 			exp:    []uint16{1, 63, 543, 639, 65535},
 		},
 		{
 			array:  []uint16{0, 1, 63, 120, 543, 639, 12000, 65534, 65535},
-			bitmap: bitmapEvens(),
+			bitmap: bitmapEvenBitsSet(),
 			exp:    []uint16{0, 120, 12000, 65534},
 		},
 	}
@@ -2635,31 +2635,6 @@ func TestIntersectArrayBitmap(t *testing.T) {
 			t.Fatalf("test #%v intersectArrayBitmap received: %v exp: %v", i, ret, test.exp)
 		}
 	}
-}
-
-func bitmapOdds() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN; i++ {
-		bitmap[i] = 0xAAAAAAAAAAAAAAAA
-	}
-	return bitmap
-}
-
-func bitmapEvens() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN; i++ {
-		bitmap[i] = 0x5555555555555555
-	}
-	return bitmap
-}
-
-func bitmapLast() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN-1; i++ {
-		bitmap[i] = 0
-	}
-	bitmap[bitmapN-1] = 0x8000000000000000
-	return bitmap
 }
 
 // rleCont returns a slice of numbers all in the range starting from
@@ -2776,6 +2751,8 @@ func TestContainerCombinations(t *testing.T) {
 		{intersect, "empty", "lastBitUnset", "empty"},
 		{intersect, "empty", "innerBitsSet", "empty"},
 		{intersect, "empty", "outerBitsSet", "empty"},
+		{intersect, "empty", "oddBitsSet", "empty"},
+		{intersect, "empty", "evenBitsSet", "empty"},
 		//
 		{intersect, "full", "empty", "empty"},
 		{intersect, "full", "full", "full"},
@@ -2785,6 +2762,8 @@ func TestContainerCombinations(t *testing.T) {
 		{intersect, "full", "lastBitUnset", "lastBitUnset"},
 		{intersect, "full", "innerBitsSet", "innerBitsSet"},
 		{intersect, "full", "outerBitsSet", "outerBitsSet"},
+		{intersect, "full", "oddBitsSet", "oddBitsSet"},
+		{intersect, "full", "evenBitsSet", "evenBitsSet"},
 		//
 		{intersect, "firstBitSet", "empty", "empty"},
 		{intersect, "firstBitSet", "full", "firstBitSet"},
@@ -2794,6 +2773,8 @@ func TestContainerCombinations(t *testing.T) {
 		{intersect, "firstBitSet", "lastBitUnset", "firstBitSet"},
 		{intersect, "firstBitSet", "innerBitsSet", "empty"},
 		{intersect, "firstBitSet", "outerBitsSet", "firstBitSet"},
+		{intersect, "firstBitSet", "oddBitsSet", "empty"},
+		{intersect, "firstBitSet", "evenBitsSet", "firstBitSet"},
 		//
 		{intersect, "lastBitSet", "empty", "empty"},
 		{intersect, "lastBitSet", "full", "lastBitSet"},
@@ -2803,6 +2784,8 @@ func TestContainerCombinations(t *testing.T) {
 		{intersect, "lastBitSet", "lastBitUnset", "empty"},
 		{intersect, "lastBitSet", "innerBitsSet", "empty"},
 		{intersect, "lastBitSet", "outerBitsSet", "lastBitSet"},
+		{intersect, "lastBitSet", "oddBitsSet", "lastBitSet"},
+		{intersect, "lastBitSet", "evenBitsSet", "empty"},
 		//
 		{intersect, "firstBitUnset", "empty", "empty"},
 		{intersect, "firstBitUnset", "full", "firstBitUnset"},
@@ -2812,6 +2795,8 @@ func TestContainerCombinations(t *testing.T) {
 		{intersect, "firstBitUnset", "lastBitUnset", "innerBitsSet"},
 		{intersect, "firstBitUnset", "innerBitsSet", "innerBitsSet"},
 		{intersect, "firstBitUnset", "outerBitsSet", "lastBitSet"},
+		{intersect, "firstBitUnset", "oddBitsSet", "oddBitsSet"},
+		//{intersect, "firstBitUnset", "evenBitsSet", ""},
 		//
 		{intersect, "lastBitUnset", "empty", "empty"},
 		{intersect, "lastBitUnset", "full", "lastBitUnset"},
@@ -2821,6 +2806,8 @@ func TestContainerCombinations(t *testing.T) {
 		{intersect, "lastBitUnset", "lastBitUnset", "lastBitUnset"},
 		{intersect, "lastBitUnset", "innerBitsSet", "innerBitsSet"},
 		{intersect, "lastBitUnset", "outerBitsSet", "firstBitSet"},
+		//{intersect, "lastBitUnset", "oddBitsSet", ""},
+		{intersect, "lastBitUnset", "evenBitsSet", "evenBitsSet"},
 		//
 		{intersect, "innerBitsSet", "empty", "empty"},
 		{intersect, "innerBitsSet", "full", "innerBitsSet"},
@@ -2830,6 +2817,8 @@ func TestContainerCombinations(t *testing.T) {
 		{intersect, "innerBitsSet", "lastBitUnset", "innerBitsSet"},
 		{intersect, "innerBitsSet", "innerBitsSet", "innerBitsSet"},
 		{intersect, "innerBitsSet", "outerBitsSet", "empty"},
+		//{intersect, "innerBitsSet", "oddBitsSet", ""},
+		//{intersect, "innerBitsSet", "evenBitsSet", ""},
 		//
 		{intersect, "outerBitsSet", "empty", "empty"},
 		{intersect, "outerBitsSet", "full", "outerBitsSet"},
@@ -2839,6 +2828,30 @@ func TestContainerCombinations(t *testing.T) {
 		{intersect, "outerBitsSet", "lastBitUnset", "firstBitSet"},
 		{intersect, "outerBitsSet", "innerBitsSet", "empty"},
 		{intersect, "outerBitsSet", "outerBitsSet", "outerBitsSet"},
+		{intersect, "outerBitsSet", "oddBitsSet", "lastBitSet"},
+		{intersect, "outerBitsSet", "evenBitsSet", "firstBitSet"},
+		//
+		{intersect, "oddBitsSet", "empty", "empty"},
+		{intersect, "oddBitsSet", "full", "oddBitsSet"},
+		{intersect, "oddBitsSet", "firstBitSet", "empty"},
+		{intersect, "oddBitsSet", "lastBitSet", "lastBitSet"},
+		{intersect, "oddBitsSet", "firstBitUnset", "oddBitsSet"},
+		//{intersect, "oddBitsSet", "lastBitUnset", ""},
+		//{intersect, "oddBitsSet", "innerBitsSet", ""},
+		{intersect, "oddBitsSet", "outerBitsSet", "lastBitSet"},
+		{intersect, "oddBitsSet", "oddBitsSet", "oddBitsSet"},
+		{intersect, "oddBitsSet", "evenBitsSet", "empty"},
+		//
+		{intersect, "evenBitsSet", "empty", "empty"},
+		{intersect, "evenBitsSet", "full", "evenBitsSet"},
+		{intersect, "evenBitsSet", "firstBitSet", "firstBitSet"},
+		{intersect, "evenBitsSet", "lastBitSet", "empty"},
+		//{intersect, "evenBitsSet", "firstBitUnset", ""},
+		{intersect, "evenBitsSet", "lastBitUnset", "evenBitsSet"},
+		//{intersect, "evenBitsSet", "innerBitsSet", ""},
+		{intersect, "evenBitsSet", "outerBitsSet", "firstBitSet"},
+		{intersect, "evenBitsSet", "oddBitsSet", "empty"},
+		{intersect, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
 
 		// union
 		{union, "empty", "empty", "empty"},
@@ -2849,6 +2862,8 @@ func TestContainerCombinations(t *testing.T) {
 		{union, "empty", "lastBitUnset", "lastBitUnset"},
 		{union, "empty", "innerBitsSet", "innerBitsSet"},
 		{union, "empty", "outerBitsSet", "outerBitsSet"},
+		{union, "empty", "oddBitsSet", "oddBitsSet"},
+		{union, "empty", "evenBitsSet", "evenBitsSet"},
 		//
 		{union, "full", "empty", "full"},
 		{union, "full", "full", "full"},
@@ -2858,6 +2873,8 @@ func TestContainerCombinations(t *testing.T) {
 		{union, "full", "lastBitUnset", "full"},
 		{union, "full", "innerBitsSet", "full"},
 		{union, "full", "outerBitsSet", "full"},
+		{union, "full", "oddBitsSet", "full"},
+		{union, "full", "evenBitsSet", "full"},
 		//
 		{union, "firstBitSet", "empty", "firstBitSet"},
 		{union, "firstBitSet", "full", "full"},
@@ -2867,6 +2884,8 @@ func TestContainerCombinations(t *testing.T) {
 		{union, "firstBitSet", "lastBitUnset", "lastBitUnset"},
 		{union, "firstBitSet", "innerBitsSet", "lastBitUnset"},
 		{union, "firstBitSet", "outerBitsSet", "outerBitsSet"},
+		//{union, "firstBitSet", "oddBitsSet", ""},
+		{union, "firstBitSet", "evenBitsSet", "evenBitsSet"},
 		//
 		{union, "lastBitSet", "empty", "lastBitSet"},
 		{union, "lastBitSet", "full", "full"},
@@ -2876,6 +2895,8 @@ func TestContainerCombinations(t *testing.T) {
 		{union, "lastBitSet", "lastBitUnset", "full"},
 		{union, "lastBitSet", "innerBitsSet", "firstBitUnset"},
 		{union, "lastBitSet", "outerBitsSet", "outerBitsSet"},
+		{union, "lastBitSet", "oddBitsSet", "oddBitsSet"},
+		//{union, "lastBitSet", "evenBitsSet", ""},
 		//
 		{union, "firstBitUnset", "empty", "firstBitUnset"},
 		{union, "firstBitUnset", "full", "full"},
@@ -2885,6 +2906,8 @@ func TestContainerCombinations(t *testing.T) {
 		{union, "firstBitUnset", "lastBitUnset", "full"},
 		{union, "firstBitUnset", "innerBitsSet", "firstBitUnset"},
 		{union, "firstBitUnset", "outerBitsSet", "full"},
+		{union, "firstBitUnset", "oddBitsSet", "firstBitUnset"},
+		{union, "firstBitUnset", "evenBitsSet", "full"},
 		//
 		{union, "lastBitUnset", "empty", "lastBitUnset"},
 		{union, "lastBitUnset", "full", "full"},
@@ -2894,6 +2917,8 @@ func TestContainerCombinations(t *testing.T) {
 		{union, "lastBitUnset", "lastBitUnset", "lastBitUnset"},
 		{union, "lastBitUnset", "innerBitsSet", "lastBitUnset"},
 		{union, "lastBitUnset", "outerBitsSet", "full"},
+		{union, "lastBitUnset", "oddBitsSet", "full"},
+		{union, "lastBitUnset", "evenBitsSet", "lastBitUnset"},
 		//
 		{union, "innerBitsSet", "empty", "innerBitsSet"},
 		{union, "innerBitsSet", "full", "full"},
@@ -2903,6 +2928,8 @@ func TestContainerCombinations(t *testing.T) {
 		{union, "innerBitsSet", "lastBitUnset", "lastBitUnset"},
 		{union, "innerBitsSet", "innerBitsSet", "innerBitsSet"},
 		{union, "innerBitsSet", "outerBitsSet", "full"},
+		{union, "innerBitsSet", "oddBitsSet", "firstBitUnset"},
+		{union, "innerBitsSet", "evenBitsSet", "lastBitUnset"},
 		//
 		{union, "outerBitsSet", "empty", "outerBitsSet"},
 		{union, "outerBitsSet", "full", "full"},
@@ -2912,6 +2939,30 @@ func TestContainerCombinations(t *testing.T) {
 		{union, "outerBitsSet", "lastBitUnset", "full"},
 		{union, "outerBitsSet", "innerBitsSet", "full"},
 		{union, "outerBitsSet", "outerBitsSet", "outerBitsSet"},
+		//{union, "outerBitsSet", "oddBitsSet", ""},
+		//{union, "outerBitsSet", "evenBitsSet", ""},
+		//
+		{union, "oddBitsSet", "empty", "oddBitsSet"},
+		{union, "oddBitsSet", "full", "full"},
+		//{union, "oddBitsSet", "firstBitSet", ""},
+		{union, "oddBitsSet", "lastBitSet", "oddBitsSet"},
+		{union, "oddBitsSet", "firstBitUnset", "firstBitUnset"},
+		{union, "oddBitsSet", "lastBitUnset", "full"},
+		{union, "oddBitsSet", "innerBitsSet", "firstBitUnset"},
+		//{union, "oddBitsSet", "outerBitsSet", ""},
+		{union, "oddBitsSet", "oddBitsSet", "oddBitsSet"},
+		{union, "oddBitsSet", "evenBitsSet", "full"},
+		//
+		{union, "evenBitsSet", "empty", "evenBitsSet"},
+		{union, "evenBitsSet", "full", "full"},
+		{union, "evenBitsSet", "firstBitSet", "evenBitsSet"},
+		//{union, "evenBitsSet", "lastBitSet", ""},
+		{union, "evenBitsSet", "firstBitUnset", "full"},
+		{union, "evenBitsSet", "lastBitUnset", "lastBitUnset"},
+		{union, "evenBitsSet", "innerBitsSet", "lastBitUnset"},
+		//{union, "evenBitsSet", "outerBitsSet", ""},
+		{union, "evenBitsSet", "oddBitsSet", "full"},
+		{union, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
 
 		// difference
 		{difference, "empty", "empty", "empty"},
@@ -2922,6 +2973,8 @@ func TestContainerCombinations(t *testing.T) {
 		{difference, "empty", "lastBitUnset", "empty"},
 		{difference, "empty", "innerBitsSet", "empty"},
 		{difference, "empty", "outerBitsSet", "empty"},
+		{difference, "empty", "oddBitsSet", "empty"},
+		{difference, "empty", "evenBitsSet", "empty"},
 		//
 		{difference, "full", "empty", "full"},
 		{difference, "full", "full", "empty"},
@@ -2931,6 +2984,8 @@ func TestContainerCombinations(t *testing.T) {
 		{difference, "full", "lastBitUnset", "lastBitSet"},
 		{difference, "full", "innerBitsSet", "outerBitsSet"},
 		{difference, "full", "outerBitsSet", "innerBitsSet"},
+		{difference, "full", "oddBitsSet", "evenBitsSet"},
+		{difference, "full", "evenBitsSet", "oddBitsSet"},
 		//
 		{difference, "firstBitSet", "empty", "firstBitSet"},
 		{difference, "firstBitSet", "full", "empty"},
@@ -2940,6 +2995,8 @@ func TestContainerCombinations(t *testing.T) {
 		{difference, "firstBitSet", "lastBitUnset", "empty"},
 		{difference, "firstBitSet", "innerBitsSet", "firstBitSet"},
 		{difference, "firstBitSet", "outerBitsSet", "empty"},
+		{difference, "firstBitSet", "oddBitsSet", "firstBitSet"},
+		{difference, "firstBitSet", "evenBitsSet", "empty"},
 		//
 		{difference, "lastBitSet", "empty", "lastBitSet"},
 		{difference, "lastBitSet", "full", "empty"},
@@ -2949,6 +3006,8 @@ func TestContainerCombinations(t *testing.T) {
 		{difference, "lastBitSet", "lastBitUnset", "lastBitSet"},
 		{difference, "lastBitSet", "innerBitsSet", "lastBitSet"},
 		{difference, "lastBitSet", "outerBitsSet", "empty"},
+		{difference, "lastBitSet", "oddBitsSet", "empty"},
+		{difference, "lastBitSet", "evenBitsSet", "lastBitSet"},
 		//
 		{difference, "firstBitUnset", "empty", "firstBitUnset"},
 		{difference, "firstBitUnset", "full", "empty"},
@@ -2958,6 +3017,8 @@ func TestContainerCombinations(t *testing.T) {
 		{difference, "firstBitUnset", "lastBitUnset", "lastBitSet"},
 		{difference, "firstBitUnset", "innerBitsSet", "lastBitSet"},
 		{difference, "firstBitUnset", "outerBitsSet", "innerBitsSet"},
+		//{difference, "firstBitUnset", "oddBitsSet", ""},
+		{difference, "firstBitUnset", "evenBitsSet", "oddBitsSet"},
 		//
 		{difference, "lastBitUnset", "empty", "lastBitUnset"},
 		{difference, "lastBitUnset", "full", "empty"},
@@ -2967,6 +3028,8 @@ func TestContainerCombinations(t *testing.T) {
 		{difference, "lastBitUnset", "lastBitUnset", "empty"},
 		{difference, "lastBitUnset", "innerBitsSet", "firstBitSet"},
 		{difference, "lastBitUnset", "outerBitsSet", "innerBitsSet"},
+		{difference, "lastBitUnset", "oddBitsSet", "evenBitsSet"},
+		//{difference, "lastBitUnset", "evenBitsSet", ""},
 		//
 		{difference, "innerBitsSet", "empty", "innerBitsSet"},
 		{difference, "innerBitsSet", "full", "empty"},
@@ -2976,6 +3039,8 @@ func TestContainerCombinations(t *testing.T) {
 		{difference, "innerBitsSet", "lastBitUnset", "empty"},
 		{difference, "innerBitsSet", "innerBitsSet", "empty"},
 		{difference, "innerBitsSet", "outerBitsSet", "innerBitsSet"},
+		//{difference, "innerBitsSet", "oddBitsSet", ""},
+		//{difference, "innerBitsSet", "evenBitsSet", ""},
 		//
 		{difference, "outerBitsSet", "empty", "outerBitsSet"},
 		{difference, "outerBitsSet", "full", "empty"},
@@ -2985,6 +3050,30 @@ func TestContainerCombinations(t *testing.T) {
 		{difference, "outerBitsSet", "lastBitUnset", "lastBitSet"},
 		{difference, "outerBitsSet", "innerBitsSet", "outerBitsSet"},
 		{difference, "outerBitsSet", "outerBitsSet", "empty"},
+		{difference, "outerBitsSet", "oddBitsSet", "firstBitSet"},
+		{difference, "outerBitsSet", "evenBitsSet", "lastBitSet"},
+		//
+		{difference, "oddBitsSet", "empty", "oddBitsSet"},
+		{difference, "oddBitsSet", "full", "empty"},
+		{difference, "oddBitsSet", "firstBitSet", "oddBitsSet"},
+		//{difference, "oddBitsSet", "lastBitSet", ""},
+		{difference, "oddBitsSet", "firstBitUnset", "empty"},
+		{difference, "oddBitsSet", "lastBitUnset", "lastBitSet"},
+		{difference, "oddBitsSet", "innerBitsSet", "lastBitSet"},
+		//{difference, "oddBitsSet", "outerBitsSet", ""},
+		{difference, "oddBitsSet", "oddBitsSet", "empty"},
+		{difference, "oddBitsSet", "evenBitsSet", "oddBitsSet"},
+		//
+		{difference, "evenBitsSet", "empty", "evenBitsSet"},
+		{difference, "evenBitsSet", "full", "empty"},
+		//{difference, "evenBitsSet", "firstBitSet", ""},
+		{difference, "evenBitsSet", "lastBitSet", "evenBitsSet"},
+		{difference, "evenBitsSet", "firstBitUnset", "firstBitSet"},
+		{difference, "evenBitsSet", "lastBitUnset", "empty"},
+		{difference, "evenBitsSet", "innerBitsSet", "firstBitSet"},
+		//{difference, "evenBitsSet", "outerBitsSet", ""},
+		{difference, "evenBitsSet", "oddBitsSet", "evenBitsSet"},
+		{difference, "evenBitsSet", "evenBitsSet", "empty"},
 
 		// xor
 		{xor, "empty", "empty", "empty"},
@@ -2995,6 +3084,8 @@ func TestContainerCombinations(t *testing.T) {
 		{xor, "empty", "lastBitUnset", "lastBitUnset"},
 		{xor, "empty", "innerBitsSet", "innerBitsSet"},
 		{xor, "empty", "outerBitsSet", "outerBitsSet"},
+		{xor, "empty", "oddBitsSet", "oddBitsSet"},
+		{xor, "empty", "evenBitsSet", "evenBitsSet"},
 		//
 		{xor, "full", "empty", "full"},
 		{xor, "full", "full", "empty"},
@@ -3004,6 +3095,8 @@ func TestContainerCombinations(t *testing.T) {
 		{xor, "full", "lastBitUnset", "lastBitSet"},
 		{xor, "full", "innerBitsSet", "outerBitsSet"},
 		{xor, "full", "outerBitsSet", "innerBitsSet"},
+		{xor, "full", "oddBitsSet", "evenBitsSet"},
+		{xor, "full", "evenBitsSet", "oddBitsSet"},
 		//
 		{xor, "firstBitSet", "empty", "firstBitSet"},
 		{xor, "firstBitSet", "full", "firstBitUnset"},
@@ -3013,6 +3106,8 @@ func TestContainerCombinations(t *testing.T) {
 		{xor, "firstBitSet", "lastBitUnset", "innerBitsSet"},
 		{xor, "firstBitSet", "innerBitsSet", "lastBitUnset"},
 		{xor, "firstBitSet", "outerBitsSet", "lastBitSet"},
+		//{xor, "firstBitSet", "oddBitsSet", ""},
+		//{xor, "firstBitSet", "evenBitsSet", ""},
 		//
 		{xor, "lastBitSet", "empty", "lastBitSet"},
 		{xor, "lastBitSet", "full", "lastBitUnset"},
@@ -3022,6 +3117,8 @@ func TestContainerCombinations(t *testing.T) {
 		{xor, "lastBitSet", "lastBitUnset", "full"},
 		{xor, "lastBitSet", "innerBitsSet", "firstBitUnset"},
 		{xor, "lastBitSet", "outerBitsSet", "firstBitSet"},
+		//{xor, "lastBitSet", "oddBitsSet", ""},
+		//{xor, "lastBitSet", "evenBitsSet", ""},
 		//
 		{xor, "firstBitUnset", "empty", "firstBitUnset"},
 		{xor, "firstBitUnset", "full", "firstBitSet"},
@@ -3031,6 +3128,8 @@ func TestContainerCombinations(t *testing.T) {
 		{xor, "firstBitUnset", "lastBitUnset", "outerBitsSet"},
 		{xor, "firstBitUnset", "innerBitsSet", "lastBitSet"},
 		{xor, "firstBitUnset", "outerBitsSet", "lastBitUnset"},
+		//{xor, "firstBitUnset", "oddBitsSet", ""},
+		//{xor, "firstBitUnset", "evenBitsSet", ""},
 		//
 		{xor, "lastBitUnset", "empty", "lastBitUnset"},
 		{xor, "lastBitUnset", "full", "lastBitSet"},
@@ -3040,6 +3139,8 @@ func TestContainerCombinations(t *testing.T) {
 		{xor, "lastBitUnset", "lastBitUnset", "empty"},
 		{xor, "lastBitUnset", "innerBitsSet", "firstBitSet"},
 		{xor, "lastBitUnset", "outerBitsSet", "firstBitUnset"},
+		//{xor, "lastBitUnset", "oddBitsSet", ""},
+		//{xor, "lastBitUnset", "evenBitsSet", ""},
 		//
 		{xor, "innerBitsSet", "empty", "innerBitsSet"},
 		{xor, "innerBitsSet", "full", "outerBitsSet"},
@@ -3049,6 +3150,8 @@ func TestContainerCombinations(t *testing.T) {
 		{xor, "innerBitsSet", "lastBitUnset", "firstBitSet"},
 		{xor, "innerBitsSet", "innerBitsSet", "empty"},
 		{xor, "innerBitsSet", "outerBitsSet", "full"},
+		//{xor, "innerBitsSet", "oddBitsSet", ""},
+		//{xor, "innerBitsSet", "evenBitsSet", ""},
 		//
 		{xor, "outerBitsSet", "empty", "outerBitsSet"},
 		{xor, "outerBitsSet", "full", "innerBitsSet"},
@@ -3058,6 +3161,30 @@ func TestContainerCombinations(t *testing.T) {
 		{xor, "outerBitsSet", "lastBitUnset", "firstBitUnset"},
 		{xor, "outerBitsSet", "innerBitsSet", "full"},
 		{xor, "outerBitsSet", "outerBitsSet", "empty"},
+		//{xor, "outerBitsSet", "oddBitsSet", ""},
+		//{xor, "outerBitsSet", "evenBitsSet", ""},
+		//
+		{xor, "oddBitsSet", "empty", "oddBitsSet"},
+		{xor, "oddBitsSet", "full", "evenBitsSet"},
+		//{xor, "oddBitsSet", "firstBitSet", ""},
+		//{xor, "oddBitsSet", "lastBitSet", ""},
+		//{xor, "oddBitsSet", "firstBitUnset", ""},
+		//{xor, "oddBitsSet", "lastBitUnset", ""},
+		//{xor, "oddBitsSet", "innerBitsSet", ""},
+		//{xor, "oddBitsSet", "outerBitsSet", ""},
+		{xor, "oddBitsSet", "oddBitsSet", "empty"},
+		{xor, "oddBitsSet", "evenBitsSet", "full"},
+		//
+		{xor, "evenBitsSet", "empty", "evenBitsSet"},
+		{xor, "evenBitsSet", "full", "oddBitsSet"},
+		//{xor, "evenBitsSet", "firstBitSet", ""},
+		//{xor, "evenBitsSet", "lastBitSet", ""},
+		//{xor, "evenBitsSet", "firstBitUnset", ""},
+		//{xor, "evenBitsSet", "lastBitUnset", ""},
+		//{xor, "evenBitsSet", "innerBitsSet", ""},
+		//{xor, "evenBitsSet", "outerBitsSet", ""},
+		{xor, "evenBitsSet", "oddBitsSet", "full"},
+		{xor, "evenBitsSet", "evenBitsSet", "empty"},
 	}
 	for _, testOp := range testOps {
 		for _, x := range containerTypes {

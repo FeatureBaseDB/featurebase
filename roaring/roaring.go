@@ -2473,10 +2473,18 @@ func differenceArrayRun(a, b *container) *container {
 
 	if i < len(a.array) {
 		// keep all array elements after end of runs
-		output.array = append(output.array, a.array[i:]...)
-		// TODO: consider handling container.n mutations in one place
-		// like we do with container.add().
-		output.n += len(a.array[i:])
+		// It's possible that output was converted from array to bitmap in output.add()
+		// so check container type before proceeding.
+		if output.containerType == ContainerArray {
+			output.array = append(output.array, a.array[i:]...)
+			// TODO: consider handling container.n mutations in one place
+			// like we do with container.add().
+			output.n += len(a.array[i:])
+		} else {
+			for _, v := range a.array[i:] {
+				output.add(v)
+			}
+		}
 	}
 	return output
 }
