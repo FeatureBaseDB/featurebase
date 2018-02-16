@@ -36,7 +36,6 @@ import (
 	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
