@@ -38,6 +38,12 @@
   version = "v1.3.1"
 
 [[projects]]
+  name = "github.com/cespare/xxhash"
+  packages = ["."]
+  revision = "5c37fe3735342a2e0d01c87a907579987c8936cc"
+  version = "v1.0.0"
+
+[[projects]]
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
@@ -189,9 +195,15 @@
 
 [[projects]]
   name = "github.com/shirou/gopsutil"
-  packages = ["host","internal/common","mem","process"]
+  packages = ["cpu","host","internal/common","mem","net","process"]
   revision = "bfe3c2e8f406bf352bc8df81f98c752224867349"
   version = "v2.17.11"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/shirou/w32"
+  packages = ["."]
+  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
 
 [[projects]]
   name = "github.com/sony/gobreaker"
@@ -268,6 +280,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "d91110a10c830f7a9cc439b9578840d97d9921e84d08242316da8d4a18c68c56"
+  inputs-digest = "668c03e22d947dd7e24c4c5e07d7850ed0a2ea9a27d2af1fa0d1cff0e3743b0b"
   solver-name = "gps-cdcl"
   solver-version = 1

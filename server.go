@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
