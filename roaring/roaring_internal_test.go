@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -27,11 +29,11 @@ func (iv interval16) String() string {
 }
 
 func (c *container) String() string {
-	return fmt.Sprintf("<%s container  n=%d, array[%d], runs[%d], bitmap[%d]> type:%d", c.info().Type, c.n, len(c.array), len(c.runs), len(c.bitmap), c.container_type)
+	return fmt.Sprintf("<%s container  n=%d, array[%d], runs[%d], bitmap[%d]> type:%d", c.info().Type, c.n, len(c.array), len(c.runs), len(c.bitmap), c.containerType)
 }
 
 func TestRunAppendInterval(t *testing.T) {
-	a := container{container_type: ContainerRun}
+	a := container{containerType: ContainerRun}
 	tests := []struct {
 		base []interval16
 		app  interval16
@@ -80,7 +82,7 @@ func TestInterval16RunLen(t *testing.T) {
 }
 
 func TestContainerRunAdd(t *testing.T) {
-	c := container{runs: make([]interval16, 0), container_type: ContainerRun}
+	c := container{runs: make([]interval16, 0), containerType: ContainerRun}
 	tests := []struct {
 		op  uint16
 		exp []interval16
@@ -111,7 +113,7 @@ func TestContainerRunAdd(t *testing.T) {
 }
 
 func TestContainerRunAdd2(t *testing.T) {
-	c := container{runs: make([]interval16, 0), container_type: ContainerRun}
+	c := container{runs: make([]interval16, 0), containerType: ContainerRun}
 	ret := c.add(0)
 	if !ret {
 		t.Fatalf("result of adding new bit should be true: %v", c.runs)
@@ -126,7 +128,7 @@ func TestContainerRunAdd2(t *testing.T) {
 }
 
 func TestRunCountRange(t *testing.T) {
-	c := container{runs: make([]interval16, 0), container_type: ContainerRun}
+	c := container{runs: make([]interval16, 0), containerType: ContainerRun}
 	cnt := c.runCountRange(2, 9)
 	if cnt != 0 {
 		t.Fatalf("should get 0 from empty container, but got: %v", cnt)
@@ -179,7 +181,7 @@ func TestRunCountRange(t *testing.T) {
 }
 
 func TestRunContains(t *testing.T) {
-	c := container{runs: make([]interval16, 0), container_type: ContainerRun}
+	c := container{runs: make([]interval16, 0), containerType: ContainerRun}
 	if c.runContains(5) {
 		t.Fatalf("empty run container should not contain 5")
 	}
@@ -201,7 +203,7 @@ func TestRunContains(t *testing.T) {
 }
 
 func TestBitmapCountRange(t *testing.T) {
-	c := container{container_type: ContainerBitmap}
+	c := container{containerType: ContainerBitmap}
 	tests := []struct {
 		start  int
 		end    int
@@ -227,11 +229,11 @@ func TestBitmapCountRange(t *testing.T) {
 
 func TestIntersectionCountArrayBitmap3(t *testing.T) {
 	a, b := &container{}, &container{}
-	a.container_type = ContainerBitmap
+	a.containerType = ContainerBitmap
 	a.bitmap = getFullBitmap()
 	a.n = maxContainerVal + 1
 
-	b.container_type = ContainerBitmap
+	b.containerType = ContainerBitmap
 	b.bitmap = getFullBitmap()
 	b.n = maxContainerVal + 1
 	res := intersectBitmapBitmap(a, b)
@@ -288,9 +290,9 @@ func TestIntersectionCountArrayBitmap2(t *testing.T) {
 
 	for i, test := range tests {
 		a.array = test.array
-		a.container_type = ContainerArray
+		a.containerType = ContainerArray
 		b.bitmap = test.bitmap
-		b.container_type = ContainerBitmap
+		b.containerType = ContainerBitmap
 		ret := intersectionCountArrayBitmap(a, b)
 		if ret != test.exp {
 			t.Fatalf("test #%v intersectCountArrayBitmap fail received: %v exp: %v", i, ret, test.exp)
@@ -299,7 +301,7 @@ func TestIntersectionCountArrayBitmap2(t *testing.T) {
 }
 
 func TestRunRemove(t *testing.T) {
-	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun}
+	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, containerType: ContainerRun}
 	tests := []struct {
 		op     uint16
 		exp    []interval16
@@ -333,7 +335,7 @@ func TestRunRemove(t *testing.T) {
 }
 
 func TestRunMax(t *testing.T) {
-	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun}
+	c := container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, containerType: ContainerRun}
 	max := c.max()
 	if max != 16 {
 		t.Fatalf("max for %v should be 16", c.runs)
@@ -347,8 +349,8 @@ func TestRunMax(t *testing.T) {
 }
 
 func TestIntersectionCountArrayRun(t *testing.T) {
-	a := &container{container_type: ContainerArray, array: []uint16{1, 5, 10, 11, 12}}
-	b := &container{container_type: ContainerRun, runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
+	a := &container{containerType: ContainerArray, array: []uint16{1, 5, 10, 11, 12}}
+	b := &container{containerType: ContainerRun, runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}}
 
 	ret := intersectionCountArrayRun(a, b)
 	if ret != 3 {
@@ -357,16 +359,16 @@ func TestIntersectionCountArrayRun(t *testing.T) {
 }
 
 func TestIntersectionCountBitmapRun(t *testing.T) {
-	a := &container{container_type: ContainerBitmap, bitmap: []uint64{0x8000000000000000}}
-	b := &container{container_type: ContainerRun, runs: []interval16{{start: 63, last: 64}}}
+	a := &container{containerType: ContainerBitmap, bitmap: []uint64{0x8000000000000000}}
+	b := &container{containerType: ContainerRun, runs: []interval16{{start: 63, last: 64}}}
 
 	ret := intersectionCountBitmapRun(a, b)
 	if ret != 1 {
 		t.Fatalf("count of %v with %v should be 1, but got %v", a.bitmap, b.runs, ret)
 	}
 
-	a = &container{container_type: ContainerBitmap, bitmap: []uint64{0xF0000001, 0xFF00000000000000, 0xFF000000000000F0, 0x0F0000}}
-	b = &container{container_type: ContainerRun, runs: []interval16{{start: 29, last: 31}, {start: 125, last: 134}, {start: 191, last: 197}, {start: 200, last: 300}}}
+	a = &container{containerType: ContainerBitmap, bitmap: []uint64{0xF0000001, 0xFF00000000000000, 0xFF000000000000F0, 0x0F0000}}
+	b = &container{containerType: ContainerRun, runs: []interval16{{start: 29, last: 31}, {start: 125, last: 134}, {start: 191, last: 197}, {start: 200, last: 300}}}
 
 	ret = intersectionCountBitmapRun(a, b)
 	if ret != 14 {
@@ -414,8 +416,8 @@ func TestIntersectionCountRunRun(t *testing.T) {
 			bruns: []interval16{{start: 9, last: 9}, {start: 11, last: 17}}, exp: 6},
 	}
 	for i, test := range tests {
-		a.container_type = ContainerRun
-		b.container_type = ContainerRun
+		a.containerType = ContainerRun
+		b.containerType = ContainerRun
 		a.runs = test.aruns
 		b.runs = test.bruns
 		ret := intersectionCountRunRun(a, b)
@@ -456,8 +458,8 @@ func TestIntersectArrayRun(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		a.container_type = ContainerArray
-		b.container_type = ContainerRun
+		a.containerType = ContainerArray
+		b.containerType = ContainerRun
 		a.array = test.array
 		b.runs = test.runs
 		ret := intersectArrayRun(a, b)
@@ -514,8 +516,8 @@ func TestIntersectRunRun(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		a.container_type = ContainerRun
-		b.container_type = ContainerRun
+		a.containerType = ContainerRun
+		b.containerType = ContainerRun
 		a.runs = test.aruns
 		b.runs = test.bruns
 		ret := intersectRunRun(a, b)
@@ -579,8 +581,8 @@ func TestIntersectBitmapRunBitmap(t *testing.T) {
 		for i, v := range test.exp {
 			exp[i] = v
 		}
-		a.container_type = ContainerBitmap
-		b.container_type = ContainerRun
+		a.containerType = ContainerBitmap
+		b.containerType = ContainerRun
 		ret := intersectBitmapRun(a, b)
 		if ret.isArray() {
 			ret.arrayToBitmap()
@@ -640,8 +642,8 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 			a.bitmap[i] = v
 		}
 		b.runs = test.runs
-		a.container_type = ContainerBitmap
-		b.container_type = ContainerRun
+		a.containerType = ContainerBitmap
+		b.containerType = ContainerRun
 		ret := intersectBitmapRun(a, b)
 		if !reflect.DeepEqual(ret.array, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
@@ -658,19 +660,19 @@ func TestUnionMixed(t *testing.T) {
 	// array container
 	a := &container{}
 	a.array = []uint16{1, 4, 5, 7, 10, 11, 12}
-	a.container_type = ContainerArray
+	a.containerType = ContainerArray
 	a.n = 7
 
 	// bitmap container
 	b := &container{bitmap: make([]uint64, bitmapN)}
 	b.bitmap[0] = uint64(0x3)
 	b.n = 2
-	b.container_type = ContainerBitmap
+	b.containerType = ContainerBitmap
 
 	// run container
 	r := &container{}
 	r.runs = []interval16{{start: 5, last: 10}}
-	r.container_type = ContainerRun
+	r.containerType = ContainerRun
 	r.n = 6
 
 	t.Run("various container Unions", func(t *testing.T) {
@@ -711,10 +713,10 @@ func TestIntersectMixed(t *testing.T) {
 
 	a.runs = []interval16{{start: 5, last: 10}}
 	a.n = 6
-	a.container_type = ContainerRun
+	a.containerType = ContainerRun
 	b.array = []uint16{1, 4, 5, 7, 10, 11, 12}
 	b.n = 7
-	b.container_type = ContainerArray
+	b.containerType = ContainerArray
 	res := intersect(a, b)
 	if !reflect.DeepEqual(res.array, []uint16{5, 7, 10}) {
 		t.Fatalf("test #1 expected %v, but got %v", []uint16{5, 7, 10}, res.array)
@@ -730,7 +732,7 @@ func TestIntersectMixed(t *testing.T) {
 	}
 	c.bitmap = []uint64{0x60}
 	c.n = 2
-	c.container_type = ContainerBitmap
+	c.containerType = ContainerBitmap
 
 	res = intersect(c, a)
 	if !reflect.DeepEqual(res.array, []uint16{5, 6}) {
@@ -760,15 +762,15 @@ func TestDifferenceMixed(t *testing.T) {
 
 	a.runs = []interval16{{start: 5, last: 10}}
 	a.n = a.runCountRange(0, 100)
-	a.container_type = ContainerRun
+	a.containerType = ContainerRun
 
 	b.array = []uint16{0, 2, 4, 6, 8, 10, 12}
 	b.n = len(b.array)
-	b.container_type = ContainerArray
+	b.containerType = ContainerArray
 
 	d.array = []uint16{1, 3, 5, 7, 9, 11, 12}
 	d.n = len(d.array)
-	d.container_type = ContainerArray
+	d.containerType = ContainerArray
 
 	res := difference(a, b)
 
@@ -788,7 +790,7 @@ func TestDifferenceMixed(t *testing.T) {
 
 	c.bitmap = []uint64{0x64}
 	c.n = c.countRange(0, 100)
-	c.container_type = ContainerBitmap
+	c.containerType = ContainerBitmap
 	res = difference(c, a)
 	if !reflect.DeepEqual(res.bitmap, []uint64{0x4}) {
 		t.Fatalf("test #4 expected %v, but got %v", []uint16{4}, res.bitmap)
@@ -883,8 +885,8 @@ func TestUnionRunRun(t *testing.T) {
 	for i, test := range tests {
 		a.runs = test.aruns
 		b.runs = test.bruns
-		a.container_type = ContainerRun
-		b.container_type = ContainerRun
+		a.containerType = ContainerRun
+		b.containerType = ContainerRun
 		ret := unionRunRun(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
@@ -925,8 +927,8 @@ func TestUnionArrayRun(t *testing.T) {
 	for i, test := range tests {
 		a.array = test.array
 		b.runs = test.runs
-		a.container_type = ContainerArray
-		b.container_type = ContainerRun
+		a.containerType = ContainerArray
+		b.containerType = ContainerRun
 		ret := unionArrayRun(a, b)
 		if !reflect.DeepEqual(ret.array, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
@@ -935,7 +937,7 @@ func TestUnionArrayRun(t *testing.T) {
 }
 
 func TestBitmapSetRange(t *testing.T) {
-	c := &container{container_type: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
+	c := &container{containerType: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
 	tests := []struct {
 		bitmap []uint64
 		start  uint64
@@ -975,7 +977,7 @@ func TestBitmapSetRange(t *testing.T) {
 }
 
 func TestArrayToBitmap(t *testing.T) {
-	a := &container{container_type: ContainerArray}
+	a := &container{containerType: ContainerArray}
 	tests := []struct {
 		array []uint16
 		exp   []uint64
@@ -1006,7 +1008,7 @@ func TestArrayToBitmap(t *testing.T) {
 }
 
 func TestBitmapToArray(t *testing.T) {
-	a := &container{container_type: ContainerBitmap}
+	a := &container{containerType: ContainerBitmap}
 	tests := []struct {
 		bitmap []uint64
 		exp    []uint16
@@ -1037,7 +1039,7 @@ func TestBitmapToArray(t *testing.T) {
 }
 
 func TestRunToBitmap(t *testing.T) {
-	a := &container{container_type: ContainerRun}
+	a := &container{containerType: ContainerRun}
 	tests := []struct {
 		runs []interval16
 		exp  []uint64
@@ -1091,7 +1093,7 @@ func getFullBitmap() []uint64 {
 }
 
 func TestBitmapToRun(t *testing.T) {
-	a := &container{container_type: ContainerBitmap}
+	a := &container{containerType: ContainerBitmap}
 	tests := []struct {
 		bitmap []uint64
 		exp    []interval16
@@ -1169,7 +1171,7 @@ func TestBitmapToRun(t *testing.T) {
 }
 
 func TestArrayToRun(t *testing.T) {
-	a := &container{container_type: ContainerArray}
+	a := &container{containerType: ContainerArray}
 	tests := []struct {
 		array []uint16
 		exp   []interval16
@@ -1203,7 +1205,7 @@ func TestArrayToRun(t *testing.T) {
 }
 
 func TestRunToArray(t *testing.T) {
-	a := &container{container_type: ContainerRun}
+	a := &container{containerType: ContainerRun}
 	tests := []struct {
 		runs []interval16
 		exp  []uint16
@@ -1237,7 +1239,7 @@ func TestRunToArray(t *testing.T) {
 }
 
 func TestBitmapZeroRange(t *testing.T) {
-	c := &container{container_type: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
+	c := &container{containerType: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
 	tests := []struct {
 		bitmap []uint64
 		start  uint64
@@ -1273,7 +1275,7 @@ func TestBitmapZeroRange(t *testing.T) {
 		if test.expN != c.n {
 			t.Fatalf("test #%v expected n to be %v, but got %v", i, test.expN, c.n)
 		}
-		for i, _ := range test.bitmap {
+		for i := range test.bitmap {
 			c.bitmap[i] = 0
 		}
 	}
@@ -1281,8 +1283,8 @@ func TestBitmapZeroRange(t *testing.T) {
 }
 
 func TestUnionBitmapRun(t *testing.T) {
-	a := &container{container_type: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
-	b := &container{container_type: ContainerRun}
+	a := &container{containerType: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
+	b := &container{containerType: ContainerRun}
 	tests := []struct {
 		bitmap []uint64
 		runs   []interval16
@@ -1313,14 +1315,14 @@ func TestUnionBitmapRun(t *testing.T) {
 		if ret.n != test.expN {
 			t.Fatalf("test #%v expected n to be %v, but got %v", i, test.expN, ret.n)
 		}
-		for i, _ := range test.bitmap {
+		for i := range test.bitmap {
 			a.bitmap[i] = 0
 		}
 	}
 }
 
 func TestBitmapCountRuns(t *testing.T) {
-	c := &container{container_type: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
+	c := &container{containerType: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
 	tests := []struct {
 		bitmap []uint64
 		exp    int
@@ -1353,7 +1355,7 @@ func TestBitmapCountRuns(t *testing.T) {
 			t.Fatalf("test #%v expected %v but got %v", i, test.exp, ret)
 		}
 
-		for j, _ := range test.bitmap {
+		for j := range test.bitmap {
 			c.bitmap[j] = 0
 		}
 	}
@@ -1370,7 +1372,7 @@ func TestBitmapCountRuns(t *testing.T) {
 }
 
 func TestArrayCountRuns(t *testing.T) {
-	c := &container{container_type: ContainerArray}
+	c := &container{containerType: ContainerArray}
 	tests := []struct {
 		array []uint16
 		exp   int
@@ -1411,8 +1413,8 @@ func TestArrayCountRuns(t *testing.T) {
 }
 
 func TestDifferenceArrayRun(t *testing.T) {
-	a := &container{container_type: ContainerArray}
-	b := &container{container_type: ContainerRun}
+	a := &container{containerType: ContainerArray}
+	b := &container{containerType: ContainerRun}
 	tests := []struct {
 		array []uint16
 		runs  []interval16
@@ -1437,8 +1439,8 @@ func TestDifferenceArrayRun(t *testing.T) {
 }
 
 func TestDifferenceRunArray(t *testing.T) {
-	a := &container{container_type: ContainerRun}
-	b := &container{container_type: ContainerArray}
+	a := &container{containerType: ContainerRun}
+	b := &container{containerType: ContainerArray}
 	tests := []struct {
 		runs  []interval16
 		array []uint16
@@ -1518,8 +1520,8 @@ func MakeLastBitSet() []uint64 {
 }
 
 func TestDifferenceRunBitmap(t *testing.T) {
-	a := &container{container_type: ContainerRun}
-	b := &container{container_type: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
+	a := &container{containerType: ContainerRun}
+	b := &container{containerType: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
 	tests := []struct {
 		runs   []interval16
 		bitmap []uint64
@@ -1581,8 +1583,8 @@ func TestDifferenceRunBitmap(t *testing.T) {
 }
 
 func TestDifferenceBitmapRun(t *testing.T) {
-	a := &container{container_type: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
-	b := &container{container_type: ContainerRun}
+	a := &container{containerType: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
+	b := &container{containerType: ContainerRun}
 	tests := []struct {
 		bitmap []uint64
 		runs   []interval16
@@ -1639,7 +1641,7 @@ func TestDifferenceBitmapRun(t *testing.T) {
 			exp:    []uint64{0x0000000000000000},
 		},
 		{
-			bitmap: bitmapLast(),
+			bitmap: bitmapLastBitSet(),
 			runs:   []interval16{{start: 65535, last: 65535}},
 			exp:    bitmapEmpty(),
 		},
@@ -1664,8 +1666,8 @@ func TestDifferenceBitmapRun(t *testing.T) {
 }
 
 func TestDifferenceBitmapArray(t *testing.T) {
-	b := &container{container_type: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
-	a := &container{container_type: ContainerArray}
+	b := &container{containerType: ContainerBitmap, bitmap: make([]uint64, bitmapN)}
+	a := &container{containerType: ContainerArray}
 	tests := []struct {
 		bitmap []uint64
 		array  []uint16
@@ -1687,12 +1689,12 @@ func TestDifferenceBitmapArray(t *testing.T) {
 			exp:    []uint16{8, 9, 11, 12, 13, 14, 15},
 		},
 		{
-			bitmap: bitmapOdds(),
+			bitmap: bitmapOddBitsSet(),
 			array:  []uint16{0, 1, 2, 3, 4, 5, 6, 7, 10},
 			exp:    []uint16{9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63},
 		},
 		{
-			bitmap: bitmapOdds(),
+			bitmap: bitmapOddBitsSet(),
 			array:  []uint16{63},
 			exp:    []uint16{1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61},
 		},
@@ -1714,8 +1716,8 @@ func TestDifferenceBitmapArray(t *testing.T) {
 }
 
 func TestDifferenceBitmapBitmap(t *testing.T) {
-	a := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
-	b := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+	a := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
+	b := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
 	tests := []struct {
 		abitmap []uint64
 		bbitmap []uint64
@@ -1744,8 +1746,8 @@ func TestDifferenceBitmapBitmap(t *testing.T) {
 }
 
 func TestDifferenceRunRun(t *testing.T) {
-	a := &container{container_type: ContainerRun}
-	b := &container{container_type: ContainerRun}
+	a := &container{containerType: ContainerRun}
+	b := &container{containerType: ContainerRun}
 	tests := []struct {
 		aruns []interval16
 		bruns []interval16
@@ -1778,7 +1780,7 @@ func TestDifferenceRunRun(t *testing.T) {
 }
 
 func TestWriteReadArray(t *testing.T) {
-	ca := &container{array: []uint16{1, 10, 100, 1000}, n: 4, container_type: ContainerArray}
+	ca := &container{array: []uint16{1, 10, 100, 1000}, n: 4, containerType: ContainerArray}
 	ba := &Bitmap{keys: []uint64{0}, containers: []*container{ca}}
 	ba2 := &Bitmap{}
 	var buf bytes.Buffer
@@ -1797,7 +1799,7 @@ func TestWriteReadArray(t *testing.T) {
 
 func TestWriteReadBitmap(t *testing.T) {
 	// create bitmap containing > 4096 bits
-	cb := &container{bitmap: make([]uint64, bitmapN), n: 129 * 32, container_type: ContainerBitmap}
+	cb := &container{bitmap: make([]uint64, bitmapN), n: 129 * 32, containerType: ContainerBitmap}
 	for i := 0; i < 129; i++ {
 		cb.bitmap[i] = 0x5555555555555555
 	}
@@ -1819,7 +1821,7 @@ func TestWriteReadBitmap(t *testing.T) {
 
 func TestWriteReadFullBitmap(t *testing.T) {
 	// create bitmap containing > 4096 bits
-	cb := &container{bitmap: make([]uint64, bitmapN), n: 65536, container_type: ContainerBitmap}
+	cb := &container{bitmap: make([]uint64, bitmapN), n: 65536, containerType: ContainerBitmap}
 	for i := 0; i < bitmapN; i++ {
 		cb.bitmap[i] = 0xffffffffffffffff
 	}
@@ -1847,7 +1849,7 @@ func TestWriteReadFullBitmap(t *testing.T) {
 }
 
 func TestWriteReadRun(t *testing.T) {
-	cr := &container{runs: []interval16{{start: 3, last: 13}, {start: 100, last: 109}}, n: 21, container_type: ContainerRun}
+	cr := &container{runs: []interval16{{start: 3, last: 13}, {start: 100, last: 109}}, n: 21, containerType: ContainerRun}
 	br := &Bitmap{keys: []uint64{0}, containers: []*container{cr}}
 	br2 := &Bitmap{}
 	var buf bytes.Buffer
@@ -1871,21 +1873,21 @@ func TestXorArrayRun(t *testing.T) {
 		exp *container
 	}{
 		{
-			a:   &container{array: []uint16{1, 5, 10, 11, 12}, container_type: ContainerArray},
-			b:   &container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun},
-			exp: &container{array: []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 13, 15, 16}, container_type: ContainerArray, n: 12},
+			a:   &container{array: []uint16{1, 5, 10, 11, 12}, containerType: ContainerArray},
+			b:   &container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, containerType: ContainerRun},
+			exp: &container{array: []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 13, 15, 16}, containerType: ContainerArray, n: 12},
 		}, {
-			a:   &container{array: []uint16{1, 5, 10, 11, 12, 13, 14}, container_type: ContainerArray},
-			b:   &container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, container_type: ContainerRun},
-			exp: &container{array: []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}, container_type: ContainerArray, n: 12},
+			a:   &container{array: []uint16{1, 5, 10, 11, 12, 13, 14}, containerType: ContainerArray},
+			b:   &container{runs: []interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, containerType: ContainerRun},
+			exp: &container{array: []uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}, containerType: ContainerArray, n: 12},
 		}, {
-			a:   &container{array: []uint16{65535}, container_type: ContainerArray},
-			b:   &container{runs: []interval16{{start: 65534, last: 65535}}, container_type: ContainerRun},
-			exp: &container{array: []uint16{65534}, container_type: ContainerArray, n: 1},
+			a:   &container{array: []uint16{65535}, containerType: ContainerArray},
+			b:   &container{runs: []interval16{{start: 65534, last: 65535}}, containerType: ContainerRun},
+			exp: &container{array: []uint16{65534}, containerType: ContainerArray, n: 1},
 		}, {
-			a:   &container{array: []uint16{65535}, container_type: ContainerArray},
-			b:   &container{runs: []interval16{{start: 65535, last: 65535}}, container_type: ContainerRun},
-			exp: &container{array: []uint16{}, container_type: ContainerArray, n: 0},
+			a:   &container{array: []uint16{65535}, containerType: ContainerArray},
+			b:   &container{runs: []interval16{{start: 65535, last: 65535}}, containerType: ContainerRun},
+			exp: &container{array: []uint16{}, containerType: ContainerArray, n: 0},
 		},
 	}
 
@@ -1906,8 +1908,8 @@ func TestXorArrayRun(t *testing.T) {
 
 //special case that didn't fit the xorrunrun table testing below.
 func TestXorRunRun1(t *testing.T) {
-	a := &container{container_type: ContainerRun}
-	b := &container{container_type: ContainerRun}
+	a := &container{containerType: ContainerRun}
+	b := &container{containerType: ContainerRun}
 	a.runs = []interval16{{start: 4, last: 10}}
 	b.runs = []interval16{{start: 5, last: 10}}
 	ret := xorRunRun(a, b)
@@ -1921,8 +1923,8 @@ func TestXorRunRun1(t *testing.T) {
 }
 
 func TestXorRunRun(t *testing.T) {
-	a := &container{container_type: ContainerRun}
-	b := &container{container_type: ContainerRun}
+	a := &container{containerType: ContainerRun}
+	b := &container{containerType: ContainerRun}
 	tests := []struct {
 		aruns []interval16
 		bruns []interval16
@@ -2019,7 +2021,7 @@ func TestXorRunRun(t *testing.T) {
 }
 
 func TestBitmapFlip(t *testing.T) {
-	c := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+	c := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
 
 	ttable := []struct {
 		original uint64
@@ -2051,7 +2053,7 @@ func TestBitmapFlip(t *testing.T) {
 }
 
 func TestBitmapXorRange(t *testing.T) {
-	c := &container{bitmap: make([]uint64, bitmapN), container_type: ContainerBitmap}
+	c := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
 	tests := []struct {
 		bitmap []uint64
 		start  uint64
@@ -2119,8 +2121,8 @@ func TestBitmapXorRange(t *testing.T) {
 }
 
 func TestXorBitmapRun(t *testing.T) {
-	a := &container{container_type: ContainerBitmap}
-	b := &container{container_type: ContainerRun}
+	a := &container{containerType: ContainerBitmap}
+	b := &container{containerType: ContainerRun}
 	tests := []struct {
 		bitmap []uint64
 		runs   []interval16
@@ -2493,65 +2495,6 @@ func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
 	}
 }
 
-func Test_BufBitmapIterator_Next(t *testing.T) {
-	b := NewBitmap()
-	for i := uint64(0); i < 4097; i++ {
-		b.Add(i)
-	}
-	if !b.containers[0].isBitmap() {
-		t.Fatalf("wrong container type")
-	}
-
-	bin := []uint16{}
-
-	itr := newBufBitmapIterator(newBitmapIterator(b.containers[0].bitmap))
-	x := uint16(0)
-
-	for i := 0; i < 10; i++ {
-		x, _ = itr.next()
-		bin = append(bin, x)
-	}
-	exp := []uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-	if !reflect.DeepEqual(bin, exp) {
-		t.Fatalf("BufBitmapIterator expected (%v) but got (%v)", exp, bin)
-	}
-
-	// ensure that unread points next back one such that the last value is repeated
-	itr.unread()
-	x, _ = itr.next()
-	bin = append(bin, x)
-	exp = append(exp, uint16(9))
-	if !reflect.DeepEqual(bin, exp) {
-		t.Fatalf("BufBitmapIterator expected (%v) but got (%v)", exp, bin)
-	}
-}
-
-func Test_BufBitmapIterator_UnreadPanic(t *testing.T) {
-
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("BufBitmapIterator unread did not panic")
-		}
-	}()
-
-	b := NewBitmap()
-	for i := uint64(0); i < 4097; i++ {
-		b.Add(i)
-	}
-	if !b.containers[0].isBitmap() {
-		t.Fatalf("wrong container type")
-	}
-
-	itr := newBufBitmapIterator(newBitmapIterator(b.containers[0].bitmap))
-	for i := 0; i < 10; i++ {
-		itr.next()
-	}
-
-	// ensure that unreading back-to-back panics
-	itr.unread()
-	itr.unread()
-}
-
 func TestSearch64(t *testing.T) {
 	tests := []struct {
 		a     []uint64
@@ -2631,9 +2574,9 @@ func TestSearch64(t *testing.T) {
 }
 
 func TestIntersectArrayBitmap(t *testing.T) {
-	a, b := &container{container_type: ContainerArray}, &container{
-		container_type: ContainerBitmap,
-		bitmap:         make([]uint64, bitmapN),
+	a, b := &container{containerType: ContainerArray}, &container{
+		containerType: ContainerBitmap,
+		bitmap:        make([]uint64, bitmapN),
 	}
 	tests := []struct {
 		array  []uint16
@@ -2667,23 +2610,23 @@ func TestIntersectArrayBitmap(t *testing.T) {
 		},
 		{
 			array:  []uint16{0, 1, 63, 120, 543, 639, 12000, 65534, 65535},
-			bitmap: bitmapOdds(),
+			bitmap: bitmapOddBitsSet(),
 			exp:    []uint16{1, 63, 543, 639, 65535},
 		},
 		{
 			array:  []uint16{0, 1, 63, 120, 543, 639, 12000, 65534, 65535},
-			bitmap: bitmapEvens(),
+			bitmap: bitmapEvenBitsSet(),
 			exp:    []uint16{0, 120, 12000, 65534},
 		},
 	}
 
 	for i, test := range tests {
 		a.array = test.array
-		a.container_type = ContainerArray
+		a.containerType = ContainerArray
 		for i, bmval := range test.bitmap {
 			b.bitmap[i] = bmval
 		}
-		b.container_type = ContainerBitmap
+		b.containerType = ContainerBitmap
 		ret := intersectArrayBitmap(a, b).array
 		if len(ret) == 0 && len(test.exp) == 0 {
 			continue
@@ -2693,49 +2636,6 @@ func TestIntersectArrayBitmap(t *testing.T) {
 		}
 	}
 }
-
-func bitmapOdds() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN; i++ {
-		bitmap[i] = 0xAAAAAAAAAAAAAAAA
-	}
-	return bitmap
-}
-
-func bitmapEvens() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN; i++ {
-		bitmap[i] = 0x5555555555555555
-	}
-	return bitmap
-}
-
-func bitmapLast() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN-1; i++ {
-		bitmap[i] = 0
-	}
-	bitmap[bitmapN-1] = 0x8000000000000000
-	return bitmap
-}
-
-func bitmapFull() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN; i++ {
-		bitmap[i] = 0xFFFFFFFFFFFFFFFF
-	}
-	return bitmap
-}
-
-func bitmapEmpty() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN; i++ {
-		bitmap[i] = 0
-	}
-	return bitmap
-}
-
-var containerWidth uint64 = 65536
 
 // rleCont returns a slice of numbers all in the range starting from
 // container_width*num, and ending at container_width*(num+1)-1. If left is
@@ -2817,4 +2717,526 @@ func bitmapVariousContainers() *Bitmap {
 	bm := NewBitmap(bits...)
 	bm.Optimize()
 	return bm
+}
+
+///////////////////////////////////////////////////////////////////////////
+
+func getFunctionName(i interface{}) string {
+	x := runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
+	y := strings.Split(x, ".")
+	y = y[len(y)-1:]
+	return y[0]
+}
+
+func TestContainerCombinations(t *testing.T) {
+
+	cts := setupContainerTests()
+
+	containerTypes := []byte{ContainerArray, ContainerBitmap, ContainerRun}
+
+	// map used for a more descriptive print
+	cm := map[byte]string{
+		ContainerArray:  "array",
+		ContainerBitmap: "bitmap",
+		ContainerRun:    "run",
+	}
+
+	testOps := []testOp{
+		// intersect
+		{intersect, "empty", "empty", "empty"},
+		{intersect, "empty", "full", "empty"},
+		{intersect, "empty", "firstBitSet", "empty"},
+		{intersect, "empty", "lastBitSet", "empty"},
+		{intersect, "empty", "firstBitUnset", "empty"},
+		{intersect, "empty", "lastBitUnset", "empty"},
+		{intersect, "empty", "innerBitsSet", "empty"},
+		{intersect, "empty", "outerBitsSet", "empty"},
+		{intersect, "empty", "oddBitsSet", "empty"},
+		{intersect, "empty", "evenBitsSet", "empty"},
+		//
+		{intersect, "full", "empty", "empty"},
+		{intersect, "full", "full", "full"},
+		{intersect, "full", "firstBitSet", "firstBitSet"},
+		{intersect, "full", "lastBitSet", "lastBitSet"},
+		{intersect, "full", "firstBitUnset", "firstBitUnset"},
+		{intersect, "full", "lastBitUnset", "lastBitUnset"},
+		{intersect, "full", "innerBitsSet", "innerBitsSet"},
+		{intersect, "full", "outerBitsSet", "outerBitsSet"},
+		{intersect, "full", "oddBitsSet", "oddBitsSet"},
+		{intersect, "full", "evenBitsSet", "evenBitsSet"},
+		//
+		{intersect, "firstBitSet", "empty", "empty"},
+		{intersect, "firstBitSet", "full", "firstBitSet"},
+		{intersect, "firstBitSet", "firstBitSet", "firstBitSet"},
+		{intersect, "firstBitSet", "lastBitSet", "empty"},
+		{intersect, "firstBitSet", "firstBitUnset", "empty"},
+		{intersect, "firstBitSet", "lastBitUnset", "firstBitSet"},
+		{intersect, "firstBitSet", "innerBitsSet", "empty"},
+		{intersect, "firstBitSet", "outerBitsSet", "firstBitSet"},
+		{intersect, "firstBitSet", "oddBitsSet", "empty"},
+		{intersect, "firstBitSet", "evenBitsSet", "firstBitSet"},
+		//
+		{intersect, "lastBitSet", "empty", "empty"},
+		{intersect, "lastBitSet", "full", "lastBitSet"},
+		{intersect, "lastBitSet", "firstBitSet", "empty"},
+		{intersect, "lastBitSet", "lastBitSet", "lastBitSet"},
+		{intersect, "lastBitSet", "firstBitUnset", "lastBitSet"},
+		{intersect, "lastBitSet", "lastBitUnset", "empty"},
+		{intersect, "lastBitSet", "innerBitsSet", "empty"},
+		{intersect, "lastBitSet", "outerBitsSet", "lastBitSet"},
+		{intersect, "lastBitSet", "oddBitsSet", "lastBitSet"},
+		{intersect, "lastBitSet", "evenBitsSet", "empty"},
+		//
+		{intersect, "firstBitUnset", "empty", "empty"},
+		{intersect, "firstBitUnset", "full", "firstBitUnset"},
+		{intersect, "firstBitUnset", "firstBitSet", "empty"},
+		{intersect, "firstBitUnset", "lastBitSet", "lastBitSet"},
+		{intersect, "firstBitUnset", "firstBitUnset", "firstBitUnset"},
+		{intersect, "firstBitUnset", "lastBitUnset", "innerBitsSet"},
+		{intersect, "firstBitUnset", "innerBitsSet", "innerBitsSet"},
+		{intersect, "firstBitUnset", "outerBitsSet", "lastBitSet"},
+		{intersect, "firstBitUnset", "oddBitsSet", "oddBitsSet"},
+		//{intersect, "firstBitUnset", "evenBitsSet", ""},
+		//
+		{intersect, "lastBitUnset", "empty", "empty"},
+		{intersect, "lastBitUnset", "full", "lastBitUnset"},
+		{intersect, "lastBitUnset", "firstBitSet", "firstBitSet"},
+		{intersect, "lastBitUnset", "lastBitSet", "empty"},
+		{intersect, "lastBitUnset", "firstBitUnset", "innerBitsSet"},
+		{intersect, "lastBitUnset", "lastBitUnset", "lastBitUnset"},
+		{intersect, "lastBitUnset", "innerBitsSet", "innerBitsSet"},
+		{intersect, "lastBitUnset", "outerBitsSet", "firstBitSet"},
+		//{intersect, "lastBitUnset", "oddBitsSet", ""},
+		{intersect, "lastBitUnset", "evenBitsSet", "evenBitsSet"},
+		//
+		{intersect, "innerBitsSet", "empty", "empty"},
+		{intersect, "innerBitsSet", "full", "innerBitsSet"},
+		{intersect, "innerBitsSet", "firstBitSet", "empty"},
+		{intersect, "innerBitsSet", "lastBitSet", "empty"},
+		{intersect, "innerBitsSet", "firstBitUnset", "innerBitsSet"},
+		{intersect, "innerBitsSet", "lastBitUnset", "innerBitsSet"},
+		{intersect, "innerBitsSet", "innerBitsSet", "innerBitsSet"},
+		{intersect, "innerBitsSet", "outerBitsSet", "empty"},
+		//{intersect, "innerBitsSet", "oddBitsSet", ""},
+		//{intersect, "innerBitsSet", "evenBitsSet", ""},
+		//
+		{intersect, "outerBitsSet", "empty", "empty"},
+		{intersect, "outerBitsSet", "full", "outerBitsSet"},
+		{intersect, "outerBitsSet", "firstBitSet", "firstBitSet"},
+		{intersect, "outerBitsSet", "lastBitSet", "lastBitSet"},
+		{intersect, "outerBitsSet", "firstBitUnset", "lastBitSet"},
+		{intersect, "outerBitsSet", "lastBitUnset", "firstBitSet"},
+		{intersect, "outerBitsSet", "innerBitsSet", "empty"},
+		{intersect, "outerBitsSet", "outerBitsSet", "outerBitsSet"},
+		{intersect, "outerBitsSet", "oddBitsSet", "lastBitSet"},
+		{intersect, "outerBitsSet", "evenBitsSet", "firstBitSet"},
+		//
+		{intersect, "oddBitsSet", "empty", "empty"},
+		{intersect, "oddBitsSet", "full", "oddBitsSet"},
+		{intersect, "oddBitsSet", "firstBitSet", "empty"},
+		{intersect, "oddBitsSet", "lastBitSet", "lastBitSet"},
+		{intersect, "oddBitsSet", "firstBitUnset", "oddBitsSet"},
+		//{intersect, "oddBitsSet", "lastBitUnset", ""},
+		//{intersect, "oddBitsSet", "innerBitsSet", ""},
+		{intersect, "oddBitsSet", "outerBitsSet", "lastBitSet"},
+		{intersect, "oddBitsSet", "oddBitsSet", "oddBitsSet"},
+		{intersect, "oddBitsSet", "evenBitsSet", "empty"},
+		//
+		{intersect, "evenBitsSet", "empty", "empty"},
+		{intersect, "evenBitsSet", "full", "evenBitsSet"},
+		{intersect, "evenBitsSet", "firstBitSet", "firstBitSet"},
+		{intersect, "evenBitsSet", "lastBitSet", "empty"},
+		//{intersect, "evenBitsSet", "firstBitUnset", ""},
+		{intersect, "evenBitsSet", "lastBitUnset", "evenBitsSet"},
+		//{intersect, "evenBitsSet", "innerBitsSet", ""},
+		{intersect, "evenBitsSet", "outerBitsSet", "firstBitSet"},
+		{intersect, "evenBitsSet", "oddBitsSet", "empty"},
+		{intersect, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
+
+		// union
+		{union, "empty", "empty", "empty"},
+		{union, "empty", "full", "full"},
+		{union, "empty", "firstBitSet", "firstBitSet"},
+		{union, "empty", "lastBitSet", "lastBitSet"},
+		{union, "empty", "firstBitUnset", "firstBitUnset"},
+		{union, "empty", "lastBitUnset", "lastBitUnset"},
+		{union, "empty", "innerBitsSet", "innerBitsSet"},
+		{union, "empty", "outerBitsSet", "outerBitsSet"},
+		{union, "empty", "oddBitsSet", "oddBitsSet"},
+		{union, "empty", "evenBitsSet", "evenBitsSet"},
+		//
+		{union, "full", "empty", "full"},
+		{union, "full", "full", "full"},
+		{union, "full", "firstBitSet", "full"},
+		{union, "full", "lastBitSet", "full"},
+		{union, "full", "firstBitUnset", "full"},
+		{union, "full", "lastBitUnset", "full"},
+		{union, "full", "innerBitsSet", "full"},
+		{union, "full", "outerBitsSet", "full"},
+		{union, "full", "oddBitsSet", "full"},
+		{union, "full", "evenBitsSet", "full"},
+		//
+		{union, "firstBitSet", "empty", "firstBitSet"},
+		{union, "firstBitSet", "full", "full"},
+		{union, "firstBitSet", "firstBitSet", "firstBitSet"},
+		{union, "firstBitSet", "lastBitSet", "outerBitsSet"},
+		{union, "firstBitSet", "firstBitUnset", "full"},
+		{union, "firstBitSet", "lastBitUnset", "lastBitUnset"},
+		{union, "firstBitSet", "innerBitsSet", "lastBitUnset"},
+		{union, "firstBitSet", "outerBitsSet", "outerBitsSet"},
+		//{union, "firstBitSet", "oddBitsSet", ""},
+		{union, "firstBitSet", "evenBitsSet", "evenBitsSet"},
+		//
+		{union, "lastBitSet", "empty", "lastBitSet"},
+		{union, "lastBitSet", "full", "full"},
+		{union, "lastBitSet", "firstBitSet", "outerBitsSet"},
+		{union, "lastBitSet", "lastBitSet", "lastBitSet"},
+		{union, "lastBitSet", "firstBitUnset", "firstBitUnset"},
+		{union, "lastBitSet", "lastBitUnset", "full"},
+		{union, "lastBitSet", "innerBitsSet", "firstBitUnset"},
+		{union, "lastBitSet", "outerBitsSet", "outerBitsSet"},
+		{union, "lastBitSet", "oddBitsSet", "oddBitsSet"},
+		//{union, "lastBitSet", "evenBitsSet", ""},
+		//
+		{union, "firstBitUnset", "empty", "firstBitUnset"},
+		{union, "firstBitUnset", "full", "full"},
+		{union, "firstBitUnset", "firstBitSet", "full"},
+		{union, "firstBitUnset", "lastBitSet", "firstBitUnset"},
+		{union, "firstBitUnset", "firstBitUnset", "firstBitUnset"},
+		{union, "firstBitUnset", "lastBitUnset", "full"},
+		{union, "firstBitUnset", "innerBitsSet", "firstBitUnset"},
+		{union, "firstBitUnset", "outerBitsSet", "full"},
+		{union, "firstBitUnset", "oddBitsSet", "firstBitUnset"},
+		{union, "firstBitUnset", "evenBitsSet", "full"},
+		//
+		{union, "lastBitUnset", "empty", "lastBitUnset"},
+		{union, "lastBitUnset", "full", "full"},
+		{union, "lastBitUnset", "firstBitSet", "lastBitUnset"},
+		{union, "lastBitUnset", "lastBitSet", "full"},
+		{union, "lastBitUnset", "firstBitUnset", "full"},
+		{union, "lastBitUnset", "lastBitUnset", "lastBitUnset"},
+		{union, "lastBitUnset", "innerBitsSet", "lastBitUnset"},
+		{union, "lastBitUnset", "outerBitsSet", "full"},
+		{union, "lastBitUnset", "oddBitsSet", "full"},
+		{union, "lastBitUnset", "evenBitsSet", "lastBitUnset"},
+		//
+		{union, "innerBitsSet", "empty", "innerBitsSet"},
+		{union, "innerBitsSet", "full", "full"},
+		{union, "innerBitsSet", "firstBitSet", "lastBitUnset"},
+		{union, "innerBitsSet", "lastBitSet", "firstBitUnset"},
+		{union, "innerBitsSet", "firstBitUnset", "firstBitUnset"},
+		{union, "innerBitsSet", "lastBitUnset", "lastBitUnset"},
+		{union, "innerBitsSet", "innerBitsSet", "innerBitsSet"},
+		{union, "innerBitsSet", "outerBitsSet", "full"},
+		{union, "innerBitsSet", "oddBitsSet", "firstBitUnset"},
+		{union, "innerBitsSet", "evenBitsSet", "lastBitUnset"},
+		//
+		{union, "outerBitsSet", "empty", "outerBitsSet"},
+		{union, "outerBitsSet", "full", "full"},
+		{union, "outerBitsSet", "firstBitSet", "outerBitsSet"},
+		{union, "outerBitsSet", "lastBitSet", "outerBitsSet"},
+		{union, "outerBitsSet", "firstBitUnset", "full"},
+		{union, "outerBitsSet", "lastBitUnset", "full"},
+		{union, "outerBitsSet", "innerBitsSet", "full"},
+		{union, "outerBitsSet", "outerBitsSet", "outerBitsSet"},
+		//{union, "outerBitsSet", "oddBitsSet", ""},
+		//{union, "outerBitsSet", "evenBitsSet", ""},
+		//
+		{union, "oddBitsSet", "empty", "oddBitsSet"},
+		{union, "oddBitsSet", "full", "full"},
+		//{union, "oddBitsSet", "firstBitSet", ""},
+		{union, "oddBitsSet", "lastBitSet", "oddBitsSet"},
+		{union, "oddBitsSet", "firstBitUnset", "firstBitUnset"},
+		{union, "oddBitsSet", "lastBitUnset", "full"},
+		{union, "oddBitsSet", "innerBitsSet", "firstBitUnset"},
+		//{union, "oddBitsSet", "outerBitsSet", ""},
+		{union, "oddBitsSet", "oddBitsSet", "oddBitsSet"},
+		{union, "oddBitsSet", "evenBitsSet", "full"},
+		//
+		{union, "evenBitsSet", "empty", "evenBitsSet"},
+		{union, "evenBitsSet", "full", "full"},
+		{union, "evenBitsSet", "firstBitSet", "evenBitsSet"},
+		//{union, "evenBitsSet", "lastBitSet", ""},
+		{union, "evenBitsSet", "firstBitUnset", "full"},
+		{union, "evenBitsSet", "lastBitUnset", "lastBitUnset"},
+		{union, "evenBitsSet", "innerBitsSet", "lastBitUnset"},
+		//{union, "evenBitsSet", "outerBitsSet", ""},
+		{union, "evenBitsSet", "oddBitsSet", "full"},
+		{union, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
+
+		// difference
+		{difference, "empty", "empty", "empty"},
+		{difference, "empty", "full", "empty"},
+		{difference, "empty", "firstBitSet", "empty"},
+		{difference, "empty", "lastBitSet", "empty"},
+		{difference, "empty", "firstBitUnset", "empty"},
+		{difference, "empty", "lastBitUnset", "empty"},
+		{difference, "empty", "innerBitsSet", "empty"},
+		{difference, "empty", "outerBitsSet", "empty"},
+		{difference, "empty", "oddBitsSet", "empty"},
+		{difference, "empty", "evenBitsSet", "empty"},
+		//
+		{difference, "full", "empty", "full"},
+		{difference, "full", "full", "empty"},
+		{difference, "full", "firstBitSet", "firstBitUnset"},
+		{difference, "full", "lastBitSet", "lastBitUnset"},
+		{difference, "full", "firstBitUnset", "firstBitSet"},
+		{difference, "full", "lastBitUnset", "lastBitSet"},
+		{difference, "full", "innerBitsSet", "outerBitsSet"},
+		{difference, "full", "outerBitsSet", "innerBitsSet"},
+		{difference, "full", "oddBitsSet", "evenBitsSet"},
+		{difference, "full", "evenBitsSet", "oddBitsSet"},
+		//
+		{difference, "firstBitSet", "empty", "firstBitSet"},
+		{difference, "firstBitSet", "full", "empty"},
+		{difference, "firstBitSet", "firstBitSet", "empty"},
+		{difference, "firstBitSet", "lastBitSet", "firstBitSet"},
+		{difference, "firstBitSet", "firstBitUnset", "firstBitSet"},
+		{difference, "firstBitSet", "lastBitUnset", "empty"},
+		{difference, "firstBitSet", "innerBitsSet", "firstBitSet"},
+		{difference, "firstBitSet", "outerBitsSet", "empty"},
+		{difference, "firstBitSet", "oddBitsSet", "firstBitSet"},
+		{difference, "firstBitSet", "evenBitsSet", "empty"},
+		//
+		{difference, "lastBitSet", "empty", "lastBitSet"},
+		{difference, "lastBitSet", "full", "empty"},
+		{difference, "lastBitSet", "firstBitSet", "lastBitSet"},
+		{difference, "lastBitSet", "lastBitSet", "empty"},
+		{difference, "lastBitSet", "firstBitUnset", "empty"},
+		{difference, "lastBitSet", "lastBitUnset", "lastBitSet"},
+		{difference, "lastBitSet", "innerBitsSet", "lastBitSet"},
+		{difference, "lastBitSet", "outerBitsSet", "empty"},
+		{difference, "lastBitSet", "oddBitsSet", "empty"},
+		{difference, "lastBitSet", "evenBitsSet", "lastBitSet"},
+		//
+		{difference, "firstBitUnset", "empty", "firstBitUnset"},
+		{difference, "firstBitUnset", "full", "empty"},
+		{difference, "firstBitUnset", "firstBitSet", "firstBitUnset"},
+		{difference, "firstBitUnset", "lastBitSet", "innerBitsSet"},
+		{difference, "firstBitUnset", "firstBitUnset", "empty"},
+		{difference, "firstBitUnset", "lastBitUnset", "lastBitSet"},
+		{difference, "firstBitUnset", "innerBitsSet", "lastBitSet"},
+		{difference, "firstBitUnset", "outerBitsSet", "innerBitsSet"},
+		//{difference, "firstBitUnset", "oddBitsSet", ""},
+		{difference, "firstBitUnset", "evenBitsSet", "oddBitsSet"},
+		//
+		{difference, "lastBitUnset", "empty", "lastBitUnset"},
+		{difference, "lastBitUnset", "full", "empty"},
+		{difference, "lastBitUnset", "firstBitSet", "innerBitsSet"},
+		{difference, "lastBitUnset", "lastBitSet", "lastBitUnset"},
+		{difference, "lastBitUnset", "firstBitUnset", "firstBitSet"},
+		{difference, "lastBitUnset", "lastBitUnset", "empty"},
+		{difference, "lastBitUnset", "innerBitsSet", "firstBitSet"},
+		{difference, "lastBitUnset", "outerBitsSet", "innerBitsSet"},
+		{difference, "lastBitUnset", "oddBitsSet", "evenBitsSet"},
+		//{difference, "lastBitUnset", "evenBitsSet", ""},
+		//
+		{difference, "innerBitsSet", "empty", "innerBitsSet"},
+		{difference, "innerBitsSet", "full", "empty"},
+		{difference, "innerBitsSet", "firstBitSet", "innerBitsSet"},
+		{difference, "innerBitsSet", "lastBitSet", "innerBitsSet"},
+		{difference, "innerBitsSet", "firstBitUnset", "empty"},
+		{difference, "innerBitsSet", "lastBitUnset", "empty"},
+		{difference, "innerBitsSet", "innerBitsSet", "empty"},
+		{difference, "innerBitsSet", "outerBitsSet", "innerBitsSet"},
+		//{difference, "innerBitsSet", "oddBitsSet", ""},
+		//{difference, "innerBitsSet", "evenBitsSet", ""},
+		//
+		{difference, "outerBitsSet", "empty", "outerBitsSet"},
+		{difference, "outerBitsSet", "full", "empty"},
+		{difference, "outerBitsSet", "firstBitSet", "lastBitSet"},
+		{difference, "outerBitsSet", "lastBitSet", "firstBitSet"},
+		{difference, "outerBitsSet", "firstBitUnset", "firstBitSet"},
+		{difference, "outerBitsSet", "lastBitUnset", "lastBitSet"},
+		{difference, "outerBitsSet", "innerBitsSet", "outerBitsSet"},
+		{difference, "outerBitsSet", "outerBitsSet", "empty"},
+		{difference, "outerBitsSet", "oddBitsSet", "firstBitSet"},
+		{difference, "outerBitsSet", "evenBitsSet", "lastBitSet"},
+		//
+		{difference, "oddBitsSet", "empty", "oddBitsSet"},
+		{difference, "oddBitsSet", "full", "empty"},
+		{difference, "oddBitsSet", "firstBitSet", "oddBitsSet"},
+		//{difference, "oddBitsSet", "lastBitSet", ""},
+		{difference, "oddBitsSet", "firstBitUnset", "empty"},
+		{difference, "oddBitsSet", "lastBitUnset", "lastBitSet"},
+		{difference, "oddBitsSet", "innerBitsSet", "lastBitSet"},
+		//{difference, "oddBitsSet", "outerBitsSet", ""},
+		{difference, "oddBitsSet", "oddBitsSet", "empty"},
+		{difference, "oddBitsSet", "evenBitsSet", "oddBitsSet"},
+		//
+		{difference, "evenBitsSet", "empty", "evenBitsSet"},
+		{difference, "evenBitsSet", "full", "empty"},
+		//{difference, "evenBitsSet", "firstBitSet", ""},
+		{difference, "evenBitsSet", "lastBitSet", "evenBitsSet"},
+		{difference, "evenBitsSet", "firstBitUnset", "firstBitSet"},
+		{difference, "evenBitsSet", "lastBitUnset", "empty"},
+		{difference, "evenBitsSet", "innerBitsSet", "firstBitSet"},
+		//{difference, "evenBitsSet", "outerBitsSet", ""},
+		{difference, "evenBitsSet", "oddBitsSet", "evenBitsSet"},
+		{difference, "evenBitsSet", "evenBitsSet", "empty"},
+
+		// xor
+		{xor, "empty", "empty", "empty"},
+		{xor, "empty", "full", "full"},
+		{xor, "empty", "firstBitSet", "firstBitSet"},
+		{xor, "empty", "lastBitSet", "lastBitSet"},
+		{xor, "empty", "firstBitUnset", "firstBitUnset"},
+		{xor, "empty", "lastBitUnset", "lastBitUnset"},
+		{xor, "empty", "innerBitsSet", "innerBitsSet"},
+		{xor, "empty", "outerBitsSet", "outerBitsSet"},
+		{xor, "empty", "oddBitsSet", "oddBitsSet"},
+		{xor, "empty", "evenBitsSet", "evenBitsSet"},
+		//
+		{xor, "full", "empty", "full"},
+		{xor, "full", "full", "empty"},
+		{xor, "full", "firstBitSet", "firstBitUnset"},
+		{xor, "full", "lastBitSet", "lastBitUnset"},
+		{xor, "full", "firstBitUnset", "firstBitSet"},
+		{xor, "full", "lastBitUnset", "lastBitSet"},
+		{xor, "full", "innerBitsSet", "outerBitsSet"},
+		{xor, "full", "outerBitsSet", "innerBitsSet"},
+		{xor, "full", "oddBitsSet", "evenBitsSet"},
+		{xor, "full", "evenBitsSet", "oddBitsSet"},
+		//
+		{xor, "firstBitSet", "empty", "firstBitSet"},
+		{xor, "firstBitSet", "full", "firstBitUnset"},
+		{xor, "firstBitSet", "firstBitSet", "empty"},
+		{xor, "firstBitSet", "lastBitSet", "outerBitsSet"},
+		{xor, "firstBitSet", "firstBitUnset", "full"},
+		{xor, "firstBitSet", "lastBitUnset", "innerBitsSet"},
+		{xor, "firstBitSet", "innerBitsSet", "lastBitUnset"},
+		{xor, "firstBitSet", "outerBitsSet", "lastBitSet"},
+		//{xor, "firstBitSet", "oddBitsSet", ""},
+		//{xor, "firstBitSet", "evenBitsSet", ""},
+		//
+		{xor, "lastBitSet", "empty", "lastBitSet"},
+		{xor, "lastBitSet", "full", "lastBitUnset"},
+		{xor, "lastBitSet", "firstBitSet", "outerBitsSet"},
+		{xor, "lastBitSet", "lastBitSet", "empty"},
+		{xor, "lastBitSet", "firstBitUnset", "innerBitsSet"},
+		{xor, "lastBitSet", "lastBitUnset", "full"},
+		{xor, "lastBitSet", "innerBitsSet", "firstBitUnset"},
+		{xor, "lastBitSet", "outerBitsSet", "firstBitSet"},
+		//{xor, "lastBitSet", "oddBitsSet", ""},
+		//{xor, "lastBitSet", "evenBitsSet", ""},
+		//
+		{xor, "firstBitUnset", "empty", "firstBitUnset"},
+		{xor, "firstBitUnset", "full", "firstBitSet"},
+		{xor, "firstBitUnset", "firstBitSet", "full"},
+		{xor, "firstBitUnset", "lastBitSet", "innerBitsSet"},
+		{xor, "firstBitUnset", "firstBitUnset", "empty"},
+		{xor, "firstBitUnset", "lastBitUnset", "outerBitsSet"},
+		{xor, "firstBitUnset", "innerBitsSet", "lastBitSet"},
+		{xor, "firstBitUnset", "outerBitsSet", "lastBitUnset"},
+		//{xor, "firstBitUnset", "oddBitsSet", ""},
+		//{xor, "firstBitUnset", "evenBitsSet", ""},
+		//
+		{xor, "lastBitUnset", "empty", "lastBitUnset"},
+		{xor, "lastBitUnset", "full", "lastBitSet"},
+		{xor, "lastBitUnset", "firstBitSet", "innerBitsSet"},
+		{xor, "lastBitUnset", "lastBitSet", "full"},
+		{xor, "lastBitUnset", "firstBitUnset", "outerBitsSet"},
+		{xor, "lastBitUnset", "lastBitUnset", "empty"},
+		{xor, "lastBitUnset", "innerBitsSet", "firstBitSet"},
+		{xor, "lastBitUnset", "outerBitsSet", "firstBitUnset"},
+		//{xor, "lastBitUnset", "oddBitsSet", ""},
+		//{xor, "lastBitUnset", "evenBitsSet", ""},
+		//
+		{xor, "innerBitsSet", "empty", "innerBitsSet"},
+		{xor, "innerBitsSet", "full", "outerBitsSet"},
+		{xor, "innerBitsSet", "firstBitSet", "lastBitUnset"},
+		{xor, "innerBitsSet", "lastBitSet", "firstBitUnset"},
+		{xor, "innerBitsSet", "firstBitUnset", "lastBitSet"},
+		{xor, "innerBitsSet", "lastBitUnset", "firstBitSet"},
+		{xor, "innerBitsSet", "innerBitsSet", "empty"},
+		{xor, "innerBitsSet", "outerBitsSet", "full"},
+		//{xor, "innerBitsSet", "oddBitsSet", ""},
+		//{xor, "innerBitsSet", "evenBitsSet", ""},
+		//
+		{xor, "outerBitsSet", "empty", "outerBitsSet"},
+		{xor, "outerBitsSet", "full", "innerBitsSet"},
+		{xor, "outerBitsSet", "firstBitSet", "lastBitSet"},
+		{xor, "outerBitsSet", "lastBitSet", "firstBitSet"},
+		{xor, "outerBitsSet", "firstBitUnset", "lastBitUnset"},
+		{xor, "outerBitsSet", "lastBitUnset", "firstBitUnset"},
+		{xor, "outerBitsSet", "innerBitsSet", "full"},
+		{xor, "outerBitsSet", "outerBitsSet", "empty"},
+		//{xor, "outerBitsSet", "oddBitsSet", ""},
+		//{xor, "outerBitsSet", "evenBitsSet", ""},
+		//
+		{xor, "oddBitsSet", "empty", "oddBitsSet"},
+		{xor, "oddBitsSet", "full", "evenBitsSet"},
+		//{xor, "oddBitsSet", "firstBitSet", ""},
+		//{xor, "oddBitsSet", "lastBitSet", ""},
+		//{xor, "oddBitsSet", "firstBitUnset", ""},
+		//{xor, "oddBitsSet", "lastBitUnset", ""},
+		//{xor, "oddBitsSet", "innerBitsSet", ""},
+		//{xor, "oddBitsSet", "outerBitsSet", ""},
+		{xor, "oddBitsSet", "oddBitsSet", "empty"},
+		{xor, "oddBitsSet", "evenBitsSet", "full"},
+		//
+		{xor, "evenBitsSet", "empty", "evenBitsSet"},
+		{xor, "evenBitsSet", "full", "oddBitsSet"},
+		//{xor, "evenBitsSet", "firstBitSet", ""},
+		//{xor, "evenBitsSet", "lastBitSet", ""},
+		//{xor, "evenBitsSet", "firstBitUnset", ""},
+		//{xor, "evenBitsSet", "lastBitUnset", ""},
+		//{xor, "evenBitsSet", "innerBitsSet", ""},
+		//{xor, "evenBitsSet", "outerBitsSet", ""},
+		{xor, "evenBitsSet", "oddBitsSet", "full"},
+		{xor, "evenBitsSet", "evenBitsSet", "empty"},
+	}
+	for _, testOp := range testOps {
+		for _, x := range containerTypes {
+			for _, y := range containerTypes {
+				desc := fmt.Sprintf("%s(%s/%s, %s/%s)", getFunctionName(testOp.f), cm[x], testOp.x, cm[y], testOp.y)
+				ret := testOp.f(cts[x][testOp.x], cts[y][testOp.y])
+				exp := testOp.exp
+
+				// Convert to all container types and check result.
+				for _, ct := range containerTypes {
+					clone := ret.clone()
+					if ct == ContainerArray {
+						if clone.isBitmap() {
+							clone.bitmapToArray()
+						} else if clone.isRun() {
+							clone.runToArray()
+						}
+						if clone.n != cts[ct][exp].n {
+							t.Fatalf("test %s expected array n=%d, but got n=%d", desc, cts[ct][exp].n, clone.n)
+						}
+						// Because xorRunRun resulting in an empty container returns an array container with a
+						// nil slice array, then we need to check len() on array first (look for 0).
+						if !(len(clone.array) == 0 && len(cts[ct][exp].array) == 0) && !reflect.DeepEqual(clone.array, cts[ct][exp].array) {
+							t.Fatalf("test %s expected array %X, but got %X", desc, cts[ct][exp].array, clone.array)
+						}
+					} else if ct == ContainerBitmap {
+						if clone.isArray() {
+							clone.arrayToBitmap()
+						} else if clone.isRun() {
+							clone.runToBitmap()
+						}
+						if clone.n != cts[ct][exp].n {
+							t.Fatalf("test %s expected bitmap n=%d, but got n=%d", desc, cts[ct][exp].n, clone.n)
+						}
+						if !reflect.DeepEqual(clone.bitmap, cts[ct][exp].bitmap) {
+							t.Fatalf("test %s expected bitmap %X, but got %X", desc, cts[ct][exp].bitmap, clone.bitmap)
+						}
+					} else if ct == ContainerRun {
+						if clone.isArray() {
+							clone.arrayToRun()
+						} else if clone.isBitmap() {
+							clone.bitmapToRun()
+						}
+						if clone.n != cts[ct][exp].n {
+							t.Fatalf("test %s expected runs n=%d, but got n=%d", desc, cts[ct][exp].n, clone.n)
+						}
+						if !reflect.DeepEqual(clone.runs, cts[ct][exp].runs) {
+							t.Fatalf("test %s expected runs %X, but got %X", desc, cts[ct][exp].runs, clone.runs)
+						}
+					}
+				}
+			}
+		}
+	}
 }
