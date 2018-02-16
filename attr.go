@@ -16,12 +16,14 @@ package pilosa
 
 import (
 	"bytes"
-	"crypto/sha1"
+
 	"encoding/binary"
 	"fmt"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/cespare/xxhash"
 
 	"github.com/boltdb/bolt"
 	"github.com/gogo/protobuf/proto"
@@ -242,7 +244,7 @@ func (s *AttrStore) Blocks() ([]AttrBlock, error) {
 		block := AttrBlock{ID: cur.blockID()}
 
 		// Compute checksum of every key/value in block.
-		h := sha1.New()
+		h := xxhash.New()
 		for k, v := cur.next(); k != nil; k, v = cur.next() {
 			h.Write(k)
 			h.Write(v)

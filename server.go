@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -35,7 +36,6 @@ import (
 	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
