@@ -50,6 +50,7 @@ const (
 	RPAREN  // )
 	LBRACK  // (
 	RBRACK  // )
+	DASH    // ~
 )
 
 var tokens = [...]string{
@@ -76,6 +77,7 @@ var tokens = [...]string{
 	RPAREN:  ")",
 	LBRACK:  "(",
 	RBRACK:  ")",
+	DASH:    "~",
 }
 
 var keywords map[string]Token

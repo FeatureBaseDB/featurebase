@@ -235,6 +235,9 @@ func (p *Parser) parseArgs() (map[string]interface{}, error) {
 // parseList parses a list of primitives. This is used by the TopN() filters.
 func (p *Parser) parseList() ([]interface{}, error) {
 	var values []interface{}
+	isRange := false
+	var lastNum int64
+
 	for {
 		// Read next value.
 		tok, pos, lit := p.scanIgnoreWhitespace()
@@ -254,7 +257,17 @@ func (p *Parser) parseList() ([]interface{}, error) {
 			if err != nil {
 				return nil, err
 			}
-			values = append(values, v)
+			if isRange {
+				for i := lastNum + 1; i <= v; i++ {
+					values = append(values, i)
+				}
+				isRange = false
+				lastNum = 0
+			} else {
+				values = append(values, v)
+				lastNum = v
+			}
+
 		default:
 			return nil, parseErrorf(pos, "invalid list value: %q", lit)
 		}
@@ -262,6 +275,8 @@ func (p *Parser) parseList() ([]interface{}, error) {
 		// Expect a comma or closing bracket next.
 		if tok, pos, lit := p.scanIgnoreWhitespace(); tok == RBRACK {
 			break
+		} else if tok == DASH {
+			isRange = true
 		} else if tok != COMMA {
 			return nil, parseErrorf(pos, "expected comma, found %q", lit)
 		}

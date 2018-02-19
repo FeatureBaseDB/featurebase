@@ -97,6 +97,8 @@ func (s *Scanner) Scan() (tok Token, pos Pos, lit string) {
 		return LBRACK, pos, string(ch)
 	case ']':
 		return RBRACK, pos, string(ch)
+	case '~':
+		return DASH, pos, string(ch)
 	default:
 		return ILLEGAL, pos, string(ch)
 	}
