@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.8] - 2018-02-19
+
+This version contains 1 contribution from 2 contributors. There are 4 files changed, 1,153 insertions, and 618 deletions.
+
+### Fixed
+
+- Bug fixes and improved test coverage in roaring ([#1118](https://github.com/pilosa/pilosa/pull/1118))
+
 ## [0.8.7] - 2018-02-12
 
 This version contains 1 contribution from 1 contributors. There are 2 files changed, 84 insertions, and 4 deletions.
