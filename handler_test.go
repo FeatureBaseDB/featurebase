@@ -840,7 +840,7 @@ func TestHandler_Index_AttrStore_Diff(t *testing.T) {
 	exp[200] = map[string]interface{}{"snowman": "☃"}
 
 	if !reflect.DeepEqual(rec, exp) {
-		t.Fatalf("\nexpected: %s\n\ngot: %s\n", exp, rec)
+		t.Fatalf("\nexpected: %v\n\ngot: %v\n", exp, rec)
 	}
 }
 
@@ -923,7 +923,7 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 	exp[200] = map[string]interface{}{"snowman": "☃"}
 
 	if !reflect.DeepEqual(rec, exp) {
-		t.Fatalf("\nexpected: %s\n\ngot: %s\n", exp, rec)
+		t.Fatalf("\nexpected: %v\n\ngot: %v\n", exp, rec)
 	}
 }
 
