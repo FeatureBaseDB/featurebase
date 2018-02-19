@@ -1198,6 +1198,15 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 	} else if w.Body.String() != `[{"scheme":"http","host":"host2"},{"scheme":"http","host":"host0"}]`+"\n" {
 		t.Fatalf("unexpected body: %q", w.Body.String())
 	}
+
+	// invalid argument should return BadRequest
+	w = httptest.NewRecorder()
+	r = test.MustNewHTTPRequest("GET", "/fragment/nodes?db=X&slice=0", nil)
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+
 }
 
 // Ensure the handler can return expvars without panicking.

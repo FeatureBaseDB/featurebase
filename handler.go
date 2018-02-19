@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	// Imported for its side-effect of registering pprof endpoints with the server.
 	_ "net/http/pprof"
 	"os"
@@ -70,6 +71,9 @@ type Handler struct {
 
 	// The writer for any logging.
 	LogOutput io.Writer
+
+	// Keeps the query argument validators for each handler
+	validators map[string]queryValidationSpec
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -91,7 +95,17 @@ func NewHandler() *Handler {
 		LogOutput: os.Stderr,
 	}
 	handler.Router = NewRouter(handler)
+	handler.populateValidators()
 	return handler
+}
+
+func (h *Handler) populateValidators() {
+	h.validators = map[string]queryValidationSpec{}
+	// GetFragmentNodes validator
+	validator := NewQueryValidationSpec()
+	validator.Required("slice")
+	validator.Optional("index")
+	h.validators["GetFragmentNodes"] = validator
 }
 
 // NewRouter creates a Gorilla Mux http router.
@@ -1342,12 +1356,18 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 // handleGetFragmentNodes handles /fragment/nodes requests.
 func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	validator := h.validators["GetFragmentNodes"]
+	err := validator.validate(q)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	index := q.Get("index")
 
 	// Read slice parameter.
 	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
 	if err != nil {
-		http.Error(w, "slice required", http.StatusBadRequest)
+		http.Error(w, "slice should be an unsigned integer", http.StatusBadRequest)
 		return
 	}
 
@@ -2057,3 +2077,41 @@ func (h *Handler) handleGetID(w http.ResponseWriter, r *http.Request) {
 }
 
 type defaultClusterMessageResponse struct{}
+
+type queryValidationSpec struct {
+	required []string
+	args     map[string]bool
+}
+
+func NewQueryValidationSpec() queryValidationSpec {
+	return queryValidationSpec{
+		args: map[string]bool{},
+	}
+}
+
+func (s *queryValidationSpec) Required(args ...string) {
+	s.required = args
+	for _, arg := range args {
+		s.args[arg] = true
+	}
+}
+
+func (s *queryValidationSpec) Optional(args ...string) {
+	for _, arg := range args {
+		s.args[arg] = true
+	}
+}
+
+func (s queryValidationSpec) validate(query url.Values) error {
+	for _, req := range s.required {
+		if query.Get(req) == "" {
+			return errors.New(fmt.Sprintf("%s is required", req))
+		}
+	}
+	for k, _ := range query {
+		if _, ok := s.args[k]; !ok {
+			return errors.New(fmt.Sprintf("%s is not a valid argument", k))
+		}
+	}
+	return nil
+}
