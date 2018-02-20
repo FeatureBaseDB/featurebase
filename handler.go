@@ -73,7 +73,7 @@ type Handler struct {
 	LogOutput io.Writer
 
 	// Keeps the query argument validators for each handler
-	validators map[string]queryValidationSpec
+	validators map[string]*queryValidationSpec
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -100,12 +100,23 @@ func NewHandler() *Handler {
 }
 
 func (h *Handler) populateValidators() {
-	h.validators = map[string]queryValidationSpec{}
-	// GetFragmentNodes validator
-	validator := NewQueryValidationSpec()
-	validator.Required("slice")
-	validator.Optional("index")
-	h.validators["GetFragmentNodes"] = validator
+	h.validators = map[string]*queryValidationSpec{}
+	h.validators["GET /fragment/nodes"] = QueryValidationSpecRequired("slice").Optional("index")
+}
+
+func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := fmt.Sprintf("%s %s", r.Method, r.URL.Path)
+		if validator, ok := h.validators[key]; ok {
+			q := r.URL.Query()
+			err := validator.validate(q)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // NewRouter creates a Gorilla Mux http router.
@@ -159,6 +170,8 @@ func NewRouter(handler *Handler) *mux.Router {
 	// https://github.com/gorilla/mux/issues/6
 	// For now we just do it for the most commonly used handler, /query
 	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
+
+	router.Use(handler.queryArgValidator)
 
 	return router
 }
@@ -1356,12 +1369,6 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 // handleGetFragmentNodes handles /fragment/nodes requests.
 func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	validator := h.validators["GetFragmentNodes"]
-	err := validator.validate(q)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 	index := q.Get("index")
 
 	// Read slice parameter.
@@ -2083,23 +2090,23 @@ type queryValidationSpec struct {
 	args     map[string]bool
 }
 
-func NewQueryValidationSpec() queryValidationSpec {
-	return queryValidationSpec{
-		args: map[string]bool{},
+func QueryValidationSpecRequired(requiredArgs ...string) *queryValidationSpec {
+	args := map[string]bool{}
+	for _, arg := range requiredArgs {
+		args[arg] = true
+	}
+
+	return &queryValidationSpec{
+		required: requiredArgs,
+		args:     args,
 	}
 }
 
-func (s *queryValidationSpec) Required(args ...string) {
-	s.required = args
+func (s *queryValidationSpec) Optional(args ...string) *queryValidationSpec {
 	for _, arg := range args {
 		s.args[arg] = true
 	}
-}
-
-func (s *queryValidationSpec) Optional(args ...string) {
-	for _, arg := range args {
-		s.args[arg] = true
-	}
+	return s
 }
 
 func (s queryValidationSpec) validate(query url.Values) error {
