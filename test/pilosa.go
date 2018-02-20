@@ -101,6 +101,27 @@ func MustNewServerCluster(t *testing.T, size int) *Cluster {
 	return cluster
 }
 
+// **** below exists to have interface compatibility with cluster-resize,
+// **** we can remove when cluster resize gets merged *****************//
+
+type M struct {
+	*server.Command
+	Stdin  bytes.Buffer
+	Stdout bytes.Buffer
+	Stderr bytes.Buffer
+}
+
+func MustRunMainWithCluster(t *testing.T, size int) []*M {
+	cluster := MustNewServerCluster(t, size)
+	mains := make([]*M, 0)
+	for _, s := range cluster.Servers {
+		mains = append(mains, &M{Command: s})
+	}
+	return mains
+}
+
+// ***********************************************************************************//
+
 func NewServerCluster(size int) (cluster *Cluster, err error) {
 	cluster = &Cluster{
 		Servers: make([]*server.Command, size),
