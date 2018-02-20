@@ -191,6 +191,26 @@ func TestExecutor_Execute_Union(t *testing.T) {
 	}
 }
 
+// Ensure a bitmaps query within a union query can be executed.
+func TestExecutor_Execute_Union_Bitmaps(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 0)
+
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(11, SliceWidth+1)
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+2)
+
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(12, 2)
+	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(12, SliceWidth+2)
+
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Union(Bitmaps(rowID=[10~12]))`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{0, 2, SliceWidth + 1, SliceWidth + 2}) {
+		t.Fatalf("unexpected bits: %+v", bits)
+	}
+}
+
 // Ensure an empty union query behaves properly.
 func TestExecutor_Execute_Empty_Union(t *testing.T) {
 	hldr := test.MustOpenHolder()
