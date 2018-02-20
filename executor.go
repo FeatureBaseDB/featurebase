@@ -821,8 +821,8 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
 	other := NewBitmap()
 	for i, input := range c.Children {
-		if input.Name == "BitmapRange" {
-			err := e.executeBitmapRange(ctx, index, input, slice, func(bm *Bitmap, first bool) {
+		if input.Name == "Bitmaps" {
+			err := e.executeBitmaps(ctx, index, input, slice, func(bm *Bitmap, first bool) {
 				if i == 0 && first {
 					other = bm
 				} else {
@@ -848,7 +848,7 @@ func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.C
 	return other, nil
 }
 
-func (e *Executor) executeBitmapRange(ctx context.Context, index string, c *pql.Call, slice uint64, callback func(bm *Bitmap, first bool)) error {
+func (e *Executor) executeBitmaps(ctx context.Context, index string, c *pql.Call, slice uint64, callback func(bm *Bitmap, first bool)) error {
 	const columnLabel = "columnID"
 	const rowLabel = "rowID"
 
