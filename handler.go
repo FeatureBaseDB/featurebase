@@ -89,6 +89,10 @@ var externalPrefixFlag = map[string]bool{
 	"version": true,
 }
 
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler() *Handler {
 	handler := &Handler{
@@ -101,17 +105,31 @@ func NewHandler() *Handler {
 
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
-	h.validators["GET /fragment/nodes"] = QueryValidationSpecRequired("slice").Optional("index")
+	h.validators["GetFragmentNodes"] = QueryValidationSpecRequired("slice").Optional("index")
+	h.validators["GetSliceMax"] = QueryValidationSpecRequired().Optional("inverse")
+	h.validators["PostQuery"] = QueryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
+	h.validators["GetExport"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["GetFragmentData"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["PostFragmentData"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["GetFragmentBlocks"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["PostFrameRestore"] = QueryValidationSpecRequired("host")
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := fmt.Sprintf("%s %s", r.Method, r.URL.Path)
+		key := mux.CurrentRoute(r).GetName()
 		if validator, ok := h.validators[key]; ok {
 			q := r.URL.Query()
 			err := validator.validate(q)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				// TODO: Return the response depending on the Accept header
+				response := errorResponse{Error: err.Error()}
+				body, err := json.Marshal(response)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				http.Error(w, string(body), http.StatusBadRequest)
 				return
 			}
 		}
@@ -126,12 +144,12 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
-	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
+	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
-	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET")
-	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET")
-	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
-	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
+	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
+	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
+	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST").Name("PostFragmentData")
+	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
 	router.HandleFunc("/import-value", handler.handlePostImportValue).Methods("POST")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
@@ -143,7 +161,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST").Name("PostFrameRestore")
 	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameFields).Methods("GET")
@@ -154,11 +172,11 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetInputDefinition).Methods("GET")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
-	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
+	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
-	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET")
+	router.HandleFunc("/slices/max", handler.handleGetSliceMax).Methods("GET").Name("GetSliceMax")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
@@ -1097,12 +1115,6 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*QueryRequest, erro
 // readURLQueryRequest parses query parameters from URL parameters from r.
 func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	q := r.URL.Query()
-	validQuery := validOptions(QueryRequest{})
-	for key := range q {
-		if _, ok := validQuery[key]; !ok {
-			return nil, errors.New("invalid query params")
-		}
-	}
 
 	// Parse query string.
 	buf, err := ioutil.ReadAll(r.Body)

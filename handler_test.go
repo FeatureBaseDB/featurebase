@@ -306,7 +306,7 @@ func TestHandler_Query_Params_Err(t *testing.T) {
 	test.NewHandler().ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1&db=sample", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"error":"invalid query params"}`+"\n" {
+	} else if body := w.Body.String(); body != `{"error":"db is not a valid argument"}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
 
