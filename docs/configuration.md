@@ -183,9 +183,8 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 #### Cluster Type
 
-* Description: Determine how the cluster handles membership and state sharing. Choose from [static, http, gossip].
+* Description: Determine how the cluster handles membership and state sharing. Choose from [static, gossip].
   * static - Messaging between nodes is disabled. This is primarily used for testing.
-  * http - Messages are transmitted over HTTP.
   * gossip - Messages are transmitted over TCP. Cluster status and node state are kept in sync via internode gossip.
 * Flag: `cluster.type="gossip"`
 * Env: `PILOSA_CLUSTER_TYPE="gossip"`
