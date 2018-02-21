@@ -1687,7 +1687,7 @@ func (c *Cluster) NodeLeave(node *Node) error {
 	}
 
 	if c.State() != ClusterStateNormal {
-		return fmt.Errorf("Cluster must be in state %s to remove a node. Current state: %s", ClusterStateNormal, c.State)
+		return fmt.Errorf("Cluster must be in state %s to remove a node. Current state: %s", ClusterStateNormal, c.State())
 	}
 
 	return c.nodeLeave(node)

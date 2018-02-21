@@ -1,7 +1,8 @@
 language: go
 go:
-  - 1.8
   - 1.9
+  - "1.10" # Use string, as 1.10==1.1 if interpreted as float.
+  - master
 env:
   global: # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
     - secure: "VnBFmFfBOrrf7ONLN9WpAFCcV8SEt5G5VPnnHv97TP7PlJG8LWR6k6O+vRJOvf8V4vDMfKCTDonwWLgbssVf3yygo3C8ZoftY2phehEkWGffCgsd9ML/YBNbGq4LYLSE5HKvBqrZjQaOrVby71BAsP8W7RhC6hqzFQ00M/z8dZVfwaQQFwew2eEcSxLEaaDFS8Wgc3/UuwxDRPBq6u3cCN5RxfB+q70HvGVq4TT+0dqS4eCvz688+Z0GIGYx9olNjh0F2Kc8R2Po0lnUNa0GiHrZ21zeQ1DxIK04QABrWWmjL4h+bx3VHNKPFR4GYSKDf+pj1kfaqbfrAg6rMAJdGejgoS+QyjhgCoN4d3qRp8s+1nrxtp0TvezEdjwyxt4quGHbP5TxWUszssbGhWqf4mx6OeJ8MmdTaJjfu0f3NWJXMycqT6J73WKORk4rHeIqF9CIdxdmcpkwYj8rk0TEMTPTsd7WA8w2HIDsCz/jQnRmEgLUiNnTAofYc/uUi/Wg/T2hllkp+oBDTzxk9NTelkqx8TJ0bDmYYL9JWUi1siFHTHiVYTJgyirSfGNpe61u8OLmT0Hak/D399IfL7qgFLlMXk8q92typfO2xEduq6G+8KygeqiOMSsOY+xcDvZf5xtcEihYd21vjtrxRSqFsup/o8DIxEurQnfXBx1B+WA="

@@ -69,6 +69,18 @@ message DeleteFrameMessage {
     string Frame = 2;
 }
 
+message CreateFieldMessage {
+    string Index = 1;
+    string Frame = 2;
+    Field Field = 3;
+}
+
+message DeleteFieldMessage {
+    string Index = 1;
+    string Frame = 2;
+    string Field = 3;
+}
+
 message Frame {
     string Name = 1;
     FrameMeta Meta = 2;
