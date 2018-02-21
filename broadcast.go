@@ -132,6 +132,8 @@ const (
 	MessageTypeCreateInputDefinition = 6
 	MessageTypeDeleteInputDefinition = 7
 	MessageTypeDeleteView            = 8
+	MessageTypeCreateField           = 9
+	MessageTypeDeleteField           = 10
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
@@ -148,6 +150,10 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeCreateFrame
 	case *internal.DeleteFrameMessage:
 		typ = MessageTypeDeleteFrame
+	case *internal.CreateFieldMessage:
+		typ = MessageTypeCreateField
+	case *internal.DeleteFieldMessage:
+		typ = MessageTypeDeleteField
 	case *internal.CreateInputDefinitionMessage:
 		typ = MessageTypeCreateInputDefinition
 	case *internal.DeleteInputDefinitionMessage:
@@ -180,6 +186,10 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.CreateFrameMessage{}
 	case MessageTypeDeleteFrame:
 		m = &internal.DeleteFrameMessage{}
+	case MessageTypeCreateField:
+		m = &internal.CreateFieldMessage{}
+	case MessageTypeDeleteField:
+		m = &internal.DeleteFieldMessage{}
 	case MessageTypeCreateInputDefinition:
 		m = &internal.CreateInputDefinitionMessage{}
 	case MessageTypeDeleteInputDefinition:

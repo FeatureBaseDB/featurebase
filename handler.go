@@ -648,7 +648,6 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.Holder.Stats.CountWithCustomTags("createFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
-
 }
 
 type _postFrameRequest postFrameRequest
@@ -800,15 +799,28 @@ func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create new field.
-	if err := f.CreateField(&Field{
+	field := &Field{
 		Name: fieldName,
 		Type: req.Type,
 		Min:  req.Min,
 		Max:  req.Max,
-	}); err != nil {
+	}
+
+	// Create new field.
+	if err := f.CreateField(field); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Send the create field message to all nodes.
+	err := h.Broadcaster.SendSync(
+		&internal.CreateFieldMessage{
+			Index: indexName,
+			Frame: frameName,
+			Field: encodeField(field),
+		})
+	if err != nil {
+		h.logger().Printf("problem sending CreateField message: %s", err)
 	}
 
 	// Encode response.
@@ -842,6 +854,17 @@ func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request)
 	if err := f.DeleteField(fieldName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Send the delete field message to all nodes.
+	err := h.Broadcaster.SendSync(
+		&internal.DeleteFieldMessage{
+			Index: indexName,
+			Frame: frameName,
+			Field: fieldName,
+		})
+	if err != nil {
+		h.logger().Printf("problem sending DeleteField message: %s", err)
 	}
 
 	// Encode response.
