@@ -404,6 +404,17 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err := idx.DeleteFrame(obj.Frame); err != nil {
 			return err
 		}
+	case *internal.CreateFieldMessage:
+		f := s.Holder.Frame(obj.Index, obj.Frame)
+		field := decodeField(obj.Field)
+		if err := f.CreateField(field); err != nil {
+			return err
+		}
+	case *internal.DeleteFieldMessage:
+		f := s.Holder.Frame(obj.Index, obj.Frame)
+		if err := f.DeleteField(obj.Field); err != nil {
+			return err
+		}
 	case *internal.CreateInputDefinitionMessage:
 		idx := s.Holder.Index(obj.Index)
 		if idx == nil {
