@@ -124,7 +124,7 @@ Note: This will only work when the replication factor is >= 2
 - Restart the cluster
 - Wait for the 1st sync (10 minutes) to validate Index connections
 
-#### Diagnostics
+### Diagnostics
 
 Each Pilosa cluster is configured by default to share anonymous usage details with Pilosa Corp. These metrics allow us to understand how Pilosa is used by the community and improve the technology to suit your needs. Diagnostics are sent to Pilosa every hour. Each of the metrics are detailed below as well as opt-out instructions.
 
@@ -145,7 +145,7 @@ Each Pilosa cluster is configured by default to share anonymous usage details wi
  
 You can opt-out of the Pilosa diagnostics reporting by setting either the command line configuration option `--metric.diagnostics=false`, use the `PILOSA_METRIC_DIAGNOSTICS` environment variable, or the TOML configuration file `[metric]` `diagnostics` option.
 
-#### Metrics
+### Metrics
 
 Pilosa can be configured to emit metrics pertaining to its internal processes in one of two formats: Expvar or StatsD. Metric recording is disabled by default.
 The metrics configuration options are: 
@@ -154,7 +154,7 @@ The metrics configuration options are:
   - [Poll Interval](../configuration#metrics-poll-interval): specify polling interval for runtime metrics
   - [Service](../configuration#metrics-service): declare type StatsD or Expvar
 
-##### Tags
+#### Tags
 StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
 
 - NodeID
@@ -163,7 +163,7 @@ StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
 - View
 - Slice
 
-##### Events
+#### Events
 We currently track the following events
 
 - **Index:** The creation of a new Index.
