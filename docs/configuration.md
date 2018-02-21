@@ -111,7 +111,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 #### Gossip Seed
 
-* Description: When using the gossip [Cluster Type]({{< ref "#cluster-type" >}}), this specifies which internal host should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip-seed` for all three nodes can be configured to be the address of `node0`.
+* Description: When using the gossip [Cluster Type]({{< ref "#cluster-type" >}}), this specifies which internal host(s) should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. You may enter multiple seeds by separating them with a comma. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip-seed` for all three nodes can be configured to be the address of `node0`.
 * Flag: `--gossip.seed="localhost:11101"`
 * Env: `PILOSA_GOSSIP_SEED="localhost:11101"`
 * Config:

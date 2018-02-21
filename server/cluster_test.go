@@ -435,3 +435,64 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 	})
 }
+
+// Ensure that redundant gossip seeds are used
+func TestCluster_GossipMembership(t *testing.T) {
+	t.Run("Node0Down", func(t *testing.T) {
+		// Configure node0
+		m0 := test.NewMainWithCluster()
+		defer m0.Close()
+
+		seed, coord, err := m0.RunWithTransport("localhost", 0, "", pilosa.URI{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Configure node1
+		m1 := test.NewMainWithCluster()
+		defer m1.Close()
+
+		var eg errgroup.Group
+		eg.Go(func() error {
+			// Pass invalid seed as first in list
+			_, _, err = m1.RunWithTransport("localhost", 0, "http://localhost:8765,"+seed, coord)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+
+		// Configure node2
+		m2 := test.NewMainWithCluster()
+		defer m2.Close()
+
+		eg.Go(func() error {
+			// Pass invalid seed as last in list
+			_, _, err = m2.RunWithTransport("localhost", 0, seed+",http://localhost:8765", coord)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+
+		if err := eg.Wait(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Give the cluster time to settle.
+		time.Sleep(1 * time.Second)
+
+		if m0.Server.Cluster.State() != pilosa.ClusterStateNormal {
+			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
+		} else if m1.Server.Cluster.State() != pilosa.ClusterStateNormal {
+			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
+		} else if m2.Server.Cluster.State() != pilosa.ClusterStateNormal {
+			t.Fatalf("unexpected node2 cluster state: %s", m2.Server.Cluster.State())
+		}
+
+		numNodes := len(m0.Server.Cluster.Status().Nodes)
+		if numNodes != 3 {
+			t.Fatalf("Expected 3 nodes, got %d", numNodes)
+		}
+	})
+}

@@ -92,13 +92,19 @@ func (g *GossipMemberSet) Open(n *pilosa.Node) error {
 		RetransmitMult: 3,
 	}
 
-	uri, err := pilosa.NewURIFromAddress(g.config.gossipSeed)
-	if err != nil {
-		return fmt.Errorf("new uri from address: %s", err)
+	parts := strings.Split(g.config.gossipSeed, ",")
+	var uris = make([]*pilosa.URI, len(parts))
+	for i, addr := range parts {
+		uris[i], err = pilosa.NewURIFromAddress(addr)
+		if err != nil {
+			return fmt.Errorf("new uri from address: %s", err)
+		}
 	}
 
-	// attach to gossip seed node
-	nodes := []*pilosa.Node{&pilosa.Node{URI: *uri}} //TODO: support a list of seeds
+	var nodes = make([]*pilosa.Node, len(uris))
+	for i, uri := range uris {
+		nodes[i] = &pilosa.Node{URI: *uri}
+	}
 
 	g.mu.RLock()
 	err = g.joinWithRetry(pilosa.URIs(pilosa.Nodes(nodes).URIs()).HostPortStrings())
