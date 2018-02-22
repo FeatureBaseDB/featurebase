@@ -1690,6 +1690,16 @@ func (c *Cluster) NodeLeave(node *Node) error {
 		return fmt.Errorf("Cluster must be in state %s to remove a node. Current state: %s", ClusterStateNormal, c.State())
 	}
 
+	// Ensure that node is in the cluster.
+	if c.nodeByID(node.ID) == nil {
+		return fmt.Errorf("Node is not a member of the cluster: %s", node.ID)
+	}
+
+	// Prevent removing the coordinator node (this node).
+	if node.ID == c.Node.ID {
+		return fmt.Errorf("The coordinator node cannot be removed. First, make a different node the new coordinator.")
+	}
+
 	return c.nodeLeave(node)
 }
 

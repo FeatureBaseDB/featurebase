@@ -2042,20 +2042,13 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 
 	removeNode := h.Cluster.nodeByID(req.ID)
 	if removeNode == nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("Node is not a member of the cluster: %s", req.ID), http.StatusBadRequest)
 		return
 	}
-	if err := func() error {
-		// TODO: prevent removing the coordinator node
 
-		// Start the resize process (similar to NodeJoin)
-		err := h.Cluster.NodeLeave(removeNode)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}(); err != nil {
+	// Start the resize process (similar to NodeJoin)
+	err = h.Cluster.NodeLeave(removeNode)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -2208,7 +2201,6 @@ func GetTimeStamp(data map[string]interface{}, timeField string) (int64, error) 
 func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Request) {
 	// Verify that request is only communicating over protobufs.
 	if r.Header.Get("Content-Type") != "application/x-protobuf" {
-		fmt.Println("**unsupported media type**")
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
 	}
