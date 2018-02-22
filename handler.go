@@ -119,9 +119,7 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := mux.CurrentRoute(r).GetName()
 		if validator, ok := h.validators[key]; ok {
-			q := r.URL.Query()
-			err := validator.validate(q)
-			if err != nil {
+			if err := validator.validate(r.URL.Query()); err != nil {
 				// TODO: Return the response depending on the Accept header
 				response := errorResponse{Error: err.Error()}
 				body, err := json.Marshal(response)
@@ -2099,13 +2097,13 @@ type defaultClusterMessageResponse struct{}
 
 type queryValidationSpec struct {
 	required []string
-	args     map[string]bool
+	args     map[string]struct{}
 }
 
 func QueryValidationSpecRequired(requiredArgs ...string) *queryValidationSpec {
-	args := map[string]bool{}
+	args := map[string]struct{}{}
 	for _, arg := range requiredArgs {
-		args[arg] = true
+		args[arg] = struct{}{}
 	}
 
 	return &queryValidationSpec{
@@ -2116,7 +2114,7 @@ func QueryValidationSpecRequired(requiredArgs ...string) *queryValidationSpec {
 
 func (s *queryValidationSpec) Optional(args ...string) *queryValidationSpec {
 	for _, arg := range args {
-		s.args[arg] = true
+		s.args[arg] = struct{}{}
 	}
 	return s
 }
