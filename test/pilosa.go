@@ -93,13 +93,13 @@ func runMainWithCluster(size int) ([]*Main, error) {
 	gossipHost := "localhost"
 	gossipPort := 0
 	var err error
-	var gossipSeed string
+	var gossipSeeds = make([]string, size)
 	var coordinator pilosa.URI
 
 	for i := 0; i < size; i++ {
 		m := NewMainWithCluster()
 
-		gossipSeed, coordinator, err = m.RunWithTransport(gossipHost, gossipPort, gossipSeed, coordinator)
+		gossipSeeds[i], coordinator, err = m.RunWithTransport(gossipHost, gossipPort, gossipSeeds[:i], coordinator)
 		if err != nil {
 			return nil, errors.Wrap(err, "RunWithTransport")
 		}
@@ -146,7 +146,7 @@ func (m *Main) Reopen() error {
 }
 
 // RunWithTransport runs Main and returns the dynamically allocated gossip port.
-func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coordinator pilosa.URI) (seed string, coord pilosa.URI, err error) {
+func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string, coordinator pilosa.URI) (seed string, coord pilosa.URI, err error) {
 	defer close(m.Started)
 
 	/*
@@ -182,12 +182,13 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeed string, coor
 	}
 	m.GossipTransport = transport
 
-	if joinSeed != "" {
-		m.Config.Gossip.Seed = joinSeed
+	if len(joinSeeds) != 0 {
+		m.Config.Gossip.Seeds = joinSeeds
 	} else {
-		m.Config.Gossip.Seed = transport.URI.String()
+		m.Config.Gossip.Seeds = []string{transport.URI.String()}
 	}
-	seed = m.Config.Gossip.Seed
+
+	seed = transport.URI.String()
 
 	// SetupNetworking
 	err = m.SetupNetworking()

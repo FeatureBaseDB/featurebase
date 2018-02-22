@@ -28,9 +28,6 @@ func TestBuildServerFlags(t *testing.T) {
 	stdin, stdout, stderr := GetIO(buf)
 	Server := server.NewCommand(stdin, stdout, stderr)
 	BuildServerFlags(cm, Server)
-	if cm.Flags().Lookup("gossip-port").Name == "" {
-		t.Fatal("gossip-port flag is required")
-	}
 	if cm.Flags().Lookup("data-dir").Name == "" {
 		t.Fatal("data-dir flag is required")
 	}

@@ -109,16 +109,16 @@ Any flag that has a value that is a comma separated list on the command line bec
       port = 11101
     ```
 
-#### Gossip Seed
+#### Gossip Seeds
 
-* Description: When using the gossip [Cluster Type]({{< ref "#cluster-type" >}}), this specifies which internal host(s) should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. You may enter multiple seeds by separating them with a comma. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip-seed` for all three nodes can be configured to be the address of `node0`.
-* Flag: `--gossip.seed="localhost:11101"`
-* Env: `PILOSA_GOSSIP_SEED="localhost:11101"`
+* Description: This specifies which internal host(s) should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip.seeds` for all three nodes can be configured to be the address of `node0`. Multiple seeds should be comma-separated in the flag and env forms.
+* Flag: `--gossip.seeds="localhost:11101"`
+* Env: `PILOSA_GOSSIP_SEEDS="localhost:11101"`
 * Config:
 
     ```toml
     [gossip]
-      seed = "localhost:11101"
+      seeds = ["localhost:11101"]
     ```
 
 #### Gossip Key
@@ -134,7 +134,7 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 #### Cluster Hosts
 
-* Description: List of hosts in the cluster. Multiple hosts should be comma separated in the flag and env forms.
+* Description: List of hosts in the cluster. Multiple hosts should be comma-separated in the flag and env forms.
 * Flag: `--cluster.hosts="localhost:10101"`
 * Env: `PILOSA_CLUSTER_HOSTS="localhost:10101"`
 * Config:
