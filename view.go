@@ -99,6 +99,12 @@ func (v *View) Path() string { return v.path }
 
 // Open opens and initializes the view.
 func (v *View) Open() error {
+
+	// Never keep a cache for field views.
+	if strings.HasPrefix(v.name, ViewFieldPrefix) {
+		v.cacheType = CacheTypeNone
+	}
+
 	if err := func() error {
 		// Ensure the view's path exists.
 		if err := os.MkdirAll(v.path, 0777); err != nil {
