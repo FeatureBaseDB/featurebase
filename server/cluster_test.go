@@ -16,7 +16,10 @@ package server_test
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -432,6 +435,53 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
 		} else if m1.Server.Cluster.State() != pilosa.ClusterStateNormal {
 			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
+		}
+	})
+}
+
+func TestClusterResize_RemoveNode(t *testing.T) {
+	cluster := test.MustRunMainWithCluster(t, 3)
+	m0 := cluster[0]
+	m1 := cluster[1]
+
+	t.Run("ErrorRemoveInvalidNode", func(t *testing.T) {
+		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), `{"id": "invalid-node-id"}`)
+		expBody := "Node is not a member of the cluster: invalid-node-id"
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected StatusCode %d but got %d", http.StatusBadRequest, resp.StatusCode)
+		} else if strings.TrimSpace(resp.Body) != expBody {
+			t.Fatalf("expected Body '%s' but got '%s'", expBody, strings.TrimSpace(resp.Body))
+		}
+	})
+
+	t.Run("ErrorRemoveCoordinator", func(t *testing.T) {
+		resp := test.MustDo("GET", m0.URL()+fmt.Sprintf("/id"), "")
+		nodeID := resp.Body
+
+		resp = test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+
+		expBody := "The coordinator node cannot be removed. First, make a different node the new coordinator."
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
+		} else if strings.TrimSpace(resp.Body) != expBody {
+			t.Fatalf("expected Body '%s' but got '%s'", expBody, strings.TrimSpace(resp.Body))
+		}
+	})
+
+	t.Run("ErrorRemoveOnNonCoordinator", func(t *testing.T) {
+		resp := test.MustDo("GET", m0.URL()+fmt.Sprintf("/id"), "")
+		coordinatorNodeID := resp.Body
+
+		resp = test.MustDo("GET", m1.URL()+fmt.Sprintf("/id"), "")
+		nodeID := resp.Body
+
+		resp = test.MustDo("POST", m1.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+
+		expBody := fmt.Sprintf("Node removal requests are only valid on the Coordinator node: %s", coordinatorNodeID)
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
+		} else if strings.TrimSpace(resp.Body) != expBody {
+			t.Fatalf("expected Body '%s' but got '%s'", expBody, strings.TrimSpace(resp.Body))
 		}
 	})
 }
