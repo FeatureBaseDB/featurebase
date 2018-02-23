@@ -31,11 +31,12 @@ docker run -it --rm --name pilosa -p 10101:10101 pilosa/pilosa:latest
 ```
 
 Let's make sure Pilosa is running:
-```
+``` request
 curl localhost:10101/status
 ```
-
-Which should output: `{"status":{"Nodes":[{"Host":":10101","State":"UP"}]}}`
+``` response
+{"status":{"Nodes":[{"Host":":10101","State":"UP"}]}}
+```
 
 ### Sample Project
 
@@ -45,24 +46,31 @@ Although Pilosa doesn't keep the data in a tabular format, we still use the term
 
 #### Create the Schema
 
-Note:
 The queries in this section which are used to set up the indexes in Pilosa just the empty object on success: `{}` - if you would like to verify that a query worked as you expected, you can request the schema as follows:
-```
+``` request
 curl localhost:10101/schema
+```
+``` response
 {"indexes":null}
 ```
 
 Before we can import data or run queries, we need to create our indexes and the frames within them. Let's create the repository index first:
-```
+``` request
 curl localhost:10101/index/repository -X POST
+```
+``` response
+{}
 ```
 
 Let's create the `stargazer` frame which has user IDs of stargazers as its rows:
-```
+``` request
 curl localhost:10101/index/repository/frame/stargazer \
      -X POST \
      -d '{"options": {"timeQuantum": "YMD",
                       "inverseEnabled": true}}'
+```
+``` response
+{}
 ```
 
 Since our data contains time stamps for the time users starred repos, we set the *time quantum* for the `stargazer` frame in the options as well. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
@@ -70,10 +78,12 @@ Since our data contains time stamps for the time users starred repos, we set the
 We set `inverseEnabled` to `true` in order to allow queries over columns as well as rows.
 
 Next up is the `language` frame, which will contain IDs for programming languages:
-```
+``` request
 curl localhost:10101/index/repository/frame/language \
-     -X POST \
-     -d '{"options": {"inverseEnabled": true}}'
+     -X POST
+```
+``` response
+{}
 ```
 
 #### Import Data From CSV Files
@@ -112,45 +122,111 @@ Alternatively Pilosa can import JSON data using an [Input Definition](../input-d
 </div>
 
 Which repositories did user 14 star:
-```
+``` request
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'Bitmap(frame="stargazer", rowID=14)'
 ```
+``` response
+{
+    "results":[
+        {
+            "attrs":{},
+            "bits":[1,2,3,362,368,391,396,409,416,430,436,450,454,460,461,464,466,469,470,483,484,486,490,491,503,504,514]
+        }
+    ]
+}
+```
 
 What are the top 5 languages in the sample data:
-```
+``` request
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'TopN(frame="language", n=5)'
 ```
+``` response
+{
+    "results":[
+        [
+            {"id":5,"count":119},
+            {"id":1,"count":50},
+            {"id":4,"count":48},
+            {"id":9,"count":31},
+            {"id":13,"count":25}
+        ]
+    ]
+}
+```
 
 Which repositories were starred by user 14 and 19:
-```
+``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'Intersect(Bitmap(frame="stargazer", rowID=14), Bitmap(frame="stargazer", rowID=19))'
+     -d 'Intersect(
+            Bitmap(frame="stargazer", rowID=14), 
+            Bitmap(frame="stargazer", rowID=19)
+        )'
+```
+``` response
+{
+    "results":[
+        {
+            "attrs":{},
+            "bits":[2,3,362,396,416,461,464,466,470,486]
+        }
+    ]
+}
 ```
 
 Which repositories were starred by user 14 or 19:
-```
+``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'Union(Bitmap(frame="stargazer", rowID=14), Bitmap(frame="stargazer", rowID=19))'
+     -d 'Union(
+            Bitmap(frame="stargazer", rowID=14),
+            Bitmap(frame="stargazer", rowID=19)
+        )'
+```
+``` response
+{
+    "results":[
+        {
+            "attrs":{},
+            "bits":[1,2,3,361,362,368,376,377,378,382,386,388,391,396,398,400,409,411,412,416,426,428,430,435,436,450,452,453,454,456,460,461,464,465,466,469,470,483,484,486,487,489,490,491,500,503,504,505,512,514]
+        }
+    ]
+}
 ```
 
 Which repositories were starred by user 14 and 19 and also were written in language 1:
-```
+``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'Intersect(Bitmap(frame="stargazer", rowID=14), Bitmap(frame="stargazer", rowID=19), Bitmap(frame="language", rowID=1))'
+     -d 'Intersect(
+            Bitmap(frame="stargazer", rowID=14),
+            Bitmap(frame="stargazer", rowID=19),
+            Bitmap(frame="language", rowID=1)
+        )'
+```
+``` response
+{
+    "results":[
+        {
+            "attrs":{},
+            "bits":[2,362,416,461]
+        }
+    ]
+}
 ```
 
 Set user 99999 as a stargazer for repository 77777:
-```
+``` request
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'SetBit(frame="stargazer", columnID=77777, rowID=99999)'
+```
+``` response
+{"results":[true]}
 ```
 
 ### What's Next?
