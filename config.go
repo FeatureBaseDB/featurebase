@@ -127,10 +127,6 @@ type TLSConfig struct {
 type Config struct {
 	DataDir string `toml:"data-dir"`
 	Bind    string `toml:"bind"`
-	// GossipPort DEPRECATED
-	GossipPort string `toml:"gossip-port"`
-	// GossipSeed DEPRECATED
-	GossipSeed string `toml:"gossip-seed"`
 
 	// Limits the number of mutating commands that can be in a single request to
 	// the server. This includes SetBit, ClearBit, SetRowAttrs & SetColumnAttrs.
@@ -151,7 +147,7 @@ type Config struct {
 
 	Gossip struct {
 		Port                string   `toml:"port"`
-		Seed                string   `toml:"seed"`
+		Seeds               []string `toml:"seeds"`
 		Key                 string   `toml:"key"`
 		StreamTimeout       Duration `toml:"stream-timeout"`
 		SuspicionMult       int      `toml:"suspicion-mult"`
@@ -194,7 +190,7 @@ func NewConfig() *Config {
 
 	// Gossip config.
 	// c.Gossip.Port = ""
-	// c.Gossip.Seed = ""
+	// c.Gossip.Seeds = []string{}
 	// c.Gossip.Key = ""
 	c.Gossip.StreamTimeout = Duration(DefaultGossipStreamTimeout)
 	c.Gossip.SuspicionMult = DefaultGossipSuspicionMult

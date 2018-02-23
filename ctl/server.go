@@ -26,8 +26,6 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags := cmd.Flags()
 	flags.StringVarP(&srv.Config.DataDir, "data-dir", "d", srv.Config.DataDir, "Directory to store pilosa data files.")
 	flags.StringVarP(&srv.Config.Bind, "bind", "b", srv.Config.Bind, "Default URI on which pilosa should listen.")
-	flags.StringVarP(&srv.Config.GossipPort, "gossip-port", "", "", "(DEPRECATED) Port to which pilosa should bind for internal state sharing.")
-	flags.StringVarP(&srv.Config.GossipSeed, "gossip-seed", "", "", "(DEPRECATED) Host with which to seed the gossip membership.")
 	flags.IntVarP(&srv.Config.MaxWritesPerRequest, "max-writes-per-request", "", srv.Config.MaxWritesPerRequest, "Number of write commands per request.")
 	flags.StringVar(&srv.Config.LogPath, "log-path", srv.Config.LogPath, "Log path")
 
@@ -43,7 +41,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// Gossip
 	flags.StringVarP(&srv.Config.Gossip.Port, "gossip.port", "", srv.Config.Gossip.Port, "Port to which pilosa should bind for internal state sharing.")
-	flags.StringVarP(&srv.Config.Gossip.Seed, "gossip.seed", "", srv.Config.Gossip.Seed, "Host with which to seed the gossip membership.")
+	flags.StringSliceVarP(&srv.Config.Gossip.Seeds, "gossip.seeds", "", srv.Config.Gossip.Seeds, "Host with which to seed the gossip membership.")
 	flags.StringVarP(&srv.Config.Gossip.Key, "gossip.key", "", srv.Config.Gossip.Key, "The path to file of the encryption key for gossip. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.StreamTimeout), "gossip.stream-timeout", "", (time.Duration)(srv.Config.Gossip.StreamTimeout), "Timeout for establishing a stream connection with a remote node for a full state sync.")
 	flags.IntVarP(&srv.Config.Gossip.SuspicionMult, "gossip.suspicion-mult", "", srv.Config.Gossip.SuspicionMult, "Multiplier for determining the time an inaccessible node is considered suspect before declaring it dead.")

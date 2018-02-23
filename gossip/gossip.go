@@ -62,9 +62,9 @@ func (g *GossipMemberSet) Start(h pilosa.BroadcastHandler) error {
 	return nil
 }
 
-// Seed returns the gossipSeed determined by the config.
-func (g *GossipMemberSet) Seed() string {
-	return g.config.gossipSeed
+// Seeds returns the gossipSeeds determined by the config.
+func (g *GossipMemberSet) Seeds() []string {
+	return g.config.gossipSeeds
 }
 
 // Open implements the MemberSet interface to start network activity.
@@ -92,13 +92,18 @@ func (g *GossipMemberSet) Open(n *pilosa.Node) error {
 		RetransmitMult: 3,
 	}
 
-	uri, err := pilosa.NewURIFromAddress(g.config.gossipSeed)
-	if err != nil {
-		return fmt.Errorf("new uri from address: %s", err)
+	var uris = make([]*pilosa.URI, len(g.config.gossipSeeds))
+	for i, addr := range g.config.gossipSeeds {
+		uris[i], err = pilosa.NewURIFromAddress(addr)
+		if err != nil {
+			return fmt.Errorf("new uri from address: %s", err)
+		}
 	}
 
-	// attach to gossip seed node
-	nodes := []*pilosa.Node{&pilosa.Node{URI: *uri}} //TODO: support a list of seeds
+	var nodes = make([]*pilosa.Node, len(uris))
+	for i, uri := range uris {
+		nodes[i] = &pilosa.Node{URI: *uri}
+	}
 
 	g.mu.RLock()
 	err = g.joinWithRetry(pilosa.URIs(pilosa.Nodes(nodes).URIs()).HostPortStrings())
@@ -142,7 +147,7 @@ func (g *GossipMemberSet) logger() *log.Logger {
 ////////////////////////////////////////////////////////////////
 
 type gossipConfig struct {
-	gossipSeed       string
+	gossipSeeds      []string
 	memberlistConfig *memberlist.Config
 }
 
@@ -191,14 +196,14 @@ func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport 
 
 	g.config = &gossipConfig{
 		memberlistConfig: conf,
-		gossipSeed:       cfg.Gossip.Seed,
+		gossipSeeds:      cfg.Gossip.Seeds,
 	}
 
 	g.statusHandler = server
 
-	// If no gossipSeed is provided, use local host:port.
-	if cfg.Gossip.Seed == "" {
-		g.config.gossipSeed = fmt.Sprintf("%s:%d", host, port)
+	// If no gossipSeeds is provided, use local host:port.
+	if len(cfg.Gossip.Seeds) == 0 {
+		g.config.gossipSeeds = []string{fmt.Sprintf("%s:%d", host, port)}
 	}
 
 	return g, nil
