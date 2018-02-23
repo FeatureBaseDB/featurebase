@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	// Imported for its side-effect of registering pprof endpoints with the server.
 	_ "net/http/pprof"
 	"os"
@@ -72,6 +73,9 @@ type Handler struct {
 
 	// The writer for any logging.
 	LogOutput io.Writer
+
+	// Keeps the query argument validators for each handler
+	validators map[string]*queryValidationSpec
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -87,30 +91,68 @@ var externalPrefixFlag = map[string]bool{
 	"version": true,
 }
 
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler() *Handler {
 	handler := &Handler{
 		LogOutput: os.Stderr,
 	}
 	BuildRouters(handler)
+	handler.populateValidators()
 	return handler
 }
 
 // BuildRouters creates Gorilla Mux http routers for both normal and restricted endpoints.
 func BuildRouters(handler *Handler) {
-	// Normal router.
 	router := mux.NewRouter()
 	loadCommon(router, handler)
 	loadNormal(router, handler)
 	handler.NormalRouter = router
+	router.Use(handler.queryArgValidator)
 
 	// Restricted router.
 	router = mux.NewRouter()
 	loadCommon(router, handler)
 	loadRestricted(router, handler)
 	handler.RestrictedRouter = router
+	router.Use(handler.queryArgValidator)
 
 	handler.SetRestricted()
+}
+
+func (h *Handler) populateValidators() {
+	h.validators = map[string]*queryValidationSpec{}
+	h.validators["GetFragmentNodes"] = QueryValidationSpecRequired("slice").Optional("index")
+	h.validators["GetSliceMax"] = QueryValidationSpecRequired().Optional("inverse")
+	h.validators["PostQuery"] = QueryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
+	h.validators["GetExport"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["GetFragmentData"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["PostFragmentData"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["GetFragmentBlocks"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["PostFrameRestore"] = QueryValidationSpecRequired("host")
+}
+
+func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := mux.CurrentRoute(r).GetName()
+		if validator, ok := h.validators[key]; ok {
+			if err := validator.validate(r.URL.Query()); err != nil {
+				// TODO: Return the response depending on the Accept header
+				response := errorResponse{Error: err.Error()}
+				body, err := json.Marshal(response)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				http.Error(w, string(body), http.StatusBadRequest)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // SetNormal is a method of the SecurityManager interface which provides normal URI routing.
@@ -130,29 +172,31 @@ func loadCommon(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
-	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET")
+	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 	router.HandleFunc("/id", handler.handleGetID).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
+	router.Use(handler.queryArgValidator)
 }
 
 func loadRestricted(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
 	router.NotFoundHandler = http.HandlerFunc(handler.reportRestricted)
+	router.Use(handler.queryArgValidator)
 }
 
 func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
-	router.HandleFunc("/export", handler.handleGetExport).Methods("GET")
+	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
-	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET")
-	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST")
-	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET")
+	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
+	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST").Name("PostFragmentData")
+	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
 	router.HandleFunc("/import-value", handler.handlePostImportValue).Methods("POST")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
@@ -164,7 +208,7 @@ func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST").Name("PostFrameRestore")
 	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameFields).Methods("GET")
@@ -175,7 +219,7 @@ func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetInputDefinition).Methods("GET")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
-	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST")
+	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 
@@ -1127,12 +1171,6 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*QueryRequest, erro
 // readURLQueryRequest parses query parameters from URL parameters from r.
 func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	q := r.URL.Query()
-	validQuery := validOptions(QueryRequest{})
-	for key := range q {
-		if _, ok := validQuery[key]; !ok {
-			return nil, errors.New("invalid query params")
-		}
-	}
 
 	// Parse query string.
 	buf, err := ioutil.ReadAll(r.Body)
@@ -1404,7 +1442,7 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	// Read slice parameter.
 	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
 	if err != nil {
-		http.Error(w, "slice required", http.StatusBadRequest)
+		http.Error(w, "slice should be an unsigned integer", http.StatusBadRequest)
 		return
 	}
 
@@ -2239,3 +2277,41 @@ func (h *Handler) handleGetID(w http.ResponseWriter, r *http.Request) {
 }
 
 type defaultClusterMessageResponse struct{}
+
+type queryValidationSpec struct {
+	required []string
+	args     map[string]struct{}
+}
+
+func QueryValidationSpecRequired(requiredArgs ...string) *queryValidationSpec {
+	args := map[string]struct{}{}
+	for _, arg := range requiredArgs {
+		args[arg] = struct{}{}
+	}
+
+	return &queryValidationSpec{
+		required: requiredArgs,
+		args:     args,
+	}
+}
+
+func (s *queryValidationSpec) Optional(args ...string) *queryValidationSpec {
+	for _, arg := range args {
+		s.args[arg] = struct{}{}
+	}
+	return s
+}
+
+func (s queryValidationSpec) validate(query url.Values) error {
+	for _, req := range s.required {
+		if query.Get(req) == "" {
+			return errors.New(fmt.Sprintf("%s is required", req))
+		}
+	}
+	for k, _ := range query {
+		if _, ok := s.args[k]; !ok {
+			return errors.New(fmt.Sprintf("%s is not a valid argument", k))
+		}
+	}
+	return nil
+}

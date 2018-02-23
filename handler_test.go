@@ -326,7 +326,7 @@ func TestHandler_Query_Params_Err(t *testing.T) {
 	test.NewHandler().ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1&db=sample", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"error":"invalid query params"}`+"\n" {
+	} else if body := w.Body.String(); body != `{"error":"db is not a valid argument"}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
 
@@ -1215,6 +1215,15 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 	} else if body := w.Body.String(); body != `[{"id":"node2","uri":{"scheme":"http","host":"host2"}},{"id":"node0","uri":{"scheme":"http","host":"host0"}}]`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
+
+	// invalid argument should return BadRequest
+	w = httptest.NewRecorder()
+	r = test.MustNewHTTPRequest("GET", "/fragment/nodes?db=X&slice=0", nil)
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
+
 }
 
 // Ensure the handler can return expvars without panicking.
