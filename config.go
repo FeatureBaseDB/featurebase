@@ -189,6 +189,9 @@ func NewConfig() *Config {
 	c.Cluster.LongQueryTime = Duration(time.Minute)
 
 	// Gossip config.
+	// c.Gossip.Port = ""
+	// c.Gossip.Seeds = []string{}
+	// c.Gossip.Key = ""
 	c.Gossip.StreamTimeout = Duration(DefaultGossipStreamTimeout)
 	c.Gossip.SuspicionMult = DefaultGossipSuspicionMult
 	c.Gossip.PushPullInterval = Duration(DefaultGossipPushPullInterval)
