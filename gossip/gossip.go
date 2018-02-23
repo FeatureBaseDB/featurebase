@@ -19,7 +19,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -159,10 +158,12 @@ func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport 
 	}
 
 	port := transport.Net.GetAutoBindPort()
-	host, _, err := net.SplitHostPort(cfg.Bind)
+
+	bindURI, err := pilosa.NewURIFromAddress(cfg.Bind)
 	if err != nil {
-		return nil, fmt.Errorf("split host port: %s", err)
+		return nil, fmt.Errorf("getting uri from bind address (with transport): %s", err)
 	}
+	host := bindURI.Host()
 
 	var gossipKey []byte
 	if cfg.Gossip.Key != "" {
@@ -215,10 +216,12 @@ func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server) 
 	if err != nil {
 		return nil, fmt.Errorf("convert port: %s", err)
 	}
-	host, _, err := net.SplitHostPort(cfg.Bind)
+
+	bindURI, err := pilosa.NewURIFromAddress(cfg.Bind)
 	if err != nil {
-		return nil, fmt.Errorf("split host port: %s", err)
+		return nil, fmt.Errorf("getting uri from bind address: %s", err)
 	}
+	host := bindURI.Host()
 
 	// Set up the transport.
 	transport, err := NewTransport(host, port)
