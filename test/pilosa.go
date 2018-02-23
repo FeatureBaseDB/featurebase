@@ -50,7 +50,7 @@ func NewMain() *Main {
 	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
 	m.Server.Network = *Network
 	m.Config.DataDir = path
-	m.Config.Bind = "localhost:0"
+	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
 	m.Command.Stdin = &m.Stdin
 	m.Command.Stdout = &m.Stdout
