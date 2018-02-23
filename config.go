@@ -127,10 +127,6 @@ type TLSConfig struct {
 type Config struct {
 	DataDir string `toml:"data-dir"`
 	Bind    string `toml:"bind"`
-	// GossipPort DEPRECATED
-	GossipPort string `toml:"gossip-port"`
-	// GossipSeed DEPRECATED
-	GossipSeed string `toml:"gossip-seed"`
 
 	// Limits the number of mutating commands that can be in a single request to
 	// the server. This includes SetBit, ClearBit, SetRowAttrs & SetColumnAttrs.

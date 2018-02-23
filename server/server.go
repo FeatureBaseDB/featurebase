@@ -240,8 +240,6 @@ func (m *Command) SetupNetworking() error {
 	// Config.GossipPort is deprecated, so Config.Gossip.Port has priority
 	if m.Config.Gossip.Port != "" {
 		gossipPortStr = m.Config.Gossip.Port
-	} else if m.Config.GossipPort != "" {
-		gossipPortStr = m.Config.GossipPort
 	}
 
 	gossipPort, err := strconv.Atoi(gossipPortStr)
