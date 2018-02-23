@@ -39,7 +39,7 @@ curl -XGET localhost:10101/index/user
 
 Creates an index with the given name.
 
-`` request
+``` request
 curl -XPOST localhost:10101/index/user
 ```
 ``` response
@@ -114,15 +114,12 @@ The payload is in JSON with the format: `{"timeQuantum": "${TIME_QUANTUM}"}`. Va
 * MDH: month, day and hour
 * YMDH: year, month, day and hour
 
-Request:
-```
+``` request
 curl localhost:10101/index/user/time-quantum \
      -X POST \
      -d '{"timeQuantum": "YM"}'
 ```
-
-Response:
-```
+``` response
 {}
 ```
 
