@@ -22,7 +22,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -574,53 +573,51 @@ func (f *Frame) RecalculateCaches() {
 // Additionally, a CreateViewMessage is sent to the cluster.
 func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 
-	view, err := f.CreateViewIfNotExistsBase(name)
+	view, created, err := f.createViewIfNotExistsBase(name)
 	if err != nil {
 		return nil, err
 	}
 
-	// Broadcast view creation to the cluster.
-	err = f.broadcaster.SendSync(
-		&internal.CreateViewMessage{
-			Index: f.index,
-			Frame: f.name,
-			View:  name,
-		})
-	if err != nil {
-		return nil, err
+	if created {
+		// Broadcast view creation to the cluster.
+		err = f.broadcaster.SendSync(
+			&internal.CreateViewMessage{
+				Index: f.index,
+				Frame: f.name,
+				View:  name,
+			})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return view, nil
 }
 
-// CreateViewIfNotExistsBase returns the named view, creating it if necessary.
-func (f *Frame) CreateViewIfNotExistsBase(name string) (*View, error) {
+// createViewIfNotExistsBase returns the named view, creating it if necessary.
+// The returned bool indicates whether the view was created or not.
+func (f *Frame) createViewIfNotExistsBase(name string) (*View, bool, error) {
 	// Don't create inverse views if they are not enabled.
 	if !f.InverseEnabled() && IsInverseView(name) {
-		return nil, ErrFrameInverseDisabled
+		return nil, false, ErrFrameInverseDisabled
 	}
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	if view := f.views[name]; view != nil {
-		return view, nil
+		return view, false, nil
 	}
 
 	view := f.newView(f.ViewPath(name), name)
 
-	// Never keep a cache for field views.
-	if strings.HasPrefix(name, ViewFieldPrefix) {
-		view.cacheType = CacheTypeNone
-	}
-
 	if err := view.Open(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	view.RowAttrStore = f.rowAttrStore
 	f.views[view.Name()] = view
 
-	return view, nil
+	return view, true, nil
 }
 
 func (f *Frame) newView(path, name string) *View {

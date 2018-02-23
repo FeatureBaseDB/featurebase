@@ -1077,9 +1077,6 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 		resp, err := http.Get(s.URL + "/index/i/frame/f/fields")
 		if err != nil {
 			t.Fatal(err)
-		}
-		if err != nil {
-			t.Fatal(err)
 		} else if resp.StatusCode != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", resp.StatusCode)
 		}

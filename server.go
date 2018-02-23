@@ -424,7 +424,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if f == nil {
 			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
 		}
-		_, err := f.CreateViewIfNotExistsBase(obj.View)
+		_, _, err := f.createViewIfNotExistsBase(obj.View)
 		if err != nil {
 			return err
 		}
