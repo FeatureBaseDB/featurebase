@@ -80,14 +80,14 @@ A return value of `false` indicates that the bit was already set to 1 and nothin
 **Examples:**
 
 ```
-SetBit(frame="stargazer", repo_id=10, rowID=1)
+SetBit(frame="stargazer", columnID=10, rowID=1)
 ```
 
 This query illustrates setting a bit in the stargazer frame. User with id=1 has starred repository with id=10.
 
 SetBit also supports providing a timestamp. To write the date that a user starred a repository.
 ```
-SetBit(frame="stargazer", repo_id=10, rowID=1, timestamp="2016-01-01T00:00")
+SetBit(frame="stargazer", columnID=10, rowID=1, timestamp="2016-01-01T00:00")
 ```
 
 Setting multiple bits in a single request:
@@ -150,7 +150,7 @@ SetColumnAttrs queries always return `null` upon success. Setting a value of `nu
 SetColumnAttrs(columnID=10, stars=123, url="http://projects.pilosa.com/10", active=true)
 ```
 
-Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap]({{< ref "query-language.md#bitmap" >}}) query like so `Bitmap(frame="stargazer", repo_id=10)`.
+Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap]({{< ref "query-language.md#bitmap" >}}) query like so `Bitmap(frame="stargazer", columnID=10)`.
 
 ```
 SetColumnAttrs(columnID=10, url=null)
@@ -184,7 +184,7 @@ A return value of `false` indicates that the bit was already set to 0 and nothin
 ClearBit(frame="stargazer", columnID=10, rowID=1)
 ```
 
-Remove relationship between stargazer_id 1 and repo_id 10  from the stargazer frame.
+Remove relationship between the stargazer in row 1 and the repository in column 10 from the stargazer frame.
 
 
 ### Read Operations
