@@ -310,6 +310,12 @@ Return `{"attrs":{},"bits":[30]}`
 
 #### Xor
 
+**Spec:**
+
+```
+Xor(<BITMAP_CALL>, [BITMAP_CALL ...])
+```
+
 **Description:**
 
 Xor performs a logical XOR on the results of each `BITMAP_CALL` query passed to it.
