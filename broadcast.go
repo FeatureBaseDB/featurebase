@@ -140,6 +140,7 @@ const (
 	MessageTypeSetCoordinator
 	MessageTypeNodeState
 	MessageTypeRecalculateCaches
+	MessageTypeNodeEvent
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
@@ -180,6 +181,8 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeNodeState
 	case *internal.RecalculateCaches:
 		typ = MessageTypeRecalculateCaches
+	case *internal.NodeEventMessage:
+		typ = MessageTypeNodeEvent
 	default:
 		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
 	}
@@ -230,6 +233,8 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.NodeStateMessage{}
 	case MessageTypeRecalculateCaches:
 		m = &internal.RecalculateCaches{}
+	case MessageTypeNodeEvent:
+		m = &internal.NodeEventMessage{}
 	default:
 		return nil, fmt.Errorf("invalid message type: %d", typ)
 	}
