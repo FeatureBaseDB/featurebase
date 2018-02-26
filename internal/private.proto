@@ -144,6 +144,11 @@ message NodeStateMessage {
     string State = 2;
 }
 
+message NodeEventMessage {
+    uint32 Event = 1;
+    Node Node = 2;
+}
+
 message NodeStatus {
     Node Node = 1;
     MaxSlices MaxSlices = 2;

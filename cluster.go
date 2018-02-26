@@ -114,6 +114,13 @@ func DecodeNode(node *internal.Node) *Node {
 	}
 }
 
+func DecodeNodeEvent(ne *internal.NodeEventMessage) *NodeEvent {
+	return &NodeEvent{
+		Event: NodeEventType(ne.Event),
+		Node:  DecodeNode(ne.Node),
+	}
+}
+
 // Nodes represents a list of nodes.
 type Nodes []*Node
 
@@ -897,6 +904,22 @@ func (c *Cluster) Open() error {
 
 	// If not coordinator then wait for ClusterStatus from coordinator.
 	if !c.IsCoordinator() {
+		// In the case where a node has been restarted and memberlist has
+		// not had enough time to determine the node went down/up, then
+		// the coorninator needs to be alerted that this node is back up
+		// (and now in a state of STARTING) so that it can be put to the correct
+		// cluster state.
+		// TODO: Because the normal code path already sends a NodeJoin event (via
+		// memberlist), this it a bit redundant in most cases. Perhaps determine
+		// that the node has been restarted and don't do this step.
+		msg := &internal.NodeEventMessage{
+			Event: uint32(NodeJoin),
+			Node:  EncodeNode(c.Node),
+		}
+		if err := c.Broadcaster.SendAsync(msg); err != nil {
+			return fmt.Errorf("sending restart NodeJoin: %v", err)
+		}
+
 		c.logger().Printf("wait for joining to complete")
 		<-c.joining
 		c.logger().Printf("joining has completed")
@@ -1678,9 +1701,11 @@ func (c *Cluster) nodeJoin(node *Node) error {
 		return nil
 	}
 
-	// Don't do anything else if the cluster already contains the node.
-	if c.nodeByID(node.ID) != nil {
-		return nil
+	// If the cluster already contains the node, just send it the cluster status.
+	// This is useful in the case where a node is restarted or temporarily leaves
+	// the cluster.
+	if node := c.nodeByID(node.ID); node != nil {
+		return c.sendTo(node, c.Status())
 	}
 
 	// If the holder does not yet contain data, go ahead and add the node.

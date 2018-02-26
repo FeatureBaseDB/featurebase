@@ -463,6 +463,8 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 	case *internal.RecalculateCaches:
 		s.Holder.RecalculateCaches()
+	case *internal.NodeEventMessage:
+		s.Cluster.ReceiveEvent(DecodeNodeEvent(obj))
 	}
 
 	return nil
