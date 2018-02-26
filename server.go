@@ -31,7 +31,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CAFxX/gcnotifier"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
@@ -73,6 +72,8 @@ type Server struct {
 	Cluster     *Cluster
 	diagnostics *diagnostics.Diagnostics
 
+	GCNotifier GCNotifier
+
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
 	MetricInterval      time.Duration
@@ -102,6 +103,8 @@ func NewServer() *Server {
 		diagnostics:       diagnostics.New(DefaultDiagnosticServer),
 
 		Network: "tcp",
+
+		GCNotifier: NopGCNotifier,
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		MetricInterval:      0,
@@ -652,8 +655,7 @@ func (s *Server) monitorRuntime() {
 	ticker := time.NewTicker(s.MetricInterval)
 	defer ticker.Stop()
 
-	gcn := gcnotifier.New()
-	defer gcn.Close()
+	defer s.GCNotifier.Close()
 
 	s.Logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
 
@@ -662,7 +664,7 @@ func (s *Server) monitorRuntime() {
 		select {
 		case <-s.closing:
 			return
-		case <-gcn.AfterGC():
+		case <-s.GCNotifier.AfterGC():
 			// GC just ran.
 			s.Holder.Stats.Count("garbage_collection", 1, 1.0)
 		case <-ticker.C:
