@@ -52,7 +52,7 @@ curl localhost:10101/index/repository/query \
 * `UINT` An unsigned integer (e.g. 42839)
 * `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`
 * `ATTR_VALUE` Can be a string, float, integer, or bool.
-* `BITMAP_CALL` Any query which returns a bitmap, such as `Bitmap`, `Union`, `Difference`, `Intersect`, `Range`
+* `BITMAP_CALL` Any query which returns a bitmap, such as `Bitmap`, `Union`, `Difference`, `Xor`, `Intersect`, `Range`
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`)
 
 ### Write Operations
@@ -307,6 +307,34 @@ Difference(Bitmap(frame="stargazer", rowID=2), Bitmap( frame="stargazer", rowID=
 Return `{"attrs":{},"bits":[30]}`
 
 * Bits are repositories that were starred by user 2 BUT NOT user 1
+
+#### Xor
+
+**Spec:**
+
+```
+Xor(<BITMAP_CALL>, [BITMAP_CALL ...])
+```
+
+**Description:**
+
+Xor performs a logical XOR on the results of each `BITMAP_CALL` query passed to it.
+
+**Result Type:** object with attrs and bits
+
+attrs will always be empty
+
+**Examples:**
+
+Query repositories which have been starred by two users.
+
+```
+Xor(Bitmap(frame="stargazer", rowID=1), Bitmap(frame="stargazer", rowID=2))
+```
+
+Returns `{"attrs":{},"bits":[30]}`.
+
+* bits are repositories that were starred by user 1 XOR user 2 (user 1 or user 2, but not both)
 
 #### Count
 **Spec:**
