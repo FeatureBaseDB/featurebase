@@ -1907,13 +1907,14 @@ func intersectionCountBitmapRun(a, b *container) (n int) {
 }
 
 func intersectionCountArrayBitmap(a, b *container) (n int) {
+	ln := len(b.bitmap)
 	for _, val := range a.array {
-		i := val >> 6
-		if i >= uint16(len(b.bitmap)) {
+		i := int(val >> 6)
+		if i >= ln {
 			break
 		}
 		off := val % 64
-		n += int((b.bitmap[i] & (1 << off)) >> off)
+		n += int(b.bitmap[i]>>off) & 1
 	}
 	return n
 }
