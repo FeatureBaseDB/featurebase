@@ -74,6 +74,8 @@ type Handler struct {
 
 	// Keeps the query argument validators for each handler
 	validators map[string]*queryValidationSpec
+
+	api *API
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -284,8 +286,6 @@ type getStatusResponse struct {
 
 // handlePostQuery handles /query requests.
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-
 	// Parse incoming request.
 	req, err := h.readQueryRequest(r)
 	if err != nil {
@@ -293,46 +293,13 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 		return
 	}
+	// TODO: Remove
+	req.Index = mux.Vars(r)["index"]
 
-	// Build execution options.
-	opt := &ExecOptions{
-		Remote:       req.Remote,
-		ExcludeAttrs: req.ExcludeAttrs,
-		ExcludeBits:  req.ExcludeBits,
-	}
-
-	// Parse query string.
-	q, err := pql.NewParser(strings.NewReader(req.Query)).Parse()
+	resp, err := h.api.ExecuteQuery(r.Context(), req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
-		return
-	}
-
-	// Execute the query.
-	results, err := h.Executor.Execute(r.Context(), indexName, q, req.Slices, opt)
-	resp := &QueryResponse{Results: results, Err: err}
-
-	// Fill column attributes if requested.
-	if req.ColumnAttrs && !req.ExcludeBits {
-		// Consolidate all column ids across all calls.
-		var columnIDs []uint64
-		for _, result := range results {
-			bm, ok := result.(*Bitmap)
-			if !ok {
-				continue
-			}
-			columnIDs = uint64Slice(columnIDs).merge(bm.Bits())
-		}
-
-		// Retrieve column attributes across all calls.
-		columnAttrSets, err := h.readColumnAttrSets(h.Holder.Index(indexName), columnIDs)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			h.writeQueryResponse(w, r, &QueryResponse{Err: err})
-			return
-		}
-		resp.ColumnAttrSets = columnAttrSets
+		h.writeQueryResponse(w, r, &resp)
 	}
 
 	// Set appropriate status code, if there is an error.
@@ -346,7 +313,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write response back to client.
-	if err := h.writeQueryResponse(w, r, resp); err != nil {
+	if err := h.writeQueryResponse(w, r, &resp); err != nil {
 		h.logger().Printf("write query response error: %s", err)
 	}
 }

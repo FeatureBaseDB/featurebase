@@ -116,6 +116,9 @@ func NewServer() *Server {
 	s.logger = log.New(s.LogOutput, "", log.LstdFlags)
 
 	s.Handler.Holder = s.Holder
+	s.Handler.api = &API{
+		holder: s.Holder,
+	}
 	return s
 }
 
@@ -195,6 +198,7 @@ func (s *Server) Open() error {
 	s.Handler.URI = s.URI
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
+	s.Handler.api.executor = e
 	s.Handler.LogOutput = s.LogOutput
 
 	// Initialize Holder.
