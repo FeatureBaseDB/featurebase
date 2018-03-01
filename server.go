@@ -117,6 +117,10 @@ func NewServer() *Server {
 
 	s.Handler.Holder = s.Holder
 	s.diagnostics.server = s
+	s.Handler.api = &API{
+		holder: s.Holder,
+	}
+
 	return s
 }
 
@@ -172,6 +176,7 @@ func (s *Server) Open() error {
 	s.Handler.Executor = e
 
 	s.Cluster.prefect = s.Handler
+	s.Handler.api.executor = e
 
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster
