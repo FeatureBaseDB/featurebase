@@ -10,6 +10,7 @@ nav = [
 
 ## Client Libraries
 
+This section contains example code for client libraries in several languages. Please remember that when modeling your data in Pilosa, it is best to keep row and column ids sequential. It is not wise to use the output of a hash, or randomly distributed ids with Pilosa.
 
 ### Go
 
