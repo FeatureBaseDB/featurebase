@@ -75,7 +75,7 @@ type Handler struct {
 	// Keeps the query argument validators for each handler
 	validators map[string]*queryValidationSpec
 
-	api *API
+	API *API
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -296,7 +296,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// TODO: Remove
 	req.Index = mux.Vars(r)["index"]
 
-	resp, err := h.api.ExecuteQuery(r.Context(), req)
+	resp, err := h.API.ExecuteQuery(r.Context(), req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		h.writeQueryResponse(w, r, &resp)
@@ -353,9 +353,9 @@ func (h *Handler) handleGetIndexes(w http.ResponseWriter, r *http.Request) {
 // handleGetIndex handles GET /index/<indexname> requests.
 func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
-	index := h.Holder.Index(indexName)
-	if index == nil {
-		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
+	index, err := h.API.ReadIndex(r.Context(), indexName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -437,28 +437,17 @@ type postIndexResponse struct{}
 // handleDeleteIndex handles DELETE /index request.
 func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
-
-	// Delete index from the holder.
-	if err := h.Holder.DeleteIndex(indexName); err != nil {
+	err := h.API.DeleteIndex(r.Context(), indexName)
+	if err != nil {
+		h.logger().Printf("problem deleting index: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	// Send the delete index message to all nodes.
-	err := h.Broadcaster.SendSync(
-		&internal.DeleteIndexMessage{
-			Index: indexName,
-		})
-	if err != nil {
-		h.logger().Printf("problem sending DeleteIndex message: %s", err)
 	}
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
-
-	h.Holder.Stats.Count("deleteIndex", 1, 1.0)
 }
 
 type deleteIndexResponse struct{}
@@ -478,8 +467,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create index.
-	_, err = h.Holder.CreateIndex(indexName, req.Options)
+	_, err = h.API.CreateIndex(r.Context(), indexName, req.Options)
 	if err == ErrIndexExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -488,24 +476,10 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the create index message to all nodes.
-	err = h.Broadcaster.SendSync(
-		&internal.CreateIndexMessage{
-			Index: indexName,
-			Meta:  req.Options.Encode(),
-		})
-	if err != nil {
-		h.logger().Printf("problem sending CreateIndex message: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postIndexResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
-
-	h.Holder.Stats.Count("createIndex", 1, 1.0)
 }
 
 // handlePatchIndexTimeQuantum handles PATCH /index/time_quantum request.
@@ -623,41 +597,22 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	// Find index.
-	index := h.Holder.Index(indexName)
-	if index == nil {
-		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Create frame.
-	_, err = index.CreateFrame(frameName, req.Options)
-	if err == ErrFrameExists {
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
-	} else if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Send the create frame message to all nodes.
-	err = h.Broadcaster.SendSync(
-		&internal.CreateFrameMessage{
-			Index: indexName,
-			Frame: frameName,
-			Meta:  req.Options.Encode(),
-		})
+	_, err = h.API.CreateFrame(r.Context(), indexName, frameName, req.Options)
 	if err != nil {
-		h.logger().Printf("problem sending CreateFrame message: %s", err)
+		switch err {
+		case ErrIndexNotFound:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case ErrFrameExists:
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
 	}
-
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
-
-	h.Holder.Stats.CountWithCustomTags("createFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 }
 
 type _postFrameRequest postFrameRequest
@@ -710,37 +665,22 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
-	// Find index.
-	index := h.Holder.Index(indexName)
-	if index == nil {
-		if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
-			h.logger().Printf("response encoding error: %s", err)
+	err := h.API.DeleteFrame(r.Context(), indexName, frameName)
+	if err != nil {
+		if err == ErrIndexNotFound {
+			if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
+				h.logger().Printf("response encoding error: %s", err)
+			}
+			return
 		}
-		return
-	}
-
-	// Delete frame from the index.
-	if err := index.DeleteFrame(frameName); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	// Send the delete frame message to all nodes.
-	err := h.Broadcaster.SendSync(
-		&internal.DeleteFrameMessage{
-			Index: indexName,
-			Frame: frameName,
-		})
-	if err != nil {
-		h.logger().Printf("problem sending DeleteFrame message: %s", err)
 	}
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteFrameResponse{}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
 	}
-
-	h.Holder.Stats.CountWithCustomTags("deleteFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 }
 
 type deleteFrameResponse struct{}
