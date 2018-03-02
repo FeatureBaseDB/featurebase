@@ -229,6 +229,11 @@ curl localhost:10101/index/repository/query \
 {"results":[true]}
 ```
 
+Please note that while user ID 99999 may not be sequential with the other column IDs, it is still a relatively low number. 
+Don't try to use arbitrary 64-bit integers as column or row IDs in Pilosa - this will lead to poor performance, out of memory errors, and more.
+
+
+
 ### What's Next?
 
 You can jump to [Data Model](../data-model/) for an in-depth look at Pilosa's data model, or [Query Language](../query-language/) for more details about **PQL**, the query language of Pilosa. Check out the [Examples](../examples/) page for example implementations of real world use cases for Pilosa. Ready to get going in your favorite language? Have a peek at our small but expanding set of official [Client Libraries](../client-libraries/).
