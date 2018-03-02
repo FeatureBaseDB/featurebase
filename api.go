@@ -16,23 +16,31 @@ package pilosa
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"log"
 	"strings"
 
+	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
 
-type QueryOptions struct {
-	Remote       bool
-	ExcludeAttrs bool
-	ExcludeBits  bool
-	ColumnAttrs  bool
+type API struct {
+	Holder *Holder
+	// The execution engine for running queries.
+	Executor interface {
+		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
+	}
+	Broadcaster Broadcaster
+	logger      *log.Logger
 }
 
-type API struct {
-	holder *Holder
-	// The execution engine for running queries.
-	executor interface {
-		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
+func NewAPI(logger *log.Logger) *API {
+	if logger == nil {
+		logger = log.New(ioutil.Discard, "", 0)
+	}
+	return &API{
+		logger: logger,
 	}
 }
 
@@ -49,7 +57,7 @@ func (a *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryRespons
 		ExcludeAttrs: req.ExcludeAttrs,
 		ExcludeBits:  req.ExcludeBits,
 	}
-	results, err := a.executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
+	results, err := a.Executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
 	if err != nil {
 		return resp, err
 	}
@@ -68,7 +76,7 @@ func (a *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryRespons
 		}
 
 		// Retrieve column attributes across all calls.
-		columnAttrSets, err := a.readColumnAttrSets(a.holder.Index(req.Index), columnIDs)
+		columnAttrSets, err := a.readColumnAttrSets(a.Holder.Index(req.Index), columnIDs)
 		if err != nil {
 			return resp, err
 		}
@@ -98,4 +106,105 @@ func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet
 	}
 
 	return ax, nil
+}
+
+func (api *API) CreateIndex(ctx context.Context, indexName string, options IndexOptions) (*Index, error) {
+	// Create index.
+	index, err := api.Holder.CreateIndex(indexName, options)
+	if err != nil {
+		return nil, err
+	}
+	// Send the create index message to all nodes.
+	err = api.Broadcaster.SendSync(
+		&internal.CreateIndexMessage{
+			Index: indexName,
+			Meta:  options.Encode(),
+		})
+	if err != nil {
+		api.logger.Printf("problem sending CreateIndex message: %s", err)
+		return nil, err
+	}
+	api.Holder.Stats.Count("createIndex", 1, 1.0)
+	return index, nil
+}
+
+func (api *API) ReadIndex(ctx context.Context, indexName string) (*Index, error) {
+	index := api.Holder.Index(indexName)
+	if index == nil {
+		return nil, ErrIndexNotFound
+	}
+	return index, nil
+}
+
+func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
+	// Delete index from the holder.
+	err := api.Holder.DeleteIndex(indexName)
+	if err != nil {
+		return err
+	}
+	// Send the delete index message to all nodes.
+	err = api.Broadcaster.SendSync(
+		&internal.DeleteIndexMessage{
+			Index: indexName,
+		})
+	if err != nil {
+		api.logger.Printf("problem sending DeleteIndex message: %s", err)
+		return err
+	}
+	api.Holder.Stats.Count("deleteIndex", 1, 1.0)
+	return nil
+}
+
+func (api *API) CreateFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) (*Frame, error) {
+	// Find index.
+	index := api.Holder.Index(indexName)
+	if index == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Create frame.
+	frame, err := index.CreateFrame(frameName, options)
+	if err != nil {
+		return nil, err
+	}
+
+	// Send the create frame message to all nodes.
+	err = api.Broadcaster.SendSync(
+		&internal.CreateFrameMessage{
+			Index: indexName,
+			Frame: frameName,
+			Meta:  options.Encode(),
+		})
+	if err != nil {
+		api.logger.Printf("problem sending CreateFrame message: %s", err)
+		return nil, err
+	}
+	api.Holder.Stats.CountWithCustomTags("createFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	return frame, nil
+}
+
+func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName string) error {
+	// Find index.
+	index := api.Holder.Index(indexName)
+	if index == nil {
+		return ErrIndexNotFound
+	}
+
+	// Delete frame from the index.
+	if err := index.DeleteFrame(frameName); err != nil {
+		return err
+	}
+
+	// Send the delete frame message to all nodes.
+	err := api.Broadcaster.SendSync(
+		&internal.DeleteFrameMessage{
+			Index: indexName,
+			Frame: frameName,
+		})
+	if err != nil {
+		api.logger.Printf("problem sending DeleteFrame message: %s", err)
+		return err
+	}
+	api.Holder.Stats.CountWithCustomTags("deleteFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	return nil
 }
