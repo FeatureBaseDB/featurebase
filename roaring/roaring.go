@@ -1002,12 +1002,16 @@ const ArrayMaxSize = 4096
 // RunMaxSize represents the maximum size of run length encoded containers.
 const RunMaxSize = 2048
 
-// container represents a container for uint32 integers.
+// container represents a container for uint16 integers.
 //
-// These are used for storing the low bits. Containers are separated into three
-// types depending on cardinality. For containers with less than 4,096 values,
-// an array or RLE container is used, depending on the contents. For containers
-// with more than 4,096 values, the values are encoded into bitmaps.
+// These are used for storing the low bits of numbers in larger sets of uint64.
+// The high bits are stored in a container's key which is tracked by a separate
+// data structure. Integers in a container can be encoded in one of three ways -
+// the encoding used is usually whichever is most compact, though any container
+// type should be able to encode any set of integers safely. For containers with
+// less than 4,096 values, an array is often used. Containers with long runs of
+// integers would use run length encoding, and more random data usually uses
+// bitmap encoding.
 type container struct {
 	mapped        bool         // mapped directly to a byte slice when true
 	containerType byte         // array, bitmap, or run
