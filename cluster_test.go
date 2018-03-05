@@ -180,10 +180,10 @@ func TestCluster_Coordinator(t *testing.T) {
 
 	c1 := *pilosa.NewCluster()
 	c1.Node = node1
-	c1.Coordinator = node1.URI
+	c1.Coordinator = node1.ID
 	c2 := *pilosa.NewCluster()
 	c2.Node = node2
-	c2.Coordinator = node1.URI
+	c2.Coordinator = node1.ID
 
 	t.Run("IsCoordinator", func(t *testing.T) {
 		if !c1.IsCoordinator() {
@@ -519,14 +519,14 @@ func TestCluster_SetCoordinator(t *testing.T) {
 		// Set coordinator to the same value.
 		if c.SetCoordinator(oldNode) {
 			t.Errorf("did not expect coordinator to change")
-		} else if c.Coordinator != oldNode.URI {
+		} else if c.Coordinator != oldNode.ID {
 			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, oldNode.URI)
 		}
 
 		// Set coordinator to a new value.
 		if !c.SetCoordinator(newNode) {
 			t.Errorf("expected coordinator to change")
-		} else if c.Coordinator != newNode.URI {
+		} else if c.Coordinator != newNode.ID {
 			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, newNode.URI)
 		}
 	})

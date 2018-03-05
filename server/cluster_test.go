@@ -52,7 +52,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	m0.Config.Gossip.Port = "0"
 	m0.Config.Gossip.Seeds = []string{}
 
-	m0.Server.Cluster.Coordinator = m0.Server.URI
+	m0.Server.Cluster.Coordinator = m0.Server.NodeID
 	m0.Server.Cluster.Topology = &pilosa.Topology{NodeIDs: []string{m0.Server.NodeID, m1.Server.NodeID}}
 	m0.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m0.Server.LogOutput)
 	gossipMemberSet0, err := gossip.NewGossipMemberSet(m0.Server.URI.HostPort(), m0.Config, m0.Server)
@@ -80,7 +80,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	m1.Config.Gossip.Port = "0"
 	m1.Config.Gossip.Seeds = gossipMemberSet0.Seeds()
 
-	m1.Server.Cluster.Coordinator = m0.Server.URI
+	m1.Server.Cluster.Coordinator = m0.Server.NodeID
 	m1.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m1.Server.LogOutput)
 	gossipMemberSet1, err := gossip.NewGossipMemberSet(m1.Server.URI.HostPort(), m1.Config, m1.Server)
 	if err != nil {
@@ -220,21 +220,21 @@ func TestClusterResize_EmptyNode(t *testing.T) {
 // Ensure that a cluster of empty nodes comes up in a NORMAL state.
 func TestClusterResize_EmptyNodes(t *testing.T) {
 	// Configure node0
-	m0 := test.NewMainWithCluster()
+	m0 := test.NewMainWithCluster(true)
 	defer m0.Close()
 
 	gossipHost := "localhost"
 	gossipPort := 0
-	seed, coord, err := m0.RunWithTransport(gossipHost, gossipPort, []string{}, pilosa.URI{})
+	seed, err := m0.RunWithTransport(gossipHost, gossipPort, []string{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Configure node1
-	m1 := test.NewMainWithCluster()
+	m1 := test.NewMainWithCluster(false)
 	defer m1.Close()
 
-	seed, coord, err = m1.RunWithTransport(gossipHost, gossipPort, []string{seed}, coord)
+	seed, err = m1.RunWithTransport(gossipHost, gossipPort, []string{seed})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,21 +250,21 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("NoData", func(t *testing.T) {
 		// Configure node0
-		m0 := test.NewMainWithCluster()
+		m0 := test.NewMainWithCluster(true)
 		defer m0.Close()
 
-		seed, coord, err := m0.RunWithTransport("localhost", 0, []string{}, pilosa.URI{})
+		seed, err := m0.RunWithTransport("localhost", 0, []string{})
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Configure node1
-		m1 := test.NewMainWithCluster()
+		m1 := test.NewMainWithCluster(false)
 		defer m1.Close()
 
 		var eg errgroup.Group
 		eg.Go(func() error {
-			_, _, err = m1.RunWithTransport("localhost", 0, []string{seed}, coord)
+			_, err = m1.RunWithTransport("localhost", 0, []string{seed})
 			if err != nil {
 				return err
 			}
@@ -284,10 +284,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 	})
 	t.Run("WithIndex", func(t *testing.T) {
 		// Configure node0
-		m0 := test.NewMainWithCluster()
+		m0 := test.NewMainWithCluster(true)
 		defer m0.Close()
 
-		seed, coord, err := m0.RunWithTransport("localhost", 0, []string{}, pilosa.URI{})
+		seed, err := m0.RunWithTransport("localhost", 0, []string{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -303,12 +303,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Configure node1
-		m1 := test.NewMainWithCluster()
+		m1 := test.NewMainWithCluster(false)
 		defer m1.Close()
 
 		var eg errgroup.Group
 		eg.Go(func() error {
-			_, _, err = m1.RunWithTransport("localhost", 0, []string{seed}, coord)
+			_, err = m1.RunWithTransport("localhost", 0, []string{seed})
 			if err != nil {
 				return err
 			}
@@ -330,10 +330,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("ContinuousSlices", func(t *testing.T) {
 
 		// Configure node0
-		m0 := test.NewMainWithCluster()
+		m0 := test.NewMainWithCluster(true)
 		defer m0.Close()
 
-		seed, coord, err := m0.RunWithTransport("localhost", 0, []string{}, pilosa.URI{})
+		seed, err := m0.RunWithTransport("localhost", 0, []string{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -358,12 +358,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Configure node1
-		m1 := test.NewMainWithCluster()
+		m1 := test.NewMainWithCluster(false)
 		defer m1.Close()
 
 		var eg errgroup.Group
 		eg.Go(func() error {
-			_, _, err = m1.RunWithTransport("localhost", 0, []string{seed}, coord)
+			_, err = m1.RunWithTransport("localhost", 0, []string{seed})
 			if err != nil {
 				return err
 			}
@@ -385,10 +385,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("SkippedSlice", func(t *testing.T) {
 
 		// Configure node0
-		m0 := test.NewMainWithCluster()
+		m0 := test.NewMainWithCluster(true)
 		defer m0.Close()
 
-		seed, coord, err := m0.RunWithTransport("localhost", 0, []string{}, pilosa.URI{})
+		seed, err := m0.RunWithTransport("localhost", 0, []string{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -413,12 +413,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Configure node1
-		m1 := test.NewMainWithCluster()
+		m1 := test.NewMainWithCluster(false)
 		defer m1.Close()
 
 		var eg errgroup.Group
 		eg.Go(func() error {
-			_, _, err = m1.RunWithTransport("localhost", 0, []string{seed}, coord)
+			_, err = m1.RunWithTransport("localhost", 0, []string{seed})
 			if err != nil {
 				return err
 			}
@@ -443,22 +443,22 @@ func TestClusterResize_AddNode(t *testing.T) {
 func TestCluster_GossipMembership(t *testing.T) {
 	t.Run("Node0Down", func(t *testing.T) {
 		// Configure node0
-		m0 := test.NewMainWithCluster()
+		m0 := test.NewMainWithCluster(true)
 		defer m0.Close()
 
-		seed, coord, err := m0.RunWithTransport("localhost", 0, []string{}, pilosa.URI{})
+		seed, err := m0.RunWithTransport("localhost", 0, []string{})
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Configure node1
-		m1 := test.NewMainWithCluster()
+		m1 := test.NewMainWithCluster(false)
 		defer m1.Close()
 
 		var eg errgroup.Group
 		eg.Go(func() error {
 			// Pass invalid seed as first in list
-			_, _, err = m1.RunWithTransport("localhost", 0, []string{"http://localhost:8765", seed}, coord)
+			_, err = m1.RunWithTransport("localhost", 0, []string{"http://localhost:8765", seed})
 			if err != nil {
 				return err
 			}
@@ -466,12 +466,12 @@ func TestCluster_GossipMembership(t *testing.T) {
 		})
 
 		// Configure node2
-		m2 := test.NewMainWithCluster()
+		m2 := test.NewMainWithCluster(false)
 		defer m2.Close()
 
 		eg.Go(func() error {
 			// Pass invalid seed as last in list
-			_, _, err = m2.RunWithTransport("localhost", 0, []string{seed, "http://localhost:8765"}, coord)
+			_, err = m2.RunWithTransport("localhost", 0, []string{seed, "http://localhost:8765"})
 			if err != nil {
 				return err
 			}

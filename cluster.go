@@ -66,8 +66,9 @@ const (
 
 // Node represents a node in the cluster.
 type Node struct {
-	ID  string `json:"id"`
-	URI URI    `json:"uri"`
+	ID            string `json:"id"`
+	URI           URI    `json:"uri"`
+	IsCoordinator bool   `json:"isCoordinator"`
 }
 
 func (n Node) String() string {
@@ -86,8 +87,9 @@ func EncodeNodes(a []*Node) []*internal.Node {
 // EncodeNode converts a Node into its internal representation.
 func EncodeNode(n *Node) *internal.Node {
 	return &internal.Node{
-		ID:  n.ID,
-		URI: n.URI.Encode(),
+		ID:            n.ID,
+		URI:           n.URI.Encode(),
+		IsCoordinator: n.IsCoordinator,
 	}
 }
 
@@ -106,8 +108,9 @@ func DecodeNodes(a []*internal.Node) []*Node {
 // DecodeNode converts a proto message into a Node.
 func DecodeNode(node *internal.Node) *Node {
 	return &Node{
-		ID:  node.ID,
-		URI: decodeURI(node.URI),
+		ID:            node.ID,
+		URI:           decodeURI(node.URI),
+		IsCoordinator: node.IsCoordinator,
 	}
 }
 
@@ -238,7 +241,7 @@ type Cluster struct {
 	// Required for cluster Resize.
 	Static      bool // Static is primarily used for testing in a non-gossip environment.
 	state       string
-	Coordinator URI
+	Coordinator string
 	Holder      *Holder
 	Broadcaster Broadcaster
 
@@ -291,12 +294,12 @@ func (c *Cluster) logger() *log.Logger {
 
 // Coordinator returns the coordinator node.
 func (c *Cluster) CoordinatorNode() *Node {
-	return c.nodeByURI(c.Coordinator)
+	return c.nodeByID(c.Coordinator)
 }
 
 // IsCoordinator is true if this node is the coordinator.
 func (c *Cluster) IsCoordinator() bool {
-	return c.Static || c.Coordinator == c.Node.URI
+	return c.Coordinator == c.Node.ID
 }
 
 // SetCoordinator updates the Coordinator to n.
@@ -308,8 +311,8 @@ func (c *Cluster) SetCoordinator(n *Node) bool {
 		return false
 	}
 
-	if c.Coordinator != newNode.URI {
-		c.Coordinator = newNode.URI
+	if c.Coordinator != newNode.ID {
+		c.Coordinator = newNode.ID
 		return true
 	}
 	return false
@@ -319,6 +322,11 @@ func (c *Cluster) SetCoordinator(n *Node) bool {
 // new topology.
 func (c *Cluster) AddNode(node *Node) error {
 	c.logger().Printf("add node %s to cluster on %s", node, c.Node)
+
+	// If the node being added is the coordinator, set it for this node.
+	if node.IsCoordinator {
+		c.Coordinator = node.ID
+	}
 
 	// add to cluster
 	if !c.addNodeBasicSorted(node) {

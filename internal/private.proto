@@ -136,6 +136,7 @@ message URI {
 message Node {
     string ID = 1;
     URI URI = 2;
+    bool IsCoordinator = 3;
 }
 
 message NodeStateMessage {
