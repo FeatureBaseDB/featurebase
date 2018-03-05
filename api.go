@@ -484,7 +484,7 @@ func (api *API) PostClusterMessage(ctx context.Context, pb proto.Message) error 
 }
 
 func (api *API) LocalID(ctx context.Context) string {
-	return api.Holder.LocalID
+	return api.Cluster.Node.ID
 }
 
 func (api *API) Schema(ctx context.Context) []*IndexInfo {
