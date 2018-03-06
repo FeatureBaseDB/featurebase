@@ -35,18 +35,14 @@ type StaticMemberSet struct {
 }
 
 // NewStaticMemberSet creates a statically defined MemberSet.
-func NewStaticMemberSet() *StaticMemberSet {
-	return &StaticMemberSet{}
+func NewStaticMemberSet(nodes []*Node) *StaticMemberSet {
+	return &StaticMemberSet{
+		nodes: nodes,
+	}
 }
 
 // Open implements the MemberSet interface to start network activity, but for a static MemberSet it does nothing.
 func (s *StaticMemberSet) Open(n *Node) error {
-	return nil
-}
-
-// Join sets the MemberSet nodes to the slice of Nodes passed in.
-func (s *StaticMemberSet) Join(nodes []*Node) error {
-	s.nodes = nodes
 	return nil
 }
 
