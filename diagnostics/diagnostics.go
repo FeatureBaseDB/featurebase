@@ -27,16 +27,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa"
 	"github.com/shirou/gopsutil/host"
 	"github.com/shirou/gopsutil/mem"
 	"github.com/sony/gobreaker"
 )
 
+// Ensure ActiveDiagnostics implements interface.
+var _ pilosa.Diagnostics = &ActiveDiagnostics{}
+
 // TODO: unique Cluster ID
 
 // Default version check URL.
 const (
-	DefaultVersionCheckURL = "https://diagnostics.pilosa.com/v0/version"
+	defaultVersionCheckURL = "https://diagnostics.pilosa.com/v0/version"
 )
 
 type versionResponse struct {
@@ -44,11 +48,9 @@ type versionResponse struct {
 	Message string `json:"message"`
 }
 
-// Diagnostics represents a client to the Pilosa cluster.
-type Diagnostics struct {
+// ActiveDiagnostics represents a client to the Pilosa cluster.
+type ActiveDiagnostics struct {
 	mu          sync.Mutex
-	wg          sync.WaitGroup
-	closing     chan struct{}
 	host        string
 	VersionURL  string
 	version     string
@@ -65,13 +67,12 @@ type Diagnostics struct {
 	logOutput io.Writer
 }
 
-// New returns a pointer to a new Diagnostics Client given an addr in the format "hostname:port".
-func New(host string) *Diagnostics {
+// New returns a pointer to a new ActiveDiagnostics Client given an addr in the format "hostname:port".
+func NewActiveDiagnostics(host string) *ActiveDiagnostics {
 
-	return &Diagnostics{
-		closing:    make(chan struct{}),
+	return &ActiveDiagnostics{
 		host:       host,
-		VersionURL: DefaultVersionCheckURL,
+		VersionURL: defaultVersionCheckURL,
 		startTime:  time.Now().Unix(),
 		start:      time.Now(),
 		client:     http.DefaultClient,
@@ -81,37 +82,21 @@ func New(host string) *Diagnostics {
 }
 
 // SetVersion of locally running Pilosa Cluster to check against master.
-func (d *Diagnostics) SetVersion(v string) {
+func (d *ActiveDiagnostics) SetVersion(v string) {
 	d.version = v
 	d.Set("Version", v)
 }
 
 // SetInterval of the diagnostic go routine and match with the circuit breaker timeout.
-func (d *Diagnostics) SetInterval(i time.Duration) {
+func (d *ActiveDiagnostics) SetInterval(i time.Duration) {
 	d.interval = i
 }
 
-// schedule start the diagnostics service ticker.
-func (d *Diagnostics) schedule() {
-	ticker := time.NewTicker(d.interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-d.closing:
-			return
-		case <-ticker.C:
-			d.CheckVersion()
-			d.Flush()
-		}
-	}
-}
-
 // Flush sends the current metrics.
-func (d *Diagnostics) Flush() error {
+func (d *ActiveDiagnostics) Flush() error {
 	d.mu.Lock()
 	d.metrics["Uptime"] = (time.Now().Unix() - d.startTime)
-	buf, _ := d.Encode()
+	buf, _ := d.encode()
 	d.mu.Unlock()
 
 	_, err := d.cb.Execute(func() (interface{}, error) {
@@ -135,7 +120,7 @@ func (d *Diagnostics) Flush() error {
 }
 
 // Open configures the circuit breaker used by the HTTP client.
-func (d *Diagnostics) Open() {
+func (d *ActiveDiagnostics) Open() {
 	var st gobreaker.Settings
 	if d.interval > 0 {
 		st.Timeout = d.interval * 2
@@ -145,15 +130,8 @@ func (d *Diagnostics) Open() {
 	d.logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every hour. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics")
 }
 
-// Close notify goroutine to stop.
-func (d *Diagnostics) Close() error {
-	close(d.closing)
-	d.wg.Wait()
-	return nil
-}
-
 // CheckVersion of the local build against Pilosa master.
-func (d *Diagnostics) CheckVersion() error {
+func (d *ActiveDiagnostics) CheckVersion() error {
 	var rsp versionResponse
 	req, err := http.NewRequest("GET", d.VersionURL, nil)
 	resp, err := d.client.Do(req)
@@ -174,15 +152,15 @@ func (d *Diagnostics) CheckVersion() error {
 	}
 
 	d.lastVersion = rsp.Version
-	if err := d.CompareVersion(rsp.Version); err != nil {
+	if err := d.compareVersion(rsp.Version); err != nil {
 		d.logger().Printf("%s\n", err.Error())
 	}
 
 	return nil
 }
 
-// CompareVersion check version strings.
-func (d *Diagnostics) CompareVersion(value string) error {
+// compareVersion checks version strings.
+func (d *ActiveDiagnostics) compareVersion(value string) error {
 	currentVersion := VersionSegments(value)
 	localVersion := VersionSegments(d.version)
 
@@ -197,30 +175,30 @@ func (d *Diagnostics) CompareVersion(value string) error {
 	return nil
 }
 
-// Encode metrics maps into the json message format.
-func (d *Diagnostics) Encode() ([]byte, error) {
+// encode metrics maps into the json message format.
+func (d *ActiveDiagnostics) encode() ([]byte, error) {
 	return json.Marshal(d.metrics)
 }
 
 // Set adds a key value metric.
-func (d *Diagnostics) Set(name string, value interface{}) {
+func (d *ActiveDiagnostics) Set(name string, value interface{}) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.metrics[name] = value
 }
 
 // SetLogger Set the logger output type.
-func (d *Diagnostics) SetLogger(logger io.Writer) {
+func (d *ActiveDiagnostics) SetLogger(logger io.Writer) {
 	d.logOutput = logger
 }
 
 // logger returns a logger that writes to LogOutput.
-func (d *Diagnostics) logger() *log.Logger {
+func (d *ActiveDiagnostics) logger() *log.Logger {
 	return log.New(d.logOutput, "", log.LstdFlags)
 }
 
 // EnrichWithOSInfo adds OS information to the diagnostics payload.
-func (d *Diagnostics) EnrichWithOSInfo() {
+func (d *ActiveDiagnostics) EnrichWithOSInfo() {
 	osInfo, err := host.Info()
 	if err != nil {
 		d.logOutput.Write([]byte(err.Error()))
@@ -243,7 +221,7 @@ func (d *Diagnostics) EnrichWithOSInfo() {
 }
 
 // EnrichWithMemoryInfo adds memory information to the diagnostics payload.
-func (d *Diagnostics) EnrichWithMemoryInfo() {
+func (d *ActiveDiagnostics) EnrichWithMemoryInfo() {
 	memory, err := mem.VirtualMemory()
 	if err != nil {
 		d.logOutput.Write([]byte(err.Error()))

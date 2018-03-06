@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
 
 	"golang.org/x/sync/errgroup"
@@ -70,7 +69,7 @@ type Server struct {
 	NodeID      string
 	URI         URI
 	Cluster     *Cluster
-	diagnostics *diagnostics.Diagnostics
+	Diagnostics Diagnostics
 
 	GCNotifier GCNotifier
 
@@ -100,7 +99,8 @@ func NewServer() *Server {
 		Handler:           NewHandler(),
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
-		diagnostics:       diagnostics.New(DefaultDiagnosticServer),
+		Diagnostics:       NopDiagnostics,
+		//diagnostics:       diagnostics.New(DefaultDiagnosticServer),
 
 		Network: "tcp",
 
@@ -605,29 +605,29 @@ func (s *Server) monitorDiagnostics() {
 		return
 	}
 
-	s.diagnostics.SetLogger(s.LogOutput)
-	s.diagnostics.SetVersion(Version)
-	s.diagnostics.SetInterval(s.DiagnosticInterval)
-	s.diagnostics.Open()
-	s.diagnostics.Set("Host", s.URI.host)
-	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeIDs(), ","))
-	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
-	s.diagnostics.Set("NumCPU", runtime.NumCPU())
-	s.diagnostics.Set("NodeID", s.NodeID)
-	s.diagnostics.Set("ClusterID", s.Cluster.ID)
-	s.diagnostics.EnrichWithOSInfo()
+	s.Diagnostics.SetLogger(s.LogOutput)
+	s.Diagnostics.SetVersion(Version)
+	s.Diagnostics.SetInterval(s.DiagnosticInterval)
+	s.Diagnostics.Open()
+	s.Diagnostics.Set("Host", s.URI.host)
+	s.Diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeIDs(), ","))
+	s.Diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
+	s.Diagnostics.Set("NumCPU", runtime.NumCPU())
+	s.Diagnostics.Set("NodeID", s.NodeID)
+	s.Diagnostics.Set("ClusterID", s.Cluster.ID)
+	s.Diagnostics.EnrichWithOSInfo()
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {
-		enrichDiagnosticsWithSchemaProperties(s.diagnostics, s.Holder)
+		enrichDiagnosticsWithSchemaProperties(s.Diagnostics, s.Holder)
 		openFiles, err := CountOpenFiles()
 		if err == nil {
-			s.diagnostics.Set("OpenFiles", openFiles)
+			s.Diagnostics.Set("OpenFiles", openFiles)
 		}
-		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
-		s.diagnostics.EnrichWithMemoryInfo()
-		s.diagnostics.CheckVersion()
-		s.diagnostics.Flush()
+		s.Diagnostics.Set("GoRoutines", runtime.NumGoroutine())
+		s.Diagnostics.EnrichWithMemoryInfo()
+		s.Diagnostics.CheckVersion()
+		s.Diagnostics.Flush()
 	}
 
 	ticker := time.NewTicker(s.DiagnosticInterval)
@@ -728,7 +728,7 @@ type diagnosticsFrameProperties struct {
 	TimeQuantumEnabled bool
 }
 
-func enrichDiagnosticsWithSchemaProperties(d *diagnostics.Diagnostics, holder *Holder) {
+func enrichDiagnosticsWithSchemaProperties(d Diagnostics, holder *Holder) {
 	// NOTE: this function is not in the diagnostics package, since circular imports are not allowed.
 	var numSlices uint64
 	numFrames := 0
