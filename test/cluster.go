@@ -338,7 +338,7 @@ func (t *TestCluster) Close() error {
 
 // TestCluster implements Broadcaster interface.
 
-// SendSync is a test implemenetation of Broadcaster SendSync method.
+// SendSync is a test implementation of Broadcaster SendSync method.
 func (t *TestCluster) SendSync(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.ClusterStatus:
@@ -356,12 +356,12 @@ func (t *TestCluster) SendSync(pb proto.Message) error {
 	return nil
 }
 
-// SendAsync is a test implemenetation of Broadcaster SendAsync method.
+// SendAsync is a test implementation of Broadcaster SendAsync method.
 func (t *TestCluster) SendAsync(pb proto.Message) error {
 	return nil
 }
 
-// SendTo is a test implemenetation of Broadcaster SendTo method.
+// SendTo is a test implementation of Broadcaster SendTo method.
 func (t *TestCluster) SendTo(to *pilosa.Node, pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.ResizeInstruction:

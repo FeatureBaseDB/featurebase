@@ -19,6 +19,9 @@ import (
 	"time"
 )
 
+// Ensure nopDiagnostics implements interface.
+var _ Diagnostics = &nopDiagnostics{}
+
 // Diagnostics represents an interface for sending diagnostics to a consumer.
 type Diagnostics interface {
 	SetVersion(string)
@@ -41,33 +44,33 @@ var NopDiagnostics Diagnostics
 
 type nopDiagnostics struct{}
 
-// SetVersion is a no-op implemenetation of Diagnostics SetVersion method.
+// SetVersion is a no-op implementation of Diagnostics SetVersion method.
 func (n *nopDiagnostics) SetVersion(v string) {}
 
-// SetInterval is a no-op implemenetation of Diagnostics SetInterval method.
+// SetInterval is a no-op implementation of Diagnostics SetInterval method.
 func (n *nopDiagnostics) SetInterval(i time.Duration) {}
 
-// Flush is a no-op implemenetation of Diagnostics Flush method.
+// Flush is a no-op implementation of Diagnostics Flush method.
 func (n *nopDiagnostics) Flush() error {
 	return nil
 }
 
-// Open is a no-op implemenetation of Diagnostics Open method.
+// Open is a no-op implementation of Diagnostics Open method.
 func (n *nopDiagnostics) Open() {}
 
-// CheckVersion is a no-op implemenetation of Diagnostics CheckVersion method.
+// CheckVersion is a no-op implementation of Diagnostics CheckVersion method.
 func (n *nopDiagnostics) CheckVersion() error {
 	return nil
 }
 
-// Set is a no-op implemenetation of Diagnostics Set method.
+// Set is a no-op implementation of Diagnostics Set method.
 func (n *nopDiagnostics) Set(k string, v interface{}) {}
 
-// SetLogger is a no-op implemenetation of Diagnostics SetLogger method.
+// SetLogger is a no-op implementation of Diagnostics SetLogger method.
 func (n *nopDiagnostics) SetLogger(w io.Writer) {}
 
-// EnrichWithOSInfo is a no-op implemenetation of Diagnostics EnrichWithOSInfo method.
+// EnrichWithOSInfo is a no-op implementation of Diagnostics EnrichWithOSInfo method.
 func (n *nopDiagnostics) EnrichWithOSInfo() {}
 
-// EnrichWithMemoryInfo is a no-op implemenetation of Diagnostics EnrichWithMemoryInfo method.
+// EnrichWithMemoryInfo is a no-op implementation of Diagnostics EnrichWithMemoryInfo method.
 func (n *nopDiagnostics) EnrichWithMemoryInfo() {}
