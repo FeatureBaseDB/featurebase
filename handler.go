@@ -240,27 +240,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	dif := time.Since(t)
 
 	// Calculate per request StatsD metrics when the handler is fully configured.
-	if h.Holder != nil && h.Cluster != nil {
-		statsTags := make([]string, 0, 3)
+	statsTags := make([]string, 0, 3)
 
-		if h.Cluster.LongQueryTime > 0 && dif > h.Cluster.LongQueryTime {
-			h.Logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
-			statsTags = append(statsTags, "slow_query")
-		}
-
-		pathParts := strings.Split(r.URL.Path, "/")
-		endpointName := strings.Join(pathParts, "_")
-
-		if externalPrefixFlag[pathParts[1]] {
-			statsTags = append(statsTags, "external")
-		}
-
-		// useragent tag identifies internal/external endpoints
-		statsTags = append(statsTags, "useragent:"+r.UserAgent())
-
-		stats := h.Holder.Stats.WithTags(statsTags...)
-		stats.Histogram("http."+endpointName, float64(dif), 0.1)
+	longQueryTime := h.API.ClusterLongQueryTime()
+	if longQueryTime > 0 && dif > longQueryTime {
+		h.Logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
+		statsTags = append(statsTags, "slow_query")
 	}
+
+	pathParts := strings.Split(r.URL.Path, "/")
+	endpointName := strings.Join(pathParts, "_")
+
+	if externalPrefixFlag[pathParts[1]] {
+		statsTags = append(statsTags, "external")
+	}
+
+	// useragent tag identifies internal/external endpoints
+	statsTags = append(statsTags, "useragent:"+r.UserAgent())
+
+	stats := h.API.StatsWithTags(statsTags)
+	stats.Histogram("http."+endpointName, float64(dif), 0.1)
 }
 
 func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
@@ -348,13 +347,23 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGetSlicesMax handles GET /schema requests.
-func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
-	if err := json.NewEncoder(w).Encode(getSlicesMaxResponse{
-		Standard: h.Holder.MaxSlices(),
-		Inverse:  h.Holder.MaxInverseSlices(),
-	}); err != nil {
-		h.Logger.Printf("write slices-max response error: %s", err)
+func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
+	inverse, err := strconv.ParseBool(r.URL.Query().Get("inverse"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ms := h.API.SliceMax(r.Context(), inverse)
+	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
+		pb := &internal.MaxSlicesResponse{
+			MaxSlices: ms,
+		}
+		if buf, err := proto.Marshal(pb); err != nil {
+			h.Logger.Printf("protobuf marshal error: %s", err)
+		} else if _, err := w.Write(buf); err != nil {
+			h.Logger.Printf("stream write error: %s", err)
+		}
+		return
 	}
 }
 
@@ -518,16 +527,12 @@ func (h *Handler) handlePatchIndexTimeQuantum(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Retrieve index by name.
-	index := h.Holder.Index(indexName)
-	if index == nil {
-		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Set default time quantum on index.
-	if err := index.SetTimeQuantum(tq); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err = h.API.ModifyIndexTimeQuantum(r.Context(), indexName, tq); err != nil {
+		if err == ErrIndexNotFound {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -554,34 +559,14 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Retrieve index from holder.
-	index := h.Holder.Index(indexName)
-	if index == nil {
-		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Retrieve local blocks.
-	blks, err := index.ColumnAttrStore().Blocks()
+	attrs, err := h.API.IndexAttrDiff(r.Context(), indexName, req.Blocks)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Read all attributes from all mismatched blocks.
-	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
-		// Retrieve block data.
-		m, err := index.ColumnAttrStore().BlockData(blockID)
-		if err != nil {
+		if err == ErrIndexNotFound {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
 		}
-
-		// Copy to index-wide struct.
-		for k, v := range m {
-			attrs[k] = v
-		}
+		return
 	}
 
 	// Encode response.
@@ -722,16 +707,12 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Retrieve index by name.
-	f := h.Holder.Frame(indexName, frameName)
-	if f == nil {
-		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Set default time quantum on index.
-	if err := f.SetTimeQuantum(tq); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := h.API.ModifyFrameTimeQuantum(r.Context(), indexName, frameName, tq); err != nil {
+		if err == ErrFragmentNotFound {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -909,34 +890,15 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Retrieve index from holder.
-	f := h.Holder.Frame(indexName, frameName)
-	if f == nil {
-		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Retrieve local blocks.
-	blks, err := f.RowAttrStore().Blocks()
+	attrs, err := h.API.FrameAttrDiff(r.Context(), indexName, frameName, req.Blocks)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Read all attributes from all mismatched blocks.
-	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range AttrBlocks(blks).Diff(req.Blocks) {
-		// Retrieve block data.
-		m, err := f.RowAttrStore().BlockData(blockID)
-		if err != nil {
+		switch err {
+		case ErrFragmentNotFound:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
 		}
-
-		// Copy to index-wide struct.
-		for k, v := range m {
-			attrs[k] = v
-		}
+		return
 	}
 
 	// Encode response.
@@ -1094,44 +1056,17 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert timestamps to time.Time.
-	timestamps := make([]*time.Time, len(req.Timestamps))
-	for i, ts := range req.Timestamps {
-		if ts == 0 {
-			continue
+	if err := h.API.Import(r.Context(), req); err != nil {
+		switch err {
+		case ErrIndexNotFound:
+			fallthrough
+		case ErrFrameNotFound:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case ErrClusterDoesNotOwnSlice:
+			http.Error(w, err.Error(), http.StatusPreconditionFailed)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		t := time.Unix(0, ts)
-		timestamps[i] = &t
-	}
-
-	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.Node.ID, req.Index, req.Slice) {
-		msg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Node.ID, req.Index, req.Slice)
-		http.Error(w, msg, http.StatusPreconditionFailed)
-		return
-	}
-
-	// Find the Index.
-	h.Logger.Printf("importing: %s %s %d", req.Index, req.Frame, req.Slice)
-	index := h.Holder.Index(req.Index)
-	if index == nil {
-		h.Logger.Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrIndexNotFound.Error())
-		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Retrieve frame.
-	f := index.Frame(req.Frame)
-	if f == nil {
-		h.Logger.Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrFrameNotFound.Error())
-		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Import into fragment.
-	err = f.Import(req.RowIDs, req.ColumnIDs, timestamps)
-	if err != nil {
-		h.Logger.Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
 		return
 	}
 
@@ -1174,34 +1109,17 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.Node.ID, req.Index, req.Slice) {
-		msg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Node.ID, req.Index, req.Slice)
-		http.Error(w, msg, http.StatusPreconditionFailed)
-		return
-	}
-
-	// Find the Index.
-	h.Logger.Printf("importing: %s %s %d", req.Index, req.Frame, req.Slice)
-	index := h.Holder.Index(req.Index)
-	if index == nil {
-		h.Logger.Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrIndexNotFound.Error())
-		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Retrieve frame.
-	f := index.Frame(req.Frame)
-	if f == nil {
-		h.Logger.Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrFrameNotFound.Error())
-		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Import into fragment.
-	err = f.ImportValue(req.Field, req.ColumnIDs, req.Values)
-	if err != nil {
-		h.Logger.Printf("import error: index=%s, frame=%s, slice=%d, field=%s, bits=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
+	if err = h.API.ImportValue(r.Context(), req); err != nil {
+		switch err {
+		case ErrIndexNotFound:
+			fallthrough
+		case ErrFrameNotFound:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case ErrClusterDoesNotOwnSlice:
+			http.Error(w, err.Error(), http.StatusPreconditionFailed)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -1240,19 +1158,16 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate that this handler owns the slice.
-	if !h.Cluster.OwnsFragment(h.Node.ID, index, slice) {
-		msg := fmt.Sprintf("host does not own slice %s-%s slice:%d", h.Node.ID, index, slice)
-		http.Error(w, msg, http.StatusPreconditionFailed)
-		return
-	}
-
 	if err = h.API.ExportCSV(r.Context(), index, frame, view, slice, w); err != nil {
-		if err == ErrFragmentNotFound {
+		switch err {
+		case ErrFragmentNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
+		case ErrClusterDoesNotOwnSlice:
+			http.Error(w, err.Error(), http.StatusPreconditionFailed)
+		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+		return
 	}
 }
 

@@ -115,9 +115,8 @@ func NewServer() *Server {
 		Logger: NopLogger,
 	}
 
-	s.Handler.Holder = s.Holder
-	s.diagnostics.server = s
 	s.Handler.API = NewAPI(s.logger)
+	s.Handler.API.Holder = s.Holder
 	return s
 }
 
@@ -165,12 +164,11 @@ func (s *Server) Open() error {
 	s.Cluster.MaxWritesPerRequest = s.MaxWritesPerRequest
 
 	// Initialize HTTP handler.
-	s.Handler.Broadcaster = s.Broadcaster
 	s.Handler.API.Broadcaster = s.Broadcaster
-	s.Handler.BroadcastHandler = s
-	s.Handler.StatusHandler = s
-	s.Handler.Node = node
-	s.Handler.Cluster = s.Cluster
+	s.Handler.API.BroadcastHandler = s
+	s.Handler.API.StatusHandler = s
+	s.Handler.API.URI = s.URI
+	s.Handler.API.Cluster = s.Cluster
 	s.Handler.Executor = e
 
 	s.Cluster.prefect = s.Handler
