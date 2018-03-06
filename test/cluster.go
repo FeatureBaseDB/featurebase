@@ -260,7 +260,7 @@ func (t *TestCluster) addCluster(i int, saveTopology bool) (*pilosa.Cluster, err
 	c.Path = path
 	c.Topology = pilosa.NewTopology()
 	c.Holder = h
-	c.MemberSet = pilosa.NewStaticMemberSet()
+	c.MemberSet = pilosa.NewStaticMemberSet(c.Nodes)
 	c.Node = node
 	c.Coordinator = t.common.Nodes[0].URI // the first node is the coordinator
 	c.Broadcaster = t

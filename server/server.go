@@ -227,13 +227,9 @@ func (m *Command) SetupNetworking() error {
 		}
 
 		m.Server.Broadcaster = pilosa.NopBroadcaster
-		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet()
+		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet(m.Server.Cluster.Nodes)
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
 		m.Server.Gossiper = pilosa.NopGossiper
-		err := m.Server.Cluster.MemberSet.(*pilosa.StaticMemberSet).Join(m.Server.Cluster.Nodes)
-		if err != nil {
-			return err
-		}
 		return nil
 	}
 
