@@ -25,6 +25,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
@@ -221,6 +222,12 @@ func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName str
 }
 
 func (api *API) ExportCSV(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, w io.Writer) error {
+	// Validate that this handler owns the slice.
+	if !api.Cluster.OwnsFragment(api.URI.HostPort(), indexName, slice) {
+		api.logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
+		return ErrClusterDoesNotOwnSlice
+	}
+
 	// Find the fragment.
 	f := api.Holder.Fragment(indexName, frameName, viewName, slice)
 	if f == nil {
@@ -600,7 +607,166 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 	return err
 }
 
-// InputJSONDataParser validates input json file and executes SetBit.
+func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+	// Retrieve index from holder.
+	index := api.Holder.Index(indexName)
+	if index == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Retrieve local blocks.
+	localBlocks, err := index.ColumnAttrStore().Blocks()
+	if err != nil {
+		return nil, err
+	}
+
+	// Read all attributes from all mismatched blocks.
+	attrs := make(map[uint64]map[string]interface{})
+	for _, blockID := range AttrBlocks(localBlocks).Diff(blocks) {
+		// Retrieve block data.
+		m, err := index.ColumnAttrStore().BlockData(blockID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Copy to index-wide struct.
+		for k, v := range m {
+			attrs[k] = v
+		}
+	}
+	return attrs, nil
+}
+
+func (api *API) FrameAttrDiff(ctx context.Context, indexName string, frameName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+	// Retrieve index from holder.
+	f := api.Holder.Frame(indexName, frameName)
+	if f == nil {
+		return nil, ErrFrameNotFound
+	}
+
+	// Retrieve local blocks.
+	localBlocks, err := f.RowAttrStore().Blocks()
+	if err != nil {
+		return nil, err
+	}
+
+	// Read all attributes from all mismatched blocks.
+	attrs := make(map[uint64]map[string]interface{})
+	for _, blockID := range AttrBlocks(localBlocks).Diff(blocks) {
+		// Retrieve block data.
+		m, err := f.RowAttrStore().BlockData(blockID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Copy to index-wide struct.
+		for k, v := range m {
+			attrs[k] = v
+		}
+	}
+	return attrs, nil
+}
+
+func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
+	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
+	if err != nil {
+		return err
+	}
+
+	// Convert timestamps to time.Time.
+	timestamps := make([]*time.Time, len(req.Timestamps))
+	for i, ts := range req.Timestamps {
+		if ts == 0 {
+			continue
+		}
+		t := time.Unix(0, ts)
+		timestamps[i] = &t
+	}
+
+	// Import into fragment.
+	err = frame.Import(req.RowIDs, req.ColumnIDs, timestamps)
+	if err != nil {
+		api.logger.Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
+	}
+	return err
+}
+
+func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest) error {
+	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
+	if err != nil {
+		return err
+	}
+
+	// Import into fragment.
+	err = frame.ImportValue(req.Field, req.ColumnIDs, req.Values)
+	if err != nil {
+		api.logger.Printf("import error: index=%s, frame=%s, slice=%d, field=%s, bits=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
+	}
+	return err
+}
+
+func (api *API) ModifyIndexTimeQuantum(ctx context.Context, indexName string, timeQuantum TimeQuantum) error {
+	// Retrieve index by name.
+	index := api.Holder.Index(indexName)
+	if index == nil {
+		return ErrIndexNotFound
+	}
+
+	// Set default time quantum on index.
+	return index.SetTimeQuantum(timeQuantum)
+}
+
+func (api *API) ModifyFrameTimeQuantum(ctx context.Context, indexName string, frameName string, timeQuantum TimeQuantum) error {
+	// Retrieve index by name.
+	frame := api.Holder.Frame(indexName, frameName)
+	if frame == nil {
+		return ErrFrameNotFound
+	}
+
+	// Set default time quantum on index.
+	return frame.SetTimeQuantum(timeQuantum)
+}
+
+func (api *API) SliceMax(ctx context.Context, inverse bool) map[string]uint64 {
+	if inverse {
+		return api.Holder.MaxInverseSlices()
+	}
+	return api.Holder.MaxSlices()
+}
+
+func (api *API) StatsWithTags(tags []string) StatsClient {
+	return api.Holder.Stats.WithTags(tags...)
+}
+
+func (api *API) ClusterLongQueryTime() time.Duration {
+	return api.Cluster.LongQueryTime
+}
+
+func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*Index, *Frame, error) {
+	// Validate that this handler owns the slice.
+	if !api.Cluster.OwnsFragment(api.URI.HostPort(), indexName, slice) {
+		api.logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
+		return nil, nil, ErrClusterDoesNotOwnSlice
+	}
+
+	// Find the Index.
+	api.logger.Println("importing:", indexName, frameName, slice)
+	index := api.Holder.Index(indexName)
+	if index == nil {
+		api.logger.Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", indexName, frameName, slice, ErrIndexNotFound.Error())
+		return nil, nil, ErrIndexNotFound
+	}
+
+	// Retrieve frame.
+	frame := index.Frame(frameName)
+	if frame == nil {
+		api.logger.Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", indexName, frameName, slice, ErrFrameNotFound.Error())
+		return nil, nil, ErrFrameNotFound
+	}
+	return index, frame, nil
+}
+
+// inputJSONDataParser validates input json file and executes SetBit.
 func (api *API) inputJSONDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
 	inputDef, err := index.InputDefinition(name)
 	if err != nil {

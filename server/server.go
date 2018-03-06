@@ -184,7 +184,7 @@ func (m *Command) SetupServer() error {
 	}
 	c := pilosa.GetHTTPClient(TLSConfig)
 	m.Server.RemoteClient = c
-	m.Server.Handler.RemoteClient = c
+	m.Server.Handler.API.RemoteClient = c
 
 	// Set internal port (string).
 	gossipPortStr := pilosa.DefaultGossipPort
