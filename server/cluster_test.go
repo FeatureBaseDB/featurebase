@@ -545,4 +545,35 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 			t.Fatalf("expected Body '%s' but got '%s'", expBody, strings.TrimSpace(resp.Body))
 		}
 	})
+
+	t.Run("ErrorRemoveWithoutReplicas", func(t *testing.T) {
+		client0 := m0.Client()
+
+		// Create indexes and frames on one node.
+		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+			t.Fatal(err)
+		} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+			t.Fatal(err)
+		}
+
+		setBits := ""
+		for i := 0; i < 20; i++ {
+			setBits += fmt.Sprintf("SetBit(rowID=1, frame=\"f\", columnID=%d) ", i*pilosa.SliceWidth)
+		}
+
+		if _, err := m0.Query("i", "", setBits); err != nil {
+			t.Fatal(err)
+		}
+
+		resp := test.MustDo("GET", m1.URL()+fmt.Sprintf("/id"), "")
+		nodeID := resp.Body
+
+		resp = test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		expBody := "not enough data to perform resize"
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
+		} else if !strings.Contains(resp.Body, expBody) {
+			t.Fatalf("expected to contain '%s' but got '%s'", expBody, strings.TrimSpace(resp.Body))
+		}
+	})
 }

@@ -737,7 +737,7 @@ func (c *Cluster) fragSources(to *Cluster, idx *Index) (map[string][]*internal.R
 			// the fragment.
 			srcNodeID, ok := srcNodesByFrag[frag]
 			if !ok {
-				return nil, errors.New("not enough data to perform resize")
+				return nil, errors.New("not enough data to perform resize (replica factor may need to be increased)")
 			}
 
 			src := &internal.ResizeSource{
@@ -937,7 +937,11 @@ func (c *Cluster) allNodesReady() bool {
 func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 	j, err := c.generateResizeJob(nodeAction)
 	if err != nil {
-		return err
+		c.logger().Printf("generateResizeJob error: err=%s", err)
+		if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
+			c.logger().Printf("setStateAndBroadcast error: err=%s", err)
+		}
+		return c.setStateAndBroadcast(ClusterStateNormal)
 	}
 
 	// j.Run() runs in a goroutine because in the case where the
@@ -1700,6 +1704,13 @@ func (c *Cluster) NodeLeave(node *Node) error {
 	// Prevent removing the coordinator node (this node).
 	if node.ID == c.Node.ID {
 		return fmt.Errorf("The coordinator node cannot be removed. First, make a different node the new coordinator.")
+	}
+
+	// See if resize job can be generated
+	_, err := c.generateResizeJobByAction(nodeAction{c.nodeByID(node.ID), ResizeJobActionRemove})
+
+	if err != nil {
+		return err
 	}
 
 	return c.nodeLeave(node)
