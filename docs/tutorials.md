@@ -8,6 +8,10 @@ nav = [
 ]
 +++
 
+### External Tutorials
+
+- [Run Pilosa with Microsoft's Azure Cosmos DB](https://github.com/pilosa/cosmosa)
+
 ## Tutorials
 
 ### Setting Up a Secure Cluster
