@@ -24,6 +24,8 @@ Rows and columns can represent anything (they could even represent the same set 
 
 Pilosa lays out data first in rows, so queries which get all the set bits in one or many rows, or compute a combining operation on multiple rows such as Intersect or Union are the fastest. Pilosa also has the ability to categorize rows into different "frames" and quickly retrieve the top rows in a frame sorted by the number of bits set in each row.
 
+Please note that Pilosa is most performant when row and column IDs are sequential starting from 0. You can deviate from this to some degree, but if you try to set a bit with column ID 2^63, bad things will start to happen.
+
 ![data model diagram](/img/docs/data-model.svg)
 
 ### Index

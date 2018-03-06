@@ -52,7 +52,7 @@ curl localhost:10101/index/repository/query \
 * `UINT` An unsigned integer (e.g. 42839)
 * `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`
 * `ATTR_VALUE` Can be a string, float, integer, or bool.
-* `BITMAP_CALL` Any query which returns a bitmap, such as `Bitmap`, `Union`, `Difference`, `Intersect`, `Range`
+* `BITMAP_CALL` Any query which returns a bitmap, such as `Bitmap`, `Union`, `Difference`, `Xor`, `Intersect`, `Range`
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`)
 
 ### Write Operations
@@ -80,14 +80,14 @@ A return value of `false` indicates that the bit was already set to 1 and nothin
 **Examples:**
 
 ```
-SetBit(frame="stargazer", repo_id=10, rowID=1)
+SetBit(frame="stargazer", columnID=10, rowID=1)
 ```
 
 This query illustrates setting a bit in the stargazer frame. User with id=1 has starred repository with id=10.
 
 SetBit also supports providing a timestamp. To write the date that a user starred a repository.
 ```
-SetBit(frame="stargazer", repo_id=10, rowID=1, timestamp="2016-01-01T00:00")
+SetBit(frame="stargazer", columnID=10, rowID=1, timestamp="2016-01-01T00:00")
 ```
 
 Setting multiple bits in a single request:
@@ -150,7 +150,7 @@ SetColumnAttrs queries always return `null` upon success. Setting a value of `nu
 SetColumnAttrs(columnID=10, stars=123, url="http://projects.pilosa.com/10", active=true)
 ```
 
-Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap]({{< ref "query-language.md#bitmap" >}}) query like so `Bitmap(frame="stargazer", repo_id=10)`.
+Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap]({{< ref "query-language.md#bitmap" >}}) query like so `Bitmap(frame="stargazer", columnID=10)`.
 
 ```
 SetColumnAttrs(columnID=10, url=null)
@@ -184,7 +184,7 @@ A return value of `false` indicates that the bit was already set to 0 and nothin
 ClearBit(frame="stargazer", columnID=10, rowID=1)
 ```
 
-Remove relationship between stargazer_id 1 and repo_id 10  from the stargazer frame.
+Remove relationship between the stargazer in row 1 and the repository in column 10 from the stargazer frame.
 
 
 ### Read Operations
@@ -307,6 +307,34 @@ Difference(Bitmap(frame="stargazer", rowID=2), Bitmap( frame="stargazer", rowID=
 Return `{"attrs":{},"bits":[30]}`
 
 * Bits are repositories that were starred by user 2 BUT NOT user 1
+
+#### Xor
+
+**Spec:**
+
+```
+Xor(<BITMAP_CALL>, [BITMAP_CALL ...])
+```
+
+**Description:**
+
+Xor performs a logical XOR on the results of each `BITMAP_CALL` query passed to it.
+
+**Result Type:** object with attrs and bits
+
+attrs will always be empty
+
+**Examples:**
+
+Query repositories which have been starred by two users.
+
+```
+Xor(Bitmap(frame="stargazer", rowID=1), Bitmap(frame="stargazer", rowID=2))
+```
+
+Returns `{"attrs":{},"bits":[30]}`.
+
+* bits are repositories that were starred by user 1 XOR user 2 (user 1 or user 2, but not both)
 
 #### Count
 **Spec:**
