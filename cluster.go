@@ -1002,7 +1002,13 @@ func (c *Cluster) ListenForJoins() {
 }
 
 func (c *Cluster) listenForJoins() {
-	var uriJoined bool
+	// When a cluster starts, the state is STARTING.
+	// We first want to wait for at least one node to join.
+	// Then we want to clear out the joiningLeavingNodes queue (buffered channel).
+	// Then we want to set the cluster state to NORMAL and resume processing of joiningLeavingNodes events.
+	// We use a bool `setNormal` to indicate when at least one node has joined.
+
+	var setNormal bool
 
 	for {
 
@@ -1014,13 +1020,13 @@ func (c *Cluster) listenForJoins() {
 				c.logger().Printf("handleNodeAction error: err=%s", err)
 				continue
 			}
-			uriJoined = true
+			setNormal = true
 			continue
 		default:
 		}
 
 		// Only change state to NORMAL if we have successfully added at least one host.
-		if uriJoined {
+		if setNormal {
 			// Put the cluster back to state NORMAL and broadcast.
 			if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
 				c.logger().Printf("setStateAndBroadcast error: err=%s", err)
@@ -1037,7 +1043,7 @@ func (c *Cluster) listenForJoins() {
 				c.logger().Printf("handleNodeAction error: err=%s", err)
 				continue
 			}
-			uriJoined = true
+			setNormal = true
 			continue
 		}
 	}
