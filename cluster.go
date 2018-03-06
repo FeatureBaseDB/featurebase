@@ -74,7 +74,7 @@ func (n Node) String() string {
 	return fmt.Sprintf("Node: %s", n.ID)
 }
 
-// EncodeNodes converts a into its internal representation.
+// EncodeNodes converts a slice of Nodes into its internal representation.
 func EncodeNodes(a []*Node) []*internal.Node {
 	other := make([]*internal.Node, len(a))
 	for i := range a {
@@ -83,7 +83,7 @@ func EncodeNodes(a []*Node) []*internal.Node {
 	return other
 }
 
-// EncodeNode converts n into its internal representation.
+// EncodeNode converts a Node into its internal representation.
 func EncodeNode(n *Node) *internal.Node {
 	return &internal.Node{
 		ID:  n.ID,
@@ -91,6 +91,7 @@ func EncodeNode(n *Node) *internal.Node {
 	}
 }
 
+// DecodeNodes converts a proto message into a slice of Nodes.
 func DecodeNodes(a []*internal.Node) []*Node {
 	if len(a) == 0 {
 		return nil
@@ -102,6 +103,7 @@ func DecodeNodes(a []*internal.Node) []*Node {
 	return other
 }
 
+// DecodeNode converts a proto message into a Node.
 func DecodeNode(node *internal.Node) *Node {
 	return &Node{
 		ID:  node.ID,
