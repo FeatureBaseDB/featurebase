@@ -20,9 +20,7 @@ nav = []
 
 <strong id="attribute">Attribute:</strong> Attributes can be associated to both rows and columns.  This metadata is kept separately from the core binary matrix in a BoltDB store.
 
-<strong id="pql">PQL:</strong> Pilosa Query Language
-
-<strong id="index">Index:</strong> The Index represents a data namespace.
+<strong id="pql">PQL:</strong> [Pilosa Query Language](/docs/query-language).
 
 <strong id="frame">Frame:</strong> Frames are used to segment rows into different categories - row ids are namespaced by frame such that the same row id in a different frame refers to a different row. For Ranked frames, rows are kept in sorted order within the frame. 
 
@@ -38,7 +36,7 @@ nav = []
 
 <strong id="anti-entropy">Anti-entropy:</strong> A periodic process that compares each slice and its replicas across the cluster to repair inconsistencies.
 
-<strong id="node">Node:</strong> An individual running instance of Pilosa server which belongs to a cluster.  
+<strong id="node">Node:</strong> An individual running instance of Pilosa server which belongs to a cluster.
 
 <strong id="cluster">Cluster:</strong> A cluster consists of one or more nodes which share a cluster configuration. The cluster also defines how data is replicated throughout and how internode communication is coordinated. Pilosa does not have a leader node, all data is evenly distributed, and any node can respond to queries.
 
@@ -46,13 +44,12 @@ nav = []
 
 <strong id="tanimoto">Tanimoto:</strong> Used for similarity queries on Pilosa data. The Tanimoto Coefficient is the ratio of the intersecting set to the union set as the measure of similarity. 
 
-<strong id="protobuf">Protobuf:</strong>: [Protocol Buffers](https://developers.google.com/protocol-buffers/) is a binary serialization format which Pilosa uses for internal messages, and can be used by clients as an alternative to JSON.
+<strong id="protobuf">Protobuf:</strong> [Protocol Buffers](https://developers.google.com/protocol-buffers/) is a binary serialization format which Pilosa uses for internal messages, and can be used by clients as an alternative to JSON.
 
 <strong id="toml">TOML:</strong> We use [TOML](https://github.com/toml-lang/toml) for our configuration file format.
 
-<strong id="jump-consistent-hash">Jump Consistent Hash:</strong> A fast, minimal memory, consistent hash algorithm that evenly distributes the workload even when the number of buckets changes.
-https://arxiv.org/pdf/1406.2294v1.pdf
+<strong id="jump-consistent-hash">Jump Consistent Hash:</strong> A fast, minimal memory, [consistent hash algorithm](https://arxiv.org/pdf/1406.2294v1.pdf) that evenly distributes the workload even when the number of buckets changes.
 
-<strong id="partition">Partition:</strong> The consistent hash is compiled with a maximum number of partitions or locations on the unit circle that keys are mapped to. Partitions are then evenly mapped to physical nodes. To add nodes to the cluster you simply need to remap the partitions, and associated data across the new cluster topography.
+<strong id="partition">Partition:</strong> The consistent hash is compiled with a maximum number of partitions or locations on the unit circle that keys are mapped to. Partitions are then evenly mapped to physical nodes. To add nodes to the cluster you simply need to remap the partitions, and associate data across the new cluster topography.
 
-<strong id="replica">Replica:</strong> A copy of a [fragment] on a different host from the original. The "cluster.replicas" configuration parameter determines how many replicas of a fragment exist in the cluster (including the original, so a value of 1 means no extra copies are made).
+<strong id="replica">Replica:</strong> A copy of a [fragment](#fragment) on a different host from the original. The "cluster.replicas" configuration parameter determines how many replicas of a fragment exist in the cluster (including the original, so a value of 1 means no extra copies are made).
