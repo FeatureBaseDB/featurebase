@@ -214,7 +214,7 @@ T(A,B)= Intersect(A,B) / (Count(A) + Count(B) - Intersect(A,B))
 
 A and B are sets of fingerprint bits on in the fingerprints of molecule A and molecule B. AB is the set of common bits of fingerprints of both molecule A and B. The Tanimoto coefficient ranges from 0 when the fingerprints have no bits in common, to 1 when the fingerprints are identical.
 
-All source code to calculate tanimoto for molecule fingerprint using Pilosa is available in a Github repository https://github.com/pilosa/chem-usecase
+All source code to calculate tanimoto for molecule fingerprint using Pilosa is available in a [Github repository](https://github.com/pilosa/chem-usecase).
 
 #### Data model
 

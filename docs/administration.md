@@ -112,17 +112,17 @@ Note: This will only work when the replication factor is >= 2
 
 #### Copying data files manually
 
-- To accomplish this goal you will 1st need:
-  - List of all Indexes on your cluster
-  - List of all frames in your Indexes
-  - Max slice per Index, listed in the /status endpoint
+- To accomplish this you will first need:
+  - List of all indexes on your cluster
+  - List of all frames in your indexes
+  - Max slice per index, listed in the /status endpoint
 - With this information you can query the `/fragment/nodes` endpoint and iterate over each slice
 - Using the list of slices owned by this node you will then need to manually:
   - setup a directory structure similar to the other nodes with a path for each Index/Frame
   - copy each owned slice for an existing node to this new node
 - Modify the cluster config file to replace the previous node address with the new node address.
 - Restart the cluster
-- Wait for the 1st sync (10 minutes) to validate Index connections
+- Wait for the first sync (10 minutes) to validate Index connections
 
 ### Diagnostics
 

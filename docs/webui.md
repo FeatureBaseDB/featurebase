@@ -20,7 +20,8 @@ Each query's result will be displayed in the Output section along with the query
 
 The Console will keep a record of each query and its result with the latest query on top.
 
-![console](/img/docs/webui-console.png)
+![webUI console screenshot](/img/docs/webui-console.png)
+*WebUI console screenshot*
 
 In addition to standard PQL, the console supports a few special commands, prefixed with `:`.
 

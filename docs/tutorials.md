@@ -49,6 +49,7 @@ openssl req -x509 -newkey rsa:2048 -keyout pilosa.local.key -out pilosa.local.cr
 ```
 
 The command above creates two files in the current directory:
+
 * `pilosa.local.crt` is the SSL certificate.
 * `pilosa.local.key` is the private key file which must be kept as secret.
 
@@ -130,6 +131,7 @@ key = "pilosa.local.gossip32"
 ```
 
 Here is some explanation of the configuration items:
+
 * `data-dir` points to the directory where the Pilosa server writes its data. If it doesn't exist, the server will create it.
 * `bind` is the address to which the server listens for incoming requests. The address is composed of three parts: scheme, host, and port. The default scheme is `http` so we explicitly specify `https` to use the HTTPS protocol for communication between nodes.
 * `[cluster]` section contains the settings for a cluster. `hosts` field is the most important, which contains the list of addresses of other nodes. See [Cluster Configuration](https://www.pilosa.com/docs/latest/configuration/#cluster-hosts) for other settings.

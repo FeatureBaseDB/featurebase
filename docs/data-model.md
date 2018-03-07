@@ -26,7 +26,8 @@ Pilosa lays out data first in rows, so queries which get all the set bits in one
 
 Please note that Pilosa is most performant when row and column IDs are sequential starting from 0. You can deviate from this to some degree, but if you try to set a bit with column ID 2^63, bad things will start to happen.
 
-![data model diagram](/img/docs/data-model.svg)
+![basic data model diagram](/img/docs/data-model.svg)
+*Basic data model diagram*
 
 ### Index
 
@@ -51,12 +52,14 @@ Row attributes are namespaced at the Frame level.
 Ranked Frames maintain a sorted cache of column counts by Row ID (yielding the top rows by columns with a bit set in each). This cache facilitates the TopN query.  The cache size defaults to 50,000 and can be set at Frame creation.
 
 ![ranked frame diagram](/img/docs/frame-ranked.svg)
+*Ranked frame diagram*
 
 #### LRU
 
 The LRU cache maintains the most recently accessed Rows.
 
 ![lru frame diagram](/img/docs/frame-lru.svg)
+*LRU frame diagram*
 
 ### Time Quantum
 
@@ -92,6 +95,7 @@ SetBit(frame="A", rowID=19, columnID=5)
 ```
 
 ![inverse frame diagram](/img/docs/frame-inverse.svg)
+*Inverse frame diagram*
 
 #### Time Quantums
 
@@ -103,6 +107,7 @@ SetBit(frame="A", rowID=8, columnID=3, timestamp="2017-05-19T00:00")
 ```
 
 ![time quantum frame diagram](/img/docs/frame-time-quantum.svg)
+*Time quantum frame diagram*
 
 #### BSI Range-Encoding
 
@@ -122,4 +127,5 @@ SetFieldValue(col=2, frame="A", field1=1)
 SetFieldValue(col=3, frame="A", field1=6)
 ```
 
-![BSI diagram](/img/docs/frame-bsi.svg)
+![BSI frame diagram](/img/docs/frame-bsi.svg)
+*BSI frame diagram*

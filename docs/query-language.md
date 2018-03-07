@@ -13,7 +13,7 @@ nav = [
 
 ### Overview
 
-This section will provide a detailed reference and examples for the Pilosa Query Language (PQL). All PQL queries operate on a single [index]({{< ref "glossary.md#index" >}}) and are passed to Pilosa through the `/index/*index_name*/query` endpoint. You may pass multiple PQL queries in a single request by simply concatenating the queries together - a space is not needed. The results format is always:
+This section will provide a detailed reference and examples for the Pilosa Query Language (PQL). All PQL queries operate on a single [index]({{< ref "glossary.md#index" >}}) and are passed to Pilosa through the `/index/INDEX_NAME/query` endpoint. You may pass multiple PQL queries in a single request by simply concatenating the queries together - a space is not needed. The results format is always:
 
 ```
 {"results":[...]}
@@ -380,6 +380,7 @@ have the attribute specified by `field` with one of the values specified in
 **Result Type:** array of key/count objects
 
 **Caveats:**
+
 * Performing a TopN() query on a frame with cache type ranked will return the top bitmaps sorted by count in descending order.
 * Frames with cache type lru will maintain an LRU (Least Recently Used) cache, thus a TopN() query on this type of frame will return bitmaps sorted in order of most recently set bit.
 * The frame's cache size determines the number of sorted bitmaps to maintain in the cache for purposes of TopN() queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance.
