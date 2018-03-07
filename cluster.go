@@ -941,7 +941,7 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 		if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
 			c.logger().Printf("setStateAndBroadcast error: err=%s", err)
 		}
-		return c.setStateAndBroadcast(ClusterStateNormal)
+		return err
 	}
 
 	// j.Run() runs in a goroutine because in the case where the

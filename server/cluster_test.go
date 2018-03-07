@@ -556,6 +556,8 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// This is an attempt to ensure there is data on both nodes, but is not guaranteed.
+		// TODO: Deterministic node IDs would ensure consistent results
 		setBits := ""
 		for i := 0; i < 20; i++ {
 			setBits += fmt.Sprintf("SetBit(rowID=1, frame=\"f\", columnID=%d) ", i*pilosa.SliceWidth)
