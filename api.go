@@ -61,7 +61,6 @@ func (a *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryRespons
 
 	q, err := pql.NewParser(strings.NewReader(req.Query)).Parse()
 	if err != nil {
-		// TODO: Wrap
 		return resp, err
 	}
 	execOpts := &ExecOptions{
@@ -735,10 +734,16 @@ func (api *API) SliceMax(ctx context.Context, inverse bool) map[string]uint64 {
 }
 
 func (api *API) StatsWithTags(tags []string) StatsClient {
+	if api.Holder == nil || api.Cluster == nil {
+		return nil
+	}
 	return api.Holder.Stats.WithTags(tags...)
 }
 
 func (api *API) ClusterLongQueryTime() time.Duration {
+	if api.Cluster == nil {
+		return 0
+	}
 	return api.Cluster.LongQueryTime
 }
 
