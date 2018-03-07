@@ -41,11 +41,12 @@ func NewHandler() *Handler {
 	h := &Handler{
 		Handler: pilosa.NewHandler(),
 	}
-	h.Handler.Executor = &h.Executor
-	h.Handler.LogOutput = ioutil.Discard
+	h.API = pilosa.NewAPI(nil)
+	h.Handler.API = pilosa.NewAPI(nil)
+	h.Handler.API.Executor = &h.Executor
 
 	// Handler test messages can no-op.
-	h.Broadcaster = pilosa.NopBroadcaster
+	h.API.Broadcaster = pilosa.NopBroadcaster
 
 	return h
 }
@@ -80,13 +81,13 @@ func NewServer() *Server {
 	if err != nil {
 		panic(err)
 	}
-	s.Handler.URI = uri
+	s.Handler.API.URI = uri
 
 	// Handler test messages can no-op.
-	s.Handler.Broadcaster = pilosa.NopBroadcaster
+	s.Handler.API.Broadcaster = pilosa.NopBroadcaster
 	// Create a default cluster on the handler
-	s.Handler.Cluster = NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.API.Cluster = NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].Host = s.Host()
 
 	return s
 }
@@ -94,19 +95,19 @@ func NewServer() *Server {
 // LocalStatus returns the state of the local node as well as the
 // holder (indexes/frames) according to the local node.
 func (s *Server) LocalStatus() (proto.Message, error) {
-	if s.Handler.Holder == nil {
+	if s.Handler.API.Holder == nil {
 		return nil, errors.New("Server.Holder is nil")
 	}
 
 	ns := internal.NodeStatus{
-		Host:    s.Handler.Handler.URI.HostPort(),
+		Host:    s.Handler.Handler.API.URI.HostPort(),
 		State:   pilosa.NodeStateUp,
-		Indexes: pilosa.EncodeIndexes(s.Handler.Holder.Indexes()),
+		Indexes: pilosa.EncodeIndexes(s.Handler.API.Holder.Indexes()),
 	}
 
 	// Append Slice list per this Node's indexes
 	for _, index := range ns.Indexes {
-		index.Slices = s.Handler.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Handler.URI.HostPort())
+		index.Slices = s.Handler.API.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Handler.API.URI.HostPort())
 	}
 
 	return &ns, nil

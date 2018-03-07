@@ -218,10 +218,10 @@ func TestStatsCount_CreateIndex(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 	called := false
-	s.Handler.Holder.Stats = &MockStats{
+	s.Handler.API.Holder.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
 			if name != "createIndex" {
 				t.Errorf("Expected createIndex, Results %s", name)
@@ -242,7 +242,7 @@ func TestStatsCount_DeleteIndex(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	// Create index.
@@ -250,7 +250,7 @@ func TestStatsCount_DeleteIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	called := false
-	s.Handler.Holder.Stats = &MockStats{
+	s.Handler.API.Holder.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
 			if name != "deleteIndex" {
 				t.Errorf("Expected deleteIndex, Results %s", name)
@@ -271,7 +271,7 @@ func TestStatsCount_CreateFrame(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	// Create index.
@@ -279,7 +279,7 @@ func TestStatsCount_CreateFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 	called := false
-	s.Handler.Holder.Stats = &MockStats{
+	s.Handler.API.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, index []string) {
 			if name != "createFrame" {
 				t.Errorf("Expected createFrame, Results %s", name)
@@ -303,7 +303,7 @@ func TestStatsCount_DeleteFrame(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 	called := false
 	// Create index.
@@ -311,7 +311,7 @@ func TestStatsCount_DeleteFrame(t *testing.T) {
 	if _, err := indx.CreateFrameIfNotExists("test", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	s.Handler.Holder.Stats = &MockStats{
+	s.Handler.API.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, index []string) {
 			if name != "deleteFrame" {
 				t.Errorf("Expected deleteFrame, Results %s", name)

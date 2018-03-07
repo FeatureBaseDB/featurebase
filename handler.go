@@ -221,9 +221,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// useragent tag identifies internal/external endpoints
 	statsTags = append(statsTags, "useragent:"+r.UserAgent())
-
 	stats := h.API.StatsWithTags(statsTags)
-	stats.Histogram("http."+endpointName, float64(dif), 0.1)
+	if stats != nil {
+		stats.Histogram("http."+endpointName, float64(dif), 0.1)
+	}
 }
 
 func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
@@ -288,7 +289,8 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.API.ExecuteQuery(r.Context(), req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		h.writeQueryResponse(w, r, &resp)
+		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
+		return
 	}
 
 	// Set appropriate status code, if there is an error.
@@ -308,10 +310,15 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
-	inverse, err := strconv.ParseBool(r.URL.Query().Get("inverse"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	var err error
+	inverse := false
+	inverseStr := r.URL.Query().Get("inverse")
+	if inverseStr != "" {
+		inverse, err = strconv.ParseBool(r.URL.Query().Get("inverse"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 	ms := h.API.SliceMax(r.Context(), inverse)
 	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
@@ -1123,7 +1130,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	if err = h.API.ExportCSV(r.Context(), index, frame, view, slice, w); err != nil {
 		switch err {
 		case ErrFragmentNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
+			break
 		case ErrClusterDoesNotOwnSlice:
 			http.Error(w, err.Error(), http.StatusPreconditionFailed)
 		default:
@@ -1495,26 +1502,30 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err = h.API.CreateInputDefinition(r.Context(), indexName, inputDefName, req)
-	switch err {
-	case nil:
-		break
-	case ErrIndexNotFound:
-		http.Error(w, err.Error(), http.StatusNotFound)
-	case ErrInputDefinitionExists:
-		http.Error(w, err.Error(), http.StatusConflict)
-	case ErrInputDefinitionAttrsRequired:
-		fallthrough
-	case ErrInputDefinitionNameRequired:
-		fallthrough
-	case ErrInputDefinitionActionRequired:
-		fallthrough
-	case ErrInputDefinitionHasPrimaryKey:
-		fallthrough
-	case ErrInputDefinitionDupePrimaryKey:
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	default:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err = h.API.CreateInputDefinition(r.Context(), indexName, inputDefName, req); err != nil {
+		switch err {
+		case ErrIndexNotFound:
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case ErrInputDefinitionExists:
+			http.Error(w, err.Error(), http.StatusConflict)
+		case ErrInputDefinitionAttrsRequired:
+			fallthrough
+		case ErrInputDefinitionNameRequired:
+			fallthrough
+		case ErrInputDefinitionActionRequired:
+			fallthrough
+		case ErrInputDefinitionHasPrimaryKey:
+			fallthrough
+		case ErrInputDefinitionDupePrimaryKey:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
+		h.logger().Printf("response encoding error: %s", err)
 	}
 }
 
