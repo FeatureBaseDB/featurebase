@@ -19,24 +19,24 @@ import (
 	"net/http"
 )
 
-// Ensure nopStaticFileSystem implements interface.
-var _ StaticFileSystem = &nopStaticFileSystem{}
+// Ensure nopFileSystem implements interface.
+var _ FileSystem = &nopFileSystem{}
 
-// StaticFileSystem represents an interface for a static WebUI.
-type StaticFileSystem interface {
+// FileSystem represents an interface for a WebUI file system.
+type FileSystem interface {
 	New() (http.FileSystem, error)
 }
 
 func init() {
-	NopStaticFileSystem = &nopStaticFileSystem{}
+	NopFileSystem = &nopFileSystem{}
 }
 
-// NopStaticFileSystem represents a StaticFileSystem that returns an error if called.
-var NopStaticFileSystem StaticFileSystem
+// NopFileSystem represents a FileSystem that returns an error if called.
+var NopFileSystem FileSystem
 
-type nopStaticFileSystem struct{}
+type nopFileSystem struct{}
 
-// New is a no-op implementation of StaticFileSystem New method.
-func (n *nopStaticFileSystem) New() (http.FileSystem, error) {
-	return nil, fmt.Errorf("static file system not implemented")
+// New is a no-op implementation of FileSystem New method.
+func (n *nopFileSystem) New() (http.FileSystem, error) {
+	return nil, fmt.Errorf("file system not implemented")
 }

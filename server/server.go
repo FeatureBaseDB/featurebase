@@ -33,9 +33,9 @@ import (
 	"crypto/tls"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/filesystem"
 	"github.com/pilosa/pilosa/gcnotify"
 	"github.com/pilosa/pilosa/gossip"
+	"github.com/pilosa/pilosa/statikfs"
 	"github.com/pilosa/pilosa/statsd"
 )
 
@@ -193,7 +193,7 @@ func (m *Command) SetupServer() error {
 	m.Server.Cluster.RemoteClient = c
 
 	// Statik file system.
-	m.Server.Handler.StaticFileSystem = &filesystem.StatikFS{}
+	m.Server.Handler.FileSystem = &statikfs.FileSystem{}
 
 	// Default coordintor to port 0 when not specified so that coordinator
 	// can be set to the value of server.URI after server binds to a port.

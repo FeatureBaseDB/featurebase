@@ -56,7 +56,7 @@ type Handler struct {
 	BroadcastHandler BroadcastHandler
 	StatusHandler    StatusHandler
 
-	StaticFileSystem StaticFileSystem
+	FileSystem FileSystem
 
 	// Local hostname & cluster configuration.
 	Node         *Node
@@ -102,7 +102,7 @@ func NewHandler() *Handler {
 		Broadcaster: NopBroadcaster,
 		//BroadcastHandler: NopBroadcastHandler, // TODO: implement the nop
 		//StatusHandler:    NopStatusHandler,    // TODO: implement the nop
-		StaticFileSystem: NopStaticFileSystem,
+		FileSystem: NopFileSystem,
 
 		LogOutput: os.Stderr,
 	}
@@ -291,7 +291,7 @@ func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the WebUI by visiting this URL in your browser.", http.StatusNotFound)
 		return
 	}
-	statikFS, err := h.StaticFileSystem.New()
+	statikFS, err := h.FileSystem.New()
 	if err != nil {
 		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 		h.logger().Println("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")

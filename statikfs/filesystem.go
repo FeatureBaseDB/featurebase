@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package filesystem
+package statikfs
 
 import (
 	"net/http"
@@ -21,12 +21,13 @@ import (
 	"github.com/rakyll/statik/fs"
 )
 
-// Ensure nopStaticFileSystem implements interface.
-var _ pilosa.StaticFileSystem = &StatikFS{}
+// Ensure nopFileSystem implements interface.
+var _ pilosa.FileSystem = &FileSystem{}
 
-type StatikFS struct{}
+// FileSystem represents a static FileSystem.
+type FileSystem struct{}
 
-// New is a statik implementation of StaticFileSystem New method.
-func (s *StatikFS) New() (http.FileSystem, error) {
+// New is a statik implementation of FileSystem New method.
+func (s *FileSystem) New() (http.FileSystem, error) {
 	return fs.New()
 }
