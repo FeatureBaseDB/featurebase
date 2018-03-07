@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package diagnostics
+package gopsutil
 
 import (
 	"encoding/json"
@@ -31,7 +31,7 @@ func TestDiagnosticsClient(t *testing.T) {
 	defer server.Close()
 
 	// Create a new client.
-	d := NewActiveDiagnostics(server.URL)
+	d := NewDiagnostics(server.URL)
 	d.SetLogger(ioutil.Discard)
 	d.Open()
 
@@ -80,7 +80,7 @@ func TestDiagnosticsVersion_Parse(t *testing.T) {
 }
 
 func TestDiagnosticsVersion_Compare(t *testing.T) {
-	d := NewActiveDiagnostics("localhost:10101")
+	d := NewDiagnostics("localhost:10101")
 	d.Open()
 
 	version := "v0.1.1"
@@ -124,7 +124,7 @@ func TestDiagnosticsVersion_Check(t *testing.T) {
 	defer server.Close()
 
 	// Create a new client.
-	d := NewActiveDiagnostics("localhost:10101")
+	d := NewDiagnostics("localhost:10101")
 
 	version := "0.1.1"
 	d.SetVersion(version)
@@ -150,7 +150,7 @@ func BenchmarkDiagnostics(b *testing.B) {
 	defer server.Close()
 
 	// Create a new client.
-	d := NewActiveDiagnostics(server.URL)
+	d := NewDiagnostics(server.URL)
 	d.SetLogger(ioutil.Discard)
 
 	prev := runtime.GOMAXPROCS(4)

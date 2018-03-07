@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package diagnostics
+package gopsutil
 
 import (
 	"bytes"
@@ -33,8 +33,8 @@ import (
 	"github.com/sony/gobreaker"
 )
 
-// Ensure ActiveDiagnostics implements interface.
-var _ pilosa.Diagnostics = &ActiveDiagnostics{}
+// Ensure Diagnostics implements interface.
+var _ pilosa.Diagnostics = &Diagnostics{}
 
 // TODO: unique Cluster ID
 
@@ -48,8 +48,8 @@ type versionResponse struct {
 	Message string `json:"message"`
 }
 
-// ActiveDiagnostics represents a client to the Pilosa cluster.
-type ActiveDiagnostics struct {
+// Diagnostics represents a client to the Pilosa cluster.
+type Diagnostics struct {
 	mu          sync.Mutex
 	host        string
 	VersionURL  string
@@ -67,10 +67,10 @@ type ActiveDiagnostics struct {
 	logOutput io.Writer
 }
 
-// New returns a pointer to a new ActiveDiagnostics Client given an addr in the format "hostname:port".
-func NewActiveDiagnostics(host string) *ActiveDiagnostics {
+// New returns a pointer to a new Diagnostics Client given an addr in the format "hostname:port".
+func NewDiagnostics(host string) *Diagnostics {
 
-	return &ActiveDiagnostics{
+	return &Diagnostics{
 		host:       host,
 		VersionURL: defaultVersionCheckURL,
 		startTime:  time.Now().Unix(),
@@ -82,18 +82,18 @@ func NewActiveDiagnostics(host string) *ActiveDiagnostics {
 }
 
 // SetVersion of locally running Pilosa Cluster to check against master.
-func (d *ActiveDiagnostics) SetVersion(v string) {
+func (d *Diagnostics) SetVersion(v string) {
 	d.version = v
 	d.Set("Version", v)
 }
 
 // SetInterval of the diagnostic go routine and match with the circuit breaker timeout.
-func (d *ActiveDiagnostics) SetInterval(i time.Duration) {
+func (d *Diagnostics) SetInterval(i time.Duration) {
 	d.interval = i
 }
 
 // Flush sends the current metrics.
-func (d *ActiveDiagnostics) Flush() error {
+func (d *Diagnostics) Flush() error {
 	d.mu.Lock()
 	d.metrics["Uptime"] = (time.Now().Unix() - d.startTime)
 	buf, _ := d.encode()
@@ -120,7 +120,7 @@ func (d *ActiveDiagnostics) Flush() error {
 }
 
 // Open configures the circuit breaker used by the HTTP client.
-func (d *ActiveDiagnostics) Open() {
+func (d *Diagnostics) Open() {
 	var st gobreaker.Settings
 	if d.interval > 0 {
 		st.Timeout = d.interval * 2
@@ -131,7 +131,7 @@ func (d *ActiveDiagnostics) Open() {
 }
 
 // CheckVersion of the local build against Pilosa master.
-func (d *ActiveDiagnostics) CheckVersion() error {
+func (d *Diagnostics) CheckVersion() error {
 	var rsp versionResponse
 	req, err := http.NewRequest("GET", d.VersionURL, nil)
 	resp, err := d.client.Do(req)
@@ -160,7 +160,7 @@ func (d *ActiveDiagnostics) CheckVersion() error {
 }
 
 // compareVersion checks version strings.
-func (d *ActiveDiagnostics) compareVersion(value string) error {
+func (d *Diagnostics) compareVersion(value string) error {
 	currentVersion := VersionSegments(value)
 	localVersion := VersionSegments(d.version)
 
@@ -176,29 +176,29 @@ func (d *ActiveDiagnostics) compareVersion(value string) error {
 }
 
 // encode metrics maps into the json message format.
-func (d *ActiveDiagnostics) encode() ([]byte, error) {
+func (d *Diagnostics) encode() ([]byte, error) {
 	return json.Marshal(d.metrics)
 }
 
 // Set adds a key value metric.
-func (d *ActiveDiagnostics) Set(name string, value interface{}) {
+func (d *Diagnostics) Set(name string, value interface{}) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.metrics[name] = value
 }
 
 // SetLogger Set the logger output type.
-func (d *ActiveDiagnostics) SetLogger(logger io.Writer) {
+func (d *Diagnostics) SetLogger(logger io.Writer) {
 	d.logOutput = logger
 }
 
 // logger returns a logger that writes to LogOutput.
-func (d *ActiveDiagnostics) logger() *log.Logger {
+func (d *Diagnostics) logger() *log.Logger {
 	return log.New(d.logOutput, "", log.LstdFlags)
 }
 
 // EnrichWithOSInfo adds OS information to the diagnostics payload.
-func (d *ActiveDiagnostics) EnrichWithOSInfo() {
+func (d *Diagnostics) EnrichWithOSInfo() {
 	osInfo, err := host.Info()
 	if err != nil {
 		d.logOutput.Write([]byte(err.Error()))
@@ -221,7 +221,7 @@ func (d *ActiveDiagnostics) EnrichWithOSInfo() {
 }
 
 // EnrichWithMemoryInfo adds memory information to the diagnostics payload.
-func (d *ActiveDiagnostics) EnrichWithMemoryInfo() {
+func (d *Diagnostics) EnrichWithMemoryInfo() {
 	memory, err := mem.VirtualMemory()
 	if err != nil {
 		d.logOutput.Write([]byte(err.Error()))

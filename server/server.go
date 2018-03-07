@@ -33,8 +33,8 @@ import (
 	"crypto/tls"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/gcnotify"
+	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statsd"
 )
@@ -151,7 +151,7 @@ func (m *Command) SetupServer() error {
 	m.Server.Holder.Path = m.Config.DataDir
 	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollInterval)
 	if m.Config.Metric.Diagnostics {
-		m.Server.Diagnostics = diagnostics.NewActiveDiagnostics(pilosa.DefaultDiagnosticServer)
+		m.Server.Diagnostics = gopsutil.NewDiagnostics(pilosa.DefaultDiagnosticServer)
 		m.Server.DiagnosticInterval = time.Duration(DefaultDiagnosticsInterval)
 	}
 	m.Server.GCNotifier = gcnotify.NewActiveGCNotifier()
