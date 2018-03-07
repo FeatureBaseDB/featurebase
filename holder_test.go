@@ -330,7 +330,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	defer hldr1.Close()
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Holder = hldr1.Holder
+	s.Handler.API.Holder = hldr1.Holder
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(client)
 		e.Holder = hldr1.Holder

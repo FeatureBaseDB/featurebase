@@ -69,10 +69,10 @@ func TestImportCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Handler.URI = uri
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.URI = uri
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.API.Holder = hldr.Holder
 	cm.Host = s.Host()
 
 	cm.Index = "i"
@@ -109,14 +109,14 @@ func TestImportCommand_RunValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Handler.URI = uri
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.URI = uri
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.API.Holder = hldr.Holder
 	cm.Host = s.Host()
 
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", strings.NewReader("")))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", strings.NewReader(`{"options":{"rangeEnabled": true, "fields": [{"name": "foo", "type": "int", "min": 0, "max": 100}]}}`)))
 
 	cm.Index = "i"
 	cm.Frame = "f"
