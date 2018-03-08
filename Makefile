@@ -1,4 +1,4 @@
-.PHONY: dep docker pilosa release-build prerelease-build release prerelease prerelease-upload install generate statik test cover cover-pkg cover-viz clean docker-build docker-test
+.PHONY: dep docker pilosa release-build prerelease-build release prerelease prerelease-upload install generate generate-statik generate-protoc statik test cover cover-pkg cover-viz clean docker-build docker-test
 
 DEP := $(shell command -v dep 2>/dev/null)
 STATIK := $(shell command -v statik 2>/dev/null)
@@ -103,7 +103,7 @@ generate-protoc: .protoc-gen-gofast
 	go generate github.com/pilosa/pilosa/internal
 
 generate-statik: statik
-	go generate github.com/pilosa/pilosa
+	go generate github.com/pilosa/pilosa/statik
 
 generate: generate-protoc generate-statik
 
