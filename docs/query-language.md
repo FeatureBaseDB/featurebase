@@ -473,7 +473,7 @@ Returns bits that are true for the comparison operator.
 **Examples:**
 
 In our source data, commitactivity was counted over the last year.
-The following greater-than Range query returns all repositories having more than 100 commits.
+The following greater-than `Range` query returns all repositories having more than 100 commits.
 
 ```
 Range(frame="stats", commitactivity > 100)
@@ -513,7 +513,7 @@ Sum([BITMAP_CALL], <frame=STRING>, <field=STRING>)
 
 **Description:**
 
-Returns the count and computed sum of all bitmap encoded integer values across the `field` in this `frame`. The optional Bitmap call filters the bits used in this computation.
+Returns the count and computed sum of all BSI integer values across the `field` in this `frame`. The optional `Bitmap` call filters the bits used in this computation.
 
 **Result Type:** object with the computed sum and count of the bitmap field.
 

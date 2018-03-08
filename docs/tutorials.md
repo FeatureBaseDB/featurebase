@@ -241,7 +241,7 @@ Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administ
 
 #### Introduction
 
-Pilosa can store integer values associated to the columns in an index, and those values are used to support range and aggregate queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
+Pilosa can store integer values associated to the columns in an index, and those values are used to support `Range` and `Sum` queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
 
 First, create an index called `patients`:
 ``` request
