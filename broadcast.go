@@ -134,6 +134,7 @@ const (
 	MessageTypeResizeInstruction
 	MessageTypeResizeInstructionComplete
 	MessageTypeSetCoordinator
+	MessageTypeUpdateCoordinator
 	MessageTypeNodeState
 	MessageTypeRecalculateCaches
 	MessageTypeNodeEvent
@@ -173,6 +174,8 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeResizeInstructionComplete
 	case *internal.SetCoordinatorMessage:
 		typ = MessageTypeSetCoordinator
+	case *internal.UpdateCoordinatorMessage:
+		typ = MessageTypeUpdateCoordinator
 	case *internal.NodeStateMessage:
 		typ = MessageTypeNodeState
 	case *internal.RecalculateCaches:
@@ -225,6 +228,8 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.ResizeInstructionComplete{}
 	case MessageTypeSetCoordinator:
 		m = &internal.SetCoordinatorMessage{}
+	case MessageTypeUpdateCoordinator:
+		m = &internal.UpdateCoordinatorMessage{}
 	case MessageTypeNodeState:
 		m = &internal.NodeStateMessage{}
 	case MessageTypeRecalculateCaches:

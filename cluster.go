@@ -309,20 +309,51 @@ func (c *Cluster) IsCoordinator() bool {
 	return c.Coordinator == c.Node.ID
 }
 
-// SetCoordinator updates the Coordinator to n.
-// Returns true if the Coordinator changed.
-func (c *Cluster) SetCoordinator(n *Node) bool {
-	// Get new node.
-	newNode := c.nodeByID(n.ID)
-	if newNode == nil {
-		return false
+// SetCoordinator tells the current node to become the
+// Coordinator. In response to this, the current node
+// will consider itself coordinator and update the other
+// nodes with its version of Cluster.Status.
+func (c *Cluster) SetCoordinator(n *Node) error {
+	// Verify that the new Coordinator value matches
+	// this node.
+	if c.Node.ID != n.ID {
+		return fmt.Errorf("coordinator node does not match this node")
 	}
 
-	if c.Coordinator != newNode.ID {
-		c.Coordinator = newNode.ID
-		return true
+	// Update IsCoordinator on all nodes (locally).
+	_ = c.UpdateCoordinator(n)
+
+	// Send the update coordinator message to all nodes.
+	err := c.Broadcaster.SendSync(
+		&internal.UpdateCoordinatorMessage{
+			New: EncodeNode(n),
+		})
+	if err != nil {
+		return fmt.Errorf("problem sending UpdateCoordinator message: %v", err)
 	}
-	return false
+
+	// Broadcast cluster status.
+	return c.Broadcaster.SendSync(c.Status())
+}
+
+// UpdateCoordinator updates this nodes Coordinator value as well as
+// changing the corresponding node's IsCoordinator value
+// to true, and sets all other nodes to false. Returns true if the value
+// changed.
+func (c *Cluster) UpdateCoordinator(n *Node) bool {
+	var changed bool
+	if c.Coordinator != n.ID {
+		c.Coordinator = n.ID
+		changed = true
+	}
+	for _, node := range c.Nodes {
+		if node.ID == n.ID {
+			node.IsCoordinator = true
+		} else {
+			node.IsCoordinator = false
+		}
+	}
+	return changed
 }
 
 // AddNode adds a node to the Cluster and updates and saves the

@@ -207,6 +207,10 @@ message SetCoordinatorMessage {
     Node New = 1;
 }
 
+message UpdateCoordinatorMessage {
+    Node New = 1;
+}
+
 message Topology {
     string ClusterID = 1;
     repeated string NodeIDs = 2;

@@ -2026,6 +2026,7 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 		return
 	}
 
+	oldNode := h.Cluster.nodeByID(h.Cluster.Coordinator)
 	newNode := h.Cluster.nodeByID(req.ID)
 	if newNode == nil {
 		http.Error(w, "Node with provided ID does not exist", http.StatusBadRequest)
@@ -2033,17 +2034,20 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 	}
 
 	if err := func() error {
-		// Send the set-coordinator message to all nodes.
-		err := h.Broadcaster.SendSync(
+		// If the new coordinator is this node, do the SetCoordinator directly.
+		if newNode.ID == h.Node.ID {
+			return h.Cluster.SetCoordinator(newNode)
+		}
+
+		// Send the set-coordinator message to new node.
+		err := h.Broadcaster.SendTo(
+			newNode,
 			&internal.SetCoordinatorMessage{
 				New: EncodeNode(newNode),
 			})
 		if err != nil {
 			return fmt.Errorf("problem sending SetCoordinator message: %s", err)
 		}
-
-		// Set Coordinator on local node.
-		_ = h.Cluster.SetCoordinator(newNode)
 
 		return nil
 	}(); err != nil {
@@ -2053,6 +2057,7 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(setCoordinatorResponse{
+		Old: oldNode,
 		New: newNode,
 	}); err != nil {
 		h.logger().Printf("response encoding error: %s", err)
