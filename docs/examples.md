@@ -263,7 +263,7 @@ python import_from_sdf.py -p <path_to_sdf_file> -file id_fingerprint.csv
 ```
 
 
-First, follow the instruction in the [getting started](../getting-started.md) guide to run a Pilosa server. Then create the indexes and frames according to the schemas outlined in the Data Model section above.
+First, follow the instruction in the [getting started](../getting-started) guide to run a Pilosa server. Then create the indexes and frames according to the schemas outlined in the Data Model section above.
 The option cacheSize should be set as amount of chembl_id to calculate effectively for the whole data set, so we need to calculate amount of chembl_id. We have total 1678393 chembl_id (it will displayed after import_from_sdf.py script running), then the cacheSize should be >= 1678393
 ```
 curl localhost:10101/index/mole \
