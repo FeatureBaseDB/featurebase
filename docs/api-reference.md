@@ -102,9 +102,9 @@ Creates a frame in the given index with the given name.
 
 The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which may contain the following fields:
 
-* `timeQuantum` (string): [Time Quantum]({{< ref "data-model.md#time-quantum" >}}) for this frame.
-* `inverseEnabled` (boolean): Enables [the inverted view]({{< ref "data-model.md#inverse" >}}) for this frame if `true`.
-* `cacheType` (string): [ranked]({{< ref "data-model.md#ranked" >}}) or [LRU]({{< ref "data-model.md#lru" >}}) caching on this frame. Default is `lru`.
+* `timeQuantum` (string): [Time Quantum](../data-model#time-quantum) for this frame.
+* `inverseEnabled` (boolean): Enables [the inverted view](../data-model#inverse) for this frame if `true`.
+* `cacheType` (string): [ranked](../data-model#ranked) or [LRU](../data-model#lru) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
 * `rangeEnabled` (boolean): Enables range-encoded fields in this frame.
 * `fields` (array): List of range-encoded fields.
@@ -205,9 +205,9 @@ Creates an input definition in the given index with the given name.
  
 The request payload is JSON, and it must contain the fields `frames` and `fields`. `frames` is an array of frames used within this input definition.  Each frame must contain a `name` and may contain the following options:
  
-* `timeQuantum` (string): [Time Quantum]({{< ref "data-model.md#time-quantum" >}}) for this frame.
-* `inverseEnabled` (boolean): Enables [the inverted view]({{< ref "data-model.md#inverse" >}}) for this frame if `true`.
-* `cacheType` (string): [ranked]({{< ref "data-model.md#ranked" >}}) or [LRU]({{< ref "data-model.md#lru" >}}) caching on this frame. Default is `lru`.
+* `timeQuantum` (string): [Time Quantum](../data-model#time-quantum) for this frame.
+* `inverseEnabled` (boolean): Enables [the inverted view](../data-model#inverse) for this frame if `true`.
+* `cacheType` (string): [ranked](../data-model#ranked) or [LRU](../data-model#lru) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
  
 The `fields` array contains a series of JSON objects describing how to process each field received in the input data.  Each `field` object must contain a `name` which maps to the source JSON field name.  One field must be defined at the `primaryKey`.  The `primarykey` source field name must equal the column label for the `Index`, and its value must be an unsigned integer which maps directly to a columnID in Pilosa.
