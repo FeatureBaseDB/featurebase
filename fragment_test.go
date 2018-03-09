@@ -163,7 +163,7 @@ func TestFragment_SetFieldValue(t *testing.T) {
 			t.Fatal("expected change")
 		}
 
-		// Non-existant value.
+		// Non-existent value.
 		if value, exists, err := f.FieldValue(100, 11); err != nil {
 			t.Fatal(err)
 		} else if value != 0 {

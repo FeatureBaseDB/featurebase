@@ -801,7 +801,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 			return NewBitmap(), nil
 		}
 
-		// LT[E] and GT[E] should return all not-null if selected range fully encompases valid field range.
+		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid field range.
 		if (cond.Op == pql.LT && value > field.Max) || (cond.Op == pql.LTE && value >= field.Max) ||
 			(cond.Op == pql.GT && value < field.Min) || (cond.Op == pql.GTE && value <= field.Min) {
 			return frag.FieldNotNull(field.BitDepth())

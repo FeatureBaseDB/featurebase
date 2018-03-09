@@ -85,7 +85,7 @@ func TestImportCommand_Run(t *testing.T) {
 	}
 }
 
-// Ensure that the ImportValue path runs (note: we have specifed a value
+// Ensure that the ImportValue path runs (note: we have specified a value
 // for cm.Field. Because the handler doesn't return errors (it sends them
 // to the logger), we don't get an error returned at `cm.Run()` even though
 // we haven't setup frame `f` to be RangeEnabled.

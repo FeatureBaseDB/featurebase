@@ -135,7 +135,7 @@ type gossipConfig struct {
 
 // newTransport returns a NetTransport based on the memberlist configuration.
 // It will dynamically bind to a port if conf.BindPort is 0.
-// This is useful for test cases where specifiying a port is not reasonable.
+// This is useful for test cases where specifying a port is not reasonable.
 func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
 	if conf.LogOutput != nil && conf.Logger != nil {
 		return nil, fmt.Errorf("Cannot specify both LogOutput and Logger. Please choose a single log configuration setting.")
