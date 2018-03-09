@@ -14,13 +14,13 @@ nav = []
 
 <strong id="bitmap">[Bitmap](../data-model/#overview):</strong> The on-disk and in-memory representation of a [row](#row). Implemented with [Roaring](#roaring-bitmap). `Bitmap` is also the basic [PQL](#pql) query for reading a Bitmap.
 
-<strong id="bsi">[BSI](../data-model/#bsi-range-encoding)</strong> Bit-sliced indexing is the method Pilosa uses to represent multi-bit integers. Integer values are stored in [fields](#field), and can be used for [Range](#range) and [Sum](#sum) queries.
+<strong id="bsi">[BSI](../data-model/#bsi-range-encoding)</strong> Bit-sliced indexing is the method Pilosa uses to represent multi-bit integers. Integer values are stored in [fields](#field), and can be used for [Range](#range-bsi) and [Sum](#sum) queries.
 
 <strong id="cluster">Cluster:</strong> A cluster consists of one or more [nodes](#node) which share a cluster configuration. The cluster also defines how data is [replicated](#replica) throughout and how internode communication is coordinated. Pilosa does not have a leader node, all data is evenly distributed, and any node can respond to queries.
 
 <strong id="column">[Column](../data-model/#column):</strong> Columns are the fundamental horizontal data axis within Pilosa. Columns are global to all [frames](#frame) within an [index](#index).
 
-<strong id="field">[Field](../data-model/#bsi-range-encoding):</strong> A group of rows used to store integer values with [BSI](#bsi), for use in [Range](#range) and [Sum](#sum) queries.
+<strong id="field">[Field](../data-model/#bsi-range-encoding):</strong> A group of rows used to store integer values with [BSI](#bsi), for use in [Range](#range-bsi) and [Sum](#sum) queries.
 
 <strong id="fragment">Fragment:</strong> A Fragment is the intersection of a [frame](#frame) and a [slice](#slice) in an [index](#index).
 
@@ -30,7 +30,7 @@ nav = []
 
 <strong id="jump-consistent-hash">[Jump Consistent Hash](https://arxiv.org/pdf/1406.2294v1.pdf):</strong> A fast, minimal memory, consistent hash algorithm that evenly distributes the workload even when the number of buckets changes.
 
-<strong id="maxslice">MaxSlice:</strong> The total number of [slices](#slice) allocated to handle the current set of [columns](#columns). This value is important for all [nodes](#node) to efficiently distribute queries.
+<strong id="maxslice">MaxSlice:</strong> The total number of [slices](#slice) allocated to handle the current set of [columns](#column). This value is important for all [nodes](#node) to efficiently distribute queries.
 
 <strong id="node">Node:</strong> An individual running instance of Pilosa server which belongs to a [cluster](#cluster).
 
@@ -40,9 +40,9 @@ nav = []
 
 <strong id="protobuf">[Protobuf](https://developers.google.com/protocol-buffers/):</strong> Protocol Buffers is a binary serialization format which Pilosa uses for internal messages, and can be used by clients as an alternative to JSON.
 
-<strong id="range">[Range](../query-language/#range):</strong>: A [PQL](#pql) query that returns bits based on comparison to timestamps, set according to the [time quantum](#time-quantum).
+<strong id="range">[Range](../query-language/#range-queries):</strong>: A [PQL](#pql) query that returns bits based on comparison to timestamps, set according to the [time quantum](#time-quantum).
 
-<strong id="range">[Range (BSI)](../query-language/#range-bsi):</strong>: A [PQL](#pql) query that returns bits based on comparison to integers stored in [BSI](#bsi) [fields](#field).
+<strong id="range-bsi">[Range (BSI)](../query-language/#range-bsi):</strong>: A [PQL](#pql) query that returns bits based on comparison to integers stored in [BSI](#bsi) [fields](#field).
 
 <strong id="replica">[Replica](../configuration/#cluster-replicas):</strong> A copy of a [fragment](#fragment) on a different [node](#node) than the original. The `cluster.replicas` configuration parameter determines how many replicas of a fragment exist in the cluster. This includes the original, so a value of 1 means no extra copies are made.
 

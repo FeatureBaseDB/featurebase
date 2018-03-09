@@ -150,9 +150,9 @@ You can opt-out of the Pilosa diagnostics reporting by setting either the comman
 Pilosa can be configured to emit metrics pertaining to its internal processes in one of two formats: Expvar or StatsD. Metric recording is disabled by default.
 The metrics configuration options are: 
 
-  - [Host](../configuration#metrics-host): specify host that receives metric events
-  - [Poll Interval](../configuration#metrics-poll-interval): specify polling interval for runtime metrics
-  - [Service](../configuration#metrics-service): declare type StatsD or Expvar
+  - [Host](../configuration#metric-host): specify host that receives metric events
+  - [Poll Interval](../configuration#metric-poll-interval): specify polling interval for runtime metrics
+  - [Service](../configuration#metric-service): declare type StatsD or Expvar
 
 #### Tags
 StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
