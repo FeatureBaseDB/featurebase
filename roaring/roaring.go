@@ -2645,7 +2645,7 @@ func differenceRunRun(a, b *container) *container {
 	for apos < alen && bpos < blen {
 		switch {
 		case alast < bstart:
-			// current A-run entirely preceeds current B-run: keep full A-run, advance to next A-run
+			// current A-run entirely precedes current B-run: keep full A-run, advance to next A-run
 			output.runs = append(output.runs, interval16{start: astart, last: alast})
 			apos++
 			if apos < alen {
@@ -2653,7 +2653,7 @@ func differenceRunRun(a, b *container) *container {
 				alast = a.runs[apos].last
 			}
 		case blast < astart:
-			// current B-run entirely preceeds current A-run: advance to next B-run
+			// current B-run entirely precedes current A-run: advance to next B-run
 			bpos++
 			if bpos < blen {
 				bstart = b.runs[bpos].start
