@@ -218,7 +218,8 @@ Any flag that has a value that is a comma separated list on the command line bec
     [profile]
     cpu-time = "30s"
     ```
-##### Metric Service
+    
+#### Metric Service
 * Description: Which stats service to use. Choose from [statsd, expvar].
 * Flag: `--metric.service=statsd`
 * Env: `PILOSA_METRIC_SERVICE=statsd'
@@ -229,7 +230,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     service = “statsd”
     ```
 
-##### Metric Host
+#### Metric Host
 * Description: Address of the StatsD service host.
 * Flag: `--metric.host=localhost:8125`
 * Env: `PILOSA_METRIC_HOST=localhost:8125'
@@ -240,7 +241,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     host = "localhost:8125"
     ```
 
-##### Metric Poll Interval
+#### Metric Poll Interval
 
 * Description: Polling interval for runtime metrics.
 * Flag: `metric.poll-interval=”0m15s”`
@@ -252,7 +253,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     poll-interval = "0m15s"
     ```
 
-##### Metric Diagnostics
+#### Metric Diagnostics
 
 * Description: Enable diagnostic reporting. To disable diagnostics set to false.
 * Flag: `metric.diagnostics`
@@ -265,7 +266,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     ```
 
 
-##### TLS Certificate
+#### TLS Certificate
 
 * Description: Path to the TLS certificate to use for serving HTTPS. Usually has one of`.crt` or `.pem` extensions.
 * Flag: `tls.certificate=/srv/pilosa/certs/server.crt`
@@ -277,7 +278,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     certificate = "/srv/pilosa/certs/server.crt"
     ```
 
-##### TLS Certificate Key
+#### TLS Certificate Key
 
 * Description: Path to the TLS certificate key to use for serving HTTPS. Usually has the `.key` extension.
 * Flag: `tls.key=/srv/pilosa/certs/server.key`
@@ -289,7 +290,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     key = "/srv/pilosa/certs/server.key"
     ```
 
-##### TLS Skip Verify
+#### TLS Skip Verify
 
 * Description: Disables verification for checking TLS certificates. This configuration item is mainly useful for using self-signed certificates for a Pilosa cluster. Do not use in production since it makes man-in-the-middle attacks trivial.
 * Flag: `tls.skip-verify`
