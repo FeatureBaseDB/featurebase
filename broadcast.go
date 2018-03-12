@@ -134,8 +134,10 @@ const (
 	MessageTypeResizeInstruction
 	MessageTypeResizeInstructionComplete
 	MessageTypeSetCoordinator
+	MessageTypeUpdateCoordinator
 	MessageTypeNodeState
 	MessageTypeRecalculateCaches
+	MessageTypeNodeEvent
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
@@ -172,10 +174,14 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeResizeInstructionComplete
 	case *internal.SetCoordinatorMessage:
 		typ = MessageTypeSetCoordinator
+	case *internal.UpdateCoordinatorMessage:
+		typ = MessageTypeUpdateCoordinator
 	case *internal.NodeStateMessage:
 		typ = MessageTypeNodeState
 	case *internal.RecalculateCaches:
 		typ = MessageTypeRecalculateCaches
+	case *internal.NodeEventMessage:
+		typ = MessageTypeNodeEvent
 	default:
 		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
 	}
@@ -222,10 +228,14 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.ResizeInstructionComplete{}
 	case MessageTypeSetCoordinator:
 		m = &internal.SetCoordinatorMessage{}
+	case MessageTypeUpdateCoordinator:
+		m = &internal.UpdateCoordinatorMessage{}
 	case MessageTypeNodeState:
 		m = &internal.NodeStateMessage{}
 	case MessageTypeRecalculateCaches:
 		m = &internal.RecalculateCaches{}
+	case MessageTypeNodeEvent:
+		m = &internal.NodeEventMessage{}
 	default:
 		return nil, fmt.Errorf("invalid message type: %d", typ)
 	}

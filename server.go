@@ -132,7 +132,11 @@ func (s *Server) Open() error {
 	s.NodeID = s.LoadNodeID()
 
 	// Set Cluster Node.
-	node := &Node{ID: s.NodeID, URI: s.URI}
+	node := &Node{
+		ID:            s.NodeID,
+		URI:           s.URI,
+		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
+	}
 	s.Cluster.Node = node
 
 	// Append the NodeID tag to stats.
@@ -183,11 +187,6 @@ func (s *Server) Open() error {
 	// Start the BroadcastReceiver.
 	if err := s.BroadcastReceiver.Start(s); err != nil {
 		return fmt.Errorf("starting BroadcastReceiver: %v", err)
-	}
-
-	// If a Coordinator is not specified, then default to s.URI.
-	if s.Cluster.Coordinator.Port() == 0 {
-		s.Cluster.Coordinator = s.URI
 	}
 
 	// Open Cluster management.
@@ -457,6 +456,8 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 	case *internal.SetCoordinatorMessage:
 		s.Cluster.SetCoordinator(DecodeNode(obj.New))
+	case *internal.UpdateCoordinatorMessage:
+		s.Cluster.UpdateCoordinator(DecodeNode(obj.New))
 	case *internal.NodeStateMessage:
 		err := s.Cluster.ReceiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
@@ -464,6 +465,8 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 	case *internal.RecalculateCaches:
 		s.Holder.RecalculateCaches()
+	case *internal.NodeEventMessage:
+		s.Cluster.ReceiveEvent(DecodeNodeEvent(obj))
 	}
 
 	return nil

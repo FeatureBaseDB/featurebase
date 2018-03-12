@@ -180,8 +180,8 @@ func TestFragSources(t *testing.T) {
 				"node0": []*internal.ResizeSource{},
 				"node1": []*internal.ResizeSource{},
 				"node2": []*internal.ResizeSource{
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}}, "i", "f", "standard", uint64(0)},
-					{&internal.Node{"node1", &internal.URI{"http", "host1", 10101}}, "i", "f", "standard", uint64(2)},
+					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
+					{&internal.Node{"node1", &internal.URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -192,11 +192,11 @@ func TestFragSources(t *testing.T) {
 			idx:  idx,
 			expected: map[string][]*internal.ResizeSource{
 				"node0": []*internal.ResizeSource{
-					{&internal.Node{"node1", &internal.URI{"http", "host1", 10101}}, "i", "f", "standard", uint64(1)},
+					{&internal.Node{"node1", &internal.URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(1)},
 				},
 				"node1": []*internal.ResizeSource{
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}}, "i", "f", "standard", uint64(0)},
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}}, "i", "f", "standard", uint64(2)},
+					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
+					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -207,11 +207,11 @@ func TestFragSources(t *testing.T) {
 			idx:  idx,
 			expected: map[string][]*internal.ResizeSource{
 				"node0": []*internal.ResizeSource{
-					{&internal.Node{"node2", &internal.URI{"http", "host2", 10101}}, "i", "f", "standard", uint64(0)},
-					{&internal.Node{"node2", &internal.URI{"http", "host2", 10101}}, "i", "f", "standard", uint64(2)},
+					{&internal.Node{"node2", &internal.URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(0)},
+					{&internal.Node{"node2", &internal.URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
 				"node1": []*internal.ResizeSource{
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}}, "i", "f", "standard", uint64(3)},
+					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(3)},
 				},
 				"node2": []*internal.ResizeSource{},
 			},
