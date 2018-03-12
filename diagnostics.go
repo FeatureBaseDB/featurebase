@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package diagnostics
+package pilosa
 
 import (
 	"bytes"
@@ -36,7 +36,7 @@ import (
 
 // Default version check URL.
 const (
-	DefaultVersionCheckURL = "https://diagnostics.pilosa.com/v0/version"
+	defaultVersionCheckURL = "https://diagnostics.pilosa.com/v0/version"
 )
 
 type versionResponse struct {
@@ -44,11 +44,9 @@ type versionResponse struct {
 	Message string `json:"message"`
 }
 
-// Diagnostics represents a client to the Pilosa cluster.
-type Diagnostics struct {
+// DiagnosticsCollector represents a collector/sender of diagnostics data
+type DiagnosticsCollector struct {
 	mu          sync.Mutex
-	wg          sync.WaitGroup
-	closing     chan struct{}
 	host        string
 	VersionURL  string
 	version     string
@@ -65,13 +63,12 @@ type Diagnostics struct {
 	logOutput io.Writer
 }
 
-// New returns a pointer to a new Diagnostics Client given an addr in the format "hostname:port".
-func New(host string) *Diagnostics {
+// New returns a pointer to a new DiagnosticsCollector Client given an addr in the format "hostname:port".
+func NewDiagnosticsCollector(host string) *DiagnosticsCollector {
 
-	return &Diagnostics{
-		closing:    make(chan struct{}),
+	return &DiagnosticsCollector{
 		host:       host,
-		VersionURL: DefaultVersionCheckURL,
+		VersionURL: defaultVersionCheckURL,
 		startTime:  time.Now().Unix(),
 		start:      time.Now(),
 		client:     http.DefaultClient,
@@ -81,37 +78,21 @@ func New(host string) *Diagnostics {
 }
 
 // SetVersion of locally running Pilosa Cluster to check against master.
-func (d *Diagnostics) SetVersion(v string) {
+func (d *DiagnosticsCollector) SetVersion(v string) {
 	d.version = v
 	d.Set("Version", v)
 }
 
 // SetInterval of the diagnostic go routine and match with the circuit breaker timeout.
-func (d *Diagnostics) SetInterval(i time.Duration) {
+func (d *DiagnosticsCollector) SetInterval(i time.Duration) {
 	d.interval = i
 }
 
-// schedule start the diagnostics service ticker.
-func (d *Diagnostics) schedule() {
-	ticker := time.NewTicker(d.interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-d.closing:
-			return
-		case <-ticker.C:
-			d.CheckVersion()
-			d.Flush()
-		}
-	}
-}
-
 // Flush sends the current metrics.
-func (d *Diagnostics) Flush() error {
+func (d *DiagnosticsCollector) Flush() error {
 	d.mu.Lock()
 	d.metrics["Uptime"] = (time.Now().Unix() - d.startTime)
-	buf, _ := d.Encode()
+	buf, _ := d.encode()
 	d.mu.Unlock()
 
 	_, err := d.cb.Execute(func() (interface{}, error) {
@@ -135,7 +116,7 @@ func (d *Diagnostics) Flush() error {
 }
 
 // Open configures the circuit breaker used by the HTTP client.
-func (d *Diagnostics) Open() {
+func (d *DiagnosticsCollector) Open() {
 	var st gobreaker.Settings
 	if d.interval > 0 {
 		st.Timeout = d.interval * 2
@@ -145,15 +126,8 @@ func (d *Diagnostics) Open() {
 	d.logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every hour. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics")
 }
 
-// Close notify goroutine to stop.
-func (d *Diagnostics) Close() error {
-	close(d.closing)
-	d.wg.Wait()
-	return nil
-}
-
 // CheckVersion of the local build against Pilosa master.
-func (d *Diagnostics) CheckVersion() error {
+func (d *DiagnosticsCollector) CheckVersion() error {
 	var rsp versionResponse
 	req, err := http.NewRequest("GET", d.VersionURL, nil)
 	resp, err := d.client.Do(req)
@@ -174,15 +148,15 @@ func (d *Diagnostics) CheckVersion() error {
 	}
 
 	d.lastVersion = rsp.Version
-	if err := d.CompareVersion(rsp.Version); err != nil {
+	if err := d.compareVersion(rsp.Version); err != nil {
 		d.logger().Printf("%s\n", err.Error())
 	}
 
 	return nil
 }
 
-// CompareVersion check version strings.
-func (d *Diagnostics) CompareVersion(value string) error {
+// compareVersion check version strings.
+func (d *DiagnosticsCollector) compareVersion(value string) error {
 	currentVersion := VersionSegments(value)
 	localVersion := VersionSegments(d.version)
 
@@ -198,29 +172,29 @@ func (d *Diagnostics) CompareVersion(value string) error {
 }
 
 // Encode metrics maps into the json message format.
-func (d *Diagnostics) Encode() ([]byte, error) {
+func (d *DiagnosticsCollector) encode() ([]byte, error) {
 	return json.Marshal(d.metrics)
 }
 
 // Set adds a key value metric.
-func (d *Diagnostics) Set(name string, value interface{}) {
+func (d *DiagnosticsCollector) Set(name string, value interface{}) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.metrics[name] = value
 }
 
 // SetLogger Set the logger output type.
-func (d *Diagnostics) SetLogger(logger io.Writer) {
+func (d *DiagnosticsCollector) SetLogger(logger io.Writer) {
 	d.logOutput = logger
 }
 
 // logger returns a logger that writes to LogOutput.
-func (d *Diagnostics) logger() *log.Logger {
+func (d *DiagnosticsCollector) logger() *log.Logger {
 	return log.New(d.logOutput, "", log.LstdFlags)
 }
 
 // EnrichWithOSInfo adds OS information to the diagnostics payload.
-func (d *Diagnostics) EnrichWithOSInfo() {
+func (d *DiagnosticsCollector) EnrichWithOSInfo() {
 	osInfo, err := host.Info()
 	if err != nil {
 		d.logOutput.Write([]byte(err.Error()))
@@ -243,7 +217,7 @@ func (d *Diagnostics) EnrichWithOSInfo() {
 }
 
 // EnrichWithMemoryInfo adds memory information to the diagnostics payload.
-func (d *Diagnostics) EnrichWithMemoryInfo() {
+func (d *DiagnosticsCollector) EnrichWithMemoryInfo() {
 	memory, err := mem.VirtualMemory()
 	if err != nil {
 		d.logOutput.Write([]byte(err.Error()))
@@ -252,6 +226,37 @@ func (d *Diagnostics) EnrichWithMemoryInfo() {
 	d.Set("MemTotal", memory.Total)
 	d.Set("MemUsed", memory.Used)
 
+}
+
+// EnrichWithSchemaProperties adds schema info to the diagnostics payload.
+func (d *DiagnosticsCollector) EnrichWithSchemaProperties(holder *Holder) {
+	var numSlices uint64
+	numFrames := 0
+	numIndexes := 0
+	bsiFieldCount := 0
+	timeQuantumEnabled := false
+
+	for _, index := range holder.Indexes() {
+		numSlices += index.MaxSlice() + 1
+		numIndexes += 1
+		for _, frame := range index.Frames() {
+			numFrames += 1
+			if frame.rangeEnabled {
+				if fields, err := frame.GetFields(); err == nil {
+					bsiFieldCount += len(fields)
+				}
+			}
+			if frame.TimeQuantum() != "" {
+				timeQuantumEnabled = true
+			}
+		}
+	}
+
+	d.Set("NumIndexes", numIndexes)
+	d.Set("NumFrames", numFrames)
+	d.Set("NumSlices", numSlices)
+	d.Set("BSIFieldCount", bsiFieldCount)
+	d.Set("TimeQuantumEnabled", timeQuantumEnabled)
 }
 
 // VersionSegments returns the numeric segments of the version as a slice of ints.
