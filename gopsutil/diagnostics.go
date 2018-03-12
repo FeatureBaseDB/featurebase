@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package diagnostics
+package gopsutil
 
 import (
 	"bytes"
@@ -27,16 +27,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa"
 	"github.com/shirou/gopsutil/host"
 	"github.com/shirou/gopsutil/mem"
 	"github.com/sony/gobreaker"
 )
 
+// Ensure Diagnostics implements interface.
+var _ pilosa.Diagnostics = &Diagnostics{}
+
 // TODO: unique Cluster ID
 
 // Default version check URL.
 const (
-	DefaultVersionCheckURL = "https://diagnostics.pilosa.com/v0/version"
+	defaultVersionCheckURL = "https://diagnostics.pilosa.com/v0/version"
 )
 
 type versionResponse struct {
@@ -47,8 +51,6 @@ type versionResponse struct {
 // Diagnostics represents a client to the Pilosa cluster.
 type Diagnostics struct {
 	mu          sync.Mutex
-	wg          sync.WaitGroup
-	closing     chan struct{}
 	host        string
 	VersionURL  string
 	version     string
@@ -66,12 +68,11 @@ type Diagnostics struct {
 }
 
 // New returns a pointer to a new Diagnostics Client given an addr in the format "hostname:port".
-func New(host string) *Diagnostics {
+func NewDiagnostics(host string) *Diagnostics {
 
 	return &Diagnostics{
-		closing:    make(chan struct{}),
 		host:       host,
-		VersionURL: DefaultVersionCheckURL,
+		VersionURL: defaultVersionCheckURL,
 		startTime:  time.Now().Unix(),
 		start:      time.Now(),
 		client:     http.DefaultClient,
@@ -91,27 +92,11 @@ func (d *Diagnostics) SetInterval(i time.Duration) {
 	d.interval = i
 }
 
-// schedule start the diagnostics service ticker.
-func (d *Diagnostics) schedule() {
-	ticker := time.NewTicker(d.interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-d.closing:
-			return
-		case <-ticker.C:
-			d.CheckVersion()
-			d.Flush()
-		}
-	}
-}
-
 // Flush sends the current metrics.
 func (d *Diagnostics) Flush() error {
 	d.mu.Lock()
 	d.metrics["Uptime"] = (time.Now().Unix() - d.startTime)
-	buf, _ := d.Encode()
+	buf, _ := d.encode()
 	d.mu.Unlock()
 
 	_, err := d.cb.Execute(func() (interface{}, error) {
@@ -145,13 +130,6 @@ func (d *Diagnostics) Open() {
 	d.logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every hour. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics")
 }
 
-// Close notify goroutine to stop.
-func (d *Diagnostics) Close() error {
-	close(d.closing)
-	d.wg.Wait()
-	return nil
-}
-
 // CheckVersion of the local build against Pilosa master.
 func (d *Diagnostics) CheckVersion() error {
 	var rsp versionResponse
@@ -174,15 +152,15 @@ func (d *Diagnostics) CheckVersion() error {
 	}
 
 	d.lastVersion = rsp.Version
-	if err := d.CompareVersion(rsp.Version); err != nil {
+	if err := d.compareVersion(rsp.Version); err != nil {
 		d.logger().Printf("%s\n", err.Error())
 	}
 
 	return nil
 }
 
-// CompareVersion check version strings.
-func (d *Diagnostics) CompareVersion(value string) error {
+// compareVersion checks version strings.
+func (d *Diagnostics) compareVersion(value string) error {
 	currentVersion := VersionSegments(value)
 	localVersion := VersionSegments(d.version)
 
@@ -197,8 +175,8 @@ func (d *Diagnostics) CompareVersion(value string) error {
 	return nil
 }
 
-// Encode metrics maps into the json message format.
-func (d *Diagnostics) Encode() ([]byte, error) {
+// encode metrics maps into the json message format.
+func (d *Diagnostics) encode() ([]byte, error) {
 	return json.Marshal(d.metrics)
 }
 

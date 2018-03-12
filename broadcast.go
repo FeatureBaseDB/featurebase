@@ -63,17 +63,17 @@ var NopBroadcaster Broadcaster
 
 type nopBroadcaster struct{}
 
-// SendSync A no-op implemenetation of Broadcaster SendSync method.
+// SendSync A no-op implementation of Broadcaster SendSync method.
 func (n *nopBroadcaster) SendSync(pb proto.Message) error {
 	return nil
 }
 
-// SendAsync A no-op implemenetation of Broadcaster SendAsync method.
+// SendAsync A no-op implementation of Broadcaster SendAsync method.
 func (n *nopBroadcaster) SendAsync(pb proto.Message) error {
 	return nil
 }
 
-// SendTo is a no-op implemenetation of Broadcaster SendTo method.
+// SendTo is a no-op implementation of Broadcaster SendTo method.
 func (c *nopBroadcaster) SendTo(to *Node, pb proto.Message) error {
 	return nil
 }
@@ -112,7 +112,7 @@ var NopGossiper Gossiper
 
 type nopGossiper struct{}
 
-// SendAsync A no-op implemenetation of Gossiper SendAsync method.
+// SendAsync A no-op implementation of Gossiper SendAsync method.
 func (n *nopGossiper) SendAsync(pb proto.Message) error {
 	return nil
 }
