@@ -32,7 +32,6 @@ func TestDiagnosticsClient(t *testing.T) {
 	// Create a new client.
 	d := NewDiagnosticsCollector(server.URL)
 	d.SetLogger(ioutil.Discard)
-	d.Open()
 
 	d.Set("gg", 10)
 	d.Set("ss", "ss")
@@ -80,7 +79,6 @@ func TestDiagnosticsVersion_Parse(t *testing.T) {
 
 func TestDiagnosticsVersion_Compare(t *testing.T) {
 	d := NewDiagnosticsCollector("localhost:10101")
-	d.Open()
 
 	version := "v0.1.1"
 	d.SetVersion(version)

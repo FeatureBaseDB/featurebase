@@ -26,8 +26,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/sony/gobreaker"
 )
 
 // Default version check URL.
@@ -52,10 +50,8 @@ type DiagnosticsCollector struct {
 
 	metrics map[string]interface{}
 
-	client   *http.Client
-	interval time.Duration
+	client *http.Client
 
-	cb        *gobreaker.CircuitBreaker
 	logOutput io.Writer
 
 	server *Server
@@ -69,7 +65,7 @@ func NewDiagnosticsCollector(host string) *DiagnosticsCollector {
 		VersionURL: defaultVersionCheckURL,
 		startTime:  time.Now().Unix(),
 		start:      time.Now(),
-		client:     http.DefaultClient,
+		client:     &http.Client{Timeout: 10 * time.Second},
 		metrics:    make(map[string]interface{}),
 		logOutput:  ioutil.Discard,
 	}
@@ -81,47 +77,29 @@ func (d *DiagnosticsCollector) SetVersion(v string) {
 	d.Set("Version", v)
 }
 
-// SetInterval of the diagnostic go routine and match with the circuit breaker timeout.
-func (d *DiagnosticsCollector) SetInterval(i time.Duration) {
-	d.interval = i
-}
-
 // Flush sends the current metrics.
 func (d *DiagnosticsCollector) Flush() error {
 	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.metrics["Uptime"] = (time.Now().Unix() - d.startTime)
-	buf, _ := d.encode()
-	d.mu.Unlock()
-
-	_, err := d.cb.Execute(func() (interface{}, error) {
-		req, err := http.NewRequest("POST", d.host, bytes.NewReader(buf))
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := d.client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		// TODO verify response
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return body, nil
-	})
-
-	return err
-}
-
-// Open configures the circuit breaker used by the HTTP client.
-func (d *DiagnosticsCollector) Open() {
-	var st gobreaker.Settings
-	if d.interval > 0 {
-		st.Timeout = d.interval * 2
+	buf, err := d.encode()
+	if err != nil {
+		return err
 	}
-	d.cb = gobreaker.NewCircuitBreaker(st)
+	req, err := http.NewRequest("POST", d.host, bytes.NewReader(buf))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 
-	d.logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every hour. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics")
+	// TODO verify response
+	_, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // CheckVersion of the local build against Pilosa master.

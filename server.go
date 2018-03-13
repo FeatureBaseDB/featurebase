@@ -605,15 +605,16 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 
 // monitorDiagnostics periodically polls the Pilosa Indexes for cluster info.
 func (s *Server) monitorDiagnostics() {
-	if s.DiagnosticInterval <= 0 {
+	// Do not send more than once a minute
+	if s.DiagnosticInterval < time.Minute {
 		s.Logger().Printf("diagnostics disabled")
 		return
+	} else {
+		s.Logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every hour. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics")
 	}
 
 	s.diagnostics.SetLogger(s.LogOutput)
 	s.diagnostics.SetVersion(Version)
-	s.diagnostics.SetInterval(s.DiagnosticInterval)
-	s.diagnostics.Open()
 	s.diagnostics.Set("Host", s.URI.host)
 	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
@@ -632,7 +633,10 @@ func (s *Server) monitorDiagnostics() {
 		s.diagnostics.EnrichWithMemoryInfo()
 		s.diagnostics.EnrichWithSchemaProperties()
 		s.diagnostics.CheckVersion()
-		s.diagnostics.Flush()
+		err = s.diagnostics.Flush()
+		if err != nil {
+			s.Logger().Printf("Diagnostics error: %s", err)
+		}
 	}
 
 	ticker := time.NewTicker(s.DiagnosticInterval)
