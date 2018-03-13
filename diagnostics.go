@@ -27,12 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shirou/gopsutil/host"
-	"github.com/shirou/gopsutil/mem"
 	"github.com/sony/gobreaker"
 )
-
-// TODO: unique Cluster ID
 
 // Default version check URL.
 const (
@@ -61,6 +57,8 @@ type DiagnosticsCollector struct {
 
 	cb        *gobreaker.CircuitBreaker
 	logOutput io.Writer
+
+	server *Server
 }
 
 // New returns a pointer to a new DiagnosticsCollector Client given an addr in the format "hostname:port".
@@ -193,50 +191,64 @@ func (d *DiagnosticsCollector) logger() *log.Logger {
 	return log.New(d.logOutput, "", log.LstdFlags)
 }
 
+// logErr logs the error and returns true if an error exists
+func (d *DiagnosticsCollector) logErr(err error) bool {
+	if err != nil {
+		d.logOutput.Write([]byte(err.Error()))
+		return true
+	}
+	return false
+}
+
 // EnrichWithOSInfo adds OS information to the diagnostics payload.
 func (d *DiagnosticsCollector) EnrichWithOSInfo() {
-	osInfo, err := host.Info()
-	if err != nil {
-		d.logOutput.Write([]byte(err.Error()))
+	uptime, err := d.server.SystemInfo.Uptime()
+	if !d.logErr(err) {
+		d.Set("HostUptime", uptime)
 	}
-	d.Set("HostUptime", osInfo.Uptime)
-
-	platform, family, version, err := host.PlatformInformation()
-	if err != nil {
-		d.logOutput.Write([]byte(err.Error()))
+	platform, err := d.server.SystemInfo.Platform()
+	if !d.logErr(err) {
+		d.Set("OSPlatform", platform)
 	}
-	d.Set("OSPlatform", platform)
-	d.Set("OSFamily", family)
-	d.Set("OSVersion", version)
-
-	kernelVersion, err := host.KernelVersion()
-	if err != nil {
-		d.logOutput.Write([]byte(err.Error()))
+	family, err := d.server.SystemInfo.Family()
+	if !d.logErr(err) {
+		d.Set("OSFamily", family)
 	}
-	d.Set("OSKernelVersion", kernelVersion)
+	version, err := d.server.SystemInfo.OSVersion()
+	if !d.logErr(err) {
+		d.Set("OSVersion", version)
+	}
+	kernelVersion, err := d.server.SystemInfo.KernelVersion()
+	if !d.logErr(err) {
+		d.Set("OSKernelVersion", kernelVersion)
+	}
 }
 
 // EnrichWithMemoryInfo adds memory information to the diagnostics payload.
 func (d *DiagnosticsCollector) EnrichWithMemoryInfo() {
-	memory, err := mem.VirtualMemory()
-	if err != nil {
-		d.logOutput.Write([]byte(err.Error()))
+	memFree, err := d.server.SystemInfo.MemFree()
+	if !d.logErr(err) {
+		d.Set("MemFree", memFree)
 	}
-	d.Set("MemFree", memory.Free)
-	d.Set("MemTotal", memory.Total)
-	d.Set("MemUsed", memory.Used)
-
+	memTotal, err := d.server.SystemInfo.MemTotal()
+	if !d.logErr(err) {
+		d.Set("MemTotal", memTotal)
+	}
+	memUsed, err := d.server.SystemInfo.MemUsed()
+	if !d.logErr(err) {
+		d.Set("MemUsed", memUsed)
+	}
 }
 
 // EnrichWithSchemaProperties adds schema info to the diagnostics payload.
-func (d *DiagnosticsCollector) EnrichWithSchemaProperties(holder *Holder) {
+func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 	var numSlices uint64
 	numFrames := 0
 	numIndexes := 0
 	bsiFieldCount := 0
 	timeQuantumEnabled := false
 
-	for _, index := range holder.Indexes() {
+	for _, index := range d.server.Holder.Indexes() {
 		numSlices += index.MaxSlice() + 1
 		numIndexes += 1
 		for _, frame := range index.Frames() {
@@ -269,4 +281,65 @@ func VersionSegments(segments string) []int {
 		segmentSlice[i], _ = strconv.Atoi(v)
 	}
 	return segmentSlice
+}
+
+// SystemInfo collects information about the host OS
+type SystemInfo interface {
+	Uptime() (uint64, error)
+	Platform() (string, error)
+	Family() (string, error)
+	OSVersion() (string, error)
+	KernelVersion() (string, error)
+	MemFree() (uint64, error)
+	MemTotal() (uint64, error)
+	MemUsed() (uint64, error)
+}
+
+// NewNopSystemInfo creates a no-op implementation of SystemInfo
+func NewNopSystemInfo() *NopSystemInfo {
+	return &NopSystemInfo{}
+}
+
+// NopSystemInfo is a no-op implementation of SystemInfo
+type NopSystemInfo struct {
+}
+
+// Uptime is a no-op implementation of SystemInfo.Uptime
+func (n *NopSystemInfo) Uptime() (uint64, error) {
+	return 0, nil
+}
+
+// Platform is a no-op implementation of SystemInfo.Platform
+func (n *NopSystemInfo) Platform() (string, error) {
+	return "", nil
+}
+
+// Family is a no-op implementation of SystemInfo.Family
+func (n *NopSystemInfo) Family() (string, error) {
+	return "", nil
+}
+
+// OSVersion is a no-op implementation of SystemInfo.OSVersion
+func (n *NopSystemInfo) OSVersion() (string, error) {
+	return "", nil
+}
+
+// KernelVersion is a no-op implementation of SystemInfo.KernelVersion
+func (n *NopSystemInfo) KernelVersion() (string, error) {
+	return "", nil
+}
+
+// MemFree is a no-op implementation of SystemInfo.MemFree
+func (n *NopSystemInfo) MemFree() (uint64, error) {
+	return 0, nil
+}
+
+// MemTotal is a no-op implementation of SystemInfo.MemTotal
+func (n *NopSystemInfo) MemTotal() (uint64, error) {
+	return 0, nil
+}
+
+// MemUsed is a no-op implementation of SystemInfo.MemUsed
+func (n *NopSystemInfo) MemUsed() (uint64, error) {
+	return 0, nil
 }

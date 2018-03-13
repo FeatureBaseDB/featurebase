@@ -14,6 +14,9 @@
 
 package pilosa
 
+// Ensure nopGCNotifier implements interface.
+var _ GCNotifier = &nopGCNotifier{}
+
 // GCNotifier represents an interface for garbage collection notificationss.
 type GCNotifier interface {
 	Close()

@@ -70,6 +70,7 @@ type Server struct {
 	URI         URI
 	Cluster     *Cluster
 	diagnostics *DiagnosticsCollector
+	SystemInfo  SystemInfo
 
 	GCNotifier GCNotifier
 
@@ -100,6 +101,7 @@ func NewServer() *Server {
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
 		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
+		SystemInfo:        NewNopSystemInfo(),
 
 		Network: "tcp",
 
@@ -114,6 +116,7 @@ func NewServer() *Server {
 	s.logger = log.New(s.LogOutput, "", log.LstdFlags)
 
 	s.Handler.Holder = s.Holder
+	s.diagnostics.server = s
 	return s
 }
 
@@ -627,7 +630,7 @@ func (s *Server) monitorDiagnostics() {
 		}
 		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
 		s.diagnostics.EnrichWithMemoryInfo()
-		s.diagnostics.EnrichWithSchemaProperties(s.Holder)
+		s.diagnostics.EnrichWithSchemaProperties()
 		s.diagnostics.CheckVersion()
 		s.diagnostics.Flush()
 	}
