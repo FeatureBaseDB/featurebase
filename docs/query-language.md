@@ -187,6 +187,30 @@ ClearBit(frame="stargazer", columnID=10, rowID=1)
 Remove relationship between the stargazer in row 1 and the repository in column 10 from the stargazer frame.
 
 
+#### SetFieldValue
+
+**Spec:**
+
+```
+SetFieldValue(<COL_LABEL=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
+```
+
+**Description:**
+
+`SetFieldValue` assigns an integer value with the specified field name to the `columnID` in the given `frame`.
+
+**Result Type:** null
+
+SetFieldValue returns `null` upon success.
+
+**Examples:**
+
+Set the number of pull requests of repository 10.
+```
+SetFieldValue(col=10, frame="stats", pullrequests=2)
+```
+
+
 ### Read Operations
 
 #### Bitmap
@@ -527,27 +551,3 @@ Sum(frame="stats", field="diskusage")
 Return `{"sum":10,"count":3}`
 
 * Result is the size of all repositories in kilobytes, plus the number of repositories.
-
-
-#### SetFieldValue
-
-**Spec:**
-
-```
-SetFieldValue(<COL_LABEL=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
-```
-
-**Description:**
-
-`SetFieldValue` assigns an integer value with the specified field name to the `columnID` in the given `frame`.
-
-**Result Type:** null
-
-SetFieldValue returns `null` upon success.
-
-**Examples:**
-
-Set the number of pull requests of repository 10.
-```
-SetFieldValue(col=10, frame="stats", pullrequests=2)
-```
