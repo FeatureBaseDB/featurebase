@@ -10,8 +10,6 @@ var _ pilosa.SystemInfo = NewSystemInfo()
 
 // SystemInfo is an implementation of pilosa.SystemInfo that uses gopsutil to collect information about the host OS
 type SystemInfo struct {
-	hostInfo  *host.InfoStat
-	memInfo   *mem.VirtualMemoryStat
 	platform  string
 	family    string
 	osVersion string
@@ -19,13 +17,23 @@ type SystemInfo struct {
 
 // Uptime returns the system uptime in seconds
 func (s *SystemInfo) Uptime() (uptime uint64, err error) {
-	if s.hostInfo == nil {
-		s.hostInfo, err = host.Info()
+	hostInfo, err := host.Info()
+	if err != nil {
+		return 0, err
+	}
+	return hostInfo.Uptime, nil
+}
+
+// collectPlatformInfo fetches and caches system platform information
+func (s *SystemInfo) collectPlatformInfo() error {
+	var err error
+	if s.platform == "" {
+		s.platform, s.family, s.osVersion, err = host.PlatformInformation()
 		if err != nil {
-			return 0, err
+			return err
 		}
 	}
-	return s.hostInfo.Uptime, nil
+	return nil
 }
 
 // Uptime returns the system platform
@@ -55,54 +63,31 @@ func (s *SystemInfo) OSVersion() (string, error) {
 	return s.osVersion, err
 }
 
-// collectPlatformInfo fetches and caches system platform information
-func (s *SystemInfo) collectPlatformInfo() error {
-	var err error
-	if s.platform == "" {
-		s.platform, s.family, s.osVersion, err = host.PlatformInformation()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// collectMemoryInfo fetches and caches memory stats
-func (s *SystemInfo) collectMemoryInfo() (err error) {
-	if s.memInfo == nil {
-		s.memInfo, err = mem.VirtualMemory()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // MemFree returns the amount of free memory in bytes
 func (s *SystemInfo) MemFree() (uint64, error) {
-	err := s.collectMemoryInfo()
+	memInfo, err := mem.VirtualMemory()
 	if err != nil {
 		return 0, err
 	}
-	return s.memInfo.Free, err
+	return memInfo.Free, err
 }
 
 // MemFree returns the amount of total memory in bytes
 func (s *SystemInfo) MemTotal() (uint64, error) {
-	err := s.collectMemoryInfo()
+	memInfo, err := mem.VirtualMemory()
 	if err != nil {
 		return 0, err
 	}
-	return s.memInfo.Total, err
+	return memInfo.Total, err
 }
 
 // MemFree returns the amount of used memory in bytes
 func (s *SystemInfo) MemUsed() (uint64, error) {
-	err := s.collectMemoryInfo()
+	memInfo, err := mem.VirtualMemory()
 	if err != nil {
 		return 0, err
 	}
-	return s.memInfo.Used, err
+	return memInfo.Used, err
 }
 
 // KernelVersion returns the kernel version as a string
