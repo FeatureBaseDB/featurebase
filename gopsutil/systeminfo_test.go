@@ -28,7 +28,7 @@ func TestSystemInfo(t *testing.T) {
 
 	platform, err := systemInfo.Platform()
 	if err != nil || platform != runtime.GOOS {
-		t.Fatalf("Platform must be %s. (error: %v)", runtime.GOOS, err)
+		t.Fatalf("Platform must be %s. (platform: %v, error: %v)", platform, runtime.GOOS, err)
 	}
 
 	family, err := systemInfo.Family()
