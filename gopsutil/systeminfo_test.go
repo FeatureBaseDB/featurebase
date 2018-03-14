@@ -2,7 +2,6 @@ package gopsutil_test
 
 import (
 	"log"
-	"runtime"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -27,8 +26,8 @@ func TestSystemInfo(t *testing.T) {
 	}
 
 	platform, err := systemInfo.Platform()
-	if err != nil || platform != runtime.GOOS {
-		t.Fatalf("Platform must be %s. (platform: %v, error: %v)", platform, runtime.GOOS, err)
+	if err != nil {
+		t.Fatalf("Error getting platform. (platform: %v, error: %v)", platform, err)
 	}
 
 	family, err := systemInfo.Family()
