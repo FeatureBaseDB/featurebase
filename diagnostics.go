@@ -38,7 +38,7 @@ type versionResponse struct {
 	Message string `json:"message"`
 }
 
-// DiagnosticsCollector represents a collector/sender of diagnostics data
+// DiagnosticsCollector represents a collector/sender of diagnostics data.
 type DiagnosticsCollector struct {
 	mu          sync.Mutex
 	host        string
@@ -57,9 +57,8 @@ type DiagnosticsCollector struct {
 	server *Server
 }
 
-// New returns a pointer to a new DiagnosticsCollector Client given an addr in the format "hostname:port".
+// NewDiagnosticsCollector returns a new DiagnosticsCollector given an addr in the format "hostname:port".
 func NewDiagnosticsCollector(host string) *DiagnosticsCollector {
-
 	return &DiagnosticsCollector{
 		host:       host,
 		VersionURL: defaultVersionCheckURL,
@@ -118,7 +117,7 @@ func (d *DiagnosticsCollector) CheckVersion() error {
 		return fmt.Errorf("json decode: %s", err)
 	}
 
-	// Same a version as last test
+	// If version has not changed since the last check, return
 	if rsp.Version == d.lastVersion {
 		return nil
 	}
@@ -133,8 +132,8 @@ func (d *DiagnosticsCollector) CheckVersion() error {
 
 // compareVersion check version strings.
 func (d *DiagnosticsCollector) compareVersion(value string) error {
-	currentVersion := VersionSegments(value)
-	localVersion := VersionSegments(d.version)
+	currentVersion := versionSegments(value)
+	localVersion := versionSegments(d.version)
 
 	if localVersion[0] < currentVersion[0] { //Major
 		return fmt.Errorf("Warning: You are running Pilosa %s. A newer version (%s) is available: https://github.com/pilosa/pilosa/releases", d.version, value)
@@ -249,8 +248,8 @@ func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 	d.Set("TimeQuantumEnabled", timeQuantumEnabled)
 }
 
-// VersionSegments returns the numeric segments of the version as a slice of ints.
-func VersionSegments(segments string) []int {
+// versionSegments returns the numeric segments of the version as a slice of ints.
+func versionSegments(segments string) []int {
 	segments = strings.Trim(segments, "v")
 	segments = strings.Split(segments, "-")[0]
 	s := strings.Split(segments, ".")
@@ -261,7 +260,7 @@ func VersionSegments(segments string) []int {
 	return segmentSlice
 }
 
-// SystemInfo collects information about the host OS
+// SystemInfo collects information about the host OS.
 type SystemInfo interface {
 	Uptime() (uint64, error)
 	Platform() (string, error)
@@ -273,51 +272,51 @@ type SystemInfo interface {
 	MemUsed() (uint64, error)
 }
 
-// NewNopSystemInfo creates a no-op implementation of SystemInfo
+// NewNopSystemInfo creates a no-op implementation of SystemInfo.
 func NewNopSystemInfo() *NopSystemInfo {
 	return &NopSystemInfo{}
 }
 
-// NopSystemInfo is a no-op implementation of SystemInfo
+// NopSystemInfo is a no-op implementation of SystemInfo.
 type NopSystemInfo struct {
 }
 
-// Uptime is a no-op implementation of SystemInfo.Uptime
+// Uptime is a no-op implementation of SystemInfo.Uptime.
 func (n *NopSystemInfo) Uptime() (uint64, error) {
 	return 0, nil
 }
 
-// Platform is a no-op implementation of SystemInfo.Platform
+// Platform is a no-op implementation of SystemInfo.Platform.
 func (n *NopSystemInfo) Platform() (string, error) {
 	return "", nil
 }
 
-// Family is a no-op implementation of SystemInfo.Family
+// Family is a no-op implementation of SystemInfo.Family.
 func (n *NopSystemInfo) Family() (string, error) {
 	return "", nil
 }
 
-// OSVersion is a no-op implementation of SystemInfo.OSVersion
+// OSVersion is a no-op implementation of SystemInfo.OSVersion.
 func (n *NopSystemInfo) OSVersion() (string, error) {
 	return "", nil
 }
 
-// KernelVersion is a no-op implementation of SystemInfo.KernelVersion
+// KernelVersion is a no-op implementation of SystemInfo.KernelVersion.
 func (n *NopSystemInfo) KernelVersion() (string, error) {
 	return "", nil
 }
 
-// MemFree is a no-op implementation of SystemInfo.MemFree
+// MemFree is a no-op implementation of SystemInfo.MemFree.
 func (n *NopSystemInfo) MemFree() (uint64, error) {
 	return 0, nil
 }
 
-// MemTotal is a no-op implementation of SystemInfo.MemTotal
+// MemTotal is a no-op implementation of SystemInfo.MemTotal.
 func (n *NopSystemInfo) MemTotal() (uint64, error) {
 	return 0, nil
 }
 
-// MemUsed is a no-op implementation of SystemInfo.MemUsed
+// MemUsed is a no-op implementation of SystemInfo.MemUsed.
 func (n *NopSystemInfo) MemUsed() (uint64, error) {
 	return 0, nil
 }

@@ -8,14 +8,14 @@ import (
 
 var _ pilosa.SystemInfo = NewSystemInfo()
 
-// SystemInfo is an implementation of pilosa.SystemInfo that uses gopsutil to collect information about the host OS
+// SystemInfo is an implementation of pilosa.SystemInfo that uses gopsutil to collect information about the host OS.
 type SystemInfo struct {
 	platform  string
 	family    string
 	osVersion string
 }
 
-// Uptime returns the system uptime in seconds
+// Uptime returns the system uptime in seconds.
 func (s *SystemInfo) Uptime() (uptime uint64, err error) {
 	hostInfo, err := host.Info()
 	if err != nil {
@@ -24,7 +24,7 @@ func (s *SystemInfo) Uptime() (uptime uint64, err error) {
 	return hostInfo.Uptime, nil
 }
 
-// collectPlatformInfo fetches and caches system platform information
+// collectPlatformInfo fetches and caches system platform information.
 func (s *SystemInfo) collectPlatformInfo() error {
 	var err error
 	if s.platform == "" {
@@ -36,7 +36,7 @@ func (s *SystemInfo) collectPlatformInfo() error {
 	return nil
 }
 
-// Uptime returns the system platform
+// Platform returns the system platform.
 func (s *SystemInfo) Platform() (string, error) {
 	err := s.collectPlatformInfo()
 	if err != nil {
@@ -45,7 +45,7 @@ func (s *SystemInfo) Platform() (string, error) {
 	return s.platform, nil
 }
 
-// Family returns the system family
+// Family returns the system family.
 func (s *SystemInfo) Family() (string, error) {
 	err := s.collectPlatformInfo()
 	if err != nil {
@@ -54,7 +54,7 @@ func (s *SystemInfo) Family() (string, error) {
 	return s.family, err
 }
 
-// OSVersion returns the OS Version
+// OSVersion returns the OS Version.
 func (s *SystemInfo) OSVersion() (string, error) {
 	err := s.collectPlatformInfo()
 	if err != nil {
@@ -63,7 +63,7 @@ func (s *SystemInfo) OSVersion() (string, error) {
 	return s.osVersion, err
 }
 
-// MemFree returns the amount of free memory in bytes
+// MemFree returns the amount of free memory in bytes.
 func (s *SystemInfo) MemFree() (uint64, error) {
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
@@ -72,7 +72,7 @@ func (s *SystemInfo) MemFree() (uint64, error) {
 	return memInfo.Free, err
 }
 
-// MemFree returns the amount of total memory in bytes
+// MemTotal returns the amount of total memory in bytes.
 func (s *SystemInfo) MemTotal() (uint64, error) {
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
@@ -81,7 +81,7 @@ func (s *SystemInfo) MemTotal() (uint64, error) {
 	return memInfo.Total, err
 }
 
-// MemFree returns the amount of used memory in bytes
+// MemUsed returns the amount of used memory in bytes.
 func (s *SystemInfo) MemUsed() (uint64, error) {
 	memInfo, err := mem.VirtualMemory()
 	if err != nil {
@@ -90,12 +90,12 @@ func (s *SystemInfo) MemUsed() (uint64, error) {
 	return memInfo.Used, err
 }
 
-// KernelVersion returns the kernel version as a string
+// KernelVersion returns the kernel version as a string.
 func (s *SystemInfo) KernelVersion() (string, error) {
 	return host.KernelVersion()
 }
 
-// NewSystemInfo is a constructor for the gopsutil implementation of SystemInfo
+// NewSystemInfo is a constructor for the gopsutil implementation of SystemInfo.
 func NewSystemInfo() *SystemInfo {
 	return &SystemInfo{}
 }

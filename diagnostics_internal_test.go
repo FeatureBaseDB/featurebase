@@ -69,7 +69,7 @@ func TestDiagnosticsClient(t *testing.T) {
 
 func TestDiagnosticsVersion_Parse(t *testing.T) {
 	version := "0.1.1"
-	vs := VersionSegments(version)
+	vs := versionSegments(version)
 
 	output := []int{0, 1, 1}
 	if !reflect.DeepEqual(vs, output) {
