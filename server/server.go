@@ -34,6 +34,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gcnotify"
+	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statsd"
 )
@@ -152,6 +153,7 @@ func (m *Command) SetupServer() error {
 	if m.Config.Metric.Diagnostics {
 		m.Server.DiagnosticInterval = time.Duration(DefaultDiagnosticsInterval)
 	}
+	m.Server.SystemInfo = gopsutil.NewSystemInfo()
 	m.Server.GCNotifier = gcnotify.NewActiveGCNotifier()
 	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
 	if err != nil {
