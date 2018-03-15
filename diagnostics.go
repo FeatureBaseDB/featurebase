@@ -91,13 +91,8 @@ func (d *DiagnosticsCollector) Flush() error {
 	if err != nil {
 		return err
 	}
+	// Intentionally ignoring response body, as user does not need to be notified of error.
 	defer resp.Body.Close()
-
-	// TODO verify response
-	_, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
