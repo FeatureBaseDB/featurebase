@@ -148,6 +148,13 @@ func (d *DiagnosticsCollector) encode() ([]byte, error) {
 
 // Set adds a key value metric.
 func (d *DiagnosticsCollector) Set(name string, value interface{}) {
+	switch v := value.(type) {
+	case string:
+		if v == "" {
+			// Do not set empty string
+			return
+		}
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.metrics[name] = value
