@@ -207,7 +207,7 @@ SetFieldValue returns `null` upon success.
 
 Set the number of pull requests of repository 10.
 ```
-SetFieldValue(col=10, frame="stats", pullrequests=2)
+SetFieldValue(columnID=10, frame="stats", pullrequests=2)
 ```
 
 
