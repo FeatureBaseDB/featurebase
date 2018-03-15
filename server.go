@@ -610,7 +610,7 @@ func (s *Server) monitorDiagnostics() {
 		s.Logger().Printf("diagnostics disabled")
 		return
 	} else {
-		s.Logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every hour. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics")
+		s.Logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.DiagnosticInterval)
 	}
 
 	s.diagnostics.SetLogger(s.LogOutput)
