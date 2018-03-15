@@ -537,7 +537,7 @@ Sum([BITMAP_CALL], <frame=STRING>, <field=STRING>)
 
 **Description:**
 
-Returns the count and computed sum of all BSI integer values across the `field` in this `frame`. The optional `Bitmap` call filters the bits used in this computation.
+Returns the count and computed sum of all BSI integer values in the `field` in this `frame`. If the optional `Bitmap` call is supplied, columns with set bits are summed, otherwise the sum is across all columns.
 
 **Result Type:** object with the computed sum and count of the bitmap field.
 
