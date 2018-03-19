@@ -13,7 +13,7 @@ nav = [
 
 ### Overview
 
-This section will provide a detailed reference and examples for the Pilosa Query Language (PQL). All PQL queries operate on a single [index](../glossary#index) and are passed to Pilosa through the `/index/INDEX_NAME/query` endpoint. You may pass multiple PQL queries in a single request by simply concatenating the queries together - a space is not needed. The results format is always:
+This section will provide a detailed reference and examples for the Pilosa Query Language (PQL). All PQL queries operate on a single [index](../glossary/#index) and are passed to Pilosa through the `/index/INDEX_NAME/query` endpoint. You may pass multiple PQL queries in a single request by simply concatenating the queries together - a space is not needed. The results format is always:
 
 ```
 {"results":[...]}
@@ -45,7 +45,7 @@ curl localhost:10101/index/repository/query \
 
 #### Arguments and Types
 
-* `frame` The frame specifies on which Pilosa [frame](../glossary#frame) the query will operate. Valid frame names are lower case strings; they start with an alphanumeric character, and contain only alphanumeric characters and `_-`. They must be 64 characters or less in length.
+* `frame` The frame specifies on which Pilosa [frame](../glossary/#frame) the query will operate. Valid frame names are lower case strings; they start with an alphanumeric character, and contain only alphanumeric characters and `_-`. They must be 64 characters or less in length.
 * `ROW_LABEL` The default row label is `rowID`, changing the default is deprecated.
 * `COL_LABEL` The default column label is `columnID`, changing the default is deprecated.
 * `TIMESTAMP` This is a timestamp in quotes with the following format `"YYYY-MM-DDTHH:MM"` (e.g. "2006-01-02T15:04")
@@ -118,7 +118,7 @@ SetRowAttrs queries always return `null` upon success.
 SetRowAttrs(frame="stargazer", rowID=10, username="mrpi", active=true)
 ```
 
-Set username value and active status for user 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a row with a [Bitmap](../query-language#bitmap) query like so `Bitmap(frame="stargazer", stargazer_id=10)`.
+Set username value and active status for user 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a row with a [Bitmap](../query-language/#bitmap) query like so `Bitmap(frame="stargazer", stargazer_id=10)`.
 
 ```
 SetRowAttrs(frame="stargazer", rowID=10, username=null)
@@ -150,7 +150,7 @@ SetColumnAttrs queries always return `null` upon success. Setting a value of `nu
 SetColumnAttrs(columnID=10, stars=123, url="http://projects.pilosa.com/10", active=true)
 ```
 
-Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap](../query-language#bitmap) query like so `Bitmap(frame="stargazer", columnID=10)`.
+Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap](../query-language/#bitmap) query like so `Bitmap(frame="stargazer", columnID=10)`.
 
 ```
 SetColumnAttrs(columnID=10, url=null)
