@@ -60,7 +60,7 @@ nav = []
 
 <strong id="time-quantum">[Time quantum](../data-model/#time-quantum):</strong> Defines the granularity to be used for time [Range](#range) queries.
 
-<strong id="toml">[TOML](https://github.com/toml-lang/toml):</strong> the language used for Pilosa's [configuration file](../configuration).
+<strong id="toml">[TOML](https://github.com/toml-lang/toml):</strong> the language used for Pilosa's [configuration file](../configuration/).
 
 <strong id="topn">[TopN](../query-language/#topn):</strong> A [PQL](#pql) query that returns a list of `RowID`s, sorted by the count of [bits](#bit) set in the [row](#row), within a specified [frame](#frame).
 
