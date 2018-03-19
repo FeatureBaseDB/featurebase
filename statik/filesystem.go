@@ -16,7 +16,6 @@
 //
 // Package statik contains static assets for the Web UI. `go generate` or
 // `make generate-statik` will produce statik.go, which is ignored by git.
-
 package statik
 
 import (
