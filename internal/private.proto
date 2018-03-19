@@ -136,11 +136,17 @@ message URI {
 message Node {
     string ID = 1;
     URI URI = 2;
+    bool IsCoordinator = 3;
 }
 
 message NodeStateMessage {
     string NodeID = 1;
     string State = 2;
+}
+
+message NodeEventMessage {
+    uint32 Event = 1;
+    Node Node = 2;
 }
 
 message NodeStatus {
@@ -198,6 +204,10 @@ message ResizeInstructionComplete {
 }
 
 message SetCoordinatorMessage {
+    Node New = 1;
+}
+
+message UpdateCoordinatorMessage {
     Node New = 1;
 }
 

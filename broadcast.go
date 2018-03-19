@@ -35,18 +35,14 @@ type StaticMemberSet struct {
 }
 
 // NewStaticMemberSet creates a statically defined MemberSet.
-func NewStaticMemberSet() *StaticMemberSet {
-	return &StaticMemberSet{}
+func NewStaticMemberSet(nodes []*Node) *StaticMemberSet {
+	return &StaticMemberSet{
+		nodes: nodes,
+	}
 }
 
 // Open implements the MemberSet interface to start network activity, but for a static MemberSet it does nothing.
 func (s *StaticMemberSet) Open(n *Node) error {
-	return nil
-}
-
-// Join sets the MemberSet nodes to the slice of Nodes passed in.
-func (s *StaticMemberSet) Join(nodes []*Node) error {
-	s.nodes = nodes
 	return nil
 }
 
@@ -67,17 +63,17 @@ var NopBroadcaster Broadcaster
 
 type nopBroadcaster struct{}
 
-// SendSync A no-op implemenetation of Broadcaster SendSync method.
+// SendSync A no-op implementation of Broadcaster SendSync method.
 func (n *nopBroadcaster) SendSync(pb proto.Message) error {
 	return nil
 }
 
-// SendAsync A no-op implemenetation of Broadcaster SendAsync method.
+// SendAsync A no-op implementation of Broadcaster SendAsync method.
 func (n *nopBroadcaster) SendAsync(pb proto.Message) error {
 	return nil
 }
 
-// SendTo is a no-op implemenetation of Broadcaster SendTo method.
+// SendTo is a no-op implementation of Broadcaster SendTo method.
 func (c *nopBroadcaster) SendTo(to *Node, pb proto.Message) error {
 	return nil
 }
@@ -116,7 +112,7 @@ var NopGossiper Gossiper
 
 type nopGossiper struct{}
 
-// SendAsync A no-op implemenetation of Gossiper SendAsync method.
+// SendAsync A no-op implementation of Gossiper SendAsync method.
 func (n *nopGossiper) SendAsync(pb proto.Message) error {
 	return nil
 }
@@ -138,8 +134,10 @@ const (
 	MessageTypeResizeInstruction
 	MessageTypeResizeInstructionComplete
 	MessageTypeSetCoordinator
+	MessageTypeUpdateCoordinator
 	MessageTypeNodeState
 	MessageTypeRecalculateCaches
+	MessageTypeNodeEvent
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
@@ -176,10 +174,14 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeResizeInstructionComplete
 	case *internal.SetCoordinatorMessage:
 		typ = MessageTypeSetCoordinator
+	case *internal.UpdateCoordinatorMessage:
+		typ = MessageTypeUpdateCoordinator
 	case *internal.NodeStateMessage:
 		typ = MessageTypeNodeState
 	case *internal.RecalculateCaches:
 		typ = MessageTypeRecalculateCaches
+	case *internal.NodeEventMessage:
+		typ = MessageTypeNodeEvent
 	default:
 		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
 	}
@@ -226,10 +228,14 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.ResizeInstructionComplete{}
 	case MessageTypeSetCoordinator:
 		m = &internal.SetCoordinatorMessage{}
+	case MessageTypeUpdateCoordinator:
+		m = &internal.UpdateCoordinatorMessage{}
 	case MessageTypeNodeState:
 		m = &internal.NodeStateMessage{}
 	case MessageTypeRecalculateCaches:
 		m = &internal.RecalculateCaches{}
+	case MessageTypeNodeEvent:
+		m = &internal.NodeEventMessage{}
 	default:
 		return nil, fmt.Errorf("invalid message type: %d", typ)
 	}

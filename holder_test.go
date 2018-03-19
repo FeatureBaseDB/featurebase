@@ -338,37 +338,6 @@ func TestHolder_HasData(t *testing.T) {
 	})
 }
 
-/*
-func TestHolder_Schema(t *testing.T) {
-	t.Run("Schema", func(t *testing.T) {
-		h := test.MustOpenHolder()
-		defer h.Close()
-
-		if idx, err := h.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		} else if frame, err := idx.CreateFrame("f", pilosa.FrameOptions{}); err != nil {
-			t.Fatal(err)
-		} else if view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
-			t.Fatal(err)
-		} else if _, err := view.SetBit(0, 0); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Chmod(filepath.Join(h.Path, "i", "f", "views", "standard", "fragments", "0"), 0000); err != nil {
-			t.Fatal(err)
-		}
-		fmt.Printf("%v\n", h.Schema())
-		defer os.Chmod(filepath.Join(h.Path, "i", "f", "views", "standard", "fragments", "0"), 0666)
-
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-
-		t.Fatalf("STOPPER")
-	})
-}
-*/
-
 // Ensure holder can delete an index and its underlying files.
 func TestHolder_DeleteIndex(t *testing.T) {
 	hldr := test.MustOpenHolder()

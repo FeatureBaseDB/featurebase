@@ -49,7 +49,7 @@ func NewCluster(n int) *pilosa.Cluster {
 	}
 
 	c.Node = c.Nodes[0]
-	c.Coordinator = c.Nodes[0].URI
+	c.Coordinator = c.Nodes[0].ID
 
 	return c
 }
@@ -260,9 +260,9 @@ func (t *TestCluster) addCluster(i int, saveTopology bool) (*pilosa.Cluster, err
 	c.Path = path
 	c.Topology = pilosa.NewTopology()
 	c.Holder = h
-	c.MemberSet = pilosa.NewStaticMemberSet()
+	c.MemberSet = pilosa.NewStaticMemberSet(c.Nodes)
 	c.Node = node
-	c.Coordinator = t.common.Nodes[0].URI // the first node is the coordinator
+	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
 	c.Broadcaster = t
 
 	// add nodes

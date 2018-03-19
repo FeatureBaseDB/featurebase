@@ -34,6 +34,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gcnotify"
+	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statik"
 	"github.com/pilosa/pilosa/statsd"
@@ -153,6 +154,7 @@ func (m *Command) SetupServer() error {
 	if m.Config.Metric.Diagnostics {
 		m.Server.DiagnosticInterval = time.Duration(DefaultDiagnosticsInterval)
 	}
+	m.Server.SystemInfo = gopsutil.NewSystemInfo()
 	m.Server.GCNotifier = gcnotify.NewActiveGCNotifier()
 	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
 	if err != nil {
@@ -182,10 +184,7 @@ func (m *Command) SetupServer() error {
 			InsecureSkipVerify: m.Config.TLS.SkipVerify,
 		}
 
-		// TODO Review this location
-
 		TLSConfig = m.Server.TLS
-
 	}
 	c := pilosa.GetHTTPClient(TLSConfig)
 	m.Server.RemoteClient = c
@@ -195,21 +194,6 @@ func (m *Command) SetupServer() error {
 	// Statik file system.
 	m.Server.Handler.FileSystem = &statik.FileSystem{}
 
-	// Default coordintor to port 0 when not specified so that coordinator
-	// can be set to the value of server.URI after server binds to a port.
-	// This would only be useful in a one-node cluster.
-	coord := m.Config.Cluster.Coordinator
-	if coord == "" {
-		coord = ":0"
-	}
-
-	// Set the coordinator node.
-	curi, err := pilosa.AddressWithDefaults(coord)
-	if err != nil {
-		return err
-	}
-	m.Server.Cluster.Coordinator = *curi
-
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
 	m.Server.Cluster.LongQueryTime = time.Duration(m.Config.Cluster.LongQueryTime)
@@ -218,8 +202,12 @@ func (m *Command) SetupServer() error {
 
 // SetupNetworking sets up internode communication based on the configuration.
 func (m *Command) SetupNetworking() error {
+
+	m.Server.NodeID = m.Server.LoadNodeID()
+
 	if m.Config.Cluster.Disabled {
 		m.Server.Cluster.Static = true
+		m.Server.Cluster.Coordinator = m.Server.NodeID
 		for _, address := range m.Config.Cluster.Hosts {
 			uri, err := pilosa.NewURIFromAddress(address)
 			if err != nil {
@@ -231,13 +219,9 @@ func (m *Command) SetupNetworking() error {
 		}
 
 		m.Server.Broadcaster = pilosa.NopBroadcaster
-		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet()
+		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet(m.Server.Cluster.Nodes)
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
 		m.Server.Gossiper = pilosa.NopGossiper
-		err := m.Server.Cluster.MemberSet.(*pilosa.StaticMemberSet).Join(m.Server.Cluster.Nodes)
-		if err != nil {
-			return err
-		}
 		return nil
 	}
 
@@ -264,7 +248,10 @@ func (m *Command) SetupNetworking() error {
 		}
 	}
 
-	m.Server.NodeID = m.Server.LoadNodeID()
+	// Set Coordinator.
+	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
+		m.Server.Cluster.Coordinator = m.Server.NodeID
+	}
 
 	m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m.Server.LogOutput)
 	gossipMemberSet, err := gossip.NewGossipMemberSetWithTransport(m.Server.NodeID, m.Config, transport, m.Server)

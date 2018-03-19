@@ -14,6 +14,9 @@
 
 package pilosa
 
+// Ensure nopGCNotifier implements interface.
+var _ GCNotifier = &nopGCNotifier{}
+
 // GCNotifier represents an interface for garbage collection notificationss.
 type GCNotifier interface {
 	Close()
@@ -29,10 +32,10 @@ var NopGCNotifier GCNotifier
 
 type nopGCNotifier struct{}
 
-// Close is a no-op implemenetation of GCNotifier Close method.
+// Close is a no-op implementation of GCNotifier Close method.
 func (n *nopGCNotifier) Close() {}
 
-// AfterGC is a no-op implemenetation of GCNotifier AfterGC method.
+// AfterGC is a no-op implementation of GCNotifier AfterGC method.
 func (c *nopGCNotifier) AfterGC() <-chan struct{} {
 	return nil
 }

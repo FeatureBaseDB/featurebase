@@ -139,7 +139,7 @@ type Config struct {
 
 	Cluster struct {
 		Disabled      bool     `toml:"disabled"`
-		Coordinator   string   `toml:"coordinator"`
+		Coordinator   bool     `toml:"coordinator"`
 		ReplicaN      int      `toml:"replicas"`
 		Hosts         []string `toml:"hosts"`
 		LongQueryTime Duration `toml:"long-query-time"`
@@ -183,7 +183,7 @@ func NewConfig() *Config {
 
 	// Cluster config.
 	c.Cluster.Disabled = DefaultClusterDisabled
-	// c.Cluster.Coordinator = ""
+	// c.Cluster.Coordinator = false
 	c.Cluster.ReplicaN = DefaultReplicaN
 	c.Cluster.Hosts = []string{}
 	c.Cluster.LongQueryTime = Duration(time.Minute)

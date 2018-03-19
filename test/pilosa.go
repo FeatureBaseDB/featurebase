@@ -65,9 +65,10 @@ func NewMain() *Main {
 }
 
 // NewMainWithCluster returns a new instance of Main with clustering enabled.
-func NewMainWithCluster() *Main {
+func NewMainWithCluster(isCoordinator bool) *Main {
 	m := NewMain()
 	m.Config.Cluster.Disabled = false
+	m.Config.Cluster.Coordinator = isCoordinator
 	return m
 }
 
@@ -94,12 +95,11 @@ func runMainWithCluster(size int) ([]*Main, error) {
 	gossipPort := 0
 	var err error
 	var gossipSeeds = make([]string, size)
-	var coordinator pilosa.URI
 
 	for i := 0; i < size; i++ {
-		m := NewMainWithCluster()
+		m := NewMainWithCluster(i == 0)
 
-		gossipSeeds[i], coordinator, err = m.RunWithTransport(gossipHost, gossipPort, gossipSeeds[:i], coordinator)
+		gossipSeeds[i], err = m.RunWithTransport(gossipHost, gossipPort, gossipSeeds[:i])
 		if err != nil {
 			return nil, errors.Wrap(err, "RunWithTransport")
 		}
@@ -146,7 +146,7 @@ func (m *Main) Reopen() error {
 }
 
 // RunWithTransport runs Main and returns the dynamically allocated gossip port.
-func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string, coordinator pilosa.URI) (seed string, coord pilosa.URI, err error) {
+func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (seed string, err error) {
 	defer close(m.Started)
 
 	/*
@@ -166,19 +166,19 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string, c
 	// SetupServer
 	err = m.SetupServer()
 	if err != nil {
-		return seed, coord, err
+		return seed, err
 	}
 
 	// Open server listener.
 	err = m.Server.OpenListener()
 	if err != nil {
-		return seed, coord, err
+		return seed, err
 	}
 
 	// Open gossip transport to use in SetupServer.
 	transport, err := gossip.NewTransport(host, bindPort)
 	if err != nil {
-		return seed, coord, err
+		return seed, err
 	}
 	m.GossipTransport = transport
 
@@ -193,23 +193,22 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string, c
 	// SetupNetworking
 	err = m.SetupNetworking()
 	if err != nil {
-		return seed, coord, err
+		return seed, err
 	}
 
 	if err = m.Server.BroadcastReceiver.Start(m.Server); err != nil {
-		return seed, coord, err
+		return seed, err
 	}
 
-	m.Server.Cluster.Coordinator = coordinator
 	m.Server.Cluster.Static = false
 
 	// Initialize server.
 	err = m.Server.Open()
 	if err != nil {
-		return seed, coord, err
+		return seed, err
 	}
 
-	return seed, m.Server.Cluster.Coordinator, nil
+	return seed, nil
 }
 
 // URL returns the base URL string for accessing the running program.

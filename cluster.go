@@ -66,15 +66,16 @@ const (
 
 // Node represents a node in the cluster.
 type Node struct {
-	ID  string `json:"id"`
-	URI URI    `json:"uri"`
+	ID            string `json:"id"`
+	URI           URI    `json:"uri"`
+	IsCoordinator bool   `json:"isCoordinator"`
 }
 
 func (n Node) String() string {
 	return fmt.Sprintf("Node: %s", n.ID)
 }
 
-// EncodeNodes converts a into its internal representation.
+// EncodeNodes converts a slice of Nodes into its internal representation.
 func EncodeNodes(a []*Node) []*internal.Node {
 	other := make([]*internal.Node, len(a))
 	for i := range a {
@@ -83,14 +84,16 @@ func EncodeNodes(a []*Node) []*internal.Node {
 	return other
 }
 
-// EncodeNode converts n into its internal representation.
+// EncodeNode converts a Node into its internal representation.
 func EncodeNode(n *Node) *internal.Node {
 	return &internal.Node{
-		ID:  n.ID,
-		URI: n.URI.Encode(),
+		ID:            n.ID,
+		URI:           n.URI.Encode(),
+		IsCoordinator: n.IsCoordinator,
 	}
 }
 
+// DecodeNodes converts a proto message into a slice of Nodes.
 func DecodeNodes(a []*internal.Node) []*Node {
 	if len(a) == 0 {
 		return nil
@@ -102,10 +105,19 @@ func DecodeNodes(a []*internal.Node) []*Node {
 	return other
 }
 
+// DecodeNode converts a proto message into a Node.
 func DecodeNode(node *internal.Node) *Node {
 	return &Node{
-		ID:  node.ID,
-		URI: decodeURI(node.URI),
+		ID:            node.ID,
+		URI:           decodeURI(node.URI),
+		IsCoordinator: node.IsCoordinator,
+	}
+}
+
+func DecodeNodeEvent(ne *internal.NodeEventMessage) *NodeEvent {
+	return &NodeEvent{
+		Event: NodeEventType(ne.Event),
+		Node:  DecodeNode(ne.Node),
 	}
 }
 
@@ -236,7 +248,7 @@ type Cluster struct {
 	// Required for cluster Resize.
 	Static      bool // Static is primarily used for testing in a non-gossip environment.
 	state       string
-	Coordinator URI
+	Coordinator string
 	Holder      *Holder
 	Broadcaster Broadcaster
 
@@ -289,34 +301,70 @@ func (c *Cluster) logger() *log.Logger {
 
 // Coordinator returns the coordinator node.
 func (c *Cluster) CoordinatorNode() *Node {
-	return c.nodeByURI(c.Coordinator)
+	return c.nodeByID(c.Coordinator)
 }
 
 // IsCoordinator is true if this node is the coordinator.
 func (c *Cluster) IsCoordinator() bool {
-	return c.Static || c.Coordinator == c.Node.URI
+	return c.Coordinator == c.Node.ID
 }
 
-// SetCoordinator updates the Coordinator to n.
-// Returns true if the Coordinator changed.
-func (c *Cluster) SetCoordinator(n *Node) bool {
-	// Get new node.
-	newNode := c.nodeByID(n.ID)
-	if newNode == nil {
-		return false
+// SetCoordinator tells the current node to become the
+// Coordinator. In response to this, the current node
+// will consider itself coordinator and update the other
+// nodes with its version of Cluster.Status.
+func (c *Cluster) SetCoordinator(n *Node) error {
+	// Verify that the new Coordinator value matches
+	// this node.
+	if c.Node.ID != n.ID {
+		return fmt.Errorf("coordinator node does not match this node")
 	}
 
-	if c.Coordinator != newNode.URI {
-		c.Coordinator = newNode.URI
-		return true
+	// Update IsCoordinator on all nodes (locally).
+	_ = c.UpdateCoordinator(n)
+
+	// Send the update coordinator message to all nodes.
+	err := c.Broadcaster.SendSync(
+		&internal.UpdateCoordinatorMessage{
+			New: EncodeNode(n),
+		})
+	if err != nil {
+		return fmt.Errorf("problem sending UpdateCoordinator message: %v", err)
 	}
-	return false
+
+	// Broadcast cluster status.
+	return c.Broadcaster.SendSync(c.Status())
+}
+
+// UpdateCoordinator updates this nodes Coordinator value as well as
+// changing the corresponding node's IsCoordinator value
+// to true, and sets all other nodes to false. Returns true if the value
+// changed.
+func (c *Cluster) UpdateCoordinator(n *Node) bool {
+	var changed bool
+	if c.Coordinator != n.ID {
+		c.Coordinator = n.ID
+		changed = true
+	}
+	for _, node := range c.Nodes {
+		if node.ID == n.ID {
+			node.IsCoordinator = true
+		} else {
+			node.IsCoordinator = false
+		}
+	}
+	return changed
 }
 
 // AddNode adds a node to the Cluster and updates and saves the
 // new topology.
 func (c *Cluster) AddNode(node *Node) error {
 	c.logger().Printf("add node %s to cluster on %s", node, c.Node)
+
+	// If the node being added is the coordinator, set it for this node.
+	if node.IsCoordinator {
+		c.Coordinator = node.ID
+	}
 
 	// add to cluster
 	if !c.addNodeBasicSorted(node) {
@@ -737,7 +785,7 @@ func (c *Cluster) fragSources(to *Cluster, idx *Index) (map[string][]*internal.R
 			// the fragment.
 			srcNodeID, ok := srcNodesByFrag[frag]
 			if !ok {
-				return nil, errors.New("not enough data to perform resize")
+				return nil, errors.New("not enough data to perform resize (replica factor may need to be increased)")
 			}
 
 			src := &internal.ResizeSource{
@@ -887,6 +935,22 @@ func (c *Cluster) Open() error {
 
 	// If not coordinator then wait for ClusterStatus from coordinator.
 	if !c.IsCoordinator() {
+		// In the case where a node has been restarted and memberlist has
+		// not had enough time to determine the node went down/up, then
+		// the coorninator needs to be alerted that this node is back up
+		// (and now in a state of STARTING) so that it can be put to the correct
+		// cluster state.
+		// TODO: Because the normal code path already sends a NodeJoin event (via
+		// memberlist), this it a bit redundant in most cases. Perhaps determine
+		// that the node has been restarted and don't do this step.
+		msg := &internal.NodeEventMessage{
+			Event: uint32(NodeJoin),
+			Node:  EncodeNode(c.Node),
+		}
+		if err := c.Broadcaster.SendAsync(msg); err != nil {
+			return fmt.Errorf("sending restart NodeJoin: %v", err)
+		}
+
 		c.logger().Printf("wait for joining to complete")
 		<-c.joining
 		c.logger().Printf("joining has completed")
@@ -937,6 +1001,10 @@ func (c *Cluster) allNodesReady() bool {
 func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 	j, err := c.generateResizeJob(nodeAction)
 	if err != nil {
+		c.logger().Printf("generateResizeJob error: err=%s", err)
+		if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
+			c.logger().Printf("setStateAndBroadcast error: err=%s", err)
+		}
 		return err
 	}
 
@@ -998,7 +1066,13 @@ func (c *Cluster) ListenForJoins() {
 }
 
 func (c *Cluster) listenForJoins() {
-	var uriJoined bool
+	// When a cluster starts, the state is STARTING.
+	// We first want to wait for at least one node to join.
+	// Then we want to clear out the joiningLeavingNodes queue (buffered channel).
+	// Then we want to set the cluster state to NORMAL and resume processing of joiningLeavingNodes events.
+	// We use a bool `setNormal` to indicate when at least one node has joined.
+
+	var setNormal bool
 
 	for {
 
@@ -1010,13 +1084,13 @@ func (c *Cluster) listenForJoins() {
 				c.logger().Printf("handleNodeAction error: err=%s", err)
 				continue
 			}
-			uriJoined = true
+			setNormal = true
 			continue
 		default:
 		}
 
 		// Only change state to NORMAL if we have successfully added at least one host.
-		if uriJoined {
+		if setNormal {
 			// Put the cluster back to state NORMAL and broadcast.
 			if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
 				c.logger().Printf("setStateAndBroadcast error: err=%s", err)
@@ -1033,7 +1107,7 @@ func (c *Cluster) listenForJoins() {
 				c.logger().Printf("handleNodeAction error: err=%s", err)
 				continue
 			}
-			uriJoined = true
+			setNormal = true
 			continue
 		}
 	}
@@ -1658,9 +1732,11 @@ func (c *Cluster) nodeJoin(node *Node) error {
 		return nil
 	}
 
-	// Don't do anything else if the cluster already contains the node.
-	if c.nodeByID(node.ID) != nil {
-		return nil
+	// If the cluster already contains the node, just send it the cluster status.
+	// This is useful in the case where a node is restarted or temporarily leaves
+	// the cluster.
+	if node := c.nodeByID(node.ID); node != nil {
+		return c.sendTo(node, c.Status())
 	}
 
 	// If the holder does not yet contain data, go ahead and add the node.
@@ -1700,6 +1776,13 @@ func (c *Cluster) NodeLeave(node *Node) error {
 	// Prevent removing the coordinator node (this node).
 	if node.ID == c.Node.ID {
 		return fmt.Errorf("The coordinator node cannot be removed. First, make a different node the new coordinator.")
+	}
+
+	// See if resize job can be generated
+	_, err := c.generateResizeJobByAction(nodeAction{c.nodeByID(node.ID), ResizeJobActionRemove})
+
+	if err != nil {
+		return err
 	}
 
 	return c.nodeLeave(node)

@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
 
 	"golang.org/x/sync/errgroup"
@@ -70,7 +69,8 @@ type Server struct {
 	NodeID      string
 	URI         URI
 	Cluster     *Cluster
-	diagnostics *diagnostics.Diagnostics
+	diagnostics *DiagnosticsCollector
+	SystemInfo  SystemInfo
 
 	GCNotifier GCNotifier
 
@@ -100,7 +100,8 @@ func NewServer() *Server {
 		Handler:           NewHandler(),
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
-		diagnostics:       diagnostics.New(DefaultDiagnosticServer),
+		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
+		SystemInfo:        NewNopSystemInfo(),
 
 		Network: "tcp",
 
@@ -115,6 +116,7 @@ func NewServer() *Server {
 	s.logger = log.New(s.LogOutput, "", log.LstdFlags)
 
 	s.Handler.Holder = s.Holder
+	s.diagnostics.server = s
 	return s
 }
 
@@ -132,7 +134,11 @@ func (s *Server) Open() error {
 	s.NodeID = s.LoadNodeID()
 
 	// Set Cluster Node.
-	node := &Node{ID: s.NodeID, URI: s.URI}
+	node := &Node{
+		ID:            s.NodeID,
+		URI:           s.URI,
+		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
+	}
 	s.Cluster.Node = node
 
 	// Append the NodeID tag to stats.
@@ -183,11 +189,6 @@ func (s *Server) Open() error {
 	// Start the BroadcastReceiver.
 	if err := s.BroadcastReceiver.Start(s); err != nil {
 		return fmt.Errorf("starting BroadcastReceiver: %v", err)
-	}
-
-	// If a Coordinator is not specified, then default to s.URI.
-	if s.Cluster.Coordinator.Port() == 0 {
-		s.Cluster.Coordinator = s.URI
 	}
 
 	// Open Cluster management.
@@ -457,6 +458,8 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 	case *internal.SetCoordinatorMessage:
 		s.Cluster.SetCoordinator(DecodeNode(obj.New))
+	case *internal.UpdateCoordinatorMessage:
+		s.Cluster.UpdateCoordinator(DecodeNode(obj.New))
 	case *internal.NodeStateMessage:
 		err := s.Cluster.ReceiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
@@ -464,6 +467,8 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 	case *internal.RecalculateCaches:
 		s.Holder.RecalculateCaches()
+	case *internal.NodeEventMessage:
+		s.Cluster.ReceiveEvent(DecodeNodeEvent(obj))
 	}
 
 	return nil
@@ -600,15 +605,16 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 
 // monitorDiagnostics periodically polls the Pilosa Indexes for cluster info.
 func (s *Server) monitorDiagnostics() {
-	if s.DiagnosticInterval <= 0 {
+	// Do not send more than once a minute
+	if s.DiagnosticInterval < time.Minute {
 		s.Logger().Printf("diagnostics disabled")
 		return
+	} else {
+		s.Logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.DiagnosticInterval)
 	}
 
 	s.diagnostics.SetLogger(s.LogOutput)
 	s.diagnostics.SetVersion(Version)
-	s.diagnostics.SetInterval(s.DiagnosticInterval)
-	s.diagnostics.Open()
 	s.diagnostics.Set("Host", s.URI.host)
 	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
@@ -619,15 +625,18 @@ func (s *Server) monitorDiagnostics() {
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {
-		enrichDiagnosticsWithSchemaProperties(s.diagnostics, s.Holder)
 		openFiles, err := CountOpenFiles()
 		if err == nil {
 			s.diagnostics.Set("OpenFiles", openFiles)
 		}
 		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
 		s.diagnostics.EnrichWithMemoryInfo()
+		s.diagnostics.EnrichWithSchemaProperties()
 		s.diagnostics.CheckVersion()
-		s.diagnostics.Flush()
+		err = s.diagnostics.Flush()
+		if err != nil {
+			s.Logger().Printf("Diagnostics error: %s", err)
+		}
 	}
 
 	ticker := time.NewTicker(s.DiagnosticInterval)
@@ -721,40 +730,4 @@ type StatusHandler interface {
 	LocalStatus() (proto.Message, error)
 	ClusterStatus() (proto.Message, error)
 	HandleRemoteStatus(proto.Message) error
-}
-
-type diagnosticsFrameProperties struct {
-	BSIFieldCount      int
-	TimeQuantumEnabled bool
-}
-
-func enrichDiagnosticsWithSchemaProperties(d *diagnostics.Diagnostics, holder *Holder) {
-	// NOTE: this function is not in the diagnostics package, since circular imports are not allowed.
-	var numSlices uint64
-	numFrames := 0
-	numIndexes := 0
-	bsiFieldCount := 0
-	timeQuantumEnabled := false
-
-	for _, index := range holder.Indexes() {
-		numSlices += index.MaxSlice() + 1
-		numIndexes += 1
-		for _, frame := range index.Frames() {
-			numFrames += 1
-			if frame.rangeEnabled {
-				if fields, err := frame.GetFields(); err == nil {
-					bsiFieldCount += len(fields)
-				}
-			}
-			if frame.TimeQuantum() != "" {
-				timeQuantumEnabled = true
-			}
-		}
-	}
-
-	d.Set("NumIndexes", numIndexes)
-	d.Set("NumFrames", numFrames)
-	d.Set("NumSlices", numSlices)
-	d.Set("BSIFieldCount", bsiFieldCount)
-	d.Set("TimeQuantumEnabled", timeQuantumEnabled)
 }
