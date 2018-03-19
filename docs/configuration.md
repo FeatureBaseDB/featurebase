@@ -27,10 +27,10 @@ Every command line flag has a corresponding environment variable. The environmen
 
 ### Config file
 
-The config file is in the [toml format](https://github.com/toml-lang/toml) and has exactly the same options available as the flags and environment variables. Any flag which contains a dot (".") denotes nesting within the config file, so the two flags `--cluster.coordinator="localhost:10101"` and `--cluster.replicas=1` look like this in the config file:
+The config file is in the [toml format](https://github.com/toml-lang/toml) and has exactly the same options available as the flags and environment variables. Any flag which contains a dot (".") denotes nesting within the config file, so the two flags `--cluster.coordinator` and `--cluster.replicas=1` look like this in the config file:
 ```toml
 [cluster]
-  coordinator = "localhost:10101"
+  coordinator = true
   replicas = 1
 ```
 
@@ -129,14 +129,14 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Cluster Coordinator
 
-* Description: Address of the node responsible for coordinating cluster membership and the cluster resize process. This value should be the same on all nodes in the cluster.
-* Flag: `cluster.coordinator="localhost:10101"`
-* Env: `PILOSA_CLUSTER_COORDINATOR="localhost:10101"`
+* Description: Indicates whether the node should act as the coordinator for the cluster. Only one node per cluster should be the coordinator.
+* Flag: `cluster.coordinator`
+* Env: `PILOSA_CLUSTER_COORDINATOR`
 * Config:
 
     ```toml
     [cluster]
-    coordinator = "localhost:10101"
+    coordinator = true
     ```
 
 #### Cluster Long Query Time
@@ -299,7 +299,7 @@ A three node cluster running on different hosts could be minimally configured as
 
     [cluster]
       replicas = 1
-      coordinator = "node0.pilosa.com:10101"
+      coordinator = true
 
 #### Node 1
 
@@ -312,7 +312,7 @@ A three node cluster running on different hosts could be minimally configured as
 
     [cluster]
       replicas = 1
-      coordinator = "node0.pilosa.com:10101"
+      coordinator = false
 
 #### Node 2
 
@@ -325,7 +325,7 @@ A three node cluster running on different hosts could be minimally configured as
 
     [cluster]
       replicas = 1
-      coordinator = "node0.pilosa.com:10101"
+      coordinator = false
 
 
 ### Example Cluster Configuration (HTTPS)
@@ -344,7 +344,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     [cluster]
       replicas = 1
-      coordinator = "https://node0.pilosa.com:10101"
+      coordinator = true
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
@@ -362,7 +362,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     [cluster]
       replicas = 1
-      coordinator = "https://node0.pilosa.com:10101"
+      coordinator = false
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
@@ -380,7 +380,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     [cluster]
       replicas = 1
-      coordinator = "https://node0.pilosa.com:10101"
+      coordinator = false
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
@@ -402,7 +402,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [cluster]
       replicas = 1
-      coordinator = "https://node0.pilosa.com:10100"
+      coordinator = true
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
@@ -420,7 +420,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [cluster]
       replicas = 1
-      coordinator = "https://node0.pilosa.com:10100"
+      coordinator = false
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
@@ -438,7 +438,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [cluster]
       replicas = 1
-      coordinator = "https://node0.pilosa.com:10100"
+      coordinator = false
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
