@@ -48,9 +48,9 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.PushPullInterval), "gossip.push-pull-interval", "", (time.Duration)(srv.Config.Gossip.PushPullInterval), "Interval between complete state syncs.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.ProbeTimeout), "gossip.probe-timeout", "", (time.Duration)(srv.Config.Gossip.ProbeTimeout), "Timeout to wait for an ack from a probed node before assuming it is unhealthy.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.ProbeInterval), "gossip.probe-interval", "", (time.Duration)(srv.Config.Gossip.ProbeInterval), "Interval between random node probes.")
-	flags.IntVarP(&srv.Config.Gossip.GossipNodes, "gossip.gossip-nodes", "", srv.Config.Gossip.GossipNodes, "Number of random nodes to send gossip messages to per GossipInterval.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.GossipInterval), "gossip.gossip-interval", "", (time.Duration)(srv.Config.Gossip.GossipInterval), "Interval between sending messages that need to be gossiped that haven't piggybacked on probing messages.")
-	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.GossipToTheDeadTime), "gossip.gossip-to-the-dead-time", "", (time.Duration)(srv.Config.Gossip.GossipToTheDeadTime), "Interval after which a node has died that we will still try to gossip to it.")
+	flags.IntVarP(&srv.Config.Gossip.Nodes, "gossip.nodes", "", srv.Config.Gossip.Nodes, "Number of random nodes to send gossip messages to per GossipInterval.")
+	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.Interval), "gossip.interval", "", (time.Duration)(srv.Config.Gossip.Interval), "Interval between sending messages that need to be gossiped that haven't piggybacked on probing messages.")
+	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.ToTheDeadTime), "gossip.to-the-dead-time", "", (time.Duration)(srv.Config.Gossip.ToTheDeadTime), "Interval after which a node has died that we will still try to gossip to it.")
 
 	// AntiEntropy
 	flags.DurationVarP((*time.Duration)(&srv.Config.AntiEntropy.Interval), "anti-entropy.interval", "", (time.Duration)(srv.Config.AntiEntropy.Interval), "Interval at which to run anti-entropy routine.")

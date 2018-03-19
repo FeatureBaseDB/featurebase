@@ -187,9 +187,9 @@ func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport 
 	conf.PushPullInterval = time.Duration(cfg.Gossip.PushPullInterval)
 	conf.ProbeTimeout = time.Duration(cfg.Gossip.ProbeTimeout)
 	conf.ProbeInterval = time.Duration(cfg.Gossip.ProbeInterval)
-	conf.GossipNodes = cfg.Gossip.GossipNodes
-	conf.GossipInterval = time.Duration(cfg.Gossip.GossipInterval)
-	conf.GossipToTheDeadTime = time.Duration(cfg.Gossip.GossipToTheDeadTime)
+	conf.GossipNodes = cfg.Gossip.Nodes
+	conf.GossipInterval = time.Duration(cfg.Gossip.Interval)
+	conf.GossipToTheDeadTime = time.Duration(cfg.Gossip.ToTheDeadTime)
 	//
 	conf.Delegate = g
 	conf.SecretKey = gossipKey
