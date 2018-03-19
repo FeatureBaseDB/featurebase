@@ -90,25 +90,25 @@ const (
 	DefaultGossipProbeInterval = 1 * time.Second
 	DefaultGossipProbeTimeout  = 500 * time.Millisecond
 
-	// GossipInterval and GossipNodes are used to configure the gossip
+	// Interval and Nodes are used to configure the gossip
 	// behavior of memberlist.
 	//
-	// GossipInterval is the interval between sending messages that need
+	// Interval is the interval between sending messages that need
 	// to be gossiped that haven't been able to piggyback on probing messages.
 	// If this is set to zero, non-piggyback gossip is disabled. By lowering
 	// this value (more frequent) gossip messages are propagated across
 	// the cluster more quickly at the expense of increased bandwidth.
 	//
-	// GossipNodes is the number of random nodes to send gossip messages to
-	// per GossipInterval. Increasing this number causes the gossip messages
+	// Nodes is the number of random nodes to send gossip messages to
+	// per Interval. Increasing this number causes the gossip messages
 	// to propagate across the cluster more quickly at the expense of
 	// increased bandwidth.
 	//
-	// GossipToTheDeadTime is the interval after which a node has died that
+	// ToTheDeadTime is the interval after which a node has died that
 	// we will still try to gossip to it. This gives it a chance to refute.
-	DefaultGossipGossipInterval      = 200 * time.Millisecond
-	DefaultGossipGossipNodes         = 3
-	DefaultGossipGossipToTheDeadTime = 30 * time.Second
+	DefaultGossipInterval      = 200 * time.Millisecond
+	DefaultGossipNodes         = 3
+	DefaultGossipToTheDeadTime = 30 * time.Second
 
 	DefaultMetricPollInterval = 0 * time.Minute
 )
@@ -146,17 +146,17 @@ type Config struct {
 	} `toml:"cluster"`
 
 	Gossip struct {
-		Port                string   `toml:"port"`
-		Seeds               []string `toml:"seeds"`
-		Key                 string   `toml:"key"`
-		StreamTimeout       Duration `toml:"stream-timeout"`
-		SuspicionMult       int      `toml:"suspicion-mult"`
-		PushPullInterval    Duration `toml:"push-pull-interval"`
-		ProbeTimeout        Duration `toml:"probe-timeout"`
-		ProbeInterval       Duration `toml:"probe-interval"`
-		GossipNodes         int      `toml:"gossip-nodes"`
-		GossipInterval      Duration `toml:"gossip-interval"`
-		GossipToTheDeadTime Duration `toml:"gossip-to-the-dead-time"`
+		Port             string   `toml:"port"`
+		Seeds            []string `toml:"seeds"`
+		Key              string   `toml:"key"`
+		StreamTimeout    Duration `toml:"stream-timeout"`
+		SuspicionMult    int      `toml:"suspicion-mult"`
+		PushPullInterval Duration `toml:"push-pull-interval"`
+		ProbeTimeout     Duration `toml:"probe-timeout"`
+		ProbeInterval    Duration `toml:"probe-interval"`
+		Nodes            int      `toml:"nodes"`
+		Interval         Duration `toml:"interval"`
+		ToTheDeadTime    Duration `toml:"to-the-dead-time"`
 	} `toml:"gossip"`
 
 	AntiEntropy struct {
@@ -197,9 +197,9 @@ func NewConfig() *Config {
 	c.Gossip.PushPullInterval = Duration(DefaultGossipPushPullInterval)
 	c.Gossip.ProbeTimeout = Duration(DefaultGossipProbeTimeout)
 	c.Gossip.ProbeInterval = Duration(DefaultGossipProbeInterval)
-	c.Gossip.GossipNodes = DefaultGossipGossipNodes
-	c.Gossip.GossipInterval = Duration(DefaultGossipGossipInterval)
-	c.Gossip.GossipToTheDeadTime = Duration(DefaultGossipGossipToTheDeadTime)
+	c.Gossip.Nodes = DefaultGossipNodes
+	c.Gossip.Interval = Duration(DefaultGossipInterval)
+	c.Gossip.ToTheDeadTime = Duration(DefaultGossipToTheDeadTime)
 
 	// AntiEntropy config.
 	c.AntiEntropy.Interval = Duration(DefaultAntiEntropyInterval)
