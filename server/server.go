@@ -35,7 +35,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/gcnotify"
 	"github.com/pilosa/pilosa/gossip"
-	statik "github.com/pilosa/pilosa/statik/filesystem"
+	"github.com/pilosa/pilosa/statik"
 	"github.com/pilosa/pilosa/statsd"
 )
 

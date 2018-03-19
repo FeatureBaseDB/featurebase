@@ -42,9 +42,6 @@ import (
 	"github.com/pilosa/pilosa/pql"
 
 	"unicode"
-
-	// Allow building Pilosa without the web UI.
-	_ "github.com/pilosa/pilosa/statik"
 )
 
 // Handler represents an HTTP handler.
@@ -289,13 +286,13 @@ func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the WebUI by visiting this URL in your browser.", http.StatusNotFound)
 		return
 	}
-	statikFS, err := h.FileSystem.New()
+	filesystem, err := h.FileSystem.New()
 	if err != nil {
 		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 		h.logger().Println("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
 		return
 	}
-	http.FileServer(statikFS).ServeHTTP(w, r)
+	http.FileServer(filesystem).ServeHTTP(w, r)
 }
 
 // handleGetSchema handles GET /schema requests.

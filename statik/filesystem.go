@@ -11,8 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+//go:generate statik -src=../webui -dest=..
+//
+// Package statik contains static assets for the Web UI. `go generate` or
+// `make generate-statik` will produce statik.go, which is ignored by git.
 
-package filesystem
+package statik
 
 import (
 	"net/http"
