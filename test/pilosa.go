@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/boltdb"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pkg/errors"
@@ -49,6 +50,8 @@ func NewMain() *Main {
 
 	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
 	m.Server.Network = *Network
+	m.Server.AttrStoreGenerator = boltdb.NewAttrStoreGenerator()
+	m.Server.Holder.AttrStoreGenerator = m.Server.AttrStoreGenerator
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
@@ -136,6 +139,8 @@ func (m *Main) Reopen() error {
 	config := m.Config
 	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
 	m.Server.Network = *Network
+	m.Server.AttrStoreGenerator = boltdb.NewAttrStoreGenerator()
+	m.Server.Holder.AttrStoreGenerator = m.Server.AttrStoreGenerator
 	m.Config = config
 
 	// Run new program.

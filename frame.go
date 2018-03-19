@@ -51,7 +51,7 @@ type Frame struct {
 	views map[string]*View
 
 	// Row attribute storage and cache
-	rowAttrStore *AttrStore
+	rowAttrStore AttrStore
 
 	broadcaster Broadcaster
 	Stats       StatsClient
@@ -80,8 +80,9 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		index: index,
 		name:  name,
 
-		views:        make(map[string]*View),
-		rowAttrStore: NewAttrStore(filepath.Join(path, ".data")),
+		views: make(map[string]*View),
+
+		rowAttrStore: NopAttrStore,
 
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
@@ -108,7 +109,7 @@ func (f *Frame) Index() string { return f.index }
 func (f *Frame) Path() string { return f.path }
 
 // RowAttrStore returns the attribute storage.
-func (f *Frame) RowAttrStore() *AttrStore { return f.rowAttrStore }
+func (f *Frame) RowAttrStore() AttrStore { return f.rowAttrStore }
 
 // MaxSlice returns the max slice in the frame.
 func (f *Frame) MaxSlice() uint64 {

@@ -55,6 +55,9 @@ type Holder struct {
 	opened chan struct{}
 
 	Broadcaster Broadcaster
+
+	AttrStoreGenerator AttrStoreGenerator
+
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
@@ -81,6 +84,8 @@ func NewHolder() *Holder {
 
 		Broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
+
+		AttrStoreGenerator: NopAttrStoreGenerator,
 
 		CacheFlushInterval: DefaultCacheFlushInterval,
 
@@ -372,6 +377,8 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.LogOutput = h.LogOutput
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.Broadcaster
+	index.AttrStoreGenerator = h.AttrStoreGenerator
+	index.columnAttrStore = h.AttrStoreGenerator.New(filepath.Join(index.path, ".data"))
 	return index, nil
 }
 

@@ -21,12 +21,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/boltdb"
 )
 
 // AttrStore represents a test wrapper for pilosa.AttrStore.
 type AttrStore struct {
-	*pilosa.AttrStore
+	//*pilosa.AttrStore
+	*boltdb.AttrStore
 }
 
 // NewAttrStore returns a new instance of AttrStore.
@@ -38,7 +39,7 @@ func NewAttrStore() *AttrStore {
 	f.Close()
 	os.Remove(f.Name())
 
-	return &AttrStore{AttrStore: pilosa.NewAttrStore(f.Name())}
+	return &AttrStore{AttrStore: boltdb.NewAttrStore(f.Name())}
 }
 
 func BenchmarkAttrStore_Duplicate(b *testing.B) {

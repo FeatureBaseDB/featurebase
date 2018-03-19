@@ -33,6 +33,7 @@ import (
 	"crypto/tls"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/boltdb"
 	"github.com/pilosa/pilosa/gcnotify"
 	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
@@ -145,6 +146,9 @@ func (m *Command) SetupServer() error {
 
 	// Configure data directory (for Cluster .topology)
 	m.Server.Cluster.Path = m.Config.DataDir
+
+	m.Server.AttrStoreGenerator = boltdb.NewAttrStoreGenerator()
+	m.Server.Holder.AttrStoreGenerator = m.Server.AttrStoreGenerator
 
 	// Configure holder.
 	m.Server.Logger().Printf("Using data from: %s\n", m.Config.DataDir)

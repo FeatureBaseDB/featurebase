@@ -74,6 +74,8 @@ type Server struct {
 
 	GCNotifier GCNotifier
 
+	AttrStoreGenerator AttrStoreGenerator
+
 	// Background monitoring intervals.
 	AntiEntropyInterval time.Duration
 	MetricInterval      time.Duration
@@ -106,6 +108,8 @@ func NewServer() *Server {
 		Network: "tcp",
 
 		GCNotifier: NopGCNotifier,
+
+		AttrStoreGenerator: NopAttrStoreGenerator,
 
 		AntiEntropyInterval: DefaultAntiEntropyInterval,
 		MetricInterval:      0,
