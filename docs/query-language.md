@@ -31,7 +31,7 @@ The default row label is `rowID`, and the default column label is `columnID`. Ch
 
 ##### Examples
 
-Before running any of the example queries below, follow the instructions in the [Getting Started](../getting-started) section to set up an index, frames, and populate them with some data.
+Before running any of the example queries below, follow the instructions in the [Getting Started](../getting-started/) section to set up an index, frames, and populate them with some data.
 
 The examples just show the PQL quer(ies) needed - to run the query `SetBit(frame="stargazer", columnID=10, rowID=1)` against a server using curl, you would:
 ``` request
