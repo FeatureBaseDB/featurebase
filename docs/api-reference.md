@@ -107,9 +107,10 @@ The request payload is in JSON, and may contain the `options` field. The `option
 * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
 * `rangeEnabled` (boolean): Enables range-encoded fields in this frame.
-* `fields` (array): List of range-encoded fields.
+* `fields` (array): List of range-encoded [fields](../data-model/#bsi-range-encoding).
 
 Each individual `field` contains the following:
+
 * `name` (string): Field name.
 * `type` (string): Field type, currently only "int" is supported.
 * `min` (int): Minimum value allowed for this field.
