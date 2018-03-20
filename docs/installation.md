@@ -136,7 +136,7 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
 
 1. Install the prerequisites:
 
-    * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described here (https://golang.org/doc/code.html#GOPATH).
+    * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described [here](https://golang.org/doc/code.html#GOPATH).
     * [Git](https://git-scm.com/)
 
 2. Clone the repo:
@@ -289,7 +289,7 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
 
 1. Install the prerequisites:
 
-    * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described here (https://golang.org/doc/code.html#GOPATH).
+    * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described [here](https://golang.org/doc/code.html#GOPATH).
     * [Git](https://git-scm.com/)
 
 2. Clone the repo:

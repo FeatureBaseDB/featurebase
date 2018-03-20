@@ -20,9 +20,9 @@ If you want to help but you aren't sure where to start, check out our [github la
 
 ### Development Environment
 
-- Ensure you have a recent version of [Go](https://golang.org/dl/) installed. Pilosa generally supports the current and previous minor versions; check our [travis file](../.travis.yml) for the most up-to-date information.
+- Ensure you have a recent version of [Go](https://golang.org/doc/install) installed. Pilosa generally supports the current and previous minor versions; check our [travis file](../.travis.yml) for the most up-to-date information.
 
-- Make sure `$GOPATH` environment variable points to your Go working directory and `$PATH` incudes `$GOPATH/bin`.
+- Make sure `$GOPATH` environment variable points to your Go working directory and `$PATH` incudes `$GOPATH/bin`, as described [here](https://golang.org/doc/code.html#GOPATH).
 
 - Fork the [Pilosa repository][2] to your own account.
 
@@ -49,8 +49,12 @@ If you want to help but you aren't sure where to start, check out our [github la
 
     ```sh
     make install
-    # or:
-    # dep ensure && go install github.com/pilosa/pilosa/cmd/...
+    ```
+    
+    or
+    
+    ```
+    dep ensure && go install github.com/pilosa/pilosa/cmd/...
     ```
 
     Running `pilosa` should now run a Pilosa instance.
