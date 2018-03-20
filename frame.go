@@ -17,7 +17,6 @@ package pilosa
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -65,7 +64,7 @@ type Frame struct {
 	rangeEnabled   bool
 	fields         []*Field
 
-	LogOutput io.Writer
+	Logger Logger
 }
 
 // NewFrame returns a new instance of frame.
@@ -95,7 +94,7 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		rangeEnabled: DefaultRangeEnabled,
 		//fields
 
-		LogOutput: ioutil.Discard,
+		Logger: NopLogger,
 	}, nil
 }
 
@@ -624,7 +623,7 @@ func (f *Frame) createViewIfNotExistsBase(name string) (*View, bool, error) {
 func (f *Frame) newView(path, name string) *View {
 	view := NewView(path, f.index, f.name, name, f.cacheSize)
 	view.cacheType = f.cacheType
-	view.LogOutput = f.LogOutput
+	view.Logger = f.Logger
 	view.RowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	view.broadcaster = f.broadcaster

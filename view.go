@@ -16,9 +16,6 @@ package pilosa
 
 import (
 	"fmt"
-	"io"
-	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -64,7 +61,7 @@ type View struct {
 	stats       StatsClient
 
 	RowAttrStore AttrStore
-	LogOutput    io.Writer
+	Logger       Logger
 }
 
 // NewView returns a new instance of View.
@@ -81,7 +78,7 @@ func NewView(path, index, frame, name string, cacheSize uint32) *View {
 
 		broadcaster: NopBroadcaster,
 		stats:       NopStatsClient,
-		LogOutput:   ioutil.Discard,
+		Logger:      NopLogger,
 	}
 }
 
@@ -125,9 +122,6 @@ func (v *View) Open() error {
 
 	return nil
 }
-
-// logger returns a logger instance for the view.
-func (v *View) logger() *log.Logger { return log.New(v.LogOutput, "", log.LstdFlags) }
 
 // openFragments opens and initializes the fragments inside the view.
 func (v *View) openFragments() error {
@@ -275,7 +269,7 @@ func (v *View) newFragment(path string, slice uint64) *Fragment {
 	frag := NewFragment(path, v.index, v.frame, v.name, slice)
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
-	frag.LogOutput = v.LogOutput
+	frag.Logger = v.Logger
 	frag.stats = v.stats.WithTags(fmt.Sprintf("slice:%d", slice))
 	return frag
 }
@@ -288,7 +282,7 @@ func (v *View) DeleteFragment(slice uint64) error {
 		return ErrFragmentNotFound
 	}
 
-	v.logger().Printf("delete fragment: (%s/%s/%s) %d", v.index, v.frame, v.name, slice)
+	v.Logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.frame, v.name, slice)
 
 	// Close data files before deletion.
 	if err := fragment.Close(); err != nil {
@@ -302,7 +296,7 @@ func (v *View) DeleteFragment(slice uint64) error {
 
 	// Delete fragment cache file.
 	if err := os.Remove(fragment.CachePath()); err != nil {
-		v.logger().Printf("no cache file to delete for slice %d", slice)
+		v.Logger.Printf("no cache file to delete for slice %d", slice)
 	}
 
 	delete(v.fragments, slice)

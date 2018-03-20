@@ -16,10 +16,8 @@ package gossip
 
 import (
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,8 +49,10 @@ type GossipMemberSet struct {
 	statusHandler pilosa.StatusHandler
 	config        *gossipConfig
 
-	// The writer for any logging.
-	LogOutput io.Writer
+	Logger pilosa.Logger
+
+	logger    *log.Logger
+	transport *Transport
 }
 
 // Start implements the BroadcastReceiver interface and sets the BroadcastHandler.
@@ -140,11 +140,6 @@ func retry(attempts int, sleep time.Duration, fn func() error) (err error) {
 	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
 
-// logger returns a logger for the GossipMemberSet.
-func (g *GossipMemberSet) logger() *log.Logger {
-	return log.New(g.LogOutput, "", log.LstdFlags)
-}
-
 ////////////////////////////////////////////////////////////////
 
 type gossipConfig struct {
@@ -152,14 +147,58 @@ type gossipConfig struct {
 	memberlistConfig *memberlist.Config
 }
 
-// NewGossipMemberSetWithTransport returns a new instance of GossipMemberSet given a Transport.
-func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport *Transport, server *pilosa.Server) (*GossipMemberSet, error) {
+type GossipMemberSetOption func(*GossipMemberSet) error
+
+func WithTransport(transport *Transport) func(*GossipMemberSet) error {
+	return func(g *GossipMemberSet) error {
+		g.transport = transport
+		return nil
+	}
+}
+
+func WithLogger(logger *log.Logger) func(*GossipMemberSet) error {
+	return func(g *GossipMemberSet) error {
+		g.logger = logger
+		return nil
+	}
+}
+
+// NewGossipMemberSet returns a new instance of GossipMemberSet based on options.
+func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
 
 	g := &GossipMemberSet{
-		LogOutput: server.LogOutput,
+		Logger: server.Logger,
 	}
 
-	port := transport.Net.GetAutoBindPort()
+	// options
+	for _, opt := range options {
+		if err := opt(g); err != nil {
+			return nil, err
+		}
+	}
+
+	if g.transport == nil {
+		port, err := strconv.Atoi(cfg.Gossip.Port)
+		if err != nil {
+			return nil, fmt.Errorf("convert port: %s", err)
+		}
+
+		bindURI, err := pilosa.NewURIFromAddress(cfg.Bind)
+		if err != nil {
+			return nil, fmt.Errorf("getting uri from bind address: %s", err)
+		}
+		host := bindURI.Host()
+
+		// Set up the transport.
+		transport, err := NewTransport(host, port, g.logger)
+		if err != nil {
+			return nil, fmt.Errorf("new tranport: %s", err)
+		}
+
+		g.transport = transport
+	}
+
+	port := g.transport.Net.GetAutoBindPort()
 
 	bindURI, err := pilosa.NewURIFromAddress(cfg.Bind)
 	if err != nil {
@@ -177,7 +216,7 @@ func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport 
 
 	// memberlist config
 	conf := memberlist.DefaultWANConfig()
-	conf.Transport = transport.Net
+	conf.Transport = g.transport.Net
 	conf.Name = name
 	conf.BindAddr = host
 	conf.BindPort = port
@@ -196,6 +235,7 @@ func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport 
 	conf.Delegate = g
 	conf.SecretKey = gossipKey
 	conf.Events = server.Cluster.EventReceiver.(memberlist.EventDelegate)
+	conf.Logger = g.logger
 
 	g.config = &gossipConfig{
 		memberlistConfig: conf,
@@ -205,28 +245,6 @@ func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport 
 	g.statusHandler = server
 
 	return g, nil
-}
-
-// NewGossipMemberSet returns a new instance of GossipMemberSet given a gossip port.
-func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server) (*GossipMemberSet, error) {
-	port, err := strconv.Atoi(cfg.Gossip.Port)
-	if err != nil {
-		return nil, fmt.Errorf("convert port: %s", err)
-	}
-
-	bindURI, err := pilosa.NewURIFromAddress(cfg.Bind)
-	if err != nil {
-		return nil, fmt.Errorf("getting uri from bind address: %s", err)
-	}
-	host := bindURI.Host()
-
-	// Set up the transport.
-	transport, err := NewTransport(host, port)
-	if err != nil {
-		return nil, fmt.Errorf("new tranport: %s", err)
-	}
-
-	return NewGossipMemberSetWithTransport(name, cfg, transport, server)
 }
 
 // SendSync implementation of the Broadcaster interface.
@@ -276,7 +294,7 @@ func (g *GossipMemberSet) SendAsync(pb proto.Message) error {
 func (g *GossipMemberSet) NodeMeta(limit int) []byte {
 	buf, err := proto.Marshal(pilosa.EncodeNode(g.node))
 	if err != nil {
-		g.logger().Printf("marshal message error: %s", err)
+		g.Logger.Printf("marshal message error: %s", err)
 		return []byte{}
 	}
 	return buf
@@ -287,11 +305,11 @@ func (g *GossipMemberSet) NodeMeta(limit int) []byte {
 func (g *GossipMemberSet) NotifyMsg(b []byte) {
 	m, err := pilosa.UnmarshalMessage(b)
 	if err != nil {
-		g.logger().Printf("unmarshal message error: %s", err)
+		g.Logger.Printf("unmarshal message error: %s", err)
 		return
 	}
 	if err := g.handler.ReceiveMessage(m); err != nil {
-		g.logger().Printf("receive message error: %s", err)
+		g.Logger.Printf("receive message error: %s", err)
 		return
 	}
 }
@@ -307,14 +325,14 @@ func (g *GossipMemberSet) GetBroadcasts(overhead, limit int) [][]byte {
 func (g *GossipMemberSet) LocalState(join bool) []byte {
 	pb, err := g.statusHandler.LocalStatus()
 	if err != nil {
-		g.logger().Printf("error getting local state, err=%s", err)
+		g.Logger.Printf("error getting local state, err=%s", err)
 		return []byte{}
 	}
 
 	// Marshal nodestate data to bytes.
 	buf, err := proto.Marshal(pb)
 	if err != nil {
-		g.logger().Printf("error marshalling nodestate data, err=%s", err)
+		g.Logger.Printf("error marshalling nodestate data, err=%s", err)
 		return []byte{}
 	}
 	return buf
@@ -326,12 +344,12 @@ func (g *GossipMemberSet) MergeRemoteState(buf []byte, join bool) {
 	// Unmarshal nodestate data.
 	var pb internal.NodeStatus
 	if err := proto.Unmarshal(buf, &pb); err != nil {
-		g.logger().Printf("error unmarshalling nodestate data, err=%s", err)
+		g.Logger.Printf("error unmarshalling nodestate data, err=%s", err)
 		return
 	}
 	err := g.statusHandler.HandleRemoteStatus(&pb)
 	if err != nil {
-		g.logger().Printf("merge state error: %s", err)
+		g.Logger.Printf("merge state error: %s", err)
 	}
 }
 
@@ -344,15 +362,14 @@ type GossipEventReceiver struct {
 	ch           chan memberlist.NodeEvent
 	eventHandler pilosa.EventHandler
 
-	// The writer for any logging.
-	LogOutput io.Writer
+	Logger pilosa.Logger
 }
 
 // NewGossipEventReceiver returns a new instance of GossipEventReceiver.
-func NewGossipEventReceiver(logOutput io.Writer) *GossipEventReceiver {
+func NewGossipEventReceiver(logger pilosa.Logger) *GossipEventReceiver {
 	return &GossipEventReceiver{
-		ch:        make(chan memberlist.NodeEvent, 1),
-		LogOutput: logOutput,
+		ch:     make(chan memberlist.NodeEvent, 1),
+		Logger: logger,
 	}
 }
 
@@ -373,11 +390,6 @@ func (g *GossipEventReceiver) Start(h pilosa.EventHandler) error {
 	g.eventHandler = h
 	go g.listen()
 	return nil
-}
-
-// logger returns a logger for the GossipEventReceiver.
-func (g *GossipEventReceiver) logger() *log.Logger {
-	return log.New(g.LogOutput, "", log.LstdFlags)
 }
 
 func (g *GossipEventReceiver) listen() {
@@ -407,7 +419,7 @@ func (g *GossipEventReceiver) listen() {
 			Node:  node,
 		}
 		if err := g.eventHandler.ReceiveEvent(ne); err != nil {
-			g.logger().Printf("receive event error: %s", err)
+			g.Logger.Printf("receive event error: %s", err)
 		}
 	}
 }
@@ -443,12 +455,13 @@ type Transport struct {
 // It will dynamically bind to a port if port is 0.
 // This is useful for test cases where specifiying a port is not reasonable.
 //func NewTransport(host string, port int) (*memberlist.NetTransport, error) {
-func NewTransport(host string, port int) (*Transport, error) {
+func NewTransport(host string, port int, logger *log.Logger) (*Transport, error) {
 	// memberlist config
 	conf := memberlist.DefaultWANConfig()
 	conf.BindAddr = host
 	conf.BindPort = port
 	conf.AdvertisePort = port
+	conf.Logger = logger
 
 	net, err := newTransport(conf)
 	if err != nil {
@@ -469,24 +482,10 @@ func NewTransport(host string, port int) (*Transport, error) {
 // newTransport returns a NetTransport based on the memberlist configuration.
 // It will dynamically bind to a port if conf.BindPort is 0.
 func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
-	if conf.LogOutput != nil && conf.Logger != nil {
-		return nil, fmt.Errorf("Cannot specify both LogOutput and Logger. Please choose a single log configuration setting.")
-	}
-
-	logDest := conf.LogOutput
-	if logDest == nil {
-		logDest = os.Stderr
-	}
-
-	logger := conf.Logger
-	if logger == nil {
-		logger = log.New(logDest, "", log.LstdFlags)
-	}
-
 	nc := &memberlist.NetTransportConfig{
 		BindAddrs: []string{conf.BindAddr},
 		BindPort:  conf.BindPort,
-		Logger:    logger,
+		Logger:    conf.Logger,
 	}
 
 	// See comment below for details about the retry in here.
@@ -498,7 +497,7 @@ func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
 				return nt, nil
 			}
 			if strings.Contains(err.Error(), "address already in use") {
-				logger.Printf("[DEBUG] Got bind error: %v", err)
+				conf.Logger.Printf("[DEBUG] Got bind error: %v", err)
 				continue
 			}
 		}

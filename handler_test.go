@@ -37,13 +37,13 @@ import (
 
 func TestHandlerPanics(t *testing.T) {
 	h := test.NewHandler()
-	buf := &bytes.Buffer{}
-	h.Handler.LogOutput = buf
+	bufLogger := test.NewBufferLogger()
+	h.Handler.Logger = bufLogger
 
 	w := httptest.NewRecorder()
 	// will panic since Handler has no Holder set up
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/index/taxi", nil))
-	bufbytes, err := ioutil.ReadAll(buf)
+	bufbytes, err := bufLogger.ReadAll()
 	if err != nil {
 		t.Fatalf("reading all logoutput: %v", err)
 	}

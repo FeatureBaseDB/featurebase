@@ -17,7 +17,6 @@ package pilosa
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -66,7 +65,7 @@ type Index struct {
 	broadcaster Broadcaster
 	Stats       StatsClient
 
-	LogOutput io.Writer
+	Logger Logger
 }
 
 // NewIndex returns a new instance of Index.
@@ -92,7 +91,7 @@ func NewIndex(path, name string) (*Index, error) {
 
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
-		LogOutput:   ioutil.Discard,
+		Logger:      NopLogger,
 	}, nil
 }
 
@@ -528,7 +527,7 @@ func (i *Index) newFrame(path, name string) (*Frame, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.LogOutput = i.LogOutput
+	f.Logger = i.Logger
 	f.Stats = i.Stats.WithTags(fmt.Sprintf("frame:%s", name))
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.NewAttrStore(filepath.Join(f.path, ".data"))

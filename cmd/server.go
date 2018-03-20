@@ -43,7 +43,7 @@ func NewServeCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Long: `pilosa server runs Pilosa.
 
 It will load existing data from the configured
-directory, and start listening client connections
+directory and start listening for client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logOutput, err := server.GetLogWriter(Server.Config.LogPath, stderr)

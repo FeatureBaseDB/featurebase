@@ -18,9 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"path"
@@ -71,7 +69,7 @@ type Holder struct {
 	// The interval at which the cached row ids are persisted to disk.
 	CacheFlushInterval time.Duration
 
-	LogOutput io.Writer
+	Logger Logger
 }
 
 // NewHolder returns a new instance of Holder.
@@ -89,7 +87,7 @@ func NewHolder() *Holder {
 
 		CacheFlushInterval: DefaultCacheFlushInterval,
 
-		LogOutput: os.Stderr,
+		Logger: NopLogger,
 	}
 }
 
@@ -97,7 +95,7 @@ func NewHolder() *Holder {
 // without actually loading any data into memory.
 // HasData is returned, and h.hasData is set.
 func (h *Holder) Peek() bool {
-	h.logger().Printf("peek at holder path: %s", h.Path)
+	h.Logger.Printf("peek at holder path: %s", h.Path)
 	h.hasData = false
 
 	// Open path to read all index directories.
@@ -127,7 +125,7 @@ func (h *Holder) Peek() bool {
 func (h *Holder) Open() error {
 	h.setFileLimit()
 
-	h.logger().Printf("open holder path: %s", h.Path)
+	h.Logger.Printf("open holder path: %s", h.Path)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return err
 	}
@@ -149,18 +147,18 @@ func (h *Holder) Open() error {
 			continue
 		}
 
-		h.logger().Printf("opening index: %s", filepath.Base(fi.Name()))
+		h.Logger.Printf("opening index: %s", filepath.Base(fi.Name()))
 
 		index, err := h.newIndex(h.IndexPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err == ErrName {
-			h.logger().Printf("ERROR opening index: %s, err=%s", fi.Name(), err)
+			h.Logger.Printf("ERROR opening index: %s, err=%s", fi.Name(), err)
 			continue
 		} else if err != nil {
 			return err
 		}
 		if err := index.Open(); err != nil {
 			if err == ErrName {
-				h.logger().Printf("ERROR opening index: %s, err=%s", index.Name(), err)
+				h.Logger.Printf("ERROR opening index: %s, err=%s", index.Name(), err)
 				continue
 			}
 			return fmt.Errorf("open index: name=%s, err=%s", index.Name(), err)
@@ -169,7 +167,7 @@ func (h *Holder) Open() error {
 		h.indexes[index.Name()] = index
 		h.mu.Unlock()
 	}
-	h.logger().Printf("open holder: complete")
+	h.Logger.Printf("open holder: complete")
 
 	// Periodically flush cache.
 	h.wg.Add(1)
@@ -374,7 +372,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
-	index.LogOutput = h.LogOutput
+	index.Logger = h.Logger
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.Broadcaster
 	index.NewAttrStore = h.NewAttrStore
@@ -464,7 +462,7 @@ func (h *Holder) flushCaches() {
 					}
 
 					if err := fragment.FlushCache(); err != nil {
-						h.logger().Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
+						h.Logger.Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
 					}
 				}
 			}
@@ -488,7 +486,7 @@ func (h *Holder) setFileLimit() {
 	newLimit := &syscall.Rlimit{}
 
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
-		h.logger().Printf("ERROR checking open file limit: %s", err)
+		h.Logger.Printf("ERROR checking open file limit: %s", err)
 		return
 	}
 	// If the soft limit is lower than the FileLimit constant, we will try to change it.
@@ -512,32 +510,30 @@ func (h *Holder) setFileLimit() {
 				}
 				// Try setting again with lowered Max (hard limit)
 				if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, newLimit); err != nil {
-					h.logger().Printf("ERROR setting open file limit: %s", err)
+					h.Logger.Printf("ERROR setting open file limit: %s", err)
 				}
 				// If we weren't trying to change the hard limit, let the user know something is wrong.
 			} else {
-				h.logger().Printf("ERROR setting open file limit: %s", err)
+				h.Logger.Printf("ERROR setting open file limit: %s", err)
 			}
 		}
 
 		// Check the limit after setting it. OS may not obey Setrlimit call.
 		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
-			h.logger().Printf("ERROR checking open file limit: %s", err)
+			h.Logger.Printf("ERROR checking open file limit: %s", err)
 		} else {
 			if oldLimit.Cur < FileLimit {
-				h.logger().Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/administration/#open-file-limits for more information.", FileLimit, oldLimit.Cur, FileLimit)
+				h.Logger.Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/administration/#open-file-limits for more information.", FileLimit, oldLimit.Cur, FileLimit)
 			}
 		}
 	}
 }
 
-func (h *Holder) logger() *log.Logger { return log.New(h.LogOutput, "", log.LstdFlags) }
-
 func (h *Holder) loadNodeID() (string, error) {
 	idPath := path.Join(h.Path, "ID")
 	nodeID := ""
 
-	h.logger().Printf("load NodeID: %s", idPath)
+	h.Logger.Printf("load NodeID: %s", idPath)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return "", err
 	}

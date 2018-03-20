@@ -15,7 +15,6 @@
 package test
 
 import (
-	"bytes"
 	"io/ioutil"
 	"os"
 
@@ -26,7 +25,6 @@ import (
 // Holder is a test wrapper for pilosa.Holder.
 type Holder struct {
 	*pilosa.Holder
-	LogOutput bytes.Buffer
 }
 
 // NewHolder returns a new instance of Holder with a temporary path.
@@ -38,7 +36,6 @@ func NewHolder() *Holder {
 
 	h := &Holder{Holder: pilosa.NewHolder()}
 	h.Path = path
-	h.Holder.LogOutput = &h.LogOutput
 	h.Holder.NewAttrStore = boltdb.NewAttrStore
 
 	return h
@@ -62,10 +59,10 @@ func (h *Holder) Close() error {
 // Reopen instantiates and opens a new holder.
 // Note that the holder must be Closed first.
 func (h *Holder) Reopen() error {
-	path, logOutput := h.Path, h.Holder.LogOutput
+	path, logger := h.Path, h.Holder.Logger
 	h.Holder = pilosa.NewHolder()
 	h.Holder.Path = path
-	h.Holder.LogOutput = logOutput
+	h.Holder.Logger = logger
 	h.Holder.NewAttrStore = boltdb.NewAttrStore
 	if err := h.Holder.Open(); err != nil {
 		return err
