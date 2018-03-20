@@ -36,6 +36,7 @@ import (
 	"github.com/pilosa/pilosa/gcnotify"
 	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
+	"github.com/pilosa/pilosa/statik"
 	"github.com/pilosa/pilosa/statsd"
 )
 
@@ -189,6 +190,9 @@ func (m *Command) SetupServer() error {
 	m.Server.RemoteClient = c
 	m.Server.Handler.RemoteClient = c
 	m.Server.Cluster.RemoteClient = c
+
+	// Statik file system.
+	m.Server.Handler.FileSystem = &statik.FileSystem{}
 
 	// Set configuration options.
 	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)

@@ -11,7 +11,27 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-// Package statik contains static assets for the Web UI. `go generate` will
-// produce statik.go, which is ignored by git.
+//
+//go:generate statik -src=../webui -dest=..
+//
+// Package statik contains static assets for the Web UI. `go generate` or
+// `make generate-statik` will produce statik.go, which is ignored by git.
 package statik
+
+import (
+	"net/http"
+
+	"github.com/pilosa/pilosa"
+	"github.com/rakyll/statik/fs"
+)
+
+// Ensure nopFileSystem implements interface.
+var _ pilosa.FileSystem = &FileSystem{}
+
+// FileSystem represents a static FileSystem.
+type FileSystem struct{}
+
+// New is a statik implementation of FileSystem New method.
+func (s *FileSystem) New() (http.FileSystem, error) {
+	return fs.New()
+}

@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate statik -src=./webui
-
 package pilosa
 
 import (
@@ -44,10 +42,6 @@ import (
 	"github.com/pilosa/pilosa/pql"
 
 	"unicode"
-
-	// Allow building Pilosa without the web UI.
-	_ "github.com/pilosa/pilosa/statik"
-	"github.com/rakyll/statik/fs"
 )
 
 // Handler represents an HTTP handler.
@@ -56,6 +50,8 @@ type Handler struct {
 	Broadcaster      Broadcaster
 	BroadcastHandler BroadcastHandler
 	StatusHandler    StatusHandler
+
+	FileSystem FileSystem
 
 	// Local hostname & cluster configuration.
 	Node         *Node
@@ -98,6 +94,11 @@ type errorResponse struct {
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler() *Handler {
 	handler := &Handler{
+		Broadcaster: NopBroadcaster,
+		//BroadcastHandler: NopBroadcastHandler, // TODO: implement the nop
+		//StatusHandler:    NopStatusHandler,    // TODO: implement the nop
+		FileSystem: NopFileSystem,
+
 		LogOutput: os.Stderr,
 	}
 	BuildRouters(handler)
@@ -285,13 +286,13 @@ func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the WebUI by visiting this URL in your browser.", http.StatusNotFound)
 		return
 	}
-	statikFS, err := fs.New()
+	filesystem, err := h.FileSystem.New()
 	if err != nil {
 		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 		h.logger().Println("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
 		return
 	}
-	http.FileServer(statikFS).ServeHTTP(w, r)
+	http.FileServer(filesystem).ServeHTTP(w, r)
 }
 
 // handleGetSchema handles GET /schema requests.

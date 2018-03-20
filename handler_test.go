@@ -31,6 +31,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/statik"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -1853,6 +1854,7 @@ func TestHandler_WebUI(t *testing.T) {
 	h := test.NewHandler()
 	h.Holder = hldr.Holder
 	h.Cluster = test.NewCluster(1)
+	h.FileSystem = &statik.FileSystem{}
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/", nil))
