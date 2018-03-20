@@ -39,10 +39,10 @@ If you want to help but you aren't sure where to start, check out our [github la
     cd ${GOPATH}/src/github.com/pilosa/pilosa
     ```
 
-- Install `dep` to manage dependencies:
+- [Install](https://github.com/golang/dep/#installation) `dep` to manage dependencies:
 
     ```sh
-    go get -u github.com/golang/dep/cmd/dep
+    curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
     ```
 
 - Install Pilosa command line tools:
