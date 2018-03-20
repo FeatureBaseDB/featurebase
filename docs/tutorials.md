@@ -10,6 +10,8 @@ nav = [
 
 ### External Tutorials
 
+Some of our tutorials work better as standalone repos, since you can `git clone` the instructions, code, and data all at once. Officially supported tutorials are listed here.
+
 - [Run Pilosa with Microsoft's Azure Cosmos DB](https://github.com/pilosa/cosmosa)
 
 ## Tutorials
