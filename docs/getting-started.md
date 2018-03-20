@@ -85,7 +85,7 @@ curl localhost:10101/index/repository/frame/language \
 
 #### Import Data From CSV Files
 
-If you import data using csv files and without input defintion, download the `stargazer.csv` and `language.csv` files in that repo.
+Download the `stargazer.csv` and `language.csv` files here:
 
 ```
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/stargazer.csv
@@ -110,7 +110,12 @@ docker exec -it pilosa /pilosa import -i repository -f language /language.csv
 Note that, both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out `languages.txt` to see the mapping for languages.
 
 ### Input Definition
-Alternatively Pilosa can import JSON data using an [Input Definition](../input-definition/) describing the schema and ETL rules to process the data.  
+
+<div class="warning">
+Input definition is deprecated as of v0.9.
+</div>
+
+Alternatively Pilosa can import JSON data using an [Input Definition](../input-definition/) describing the schema and ETL rules to process the data.
 
 #### Make Some Queries
 

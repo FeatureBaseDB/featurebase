@@ -199,6 +199,10 @@ curl localhost:10101/index/repository/frame/stats/field/pullrequests \
 
 ### Create input definition
 
+<div class="warning">
+Input definition is deprecated as of v0.9.
+</div>
+
 `POST /index/<index-name>/input-definition/<input-definition-name>`
  
 Creates an input definition in the given index with the given name.
@@ -263,6 +267,10 @@ curl localhost:10101/index/user/input-definition/stargazer-input \
 
 ### Get input definition
 
+<div class="warning">
+Input definition is deprecated as of v0.9.
+</div>
+
 `GET /index/<index-name>/input-definition/<input-definition-name>`
 
 Returns the given input definition as JSON.
@@ -276,6 +284,10 @@ curl -XGET localhost:10101/index/user/input-definition/stargazer-input
 
 ### Remove input definition
 
+<div class="warning">
+Input definition is deprecated as of v0.9.
+</div>
+
 `DELETE /index/<index-name>/input-definition/<input-definition-name>`
 
 Removes the given input definition.
@@ -288,6 +300,10 @@ curl -XDELETE localhost:10101/index/user/input-definition/stargazer-input
 ```
 
 ### Process input data
+
+<div class="warning">
+Input definition is deprecated as of v0.9.
+</div>
 
 `POST /index/<index-name>/input/<input-definition-name>`
 
