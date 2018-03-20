@@ -96,7 +96,7 @@ func main() {
 
 ### Python
 
-You can find the Python client library for Pilosa at our [Python Pilosa Repository](https://github.com/pilosa/python-pilosa). Check out its [README](https://github.com/pilosa/python-pilosa/blob/master/README.md) for more information and installation instructions.
+You can find the Python client library for Pilosa at our [Python Pilosa Repository](https://github.com/pilosa/python-pilosa). Check out its [README](https://github.com/pilosa/python-pilosa/blob/master/README.md) or [readthedocs](https://pilosa.readthedocs.io/en/latest/) for more information and installation instructions.
 
 We are going to use the index you have created in the [Getting Started](../getting-started/) section. Before carrying on, make sure that example index is created, sample stargazer data is imported and Pilosa server is running on the default address: `http://localhost:10101`.
 
