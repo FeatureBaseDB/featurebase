@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.8.8] - 2018-02-19
+
+This version contains 1 contribution from 2 contributors. There are 4 files changed, 1,153 insertions, and 618 deletions.
+
+### Fixed
+
+- Bug fixes and improved test coverage in roaring ([#1118](https://github.com/pilosa/pilosa/pull/1118))
+
+## [0.8.7] - 2018-02-12
+
+This version contains 1 contribution from 1 contributors. There are 2 files changed, 84 insertions, and 4 deletions.
+
+### Fixed
+
+- Fix a shift logic bug in bitmapZeroRange ([#1111](https://github.com/pilosa/pilosa/pull/1111))
+
+## [0.8.6] - 2018-02-09
+
+This version contains 2 contributions from 2 contributors. There are 3 files changed, 171 insertions, and 6 deletions.
+
+### Fixed
+
+- Fix overflow bug in differenceRunArray [#1106](https://github.com/pilosa/pilosa/pull/1106)
+- Fix bug where count and bitmap queries could return different numbers [#1083](https://github.com/pilosa/pilosa/pull/1083)
+
+## [0.8.5] - 2018-01-18
+
+This version contains 1 contribution from 1 contributor. There is 1 file changed, 1 insertion, and 0 deletions.
+
+### Fixed
+
+- Bind Docker container on all interfaces ([#1061](https://github.com/pilosa/pilosa/pull/1061))
+
+## [0.8.4] - 2018-01-10
+
+This version contains 4 contributions from 3 contributors. There are 17 files changed, 974 insertions, and 221 deletions.
+
+### Fixed
+
+- Group the write operations in syncBlock by MaxWritesPerRequest ([#1038](https://github.com/pilosa/pilosa/pull/1038))
+- Change gossip config from memberlist.DefaultLocalConfig to memberlist.DefaultWANConfig ([#1033](https://github.com/pilosa/pilosa/pull/1033))
+
+### Performance
+
+- Change AttrBlock handler calls to support protobuf instead of json ([#1046](https://github.com/pilosa/pilosa/pull/1046))
+- Use RLock instead of Lock in a few places ([#1042](https://github.com/pilosa/pilosa/pull/1042))
+
 ## [0.8.3] - 2017-12-12
 
 This version contains 1 contribution from 1 contributor. There are 2 files changed, 59 insertions, and 42 deletions.
