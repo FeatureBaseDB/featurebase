@@ -19,8 +19,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -87,8 +85,7 @@ type Server struct {
 	// Misc options.
 	MaxWritesPerRequest int
 
-	LogOutput io.Writer
-	Logger    Logger
+	Logger Logger
 
 	defaultClient InternalClient
 }
@@ -115,8 +112,7 @@ func NewServer() *Server {
 		MetricInterval:      0,
 		DiagnosticInterval:  0,
 
-		LogOutput: ioutil.Discard,
-		Logger:    NopLogger,
+		Logger: NopLogger,
 	}
 
 	s.Handler.Holder = s.Holder

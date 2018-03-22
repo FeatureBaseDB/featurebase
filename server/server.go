@@ -134,7 +134,6 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return err
 	}
-	m.Server.LogOutput = lw
 	m.logger = log.New(lw, "", log.LstdFlags)
 	if m.Config.Verbose {
 		m.Server.Logger = pilosa.NewVerboseLogger(m.logger)
@@ -299,8 +298,8 @@ func GetLogWriter(path string, defaultWriter io.Writer) (io.Writer, error) {
 func (m *Command) Close() error {
 	var logErr error
 	serveErr := m.Server.Close()
-	logOutput := m.Server.LogOutput
-	if closer, ok := logOutput.(io.Closer); ok {
+	logger := m.Server.Logger
+	if closer, ok := logger.(io.Closer); ok {
 		logErr = closer.Close()
 	}
 	close(m.Done)
