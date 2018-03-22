@@ -8,13 +8,17 @@ nav = [
 ]
 +++
 
-### External Tutorials
-
-Some of our tutorials work better as standalone repos, since you can `git clone` the instructions, code, and data all at once. Officially supported tutorials are listed here.
-
-- [Run Pilosa with Microsoft's Azure Cosmos DB](https://github.com/pilosa/cosmosa)
-
 ## Tutorials
+
+<div class="note">
+<!-- this is html because there is a problem putting a list inside a shortcode -->
+Some of our tutorials work better as standalone repos, since you can <code>git clone</code> the instructions, code, and data all at once. Officially supported tutorials are listed here.<br />
+<br />
+<ul>
+<li><a href="https://github.com/pilosa/cosmosa">Run Pilosa with Microsoft's Azure Cosmos DB</a></li>
+</ul>
+
+</div>
 
 ### Setting Up a Secure Cluster
 
