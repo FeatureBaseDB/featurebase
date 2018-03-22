@@ -16,4 +16,4 @@ It is designed primarly for speed and horizontal scalability. If you have data w
 
 "What attributes are the most common?", "Which objects have these specific attributes?", "What groups of attributes often appear together?" Pilosa is designed to answer these types of queries in real time, suitable for use with high rate data streams, or to power a user interface.
 
-Once you have Pilosa [installed]({{< ref "installation.md" >}}), the [getting started]({{< ref "getting-started.md" >}}) guide will show you the basics of interacting with Pilosa and give you some pointers for deeper exploration.
+Once you have Pilosa [installed](../installation/), the [getting started](../getting-started/) guide will show you the basics of interacting with Pilosa and give you some pointers for deeper exploration.

@@ -1911,13 +1911,14 @@ func intersectionCountBitmapRun(a, b *container) (n int) {
 }
 
 func intersectionCountArrayBitmap(a, b *container) (n int) {
+	ln := len(b.bitmap)
 	for _, val := range a.array {
-		i := val >> 6
-		if i >= uint16(len(b.bitmap)) {
+		i := int(val >> 6)
+		if i >= ln {
 			break
 		}
 		off := val % 64
-		n += int((b.bitmap[i] & (1 << off)) >> off)
+		n += int(b.bitmap[i]>>off) & 1
 	}
 	return n
 }
@@ -2645,7 +2646,7 @@ func differenceRunRun(a, b *container) *container {
 	for apos < alen && bpos < blen {
 		switch {
 		case alast < bstart:
-			// current A-run entirely preceeds current B-run: keep full A-run, advance to next A-run
+			// current A-run entirely precedes current B-run: keep full A-run, advance to next A-run
 			output.runs = append(output.runs, interval16{start: astart, last: alast})
 			apos++
 			if apos < alen {
@@ -2653,7 +2654,7 @@ func differenceRunRun(a, b *container) *container {
 				alast = a.runs[apos].last
 			}
 		case blast < astart:
-			// current B-run entirely preceeds current A-run: advance to next B-run
+			// current B-run entirely precedes current A-run: advance to next B-run
 			bpos++
 			if bpos < blen {
 				bstart = b.runs[bpos].start

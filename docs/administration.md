@@ -65,7 +65,7 @@ pilosa import -i project -f stargazer --field star_count project-stargazer-count
 ```
 
 <div class="note">
-    <p>Note that you must first create a frame with Range Encoding enabled and a field. View <a href="../api-reference/#create-frame">Create Frame</a> for more details.</p>
+    <p>Note that you must first create a frame with range-encoding enabled and a field. View <a href="../api-reference/#create-frame">Create Frame</a> for more details.</p>
 </div>
 
 #### Exporting
@@ -178,17 +178,17 @@ Note: This will only work when the replication factor is >= 2
 
 #### Copying data files manually
 
-- To accomplish this goal you will 1st need:
-  - List of all Indexes on your cluster
-  - List of all frames in your Indexes
-  - Max slice per Index, listed in the /status endpoint
+- To accomplish this you will first need:
+  - List of all indexes on your cluster
+  - List of all frames in your indexes
+  - Max slice per index, listed in the /status endpoint
 - With this information you can query the `/fragment/nodes` endpoint and iterate over each slice
 - Using the list of slices owned by this node you will then need to manually:
   - setup a directory structure similar to the other nodes with a path for each Index/Frame
   - copy each owned slice for an existing node to this new node
 - Modify the cluster config file to replace the previous node address with the new node address.
 - Restart the cluster
-- Wait for the 1st sync (10 minutes) to validate Index connections
+- Wait for the first sync (10 minutes) to validate Index connections
 
 ### Diagnostics
 
@@ -216,9 +216,9 @@ You can opt-out of the Pilosa diagnostics reporting by setting either the comman
 Pilosa can be configured to emit metrics pertaining to its internal processes in one of two formats: Expvar or StatsD. Metric recording is disabled by default.
 The metrics configuration options are: 
 
-  - [Host](../configuration#metrics-host): specify host that receives metric events
-  - [Poll Interval](../configuration#metrics-poll-interval): specify polling interval for runtime metrics
-  - [Service](../configuration#metrics-service): declare type StatsD or Expvar
+  - [Host](../configuration/#metric-host): specify host that receives metric events
+  - [Poll Interval](../configuration/#metric-poll-interval): specify polling interval for runtime metrics
+  - [Service](../configuration/#metric-service): declare type StatsD or Expvar
 
 #### Tags
 StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
