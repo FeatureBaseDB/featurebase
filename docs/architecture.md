@@ -18,5 +18,8 @@ Bitmaps are persisted to disk using a file format very similar to the [Roaring B
 * After the container storage section is an operation log, of unspecified length.
 
 ![roaring file format diagram](/img/docs/pilosa-roaring-storage-diagram.png)
+*Pilosa Roaring storage format diagram*
 
 All values are little-endian. The first two bytes of the cookie is 12348, to reflect incompatibility with the spec, which uses 12346 or 12347. Container types are NOT inferred from their cardinality as in the spec. Instead, the container type is read directly from the descriptive header.
+
+Check out this [blog post](/blog/adding-rle-support/) for some more details about Roaring in Pilosa.
