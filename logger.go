@@ -58,12 +58,28 @@ func NewStandardLogger(logger *log.Logger) *StandardLogger {
 	}
 }
 
-// Printf is a no-op implementation of the Logger Printf method.
 func (s *StandardLogger) Printf(format string, v ...interface{}) {
 	s.logger.Printf(format, v...)
 }
 
-// Debugf is a no-op implementation of the Logger Debugf method.
-func (s *StandardLogger) Debugf(format string, v ...interface{}) {
-	// TODO: implement this
+func (s *StandardLogger) Debugf(format string, v ...interface{}) {}
+
+// VerboseLogger is an implementation of pilosa.Logger which includes debug messages.
+type VerboseLogger struct {
+	logger *log.Logger
+}
+
+func NewVerboseLogger(logger *log.Logger) *VerboseLogger {
+	return &VerboseLogger{
+		logger: logger,
+	}
+}
+
+func (vb *VerboseLogger) Printf(format string, v ...interface{}) {
+	vb.logger.Printf(format, v...)
+}
+
+func (vb *VerboseLogger) Debugf(format string, v ...interface{}) {
+	vb.logger.Printf("VERBOSE...")
+	vb.logger.Printf(format, v...)
 }

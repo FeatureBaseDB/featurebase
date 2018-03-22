@@ -136,7 +136,11 @@ func (m *Command) SetupServer() error {
 	}
 	m.Server.LogOutput = lw
 	m.logger = log.New(lw, "", log.LstdFlags)
-	m.Server.Logger = pilosa.NewStandardLogger(m.logger)
+	if m.Config.Verbose {
+		m.Server.Logger = pilosa.NewVerboseLogger(m.logger)
+	} else {
+		m.Server.Logger = pilosa.NewStandardLogger(m.logger)
+	}
 	m.Server.Handler.Logger = m.Server.Logger
 	m.Server.Holder.Logger = m.Server.Logger
 	m.Server.Holder.Stats.SetLogger(m.Server.Logger)

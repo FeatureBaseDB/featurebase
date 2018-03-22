@@ -147,8 +147,10 @@ type gossipConfig struct {
 	memberlistConfig *memberlist.Config
 }
 
+// GossipMemberSetOption describes a functional option for GossipMemberSet.
 type GossipMemberSetOption func(*GossipMemberSet) error
 
+// WithTransport is a functional option for providing a transport to NewGossipMemberSet.
 func WithTransport(transport *Transport) func(*GossipMemberSet) error {
 	return func(g *GossipMemberSet) error {
 		g.transport = transport
@@ -156,6 +158,7 @@ func WithTransport(transport *Transport) func(*GossipMemberSet) error {
 	}
 }
 
+// WithLogger is a functional option for providing a logger to NewGossipMemberSet.
 func WithLogger(logger *log.Logger) func(*GossipMemberSet) error {
 	return func(g *GossipMemberSet) error {
 		g.logger = logger

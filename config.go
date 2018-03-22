@@ -133,6 +133,7 @@ type Config struct {
 	MaxWritesPerRequest int `toml:"max-writes-per-request"`
 
 	LogPath string `toml:"log-path"`
+	Verbose bool   `toml:"verbose"`
 
 	// TLS
 	TLS TLSConfig
@@ -178,6 +179,7 @@ func NewConfig() *Config {
 		Bind:                ":" + DefaultPort,
 		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
 		// LogPath: "",
+		// Verbose: false,
 		TLS: TLSConfig{},
 	}
 
