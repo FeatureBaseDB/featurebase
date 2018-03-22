@@ -14,10 +14,7 @@
 
 package pilosa
 
-import (
-	"io/ioutil"
-	"log"
-)
+import "log"
 
 // Ensure nopLogger implements interface.
 var _ Logger = &nopLogger{}
@@ -29,17 +26,13 @@ type Logger interface {
 }
 
 func init() {
-	NopLogger = &nopLogger{
-		logger: log.New(ioutil.Discard, "", log.LstdFlags),
-	}
+	NopLogger = &nopLogger{}
 }
 
 // NopLogger represents a Logger that doesn't do anything.
 var NopLogger Logger
 
-type nopLogger struct {
-	logger *log.Logger
-}
+type nopLogger struct{}
 
 // Printf is a no-op implementation of the Logger Printf method.
 func (n *nopLogger) Printf(format string, v ...interface{}) {}
