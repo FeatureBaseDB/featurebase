@@ -73,6 +73,7 @@ type Command struct {
 	// Done will be closed when Command.Close() is called
 	Done chan struct{}
 
+	// Passed to the Gossip implementation.
 	logger *log.Logger
 }
 
@@ -122,6 +123,26 @@ func (m *Command) Run(args ...string) (err error) {
 	return nil
 }
 
+// SetupLogger sets up the logger based on the configuration.
+func (m *Command) SetupLogger() error {
+	if m.Config.Verbose {
+		vbl, err := pilosa.NewVerboseLogger(m.Config.LogPath, m.Stderr)
+		if err != nil {
+			return err
+		}
+		m.logger = vbl.Logger()
+		m.Server.Logger = vbl
+	} else {
+		sl, err := pilosa.NewStandardLogger(m.Config.LogPath, m.Stderr)
+		if err != nil {
+			return err
+		}
+		m.logger = sl.Logger()
+		m.Server.Logger = sl
+	}
+	return nil
+}
+
 // SetupServer uses the cluster configuration to set up this server.
 func (m *Command) SetupServer() error {
 	err := m.Config.Validate()
@@ -129,17 +150,6 @@ func (m *Command) SetupServer() error {
 		return err
 	}
 
-	// Set up logger based on configuration.
-	lw, err := GetLogWriter(m.Config.LogPath, m.Stderr)
-	if err != nil {
-		return err
-	}
-	m.logger = log.New(lw, "", log.LstdFlags)
-	if m.Config.Verbose {
-		m.Server.Logger = pilosa.NewVerboseLogger(m.logger)
-	} else {
-		m.Server.Logger = pilosa.NewStandardLogger(m.logger)
-	}
 	m.Server.Handler.Logger = m.Server.Logger
 	m.Server.Holder.Logger = m.Server.Logger
 	m.Server.Holder.Stats.SetLogger(m.Server.Logger)
@@ -280,28 +290,11 @@ func (m *Command) SetupNetworking() error {
 	return nil
 }
 
-// GetLogWriter opens a file for logging, or a default io.Writer (such as stderr) for an empty path.
-func GetLogWriter(path string, defaultWriter io.Writer) (io.Writer, error) {
-	// This is split out so it can be used in NewServeCmd as well as SetupServer
-	if path == "" {
-		return defaultWriter, nil
-	} else {
-		logFile, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
-		if err != nil {
-			return nil, err
-		}
-		return logFile, nil
-	}
-}
-
 // Close shuts down the server.
 func (m *Command) Close() error {
-	var logErr error
 	serveErr := m.Server.Close()
-	logger := m.Server.Logger
-	if closer, ok := logger.(io.Closer); ok {
-		logErr = closer.Close()
-	}
+	logErr := m.Server.Logger.Close()
+
 	close(m.Done)
 	if serveErr != nil && logErr != nil {
 		return fmt.Errorf("closing server: '%v', closing logs: '%v'", serveErr, logErr)

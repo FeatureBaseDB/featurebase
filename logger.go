@@ -14,7 +14,11 @@
 
 package pilosa
 
-import "log"
+import (
+	"io"
+	"log"
+	"os"
+)
 
 // Ensure nopLogger implements interface.
 var _ Logger = &nopLogger{}
@@ -23,6 +27,7 @@ var _ Logger = &nopLogger{}
 type Logger interface {
 	Printf(format string, v ...interface{})
 	Debugf(format string, v ...interface{})
+	Close() error
 }
 
 func init() {
@@ -40,15 +45,34 @@ func (n *nopLogger) Printf(format string, v ...interface{}) {}
 // Debugf is a no-op implementation of the Logger Debugf method.
 func (n *nopLogger) Debugf(format string, v ...interface{}) {}
 
+// Close is a no-op implementation of the Logger Close method.
+func (n *nopLogger) Close() error { return nil }
+
 // StandardLogger is a basic implementation of pilosa.Logger based on log.Logger.
 type StandardLogger struct {
 	logger *log.Logger
+	f      *os.File
 }
 
-func NewStandardLogger(logger *log.Logger) *StandardLogger {
-	return &StandardLogger{
-		logger: logger,
+func NewStandardLogger(path string, defaultWriter io.Writer) (*StandardLogger, error) {
+	var lw io.Writer
+	var err error
+	var f *os.File
+
+	if path == "" {
+		lw = defaultWriter
+	} else {
+		f, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		if err != nil {
+			return nil, err
+		}
+		lw = f
 	}
+
+	return &StandardLogger{
+		logger: log.New(lw, "", log.LstdFlags),
+		f:      f,
+	}, nil
 }
 
 func (s *StandardLogger) Printf(format string, v ...interface{}) {
@@ -57,15 +81,42 @@ func (s *StandardLogger) Printf(format string, v ...interface{}) {
 
 func (s *StandardLogger) Debugf(format string, v ...interface{}) {}
 
+func (s *StandardLogger) Close() error {
+	if s.f == nil {
+		return nil
+	}
+	return s.f.Close()
+}
+
+func (s *StandardLogger) Logger() *log.Logger {
+	return s.logger
+}
+
 // VerboseLogger is an implementation of pilosa.Logger which includes debug messages.
 type VerboseLogger struct {
 	logger *log.Logger
+	f      *os.File
 }
 
-func NewVerboseLogger(logger *log.Logger) *VerboseLogger {
-	return &VerboseLogger{
-		logger: logger,
+func NewVerboseLogger(path string, defaultWriter io.Writer) (*VerboseLogger, error) {
+	var lw io.Writer
+	var err error
+	var f *os.File
+
+	if path == "" {
+		lw = defaultWriter
+	} else {
+		f, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		if err != nil {
+			return nil, err
+		}
+		lw = f
 	}
+
+	return &VerboseLogger{
+		logger: log.New(lw, "", log.LstdFlags),
+		f:      f,
+	}, nil
 }
 
 func (vb *VerboseLogger) Printf(format string, v ...interface{}) {
@@ -73,6 +124,16 @@ func (vb *VerboseLogger) Printf(format string, v ...interface{}) {
 }
 
 func (vb *VerboseLogger) Debugf(format string, v ...interface{}) {
-	vb.logger.Printf("VERBOSE...")
 	vb.logger.Printf(format, v...)
+}
+
+func (vb *VerboseLogger) Close() error {
+	if vb.f == nil {
+		return nil
+	}
+	return vb.f.Close()
+}
+
+func (vb *VerboseLogger) Logger() *log.Logger {
+	return vb.logger
 }
