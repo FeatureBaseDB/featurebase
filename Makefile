@@ -40,20 +40,10 @@ test: vendor
 	go test $(PKGS) $(TESTFLAGS)
 
 cover: vendor
-	mkdir -p build/coverage
-	echo "mode: set" > build/coverage/all.out
-	for pkg in $(PKGS) ; do \
-		make cover-pkg PKG=$$pkg ; \
-	done
-
-cover-pkg:
-	mkdir -p build/coverage
-	touch build/coverage/$(subst /,-,$(PKG)).out
-	go test -coverprofile=build/coverage/$(subst /,-,$(PKG)).out $(PKG)
-	tail -n +2 build/coverage/$(subst /,-,$(PKG)).out >> build/coverage/all.out
+	make test TESTFLAGS="-coverprofile=build/coverage.out"
 
 cover-viz: cover
-	go tool cover -html=build/coverage/all.out
+	go tool cover -html=build/coverage.out
 
 pilosa: vendor
 	go build -tags release -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
