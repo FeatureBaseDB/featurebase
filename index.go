@@ -55,8 +55,10 @@ type Index struct {
 	remoteMaxSlice        uint64
 	remoteMaxInverseSlice uint64
 
+	NewAttrStore func(string) AttrStore
+
 	// Column attribute storage and cache.
-	columnAttrStore *AttrStore
+	columnAttrStore AttrStore
 
 	// InputDefinitions by name.
 	inputDefinitions map[string]*InputDefinition
@@ -83,7 +85,8 @@ func NewIndex(path, name string) (*Index, error) {
 		remoteMaxSlice:        0,
 		remoteMaxInverseSlice: 0,
 
-		columnAttrStore: NewAttrStore(filepath.Join(path, ".data")),
+		NewAttrStore:    NewNopAttrStore,
+		columnAttrStore: NopAttrStore,
 
 		columnLabel: DefaultColumnLabel,
 
@@ -100,7 +103,7 @@ func (i *Index) Name() string { return i.name }
 func (i *Index) Path() string { return i.path }
 
 // ColumnAttrStore returns the storage for column attributes.
-func (i *Index) ColumnAttrStore() *AttrStore { return i.columnAttrStore }
+func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrStore }
 
 // SetColumnLabel sets the column label. Persists to meta file on update.
 func (i *Index) SetColumnLabel(v string) error {
@@ -256,9 +259,7 @@ func (i *Index) Close() error {
 	defer i.mu.Unlock()
 
 	// Close the attribute store.
-	if i.columnAttrStore != nil {
-		i.columnAttrStore.Close()
-	}
+	i.columnAttrStore.Close()
 
 	// Close all frames.
 	for _, f := range i.frames {
@@ -530,6 +531,7 @@ func (i *Index) newFrame(path, name string) (*Frame, error) {
 	f.LogOutput = i.LogOutput
 	f.Stats = i.Stats.WithTags(fmt.Sprintf("frame:%s", name))
 	f.broadcaster = i.broadcaster
+	f.rowAttrStore = i.NewAttrStore(filepath.Join(f.path, ".data"))
 	return f, nil
 }
 

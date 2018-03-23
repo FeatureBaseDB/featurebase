@@ -27,7 +27,7 @@ const SliceWidth = pilosa.SliceWidth
 // Fragment is a test wrapper for pilosa.Fragment.
 type Fragment struct {
 	*pilosa.Fragment
-	RowAttrStore *AttrStore
+	RowAttrStore pilosa.AttrStore
 }
 
 // NewFragment returns a new instance of Fragment with a temporary path.
@@ -43,7 +43,7 @@ func NewFragment(index, frame, view string, slice uint64, cacheType string) *Fra
 		RowAttrStore: MustOpenAttrStore(),
 	}
 	f.Fragment.CacheType = cacheType
-	f.Fragment.RowAttrStore = f.RowAttrStore.AttrStore
+	f.Fragment.RowAttrStore = f.RowAttrStore
 	return f
 }
 
@@ -78,7 +78,7 @@ func (f *Fragment) Reopen() error {
 
 	f.Fragment = pilosa.NewFragment(path, f.Index(), f.Frame(), f.View(), f.Slice())
 	f.Fragment.CacheType = cacheType
-	f.Fragment.RowAttrStore = f.RowAttrStore.AttrStore
+	f.Fragment.RowAttrStore = f.RowAttrStore
 	if err := f.Open(); err != nil {
 		return err
 	}

@@ -63,7 +63,7 @@ type View struct {
 	broadcaster Broadcaster
 	stats       StatsClient
 
-	RowAttrStore *AttrStore
+	RowAttrStore AttrStore
 	LogOutput    io.Writer
 }
 

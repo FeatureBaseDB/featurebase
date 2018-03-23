@@ -108,7 +108,7 @@ type Fragment struct {
 
 	// Row attribute storage.
 	// This is set by the parent frame unless overridden for testing.
-	RowAttrStore *AttrStore
+	RowAttrStore AttrStore
 
 	stats StatsClient
 }

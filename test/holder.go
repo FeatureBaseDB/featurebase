@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/boltdb"
 )
 
 // Holder is a test wrapper for pilosa.Holder.
@@ -38,6 +39,7 @@ func NewHolder() *Holder {
 	h := &Holder{Holder: pilosa.NewHolder()}
 	h.Path = path
 	h.Holder.LogOutput = &h.LogOutput
+	h.Holder.NewAttrStore = boltdb.NewAttrStore
 
 	return h
 }
@@ -64,6 +66,7 @@ func (h *Holder) Reopen() error {
 	h.Holder = pilosa.NewHolder()
 	h.Holder.Path = path
 	h.Holder.LogOutput = logOutput
+	h.Holder.NewAttrStore = boltdb.NewAttrStore
 	if err := h.Holder.Open(); err != nil {
 		return err
 	}

@@ -702,7 +702,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 		Fragment:     frag,
 		RowAttrStore: test.MustOpenAttrStore(),
 	}
-	f.Fragment.RowAttrStore = f.RowAttrStore.AttrStore
+	f.Fragment.RowAttrStore = f.RowAttrStore
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
