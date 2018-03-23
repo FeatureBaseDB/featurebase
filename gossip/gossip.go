@@ -61,12 +61,11 @@ func (g *GossipMemberSet) Start(h pilosa.BroadcastHandler) error {
 	return nil
 }
 
-// Seeds returns the gossipSeeds determined by the config.
-func (g *GossipMemberSet) Seeds() []string {
-	if len(g.config.gossipSeeds) == 0 {
-		return []string{fmt.Sprintf("%s:%d", g.config.memberlistConfig.BindAddr, g.config.memberlistConfig.BindPort)}
-	}
-	return g.config.gossipSeeds
+// GetBindAddr returns the gossip bind address based on config and auto bind port.
+// This method is currently only used in a test scenario where a second node needs
+// the auto-bind address of the first node to use as its gossip seed.
+func (g *GossipMemberSet) GetBindAddr() string {
+	return fmt.Sprintf("%s:%d", g.config.memberlistConfig.BindAddr, g.config.memberlistConfig.BindPort)
 }
 
 // Open implements the MemberSet interface to start network activity.
