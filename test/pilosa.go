@@ -50,8 +50,8 @@ func NewMain() *Main {
 
 	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
 	m.Server.Network = *Network
-	m.Server.AttrStoreGenerator = boltdb.NewAttrStoreGenerator()
-	m.Server.Holder.AttrStoreGenerator = m.Server.AttrStoreGenerator
+	m.Server.NewAttrStore = NewAttrStore
+	m.Server.Holder.NewAttrStore = NewAttrStore
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
@@ -139,8 +139,8 @@ func (m *Main) Reopen() error {
 	config := m.Config
 	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
 	m.Server.Network = *Network
-	m.Server.AttrStoreGenerator = boltdb.NewAttrStoreGenerator()
-	m.Server.Holder.AttrStoreGenerator = m.Server.AttrStoreGenerator
+	m.Server.NewAttrStore = boltdb.NewAttrStore
+	m.Server.Holder.NewAttrStore = m.Server.NewAttrStore
 	m.Config = config
 
 	// Run new program.

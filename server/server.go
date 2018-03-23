@@ -147,8 +147,8 @@ func (m *Command) SetupServer() error {
 	// Configure data directory (for Cluster .topology)
 	m.Server.Cluster.Path = m.Config.DataDir
 
-	m.Server.AttrStoreGenerator = boltdb.NewAttrStoreGenerator()
-	m.Server.Holder.AttrStoreGenerator = m.Server.AttrStoreGenerator
+	m.Server.NewAttrStore = boltdb.NewAttrStore
+	m.Server.Holder.NewAttrStore = boltdb.NewAttrStore
 
 	// Configure holder.
 	m.Server.Logger().Printf("Using data from: %s\n", m.Config.DataDir)

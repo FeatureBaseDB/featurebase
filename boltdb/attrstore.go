@@ -62,25 +62,12 @@ func (c *AttrCache) Set(id uint64, attrs map[string]interface{}) {
 	c.attrs[id] = attrs
 }
 
-// AttrStoreGenerator represents a bolt implementation of the AttrStoreGenerator interface.
-type AttrStoreGenerator struct{}
-
-// New is a bolt implementation of AttrStoreGenerator New method.
-func (g *AttrStoreGenerator) New(path string) pilosa.AttrStore {
-	return NewAttrStore(path)
-}
-
 // AttrStore represents a storage layer for attributes.
 type AttrStore struct {
 	mu        sync.RWMutex
 	path      string
 	db        *bolt.DB
 	attrCache *AttrCache
-}
-
-// NewAttrStoreGenerator returns a new instance of AttrStoreGenerator.
-func NewAttrStoreGenerator() *AttrStoreGenerator {
-	return &AttrStoreGenerator{}
 }
 
 // NewAttrCache returns a new instance of AttrCache.
@@ -91,7 +78,7 @@ func NewAttrCache() *AttrCache {
 }
 
 // NewAttrStore returns a new instance of AttrStore.
-func NewAttrStore(path string) *AttrStore {
+func NewAttrStore(path string) pilosa.AttrStore {
 	return &AttrStore{
 		path:      path,
 		attrCache: NewAttrCache(),

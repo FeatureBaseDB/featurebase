@@ -55,7 +55,7 @@ type Index struct {
 	remoteMaxSlice        uint64
 	remoteMaxInverseSlice uint64
 
-	AttrStoreGenerator AttrStoreGenerator
+	NewAttrStore func(string) AttrStore
 
 	// Column attribute storage and cache.
 	columnAttrStore AttrStore
@@ -85,8 +85,8 @@ func NewIndex(path, name string) (*Index, error) {
 		remoteMaxSlice:        0,
 		remoteMaxInverseSlice: 0,
 
-		AttrStoreGenerator: NopAttrStoreGenerator,
-		columnAttrStore:    NopAttrStore,
+		NewAttrStore:    NewNopAttrStore,
+		columnAttrStore: NopAttrStore,
 
 		columnLabel: DefaultColumnLabel,
 
@@ -531,7 +531,7 @@ func (i *Index) newFrame(path, name string) (*Frame, error) {
 	f.LogOutput = i.LogOutput
 	f.Stats = i.Stats.WithTags(fmt.Sprintf("frame:%s", name))
 	f.broadcaster = i.broadcaster
-	f.rowAttrStore = i.AttrStoreGenerator.New(filepath.Join(f.path, ".data"))
+	f.rowAttrStore = i.NewAttrStore(filepath.Join(f.path, ".data"))
 	return f, nil
 }
 

@@ -30,11 +30,6 @@ const (
 	AttrTypeFloat  = 4
 )
 
-// AttrStoreGenerator represents an interface for generating an AttrStore.
-type AttrStoreGenerator interface {
-	New(string) AttrStore
-}
-
 // AttrStore represents an interface for handling row/column attributes.
 type AttrStore interface {
 	Path() string
@@ -48,25 +43,13 @@ type AttrStore interface {
 }
 
 func init() {
-	NopAttrStoreGenerator = &nopAttrStoreGenerator{
-		Name: "NooP",
-	}
 	NopAttrStore = &nopAttrStore{}
 }
-
-// NopAttrStoreGenerator represents an AttrStoreGenerator that return a no-op AttrStore.
-var NopAttrStoreGenerator AttrStoreGenerator
 
 // NopAttrStore represents an AttrStore that doesn't do anything.
 var NopAttrStore AttrStore
 
-// nopAttrStoreGenerator represents a no-op implementation of the AttrStoreGenerator interface.
-type nopAttrStoreGenerator struct {
-	Name string
-}
-
-// New is a no-op implementation of AttrStoreGenerator New method.
-func (g *nopAttrStoreGenerator) New(string) AttrStore {
+func NewNopAttrStore(string) AttrStore {
 	return &nopAttrStore{}
 }
 
