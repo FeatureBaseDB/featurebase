@@ -63,6 +63,9 @@ func (g *GossipMemberSet) Start(h pilosa.BroadcastHandler) error {
 
 // Seeds returns the gossipSeeds determined by the config.
 func (g *GossipMemberSet) Seeds() []string {
+	if len(g.config.gossipSeeds) == 0 {
+		return []string{fmt.Sprintf("%s:%d", g.config.memberlistConfig.BindAddr, g.config.memberlistConfig.BindPort)}
+	}
 	return g.config.gossipSeeds
 }
 
@@ -201,11 +204,6 @@ func NewGossipMemberSetWithTransport(name string, cfg *pilosa.Config, transport 
 	}
 
 	g.statusHandler = server
-
-	// If no gossipSeeds is provided, use local host:port.
-	if len(cfg.Gossip.Seeds) == 0 {
-		g.config.gossipSeeds = []string{fmt.Sprintf("%s:%d", host, port)}
-	}
 
 	return g, nil
 }
