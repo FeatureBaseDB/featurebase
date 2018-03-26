@@ -36,7 +36,6 @@ var (
 	ErrFrameExists          = errors.New("frame already exists")
 	ErrFrameNotFound        = errors.New("frame not found")
 	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
-	ErrColumnRowLabelEqual  = errors.New("column and row labels cannot be equal")
 
 	ErrInputDefinitionExists         = errors.New("input-definition already exists")
 	ErrInputDefinitionHasPrimaryKey  = errors.New("input-definition must contain one PrimaryKey")

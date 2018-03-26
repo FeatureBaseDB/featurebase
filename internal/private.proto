@@ -8,7 +8,6 @@ message IndexMeta {
 }
 
 message FrameMeta {
-	string RowLabel = 1;
 	bool InverseEnabled = 2;
 	string CacheType = 3;
 	uint32 CacheSize = 4;

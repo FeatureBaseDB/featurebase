@@ -153,8 +153,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Write data on first node.
 	if _, err := m0.Query("i", "", `
-            SetBit(rowID=1, frame="f", columnID=1)
-            SetBit(rowID=1, frame="f", columnID=2400000)
+            SetBit(row=1, frame="f", columnID=1)
+            SetBit(row=1, frame="f", columnID=2400000)
         `); err != nil {
 		t.Fatal(err)
 	}
@@ -351,8 +351,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Write data on first node.
 		if _, err := m0.Query("i", "", `
-				SetBit(rowID=1, frame="f", columnID=1)
-				SetBit(rowID=1, frame="f", columnID=1300000)
+				SetBit(row=1, frame="f", columnID=1)
+				SetBit(row=1, frame="f", columnID=1300000)
 			`); err != nil {
 			t.Fatal(err)
 		}
@@ -406,8 +406,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Write data on first node. Note that no data is placed on slice 1.
 		if _, err := m0.Query("i", "", `
-				SetBit(rowID=1, frame="f", columnID=1)
-				SetBit(rowID=1, frame="f", columnID=2400000)
+				SetBit(row=1, frame="f", columnID=1)
+				SetBit(row=1, frame="f", columnID=2400000)
 			`); err != nil {
 			t.Fatal(err)
 		}
@@ -560,7 +560,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		// TODO: Deterministic node IDs would ensure consistent results
 		setBits := ""
 		for i := 0; i < 20; i++ {
-			setBits += fmt.Sprintf("SetBit(rowID=1, frame=\"f\", columnID=%d) ", i*pilosa.SliceWidth)
+			setBits += fmt.Sprintf("SetBit(row=1, frame=\"f\", columnID=%d) ", i*pilosa.SliceWidth)
 		}
 
 		if _, err := m0.Query("i", "", setBits); err != nil {

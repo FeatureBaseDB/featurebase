@@ -446,11 +446,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, ErrInvalidCacheType
 	}
 
-	// Validate that row label does not match column label.
-	if i.columnLabel == opt.RowLabel || (opt.RowLabel == "" && i.columnLabel == DefaultRowLabel) {
-		return nil, ErrColumnRowLabelEqual
-	}
-
 	// Validate mutually exclusive options if ranges are enabled.
 	if opt.RangeEnabled {
 		if opt.InverseEnabled {
@@ -496,10 +491,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 	f.cacheType = opt.CacheType
 
-	// Set options.
-	if opt.RowLabel != "" {
-		f.rowLabel = opt.RowLabel
-	}
 	if opt.CacheSize != 0 {
 		f.cacheSize = opt.CacheSize
 	}
@@ -694,7 +685,6 @@ func (i *Index) createInputDefinition(pb *internal.InputDefinition) (*InputDefin
 	for _, fr := range pb.Frames {
 		opt := FrameOptions{
 			// Deprecating row labels per #810. So, setting the default row label here.
-			RowLabel:       DefaultRowLabel,
 			InverseEnabled: fr.Meta.InverseEnabled,
 			CacheType:      fr.Meta.CacheType,
 			CacheSize:      fr.Meta.CacheSize,

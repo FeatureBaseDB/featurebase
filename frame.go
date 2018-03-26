@@ -32,7 +32,7 @@ import (
 
 // Default frame settings.
 const (
-	DefaultRowLabel       = "rowID"
+	DefaultRowLabel       = "row"
 	DefaultCacheType      = CacheTypeRanked
 	DefaultInverseEnabled = false
 	DefaultRangeEnabled   = false
@@ -87,7 +87,6 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
-		rowLabel:       DefaultRowLabel,
 		inverseEnabled: DefaultInverseEnabled,
 		cacheType:      DefaultCacheType,
 		cacheSize:      DefaultCacheSize,
@@ -137,39 +136,6 @@ func (f *Frame) MaxInverseSlice() uint64 {
 		return 0
 	}
 	return view.MaxSlice()
-}
-
-// SetRowLabel sets the row labels. Persists to meta file on update.
-func (f *Frame) SetRowLabel(v string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Ignore if no change occurred.
-	if v == "" || f.rowLabel == v {
-		return nil
-	}
-
-	// Make sure rowLabel is valid name
-	err := ValidateLabel(v)
-	if err != nil {
-		return err
-	}
-
-	// Persist meta data to disk on change.
-	f.rowLabel = v
-	if err := f.saveMeta(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// RowLabel returns the row label.
-func (f *Frame) RowLabel() string {
-	f.mu.RLock()
-	v := f.rowLabel
-	f.mu.RUnlock()
-	return v
 }
 
 // CacheType returns the caching mode for the frame.
@@ -224,7 +190,6 @@ func (f *Frame) Options() FrameOptions {
 
 func (f *Frame) options() FrameOptions {
 	return FrameOptions{
-		RowLabel:       f.rowLabel,
 		InverseEnabled: f.inverseEnabled,
 		RangeEnabled:   f.rangeEnabled,
 		CacheType:      f.cacheType,
@@ -319,7 +284,6 @@ func (f *Frame) loadMeta() error {
 	}
 
 	// Copy metadata fields.
-	f.rowLabel = pb.RowLabel
 	f.inverseEnabled = pb.InverseEnabled
 	f.cacheType = pb.CacheType
 	if f.cacheType == "" {
@@ -1030,7 +994,6 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
-	RowLabel       string      `json:"rowLabel,omitempty"`
 	InverseEnabled bool        `json:"inverseEnabled,omitempty"`
 	RangeEnabled   bool        `json:"rangeEnabled,omitempty"`
 	CacheType      string      `json:"cacheType,omitempty"`
@@ -1049,7 +1012,6 @@ func encodeFrameOptions(o *FrameOptions) *internal.FrameMeta {
 		return nil
 	}
 	return &internal.FrameMeta{
-		RowLabel:       o.RowLabel,
 		InverseEnabled: o.InverseEnabled,
 		RangeEnabled:   o.RangeEnabled,
 		CacheType:      o.CacheType,
@@ -1064,7 +1026,6 @@ func decodeFrameOptions(options *internal.FrameMeta) *FrameOptions {
 		return nil
 	}
 	return &FrameOptions{
-		RowLabel:       options.RowLabel,
 		InverseEnabled: options.InverseEnabled,
 		RangeEnabled:   options.RangeEnabled,
 		CacheType:      options.CacheType,
