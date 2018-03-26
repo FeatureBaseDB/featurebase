@@ -3,7 +3,6 @@ syntax = "proto3";
 package internal;
 
 message IndexMeta {
-	string ColumnLabel = 1;
 	string TimeQuantum = 2;
 }
 

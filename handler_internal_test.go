@@ -30,8 +30,7 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 		{json: `{"options": {}}`, expected: postIndexRequest{Options: IndexOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
-		{json: `{"options": {"columnLabel": "test"}}`, expected: postIndexRequest{Options: IndexOptions{ColumnLabel: "test"}}},
-		{json: `{"options": {"columnLabl": "test"}}`, err: "Unknown key: columnLabl:test"},
+		{json: `{"options": {"columnLabel": "test"}}`, err: "Unknown key: columnLabel:test"},
 	}
 	for _, test := range tests {
 		actual := &postIndexRequest{}

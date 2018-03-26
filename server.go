@@ -378,7 +378,6 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 	case *internal.CreateIndexMessage:
 		opt := IndexOptions{
-			ColumnLabel: obj.Meta.ColumnLabel,
 			TimeQuantum: TimeQuantum(obj.Meta.TimeQuantum),
 		}
 		_, err := s.Holder.CreateIndex(obj.Index, opt)

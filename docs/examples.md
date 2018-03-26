@@ -267,12 +267,11 @@ First, follow the instruction in the [getting started](../getting-started/) guid
 The option cacheSize should be set as amount of chembl_id to calculate effectively for the whole data set, so we need to calculate amount of chembl_id. We have total 1678393 chembl_id (it will displayed after import_from_sdf.py script running), then the cacheSize should be >= 1678393
 ```
 curl localhost:10101/index/mole \
-     -X POST \
-     -d '{"options": {"columnLabel": "position_id"}}'
+     -X POST
 
 curl localhost:10101/index/mole/frame/fingerprint \
      -X POST \
-     -d '{"options": {"rowLabel": "chembl_id", "inverseEnabled": true, "cacheSize": 2000000, "cacheType": "ranked"}}'
+     -d '{"options": {"inverseEnabled": true, "cacheSize": 2000000, "cacheType": "ranked"}}'
 
 ```
 
@@ -302,7 +301,7 @@ Return chembl_id = 6223. This script uses Pilosa’s Intersection query to get a
 * Query all chembl_id that have all "on" positions from the inverse view, return list of chembl_id
 
     ```python
-    bit_maps = ["Bitmap(position_id=%s, frame=%s, inversed=%s)" % (f, frame, True) for f in fp]
+    bit_maps = ["Bitmap(col=%s, frame=%s, inversed=%s)" % (f, frame, True) for f in fp]
     bitmap_string = ', '.join(bit_maps)
     intersection = "Intersect(%s)" % bitmap_string
     mole_ids = requests.post("http://%s/index/%s/query" % (host, db), data=intersection).json()["results"][0]["bits"]
@@ -312,7 +311,7 @@ Return chembl_id = 6223. This script uses Pilosa’s Intersection query to get a
 
     ```python    
     for m in mole_ids:
-        mol = requests.post("http://%s/index/%s/query" % (host, db), data="Bitmap(chembl_id=%s, frame=%s)" % (m, frame)).json()["results"][0]["bits"]
+        mol = requests.post("http://%s/index/%s/query" % (host, db), data="Bitmap(row=%s, frame=%s)" % (m, frame)).json()["results"][0]["bits"]
         existed_mol = False
         if len(mol) == len(fp):
             found = m
@@ -331,7 +330,7 @@ Return chembl_id = [6223, 269758, 6206, 6228]. This script uses Pilosa’s TopN 
 
 * Query Pilosa’s TopN to get list of similarity chembl_id
     ```python
-    query_string = 'TopN(Bitmap(chembl_id=6223, frame="fingerprint"), frame="fingerprint", n=2000000, tanimotoThreshold=70)'
+    query_string = 'TopN(Bitmap(row=6223, frame="fingerprint"), frame="fingerprint", n=2000000, tanimotoThreshold=70)'
     topn = requests.post("http://127.0.0.1:10101/index/mol/query" , data=query_string)
     ```
 

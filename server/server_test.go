@@ -56,7 +56,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			if err := client.CreateFrame(context.Background(), "i", cmd.Frame, pilosa.FrameOptions{}); err != nil && err != pilosa.ErrFrameExists {
 				t.Fatal(err)
 			}
-			if _, err := m.Query("i", "", fmt.Sprintf(`SetBit(row=%d, frame=%q, columnID=%d)`, cmd.ID, cmd.Frame, cmd.ColumnID)); err != nil {
+			if _, err := m.Query("i", "", fmt.Sprintf(`SetBit(row=%d, frame=%q, col=%d)`, cmd.ID, cmd.Frame, cmd.ColumnID)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -131,13 +131,13 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	}
 
 	// Set bits on different rows in different frames.
-	if _, err := m.Query("i", "", `SetBit(row=1, frame="x", columnID=100)`); err != nil {
+	if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(row=2, frame="x", columnID=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(row=2, frame="x", col=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(row=2, frame="z", columnID=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(row=2, frame="z", col=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(row=3, frame="neg", columnID=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(row=3, frame="neg", col=100)`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -204,14 +204,14 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	}
 
 	// Set bits on row.
-	if _, err := m.Query("i", "", `SetBit(row=1, frame="x", columnID=100)`); err != nil {
+	if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(row=1, frame="x", columnID=101)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=101)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set column attributes.
-	if _, err := m.Query("i", "", `SetColumnAttrs(id=100, foo="bar")`); err != nil {
+	if _, err := m.Query("i", "", `SetColumnAttrs(col=100, foo="bar")`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -234,40 +234,6 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	}
 }
 
-// Ensure program can set column attributes with columnLabel option.
-func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
-	m := test.MustRunMain()
-	defer m.Close()
-
-	// Create frames.
-	client := m.Client()
-	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{ColumnLabel: "col"}); err != nil && err != pilosa.ErrIndexExists {
-		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "i", "x", pilosa.FrameOptions{}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set bits on row.
-	if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=100)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=101)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Set column attributes.
-	if _, err := m.Query("i", "", `SetColumnAttrs(col=100, foo="bar")`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Query row.
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=1, frame="x")`); err != nil {
-		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
-		t.Fatalf("unexpected result: %s", res)
-	}
-
-}
-
 // Ensure program can set bits on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
 	mains1 := test.MustRunMainWithCluster(t, 2)
@@ -285,13 +251,13 @@ func TestMain_FrameRestore(t *testing.T) {
 
 	// Write data on first cluster.
 	if _, err := m10.Query("i", "", `
-		SetBit(row=1, frame="f", columnID=100)
-		SetBit(row=1, frame="f", columnID=1000)
-		SetBit(row=1, frame="f", columnID=100000)
-		SetBit(row=1, frame="f", columnID=200000)
-		SetBit(row=1, frame="f", columnID=400000)
-		SetBit(row=1, frame="f", columnID=600000)
-		SetBit(row=1, frame="f", columnID=800000)
+		SetBit(row=1, frame="f", col=100)
+		SetBit(row=1, frame="f", col=1000)
+		SetBit(row=1, frame="f", col=100000)
+		SetBit(row=1, frame="f", col=200000)
+		SetBit(row=1, frame="f", col=400000)
+		SetBit(row=1, frame="f", col=600000)
+		SetBit(row=1, frame="f", col=800000)
 	`); err != nil {
 		t.Fatal("setting bits:", err)
 	}
@@ -401,7 +367,7 @@ func TestMain_RecalculateHashes(t *testing.T) {
 	data := []string{}
 	for rowID := 1; rowID < 10; rowID++ {
 		for columnID := 1; columnID < 100; columnID++ {
-			data = append(data, fmt.Sprintf(`SetBit(row=%d, frame="f", columnID=%d)`, rowID, columnID))
+			data = append(data, fmt.Sprintf(`SetBit(row=%d, frame="f", col=%d)`, rowID, columnID))
 		}
 	}
 	if _, err := cluster[0].Query("i", "", strings.Join(data, "")); err != nil {

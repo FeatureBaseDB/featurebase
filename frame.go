@@ -57,7 +57,6 @@ type Frame struct {
 	Stats       StatsClient
 
 	// Frame options.
-	rowLabel       string
 	inverseEnabled bool
 	cacheType      string
 	cacheSize      uint32
@@ -267,7 +266,6 @@ func (f *Frame) loadMeta() error {
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
 	if os.IsNotExist(err) {
-		f.rowLabel = DefaultRowLabel
 		f.inverseEnabled = DefaultInverseEnabled
 		f.cacheType = DefaultCacheType
 		f.cacheSize = DefaultCacheSize

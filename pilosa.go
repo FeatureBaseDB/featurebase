@@ -40,7 +40,6 @@ var (
 	ErrInputDefinitionExists         = errors.New("input-definition already exists")
 	ErrInputDefinitionHasPrimaryKey  = errors.New("input-definition must contain one PrimaryKey")
 	ErrInputDefinitionDupePrimaryKey = errors.New("input-definition can only contain one PrimaryKey")
-	ErrInputDefinitionColumnLabel    = errors.New("PrimaryKey field name does not match columnLabel")
 	ErrInputDefinitionNameRequired   = errors.New("input-definition name required")
 	ErrInputDefinitionAttrsRequired  = errors.New("frames and fields are required")
 	ErrInputDefinitionValueMap       = errors.New("valueMap required for map")

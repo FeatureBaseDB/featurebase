@@ -80,7 +80,6 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// MaxSlice can differ between inverse and standard views, so we need
 	// to send queries to different slices based on orientation.
 	var inverseSlices []uint64
-	columnLabel := DefaultColumnLabel
 
 	// If slices aren't specified, then include all of them.
 	if len(slices) == 0 {
@@ -105,9 +104,6 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 			for i := range inverseSlices {
 				inverseSlices[i] = uint64(i)
 			}
-
-			// Fetch column label from index.
-			columnLabel = idx.ColumnLabel()
 		}
 	}
 
@@ -132,7 +128,7 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 			}
 
 			// If this call is to an inverse frame send to a different list of slices.
-			if call.IsInverse(DefaultRowLabel, columnLabel) {
+			if call.IsInverse(DefaultRowLabel, DefaultColumnLabel) {
 				slices = inverseSlices
 			}
 		}
@@ -266,8 +262,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 		} else {
 			idx := e.Holder.Index(index)
 			if idx != nil {
-				columnLabel := idx.ColumnLabel()
-				if columnID, ok, err := c.UintArg(columnLabel); ok && err == nil {
+				if columnID, ok, err := c.UintArg(DefaultColumnLabel); ok && err == nil {
 					attrs, err := idx.ColumnAttrStore().Attrs(columnID)
 					if err != nil {
 						return nil, err
@@ -522,7 +517,6 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
-	columnLabel := idx.ColumnLabel()
 
 	// Fetch frame & row label based on argument.
 	frame, _ := c.Args["frame"].(string)
@@ -536,14 +530,14 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 
 	// Return an error if both the row and column label are specified.
 	rowID, rowOK, rowErr := c.UintArg(DefaultRowLabel)
-	columnID, columnOK, columnErr := c.UintArg(columnLabel)
+	columnID, columnOK, columnErr := c.UintArg(DefaultColumnLabel)
 	if rowErr != nil || columnErr != nil {
 		return nil, fmt.Errorf("Bitmap() error with arg for col: %v or row: %v", columnErr, rowErr)
 	}
 	if rowOK && columnOK {
-		return nil, fmt.Errorf("Bitmap() cannot specify both %s and %s values", DefaultRowLabel, columnLabel)
+		return nil, fmt.Errorf("Bitmap() cannot specify both %s and %s values", DefaultRowLabel, DefaultColumnLabel)
 	} else if !rowOK && !columnOK {
-		return nil, fmt.Errorf("Bitmap() must specify either %s or %s values", DefaultRowLabel, columnLabel)
+		return nil, fmt.Errorf("Bitmap() must specify either %s or %s values", DefaultRowLabel, DefaultColumnLabel)
 	}
 
 	// Determine row or column orientation.
@@ -602,7 +596,6 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
-	columnLabel := idx.ColumnLabel()
 
 	// Retrieve base frame.
 	f := idx.Frame(frame)
@@ -611,7 +604,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	}
 
 	// Read row & column id.
-	columnID, columnOK, err := c.UintArg(columnLabel)
+	columnID, columnOK, err := c.UintArg(DefaultColumnLabel)
 	if err != nil {
 		return nil, fmt.Errorf("executeRangeSlice - reading column: %v", err)
 	}
@@ -624,9 +617,9 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	var id uint64
 	var viewName string
 	if columnOK && rowOK {
-		return nil, fmt.Errorf("Range() cannot contain both %q and %q", columnLabel, DefaultRowLabel)
+		return nil, fmt.Errorf("Range() cannot contain both %q and %q", DefaultColumnLabel, DefaultRowLabel)
 	} else if !columnOK && !rowOK {
-		return nil, fmt.Errorf("Range() must specify either %q or %q", columnLabel, DefaultRowLabel)
+		return nil, fmt.Errorf("Range() must specify either %q or %q", DefaultColumnLabel, DefaultRowLabel)
 	} else if columnOK {
 		viewName, id = ViewInverse, columnID
 	} else {
@@ -899,9 +892,6 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, ErrFrameNotFound
 	}
 
-	// Retrieve labels.
-	columnLabel := idx.ColumnLabel()
-
 	// Read fields using labels.
 	rowID, ok, err := c.UintArg(DefaultRowLabel)
 	if err != nil {
@@ -910,11 +900,11 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, fmt.Errorf("ClearBit() row field '%v' required", DefaultRowLabel)
 	}
 
-	colID, ok, err := c.UintArg(columnLabel)
+	colID, ok, err := c.UintArg(DefaultColumnLabel)
 	if err != nil {
 		return false, fmt.Errorf("reading ClearBit() column: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
+		return false, fmt.Errorf("ClearBit col field '%v' required", DefaultColumnLabel)
 	}
 
 	// Clear bits for each view.
@@ -992,9 +982,6 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		return false, ErrFrameNotFound
 	}
 
-	// Retrieve labels.
-	columnLabel := idx.ColumnLabel()
-
 	// Read fields using labels.
 	rowID, ok, err := c.UintArg(DefaultRowLabel)
 	if err != nil {
@@ -1003,11 +990,11 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		return false, fmt.Errorf("SetBit() row field '%v' required", DefaultRowLabel)
 	}
 
-	colID, ok, err := c.UintArg(columnLabel)
+	colID, ok, err := c.UintArg(DefaultColumnLabel)
 	if err != nil {
 		return false, fmt.Errorf("reading SetBit() column: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("SetBit() column field '%v' required", columnLabel)
+		return false, fmt.Errorf("SetBit() column field '%v' required", DefaultColumnLabel)
 	}
 
 	var timestamp *time.Time
@@ -1086,13 +1073,6 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 		return errors.New("SetFieldValue() frame required")
 	}
 
-	// Retrieve column label.
-	idx := e.Holder.Index(index)
-	if idx == nil {
-		return ErrIndexNotFound
-	}
-	columnLabel := idx.ColumnLabel()
-
 	// Retrieve frame.
 	frame := e.Holder.Frame(index, frameName)
 	if frame == nil {
@@ -1100,11 +1080,11 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 	}
 
 	// Parse labels.
-	columnID, ok, err := c.UintArg(columnLabel)
+	columnID, ok, err := c.UintArg(DefaultColumnLabel)
 	if err != nil {
 		return fmt.Errorf("reading SetFieldValue() column: %v", err)
 	} else if !ok {
-		return fmt.Errorf("SetFieldValue() column field '%v' required", columnLabel)
+		return fmt.Errorf("SetFieldValue() column field '%v' required", DefaultColumnLabel)
 	}
 
 	// Copy args and remove reserved fields.
@@ -1112,7 +1092,7 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 	delete(args, "frame")
 	// While frame could technically work as a ColumnAttr argument, we are treating it as a reserved word primarily to avoid confusion.
 	// Also, if we ever need to make ColumnAttrs frame-specific, then having this reserved word prevents backward incompatibility.
-	delete(args, columnLabel)
+	delete(args, DefaultColumnLabel)
 
 	// Set values.
 	for name, value := range args {
@@ -1304,28 +1284,18 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 		return ErrIndexNotFound
 	}
 
-	var colName string
-	id, okID, errID := c.UintArg("id")
-	if errID != nil || !okID {
-		// Retrieve columnLabel
-		columnLabel := idx.columnLabel
-		col, okCol, errCol := c.UintArg(columnLabel)
-		if errCol != nil || !okCol {
-			return fmt.Errorf("reading SetColumnAttrs() id/columnLabel errs: %v/%v found %v/%v", errID, errCol, okID, okCol)
-		}
-		id = col
-		colName = columnLabel
-	} else {
-		colName = "id"
+	col, okCol, errCol := c.UintArg(DefaultColumnLabel)
+	if errCol != nil || !okCol {
+		return fmt.Errorf("reading SetColumnAttrs() col errs: %v found %v", errCol, okCol)
 	}
 
 	// Copy args and remove reserved fields.
 	attrs := pql.CopyArgs(c.Args)
-	delete(attrs, colName)
+	delete(attrs, DefaultColumnLabel)
 	delete(attrs, "frame")
 
 	// Set attributes.
-	if err := idx.ColumnAttrStore().SetAttrs(id, attrs); err != nil {
+	if err := idx.ColumnAttrStore().SetAttrs(col, attrs); err != nil {
 		return err
 	}
 	idx.Stats.Count("SetProfileAttrs", 1, 1.0)
