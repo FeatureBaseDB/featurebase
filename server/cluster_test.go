@@ -78,7 +78,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// get the host portion of addr to use for binding
 	m1.Config.Gossip.Port = "0"
-	m1.Config.Gossip.Seeds = gossipMemberSet0.Seeds()
+	m1.Config.Gossip.Seeds = []string{gossipMemberSet0.GetBindAddr()}
 
 	m1.Server.Cluster.Coordinator = m0.Server.NodeID
 	m1.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m1.Server.LogOutput)
