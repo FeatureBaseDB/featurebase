@@ -134,6 +134,10 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
 
 #### Build from Source
 
+<div class="note">
+    <p>For advanced instructions for building from source, view our <a href="https://github.com/pilosa/pilosa/blob/master/CONTRIBUTING.md">Contributor's Guide.</a></p>
+</div>
+
 1. Install the prerequisites:
 
     * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described [here](https://golang.org/doc/code.html#GOPATH).
@@ -287,6 +291,10 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
     You're good to go!
 
 #### Build from Source
+
+<div class="note">
+    <p>For advanced instructions for building from source, view our <a href="https://github.com/pilosa/pilosa/blob/master/CONTRIBUTING.md">Contributor's Guide.</a></p>
+</div>
 
 1. Install the prerequisites:
 

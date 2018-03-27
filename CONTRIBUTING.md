@@ -66,6 +66,72 @@ If you want to help but you aren't sure where to start, check out our [github la
     git remote add upstream git@github.com:pilosa/pilosa.git
     ```
 
+### Makefile
+
+Pilosa includes a Makefile that automates several tasks:
+
+- Install Pilosa:
+
+    ```sh
+    make install
+    ```
+
+- Create the vendor directory:
+
+    ```sh
+    make vendor
+    ```
+
+- Run the test suite:
+
+    ```sh
+    make test
+    ```
+
+- View the coverage report:
+
+    ```sh
+    make cover-viz
+    ```
+
+- Clear the `vendor/` and `build/` directories:
+
+    ```sh
+    make clean
+    ```
+
+- Create release tarballs:
+
+    ```sh
+    make release
+    ```
+
+- Generate static assets for the WebUI:
+
+    ```sh
+    make generate-statik
+    ```
+
+- Regenerate protocol buffer files in `internal/`:
+
+    ```sh
+    make generate-protoc
+    ```
+
+- Create tagged Docker image:
+
+    ```sh
+    make docker
+    ```
+
+- Run tests inside Docker container:
+
+    ```sh
+    make docker-test
+    ```
+
+Additional commands are available in the `Makefile`.
+
 ### Submitting code changes
 
 - Before starting to work on a task, sync your branch with the upstream:
