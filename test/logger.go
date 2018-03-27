@@ -43,8 +43,6 @@ func (b *BufferLogger) Printf(format string, v ...interface{}) {
 
 func (b *BufferLogger) Debugf(format string, v ...interface{}) {}
 
-func (b *BufferLogger) Close() error { return nil }
-
 func (b *BufferLogger) ReadAll() ([]byte, error) {
 	return ioutil.ReadAll(b.buf)
 }

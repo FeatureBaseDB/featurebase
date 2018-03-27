@@ -74,7 +74,8 @@ type Command struct {
 	Done chan struct{}
 
 	// Passed to the Gossip implementation.
-	logger *log.Logger
+	logOutput io.Writer
+	logger    *log.Logger
 }
 
 // NewCommand returns a new instance of Main.
@@ -125,18 +126,22 @@ func (m *Command) Run(args ...string) (err error) {
 
 // SetupLogger sets up the logger based on the configuration.
 func (m *Command) SetupLogger() error {
-	if m.Config.Verbose {
-		vbl, err := pilosa.NewVerboseLogger(m.Config.LogPath, m.Stderr)
+	var err error
+	if m.Config.LogPath == "" {
+		m.logOutput = m.Stderr
+	} else {
+		m.logOutput, err = os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 		if err != nil {
 			return err
 		}
+	}
+
+	if m.Config.Verbose {
+		vbl := pilosa.NewVerboseLogger(m.logOutput)
 		m.logger = vbl.Logger()
 		m.Server.Logger = vbl
 	} else {
-		sl, err := pilosa.NewStandardLogger(m.Config.LogPath, m.Stderr)
-		if err != nil {
-			return err
-		}
+		sl := pilosa.NewStandardLogger(m.logOutput)
 		m.logger = sl.Logger()
 		m.Server.Logger = sl
 	}
@@ -292,9 +297,11 @@ func (m *Command) SetupNetworking() error {
 
 // Close shuts down the server.
 func (m *Command) Close() error {
+	var logErr error
 	serveErr := m.Server.Close()
-	logErr := m.Server.Logger.Close()
-
+	if closer, ok := m.logOutput.(io.Closer); ok {
+		logErr = closer.Close()
+	}
 	close(m.Done)
 	if serveErr != nil && logErr != nil {
 		return fmt.Errorf("closing server: '%v', closing logs: '%v'", serveErr, logErr)
