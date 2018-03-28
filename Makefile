@@ -84,7 +84,7 @@ generate: generate-protoc generate-statik
 
 # Create Docker image from Dockerfile
 docker:
-	docker build -t "pilosa:$(VERSION)" --build-arg ldflags=$(LDFLAGS) .
+	docker build -t "pilosa:$(VERSION)" .
 	@echo Created docker image: pilosa:$(VERSION)
 
 # Compile Pilosa inside Docker container
