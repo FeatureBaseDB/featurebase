@@ -76,6 +76,12 @@ Pilosa includes a Makefile that automates several tasks:
     make install
     ```
 
+- Install build dependencies (dep, statik, and protoc):
+
+    ```sh
+    make install-build-deps
+    ```
+
 - Create the vendor directory:
 
     ```sh

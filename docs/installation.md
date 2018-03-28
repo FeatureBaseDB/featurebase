@@ -152,6 +152,7 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
 3. Build the Pilosa repo (the `make generate-statik` line isn't necessary but builds a nice [webUI](../webui/) into Pilosa):
     ```
     cd $GOPATH/src/github.com/pilosa/pilosa
+    make install-build-deps
     make generate-statik
     make install
     ```
@@ -310,6 +311,7 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
 3. Build the Pilosa repo (the `make generate-statik` line isn't necessary but builds a nice [webUI](../webui/) into Pilosa):
     ```
     cd $GOPATH/src/github.com/pilosa/pilosa
+    make install-build-deps
     make generate-statik
     make install
     ```
