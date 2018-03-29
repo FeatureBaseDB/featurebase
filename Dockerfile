@@ -5,8 +5,6 @@ COPY . /go/src/github.com/pilosa/pilosa/
 RUN cd /go/src/github.com/pilosa/pilosa \
     && CGO_ENABLED=0 make install-dep install-statik install FLAGS="-a"
 
-RUN chmod +x /go/bin/pilosa
-
 FROM scratch
 
 LABEL maintainer "dev@pilosa.com"
