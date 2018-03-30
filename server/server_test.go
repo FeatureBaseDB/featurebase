@@ -15,26 +15,20 @@
 package server_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math/rand"
-	"net/http"
-	"os"
 	"reflect"
 	"runtime"
 	"sort"
 	"strings"
 	"testing"
 	"testing/quick"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -45,7 +39,7 @@ func TestMain_Set_Quick(t *testing.T) {
 	}
 
 	if err := quick.Check(func(cmds []SetCommand) bool {
-		m := MustRunMain()
+		m := test.MustRunMain()
 		defer m.Close()
 
 		// Create client.
@@ -121,7 +115,7 @@ func TestMain_Set_Quick(t *testing.T) {
 
 // Ensure program can set row attributes and retrieve them.
 func TestMain_SetRowAttrs(t *testing.T) {
-	m := MustRunMain()
+	m := test.MustRunMain()
 	defer m.Close()
 
 	// Create frames.
@@ -198,7 +192,7 @@ func TestMain_SetRowAttrs(t *testing.T) {
 
 // Ensure program can set column attributes and retrieve them.
 func TestMain_SetColumnAttrs(t *testing.T) {
-	m := MustRunMain()
+	m := test.MustRunMain()
 	defer m.Close()
 
 	// Create frames.
@@ -242,7 +236,7 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 
 // Ensure program can set column attributes with columnLabel option.
 func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
-	m := MustRunMain()
+	m := test.MustRunMain()
 	defer m.Close()
 
 	// Create frames.
@@ -276,11 +270,12 @@ func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
 
 // Ensure program can set bits on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
-	mains1 := NewMainArrayWithCluster(2)
-	m0 := mains1[0]
+	mains1 := test.MustRunMainWithCluster(t, 2)
+	m10 := mains1[0]
+	m11 := mains1[1]
 
 	// Create frames.
-	client := m0.Client()
+	client := m10.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create index:", err)
 	}
@@ -289,7 +284,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	}
 
 	// Write data on first cluster.
-	if _, err := m0.Query("i", "", `
+	if _, err := m10.Query("i", "", `
 		SetBit(rowID=1, frame="f", columnID=100)
 		SetBit(rowID=1, frame="f", columnID=1000)
 		SetBit(rowID=1, frame="f", columnID=100000)
@@ -302,34 +297,45 @@ func TestMain_FrameRestore(t *testing.T) {
 	}
 
 	// Query row on first cluster.
-	if res, err := m0.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
+	if res, err := m10.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
 		t.Fatal("bitmap query:", err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
 	// Start second cluster.
-	mains2 := NewMainArrayWithCluster(2)
-	m2 := mains2[0]
-	defer m2.Close()
+	mains2 := test.MustRunMainWithCluster(t, 2)
+	m20 := mains2[0]
+	defer m20.Close()
+	m21 := mains2[1]
+	defer m21.Close()
 
 	// Import from first cluster.
-	client, err := pilosa.NewInternalHTTPClient(m2.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	client20, err := pilosa.NewInternalHTTPClient(m20.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
 	if err != nil {
 		t.Fatal("new client:", err)
 	}
-	if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+	client21, err := pilosa.NewInternalHTTPClient(m21.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	if err != nil {
+		t.Fatal("new client:", err)
+	}
+
+	if err := m20.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create new index:", err)
 	}
-	if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+	if err := m20.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal("create new frame:", err)
 	}
-	if err := client.RestoreFrame(context.Background(), m0.Server.URI.HostPort(), "i", "f"); err != nil {
+
+	if err := client20.RestoreFrame(context.Background(), m10.Server.URI.HostPort(), "i", "f"); err != nil {
+		t.Fatal("restore frame:", err)
+	}
+	if err := client21.RestoreFrame(context.Background(), m11.Server.URI.HostPort(), "i", "f"); err != nil {
 		t.Fatal("restore frame:", err)
 	}
 
 	// Query row on second cluster.
-	if res, err := m2.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
+	if res, err := m20.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
 		t.Fatal("another bitmap query:", err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("2unexpected result: %s", res)
@@ -378,226 +384,45 @@ func TestCountOpenFiles(t *testing.T) {
 	}
 }
 
-// Ensure program can send/receive broadcast messages.
-func TestMain_SendReceiveMessage(t *testing.T) {
-	mains := NewMainArrayWithCluster(2)
-	m0 := mains[0]
-	defer m0.Close()
+func TestMain_RecalculateHashes(t *testing.T) {
+	const clusterSize = 5
+	cluster := test.MustRunMainWithCluster(t, clusterSize)
 
-	m1 := mains[1]
-	defer m1.Close()
-
-	// Expected indexes and Frames
-	expected := map[string][]string{
-		"i": []string{"f"},
-	}
-
-	// Create a client for each node.
-	client0 := m0.Client()
-	client1 := m1.Client()
-
-	// Create indexes and frames on one node.
+	// Create the schema.
+	client0 := cluster[0].Client()
 	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
-		t.Fatal(err)
-	} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
-		t.Fatal(err)
+		t.Fatal("create index:", err)
+	}
+	if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{CacheType: "ranked"}); err != nil {
+		t.Fatal("create frame:", err)
 	}
 
-	// Make sure node0 knows about the index and frame created.
-	schema0, err := client0.Schema(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	received0 := map[string][]string{}
-	for _, idx := range schema0 {
-		received0[idx.Name] = []string{}
-		for _, frame := range idx.Frames {
-			received0[idx.Name] = append(received0[idx.Name], frame.Name)
+	// Set some bits
+	data := []string{}
+	for rowID := 1; rowID < 10; rowID++ {
+		for columnID := 1; columnID < 100; columnID++ {
+			data = append(data, fmt.Sprintf(`SetBit(rowID=%d, frame="f", columnID=%d)`, rowID, columnID))
 		}
 	}
-	if !reflect.DeepEqual(received0, expected) {
-		t.Fatalf("unexpected schema on node0: %s", received0)
+	if _, err := cluster[0].Query("i", "", strings.Join(data, "")); err != nil {
+		t.Fatal("setting bits:", err)
 	}
 
-	// Make sure node1 knows about the index and frame created.
-	schema1, err := client1.Schema(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	received1 := map[string][]string{}
-	for _, idx := range schema1 {
-		received1[idx.Name] = []string{}
-		for _, frame := range idx.Frames {
-			received1[idx.Name] = append(received1[idx.Name], frame.Name)
+	// Calculate caches on the first node
+	cluster[0].RecalculateCaches()
+	target := `{"results":[[{"id":7,"count":99},{"id":1,"count":99},{"id":9,"count":99},{"id":5,"count":99},{"id":4,"count":99},{"id":8,"count":99},{"id":2,"count":99},{"id":6,"count":99},{"id":3,"count":99}]]}`
+
+	// Run a TopN query on all nodes. The result should be the same as the target.
+	for _, m := range cluster {
+		res, err := m.Query("i", "", `TopN(frame="f")`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res = strings.TrimSpace(res)
+		if sortedString(target) != sortedString(res) {
+			t.Fatalf("%v != %v", target, res)
 		}
 	}
-	if !reflect.DeepEqual(received1, expected) {
-		t.Fatalf("unexpected schema on node1: %s", received1)
-	}
-
-	// Write data on first node.
-	if _, err := m0.Query("i", "", `
-            SetBit(rowID=1, frame="f", columnID=1)
-            SetBit(rowID=1, frame="f", columnID=2400000)
-        `); err != nil {
-		t.Fatal(err)
-	}
-
-	// We have to wait for the broadcast message to be sent before checking state.
-	time.Sleep(1 * time.Second)
-
-	// Make sure node0 knows about the latest MaxSlice.
-	maxSlices0, err := client0.MaxSliceByIndex(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if maxSlices0["i"] != 2 {
-		t.Fatalf("unexpected maxSlice on node0: %d", maxSlices0["i"])
-	}
-
-	// Make sure node1 knows about the latest MaxSlice.
-	maxSlices1, err := client1.MaxSliceByIndex(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if maxSlices1["i"] != 2 {
-		t.Fatalf("unexpected maxSlice on node1: %d", maxSlices1["i"])
-	}
-
-	// Write input definition to the first node.
-	if _, err := m0.CreateDefinition("i", "test", `{
-            "frames": [{"name": "event-time",
-                        "options": {
-                            "cacheType": "ranked",
-                            "timeQuantum": "YMD"
-                        }}],
-            "fields": [{"name": "columnID",
-                        "primaryKey": true
-                        }]}
-        `); err != nil {
-		t.Fatal(err)
-	}
-
-	// We have to wait for the broadcast message to be sent before checking state.
-	time.Sleep(1 * time.Second)
-
-	frame0 := m0.Server.Holder.Frame("i", "event-time")
-	if frame0 == nil {
-		t.Fatal("frame not found")
-	}
-	frame1 := m1.Server.Holder.Frame("i", "event-time")
-	if frame1 == nil {
-		t.Fatal("frame not found")
-	}
-}
-
-// Main represents a test wrapper for main.Main.
-type Main struct {
-	*server.Command
-
-	Stdin  bytes.Buffer
-	Stdout bytes.Buffer
-	Stderr bytes.Buffer
-}
-
-// NewMain returns a new instance of Main with a temporary data directory and random port.
-func NewMain() *Main {
-	path, err := ioutil.TempDir("", "pilosa-")
-	if err != nil {
-		panic(err)
-	}
-
-	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
-	m.Server.Network = *test.Network
-	m.Config.DataDir = path
-	m.Config.Bind = "localhost:0"
-	m.Config.Cluster.Type = "static"
-	m.Command.Stdin = &m.Stdin
-	m.Command.Stdout = &m.Stdout
-	m.Command.Stderr = &m.Stderr
-
-	if testing.Verbose() {
-		m.Command.Stdout = io.MultiWriter(os.Stdout, m.Command.Stdout)
-		m.Command.Stderr = io.MultiWriter(os.Stderr, m.Command.Stderr)
-	}
-
-	return m
-}
-
-func NewMainArrayWithCluster(size int) []*Main {
-	cluster, err := test.NewServerCluster(size)
-	if err != nil {
-		panic(err)
-	}
-	mainArray := make([]*Main, size)
-	for i := 0; i < size; i++ {
-		mainArray[i] = &Main{Command: cluster.Servers[i]}
-	}
-	return mainArray
-}
-
-// MustRunMain returns a new, running Main. Panic on error.
-func MustRunMain() *Main {
-	m := NewMain()
-	if err := m.Run(); err != nil {
-		panic(err)
-	}
-	return m
-}
-
-// Close closes the program and removes the underlying data directory.
-func (m *Main) Close() error {
-	defer os.RemoveAll(m.Config.DataDir)
-	return m.Command.Close()
-}
-
-// Reopen closes the program and reopens it.
-func (m *Main) Reopen() error {
-	if err := m.Command.Close(); err != nil {
-		return err
-	}
-
-	// Create new main with the same config.
-	config := m.Config
-	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
-	m.Server.Network = *test.Network
-	m.Config = config
-
-	// Run new program.
-	if err := m.Run(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// URL returns the base URL string for accessing the running program.
-func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
-
-// Client returns a client to connect to the program.
-func (m *Main) Client() *pilosa.InternalHTTPClient {
-	client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
-	if err != nil {
-		panic(err)
-	}
-	return client
-}
-
-// Query executes a query against the program through the HTTP API.
-func (m *Main) Query(index, rawQuery, query string) (string, error) {
-	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
-	}
-	return resp.Body, nil
-}
-
-// CreateDefinition.
-func (m *Main) CreateDefinition(index, def, query string) (string, error) {
-	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/input-definition/%s", index, def), query)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
-	}
-	return resp.Body, nil
 }
 
 // SetCommand represents a command to set a bit.
@@ -656,32 +481,6 @@ func ParseConfig(s string) (pilosa.Config, error) {
 	return c, err
 }
 
-// MustDo executes http.Do() with an http.NewRequest(). Panic on error.
-func MustDo(method, urlStr string, body string) *httpResponse {
-	req, err := http.NewRequest(method, urlStr, strings.NewReader(body))
-	if err != nil {
-		panic(err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	buf, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	return &httpResponse{Response: resp, Body: string(buf)}
-}
-
-// httpResponse is a wrapper for http.Response that holds the Body as a string.
-type httpResponse struct {
-	*http.Response
-	Body string
-}
-
 // MustMarshalJSON marshals v into a string. Panic on error.
 func MustMarshalJSON(v interface{}) string {
 	buf, err := json.Marshal(v)
@@ -689,6 +488,12 @@ func MustMarshalJSON(v interface{}) string {
 		panic(err)
 	}
 	return string(buf)
+}
+
+func sortedString(s string) string {
+	arr := strings.Split(s, "")
+	sort.Strings(arr)
+	return strings.Join(arr, "")
 }
 
 // uint64Slice represents a sortable slice of uint64 numbers.

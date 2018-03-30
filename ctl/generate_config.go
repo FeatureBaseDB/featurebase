@@ -43,7 +43,6 @@ bind = "localhost:10101"
 max-writes-per-request = 5000
 
 [cluster]
-  poll-interval = "2m0s"
   replicas = 1
   hosts = [
     "localhost:10101",

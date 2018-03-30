@@ -16,140 +16,268 @@ package test
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"io/ioutil"
-	"net"
-	"strconv"
+	"net/http"
+	"os"
+	"strings"
 	"testing"
 
+	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/boltdb"
+	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pkg/errors"
 )
 
-func MustNewRunningServer(t *testing.T) *server.Command {
-	s, err := newServer()
-	if err != nil {
-		t.Fatalf("getting new server: %v", err)
-	}
-
-	err = s.Run()
-	if err != nil {
-		t.Fatalf("running new pilosa server: %v", err)
-	}
-	return s
-}
-
-func newServer() (*server.Command, error) {
-	s := server.NewCommand(&bytes.Buffer{}, ioutil.Discard, ioutil.Discard)
-
-	port, err := findPort()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting port")
-	}
-	s.Config.Bind = "localhost:" + strconv.Itoa(port)
-
-	gport, err := findPort()
-	if err != nil {
-		return nil, errors.Wrap(err, "getting gossip port")
-	}
-	s.Config.GossipPort = strconv.Itoa(gport)
-
-	s.Config.GossipSeed = "localhost:" + s.Config.GossipPort
-	s.Config.Cluster.Type = "gossip"
-	td, err := ioutil.TempDir("", "")
-	if err != nil {
-		return nil, errors.Wrap(err, "temp dir")
-	}
-	s.Config.DataDir = td
-	return s, nil
-}
-
-func findPort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", ":0")
-	if err != nil {
-		return 0, errors.Wrap(err, "resolving new port addr")
-	}
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, errors.Wrap(err, "listening to get new port")
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	err = l.Close()
-	if err != nil {
-		return port, errors.Wrap(err, "closing listener")
-	}
-	return port, nil
-
-}
-
-func MustFindPort(t *testing.T) int {
-	port, err := findPort()
-	if err != nil {
-		t.Fatalf("allocating new port: %v", err)
-	}
-	return port
-}
-
-type Cluster struct {
-	Servers []*server.Command
-}
-
-func MustNewServerCluster(t *testing.T, size int) *Cluster {
-	cluster, err := NewServerCluster(size)
-	if err != nil {
-		t.Fatalf("new cluster: %v", err)
-	}
-	return cluster
-}
-
-// **** below exists to have interface compatibility with cluster-resize,
-// **** we can remove when cluster resize gets merged *****************//
-
-type M struct {
+////////////////////////////////////////////////////////////////////////////////////
+// Main represents a test wrapper for main.Main.
+type Main struct {
 	*server.Command
+
 	Stdin  bytes.Buffer
 	Stdout bytes.Buffer
 	Stderr bytes.Buffer
 }
 
-func MustRunMainWithCluster(t *testing.T, size int) []*M {
-	cluster := MustNewServerCluster(t, size)
-	mains := make([]*M, 0)
-	for _, s := range cluster.Servers {
-		mains = append(mains, &M{Command: s})
+// NewMain returns a new instance of Main with a temporary data directory and random port.
+func NewMain() *Main {
+	path, err := ioutil.TempDir("", "pilosa-")
+	if err != nil {
+		panic(err)
 	}
-	return mains
+
+	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
+	m.Server.Network = *Network
+	m.Server.NewAttrStore = NewAttrStore
+	m.Server.Holder.NewAttrStore = NewAttrStore
+	m.Config.DataDir = path
+	m.Config.Bind = "http://localhost:0"
+	m.Config.Cluster.Disabled = true
+	m.Command.Stdin = &m.Stdin
+	m.Command.Stdout = &m.Stdout
+	m.Command.Stderr = &m.Stderr
+
+	if testing.Verbose() {
+		m.Command.Stdout = io.MultiWriter(os.Stdout, m.Command.Stdout)
+		m.Command.Stderr = io.MultiWriter(os.Stderr, m.Command.Stderr)
+	}
+
+	return m
 }
 
-// ***********************************************************************************//
+// NewMainWithCluster returns a new instance of Main with clustering enabled.
+func NewMainWithCluster(isCoordinator bool) *Main {
+	m := NewMain()
+	m.Config.Cluster.Disabled = false
+	m.Config.Cluster.Coordinator = isCoordinator
+	return m
+}
 
-func NewServerCluster(size int) (cluster *Cluster, err error) {
-	cluster = &Cluster{
-		Servers: make([]*server.Command, size),
+// MustRunMainWithCluster ruturns a running array of *Main where
+// all nodes are joined via memberlist (i.e. clustering enabled).
+func MustRunMainWithCluster(t *testing.T, size int) []*Main {
+	ma, err := runMainWithCluster(size)
+	if err != nil {
+		t.Fatalf("new main array with cluster: %v", err)
 	}
-	hosts := make([]string, size)
+	return ma
+}
+
+// runMainWithCluster runs an array of *Main where all nodes are
+// joined via memberlist (i.e. clustering enabled).
+func runMainWithCluster(size int) ([]*Main, error) {
+	if size == 0 {
+		return nil, errors.New("cluster must contain at least one node")
+	}
+
+	mains := make([]*Main, size)
+
+	gossipHost := "localhost"
+	gossipPort := 0
+	var err error
+	var gossipSeeds = make([]string, size)
+
 	for i := 0; i < size; i++ {
-		s, err := newServer()
+		m := NewMainWithCluster(i == 0)
+
+		gossipSeeds[i], err = m.RunWithTransport(gossipHost, gossipPort, gossipSeeds[:i])
 		if err != nil {
-			return nil, errors.Wrap(err, "new server")
+			return nil, errors.Wrap(err, "RunWithTransport")
 		}
-		cluster.Servers[i] = s
-		hosts[i] = s.Config.Bind
-		s.Config.GossipSeed = cluster.Servers[0].Config.GossipSeed
 
+		mains[i] = m
 	}
 
-	for _, s := range cluster.Servers {
-		s.Config.Cluster.Hosts = hosts
+	return mains, nil
+}
+
+// MustRunMain returns a new, running Main. Panic on error.
+func MustRunMain() *Main {
+	m := NewMain()
+	m.Config.Metric.Diagnostics = false // Disable diagnostics.
+	if err := m.Run(); err != nil {
+		panic(err)
 	}
-	for i, s := range cluster.Servers {
-		err := s.Run()
-		if err != nil {
-			for j := 0; j <= i; j++ {
-				cluster.Servers[j].Close()
-			}
-			return nil, errors.Wrapf(err, "starting server %d of %d. Config: %#v", i+1, size, s.Config)
-		}
+	return m
+}
+
+// Close closes the program and removes the underlying data directory.
+func (m *Main) Close() error {
+	defer os.RemoveAll(m.Config.DataDir)
+	return m.Command.Close()
+}
+
+// Reopen closes the program and reopens it.
+func (m *Main) Reopen() error {
+	if err := m.Command.Close(); err != nil {
+		return err
 	}
 
-	return cluster, nil
+	// Create new main with the same config.
+	config := m.Config
+	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
+	m.Server.Network = *Network
+	m.Server.NewAttrStore = boltdb.NewAttrStore
+	m.Server.Holder.NewAttrStore = m.Server.NewAttrStore
+	m.Config = config
+
+	// Run new program.
+	if err := m.Run(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RunWithTransport runs Main and returns the dynamically allocated gossip port.
+func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (seed string, err error) {
+	defer close(m.Started)
+
+	/*
+	   TEST:
+	   - SetupServer (just static settings from config)
+	   - OpenListener (sets Server.Name to use in gossip)
+	   - NewTransport (gossip)
+	   - SetupNetworking (does the gossip or static stuff) - uses Server.Name
+	   - Open server
+
+	   PRODUCTION:
+	   - SetupServer (just static settings from config)
+	   - SetupNetworking (does the gossip or static stuff) - calls NewTransport
+	   - Open server - calls OpenListener
+	*/
+
+	// SetupServer
+	err = m.SetupServer()
+	if err != nil {
+		return seed, err
+	}
+
+	// Open server listener.
+	err = m.Server.OpenListener()
+	if err != nil {
+		return seed, err
+	}
+
+	// Open gossip transport to use in SetupServer.
+	transport, err := gossip.NewTransport(host, bindPort)
+	if err != nil {
+		return seed, err
+	}
+	m.GossipTransport = transport
+
+	if len(joinSeeds) != 0 {
+		m.Config.Gossip.Seeds = joinSeeds
+	} else {
+		m.Config.Gossip.Seeds = []string{transport.URI.String()}
+	}
+
+	seed = transport.URI.String()
+
+	// SetupNetworking
+	err = m.SetupNetworking()
+	if err != nil {
+		return seed, err
+	}
+
+	if err = m.Server.BroadcastReceiver.Start(m.Server); err != nil {
+		return seed, err
+	}
+
+	m.Server.Cluster.Static = false
+
+	// Initialize server.
+	err = m.Server.Open()
+	if err != nil {
+		return seed, err
+	}
+
+	return seed, nil
+}
+
+// URL returns the base URL string for accessing the running program.
+func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
+
+// Client returns a client to connect to the program.
+func (m *Main) Client() *pilosa.InternalHTTPClient {
+	client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	if err != nil {
+		panic(err)
+	}
+	return client
+}
+
+// Query executes a query against the program through the HTTP API.
+func (m *Main) Query(index, rawQuery, query string) (string, error) {
+	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+	return resp.Body, nil
+}
+
+// CreateDefinition.
+func (m *Main) CreateDefinition(index, def, query string) (string, error) {
+	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/input-definition/%s", index, def), query)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+	return resp.Body, nil
+}
+
+func (m *Main) RecalculateCaches() error {
+	resp := MustDo("POST", fmt.Sprintf("%s/recalculate-caches", m.URL()), "")
+	if resp.StatusCode != 204 {
+		return fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+
+// MustDo executes http.Do() with an http.NewRequest(). Panic on error.
+func MustDo(method, urlStr string, body string) *httpResponse {
+	req, err := http.NewRequest(method, urlStr, strings.NewReader(body))
+	if err != nil {
+		panic(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	buf, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	return &httpResponse{Response: resp, Body: string(buf)}
+}
+
+// httpResponse is a wrapper for http.Response that holds the Body as a string.
+type httpResponse struct {
+	*http.Response
+	Body string
 }

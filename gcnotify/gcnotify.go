@@ -12,34 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ctl
+package gcnotify
 
 import (
-	"bytes"
-	"context"
-	"io"
-	"os"
-	"strings"
-	"testing"
-
+	"github.com/CAFxX/gcnotifier"
 	"github.com/pilosa/pilosa"
 )
 
-func TestConfigCommand_Run(t *testing.T) {
-	rder := []byte{}
-	stdin := bytes.NewReader(rder)
-	r, w, _ := os.Pipe()
-	cm := NewConfigCommand(stdin, w, os.Stderr)
-	cm.Config = pilosa.NewConfig()
+// Ensure ActiveGCNotifier implements interface.
+var _ pilosa.GCNotifier = &ActiveGCNotifier{}
 
-	err := cm.Run(context.Background())
-	w.Close()
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
+type ActiveGCNotifier struct {
+	gcn *gcnotifier.GCNotifier
+}
 
-	if err != nil {
-		t.Fatalf("Config Run doesn't work: %s", err)
-	} else if !strings.Contains(buf.String(), ":10101") {
-		t.Fatalf("Unexpected config: \n%s", buf.String())
+// NewActiveGCNotifier creates an active GCNotifier.
+func NewActiveGCNotifier() *ActiveGCNotifier {
+	return &ActiveGCNotifier{
+		gcn: gcnotifier.New(),
 	}
+}
+
+// Close implements the GCNotifier interface.
+func (n *ActiveGCNotifier) Close() {
+	n.gcn.Close()
+}
+
+// AfterGC implements the GCNotifier interface.
+func (n *ActiveGCNotifier) AfterGC() <-chan struct{} {
+	return n.gcn.AfterGC()
 }

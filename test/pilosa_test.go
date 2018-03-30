@@ -15,28 +15,35 @@
 package test_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
-	"encoding/json"
-
+	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/test"
 )
 
 func TestNewCluster(t *testing.T) {
-	cluster := test.MustNewServerCluster(t, 3)
-	response, err := http.Get("http://" + cluster.Servers[0].Server.Addr().String() + "/status")
+	numNodes := 3
+	cluster := test.MustRunMainWithCluster(t, numNodes)
+	coordinator := cluster[0].Server.Cluster.Coordinator
+	for i := 1; i < numNodes; i++ {
+		if coordi := cluster[i].Server.Cluster.Coordinator; coordi != coordinator {
+			t.Fatalf("node %d does not have the same coordinator as node 0. '%v' and '%v' respectively", i, coordi, coordinator)
+		}
+	}
+
+	response, err := http.Get("http://" + cluster[0].Server.Addr().String() + "/status")
 	if err != nil {
 		t.Fatalf("getting schema: %v", err)
 	}
 	dec := json.NewDecoder(response.Body)
 	body := struct {
-		Status struct {
-			Nodes []struct {
-				Host   string
-				Schema string
-				State  string
-			}
+		State string
+		Nodes []struct {
+			Scheme string
+			Host   string
+			Port   int
 		}
 	}{}
 
@@ -50,13 +57,11 @@ func TestNewCluster(t *testing.T) {
 		t.Fatalf("encoding: %v", err)
 	}
 
-	if len(body.Status.Nodes) != 3 {
+	if len(body.Nodes) != 3 {
 		t.Fatalf("wrong number of nodes in status: %s", bytes)
 	}
 
-	for i, node := range body.Status.Nodes {
-		if node.State != "UP" {
-			t.Fatalf("node %d should be up but is %s", i, node.State)
-		}
+	if body.State != pilosa.ClusterStateNormal {
+		t.Fatalf("cluster state should be %s but is %s", pilosa.ClusterStateNormal, body.State)
 	}
 }

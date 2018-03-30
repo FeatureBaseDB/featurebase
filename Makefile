@@ -1,4 +1,4 @@
-.PHONY: dep docker pilosa release-build prerelease-build release prerelease prerelease-upload install generate statik test cover cover-pkg cover-viz clean docker-build docker-test
+.PHONY: dep docker pilosa release-build prerelease-build release prerelease prerelease-upload install generate generate-statik generate-protoc statik test cover cover-pkg cover-viz clean docker-build docker-test
 
 DEP := $(shell command -v dep 2>/dev/null)
 STATIK := $(shell command -v statik 2>/dev/null)
@@ -11,6 +11,9 @@ PKGS := $(shell cd $(GOPATH)/src/$(CLONE_URL); go list ./... | grep -v vendor)
 BUILD_TIME=`date -u +%FT%T%z`
 LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME)"
 DOCKER_GOLANG_IMAGE=golang:latest
+GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(GIT_BRANCH))
+BRANCH_IDENTIFIER := $(BRANCH)-$(GOOS)-$(GOARCH)
 
 default: test pilosa
 
@@ -75,16 +78,16 @@ else
 endif
 
 prerelease-build: vendor
-	make pilosa FLAGS="-o build/pilosa-master-$(GOOS)-$(GOARCH)/pilosa"
-	cp LICENSE README.md build/pilosa-master-$(GOOS)-$(GOARCH)
-	tar -cvz -C build -f build/pilosa-master-$(GOOS)-$(GOARCH).tar.gz pilosa-master-$(GOOS)-$(GOARCH)/
-	@echo "Created pre-release build: build/pilosa-master-$(GOOS)-$(GOARCH).tar.gz"
+	make pilosa FLAGS="-o build/pilosa-$(BRANCH_IDENTIFIER)/pilosa"
+	cp LICENSE README.md build/pilosa-$(BRANCH_IDENTIFIER)
+	tar -cvz -C build -f build/pilosa-$(BRANCH_IDENTIFIER).tar.gz pilosa-$(BRANCH_IDENTIFIER)/
+	@echo "Created pre-release build: build/pilosa-$(BRANCH_IDENTIFIER).tar.gz"
 
 prerelease:
 	make prerelease-build GOOS=linux GOARCH=amd64
 
 prerelease-upload: prerelease
-	aws s3 cp build/pilosa-master-linux-amd64.tar.gz s3://build.pilosa.com/pilosa-master-linux-amd64.tar.gz --acl public-read
+	aws s3 cp build/pilosa-$(BRANCH_IDENTIFIER).tar.gz s3://build.pilosa.com/pilosa-$(BRANCH_IDENTIFIER).tar.gz --acl public-read
 
 install: vendor
 	go install -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
@@ -100,7 +103,7 @@ generate-protoc: .protoc-gen-gofast
 	go generate github.com/pilosa/pilosa/internal
 
 generate-statik: statik
-	go generate github.com/pilosa/pilosa
+	go generate github.com/pilosa/pilosa/statik
 
 generate: generate-protoc generate-statik
 

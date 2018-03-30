@@ -12,26 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ctl
+package pilosa
 
-import (
-	"bytes"
-	"testing"
-
-	"github.com/pilosa/pilosa/server"
-	"github.com/spf13/cobra"
-)
-
-func TestBuildServerFlags(t *testing.T) {
-	cm := &cobra.Command{}
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	Server := server.NewCommand(stdin, stdout, stderr)
-	BuildServerFlags(cm, Server)
-	if cm.Flags().Lookup("data-dir").Name == "" {
-		t.Fatal("data-dir flag is required")
-	}
-	if cm.Flags().Lookup("log-path").Name == "" {
-		t.Fatal("log-path flag is required")
-	}
+// SecurityManager provides the ability to limit access to restricted endpoints
+// during cluster configuration.
+type SecurityManager interface {
+	SetRestricted()
+	SetNormal()
 }
+
+// NopSecurityManager provides a no-op implementation of the SecurityManager interface.
+type NopSecurityManager struct {
+}
+
+// SetRestricted no-op.
+func (sdm *NopSecurityManager) SetRestricted() {}
+
+// SetNormal no-op.
+func (sdm *NopSecurityManager) SetNormal() {}

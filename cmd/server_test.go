@@ -45,15 +45,14 @@ func TestServerConfig(t *testing.T) {
 		// TEST 0
 		{
 			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:10111,localhost:10110", "--bind", "localhost:10111"},
-			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER_POLL_INTERVAL": "3m2s", "PILOSA_CLUSTER_LONG_QUERY_TIME": "1m30s", "PILOSA_MAX_WRITES_PER_REQUEST": "2000"},
+			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER_LONG_QUERY_TIME": "1m30s", "PILOSA_MAX_WRITES_PER_REQUEST": "2000"},
 			cfgFileContent: `
 	data-dir = "/tmp/myFileDatadir"
 	bind = "localhost:0"
 	max-writes-per-request = 3000
 
 	[cluster]
-		poll-interval = "45s"
-		type = "static"
+		disabled = true
 		replicas = 2
 		hosts = [
 			"localhost:19444",
@@ -66,7 +65,6 @@ func TestServerConfig(t *testing.T) {
 				v.Check(cmd.Server.Config.Bind, "localhost:10111")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:10111", "localhost:10110"})
-				v.Check(cmd.Server.Config.Cluster.PollInterval, pilosa.Duration(time.Second*182))
 				v.Check(cmd.Server.Config.Cluster.LongQueryTime, pilosa.Duration(time.Second*90))
 				v.Check(cmd.Server.Config.MaxWritesPerRequest, 2000)
 				return v.Error()
@@ -80,7 +78,7 @@ func TestServerConfig(t *testing.T) {
 	bind = "localhost:0"
 	data-dir = "` + actualDataDir + `"
 	[cluster]
-		type = "static"
+		disabled = true
 		hosts = [
 			"localhost:19444",
 		]
@@ -94,13 +92,12 @@ func TestServerConfig(t *testing.T) {
 		},
 		// TEST 2
 		{
-			args: []string{"server", "--log-path", logFile.Name(), "--cluster.type", "static"},
+			args: []string{"server", "--log-path", logFile.Name(), "--cluster.disabled", "true"},
 			env:  map[string]string{"PILOSA_PROFILE_CPU_TIME": "1m"},
 			cfgFileContent: `
 	bind = "localhost:19444"
 	data-dir = "` + actualDataDir + `"
 	[cluster]
-		poll-interval = "2m0s"
 		hosts = [
 			"localhost:19444",
 		]
@@ -116,7 +113,6 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:19444"})
-				v.Check(cmd.Server.Config.Cluster.PollInterval, pilosa.Duration(time.Minute*2))
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*11))
 				v.Check(cmd.Server.CPUProfile, profFile.Name())
 				v.Check(cmd.Server.CPUTime, time.Minute)

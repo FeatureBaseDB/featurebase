@@ -25,27 +25,15 @@ import (
 func Test_NewConfig(t *testing.T) {
 	c := pilosa.NewConfig()
 
+	if c.Cluster.Disabled != pilosa.DefaultClusterDisabled {
+		t.Fatalf("unexpected Cluster.Disabled: %v", c.Cluster.Disabled)
+	}
+
+	// Ensure that hosts can't be specificed on a non-disabled cluster.
 	c.Cluster.Hosts = []string{c.Bind, "localhost:10102"}
 
 	// Change cluster type from the default (gossip) to an invalid string.
-	c.Cluster.Type = "invalid-type"
-	if err := c.Validate(); err != pilosa.ErrConfigClusterTypeInvalid {
-		t.Fatal(err)
-	}
-
-	// Change cluster type back to gossip.
-	c.Cluster.Type = pilosa.ClusterGossip
-
-	// Check for bind address in cluster hosts.
-	c.Bind = "localhost:1"
-	if err := c.Validate(); err != pilosa.ErrConfigHostsMissing {
-		t.Fatal(err)
-	}
-
-	c.Bind = "localhost:10101"
-	c.Cluster.ReplicaN = 2
-	c.GossipSeed = "localhost:14000"
-	if err := c.Validate(); err != nil {
+	if err := c.Validate(); err != pilosa.ErrConfigClusterEnabledHosts {
 		t.Fatal(err)
 	}
 }

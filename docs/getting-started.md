@@ -35,7 +35,7 @@ Let's make sure Pilosa is running:
 curl localhost:10101/status
 ```
 ``` response
-{"status":{"Nodes":[{"Host":":10101","State":"UP"}]}}
+{"state":"NORMAL","nodes":[{"id":"18eb5546-5a1a-4ba4-9c52-b53fbe22317e","uri":{"scheme":"http","host":"localhost","port":10101}}]}
 ```
 
 ### Sample Project
@@ -46,7 +46,9 @@ Although Pilosa doesn't keep the data in a tabular format, we still use the term
 
 #### Create the Schema
 
-The queries in this section which are used to set up the indexes in Pilosa just the empty object on success: `{}` - if you would like to verify that a query worked as you expected, you can request the schema as follows:
+Note:
+The queries in this section which are used to set up the indexes in Pilosa just return the empty object on success: `{}` - if you would like to verify that a query worked as you expected, you can request the schema as follows:
+
 ``` request
 curl localhost:10101/schema
 ```
@@ -107,7 +109,7 @@ docker cp language.csv pilosa:/language.csv
 docker exec -it pilosa /pilosa import -i repository -f language /language.csv
 ```
 
-Note that, both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out `languages.txt` to see the mapping for languages.
+Note that both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out [languages.txt](https://github.com/pilosa/getting-started/blob/master/languages.txt) to see the mapping for languages.
 
 ### Input Definition
 

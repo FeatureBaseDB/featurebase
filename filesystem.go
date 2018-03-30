@@ -12,26 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ctl
+package pilosa
 
 import (
-	"bytes"
-	"testing"
-
-	"github.com/pilosa/pilosa/server"
-	"github.com/spf13/cobra"
+	"fmt"
+	"net/http"
 )
 
-func TestBuildServerFlags(t *testing.T) {
-	cm := &cobra.Command{}
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	Server := server.NewCommand(stdin, stdout, stderr)
-	BuildServerFlags(cm, Server)
-	if cm.Flags().Lookup("data-dir").Name == "" {
-		t.Fatal("data-dir flag is required")
-	}
-	if cm.Flags().Lookup("log-path").Name == "" {
-		t.Fatal("log-path flag is required")
-	}
+// Ensure nopFileSystem implements interface.
+var _ FileSystem = &nopFileSystem{}
+
+// FileSystem represents an interface for a WebUI file system.
+type FileSystem interface {
+	New() (http.FileSystem, error)
+}
+
+func init() {
+	NopFileSystem = &nopFileSystem{}
+}
+
+// NopFileSystem represents a FileSystem that returns an error if called.
+var NopFileSystem FileSystem
+
+type nopFileSystem struct{}
+
+// New is a no-op implementation of FileSystem New method.
+func (n *nopFileSystem) New() (http.FileSystem, error) {
+	return nil, fmt.Errorf("file system not implemented")
 }

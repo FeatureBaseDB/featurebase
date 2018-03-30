@@ -89,9 +89,6 @@ func (c *InternalHTTPClient) MaxInverseSliceByIndex(ctx context.Context) (map[st
 func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := uriPathToURL(c.clientURI(ctx), "/slices/max")
-	u.RawQuery = (&url.Values{
-		"inverse": {strconv.FormatBool(inverse)},
-	}).Encode()
 
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
@@ -108,14 +105,17 @@ func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) 
 	}
 	defer resp.Body.Close()
 
-	var rsp sliceMaxResponse
+	var rsp getSlicesMaxResponse
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
 	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
-	return rsp.MaxSlices, nil
+	if inverse {
+		return rsp.Inverse, nil
+	}
+	return rsp.Standard, nil
 }
 
 // Schema returns all index and frame schema information.
@@ -296,7 +296,7 @@ func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, sl
 	// Import to each node.
 	for _, node := range nodes {
 		if err := c.importNode(ctx, node, buf); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
 
@@ -317,13 +317,12 @@ func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, b
 	}
 
 	node := &Node{
-		Scheme: c.defaultURI.Scheme(),
-		Host:   c.defaultURI.HostPort(),
+		URI: *c.defaultURI,
 	}
 
 	// Import to node.
 	if err := c.importNode(ctx, node, buf); err != nil {
-		return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+		return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 	}
 
 	return nil
@@ -448,7 +447,7 @@ func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, frame, fiel
 	// Import to each node.
 	for _, node := range nodes {
 		if err := c.importValueNode(ctx, node, buf); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
 
@@ -536,7 +535,7 @@ func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame, view s
 		node := nodes[i]
 
 		if err := c.exportNodeCSV(ctx, node, index, frame, view, slice, w); err != nil {
-			e = fmt.Errorf("export node: host=%s, err=%s", node.Host, err)
+			e = fmt.Errorf("export node: host=%s, err=%s", node.URI, err)
 			continue
 		} else {
 			return nil
@@ -688,6 +687,13 @@ func (c *InternalHTTPClient) BackupSlice(ctx context.Context, index, frame, view
 	return nil, fmt.Errorf("unable to connect to any owner")
 }
 
+func (c *InternalHTTPClient) RetrieveSliceFromURI(ctx context.Context, index, frame, view string, slice uint64, uri URI) (io.ReadCloser, error) {
+	node := &Node{
+		URI: uri,
+	}
+	return c.backupSliceNode(ctx, index, frame, view, slice, node)
+}
+
 func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame, view string, slice uint64, node *Node) (io.ReadCloser, error) {
 	u := nodePathToURL(node, "/fragment/data")
 	u.RawQuery = url.Values{
@@ -717,7 +723,7 @@ func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame, 
 		return nil, ErrFragmentNotFound
 	} else if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("unexpected backup status code: host=%s, code=%d", node.Host, resp.StatusCode)
+		return nil, fmt.Errorf("unexpected backup status code: host=%s, code=%d", node.URI, resp.StatusCode)
 	}
 
 	return resp.Body, nil
@@ -796,7 +802,7 @@ func (c *InternalHTTPClient) restoreSliceFrom(ctx context.Context, buf []byte, i
 
 		// Return error if response not OK.
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("unexpected status code: host=%s, code=%d", node.Host, resp.StatusCode)
+			return fmt.Errorf("unexpected status code: host=%s, code=%d", node.URI, resp.StatusCode)
 		}
 	}
 
@@ -1130,6 +1136,8 @@ func (c *InternalHTTPClient) clientURI(ctx context.Context) *URI {
 	clientURI := c.defaultURI
 	if contextURI, ok := ctx.Value("uri").(*URI); ok {
 		clientURI = contextURI
+	} else if contextURI, ok := ctx.Value("uri").(URI); ok {
+		clientURI = &contextURI
 	}
 	return clientURI
 }
@@ -1318,8 +1326,8 @@ func uriPathToURL(uri *URI, path string) url.URL {
 
 func nodePathToURL(node *Node, path string) url.URL {
 	return url.URL{
-		Scheme: node.Scheme,
-		Host:   node.Host,
+		Scheme: node.URI.Scheme(),
+		Host:   node.URI.HostPort(),
 		Path:   path,
 	}
 }
