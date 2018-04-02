@@ -18,9 +18,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -52,7 +49,7 @@ type DiagnosticsCollector struct {
 
 	client *http.Client
 
-	logOutput io.Writer
+	Logger Logger
 
 	server *Server
 }
@@ -66,7 +63,7 @@ func NewDiagnosticsCollector(host string) *DiagnosticsCollector {
 		start:      time.Now(),
 		client:     &http.Client{Timeout: 10 * time.Second},
 		metrics:    make(map[string]interface{}),
-		logOutput:  ioutil.Discard,
+		Logger:     NopLogger,
 	}
 }
 
@@ -119,7 +116,7 @@ func (d *DiagnosticsCollector) CheckVersion() error {
 
 	d.lastVersion = rsp.Version
 	if err := d.compareVersion(rsp.Version); err != nil {
-		d.logger().Printf("%s\n", err.Error())
+		d.Logger.Printf("%s\n", err.Error())
 	}
 
 	return nil
@@ -160,20 +157,10 @@ func (d *DiagnosticsCollector) Set(name string, value interface{}) {
 	d.metrics[name] = value
 }
 
-// SetLogger Set the logger output type.
-func (d *DiagnosticsCollector) SetLogger(logger io.Writer) {
-	d.logOutput = logger
-}
-
-// logger returns a logger that writes to LogOutput.
-func (d *DiagnosticsCollector) logger() *log.Logger {
-	return log.New(d.logOutput, "", log.LstdFlags)
-}
-
 // logErr logs the error and returns true if an error exists
 func (d *DiagnosticsCollector) logErr(err error) bool {
 	if err != nil {
-		d.logOutput.Write([]byte(err.Error()))
+		d.Logger.Printf("%v", err)
 		return true
 	}
 	return false

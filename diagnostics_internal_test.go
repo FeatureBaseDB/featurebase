@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -31,7 +30,6 @@ func TestDiagnosticsClient(t *testing.T) {
 
 	// Create a new client.
 	d := NewDiagnosticsCollector(server.URL)
-	d.SetLogger(ioutil.Discard)
 
 	d.Set("gg", 10)
 	d.Set("ss", "ss")
@@ -146,7 +144,6 @@ func BenchmarkDiagnostics(b *testing.B) {
 
 	// Create a new client.
 	d := NewDiagnosticsCollector(server.URL)
-	d.SetLogger(ioutil.Discard)
 
 	prev := runtime.GOMAXPROCS(4)
 	defer runtime.GOMAXPROCS(prev)

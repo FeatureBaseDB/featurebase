@@ -15,7 +15,6 @@
 package statsd_test
 
 import (
-	"io/ioutil"
 	"reflect"
 	"testing"
 	"time"
@@ -31,7 +30,6 @@ func TestStatsClient_WithTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	c.SetLogger(ioutil.Discard)
 
 	// Create a new client with additional tags.
 	c1 := c.WithTags("foo", "bar")

@@ -181,7 +181,7 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (
 	}
 
 	// Open gossip transport to use in SetupServer.
-	transport, err := gossip.NewTransport(host, bindPort)
+	transport, err := gossip.NewTransport(host, bindPort, nil)
 	if err != nil {
 		return seed, err
 	}
