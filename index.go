@@ -31,7 +31,6 @@ import (
 
 // Default index settings.
 const (
-	DefaultColumnLabel = "col"
 	InputDefinitionDir = ".input-definitions"
 )
 

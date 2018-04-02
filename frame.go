@@ -32,7 +32,6 @@ import (
 
 // Default frame settings.
 const (
-	DefaultRowLabel       = "row"
 	DefaultCacheType      = CacheTypeRanked
 	DefaultInverseEnabled = false
 	DefaultRangeEnabled   = false
