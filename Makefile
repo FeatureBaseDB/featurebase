@@ -28,6 +28,7 @@ test: vendor
 
 # Run test suite with coverage enabled
 cover: vendor
+	mkdir -p build
 	$(MAKE) test TESTFLAGS="-coverprofile=build/coverage.out"
 
 # Run test suite with coverage enabled and view coverage results in browser
@@ -130,4 +131,4 @@ install-protoc-gen-gofast:
 	go get -u github.com/gogo/protobuf/protoc-gen-gofast
 
 install-protoc:
-	@echo This tool cannot automatically install protoc. Please download and install protoc from https://github.com/google/protobuf/releases
+	@echo This tool cannot automatically install protoc. Please download and install protoc from https://google.github.io/proto-lens/installing-protoc.html
