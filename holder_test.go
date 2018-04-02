@@ -284,6 +284,60 @@ func TestHolder_Open(t *testing.T) {
 	})
 }
 
+func TestHolder_HasData(t *testing.T) {
+	t.Run("IndexDirectory", func(t *testing.T) {
+		h := test.MustOpenHolder()
+		defer h.Close()
+
+		if h.HasData() {
+			t.Fatal("expected HasData to return false")
+		}
+
+		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		}
+
+		if !h.HasData() {
+			t.Fatal("expected HasData to return true")
+		}
+	})
+
+	t.Run("Peek", func(t *testing.T) {
+		h := test.NewHolder()
+
+		if hasData := h.Peek(); hasData != false {
+			t.Fatal("expected Peek to return false")
+		} else if h.HasData() {
+			t.Fatal("expected HasData to return false")
+		}
+
+		// Create an index directory to indicate data exists.
+		if err := os.Mkdir(h.IndexPath("test"), 0777); err != nil {
+			t.Fatal(err)
+		}
+
+		if hasData := h.Peek(); hasData != true {
+			t.Fatal("expected Peek to return true")
+		} else if !h.HasData() {
+			t.Fatal("expected HasData to return true")
+		}
+	})
+
+	t.Run("Peek at missing directory", func(t *testing.T) {
+		h := test.NewHolder()
+
+		// Ensure that hasData is false when trying to peek into
+		// a directory that doesn't exist.
+		h.Path = "bad-path"
+
+		if hasData := h.Peek(); hasData != false {
+			t.Fatal("expected Peek to return false")
+		} else if h.HasData() {
+			t.Fatal("expected HasData to return false")
+		}
+	})
+}
+
 // Ensure holder can delete an index and its underlying files.
 func TestHolder_DeleteIndex(t *testing.T) {
 	hldr := test.MustOpenHolder()
@@ -334,16 +388,21 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(client)
 		e.Holder = hldr1.Holder
-		e.Scheme = cluster.Nodes[1].Scheme
-		e.Host = cluster.Nodes[1].Host
+		e.Node = cluster.Nodes[1]
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 
 	// Mock 2-node, fully replicated cluster.
 	cluster.ReplicaN = 2
-	cluster.Nodes[0].Host = "localhost:0"
-	cluster.Nodes[1].Host = test.MustParseURLHost(s.URL)
+
+	uri, err := pilosa.NewURIFromAddress(s.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cluster.Nodes[0].URI = test.NewURIFromHostPort("localhost", 0)
+	cluster.Nodes[1].URI = *uri
 
 	// Create frames on nodes.
 	for _, hldr := range []*test.Holder{hldr0, hldr1} {
@@ -395,13 +454,9 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr0.Index("y").SetRemoteMaxSlice(3)
 
 	// Set up syncer.
-	uri, err := cluster.Nodes[0].URI()
-	if err != nil {
-		t.Fatal(err)
-	}
 	syncer := pilosa.HolderSyncer{
 		Holder:       hldr0.Holder,
-		URI:          uri,
+		Node:         cluster.Nodes[0],
 		Cluster:      cluster,
 		RemoteClient: pilosa.GetHTTPClient(nil),
 		Stats:        pilosa.NopStatsClient,
@@ -436,6 +491,144 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 		}
 		f = hldr.Fragment("y", "z", pilosa.ViewStandard, 3)
 		if a := f.Row(10).Bits(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
+			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
+		}
+	}
+}
+
+// Ensure holder can clean up orphaned fragments.
+func TestHolderCleaner_CleanHolder(t *testing.T) {
+	cluster := test.NewCluster(2)
+
+	// Create a local holder.
+	hldr0 := test.MustOpenHolder()
+	defer hldr0.Close()
+
+	// Mock 2-node, fully replicated cluster.
+	cluster.ReplicaN = 2
+
+	cluster.Nodes[0].URI = test.NewURIFromHostPort("localhost", 0)
+
+	// Create frames on nodes.
+	for _, hldr := range []*test.Holder{hldr0} {
+		hldr.MustCreateFrameIfNotExists("i", "f")
+		hldr.MustCreateFrameIfNotExists("i", "f0")
+		hldr.MustCreateFrameIfNotExists("y", "z")
+	}
+
+	// Set data on the local holder.
+	f := hldr0.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
+	if _, err := f.SetBit(0, 10); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(0, 4000); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(2, 20); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(3, 10); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(120, 10); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(200, 4); err != nil {
+		t.Fatal(err)
+	}
+
+	f = hldr0.MustCreateFragmentIfNotExists("i", "f0", pilosa.ViewStandard, 1)
+	if _, err := f.SetBit(9, SliceWidth+5); err != nil {
+		t.Fatal(err)
+	}
+
+	f = hldr0.MustCreateFragmentIfNotExists("y", "z", pilosa.ViewStandard, 2)
+	if _, err := f.SetBit(10, (2*SliceWidth)+4); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(10, (2*SliceWidth)+5); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(10, (2*SliceWidth)+7); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set highest slice.
+	hldr0.Index("i").SetRemoteMaxSlice(1)
+	hldr0.Index("y").SetRemoteMaxSlice(2)
+
+	// Keep replication the same and ensure we get the expected results.
+	cluster.ReplicaN = 2
+
+	// Set up cleaner for replication 2.
+	cleaner2 := pilosa.HolderCleaner{
+		Node:    cluster.Nodes[0],
+		Holder:  hldr0.Holder,
+		Cluster: cluster,
+	}
+
+	if err := cleaner2.CleanHolder(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data is the same on both nodes.
+	for i, hldr := range []*test.Holder{hldr0} {
+		f := hldr.Fragment("i", "f", pilosa.ViewStandard, 0)
+		if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+			t.Fatalf("unexpected bits(%d/0): %+v", i, a)
+		} else if a := f.Row(2).Bits(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Fatalf("unexpected bits(%d/2): %+v", i, a)
+		} else if a := f.Row(3).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected bits(%d/3): %+v", i, a)
+		} else if a := f.Row(120).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected bits(%d/120): %+v", i, a)
+		} else if a := f.Row(200).Bits(); !reflect.DeepEqual(a, []uint64{4}) {
+			t.Fatalf("unexpected bits(%d/200): %+v", i, a)
+		}
+
+		f = hldr.Fragment("i", "f0", pilosa.ViewStandard, 1)
+		a := f.Row(9).Bits()
+		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+			t.Fatalf("unexpected bits(%d/i/f0): %+v", i, a)
+		}
+		if a := f.Row(9).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
+		}
+		f = hldr.Fragment("y", "z", pilosa.ViewStandard, 2)
+		if a := f.Row(10).Bits(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
+			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
+		}
+	}
+
+	// Change replication factor to ensure we have fragments to remove.
+	cluster.ReplicaN = 1
+
+	// Set up cleaner for replication 1.
+	cleaner1 := pilosa.HolderCleaner{
+		Node:    cluster.Nodes[0],
+		Holder:  hldr0.Holder,
+		Cluster: cluster,
+	}
+
+	if err := cleaner1.CleanHolder(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data is the same on both nodes.
+	for i, hldr := range []*test.Holder{hldr0} {
+		f := hldr.Fragment("i", "f", pilosa.ViewStandard, 0)
+		if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+			t.Fatalf("unexpected bits(%d/0): %+v", i, a)
+		} else if a := f.Row(2).Bits(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Fatalf("unexpected bits(%d/2): %+v", i, a)
+		} else if a := f.Row(3).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected bits(%d/3): %+v", i, a)
+		} else if a := f.Row(120).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected bits(%d/120): %+v", i, a)
+		} else if a := f.Row(200).Bits(); !reflect.DeepEqual(a, []uint64{4}) {
+			t.Fatalf("unexpected bits(%d/200): %+v", i, a)
+		}
+
+		f = hldr.Fragment("i", "f0", pilosa.ViewStandard, 1)
+		if f != nil {
+			t.Fatalf("expected fragment to be deleted: (%d/i/f0): %+v", i, f)
+		}
+
+		f = hldr.Fragment("y", "z", pilosa.ViewStandard, 2)
+		if a := f.Row(10).Bits(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
 			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
 		}
 	}

@@ -63,9 +63,11 @@ func TestExportCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Handler.URI = uri
+	node := &pilosa.Node{ID: "node", URI: *uri}
+
+	s.Handler.Node = node
 	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.Cluster.Nodes[0] = node
 	s.Handler.Holder = hldr.Holder
 	cm.Host = s.Host()
 

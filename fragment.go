@@ -108,7 +108,7 @@ type Fragment struct {
 
 	// Row attribute storage.
 	// This is set by the parent frame unless overridden for testing.
-	RowAttrStore *AttrStore
+	RowAttrStore AttrStore
 
 	stats StatsClient
 }
@@ -256,6 +256,7 @@ func (f *Fragment) openCache() error {
 		f.cache = NewLRUCache(f.CacheSize)
 	case CacheTypeNone:
 		f.cache = NewNopCache()
+		return nil
 	default:
 		return ErrInvalidCacheType
 	}
@@ -1455,6 +1456,10 @@ func (f *Fragment) flushCache() error {
 		return nil
 	}
 
+	if f.CacheType == CacheTypeNone {
+		return nil
+	}
+
 	// Retrieve a list of row ids from the cache.
 	ids := f.cache.IDs()
 
@@ -1681,7 +1686,7 @@ func (h *blockHasher) WriteValue(v uint64) {
 type FragmentSyncer struct {
 	Fragment *Fragment
 
-	Host         string
+	Node         *Node
 	Cluster      *Cluster
 	RemoteClient *http.Client
 
@@ -1711,17 +1716,14 @@ func (s *FragmentSyncer) SyncFragment() error {
 	blockSets := make([][]FragmentBlock, 0, len(nodes))
 	for _, node := range nodes {
 		// Read local blocks.
-		if node.Host == s.Host {
+		if node.ID == s.Node.ID {
 			b := s.Fragment.Blocks()
 			blockSets = append(blockSets, b)
 			continue
 		}
 
 		// Retrieve remote blocks.
-		client, err := NewInternalHTTPClient(node.Host, s.RemoteClient)
-		if err != nil {
-			return err
-		}
+		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
 		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return err
@@ -1788,7 +1790,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	var pairSets []PairSet
 	var clients []InternalClient
 	for _, node := range s.Cluster.FragmentNodes(f.Index(), f.Slice()) {
-		if s.Host == node.Host {
+		if s.Node.ID == node.ID {
 			continue
 		}
 
@@ -1797,10 +1799,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 			return nil
 		}
 
-		client, err := NewInternalHTTPClient(node.Host, s.RemoteClient)
-		if err != nil {
-			return err
-		}
+		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
 		clients = append(clients, client)
 
 		// Only sync the standard block.

@@ -9,18 +9,20 @@ nav = [
 
 ## WebUI
 
-The Pilosa server comes packaged with in-browser WebUI.  When you run a local Pilosa server on the default host, you can access it at [localhost:10101](http://localhost:10101)
+The Pilosa server comes packaged with in-browser WebUI. When you run a local Pilosa server on the default host, you can access it at [localhost:10101](http://localhost:10101).
+
 This can be used for constructing queries and viewing the cluster status.
 
 ### Console
 
-The [Console view](http://localhost:10101/#console) allows you to enter [PQL](../query-language) queries and run them against your locally running server.  First you must select an Index with the Select index dropdown.
+The [Console view](http://localhost:10101/#console) allows you to enter [PQL](../query-language/) queries and run them against your locally running server.  First you must select an Index with the Select index dropdown.
 
 Each query's result will be displayed in the Output section along with the query time. 
 
 The Console will keep a record of each query and its result with the latest query on top.
 
-![console](/img/docs/webui-console.png)
+![webUI console screenshot](/img/docs/webui-console.png)
+*WebUI console screenshot*
 
 In addition to standard PQL, the console supports a few special commands, prefixed with `:`.
 
@@ -30,9 +32,8 @@ In addition to standard PQL, the console supports a few special commands, prefix
 - `:create frame <framename>`
 - `:delete frame <framename>`
 
-Frame creation also supports options like `timeQuantum` or `inverseEnabled`. When creating a new frame, add options by using the keys documented in [API reference](../api-reference).
+Frame creation also supports options like `timeQuantum` or `inverseEnabled`. When creating a new frame, add options by using the keys documented in [API reference](../api-reference/#create-frame).
 
-- `:create index <indexname> timeQuantum=YM`
 - `:create frame <framename> inverseEnabled=true cacheSize=10000`
 
 

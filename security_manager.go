@@ -12,16 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build !amd64
+package pilosa
 
-package roaring
+// SecurityManager provides the ability to limit access to restricted endpoints
+// during cluster configuration.
+type SecurityManager interface {
+	SetRestricted()
+	SetNormal()
+}
 
-func hasAsm() bool {return false}
+// NopSecurityManager provides a no-op implementation of the SecurityManager interface.
+type NopSecurityManager struct {
+}
 
+// SetRestricted no-op.
+func (sdm *NopSecurityManager) SetRestricted() {}
 
-func popcntSlice(s []uint64) uint64        { return popcntSliceGo(s) }
-func popcntMaskSlice(s, m []uint64) uint64 { return popcntMaskSliceGo(s, m) }
-func popcntAndSlice(s, m []uint64) uint64  { return popcntAndSliceGo(s, m) }
-func popcntOrSlice(s, m []uint64) uint64   { return popcntOrSliceGo(s, m) }
-func popcntXorSlice(s, m []uint64) uint64  { return popcntXorSliceGo(s, m) }
-func popcnt(s uint64) uint64               { return popcntGo(s) }
+// SetNormal no-op.
+func (sdm *NopSecurityManager) SetNormal() {}

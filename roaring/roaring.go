@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"math/bits"
 	"sort"
 	"unsafe"
 )
@@ -1001,12 +1002,16 @@ const ArrayMaxSize = 4096
 // RunMaxSize represents the maximum size of run length encoded containers.
 const RunMaxSize = 2048
 
-// container represents a container for uint32 integers.
+// container represents a container for uint16 integers.
 //
-// These are used for storing the low bits. Containers are separated into three
-// types depending on cardinality. For containers with less than 4,096 values,
-// an array or RLE container is used, depending on the contents. For containers
-// with more than 4,096 values, the values are encoded into bitmaps.
+// These are used for storing the low bits of numbers in larger sets of uint64.
+// The high bits are stored in a container's key which is tracked by a separate
+// data structure. Integers in a container can be encoded in one of three ways -
+// the encoding used is usually whichever is most compact, though any container
+// type should be able to encode any set of integers safely. For containers with
+// less than 4,096 values, an array is often used. Containers with long runs of
+// integers would use run length encoding, and more random data usually uses
+// bitmap encoding.
 type container struct {
 	mapped        bool         // mapped directly to a byte slice when true
 	containerType byte         // array, bitmap, or run
@@ -1274,10 +1279,10 @@ func (c *container) contains(v uint16) bool {
 func (c *container) bitmapCountRuns() (r int) {
 	for i := 0; i < 1023; i++ {
 		v, v1 := c.bitmap[i], c.bitmap[i+1]
-		r = r + int(popcnt((v<<1)&^v)+((v>>63)&^v1))
+		r = r + int(popcount((v<<1)&^v)+((v>>63)&^v1))
 	}
 	vl := c.bitmap[len(c.bitmap)-1]
-	r = r + int(popcnt((vl<<1)&^vl)+vl>>63)
+	r = r + int(popcount((vl<<1)&^vl)+vl>>63)
 	return r
 }
 
@@ -1906,19 +1911,20 @@ func intersectionCountBitmapRun(a, b *container) (n int) {
 }
 
 func intersectionCountArrayBitmap(a, b *container) (n int) {
+	ln := len(b.bitmap)
 	for _, val := range a.array {
-		i := val >> 6
-		if i >= uint16(len(b.bitmap)) {
+		i := int(val >> 6)
+		if i >= ln {
 			break
 		}
 		off := val % 64
-		n += int((b.bitmap[i] & (1 << off)) >> off)
+		n += int(b.bitmap[i]>>off) & 1
 	}
 	return n
 }
 
 func intersectionCountBitmapBitmap(a, b *container) (n int) {
-	return int(popcntAndSlice(a.bitmap, b.bitmap))
+	return int(popcountAndSlice(a.bitmap, b.bitmap))
 }
 
 func intersect(a, b *container) *container {
@@ -2061,22 +2067,22 @@ func intersectBitmapRun(a, b *container) *container {
 			for valast >= vb.start && vastart <= vb.last && i < bitmapN {
 				if vastart >= vb.start && valast <= vb.last { // a within b
 					output.bitmap[i] = a.bitmap[i]
-					output.n += int(popcnt(a.bitmap[i]))
+					output.n += int(popcount(a.bitmap[i]))
 				} else if vb.start >= vastart && vb.last <= valast { // b within a
 					var mask uint64 = ((1 << (vb.last - vb.start + 1)) - 1) << (vb.start - vastart)
 					bits := a.bitmap[i] & mask
 					output.bitmap[i] |= bits
-					output.n += int(popcnt(bits))
+					output.n += int(popcount(bits))
 				} else if vastart < vb.start { // a overlaps front of b
 					offset := 64 - (1 + valast - vb.start)
 					bits := (a.bitmap[i] >> offset) << offset
 					output.bitmap[i] |= bits
-					output.n += int(popcnt(bits))
+					output.n += int(popcount(bits))
 				} else if vb.start < vastart { // b overlaps front of a
 					offset := 64 - (1 + vb.last - vastart)
 					bits := (a.bitmap[i] << offset) >> offset
 					output.bitmap[i] |= bits
-					output.n += int(popcnt(bits))
+					output.n += int(popcount(bits))
 				}
 				// update loop vars
 				i++
@@ -2293,19 +2299,19 @@ func (c *container) bitmapSetRange(i, j uint64) {
 	y := (j - 1) >> 6
 	var X uint64 = maxBitmap << (i % 64)
 	var Y uint64 = maxBitmap >> (63 - ((j - 1) % 64))
-	xcnt := popcnt(X)
-	ycnt := popcnt(Y)
+	xcnt := popcount(X)
+	ycnt := popcount(Y)
 	if x == y {
-		c.n += int((j - i) - popcnt(c.bitmap[x]&(X&Y)))
+		c.n += int((j - i) - popcount(c.bitmap[x]&(X&Y)))
 		c.bitmap[x] |= (X & Y)
 	} else {
-		c.n += int(xcnt - popcnt(c.bitmap[x]&X))
+		c.n += int(xcnt - popcount(c.bitmap[x]&X))
 		c.bitmap[x] |= X
 		for i := x + 1; i < y; i++ {
-			c.n += int(64 - popcnt(c.bitmap[i]))
+			c.n += int(64 - popcount(c.bitmap[i]))
 			c.bitmap[i] = maxBitmap
 		}
-		c.n += int(ycnt - popcnt(c.bitmap[y]&Y))
+		c.n += int(ycnt - popcount(c.bitmap[y]&Y))
 		c.bitmap[y] |= Y
 	}
 }
@@ -2317,21 +2323,21 @@ func (c *container) bitmapXorRange(i, j uint64) {
 	var X uint64 = maxBitmap << (i % 64)
 	var Y uint64 = maxBitmap >> (63 - ((j - 1) % 64))
 	if x == y {
-		cnt := popcnt(c.bitmap[x])
+		cnt := popcount(c.bitmap[x])
 		c.bitmap[x] ^= (X & Y) //// flip
-		c.n += int(popcnt(c.bitmap[x]) - cnt)
+		c.n += int(popcount(c.bitmap[x]) - cnt)
 	} else {
-		cnt := popcnt(c.bitmap[x])
+		cnt := popcount(c.bitmap[x])
 		c.bitmap[x] ^= X
-		c.n += int(popcnt(c.bitmap[x]) - cnt)
+		c.n += int(popcount(c.bitmap[x]) - cnt)
 		for i := x + 1; i < y; i++ {
-			cnt = popcnt(c.bitmap[i])
+			cnt = popcount(c.bitmap[i])
 			c.bitmap[i] ^= maxBitmap
-			c.n += int(popcnt(c.bitmap[i]) - cnt)
+			c.n += int(popcount(c.bitmap[i]) - cnt)
 		}
-		cnt = popcnt(c.bitmap[y])
+		cnt = popcount(c.bitmap[y])
 		c.bitmap[y] ^= Y
-		c.n += int(popcnt(c.bitmap[y]) - cnt)
+		c.n += int(popcount(c.bitmap[y]) - cnt)
 	}
 }
 
@@ -2342,16 +2348,16 @@ func (c *container) bitmapZeroRange(i, j uint64) {
 	var X uint64 = maxBitmap << (i % 64)
 	var Y uint64 = maxBitmap >> (63 - ((j - 1) % 64))
 	if x == y {
-		c.n -= int(popcnt(c.bitmap[x] & (X & Y)))
+		c.n -= int(popcount(c.bitmap[x] & (X & Y)))
 		c.bitmap[x] &= ^(X & Y)
 	} else {
-		c.n -= int(popcnt(c.bitmap[x] & X))
+		c.n -= int(popcount(c.bitmap[x] & X))
 		c.bitmap[x] &= ^X
 		for i := x + 1; i < y; i++ {
-			c.n -= int(popcnt(c.bitmap[i]))
+			c.n -= int(popcount(c.bitmap[i]))
 			c.bitmap[i] = 0
 		}
-		c.n -= int(popcnt(c.bitmap[y] & Y))
+		c.n -= int(popcount(c.bitmap[y] & Y))
 		c.bitmap[y] &= ^Y
 	}
 }
@@ -2376,7 +2382,7 @@ func unionBitmapBitmap(a, b *container) *container {
 	for i := 0; i < bitmapN; i++ {
 		v := a.bitmap[i] | b.bitmap[i]
 		output.bitmap[i] = v
-		output.n += int(popcnt(v))
+		output.n += int(popcount(v))
 	}
 
 	return output
@@ -2640,7 +2646,7 @@ func differenceRunRun(a, b *container) *container {
 	for apos < alen && bpos < blen {
 		switch {
 		case alast < bstart:
-			// current A-run entirely preceeds current B-run: keep full A-run, advance to next A-run
+			// current A-run entirely precedes current B-run: keep full A-run, advance to next A-run
 			output.runs = append(output.runs, interval16{start: astart, last: alast})
 			apos++
 			if apos < alen {
@@ -2648,7 +2654,7 @@ func differenceRunRun(a, b *container) *container {
 				alast = a.runs[apos].last
 			}
 		case blast < astart:
-			// current B-run entirely preceeds current A-run: advance to next B-run
+			// current B-run entirely precedes current A-run: advance to next B-run
 			bpos++
 			if bpos < blen {
 				bstart = b.runs[bpos].start
@@ -2812,7 +2818,7 @@ func xorBitmapBitmap(a, b *container) *container {
 	for i := 0; i < bitmapN; i++ {
 		v := a.bitmap[i] ^ b.bitmap[i]
 		output.bitmap[i] = v
-		output.n += int(popcnt(v))
+		output.n += int(popcount(v))
 	}
 
 	if output.count() < ArrayMaxSize {
@@ -2975,35 +2981,7 @@ func search64(a []uint64, value uint64) int {
 // trailingZeroN returns the number of trailing zeros in v.
 // v must be greater than zero.
 func trailingZeroN(v uint64) int {
-	n := int64(63)
-	if y := v << 32; y != 0 {
-		n, v = n-32, y
-	}
-	if y := v << 16; y != 0 {
-		n, v = n-16, y
-	}
-	if y := v << 8; y != 0 {
-		n, v = n-8, y
-	}
-	if y := v << 4; y != 0 {
-		n, v = n-4, y
-	}
-	if y := v << 2; y != 0 {
-		n, v = n-2, y
-	}
-	return int(n - int64(v<<1>>63))
-}
-
-// bit population count, taken from
-// https://code.google.com/p/go/issues/detail?id=4988#c11
-// credit: https://code.google.com/u/arnehormann/
-func popcount(x uint64) (n uint64) {
-	x -= (x >> 1) & 0x5555555555555555
-	x = (x>>2)&0x3333333333333333 + x&0x3333333333333333
-	x += x >> 4
-	x &= 0x0f0f0f0f0f0f0f0f
-	x *= 0x0101010101010101
-	return x >> 56
+	return bits.TrailingZeros64(v)
 }
 
 // ErrorList represents a list of errors.
@@ -3264,4 +3242,48 @@ func xorBitmapRun(a, b *container) *container {
 		output.runToBitmap()
 	}
 	return output
+}
+
+func popcount(x uint64) uint64 {
+	return uint64(bits.OnesCount64(x))
+}
+
+func popcountSlice(s []uint64) uint64 {
+	cnt := uint64(0)
+	for _, x := range s {
+		cnt += popcount(x)
+	}
+	return cnt
+}
+
+func popcountMaskSlice(s, m []uint64) uint64 {
+	cnt := uint64(0)
+	for i := range s {
+		cnt += popcount(s[i] &^ m[i])
+	}
+	return cnt
+}
+
+func popcountAndSlice(s, m []uint64) uint64 {
+	cnt := uint64(0)
+	for i := range s {
+		cnt += popcount(s[i] & m[i])
+	}
+	return cnt
+}
+
+func popcountOrSlice(s, m []uint64) uint64 {
+	cnt := uint64(0)
+	for i := range s {
+		cnt += popcount(s[i] | m[i])
+	}
+	return cnt
+}
+
+func popcountXorSlice(s, m []uint64) uint64 {
+	cnt := uint64(0)
+	for i := range s {
+		cnt += popcount(s[i] ^ m[i])
+	}
+	return cnt
 }

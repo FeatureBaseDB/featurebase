@@ -13,7 +13,7 @@ nav = [
 
 ### Overview
 
-This section will provide a detailed reference and examples for the Pilosa Query Language (PQL). All PQL queries operate on a single [index]({{< ref "glossary.md#index" >}}) and are passed to Pilosa through the `/index/*index_name*/query` endpoint. You may pass multiple PQL queries in a single request by simply concatenating the queries together - a space is not needed. The results format is always:
+This section will provide a detailed reference and examples for the Pilosa Query Language (PQL). All PQL queries operate on a single [index](../glossary/#index) and are passed to Pilosa through the `/index/INDEX_NAME/query` endpoint. You may pass multiple PQL queries in a single request by simply concatenating the queries together - a space is not needed. The results format is always:
 
 ```
 {"results":[...]}
@@ -31,7 +31,7 @@ The default row label is `rowID`, and the default column label is `columnID`. Ch
 
 ##### Examples
 
-Before running any of the example queries below, follow the instructions in the [Getting Started](../getting-started) section to set up an index, frames, and populate them with some data.
+Before running any of the example queries below, follow the instructions in the [Getting Started](../getting-started/) section to set up an index, frames, and populate them with some data.
 
 The examples just show the PQL quer(ies) needed - to run the query `SetBit(frame="stargazer", columnID=10, rowID=1)` against a server using curl, you would:
 ``` request
@@ -45,14 +45,14 @@ curl localhost:10101/index/repository/query \
 
 #### Arguments and Types
 
-* `frame` The frame specifies on which Pilosa [frame]({{< ref "glossary.md#frame" >}}) the query will operate. Valid frame names are lower case strings; they start with an alphanumeric character, and contain only alphanumeric characters and `_-`. They must be 64 characters or less in length.
+* `frame` The frame specifies on which Pilosa [frame](../glossary/#frame) the query will operate. Valid frame names are lower case strings; they start with an alphanumeric character, and contain only alphanumeric characters and `_-`. They must be 64 characters or less in length.
 * `ROW_LABEL` The default row label is `rowID`, changing the default is deprecated.
 * `COL_LABEL` The default column label is `columnID`, changing the default is deprecated.
 * `TIMESTAMP` This is a timestamp in quotes with the following format `"YYYY-MM-DDTHH:MM"` (e.g. "2006-01-02T15:04")
 * `UINT` An unsigned integer (e.g. 42839)
 * `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`
 * `ATTR_VALUE` Can be a string, float, integer, or bool.
-* `BITMAP_CALL` Any query which returns a bitmap, such as `Bitmap`, `Union`, `Difference`, `Intersect`, `Range`
+* `BITMAP_CALL` Any query which returns a bitmap, such as `Bitmap`, `Union`, `Difference`, `Xor`, `Intersect`, `Range`
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`)
 
 ### Write Operations
@@ -80,14 +80,14 @@ A return value of `false` indicates that the bit was already set to 1 and nothin
 **Examples:**
 
 ```
-SetBit(frame="stargazer", repo_id=10, rowID=1)
+SetBit(frame="stargazer", columnID=10, rowID=1)
 ```
 
 This query illustrates setting a bit in the stargazer frame. User with id=1 has starred repository with id=10.
 
 SetBit also supports providing a timestamp. To write the date that a user starred a repository.
 ```
-SetBit(frame="stargazer", repo_id=10, rowID=1, timestamp="2016-01-01T00:00")
+SetBit(frame="stargazer", columnID=10, rowID=1, timestamp="2016-01-01T00:00")
 ```
 
 Setting multiple bits in a single request:
@@ -118,7 +118,7 @@ SetRowAttrs queries always return `null` upon success.
 SetRowAttrs(frame="stargazer", rowID=10, username="mrpi", active=true)
 ```
 
-Set username value and active status for user 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a row with a [Bitmap]({{< ref "query-language.md#bitmap" >}}) query like so `Bitmap(frame="stargazer", stargazer_id=10)`.
+Set username value and active status for user 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a row with a [Bitmap](../query-language/#bitmap) query like so `Bitmap(frame="stargazer", stargazer_id=10)`.
 
 ```
 SetRowAttrs(frame="stargazer", rowID=10, username=null)
@@ -150,7 +150,7 @@ SetColumnAttrs queries always return `null` upon success. Setting a value of `nu
 SetColumnAttrs(columnID=10, stars=123, url="http://projects.pilosa.com/10", active=true)
 ```
 
-Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap]({{< ref "query-language.md#bitmap" >}}) query like so `Bitmap(frame="stargazer", repo_id=10)`.
+Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap](../query-language/#bitmap) query like so `Bitmap(frame="stargazer", columnID=10)`.
 
 ```
 SetColumnAttrs(columnID=10, url=null)
@@ -184,7 +184,31 @@ A return value of `false` indicates that the bit was already set to 0 and nothin
 ClearBit(frame="stargazer", columnID=10, rowID=1)
 ```
 
-Remove relationship between stargazer_id 1 and repo_id 10  from the stargazer frame.
+Remove relationship between the stargazer in row 1 and the repository in column 10 from the stargazer frame.
+
+
+#### SetFieldValue
+
+**Spec:**
+
+```
+SetFieldValue(<COL_LABEL=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
+```
+
+**Description:**
+
+`SetFieldValue` assigns an integer value with the specified field name to the `columnID` in the given `frame`.
+
+**Result Type:** null
+
+SetFieldValue returns `null` upon success.
+
+**Examples:**
+
+Set the number of pull requests of repository 10.
+```
+SetFieldValue(columnID=10, frame="stats", pullrequests=2)
+```
 
 
 ### Read Operations
@@ -308,6 +332,34 @@ Return `{"attrs":{},"bits":[30]}`
 
 * Bits are repositories that were starred by user 2 BUT NOT user 1
 
+#### Xor
+
+**Spec:**
+
+```
+Xor(<BITMAP_CALL>, [BITMAP_CALL ...])
+```
+
+**Description:**
+
+Xor performs a logical XOR on the results of each `BITMAP_CALL` query passed to it.
+
+**Result Type:** object with attrs and bits
+
+attrs will always be empty
+
+**Examples:**
+
+Query repositories which have been starred by two users.
+
+```
+Xor(Bitmap(frame="stargazer", rowID=1), Bitmap(frame="stargazer", rowID=2))
+```
+
+Returns `{"attrs":{},"bits":[30]}`.
+
+* bits are repositories that were starred by user 1 XOR user 2 (user 1 or user 2, but not both)
+
 #### Count
 **Spec:**
 
@@ -352,6 +404,7 @@ have the attribute specified by `field` with one of the values specified in
 **Result Type:** array of key/count objects
 
 **Caveats:**
+
 * Performing a TopN() query on a frame with cache type ranked will return the top bitmaps sorted by count in descending order.
 * Frames with cache type lru will maintain an LRU (Least Recently Used) cache, thus a TopN() query on this type of frame will return bitmaps sorted in order of most recently set bit.
 * The frame's cache size determines the number of sorted bitmaps to maintain in the cache for purposes of TopN() queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance.
@@ -444,7 +497,7 @@ Returns bits that are true for the comparison operator.
 **Examples:**
 
 In our source data, commitactivity was counted over the last year.
-The following greater-than Range query returns all repositories having more than 100 commits.
+The following greater-than `Range` query returns all repositories having more than 100 commits.
 
 ```
 Range(frame="stats", commitactivity > 100)
@@ -484,7 +537,7 @@ Sum([BITMAP_CALL], <frame=STRING>, <field=STRING>)
 
 **Description:**
 
-Returns the count and computed sum of all bitmap encoded integer values across the `field` in this `frame`. The optional Bitmap call filters the bits used in this computation.
+Returns the count and computed sum of all BSI integer values in the `field` in this `frame`. If the optional `Bitmap` call is supplied, columns with set bits are summed, otherwise the sum is across all columns.
 
 **Result Type:** object with the computed sum and count of the bitmap field.
 
@@ -498,27 +551,3 @@ Sum(frame="stats", field="diskusage")
 Return `{"sum":10,"count":3}`
 
 * Result is the size of all repositories in kilobytes, plus the number of repositories.
-
-
-#### SetFieldValue
-
-**Spec:**
-
-```
-SetFieldValue(<COL_LABEL=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
-```
-
-**Description:**
-
-`SetFieldValue` assigns an integer value with the specified field name to the `columnID` in the given `frame`.
-
-**Result Type:** null
-
-SetFieldValue returns `null` upon success.
-
-**Examples:**
-
-Set the number of pull requests of repository 10.
-```
-SetFieldValue(col=10, frame="stats", pullrequests=2)
-```

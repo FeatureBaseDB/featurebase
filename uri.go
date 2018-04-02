@@ -15,11 +15,14 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/pilosa/pilosa/internal"
 )
 
 var schemeRegexp = regexp.MustCompile("^[+a-z]+$")
@@ -40,9 +43,9 @@ var addressRegexp = regexp.MustCompile("^(([+a-z]+):\\/\\/)?([0-9a-z.-]+|\\[[:0-
 // 	localhost
 // 	:10101
 type URI struct {
-	scheme string
-	host   string
-	port   uint16
+	scheme string `json:"scheme"`
+	host   string `json:"host"`
+	port   uint16 `json:"port"`
 }
 
 // DefaultURI creates and returns the default URI.
@@ -52,6 +55,16 @@ func DefaultURI() *URI {
 		host:   "localhost",
 		port:   10101,
 	}
+}
+
+type URIs []URI
+
+func (u URIs) HostPortStrings() []string {
+	s := make([]string, len(u))
+	for i, a := range u {
+		s[i] = a.HostPort()
+	}
+	return s
 }
 
 // NewURIFromHostPort returns a URI with specified host and port.
@@ -67,11 +80,7 @@ func NewURIFromHostPort(host string, port uint16) (*URI, error) {
 
 // NewURIFromAddress parses the passed address and returns a URI.
 func NewURIFromAddress(address string) (*URI, error) {
-	uri, err := parseAddress(address)
-	if err != nil {
-		return nil, err
-	}
-	return uri, err
+	return parseAddress(address)
 }
 
 // Scheme returns the scheme of this URI.
@@ -144,9 +153,7 @@ func (u URI) Equals(other *URI) bool {
 	if other == nil {
 		return false
 	}
-	return u.scheme == other.scheme &&
-		u.host == other.host &&
-		u.port == other.port
+	return u == *other
 }
 
 // Path returns URI with path
@@ -197,4 +204,83 @@ func parseAddress(address string) (uri *URI, err error) {
 		port:   uint16(port),
 	}
 	return uri, nil
+}
+
+// Encode converts o into its internal representation.
+func (u URI) Encode() *internal.URI {
+	return encodeURI(u)
+}
+
+func encodeURI(u URI) *internal.URI {
+	return &internal.URI{
+		Scheme: u.scheme,
+		Host:   u.host,
+		Port:   uint32(u.port),
+	}
+}
+
+func DecodeURI(i *internal.URI) URI {
+	return decodeURI(i)
+}
+
+func decodeURI(i *internal.URI) URI {
+	if i == nil {
+		return URI{}
+	}
+	return URI{
+		scheme: i.Scheme,
+		host:   i.Host,
+		port:   uint16(i.Port),
+	}
+}
+
+func encodeURIs(a []URI) []*internal.URI {
+	if len(a) == 0 {
+		return nil
+	}
+	other := make([]*internal.URI, len(a))
+	for i := range a {
+		other[i] = encodeURI(a[i])
+	}
+	return other
+}
+
+func decodeURIs(a []*internal.URI) []URI {
+	if len(a) == 0 {
+		return nil
+	}
+	other := make([]URI, len(a))
+	for i := range a {
+		other[i] = decodeURI(a[i])
+	}
+	return other
+}
+
+// MarshalJSON marshals URI into a JSON-encoded byte slice.
+func (u *URI) MarshalJSON() ([]byte, error) {
+	var output struct {
+		Scheme string `json:"scheme,omitempty"`
+		Host   string `json:"host,omitempty"`
+		Port   uint16 `json:"port,omitempty"`
+	}
+	output.Scheme = u.scheme
+	output.Host = u.host
+	output.Port = u.port
+
+	return json.Marshal(output)
+}
+
+func (u *URI) UnmarshalJSON(b []byte) error {
+	var input struct {
+		Scheme string `json:"scheme,omitempty"`
+		Host   string `json:"host,omitempty"`
+		Port   uint16 `json:"port,omitempty"`
+	}
+	if err := json.Unmarshal(b, &input); err != nil {
+		return err
+	}
+	u.scheme = input.Scheme
+	u.host = input.Host
+	u.port = input.Port
+	return nil
 }

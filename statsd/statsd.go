@@ -24,7 +24,7 @@ import (
 	"github.com/pilosa/pilosa"
 )
 
-// StatsD protocal wrapper using the DataDog library that added Tags to the StatsD protocal
+// StatsD protocol wrapper using the DataDog library that added Tags to the StatsD protocol
 // statsD defailt host is "127.0.0.1:8125"
 
 const (

@@ -897,8 +897,12 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	// Create secondary server and update second cluster node.
 	s := test.NewServer()
 	defer s.Close()
-	c.Nodes[1].Scheme = "http"
-	c.Nodes[1].Host = s.Host()
+
+	uri, err := pilosa.NewURIFromAddress(s.Host())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Nodes[1].URI = *uri
 
 	// Mock secondary server's executor to verify arguments and return a bitmap.
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -941,7 +945,13 @@ func TestExecutor_Execute_Remote_Count(t *testing.T) {
 	// Create secondary server and update second cluster node.
 	s := test.NewServer()
 	defer s.Close()
-	c.Nodes[1].Host = s.Host()
+
+	uri, err := pilosa.NewURIFromAddress(s.Host())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c.Nodes[1].URI = *uri
 
 	// Mock secondary server's executor to return a count.
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -971,7 +981,13 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	// Create secondary server and update second cluster node.
 	s := test.NewServer()
 	defer s.Close()
-	c.Nodes[1].Host = s.Host()
+
+	uri, err := pilosa.NewURIFromAddress(s.Host())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c.Nodes[1].URI = *uri
 
 	// Mock secondary server's executor to verify arguments.
 	var remoteCalled bool
@@ -1017,7 +1033,13 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	// Create secondary server and update second cluster node.
 	s := test.NewServer()
 	defer s.Close()
-	c.Nodes[1].Host = s.Host()
+
+	uri, err := pilosa.NewURIFromAddress(s.Host())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c.Nodes[1].URI = *uri
 
 	// Mock secondary server's executor to verify arguments.
 	var remoteCalled bool
@@ -1064,7 +1086,13 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	// Create secondary server and update second cluster node.
 	s := test.NewServer()
 	defer s.Close()
-	c.Nodes[1].Host = s.Host()
+
+	uri, err := pilosa.NewURIFromAddress(s.Host())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c.Nodes[1].URI = *uri
 
 	// Mock secondary server's executor to verify arguments and return a bitmap.
 	var remoteExecN int

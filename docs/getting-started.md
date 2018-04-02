@@ -20,7 +20,7 @@ Any HTTP tool can be used to interact with the Pilosa server. The examples in th
 
 ### Starting Pilosa
 
-Follow the steps in the [Install]({{< ref "installation.md" >}}) document to install Pilosa.
+Follow the steps in the [Install](../installation/) document to install Pilosa.
 Execute the following in a terminal to run Pilosa with the default configuration (Pilosa will be available at `localhost:10101`):
 ```
 pilosa server
@@ -35,18 +35,20 @@ Let's make sure Pilosa is running:
 curl localhost:10101/status
 ```
 ``` response
-{"status":{"Nodes":[{"Host":":10101","State":"UP"}]}}
+{"state":"NORMAL","nodes":[{"id":"18eb5546-5a1a-4ba4-9c52-b53fbe22317e","uri":{"scheme":"http","host":"localhost","port":10101}}]}
 ```
 
 ### Sample Project
 
 In order to better understand Pilosa's capabilities, we will create a sample project called "Star Trace" containing information about the top 1,000 most recently updated Github repositories which have "go" in their name. The Star Trace index will include data points such as programming language, tags, and stargazers—people who have starred a project.
 
-Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and tags. We can better organize the rows by grouping them into sets called Frames. So the "repository" index might have a "languages" frame as well as a "tags" frame. You can learn more about indexes and frames in the [Data Model](../data-model) section of the documentation.
+Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and tags. We can better organize the rows by grouping them into sets called Frames. So the "repository" index might have a "languages" frame as well as a "tags" frame. You can learn more about indexes and frames in the [Data Model](../data-model/) section of the documentation.
 
 #### Create the Schema
 
-The queries in this section which are used to set up the indexes in Pilosa just the empty object on success: `{}` - if you would like to verify that a query worked as you expected, you can request the schema as follows:
+Note:
+The queries in this section which are used to set up the indexes in Pilosa just return the empty object on success: `{}` - if you would like to verify that a query worked as you expected, you can request the schema as follows:
+
 ``` request
 curl localhost:10101/schema
 ```
@@ -85,7 +87,7 @@ curl localhost:10101/index/repository/frame/language \
 
 #### Import Data From CSV Files
 
-If you import data using csv files and without input defintion, download the `stargazer.csv` and `language.csv` files in that repo.
+Download the `stargazer.csv` and `language.csv` files here:
 
 ```
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/stargazer.csv
@@ -107,10 +109,15 @@ docker cp language.csv pilosa:/language.csv
 docker exec -it pilosa /pilosa import -i repository -f language /language.csv
 ```
 
-Note that, both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out `languages.txt` to see the mapping for languages.
+Note that both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out [languages.txt](https://github.com/pilosa/getting-started/blob/master/languages.txt) to see the mapping for languages.
 
 ### Input Definition
-Alternatively Pilosa can import JSON data using an [Input Definition](../input-definition/) describing the schema and ETL rules to process the data.  
+
+<div class="warning">
+Input definition is deprecated as of v0.9.
+</div>
+
+Alternatively Pilosa can import JSON data using an [Input Definition](../input-definition/) describing the schema and ETL rules to process the data.
 
 #### Make Some Queries
 
@@ -225,6 +232,11 @@ curl localhost:10101/index/repository/query \
 ``` response
 {"results":[true]}
 ```
+
+Please note that while user ID 99999 may not be sequential with the other column IDs, it is still a relatively low number. 
+Don't try to use arbitrary 64-bit integers as column or row IDs in Pilosa - this will lead to poor performance, out of memory errors, and more.
+
+
 
 ### What's Next?
 

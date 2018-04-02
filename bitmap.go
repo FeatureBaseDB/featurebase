@@ -14,8 +14,6 @@
 
 package pilosa
 
-// #cgo  CFLAGS:-mpopcnt
-
 import (
 	"encoding/json"
 	"sort"

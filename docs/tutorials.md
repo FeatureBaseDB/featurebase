@@ -10,6 +10,16 @@ nav = [
 
 ## Tutorials
 
+<div class="note">
+<!-- this is html because there is a problem putting a list inside a shortcode -->
+Some of our tutorials work better as standalone repos, since you can <code>git clone</code> the instructions, code, and data all at once. Officially supported tutorials are listed here.<br />
+<br />
+<ul>
+<li><a href="https://github.com/pilosa/cosmosa">Run Pilosa with Microsoft's Azure Cosmos DB</a></li>
+</ul>
+
+</div>
+
 ### Setting Up a Secure Cluster
 
 #### Introduction
@@ -20,7 +30,7 @@ This tutorial assumes that you are using a UNIX-like system, such as Linux or Ma
 
 #### Installing Pilosa and Creating the Directory Structure
 
-If you haven't already done so, install Pilosa server on your computer. For Linux and WSL (Windows Subsystem for Linux) use the [Installing on Linux](https://www.pilosa.com/docs/latest/installation/#installing-on-linux) instructions. For MacOS use the [Installing on MacOS](https://www.pilosa.com/docs/latest/installation/#installing-on-macos). We do not support precompiled releases for other platforms, but you can always compile it yourself from source. See [Build from Source](https://www.pilosa.com/docs/latest/installation/#build-from-source).
+If you haven't already done so, install Pilosa server on your computer. For Linux and WSL (Windows Subsystem for Linux) use the [Installing on Linux](../installation/#installing-on-linux) instructions. For MacOS use the [Installing on MacOS](../installation/#installing-on-macos). We do not support precompiled releases for other platforms, but you can always compile it yourself from source. See [Build from Source](../installation/#build-from-source).
 
 After installing Pilosa, you may have to add it to your `$PATH`. Check that you can run Pilosa from the command line:
 ```
@@ -45,6 +55,7 @@ openssl req -x509 -newkey rsa:2048 -keyout pilosa.local.key -out pilosa.local.cr
 ```
 
 The command above creates two files in the current directory:
+
 * `pilosa.local.crt` is the SSL certificate.
 * `pilosa.local.key` is the private key file which must be kept as secret.
 
@@ -126,9 +137,10 @@ key = "pilosa.local.gossip32"
 ```
 
 Here is some explanation of the configuration items:
+
 * `data-dir` points to the directory where the Pilosa server writes its data. If it doesn't exist, the server will create it.
 * `bind` is the address to which the server listens for incoming requests. The address is composed of three parts: scheme, host, and port. The default scheme is `http` so we explicitly specify `https` to use the HTTPS protocol for communication between nodes.
-* `[cluster]` section contains the settings for a cluster. `hosts` field is the most important, which contains the list of addresses of other nodes. See [Cluster Configuration](https://www.pilosa.com/docs/latest/configuration/#cluster-hosts) for other settings.
+* `[cluster]` section contains the settings for a cluster. `hosts` field is the most important, which contains the list of addresses of other nodes. See [Cluster Configuration](../configuration/#cluster-hosts) for other settings.
 * `[tls]` section contains the TLS settings, including the path to the SSL certificate and the corresponding key. Set `skip-verify` to `true` in order to disable host name verification and other security measures. Do not set `skip-verify` to `true` on production servers.
 * `[gossip]` section contains settings for the Gossip protocol. `seed` is the host and port for the main gossip node which coordinates other nodes. The `port` setting is the gossip listen address for the node. It should be different for each node, if the cluster is running on the same computer, otherwise you can set it to the same value. Finally, the `key` points to the gossip encryption key we created before.
 
@@ -235,7 +247,7 @@ Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administ
 
 #### Introduction
 
-Pilosa can store integer values associated to the columns in an index, and those values are used to support range and aggregate queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
+Pilosa can store integer values associated to the columns in an index, and those values are used to support `Range` and `Sum` queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
 
 First, create an index called `patients`:
 ``` request

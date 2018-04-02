@@ -38,8 +38,9 @@ message Cache {
 	repeated uint64 IDs = 1;
 }
 
-message MaxSlicesResponse {
-    map<string, uint64> MaxSlices = 1;
+message MaxSlices {
+    map<string, uint64> Standard = 1;
+    map<string, uint64> Inverse = 2;
 }
 
 message CreateSliceMessage {
@@ -68,17 +69,31 @@ message DeleteFrameMessage {
     string Frame = 2;
 }
 
+message CreateFieldMessage {
+    string Index = 1;
+    string Frame = 2;
+    Field Field = 3;
+}
+
+message DeleteFieldMessage {
+    string Index = 1;
+    string Frame = 2;
+    string Field = 3;
+}
+
 message Frame {
     string Name = 1;
     FrameMeta Meta = 2;
+    repeated string Views = 3;
+}
+
+message Schema {
+    repeated Index Indexes = 1;
 }
 
 message Index {
     string Name = 1;
-    IndexMeta Meta = 2;
-    uint64 MaxSlice = 3;
     repeated Frame Frames = 4;
-    repeated uint64 Slices = 5;
     repeated InputDefinition InputDefinitions = 6;
 }
 
@@ -112,19 +127,38 @@ message DeleteInputDefinitionMessage {
     string Name = 2;
 }
 
-message NodeStatus {
-    string Host = 1;
+message URI {
+    string Scheme = 1;
+    string Host = 2;
+    uint32 Port = 3;
+}
+
+message Node {
+    string ID = 1;
+    URI URI = 2;
+    bool IsCoordinator = 3;
+}
+
+message NodeStateMessage {
+    string NodeID = 1;
     string State = 2;
-    repeated Index Indexes = 3;
-    string Scheme = 4;
+}
+
+message NodeEventMessage {
+    uint32 Event = 1;
+    Node Node = 2;
+}
+
+message NodeStatus {
+    Node Node = 1;
+    MaxSlices MaxSlices = 2;
+    Schema Schema = 3;
 }
 
 message ClusterStatus {
-    repeated NodeStatus Nodes = 1;
-}
-
-message FrameSchema {
-    repeated Field Fields = 1;
+    string ClusterID = 1;
+    string State = 2;
+    repeated Node Nodes = 3;
 }
 
 message Field {
@@ -134,8 +168,52 @@ message Field {
     int64 Max = 4;
 }
 
+message CreateViewMessage {
+    string Index = 1;
+    string Frame = 2;
+    string View = 3;
+}
+
 message DeleteViewMessage {
     string Index = 1;
     string Frame = 2;
     string View = 3;
 }
+
+message ResizeInstruction {
+    int64 JobID = 1;
+    Node Node = 2;
+    Node Coordinator = 3;
+    repeated ResizeSource Sources = 4;
+    Schema Schema = 5;
+    ClusterStatus ClusterStatus = 6;
+}
+
+message ResizeSource {
+    Node Node = 1;
+    string Index = 2;
+    string Frame = 3;
+    string View = 4;
+    uint64 Slice = 5;
+}
+
+message ResizeInstructionComplete {
+    int64 JobID = 1;
+    Node Node = 2;
+    string Error = 3;
+}
+
+message SetCoordinatorMessage {
+    Node New = 1;
+}
+
+message UpdateCoordinatorMessage {
+    Node New = 1;
+}
+
+message Topology {
+    string ClusterID = 1;
+    repeated string NodeIDs = 2;
+}
+
+message RecalculateCaches {}

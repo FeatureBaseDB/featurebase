@@ -5,6 +5,7 @@ nav = [
     "Installing in production",
     "Importing and Exporting Data",
     "Versioning",
+    "Resizing the Cluster",
     "Backup/restore",
 ]
 +++
@@ -64,7 +65,7 @@ pilosa import -i project -f stargazer --field star_count project-stargazer-count
 ```
 
 <div class="note">
-    <p>Note that you must first create a frame with Range Encoding enabled and a field. View <a href="../api-reference/#create-frame">Create Frame</a> for more details.</p>
+    <p>Note that you must first create a frame with range-encoding enabled and a field. View <a href="../api-reference/#create-frame">Create Frame</a> for more details.</p>
 </div>
 
 #### Exporting
@@ -93,6 +94,71 @@ The Pilosa server should support PQL versioning using HTTP headers. On each requ
 
 When upgrading, upgrade clients first, followed by server for all Minor and Patch level changes.
 
+### Resizing the Cluster
+
+If you need to increase (or decrease) the capacity of a Pilosa server, you can add or remove nodes to a running cluster at any time. Note that you can only add or remove one node at a time; if you attempt to add multiple nodes at once, those requests will be enqueued and processed serially. Also note that during any resize process, the cluster goes into state `RESIZING` during which all read/write requests are denied. When the cluster returns to state `NORMAL` then read/write operations can resume. The amount of time that the cluster stays in state `RESIZING` depends on the amount of data that needs to be moved during the resize process.
+
+#### Adding a Node
+
+You can add a new, empty node to an existing cluster by starting `pilosa server` on the new node with the correct configuration options. Specifically, you must specify the [cluster coordinator](../configuration/#cluster-coordinator) to be the same as the coordinator on the existing nodes. You must also specify at least one valid [gossip seed](../configuration/#gossip-seeds) (preferably multiple for redundancy). When the new node starts, the coordinator node will receive a `nodeJoin` event indicating that a new node is joining the cluster. At this point, the coordinator will put the cluster into state `RESIZING` and kick off a resize job that instructs all of the nodes in the cluster how to rebalance data to accomodate the additional capacity of the new node. Once the resize job is complete, the coordinator will put the cluster back to state `NORMAL` and ensure that the new node is included in future queries.
+
+If the node is being added to a cluster which contains no data (for example, during startup of a new cluster), the coordinator will bypass the `RESIZING` state and allow the node to join the cluster immediately.
+
+#### Removing a Node
+
+In order to  remove a node from a cluster, your cluster must be configured to have a [cluster replicas](../configuration/#cluster-replicas) value of at least 2; if you're removing a node that no longer exists (for example a node that has died), there must be at least one additional replica of the data owned by the dead node in order for the cluster to correctly rebalance itself.
+
+To remove node `localhost:10102` from a cluster having coordinator `localhost:10101`, first determine the ID of the node to be removed. If the node to be removed is still available, you can find the ID by issuing an `/id` request to the node:
+``` request
+curl localhost:10102/id
+```
+``` response
+40a891fa-243b-4d71-ae24-4f5c78a0f4b1
+```
+
+If the node to be removed is no longer available, you can get the IDs of the nodes in the cluster by issuing a `/status` request to any available node:
+``` request
+curl localhost:10101/status
+```
+``` response
+{
+    "state":"NORMAL",
+    "nodes":[
+        {"id":"24824777-62ec-4151-9fbd-67e4676e317d","uri":{"scheme":"http","host":"localhost","port":10101}}
+        {"id":"40a891fa-243b-4d71-ae24-4f5c78a0f4b1","uri":{"scheme":"http","host":"localhost","port":10102}}
+        {"id":"9fab09cc-3c26-4202-9622-d167c84684d9","uri":{"scheme":"http","host":"localhost","port":10103}}
+    ]
+}
+```
+
+Once you have the ID of the node that you want to remove from the cluster, issue the following request:
+```
+curl localhost:10101/cluster/resize/remove-node \
+     -X POST \
+     -d '{"id": "40a891fa-243b-4d71-ae24-4f5c78a0f4b1"}'
+```
+At this point, the coordinator will put the cluster into state `RESIZING` and kick off a resize job that instructs all of the nodes in the cluster how to rebalance data to accomodate the reduced capacity of the cluster. Once the resize job is complete, the coordinator will put the cluster back to state `NORMAL` and ensure that the removed node is no longer included in future queries.
+
+Note that you can't directly remove the coordinator node. If you need to remove the coordinator node from the cluster, you must first [make one of the other nodes the coordinator](#changing-the-coordinator).
+
+#### Aborting a Resize Job
+
+If at any point you need to abort an active resize job, you can issue a `POST` request to the `/cluster/resize/abort` endpoint on the coordinator node.
+For example, if your coordinator node is `localhost:10101`, then you can run:
+```
+curl localhost:10101/cluster/resize/abort -X POST
+```
+This will immediately abort the resize job and return the cluster to state `NORMAL`. Because data is never removed from a node during a resize job (only once a resize job has successfully completed), aborting a resize job will return the cluster back to the state it was in before the resize began.
+
+#### Changing the Coordinator
+
+In order to assign a different node to be the coordinator, you can issue a `/cluster/resize/set-coordinator` request to any node in the cluster. The payload should indicate the ID of the node to be made coordinator.
+```
+curl localhost:10101/cluster/resize/set-coordinator \
+     -X POST \
+     -d '{"id": "9fab09cc-3c26-4202-9622-d167c84684d9"}'
+```
+
 ### Backup/restore
 
 Pilosa continuously writes out the in-memory bitmap data to disk.  This data is organized by Index->Frame->Views->Fragment->numbered slice files.  These data files can be routinely backed up to restore nodes in a cluster.
@@ -112,19 +178,19 @@ Note: This will only work when the replication factor is >= 2
 
 #### Copying data files manually
 
-- To accomplish this goal you will 1st need:
-  - List of all Indexes on your cluster
-  - List of all frames in your Indexes
-  - Max slice per Index, listed in the /status endpoint
+- To accomplish this you will first need:
+  - List of all indexes on your cluster
+  - List of all frames in your indexes
+  - Max slice per index, listed in the /status endpoint
 - With this information you can query the `/fragment/nodes` endpoint and iterate over each slice
 - Using the list of slices owned by this node you will then need to manually:
   - setup a directory structure similar to the other nodes with a path for each Index/Frame
   - copy each owned slice for an existing node to this new node
 - Modify the cluster config file to replace the previous node address with the new node address.
 - Restart the cluster
-- Wait for the 1st sync (10 minutes) to validate Index connections
+- Wait for the first sync (10 minutes) to validate Index connections
 
-#### Diagnostics
+### Diagnostics
 
 Each Pilosa cluster is configured by default to share anonymous usage details with Pilosa Corp. These metrics allow us to understand how Pilosa is used by the community and improve the technology to suit your needs. Diagnostics are sent to Pilosa every hour. Each of the metrics are detailed below as well as opt-out instructions.
 
@@ -145,16 +211,16 @@ Each Pilosa cluster is configured by default to share anonymous usage details wi
  
 You can opt-out of the Pilosa diagnostics reporting by setting either the command line configuration option `--metric.diagnostics=false`, use the `PILOSA_METRIC_DIAGNOSTICS` environment variable, or the TOML configuration file `[metric]` `diagnostics` option.
 
-#### Metrics
+### Metrics
 
 Pilosa can be configured to emit metrics pertaining to its internal processes in one of two formats: Expvar or StatsD. Metric recording is disabled by default.
 The metrics configuration options are: 
 
-  - [Host](../configuration#metrics-host): specify host that receives metric events
-  - [Poll Interval](../configuration#metrics-poll-interval): specify polling interval for runtime metrics
-  - [Service](../configuration#metrics-service): declare type StatsD or Expvar
+  - [Host](../configuration/#metric-host): specify host that receives metric events
+  - [Poll Interval](../configuration/#metric-poll-interval): specify polling interval for runtime metrics
+  - [Service](../configuration/#metric-service): declare type StatsD or Expvar
 
-##### Tags
+#### Tags
 StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
 
 - NodeID
@@ -163,7 +229,7 @@ StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
 - View
 - Slice
 
-##### Events
+#### Events
 We currently track the following events
 
 - **Index:** The creation of a new Index.

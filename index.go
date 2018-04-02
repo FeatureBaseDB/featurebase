@@ -55,8 +55,10 @@ type Index struct {
 	remoteMaxSlice        uint64
 	remoteMaxInverseSlice uint64
 
+	NewAttrStore func(string) AttrStore
+
 	// Column attribute storage and cache.
-	columnAttrStore *AttrStore
+	columnAttrStore AttrStore
 
 	// InputDefinitions by name.
 	inputDefinitions map[string]*InputDefinition
@@ -83,7 +85,8 @@ func NewIndex(path, name string) (*Index, error) {
 		remoteMaxSlice:        0,
 		remoteMaxInverseSlice: 0,
 
-		columnAttrStore: NewAttrStore(filepath.Join(path, ".data")),
+		NewAttrStore:    NewNopAttrStore,
+		columnAttrStore: NopAttrStore,
 
 		columnLabel: DefaultColumnLabel,
 
@@ -100,7 +103,7 @@ func (i *Index) Name() string { return i.name }
 func (i *Index) Path() string { return i.path }
 
 // ColumnAttrStore returns the storage for column attributes.
-func (i *Index) ColumnAttrStore() *AttrStore { return i.columnAttrStore }
+func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrStore }
 
 // SetColumnLabel sets the column label. Persists to meta file on update.
 func (i *Index) SetColumnLabel(v string) error {
@@ -256,9 +259,7 @@ func (i *Index) Close() error {
 	defer i.mu.Unlock()
 
 	// Close the attribute store.
-	if i.columnAttrStore != nil {
-		i.columnAttrStore.Close()
-	}
+	i.columnAttrStore.Close()
 
 	// Close all frames.
 	for _, f := range i.frames {
@@ -392,6 +393,20 @@ func (i *Index) Frames() []*Frame {
 	return a
 }
 
+// InputDefinitions returns a list of all inputDefinitions in the index.
+func (i *Index) InputDefinitions() []*InputDefinition {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
+	a := make([]*InputDefinition, 0, len(i.inputDefinitions))
+	for _, d := range i.inputDefinitions {
+		a = append(a, d)
+	}
+	//sort.Sort(inputDefintionSlice(a)) // TODO
+
+	return a
+}
+
 // RecalculateCaches recalculates caches on every frame in the index.
 func (i *Index) RecalculateCaches() {
 	for _, frame := range i.Frames() {
@@ -440,8 +455,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	if opt.RangeEnabled {
 		if opt.InverseEnabled {
 			return nil, ErrInverseRangeNotAllowed
-		} else if opt.CacheType != "" && opt.CacheType != CacheTypeNone {
-			return nil, ErrRangeCacheNotAllowed
 		}
 	} else {
 		if len(opt.Fields) > 0 {
@@ -494,18 +507,12 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	f.inverseEnabled = opt.InverseEnabled
 	f.rangeEnabled = opt.RangeEnabled
 
-	if err := f.saveMeta(); err != nil {
-		f.Close()
-		return nil, err
-	}
-
 	f.rangeEnabled = opt.RangeEnabled
 
-	// Set schema & save.
-	f.schema = &FrameSchema{
-		Fields: opt.Fields,
-	}
-	if err := f.saveSchema(); err != nil {
+	// Set fields.
+	f.fields = opt.Fields
+
+	if err := f.saveMeta(); err != nil {
 		f.Close()
 		return nil, err
 	}
@@ -524,6 +531,7 @@ func (i *Index) newFrame(path, name string) (*Frame, error) {
 	f.LogOutput = i.LogOutput
 	f.Stats = i.Stats.WithTags(fmt.Sprintf("frame:%s", name))
 	f.broadcaster = i.broadcaster
+	f.rowAttrStore = i.NewAttrStore(filepath.Join(f.path, ".data"))
 	return f, nil
 }
 
@@ -623,12 +631,10 @@ func EncodeIndexes(a []*Index) []*internal.Index {
 
 // encodeIndex converts d into its internal representation.
 func encodeIndex(d *Index) *internal.Index {
-	io := d.options()
 	return &internal.Index{
-		Name:     d.name,
-		Meta:     io.Encode(),
-		MaxSlice: d.MaxSlice(),
-		Frames:   encodeFrames(d.Frames()),
+		Name:             d.name,
+		Frames:           encodeFrames(d.Frames()),
+		InputDefinitions: encodeInputDefinitions(d.InputDefinitions()),
 	}
 }
 
@@ -723,7 +729,6 @@ func (i *Index) newInputDefinition(name string) (*InputDefinition, error) {
 	if err != nil {
 		return nil, err
 	}
-	inputDef.broadcaster = i.broadcaster
 	return inputDef, nil
 }
 
@@ -776,7 +781,6 @@ func (i *Index) openInputDefinitions() error {
 				return nil
 			}
 		}
-
 	}
 	return nil
 }

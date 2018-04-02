@@ -17,7 +17,7 @@ New York City released an extremely detailed data set of over 1 billion taxi rid
 
 Transportation in general is a compelling use case for Pilosa as it often involves multiple disparate data sources, as well as high rate, real time, and extremely large amounts of data (particularly if one wants to draw reasonable conclusions).
 
-We've written a tool to help import the NYC taxi data into Pilosa - this tool is part of the [PDK](../pdk) (Pilosa Development Kit), and takes advantage of a number of reusable modules that may help you import other data as well. Follow along and we'll explain the whole process step by step.
+We've written a tool to help import the NYC taxi data into Pilosa - this tool is part of the [PDK](../pdk/) (Pilosa Development Kit), and takes advantage of a number of reusable modules that may help you import other data as well. Follow along and we'll explain the whole process step by step.
 
 After initial setup, the PDK import tool does everything we need to define a Pilosa schema, map data to bitmaps accordingly, and import it into Pilosa.
 
@@ -163,7 +163,7 @@ durm := pdk.CustomMapper{
 
 #### Import process
 
-After designing this schema and mapping, we capture it in a JSON definition file that can be read by the PDK import tool. Running `pdk taxi` runs the import based on the information in this file. See [PDK](../pdk) for more details on this process.
+After designing this schema and mapping, we capture it in a JSON definition file that can be read by the PDK import tool. Running `pdk taxi` runs the import based on the information in this file. See [PDK](../pdk/) for more details on this process.
 
 #### Queries
 
@@ -214,7 +214,7 @@ T(A,B)= Intersect(A,B) / (Count(A) + Count(B) - Intersect(A,B))
 
 A and B are sets of fingerprint bits on in the fingerprints of molecule A and molecule B. AB is the set of common bits of fingerprints of both molecule A and B. The Tanimoto coefficient ranges from 0 when the fingerprints have no bits in common, to 1 when the fingerprints are identical.
 
-All source code to calculate tanimoto for molecule fingerprint using Pilosa is available in a Github repository https://github.com/pilosa/chem-usecase
+All source code to calculate tanimoto for molecule fingerprint using Pilosa is available in a [Github repository](https://github.com/pilosa/chem-usecase).
 
 #### Data model
 
@@ -263,7 +263,7 @@ python import_from_sdf.py -p <path_to_sdf_file> -file id_fingerprint.csv
 ```
 
 
-First, follow the instruction in the [getting started]({{< ref "getting-started.md" >}}) guide to run a Pilosa server. Then create the indexes and frames according to the schemas outlined in the Data Model section above.
+First, follow the instruction in the [getting started](../getting-started/) guide to run a Pilosa server. Then create the indexes and frames according to the schemas outlined in the Data Model section above.
 The option cacheSize should be set as amount of chembl_id to calculate effectively for the whole data set, so we need to calculate amount of chembl_id. We have total 1678393 chembl_id (it will displayed after import_from_sdf.py script running), then the cacheSize should be >= 1678393
 ```
 curl localhost:10101/index/mole \
