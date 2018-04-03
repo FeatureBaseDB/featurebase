@@ -45,6 +45,8 @@ import (
 type Handler struct {
 	Router *mux.Router
 
+	FileSystem FileSystem
+
 	// The execution engine for running queries.
 	Executor interface {
 		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
@@ -78,9 +80,6 @@ type errorResponse struct {
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler() *Handler {
 	handler := &Handler{
-		Broadcaster: NopBroadcaster,
-		//BroadcastHandler: NopBroadcastHandler, // TODO: implement the nop
-		//StatusHandler:    NopStatusHandler,    // TODO: implement the nop
 		FileSystem: NopFileSystem,
 		Logger:     NopLogger,
 	}

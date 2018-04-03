@@ -115,13 +115,14 @@ func NewServer() *Server {
 		Logger: NopLogger,
 	}
 
-	s.Handler.API = NewAPI(s.logger)
+	s.Handler.API = NewAPI()
 	s.Handler.API.Holder = s.Holder
 	return s
 }
 
 // Open opens and initializes the server.
 func (s *Server) Open() error {
+	s.Handler.API.Logger = s.Logger // TODO do this in NewServer with functional options
 	s.Logger.Printf("open server")
 	// s.ln can be configured prior to Open() via s.OpenListener().
 	if s.ln == nil {

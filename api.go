@@ -19,8 +19,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -44,15 +42,15 @@ type API struct {
 	Cluster          *Cluster
 	URI              *URI
 	RemoteClient     *http.Client
-	logger           *log.Logger
+	Logger           Logger
 }
 
-func NewAPI(logger *log.Logger) *API {
-	if logger == nil {
-		logger = log.New(ioutil.Discard, "", 0)
-	}
+func NewAPI() *API {
 	return &API{
-		logger: logger,
+		Broadcaster: NopBroadcaster,
+		//BroadcastHandler: NopBroadcastHandler, // TODO: implement the nop
+		//StatusHandler:    NopStatusHandler,    // TODO: implement the nop
+		Logger: NopLogger,
 	}
 }
 
@@ -132,7 +130,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 			Meta:  options.Encode(),
 		})
 	if err != nil {
-		api.logger.Printf("problem sending CreateIndex message: %s", err)
+		api.Logger.Printf("problem sending CreateIndex message: %s", err)
 		return nil, err
 	}
 	api.Holder.Stats.Count("createIndex", 1, 1.0)
@@ -159,7 +157,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 			Index: indexName,
 		})
 	if err != nil {
-		api.logger.Printf("problem sending DeleteIndex message: %s", err)
+		api.Logger.Printf("problem sending DeleteIndex message: %s", err)
 		return err
 	}
 	api.Holder.Stats.Count("deleteIndex", 1, 1.0)
@@ -187,7 +185,7 @@ func (api *API) CreateFrame(ctx context.Context, indexName string, frameName str
 			Meta:  options.Encode(),
 		})
 	if err != nil {
-		api.logger.Printf("problem sending CreateFrame message: %s", err)
+		api.Logger.Printf("problem sending CreateFrame message: %s", err)
 		return nil, err
 	}
 	api.Holder.Stats.CountWithCustomTags("createFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
@@ -213,7 +211,7 @@ func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName str
 			Frame: frameName,
 		})
 	if err != nil {
-		api.logger.Printf("problem sending DeleteFrame message: %s", err)
+		api.Logger.Printf("problem sending DeleteFrame message: %s", err)
 		return err
 	}
 	api.Holder.Stats.CountWithCustomTags("deleteFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
@@ -223,7 +221,7 @@ func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName str
 func (api *API) ExportCSV(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, w io.Writer) error {
 	// Validate that this handler owns the slice.
 	if !api.Cluster.OwnsFragment(api.URI.HostPort(), indexName, slice) {
-		api.logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
+		api.Logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
 		return ErrClusterDoesNotOwnSlice
 	}
 
@@ -413,7 +411,7 @@ func (api *API) CreateInputDefinition(ctx context.Context, indexName string, inp
 			Definition: def,
 		})
 	if err != nil {
-		api.logger.Printf("problem sending CreateInputDefinition message: %s", err)
+		api.Logger.Printf("problem sending CreateInputDefinition message: %s", err)
 	}
 	return nil
 }
@@ -450,7 +448,7 @@ func (api *API) DeleteInputDefinition(ctx context.Context, indexName string, inp
 			Name:  inputDefName,
 		})
 	if err != nil {
-		api.logger.Printf("problem sending DeleteInputDefinition message: %s", err)
+		api.Logger.Printf("problem sending DeleteInputDefinition message: %s", err)
 	}
 	return nil
 }
@@ -521,7 +519,7 @@ func (api *API) CreateFrameField(ctx context.Context, indexName string, frameNam
 			Field: encodeField(field),
 		})
 	if err != nil {
-		api.logger.Printf("problem sending CreateField message: %s", err)
+		api.Logger.Printf("problem sending CreateField message: %s", err)
 	}
 	return err
 }
@@ -546,7 +544,7 @@ func (api *API) DeleteFrameField(ctx context.Context, indexName string, frameNam
 			Field: fieldName,
 		})
 	if err != nil {
-		api.logger.Printf("problem sending DeleteField message: %s", err)
+		api.Logger.Printf("problem sending DeleteField message: %s", err)
 	}
 	return err
 }
@@ -600,7 +598,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 			View:  viewName,
 		})
 	if err != nil {
-		api.logger.Printf("problem sending DeleteView message: %s", err)
+		api.Logger.Printf("problem sending DeleteView message: %s", err)
 	}
 
 	return err
@@ -685,7 +683,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	// Import into fragment.
 	err = frame.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
-		api.logger.Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
+		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
 	}
 	return err
 }
@@ -699,7 +697,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 	// Import into fragment.
 	err = frame.ImportValue(req.Field, req.ColumnIDs, req.Values)
 	if err != nil {
-		api.logger.Printf("import error: index=%s, frame=%s, slice=%d, field=%s, bits=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
+		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, field=%s, bits=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
 	}
 	return err
 }
@@ -750,22 +748,22 @@ func (api *API) ClusterLongQueryTime() time.Duration {
 func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*Index, *Frame, error) {
 	// Validate that this handler owns the slice.
 	if !api.Cluster.OwnsFragment(api.URI.HostPort(), indexName, slice) {
-		api.logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
+		api.Logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
 		return nil, nil, ErrClusterDoesNotOwnSlice
 	}
 
 	// Find the Index.
-	api.logger.Println("importing:", indexName, frameName, slice)
+	api.Logger.Printf("importing: %v %v %v", indexName, frameName, slice)
 	index := api.Holder.Index(indexName)
 	if index == nil {
-		api.logger.Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", indexName, frameName, slice, ErrIndexNotFound.Error())
+		api.Logger.Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", indexName, frameName, slice, ErrIndexNotFound.Error())
 		return nil, nil, ErrIndexNotFound
 	}
 
 	// Retrieve frame.
 	frame := index.Frame(frameName)
 	if frame == nil {
-		api.logger.Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", indexName, frameName, slice, ErrFrameNotFound.Error())
+		api.Logger.Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", indexName, frameName, slice, ErrFrameNotFound.Error())
 		return nil, nil, ErrFrameNotFound
 	}
 	return index, frame, nil
