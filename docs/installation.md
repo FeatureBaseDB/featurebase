@@ -134,6 +134,10 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
 
 #### Build from Source
 
+<div class="note">
+    <p>For advanced instructions for building from source, view our <a href="https://github.com/pilosa/pilosa/blob/master/CONTRIBUTING.md">Contributor's Guide.</a></p>
+</div>
+
 1. Install the prerequisites:
 
     * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described [here](https://golang.org/doc/code.html#GOPATH).
@@ -148,6 +152,7 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
 3. Build the Pilosa repo (the `make generate-statik` line isn't necessary but builds a nice [webUI](../webui/) into Pilosa):
     ```
     cd $GOPATH/src/github.com/pilosa/pilosa
+    make install-build-deps
     make generate-statik
     make install
     ```
@@ -288,6 +293,10 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
 
 #### Build from Source
 
+<div class="note">
+    <p>For advanced instructions for building from source, view our <a href="https://github.com/pilosa/pilosa/blob/master/CONTRIBUTING.md">Contributor's Guide.</a></p>
+</div>
+
 1. Install the prerequisites:
 
     * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described [here](https://golang.org/doc/code.html#GOPATH).
@@ -302,6 +311,7 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
 3. Build the Pilosa repo (the `make generate-statik` line isn't necessary but builds a nice [webUI](../webui/) into Pilosa):
     ```
     cd $GOPATH/src/github.com/pilosa/pilosa
+    make install-build-deps
     make generate-statik
     make install
     ```
