@@ -23,7 +23,7 @@ deploy:
     skip_cleanup: true
     on:
       all_branches: true
-      go: 1.9
+      go: "1.10"
 matrix:
   allow_failures:
     - go: master
