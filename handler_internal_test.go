@@ -30,7 +30,7 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 		{json: `{"options": {}}`, expected: postIndexRequest{Options: IndexOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
-		{json: `{"options": {"columnLabel": "test"}}`, err: "Unknown key: columnLabel:test"},
+		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
 	}
 	for _, test := range tests {
 		actual := &postIndexRequest{}
@@ -65,7 +65,7 @@ func TestPostFrameRequestUnmarshalJSON(t *testing.T) {
 		{json: `{"options": {}}`, expected: postFrameRequest{Options: FrameOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
-		{json: `{"options": {"rowLabel": "test"}}`, err: "Unknown key: rowLabel:test"},
+		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
 		{json: `{"options": {"inverseEnabled": true}}`, expected: postFrameRequest{Options: FrameOptions{InverseEnabled: true}}},
 		{json: `{"options": {"inverseEnabled": true, "cacheType": "type"}}`, expected: postFrameRequest{Options: FrameOptions{InverseEnabled: true, CacheType: "type"}}},
 		{json: `{"options": {"inverse": true, "cacheType": "type"}}`, err: "Unknown key: inverse:true"},

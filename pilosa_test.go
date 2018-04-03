@@ -46,30 +46,6 @@ func TestValidateNameInvalid(t *testing.T) {
 	}
 }
 
-func TestValidateLabel(t *testing.T) {
-	labels := []string{
-		"a", "ab", "ab1", "d_e", "A", "Bc", "B1", "aB", "b-c",
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}
-	for _, label := range labels {
-		if pilosa.ValidateLabel(label) != nil {
-			t.Fatalf("Should be valid label: %s", label)
-		}
-	}
-}
-
-func TestValidateLabelInvalid(t *testing.T) {
-	labels := []string{
-		"", "1", "_", "-", "'", "^", "/", "\\", "*", "a:b", "valid?no", "yüce",
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
-	}
-	for _, label := range labels {
-		if pilosa.ValidateLabel(label) == nil {
-			t.Fatalf("Should be invalid label: %s", label)
-		}
-	}
-}
-
 func TestStringInSlice(t *testing.T) {
 	list := []string{"localhost:10101", "localhost:10102", "localhost:10103"}
 	substr := "localhost:10101"

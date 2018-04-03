@@ -77,9 +77,6 @@ var (
 // Regular expression to validate index and frame names.
 var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
-// Regular expression to validate row and column labels.
-var labelRegexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
-
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
 type ColumnAttrSet struct {
@@ -137,14 +134,6 @@ const TimeFormat = "2006-01-02T15:04"
 func ValidateName(name string) error {
 	if nameRegexp.Match([]byte(name)) == false {
 		return ErrName
-	}
-	return nil
-}
-
-// ValidateLabel ensures that the label is a valid format.
-func ValidateLabel(label string) error {
-	if labelRegexp.Match([]byte(label)) == false {
-		return ErrLabel
 	}
 	return nil
 }
