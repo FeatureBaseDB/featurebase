@@ -36,12 +36,10 @@ var (
 	ErrFrameExists          = errors.New("frame already exists")
 	ErrFrameNotFound        = errors.New("frame not found")
 	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
-	ErrColumnRowLabelEqual  = errors.New("column and row labels cannot be equal")
 
 	ErrInputDefinitionExists         = errors.New("input-definition already exists")
 	ErrInputDefinitionHasPrimaryKey  = errors.New("input-definition must contain one PrimaryKey")
 	ErrInputDefinitionDupePrimaryKey = errors.New("input-definition can only contain one PrimaryKey")
-	ErrInputDefinitionColumnLabel    = errors.New("PrimaryKey field name does not match columnLabel")
 	ErrInputDefinitionNameRequired   = errors.New("input-definition name required")
 	ErrInputDefinitionAttrsRequired  = errors.New("frames and fields are required")
 	ErrInputDefinitionValueMap       = errors.New("valueMap required for map")
@@ -78,9 +76,6 @@ var (
 
 // Regular expression to validate index and frame names.
 var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
-
-// Regular expression to validate row and column labels.
-var labelRegexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
@@ -139,14 +134,6 @@ const TimeFormat = "2006-01-02T15:04"
 func ValidateName(name string) error {
 	if nameRegexp.Match([]byte(name)) == false {
 		return ErrName
-	}
-	return nil
-}
-
-// ValidateLabel ensures that the label is a valid format.
-func ValidateLabel(label string) error {
-	if labelRegexp.Match([]byte(label)) == false {
-		return ErrLabel
 	}
 	return nil
 }

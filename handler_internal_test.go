@@ -30,8 +30,7 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 		{json: `{"options": {}}`, expected: postIndexRequest{Options: IndexOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
-		{json: `{"options": {"columnLabel": "test"}}`, expected: postIndexRequest{Options: IndexOptions{ColumnLabel: "test"}}},
-		{json: `{"options": {"columnLabl": "test"}}`, err: "Unknown key: columnLabl:test"},
+		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
 	}
 	for _, test := range tests {
 		actual := &postIndexRequest{}
@@ -66,11 +65,10 @@ func TestPostFrameRequestUnmarshalJSON(t *testing.T) {
 		{json: `{"options": {}}`, expected: postFrameRequest{Options: FrameOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
-		{json: `{"options": {"rowLabel": "test"}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test"}}},
-		{json: `{"options": {"rowLabl": "test"}}`, err: "Unknown key: rowLabl:test"},
-		{json: `{"options": {"rowLabel": "test", "inverseEnabled": true}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test", InverseEnabled: true}}},
-		{json: `{"options": {"rowLabel": "test", "inverseEnabled": true, "cacheType": "type"}}`, expected: postFrameRequest{Options: FrameOptions{RowLabel: "test", InverseEnabled: true, CacheType: "type"}}},
-		{json: `{"options": {"rowLabel": "test", "inverse": true, "cacheType": "type"}}`, err: "Unknown key: inverse:true"},
+		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
+		{json: `{"options": {"inverseEnabled": true}}`, expected: postFrameRequest{Options: FrameOptions{InverseEnabled: true}}},
+		{json: `{"options": {"inverseEnabled": true, "cacheType": "type"}}`, expected: postFrameRequest{Options: FrameOptions{InverseEnabled: true, CacheType: "type"}}},
+		{json: `{"options": {"inverse": true, "cacheType": "type"}}`, err: "Unknown key: inverse:true"},
 	}
 	for _, test := range tests {
 		actual := &postFrameRequest{}

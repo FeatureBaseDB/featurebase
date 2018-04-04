@@ -3,12 +3,10 @@ syntax = "proto3";
 package internal;
 
 message IndexMeta {
-	string ColumnLabel = 1;
 	string TimeQuantum = 2;
 }
 
 message FrameMeta {
-	string RowLabel = 1;
 	bool InverseEnabled = 2;
 	string CacheType = 3;
 	uint32 CacheSize = 4;

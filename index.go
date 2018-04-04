@@ -30,7 +30,6 @@ import (
 
 // Default index settings.
 const (
-	DefaultColumnLabel = "columnID"
 	InputDefinitionDir = ".input-definitions"
 )
 
@@ -43,9 +42,6 @@ type Index struct {
 	// Default time quantum for all frames in index.
 	// This can be overridden by individual frames.
 	timeQuantum TimeQuantum
-
-	// Label used for referring to columns in index.
-	columnLabel string
 
 	// Frames by name.
 	frames map[string]*Frame
@@ -87,8 +83,6 @@ func NewIndex(path, name string) (*Index, error) {
 		NewAttrStore:    NewNopAttrStore,
 		columnAttrStore: NopAttrStore,
 
-		columnLabel: DefaultColumnLabel,
-
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 		Logger:      NopLogger,
@@ -104,39 +98,6 @@ func (i *Index) Path() string { return i.path }
 // ColumnAttrStore returns the storage for column attributes.
 func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrStore }
 
-// SetColumnLabel sets the column label. Persists to meta file on update.
-func (i *Index) SetColumnLabel(v string) error {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Ignore if no change occurred.
-	if v == "" || i.columnLabel == v {
-		return nil
-	}
-
-	// Make sure columnLabel is valid name
-	err := ValidateLabel(v)
-	if err != nil {
-		return err
-	}
-
-	// Persist meta data to disk on change.
-	i.columnLabel = v
-	if err := i.saveMeta(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// ColumnLabel returns the column label.
-func (i *Index) ColumnLabel() string {
-	i.mu.RLock()
-	v := i.columnLabel
-	i.mu.RUnlock()
-	return v
-}
-
 // Options returns all options for this index.
 func (i *Index) Options() IndexOptions {
 	i.mu.RLock()
@@ -146,7 +107,6 @@ func (i *Index) Options() IndexOptions {
 
 func (i *Index) options() IndexOptions {
 	return IndexOptions{
-		ColumnLabel: i.columnLabel,
 		TimeQuantum: i.timeQuantum,
 	}
 }
@@ -216,7 +176,6 @@ func (i *Index) loadMeta() error {
 	buf, err := ioutil.ReadFile(filepath.Join(i.path, ".meta"))
 	if os.IsNotExist(err) {
 		i.timeQuantum = ""
-		i.columnLabel = DefaultColumnLabel
 		return nil
 	} else if err != nil {
 		return err
@@ -228,7 +187,6 @@ func (i *Index) loadMeta() error {
 
 	// Copy metadata fields.
 	i.timeQuantum = TimeQuantum(pb.TimeQuantum)
-	i.columnLabel = pb.ColumnLabel
 
 	return nil
 }
@@ -238,7 +196,6 @@ func (i *Index) saveMeta() error {
 	// Marshal metadata.
 	buf, err := proto.Marshal(&internal.IndexMeta{
 		TimeQuantum: string(i.timeQuantum),
-		ColumnLabel: i.columnLabel,
 	})
 	if err != nil {
 		return err
@@ -445,11 +402,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, ErrInvalidCacheType
 	}
 
-	// Validate that row label does not match column label.
-	if i.columnLabel == opt.RowLabel || (opt.RowLabel == "" && i.columnLabel == DefaultRowLabel) {
-		return nil, ErrColumnRowLabelEqual
-	}
-
 	// Validate mutually exclusive options if ranges are enabled.
 	if opt.RangeEnabled {
 		if opt.InverseEnabled {
@@ -495,10 +447,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 	f.cacheType = opt.CacheType
 
-	// Set options.
-	if opt.RowLabel != "" {
-		f.rowLabel = opt.RowLabel
-	}
 	if opt.CacheSize != 0 {
 		f.cacheSize = opt.CacheSize
 	}
@@ -639,14 +587,12 @@ func encodeIndex(d *Index) *internal.Index {
 
 // IndexOptions represents options to set when initializing an index.
 type IndexOptions struct {
-	ColumnLabel string      `json:"columnLabel,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
 // Encode converts i into its internal representation.
 func (i *IndexOptions) Encode() *internal.IndexMeta {
 	return &internal.IndexMeta{
-		ColumnLabel: i.ColumnLabel,
 		TimeQuantum: string(i.TimeQuantum),
 	}
 }
@@ -693,7 +639,6 @@ func (i *Index) createInputDefinition(pb *internal.InputDefinition) (*InputDefin
 	for _, fr := range pb.Frames {
 		opt := FrameOptions{
 			// Deprecating row labels per #810. So, setting the default row label here.
-			RowLabel:       DefaultRowLabel,
 			InverseEnabled: fr.Meta.InverseEnabled,
 			CacheType:      fr.Meta.CacheType,
 			CacheSize:      fr.Meta.CacheSize,

@@ -77,7 +77,7 @@ func TestHolder_Open(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
-		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
+		if _, err := h.CreateIndex("test", pilosa.IndexOptions{TimeQuantum: pilosa.TimeQuantum("YMDH")}); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
