@@ -122,7 +122,7 @@ func BuildRouters(handler *Handler) {
 
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
-	h.validators["GetFragmentNodes"] = QueryValidationSpecRequired("slice").Optional("index")
+	h.validators["GetFragmentNodes"] = QueryValidationSpecRequired("slice", "index")
 	h.validators["GetSliceMax"] = QueryValidationSpecRequired().Optional("inverse")
 	h.validators["PostQuery"] = QueryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
 	h.validators["GetExport"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
