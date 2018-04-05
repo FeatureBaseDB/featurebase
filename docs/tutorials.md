@@ -70,6 +70,8 @@ We now should have `pilosa.local.gossip32` in the current directory with 32 rand
 
 Pilosa supports passing configuration items using the command line, environment variables or a configuration file. We will use the last option in this tutorial and create three configuration files for our three nodes.
 
+One of the nodes in the cluster must be chosen as the *coordinator*. We choose the first node as the coordinator in this tutorial.
+
 Create `node1.config.toml` in the project directory and paste the following in it:
 
 ```toml
@@ -79,7 +81,7 @@ data-dir = "node1_data"
 bind = "https://01.pilosa.local:10501"
 
 [cluster]
-hosts = ["https://01.pilosa.local:10501", "https://02.pilosa.local:10502", "https://03.pilosa.local:10503"]
+coordinator = true
 
 [tls]
 certificate = "pilosa.local.crt"
@@ -87,7 +89,7 @@ key = "pilosa.local.key"
 skip-verify = true
 
 [gossip]
-seed = "01.pilosa.local:15000"
+seeds = ["01.pilosa.local:15000"]
 port = 15000
 key = "pilosa.local.gossip32"
 ```
@@ -100,16 +102,13 @@ Create `node2.config.toml` in the project directory and paste the following in i
 data-dir = "node2_data"
 bind = "https://02.pilosa.local:10502"
 
-[cluster]
-hosts = ["https://01.pilosa.local:10501", "https://02.pilosa.local:10502", "https://03.pilosa.local:10503"]
-
 [tls]
 certificate = "pilosa.local.crt"
 key = "pilosa.local.key"
 skip-verify = true
 
 [gossip]
-seed = "01.pilosa.local:15000"
+seeds = ["01.pilosa.local:15000"]
 port = 16000
 key = "pilosa.local.gossip32"
 ```
@@ -122,16 +121,13 @@ Create `node3.config.toml` in the project directory and paste the following in i
 data-dir = "node3_data"
 bind = "https://03.pilosa.local:10503"
 
-[cluster]
-hosts = ["https://01.pilosa.local:10501", "https://02.pilosa.local:10502", "https://03.pilosa.local:10503"]
-
 [tls]
 certificate = "pilosa.local.crt"
 key = "pilosa.local.key"
 skip-verify = true
 
 [gossip]
-seed = "01.pilosa.local:15000"
+seeds = ["01.pilosa.local:15000"]
 port = 17000
 key = "pilosa.local.gossip32"
 ```
@@ -140,9 +136,9 @@ Here is some explanation of the configuration items:
 
 * `data-dir` points to the directory where the Pilosa server writes its data. If it doesn't exist, the server will create it.
 * `bind` is the address to which the server listens for incoming requests. The address is composed of three parts: scheme, host, and port. The default scheme is `http` so we explicitly specify `https` to use the HTTPS protocol for communication between nodes.
-* `[cluster]` section contains the settings for a cluster. `hosts` field is the most important, which contains the list of addresses of other nodes. See [Cluster Configuration](../configuration/#cluster-hosts) for other settings.
+* `[cluster]` section contains the settings for a cluster. We set `coordinator = true` for only the first node to choose that as the coordinator node. See [Cluster Configuration](../configuration/#cluster-hosts) for other settings.
 * `[tls]` section contains the TLS settings, including the path to the SSL certificate and the corresponding key. Set `skip-verify` to `true` in order to disable host name verification and other security measures. Do not set `skip-verify` to `true` on production servers.
-* `[gossip]` section contains settings for the Gossip protocol. `seed` is the host and port for the main gossip node which coordinates other nodes. The `port` setting is the gossip listen address for the node. It should be different for each node, if the cluster is running on the same computer, otherwise you can set it to the same value. Finally, the `key` points to the gossip encryption key we created before.
+* `[gossip]` section contains settings for the Gossip protocol. `seeds` contain the seed nodes which other nodes gather cluster topology. There must be at least one gossip seed. The `port` setting is the gossip listen address for the node. It should be different for each node, if the cluster is running on the same computer, otherwise you can set it to the same value. Finally, the `key` points to the gossip encryption key we created before.
 
 #### Final Touches Before Running the Cluster
 
@@ -189,9 +185,9 @@ curl -k --ipv4 https://01.pilosa.local:10501/status
 
 The `-k` flag is used to tell curl that it shouldn't bother with checking the certificate the server provides and `--ipv4` workarounds an issue on MacOS where the curl requests take a long time if the address resolves to `127.0.0.1`. You can leave it out on Linux and WSL.
 
-All nodes should be in the `UP` state:
+All nodes should be in the `NORMAL` state:
 ``` response
-{"status":{"Nodes":[{"Host":"01.pilosa.local:10501","State":"UP"},{"Host":"02.pilosa.local:10502","State":"UP"},{"Host":"03.pilosa.local:10503","State":"UP"}]}}
+{"state":"NORMAL","nodes":[{"id":"98ebd177-c082-4c54-8d48-7e7c75857b52","uri":{"scheme":"https","host":"02.pilosa.local","port":10502},"isCoordinator":false},{"id":"a33dc0d6-c35f-4559-984a-e582bf032a21","uri":{"scheme":"https","host":"03.pilosa.local","port":10503},"isCoordinator":false},{"id":"e24ac014-ee2f-4cb0-b565-74df6c551f0a","uri":{"scheme":"https","host":"01.pilosa.local","port":10501},"isCoordinator":true}]}
 ```
 
 #### Running Queries
@@ -216,7 +212,7 @@ We just created frame `sample-frame` with default options.
 
 Let's run a `SetBit` query:
 ``` request
-curl -k --ipv4 https://01.pilosa.local:10501/index/sample-index/query -d 'SetBit(frame="sample-frame", rowID=1, columnID=100)'
+curl -k --ipv4 https://01.pilosa.local:10501/index/sample-index/query -d 'SetBit(frame="sample-frame", row=1, col=100)'
 ```
 ``` response
 {"results":[true]}
@@ -224,7 +220,7 @@ curl -k --ipv4 https://01.pilosa.local:10501/index/sample-index/query -d 'SetBit
 
 Confirm that the bit was indeed set:
 ``` request
-curl -k --ipv4 https://01.pilosa.local:10501/index/sample-index/query -d 'Bitmap(frame="sample-frame", rowID=1)'
+curl -k --ipv4 https://01.pilosa.local:10501/index/sample-index/query -d 'Bitmap(frame="sample-frame", row=1)'
 ```
 ``` response
 {"results":[{"attrs":{},"bits":[100]}]}
@@ -232,7 +228,7 @@ curl -k --ipv4 https://01.pilosa.local:10501/index/sample-index/query -d 'Bitmap
 
 The same response should be returned when querying other nodes in the cluster:
 ``` request
-curl -k --ipv4 https://02.pilosa.local:10502/index/sample-index/query -d 'Bitmap(frame="sample-frame", rowID=1)'
+curl -k --ipv4 https://02.pilosa.local:10502/index/sample-index/query -d 'Bitmap(frame="sample-frame", row=1)'
 ```
 ``` response
 {"results":[{"attrs":{},"bits":[100]}]}
@@ -283,7 +279,7 @@ This query sets the age, weight, and t-cell count for the patient with ID `1` in
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'SetFieldValue(columnID=1, frame="measurements", age=34, weight=128, tcells=1145)'
+     -d 'SetFieldValue(col=1, frame="measurements", age=34, weight=128, tcells=1145)'
 ```
 ``` response
 {"results":[null]}
@@ -373,11 +369,11 @@ Now, let's add some books to our index.
 ``` request
 curl localhost:10101/index/books/query \
      -X POST \
-     -d 'SetColumnAttrs(columnID=1, name="To Kill a Mockingbird", year=1960)
-         SetColumnAttrs(columnID=2, name="No Name in the Street", year=1972)
-         SetColumnAttrs(columnID=3, name="The Tipping Point", year=2000)
-         SetColumnAttrs(columnID=4, name="Out Stealing Horses", year=2003)
-         SetColumnAttrs(columnID=5, name="The Forever War", year=2008)'
+     -d 'SetColumnAttrs(col=1, name="To Kill a Mockingbird", year=1960)
+         SetColumnAttrs(col=2, name="No Name in the Street", year=1972)
+         SetColumnAttrs(col=3, name="The Tipping Point", year=2000)
+         SetColumnAttrs(col=4, name="Out Stealing Horses", year=2003)
+         SetColumnAttrs(col=5, name="The Forever War", year=2008)'
 ```
 ``` response
 {"results":[null,null,null,null,null]}
@@ -387,11 +383,11 @@ And add some members.
 ``` request
 curl localhost:10101/index/books/query \
      -X POST \
-     -d 'SetRowAttrs(frame="members", rowID=10001, fullName="John Smith")
-         SetRowAttrs(frame="members", rowID=10002, fullName="Sue Perkins")
-         SetRowAttrs(frame="members", rowID=10003, fullName="Jennifer Hawks")
-         SetRowAttrs(frame="members", rowID=10004, fullName="Pedro Vazquez")
-         SetRowAttrs(frame="members", rowID=10005, fullName="Pat Washington")'
+     -d 'SetRowAttrs(frame="members", row=10001, fullName="John Smith")
+         SetRowAttrs(frame="members", row=10002, fullName="Sue Perkins")
+         SetRowAttrs(frame="members", row=10003, fullName="Jennifer Hawks")
+         SetRowAttrs(frame="members", row=10004, fullName="Pedro Vazquez")
+         SetRowAttrs(frame="members", row=10005, fullName="Pat Washington")'
 ```
 ``` response
 {"results":[null,null,null,null,null]}
@@ -401,7 +397,7 @@ At this point we can query one of the `member` records by querying that row.
 ``` request
 curl localhost:10101/index/books/query \
      -X POST \
-     -d 'Bitmap(frame="members", rowID=10002)'
+     -d 'Bitmap(frame="members", row=10002)'
 ```
 ``` response
 {"results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[]}]}
@@ -411,23 +407,19 @@ Now let's add some data to the matrix such that each pair represents a member wh
 ``` request
 curl localhost:10101/index/books/query \
      -X POST \
-     -d 'SetBit(frame="members", rowID=10001, columnID=3)
-         SetBit(frame="members", rowID=10001, columnID=5)
-
-         SetBit(frame="members", rowID=10002, columnID=1)
-         SetBit(frame="members", rowID=10002, columnID=2)
-         SetBit(frame="members", rowID=10002, columnID=4)
-
-         SetBit(frame="members", rowID=10003, columnID=3)
-
-         SetBit(frame="members", rowID=10004, columnID=4)
-         SetBit(frame="members", rowID=10004, columnID=5)
-
-         SetBit(frame="members", rowID=10005, columnID=1)
-         SetBit(frame="members", rowID=10005, columnID=2)
-         SetBit(frame="members", rowID=10005, columnID=3)
-         SetBit(frame="members", rowID=10005, columnID=4)
-         SetBit(frame="members", rowID=10005, columnID=5)'
+     -d 'SetBit(frame="members", row=10001, col=3)
+         SetBit(frame="members", row=10001, col=5)
+         SetBit(frame="members", row=10002, col=1)
+         SetBit(frame="members", row=10002, col=2)
+         SetBit(frame="members", row=10002, col=4)
+         SetBit(frame="members", row=10003, col=3)
+         SetBit(frame="members", row=10004, col=4)
+         SetBit(frame="members", row=10004, col=5)
+         SetBit(frame="members", row=10005, col=1)
+         SetBit(frame="members", row=10005, col=2)
+         SetBit(frame="members", row=10005, col=3)
+         SetBit(frame="members", row=10005, col=4)
+         SetBit(frame="members", row=10005, col=5)'
 ```
 ``` response
 {"results":[true,true,true,true,true,true,true,true,true,true,true,true,true]}
@@ -437,7 +429,7 @@ Now pull the record for `Sue Perkins` again.
 ``` request
 curl localhost:10101/index/books/query \
      -X POST \
-     -d 'Bitmap(frame="members", rowID=10002)'
+     -d 'Bitmap(frame="members", row=10002)'
 ```
 ``` response
 {"results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[1,2,4]}]}
@@ -448,7 +440,7 @@ In order to retrieve the attribute information that we stored for each book, we 
 ``` request
 curl localhost:10101/index/books/query?columnAttrs=true \
      -X POST \
-     -d 'Bitmap(frame="members", rowID=10002)'
+     -d 'Bitmap(frame="members", row=10002)'
 ```
 ``` response
 {
@@ -466,7 +458,7 @@ Finally, if we want to find out which books were read by both `Sue` and `Pedro`,
 ``` request
 curl localhost:10101/index/books/query?columnAttrs=true \
      -X POST \
-     -d 'Intersect(Bitmap(frame="members", rowID=10002), Bitmap(frame="members", rowID=10004))'
+     -d 'Intersect(Bitmap(frame="members", row=10002), Bitmap(frame="members", row=10004))'
 ```
 ``` response
 {
