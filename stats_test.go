@@ -16,8 +16,6 @@ package pilosa_test
 
 import (
 	"context"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"testing"
@@ -38,7 +36,6 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 	ms[0] = c
 	hldr.Stats = ms
 
-	hldr.Stats.SetLogger(ioutil.Discard)
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
@@ -143,7 +140,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`Bitmap(frame=f, rowID=0)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`Bitmap(frame=f, row=0)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -174,7 +171,7 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetRowAttrs(rowID=10, frame=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetRowAttrs(row=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -206,7 +203,7 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetColumnAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetColumnAttrs(col=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -357,6 +354,6 @@ func (c *MockStats) Gauge(name string, value float64, rate float64)        {}
 func (c *MockStats) Histogram(name string, value float64, rate float64)    {}
 func (c *MockStats) Set(name string, value string, rate float64)           {}
 func (c *MockStats) Timing(name string, value time.Duration, rate float64) {}
-func (c *MockStats) SetLogger(logger io.Writer)                            {}
+func (c *MockStats) SetLogger(logger pilosa.Logger)                        {}
 func (c *MockStats) Open()                                                 {}
 func (c *MockStats) Close() error                                          { return nil }

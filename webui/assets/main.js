@@ -254,12 +254,12 @@ function populate_version() {
 
     xhr.onload = function() {
       var version = JSON.parse(xhr.responseText)['version']
-      var version_major_minor = /(v\d+\.\d+)/.exec(version)[0]
+      var version_major_minor = /v?(\d+\.\d+).*/.exec(version)[1]
       var doc_link = document.getElementById('nav-documentation')
       doc_link.onclick = function() {
-        window.open('https://www.pilosa.com/docs/' + version_major_minor + '/introduction/')
+        window.open('https://www.pilosa.com/docs/v' + version_major_minor + '/introduction/')
       }
-      node.innerHTML = version
+      node.innerHTML = "Pilosa v" + version
     }
     xhr.send(null)
 }
@@ -295,12 +295,19 @@ function set_active_pane_by_name(name) {
 function update_cluster_status() {
   var xhr = new XMLHttpRequest();
   xhr.open('GET', '/status')
-  status_node = document.getElementById('status')
   xhr.onload = function() {
     var status = JSON.parse(xhr.responseText)
     render_status(status)
   }
   xhr.send(null)
+
+  var xhrSchema = new XMLHttpRequest();
+  xhrSchema.open('GET', '/schema')
+  xhrSchema.onload = function() {
+    var schema = JSON.parse(xhrSchema.responseText)
+    render_schema(schema)
+  }
+  xhrSchema.send(null)
 }
 
 function render_status(status) {
@@ -310,7 +317,7 @@ function render_status(status) {
     nodes_div.removeChild(nodes_div.firstChild);
   }
 
-  var nodes = status["status"]["Nodes"]
+  var nodes = status["nodes"]
   table = document.createElement("table")
   tbody = document.createElement("tbody")
   table.appendChild(tbody)
@@ -320,31 +327,35 @@ function render_status(status) {
 
   var header = document.createElement('tr')
   markup = `<th>Host</th>
-  <th>State</th>`
+  <th>ID</th>
+  <th>Coordinator</th>`
   header.innerHTML = markup
   tbody.appendChild(header)
   for(var n=0; n<nodes.length; n++) {
     var row = document.createElement("tr")
-    markup = `<td>${nodes[n]["Host"]}</td>
-    <td>${nodes[n]["State"]}</td>`
+    markup = `<td>${nodes[n]["uri"]["host"]}:${nodes[n]["uri"]["port"]}</td>
+    <td>${nodes[n]["id"]}</td>
+    <td>${nodes[n]["isCoordinator"]}</td>`
     row.innerHTML = markup
     tbody.appendChild(row)
   }
   nodes_div.appendChild(table)
+}
 
+function render_schema(schema) {
   // render index tables
   var indexes_div = document.getElementById("status-indexes")
   while (indexes_div.firstChild) {
     indexes_div.removeChild(indexes_div.firstChild);
   }
 
-  var indexes = nodes[0]["Indexes"] // TODO currently comes from only node 0
+  var indexes = schema["indexes"] // TODO currently comes from only node 0
   for(var n=0; n<indexes.length; n++) {
     table = document.createElement("table")
     tbody = document.createElement("tbody")
     table.appendChild(tbody)
     var caption = document.createElement("caption")
-    caption.innerHTML = indexes[n]["Name"]
+    caption.innerHTML = indexes[n]["name"]
     table.appendChild(caption)
 
     var header = document.createElement('tr')
@@ -354,13 +365,13 @@ function render_status(status) {
     header.innerHTML = markup
     tbody.appendChild(header)
 
-    var frames = indexes[n]["Frames"]
+    var frames = indexes[n]["frames"]
     if(frames) {
       for(var m=0; m<frames.length; m++) {
         var row = document.createElement("tr")
-        row.innerHTML = `<td>${frames[m]["Name"]}</td>
-        <td>${frames[m]["Meta"]["CacheType"]}</td>
-        <td>${frames[m]["Meta"]["CacheSize"]}</td>`
+        row.innerHTML = `<td>${frames[m]["name"]}</td>
+        <td>${frames[m]["options"]["cacheType"]}</td>
+        <td>${frames[m]["options"]["cacheSize"]}</td>`
         tbody.appendChild(row)
       }
     }
@@ -472,7 +483,7 @@ class Autocompleter {
   }
 
   init_dynamic_keywords() {
-    // hit /schema, parse indexes, frames, rowlabels, columnlabels, add to list
+    // hit /schema, parse indexes, frames, add to list
   }
 
   add_keyword() {

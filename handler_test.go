@@ -37,13 +37,13 @@ import (
 
 func TestHandlerPanics(t *testing.T) {
 	h := test.NewHandler()
-	buf := &bytes.Buffer{}
-	h.Handler.LogOutput = buf
+	bufLogger := test.NewBufferLogger()
+	h.Handler.Logger = bufLogger
 
 	w := httptest.NewRecorder()
 	// will panic since Handler has no Holder set up
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/index/taxi", nil))
-	bufbytes, err := ioutil.ReadAll(buf)
+	bufbytes, err := bufLogger.ReadAll()
 	if err != nil {
 		t.Fatalf("reading all logoutput: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestHandler_Schema(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0"},{"name":"f1","views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","views":[{"name":"standard"}]}]}]}`+"\n" {
-	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0","options":{"rowLabel":"rowID","cacheType":"ranked","cacheSize":50000}},{"name":"f1","options":{"rowLabel":"rowID","inverseEnabled":true,"cacheType":"ranked","cacheSize":50000},"views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","options":{"rowLabel":"rowID","cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000}},{"name":"f1","options":{"inverseEnabled":true,"cacheType":"ranked","cacheSize":50000},"views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -1349,7 +1349,7 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 	}
 
 	// Ensure throwing error if there's no primary key
-	hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{ColumnLabel: "id"})
+	hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 	unmatchColumnBody := []byte(`
 			{
 			"frames":[{
@@ -1433,7 +1433,7 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 
 	// Test input definition is deleted.
 	index := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
+	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
@@ -1470,7 +1470,7 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 	h.Holder = hldr.Holder
 	h.Cluster = test.NewCluster(1)
 
-	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
+	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
 	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}

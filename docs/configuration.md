@@ -81,6 +81,17 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     log-path = "/path/to/logfile"
     ```
 
+#### Verbose
+
+* Description: Enable verbose logging.
+* Flag: `--verbose`
+* Env: `PILOSA_VERBOSE`
+* Config:
+
+    ```toml
+    verbose = true
+    ```
+
 #### Max Writes Per Request
 
 * Description: Maximum number of mutating commands allowed per request. This includes SetBit, ClearBit, SetRowAttrs, SetColumnAttrs, and SetFieldValue.

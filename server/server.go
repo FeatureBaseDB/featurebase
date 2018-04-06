@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -71,6 +72,10 @@ type Command struct {
 	Started chan struct{}
 	// Done will be closed when Command.Close() is called
 	Done chan struct{}
+
+	// Passed to the Gossip implementation.
+	logOutput io.Writer
+	logger    *log.Logger
 }
 
 // NewCommand returns a new instance of Main.
@@ -115,7 +120,31 @@ func (m *Command) Run(args ...string) (err error) {
 		return fmt.Errorf("server.Open: %v", err)
 	}
 
-	m.Server.Logger().Printf("Listening as %s\n", m.Server.URI)
+	m.Server.Logger.Printf("Listening as %s\n", m.Server.URI)
+	return nil
+}
+
+// SetupLogger sets up the logger based on the configuration.
+func (m *Command) SetupLogger() error {
+	var err error
+	if m.Config.LogPath == "" {
+		m.logOutput = m.Stderr
+	} else {
+		m.logOutput, err = os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		if err != nil {
+			return err
+		}
+	}
+
+	if m.Config.Verbose {
+		vbl := pilosa.NewVerboseLogger(m.logOutput)
+		m.logger = vbl.Logger()
+		m.Server.Logger = vbl
+	} else {
+		sl := pilosa.NewStandardLogger(m.logOutput)
+		m.logger = sl.Logger()
+		m.Server.Logger = sl
+	}
 	return nil
 }
 
@@ -125,6 +154,10 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return err
 	}
+
+	m.Server.Handler.Logger = m.Server.Logger
+	m.Server.Holder.Logger = m.Server.Logger
+	m.Server.Holder.Stats.SetLogger(m.Server.Logger)
 
 	uri, err := pilosa.AddressWithDefaults(m.Config.Bind)
 
@@ -136,14 +169,9 @@ func (m *Command) SetupServer() error {
 	cluster := pilosa.NewCluster()
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 	cluster.Holder = m.Server.Holder
+	cluster.Logger = m.Server.Logger
 
 	m.Server.Cluster = cluster
-
-	// Setup logging output.
-	m.Server.LogOutput, err = GetLogWriter(m.Config.LogPath, m.Stderr)
-	if err != nil {
-		return err
-	}
 
 	// Configure data directory (for Cluster .topology)
 	m.Server.Cluster.Path = m.Config.DataDir
@@ -152,7 +180,7 @@ func (m *Command) SetupServer() error {
 	m.Server.Holder.NewAttrStore = boltdb.NewAttrStore
 
 	// Configure holder.
-	m.Server.Logger().Printf("Using data from: %s\n", m.Config.DataDir)
+	m.Server.Logger.Printf("Using data from: %s\n", m.Config.DataDir)
 	m.Server.Holder.Path = m.Config.DataDir
 	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollInterval)
 	if m.Config.Metric.Diagnostics {
@@ -164,8 +192,6 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return err
 	}
-
-	m.Server.Holder.Stats.SetLogger(m.Server.LogOutput)
 
 	// Copy configuration flags.
 	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
@@ -246,7 +272,7 @@ func (m *Command) SetupNetworking() error {
 	if m.GossipTransport != nil {
 		transport = m.GossipTransport
 	} else {
-		transport, err = gossip.NewTransport(gossipHost, gossipPort)
+		transport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger)
 		if err != nil {
 			return err
 		}
@@ -257,8 +283,8 @@ func (m *Command) SetupNetworking() error {
 		m.Server.Cluster.Coordinator = m.Server.NodeID
 	}
 
-	m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m.Server.LogOutput)
-	gossipMemberSet, err := gossip.NewGossipMemberSetWithTransport(m.Server.NodeID, m.Config, transport, m.Server)
+	m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m.Server.Logger)
+	gossipMemberSet, err := gossip.NewGossipMemberSet(m.Server.NodeID, m.Config, m.Server, gossip.WithLogger(m.logger), gossip.WithTransport(transport))
 	if err != nil {
 		return err
 	}
@@ -269,26 +295,11 @@ func (m *Command) SetupNetworking() error {
 	return nil
 }
 
-// GetLogWriter opens a file for logging, or a default io.Writer (such as stderr) for an empty path.
-func GetLogWriter(path string, defaultWriter io.Writer) (io.Writer, error) {
-	// This is split out so it can be used in NewServeCmd as well as SetupServer
-	if path == "" {
-		return defaultWriter, nil
-	} else {
-		logFile, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
-		if err != nil {
-			return nil, err
-		}
-		return logFile, nil
-	}
-}
-
 // Close shuts down the server.
 func (m *Command) Close() error {
 	var logErr error
 	serveErr := m.Server.Close()
-	logOutput := m.Server.LogOutput
-	if closer, ok := logOutput.(io.Closer); ok {
+	if closer, ok := m.logOutput.(io.Closer); ok {
 		logErr = closer.Close()
 	}
 	close(m.Done)

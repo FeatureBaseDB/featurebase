@@ -21,8 +21,6 @@ This section will provide a detailed reference and examples for the Pilosa Query
 
 There will be one item in the `results` array for each PQL query in the request. The type of each item in the array will depend on the type of query - each query in the reference below lists it's result type.
 
-The default row label is `rowID`, and the default column label is `columnID`. Changing these defaults is deprecated and this feature will be removed in a future release.
-
 #### Conventions
 
 * Angle Brackets `<>` denote required arguments
@@ -46,8 +44,6 @@ curl localhost:10101/index/repository/query \
 #### Arguments and Types
 
 * `frame` The frame specifies on which Pilosa [frame](../glossary/#frame) the query will operate. Valid frame names are lower case strings; they start with an alphanumeric character, and contain only alphanumeric characters and `_-`. They must be 64 characters or less in length.
-* `ROW_LABEL` The default row label is `rowID`, changing the default is deprecated.
-* `COL_LABEL` The default column label is `columnID`, changing the default is deprecated.
 * `TIMESTAMP` This is a timestamp in quotes with the following format `"YYYY-MM-DDTHH:MM"` (e.g. "2006-01-02T15:04")
 * `UINT` An unsigned integer (e.g. 42839)
 * `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`
@@ -223,7 +219,7 @@ Bitmap(<frame=STRING>, (<ROW_LABEL=UINT> | <COL_LABEL>=UINT))
 
 **Description:**
 
-`Bitmap` retrieves the indices of all the set bits in a row or column based on whether the row label or column label is given in the query. It also retrieves any attributes set on that row or column.
+`Bitmap` retrieves the indices of all the set bits in a row or column based on whether the row or column argument is provided in the query. It also retrieves any attributes set on that row or column.
 
 **Result Type:** object with attrs and bits.
 

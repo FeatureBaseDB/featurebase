@@ -8,7 +8,7 @@ env:
     - secure: "VnBFmFfBOrrf7ONLN9WpAFCcV8SEt5G5VPnnHv97TP7PlJG8LWR6k6O+vRJOvf8V4vDMfKCTDonwWLgbssVf3yygo3C8ZoftY2phehEkWGffCgsd9ML/YBNbGq4LYLSE5HKvBqrZjQaOrVby71BAsP8W7RhC6hqzFQ00M/z8dZVfwaQQFwew2eEcSxLEaaDFS8Wgc3/UuwxDRPBq6u3cCN5RxfB+q70HvGVq4TT+0dqS4eCvz688+Z0GIGYx9olNjh0F2Kc8R2Po0lnUNa0GiHrZ21zeQ1DxIK04QABrWWmjL4h+bx3VHNKPFR4GYSKDf+pj1kfaqbfrAg6rMAJdGejgoS+QyjhgCoN4d3qRp8s+1nrxtp0TvezEdjwyxt4quGHbP5TxWUszssbGhWqf4mx6OeJ8MmdTaJjfu0f3NWJXMycqT6J73WKORk4rHeIqF9CIdxdmcpkwYj8rk0TEMTPTsd7WA8w2HIDsCz/jQnRmEgLUiNnTAofYc/uUi/Wg/T2hllkp+oBDTzxk9NTelkqx8TJ0bDmYYL9JWUi1siFHTHiVYTJgyirSfGNpe61u8OLmT0Hak/D399IfL7qgFLlMXk8q92typfO2xEduq6G+8KygeqiOMSsOY+xcDvZf5xtcEihYd21vjtrxRSqFsup/o8DIxEurQnfXBx1B+WA="
     - secure: "U4fpHWDVOG4viqZsiVgUDW7OW1JW60uPOZy0q9pfbs86iHvmZq0PaScsZ+YdlYaN2GETVr7endDf6DCcZs1PWfg0F6VQfkOXcShX8HVS9O58lUZA5tyvbDVql9DQs4PbnkZo+ktz+Z0YaXqq2RdtMDOUz4bgZwspLPMA14if+N6w0tqCFpB7bEtpptTGsdbIQPG1n07yvSeNmK4mvrEEs77tWmhulN5iilpOqhpIvD39bJvtCYVALuJpzLd/OjLTPV9l/fl+hJkMXSj+X5ilO1DHINAcCM648iEX2phXAIWmi0O0Rbg2cI4kV9T5ysOIw8ux+YCm9bZDGTCt+VGBW5Fg+Z5iaXXexyKYCGiHleOJ7kCj9kXxh2u8NiYVNgb19dGJV5/HgQ6pcGWjeVEqr8yY1546zMjpTX+SYGQF+XZe+uggEjeAsk53ueXa0pyZTrlrqSvR7BBtWPx47s/dTg2L19FQYv3XpGMxEXLw92RplExQKi1h7QgihRxFpjGgURHhrt7d9eiNiNqBt3ZsHjmh2AkXZHnaDjlgSnFFWaMqP3UtDBWIuO+2BMbZUJVfP+gpQGBZ4gtpUSmV2JDCHgZgX5OAnLD4usxh+ATQ4rvUXF/tf8nMqEKHlGKd8hxpYSyMX21BoqfSfY4/IA0ejVE9BITqlrvqewqkP1yxe7o="
 install:
-  - make vendor generate-statik
+  - make install-dep install-statik vendor generate-statik
 script:
   - make test
 # TODO: When we drop support for Go <1.10, we should use `-coverprofile=` on both `go test` and `goveralls` so the test suite doesn't run twice. See https://github.com/pilosa/pilosa/issues/1009
@@ -23,7 +23,7 @@ deploy:
     skip_cleanup: true
     on:
       all_branches: true
-      go: 1.9
+      go: "1.10"
 matrix:
   allow_failures:
     - go: master

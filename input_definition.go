@@ -281,7 +281,7 @@ func (i *InputDefinitionInfo) Validate() error {
 		}
 	}
 
-	// Validate columnLabel and duplicate primaryKey.
+	// Validate duplicate primaryKey.
 	for _, field := range i.Fields {
 		if field.Name == "" {
 			return ErrInputDefinitionNameRequired

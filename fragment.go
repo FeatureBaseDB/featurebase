@@ -26,7 +26,6 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -103,8 +102,8 @@ type Fragment struct {
 	// so that they can be mmapped and heap utilization can be kept low.
 	MaxOpN int
 
-	// Writer used for out-of-band log entries.
-	LogOutput io.Writer
+	// Logger used for out-of-band log entries.
+	Logger Logger
 
 	// Row attribute storage.
 	// This is set by the parent frame unless overridden for testing.
@@ -124,8 +123,8 @@ func NewFragment(path, index, frame, view string, slice uint64) *Fragment {
 		CacheType: DefaultCacheType,
 		CacheSize: DefaultCacheSize,
 
-		LogOutput: ioutil.Discard,
-		MaxOpN:    DefaultFragmentMaxOpN,
+		Logger: NopLogger,
+		MaxOpN: DefaultFragmentMaxOpN,
 
 		stats: NopStatsClient,
 	}
@@ -273,7 +272,7 @@ func (f *Fragment) openCache() error {
 	// Unmarshal cache data.
 	var pb internal.Cache
 	if err := proto.Unmarshal(buf, &pb); err != nil {
-		f.logger().Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
+		f.Logger.Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
 		return nil
 	}
 
@@ -298,13 +297,13 @@ func (f *Fragment) Close() error {
 func (f *Fragment) close() error {
 	// Flush cache if closing gracefully.
 	if err := f.flushCache(); err != nil {
-		f.logger().Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
+		f.Logger.Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
 		return err
 	}
 
 	// Close underlying storage.
 	if err := f.closeStorage(); err != nil {
-		f.logger().Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
+		f.Logger.Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
 		return err
 	}
 
@@ -342,9 +341,6 @@ func (f *Fragment) closeStorage() error {
 
 	return nil
 }
-
-// logger returns a logger instance for the fragment.nt.
-func (f *Fragment) logger() *log.Logger { return log.New(f.LogOutput, "", log.LstdFlags) }
 
 // Row returns a row by ID.
 func (f *Fragment) Row(rowID uint64) *Bitmap {
@@ -1385,18 +1381,17 @@ func (f *Fragment) Snapshot() error {
 	defer f.mu.Unlock()
 	return f.snapshot()
 }
-func track(start time.Time, message string, stats StatsClient, logger *log.Logger) {
+func track(start time.Time, message string, stats StatsClient, logger Logger) {
 	elapsed := time.Since(start)
 	logger.Printf("%s took %s", message, elapsed)
 	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
 }
 
 func (f *Fragment) snapshot() error {
-	logger := f.logger()
-	logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
+	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
 	start := time.Now()
-	defer track(start, completeMessage, f.stats, logger)
+	defer track(start, completeMessage, f.stats, f.Logger)
 
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + SnapshotExt
@@ -1841,11 +1836,11 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 		// Only sync the standard block.
 		for j := 0; j < len(set.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "SetBit(frame=%q, rowID=%d, columnID=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "SetBit(frame=%q, row=%d, col=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
 			count++
 		}
 		for j := 0; j < len(clear.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "ClearBit(frame=%q, rowID=%d, columnID=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "ClearBit(frame=%q, row=%d, col=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
 			count++
 		}
 

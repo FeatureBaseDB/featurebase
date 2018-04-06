@@ -19,8 +19,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -87,8 +85,7 @@ type Server struct {
 	// Misc options.
 	MaxWritesPerRequest int
 
-	LogOutput io.Writer
-	logger    *log.Logger
+	Logger Logger
 
 	defaultClient InternalClient
 }
@@ -115,9 +112,8 @@ func NewServer() *Server {
 		MetricInterval:      0,
 		DiagnosticInterval:  0,
 
-		LogOutput: os.Stderr,
+		Logger: NopLogger,
 	}
-	s.logger = log.New(s.LogOutput, "", log.LstdFlags)
 
 	s.Handler.Holder = s.Holder
 	s.diagnostics.server = s
@@ -126,7 +122,7 @@ func NewServer() *Server {
 
 // Open opens and initializes the server.
 func (s *Server) Open() error {
-	s.Logger().Printf("open server")
+	s.Logger.Printf("open server")
 	// s.ln can be configured prior to Open() via s.OpenListener().
 	if s.ln == nil {
 		if err := s.OpenListener(); err != nil {
@@ -151,7 +147,6 @@ func (s *Server) Open() error {
 	// Peek at the holder to determine if there is data on disk.
 	// Don't actually load the data until after the Cluster
 	// management starts.
-	s.Holder.LogOutput = s.LogOutput
 	s.Holder.Peek()
 
 	// Create default HTTP client
@@ -175,7 +170,6 @@ func (s *Server) Open() error {
 	s.Handler.Node = node
 	s.Handler.Cluster = s.Cluster
 	s.Handler.Executor = e
-	s.Handler.LogOutput = s.LogOutput
 
 	s.Cluster.prefect = s.Handler
 
@@ -186,7 +180,7 @@ func (s *Server) Open() error {
 	go func() {
 		err := http.Serve(s.ln, s.Handler)
 		if err != nil {
-			s.Logger().Printf("HTTP handler terminated with error: %s\n", err)
+			s.Logger.Printf("HTTP handler terminated with error: %s\n", err)
 		}
 	}()
 
@@ -226,7 +220,7 @@ func (s *Server) Open() error {
 
 // OpenListener opens a listener for the Server.
 func (s *Server) OpenListener() error {
-	s.Logger().Printf("open server listener: %s", s.URI)
+	s.Logger.Printf("open server listener: %s", s.URI)
 	if s.ln != nil {
 		return fmt.Errorf("a listener already exists for server: %s", s.URI)
 	}
@@ -288,7 +282,7 @@ func (s *Server) LoadNodeID() string {
 	}
 	nodeID, err := s.Holder.loadNodeID()
 	if err != nil {
-		s.Logger().Printf("loading NodeID: %v", err)
+		s.Logger.Printf("loading NodeID: %v", err)
 		return s.NodeID
 	}
 	return nodeID
@@ -321,14 +315,11 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 	return &http.Client{Transport: transport}
 }
 
-// Logger returns a logger that writes to LogOutput
-func (s *Server) Logger() *log.Logger { return s.logger }
-
 func (s *Server) monitorAntiEntropy() {
 	ticker := time.NewTicker(s.AntiEntropyInterval)
 	defer ticker.Stop()
 
-	s.Logger().Printf("holder sync monitor initializing (%s interval)", s.AntiEntropyInterval)
+	s.Logger.Printf("holder sync monitor initializing (%s interval)", s.AntiEntropyInterval)
 
 	for {
 		// Wait for tick or a close.
@@ -339,7 +330,7 @@ func (s *Server) monitorAntiEntropy() {
 			s.Holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 		t := time.Now()
-		s.Logger().Printf("holder sync beginning")
+		s.Logger.Printf("holder sync beginning")
 
 		// Initialize syncer with local holder and remote client.
 		var syncer HolderSyncer
@@ -352,12 +343,12 @@ func (s *Server) monitorAntiEntropy() {
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {
-			s.Logger().Printf("holder sync error: err=%s", err)
+			s.Logger.Printf("holder sync error: err=%s", err)
 			continue
 		}
 
 		// Record successful sync in log.
-		s.Logger().Printf("holder sync complete")
+		s.Logger.Printf("holder sync complete")
 		dif := time.Since(t)
 		s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
 	}
@@ -378,7 +369,6 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		}
 	case *internal.CreateIndexMessage:
 		opt := IndexOptions{
-			ColumnLabel: obj.Meta.ColumnLabel,
 			TimeQuantum: TimeQuantum(obj.Meta.TimeQuantum),
 		}
 		_, err := s.Holder.CreateIndex(obj.Index, opt)
@@ -482,7 +472,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 func (s *Server) SendSync(pb proto.Message) error {
 	var eg errgroup.Group
 	for _, node := range s.Cluster.Nodes {
-		s.Logger().Printf("SendSync to: %s", node.URI)
+		s.Logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
 		if s.URI == node.URI {
 			continue
@@ -504,7 +494,7 @@ func (s *Server) SendAsync(pb proto.Message) error {
 
 // SendTo represents an implementation of Broadcaster.
 func (s *Server) SendTo(to *Node, pb proto.Message) error {
-	s.Logger().Printf("SendTo: %s", to.URI)
+	s.Logger.Printf("SendTo: %s", to.URI)
 	ctx := context.WithValue(context.Background(), "uri", &to.URI)
 	return s.defaultClient.SendMessage(ctx, pb)
 }
@@ -554,7 +544,7 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 
 		err := s.mergeRemoteStatus(pb.(*internal.NodeStatus))
 		if err != nil {
-			s.Logger().Printf("merge remote status: %s", err)
+			s.Logger.Printf("merge remote status: %s", err)
 		}
 	}()
 
@@ -579,7 +569,7 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 		// if we don't know about an index locally, log an error because
 		// indexes should be created and synced prior to slice creation
 		if localIndex == nil {
-			s.Logger().Printf("Local Index not found: %s", index)
+			s.Logger.Printf("Local Index not found: %s", index)
 			continue
 		}
 		if newMax > oldmaxslices[index] {
@@ -595,7 +585,7 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 		// if we don't know about an index locally, log an error because
 		// indexes should be created and synced prior to slice creation
 		if localIndex == nil {
-			s.Logger().Printf("Local Index not found: %s", index)
+			s.Logger.Printf("Local Index not found: %s", index)
 			continue
 		}
 		if newMaxInverse > oldMaxInverseSlices[index] {
@@ -611,13 +601,13 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 func (s *Server) monitorDiagnostics() {
 	// Do not send more than once a minute
 	if s.DiagnosticInterval < time.Minute {
-		s.Logger().Printf("diagnostics disabled")
+		s.Logger.Printf("diagnostics disabled")
 		return
 	} else {
-		s.Logger().Printf("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.DiagnosticInterval)
+		s.Logger.Printf("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.DiagnosticInterval)
 	}
 
-	s.diagnostics.SetLogger(s.LogOutput)
+	s.diagnostics.Logger = s.Logger
 	s.diagnostics.SetVersion(Version)
 	s.diagnostics.Set("Host", s.URI.host)
 	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeIDs(), ","))
@@ -639,7 +629,7 @@ func (s *Server) monitorDiagnostics() {
 		s.diagnostics.CheckVersion()
 		err = s.diagnostics.Flush()
 		if err != nil {
-			s.Logger().Printf("Diagnostics error: %s", err)
+			s.Logger.Printf("Diagnostics error: %s", err)
 		}
 	}
 
@@ -670,7 +660,7 @@ func (s *Server) monitorRuntime() {
 
 	defer s.GCNotifier.Close()
 
-	s.Logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
+	s.Logger.Printf("runtime stats initializing (%s interval)", s.MetricInterval)
 
 	for {
 		// Wait for tick or a close.

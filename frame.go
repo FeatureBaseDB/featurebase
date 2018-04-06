@@ -17,7 +17,6 @@ package pilosa
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -32,7 +31,6 @@ import (
 
 // Default frame settings.
 const (
-	DefaultRowLabel       = "rowID"
 	DefaultCacheType      = CacheTypeRanked
 	DefaultInverseEnabled = false
 	DefaultRangeEnabled   = false
@@ -57,7 +55,6 @@ type Frame struct {
 	Stats       StatsClient
 
 	// Frame options.
-	rowLabel       string
 	inverseEnabled bool
 	cacheType      string
 	cacheSize      uint32
@@ -65,7 +62,7 @@ type Frame struct {
 	rangeEnabled   bool
 	fields         []*Field
 
-	LogOutput io.Writer
+	Logger Logger
 }
 
 // NewFrame returns a new instance of frame.
@@ -87,7 +84,6 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
-		rowLabel:       DefaultRowLabel,
 		inverseEnabled: DefaultInverseEnabled,
 		cacheType:      DefaultCacheType,
 		cacheSize:      DefaultCacheSize,
@@ -95,7 +91,7 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		rangeEnabled: DefaultRangeEnabled,
 		//fields
 
-		LogOutput: ioutil.Discard,
+		Logger: NopLogger,
 	}, nil
 }
 
@@ -137,39 +133,6 @@ func (f *Frame) MaxInverseSlice() uint64 {
 		return 0
 	}
 	return view.MaxSlice()
-}
-
-// SetRowLabel sets the row labels. Persists to meta file on update.
-func (f *Frame) SetRowLabel(v string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Ignore if no change occurred.
-	if v == "" || f.rowLabel == v {
-		return nil
-	}
-
-	// Make sure rowLabel is valid name
-	err := ValidateLabel(v)
-	if err != nil {
-		return err
-	}
-
-	// Persist meta data to disk on change.
-	f.rowLabel = v
-	if err := f.saveMeta(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// RowLabel returns the row label.
-func (f *Frame) RowLabel() string {
-	f.mu.RLock()
-	v := f.rowLabel
-	f.mu.RUnlock()
-	return v
 }
 
 // CacheType returns the caching mode for the frame.
@@ -224,7 +187,6 @@ func (f *Frame) Options() FrameOptions {
 
 func (f *Frame) options() FrameOptions {
 	return FrameOptions{
-		RowLabel:       f.rowLabel,
 		InverseEnabled: f.inverseEnabled,
 		RangeEnabled:   f.rangeEnabled,
 		CacheType:      f.cacheType,
@@ -302,7 +264,6 @@ func (f *Frame) loadMeta() error {
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
 	if os.IsNotExist(err) {
-		f.rowLabel = DefaultRowLabel
 		f.inverseEnabled = DefaultInverseEnabled
 		f.cacheType = DefaultCacheType
 		f.cacheSize = DefaultCacheSize
@@ -319,7 +280,6 @@ func (f *Frame) loadMeta() error {
 	}
 
 	// Copy metadata fields.
-	f.rowLabel = pb.RowLabel
 	f.inverseEnabled = pb.InverseEnabled
 	f.cacheType = pb.CacheType
 	if f.cacheType == "" {
@@ -624,7 +584,7 @@ func (f *Frame) createViewIfNotExistsBase(name string) (*View, bool, error) {
 func (f *Frame) newView(path, name string) *View {
 	view := NewView(path, f.index, f.name, name, f.cacheSize)
 	view.cacheType = f.cacheType
-	view.LogOutput = f.LogOutput
+	view.Logger = f.Logger
 	view.RowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	view.broadcaster = f.broadcaster
@@ -1030,7 +990,6 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
-	RowLabel       string      `json:"rowLabel,omitempty"`
 	InverseEnabled bool        `json:"inverseEnabled,omitempty"`
 	RangeEnabled   bool        `json:"rangeEnabled,omitempty"`
 	CacheType      string      `json:"cacheType,omitempty"`
@@ -1049,7 +1008,6 @@ func encodeFrameOptions(o *FrameOptions) *internal.FrameMeta {
 		return nil
 	}
 	return &internal.FrameMeta{
-		RowLabel:       o.RowLabel,
 		InverseEnabled: o.InverseEnabled,
 		RangeEnabled:   o.RangeEnabled,
 		CacheType:      o.CacheType,
@@ -1064,7 +1022,6 @@ func decodeFrameOptions(options *internal.FrameMeta) *FrameOptions {
 		return nil
 	}
 	return &FrameOptions{
-		RowLabel:       options.RowLabel,
 		InverseEnabled: options.InverseEnabled,
 		RangeEnabled:   options.RangeEnabled,
 		CacheType:      options.CacheType,

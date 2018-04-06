@@ -23,12 +23,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	// Imported for its side-effect of registering pprof endpoints with the server.
 	_ "net/http/pprof"
-	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -67,8 +65,7 @@ type Handler struct {
 		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
 	}
 
-	// The writer for any logging.
-	LogOutput io.Writer
+	Logger Logger
 
 	// Keeps the query argument validators for each handler
 	validators map[string]*queryValidationSpec
@@ -98,8 +95,7 @@ func NewHandler() *Handler {
 		//BroadcastHandler: NopBroadcastHandler, // TODO: implement the nop
 		//StatusHandler:    NopStatusHandler,    // TODO: implement the nop
 		FileSystem: NopFileSystem,
-
-		LogOutput: os.Stderr,
+		Logger:     NopLogger,
 	}
 	BuildRouters(handler)
 	handler.populateValidators()
@@ -247,7 +243,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			stack := debug.Stack()
 			msg := "PANIC: %s\n%s"
-			fmt.Fprintf(h.LogOutput, msg, err, stack)
+			h.Logger.Printf(msg, err, stack)
 			fmt.Fprintf(w, msg, err, stack)
 		}
 	}()
@@ -261,7 +257,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		statsTags := make([]string, 0, 3)
 
 		if h.Cluster.LongQueryTime > 0 && dif > h.Cluster.LongQueryTime {
-			h.logger().Printf("%s %s %v", r.Method, r.URL.String(), dif)
+			h.Logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
 			statsTags = append(statsTags, "slow_query")
 		}
 
@@ -289,7 +285,7 @@ func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
 	filesystem, err := h.FileSystem.New()
 	if err != nil {
 		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
-		h.logger().Println("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
+		h.Logger.Printf("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
 		return
 	}
 	http.FileServer(filesystem).ServeHTTP(w, r)
@@ -300,7 +296,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(getSchemaResponse{
 		Indexes: h.Holder.Schema(),
 	}); err != nil {
-		h.logger().Printf("write schema response error: %s", err)
+		h.Logger.Printf("write schema response error: %s", err)
 	}
 }
 
@@ -308,7 +304,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	pb, err := h.StatusHandler.ClusterStatus()
 	if err != nil {
-		h.logger().Printf("cluster status error: %s", err)
+		h.Logger.Printf("cluster status error: %s", err)
 		return
 	}
 
@@ -317,7 +313,7 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		State: cs.State,
 		Nodes: DecodeNodes(cs.Nodes),
 	}); err != nil {
-		h.logger().Printf("write status response error: %s", err)
+		h.Logger.Printf("write status response error: %s", err)
 	}
 }
 
@@ -395,7 +391,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	// Write response back to client.
 	if err := h.writeQueryResponse(w, r, resp); err != nil {
-		h.logger().Printf("write query response error: %s", err)
+		h.Logger.Printf("write query response error: %s", err)
 	}
 }
 
@@ -405,7 +401,7 @@ func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
 		Standard: h.Holder.MaxSlices(),
 		Inverse:  h.Holder.MaxInverseSlices(),
 	}); err != nil {
-		h.logger().Printf("write slices-max response error: %s", err)
+		h.Logger.Printf("write slices-max response error: %s", err)
 	}
 }
 
@@ -431,7 +427,7 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(getIndexResponse{
 		map[string]string{"name": index.Name()},
 	}); err != nil {
-		h.logger().Printf("write response error: %s", err)
+		h.Logger.Printf("write response error: %s", err)
 	}
 }
 
@@ -519,12 +515,12 @@ func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
 			Index: indexName,
 		})
 	if err != nil {
-		h.logger().Printf("problem sending DeleteIndex message: %s", err)
+		h.Logger.Printf("problem sending DeleteIndex message: %s", err)
 	}
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 
 	h.Holder.Stats.Count("deleteIndex", 1, 1.0)
@@ -564,14 +560,14 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 			Meta:  req.Options.Encode(),
 		})
 	if err != nil {
-		h.logger().Printf("problem sending CreateIndex message: %s", err)
+		h.Logger.Printf("problem sending CreateIndex message: %s", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postIndexResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 
 	h.Holder.Stats.Count("createIndex", 1, 1.0)
@@ -610,7 +606,7 @@ func (h *Handler) handlePatchIndexTimeQuantum(w http.ResponseWriter, r *http.Req
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(patchIndexTimeQuantumResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -665,7 +661,7 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 	if err := json.NewEncoder(w).Encode(postIndexAttrDiffResponse{
 		Attrs: attrs,
 	}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -718,12 +714,12 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 			Meta:  req.Options.Encode(),
 		})
 	if err != nil {
-		h.logger().Printf("problem sending CreateFrame message: %s", err)
+		h.Logger.Printf("problem sending CreateFrame message: %s", err)
 	}
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 
 	h.Holder.Stats.CountWithCustomTags("createFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
@@ -783,7 +779,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	index := h.Holder.Index(indexName)
 	if index == nil {
 		if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
-			h.logger().Printf("response encoding error: %s", err)
+			h.Logger.Printf("response encoding error: %s", err)
 		}
 		return
 	}
@@ -801,12 +797,12 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 			Frame: frameName,
 		})
 	if err != nil {
-		h.logger().Printf("problem sending DeleteFrame message: %s", err)
+		h.Logger.Printf("problem sending DeleteFrame message: %s", err)
 	}
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteFrameResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 
 	h.Holder.Stats.CountWithCustomTags("deleteFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
@@ -848,7 +844,7 @@ func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Req
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(patchFrameTimeQuantumResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -899,12 +895,12 @@ func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
 			Field: encodeField(field),
 		})
 	if err != nil {
-		h.logger().Printf("problem sending CreateField message: %s", err)
+		h.Logger.Printf("problem sending CreateField message: %s", err)
 	}
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(postFrameFieldResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -943,12 +939,12 @@ func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request)
 			Field: fieldName,
 		})
 	if err != nil {
-		h.logger().Printf("problem sending DeleteField message: %s", err)
+		h.Logger.Printf("problem sending DeleteField message: %s", err)
 	}
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteFrameFieldResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -979,7 +975,7 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(getFrameFieldsResponse{Fields: fields}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -1012,7 +1008,7 @@ func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(getFrameViewsResponse{Views: names}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -1046,12 +1042,12 @@ func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
 			View:  viewName,
 		})
 	if err != nil {
-		h.logger().Printf("problem sending DeleteView message: %s", err)
+		h.Logger.Printf("problem sending DeleteView message: %s", err)
 	}
 
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(deleteViewResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -1107,7 +1103,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 	if err := json.NewEncoder(w).Encode(postFrameAttrDiffResponse{
 		Attrs: attrs,
 	}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -1276,10 +1272,10 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the Index.
-	h.logger().Println("importing:", req.Index, req.Frame, req.Slice)
+	h.Logger.Printf("importing: %s %s %d", req.Index, req.Frame, req.Slice)
 	index := h.Holder.Index(req.Index)
 	if index == nil {
-		h.logger().Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrIndexNotFound.Error())
+		h.Logger.Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrIndexNotFound.Error())
 		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
@@ -1287,7 +1283,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Retrieve frame.
 	f := index.Frame(req.Frame)
 	if f == nil {
-		h.logger().Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrFrameNotFound.Error())
+		h.Logger.Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrFrameNotFound.Error())
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
 	}
@@ -1295,7 +1291,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Import into fragment.
 	err = f.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
-		h.logger().Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
+		h.Logger.Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
 		return
 	}
 
@@ -1346,10 +1342,10 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Find the Index.
-	h.logger().Println("importing:", req.Index, req.Frame, req.Slice)
+	h.Logger.Printf("importing: %s %s %d", req.Index, req.Frame, req.Slice)
 	index := h.Holder.Index(req.Index)
 	if index == nil {
-		h.logger().Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrIndexNotFound.Error())
+		h.Logger.Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrIndexNotFound.Error())
 		http.Error(w, ErrIndexNotFound.Error(), http.StatusNotFound)
 		return
 	}
@@ -1357,7 +1353,7 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 	// Retrieve frame.
 	f := index.Frame(req.Frame)
 	if f == nil {
-		h.logger().Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrFrameNotFound.Error())
+		h.Logger.Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", req.Index, req.Frame, req.Slice, ErrFrameNotFound.Error())
 		http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		return
 	}
@@ -1365,7 +1361,7 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 	// Import into fragment.
 	err = f.ImportValue(req.Field, req.ColumnIDs, req.Values)
 	if err != nil {
-		h.logger().Printf("import error: index=%s, frame=%s, slice=%d, field=%s, bits=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
+		h.Logger.Printf("import error: index=%s, frame=%s, slice=%d, field=%s, bits=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
 		return
 	}
 
@@ -1452,7 +1448,7 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 
 	// Write to response.
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
-		h.logger().Printf("json write error: %s", err)
+		h.Logger.Printf("json write error: %s", err)
 	}
 }
 
@@ -1475,7 +1471,7 @@ func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) 
 
 	// Stream fragment to response body.
 	if _, err := f.WriteTo(w); err != nil {
-		h.logger().Printf("fragment backup error: %s", err)
+		h.Logger.Printf("fragment backup error: %s", err)
 	}
 }
 
@@ -1545,7 +1541,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	// Encode response.
 	buf, err := proto.Marshal(&resp)
 	if err != nil {
-		h.logger().Printf("merge block response encoding error: %s", err)
+		h.Logger.Printf("merge block response encoding error: %s", err)
 		return
 	}
 
@@ -1579,7 +1575,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 	if err := json.NewEncoder(w).Encode(getFragmentBlocksResponse{
 		Blocks: blocks,
 	}); err != nil {
-		h.logger().Printf("block response encoding error: %s", err)
+		h.Logger.Printf("block response encoding error: %s", err)
 	}
 }
 
@@ -1680,7 +1676,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 // handleGetHosts handles /hosts requests.
 func (h *Handler) handleGetHosts(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(h.Cluster.Nodes); err != nil {
-		h.logger().Printf("write version response error: %s", err)
+		h.Logger.Printf("write version response error: %s", err)
 	}
 }
 
@@ -1696,7 +1692,7 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	}{
 		Version: version,
 	}); err != nil {
-		h.logger().Printf("write version response error: %s", err)
+		h.Logger.Printf("write version response error: %s", err)
 	}
 }
 
@@ -1714,11 +1710,6 @@ func (h *Handler) handleExpvar(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%q: %s", kv.Key, kv.Value)
 	})
 	fmt.Fprintf(w, "\n}\n")
-}
-
-// logger returns a logger for the handler.
-func (h *Handler) logger() *log.Logger {
-	return log.New(h.LogOutput, "", log.LstdFlags)
 }
 
 // QueryResult types.
@@ -1908,11 +1899,11 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 			Definition: def,
 		})
 	if err != nil {
-		h.logger().Printf("problem sending CreateInputDefinition message: %s", err)
+		h.Logger.Printf("problem sending CreateInputDefinition message: %s", err)
 	}
 
 	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -1938,7 +1929,7 @@ func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Reques
 		Frames: inputDef.frames,
 		Fields: inputDef.fields,
 	}); err != nil {
-		h.logger().Printf("write status response error: %s", err)
+		h.Logger.Printf("write status response error: %s", err)
 	}
 
 }
@@ -1967,11 +1958,11 @@ func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Req
 			Name:  inputDefName,
 		})
 	if err != nil {
-		h.logger().Printf("problem sending DeleteInputDefinition message: %s", err)
+		h.Logger.Printf("problem sending DeleteInputDefinition message: %s", err)
 	}
 
 	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -2013,7 +2004,7 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -2061,7 +2052,7 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 		Old: oldNode,
 		New: newNode,
 	}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -2101,7 +2092,7 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 	if err := json.NewEncoder(w).Encode(removeNodeResponse{
 		Remove: removeNode,
 	}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -2134,7 +2125,7 @@ func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Re
 	if err := json.NewEncoder(w).Encode(clusterResizeAbortResponse{
 		Info: msg,
 	}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -2271,7 +2262,7 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
