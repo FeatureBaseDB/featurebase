@@ -1198,7 +1198,7 @@ func (c *Cluster) CompleteCurrentJob(state string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.currentJob == nil {
-		return fmt.Errorf("no resize job currently running")
+		return ErrResizeNotRunning
 	}
 	c.currentJob.SetState(state)
 	c.currentJob = nil
@@ -1747,7 +1747,7 @@ func (c *Cluster) nodeJoin(node *Node) error {
 func (c *Cluster) NodeLeave(node *Node) error {
 	// Refuse the request if this is not the coordinator.
 	if !c.IsCoordinator() {
-		return fmt.Errorf("Node removal requests are only valid on the Coordinator node: %s", c.CoordinatorNode().ID)
+		return fmt.Errorf("node removal requests are only valid on the coordinator node: %s", c.CoordinatorNode().ID)
 	}
 
 	if c.State() != ClusterStateNormal {
@@ -1761,7 +1761,7 @@ func (c *Cluster) NodeLeave(node *Node) error {
 
 	// Prevent removing the coordinator node (this node).
 	if node.ID == c.Node.ID {
-		return fmt.Errorf("The coordinator node cannot be removed. First, make a different node the new coordinator.")
+		return fmt.Errorf("coordinator cannot be removed; first, make a different node the new coordinator.")
 	}
 
 	// See if resize job can be generated

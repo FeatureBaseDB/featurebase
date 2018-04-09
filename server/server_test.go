@@ -409,7 +409,11 @@ func TestMain_RecalculateHashes(t *testing.T) {
 	}
 
 	// Calculate caches on the first node
-	cluster[0].RecalculateCaches()
+	err := cluster[0].RecalculateCaches()
+	if err != nil {
+		t.Fatalf("recalculating caches: %v", err)
+	}
+
 	target := `{"results":[[{"id":7,"count":99},{"id":1,"count":99},{"id":9,"count":99},{"id":5,"count":99},{"id":4,"count":99},{"id":8,"count":99},{"id":2,"count":99},{"id":6,"count":99},{"id":3,"count":99}]]}`
 
 	// Run a TopN query on all nodes. The result should be the same as the target.

@@ -158,14 +158,15 @@ func TestHandler_ClusterResizeAbort(t *testing.T) {
 
 	t.Run("No resize job", func(t *testing.T) {
 		h := test.NewHandler()
-		h.Cluster = test.NewCluster(1)
+		h.API.Cluster = test.NewCluster(1)
 		h.SetRestricted()
 
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/cluster/resize/abort", nil))
 		if w.Code != http.StatusOK {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"info":"no resize job currently running"}`+"\n" {
+			bod, err := ioutil.ReadAll(w.Body)
+			t.Fatalf("unexpected status code: %d, bod: %s, readerr: %v", w.Code, bod, err)
+		} else if body := w.Body.String(); body != `{"info":"complete current job: no resize job currently running"}`+"\n" {
 			t.Fatalf("unexpected body: %s", body)
 		}
 	})
@@ -1852,8 +1853,8 @@ func TestHandler_WebUI(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	h.FileSystem = &statik.FileSystem{}
 
 	w := httptest.NewRecorder()

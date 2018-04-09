@@ -17,7 +17,6 @@ package pilosa
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"expvar"
 	"fmt"
 	"io"
@@ -26,26 +25,27 @@ import (
 	"net/url"
 	// Imported for its side-effect of registering pprof endpoints with the server.
 	_ "net/http/pprof"
+	"reflect"
 	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
-
-	"reflect"
+	"unicode"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
-
-	"unicode"
+	"github.com/pkg/errors"
 )
 
 // Handler represents an HTTP handler.
 type Handler struct {
 	Router *mux.Router
 
-	FileSystem FileSystem
+	FileSystem       FileSystem
+	NormalRouter     *mux.Router
+	RestrictedRouter *mux.Router
 
 	// The execution engine for running queries.
 	Executor interface {
@@ -215,7 +215,7 @@ func loadNormal(router *mux.Router, handler *Handler) {
 }
 
 func (h *Handler) reportRestricted(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, fmt.Sprintf("not allowed in cluster state %s", h.Cluster.State()), http.StatusMethodNotAllowed)
+	http.Error(w, fmt.Sprintf("not allowed in cluster state %s", h.API.State()), http.StatusMethodNotAllowed)
 }
 
 func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
@@ -295,7 +295,10 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cs := pb.(*internal.ClusterStatus)
+	cs, ok := status.(*internal.ClusterStatus)
+	if !ok {
+		panic("status is not a status")
+	}
 	if err := json.NewEncoder(w).Encode(getStatusResponse{
 		State: cs.State,
 		Nodes: DecodeNodes(cs.Nodes),
@@ -348,28 +351,13 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleGetSliceMax(w http.ResponseWriter, r *http.Request) {
-	var err error
-	inverse := false
-	inverseStr := r.URL.Query().Get("inverse")
-	if inverseStr != "" {
-		inverse, err = strconv.ParseBool(r.URL.Query().Get("inverse"))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-	}
-	ms := h.API.SliceMax(r.Context(), inverse)
-	if strings.Contains(r.Header.Get("Accept"), "application/x-protobuf") {
-		pb := &internal.MaxSlicesResponse{
-			MaxSlices: ms,
-		}
-		if buf, err := proto.Marshal(pb); err != nil {
-			h.Logger.Printf("protobuf marshal error: %s", err)
-		} else if _, err := w.Write(buf); err != nil {
-			h.Logger.Printf("stream write error: %s", err)
-		}
-		return
+// handleGetSlicesMax handles GET /schema requests.
+func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
+	if err := json.NewEncoder(w).Encode(getSlicesMaxResponse{
+		Standard: h.API.MaxSlices(r.Context()),
+		Inverse:  h.API.MaxInverseSlices(r.Context()),
+	}); err != nil {
+		h.Logger.Printf("write slices-max response error: %s", err)
 	}
 }
 
@@ -802,7 +790,7 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
-	schema, err := h.API.FrameFields(r.Context(), indexName, frameName)
+	fields, err := h.API.FrameFields(r.Context(), indexName, frameName)
 	if err != nil {
 		switch err {
 		case ErrIndexNotFound:
@@ -1557,7 +1545,7 @@ func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
-		h.logger().Printf("response encoding error: %s", err)
+		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -1646,46 +1634,24 @@ func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// <<<<<<< b702f70610962341116d9678ce7c5877b7e171ca
-// handlePostClusterResizeSetCoordinator handles POST /cluster/resize/set-coordinator request.
 func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r *http.Request) {
 	// Decode request.
 	var req setCoordinatorRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "decoding request "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	oldNode := h.Cluster.nodeByID(h.Cluster.Coordinator)
-	newNode := h.Cluster.nodeByID(req.ID)
-	if newNode == nil {
-		http.Error(w, "Node with provided ID does not exist", http.StatusBadRequest)
-		return
-	}
-
-	if err := func() error {
-		// If the new coordinator is this node, do the SetCoordinator directly.
-		if newNode.ID == h.Node.ID {
-			return h.Cluster.SetCoordinator(newNode)
+	oldNode, newNode, err := h.API.SetCoordinator(r.Context(), req.ID)
+	if err != nil {
+		if errors.Cause(err) == ErrNodeIDNotExists {
+			http.Error(w, "setting new coordinator: "+err.Error(), http.StatusNotFound)
+		} else {
+			http.Error(w, "setting new coordinator: "+err.Error(), http.StatusInternalServerError)
 		}
-
-		// Send the set-coordinator message to new node.
-		err := h.Broadcaster.SendTo(
-			newNode,
-			&internal.SetCoordinatorMessage{
-				New: EncodeNode(newNode),
-			})
-		if err != nil {
-			return fmt.Errorf("problem sending SetCoordinator message: %s", err)
-		}
-
-		return nil
-	}(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(setCoordinatorResponse{
 		Old: oldNode,
@@ -1714,16 +1680,13 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 		return
 	}
 
-	removeNode := h.Cluster.nodeByID(req.ID)
-	if removeNode == nil {
-		http.Error(w, fmt.Sprintf("Node is not a member of the cluster: %s", req.ID), http.StatusBadRequest)
-		return
-	}
-
-	// Start the resize process (similar to NodeJoin)
-	err = h.Cluster.NodeLeave(removeNode)
+	removeNode, err := h.API.RemoveNode(req.ID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Cause(err) == ErrNodeIDNotExists {
+			http.Error(w, "removing node: "+err.Error(), http.StatusNotFound)
+		} else {
+			http.Error(w, "removing node: "+err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -1745,21 +1708,20 @@ type removeNodeResponse struct {
 
 // handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
 func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Request) {
+	err := h.API.ResizeAbort()
 	var msg string
-
-	if err := func() error {
-		if !h.Cluster.IsCoordinator() {
-			return fmt.Errorf("abort requests must be made on the coordinator node")
+	if err != nil {
+		switch errors.Cause(err) {
+		case ErrNodeNotCoordinator:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		case ErrResizeNotRunning:
+			msg = err.Error()
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		err := h.Cluster.CompleteCurrentJob(ResizeJobStateAborted)
-		if err != nil {
-			return err
-		}
-		return nil
-	}(); err != nil {
-		msg = err.Error()
 	}
-
 	// Encode response.
 	if err := json.NewEncoder(w).Encode(clusterResizeAbortResponse{
 		Info: msg,
@@ -1772,80 +1734,82 @@ type clusterResizeAbortResponse struct {
 	Info string `json:"info"`
 }
 
-// InputJSONDataParser validates input json file and executes SetBit.
-func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
-	inputDef, err := index.InputDefinition(name)
-	if err != nil {
-		return nil, err
-	}
-	// If field in input data is not in defined definition, return error.
-	var colValue uint64
-	validFields := make(map[string]bool)
-	timestampFrame := make(map[string]int64)
-	for _, field := range inputDef.Fields() {
-		validFields[field.Name] = true
-		if field.PrimaryKey {
-			value, ok := req[field.Name]
-			if !ok {
-				return nil, fmt.Errorf("primary key does not exist")
-			}
-			rawValue, ok := value.(float64) // The default JSON marshalling will interpret this as a float
-			if !ok {
-				return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
-			}
-			colValue = uint64(rawValue)
-		}
-		// Find frame that need to add timestamp.
-		for _, action := range field.Actions {
-			if action.ValueDestination == InputSetTimestamp {
-				timestampFrame[action.Frame], err = GetTimeStamp(req, field.Name)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
+// // InputJSONDataParser validates input json file and executes SetBit.
+// func (h *Handler) InputJSONDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
+// 	inputDef, err := index.InputDefinition(name)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	// If field in input data is not in defined definition, return error.
+// 	var colValue uint64
+// 	validFields := make(map[string]bool)
+// 	timestampFrame := make(map[string]int64)
+// 	for _, field := range inputDef.Fields() {
+// 		validFields[field.Name] = true
+// 		if field.PrimaryKey {
+// 			value, ok := req[field.Name]
+// 			if !ok {
+// 				return nil, fmt.Errorf("primary key does not exist")
+// 			}
+// 			rawValue, ok := value.(float64) // The default JSON marshalling will interpret this as a float
+// 			if !ok {
+// 				return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
+// 			}
+// 			colValue = uint64(rawValue)
+// 		}
+// 		// Find frame that need to add timestamp.
+// 		for _, action := range field.Actions {
+// 			if action.ValueDestination == InputSetTimestamp {
+// 				timestampFrame[action.Frame], err = GetTimeStamp(req, field.Name)
+// 				if err != nil {
+// 					return nil, err
+// 				}
+// 			}
+// 		}
+// 	}
 
-	for key := range req {
-		_, ok := validFields[key]
-		if !ok {
-			return nil, fmt.Errorf("field not found: %s", key)
-		}
-	}
+// 	for key := range req {
+// 		_, ok := validFields[key]
+// 		if !ok {
+// 			return nil, fmt.Errorf("field not found: %s", key)
+// 		}
+// 	}
 
-	setBits := make(map[string][]*Bit)
+// 	setBits := make(map[string][]*Bit)
 
-	for _, field := range inputDef.Fields() {
-		// skip field that defined in definition but not in input data
-		if _, ok := req[field.Name]; !ok {
-			continue
-		}
+// 	for _, field := range inputDef.Fields() {
+// 		// skip field that defined in definition but not in input data
+// 		if _, ok := req[field.Name]; !ok {
+// 			continue
+// 		}
 
-		// Looking into timestampFrame map and set timestamp to the whole frame
-		for _, action := range field.Actions {
-			frame := action.Frame
-			timestamp := timestampFrame[action.Frame]
-			// Skip input data field values that are set to null
-			if req[field.Name] == nil {
-				continue
-			}
-			bit, err := HandleAction(action, req[field.Name], colValue, timestamp)
-			if err != nil {
-				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
-			}
-			if bit != nil {
-				setBits[frame] = append(setBits[frame], bit)
-			}
-		}
-	}
-	return setBits, nil
-}
-
-// =======
-// >>>>>>> Moved more of handler to API
+// 		// Looking into timestampFrame map and set timestamp to the whole frame
+// 		for _, action := range field.Actions {
+// 			frame := action.Frame
+// 			timestamp := timestampFrame[action.Frame]
+// 			// Skip input data field values that are set to null
+// 			if req[field.Name] == nil {
+// 				continue
+// 			}
+// 			bit, err := HandleAction(action, req[field.Name], colValue, timestamp)
+// 			if err != nil {
+// 				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
+// 			}
+// 			if bit != nil {
+// 				setBits[frame] = append(setBits[frame], bit)
+// 			}
+// 		}
+// 	}
+// 	return setBits, nil
+// }
 
 func (h *Handler) handleRecalculateCaches(w http.ResponseWriter, r *http.Request) {
-	h.API.RecalculateCaches(r.Context())
+	err := h.API.RecalculateCaches(r.Context())
+	if err != nil {
+		http.Error(w, "recalculating caches: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1901,7 +1865,7 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) handleGetID(w http.ResponseWriter, r *http.Request) {
-	_, err := w.Write([]byte(h.API.LocalID(r.Context())))
+	_, err := w.Write([]byte(h.API.LocalID()))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -1936,12 +1900,12 @@ func (s *queryValidationSpec) Optional(args ...string) *queryValidationSpec {
 func (s queryValidationSpec) validate(query url.Values) error {
 	for _, req := range s.required {
 		if query.Get(req) == "" {
-			return errors.New(fmt.Sprintf("%s is required", req))
+			return errors.Errorf("%s is required", req)
 		}
 	}
-	for k, _ := range query {
+	for k := range query {
 		if _, ok := s.args[k]; !ok {
-			return errors.New(fmt.Sprintf("%s is not a valid argument", k))
+			return errors.Errorf("%s is not a valid argument", k)
 		}
 	}
 	return nil

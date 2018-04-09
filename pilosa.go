@@ -78,6 +78,10 @@ var (
 	ErrConfigHostsMissing        = errors.New("missing bind address in cluster hosts")
 
 	ErrClusterDoesNotOwnSlice = errors.New("cluster does not own slice")
+
+	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
+	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
+	ErrResizeNotRunning   = errors.New("no resize job currently running")
 )
 
 // Regular expression to validate index and frame names.

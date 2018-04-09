@@ -27,7 +27,6 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
-	"github.com/pkg/errors"
 )
 
 // Handler represents a test wrapper for pilosa.Handler.
@@ -41,8 +40,8 @@ func NewHandler() *Handler {
 	h := &Handler{
 		Handler: pilosa.NewHandler(),
 	}
-	h.API = pilosa.NewAPI(nil)
-	h.Handler.API = pilosa.NewAPI(nil)
+	h.API = pilosa.NewAPI()
+	h.Handler.API = pilosa.NewAPI()
 	h.Handler.API.Executor = &h.Executor
 
 	// Handler test messages can no-op.
@@ -83,7 +82,7 @@ func NewServer() *Server {
 	if err != nil {
 		panic(err)
 	}
-	s.Handler.API.URI = uri
+	s.Handler.API.URI = *uri
 
 	// Handler test messages can no-op.
 	s.Handler.API.Broadcaster = pilosa.NopBroadcaster
@@ -96,22 +95,7 @@ func NewServer() *Server {
 
 // LocalStatus exists so that test.Server implements StatusHandler.
 func (s *Server) LocalStatus() (proto.Message, error) {
-	if s.Handler.API.Holder == nil {
-		return nil, errors.New("Server.Holder is nil")
-	}
-
-	ns := internal.NodeStatus{
-		Host:    s.Handler.Handler.API.URI.HostPort(),
-		State:   pilosa.NodeStateUp,
-		Indexes: pilosa.EncodeIndexes(s.Handler.API.Holder.Indexes()),
-	}
-
-	// Append Slice list per this Node's indexes
-	for _, index := range ns.Indexes {
-		index.Slices = s.Handler.API.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Handler.API.URI.HostPort())
-	}
-
-	return &ns, nil
+	return nil, nil
 }
 
 // ClusterStatus exists so that test.Server implements StatusHandler.

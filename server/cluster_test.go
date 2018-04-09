@@ -62,7 +62,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	m0.Server.Cluster.MemberSet = gossipMemberSet0
 	m0.Server.Broadcaster = m0.Server
 	m0.Server.Gossiper = gossipMemberSet0
-	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
+	m0.Server.Handler.API.Broadcaster = m0.Server.Broadcaster
 	m0.Server.Holder.Broadcaster = m0.Server.Broadcaster
 	m0.Server.BroadcastReceiver = gossipMemberSet0
 
@@ -89,7 +89,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	m1.Server.Cluster.MemberSet = gossipMemberSet1
 	m1.Server.Broadcaster = m1.Server
 	m1.Server.Gossiper = gossipMemberSet1
-	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
+	m1.Server.Handler.API.Broadcaster = m1.Server.Broadcaster
 	m1.Server.Holder.Broadcaster = m1.Server.Broadcaster
 	m1.Server.BroadcastReceiver = gossipMemberSet1
 
@@ -507,9 +507,9 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 
 	t.Run("ErrorRemoveInvalidNode", func(t *testing.T) {
 		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), `{"id": "invalid-node-id"}`)
-		expBody := "Node is not a member of the cluster: invalid-node-id"
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("expected StatusCode %d but got %d", http.StatusBadRequest, resp.StatusCode)
+		expBody := "removing node: finding node to remove: node with provided ID does not exist"
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected StatusCode %d but got %d", http.StatusNotFound, resp.StatusCode)
 		} else if strings.TrimSpace(resp.Body) != expBody {
 			t.Fatalf("expected Body '%s' but got '%s'", expBody, strings.TrimSpace(resp.Body))
 		}
@@ -521,7 +521,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 
 		resp = test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
-		expBody := "The coordinator node cannot be removed. First, make a different node the new coordinator."
+		expBody := "removing node: calling node leave: coordinator cannot be removed; first, make a different node the new coordinator."
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
 		} else if strings.TrimSpace(resp.Body) != expBody {
@@ -538,7 +538,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 
 		resp = test.MustDo("POST", m1.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
-		expBody := fmt.Sprintf("Node removal requests are only valid on the Coordinator node: %s", coordinatorNodeID)
+		expBody := fmt.Sprintf("removing node: calling node leave: node removal requests are only valid on the coordinator node: %s", coordinatorNodeID)
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
 		} else if strings.TrimSpace(resp.Body) != expBody {

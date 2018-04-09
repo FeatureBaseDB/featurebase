@@ -28,6 +28,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pkg/errors"
 )
 
 type API struct {
@@ -40,7 +41,7 @@ type API struct {
 	BroadcastHandler BroadcastHandler
 	StatusHandler    StatusHandler
 	Cluster          *Cluster
-	URI              *URI
+	URI              URI
 	RemoteClient     *http.Client
 	Logger           Logger
 }
@@ -220,7 +221,7 @@ func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName str
 
 func (api *API) ExportCSV(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, w io.Writer) error {
 	// Validate that this handler owns the slice.
-	if !api.Cluster.OwnsFragment(api.URI.HostPort(), indexName, slice) {
+	if !api.Cluster.OwnsFragment(api.LocalID(), indexName, slice) {
 		api.Logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
 		return ErrClusterDoesNotOwnSlice
 	}
@@ -339,7 +340,7 @@ func (api *API) RestoreFrame(ctx context.Context, indexName string, frameName st
 	// Loop over each slice and import it if this node owns it.
 	for slice := uint64(0); slice <= maxSlices[indexName]; slice++ {
 		// Ignore this slice if we don't own it.
-		if !api.Cluster.OwnsFragment(api.URI.HostPort(), indexName, slice) {
+		if !api.Cluster.OwnsFragment(api.LocalID(), indexName, slice) {
 			continue
 		}
 
@@ -475,8 +476,13 @@ func (api *API) WriteInput(ctx context.Context, indexName string, inputDefName s
 	return nil
 }
 
-func (api *API) RecalculateCaches(ctx context.Context) {
+func (api *API) RecalculateCaches(ctx context.Context) error {
+	err := api.Broadcaster.SendSync(&internal.RecalculateCaches{})
+	if err != nil {
+		return errors.Wrap(err, "broacasting message")
+	}
 	api.Holder.RecalculateCaches()
+	return nil
 }
 
 func (api *API) PostClusterMessage(ctx context.Context, pb proto.Message) error {
@@ -487,7 +493,7 @@ func (api *API) PostClusterMessage(ctx context.Context, pb proto.Message) error 
 	return nil
 }
 
-func (api *API) LocalID(ctx context.Context) string {
+func (api *API) LocalID() string {
 	return api.Cluster.Node.ID
 }
 
@@ -549,7 +555,7 @@ func (api *API) DeleteFrameField(ctx context.Context, indexName string, frameNam
 	return err
 }
 
-func (api *API) FrameFields(ctx context.Context, indexName string, frameName string) (*FrameSchema, error) {
+func (api *API) FrameFields(ctx context.Context, indexName string, frameName string) ([]*Field, error) {
 	index := api.Holder.index(indexName)
 	if index == nil {
 		return nil, ErrIndexNotFound
@@ -724,11 +730,12 @@ func (api *API) ModifyFrameTimeQuantum(ctx context.Context, indexName string, fr
 	return frame.SetTimeQuantum(timeQuantum)
 }
 
-func (api *API) SliceMax(ctx context.Context, inverse bool) map[string]uint64 {
-	if inverse {
-		return api.Holder.MaxInverseSlices()
-	}
+func (api *API) MaxSlices(ctx context.Context) map[string]uint64 {
 	return api.Holder.MaxSlices()
+}
+
+func (api *API) MaxInverseSlices(ctx context.Context) map[string]uint64 {
+	return api.Holder.MaxInverseSlices()
 }
 
 func (api *API) StatsWithTags(tags []string) StatsClient {
@@ -747,7 +754,7 @@ func (api *API) ClusterLongQueryTime() time.Duration {
 
 func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*Index, *Frame, error) {
 	// Validate that this handler owns the slice.
-	if !api.Cluster.OwnsFragment(api.URI.HostPort(), indexName, slice) {
+	if !api.Cluster.OwnsFragment(api.LocalID(), indexName, slice) {
 		api.Logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
 		return nil, nil, ErrClusterDoesNotOwnSlice
 	}
@@ -836,4 +843,54 @@ func (api *API) inputJSONDataParser(req map[string]interface{}, index *Index, na
 		}
 	}
 	return setBits, nil
+}
+
+func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *Node, err error) {
+	oldNode = api.Cluster.nodeByID(api.Cluster.Coordinator)
+	newNode = api.Cluster.nodeByID(id)
+	if newNode == nil {
+		return nil, nil, errors.Wrap(ErrNodeIDNotExists, "getting new node")
+	}
+
+	// If the new coordinator is this node, do the SetCoordinator directly.
+	if newNode.ID == api.LocalID() {
+		return oldNode, newNode, api.Cluster.SetCoordinator(newNode)
+	}
+
+	// Send the set-coordinator message to new node.
+	err = api.Broadcaster.SendTo(
+		newNode,
+		&internal.SetCoordinatorMessage{
+			New: EncodeNode(newNode),
+		})
+	if err != nil {
+		return nil, nil, fmt.Errorf("problem sending SetCoordinator message: %s", err)
+	}
+	return oldNode, newNode, nil
+}
+
+func (api *API) RemoveNode(id string) (*Node, error) {
+	removeNode := api.Cluster.nodeByID(id)
+	if removeNode == nil {
+		return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
+	}
+
+	// Start the resize process (similar to NodeJoin)
+	err := api.Cluster.NodeLeave(removeNode)
+	if err != nil {
+		return removeNode, errors.Wrap(err, "calling node leave")
+	}
+	return removeNode, nil
+}
+
+func (api *API) ResizeAbort() error {
+	if !api.Cluster.IsCoordinator() {
+		return ErrNodeNotCoordinator
+	}
+	err := api.Cluster.CompleteCurrentJob(ResizeJobStateAborted)
+	return errors.Wrap(err, "complete current job")
+}
+
+func (api *API) State() string {
+	return api.Cluster.State()
 }
