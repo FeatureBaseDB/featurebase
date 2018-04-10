@@ -41,7 +41,7 @@ func NewHandler() *Handler {
 		Handler: pilosa.NewHandler(),
 	}
 	h.API = pilosa.NewAPI()
-	h.Handler.API = pilosa.NewAPI()
+	h.Handler.API = h.API
 	h.Handler.API.Executor = &h.Executor
 
 	// Handler test messages can no-op.
