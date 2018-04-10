@@ -215,7 +215,7 @@ The request payload is JSON, and it must contain the fields `frames` and `fields
 * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
  
-The `fields` array contains a series of JSON objects describing how to process each field received in the input data.  Each `field` object must contain a `name` which maps to the source JSON field name.  One field must be defined at the `primaryKey`.  The `primarykey` source field name must equal the column label for the `Index`, and its value must be an unsigned integer which maps directly to a columnID in Pilosa.
+The `fields` array contains a series of JSON objects describing how to process each field received in the input data.  Each `field` object must contain a `name` which maps to the source JSON field name.  One field must be defined at the `primaryKey`.  The `primarykey` source field's value must be an unsigned integer which maps directly to a columnID in Pilosa.
 
 * `name`    (string): Maps the source data field to actions that process the field's corresponding value.
 * `actions` (array): List of actions that will process the field's value.
@@ -310,7 +310,7 @@ Input definition is deprecated as of v0.9.
 
 Processes the JSON payload using the given input definition.
 
-The request payload is a JSON array of objects containing one field for the primary key that corresponds to the column label, and additional fields that will be handled by corresponding actions in the input definition.
+The request payload is a JSON array of objects containing one field for the primary key that corresponds to the column, and additional fields that will be handled by corresponding actions in the input definition.
 
 ``` request
 curl localhost:10101/index/user/input/stargazer-input \

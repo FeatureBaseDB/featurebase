@@ -483,7 +483,7 @@ class Autocompleter {
   }
 
   init_dynamic_keywords() {
-    // hit /schema, parse indexes, frames, rowlabels, columnlabels, add to list
+    // hit /schema, parse indexes, frames, add to list
   }
 
   add_keyword() {

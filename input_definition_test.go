@@ -30,7 +30,7 @@ func TestInputDefinition_Open(t *testing.T) {
 	defer index.Close()
 
 	// Create Input Definition.
-	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{RowLabel: "row"}}
+	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
 	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
 	def := internal.InputDefinition{Name: "^", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
@@ -115,14 +115,14 @@ func TestActionValidation(t *testing.T) {
 		t.Fatalf("Expect error: %s, actual err: %s", pilosa.ErrInputDefinitionAttrsRequired, err)
 	}
 
-	frame := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
+	frame := pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{}}
 	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
 	err = info.Validate()
 	if !strings.Contains(err.Error(), "rowID required for single-row-boolean") {
 		t.Fatalf("Expected rowID required for single-row-boolean error, actual error: %s", err)
 	}
 
-	frame = pilosa.InputFrame{Name: "^", Options: pilosa.FrameOptions{RowLabel: "row"}}
+	frame = pilosa.InputFrame{Name: "^", Options: pilosa.FrameOptions{}}
 	action = pilosa.Action{Frame: "f", ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
 	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
 	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
@@ -131,7 +131,7 @@ func TestActionValidation(t *testing.T) {
 		t.Fatalf("Expect error: %s, actual err: %s", pilosa.ErrName, err)
 	}
 
-	frame = pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{RowLabel: "row"}}
+	frame = pilosa.InputFrame{Name: "f", Options: pilosa.FrameOptions{}}
 	action = pilosa.Action{ValueDestination: pilosa.InputSingleRowBool, RowID: &rowID}
 	field = pilosa.InputDefinitionField{Name: "id", PrimaryKey: true, Actions: []pilosa.Action{action}}
 	info = pilosa.InputDefinitionInfo{Frames: []pilosa.InputFrame{frame}, Fields: []pilosa.InputDefinitionField{field}}
