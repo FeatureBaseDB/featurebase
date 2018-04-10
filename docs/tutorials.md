@@ -247,7 +247,7 @@ Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administ
 
 #### Introduction
 
-Pilosa can store integer values associated to the columns in an index, and those values are used to support `Range` and `Sum` queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
+Pilosa can store integer values associated to the columns in an index, and those values are used to support `Range`, `Min`, `Max`, and `Sum` queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
 
 First, create an index called `patients`:
 ``` request
@@ -333,7 +333,7 @@ curl localhost:10101/index/patients/query \
 ```
 The results you get from the `Sum` query contain the `sum` of all values as well as the `count` of columns with a value. To get the average you can just divide `sum` by `count`.
 
-You can also provide a filter to the `Sum()` function, to find the average age of all patients over 40.
+You can also provide a filter to the `Sum()` function to find the average age of all patients over 40.
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
@@ -343,6 +343,48 @@ curl localhost:10101/index/patients/query \
 {"results":[{"sum":191,"count":3}]}
 ```
 Notice in this case that the count is only `3` because of the `age > 40` filter applied to the query.
+
+To find the minimum age of all patients, run a `Min` query:
+``` request
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Min(frame="measurements", field="age")'
+```
+``` response
+{"results":[{"min":19,"count":1}]}
+```
+The results you get from the `Min` query contain the `min` of all values as well as the `count` of columns with that value.
+
+You can also provide a filter to the `Min()` function to find the minimum age of all patients over 40.
+``` request
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Min(Range(frame="measurements", age > 40), frame="measurements", field="age")'
+```
+``` response
+{"results":[{"min":57,"count":1}]}
+```
+
+To find the maximum age of all patients, run a `Max` query:
+``` request
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Max(frame="measurements", field="age")'
+```
+``` response
+{"results":[{"max":71,"count":1}]}
+```
+The results you get from the `Max` query contain the `max` of all values as well as the `count` of columns with that value.
+
+You can also provide a filter to the `Max()` function to find the maximum age of all patients under 40.
+``` request
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Max(Range(frame="measurements", age < 40), frame="measurements", field="age")'
+```
+``` response
+{"results":[{"max":34,"count":1}]}
+```
 
 ### Storing Row and Column Attributes
 

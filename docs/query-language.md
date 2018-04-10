@@ -523,6 +523,56 @@ Range(frame="stats", commitactivity >< [100, 200])
 
 This is conceptually equivalent to the interval 100 <= commitactivity <= 200, but this chained comparison syntax is not currently supported. `BETWEEN` query syntax is restricted to greater-than-or-equal-to and less-than-or-equal-to, but any valid interval on the integers can be represented this way.
 
+#### Min
+
+**Spec:**
+
+```
+Min([BITMAP_CALL], <frame=STRING>, <field=STRING>)
+```
+
+**Description:**
+
+Returns the minimum value of all BSI integer values in the `field` in this `frame`. If the optional `Bitmap` call is supplied, only columns with set bits are considered, otherwise all collumns are considered.
+
+**Result Type:** object with the min and count of columns containing the min value.
+
+**Examples:**
+
+Query the size of all repositories.
+```
+Min(frame="stats", field="diskusage")
+```
+
+Return `{"min":4,"count":2}`
+
+* Result is the smallest repository in kilobytes, plus the number of repositories of that size.
+
+#### Max
+
+**Spec:**
+
+```
+Max([BITMAP_CALL], <frame=STRING>, <field=STRING>)
+```
+
+**Description:**
+
+Returns the maximum value of all BSI integer values in the `field` in this `frame`. If the optional `Bitmap` call is supplied, only columns with set bits are considered, otherwise all columns are considered.
+
+**Result Type:** object with the max and count of columns containing the max value.
+
+**Examples:**
+
+Query the size of all repositories.
+```
+Max(frame="stats", field="diskusage")
+```
+
+Return `{"max":88,"count":13}`
+
+* Result is the largest repository in kilobytes, plus the number of repositories of that size.
+
 #### Sum
 
 **Spec:**

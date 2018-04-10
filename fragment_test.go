@@ -256,7 +256,7 @@ func TestFragment_FieldSum(t *testing.T) {
 	})
 }
 
-// Ensure a fragment can find the max of field values.
+// Ensure a fragment can find the min and max of field values.
 func TestFragment_FieldMinMax(t *testing.T) {
 	const bitDepth = 16
 

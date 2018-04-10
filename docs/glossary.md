@@ -14,7 +14,7 @@ nav = []
 
 <strong id="bitmap">[Bitmap](../data-model/#overview):</strong> The on-disk and in-memory representation of a [row](#row). Implemented with [Roaring](#roaring-bitmap). `Bitmap` is also the basic [PQL](#pql) query for reading a Bitmap.
 
-<strong id="bsi">[BSI](../data-model/#bsi-range-encoding)</strong> Bit-sliced indexing is the method Pilosa uses to represent multi-bit integers. Integer values are stored in [fields](#field), and can be used for [Range](#range-bsi) and [Sum](#sum) queries.
+<strong id="bsi">[BSI](../data-model/#bsi-range-encoding)</strong> Bit-sliced indexing is the method Pilosa uses to represent multi-bit integers. Integer values are stored in [fields](#field), and can be used for [Range](#range-bsi), [Min](#min), [Max](#max), and [Sum](#sum) queries.
 
 <strong id="cluster">Cluster:</strong> A cluster consists of one or more [nodes](#node) which share a cluster configuration. The cluster also defines how data is [replicated](#replica) throughout and how internode communication is coordinated. Pilosa does not have a leader node, all data is evenly distributed, and any node can respond to queries.
 
@@ -30,7 +30,11 @@ nav = []
 
 <strong id="jump-consistent-hash">[Jump Consistent Hash](https://arxiv.org/pdf/1406.2294v1.pdf):</strong> A fast, minimal memory, consistent hash algorithm that evenly distributes the workload even when the number of buckets changes.
 
+<strong id="max">[Max](../query-language/#max):</strong> A [PQL](#pql) query that returns the maximum integer value stored in [BSI](#bsi) [fields](#field).
+
 <strong id="maxslice">MaxSlice:</strong> The total number of [slices](#slice) allocated to handle the current set of [columns](#column). This value is important for all [nodes](#node) to efficiently distribute queries.
+
+<strong id="min">[Min](../query-language/#min):</strong> A [PQL](#pql) query that returns the minimum integer value stored in [BSI](#bsi) [fields](#field).
 
 <strong id="node">Node:</strong> An individual running instance of Pilosa server which belongs to a [cluster](#cluster).
 
