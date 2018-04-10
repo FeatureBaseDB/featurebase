@@ -614,6 +614,70 @@ func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, e
 	return sum, count, nil
 }
 
+// FieldMin returns the min of a given field as well as the number of columns involved.
+// A bitmap can be passed in to optionally filter the computed columns.
+func (f *Fragment) FieldMin(filter *Bitmap, bitDepth uint) (min, count uint64, err error) {
+
+	consider := f.Row(uint64(bitDepth))
+	if filter != nil {
+		consider = consider.Intersect(filter)
+	}
+
+	// If there are no columns to consider, return early.
+	if consider.Count() == 0 {
+		return 0, 0, nil
+	}
+
+	for i := bitDepth; i > uint(0); i-- {
+		ii := i - 1 // allow for uint range: (bitdepth-1) to 0
+		row := f.Row(uint64(ii))
+
+		x := consider.Difference(row)
+		count = x.Count()
+		if count > 0 {
+			consider = x
+		} else {
+			min += (1 << ii)
+			if ii == 0 {
+				count = consider.Count()
+			}
+		}
+	}
+
+	return min, count, nil
+}
+
+// FieldMax returns the max of a given field as well as the number of columns involved.
+// A bitmap can be passed in to optionally filter the computed columns.
+func (f *Fragment) FieldMax(filter *Bitmap, bitDepth uint) (max, count uint64, err error) {
+
+	consider := f.Row(uint64(bitDepth))
+	if filter != nil {
+		consider = consider.Intersect(filter)
+	}
+
+	// If there are no columns to consider, return early.
+	if consider.Count() == 0 {
+		return 0, 0, nil
+	}
+
+	for i := bitDepth; i > uint(0); i-- {
+		ii := i - 1 // allow for uint range: (bitdepth-1) to 0
+		row := f.Row(uint64(ii))
+
+		x := row.Intersect(consider)
+		count = x.Count()
+		if count > 0 {
+			max += (1 << ii)
+			consider = x
+		} else if ii == 0 {
+			count = consider.Count()
+		}
+	}
+
+	return max, count, nil
+}
+
 // FieldRange returns bitmaps with a field value encoding matching the predicate.
 func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitmap, error) {
 	switch op {
