@@ -40,10 +40,12 @@ func NewHandler() *Handler {
 	h := &Handler{
 		Handler: pilosa.NewHandler(),
 	}
-	h.Handler.Executor = &h.Executor
+	h.API = pilosa.NewAPI()
+	h.Handler.API = h.API
+	h.Handler.API.Executor = &h.Executor
 
 	// Handler test messages can no-op.
-	h.Broadcaster = pilosa.NopBroadcaster
+	h.API.Broadcaster = pilosa.NopBroadcaster
 
 	h.SetNormal()
 
@@ -80,14 +82,13 @@ func NewServer() *Server {
 	if err != nil {
 		panic(err)
 	}
+	s.Handler.API.URI = *uri
 
 	// Handler test messages can no-op.
-	s.Handler.Broadcaster = pilosa.NopBroadcaster
+	s.Handler.API.Broadcaster = pilosa.NopBroadcaster
 	// Create a default cluster on the handler
-	s.Handler.Cluster = NewCluster(1)
-	s.Handler.Cluster.Nodes[0].URI = *uri
-
-	s.Handler.Node = s.Handler.Cluster.Nodes[0]
+	s.Handler.API.Cluster = NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
 
 	return s
 }
