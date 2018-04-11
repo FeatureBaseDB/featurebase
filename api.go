@@ -151,6 +151,8 @@ func (api *API) ReadIndex(ctx context.Context, indexName string) (*Index, error)
 	return index, nil
 }
 
+// DeleteIndex removes the named index. If the index is not found it does
+// nothing and returns no error.
 func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	// Delete index from the holder.
 	err := api.Holder.DeleteIndex(indexName)
@@ -170,6 +172,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	return nil
 }
 
+// CreateFrame makes the named frame in the named index with the given options.
 func (api *API) CreateFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) (*Frame, error) {
 	// Find index.
 	index := api.Holder.Index(indexName)
@@ -198,6 +201,9 @@ func (api *API) CreateFrame(ctx context.Context, indexName string, frameName str
 	return frame, nil
 }
 
+// DeleteFrame removes the named frame from the named index. If the index is not
+// found, an error is returned. If the frame is not found, it is ignored and no
+// action is taken.
 func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName string) error {
 	// Find index.
 	index := api.Holder.Index(indexName)
@@ -387,6 +393,8 @@ func (api *API) RestoreFrame(ctx context.Context, indexName string, frameName st
 	return nil
 }
 
+// ClusterHosts returns a list of the hosts in the cluster including their ID,
+// URL, and which is the coordinator.
 func (api *API) ClusterHosts(ctx context.Context) []*Node {
 	return api.Cluster.Nodes
 }
@@ -481,6 +489,7 @@ func (api *API) WriteInput(ctx context.Context, indexName string, inputDefName s
 	return nil
 }
 
+// RecalculateCaches forces all TopN caches to be updated. Used mainly for integration tests.
 func (api *API) RecalculateCaches(ctx context.Context) error {
 	err := api.Broadcaster.SendSync(&internal.RecalculateCaches{})
 	if err != nil {
@@ -498,10 +507,13 @@ func (api *API) PostClusterMessage(ctx context.Context, pb proto.Message) error 
 	return nil
 }
 
+// LocalID returns the current node's ID.
 func (api *API) LocalID() string {
 	return api.Cluster.Node.ID
 }
 
+// Schema returns information about each index in Pilosa including which frames
+// and views they contain.
 func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	return api.Holder.Schema()
 }
@@ -595,7 +607,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 
 	// Delete the view.
 	if err := f.DeleteView(viewName); err != nil {
-		// Ingore this error becuase views do not exist on all nodes due to slice distribution.
+		// Ignore this error becuase views do not exist on all nodes due to slice distribution.
 		if err != ErrInvalidView {
 			return err
 		}
@@ -675,6 +687,7 @@ func (api *API) FrameAttrDiff(ctx context.Context, indexName string, frameName s
 	return attrs, nil
 }
 
+// Import bulk imports data into a particular index,frame,slice.
 func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
 	if err != nil {
@@ -699,6 +712,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	return err
 }
 
+// ImportValue bulk imports values into a particular field.
 func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest) error {
 	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
 	if err != nil {
@@ -750,6 +764,8 @@ func (api *API) StatsWithTags(tags []string) StatsClient {
 	return api.Holder.Stats.WithTags(tags...)
 }
 
+// ClusterLongQueryTime returns the configured threshold for logging/statting
+// long running queries.
 func (api *API) ClusterLongQueryTime() time.Duration {
 	if api.Cluster == nil {
 		return 0
