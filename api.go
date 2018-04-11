@@ -31,6 +31,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+// API provides the top level programmatic interface to Pilosa. It is usually
+// wrapped by a handler which provides an external interface (e.g. HTTP).
 type API struct {
 	Holder *Holder
 	// The execution engine for running queries.
@@ -46,6 +48,7 @@ type API struct {
 	Logger           Logger
 }
 
+// NewAPI returns a new API instance.
 func NewAPI() *API {
 	return &API{
 		Broadcaster: NopBroadcaster,
@@ -55,7 +58,8 @@ func NewAPI() *API {
 	}
 }
 
-func (a *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
+// ExecuteQuery parses a PQL query out of the request and executes it.
+func (api *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
 	resp := QueryResponse{}
 
 	q, err := pql.NewParser(strings.NewReader(req.Query)).Parse()
@@ -67,7 +71,7 @@ func (a *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryRespons
 		ExcludeAttrs: req.ExcludeAttrs,
 		ExcludeBits:  req.ExcludeBits,
 	}
-	results, err := a.Executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
+	results, err := api.Executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
 	if err != nil {
 		return resp, err
 	}
@@ -86,7 +90,7 @@ func (a *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryRespons
 		}
 
 		// Retrieve column attributes across all calls.
-		columnAttrSets, err := a.readColumnAttrSets(a.Holder.Index(req.Index), columnIDs)
+		columnAttrSets, err := api.readColumnAttrSets(api.Holder.Index(req.Index), columnIDs)
 		if err != nil {
 			return resp, err
 		}
@@ -118,6 +122,7 @@ func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet
 	return ax, nil
 }
 
+// CreateIndex makes a new Pilosa index.
 func (api *API) CreateIndex(ctx context.Context, indexName string, options IndexOptions) (*Index, error) {
 	// Create index.
 	index, err := api.Holder.CreateIndex(indexName, options)
@@ -845,6 +850,7 @@ func (api *API) inputJSONDataParser(req map[string]interface{}, index *Index, na
 	return setBits, nil
 }
 
+// SetCoordinator makes a new Node the cluster coordinator.
 func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *Node, err error) {
 	oldNode = api.Cluster.nodeByID(api.Cluster.Coordinator)
 	newNode = api.Cluster.nodeByID(id)
@@ -869,6 +875,8 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 	return oldNode, newNode, nil
 }
 
+// RemoveNode puts the cluster into the "RESIZING" state and begins the job of
+// removing the given node.
 func (api *API) RemoveNode(id string) (*Node, error) {
 	removeNode := api.Cluster.nodeByID(id)
 	if removeNode == nil {
@@ -891,6 +899,14 @@ func (api *API) ResizeAbort() error {
 	return errors.Wrap(err, "complete current job")
 }
 
+// State returns the cluster state which is usually "NORMAL", but could be
+// "STARTING", "RESIZING", or potentially others. See cluster.go for more
+// details.
 func (api *API) State() string {
 	return api.Cluster.State()
+}
+
+// Version returns the Pilosa version.
+func (api *API) Version() string {
+	return strings.TrimPrefix(Version, "v")
 }

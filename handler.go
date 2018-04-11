@@ -108,14 +108,14 @@ func BuildRouters(handler *Handler) {
 
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
-	h.validators["GetFragmentNodes"] = QueryValidationSpecRequired("slice").Optional("index")
-	h.validators["GetSliceMax"] = QueryValidationSpecRequired().Optional("inverse")
-	h.validators["PostQuery"] = QueryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
-	h.validators["GetExport"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["GetFragmentData"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["PostFragmentData"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["GetFragmentBlocks"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["PostFrameRestore"] = QueryValidationSpecRequired("host")
+	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice").Optional("index")
+	h.validators["GetSliceMax"] = queryValidationSpecRequired().Optional("inverse")
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
+	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["PostFrameRestore"] = queryValidationSpecRequired("host")
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -154,7 +154,7 @@ func loadCommon(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
-	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
+	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 	router.HandleFunc("/id", handler.handleGetID).Methods("GET")
@@ -174,7 +174,7 @@ func loadRestricted(router *mux.Router, handler *Handler) {
 func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
-	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
+	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
 	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
@@ -270,7 +270,7 @@ func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
 	}
 	filesystem, err := h.FileSystem.New()
 	if err != nil {
-		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
+		_ = h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 		h.Logger.Printf("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
 		return
 	}
@@ -1337,34 +1337,14 @@ func (h *Handler) handleGetHosts(w http.ResponseWriter, r *http.Request) {
 
 // handleGetVersion handles /version requests.
 func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
-	version := Version
-	if strings.HasPrefix(version, "v") {
-		// make the version string semver-compatible
-		version = version[1:]
-	}
-	if err := json.NewEncoder(w).Encode(struct {
+	err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
-		Version: version,
-	}); err != nil {
+		Version: h.API.Version(),
+	})
+	if err != nil {
 		h.Logger.Printf("write version response error: %s", err)
 	}
-}
-
-// handleExpvar handles /debug/vars requests.
-func (h *Handler) handleExpvar(w http.ResponseWriter, r *http.Request) {
-	// Copied from $GOROOT/src/expvar/expvar.go
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	fmt.Fprintf(w, "{\n")
-	first := true
-	expvar.Do(func(kv expvar.KeyValue) {
-		if !first {
-			fmt.Fprintf(w, ",\n")
-		}
-		first = false
-		fmt.Fprintf(w, "%q: %s", kv.Key, kv.Value)
-	})
-	fmt.Fprintf(w, "\n}\n")
 }
 
 // QueryResult types.
@@ -1809,7 +1789,7 @@ type queryValidationSpec struct {
 	args     map[string]struct{}
 }
 
-func QueryValidationSpecRequired(requiredArgs ...string) *queryValidationSpec {
+func queryValidationSpecRequired(requiredArgs ...string) *queryValidationSpec {
 	args := map[string]struct{}{}
 	for _, arg := range requiredArgs {
 		args[arg] = struct{}{}
