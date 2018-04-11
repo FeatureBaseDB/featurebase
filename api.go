@@ -58,8 +58,8 @@ func NewAPI() *API {
 	}
 }
 
-// ExecuteQuery parses a PQL query out of the request and executes it.
-func (api *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
+// Query parses a PQL query out of the request and executes it.
+func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
 	resp := QueryResponse{}
 
 	q, err := pql.NewParser(strings.NewReader(req.Query)).Parse()
@@ -143,7 +143,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	return index, nil
 }
 
-func (api *API) ReadIndex(ctx context.Context, indexName string) (*Index, error) {
+func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 	index := api.Holder.Index(indexName)
 	if index == nil {
 		return nil, ErrIndexNotFound
@@ -393,9 +393,9 @@ func (api *API) RestoreFrame(ctx context.Context, indexName string, frameName st
 	return nil
 }
 
-// ClusterHosts returns a list of the hosts in the cluster including their ID,
+// Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the coordinator.
-func (api *API) ClusterHosts(ctx context.Context) []*Node {
+func (api *API) Hosts(ctx context.Context) []*Node {
 	return api.Cluster.Nodes
 }
 
@@ -522,7 +522,7 @@ func (api *API) Status(ctx context.Context) (proto.Message, error) {
 	return api.StatusHandler.ClusterStatus()
 }
 
-func (api *API) CreateFrameField(ctx context.Context, indexName string, frameName string, field *Field) error {
+func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *Field) error {
 	// Retrieve frame by name.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
@@ -547,7 +547,7 @@ func (api *API) CreateFrameField(ctx context.Context, indexName string, frameNam
 	return err
 }
 
-func (api *API) DeleteFrameField(ctx context.Context, indexName string, frameName string, fieldName string) error {
+func (api *API) DeleteField(ctx context.Context, indexName string, frameName string, fieldName string) error {
 	// Retrieve frame by name.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
@@ -572,7 +572,7 @@ func (api *API) DeleteFrameField(ctx context.Context, indexName string, frameNam
 	return err
 }
 
-func (api *API) FrameFields(ctx context.Context, indexName string, frameName string) ([]*Field, error) {
+func (api *API) Fields(ctx context.Context, indexName string, frameName string) ([]*Field, error) {
 	index := api.Holder.index(indexName)
 	if index == nil {
 		return nil, ErrIndexNotFound
@@ -586,7 +586,7 @@ func (api *API) FrameFields(ctx context.Context, indexName string, frameName str
 	return frame.GetFields()
 }
 
-func (api *API) FrameViews(ctx context.Context, indexName string, frameName string) ([]*View, error) {
+func (api *API) Views(ctx context.Context, indexName string, frameName string) ([]*View, error) {
 	// Retrieve views.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
@@ -764,9 +764,9 @@ func (api *API) StatsWithTags(tags []string) StatsClient {
 	return api.Holder.Stats.WithTags(tags...)
 }
 
-// ClusterLongQueryTime returns the configured threshold for logging/statting
+// LongQueryTime returns the configured threshold for logging/statting
 // long running queries.
-func (api *API) ClusterLongQueryTime() time.Duration {
+func (api *API) LongQueryTime() time.Duration {
 	if api.Cluster == nil {
 		return 0
 	}
