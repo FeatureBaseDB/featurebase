@@ -289,20 +289,11 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 // handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
-	pb, err := h.API.Status(r.Context())
-	if err != nil {
-		h.Logger.Printf("cluster status error: %s", err)
-		return
+	status := getStatusResponse{
+		State: h.API.State(),
+		Nodes: h.API.Hosts(r.Context()),
 	}
-
-	cs, ok := pb.(*internal.ClusterStatus)
-	if !ok {
-		panic("status is not a status")
-	}
-	if err := json.NewEncoder(w).Encode(getStatusResponse{
-		State: cs.State,
-		Nodes: DecodeNodes(cs.Nodes),
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(status); err != nil {
 		h.Logger.Printf("write status response error: %s", err)
 	}
 }

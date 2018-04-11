@@ -518,10 +518,6 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	return api.Holder.Schema()
 }
 
-func (api *API) Status(ctx context.Context) (proto.Message, error) {
-	return api.StatusHandler.ClusterStatus()
-}
-
 func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *Field) error {
 	// Retrieve frame by name.
 	f := api.Holder.Frame(indexName, frameName)
