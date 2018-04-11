@@ -84,29 +84,31 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// to send queries to different slices based on orientation.
 	var inverseSlices []uint64
 
-	// If slices aren't specified, then include all of them.
-	if len(slices) == 0 {
-		// Determine slices and inverseSlices for use in e.executeCall().
-		if needsSlices {
-			// Round up the number of slices.
-			idx := e.Holder.Index(index)
-			if idx == nil {
-				return nil, ErrIndexNotFound
-			}
-			maxSlice := idx.MaxSlice()
-			maxInverseSlice := idx.MaxInverseSlice()
+	// If slices are specified, then use that value for slices or
+	// inverseSlices. If slices aren't specified, then include all of them.
+	if len(slices) > 0 {
+		// For inverse queries, the values of `slices` provided to the Execute() method
+		// on the remote node actually represents inverseSlices.
+		inverseSlices = slices
+	} else if needsSlices {
+		// Round up the number of slices.
+		idx := e.Holder.Index(index)
+		if idx == nil {
+			return nil, ErrIndexNotFound
+		}
+		maxSlice := idx.MaxSlice()
+		maxInverseSlice := idx.MaxInverseSlice()
 
-			// Generate a slices of all slices.
-			slices = make([]uint64, maxSlice+1)
-			for i := range slices {
-				slices[i] = uint64(i)
-			}
+		// Generate a slices of all slices.
+		slices = make([]uint64, maxSlice+1)
+		for i := range slices {
+			slices[i] = uint64(i)
+		}
 
-			// Generate a slices of all inverse slices.
-			inverseSlices = make([]uint64, maxInverseSlice+1)
-			for i := range inverseSlices {
-				inverseSlices[i] = uint64(i)
-			}
+		// Generate a slices of all inverse slices.
+		inverseSlices = make([]uint64, maxInverseSlice+1)
+		for i := range inverseSlices {
+			inverseSlices[i] = uint64(i)
 		}
 	}
 
@@ -118,7 +120,6 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
-
 		if call.SupportsInverse() && needsSlices {
 			// Fetch frame & row label based on argument.
 			frame, _ := call.Args["frame"].(string)
@@ -147,7 +148,6 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 
 // executeCall executes a call.
 func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
-
 	if err := e.validateCallArgs(c); err != nil {
 		return nil, err
 	}
