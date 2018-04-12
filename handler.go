@@ -1169,7 +1169,7 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve fragment owner nodes.
-	nodes := h.API.FragmentNodes(r.Context(), index, slice)
+	nodes := h.API.SliceNodes(r.Context(), index, slice)
 
 	// Write to response.
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
@@ -1188,7 +1188,7 @@ func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Retrieve fragment from holder.
-	f, err := h.API.FragmentData(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice)
+	f, err := h.API.MarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -1210,7 +1210,7 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err = h.API.WriteFragmentData(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice, r.Body); err != nil {
+	if err = h.API.UnmarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice, r.Body); err != nil {
 		if err == ErrFrameNotFound {
 			http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		} else {
@@ -1221,30 +1221,15 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 
 // handleGetFragmentBlockData handles GET /fragment/block/data requests.
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
-	// Read request object.
-	var req internal.BlockDataRequest
-	if body, err := ioutil.ReadAll(r.Body); err != nil {
-		http.Error(w, "ready body error", http.StatusBadRequest)
-		return
-	} else if err := proto.Unmarshal(body, &req); err != nil {
-		http.Error(w, "unmarshal body error", http.StatusBadRequest)
-		return
-	}
-
-	resp, err := h.API.FragmentBlockData(r.Context(), req)
+	buf, err := h.API.FragmentBlockData(r.Context(), r.Body)
 	if err != nil {
-		if err == ErrFragmentNotFound {
+		if _, ok := err.(BadRequestError); ok {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		} else if err == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
-	}
-
-	// Encode response.
-	buf, err := proto.Marshal(&resp)
-	if err != nil {
-		h.Logger.Printf("merge block response encoding error: %s", err)
 		return
 	}
 
@@ -1742,23 +1727,10 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Read entire body.
-	body, err := ioutil.ReadAll(r.Body)
+	err := h.API.PostClusterMessage(r.Context(), r.Body)
 	if err != nil {
+		// TODO this was the previous behavior, but perhaps not everything is a bad request
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Marshal into request object.
-	pb, err := UnmarshalMessage(body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := h.API.PostClusterMessage(r.Context(), pb); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
 	}
 
 	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {

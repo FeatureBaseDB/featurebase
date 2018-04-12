@@ -614,7 +614,7 @@ func (s *HolderSyncer) SyncHolder() error {
 
 				for slice := uint64(0); slice <= s.Holder.Index(di.Name).MaxSlice(); slice++ {
 					// Ignore slices that this host doesn't own.
-					if !s.Cluster.OwnsFragment(s.Node.ID, di.Name, slice) {
+					if !s.Cluster.OwnsSlice(s.Node.ID, di.Name, slice) {
 						continue
 					}
 

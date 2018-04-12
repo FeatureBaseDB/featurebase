@@ -941,7 +941,7 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql.Call, f *Frame, view string, colID, rowID uint64, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
-	for _, node := range e.Cluster.FragmentNodes(index, slice) {
+	for _, node := range e.Cluster.SliceNodes(index, slice) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 			val, err := f.ClearBit(view, rowID, colID, nil)
@@ -1042,7 +1042,7 @@ func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.C
 	slice := colID / SliceWidth
 	ret := false
 
-	for _, node := range e.Cluster.FragmentNodes(index, slice) {
+	for _, node := range e.Cluster.SliceNodes(index, slice) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 			val, err := f.SetBit(view, rowID, colID, timestamp)
@@ -1385,7 +1385,7 @@ func (e *Executor) slicesByNode(nodes []*Node, index string, slices []uint64) (m
 
 loop:
 	for _, slice := range slices {
-		for _, node := range e.Cluster.FragmentNodes(index, slice) {
+		for _, node := range e.Cluster.SliceNodes(index, slice) {
 			if Nodes(nodes).Contains(node) {
 				m[node] = append(m[node], slice)
 				continue loop
