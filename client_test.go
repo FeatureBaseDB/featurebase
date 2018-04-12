@@ -355,7 +355,7 @@ func TestClient_ImportValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	min, cnt, err = frame.FieldMin(filter, fld.Name) // TODO: change this to use the client
+	min, cnt, err = frame.FieldMin(filter, fld.Name)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1782,7 +1782,7 @@ type MinCount struct {
 
 // Smaller returns the smaller of the two MinCounts.
 func (mc *MinCount) Smaller(other MinCount) MinCount {
-	if mc.Count == 0 || other.Count < mc.Count {
+	if mc.Count == 0 || (other.Min < mc.Min && other.Count > 0) {
 		return other
 	}
 	return MinCount{
@@ -1799,7 +1799,7 @@ type MaxCount struct {
 
 // Larger returns the larger of the two MaxCounts.
 func (mc *MaxCount) Larger(other MaxCount) MaxCount {
-	if mc.Count == 0 || other.Count < mc.Count {
+	if mc.Count == 0 || (other.Max > mc.Max && other.Count > 0) {
 		return other
 	}
 	return MaxCount{
