@@ -129,7 +129,7 @@ func (t *TestCluster) SetBit(index, frame, view string, rowID, colID uint64, x *
 	// Determine which node should receive the SetBit.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
 	slice := colID / pilosa.SliceWidth
-	nodes := c0.FragmentNodes(index, slice)
+	nodes := c0.SliceNodes(index, slice)
 
 	for _, node := range nodes {
 		c := t.clusterByID(node.ID)
@@ -153,7 +153,7 @@ func (t *TestCluster) SetFieldValue(index, frame string, columnID uint64, name s
 	// Determine which node should receive the SetFieldValue.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
 	slice := columnID / pilosa.SliceWidth
-	nodes := c0.FragmentNodes(index, slice)
+	nodes := c0.SliceNodes(index, slice)
 
 	for _, node := range nodes {
 		c := t.clusterByID(node.ID)

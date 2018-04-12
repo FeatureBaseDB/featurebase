@@ -108,14 +108,14 @@ func BuildRouters(handler *Handler) {
 
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
-	h.validators["GetFragmentNodes"] = QueryValidationSpecRequired("slice").Optional("index")
-	h.validators["GetSliceMax"] = QueryValidationSpecRequired().Optional("inverse")
-	h.validators["PostQuery"] = QueryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
-	h.validators["GetExport"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["GetFragmentData"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["PostFragmentData"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["GetFragmentBlocks"] = QueryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["PostFrameRestore"] = QueryValidationSpecRequired("host")
+	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice").Optional("index")
+	h.validators["GetSliceMax"] = queryValidationSpecRequired().Optional("inverse")
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
+	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["PostFrameRestore"] = queryValidationSpecRequired("host")
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -154,7 +154,7 @@ func loadCommon(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
-	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
+	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
 	router.HandleFunc("/id", handler.handleGetID).Methods("GET")
@@ -174,7 +174,7 @@ func loadRestricted(router *mux.Router, handler *Handler) {
 func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
-	router.HandleFunc("/debug/vars", handler.handleExpvar).Methods("GET")
+	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
 	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
@@ -241,7 +241,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Calculate per request StatsD metrics when the handler is fully configured.
 	statsTags := make([]string, 0, 3)
 
-	longQueryTime := h.API.ClusterLongQueryTime()
+	longQueryTime := h.API.LongQueryTime()
 	if longQueryTime > 0 && dif > longQueryTime {
 		h.Logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
 		statsTags = append(statsTags, "slow_query")
@@ -270,7 +270,7 @@ func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
 	}
 	filesystem, err := h.FileSystem.New()
 	if err != nil {
-		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
+		_ = h.writeQueryResponse(w, r, &QueryResponse{Err: err})
 		h.Logger.Printf("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
 		return
 	}
@@ -289,20 +289,11 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 // handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
-	pb, err := h.API.Status(r.Context())
-	if err != nil {
-		h.Logger.Printf("cluster status error: %s", err)
-		return
+	status := getStatusResponse{
+		State: h.API.State(),
+		Nodes: h.API.Hosts(r.Context()),
 	}
-
-	cs, ok := pb.(*internal.ClusterStatus)
-	if !ok {
-		panic("status is not a status")
-	}
-	if err := json.NewEncoder(w).Encode(getStatusResponse{
-		State: cs.State,
-		Nodes: DecodeNodes(cs.Nodes),
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(status); err != nil {
 		h.Logger.Printf("write status response error: %s", err)
 	}
 }
@@ -328,7 +319,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// TODO: Remove
 	req.Index = mux.Vars(r)["index"]
 
-	resp, err := h.API.ExecuteQuery(r.Context(), req)
+	resp, err := h.API.Query(r.Context(), req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		h.writeQueryResponse(w, r, &QueryResponse{Err: err})
@@ -374,7 +365,7 @@ func (h *Handler) handleGetIndexes(w http.ResponseWriter, r *http.Request) {
 // handleGetIndex handles GET /index/<indexname> requests.
 func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
-	index, err := h.API.ReadIndex(r.Context(), indexName)
+	index, err := h.API.Index(r.Context(), indexName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -742,7 +733,7 @@ func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
 		Max:  req.Max,
 	}
 
-	if err := h.API.CreateFrameField(r.Context(), indexName, frameName, field); err != nil {
+	if err := h.API.CreateField(r.Context(), indexName, frameName, field); err != nil {
 		if err == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
@@ -771,7 +762,7 @@ func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request)
 	frameName := mux.Vars(r)["frame"]
 	fieldName := mux.Vars(r)["field"]
 
-	if err := h.API.DeleteFrameField(r.Context(), indexName, frameName, fieldName); err != nil {
+	if err := h.API.DeleteField(r.Context(), indexName, frameName, fieldName); err != nil {
 		if err == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
@@ -790,7 +781,7 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
-	fields, err := h.API.FrameFields(r.Context(), indexName, frameName)
+	fields, err := h.API.Fields(r.Context(), indexName, frameName)
 	if err != nil {
 		switch err {
 		case ErrIndexNotFound:
@@ -824,7 +815,7 @@ func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
-	views, err := h.API.FrameViews(r.Context(), indexName, frameName)
+	views, err := h.API.Views(r.Context(), indexName, frameName)
 	if err != nil {
 		if err == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -1178,7 +1169,7 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve fragment owner nodes.
-	nodes := h.API.FragmentNodes(r.Context(), index, slice)
+	nodes := h.API.SliceNodes(r.Context(), index, slice)
 
 	// Write to response.
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
@@ -1197,7 +1188,7 @@ func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Retrieve fragment from holder.
-	f, err := h.API.FragmentData(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice)
+	f, err := h.API.MarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -1219,7 +1210,7 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err = h.API.WriteFragmentData(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice, r.Body); err != nil {
+	if err = h.API.UnmarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice, r.Body); err != nil {
 		if err == ErrFrameNotFound {
 			http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		} else {
@@ -1230,30 +1221,15 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 
 // handleGetFragmentBlockData handles GET /fragment/block/data requests.
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
-	// Read request object.
-	var req internal.BlockDataRequest
-	if body, err := ioutil.ReadAll(r.Body); err != nil {
-		http.Error(w, "ready body error", http.StatusBadRequest)
-		return
-	} else if err := proto.Unmarshal(body, &req); err != nil {
-		http.Error(w, "unmarshal body error", http.StatusBadRequest)
-		return
-	}
-
-	resp, err := h.API.FragmentBlockData(r.Context(), req)
+	buf, err := h.API.FragmentBlockData(r.Context(), r.Body)
 	if err != nil {
-		if err == ErrFragmentNotFound {
+		if _, ok := err.(BadRequestError); ok {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		} else if err == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
-	}
-
-	// Encode response.
-	buf, err := proto.Marshal(&resp)
-	if err != nil {
-		h.Logger.Printf("merge block response encoding error: %s", err)
 		return
 	}
 
@@ -1329,7 +1305,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 
 // handleGetHosts handles /hosts requests.
 func (h *Handler) handleGetHosts(w http.ResponseWriter, r *http.Request) {
-	hosts := h.API.ClusterHosts(r.Context())
+	hosts := h.API.Hosts(r.Context())
 	if err := json.NewEncoder(w).Encode(hosts); err != nil {
 		h.Logger.Printf("write version response error: %s", err)
 	}
@@ -1337,34 +1313,14 @@ func (h *Handler) handleGetHosts(w http.ResponseWriter, r *http.Request) {
 
 // handleGetVersion handles /version requests.
 func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
-	version := Version
-	if strings.HasPrefix(version, "v") {
-		// make the version string semver-compatible
-		version = version[1:]
-	}
-	if err := json.NewEncoder(w).Encode(struct {
+	err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
-		Version: version,
-	}); err != nil {
+		Version: h.API.Version(),
+	})
+	if err != nil {
 		h.Logger.Printf("write version response error: %s", err)
 	}
-}
-
-// handleExpvar handles /debug/vars requests.
-func (h *Handler) handleExpvar(w http.ResponseWriter, r *http.Request) {
-	// Copied from $GOROOT/src/expvar/expvar.go
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	fmt.Fprintf(w, "{\n")
-	first := true
-	expvar.Do(func(kv expvar.KeyValue) {
-		if !first {
-			fmt.Fprintf(w, ",\n")
-		}
-		first = false
-		fmt.Fprintf(w, "%q: %s", kv.Key, kv.Value)
-	})
-	fmt.Fprintf(w, "\n}\n")
 }
 
 // QueryResult types.
@@ -1771,23 +1727,10 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Read entire body.
-	body, err := ioutil.ReadAll(r.Body)
+	err := h.API.PostClusterMessage(r.Context(), r.Body)
 	if err != nil {
+		// TODO this was the previous behavior, but perhaps not everything is a bad request
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Marshal into request object.
-	pb, err := UnmarshalMessage(body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := h.API.PostClusterMessage(r.Context(), pb); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
 	}
 
 	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
@@ -1809,7 +1752,7 @@ type queryValidationSpec struct {
 	args     map[string]struct{}
 }
 
-func QueryValidationSpecRequired(requiredArgs ...string) *queryValidationSpec {
+func queryValidationSpecRequired(requiredArgs ...string) *queryValidationSpec {
 	args := map[string]struct{}{}
 	for _, arg := range requiredArgs {
 		args[arg] = struct{}{}

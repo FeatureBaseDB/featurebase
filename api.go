@@ -19,6 +19,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -31,6 +32,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+// API provides the top level programmatic interface to Pilosa. It is usually
+// wrapped by a handler which provides an external interface (e.g. HTTP).
 type API struct {
 	Holder *Holder
 	// The execution engine for running queries.
@@ -46,6 +49,7 @@ type API struct {
 	Logger           Logger
 }
 
+// NewAPI returns a new API instance.
 func NewAPI() *API {
 	return &API{
 		Broadcaster: NopBroadcaster,
@@ -55,7 +59,8 @@ func NewAPI() *API {
 	}
 }
 
-func (a *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
+// Query parses a PQL query out of the request and executes it.
+func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
 	resp := QueryResponse{}
 
 	q, err := pql.NewParser(strings.NewReader(req.Query)).Parse()
@@ -67,7 +72,7 @@ func (a *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryRespons
 		ExcludeAttrs: req.ExcludeAttrs,
 		ExcludeBits:  req.ExcludeBits,
 	}
-	results, err := a.Executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
+	results, err := api.Executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
 	if err != nil {
 		return resp, err
 	}
@@ -86,7 +91,7 @@ func (a *API) ExecuteQuery(ctx context.Context, req *QueryRequest) (QueryRespons
 		}
 
 		// Retrieve column attributes across all calls.
-		columnAttrSets, err := a.readColumnAttrSets(a.Holder.Index(req.Index), columnIDs)
+		columnAttrSets, err := api.readColumnAttrSets(api.Holder.Index(req.Index), columnIDs)
 		if err != nil {
 			return resp, err
 		}
@@ -118,6 +123,7 @@ func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet
 	return ax, nil
 }
 
+// CreateIndex makes a new Pilosa index.
 func (api *API) CreateIndex(ctx context.Context, indexName string, options IndexOptions) (*Index, error) {
 	// Create index.
 	index, err := api.Holder.CreateIndex(indexName, options)
@@ -138,7 +144,8 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	return index, nil
 }
 
-func (api *API) ReadIndex(ctx context.Context, indexName string) (*Index, error) {
+// Index retrieves the named index.
+func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 	index := api.Holder.Index(indexName)
 	if index == nil {
 		return nil, ErrIndexNotFound
@@ -146,6 +153,8 @@ func (api *API) ReadIndex(ctx context.Context, indexName string) (*Index, error)
 	return index, nil
 }
 
+// DeleteIndex removes the named index. If the index is not found it does
+// nothing and returns no error.
 func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	// Delete index from the holder.
 	err := api.Holder.DeleteIndex(indexName)
@@ -165,6 +174,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	return nil
 }
 
+// CreateFrame makes the named frame in the named index with the given options.
 func (api *API) CreateFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) (*Frame, error) {
 	// Find index.
 	index := api.Holder.Index(indexName)
@@ -193,6 +203,9 @@ func (api *API) CreateFrame(ctx context.Context, indexName string, frameName str
 	return frame, nil
 }
 
+// DeleteFrame removes the named frame from the named index. If the index is not
+// found, an error is returned. If the frame is not found, it is ignored and no
+// action is taken.
 func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName string) error {
 	// Find index.
 	index := api.Holder.Index(indexName)
@@ -219,9 +232,11 @@ func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName str
 	return nil
 }
 
+// ExportCSV encodes the fragment designated by the index,frame,view,slice as
+// CSV of the form <row>,<col>
 func (api *API) ExportCSV(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, w io.Writer) error {
 	// Validate that this handler owns the slice.
-	if !api.Cluster.OwnsFragment(api.LocalID(), indexName, slice) {
+	if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
 		api.Logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
 		return ErrClusterDoesNotOwnSlice
 	}
@@ -251,11 +266,20 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, frameName strin
 	return nil
 }
 
-func (api *API) FragmentNodes(ctx context.Context, indexName string, slice uint64) []*Node {
-	return api.Cluster.FragmentNodes(indexName, slice)
+// SliceNodes returns the node and all replicas which should contain a slice's data.
+func (api *API) SliceNodes(ctx context.Context, indexName string, slice uint64) []*Node {
+	return api.Cluster.SliceNodes(indexName, slice)
 }
 
-func (api *API) FragmentData(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) (*Fragment, error) {
+// WriterTo is an interface for any Object which knows how to serialize itself to an io.Writer
+type WriterTo interface {
+	WriteTo(w io.Writer) (n int64, err error)
+}
+
+// MarshalFragment returns an object which can write the specified fragment's data
+// to an io.Writer. The serialized data can be read back into a fragment with
+// the UnmarshalFragment API call.
+func (api *API) MarshalFragment(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) (WriterTo, error) {
 	// Retrieve fragment from holder.
 	f := api.Holder.Fragment(indexName, frameName, viewName, slice)
 	if f == nil {
@@ -264,7 +288,10 @@ func (api *API) FragmentData(ctx context.Context, indexName string, frameName st
 	return f, nil
 }
 
-func (api *API) WriteFragmentData(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, reader io.ReadCloser) error {
+// UnmarshalFragment creates a new fragment (if necessary) and reads data from a
+// Reader which was previously written by MarshalFragment to populate the
+// fragment's data.
+func (api *API) UnmarshalFragment(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, reader io.ReadCloser) error {
 	// Retrieve frame.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
@@ -290,19 +317,38 @@ func (api *API) WriteFragmentData(ctx context.Context, indexName string, frameNa
 	return nil
 }
 
-func (api *API) FragmentBlockData(ctx context.Context, req internal.BlockDataRequest) (internal.BlockDataResponse, error) {
+// FragmentBlockData is an endpoint for internal usage. It is not guaranteed to
+// return anything useful. Currently it returns protobuf encoded row and column
+// ids from a "block" which is a subdivision of a fragment.
+func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, error) {
+	reqBytes, err := ioutil.ReadAll(body)
+	if err != nil {
+		return nil, BadRequestError{errors.Wrap(err, "read body error")}
+	}
+	var req internal.BlockDataRequest
+	if err := proto.Unmarshal(reqBytes, &req); err != nil {
+		return nil, BadRequestError{errors.Wrap(err, "unmarshal body error")}
+	}
+
 	// Retrieve fragment from holder.
 	f := api.Holder.Fragment(req.Index, req.Frame, req.View, req.Slice)
 	if f == nil {
-		return internal.BlockDataResponse{}, ErrFragmentNotFound
+		return nil, ErrFragmentNotFound
 	}
 
-	// Read data
-	var resp internal.BlockDataResponse
+	var resp = internal.BlockDataResponse{}
 	resp.RowIDs, resp.ColumnIDs = f.BlockData(int(req.Block))
-	return resp, nil
+
+	// Encode response.
+	buf, err := proto.Marshal(&resp)
+	if err != nil {
+		return nil, errors.Wrap(err, "merge block response encoding error: %s")
+	}
+
+	return buf, nil
 }
 
+// FragmentBlocks returns the checksums and block ids for all blocks in the specified fragment.
 func (api *API) FragmentBlocks(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) ([]FragmentBlock, error) {
 	// Retrieve fragment from holder.
 	f := api.Holder.Fragment(indexName, frameName, viewName, slice)
@@ -315,6 +361,8 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName string, frameName 
 	return blocks, nil
 }
 
+// RestoreFrame reads all the data that this host should have for a given frame
+// from replicas in the cluster and restores that data to it.
 func (api *API) RestoreFrame(ctx context.Context, indexName string, frameName string, host *URI) error {
 	// Create a client for the remote cluster.
 	client := NewInternalHTTPClientFromURI(host, api.RemoteClient)
@@ -340,7 +388,7 @@ func (api *API) RestoreFrame(ctx context.Context, indexName string, frameName st
 	// Loop over each slice and import it if this node owns it.
 	for slice := uint64(0); slice <= maxSlices[indexName]; slice++ {
 		// Ignore this slice if we don't own it.
-		if !api.Cluster.OwnsFragment(api.LocalID(), indexName, slice) {
+		if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
 			continue
 		}
 
@@ -382,11 +430,16 @@ func (api *API) RestoreFrame(ctx context.Context, indexName string, frameName st
 	return nil
 }
 
-func (api *API) ClusterHosts(ctx context.Context) []*Node {
+// Hosts returns a list of the hosts in the cluster including their ID,
+// URL, and which is the coordinator.
+func (api *API) Hosts(ctx context.Context) []*Node {
 	return api.Cluster.Nodes
 }
 
+// CreateInputDefinition is deprecated and will be removed. Do not use it.
 func (api *API) CreateInputDefinition(ctx context.Context, indexName string, inputDefName string, inputDef InputDefinitionInfo) error {
+	api.Logger.Printf(`CreateInputDefinition is deprecated and will be removed.
+Please open an issue if you need to continue using it.`)
 	// Find index.
 	index := api.Holder.Index(indexName)
 	if index == nil {
@@ -417,7 +470,9 @@ func (api *API) CreateInputDefinition(ctx context.Context, indexName string, inp
 	return nil
 }
 
+// InputDefinition is deprecated and will be removed.
 func (api *API) InputDefinition(ctx context.Context, indexName string, inputDefName string) (*InputDefinition, error) {
+	api.Logger.Printf(`InputDefinition is deprecated and will be removed.`)
 	// Find index.
 	index := api.Holder.Index(indexName)
 	if index == nil {
@@ -431,7 +486,9 @@ func (api *API) InputDefinition(ctx context.Context, indexName string, inputDefN
 	return inputDef, nil
 }
 
+// DeleteInputDefinition is deprecated and will be removed.
 func (api *API) DeleteInputDefinition(ctx context.Context, indexName string, inputDefName string) error {
+	api.Logger.Printf("DeleteInputDefinition is deprecated and will be removed.")
 	// Find index.
 	index := api.Holder.Index(indexName)
 	if index == nil {
@@ -454,7 +511,9 @@ func (api *API) DeleteInputDefinition(ctx context.Context, indexName string, inp
 	return nil
 }
 
+// WriteInput is deprecated and will be removed.
 func (api *API) WriteInput(ctx context.Context, indexName string, inputDefName string, reqs []interface{}) error {
+	api.Logger.Printf("WriteInput is deprecated and will be removed.")
 	// Find index.
 	index := api.Holder.Index(indexName)
 	if index == nil {
@@ -476,6 +535,7 @@ func (api *API) WriteInput(ctx context.Context, indexName string, inputDefName s
 	return nil
 }
 
+// RecalculateCaches forces all TopN caches to be updated. Used mainly for integration tests.
 func (api *API) RecalculateCaches(ctx context.Context) error {
 	err := api.Broadcaster.SendSync(&internal.RecalculateCaches{})
 	if err != nil {
@@ -485,27 +545,41 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 	return nil
 }
 
-func (api *API) PostClusterMessage(ctx context.Context, pb proto.Message) error {
+// PostClusterMessage is for internal use. It decodes a protobuf message out of
+// the body and forwards it to the BroadcastHandler.
+func (api *API) PostClusterMessage(ctx context.Context, reqBody io.Reader) error {
+	// Read entire body.
+	body, err := ioutil.ReadAll(reqBody)
+	if err != nil {
+		return errors.Wrap(err, "reading body")
+	}
+
+	// Marshal into request object.
+	pb, err := UnmarshalMessage(body)
+	if err != nil {
+		return errors.Wrap(err, "unmarshaling message")
+	}
+
 	// Forward the error message.
 	if err := api.BroadcastHandler.ReceiveMessage(pb); err != nil {
-		return err
+		return errors.Wrap(err, "receiving message")
 	}
 	return nil
 }
 
+// LocalID returns the current node's ID.
 func (api *API) LocalID() string {
 	return api.Cluster.Node.ID
 }
 
+// Schema returns information about each index in Pilosa including which frames
+// and views they contain.
 func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	return api.Holder.Schema()
 }
 
-func (api *API) Status(ctx context.Context) (proto.Message, error) {
-	return api.StatusHandler.ClusterStatus()
-}
-
-func (api *API) CreateFrameField(ctx context.Context, indexName string, frameName string, field *Field) error {
+// CreateField creates a new BSI field in the given index and frame.
+func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *Field) error {
 	// Retrieve frame by name.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
@@ -530,7 +604,8 @@ func (api *API) CreateFrameField(ctx context.Context, indexName string, frameNam
 	return err
 }
 
-func (api *API) DeleteFrameField(ctx context.Context, indexName string, frameName string, fieldName string) error {
+// DeleteField deletes the given field.
+func (api *API) DeleteField(ctx context.Context, indexName string, frameName string, fieldName string) error {
 	// Retrieve frame by name.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
@@ -555,7 +630,8 @@ func (api *API) DeleteFrameField(ctx context.Context, indexName string, frameNam
 	return err
 }
 
-func (api *API) FrameFields(ctx context.Context, indexName string, frameName string) ([]*Field, error) {
+// Fields returns the fields in the given frame.
+func (api *API) Fields(ctx context.Context, indexName string, frameName string) ([]*Field, error) {
 	index := api.Holder.index(indexName)
 	if index == nil {
 		return nil, ErrIndexNotFound
@@ -569,7 +645,8 @@ func (api *API) FrameFields(ctx context.Context, indexName string, frameName str
 	return frame.GetFields()
 }
 
-func (api *API) FrameViews(ctx context.Context, indexName string, frameName string) ([]*View, error) {
+// Views returns the views in the given frame.
+func (api *API) Views(ctx context.Context, indexName string, frameName string) ([]*View, error) {
 	// Retrieve views.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
@@ -581,6 +658,7 @@ func (api *API) FrameViews(ctx context.Context, indexName string, frameName stri
 	return views, nil
 }
 
+// DeleteView removes the given view.
 func (api *API) DeleteView(ctx context.Context, indexName string, frameName string, viewName string) error {
 	// Retrieve frame.
 	f := api.Holder.Frame(indexName, frameName)
@@ -590,7 +668,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 
 	// Delete the view.
 	if err := f.DeleteView(viewName); err != nil {
-		// Ingore this error becuase views do not exist on all nodes due to slice distribution.
+		// Ignore this error becuase views do not exist on all nodes due to slice distribution.
 		if err != ErrInvalidView {
 			return err
 		}
@@ -610,6 +688,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 	return err
 }
 
+// IndexAttrDiff
 func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	// Retrieve index from holder.
 	index := api.Holder.Index(indexName)
@@ -670,6 +749,7 @@ func (api *API) FrameAttrDiff(ctx context.Context, indexName string, frameName s
 	return attrs, nil
 }
 
+// Import bulk imports data into a particular index,frame,slice.
 func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
 	if err != nil {
@@ -694,6 +774,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	return err
 }
 
+// ImportValue bulk imports values into a particular field.
 func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest) error {
 	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
 	if err != nil {
@@ -708,6 +789,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 	return err
 }
 
+// ModifyIndexTimeQuantum changes the default time quantum on the given index.
 func (api *API) ModifyIndexTimeQuantum(ctx context.Context, indexName string, timeQuantum TimeQuantum) error {
 	// Retrieve index by name.
 	index := api.Holder.Index(indexName)
@@ -719,6 +801,8 @@ func (api *API) ModifyIndexTimeQuantum(ctx context.Context, indexName string, ti
 	return index.SetTimeQuantum(timeQuantum)
 }
 
+// ModifyFrameTimeQuantum changes the time quantum on the given frame. TODO:
+// what happens if there is already data in the frame?
 func (api *API) ModifyFrameTimeQuantum(ctx context.Context, indexName string, frameName string, timeQuantum TimeQuantum) error {
 	// Retrieve index by name.
 	frame := api.Holder.Frame(indexName, frameName)
@@ -730,14 +814,19 @@ func (api *API) ModifyFrameTimeQuantum(ctx context.Context, indexName string, fr
 	return frame.SetTimeQuantum(timeQuantum)
 }
 
+// MaxSlices returns the maximum slice number for each index in a map.
 func (api *API) MaxSlices(ctx context.Context) map[string]uint64 {
 	return api.Holder.MaxSlices()
 }
 
+// MaxInverseSlices returns the maximum inverse slice number for each index in a
+// map.
 func (api *API) MaxInverseSlices(ctx context.Context) map[string]uint64 {
 	return api.Holder.MaxInverseSlices()
 }
 
+// StatsWithTags returns an instance of whatever implementation of StatsClient
+// pilosa is using with the given tags.
 func (api *API) StatsWithTags(tags []string) StatsClient {
 	if api.Holder == nil || api.Cluster == nil {
 		return nil
@@ -745,7 +834,9 @@ func (api *API) StatsWithTags(tags []string) StatsClient {
 	return api.Holder.Stats.WithTags(tags...)
 }
 
-func (api *API) ClusterLongQueryTime() time.Duration {
+// LongQueryTime returns the configured threshold for logging/statting
+// long running queries.
+func (api *API) LongQueryTime() time.Duration {
 	if api.Cluster == nil {
 		return 0
 	}
@@ -754,7 +845,7 @@ func (api *API) ClusterLongQueryTime() time.Duration {
 
 func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*Index, *Frame, error) {
 	// Validate that this handler owns the slice.
-	if !api.Cluster.OwnsFragment(api.LocalID(), indexName, slice) {
+	if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
 		api.Logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
 		return nil, nil, ErrClusterDoesNotOwnSlice
 	}
@@ -776,7 +867,7 @@ func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*I
 	return index, frame, nil
 }
 
-// inputJSONDataParser validates input json file and executes SetBit.
+// inputJSONDataParser validates input json file and executes SetBit. Deprecated - remove with input definition stuff.
 func (api *API) inputJSONDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
 	inputDef, err := index.InputDefinition(name)
 	if err != nil {
@@ -845,6 +936,7 @@ func (api *API) inputJSONDataParser(req map[string]interface{}, index *Index, na
 	return setBits, nil
 }
 
+// SetCoordinator makes a new Node the cluster coordinator.
 func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *Node, err error) {
 	oldNode = api.Cluster.nodeByID(api.Cluster.Coordinator)
 	newNode = api.Cluster.nodeByID(id)
@@ -869,6 +961,8 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 	return oldNode, newNode, nil
 }
 
+// RemoveNode puts the cluster into the "RESIZING" state and begins the job of
+// removing the given node.
 func (api *API) RemoveNode(id string) (*Node, error) {
 	removeNode := api.Cluster.nodeByID(id)
 	if removeNode == nil {
@@ -883,6 +977,7 @@ func (api *API) RemoveNode(id string) (*Node, error) {
 	return removeNode, nil
 }
 
+// ResizeAbort stops the current resize job.
 func (api *API) ResizeAbort() error {
 	if !api.Cluster.IsCoordinator() {
 		return ErrNodeNotCoordinator
@@ -891,6 +986,14 @@ func (api *API) ResizeAbort() error {
 	return errors.Wrap(err, "complete current job")
 }
 
+// State returns the cluster state which is usually "NORMAL", but could be
+// "STARTING", "RESIZING", or potentially others. See cluster.go for more
+// details.
 func (api *API) State() string {
 	return api.Cluster.State()
+}
+
+// Version returns the Pilosa version.
+func (api *API) Version() string {
+	return strings.TrimPrefix(Version, "v")
 }
