@@ -271,15 +271,10 @@ func (api *API) SliceNodes(ctx context.Context, indexName string, slice uint64) 
 	return api.Cluster.SliceNodes(indexName, slice)
 }
 
-// WriterTo is an interface for any Object which knows how to serialize itself to an io.Writer
-type WriterTo interface {
-	WriteTo(w io.Writer) (n int64, err error)
-}
-
 // MarshalFragment returns an object which can write the specified fragment's data
 // to an io.Writer. The serialized data can be read back into a fragment with
 // the UnmarshalFragment API call.
-func (api *API) MarshalFragment(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) (WriterTo, error) {
+func (api *API) MarshalFragment(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) (io.WriterTo, error) {
 	// Retrieve fragment from holder.
 	f := api.Holder.Fragment(indexName, frameName, viewName, slice)
 	if f == nil {
