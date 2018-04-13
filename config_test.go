@@ -25,7 +25,7 @@ import (
 func Test_NewConfig(t *testing.T) {
 	c := pilosa.NewConfig()
 
-	if c.Cluster.Disabled != pilosa.DefaultClusterDisabled {
+	if c.Cluster.Disabled {
 		t.Fatalf("unexpected Cluster.Disabled: %v", c.Cluster.Disabled)
 	}
 

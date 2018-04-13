@@ -1832,15 +1832,19 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 		// Generate query with sets & clears, and group the requests to not exceed MaxWritesPerRequest.
 		total := len(set.ColumnIDs) + len(clear.ColumnIDs)
-		buffers := make([]bytes.Buffer, int(math.Ceil(float64(total)/float64(s.Cluster.MaxWritesPerRequest))))
+		maxWrites := s.Cluster.MaxWritesPerRequest
+		if maxWrites <= 0 {
+			maxWrites = 5000
+		}
+		buffers := make([]bytes.Buffer, int(math.Ceil(float64(total)/float64(maxWrites))))
 
 		// Only sync the standard block.
 		for j := 0; j < len(set.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "SetBit(frame=%q, row=%d, col=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "SetBit(frame=%q, row=%d, col=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
 			count++
 		}
 		for j := 0; j < len(clear.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "ClearBit(frame=%q, row=%d, col=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "ClearBit(frame=%q, row=%d, col=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
 			count++
 		}
 

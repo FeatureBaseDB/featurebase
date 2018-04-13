@@ -275,11 +275,10 @@ type Cluster struct {
 // NewCluster returns a new instance of Cluster with defaults.
 func NewCluster() *Cluster {
 	return &Cluster{
-		Hasher:              &jmphasher{},
-		PartitionN:          DefaultPartitionN,
-		ReplicaN:            DefaultReplicaN,
-		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
-		EventReceiver:       NopEventReceiver,
+		Hasher:        &jmphasher{},
+		PartitionN:    DefaultPartitionN,
+		ReplicaN:      DefaultReplicaN,
+		EventReceiver: NopEventReceiver,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
 		jobs:                make(map[int64]*ResizeJob),

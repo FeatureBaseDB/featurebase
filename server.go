@@ -37,8 +37,7 @@ import (
 
 // Default server settings.
 const (
-	DefaultAntiEntropyInterval = 10 * time.Minute
-	DefaultDiagnosticServer    = "https://diagnostics.pilosa.com/v0/diagnostics"
+	DefaultDiagnosticServer = "https://diagnostics.pilosa.com/v0/diagnostics"
 )
 
 // Ensure Server implements interfaces.
@@ -108,7 +107,7 @@ func NewServer() *Server {
 
 		NewAttrStore: NewNopAttrStore,
 
-		AntiEntropyInterval: DefaultAntiEntropyInterval,
+		AntiEntropyInterval: time.Duration(DefaultConfig.AntiEntropy.Interval),
 		MetricInterval:      0,
 		DiagnosticInterval:  0,
 

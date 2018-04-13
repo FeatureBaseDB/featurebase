@@ -213,7 +213,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     ```
 
 #### Metric Service
-* Description: Which stats service to use. Choose from [statsd, expvar].
+* Description: Which stats service to use. Choose from [statsd, expvar, none].
 * Flag: `--metric.service=statsd`
 * Env: `PILOSA_METRIC_SERVICE=statsd'
 * Config:

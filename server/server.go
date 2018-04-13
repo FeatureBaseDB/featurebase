@@ -20,7 +20,6 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -40,6 +39,7 @@ import (
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statik"
 	"github.com/pilosa/pilosa/statsd"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -255,13 +255,7 @@ func (m *Command) SetupNetworking() error {
 		return nil
 	}
 
-	// Set internal port (string).
-	gossipPortStr := pilosa.DefaultGossipPort
-	if m.Config.Gossip.Port != "" {
-		gossipPortStr = m.Config.Gossip.Port
-	}
-
-	gossipPort, err := strconv.Atoi(gossipPortStr)
+	gossipPort, err := strconv.Atoi(m.Config.Gossip.Port)
 	if err != nil {
 		return err
 	}
@@ -318,7 +312,9 @@ func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
 		return pilosa.NewExpvarStatsClient(), nil
 	case "statsd":
 		return statsd.NewStatsClient(host)
-	default:
+	case "nop", "none":
 		return pilosa.NopStatsClient, nil
+	default:
+		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, none].")
 	}
 }
