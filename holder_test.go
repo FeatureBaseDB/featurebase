@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -448,11 +449,12 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	// Set up syncer.
 	syncer := pilosa.HolderSyncer{
-		Holder:       hldr0.Holder,
-		Node:         cluster.Nodes[0],
-		Cluster:      cluster,
-		RemoteClient: pilosa.GetHTTPClient(nil),
-		Stats:        pilosa.NopStatsClient,
+		Holder:        hldr0.Holder,
+		Node:          cluster.Nodes[0],
+		Cluster:       cluster,
+		RemoteClient:  pilosa.GetHTTPClient(nil),
+		Stats:         pilosa.NopStatsClient,
+		ActivityMutex: new(sync.Mutex),
 	}
 
 	if err := syncer.SyncHolder(); err != nil {

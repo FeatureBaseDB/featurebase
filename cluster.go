@@ -269,6 +269,8 @@ type Cluster struct {
 
 	//
 	RemoteClient *http.Client
+
+	ActivityMutex *sync.Mutex
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
@@ -285,6 +287,8 @@ func NewCluster() *Cluster {
 		joining:             make(chan struct{}),
 
 		Logger: NopLogger,
+
+		ActivityMutex: new(sync.Mutex),
 	}
 }
 
@@ -431,6 +435,10 @@ func (c *Cluster) setState(state string) {
 	var doCleanup bool
 
 	switch state {
+	case ClusterStateResizing:
+		// Don't change to RESIZING until/unless AE is not running.
+		c.ActivityMutex.Lock()
+		defer c.ActivityMutex.Unlock()
 	case ClusterStateNormal:
 		// If state is RESIZING -> NORMAL then run cleanup.
 		if c.state == ClusterStateResizing {
@@ -1208,7 +1216,6 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 	// The actual resizing runs in a goroutine because we don't want to block
 	// the distribution of other ResizeInstructions to the rest of the cluster.
 	go func() {
-
 		// Make sure the holder has opened.
 		<-c.Holder.opened
 
@@ -1221,7 +1228,6 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 
 		// Stop processing on any error.
 		if err := func() error {
-
 			// Sync the schema received in the resize instruction.
 			c.Logger.Printf("Holder ApplySchema")
 			if err := c.Holder.ApplySchema(instr.Schema); err != nil {

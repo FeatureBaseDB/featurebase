@@ -87,6 +87,10 @@ type Server struct {
 	Logger Logger
 
 	defaultClient InternalClient
+
+	// ActivityMutex ensures mutual exclusion on cluster resize
+	// and anti-entropy events.
+	ActivityMutex *sync.Mutex
 }
 
 // NewServer returns a new instance of Server.
@@ -112,6 +116,8 @@ func NewServer() *Server {
 		DiagnosticInterval:  0,
 
 		Logger: NopLogger,
+
+		ActivityMutex: new(sync.Mutex),
 	}
 
 	s.Handler.API = NewAPI()
@@ -339,6 +345,7 @@ func (s *Server) monitorAntiEntropy() {
 		syncer.Closing = s.closing
 		syncer.RemoteClient = s.RemoteClient
 		syncer.Stats = s.Holder.Stats.WithTags("HolderSyncer")
+		syncer.ActivityMutex = s.ActivityMutex
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {

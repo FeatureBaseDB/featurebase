@@ -170,6 +170,7 @@ func (m *Command) SetupServer() error {
 	cluster.ReplicaN = m.Config.Cluster.ReplicaN
 	cluster.Holder = m.Server.Holder
 	cluster.Logger = m.Server.Logger
+	cluster.ActivityMutex = m.Server.ActivityMutex
 
 	m.Server.Cluster = cluster
 
