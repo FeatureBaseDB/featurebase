@@ -1227,6 +1227,13 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 
+	// index is required
+	w = httptest.NewRecorder()
+	r = test.MustNewHTTPRequest("GET", "/fragment/nodes?slice=0", nil)
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	}
 }
 
 // Ensure the handler can return expvars without panicking.
