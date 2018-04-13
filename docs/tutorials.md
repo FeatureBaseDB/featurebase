@@ -70,7 +70,7 @@ We now should have `pilosa.local.gossip32` in the current directory with 32 rand
 
 Pilosa supports passing configuration items using the command line, environment variables or a configuration file. We will use the last option in this tutorial and create three configuration files for our three nodes.
 
-One of the nodes in the cluster must be chosen as the *coordinator*. We choose the first node as the coordinator in this tutorial.
+One of the nodes in the cluster must be chosen as the *coordinator*. We choose the first node as the coordinator in this tutorial. The coordinator is only important during cluster resizing operations, and otherwise acts like any other node in the cluster. In the future, the coordinator will be chosen transparently by distributed consensus, and this option will be deprecated.
 
 Create `node1.config.toml` in the project directory and paste the following in it:
 
