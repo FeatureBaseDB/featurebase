@@ -26,6 +26,7 @@ import (
 	"strings"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
@@ -234,6 +235,49 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	}
 }
 
+// Ensure inverse slices get handled correctly in a multi-node query.
+func TestMain_InverseSlices(t *testing.T) {
+	mains := test.MustRunMainWithCluster(t, 2)
+
+	m0 := mains[0]
+	m1 := mains[1]
+
+	// Make sure to use node0 in the cluster.
+	var m *test.Main
+	if m0.Server.NodeID < m1.Server.NodeID {
+		m = m0
+	} else {
+		m = m1
+	}
+
+	// Create frames.
+	client := m.Client()
+	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		t.Fatal("create index:", err)
+	}
+	if err := client.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
+		t.Fatal("create frame:", err)
+	}
+
+	// Write data on cluster.
+	if _, err := m.Query("i", "", fmt.Sprintf(`
+		SetBit(col=1, frame="f", row=1000)
+		SetBit(col=1, frame="f", row=2000)
+		SetBit(col=1, frame="f", row=%d)
+	`, 1*pilosa.SliceWidth)); err != nil {
+		t.Fatal("setting bits:", err)
+	}
+
+	time.Sleep(1 * time.Second)
+
+	// Query the cluster.
+	if res, err := m.Query("i", "", `Bitmap(col=1, frame="f")`); err != nil {
+		t.Fatal("another bitmap query:", err)
+	} else if res != fmt.Sprintf(`{"results":[{"attrs":{},"bits":[1000,2000,%d]}]}`, 1*pilosa.SliceWidth)+"\n" {
+		t.Fatalf("unexpected result: %s", res)
+	}
+}
+
 // Ensure program can set bits on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
 	mains1 := test.MustRunMainWithCluster(t, 2)
@@ -375,7 +419,11 @@ func TestMain_RecalculateHashes(t *testing.T) {
 	}
 
 	// Calculate caches on the first node
-	cluster[0].RecalculateCaches()
+	err := cluster[0].RecalculateCaches()
+	if err != nil {
+		t.Fatalf("recalculating caches: %v", err)
+	}
+
 	target := `{"results":[[{"id":7,"count":99},{"id":1,"count":99},{"id":9,"count":99},{"id":5,"count":99},{"id":4,"count":99},{"id":8,"count":99},{"id":2,"count":99},{"id":6,"count":99},{"id":3,"count":99}]]}`
 
 	// Run a TopN query on all nodes. The result should be the same as the target.

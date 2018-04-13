@@ -72,6 +72,14 @@ var (
 	ErrTooManyWrites    = errors.New("too many write commands")
 
 	ErrConfigClusterEnabledHosts = errors.New("providing hosts to a non-disabled cluster is not allowed")
+	ErrConfigClusterTypeInvalid  = errors.New("invalid cluster type")
+	ErrConfigHostsMissing        = errors.New("missing bind address in cluster hosts")
+
+	ErrClusterDoesNotOwnSlice = errors.New("cluster does not own slice")
+
+	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
+	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
+	ErrResizeNotRunning   = errors.New("no resize job currently running")
 )
 
 // Regular expression to validate index and frame names.

@@ -218,7 +218,7 @@ func (m *Command) SetupServer() error {
 	}
 	c := pilosa.GetHTTPClient(TLSConfig)
 	m.Server.RemoteClient = c
-	m.Server.Handler.RemoteClient = c
+	m.Server.Handler.API.RemoteClient = c
 	m.Server.Cluster.RemoteClient = c
 
 	// Statik file system.

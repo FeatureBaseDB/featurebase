@@ -63,12 +63,10 @@ func TestExportCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := &pilosa.Node{ID: "node", URI: *uri}
-
-	s.Handler.Node = node
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0] = node
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.URI = *uri
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
 	cm.Host = s.Host()
 
 	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))

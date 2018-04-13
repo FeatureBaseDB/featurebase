@@ -65,8 +65,8 @@ func TestHandler_NotFound(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/no_such_path", nil))
@@ -100,8 +100,8 @@ func TestHandler_Schema(t *testing.T) {
 	}
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", nil))
 	if w.Code != http.StatusOK {
@@ -139,9 +139,9 @@ func TestHandler_Status(t *testing.T) {
 	}
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
-	h.StatusHandler = s
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.StatusHandler = s
 	s.Handler = h
 
 	w := httptest.NewRecorder()
@@ -158,14 +158,15 @@ func TestHandler_ClusterResizeAbort(t *testing.T) {
 
 	t.Run("No resize job", func(t *testing.T) {
 		h := test.NewHandler()
-		h.Cluster = test.NewCluster(1)
+		h.API.Cluster = test.NewCluster(1)
 		h.SetRestricted()
 
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/cluster/resize/abort", nil))
 		if w.Code != http.StatusOK {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"info":"no resize job currently running"}`+"\n" {
+			bod, err := ioutil.ReadAll(w.Body)
+			t.Fatalf("unexpected status code: %d, bod: %s, readerr: %v", w.Code, bod, err)
+		} else if body := w.Body.String(); body != `{"info":"complete current job: no resize job currently running"}`+"\n" {
 			t.Fatalf("unexpected body: %s", body)
 		}
 	})
@@ -186,8 +187,8 @@ func TestHandler_MaxSlices(t *testing.T) {
 	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+8)
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/slices/max", nil))
 	if w.Code != http.StatusOK {
@@ -227,8 +228,8 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 	}
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/slices/max?inverse=true", nil))
 	if w.Code != http.StatusOK {
@@ -244,8 +245,8 @@ func TestHandler_Query_Args_URL(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if index != "idx0" {
 			t.Fatalf("unexpected index: %s", index)
@@ -272,8 +273,8 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if index != "idx0" {
 			t.Fatalf("unexpected index: %s", index)
@@ -312,8 +313,8 @@ func TestHandler_Query_Args_Err(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=a,b", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusBadRequest {
@@ -339,8 +340,8 @@ func TestHandler_Query_Uint64_JSON(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return []interface{}{uint64(100)}, nil
 	}
@@ -360,8 +361,8 @@ func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return []interface{}{uint64(100)}, nil
 	}
@@ -390,8 +391,8 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
@@ -423,8 +424,8 @@ func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
 	}
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
@@ -446,8 +447,8 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
@@ -494,8 +495,8 @@ func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
 	}
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
 		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
@@ -555,8 +556,8 @@ func TestHandler_Query_Pairs_JSON(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return []interface{}{[]pilosa.Pair{
 			{ID: 1, Count: 2},
@@ -579,8 +580,8 @@ func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return []interface{}{[]pilosa.Pair{
 			{ID: 1, Count: 2},
@@ -612,15 +613,15 @@ func TestHandler_Query_Err_JSON(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return nil, errors.New("marker")
 	}
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`Bitmap(id=100)`)))
-	if w.Code != http.StatusInternalServerError {
+	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"marker"}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
@@ -633,8 +634,8 @@ func TestHandler_Query_Err_Protobuf(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		return nil, errors.New("marker")
 	}
@@ -643,7 +644,7 @@ func TestHandler_Query_Err_Protobuf(t *testing.T) {
 	r := test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`TopN(frame=x, n=2)`))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
-	if w.Code != http.StatusInternalServerError {
+	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 
@@ -661,8 +662,8 @@ func TestHandler_Query_MethodNotAllowed(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/index/i/query", nil))
 	if w.Code != http.StatusMethodNotAllowed {
@@ -676,8 +677,8 @@ func TestHandler_Query_ErrParse(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("bad_fn(")))
 	if w.Code != http.StatusBadRequest {
@@ -693,7 +694,7 @@ func TestHandler_Index_Delete(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	// Create index.
@@ -733,8 +734,8 @@ func TestHandler_DeleteFrame(t *testing.T) {
 	}
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i0/frame/f1", strings.NewReader("")))
 	if w.Code != http.StatusOK {
@@ -753,8 +754,8 @@ func TestHandler_SetIndexTimeQuantum(t *testing.T) {
 	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("PATCH", "/index/i0/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
@@ -777,8 +778,8 @@ func TestHandler_SetFrameTimeQuantum(t *testing.T) {
 	}
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("PATCH", "/index/i0/frame/f1/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
 	if w.Code != http.StatusOK {
@@ -796,7 +797,7 @@ func TestHandler_Index_AttrStore_Diff(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	// Set attributes on the index.
@@ -845,7 +846,7 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	// Set attributes on the index.
@@ -895,7 +896,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	t.Run("OK", func(t *testing.T) {
@@ -999,7 +1000,7 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	t.Run("OK", func(t *testing.T) {
@@ -1064,7 +1065,7 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	t.Run("OK", func(t *testing.T) {
@@ -1132,7 +1133,7 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	// Set bits in the index.
@@ -1181,8 +1182,8 @@ func TestHandler_Version(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 
 	w := httptest.NewRecorder()
 	r := test.MustNewHTTPRequest("GET", "/version", nil)
@@ -1204,9 +1205,9 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(3)
-	h.Cluster.ReplicaN = 2
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(3)
+	h.API.Cluster.ReplicaN = 2
 
 	w := httptest.NewRecorder()
 	r := test.MustNewHTTPRequest("GET", "/fragment/nodes?index=X&slice=0", nil)
@@ -1240,8 +1241,8 @@ func TestHandler_Expvars(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Cluster = test.NewCluster(1)
-	h.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
 	w := httptest.NewRecorder()
 	r := test.MustNewHTTPRequest("GET", "/debug/vars", nil)
 	h.ServeHTTP(w, r)
@@ -1286,8 +1287,8 @@ func TestHandler_CreateInputDefinition(t *testing.T) {
 			]
 		}`)
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/input-definition/input1", bytes.NewBuffer(inputBody)))
 	if w.Code != http.StatusOK {
@@ -1321,8 +1322,8 @@ func TestHandler_DuplicatePrimaryKey(t *testing.T) {
 	defer hldr.Close()
 	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 
 	//Ensure throwing error if there's duplicated primaryKey field
 	invalidPrimaryKey := []byte(`
@@ -1426,8 +1427,8 @@ func TestHandler_DeleteInputDefinition(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 
 	// Test index not found.
 	w := httptest.NewRecorder()
@@ -1474,8 +1475,8 @@ func TestHandler_GetInputDefinition(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 
 	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{}}
 	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
@@ -1641,8 +1642,8 @@ func TestHandler_CreateInput(t *testing.T) {
 				"null_value": null
 			}]`)
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 
 	// Return error if index does not exist.
 	w := httptest.NewRecorder()
@@ -1756,8 +1757,8 @@ func TestInput_JSON(t *testing.T) {
 			err: "set-timestamp value must be in time format: YYYY-MM-DD, has: 12345"},
 	}
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	for _, req := range tests {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/input/input1", bytes.NewBuffer([]byte(req.json))))
@@ -1817,8 +1818,8 @@ func TestHandler_DeleteView(t *testing.T) {
 	hldr.Index("i0").Frame("f0").SetTimeQuantum("YMD")
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i0/frame/f0/view/standard_2017", strings.NewReader("")))
 	if w.Code != http.StatusOK {
@@ -1843,8 +1844,8 @@ func TestHandler_RecalculateCaches(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/recalculate-caches", nil))
@@ -1859,8 +1860,8 @@ func TestHandler_WebUI(t *testing.T) {
 	defer hldr.Close()
 
 	h := test.NewHandler()
-	h.Holder = hldr.Holder
-	h.Cluster = test.NewCluster(1)
+	h.API.Holder = hldr.Holder
+	h.API.Cluster = test.NewCluster(1)
 	h.FileSystem = &statik.FileSystem{}
 
 	w := httptest.NewRecorder()
