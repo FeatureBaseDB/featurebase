@@ -1702,7 +1702,7 @@ func (s *FragmentSyncer) isClosing() bool {
 // then merges any blocks which have differences.
 func (s *FragmentSyncer) SyncFragment() error {
 	// Determine replica set.
-	nodes := s.Cluster.FragmentNodes(s.Fragment.Index(), s.Fragment.Slice())
+	nodes := s.Cluster.SliceNodes(s.Fragment.Index(), s.Fragment.Slice())
 	if len(nodes) == 1 {
 		return nil
 	}
@@ -1784,7 +1784,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	// Read pairs from each remote block.
 	var pairSets []PairSet
 	var clients []InternalClient
-	for _, node := range s.Cluster.FragmentNodes(f.Index(), f.Slice()) {
+	for _, node := range s.Cluster.SliceNodes(f.Index(), f.Slice()) {
 		if s.Node.ID == node.ID {
 			continue
 		}

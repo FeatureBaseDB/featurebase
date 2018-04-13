@@ -654,7 +654,7 @@ func (c *Cluster) fragsByHost(idx *Index) fragsByHost {
 func (c *Cluster) fragCombos(idx string, maxSlice uint64, frameViews viewsByFrame) fragsByHost {
 	t := make(fragsByHost)
 	for i := uint64(0); i <= maxSlice; i++ {
-		nodes := c.FragmentNodes(idx, i)
+		nodes := c.SliceNodes(idx, i)
 		for _, n := range nodes {
 			// for each frame/view combination:
 			for frame, views := range frameViews {
@@ -807,14 +807,14 @@ func (c *Cluster) Partition(index string, slice uint64) int {
 	return int(h.Sum64() % uint64(c.PartitionN))
 }
 
-// FragmentNodes returns a list of nodes that own a fragment.
-func (c *Cluster) FragmentNodes(index string, slice uint64) []*Node {
+// SliceNodes returns a list of nodes that own a fragment.
+func (c *Cluster) SliceNodes(index string, slice uint64) []*Node {
 	return c.PartitionNodes(c.Partition(index, slice))
 }
 
-// OwnsFragment returns true if a host owns a fragment.
-func (c *Cluster) OwnsFragment(nodeID string, index string, slice uint64) bool {
-	return Nodes(c.FragmentNodes(index, slice)).ContainsID(nodeID)
+// OwnsSlice returns true if a host owns a fragment.
+func (c *Cluster) OwnsSlice(nodeID string, index string, slice uint64) bool {
+	return Nodes(c.SliceNodes(index, slice)).ContainsID(nodeID)
 }
 
 // PartitionNodes returns a list of nodes that own a partition.

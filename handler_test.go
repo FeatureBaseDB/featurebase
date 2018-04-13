@@ -141,6 +141,7 @@ func TestHandler_Status(t *testing.T) {
 	h := test.NewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
+	h.API.Cluster.SetState(pilosa.ClusterStateNormal)
 	h.API.StatusHandler = s
 	s.Handler = h
 
@@ -148,7 +149,7 @@ func TestHandler_Status(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/status", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"state":"NORMAL","nodes":[{"id":"test-node","uri":{"scheme":"http","host":"localhost","port":10101},"isCoordinator":false}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"state":"NORMAL","nodes":[{"id":"node0","uri":{"scheme":"http","host":"host0"},"isCoordinator":false}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }

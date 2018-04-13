@@ -82,6 +82,13 @@ var (
 	ErrResizeNotRunning   = errors.New("no resize job currently running")
 )
 
+// BadRequestError wraps an error value to signify that a request could not be
+// read, decoded, or parsed such that in an HTTP scenario, http.StatusBadRequest
+// would be returned.
+type BadRequestError struct {
+	error
+}
+
 // Regular expression to validate index and frame names.
 var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
