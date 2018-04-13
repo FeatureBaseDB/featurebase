@@ -129,7 +129,7 @@ Which repositories did user 14 star:
 ``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'Bitmap(frame="stargazer", rowID=14)'
+     -d 'Bitmap(frame="stargazer", row=14)'
 ```
 ``` response
 {
@@ -167,8 +167,8 @@ Which repositories were starred by user 14 and 19:
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'Intersect(
-            Bitmap(frame="stargazer", rowID=14), 
-            Bitmap(frame="stargazer", rowID=19)
+            Bitmap(frame="stargazer", row=14), 
+            Bitmap(frame="stargazer", row=19)
         )'
 ```
 ``` response
@@ -187,8 +187,8 @@ Which repositories were starred by user 14 or 19:
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'Union(
-            Bitmap(frame="stargazer", rowID=14),
-            Bitmap(frame="stargazer", rowID=19)
+            Bitmap(frame="stargazer", row=14),
+            Bitmap(frame="stargazer", row=19)
         )'
 ```
 ``` response
@@ -207,9 +207,9 @@ Which repositories were starred by user 14 and 19 and also were written in langu
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'Intersect(
-            Bitmap(frame="stargazer", rowID=14),
-            Bitmap(frame="stargazer", rowID=19),
-            Bitmap(frame="language", rowID=1)
+            Bitmap(frame="stargazer", row=14),
+            Bitmap(frame="stargazer", row=19),
+            Bitmap(frame="language", row=1)
         )'
 ```
 ``` response
@@ -227,7 +227,7 @@ Set user 99999 as a stargazer for repository 77777:
 ``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'SetBit(frame="stargazer", columnID=77777, rowID=99999)'
+     -d 'SetBit(frame="stargazer", column=77777, row=99999)'
 ```
 ``` response
 {"results":[true]}
