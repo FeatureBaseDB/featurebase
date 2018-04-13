@@ -197,12 +197,12 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
     ```toml
     [profile]
-    cpu = "/path/to/somewhere"    
+    cpu = "/path/to/somewhere"
     ```
 
 #### Profile CPU Time
 
-* Description: Amount of time to collect cpu profiling data if `profile.cpu` is set.
+* Description: Amount of time to collect cpu profiling data at startup if `profile.cpu` is set.
 * Flag: `--profile.cpu-time="30s"`
 * Env: `PILOSA_PROFILE_CPU_TIME="30s"
 * Config:
@@ -236,7 +236,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Metric Poll Interval
 
-* Description: Polling interval for runtime metrics.
+* Description: Rate at which runtime metrics (such as open file handles and memory usage) are collected.
 * Flag: `metric.poll-interval=”0m15s”`
 * Env: `PILOSA_METRIC_POLL_INTERVAL=0m15s`
 * Config:
@@ -248,7 +248,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Metric Diagnostics
 
-* Description: Enable diagnostic reporting. To disable diagnostics set to false.
+* Description: Enable reporting of limited usage statistics to Pilosa developers. To disable, set to false.
 * Flag: `metric.diagnostics`
 * Env: `PILOSA_METRIC_DIAGNOSTICS`
 * Config:
