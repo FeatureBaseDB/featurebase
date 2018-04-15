@@ -25,9 +25,6 @@ const (
 	ClusterGossip = "gossip"
 )
 
-// DefaultConfig is a Config structure that holds all the default values.
-var DefaultConfig = NewConfig()
-
 // TLSConfig contains TLS configuration
 type TLSConfig struct {
 	// CertificatePath contains the path to the certificate (.crt or .pem file)
@@ -40,7 +37,8 @@ type TLSConfig struct {
 
 // Config represents the configuration for the command.
 type Config struct {
-	// DataDir is the default data directory.
+	// DataDir is the directory where Pilosa stores both indexed data and
+	// running state such as cluster topology information.
 	DataDir string `toml:"data-dir"`
 	// Bind is the host:port on which Pilosa will listen.
 	Bind string `toml:"bind"`

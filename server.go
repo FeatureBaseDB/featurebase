@@ -107,7 +107,7 @@ func NewServer() *Server {
 
 		NewAttrStore: NewNopAttrStore,
 
-		AntiEntropyInterval: time.Duration(DefaultConfig.AntiEntropy.Interval),
+		AntiEntropyInterval: time.Duration(NewConfig().AntiEntropy.Interval),
 		MetricInterval:      0,
 		DiagnosticInterval:  0,
 
