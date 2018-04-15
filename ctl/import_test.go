@@ -134,7 +134,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	cm.Host = pilosa.DefaultHost
+	cm.Host = "anyhost"
 	cm.Index = "i"
 	cm.Frame = "f"
 	file, err := ioutil.TempFile("", "import.csv")
