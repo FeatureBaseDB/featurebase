@@ -63,7 +63,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.Var(&Importer.IndexOptions.TimeQuantum, "index-time-quantum", "Time quantum for the index (DEPRECATED. This feature will be removed in a future version. Set time quantum of each frame instead.)")
 	flags.Var(&Importer.FrameOptions.TimeQuantum, "frame-time-quantum", "Time quantum for the frame")
 	flags.BoolVar(&Importer.FrameOptions.InverseEnabled, "frame-inverse-enabled", false, "Enable inverse frame")
-	flags.BoolVar(&Importer.FrameOptions.RangeEnabled, "frame-range-enabled", false, "Enabled range encoded frame")
+	flags.BoolVar(&Importer.FrameOptions.RangeEnabled, "frame-range-enabled", false, "DEPRECATED - any frame can have fields. This option will be removed.")
 	flags.StringVar(&Importer.FrameOptions.CacheType, "frame-cache-type", pilosa.CacheTypeRanked, "Cache type for the frame; valid values: none, lru, ranked")
 	flags.Uint32Var(&Importer.FrameOptions.CacheSize, "frame-cache-size", 50000, "Cache size for the frame")
 	ctl.SetTLSConfig(flags, &Importer.TLS.CertificatePath, &Importer.TLS.CertificateKeyPath, &Importer.TLS.SkipVerify)

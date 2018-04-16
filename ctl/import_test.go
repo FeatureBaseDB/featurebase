@@ -86,9 +86,7 @@ func TestImportCommand_Run(t *testing.T) {
 }
 
 // Ensure that the ImportValue path runs (note: we have specified a value
-// for cm.Field. Because the handler doesn't return errors (it sends them
-// to the logger), we don't get an error returned at `cm.Run()` even though
-// we haven't setup frame `f` to be RangeEnabled.
+// for cm.Field.)
 func TestImportCommand_RunValue(t *testing.T) {
 
 	buf := bytes.Buffer{}
@@ -117,7 +115,7 @@ func TestImportCommand_RunValue(t *testing.T) {
 	cm.Host = s.Host()
 
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", strings.NewReader(`{"options":{"rangeEnabled": true, "fields": [{"name": "foo", "type": "int", "min": 0, "max": 100}]}}`)))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", strings.NewReader(`{"options":{"fields": [{"name": "foo", "type": "int", "min": 0, "max": 100}]}}`)))
 
 	cm.Index = "i"
 	cm.Frame = "f"

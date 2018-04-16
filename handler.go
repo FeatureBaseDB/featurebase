@@ -788,8 +788,6 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 			fallthrough
 		case ErrFrameNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case ErrFrameFieldsNotAllowed:
-			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

@@ -33,7 +33,6 @@ import (
 const (
 	DefaultCacheType      = CacheTypeRanked
 	DefaultInverseEnabled = false
-	DefaultRangeEnabled   = false
 
 	// Default ranked frame cache
 	DefaultCacheSize = 50000
@@ -59,7 +58,6 @@ type Frame struct {
 	cacheType      string
 	cacheSize      uint32
 	timeQuantum    TimeQuantum
-	rangeEnabled   bool
 	fields         []*Field
 
 	Logger Logger
@@ -88,7 +86,6 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		cacheType:      DefaultCacheType,
 		cacheSize:      DefaultCacheSize,
 		//timeQuantum
-		rangeEnabled: DefaultRangeEnabled,
 		//fields
 
 		Logger: NopLogger,
@@ -145,11 +142,6 @@ func (f *Frame) InverseEnabled() bool {
 	return f.inverseEnabled
 }
 
-// RangeEnabled returns true if range fields can be stored on this frame.
-func (f *Frame) RangeEnabled() bool {
-	return f.rangeEnabled
-}
-
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
 // defaults to DefaultCacheSize 50000
 func (f *Frame) SetCacheSize(v uint32) error {
@@ -188,7 +180,6 @@ func (f *Frame) Options() FrameOptions {
 func (f *Frame) options() FrameOptions {
 	return FrameOptions{
 		InverseEnabled: f.inverseEnabled,
-		RangeEnabled:   f.rangeEnabled,
 		CacheType:      f.cacheType,
 		CacheSize:      f.cacheSize,
 		TimeQuantum:    f.timeQuantum,
@@ -268,7 +259,6 @@ func (f *Frame) loadMeta() error {
 		f.cacheType = DefaultCacheType
 		f.cacheSize = DefaultCacheSize
 		f.timeQuantum = ""
-		f.rangeEnabled = DefaultRangeEnabled
 		//f.fields
 		return nil
 	} else if err != nil {
@@ -287,7 +277,6 @@ func (f *Frame) loadMeta() error {
 	}
 	f.cacheSize = pb.CacheSize
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
-	f.rangeEnabled = pb.RangeEnabled
 	f.fields = decodeFields(pb.Fields)
 
 	return nil
@@ -365,11 +354,6 @@ func (f *Frame) CreateField(field *Field) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// Ensure frame supports fields.
-	if !f.RangeEnabled() {
-		return ErrFrameFieldsNotAllowed
-	}
-
 	// Append field.
 	if err := f.addField(field); err != nil {
 		return err
@@ -402,11 +386,6 @@ func (f *Frame) GetFields() ([]*Field, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	// Ensure the frame supports fields.
-	if !f.RangeEnabled() {
-		return nil, ErrFrameFieldsNotAllowed
-	}
-
 	err := f.loadMeta()
 	if err != nil {
 		return nil, err
@@ -419,11 +398,6 @@ func (f *Frame) GetFields() ([]*Field, error) {
 func (f *Frame) DeleteField(name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
-	// Ensure frame supports fields.
-	if !f.RangeEnabled() {
-		return ErrFrameFieldsNotAllowed
-	}
 
 	// Remove field.
 	if err := f.deleteField(name); err != nil {
@@ -890,11 +864,6 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 
 // ImportValue bulk imports range-encoded value data.
 func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64) error {
-	// Verify that this frame is range-encoded.
-	if !f.RangeEnabled() {
-		return fmt.Errorf("Frame not RangeEnabled: %s", f.name)
-	}
-
 	viewName := ViewFieldPrefix + fieldName
 	// Get the field so we know bitDepth.
 	field := f.Field(fieldName)
@@ -991,7 +960,7 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
 	InverseEnabled bool        `json:"inverseEnabled,omitempty"`
-	RangeEnabled   bool        `json:"rangeEnabled,omitempty"`
+	RangeEnabled   bool        `json:"rangeEnabled,omitempty"` // deprecated, will be removed
 	CacheType      string      `json:"cacheType,omitempty"`
 	CacheSize      uint32      `json:"cacheSize,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
@@ -1009,7 +978,6 @@ func encodeFrameOptions(o *FrameOptions) *internal.FrameMeta {
 	}
 	return &internal.FrameMeta{
 		InverseEnabled: o.InverseEnabled,
-		RangeEnabled:   o.RangeEnabled,
 		CacheType:      o.CacheType,
 		CacheSize:      o.CacheSize,
 		TimeQuantum:    string(o.TimeQuantum),
@@ -1023,7 +991,6 @@ func decodeFrameOptions(options *internal.FrameMeta) *FrameOptions {
 	}
 	return &FrameOptions{
 		InverseEnabled: options.InverseEnabled,
-		RangeEnabled:   options.RangeEnabled,
 		CacheType:      options.CacheType,
 		CacheSize:      options.CacheSize,
 		TimeQuantum:    TimeQuantum(options.TimeQuantum),

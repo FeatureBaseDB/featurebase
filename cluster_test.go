@@ -427,7 +427,6 @@ func TestCluster_ResizeStates(t *testing.T) {
 		// Add Field Data to node0.
 		if err := tc.CreateFrame("i", "fields", pilosa.FrameOptions{
 			InverseEnabled: false,
-			RangeEnabled:   true,
 			//CacheType:      pilosa.CacheTypeNone,
 			Fields: []*pilosa.Field{
 				{

@@ -902,7 +902,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -927,7 +927,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 
 	t.Run("ErrInvalidFieldType", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true}); err != nil {
+		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -949,7 +949,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 
 	t.Run("ErrInvalidFieldRange", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true}); err != nil {
+		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -972,8 +972,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 	t.Run("ErrFieldAlreadyExists", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			RangeEnabled: true,
-			Fields:       []*pilosa.Field{{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}},
+			Fields: []*pilosa.Field{{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}},
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -1006,7 +1005,7 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
 		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}); err != nil {
@@ -1034,7 +1033,7 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 
 	t.Run("ErrFieldNotFound", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
 		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}); err != nil {
@@ -1071,7 +1070,7 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
 		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 1, Max: 100}); err != nil {
@@ -1105,7 +1104,7 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 
 	t.Run("ErrFrameFieldNotAllowed", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		_, err := idx.CreateFrameIfNotExists("f1", pilosa.FrameOptions{RangeEnabled: false})
+		_, err := idx.CreateFrameIfNotExists("f1", pilosa.FrameOptions{})
 
 		resp, err := http.Get(s.URL + "/index/i/frame/f1/fields")
 		if err != nil {
@@ -1113,12 +1112,12 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 		}
 		if err != nil {
 			t.Fatal(err)
-		} else if resp.StatusCode != http.StatusBadRequest {
+		} else if resp.StatusCode != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", resp.StatusCode)
 		} else if body, err := ioutil.ReadAll(resp.Body); err != nil {
 			t.Fatal(err)
-		} else if strings.TrimSpace(string(body)) != `frame fields not allowed` {
-			t.Fatalf("unexpected body: %q", body)
+		} else if strings.TrimSpace(string(body)) == `frame fields not allowed` {
+			t.Fatalf("shouldn't get frame fields not allowed error: %q", body)
 		}
 	})
 

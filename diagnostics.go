@@ -219,10 +219,8 @@ func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 		numIndexes += 1
 		for _, frame := range index.Frames() {
 			numFrames += 1
-			if frame.rangeEnabled {
-				if fields, err := frame.GetFields(); err == nil {
-					bsiFieldCount += len(fields)
-				}
+			if fields, err := frame.GetFields(); err == nil {
+				bsiFieldCount += len(fields)
 			}
 			if frame.TimeQuantum() != "" {
 				timeQuantumEnabled = true
