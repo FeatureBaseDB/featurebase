@@ -169,10 +169,8 @@ func (s *Server) Open() error {
 	s.Handler.API.StatusHandler = s
 	s.Handler.API.URI = s.URI
 	s.Handler.API.Cluster = s.Cluster
-	s.Handler.Executor = e
-
-	s.Cluster.prefect = s.Handler
 	s.Handler.API.Executor = e
+	s.Handler.Executor = e
 
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster

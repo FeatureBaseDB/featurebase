@@ -43,9 +43,7 @@ import (
 type Handler struct {
 	Router *mux.Router
 
-	FileSystem       FileSystem
-	NormalRouter     *mux.Router
-	RestrictedRouter *mux.Router
+	FileSystem FileSystem
 
 	// The execution engine for running queries.
 	Executor interface {
@@ -83,27 +81,9 @@ func NewHandler() *Handler {
 		FileSystem: NopFileSystem,
 		Logger:     NopLogger,
 	}
-	BuildRouters(handler)
+	handler.Router = NewRouter(handler)
 	handler.populateValidators()
 	return handler
-}
-
-// BuildRouters creates Gorilla Mux http routers for both normal and restricted endpoints.
-func BuildRouters(handler *Handler) {
-	router := mux.NewRouter()
-	loadCommon(router, handler)
-	loadNormal(router, handler)
-	handler.NormalRouter = router
-	router.Use(handler.queryArgValidator)
-
-	// Restricted router.
-	router = mux.NewRouter()
-	loadCommon(router, handler)
-	loadRestricted(router, handler)
-	handler.RestrictedRouter = router
-	router.Use(handler.queryArgValidator)
-
-	handler.SetRestricted()
 }
 
 func (h *Handler) populateValidators() {
@@ -138,17 +118,9 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 	})
 }
 
-// SetNormal is a method of the SecurityManager interface which provides normal URI routing.
-func (h *Handler) SetNormal() {
-	h.Router = h.NormalRouter
-}
-
-// SetRestricted is a method of the SecurityManager interface which provides restricted URI routing.
-func (h *Handler) SetRestricted() {
-	h.Router = h.RestrictedRouter
-}
-
-func loadCommon(router *mux.Router, handler *Handler) {
+// NewRouter creates a new mux http router.
+func NewRouter(handler *Handler) *mux.Router {
+	router := mux.NewRouter()
 	router.HandleFunc("/", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
@@ -162,16 +134,9 @@ func loadCommon(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
-	router.Use(handler.queryArgValidator)
-}
 
-func loadRestricted(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
-	router.NotFoundHandler = http.HandlerFunc(handler.reportRestricted)
-	router.Use(handler.queryArgValidator)
-}
 
-func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
@@ -212,10 +177,8 @@ func loadNormal(router *mux.Router, handler *Handler) {
 	// For now we just do it for the most commonly used handler, /query
 	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
 
-}
-
-func (h *Handler) reportRestricted(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, fmt.Sprintf("not allowed in cluster state %s", h.API.State()), http.StatusMethodNotAllowed)
+	router.Use(handler.queryArgValidator)
+	return router
 }
 
 func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
@@ -1169,7 +1132,11 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve fragment owner nodes.
-	nodes := h.API.SliceNodes(r.Context(), index, slice)
+	nodes, err := h.API.SliceNodes(r.Context(), index, slice)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Write to response.
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
@@ -1727,7 +1694,7 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err := h.API.PostClusterMessage(r.Context(), r.Body)
+	err := h.API.ClusterMessage(r.Context(), r.Body)
 	if err != nil {
 		// TODO this was the previous behavior, but perhaps not everything is a bad request
 		http.Error(w, err.Error(), http.StatusBadRequest)

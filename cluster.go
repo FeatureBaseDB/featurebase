@@ -264,7 +264,6 @@ type Cluster struct {
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
-	prefect SecurityManager
 
 	Logger Logger
 
@@ -285,8 +284,7 @@ func NewCluster() *Cluster {
 		closing:             make(chan struct{}),
 		joining:             make(chan struct{}),
 
-		Logger:  NopLogger,
-		prefect: &NopSecurityManager{},
+		Logger: NopLogger,
 	}
 }
 
@@ -433,19 +431,11 @@ func (c *Cluster) setState(state string) {
 	var doCleanup bool
 
 	switch state {
-	case ClusterStateResizing:
-		c.prefect.SetRestricted()
 	case ClusterStateNormal:
-		c.prefect.SetNormal()
-		// Don't change routing for these states:
-		// - ClusterStateStarting
-
 		// If state is RESIZING -> NORMAL then run cleanup.
 		if c.state == ClusterStateResizing {
 			doCleanup = true
 		}
-	default:
-		panic(fmt.Sprintf("invalid cluster state: %s", state))
 	}
 
 	c.state = state
