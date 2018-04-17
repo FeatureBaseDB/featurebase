@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate stringer -type=apiFunc
+//go:generate stringer -type=apiMethod
 
 package pilosa
 
@@ -61,16 +61,16 @@ func NewAPI() *API {
 	}
 }
 
-// functionStates specifies the api functions that are valid for each
+// validAPIMethods specifies the api methods that are valid for each
 // cluster state.
-var functionStates = map[string]map[apiFunc]struct{}{
-	ClusterStateStarting: functionCommon,
-	ClusterStateNormal:   appendMap(functionCommon, functionNormal),
-	ClusterStateResizing: appendMap(functionCommon, functionResizing),
+var validAPIMethods = map[string]map[apiMethod]struct{}{
+	ClusterStateStarting: methodsCommon,
+	ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
+	ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
 }
 
-func appendMap(a, b map[apiFunc]struct{}) map[apiFunc]struct{} {
-	r := make(map[apiFunc]struct{})
+func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
+	r := make(map[apiMethod]struct{})
 	for k, v := range a {
 		r[k] = v
 	}
@@ -80,18 +80,18 @@ func appendMap(a, b map[apiFunc]struct{}) map[apiFunc]struct{} {
 	return r
 }
 
-func (api *API) validate(f apiFunc) error {
+func (api *API) validate(f apiMethod) error {
 	state := api.Cluster.State()
-	if _, ok := functionStates[state][f]; ok {
+	if _, ok := validAPIMethods[state][f]; ok {
 		return nil
 	}
-	return ApiFunctionNotAllowedError{errors.Errorf("api function %s not allowed in state %s", f, state)}
+	return ApiMethodNotAllowedError{errors.Errorf("api method %s not allowed in state %s", f, state)}
 }
 
 // Query parses a PQL query out of the request and executes it.
 func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
 	if err := api.validate(apiQuery); err != nil {
-		return QueryResponse{}, errors.Wrap(err, "validate api function")
+		return QueryResponse{}, errors.Wrap(err, "validate api method")
 	}
 
 	resp := QueryResponse{}
@@ -159,7 +159,7 @@ func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet
 // CreateIndex makes a new Pilosa index.
 func (api *API) CreateIndex(ctx context.Context, indexName string, options IndexOptions) (*Index, error) {
 	if err := api.validate(apiCreateIndex); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	// Create index.
@@ -184,7 +184,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 // Index retrieves the named index.
 func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 	if err := api.validate(apiIndex); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	index := api.Holder.Index(indexName)
@@ -198,7 +198,7 @@ func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 // nothing and returns no error.
 func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	if err := api.validate(apiDeleteIndex); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Delete index from the holder.
@@ -222,7 +222,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 // CreateFrame makes the named frame in the named index with the given options.
 func (api *API) CreateFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) (*Frame, error) {
 	if err := api.validate(apiCreateFrame); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	// Find index.
@@ -257,7 +257,7 @@ func (api *API) CreateFrame(ctx context.Context, indexName string, frameName str
 // action is taken.
 func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName string) error {
 	if err := api.validate(apiDeleteFrame); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Find index.
@@ -289,7 +289,7 @@ func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName str
 // CSV of the form <row>,<col>
 func (api *API) ExportCSV(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, w io.Writer) error {
 	if err := api.validate(apiExportCSV); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Validate that this handler owns the slice.
@@ -326,7 +326,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, frameName strin
 // SliceNodes returns the node and all replicas which should contain a slice's data.
 func (api *API) SliceNodes(ctx context.Context, indexName string, slice uint64) ([]*Node, error) {
 	if err := api.validate(apiSliceNodes); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	return api.Cluster.SliceNodes(indexName, slice), nil
@@ -337,7 +337,7 @@ func (api *API) SliceNodes(ctx context.Context, indexName string, slice uint64) 
 // the UnmarshalFragment API call.
 func (api *API) MarshalFragment(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) (io.WriterTo, error) {
 	if err := api.validate(apiMarshalFragment); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve fragment from holder.
@@ -353,7 +353,7 @@ func (api *API) MarshalFragment(ctx context.Context, indexName string, frameName
 // fragment's data.
 func (api *API) UnmarshalFragment(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, reader io.ReadCloser) error {
 	if err := api.validate(apiUnmarshalFragment); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve frame.
@@ -386,7 +386,7 @@ func (api *API) UnmarshalFragment(ctx context.Context, indexName string, frameNa
 // ids from a "block" which is a subdivision of a fragment.
 func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, error) {
 	if err := api.validate(apiFragmentBlockData); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	reqBytes, err := ioutil.ReadAll(body)
@@ -419,7 +419,7 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 // FragmentBlocks returns the checksums and block ids for all blocks in the specified fragment.
 func (api *API) FragmentBlocks(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) ([]FragmentBlock, error) {
 	if err := api.validate(apiFragmentBlocks); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve fragment from holder.
@@ -437,7 +437,7 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName string, frameName 
 // from replicas in the cluster and restores that data to it.
 func (api *API) RestoreFrame(ctx context.Context, indexName string, frameName string, host *URI) error {
 	if err := api.validate(apiRestoreFrame); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Create a client for the remote cluster.
@@ -515,7 +515,7 @@ func (api *API) Hosts(ctx context.Context) []*Node {
 // CreateInputDefinition is deprecated and will be removed. Do not use it.
 func (api *API) CreateInputDefinition(ctx context.Context, indexName string, inputDefName string, inputDef InputDefinitionInfo) error {
 	if err := api.validate(apiCreateInputDefinition); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	api.Logger.Printf(`CreateInputDefinition is deprecated and will be removed.
@@ -553,7 +553,7 @@ Please open an issue if you need to continue using it.`)
 // InputDefinition is deprecated and will be removed.
 func (api *API) InputDefinition(ctx context.Context, indexName string, inputDefName string) (*InputDefinition, error) {
 	if err := api.validate(apiInputDefinition); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	api.Logger.Printf(`InputDefinition is deprecated and will be removed.`)
@@ -573,7 +573,7 @@ func (api *API) InputDefinition(ctx context.Context, indexName string, inputDefN
 // DeleteInputDefinition is deprecated and will be removed.
 func (api *API) DeleteInputDefinition(ctx context.Context, indexName string, inputDefName string) error {
 	if err := api.validate(apiDeleteInputDefinition); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	api.Logger.Printf("DeleteInputDefinition is deprecated and will be removed.")
@@ -602,7 +602,7 @@ func (api *API) DeleteInputDefinition(ctx context.Context, indexName string, inp
 // WriteInput is deprecated and will be removed.
 func (api *API) WriteInput(ctx context.Context, indexName string, inputDefName string, reqs []interface{}) error {
 	if err := api.validate(apiWriteInput); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	api.Logger.Printf("WriteInput is deprecated and will be removed.")
@@ -630,7 +630,7 @@ func (api *API) WriteInput(ctx context.Context, indexName string, inputDefName s
 // RecalculateCaches forces all TopN caches to be updated. Used mainly for integration tests.
 func (api *API) RecalculateCaches(ctx context.Context) error {
 	if err := api.validate(apiRecalculateCaches); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	err := api.Broadcaster.SendSync(&internal.RecalculateCaches{})
@@ -645,7 +645,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 // the body and forwards it to the BroadcastHandler.
 func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 	if err := api.validate(apiClusterMessage); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Read entire body.
@@ -681,7 +681,7 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 // CreateField creates a new BSI field in the given index and frame.
 func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *Field) error {
 	if err := api.validate(apiCreateField); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve frame by name.
@@ -711,7 +711,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, frameName str
 // DeleteField deletes the given field.
 func (api *API) DeleteField(ctx context.Context, indexName string, frameName string, fieldName string) error {
 	if err := api.validate(apiDeleteField); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve frame by name.
@@ -741,7 +741,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, frameName str
 // Fields returns the fields in the given frame.
 func (api *API) Fields(ctx context.Context, indexName string, frameName string) ([]*Field, error) {
 	if err := api.validate(apiFields); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	index := api.Holder.index(indexName)
@@ -760,7 +760,7 @@ func (api *API) Fields(ctx context.Context, indexName string, frameName string) 
 // Views returns the views in the given frame.
 func (api *API) Views(ctx context.Context, indexName string, frameName string) ([]*View, error) {
 	if err := api.validate(apiViews); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve views.
@@ -777,7 +777,7 @@ func (api *API) Views(ctx context.Context, indexName string, frameName string) (
 // DeleteView removes the given view.
 func (api *API) DeleteView(ctx context.Context, indexName string, frameName string, viewName string) error {
 	if err := api.validate(apiDeleteView); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve frame.
@@ -811,7 +811,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 // IndexAttrDiff
 func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	if err := api.validate(apiIndexAttrDiff); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve index from holder.
@@ -845,7 +845,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 
 func (api *API) FrameAttrDiff(ctx context.Context, indexName string, frameName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	if err := api.validate(apiFrameAttrDiff); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve index from holder.
@@ -880,7 +880,7 @@ func (api *API) FrameAttrDiff(ctx context.Context, indexName string, frameName s
 // Import bulk imports data into a particular index,frame,slice.
 func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	if err := api.validate(apiImport); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
@@ -909,7 +909,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 // ImportValue bulk imports values into a particular field.
 func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest) error {
 	if err := api.validate(apiImportValue); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
@@ -928,7 +928,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 // ModifyIndexTimeQuantum changes the default time quantum on the given index.
 func (api *API) ModifyIndexTimeQuantum(ctx context.Context, indexName string, timeQuantum TimeQuantum) error {
 	if err := api.validate(apiModifyIndexTimeQuantum); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve index by name.
@@ -945,7 +945,7 @@ func (api *API) ModifyIndexTimeQuantum(ctx context.Context, indexName string, ti
 // what happens if there is already data in the frame?
 func (api *API) ModifyFrameTimeQuantum(ctx context.Context, indexName string, frameName string, timeQuantum TimeQuantum) error {
 	if err := api.validate(apiModifyFrameTimeQuantum); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	// Retrieve index by name.
@@ -1083,7 +1083,7 @@ func (api *API) inputJSONDataParser(req map[string]interface{}, index *Index, na
 // SetCoordinator makes a new Node the cluster coordinator.
 func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *Node, err error) {
 	if err := api.validate(apiSetCoordinator); err != nil {
-		return nil, nil, errors.Wrap(err, "validate api function")
+		return nil, nil, errors.Wrap(err, "validate api method")
 	}
 
 	oldNode = api.Cluster.nodeByID(api.Cluster.Coordinator)
@@ -1113,7 +1113,7 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 // removing the given node.
 func (api *API) RemoveNode(id string) (*Node, error) {
 	if err := api.validate(apiRemoveNode); err != nil {
-		return nil, errors.Wrap(err, "validate api function")
+		return nil, errors.Wrap(err, "validate api method")
 	}
 
 	removeNode := api.Cluster.nodeByID(id)
@@ -1132,7 +1132,7 @@ func (api *API) RemoveNode(id string) (*Node, error) {
 // ResizeAbort stops the current resize job.
 func (api *API) ResizeAbort() error {
 	if err := api.validate(apiResizeAbort); err != nil {
-		return errors.Wrap(err, "validate api function")
+		return errors.Wrap(err, "validate api method")
 	}
 
 	if !api.Cluster.IsCoordinator() {
@@ -1154,11 +1154,11 @@ func (api *API) Version() string {
 	return strings.TrimPrefix(Version, "v")
 }
 
-type apiFunc int
+type apiMethod int
 
 // API validation constants.
 const (
-	apiClusterMessage apiFunc = iota
+	apiClusterMessage apiMethod = iota
 	apiCreateField
 	apiCreateFrame
 	apiCreateIndex
@@ -1202,17 +1202,17 @@ const (
 	apiWriteInput
 )
 
-var functionCommon = map[apiFunc]struct{}{
+var methodsCommon = map[apiMethod]struct{}{
 	apiClusterMessage:  struct{}{},
 	apiMarshalFragment: struct{}{},
 	apiSetCoordinator:  struct{}{},
 }
 
-var functionResizing = map[apiFunc]struct{}{
+var methodsResizing = map[apiMethod]struct{}{
 	apiResizeAbort: struct{}{},
 }
 
-var functionNormal = map[apiFunc]struct{}{
+var methodsNormal = map[apiMethod]struct{}{
 	apiCreateField:            struct{}{},
 	apiCreateFrame:            struct{}{},
 	apiCreateIndex:            struct{}{},
