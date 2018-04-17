@@ -77,7 +77,6 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			RangeEnabled: true,
 			Fields: []*pilosa.Field{
 				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
 				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 20, Max: 25},
@@ -123,7 +122,6 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			RangeEnabled: true,
 			Fields: []*pilosa.Field{
 				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
 			},
@@ -161,7 +159,6 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			RangeEnabled: true,
 			Fields: []*pilosa.Field{
 				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
 			},
@@ -181,7 +178,6 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			RangeEnabled: true,
 			Fields: []*pilosa.Field{
 				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 20, Max: 30},
 			},
@@ -201,7 +197,6 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			RangeEnabled: true,
 			Fields: []*pilosa.Field{
 				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 20, Max: 30},
 			},

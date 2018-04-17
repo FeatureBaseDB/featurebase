@@ -99,7 +99,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 
 			// Create frame with schema and verify it exists.
 			if f, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled: true,
+				RangeEnabled: false,
 				Fields: []*pilosa.Field{
 					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
 					{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
@@ -124,16 +124,47 @@ func TestIndex_CreateFrame(t *testing.T) {
 			}
 		})
 
-		t.Run("ErrInverseRangeNotAllowed", func(t *testing.T) {
+		t.Run("ErrInverseRangeAllowed", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
-			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				InverseEnabled: true,
+			frame, err := index.CreateFrame("f", pilosa.FrameOptions{
 				RangeEnabled:   true,
-			}); err != pilosa.ErrInverseRangeNotAllowed {
+				InverseEnabled: true,
+				Fields: []*pilosa.Field{
+					&pilosa.Field{
+						Name: "myfield",
+						Type: pilosa.FieldTypeInt,
+						Min:  -20,
+						Max:  100,
+					},
+				},
+			})
+			if err != nil {
 				t.Fatal(err)
 			}
+
+			ch, err := frame.SetBit(pilosa.ViewStandard, 1, 2, nil)
+			if !ch || err != nil {
+				t.Fatal(ch, err)
+			}
+			ch, err = frame.SetBit(pilosa.ViewInverse, 1, 2, nil)
+			if !ch || err != nil {
+				t.Fatal(ch, err)
+			}
+			ch, err = frame.SetFieldValue(1, "myfield", 87)
+			if !ch || err != nil {
+				t.Fatal(ch, err)
+			}
+			views := frame.Views()
+			if len(views) != 3 {
+				var names string
+				for _, v := range views {
+					names = names + v.Name() + " "
+				}
+				t.Fatalf("Unexpected views: %s", names)
+			}
+
 		})
 
 		t.Run("ErrRangeCacheAllowed", func(t *testing.T) {
@@ -141,8 +172,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled: true,
-				CacheType:    pilosa.CacheTypeRanked,
+				CacheType: pilosa.CacheTypeRanked,
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -152,15 +182,14 @@ func TestIndex_CreateFrame(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled: true,
-				CacheType:    pilosa.CacheTypeNone,
-				CacheSize:    uint32(5),
+				CacheType: pilosa.CacheTypeNone,
+				CacheSize: uint32(5),
 			}); err != nil {
 				t.Fatal(err)
 			}
 		})
 
-		t.Run("ErrFrameFieldsNotAllowed", func(t *testing.T) {
+		t.Run("ErrFrameFieldsAllowed", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
@@ -168,7 +197,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 				Fields: []*pilosa.Field{
 					{Name: "field0", Type: pilosa.FieldTypeInt},
 				},
-			}); err != pilosa.ErrFrameFieldsNotAllowed {
+			}); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -178,7 +207,6 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled: true,
 				Fields: []*pilosa.Field{
 					{Name: "", Type: pilosa.FieldTypeInt},
 				},
@@ -192,7 +220,6 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled: true,
 				Fields: []*pilosa.Field{
 					{Name: "field0", Type: "bad_type"},
 				},
@@ -206,7 +233,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled: true,
+				RangeEnabled: true, // make sure we can still create frames with RangeEnabled: true after deprecation
 				Fields: []*pilosa.Field{
 					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 100, Max: 50},
 				},

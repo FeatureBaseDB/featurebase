@@ -106,7 +106,7 @@ The request payload is in JSON, and may contain the `options` field. The `option
 * `inverseEnabled` (boolean): Enables [the inverted view](../data-model/#inverse) for this frame if `true`.
 * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
-* `rangeEnabled` (boolean): Enables range-encoded fields in this frame.
+* `rangeEnabled` (boolean): DEPRECATED - has no effect, will be removed. All frames support BSI fields.
 * `fields` (array): List of range-encoded [fields](../data-model/#bsi-range-encoding).
 
 Each individual `field` contains the following:
@@ -130,7 +130,7 @@ curl localhost:10101/index/user/frame/language \
 ``` request
 curl localhost:10101/index/repository/frame/stats \
     -X POST \
-    -d '{"rangeEnabled": true, "fields": [{"name": "pullrequests", "type": "int", "min": 0, "max": 1000000}]}'
+    -d '{"fields": [{"name": "pullrequests", "type": "int", "min": 0, "max": 1000000}]}'
 ```
 ``` response
 {}

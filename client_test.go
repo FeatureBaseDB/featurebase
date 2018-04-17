@@ -310,7 +310,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true, Fields: []*pilosa.Field{&fld}})
+	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{Fields: []*pilosa.Field{&fld}})
 	if err != nil {
 		t.Fatal(err)
 	}

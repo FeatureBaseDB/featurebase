@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Group the write operations in syncBlock by MaxWritesPerRequest ([#950](https://github.com/pilosa/pilosa/pull/950))
 - Refactored HTTPClient handling ([#991](https://github.com/pilosa/pilosa/pull/991))
 - Remove FrameSchema. Move Fields to the Frame struct ([#907](https://github.com/pilosa/pilosa/pull/907))
+- Deprecated RangeEnabled option ([#1205](https://github.com/pilosa/pilosa/pull/1205))
 
 ### Removed
 

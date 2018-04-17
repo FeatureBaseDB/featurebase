@@ -259,7 +259,6 @@ In addition to storing rows of bits, a frame can also contain fields that store 
 curl localhost:10101/index/patients/frame/measurements \
      -X POST \
      -d '{"options":{
-              "rangeEnabled": true,
               "fields": [
                   {"name": "age", "type": "int", "min": 0, "max": 120},
                   {"name": "weight", "type": "int", "min": 0, "max": 500},

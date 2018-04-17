@@ -404,13 +404,7 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 
 	// Validate mutually exclusive options if ranges are enabled.
 	if opt.RangeEnabled {
-		if opt.InverseEnabled {
-			return nil, ErrInverseRangeNotAllowed
-		}
-	} else {
-		if len(opt.Fields) > 0 {
-			return nil, ErrFrameFieldsNotAllowed
-		}
+		i.Logger.Printf("RangeEnabled is deprecated - no need to set RangeEnabled to true when creating a frame")
 	}
 
 	// Validate fields.
@@ -452,9 +446,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 
 	f.inverseEnabled = opt.InverseEnabled
-	f.rangeEnabled = opt.RangeEnabled
-
-	f.rangeEnabled = opt.RangeEnabled
 
 	// Set fields.
 	f.fields = opt.Fields
