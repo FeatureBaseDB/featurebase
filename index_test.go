@@ -58,34 +58,11 @@ func TestIndex_CreateFrame(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
-			// Set index time quantum.
-			if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
-				t.Fatal(err)
-			}
-
 			// Create frame with explicit quantum.
 			f, err := index.CreateFrame("f", pilosa.FrameOptions{TimeQuantum: pilosa.TimeQuantum("YMDH")})
 			if err != nil {
 				t.Fatal(err)
 			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
-				t.Fatalf("unexpected frame time quantum: %s", q)
-			}
-		})
-
-		t.Run("Inherited", func(t *testing.T) {
-			index := test.MustOpenIndex()
-			defer index.Close()
-
-			// Set index time quantum.
-			if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
-				t.Fatal(err)
-			}
-
-			// Create frame.
-			f, err := index.CreateFrame("f", pilosa.FrameOptions{})
-			if err != nil {
-				t.Fatal(err)
-			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YM") {
 				t.Fatalf("unexpected frame time quantum: %s", q)
 			}
 		})
@@ -267,26 +244,6 @@ func TestIndex_DeleteFrame(t *testing.T) {
 	}
 }
 
-// Ensure index can set the default time quantum.
-func TestIndex_SetTimeQuantum(t *testing.T) {
-	index := test.MustOpenIndex()
-	defer index.Close()
-
-	// Set & retrieve time quantum.
-	if err := index.SetTimeQuantum(pilosa.TimeQuantum("YMDH")); err != nil {
-		t.Fatal(err)
-	} else if q := index.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
-		t.Fatalf("unexpected quantum: %s", q)
-	}
-
-	// Reload index and verify that it is persisted.
-	if err := index.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if q := index.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
-		t.Fatalf("unexpected quantum (reopen): %s", q)
-	}
-}
-
 // Ensure index can delete a frame.
 func TestIndex_InvalidName(t *testing.T) {
 	path, err := ioutil.TempDir("", "pilosa-index-")
@@ -404,18 +361,13 @@ func TestIndex_InputBits(t *testing.T) {
 	index := test.MustOpenIndex()
 	defer index.Close()
 
-	// Set index time quantum.
-	if err := index.SetTimeQuantum(pilosa.TimeQuantum("YM")); err != nil {
-		t.Fatal(err)
-	}
-
 	err := index.InputBits("f", bits)
 	if !strings.Contains(err.Error(), "Frame not found") {
 		t.Fatalf("Expected Frame not found error, actual error: %s", err)
 	}
 
 	// Create frame.
-	if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
+	if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{TimeQuantum: pilosa.TimeQuantum("YM")}); err != nil {
 		t.Fatal(err)
 	}
 

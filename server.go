@@ -367,9 +367,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			idx.SetRemoteMaxSlice(obj.Slice)
 		}
 	case *internal.CreateIndexMessage:
-		opt := IndexOptions{
-			TimeQuantum: TimeQuantum(obj.Meta.TimeQuantum),
-		}
+		opt := IndexOptions{}
 		_, err := s.Holder.CreateIndex(obj.Index, opt)
 		if err != nil {
 			return err

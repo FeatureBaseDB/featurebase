@@ -359,7 +359,6 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	}
 
 	// Update options.
-	index.SetTimeQuantum(opt.TimeQuantum)
 
 	h.indexes[index.Name()] = index
 

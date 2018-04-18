@@ -168,7 +168,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
-	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
@@ -456,45 +455,6 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
-
-// handlePatchIndexTimeQuantum handles PATCH /index/time_quantum request.
-func (h *Handler) handlePatchIndexTimeQuantum(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-
-	// Decode request.
-	var req patchIndexTimeQuantumRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Validate quantum.
-	tq, err := ParseTimeQuantum(req.TimeQuantum)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err = h.API.ModifyIndexTimeQuantum(r.Context(), indexName, tq); err != nil {
-		if err == ErrIndexNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(patchIndexTimeQuantumResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-type patchIndexTimeQuantumRequest struct {
-	TimeQuantum string `json:"timeQuantum"`
-}
-
-type patchIndexTimeQuantumResponse struct{}
 
 // handlePostIndexAttrDiff handles POST /index/attr/diff requests.
 func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request) {
