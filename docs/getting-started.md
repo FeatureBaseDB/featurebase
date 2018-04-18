@@ -4,7 +4,6 @@ weight = 3
 nav = [
      "Starting Pilosa",
      "Sample Project",
-     "Input Definition",
      "What's Next?",
 ]
 +++
@@ -110,14 +109,6 @@ docker exec -it pilosa /pilosa import -i repository -f language /language.csv
 ```
 
 Note that both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out [languages.txt](https://github.com/pilosa/getting-started/blob/master/languages.txt) to see the mapping for languages.
-
-### Input Definition
-
-<div class="warning">
-Input definition is deprecated as of v0.9.
-</div>
-
-Alternatively Pilosa can import JSON data using an [Input Definition](../input-definition/) describing the schema and ETL rules to process the data.
 
 #### Make Some Queries
 
