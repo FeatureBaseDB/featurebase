@@ -73,22 +73,6 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
-	t.Run("ErrIndexMetaCorrupt", func(t *testing.T) {
-		h := test.MustOpenHolder()
-		defer h.Close()
-
-		if _, err := h.CreateIndex("test", pilosa.IndexOptions{TimeQuantum: pilosa.TimeQuantum("YMDH")}); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.IndexPath("test"), ".meta"), 2); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "unexpected EOF") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
 	t.Run("ErrIndexAttrStoreCorrupt", func(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()

@@ -925,22 +925,6 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 	return err
 }
 
-// ModifyIndexTimeQuantum changes the default time quantum on the given index.
-func (api *API) ModifyIndexTimeQuantum(ctx context.Context, indexName string, timeQuantum TimeQuantum) error {
-	if err := api.validate(apiModifyIndexTimeQuantum); err != nil {
-		return errors.Wrap(err, "validate api method")
-	}
-
-	// Retrieve index by name.
-	index := api.Holder.Index(indexName)
-	if index == nil {
-		return ErrIndexNotFound
-	}
-
-	// Set default time quantum on index.
-	return index.SetTimeQuantum(timeQuantum)
-}
-
 // ModifyFrameTimeQuantum changes the time quantum on the given frame. TODO:
 // what happens if there is already data in the frame?
 func (api *API) ModifyFrameTimeQuantum(ctx context.Context, indexName string, frameName string, timeQuantum TimeQuantum) error {
@@ -1185,7 +1169,6 @@ const (
 	//apiMaxInverseSlices // not implemented
 	//apiMaxSlices // not implemented
 	apiModifyFrameTimeQuantum
-	apiModifyIndexTimeQuantum
 	apiQuery
 	apiRecalculateCaches
 	apiRemoveNode
@@ -1233,7 +1216,6 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiIndexAttrDiff:          struct{}{},
 	apiInputDefinition:        struct{}{},
 	apiModifyFrameTimeQuantum: struct{}{},
-	apiModifyIndexTimeQuantum: struct{}{},
 	apiQuery:                  struct{}{},
 	apiRecalculateCaches:      struct{}{},
 	apiRemoveNode:             struct{}{},
