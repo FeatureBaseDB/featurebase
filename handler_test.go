@@ -160,7 +160,7 @@ func TestHandler_ClusterResizeAbort(t *testing.T) {
 	t.Run("No resize job", func(t *testing.T) {
 		h := test.NewHandler()
 		h.API.Cluster = test.NewCluster(1)
-		h.SetRestricted()
+		h.API.Cluster.SetState(pilosa.ClusterStateResizing)
 
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/cluster/resize/abort", nil))

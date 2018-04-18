@@ -80,8 +80,12 @@ generate-protoc: require-protoc require-protoc-gen-gofast
 generate-statik: require-statik
 	go generate github.com/pilosa/pilosa/statik
 
+# `go generate` stringers
+generate-stringer:
+	go generate github.com/pilosa/pilosa
+
 # `go generate` all needed packages
-generate: generate-protoc generate-statik
+generate: generate-protoc generate-statik generate-stringer
 
 # Create Docker image from Dockerfile
 docker:

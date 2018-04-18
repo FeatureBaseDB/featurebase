@@ -101,6 +101,9 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	m0.Server.Cluster.SetState(pilosa.ClusterStateNormal)
+	m1.Server.Cluster.SetState(pilosa.ClusterStateNormal)
+
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// Expected indexes and Frames
