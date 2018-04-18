@@ -201,7 +201,6 @@ Each Pilosa cluster is configured by default to share anonymous usage details wi
 - **NumCPU:** Number of Cores per Node
 - **BSIEnabled:** Bit Slice Index Frames in use.
 - **TimeQuantumEnabled:** Time Quantum Frames in use.
-- **InverseEnabled:** Inverse Frames in use.
 - **NumIndexes:** Number of Indexes in the Cluster.
 - **NumFrames:** Number of Frames in the Cluster.
 - **NumSlices:** Number of Slices in the Cluster.

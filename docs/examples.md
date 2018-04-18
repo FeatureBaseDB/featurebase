@@ -205,7 +205,7 @@ For more examples and details, see this [ipython notebook](https://github.com/pi
 
 The notion of chemical similarity (or molecular similarity) plays an important role in predicting the properties of chemical compounds, designing chemicals with a predefined set of properties, and—especially—conducting drug design studies. All of these are accomplished by screening large indexes containing structures of available or potentially available chemicals.
 
-We'd like to use Pilosa to search through millions of molecules and find those most similar to a given molecule. There are examples where --- tried to solve this chemical similarity search problem using other indexes (MongoDB, PostgreSQL), so it will be interesting to compare those results to Pilosa using the same data set.
+We'd like to use Pilosa to search through millions of molecules and find those most similar to a given molecule. Others have tried to solve this chemical similarity search problem using databases (MongoDB, PostgreSQL), so it will be interesting to compare those results to Pilosa using the same data set.
 
 Calculation of the similarity of any two molecules is achieved by comparing their molecular fingerprints. These fingerprints are comprised of structural information about the molecule which has been encoded as a series of bits. The most commonly used algorithm to calculate the similarity is the Tanimoto coefficient.
 ```
@@ -218,7 +218,7 @@ All source code to calculate tanimoto for molecule fingerprint using Pilosa is a
 
 #### Data model
 
-We use the latest ChEMBL release chembl_22.sdf for test data. Each molecule in the SD file gives us the canonical isomeric SMILES (Simplified molecular-input line-entry system) and chembl_id. 
+We use the [latest ChEMBL release](ftp://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/) chembl_22.sdf for test data. Each molecule in the SD file gives us the canonical isomeric SMILES (Simplified molecular-input line-entry system) and chembl_id. 
 
 Because Pilosa store information as a series of bits, we use RDKit in Python to convert molecules from their SMILES encoding to Morgan fingerprints, which are arrays of “on” bit positions.
 
