@@ -201,6 +201,10 @@ For more examples and details, see this [ipython notebook](https://github.com/pi
 
 ### Chemical similarity search
 
+<div class="warning">
+This example uses the inverse frames feature, which is deprecated as of v0.9.0. This will soon be updated to reflect the current Pilosa API.
+</div>
+
 #### Overview
 
 The notion of chemical similarity (or molecular similarity) plays an important role in predicting the properties of chemical compounds, designing chemicals with a predefined set of properties, and—especially—conducting drug design studies. All of these are accomplished by screening large indexes containing structures of available or potentially available chemicals.
