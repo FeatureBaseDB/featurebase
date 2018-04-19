@@ -80,7 +80,11 @@ type Command struct {
 
 // NewCommand returns a new instance of Main.
 func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
-	s, _ := pilosa.NewServer()
+	s, err := pilosa.NewServer()
+	if err != nil {
+		panic(err)
+	}
+
 	return &Command{
 		Server: s,
 		Config: NewConfig(),
