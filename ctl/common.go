@@ -18,13 +18,14 @@ import (
 	"crypto/tls"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
 	"github.com/spf13/pflag"
 )
 
 // CommandWithTLSSupport is the interface for commands which has TLS settings
 type CommandWithTLSSupport interface {
 	TLSHost() string
-	TLSConfiguration() pilosa.TLSConfig
+	TLSConfiguration() server.TLSConfig
 }
 
 // SetTLSConfig creates common TLS flags

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
 )
 
 // ImportCommand represents a command for bulk importing data.
@@ -66,7 +67,7 @@ type ImportCommand struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	TLS pilosa.TLSConfig
+	TLS server.TLSConfig
 }
 
 // NewImportCommand returns a new instance of ImportCommand.
@@ -447,6 +448,6 @@ func (cmd *ImportCommand) TLSHost() string {
 	return cmd.Host
 }
 
-func (cmd *ImportCommand) TLSConfiguration() pilosa.TLSConfig {
+func (cmd *ImportCommand) TLSConfiguration() server.TLSConfig {
 	return cmd.TLS
 }

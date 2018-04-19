@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/cmd"
 	_ "github.com/pilosa/pilosa/test"
+	"github.com/pilosa/pilosa/toml"
 )
 
 func TestServerHelp(t *testing.T) {
@@ -65,7 +65,7 @@ func TestServerConfig(t *testing.T) {
 				v.Check(cmd.Server.Config.Bind, "localhost:10111")
 				v.Check(cmd.Server.Config.Cluster.ReplicaN, 2)
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:10111", "localhost:10110"})
-				v.Check(cmd.Server.Config.Cluster.LongQueryTime, pilosa.Duration(time.Second*90))
+				v.Check(cmd.Server.Config.Cluster.LongQueryTime, toml.Duration(time.Second*90))
 				v.Check(cmd.Server.Config.MaxWritesPerRequest, 2000)
 				return v.Error()
 			},
@@ -86,7 +86,7 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:1110", "localhost:1111"})
-				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*9))
+				v.Check(cmd.Server.Config.AntiEntropy.Interval, toml.Duration(time.Minute*9))
 				return v.Error()
 			},
 		},
@@ -113,7 +113,7 @@ func TestServerConfig(t *testing.T) {
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:19444"})
-				v.Check(cmd.Server.Config.AntiEntropy.Interval, pilosa.Duration(time.Minute*11))
+				v.Check(cmd.Server.Config.AntiEntropy.Interval, toml.Duration(time.Minute*11))
 				v.Check(cmd.Server.CPUProfile, profFile.Name())
 				v.Check(cmd.Server.CPUTime, time.Minute)
 				v.Check(cmd.Server.Config.LogPath, logFile.Name())

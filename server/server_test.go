@@ -30,6 +30,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -489,8 +490,8 @@ func GenerateSetCommands(n int, rand *rand.Rand) []SetCommand {
 }
 
 // ParseConfig parses s into a Config.
-func ParseConfig(s string) (pilosa.Config, error) {
-	var c pilosa.Config
+func ParseConfig(s string) (server.Config, error) {
+	var c server.Config
 	_, err := toml.Decode(s, &c)
 	return c, err
 }
