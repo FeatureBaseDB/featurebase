@@ -55,7 +55,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	m0.Server.Cluster.Coordinator = m0.Server.NodeID
 	m0.Server.Cluster.Topology = &pilosa.Topology{NodeIDs: []string{m0.Server.NodeID, m1.Server.NodeID}}
 	m0.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m0.Server.Logger)
-	gossipMemberSet0, err := gossip.NewGossipMemberSet(m0.Server.URI.HostPort(), m0.Config, m0.Server)
+	gossipMemberSet0, err := gossip.NewGossipMemberSet(m0.Server.URI.HostPort(), m0.Server.URI.Host(), m0.Config.Gossip, m0.Server)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	m1.Server.Cluster.Coordinator = m0.Server.NodeID
 	m1.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m1.Server.Logger)
-	gossipMemberSet1, err := gossip.NewGossipMemberSet(m1.Server.URI.HostPort(), m1.Config, m1.Server)
+	gossipMemberSet1, err := gossip.NewGossipMemberSet(m1.Server.URI.HostPort(), m1.Server.URI.Host(), m1.Config.Gossip, m1.Server)
 	if err != nil {
 		t.Fatal(err)
 	}

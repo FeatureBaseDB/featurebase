@@ -56,7 +56,7 @@ type Command struct {
 	Server *pilosa.Server
 
 	// Configuration.
-	Config *pilosa.Config
+	Config *Config
 
 	// Profiling options.
 	CPUProfile string
@@ -80,9 +80,10 @@ type Command struct {
 
 // NewCommand returns a new instance of Main.
 func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
+	s, _ := pilosa.NewServer()
 	return &Command{
-		Server: pilosa.NewServer(),
-		Config: pilosa.NewConfig(),
+		Server: s,
+		Config: NewConfig(),
 
 		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 
@@ -150,11 +151,6 @@ func (m *Command) SetupLogger() error {
 
 // SetupServer uses the cluster configuration to set up this server.
 func (m *Command) SetupServer() error {
-	err := m.Config.Validate()
-	if err != nil {
-		return err
-	}
-
 	m.Server.Handler.Logger = m.Server.Logger
 	m.Server.Holder.Logger = m.Server.Logger
 	m.Server.Holder.Stats.SetLogger(m.Server.Logger)
@@ -278,7 +274,7 @@ func (m *Command) SetupNetworking() error {
 	}
 
 	m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m.Server.Logger)
-	gossipMemberSet, err := gossip.NewGossipMemberSet(m.Server.NodeID, m.Config, m.Server, gossip.WithLogger(m.logger), gossip.WithTransport(transport))
+	gossipMemberSet, err := gossip.NewGossipMemberSet(m.Server.NodeID, m.Server.URI.Host(), m.Config.Gossip, m.Server, gossip.WithLogger(m.logger), gossip.WithTransport(transport))
 	if err != nil {
 		return err
 	}

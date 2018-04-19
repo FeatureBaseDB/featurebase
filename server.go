@@ -17,7 +17,6 @@ package pilosa
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -31,6 +30,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -44,6 +44,16 @@ const (
 var _ Broadcaster = &Server{}
 var _ BroadcastHandler = &Server{}
 var _ StatusHandler = &Server{}
+
+// ServerOption is a functional option type for pilosa.Server
+type ServerOption func(s *Server) error
+
+func OptServerLogger(l Logger) ServerOption {
+	return func(s *Server) error {
+		s.Logger = l
+		return nil
+	}
+}
 
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
@@ -90,7 +100,7 @@ type Server struct {
 }
 
 // NewServer returns a new instance of Server.
-func NewServer() *Server {
+func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
 		closing: make(chan struct{}),
 
@@ -107,16 +117,23 @@ func NewServer() *Server {
 
 		NewAttrStore: NewNopAttrStore,
 
-		AntiEntropyInterval: time.Duration(NewConfig().AntiEntropy.Interval),
+		AntiEntropyInterval: time.Minute * 10,
 		MetricInterval:      0,
 		DiagnosticInterval:  0,
 
 		Logger: NopLogger,
 	}
 
+	for _, opt := range opts {
+		err := opt(s)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
+	}
+
 	s.Handler.API = NewAPI()
 	s.Handler.API.Holder = s.Holder
-	return s
+	return s, nil
 }
 
 // Open opens and initializes the server.

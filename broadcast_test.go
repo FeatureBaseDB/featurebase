@@ -53,7 +53,10 @@ func testMessageMarshal(t *testing.T, m proto.Message) {
 // Ensure that BroadcastReceiver can register a BroadcastHandler.
 func TestBroadcast_BroadcastReceiver(t *testing.T) {
 
-	s := pilosa.NewServer()
+	s, err := pilosa.NewServer()
+	if err != nil {
+		t.Fatalf("getting new server: %v", err)
+	}
 
 	sbr := NewSimpleBroadcastReceiver()
 	sbh := NewSimpleBroadcastHandler()
