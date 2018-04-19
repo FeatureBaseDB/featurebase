@@ -14,8 +14,8 @@ message Pair {
 	uint64 Count = 2;
 }
 
-message SumCount {
-	int64 Sum = 1;
+message ValCount {
+	int64 Val = 1;
 	int64 Count = 2;
 }
 
@@ -64,7 +64,7 @@ message QueryResult {
 	Bitmap Bitmap = 1;
 	uint64 N = 2;
 	repeated Pair Pairs = 3;
-	SumCount SumCount = 5;
+	ValCount ValCount = 5;
 	bool Changed = 4;
 }
 

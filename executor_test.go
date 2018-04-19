@@ -658,7 +658,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			}
 			if result, err := e.Execute(context.Background(), "i", test.MustParse(pql), nil, nil); err != nil {
 				t.Fatal(err)
-			} else if !reflect.DeepEqual(result[0], pilosa.MinCount{Min: tt.exp, Count: tt.cnt}) {
+			} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
 				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
 			}
 		}
@@ -684,7 +684,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			}
 			if result, err := e.Execute(context.Background(), "i", test.MustParse(pql), nil, nil); err != nil {
 				t.Fatal(err)
-			} else if !reflect.DeepEqual(result[0], pilosa.MaxCount{Max: tt.exp, Count: tt.cnt}) {
+			} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
 				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
 			}
 		}
@@ -738,7 +738,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	t.Run("NoFilter", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=f, field=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(result[0], pilosa.SumCount{Sum: 200, Count: 5}) {
+		} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: 200, Count: 5}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -746,7 +746,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	t.Run("WithFilter", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=f, row=0), frame=f, field=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(result[0], pilosa.SumCount{Sum: 80, Count: 2}) {
+		} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: 80, Count: 2}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
