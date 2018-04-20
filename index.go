@@ -481,46 +481,6 @@ func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p indexInfoSlice) Len() int           { return len(p) }
 func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
-// MergeSchemas combines indexes and frames from a and b into one schema.
-func MergeSchemas(a, b []*IndexInfo) []*IndexInfo {
-	// Generate a map from both schemas.
-	m := make(map[string]map[string]map[string]struct{})
-	for _, idxs := range [][]*IndexInfo{a, b} {
-		for _, idx := range idxs {
-			if m[idx.Name] == nil {
-				m[idx.Name] = make(map[string]map[string]struct{})
-			}
-			for _, frame := range idx.Frames {
-				if m[idx.Name][frame.Name] == nil {
-					m[idx.Name][frame.Name] = make(map[string]struct{})
-				}
-				for _, view := range frame.Views {
-					m[idx.Name][frame.Name][view.Name] = struct{}{}
-				}
-			}
-		}
-	}
-
-	// Generate new schema from map.
-	idxs := make([]*IndexInfo, 0, len(m))
-	for idx, frames := range m {
-		di := &IndexInfo{Name: idx}
-		for frame, views := range frames {
-			fi := &FrameInfo{Name: frame}
-			for view := range views {
-				fi.Views = append(fi.Views, &ViewInfo{Name: view})
-			}
-			sort.Sort(viewInfoSlice(fi.Views))
-			di.Frames = append(di.Frames, fi)
-		}
-		sort.Sort(frameInfoSlice(di.Frames))
-		idxs = append(idxs, di)
-	}
-	sort.Sort(indexInfoSlice(idxs))
-
-	return idxs
-}
-
 // EncodeIndexes converts a into its internal representation.
 func EncodeIndexes(a []*Index) []*internal.Index {
 	other := make([]*internal.Index, len(a))
