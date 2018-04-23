@@ -49,15 +49,13 @@ func NewMain() *Main {
 	}
 
 	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
-	m.Server.Network = *Network
-	m.Server.NewAttrStore = NewAttrStore
-	m.Server.Holder.NewAttrStore = NewAttrStore
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
 	m.Command.Stdin = &m.Stdin
 	m.Command.Stdout = &m.Stdout
 	m.Command.Stderr = &m.Stderr
+	m.SetupServer()
 
 	if testing.Verbose() {
 		m.Command.Stdout = io.MultiWriter(os.Stdout, m.Command.Stdout)
@@ -101,6 +99,7 @@ func runMainWithCluster(size int) ([]*Main, error) {
 
 	for i := 0; i < size; i++ {
 		m := NewMainWithCluster(i == 0)
+		m.Config.Cluster.Disabled = false
 
 		gossipSeeds[i], err = m.RunWithTransport(gossipHost, gossipPort, gossipSeeds[:i])
 		if err != nil {
@@ -136,12 +135,16 @@ func (m *Main) Reopen() error {
 	}
 
 	// Create new main with the same config.
-	config := m.Config
+	config := m.Command.Config
 	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
-	m.Server.Network = *Network
+	m.Command.Config = config
+	err := m.SetupServer()
+	if err != nil {
+		return errors.Wrap(err, "setting up server")
+	}
+
 	m.Server.NewAttrStore = boltdb.NewAttrStore
 	m.Server.Holder.NewAttrStore = m.Server.NewAttrStore
-	m.Config = config
 
 	// Run new program.
 	if err := m.Run(); err != nil {
@@ -170,12 +173,6 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (
 
 	// SetupServer
 	err = m.SetupServer()
-	if err != nil {
-		return seed, err
-	}
-
-	// Open server listener.
-	err = m.Server.OpenListener()
 	if err != nil {
 		return seed, err
 	}
@@ -221,7 +218,7 @@ func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
 
 // Client returns a client to connect to the program.
 func (m *Main) Client() *pilosa.InternalHTTPClient {
-	client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), server.GetHTTPClient(nil))
 	if err != nil {
 		panic(err)
 	}

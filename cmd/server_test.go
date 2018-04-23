@@ -37,8 +37,6 @@ func TestServerHelp(t *testing.T) {
 func TestServerConfig(t *testing.T) {
 	actualDataDir, err := ioutil.TempDir("", "")
 	failErr(t, err, "making data dir")
-	profFile, err := ioutil.TempFile("", "")
-	failErr(t, err, "making temp file")
 	logFile, err := ioutil.TempFile("", "")
 	failErr(t, err, "making log file")
 	tests := []commandTest{
@@ -93,7 +91,7 @@ func TestServerConfig(t *testing.T) {
 		// TEST 2
 		{
 			args: []string{"server", "--log-path", logFile.Name(), "--cluster.disabled", "true"},
-			env:  map[string]string{"PILOSA_PROFILE_CPU_TIME": "1m"},
+			env:  map[string]string{},
 			cfgFileContent: `
 	bind = "localhost:19444"
 	data-dir = "` + actualDataDir + `"
@@ -103,9 +101,6 @@ func TestServerConfig(t *testing.T) {
 		]
 	[anti-entropy]
 		interval = "11m0s"
-	[profile]
-		cpu = "` + profFile.Name() + `"
-		cpu-time = "35s"
 	[metric]
 		service = "statsd"
 		host = "127.0.0.1:8125"
@@ -114,8 +109,6 @@ func TestServerConfig(t *testing.T) {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:19444"})
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, toml.Duration(time.Minute*11))
-				v.Check(cmd.Server.CPUProfile, profFile.Name())
-				v.Check(cmd.Server.CPUTime, time.Minute)
 				v.Check(cmd.Server.Config.LogPath, logFile.Name())
 				v.Check(cmd.Server.Config.Metric.Service, "statsd")
 				v.Check(cmd.Server.Config.Metric.Host, "127.0.0.1:8125")
@@ -146,6 +139,9 @@ func TestServerConfig(t *testing.T) {
 		select {
 		case <-cmd.Server.Started:
 		case <-executed:
+		}
+		if execErr != nil {
+			t.Fatalf("executing server command: %v", execErr)
 		}
 		err := cmd.Server.Close()
 		failErr(t, err, "closing pilosa server command")

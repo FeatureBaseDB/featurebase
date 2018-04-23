@@ -15,7 +15,6 @@
 package pilosa
 
 import (
-	"context"
 	"encoding/json"
 	"expvar"
 	"fmt"
@@ -35,7 +34,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
-	"github.com/pilosa/pilosa/pql"
 	"github.com/pkg/errors"
 )
 
@@ -44,11 +42,6 @@ type Handler struct {
 	Router *mux.Router
 
 	FileSystem FileSystem
-
-	// The execution engine for running queries.
-	Executor interface {
-		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
-	}
 
 	Logger Logger
 

@@ -55,46 +55,145 @@ func OptServerLogger(l Logger) ServerOption {
 	}
 }
 
+func OptServerReplicaN(n int) ServerOption {
+	return func(s *Server) error {
+		s.Cluster.ReplicaN = n
+		return nil
+	}
+}
+
+func OptServerDataDir(dir string) ServerOption {
+	return func(s *Server) error {
+		s.Cluster.Path = dir
+		s.Holder.Path = dir
+		return nil
+	}
+}
+
+func OptServerAttrStoreFunc(af func(string) AttrStore) ServerOption {
+	return func(s *Server) error {
+		s.NewAttrStore = af
+		s.Holder.NewAttrStore = af
+		return nil
+	}
+}
+
+func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.AntiEntropyInterval = interval
+		return nil
+	}
+}
+
+func OptServerLongQueryTime(dur time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.Cluster.LongQueryTime = dur
+		return nil
+	}
+}
+
+func OptServerHandler(h *Handler) ServerOption {
+	return func(s *Server) error {
+		s.Handler = h
+		return nil
+	}
+}
+
+func OptServerMaxWritesPerRequest(n int) ServerOption {
+	return func(s *Server) error {
+		s.MaxWritesPerRequest = n
+		return nil
+	}
+}
+
+func OptServerMetricInterval(dur time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.MetricInterval = dur
+		return nil
+	}
+}
+
+func OptServerSystemInfo(si SystemInfo) ServerOption {
+	return func(s *Server) error {
+		s.SystemInfo = si
+		return nil
+	}
+}
+
+func OptServerGCNotifier(gcn GCNotifier) ServerOption {
+	return func(s *Server) error {
+		s.GCNotifier = gcn
+		return nil
+	}
+}
+
+func OptServerRemoteClient(c *http.Client) ServerOption {
+	return func(s *Server) error {
+		s.RemoteClient = c
+		s.Cluster.RemoteClient = c
+		return nil
+	}
+}
+
+func OptServerStatsClient(sc StatsClient) ServerOption {
+	return func(s *Server) error {
+		s.Holder.Stats = sc
+		return nil
+	}
+}
+
+func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.DiagnosticInterval = dur
+		return nil
+	}
+}
+
+func OptServerListener(ln net.Listener) ServerOption {
+	return func(s *Server) error {
+		s.ln = ln
+
+		return nil
+	}
+}
+
+func OptServerURI(uri *URI) ServerOption {
+	return func(s *Server) error {
+		s.URI = *uri
+		return nil
+	}
+}
+
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
-	ln net.Listener
-
 	// Close management.
 	wg      sync.WaitGroup
 	closing chan struct{}
 
-	// Data storage and HTTP interface.
-	Holder            *Holder
+	// Internal
+	Holder      *Holder
+	Cluster     *Cluster
+	diagnostics *DiagnosticsCollector
+
+	// External
 	Handler           *Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
 	Gossiper          Gossiper
 	RemoteClient      *http.Client
+	SystemInfo        SystemInfo
+	GCNotifier        GCNotifier
+	NewAttrStore      func(string) AttrStore
+	Logger            Logger
+	TLS               *tls.Config
+	ln                net.Listener
 
-	// Cluster configuration.
-	Network     string
-	NodeID      string
-	URI         URI
-	Cluster     *Cluster
-	diagnostics *DiagnosticsCollector
-	SystemInfo  SystemInfo
-
-	GCNotifier GCNotifier
-
-	NewAttrStore func(string) AttrStore
-
-	// Background monitoring intervals.
+	NodeID              string
+	URI                 URI
 	AntiEntropyInterval time.Duration
 	MetricInterval      time.Duration
 	DiagnosticInterval  time.Duration
-
-	// TLS configuration
-	TLS *tls.Config
-
-	// Misc options.
 	MaxWritesPerRequest int
-
-	Logger Logger
 
 	defaultClient InternalClient
 }
@@ -102,16 +201,14 @@ type Server struct {
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
-		closing: make(chan struct{}),
-
+		closing:           make(chan struct{}),
+		Cluster:           NewCluster(),
 		Holder:            NewHolder(),
 		Handler:           NewHandler(),
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
 		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
 		SystemInfo:        NewNopSystemInfo(),
-
-		Network: "tcp",
 
 		GCNotifier: NopGCNotifier,
 
@@ -131,20 +228,25 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	s.Handler.API = NewAPI()
-	s.Handler.API.Holder = s.Holder
+	s.Holder.Logger = s.Logger
+	s.Holder.Stats.SetLogger(s.Logger)
+
+	s.Cluster.Logger = s.Logger
+	s.Cluster.Holder = s.Holder
+	s.Cluster.RemoteClient = s.RemoteClient
+	// update URI port with actual listener port. TODO this should probably be done outside of here.
+	if s.URI.Port() == 0 {
+		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
+	}
 	return s, nil
 }
 
 // Open opens and initializes the server.
 func (s *Server) Open() error {
-	s.Handler.API.Logger = s.Logger // TODO do this in NewServer with functional options
 	s.Logger.Printf("open server")
 	// s.ln can be configured prior to Open() via s.OpenListener().
 	if s.ln == nil {
-		if err := s.OpenListener(); err != nil {
-			return err
-		}
+		return errors.New("Must pass a listener option to NewServer")
 	}
 
 	// Get or create NodeID.
@@ -181,13 +283,13 @@ func (s *Server) Open() error {
 	s.Cluster.MaxWritesPerRequest = s.MaxWritesPerRequest
 
 	// Initialize HTTP handler.
+	s.Handler.API.Holder = s.Holder
 	s.Handler.API.Broadcaster = s.Broadcaster
 	s.Handler.API.BroadcastHandler = s
 	s.Handler.API.StatusHandler = s
 	s.Handler.API.URI = s.URI
 	s.Handler.API.Cluster = s.Cluster
 	s.Handler.API.Executor = e
-	s.Handler.Executor = e
 
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster
@@ -234,43 +336,6 @@ func (s *Server) Open() error {
 	return nil
 }
 
-// OpenListener opens a listener for the Server.
-func (s *Server) OpenListener() error {
-	s.Logger.Printf("open server listener: %s", s.URI)
-	if s.ln != nil {
-		return fmt.Errorf("a listener already exists for server: %s", s.URI)
-	}
-
-	var ln net.Listener
-	var err error
-
-	// If bind URI has the https scheme, enable TLS
-	if s.URI.Scheme() == "https" && s.TLS != nil {
-		ln, err = tls.Listen("tcp", s.URI.HostPort(), s.TLS)
-		if err != nil {
-			return err
-		}
-	} else if s.URI.Scheme() == "http" {
-		// Open HTTP listener to determine port (if specified as :0).
-		ln, err = net.Listen(s.Network, s.URI.HostPort())
-		if err != nil {
-			return fmt.Errorf("net.Listen: %v", err)
-		}
-	} else {
-		return fmt.Errorf("unsupported scheme: %s", s.URI.Scheme())
-	}
-
-	s.ln = ln
-
-	if s.URI.Port() == 0 {
-		// If the port is 0, it is set automatically.
-		// Find out automatically set port and update the host.
-		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
-	}
-
-	return nil
-}
-
 // Close closes the server and waits for it to shutdown.
 func (s *Server) Close() error {
 	// Notify goroutines to stop.
@@ -310,25 +375,6 @@ func (s *Server) Addr() net.Addr {
 		return nil
 	}
 	return s.ln.Addr()
-}
-func GetHTTPClient(t *tls.Config) *http.Client {
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          1000,
-		MaxIdleConnsPerHost:   200,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-	if t != nil {
-		transport.TLSClientConfig = t
-	}
-	return &http.Client{Transport: transport}
 }
 
 func (s *Server) monitorAntiEntropy() {
