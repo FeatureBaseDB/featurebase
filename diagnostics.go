@@ -168,23 +168,23 @@ func (d *DiagnosticsCollector) logErr(err error) bool {
 
 // EnrichWithOSInfo adds OS information to the diagnostics payload.
 func (d *DiagnosticsCollector) EnrichWithOSInfo() {
-	uptime, err := d.server.SystemInfo.Uptime()
+	uptime, err := d.server.systemInfo.Uptime()
 	if !d.logErr(err) {
 		d.Set("HostUptime", uptime)
 	}
-	platform, err := d.server.SystemInfo.Platform()
+	platform, err := d.server.systemInfo.Platform()
 	if !d.logErr(err) {
 		d.Set("OSPlatform", platform)
 	}
-	family, err := d.server.SystemInfo.Family()
+	family, err := d.server.systemInfo.Family()
 	if !d.logErr(err) {
 		d.Set("OSFamily", family)
 	}
-	version, err := d.server.SystemInfo.OSVersion()
+	version, err := d.server.systemInfo.OSVersion()
 	if !d.logErr(err) {
 		d.Set("OSVersion", version)
 	}
-	kernelVersion, err := d.server.SystemInfo.KernelVersion()
+	kernelVersion, err := d.server.systemInfo.KernelVersion()
 	if !d.logErr(err) {
 		d.Set("OSKernelVersion", kernelVersion)
 	}
@@ -192,15 +192,15 @@ func (d *DiagnosticsCollector) EnrichWithOSInfo() {
 
 // EnrichWithMemoryInfo adds memory information to the diagnostics payload.
 func (d *DiagnosticsCollector) EnrichWithMemoryInfo() {
-	memFree, err := d.server.SystemInfo.MemFree()
+	memFree, err := d.server.systemInfo.MemFree()
 	if !d.logErr(err) {
 		d.Set("MemFree", memFree)
 	}
-	memTotal, err := d.server.SystemInfo.MemTotal()
+	memTotal, err := d.server.systemInfo.MemTotal()
 	if !d.logErr(err) {
 		d.Set("MemTotal", memTotal)
 	}
-	memUsed, err := d.server.SystemInfo.MemUsed()
+	memUsed, err := d.server.systemInfo.MemUsed()
 	if !d.logErr(err) {
 		d.Set("MemUsed", memUsed)
 	}
