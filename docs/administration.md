@@ -48,9 +48,9 @@ On Mac OS X, `ulimit` does not behave predictably. [This blog post](https://blog
 
 #### Importing
 
-The import API expects a csv of RowID,ColumnID's.
+The import API expects a csv of rowID,columnID's.
 
-When importing large datasets remember it is much faster to pre sort the data by RowID and then by ColumnID in ascending order. You can use the `--sort` flag to do that. Also, avoid querying Pilosa until the import is complete, otherwise you will experience inconsistent results.
+When importing large datasets remember it is much faster to pre sort the data by row ID and then by column ID in ascending order. You can use the `--sort` flag to do that. Also, avoid querying Pilosa until the import is complete, otherwise you will experience inconsistent results.
 
 ```
 pilosa import --sort -i project -f stargazer project-stargazer.csv
@@ -70,7 +70,7 @@ pilosa import -i project -f stargazer --field star_count project-stargazer-count
 
 #### Exporting
 
-Exporting Data to csv can be performed on a live instance of Pilosa. You need to specify the Index, Frame, and View(default is standard). The API also expects the slice number, but the `pilosa export` sub command will export all slices within a Frame. The data will be in csv format RowID,ColumnID and sorted by column ID.
+Exporting Data to csv can be performed on a live instance of Pilosa. You need to specify the Index, Frame, and View(default is standard). The API also expects the slice number, but the `pilosa export` sub command will export all slices within a Frame. The data will be in csv format rowID,columnID and sorted by columnID.
 ```
 curl "http://localhost:10101/export?index=repository&frame=stargazer&slice=0&view=standard" \
      --header "Accept: text/csv"
