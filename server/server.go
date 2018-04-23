@@ -90,8 +90,8 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 	}
 }
 
-// Run executes the pilosa server.
-func (m *Command) Run(args ...string) (err error) { // TODO args WTF
+// Start starts the pilosa server - it returns once the server is running.
+func (m *Command) Start() (err error) {
 	defer close(m.Started)
 	prefix := "~" + string(filepath.Separator)
 	if strings.HasPrefix(m.Config.DataDir, prefix) {

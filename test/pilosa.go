@@ -116,7 +116,7 @@ func runMainWithCluster(size int) ([]*Main, error) {
 func MustRunMain() *Main {
 	m := NewMain()
 	m.Config.Metric.Diagnostics = false // Disable diagnostics.
-	if err := m.Run(); err != nil {
+	if err := m.Start(); err != nil {
 		panic(err)
 	}
 	return m
@@ -147,7 +147,7 @@ func (m *Main) Reopen() error {
 	m.Server.Holder.NewAttrStore = m.Server.NewAttrStore
 
 	// Run new program.
-	if err := m.Run(); err != nil {
+	if err := m.Start(); err != nil {
 		return err
 	}
 	return nil

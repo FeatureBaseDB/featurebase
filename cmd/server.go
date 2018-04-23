@@ -39,7 +39,7 @@ It will load existing data from the configured
 directory and start listening for client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := Server.Run(); err != nil {
+			if err := Server.Start(); err != nil {
 				return errors.Wrap(err, "running server")
 			}
 			return errors.Wrap(Server.Wait(), "waiting on Server")
