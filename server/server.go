@@ -142,18 +142,15 @@ func (m *Command) Wait() error {
 	}
 }
 
-// SetupLogger sets up the logger based on the configuration.
-func (m *Command) SetupLogger() (pilosa.Logger, error) {
-	if m.logger != nil {
-		return m.logger, nil
-	}
+// setupLogger sets up the logger based on the configuration.
+func (m *Command) setupLogger() error {
 	var err error
 	if m.Config.LogPath == "" {
 		m.logOutput = m.Stderr
 	} else {
 		m.logOutput, err = os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 		if err != nil {
-			return nil, errors.Wrap(err, "opening file")
+			return errors.Wrap(err, "opening file")
 		}
 	}
 
@@ -162,17 +159,14 @@ func (m *Command) SetupLogger() (pilosa.Logger, error) {
 	} else {
 		m.logger = pilosa.NewStandardLogger(m.logOutput)
 	}
-	return m.logger, nil
+	return nil
 }
 
 // SetupServer uses the cluster configuration to set up this server.
 func (m *Command) SetupServer() error {
-	if m.logger == nil {
-		_, err := m.SetupLogger()
-		if err != nil {
-			return errors.Wrap(err, "setting up logger")
-		}
-
+	err := m.setupLogger()
+	if err != nil {
+		return errors.Wrap(err, "setting up logger")
 	}
 
 	handler := pilosa.NewHandler()
