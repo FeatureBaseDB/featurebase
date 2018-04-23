@@ -566,10 +566,12 @@ type HolderSyncer struct {
 
 	// Signals that the sync should stop.
 	Closing <-chan struct{}
+
+	ActivityMutex *sync.Mutex
 }
 
-// IsClosing returns true if the syncer has been marked to close.
-func (s *HolderSyncer) IsClosing() bool {
+// isClosing returns true if the syncer has been marked to close.
+func (s *HolderSyncer) isClosing() bool {
 	select {
 	case <-s.Closing:
 		return true
@@ -578,36 +580,62 @@ func (s *HolderSyncer) IsClosing() bool {
 	}
 }
 
+// doAbort checks to see if the syncer should abort the current iteration.
+// Note that it assumes the ActivityMutex is currently locked.
+// Returns either: true (unlocked) or false (locked).
+func (s *HolderSyncer) doAbort() bool {
+	s.ActivityMutex.Unlock()
+	if s.Cluster.State() == ClusterStateResizing {
+		return true
+	}
+
+	s.ActivityMutex.Lock()
+	if s.Cluster.State() == ClusterStateResizing {
+		s.ActivityMutex.Unlock()
+		return true
+	}
+
+	// Verify syncer has not closed.
+	if s.isClosing() {
+		s.ActivityMutex.Unlock()
+		return true
+	}
+
+	return false
+}
+
 // SyncHolder compares the holder on host with the local holder and resolves differences.
 func (s *HolderSyncer) SyncHolder() error {
 	ti := time.Now()
 	// Iterate over schema in sorted order.
+	s.ActivityMutex.Lock()
 	for _, di := range s.Holder.Schema() {
-		// Verify syncer has not closed.
-		if s.IsClosing() {
+		// Verify syncer should continue iterating.
+		if s.doAbort() {
 			return nil
 		}
-
 		// Sync index column attributes.
 		if err := s.syncIndex(di.Name); err != nil {
+			s.ActivityMutex.Unlock()
 			return fmt.Errorf("index sync error: index=%s, err=%s", di.Name, err)
 		}
 
 		tf := time.Now()
 		for _, fi := range di.Frames {
-			// Verify syncer has not closed.
-			if s.IsClosing() {
+			// Verify syncer should continue iterating.
+			if s.doAbort() {
 				return nil
 			}
 
 			// Sync frame row attributes.
 			if err := s.syncFrame(di.Name, fi.Name); err != nil {
+				s.ActivityMutex.Unlock()
 				return fmt.Errorf("frame sync error: index=%s, frame=%s, err=%s", di.Name, fi.Name, err)
 			}
 
 			for _, vi := range fi.Views {
-				// Verify syncer has not closed.
-				if s.IsClosing() {
+				// Verify syncer should continue iterating.
+				if s.doAbort() {
 					return nil
 				}
 
@@ -617,13 +645,14 @@ func (s *HolderSyncer) SyncHolder() error {
 						continue
 					}
 
-					// Verify syncer has not closed.
-					if s.IsClosing() {
+					// Verify syncer should continue iterating.
+					if s.doAbort() {
 						return nil
 					}
 
 					// Sync fragment if own it.
 					if err := s.syncFragment(di.Name, fi.Name, vi.Name, slice); err != nil {
+						s.ActivityMutex.Unlock()
 						return fmt.Errorf("fragment sync error: index=%s, frame=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
 					}
 				}
@@ -635,6 +664,7 @@ func (s *HolderSyncer) SyncHolder() error {
 		ti = time.Now() // reset ti
 	}
 
+	s.ActivityMutex.Unlock()
 	return nil
 }
 
@@ -777,8 +807,8 @@ type HolderCleaner struct {
 	Closing <-chan struct{}
 }
 
-// IsClosing returns true if the cleaner has been marked to close.
-func (c *HolderCleaner) IsClosing() bool {
+// isClosing returns true if the cleaner has been marked to close.
+func (c *HolderCleaner) isClosing() bool {
 	select {
 	case <-c.Closing:
 		return true
@@ -792,7 +822,7 @@ func (c *HolderCleaner) IsClosing() bool {
 func (c *HolderCleaner) CleanHolder() error {
 	for _, index := range c.Holder.Indexes() {
 		// Verify cleaner has not closed.
-		if c.IsClosing() {
+		if c.isClosing() {
 			return nil
 		}
 
