@@ -356,7 +356,7 @@ func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
 	}
 }
 
-// OpenListener opens a listener for the Server.
+// getListener gets a net.Listener based on the config.
 func getListener(uri pilosa.URI, tlsconf *tls.Config) (ln net.Listener, err error) {
 	// If bind URI has the https scheme, enable TLS
 	if uri.Scheme() == "https" && tlsconf != nil {
