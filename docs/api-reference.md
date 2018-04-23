@@ -149,35 +149,6 @@ curl -XDELETE localhost:10101/index/user/frame/language
 {}
 ```
 
-### Change frame time quantum
-
-`PATCH /index/<index-name>/frame/<frame-name>/time-quantum`
-
-Changes the time quantum for the given frame. This endpoint should be called at most once right after creating a frame.
-
-The payload is in JSON with the format: `{"timeQuantum": "${TIME_QUANTUM}"}`. Valid time quantum values are:
-
-* (Empty string)
-* Y: year
-* M: month
-* D: day
-* H: hour
-* YM: year and month
-* MD: month and day
-* DH: day and hour
-* YMD: year, month and day
-* MDH: month, day and hour
-* YMDH: year, month, day and hour
-
-``` request
-curl localhost:10101/index/user/frame/language/time-quantum \
-     -X POST \
-     -d '{"timeQuantum": "YM"}'
-```
-``` response
-{}
-```
-
 ### Create Field
 
 `POST /index/<index-name>/frame/<frame-name>/field/<field-name>`

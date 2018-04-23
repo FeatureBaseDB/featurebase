@@ -157,7 +157,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST").Name("PostFrameRestore")
-	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameFields).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
@@ -595,46 +594,6 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 }
 
 type deleteFrameResponse struct{}
-
-// handlePatchFrameTimeQuantum handles PATCH /frame/time_quantum request.
-func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
-
-	// Decode request.
-	var req patchFrameTimeQuantumRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Validate quantum.
-	tq, err := ParseTimeQuantum(req.TimeQuantum)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := h.API.ModifyFrameTimeQuantum(r.Context(), indexName, frameName, tq); err != nil {
-		if err == ErrFragmentNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(patchFrameTimeQuantumResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-type patchFrameTimeQuantumRequest struct {
-	TimeQuantum string `json:"timeQuantum"`
-}
-
-type patchFrameTimeQuantumResponse struct{}
 
 // handlePostFrameField handles POST /frame/field request.
 func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
