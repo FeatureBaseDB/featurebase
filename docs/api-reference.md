@@ -103,7 +103,6 @@ Creates a frame in the given index with the given name.
 The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which may contain the following fields:
 
 * `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this frame.
-* `inverseEnabled` (boolean): Enables [the inverted view](../data-model/#inverse) for this frame if `true`.
 * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
 * `rangeEnabled` (boolean): DEPRECATED - has no effect, will be removed. All frames support BSI fields.
@@ -119,9 +118,7 @@ Each individual `field` contains the following:
 Integer fields are stored as n-bit range-encoded values. Pilosa supports 63-bit, signed integers with values between `min` and `max`.
 
 ``` request
-curl localhost:10101/index/user/frame/language \
-     -X POST \
-     -d '{"options": {"inverseEnabled": true}}'
+curl localhost:10101/index/user/frame/language -X POST
 ```
 ``` response
 {}

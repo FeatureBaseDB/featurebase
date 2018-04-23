@@ -77,25 +77,11 @@ Columns are sharded on a preset width, and each shard is referred to as a Slice.
 
 ### View
 
-Views represent the various data layouts within a Frame. The primary View is called Standard, and it contains the typical Row and Column data. The Inverse View contains the same data with the axes inverted.Time-based Views are automatically generated for each time quantum. Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface from the physical data representation.
+Views represent the various data layouts within a Frame. The primary View is called Standard, and it contains the typical Row and Column data. Time-based Views are automatically generated for each time quantum. Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface from the physical data representation.
 
 #### Standard
 
 The standard View contains the same Row/Column format as the input data. 
-
-#### Inverse
-
-The Inverse View contains the same data with the Row and Column swapped.
-
-For example, the following `SetBit()` queries will result in the data described in the illustration below:
-```
-SetBit(frame="A", rowID=8, columnID=3)
-SetBit(frame="A", rowID=11, columnID=3)
-SetBit(frame="A", rowID=19, columnID=5)
-```
-
-![inverse frame diagram](/img/docs/frame-inverse.svg)
-*Inverse frame diagram*
 
 #### Time Quantums
 

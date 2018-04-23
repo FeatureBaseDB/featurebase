@@ -386,13 +386,12 @@ Return `2`
 
 ```
 TopN([BITMAP_CALL], <frame=STRING>, [n=UINT],
-     [inverse=true], [<field=ATTR_NAME>, <filters=[]ATTR_VALUE>])
+     [<field=ATTR_NAME>, <filters=[]ATTR_VALUE>])
 ```
 
 **Description:**
 
 Return the id and count of the top `n` bitmaps (by count of bits) in the frame.
-`inverse=true` specifies that the call should operate on the [inverse view ](../data-model/#inverse).
 The `field` and `filters` arguments work together to only return Bitmaps which
 have the attribute specified by `field` with one of the values specified in
 `filters`.
@@ -418,16 +417,6 @@ Returns `[{"key": 1, "count": 2}, {"key": 2, "count": 2}, {"key": 3, "count": 1}
 * key is a user ID
 * count is amount of repositories
 * Results are the number of repositories that each user starred in descending order for all users in the stargazer frame, for example user 1 starred two repositories, user 2 starred two repositories, user 3 starred one repository.
-
-```
-TopN(frame="stargazer", inverse=true)
-```
-
-Returns `[{"key": 1, "count": 2}, {"key": 2, "count": 2}, {"key": 3, "count": 1}]`
-
-* key is a repository ID
-* count is amount of users
-* Results are the number of users that starred each repository in descending order for all respositories in the stargazer frame.
 
 ```
 TopN(frame="stargazer", n=2)

@@ -32,9 +32,9 @@ In addition to standard PQL, the console supports a few special commands, prefix
 - `:create frame <framename>`
 - `:delete frame <framename>`
 
-Frame creation also supports options like `timeQuantum` or `inverseEnabled`. When creating a new frame, add options by using the keys documented in [API reference](../api-reference/#create-frame).
+Frame creation also supports options like `timeQuantum`. When creating a new frame, add options by using the keys documented in [API reference](../api-reference/#create-frame).
 
-- `:create frame <framename> inverseEnabled=true cacheSize=10000`
+- `:create frame <framename> cacheSize=10000`
 
 
 ### Cluster Admin
