@@ -220,8 +220,11 @@ func runEvenBitsSet() []interval16 {
 
 ///////////////////////////////////////////////////////////////////////////
 
+// f is a container function taking either one or two containers as input
+// func(a *container) *container
+// func(a, b *container) *container
 type testOp struct {
-	f   func(a, b *container) *container
+	f   interface{}
 	x   string
 	y   string
 	exp string
