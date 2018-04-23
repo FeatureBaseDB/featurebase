@@ -152,7 +152,7 @@ type gossipConfig struct {
 type GossipMemberSetOption func(*GossipMemberSet) error
 
 // WithTransport is a functional option for providing a transport to NewGossipMemberSet.
-func WithTransport(transport *Transport) func(*GossipMemberSet) error {
+func WithTransport(transport *Transport) GossipMemberSetOption {
 	return func(g *GossipMemberSet) error {
 		g.transport = transport
 		return nil
@@ -160,7 +160,7 @@ func WithTransport(transport *Transport) func(*GossipMemberSet) error {
 }
 
 // WithLogger is a functional option for providing a logger to NewGossipMemberSet.
-func WithLogger(logger *log.Logger) func(*GossipMemberSet) error {
+func WithLogger(logger *log.Logger) GossipMemberSetOption {
 	return func(g *GossipMemberSet) error {
 		g.logger = logger
 		return nil
@@ -168,11 +168,8 @@ func WithLogger(logger *log.Logger) func(*GossipMemberSet) error {
 }
 
 // NewGossipMemberSet returns a new instance of GossipMemberSet based on options.
-func NewGossipMemberSet(name string, host string, cfg Config, server *pilosa.Server, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
-
-	g := &GossipMemberSet{
-		Logger: server.Logger,
-	}
+func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventReceiver, sh pilosa.StatusHandler, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
+	g := &GossipMemberSet{}
 
 	// options
 	for _, opt := range options {
@@ -227,7 +224,7 @@ func NewGossipMemberSet(name string, host string, cfg Config, server *pilosa.Ser
 	//
 	conf.Delegate = g
 	conf.SecretKey = gossipKey
-	conf.Events = server.Cluster.EventReceiver.(memberlist.EventDelegate)
+	conf.Events = ger
 	conf.Logger = g.logger
 
 	g.config = &gossipConfig{
@@ -235,7 +232,7 @@ func NewGossipMemberSet(name string, host string, cfg Config, server *pilosa.Ser
 		gossipSeeds:      cfg.Seeds,
 	}
 
-	g.statusHandler = server
+	g.statusHandler = sh
 
 	return g, nil
 }

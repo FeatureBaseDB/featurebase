@@ -25,6 +25,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -367,7 +368,7 @@ func TestHolder_DeleteIndex(t *testing.T) {
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
 	cluster := test.NewCluster(2)
-	client := pilosa.GetHTTPClient(nil)
+	client := server.GetHTTPClient(nil)
 	// Create a local holder.
 	hldr0 := test.MustOpenHolder()
 	defer hldr0.Close()
@@ -451,7 +452,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 		Holder:       hldr0.Holder,
 		Node:         cluster.Nodes[0],
 		Cluster:      cluster,
-		RemoteClient: pilosa.GetHTTPClient(nil),
+		RemoteClient: server.GetHTTPClient(nil),
 		Stats:        pilosa.NopStatsClient,
 	}
 

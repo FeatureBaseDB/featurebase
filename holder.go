@@ -530,7 +530,6 @@ func (h *Holder) setFileLimit() {
 func (h *Holder) loadNodeID() (string, error) {
 	idPath := path.Join(h.Path, "ID")
 	nodeID := ""
-
 	h.Logger.Printf("load NodeID: %s", idPath)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return "", err

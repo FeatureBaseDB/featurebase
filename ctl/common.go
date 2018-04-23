@@ -49,7 +49,7 @@ func CommandClient(cmd CommandWithTLSSupport) (*pilosa.InternalHTTPClient, error
 			InsecureSkipVerify: tlsConfig.SkipVerify,
 		}
 	}
-	client, err := pilosa.NewInternalHTTPClient(cmd.TLSHost(), pilosa.GetHTTPClient(TLSConfig))
+	client, err := pilosa.NewInternalHTTPClient(cmd.TLSHost(), server.GetHTTPClient(TLSConfig))
 	if err != nil {
 		return nil, err
 	}
