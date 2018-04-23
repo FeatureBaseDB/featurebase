@@ -25,17 +25,17 @@ There will be one item in the `results` array for each PQL query in the request.
 
 * Angle Brackets `<>` denote required arguments
 * Square Brackets `[]` denote optional arguments
-* UPPER_CASE denotes a descriptor that will need to be filled in with a concrete value (e.g. `ROW_LABEL`, `STRING`)
+* UPPER_CASE denotes a descriptor that will need to be filled in with a concrete value (e.g. `ATTR_NAME`, `STRING`)
 
 ##### Examples
 
 Before running any of the example queries below, follow the instructions in the [Getting Started](../getting-started/) section to set up an index, frames, and populate them with some data.
 
-The examples just show the PQL quer(ies) needed - to run the query `SetBit(frame="stargazer", columnID=10, rowID=1)` against a server using curl, you would:
+The examples just show the PQL quer(ies) needed - to run the query `SetBit(frame="stargazer", col=10, row=1)` against a server using curl, you would:
 ``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'SetBit(frame="stargazer", columnID=10, rowID=1)'
+     -d 'SetBit(frame="stargazer", col=10, row=1)'
 ```
 ``` response
 {"results":[true]}
@@ -58,7 +58,7 @@ curl localhost:10101/index/repository/query \
 **Spec:**
 
 ```
-SetBit(<frame=STRING>, <ROW_LABEL=UINT>, <COL_LABEL=UINT>, 
+SetBit(<frame=STRING>, <row=UINT>, <col=UINT>, 
        [timestamp=TIMESTAMP])
 ```
 
@@ -76,26 +76,26 @@ A return value of `false` indicates that the bit was already set to 1 and nothin
 **Examples:**
 
 ```
-SetBit(frame="stargazer", columnID=10, rowID=1)
+SetBit(frame="stargazer", col=10, row=1)
 ```
 
 This query illustrates setting a bit in the stargazer frame. User with id=1 has starred repository with id=10.
 
 SetBit also supports providing a timestamp. To write the date that a user starred a repository.
 ```
-SetBit(frame="stargazer", columnID=10, rowID=1, timestamp="2016-01-01T00:00")
+SetBit(frame="stargazer", col=10, row=1, timestamp="2016-01-01T00:00")
 ```
 
 Setting multiple bits in a single request:
 ```
-SetBit(frame="stargazer", columnID=10, rowID=1) SetBit(frame="stargazer", columnID=10, rowID=2) SetBit(frame="stargazer", columnID=20, rowID=1) SetBit(frame="stargazer", columnID=30, rowID=2)
+SetBit(frame="stargazer", col=10, row=1) SetBit(frame="stargazer", col=10, row=2) SetBit(frame="stargazer", col=20, row=1) SetBit(frame="stargazer", col=30, row=2)
 ```
 
 #### SetRowAttrs
 **Spec:**
 
 ```
-SetRowAttrs(<frame=STRING>, <ROW_LABEL=UINT>, 
+SetRowAttrs(<frame=STRING>, <row=UINT>, 
             <ATTR_NAME=ATTR_VALUE>, 
             [ATTR_NAME=ATTR_VALUE ...])
 ```
@@ -111,13 +111,13 @@ SetRowAttrs queries always return `null` upon success.
 **Examples:**
 
 ```
-SetRowAttrs(frame="stargazer", rowID=10, username="mrpi", active=true)
+SetRowAttrs(frame="stargazer", row=10, username="mrpi", active=true)
 ```
 
 Set username value and active status for user 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a row with a [Bitmap](../query-language/#bitmap) query like so `Bitmap(frame="stargazer", stargazer_id=10)`.
 
 ```
-SetRowAttrs(frame="stargazer", rowID=10, username=null)
+SetRowAttrs(frame="stargazer", row=10, username=null)
 ```
 
 Delete username value for user 10.
@@ -127,7 +127,7 @@ Delete username value for user 10.
 **Spec:**
 
 ```
-SetColumnAttrs(<frame=STRING>, <ROW_LABEL=UINT>, 
+SetColumnAttrs(<frame=STRING>, <row=UINT>, 
                <ATTR_NAME=ATTR_VALUE>, 
                [ATTR_NAME=ATTR_VALUE ...])
 ```
@@ -143,13 +143,13 @@ SetColumnAttrs queries always return `null` upon success. Setting a value of `nu
 **Examples:**
 
 ```
-SetColumnAttrs(columnID=10, stars=123, url="http://projects.pilosa.com/10", active=true)
+SetColumnAttrs(col=10, stars=123, url="http://projects.pilosa.com/10", active=true)
 ```
 
-Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap](../query-language/#bitmap) query like so `Bitmap(frame="stargazer", columnID=10)`.
+Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap](../query-language/#bitmap) query like so `Bitmap(frame="stargazer", col=10)`.
 
 ```
-SetColumnAttrs(columnID=10, url=null)
+SetColumnAttrs(col=10, url=null)
 ```
 
 Delete url value for repo 10.
@@ -160,7 +160,7 @@ Delete url value for repo 10.
 **Spec:**
 
 ```
-SetBit(<frame=STRING>, <ROW_LABEL=UINT>, <COL_LABEL=UINT>, 
+SetBit(<frame=STRING>, <row=UINT>, <col=UINT>, 
        [timestamp=TIMESTAMP])
 ```
 
@@ -177,7 +177,7 @@ A return value of `false` indicates that the bit was already set to 0 and nothin
 **Examples:**
 
 ```
-ClearBit(frame="stargazer", columnID=10, rowID=1)
+ClearBit(frame="stargazer", col=10, row=1)
 ```
 
 Remove relationship between the stargazer in row 1 and the repository in column 10 from the stargazer frame.
@@ -188,12 +188,12 @@ Remove relationship between the stargazer in row 1 and the repository in column 
 **Spec:**
 
 ```
-SetFieldValue(<COL_LABEL=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
+SetFieldValue(<col=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
 ```
 
 **Description:**
 
-`SetFieldValue` assigns an integer value with the specified field name to the `columnID` in the given `frame`.
+`SetFieldValue` assigns an integer value with the specified field name to the `col` in the given `frame`.
 
 **Result Type:** null
 
@@ -203,7 +203,7 @@ SetFieldValue returns `null` upon success.
 
 Set the number of pull requests of repository 10.
 ```
-SetFieldValue(columnID=10, frame="stats", pullrequests=2)
+SetFieldValue(col=10, frame="stats", pullrequests=2)
 ```
 
 
@@ -214,7 +214,7 @@ SetFieldValue(columnID=10, frame="stats", pullrequests=2)
 **Spec:**
 
 ```
-Bitmap(<frame=STRING>, (<ROW_LABEL=UINT> | <COL_LABEL>=UINT))
+Bitmap(<frame=STRING>, (<rowL=UINT> | <col>=UINT))
 ```
 
 **Description:**
@@ -229,7 +229,7 @@ e.g. `{"attrs":{"username":"mrpi","active":true},"bits":[10, 20]}`
 
 Query all repositories that user 1 has starred.
 ```
-Bitmap(frame="stargazer", rowID=1)
+Bitmap(frame="stargazer", row=1)
 ```
 
 Returns `{"attrs":{"username":"mrpi","active":true},"bits":[10, 20]}`
@@ -286,7 +286,7 @@ attrs will always be empty
 Query repositories which have been starred by two users.
 
 ```
-Intersect(Bitmap(frame="stargazer", rowID=1), Bitmap(frame="stargazer", rowID=2))
+Intersect(Bitmap(frame="stargazer", row=1), Bitmap(frame="stargazer", row=2))
 ```
 
 Returns `{"attrs":{},"bits":[10]}`.
@@ -313,7 +313,7 @@ attrs will always be empty
 
 Query repositories which have been starred by one user and not another.
 ```
-Difference(Bitmap(frame="stargazer", rowID=1), Bitmap( frame="stargazer", rowID=2))
+Difference(Bitmap(frame="stargazer", row=1), Bitmap( frame="stargazer", row=2))
 ```
 
 Return `{"results":[{"attrs":{},"bits":[20]}]}`
@@ -321,7 +321,7 @@ Return `{"results":[{"attrs":{},"bits":[20]}]}`
 * bits are repositories that were starred by user 1 BUT NOT user 2
 
 ```
-Difference(Bitmap(frame="stargazer", rowID=2), Bitmap( frame="stargazer", rowID=1))
+Difference(Bitmap(frame="stargazer", row=2), Bitmap( frame="stargazer", row=1))
 ```
 
 Return `{"attrs":{},"bits":[30]}`
@@ -349,7 +349,7 @@ attrs will always be empty
 Query repositories which have been starred by two users.
 
 ```
-Xor(Bitmap(frame="stargazer", rowID=1), Bitmap(frame="stargazer", rowID=2))
+Xor(Bitmap(frame="stargazer", row=1), Bitmap(frame="stargazer", row=2))
 ```
 
 Returns `{"attrs":{},"bits":[30]}`.
@@ -373,7 +373,7 @@ Returns the number of set bits in the `BITMAP_CALL` passed in.
 
 Query the number of repositories to which a user has contributed.
 ```
-Count(Bitmap(frame="stargazer", rowID=1))
+Count(Bitmap(frame="stargazer", row=1))
 ```
 
 Return `2`
@@ -427,7 +427,7 @@ Returns `[{"key": 1, "count": 2}, {"key": 2, "count": 2}]`
 * Results are the top two users sorted by number of repositories they've starred in descending order.
 
 ```
-TopN(Bitmap(frame="language", rowID=1), frame="stargazer", n=2)
+TopN(Bitmap(frame="language", row=1), frame="stargazer", n=2)
 ```
 
 Returns `[{"key": 1, "count": 2}, {"key": 2, "count": 1}]`
@@ -439,7 +439,7 @@ Returns `[{"key": 1, "count": 2}, {"key": 2, "count": 1}]`
 **Spec:**
 
 ```
-Range(<frame=STRING>, <ROW_LABEL=UINT>, 
+Range(<frame=STRING>, <row=UINT>, 
       <start=TIMESTAMP>, <end=TIMESTAMP>)
 ```
 
@@ -455,7 +455,7 @@ between the given `start` and `end` timestamps.
 
 When you set timestamp using SetBit, you will able to query all repositories that a user has starred within a date range.
 ```
-Range(frame="stargazer", rowID=1, start="2010-01-01T00:00", end="2017-03-02T03:00")
+Range(frame="stargazer", row=1, start="2010-01-01T00:00", end="2017-03-02T03:00")
 ```
 
 Returns `{{"attrs":{},"bits":[10]}`

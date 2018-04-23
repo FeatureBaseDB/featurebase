@@ -88,8 +88,8 @@ The standard View contains the same Row/Column format as the input data.
 If a Frame has a time quantum, then Views are generated for each of the defined time segments. For example, for a frame with a time quantum of `YMD`, the following `SetBit()` queries will result in the data described in the illustration below:
 
 ```
-SetBit(frame="A", rowID=8, columnID=3, timestamp="2017-05-18T00:00")
-SetBit(frame="A", rowID=8, columnID=3, timestamp="2017-05-19T00:00")
+SetBit(frame="A", row=8, col=3, timestamp="2017-05-18T00:00")
+SetBit(frame="A", row=8, col=3, timestamp="2017-05-19T00:00")
 ```
 
 ![time quantum frame diagram](/img/docs/frame-time-quantum.svg)
@@ -100,17 +100,17 @@ SetBit(frame="A", rowID=8, columnID=3, timestamp="2017-05-19T00:00")
 Bit-Sliced Indexing (BSI) is the storage method Pilosa uses to represent multi-bit integers in a bitmap index. Integers are stored as n-bit, range-encoded
 bit-sliced indexes of base-2, along with an additional bitmap indicating "not null". This means that a 16-bit integer will require 17 bitmaps: one for each 0-bit of the 16 bit-slice components (the 1-bit does not need to be stored because with range-encoding the highest bit position is always 1) and one for the non-null bitmap. Pilosa can evaluate `Sum` and `Range` queries on these BSI integers.
 
-Internally Pilosa stores each BSI `field` as a `view` within a `frame`. The 'rowIDs' of the `view` are composed of the base-2 representation of the integer. Pilosa manages the base-2 offset and translation that efficiently packs the integer value within the minimum set of rows.
+Internally Pilosa stores each BSI `field` as a `view` within a `frame`. The 'rows' of the `view` are composed of the base-2 representation of the integer. Pilosa manages the base-2 offset and translation that efficiently packs the integer value within the minimum set of rows.
 
 For example, the following `SetFieldValue()` queries will result in the data described in the illustration below:
 
 ```
-SetFieldValue(columnID=1, frame="A", field0=1)
-SetFieldValue(columnID=2, frame="A", field0=2)
-SetFieldValue(columnID=3, frame="A", field0=3)
-SetFieldValue(columnID=4, frame="A", field0=7)
-SetFieldValue(columnID=2, frame="A", field1=1)
-SetFieldValue(columnID=3, frame="A", field1=6)
+SetFieldValue(col=1, frame="A", field0=1)
+SetFieldValue(col=2, frame="A", field0=2)
+SetFieldValue(col=3, frame="A", field0=3)
+SetFieldValue(col=4, frame="A", field0=7)
+SetFieldValue(col=2, frame="A", field1=1)
+SetFieldValue(col=3, frame="A", field1=6)
 ```
 
 ![BSI frame diagram](/img/docs/frame-bsi.svg)

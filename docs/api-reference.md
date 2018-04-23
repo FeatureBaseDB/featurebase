@@ -68,7 +68,7 @@ Sends a query to the Pilosa server with the given index. The request body is UTF
 ``` request
 curl localhost:10101/index/user/query \
      -X POST \
-     -d 'Bitmap(frame="language", rowID=5)'
+     -d 'Bitmap(frame="language", row=5)'
 ```
 ``` response
 {"results":[{"attrs":{},"bits":[100]}]}
@@ -83,7 +83,7 @@ The query is executed for all [slices](../data-model/#slice) by default. To use 
 ``` request
 curl "localhost:10101/index/user/query?columnAttrs=true&slices=0,1" \
      -X POST \
-     -d 'Bitmap(frame="language", rowID=5)'
+     -d 'Bitmap(frame="language", row=5)'
 ```
 ``` response
 {
