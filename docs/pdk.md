@@ -34,7 +34,7 @@ With this definition available, the PDK tool can run the import, which consists 
 - for each CSV record: 
   - generate a columnID
   - apply all ParserMappers, generating a list of (frame, ID) pairs
-  - set the appropriate bit. schematically: SetBit(id=rowID, frame=frame, profileID=columnID)
+  - set the appropriate bit. schematically: SetBit(row=rowID, frame=frame, col=columnID)
 
 The process is summarized in this flowchart:
 
