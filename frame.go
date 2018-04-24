@@ -737,6 +737,46 @@ func (f *Frame) FieldSum(filter *Bitmap, name string) (sum, count int64, err err
 	return int64(vsum) + (int64(vcount) * field.Min), int64(vcount), nil
 }
 
+// FieldMin returns the min for a field.
+// An optional filtering bitmap can be provided.
+func (f *Frame) FieldMin(filter *Bitmap, name string) (min, count int64, err error) {
+	field := f.Field(name)
+	if field == nil {
+		return 0, 0, ErrFieldNotFound
+	}
+
+	view := f.View(ViewFieldPrefix + name)
+	if view == nil {
+		return 0, 0, nil
+	}
+
+	vmin, vcount, err := view.FieldMin(filter, field.BitDepth())
+	if err != nil {
+		return 0, 0, err
+	}
+	return int64(vmin) + field.Min, int64(vcount), nil
+}
+
+// FieldMax returns the max for a field.
+// An optional filtering bitmap can be provided.
+func (f *Frame) FieldMax(filter *Bitmap, name string) (max, count int64, err error) {
+	field := f.Field(name)
+	if field == nil {
+		return 0, 0, ErrFieldNotFound
+	}
+
+	view := f.View(ViewFieldPrefix + name)
+	if view == nil {
+		return 0, 0, nil
+	}
+
+	vmax, vcount, err := view.FieldMax(filter, field.BitDepth())
+	if err != nil {
+		return 0, 0, err
+	}
+	return int64(vmax) + field.Min, int64(vcount), nil
+}
+
 func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Bitmap, error) {
 	// Retrieve and validate field.
 	field := f.Field(name)

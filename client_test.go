@@ -333,14 +333,44 @@ func TestClient_ImportValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Verify Sum.
 	sum, cnt, err := frame.FieldSum(nil, fld.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Verify data.
 	if sum != 50 || cnt != 3 {
-		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=70, cnt=3", sum, cnt)
+		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", sum, cnt)
+	}
+
+	// Verify Min.
+	min, cnt, err := frame.FieldMin(nil, fld.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if min != -10 || cnt != 1 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-10, cnt=1", min, cnt)
+	}
+
+	// Verify Min with Filter.
+	filter, err := frame.FieldRange(fld.Name, pql.GT, 40)
+	if err != nil {
+		t.Fatal(err)
+	}
+	min, cnt, err = frame.FieldMin(filter, fld.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if min != -100 || cnt != 0 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-100, cnt=0", min, cnt)
+	}
+
+	// Verify Max.
+	max, cnt, err := frame.FieldMax(nil, fld.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if max != 40 || cnt != 1 {
+		t.Fatalf("unexpected values: got max=%v, count=%v; expected max=40, cnt=1", max, cnt)
 	}
 }
 

@@ -157,6 +157,12 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "Sum":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeSum(ctx, index, c, slices, opt)
+	case "Min":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeFieldMin(ctx, index, c, slices, opt)
+	case "Max":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeFieldMax(ctx, index, c, slices, opt)
 	case "ClearBit":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "Count":
@@ -199,15 +205,15 @@ func (e *Executor) validateCallArgs(c *pql.Call) error {
 }
 
 // executeSum executes a Sum() call.
-func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (SumCount, error) {
+func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
 	if frame, _ := c.Args["frame"]; frame == "" {
-		return SumCount{}, errors.New("Sum(): frame required")
+		return ValCount{}, errors.New("Sum(): frame required")
 	} else if field, _ := c.Args["field"]; field == "" {
-		return SumCount{}, errors.New("Sum(): field required")
+		return ValCount{}, errors.New("Sum(): field required")
 	}
 
 	if len(c.Children) > 1 {
-		return SumCount{}, errors.New("Sum() only accepts a single bitmap input")
+		return ValCount{}, errors.New("Sum() only accepts a single bitmap input")
 	}
 
 	// Execute calls in bulk on each remote node and merge.
@@ -217,18 +223,88 @@ func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, sl
 
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
-		other, _ := prev.(SumCount)
-		return other.Add(v.(SumCount))
+		other, _ := prev.(ValCount)
+		return other.Add(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
 	if err != nil {
-		return SumCount{}, err
+		return ValCount{}, err
 	}
-	other, _ := result.(SumCount)
+	other, _ := result.(ValCount)
 
 	if other.Count == 0 {
-		return SumCount{}, nil
+		return ValCount{}, nil
+	}
+	return other, nil
+}
+
+// executeFieldMin executes a Min() call.
+func (e *Executor) executeFieldMin(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+	if frame, _ := c.Args["frame"]; frame == "" {
+		return ValCount{}, errors.New("Min(): frame required")
+	} else if field, _ := c.Args["field"]; field == "" {
+		return ValCount{}, errors.New("Min(): field required")
+	}
+
+	if len(c.Children) > 1 {
+		return ValCount{}, errors.New("Min() only accepts a single bitmap input")
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(slice uint64) (interface{}, error) {
+		return e.executeFieldMinSlice(ctx, index, c, slice)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(ValCount)
+		return other.Smaller(v.(ValCount))
+	}
+
+	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return ValCount{}, err
+	}
+	other, _ := result.(ValCount)
+
+	if other.Count == 0 {
+		return ValCount{}, nil
+	}
+	return other, nil
+}
+
+// executeFieldMax executes a Max() call.
+func (e *Executor) executeFieldMax(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+	if frame, _ := c.Args["frame"]; frame == "" {
+		return ValCount{}, errors.New("Max(): frame required")
+	} else if field, _ := c.Args["field"]; field == "" {
+		return ValCount{}, errors.New("Max(): field required")
+	}
+
+	if len(c.Children) > 1 {
+		return ValCount{}, errors.New("Max() only accepts a single bitmap input")
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(slice uint64) (interface{}, error) {
+		return e.executeFieldMaxSlice(ctx, index, c, slice)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(ValCount)
+		return other.Larger(v.(ValCount))
+	}
+
+	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return ValCount{}, err
+	}
+	other, _ := result.(ValCount)
+
+	if other.Count == 0 {
+		return ValCount{}, nil
 	}
 	return other, nil
 }
@@ -318,13 +394,13 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 	}
 }
 
-// executeSumCountSlice executes calculates the sum & count for fields on a slice.
-func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (SumCount, error) {
+// executeSumCountSlice calculates the sum and count for fields on a slice.
+func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
 	var filter *Bitmap
 	if len(c.Children) == 1 {
 		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
 		if err != nil {
-			return SumCount{}, err
+			return ValCount{}, err
 		}
 		filter = bm
 	}
@@ -334,26 +410,104 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 
 	frame := e.Holder.Frame(index, frameName)
 	if frame == nil {
-		return SumCount{}, nil
+		return ValCount{}, nil
 	}
 
 	field := frame.Field(fieldName)
 	if field == nil {
-		return SumCount{}, nil
+		return ValCount{}, nil
 	}
 
-	view := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
-	if view == nil {
-		return SumCount{}, nil
+	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	if fragment == nil {
+		return ValCount{}, nil
 	}
 
-	vsum, vcount, err := view.FieldSum(filter, field.BitDepth())
+	vsum, vcount, err := fragment.FieldSum(filter, field.BitDepth())
 	if err != nil {
-		return SumCount{}, err
+		return ValCount{}, err
 	}
-	return SumCount{
-		Sum:   int64(vsum) + (int64(vcount) * field.Min),
+	return ValCount{
+		Val:   int64(vsum) + (int64(vcount) * field.Min),
 		Count: int64(vcount),
+	}, nil
+}
+
+// executeFieldMinSlice calculates the min for fields on a slice.
+func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+	var filter *Bitmap
+	if len(c.Children) == 1 {
+		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		if err != nil {
+			return ValCount{}, err
+		}
+		filter = bm
+	}
+
+	frameName, _ := c.Args["frame"].(string)
+	fieldName, _ := c.Args["field"].(string)
+
+	frame := e.Holder.Frame(index, frameName)
+	if frame == nil {
+		return ValCount{}, nil
+	}
+
+	field := frame.Field(fieldName)
+	if field == nil {
+		return ValCount{}, nil
+	}
+
+	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	if fragment == nil {
+		return ValCount{}, nil
+	}
+
+	fmin, fcount, err := fragment.FieldMin(filter, field.BitDepth())
+	if err != nil {
+		return ValCount{}, err
+	}
+	return ValCount{
+		Val:   int64(fmin) + field.Min,
+		Count: int64(fcount),
+	}, nil
+}
+
+// executeFieldMaxSlice calculates the max for fields on a slice.
+func (e *Executor) executeFieldMaxSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+	var filter *Bitmap
+	if len(c.Children) == 1 {
+		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		if err != nil {
+			return ValCount{}, err
+		}
+		filter = bm
+	}
+
+	frameName, _ := c.Args["frame"].(string)
+	fieldName, _ := c.Args["field"].(string)
+
+	frame := e.Holder.Frame(index, frameName)
+	if frame == nil {
+		return ValCount{}, nil
+	}
+
+	field := frame.Field(fieldName)
+	if field == nil {
+		return ValCount{}, nil
+	}
+
+	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	if fragment == nil {
+		return ValCount{}, nil
+	}
+
+	fmax, fcount, err := fragment.FieldMax(filter, field.BitDepth())
+	if err != nil {
+		return ValCount{}, err
+	}
+	return ValCount{
+		Val:   int64(fmax) + field.Min,
+		Count: int64(fcount),
 	}, nil
 }
 
@@ -1355,7 +1509,7 @@ func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *
 
 		switch call.Name {
 		case "Average", "Sum":
-			v, err = decodeSumCount(pb.Results[i].GetSumCount()), nil
+			v, err = decodeValCount(pb.Results[i].GetValCount()), nil
 		case "TopN":
 			v, err = decodePairs(pb.Results[i].GetPairs()), nil
 		case "Count":
@@ -1593,29 +1747,51 @@ func needsSlices(calls []*pql.Call) bool {
 	return false
 }
 
-// SumCount represents a grouping of sum & count for Sum() and Average() calls.
-type SumCount struct {
-	Sum   int64 `json:"sum"`
+// ValCount represents a grouping of sum & count for Sum() and Average() calls.
+type ValCount struct {
+	Val   int64 `json:"value"`
 	Count int64 `json:"count"`
 }
 
-func (sc *SumCount) Add(other SumCount) SumCount {
-	return SumCount{
-		Sum:   sc.Sum + other.Sum,
-		Count: sc.Count + other.Count,
+func (vc *ValCount) Add(other ValCount) ValCount {
+	return ValCount{
+		Val:   vc.Val + other.Val,
+		Count: vc.Count + other.Count,
 	}
 }
 
-func encodeSumCount(sc SumCount) *internal.SumCount {
-	return &internal.SumCount{
-		Sum:   sc.Sum,
-		Count: sc.Count,
+func encodeValCount(vc ValCount) *internal.ValCount {
+	return &internal.ValCount{
+		Val:   vc.Val,
+		Count: vc.Count,
 	}
 }
 
-func decodeSumCount(pb *internal.SumCount) SumCount {
-	return SumCount{
-		Sum:   pb.Sum,
+func decodeValCount(pb *internal.ValCount) ValCount {
+	return ValCount{
+		Val:   pb.Val,
 		Count: pb.Count,
+	}
+}
+
+// Smaller returns the smaller of the two ValCounts.
+func (vc *ValCount) Smaller(other ValCount) ValCount {
+	if vc.Count == 0 || (other.Val < vc.Val && other.Count > 0) {
+		return other
+	}
+	return ValCount{
+		Val:   vc.Val,
+		Count: vc.Count,
+	}
+}
+
+// Larger returns the larger of the two ValCounts.
+func (vc *ValCount) Larger(other ValCount) ValCount {
+	if vc.Count == 0 || (other.Val > vc.Val && other.Count > 0) {
+		return other
+	}
+	return ValCount{
+		Val:   vc.Val,
+		Count: vc.Count,
 	}
 }

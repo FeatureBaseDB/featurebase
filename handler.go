@@ -1205,7 +1205,7 @@ const (
 	QueryResultTypeNil uint32 = iota
 	QueryResultTypeBitmap
 	QueryResultTypePairs
-	QueryResultTypeSumCount
+	QueryResultTypeValCount
 	QueryResultTypeUint64
 	QueryResultTypeBool
 )
@@ -1294,9 +1294,9 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 		case []Pair:
 			pb.Results[i].Type = QueryResultTypePairs
 			pb.Results[i].Pairs = encodePairs(result)
-		case SumCount:
-			pb.Results[i].Type = QueryResultTypeSumCount
-			pb.Results[i].SumCount = encodeSumCount(result)
+		case ValCount:
+			pb.Results[i].Type = QueryResultTypeValCount
+			pb.Results[i].ValCount = encodeValCount(result)
 		case uint64:
 			pb.Results[i].Type = QueryResultTypeUint64
 			pb.Results[i].N = result
