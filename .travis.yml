@@ -10,6 +10,7 @@ env:
 install:
   - make install-dep install-statik vendor generate-statik
 script:
+  - GOARCH=386 make test
   - make test
 # TODO: When we drop support for Go <1.10, we should use `-coverprofile=` on both `go test` and `goveralls` so the test suite doesn't run twice. See https://github.com/pilosa/pilosa/issues/1009
 after_success:
