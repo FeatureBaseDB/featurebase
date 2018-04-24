@@ -925,23 +925,6 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 	return err
 }
 
-// ModifyFrameTimeQuantum changes the time quantum on the given frame. TODO:
-// what happens if there is already data in the frame?
-func (api *API) ModifyFrameTimeQuantum(ctx context.Context, indexName string, frameName string, timeQuantum TimeQuantum) error {
-	if err := api.validate(apiModifyFrameTimeQuantum); err != nil {
-		return errors.Wrap(err, "validate api method")
-	}
-
-	// Retrieve index by name.
-	frame := api.Holder.Frame(indexName, frameName)
-	if frame == nil {
-		return ErrFrameNotFound
-	}
-
-	// Set default time quantum on index.
-	return frame.SetTimeQuantum(timeQuantum)
-}
-
 // MaxSlices returns the maximum slice number for each index in a map.
 func (api *API) MaxSlices(ctx context.Context) map[string]uint64 {
 	return api.Holder.MaxSlices()
@@ -1168,7 +1151,6 @@ const (
 	apiMarshalFragment
 	//apiMaxInverseSlices // not implemented
 	//apiMaxSlices // not implemented
-	apiModifyFrameTimeQuantum
 	apiQuery
 	apiRecalculateCaches
 	apiRemoveNode
@@ -1196,32 +1178,31 @@ var methodsResizing = map[apiMethod]struct{}{
 }
 
 var methodsNormal = map[apiMethod]struct{}{
-	apiCreateField:            struct{}{},
-	apiCreateFrame:            struct{}{},
-	apiCreateIndex:            struct{}{},
-	apiCreateInputDefinition:  struct{}{},
-	apiDeleteField:            struct{}{},
-	apiDeleteFrame:            struct{}{},
-	apiDeleteIndex:            struct{}{},
-	apiDeleteInputDefinition:  struct{}{},
-	apiDeleteView:             struct{}{},
-	apiExportCSV:              struct{}{},
-	apiFields:                 struct{}{},
-	apiFragmentBlockData:      struct{}{},
-	apiFragmentBlocks:         struct{}{},
-	apiFrameAttrDiff:          struct{}{},
-	apiImport:                 struct{}{},
-	apiImportValue:            struct{}{},
-	apiIndex:                  struct{}{},
-	apiIndexAttrDiff:          struct{}{},
-	apiInputDefinition:        struct{}{},
-	apiModifyFrameTimeQuantum: struct{}{},
-	apiQuery:                  struct{}{},
-	apiRecalculateCaches:      struct{}{},
-	apiRemoveNode:             struct{}{},
-	apiRestoreFrame:           struct{}{},
-	apiSliceNodes:             struct{}{},
-	apiUnmarshalFragment:      struct{}{},
-	apiViews:                  struct{}{},
-	apiWriteInput:             struct{}{},
+	apiCreateField:           struct{}{},
+	apiCreateFrame:           struct{}{},
+	apiCreateIndex:           struct{}{},
+	apiCreateInputDefinition: struct{}{},
+	apiDeleteField:           struct{}{},
+	apiDeleteFrame:           struct{}{},
+	apiDeleteIndex:           struct{}{},
+	apiDeleteInputDefinition: struct{}{},
+	apiDeleteView:            struct{}{},
+	apiExportCSV:             struct{}{},
+	apiFields:                struct{}{},
+	apiFragmentBlockData:     struct{}{},
+	apiFragmentBlocks:        struct{}{},
+	apiFrameAttrDiff:         struct{}{},
+	apiImport:                struct{}{},
+	apiImportValue:           struct{}{},
+	apiIndex:                 struct{}{},
+	apiIndexAttrDiff:         struct{}{},
+	apiInputDefinition:       struct{}{},
+	apiQuery:                 struct{}{},
+	apiRecalculateCaches:     struct{}{},
+	apiRemoveNode:            struct{}{},
+	apiRestoreFrame:          struct{}{},
+	apiSliceNodes:            struct{}{},
+	apiUnmarshalFragment:     struct{}{},
+	apiViews:                 struct{}{},
+	apiWriteInput:            struct{}{},
 }

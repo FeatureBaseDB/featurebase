@@ -748,30 +748,6 @@ func TestHandler_DeleteFrame(t *testing.T) {
 	}
 }
 
-// Ensure handler can set the frame time quantum.
-func TestHandler_SetFrameTimeQuantum(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	// Create frame.
-	if _, err := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{}).CreateFrame("f1", pilosa.FrameOptions{}); err != nil {
-		t.Fatal(err)
-	}
-
-	h := test.NewHandler()
-	h.API.Holder = hldr.Holder
-	h.API.Cluster = test.NewCluster(1)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("PATCH", "/index/i0/frame/f1/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{}`+"\n" {
-		t.Fatalf("unexpected body: %s", body)
-	} else if q := hldr.Index("i0").Frame("f1").TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
-		t.Fatalf("unexpected time quantum: %s", q)
-	}
-}
-
 // Ensure the handler can return data in differing blocks for an index.
 func TestHandler_Index_AttrStore_Diff(t *testing.T) {
 	hldr := test.MustOpenHolder()
