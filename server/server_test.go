@@ -30,6 +30,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -44,7 +45,7 @@ func TestMain_Set_Quick(t *testing.T) {
 		defer m.Close()
 
 		// Create client.
-		client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+		client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), server.GetHTTPClient(nil))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -321,11 +322,11 @@ func TestMain_FrameRestore(t *testing.T) {
 	defer m21.Close()
 
 	// Import from first cluster.
-	client20, err := pilosa.NewInternalHTTPClient(m20.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	client20, err := pilosa.NewInternalHTTPClient(m20.Server.URI.HostPort(), server.GetHTTPClient(nil))
 	if err != nil {
 		t.Fatal("new client:", err)
 	}
-	client21, err := pilosa.NewInternalHTTPClient(m21.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	client21, err := pilosa.NewInternalHTTPClient(m21.Server.URI.HostPort(), server.GetHTTPClient(nil))
 	if err != nil {
 		t.Fatal("new client:", err)
 	}
@@ -489,8 +490,8 @@ func GenerateSetCommands(n int, rand *rand.Rand) []SetCommand {
 }
 
 // ParseConfig parses s into a Config.
-func ParseConfig(s string) (pilosa.Config, error) {
-	var c pilosa.Config
+func ParseConfig(s string) (server.Config, error) {
+	var c server.Config
 	_, err := toml.Decode(s, &c)
 	return c, err
 }

@@ -40,9 +40,6 @@ const (
 	// DefaultPartitionN is the default number of partitions in a cluster.
 	DefaultPartitionN = 256
 
-	// DefaultReplicaN is the default number of replicas per partition.
-	DefaultReplicaN = 1
-
 	// ClusterState represents the state returned in the /status endpoint.
 	ClusterStateStarting = "STARTING"
 	ClusterStateNormal   = "NORMAL"
@@ -264,7 +261,6 @@ type Cluster struct {
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
-	prefect SecurityManager
 
 	Logger Logger
 
@@ -277,7 +273,7 @@ func NewCluster() *Cluster {
 	return &Cluster{
 		Hasher:        &jmphasher{},
 		PartitionN:    DefaultPartitionN,
-		ReplicaN:      DefaultReplicaN,
+		ReplicaN:      1,
 		EventReceiver: NopEventReceiver,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
@@ -285,8 +281,7 @@ func NewCluster() *Cluster {
 		closing:             make(chan struct{}),
 		joining:             make(chan struct{}),
 
-		Logger:  NopLogger,
-		prefect: &NopSecurityManager{},
+		Logger: NopLogger,
 	}
 }
 
@@ -433,19 +428,11 @@ func (c *Cluster) setState(state string) {
 	var doCleanup bool
 
 	switch state {
-	case ClusterStateResizing:
-		c.prefect.SetRestricted()
 	case ClusterStateNormal:
-		c.prefect.SetNormal()
-		// Don't change routing for these states:
-		// - ClusterStateStarting
-
 		// If state is RESIZING -> NORMAL then run cleanup.
 		if c.state == ClusterStateResizing {
 			doCleanup = true
 		}
-	default:
-		panic(fmt.Sprintf("invalid cluster state: %s", state))
 	}
 
 	c.state = state

@@ -50,6 +50,7 @@ func NewCluster(n int) *pilosa.Cluster {
 
 	c.Node = c.Nodes[0]
 	c.Coordinator = c.Nodes[0].ID
+	c.SetState(pilosa.ClusterStateNormal)
 
 	return c
 }

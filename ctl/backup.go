@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
 )
 
 // BackupCommand represents a command for backing up a view.
@@ -39,7 +40,7 @@ type BackupCommand struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	TLS pilosa.TLSConfig
+	TLS server.TLSConfig
 }
 
 // NewBackupCommand returns a new instance of BackupCommand.
@@ -88,6 +89,6 @@ func (cmd *BackupCommand) TLSHost() string {
 	return cmd.Host
 }
 
-func (cmd *BackupCommand) TLSConfiguration() pilosa.TLSConfig {
+func (cmd *BackupCommand) TLSConfiguration() server.TLSConfig {
 	return cmd.TLS
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/toml"
 	"github.com/pkg/errors"
 )
 
@@ -151,7 +152,7 @@ type gossipConfig struct {
 type GossipMemberSetOption func(*GossipMemberSet) error
 
 // WithTransport is a functional option for providing a transport to NewGossipMemberSet.
-func WithTransport(transport *Transport) func(*GossipMemberSet) error {
+func WithTransport(transport *Transport) GossipMemberSetOption {
 	return func(g *GossipMemberSet) error {
 		g.transport = transport
 		return nil
@@ -159,7 +160,7 @@ func WithTransport(transport *Transport) func(*GossipMemberSet) error {
 }
 
 // WithLogger is a functional option for providing a logger to NewGossipMemberSet.
-func WithLogger(logger *log.Logger) func(*GossipMemberSet) error {
+func WithLogger(logger *log.Logger) GossipMemberSetOption {
 	return func(g *GossipMemberSet) error {
 		g.logger = logger
 		return nil
@@ -167,11 +168,8 @@ func WithLogger(logger *log.Logger) func(*GossipMemberSet) error {
 }
 
 // NewGossipMemberSet returns a new instance of GossipMemberSet based on options.
-func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
-
-	g := &GossipMemberSet{
-		Logger: server.Logger,
-	}
+func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventReceiver, sh pilosa.StatusHandler, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
+	g := &GossipMemberSet{}
 
 	// options
 	for _, opt := range options {
@@ -181,16 +179,10 @@ func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server, 
 	}
 
 	if g.transport == nil {
-		port, err := strconv.Atoi(cfg.Gossip.Port)
+		port, err := strconv.Atoi(cfg.Port)
 		if err != nil {
 			return nil, fmt.Errorf("convert port: %s", err)
 		}
-
-		bindURI, err := pilosa.NewURIFromAddress(cfg.Bind)
-		if err != nil {
-			return nil, fmt.Errorf("getting uri from bind address: %s", err)
-		}
-		host := bindURI.Host()
 
 		// Set up the transport.
 		transport, err := NewTransport(host, port, g.logger)
@@ -203,15 +195,10 @@ func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server, 
 
 	port := g.transport.Net.GetAutoBindPort()
 
-	bindURI, err := pilosa.NewURIFromAddress(cfg.Bind)
-	if err != nil {
-		return nil, fmt.Errorf("getting uri from bind address (with transport): %s", err)
-	}
-	host := bindURI.Host()
-
 	var gossipKey []byte
-	if cfg.Gossip.Key != "" {
-		gossipKey, err = ioutil.ReadFile(cfg.Gossip.Key)
+	var err error
+	if cfg.Key != "" {
+		gossipKey, err = ioutil.ReadFile(cfg.Key)
 		if err != nil {
 			return nil, fmt.Errorf("reading gossip key: %s", err)
 		}
@@ -226,26 +213,26 @@ func NewGossipMemberSet(name string, cfg *pilosa.Config, server *pilosa.Server, 
 	conf.AdvertisePort = port
 	conf.AdvertiseAddr = pilosa.HostToIP(host)
 	//
-	conf.TCPTimeout = time.Duration(cfg.Gossip.StreamTimeout)
-	conf.SuspicionMult = cfg.Gossip.SuspicionMult
-	conf.PushPullInterval = time.Duration(cfg.Gossip.PushPullInterval)
-	conf.ProbeTimeout = time.Duration(cfg.Gossip.ProbeTimeout)
-	conf.ProbeInterval = time.Duration(cfg.Gossip.ProbeInterval)
-	conf.GossipNodes = cfg.Gossip.Nodes
-	conf.GossipInterval = time.Duration(cfg.Gossip.Interval)
-	conf.GossipToTheDeadTime = time.Duration(cfg.Gossip.ToTheDeadTime)
+	conf.TCPTimeout = time.Duration(cfg.StreamTimeout)
+	conf.SuspicionMult = cfg.SuspicionMult
+	conf.PushPullInterval = time.Duration(cfg.PushPullInterval)
+	conf.ProbeTimeout = time.Duration(cfg.ProbeTimeout)
+	conf.ProbeInterval = time.Duration(cfg.ProbeInterval)
+	conf.GossipNodes = cfg.Nodes
+	conf.GossipInterval = time.Duration(cfg.Interval)
+	conf.GossipToTheDeadTime = time.Duration(cfg.ToTheDeadTime)
 	//
 	conf.Delegate = g
 	conf.SecretKey = gossipKey
-	conf.Events = server.Cluster.EventReceiver.(memberlist.EventDelegate)
+	conf.Events = ger
 	conf.Logger = g.logger
 
 	g.config = &gossipConfig{
 		memberlistConfig: conf,
-		gossipSeeds:      cfg.Gossip.Seeds,
+		gossipSeeds:      cfg.Seeds,
 	}
 
-	g.statusHandler = server
+	g.statusHandler = sh
 
 	return g, nil
 }
@@ -525,4 +512,69 @@ func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
 	}
 
 	return nt, nil
+}
+
+// Config holds toml-friendly memberlist configuration.
+type Config struct {
+	// Port indicates the port to which pilosa should bind for internal state sharing.
+	Port  string   `toml:"port"`
+	Seeds []string `toml:"seeds"`
+	Key   string   `toml:"key"`
+	// StreamTimeout is the timeout for establishing a stream connection with
+	// a remote node for a full state sync, and for stream read and write
+	// operations. Maps to memberlist TCPTimeout.
+	StreamTimeout toml.Duration `toml:"stream-timeout"`
+	// SuspicionMult is the multiplier for determining the time an
+	// inaccessible node is considered suspect before declaring it dead.
+	// The actual timeout is calculated using the formula:
+	//
+	//   SuspicionTimeout = SuspicionMult * log(N+1) * ProbeInterval
+	//
+	// This allows the timeout to scale properly with expected propagation
+	// delay with a larger cluster size. The higher the multiplier, the longer
+	// an inaccessible node is considered part of the cluster before declaring
+	// it dead, giving that suspect node more time to refute if it is indeed
+	// still alive.
+	SuspicionMult int `toml:"suspicion-mult"`
+	// PushPullInterval is the interval between complete state syncs.
+	// Complete state syncs are done with a single node over TCP and are
+	// quite expensive relative to standard gossiped messages. Setting this
+	// to zero will disable state push/pull syncs completely.
+	//
+	// Setting this interval lower (more frequent) will increase convergence
+	// speeds across larger clusters at the expense of increased bandwidth
+	// usage.
+	PushPullInterval toml.Duration `toml:"push-pull-interval"`
+	// ProbeInterval and ProbeTimeout are used to configure probing behavior
+	// for memberlist.
+	//
+	// ProbeInterval is the interval between random node probes. Setting
+	// this lower (more frequent) will cause the memberlist cluster to detect
+	// failed nodes more quickly at the expense of increased bandwidth usage.
+	//
+	// ProbeTimeout is the timeout to wait for an ack from a probed node
+	// before assuming it is unhealthy. This should be set to 99-percentile
+	// of RTT (round-trip time) on your network.
+	ProbeInterval toml.Duration `toml:"probe-interval"`
+	ProbeTimeout  toml.Duration `toml:"probe-timeout"`
+
+	// Interval and Nodes are used to configure the gossip
+	// behavior of memberlist.
+	//
+	// Interval is the interval between sending messages that need
+	// to be gossiped that haven't been able to piggyback on probing messages.
+	// If this is set to zero, non-piggyback gossip is disabled. By lowering
+	// this value (more frequent) gossip messages are propagated across
+	// the cluster more quickly at the expense of increased bandwidth.
+	//
+	// Nodes is the number of random nodes to send gossip messages to
+	// per Interval. Increasing this number causes the gossip messages
+	// to propagate across the cluster more quickly at the expense of
+	// increased bandwidth.
+	//
+	// ToTheDeadTime is the interval after which a node has died that
+	// we will still try to gossip to it. This gives it a chance to refute.
+	Interval      toml.Duration `toml:"interval"`
+	Nodes         int           `toml:"nodes"`
+	ToTheDeadTime toml.Duration `toml:"to-the-dead-time"`
 }

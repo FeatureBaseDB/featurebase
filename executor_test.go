@@ -280,7 +280,6 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		// Create frames.
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			RangeEnabled: true,
 			Fields: []*pilosa.Field{
 				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 50},
 				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 1, Max: 2},
@@ -330,7 +329,6 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		defer hldr.Close()
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			RangeEnabled: true,
 			Fields: []*pilosa.Field{
 				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 100},
 			},
@@ -611,7 +609,6 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		RangeEnabled: true,
 		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
 			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
@@ -621,7 +618,6 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
-		RangeEnabled: true,
 		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
 		},
@@ -723,7 +719,6 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		RangeEnabled: true,
 		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
 			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
@@ -733,7 +728,6 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
-		RangeEnabled: true,
 		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
 		},
@@ -742,7 +736,6 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("edge", pilosa.FrameOptions{
-		RangeEnabled: true,
 		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: -100, Max: 100},
 		},

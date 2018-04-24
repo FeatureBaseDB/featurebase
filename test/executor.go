@@ -20,6 +20,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/server"
 )
 
 // Executor represents a test wrapper for pilosa.Executor.
@@ -30,7 +31,7 @@ type Executor struct {
 var remoteClient *http.Client
 
 func init() {
-	remoteClient = pilosa.GetHTTPClient(nil)
+	remoteClient = server.GetHTTPClient(nil)
 }
 
 // NewExecutor returns a new instance of Executor.

@@ -1674,19 +1674,6 @@ func (c *container) clone() *container {
 	return other
 }
 
-// flipBitmap returns a new bitmap containter containing the inverse of all
-// bits in c.
-func (c *container) flipBitmap() *container {
-	other := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
-
-	for i, bitmap := range c.bitmap {
-		other.bitmap[i] = ^bitmap
-	}
-
-	other.n = other.count()
-	return other
-}
-
 // WriteTo writes c to w.
 func (c *container) WriteTo(w io.Writer) (n int64, err error) {
 	if c.isArray() {
@@ -1810,6 +1797,43 @@ type ContainerInfo struct {
 	N       int            // number of bits
 	Alloc   int            // memory used
 	Pointer unsafe.Pointer // offset within the mmap
+}
+
+// flip returns a new container containing the inverse of all
+// bits in a.
+func flip(a *container) *container {
+	if a.isArray() {
+		return flipArray(a)
+	} else if a.isRun() {
+		return flipRun(a)
+	} else {
+		return flipBitmap(a)
+	}
+}
+
+func flipArray(b *container) *container {
+	// TODO: actually implement this
+	x := b.clone()
+	x.arrayToBitmap()
+	return flipBitmap(x)
+}
+
+func flipBitmap(b *container) *container {
+	other := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
+
+	for i, bitmap := range b.bitmap {
+		other.bitmap[i] = ^bitmap
+	}
+
+	other.n = other.count()
+	return other
+}
+
+func flipRun(b *container) *container {
+	// TODO: actually implement this
+	x := b.clone()
+	x.runToBitmap()
+	return flipBitmap(x)
 }
 
 func intersectionCount(a, b *container) int {
@@ -2571,7 +2595,7 @@ RUNLOOP:
 func differenceRunBitmap(a, b *container) *container {
 	// If a is full, difference is the flip of b.
 	if len(a.runs) > 0 && a.runs[0].start == 0 && a.runs[0].last == 65535 {
-		return b.flipBitmap()
+		return flipBitmap(b)
 	}
 	output := &container{containerType: ContainerRun}
 	output.n = a.n

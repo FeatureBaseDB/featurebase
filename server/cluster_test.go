@@ -26,80 +26,18 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/test"
 )
 
 // Ensure program can send/receive broadcast messages.
 func TestMain_SendReceiveMessage(t *testing.T) {
-
-	m0 := test.MustRunMain()
+	ms := test.MustRunMainWithCluster(t, 2)
+	m0, m1 := ms[0], ms[1]
 	defer m0.Close()
-
-	m1 := test.MustRunMain()
 	defer m1.Close()
 
-	// Update cluster config
-	m0.Server.Cluster.Nodes = []*pilosa.Node{
-		{ID: m0.Server.NodeID, URI: m0.Server.URI},
-		{ID: m1.Server.NodeID, URI: m1.Server.URI},
-	}
-	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
-
-	// Configure node0
-
-	// get the host portion of addr to use for binding
-	m0.Config.Gossip.Port = "0"
-	m0.Config.Gossip.Seeds = []string{}
-
-	m0.Server.Cluster.Coordinator = m0.Server.NodeID
-	m0.Server.Cluster.Topology = &pilosa.Topology{NodeIDs: []string{m0.Server.NodeID, m1.Server.NodeID}}
-	m0.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m0.Server.Logger)
-	gossipMemberSet0, err := gossip.NewGossipMemberSet(m0.Server.URI.HostPort(), m0.Config, m0.Server)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m0.Server.Cluster.MemberSet = gossipMemberSet0
-	m0.Server.Broadcaster = m0.Server
-	m0.Server.Gossiper = gossipMemberSet0
-	m0.Server.Handler.API.Broadcaster = m0.Server.Broadcaster
-	m0.Server.Holder.Broadcaster = m0.Server.Broadcaster
-	m0.Server.BroadcastReceiver = gossipMemberSet0
-
-	if err := m0.Server.BroadcastReceiver.Start(m0.Server); err != nil {
-		t.Fatal(err)
-	}
-	// Open Cluster management.
-	if err := m0.Server.Cluster.Open(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Configure node1
-
-	// get the host portion of addr to use for binding
-	m1.Config.Gossip.Port = "0"
-	m1.Config.Gossip.Seeds = []string{gossipMemberSet0.GetBindAddr()}
-
-	m1.Server.Cluster.Coordinator = m0.Server.NodeID
-	m1.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m1.Server.Logger)
-	gossipMemberSet1, err := gossip.NewGossipMemberSet(m1.Server.URI.HostPort(), m1.Config, m1.Server)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m1.Server.Cluster.MemberSet = gossipMemberSet1
-	m1.Server.Broadcaster = m1.Server
-	m1.Server.Gossiper = gossipMemberSet1
-	m1.Server.Handler.API.Broadcaster = m1.Server.Broadcaster
-	m1.Server.Holder.Broadcaster = m1.Server.Broadcaster
-	m1.Server.BroadcastReceiver = gossipMemberSet1
-
-	if err := m1.Server.BroadcastReceiver.Start(m1.Server); err != nil {
-		t.Fatal(err)
-	}
-	// Open Cluster management.
-	if err := m1.Server.Cluster.Open(); err != nil {
-		t.Fatal(err)
-	}
+	m0.Server.Cluster.SetState(pilosa.ClusterStateNormal)
+	m1.Server.Cluster.SetState(pilosa.ClusterStateNormal)
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

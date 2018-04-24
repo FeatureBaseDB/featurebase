@@ -39,10 +39,6 @@ type Index struct {
 	path string
 	name string
 
-	// Default time quantum for all frames in index.
-	// This can be overridden by individual frames.
-	timeQuantum TimeQuantum
-
 	// Frames by name.
 	frames map[string]*Frame
 
@@ -106,9 +102,7 @@ func (i *Index) Options() IndexOptions {
 }
 
 func (i *Index) options() IndexOptions {
-	return IndexOptions{
-		TimeQuantum: i.timeQuantum,
-	}
+	return IndexOptions{}
 }
 
 // Open opens and initializes the index.
@@ -175,7 +169,6 @@ func (i *Index) loadMeta() error {
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(i.path, ".meta"))
 	if os.IsNotExist(err) {
-		i.timeQuantum = ""
 		return nil
 	} else if err != nil {
 		return err
@@ -186,17 +179,18 @@ func (i *Index) loadMeta() error {
 	}
 
 	// Copy metadata fields.
-	i.timeQuantum = TimeQuantum(pb.TimeQuantum)
 
 	return nil
 }
 
+// NOTE: Until we introduce new attributes to store in the index .meta file,
+// we don't need to actually write the file. The code related to index.options
+// and the index meta file are left in place for future use.
+/*
 // saveMeta writes meta data for the index.
 func (i *Index) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.IndexMeta{
-		TimeQuantum: string(i.timeQuantum),
-	})
+	buf, err := proto.Marshal(&internal.IndexMeta{})
 	if err != nil {
 		return err
 	}
@@ -208,6 +202,7 @@ func (i *Index) saveMeta() error {
 
 	return nil
 }
+*/
 
 // Close closes the index and its frames.
 func (i *Index) Close() error {
@@ -276,34 +271,6 @@ func (i *Index) SetRemoteMaxInverseSlice(v uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.remoteMaxInverseSlice = v
-}
-
-// TimeQuantum returns the default time quantum for the index.
-func (i *Index) TimeQuantum() TimeQuantum {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-	return i.timeQuantum
-}
-
-// SetTimeQuantum sets the default time quantum for the index.
-func (i *Index) SetTimeQuantum(q TimeQuantum) error {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Validate input.
-	if !q.Valid() {
-		return ErrInvalidTimeQuantum
-	}
-
-	// Update value on index.
-	i.timeQuantum = q
-
-	// Perist meta data to disk.
-	if err := i.saveMeta(); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // FramePath returns the path to a frame in the index.
@@ -404,13 +371,7 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 
 	// Validate mutually exclusive options if ranges are enabled.
 	if opt.RangeEnabled {
-		if opt.InverseEnabled {
-			return nil, ErrInverseRangeNotAllowed
-		}
-	} else {
-		if len(opt.Fields) > 0 {
-			return nil, ErrFrameFieldsNotAllowed
-		}
+		i.Logger.Printf("RangeEnabled is deprecated - no need to set RangeEnabled to true when creating a frame")
 	}
 
 	// Validate fields.
@@ -431,12 +392,8 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, err
 	}
 
-	// Default the time quantum to what is set on the Index.
-	timeQuantum := i.timeQuantum
-	if opt.TimeQuantum != "" {
-		timeQuantum = opt.TimeQuantum
-	}
-	if err := f.SetTimeQuantum(timeQuantum); err != nil {
+	// Set the time quantum.
+	if err := f.SetTimeQuantum(opt.TimeQuantum); err != nil {
 		f.Close()
 		return nil, err
 	}
@@ -452,9 +409,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	}
 
 	f.inverseEnabled = opt.InverseEnabled
-	f.rangeEnabled = opt.RangeEnabled
-
-	f.rangeEnabled = opt.RangeEnabled
 
 	// Set fields.
 	f.fields = opt.Fields
@@ -527,46 +481,6 @@ func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p indexInfoSlice) Len() int           { return len(p) }
 func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
-// MergeSchemas combines indexes and frames from a and b into one schema.
-func MergeSchemas(a, b []*IndexInfo) []*IndexInfo {
-	// Generate a map from both schemas.
-	m := make(map[string]map[string]map[string]struct{})
-	for _, idxs := range [][]*IndexInfo{a, b} {
-		for _, idx := range idxs {
-			if m[idx.Name] == nil {
-				m[idx.Name] = make(map[string]map[string]struct{})
-			}
-			for _, frame := range idx.Frames {
-				if m[idx.Name][frame.Name] == nil {
-					m[idx.Name][frame.Name] = make(map[string]struct{})
-				}
-				for _, view := range frame.Views {
-					m[idx.Name][frame.Name][view.Name] = struct{}{}
-				}
-			}
-		}
-	}
-
-	// Generate new schema from map.
-	idxs := make([]*IndexInfo, 0, len(m))
-	for idx, frames := range m {
-		di := &IndexInfo{Name: idx}
-		for frame, views := range frames {
-			fi := &FrameInfo{Name: frame}
-			for view := range views {
-				fi.Views = append(fi.Views, &ViewInfo{Name: view})
-			}
-			sort.Sort(viewInfoSlice(fi.Views))
-			di.Frames = append(di.Frames, fi)
-		}
-		sort.Sort(frameInfoSlice(di.Frames))
-		idxs = append(idxs, di)
-	}
-	sort.Sort(indexInfoSlice(idxs))
-
-	return idxs
-}
-
 // EncodeIndexes converts a into its internal representation.
 func EncodeIndexes(a []*Index) []*internal.Index {
 	other := make([]*internal.Index, len(a))
@@ -586,15 +500,11 @@ func encodeIndex(d *Index) *internal.Index {
 }
 
 // IndexOptions represents options to set when initializing an index.
-type IndexOptions struct {
-	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
-}
+type IndexOptions struct{}
 
 // Encode converts i into its internal representation.
 func (i *IndexOptions) Encode() *internal.IndexMeta {
-	return &internal.IndexMeta{
-		TimeQuantum: string(i.TimeQuantum),
-	}
+	return &internal.IndexMeta{}
 }
 
 // hasTime returns true if a contains a non-nil time.

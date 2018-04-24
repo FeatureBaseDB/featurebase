@@ -24,7 +24,7 @@ nav = []
 
 <strong id="fragment">Fragment:</strong> A Fragment is the intersection of a [frame](#frame) and a [slice](#slice) in an [index](#index).
 
-<strong id="frame">[Frame](../data-model/#frame):</strong> Frames are used to group [rows](#row) into different categories. `RowID`s are namespaced by frame such that the same `RowID` in a different frame refers to a different row. For [ranked](#topn) frames, rows are kept in sorted order within the frame.
+<strong id="frame">[Frame](../data-model/#frame):</strong> Frames are used to group [rows](#row) into different categories. Row IDs are namespaced by frame such that the same row ID in a different frame refers to a different row. For [ranked](#topn) frames, rows are kept in sorted order within the frame.
 
 <strong id="index">[Index](../data-model/#index):</strong> An Index is a top level container in Pilosa, analogous to a database in an RDBMS. Queries cannot operate across multiple indexes.
 
@@ -62,6 +62,6 @@ nav = []
 
 <strong id="toml">[TOML](https://github.com/toml-lang/toml):</strong> the language used for Pilosa's [configuration file](../configuration/).
 
-<strong id="topn">[TopN](../query-language/#topn):</strong> A [PQL](#pql) query that returns a list of `RowID`s, sorted by the count of [bits](#bit) set in the [row](#row), within a specified [frame](#frame).
+<strong id="topn">[TopN](../query-language/#topn):</strong> A [PQL](#pql) query that returns a list of row IDs, sorted by the count of [bits](#bit) set in the [row](#row), within a specified [frame](#frame).
 
-<strong id="view">[View](../data-model/#view):</strong> Views separate the different data layouts within a [Frame](#frame). The two primary views are standard and inverse which represent the typical [row](#row)/[column](#column) data and its inverse respectively (an [inverted index](https://en.wikipedia.org/wiki/Inverted_index), or a matrix transpose). Time based frame views are automatically generated for each [time quantum](#time-quantum). Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface by separating it from the physical data representation.
+<strong id="view">[View](../data-model/#view):</strong> Views separate the different data layouts within a [Frame](#frame). The primary view is standard, which represents the typical [row](#row)/[column](#column) data. Time based frame views are automatically generated for each [time quantum](#time-quantum). Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface by separating it from the physical data representation.

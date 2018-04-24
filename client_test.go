@@ -26,6 +26,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -47,7 +48,7 @@ func createCluster(c *pilosa.Cluster) ([]*test.Server, []*test.Holder) {
 var defaultClient *http.Client
 
 func init() {
-	defaultClient = pilosa.GetHTTPClient(nil)
+	defaultClient = server.GetHTTPClient(nil)
 
 }
 
@@ -310,7 +311,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true, Fields: []*pilosa.Field{&fld}})
+	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{Fields: []*pilosa.Field{&fld}})
 	if err != nil {
 		t.Fatal(err)
 	}

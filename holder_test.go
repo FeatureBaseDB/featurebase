@@ -25,6 +25,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -70,22 +71,6 @@ func TestHolder_Open(t *testing.T) {
 		defer os.Chmod(h.IndexPath("test"), 0777)
 
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
-	t.Run("ErrIndexMetaCorrupt", func(t *testing.T) {
-		h := test.MustOpenHolder()
-		defer h.Close()
-
-		if _, err := h.CreateIndex("test", pilosa.IndexOptions{TimeQuantum: pilosa.TimeQuantum("YMDH")}); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.IndexPath("test"), ".meta"), 2); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "unexpected EOF") {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -383,7 +368,7 @@ func TestHolder_DeleteIndex(t *testing.T) {
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
 	cluster := test.NewCluster(2)
-	client := pilosa.GetHTTPClient(nil)
+	client := server.GetHTTPClient(nil)
 	// Create a local holder.
 	hldr0 := test.MustOpenHolder()
 	defer hldr0.Close()
@@ -467,7 +452,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 		Holder:       hldr0.Holder,
 		Node:         cluster.Nodes[0],
 		Cluster:      cluster,
-		RemoteClient: pilosa.GetHTTPClient(nil),
+		RemoteClient: server.GetHTTPClient(nil),
 		Stats:        pilosa.NopStatsClient,
 	}
 

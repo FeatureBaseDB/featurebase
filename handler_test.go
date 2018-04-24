@@ -160,7 +160,7 @@ func TestHandler_ClusterResizeAbort(t *testing.T) {
 	t.Run("No resize job", func(t *testing.T) {
 		h := test.NewHandler()
 		h.API.Cluster = test.NewCluster(1)
-		h.SetRestricted()
+		h.API.Cluster.SetState(pilosa.ClusterStateResizing)
 
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/cluster/resize/abort", nil))
@@ -748,50 +748,6 @@ func TestHandler_DeleteFrame(t *testing.T) {
 	}
 }
 
-// Ensure handler can set the Index time quantum.
-func TestHandler_SetIndexTimeQuantum(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-
-	h := test.NewHandler()
-	h.API.Holder = hldr.Holder
-	h.API.Cluster = test.NewCluster(1)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("PATCH", "/index/i0/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{}`+"\n" {
-		t.Fatalf("unexpected body: %s", body)
-	} else if q := hldr.Index("i0").TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
-		t.Fatalf("unexpected time quantum: %s", q)
-	}
-}
-
-// Ensure handler can set the frame time quantum.
-func TestHandler_SetFrameTimeQuantum(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	// Create frame.
-	if _, err := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{}).CreateFrame("f1", pilosa.FrameOptions{}); err != nil {
-		t.Fatal(err)
-	}
-
-	h := test.NewHandler()
-	h.API.Holder = hldr.Holder
-	h.API.Cluster = test.NewCluster(1)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("PATCH", "/index/i0/frame/f1/time-quantum", strings.NewReader(`{"timeQuantum":"ymdh"}`)))
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{}`+"\n" {
-		t.Fatalf("unexpected body: %s", body)
-	} else if q := hldr.Index("i0").Frame("f1").TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
-		t.Fatalf("unexpected time quantum: %s", q)
-	}
-}
-
 // Ensure the handler can return data in differing blocks for an index.
 func TestHandler_Index_AttrStore_Diff(t *testing.T) {
 	hldr := test.MustOpenHolder()
@@ -902,7 +858,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -927,7 +883,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 
 	t.Run("ErrInvalidFieldType", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true}); err != nil {
+		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -949,7 +905,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 
 	t.Run("ErrInvalidFieldRange", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true}); err != nil {
+		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -972,8 +928,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 	t.Run("ErrFieldAlreadyExists", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			RangeEnabled: true,
-			Fields:       []*pilosa.Field{{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}},
+			Fields: []*pilosa.Field{{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}},
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -1006,7 +961,7 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
 		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}); err != nil {
@@ -1034,7 +989,7 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 
 	t.Run("ErrFieldNotFound", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
 		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}); err != nil {
@@ -1071,7 +1026,7 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true})
+		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
 		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 1, Max: 100}); err != nil {
@@ -1105,7 +1060,7 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 
 	t.Run("ErrFrameFieldNotAllowed", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		_, err := idx.CreateFrameIfNotExists("f1", pilosa.FrameOptions{RangeEnabled: false})
+		_, err := idx.CreateFrameIfNotExists("f1", pilosa.FrameOptions{})
 
 		resp, err := http.Get(s.URL + "/index/i/frame/f1/fields")
 		if err != nil {
@@ -1113,12 +1068,12 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 		}
 		if err != nil {
 			t.Fatal(err)
-		} else if resp.StatusCode != http.StatusBadRequest {
+		} else if resp.StatusCode != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", resp.StatusCode)
 		} else if body, err := ioutil.ReadAll(resp.Body); err != nil {
 			t.Fatal(err)
-		} else if strings.TrimSpace(string(body)) != `frame fields not allowed` {
-			t.Fatalf("unexpected body: %q", body)
+		} else if strings.TrimSpace(string(body)) == `frame fields not allowed` {
+			t.Fatalf("shouldn't get frame fields not allowed error: %q", body)
 		}
 	})
 

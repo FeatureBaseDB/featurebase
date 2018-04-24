@@ -15,7 +15,6 @@
 package pilosa
 
 import (
-	"context"
 	"encoding/json"
 	"expvar"
 	"fmt"
@@ -35,7 +34,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
-	"github.com/pilosa/pilosa/pql"
 	"github.com/pkg/errors"
 )
 
@@ -43,14 +41,7 @@ import (
 type Handler struct {
 	Router *mux.Router
 
-	FileSystem       FileSystem
-	NormalRouter     *mux.Router
-	RestrictedRouter *mux.Router
-
-	// The execution engine for running queries.
-	Executor interface {
-		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
-	}
+	FileSystem FileSystem
 
 	Logger Logger
 
@@ -83,27 +74,9 @@ func NewHandler() *Handler {
 		FileSystem: NopFileSystem,
 		Logger:     NopLogger,
 	}
-	BuildRouters(handler)
+	handler.Router = NewRouter(handler)
 	handler.populateValidators()
 	return handler
-}
-
-// BuildRouters creates Gorilla Mux http routers for both normal and restricted endpoints.
-func BuildRouters(handler *Handler) {
-	router := mux.NewRouter()
-	loadCommon(router, handler)
-	loadNormal(router, handler)
-	handler.NormalRouter = router
-	router.Use(handler.queryArgValidator)
-
-	// Restricted router.
-	router = mux.NewRouter()
-	loadCommon(router, handler)
-	loadRestricted(router, handler)
-	handler.RestrictedRouter = router
-	router.Use(handler.queryArgValidator)
-
-	handler.SetRestricted()
 }
 
 func (h *Handler) populateValidators() {
@@ -138,17 +111,9 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 	})
 }
 
-// SetNormal is a method of the SecurityManager interface which provides normal URI routing.
-func (h *Handler) SetNormal() {
-	h.Router = h.NormalRouter
-}
-
-// SetRestricted is a method of the SecurityManager interface which provides restricted URI routing.
-func (h *Handler) SetRestricted() {
-	h.Router = h.RestrictedRouter
-}
-
-func loadCommon(router *mux.Router, handler *Handler) {
+// NewRouter creates a new mux http router.
+func NewRouter(handler *Handler) *mux.Router {
+	router := mux.NewRouter()
 	router.HandleFunc("/", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
 	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
@@ -162,16 +127,9 @@ func loadCommon(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
-	router.Use(handler.queryArgValidator)
-}
 
-func loadRestricted(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
-	router.NotFoundHandler = http.HandlerFunc(handler.reportRestricted)
-	router.Use(handler.queryArgValidator)
-}
 
-func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
@@ -192,7 +150,6 @@ func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST").Name("PostFrameRestore")
-	router.HandleFunc("/index/{index}/frame/{frame}/time-quantum", handler.handlePatchFrameTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameFields).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
@@ -203,7 +160,6 @@ func loadNormal(router *mux.Router, handler *Handler) {
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
 	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
-	router.HandleFunc("/index/{index}/time-quantum", handler.handlePatchIndexTimeQuantum).Methods("PATCH")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
@@ -212,10 +168,8 @@ func loadNormal(router *mux.Router, handler *Handler) {
 	// For now we just do it for the most commonly used handler, /query
 	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
 
-}
-
-func (h *Handler) reportRestricted(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, fmt.Sprintf("not allowed in cluster state %s", h.API.State()), http.StatusMethodNotAllowed)
+	router.Use(handler.queryArgValidator)
+	return router
 }
 
 func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
@@ -494,45 +448,6 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handlePatchIndexTimeQuantum handles PATCH /index/time_quantum request.
-func (h *Handler) handlePatchIndexTimeQuantum(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-
-	// Decode request.
-	var req patchIndexTimeQuantumRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Validate quantum.
-	tq, err := ParseTimeQuantum(req.TimeQuantum)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err = h.API.ModifyIndexTimeQuantum(r.Context(), indexName, tq); err != nil {
-		if err == ErrIndexNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(patchIndexTimeQuantumResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-type patchIndexTimeQuantumRequest struct {
-	TimeQuantum string `json:"timeQuantum"`
-}
-
-type patchIndexTimeQuantumResponse struct{}
-
 // handlePostIndexAttrDiff handles POST /index/attr/diff requests.
 func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
@@ -673,46 +588,6 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 
 type deleteFrameResponse struct{}
 
-// handlePatchFrameTimeQuantum handles PATCH /frame/time_quantum request.
-func (h *Handler) handlePatchFrameTimeQuantum(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
-
-	// Decode request.
-	var req patchFrameTimeQuantumRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Validate quantum.
-	tq, err := ParseTimeQuantum(req.TimeQuantum)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := h.API.ModifyFrameTimeQuantum(r.Context(), indexName, frameName, tq); err != nil {
-		if err == ErrFragmentNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(patchFrameTimeQuantumResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-type patchFrameTimeQuantumRequest struct {
-	TimeQuantum string `json:"timeQuantum"`
-}
-
-type patchFrameTimeQuantumResponse struct{}
-
 // handlePostFrameField handles POST /frame/field request.
 func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
@@ -788,8 +663,6 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 			fallthrough
 		case ErrFrameNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case ErrFrameFieldsNotAllowed:
-			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -1169,7 +1042,11 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve fragment owner nodes.
-	nodes := h.API.SliceNodes(r.Context(), index, slice)
+	nodes, err := h.API.SliceNodes(r.Context(), index, slice)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Write to response.
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
@@ -1727,7 +1604,7 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err := h.API.PostClusterMessage(r.Context(), r.Body)
+	err := h.API.ClusterMessage(r.Context(), r.Body)
 	if err != nil {
 		// TODO this was the previous behavior, but perhaps not everything is a bad request
 		http.Error(w, err.Error(), http.StatusBadRequest)

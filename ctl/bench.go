@@ -24,6 +24,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/server"
 )
 
 // BenchCommand represents a command for benchmarking index operations.
@@ -42,7 +43,7 @@ type BenchCommand struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	TLS pilosa.TLSConfig
+	TLS server.TLSConfig
 }
 
 // NewBenchCommand returns a new instance of BenchCommand.
@@ -110,6 +111,6 @@ func (cmd *BenchCommand) TLSHost() string {
 	return cmd.Host
 }
 
-func (cmd *BenchCommand) TLSConfiguration() pilosa.TLSConfig {
+func (cmd *BenchCommand) TLSConfiguration() server.TLSConfig {
 	return cmd.TLS
 }

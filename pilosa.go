@@ -46,19 +46,16 @@ var (
 	ErrInputDefinitionActionRequired = errors.New("field definitions require an action")
 	ErrInputDefinitionNotFound       = errors.New("input-definition not found")
 
-	ErrFieldNotFound          = errors.New("field not found")
-	ErrFieldExists            = errors.New("field already exists")
-	ErrFieldNameRequired      = errors.New("field name required")
-	ErrInvalidFieldType       = errors.New("invalid field type")
-	ErrInvalidFieldRange      = errors.New("invalid field range")
-	ErrInverseRangeNotAllowed = errors.New("inverse range not allowed")
-	ErrRangeCacheNotAllowed   = errors.New("range cache not allowed")
-	ErrFrameFieldsNotAllowed  = errors.New("frame fields not allowed")
-	ErrInvalidFieldValueType  = errors.New("invalid field value type")
-	ErrFieldValueTooLow       = errors.New("field value too low")
-	ErrFieldValueTooHigh      = errors.New("field value too high")
-	ErrInvalidRangeOperation  = errors.New("invalid range operation")
-	ErrInvalidBetweenValue    = errors.New("invalid value for between operation")
+	ErrFieldNotFound         = errors.New("field not found")
+	ErrFieldExists           = errors.New("field already exists")
+	ErrFieldNameRequired     = errors.New("field name required")
+	ErrInvalidFieldType      = errors.New("invalid field type")
+	ErrInvalidFieldRange     = errors.New("invalid field range")
+	ErrInvalidFieldValueType = errors.New("invalid field value type")
+	ErrFieldValueTooLow      = errors.New("field value too low")
+	ErrFieldValueTooHigh     = errors.New("field value too high")
+	ErrInvalidRangeOperation = errors.New("invalid range operation")
+	ErrInvalidBetweenValue   = errors.New("invalid value for between operation")
 
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
@@ -71,16 +68,18 @@ var (
 	ErrQueryRequired    = errors.New("query required")
 	ErrTooManyWrites    = errors.New("too many write commands")
 
-	ErrConfigClusterEnabledHosts = errors.New("providing hosts to a non-disabled cluster is not allowed")
-	ErrConfigClusterTypeInvalid  = errors.New("invalid cluster type")
-	ErrConfigHostsMissing        = errors.New("missing bind address in cluster hosts")
-
 	ErrClusterDoesNotOwnSlice = errors.New("cluster does not own slice")
 
 	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
 	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
 	ErrResizeNotRunning   = errors.New("no resize job currently running")
 )
+
+// ApiMethodNotAllowedError wraps an error value indicating that a particular
+// API method is not allowed in the current cluster state.
+type ApiMethodNotAllowedError struct {
+	error
+}
 
 // BadRequestError wraps an error value to signify that a request could not be
 // read, decoded, or parsed such that in an HTTP scenario, http.StatusBadRequest

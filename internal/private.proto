@@ -3,7 +3,6 @@ syntax = "proto3";
 package internal;
 
 message IndexMeta {
-	string TimeQuantum = 2;
 }
 
 message FrameMeta {

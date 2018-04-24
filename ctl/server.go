@@ -61,8 +61,4 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVarP(&srv.Config.Metric.Host, "metric.host", "", srv.Config.Metric.Host, "Default URI to send metrics.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Metric.PollInterval), "metric.poll-interval", "", (time.Duration)(srv.Config.Metric.PollInterval), "Polling interval metrics.")
 	flags.BoolVarP((&srv.Config.Metric.Diagnostics), "metric.diagnostics", "", srv.Config.Metric.Diagnostics, "Enabled diagnostics reporting.")
-
-	// CPU Profiling
-	flags.StringVarP(&srv.CPUProfile, "profile.cpu", "", "", "Where to store CPU profile.")
-	flags.DurationVarP(&srv.CPUTime, "profile.cpu-time", "", 30*time.Second, "CPU profile duration.")
 }
