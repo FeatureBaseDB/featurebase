@@ -305,6 +305,7 @@ func (m *Command) SetupNetworking() error {
 	// Set Coordinator.
 	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
 		m.Server.Cluster.Coordinator = m.Server.NodeID
+		m.Server.Cluster.Node.IsCoordinator = true
 	}
 
 	gossipEventReceiver := gossip.NewGossipEventReceiver(m.logger)

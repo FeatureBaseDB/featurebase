@@ -17,7 +17,6 @@ package pilosa
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"io/ioutil"
@@ -33,6 +32,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -899,7 +899,10 @@ func (c *Cluster) Open() error {
 	}
 
 	// Add the local node to the cluster.
-	c.AddNode(c.Node)
+	err := c.AddNode(c.Node)
+	if err != nil {
+		return errors.Wrap(err, "adding local node")
+	}
 
 	// Start the EventReceiver.
 	if err := c.EventReceiver.Start(c); err != nil {
@@ -1684,13 +1687,15 @@ func (c *Cluster) nodeJoin(node *Node) error {
 		// Only change to normal if there is no existing data. Otherwise,
 		// the coordinator needs to wait to receive READY messages (nodeStates)
 		// from remote nodes before setting the cluster to state NORMAL.
-		if !c.Holder.HasData() {
+		if ok, err := c.Holder.HasData(); !ok && err == nil {
 			// If the result of the previous AddNode completed the joining of nodes
 			// in the topology, then change the state to NORMAL.
 			if c.haveTopologyAgreement() {
 				return c.setStateAndBroadcast(ClusterStateNormal)
 			}
 			return nil
+		} else if err != nil {
+			return errors.Wrap(err, "checking if holder has data")
 		}
 
 		if c.haveTopologyAgreement() && c.allNodesReady() {
@@ -1712,11 +1717,13 @@ func (c *Cluster) nodeJoin(node *Node) error {
 	}
 
 	// If the holder does not yet contain data, go ahead and add the node.
-	if !c.Holder.HasData() {
+	if ok, err := c.Holder.HasData(); !ok && err == nil {
 		if err := c.AddNode(node); err != nil {
 			return err
 		}
 		return c.setStateAndBroadcast(ClusterStateNormal)
+	} else if err != nil {
+		return errors.Wrap(err, "checking if holder has data2")
 	}
 
 	// If the cluster has data, we need to change to RESIZING and
@@ -1770,11 +1777,13 @@ func (c *Cluster) nodeLeave(node *Node) error {
 	}
 
 	// If the holder does not yet contain data, go ahead and remove the node.
-	if !c.Holder.HasData() {
+	if ok, err := c.Holder.HasData(); !ok && err == nil {
 		if err := c.RemoveNode(n); err != nil {
 			return err
 		}
 		return c.setStateAndBroadcast(ClusterStateNormal)
+	} else if err != nil {
+		return errors.Wrap(err, "checking if holder has data")
 	}
 
 	// If the cluster has data then change state to RESIZING and
