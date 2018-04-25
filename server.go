@@ -54,6 +54,7 @@ type Server struct {
 	Holder      *Holder
 	Cluster     *Cluster
 	diagnostics *DiagnosticsCollector
+	executor    *Executor
 
 	// External
 	handler           *Handler
@@ -161,7 +162,8 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 
 func OptServerRemoteClient(c *http.Client) ServerOption {
 	return func(s *Server) error {
-		s.remoteClient = c
+		s.executor = NewExecutor(c)
+		s.defaultClient = NewInternalHTTPClientFromURI(nil, c)
 		s.Cluster.RemoteClient = c
 		return nil
 	}
@@ -231,11 +233,28 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 	s.Cluster.Logger = s.logger
 	s.Cluster.Holder = s.Holder
-	s.Cluster.RemoteClient = s.remoteClient
+
 	// update URI port with actual listener port. TODO this should probably be done outside of here.
 	if s.URI.Port() == 0 {
 		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
 	}
+
+	s.NodeID = s.LoadNodeID()
+	// Set Cluster Node.
+	node := &Node{
+		ID:            s.NodeID,
+		URI:           s.URI,
+		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
+	}
+	s.Cluster.Node = node
+	s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
+
+	s.executor.Holder = s.Holder
+	s.executor.Node = node
+	s.executor.Cluster = s.Cluster
+	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
+	s.handler.API.Executor = s.executor
+
 	return s, nil
 }
 
@@ -248,33 +267,12 @@ func (s *Server) Open() error {
 	}
 
 	// Get or create NodeID.
-	s.NodeID = s.LoadNodeID()
-
-	// Set Cluster Node.
-	node := &Node{
-		ID:            s.NodeID,
-		URI:           s.URI,
-		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
-	}
-	s.Cluster.Node = node
 
 	// Append the NodeID tag to stats.
-	s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
-
-	// Peek at the holder to determine if there is data on disk.
-	// Don't actually load the data until after the Cluster
-	// management starts.
-	s.Holder.Peek()
 
 	// Create default HTTP client
-	s.createDefaultClient(s.remoteClient)
 
 	// Create executor for executing queries.
-	e := NewExecutor(s.remoteClient)
-	e.Holder = s.Holder
-	e.Node = node
-	e.Cluster = s.Cluster
-	e.MaxWritesPerRequest = s.maxWritesPerRequest
 
 	// Cluster settings.
 	s.Cluster.Broadcaster = s.Broadcaster
@@ -287,7 +285,6 @@ func (s *Server) Open() error {
 	s.handler.API.StatusHandler = s
 	s.handler.API.URI = s.URI
 	s.handler.API.Cluster = s.Cluster
-	s.handler.API.Executor = e
 
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster
@@ -748,10 +745,6 @@ func (s *Server) monitorRuntime() {
 		s.Holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
 		s.Holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
 	}
-}
-
-func (s *Server) createDefaultClient(remoteClient *http.Client) {
-	s.defaultClient = NewInternalHTTPClientFromURI(nil, remoteClient)
 }
 
 // CountOpenFiles on operating systems that support lsof.
