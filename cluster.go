@@ -315,7 +315,7 @@ func (c *Cluster) SetCoordinator(n *Node) error {
 	}
 
 	// Update IsCoordinator on all nodes (locally).
-	_ = c.UpdateCoordinator(n)
+	_ = c.updateCoordinator(n)
 
 	// Send the update coordinator message to all nodes.
 	err := c.Broadcaster.SendSync(
@@ -335,6 +335,12 @@ func (c *Cluster) SetCoordinator(n *Node) error {
 // to true, and sets all other nodes to false. Returns true if the value
 // changed.
 func (c *Cluster) UpdateCoordinator(n *Node) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_ = c.updateCoordinator(n)
+}
+
+func (c *Cluster) updateCoordinator(n *Node) bool {
 	var changed bool
 	if c.Coordinator != n.ID {
 		c.Coordinator = n.ID
