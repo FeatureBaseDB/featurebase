@@ -337,7 +337,7 @@ func (c *Cluster) SetCoordinator(n *Node) error {
 func (c *Cluster) UpdateCoordinator(n *Node) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	_ = c.updateCoordinator(n)
+	return c.updateCoordinator(n)
 }
 
 func (c *Cluster) updateCoordinator(n *Node) bool {
