@@ -24,6 +24,7 @@ deploy:
     on:
       all_branches: true
       go: "1.10"
+      condition: $GOARCH = amd64
 matrix:
   allow_failures:
     - go: master
