@@ -13,7 +13,7 @@ import (
 	"github.com/pilosa/pilosa/internal"
 )
 
-// NewCluster returns a cluster with n nodes and uses a mod-based hasher.
+// NewTestCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewTestCluster(n int) *Cluster {
 	path, err := ioutil.TempDir("", "pilosa-cluster-")
 	if err != nil {
@@ -40,7 +40,7 @@ func NewTestCluster(n int) *Cluster {
 	return c
 }
 
-// NewURI is a test URI creator that intentionally swallows errors.
+// NewTestURI is a test URI creator that intentionally swallows errors.
 func NewTestURI(scheme, host string, port uint16) URI {
 	uri := DefaultURI()
 	uri.SetScheme(scheme)
@@ -59,13 +59,14 @@ func NewTestURIFromHostPort(host string, port uint16) URI {
 // ModHasher represents a simple, mod-based hashing.
 type TestModHasher struct{}
 
-// NewModHasher returns a new instance of ModHasher with n buckets.
+// NewTestModHasher returns a new instance of ModHasher with n buckets.
 func NewTestModHasher() *TestModHasher { return &TestModHasher{} }
 
 func (*TestModHasher) Hash(key uint64, n int) int { return int(key) % n }
 
 // ClusterCluster represents a cluster of test nodes, each of which
 // has a Cluster.
+// ClusterCluster implements Broadcaster interface.
 type ClusterCluster struct {
 	Clusters []*Cluster
 
@@ -101,6 +102,7 @@ func (t *ClusterCluster) CreateFrame(index, frame string, opt FrameOptions) erro
 	}
 	return nil
 }
+
 func (t *ClusterCluster) SetBit(index, frame, view string, rowID, colID uint64, x *time.Time) error {
 	// Determine which node should receive the SetBit.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
@@ -311,8 +313,6 @@ func (t *ClusterCluster) Close() error {
 	}
 	return nil
 }
-
-// ClusterCluster implements Broadcaster interface.
 
 // SendSync is a test implemenetation of Broadcaster SendSync method.
 func (t *ClusterCluster) SendSync(pb proto.Message) error {
