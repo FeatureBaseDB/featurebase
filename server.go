@@ -220,6 +220,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 		logger: NopLogger,
 	}
+	s.diagnostics.server = s
 
 	for _, opt := range opts {
 		err := opt(s)
