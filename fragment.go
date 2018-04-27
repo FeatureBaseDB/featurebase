@@ -46,7 +46,7 @@ import (
 
 const (
 	// SliceWidth is the number of column IDs in a slice.
-	SliceWidth = 1048576
+	SliceWidth = 8388608
 
 	// SnapshotExt is the file extension used for an in-process snapshot.
 	SnapshotExt = ".snapshotting"
