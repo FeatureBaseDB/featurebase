@@ -23,11 +23,13 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/boltdb"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/server"
+	"github.com/pilosa/pilosa/toml"
 	"github.com/pkg/errors"
 )
 
@@ -41,8 +43,17 @@ type Main struct {
 	Stderr bytes.Buffer
 }
 
+type MainOpt func(m *Main) error
+
+func OptAntiEntropyInterval(dur time.Duration) MainOpt {
+	return func(m *Main) error {
+		m.Command.Config.AntiEntropy.Interval = toml.Duration(dur)
+		return nil
+	}
+}
+
 // NewMain returns a new instance of Main with a temporary data directory and random port.
-func NewMain() *Main {
+func NewMain(opts ...MainOpt) *Main {
 	path, err := ioutil.TempDir("", "pilosa-")
 	if err != nil {
 		panic(err)
@@ -55,6 +66,15 @@ func NewMain() *Main {
 	m.Command.Stdin = &m.Stdin
 	m.Command.Stdout = &m.Stdout
 	m.Command.Stderr = &m.Stderr
+
+	for _, opt := range opts {
+		err := opt(m)
+		if err != nil {
+			panic(err)
+		}
+
+	}
+
 	m.SetupServer()
 
 	if testing.Verbose() {
@@ -66,8 +86,8 @@ func NewMain() *Main {
 }
 
 // NewMainWithCluster returns a new instance of Main with clustering enabled.
-func NewMainWithCluster(isCoordinator bool) *Main {
-	m := NewMain()
+func NewMainWithCluster(isCoordinator bool, opts ...MainOpt) *Main {
+	m := NewMain(opts...)
 	m.Config.Cluster.Disabled = false
 	m.Config.Cluster.Coordinator = isCoordinator
 	return m
@@ -75,8 +95,8 @@ func NewMainWithCluster(isCoordinator bool) *Main {
 
 // MustRunMainWithCluster ruturns a running array of *Main where
 // all nodes are joined via memberlist (i.e. clustering enabled).
-func MustRunMainWithCluster(t *testing.T, size int) []*Main {
-	ma, err := runMainWithCluster(size)
+func MustRunMainWithCluster(t *testing.T, size int, opts ...MainOpt) []*Main {
+	ma, err := runMainWithCluster(size, opts...)
 	if err != nil {
 		t.Fatalf("new main array with cluster: %v", err)
 	}
@@ -85,7 +105,7 @@ func MustRunMainWithCluster(t *testing.T, size int) []*Main {
 
 // runMainWithCluster runs an array of *Main where all nodes are
 // joined via memberlist (i.e. clustering enabled).
-func runMainWithCluster(size int) ([]*Main, error) {
+func runMainWithCluster(size int, opts ...MainOpt) ([]*Main, error) {
 	if size == 0 {
 		return nil, errors.New("cluster must contain at least one node")
 	}
@@ -98,7 +118,7 @@ func runMainWithCluster(size int) ([]*Main, error) {
 	var gossipSeeds = make([]string, size)
 
 	for i := 0; i < size; i++ {
-		m := NewMainWithCluster(i == 0)
+		m := NewMainWithCluster(i == 0, opts...)
 		m.Config.Cluster.Disabled = false
 
 		gossipSeeds[i], err = m.RunWithTransport(gossipHost, gossipPort, gossipSeeds[:i])

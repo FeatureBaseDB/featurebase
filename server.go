@@ -163,6 +163,7 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 func OptServerRemoteClient(c *http.Client) ServerOption {
 	return func(s *Server) error {
 		s.executor = NewExecutor(c)
+		s.remoteClient = c
 		s.defaultClient = NewInternalHTTPClientFromURI(nil, c)
 		s.Cluster.RemoteClient = c
 		return nil
