@@ -642,7 +642,8 @@ func (i *Index) openInputDefinitions() error {
 // InputBits Process the []Bit though the Frame import process
 func (i *Index) InputBits(frame string, bits []*Bit) error {
 	var rowIDs, columnIDs []uint64
-	timestamps := make([]*time.Time, len(bits))
+	var timestamps []*time.Time
+
 	f := i.Frame(frame)
 	if f == nil {
 		return fmt.Errorf("Frame not found: %s", frame)
@@ -657,6 +658,11 @@ func (i *Index) InputBits(frame string, bits []*Bit) error {
 
 		// Convert timestamps to time.Time.
 		if bit.Timestamp > 0 {
+			// Don't create a full timestamps slice unless
+			// at least one bit contains a timestamp.
+			if len(timestamps) == 0 {
+				timestamps = make([]*time.Time, len(bits))
+			}
 			t := time.Unix(bit.Timestamp, 0)
 			timestamps[i] = &t
 		}
