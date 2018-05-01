@@ -30,7 +30,7 @@ import (
 
 // Test flags
 var (
-	FragmentPath = flag.String("fragment", "", "fragment path")
+	FragmentPath = flag.String("fragment", "testdata/sample_view/0", "fragment path")
 )
 
 // SliceWidth is a helper reference to use when testing.
