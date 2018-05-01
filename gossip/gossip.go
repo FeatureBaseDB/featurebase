@@ -443,7 +443,7 @@ type Transport struct {
 
 // NewTransport returns a NetTransport based on the given host and port.
 // It will dynamically bind to a port if port is 0.
-// This is useful for test cases where specifiying a port is not reasonable.
+// This is useful for test cases where specifying a port is not reasonable.
 //func NewTransport(host string, port int) (*memberlist.NetTransport, error) {
 func NewTransport(host string, port int, logger *log.Logger) (*Transport, error) {
 	// memberlist config

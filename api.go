@@ -788,7 +788,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 
 	// Delete the view.
 	if err := f.DeleteView(viewName); err != nil {
-		// Ignore this error becuase views do not exist on all nodes due to slice distribution.
+		// Ignore this error because views do not exist on all nodes due to slice distribution.
 		if err != ErrInvalidView {
 			return err
 		}
