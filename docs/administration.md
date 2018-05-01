@@ -108,7 +108,7 @@ If the node is being added to a cluster which contains no data (for example, dur
 
 In order to  remove a node from a cluster, your cluster must be configured to have a [cluster replicas](../configuration/#cluster-replicas) value of at least 2; if you're removing a node that no longer exists (for example a node that has died), there must be at least one additional replica of the data owned by the dead node in order for the cluster to correctly rebalance itself.
 
-To remove node `localhost:10102` from a cluster having coordinator `localhost:10101`, first determine the ID of the node to be removed. If the node to be removed is still available, you can find the ID by issuing an `/status` request to the node. Node's ID is in the `localID` field:
+To remove node `localhost:10102` from a cluster having coordinator `localhost:10101`, first determine the ID of the node to be removed. If the node to be removed is still available, you can find the ID by issuing a `/status` request to the node. The node's ID is in the `localID` field:
 ``` request
 curl localhost:10101/status
 ```
