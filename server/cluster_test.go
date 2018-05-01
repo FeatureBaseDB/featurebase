@@ -16,6 +16,7 @@ package server_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -443,6 +444,19 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	m0 := cluster[0]
 	m1 := cluster[1]
 
+	mustNodeID := func(baseURL string) string {
+		body := test.MustDo("GET", fmt.Sprintf("%s/status", baseURL), "").Body
+		var resp map[string]interface{}
+		err := json.Unmarshal([]byte(body), &resp)
+		if err != nil {
+			panic(err)
+		}
+		if localID, ok := resp["localID"].(string); ok {
+			return localID
+		}
+		panic("localID should be a string")
+	}
+
 	t.Run("ErrorRemoveInvalidNode", func(t *testing.T) {
 		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), `{"id": "invalid-node-id"}`)
 		expBody := "removing node: finding node to remove: node with provided ID does not exist"
@@ -454,10 +468,8 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	})
 
 	t.Run("ErrorRemoveCoordinator", func(t *testing.T) {
-		resp := test.MustDo("GET", m0.URL()+fmt.Sprintf("/id"), "")
-		nodeID := resp.Body
-
-		resp = test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		nodeID := mustNodeID(m0.URL())
+		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
 		expBody := "removing node: calling node leave: coordinator cannot be removed; first, make a different node the new coordinator."
 		if resp.StatusCode != http.StatusInternalServerError {
@@ -468,13 +480,9 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	})
 
 	t.Run("ErrorRemoveOnNonCoordinator", func(t *testing.T) {
-		resp := test.MustDo("GET", m0.URL()+fmt.Sprintf("/id"), "")
-		coordinatorNodeID := resp.Body
-
-		resp = test.MustDo("GET", m1.URL()+fmt.Sprintf("/id"), "")
-		nodeID := resp.Body
-
-		resp = test.MustDo("POST", m1.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		coordinatorNodeID := mustNodeID(m0.URL())
+		nodeID := mustNodeID(m1.URL())
+		resp := test.MustDo("POST", m1.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
 		expBody := fmt.Sprintf("removing node: calling node leave: node removal requests are only valid on the coordinator node: %s", coordinatorNodeID)
 		if resp.StatusCode != http.StatusInternalServerError {
@@ -505,10 +513,8 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		resp := test.MustDo("GET", m1.URL()+fmt.Sprintf("/id"), "")
-		nodeID := resp.Body
-
-		resp = test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		nodeID := mustNodeID(m1.URL())
+		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 		expBody := "not enough data to perform resize"
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)

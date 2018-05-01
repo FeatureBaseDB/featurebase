@@ -166,19 +166,6 @@ curl localhost:10101/index/repository/frame/stats/field/pullrequests \
 {}
 ```
 
-### List hosts
-
-`GET /hosts`
-
-Returns the hosts in the cluster.
-
-``` request
-curl -XGET localhost:10101/hosts
-```
-``` response
-[{"host":":10101"}]
-```
-
 ### Get version
 
 `GET /version`

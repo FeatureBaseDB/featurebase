@@ -121,8 +121,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
-	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
-	router.HandleFunc("/id", handler.handleGetID).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
@@ -244,8 +242,9 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 // handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	status := getStatusResponse{
-		State: h.API.State(),
-		Nodes: h.API.Hosts(r.Context()),
+		State:   h.API.State(),
+		Nodes:   h.API.Hosts(r.Context()),
+		LocalID: h.API.LocalID(),
 	}
 	if err := json.NewEncoder(w).Encode(status); err != nil {
 		h.Logger.Printf("write status response error: %s", err)
@@ -257,8 +256,9 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State string  `json:"state"`
-	Nodes []*Node `json:"nodes"`
+	State   string  `json:"state"`
+	Nodes   []*Node `json:"nodes"`
+	LocalID string  `json:"localID"`
 }
 
 // handlePostQuery handles /query requests.
@@ -1180,14 +1180,6 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetHosts handles /hosts requests.
-func (h *Handler) handleGetHosts(w http.ResponseWriter, r *http.Request) {
-	hosts := h.API.Hosts(r.Context())
-	if err := json.NewEncoder(w).Encode(hosts); err != nil {
-		h.Logger.Printf("write version response error: %s", err)
-	}
-}
-
 // handleGetVersion handles /version requests.
 func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	err := json.NewEncoder(w).Encode(struct {
@@ -1612,13 +1604,6 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 
 	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
 		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-func (h *Handler) handleGetID(w http.ResponseWriter, r *http.Request) {
-	_, err := w.Write([]byte(h.API.LocalID()))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 

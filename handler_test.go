@@ -149,7 +149,7 @@ func TestHandler_Status(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/status", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"state":"NORMAL","nodes":[{"id":"node0","uri":{"scheme":"http","host":"host0"},"isCoordinator":false}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"state":"NORMAL","nodes":[{"id":"node0","uri":{"scheme":"http","host":"host0"},"isCoordinator":false}],"localID":"node0"}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }

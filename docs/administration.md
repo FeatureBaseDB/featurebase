@@ -108,12 +108,20 @@ If the node is being added to a cluster which contains no data (for example, dur
 
 In order to  remove a node from a cluster, your cluster must be configured to have a [cluster replicas](../configuration/#cluster-replicas) value of at least 2; if you're removing a node that no longer exists (for example a node that has died), there must be at least one additional replica of the data owned by the dead node in order for the cluster to correctly rebalance itself.
 
-To remove node `localhost:10102` from a cluster having coordinator `localhost:10101`, first determine the ID of the node to be removed. If the node to be removed is still available, you can find the ID by issuing an `/id` request to the node:
+To remove node `localhost:10102` from a cluster having coordinator `localhost:10101`, first determine the ID of the node to be removed. If the node to be removed is still available, you can find the ID by issuing an `/status` request to the node. Node's ID is in the `localID` field:
 ``` request
-curl localhost:10102/id
+curl localhost:10101/status
 ```
 ``` response
-40a891fa-243b-4d71-ae24-4f5c78a0f4b1
+{
+    "state":"NORMAL",
+    "nodes":[
+        {"id":"24824777-62ec-4151-9fbd-67e4676e317d","uri":{"scheme":"http","host":"localhost","port":10101}}
+        {"id":"40a891fa-243b-4d71-ae24-4f5c78a0f4b1","uri":{"scheme":"http","host":"localhost","port":10102}}
+        {"id":"9fab09cc-3c26-4202-9622-d167c84684d9","uri":{"scheme":"http","host":"localhost","port":10103}}
+    ],
+    "localID": "40a891fa-243b-4d71-ae24-4f5c78a0f4b1"
+}
 ```
 
 If the node to be removed is no longer available, you can get the IDs of the nodes in the cluster by issuing a `/status` request to any available node:
@@ -127,7 +135,8 @@ curl localhost:10101/status
         {"id":"24824777-62ec-4151-9fbd-67e4676e317d","uri":{"scheme":"http","host":"localhost","port":10101}}
         {"id":"40a891fa-243b-4d71-ae24-4f5c78a0f4b1","uri":{"scheme":"http","host":"localhost","port":10102}}
         {"id":"9fab09cc-3c26-4202-9622-d167c84684d9","uri":{"scheme":"http","host":"localhost","port":10103}}
-    ]
+    ],
+    "localID": "40a891fa-243b-4d71-ae24-4f5c78a0f4b1"
 }
 ```
 
