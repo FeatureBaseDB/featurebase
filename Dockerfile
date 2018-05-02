@@ -11,6 +11,8 @@ LABEL maintainer "dev@pilosa.com"
 
 COPY --from=builder /go/bin/pilosa /pilosa
 
+COPY NOTICE /NOTICE
+
 EXPOSE 10101
 VOLUME /data
 
