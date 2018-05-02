@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -230,6 +231,11 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
+	err := s.expandDataDirName()
+	if err != nil {
+		return nil, err
+	}
+
 	s.Holder.Logger = s.logger
 	s.Holder.Stats.SetLogger(s.logger)
 
@@ -258,6 +264,18 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.handler.API.Executor = s.executor
 
 	return s, nil
+}
+
+func (s *Server) expandDataDirName() error {
+	prefix := "~" + string(filepath.Separator)
+	if strings.HasPrefix(s.Holder.Path, prefix) {
+		HomeDir := os.Getenv("HOME")
+		if HomeDir == "" {
+			return errors.New("data directory not specified and no home dir available")
+		}
+		s.Holder.Path = filepath.Join(HomeDir, strings.TrimPrefix(s.Holder.Path, prefix))
+	}
+	return nil
 }
 
 // Open opens and initializes the server.
