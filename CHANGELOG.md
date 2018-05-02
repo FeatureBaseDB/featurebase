@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## [v0.9.0] - 2018-05-02
+
+This version contains 183 contribution from 12 contributors. There are 138 files changed, 17,084 insertions, and 7,482 deletions.
 
 ### Added
 
@@ -23,7 +25,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Add local and cluster IDs ([#1013](https://github.com/pilosa/pilosa/pull/1013))
 - Add HolderCleaner and view.DeleteFragment ([#985](https://github.com/pilosa/pilosa/pull/985))
 - Add set-coordinator endpoint ([#963](https://github.com/pilosa/pilosa/pull/963))
-- Documentation improvements ([#1135](https://github.com/pilosa/pilosa/pull/1135), [#1154](https://github.com/pilosa/pilosa/pull/1154), [#1091](https://github.com/pilosa/pilosa/pull/1091), [#1108](https://github.com/pilosa/pilosa/pull/1108), [#1087](https://github.com/pilosa/pilosa/pull/1087), [#1086](https://github.com/pilosa/pilosa/pull/1086), [#1026](https://github.com/pilosa/pilosa/pull/1026), [#1022](https://github.com/pilosa/pilosa/pull/1022), [#1007](https://github.com/pilosa/pilosa/pull/1007), [#981](https://github.com/pilosa/pilosa/pull/981), [#901](https://github.com/pilosa/pilosa/pull/901), [#972](https://github.com/pilosa/pilosa/pull/972))
+- Implement Min/Max BSI queries ([#1191](https://github.com/pilosa/pilosa/pull/1191))
+- Documentation improvements ([#1135](https://github.com/pilosa/pilosa/pull/1135), [#1154](https://github.com/pilosa/pilosa/pull/1154), [#1091](https://github.com/pilosa/pilosa/pull/1091), [#1108](https://github.com/pilosa/pilosa/pull/1108), [#1087](https://github.com/pilosa/pilosa/pull/1087), [#1086](https://github.com/pilosa/pilosa/pull/1086), [#1026](https://github.com/pilosa/pilosa/pull/1026), [#1022](https://github.com/pilosa/pilosa/pull/1022), [#1007](https://github.com/pilosa/pilosa/pull/1007), [#981](https://github.com/pilosa/pilosa/pull/981), [#901](https://github.com/pilosa/pilosa/pull/901), [#972](https://github.com/pilosa/pilosa/pull/972)), ([#1215](https://github.com/pilosa/pilosa/pull/1215)), ([#1213](https://github.com/pilosa/pilosa/pull/1213)), ([#1224](https://github.com/pilosa/pilosa/pull/1224))
 
 ### Changed
 
@@ -42,12 +45,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Refactored HTTPClient handling ([#991](https://github.com/pilosa/pilosa/pull/991))
 - Remove FrameSchema. Move Fields to the Frame struct ([#907](https://github.com/pilosa/pilosa/pull/907))
 - Deprecated RangeEnabled option ([#1205](https://github.com/pilosa/pilosa/pull/1205))
+- Refactoring pilosa/server ([#1220](https://github.com/pilosa/pilosa/pull/1220))
+- Clean up flipBitmap and add tests ([#1223](https://github.com/pilosa/pilosa/pull/1223))
+- Move pilosa.Config to pilosa/server.Config ([#1216](https://github.com/pilosa/pilosa/pull/1216))
 
 ### Removed
 
 - Remove the Gossip stutter from memberlist-related config options ([#1171](https://github.com/pilosa/pilosa/pull/1171))
 - Remove old GossipPort and GossipSeed config options ([#1142](https://github.com/pilosa/pilosa/pull/1142))
 - Remove cluster type `http` from docs ([#1130](https://github.com/pilosa/pilosa/pull/1130))
+- Remove holder.Peek, combine with HasData, move server logic ([#1226](https://github.com/pilosa/pilosa/pull/1226))
+- Remove PATCH frame endpoint ([#1222](https://github.com/pilosa/pilosa/pull/1222))
+- Remove Index.MergeSchemas() method ([#1219](https://github.com/pilosa/pilosa/pull/1219))
+- Remove references to Input Definition from the docs ([#1212](https://github.com/pilosa/pilosa/pull/1212))
+- Remove Index.TimeQuantum ([#1209](https://github.com/pilosa/pilosa/pull/1209))
+- Remove SecurityManager. Implement api restrictions in api package. ([#1207](https://github.com/pilosa/pilosa/pull/1207))
 
 ### Fixed
 
@@ -60,6 +72,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Fix count/bitmap mismatch bug ([#1084](https://github.com/pilosa/pilosa/pull/1084))
 - Fix edge case with Range() calls outside field Min/Max. Fixes #876. ([#979](https://github.com/pilosa/pilosa/pull/979))
 - Bind the handler to all interfaces (0.0.0.0) in Dockerfile. Fixes #977. ([#980](https://github.com/pilosa/pilosa/pull/980))
+- Fix nil client bug in monitorAntiEntropy (and test) ([#1233](https://github.com/pilosa/pilosa/pull/1233))
+- Fix crash due to server.diagnostics.server not set ([#1229](https://github.com/pilosa/pilosa/pull/1229))
 
 ### Performance
 
