@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [v0.9.0] - 2018-05-04
 
-This version contains 183 contribution from 12 contributors. There are 138 files changed, 17,084 insertions, and 7,482 deletions.
+This version contains 188 contribution from 12 contributors. There are 141 files changed, 17,832 insertions, and 7,503 deletions.
 
 ### Added
 
