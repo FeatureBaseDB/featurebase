@@ -96,7 +96,7 @@ To upgrade Pilosa:
 
 1. First, upgrade the [client libraries](../client-libraries/) you are using in your application. Generally, a client version `X` will be compatible with the Pilosa server version `X` and earlier. For example, `python-pilosa 0.9.0` is compatible with both `pilosa 0.8.0` and `pilosa 0.9.0`.
 2. Next, download the latest release from our [installation page](/docs/latest/installation/) or from the [release page on Github](https://github.com/pilosa/pilosa/releases).
-3. Shut down the Pilosa cluster. A graceful shutdown should ensure that all data files are flushed to disk.
+3. Shut down the Pilosa cluster.
 4. Make a backup of the [data directory](../configuration/#data-dir) on each cluster node.
 5. Upgrade the Pilosa server binaries and any configuration changes. See the following sections on any version-specific changes you must make.
 6. Start Pilosa. It is recommended to start the cluster coordinator node first, followed by any other nodes.
@@ -105,13 +105,13 @@ To upgrade Pilosa:
 
 Pilosa v0.9 introduces a few compatibility changes that need to be addressed.
 
-**Configuration changes**: These changes need to occur during step 5 above:
+**Configuration changes**: These changes need to occur before starting Pilosa v0.9:
 
 1. Cluster-resize capability eliminates the `hosts` setting. Now, cluster membership is determined by `gossip`. This is only a factor if you are running Pilosa as a cluster.
 2. Gossip-based cluster membership requires you to set a single cluster node as a [coordinator](../configuration/#cluster-coordinator). Make sure only a single node has the `cluster.coordinator` flag set.
 3. `gossip.seed` has been renamed [`gossip.seeds`](../configuration/#gossip-seeds) and takes multiple items. It is recommended that at least two nodes are specified as gossip seeds.
 
-**Data directory changes**: These changes also need to occur during step 5 above (while the cluster is shut down):
+**Data directory changes**: These changes need to occur while the cluster is shut down, before starting Pilosa v0.9:
 
 Pilosa v0.9 adds two new files to the data directory, an `.id` file and a `.topology` file. Due to the way Pilosa internally shards indices, upgrading a Pilosa cluster will result in data loss if an existing cluster is brought up without these files. New clusters will generate them automatically, but you may migrate an existing cluster by using a tool we called `topology-generator`:
 
