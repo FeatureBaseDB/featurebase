@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [v0.9.0] - 2018-05-02
+## [v0.9.0] - 2018-05-04
 
 This version contains 183 contribution from 12 contributors. There are 138 files changed, 17,084 insertions, and 7,482 deletions.
 
@@ -22,11 +22,12 @@ This version contains 183 contribution from 12 contributors. There are 138 files
 - Modify `pilosa import` to support string rows/columns ([#1063](https://github.com/pilosa/pilosa/pull/1063))
 - Add some statsd calls to HolderSyncer ([#1048](https://github.com/pilosa/pilosa/pull/1048))
 - Adds support for memberlist gossip configuration via pilosa.Config ([#1014](https://github.com/pilosa/pilosa/pull/1014))
-- Add local and cluster IDs ([#1013](https://github.com/pilosa/pilosa/pull/1013))
+- Add local and cluster IDs ([#1013](https://github.com/pilosa/pilosa/pull/1013), [#1245](https://github.com/pilosa/pilosa/pull/1245))
 - Add HolderCleaner and view.DeleteFragment ([#985](https://github.com/pilosa/pilosa/pull/985))
 - Add set-coordinator endpoint ([#963](https://github.com/pilosa/pilosa/pull/963))
 - Implement Min/Max BSI queries ([#1191](https://github.com/pilosa/pilosa/pull/1191))
-- Documentation improvements ([#1135](https://github.com/pilosa/pilosa/pull/1135), [#1154](https://github.com/pilosa/pilosa/pull/1154), [#1091](https://github.com/pilosa/pilosa/pull/1091), [#1108](https://github.com/pilosa/pilosa/pull/1108), [#1087](https://github.com/pilosa/pilosa/pull/1087), [#1086](https://github.com/pilosa/pilosa/pull/1086), [#1026](https://github.com/pilosa/pilosa/pull/1026), [#1022](https://github.com/pilosa/pilosa/pull/1022), [#1007](https://github.com/pilosa/pilosa/pull/1007), [#981](https://github.com/pilosa/pilosa/pull/981), [#901](https://github.com/pilosa/pilosa/pull/901), [#972](https://github.com/pilosa/pilosa/pull/972)), ([#1215](https://github.com/pilosa/pilosa/pull/1215)), ([#1213](https://github.com/pilosa/pilosa/pull/1213)), ([#1224](https://github.com/pilosa/pilosa/pull/1224))
+- Log time/version to startup log ([#1246](https://github.com/pilosa/pilosa/pull/1246))
+- Documentation improvements ([#1135](https://github.com/pilosa/pilosa/pull/1135), [#1154](https://github.com/pilosa/pilosa/pull/1154), [#1091](https://github.com/pilosa/pilosa/pull/1091), [#1108](https://github.com/pilosa/pilosa/pull/1108), [#1087](https://github.com/pilosa/pilosa/pull/1087), [#1086](https://github.com/pilosa/pilosa/pull/1086), [#1026](https://github.com/pilosa/pilosa/pull/1026), [#1022](https://github.com/pilosa/pilosa/pull/1022), [#1007](https://github.com/pilosa/pilosa/pull/1007), [#981](https://github.com/pilosa/pilosa/pull/981), [#901](https://github.com/pilosa/pilosa/pull/901), [#972](https://github.com/pilosa/pilosa/pull/972), [#1215](https://github.com/pilosa/pilosa/pull/1215), [#1213](https://github.com/pilosa/pilosa/pull/1213), [#1224](https://github.com/pilosa/pilosa/pull/1224), [#1250](https://github.com/pilosa/pilosa/pull/1250))
 
 ### Changed
 
@@ -48,6 +49,7 @@ This version contains 183 contribution from 12 contributors. There are 138 files
 - Refactoring pilosa/server ([#1220](https://github.com/pilosa/pilosa/pull/1220))
 - Clean up flipBitmap and add tests ([#1223](https://github.com/pilosa/pilosa/pull/1223))
 - Move pilosa.Config to pilosa/server.Config ([#1216](https://github.com/pilosa/pilosa/pull/1216))
+- Vendor github.com/golang/groupcache/lru ([#1221](https://github.com/pilosa/pilosa/pull/1221))
 
 ### Removed
 
@@ -74,6 +76,7 @@ This version contains 183 contribution from 12 contributors. There are 138 files
 - Bind the handler to all interfaces (0.0.0.0) in Dockerfile. Fixes #977. ([#980](https://github.com/pilosa/pilosa/pull/980))
 - Fix nil client bug in monitorAntiEntropy (and test) ([#1233](https://github.com/pilosa/pilosa/pull/1233))
 - Fix crash due to server.diagnostics.server not set ([#1229](https://github.com/pilosa/pilosa/pull/1229))
+- Fix some cluster race conditions ([#1228](https://github.com/pilosa/pilosa/pull/1228))
 
 ### Performance
 
