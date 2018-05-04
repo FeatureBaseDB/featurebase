@@ -107,7 +107,11 @@ func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) 
 
 	var rsp getSlicesMaxResponse
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("http: status=%d body=%s", resp.StatusCode, body)
 	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
