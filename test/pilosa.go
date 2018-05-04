@@ -66,7 +66,6 @@ func NewMain(opts ...MainOpt) *Main {
 	m.Command.Stdin = &m.Stdin
 	m.Command.Stdout = &m.Stdout
 	m.Command.Stderr = &m.Stderr
-
 	for _, opt := range opts {
 		err := opt(m)
 		if err != nil {
@@ -74,8 +73,10 @@ func NewMain(opts ...MainOpt) *Main {
 		}
 
 	}
-
-	m.SetupServer()
+	err = m.SetupServer()
+	if err != nil {
+		panic(err)
+	}
 
 	if testing.Verbose() {
 		m.Command.Stdout = io.MultiWriter(os.Stdout, m.Command.Stdout)

@@ -1053,8 +1053,8 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 		return nil, nil, errors.Wrap(err, "validate api method")
 	}
 
-	oldNode = api.Cluster.nodeByID(api.Cluster.Coordinator)
-	newNode = api.Cluster.nodeByID(id)
+	oldNode = api.Cluster.NodeByID(api.Cluster.Coordinator)
+	newNode = api.Cluster.NodeByID(id)
 	if newNode == nil {
 		return nil, nil, errors.Wrap(ErrNodeIDNotExists, "getting new node")
 	}
@@ -1102,9 +1102,6 @@ func (api *API) ResizeAbort() error {
 		return errors.Wrap(err, "validate api method")
 	}
 
-	if !api.Cluster.IsCoordinator() {
-		return ErrNodeNotCoordinator
-	}
 	err := api.Cluster.CompleteCurrentJob(ResizeJobStateAborted)
 	return errors.Wrap(err, "complete current job")
 }

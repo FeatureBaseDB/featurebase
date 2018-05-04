@@ -292,6 +292,12 @@ func (c *Cluster) CoordinatorNode() *Node {
 
 // IsCoordinator is true if this node is the coordinator.
 func (c *Cluster) IsCoordinator() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.isCoordinator()
+}
+
+func (c *Cluster) isCoordinator() bool {
 	return c.Coordinator == c.Node.ID
 }
 
@@ -300,6 +306,8 @@ func (c *Cluster) IsCoordinator() bool {
 // will consider itself coordinator and update the other
 // nodes with its version of Cluster.Status.
 func (c *Cluster) SetCoordinator(n *Node) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	// Verify that the new Coordinator value matches
 	// this node.
 	if c.Node.ID != n.ID {
@@ -307,7 +315,7 @@ func (c *Cluster) SetCoordinator(n *Node) error {
 	}
 
 	// Update IsCoordinator on all nodes (locally).
-	_ = c.UpdateCoordinator(n)
+	_ = c.updateCoordinator(n)
 
 	// Send the update coordinator message to all nodes.
 	err := c.Broadcaster.SendSync(
@@ -327,6 +335,12 @@ func (c *Cluster) SetCoordinator(n *Node) error {
 // to true, and sets all other nodes to false. Returns true if the value
 // changed.
 func (c *Cluster) UpdateCoordinator(n *Node) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.updateCoordinator(n)
+}
+
+func (c *Cluster) updateCoordinator(n *Node) bool {
 	var changed bool
 	if c.Coordinator != n.ID {
 		c.Coordinator = n.ID
@@ -509,6 +523,12 @@ func (c *Cluster) Status() *internal.ClusterStatus {
 		State:     c.state,
 		Nodes:     EncodeNodes(c.Nodes),
 	}
+}
+
+func (c *Cluster) NodeByID(id string) *Node {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.nodeByID(id)
 }
 
 // nodeByID returns a node reference by ID.
@@ -1186,6 +1206,9 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 func (c *Cluster) CompleteCurrentJob(state string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if !c.isCoordinator() {
+		return ErrNodeNotCoordinator
+	}
 	if c.currentJob == nil {
 		return ErrResizeNotRunning
 	}
@@ -1797,9 +1820,11 @@ func (c *Cluster) nodeLeave(node *Node) error {
 }
 
 func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.Logger.Printf("merge cluster status: %v", cs)
 	// Ignore status updates from self (coordinator).
-	if c.IsCoordinator() {
+	if c.isCoordinator() {
 		return nil
 	}
 
@@ -1836,7 +1861,7 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 		}
 	}
 
-	c.SetState(cs.State)
+	c.setState(cs.State)
 
 	c.markAsJoined()
 
