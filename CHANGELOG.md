@@ -23,7 +23,7 @@ This version contains 188 contribution from 12 contributors. There are 141 files
 - Add QueryResult.Type to protobuf message to distiguish results at the client ([#1064](https://github.com/pilosa/pilosa/pull/1064))
 - Modify `pilosa import` to support string rows/columns ([#1063](https://github.com/pilosa/pilosa/pull/1063))
 - Add some statsd calls to HolderSyncer ([#1048](https://github.com/pilosa/pilosa/pull/1048))
-- Adds support for memberlist gossip configuration via pilosa.Config ([#1014](https://github.com/pilosa/pilosa/pull/1014))
+- Add support for memberlist gossip configuration via pilosa.Config ([#1014](https://github.com/pilosa/pilosa/pull/1014))
 - Add local and cluster IDs ([#1013](https://github.com/pilosa/pilosa/pull/1013), [#1245](https://github.com/pilosa/pilosa/pull/1245))
 - Add HolderCleaner and view.DeleteFragment ([#985](https://github.com/pilosa/pilosa/pull/985))
 - Add set-coordinator endpoint ([#963](https://github.com/pilosa/pilosa/pull/963))
@@ -45,10 +45,9 @@ This version contains 188 contribution from 12 contributors. There are 141 files
 - Use binary search in runAdd ([#1027](https://github.com/pilosa/pilosa/pull/1027))
 - Use HTTP handler for gossip SendSync ([#1001](https://github.com/pilosa/pilosa/pull/1001))
 - Group the write operations in syncBlock by MaxWritesPerRequest ([#950](https://github.com/pilosa/pilosa/pull/950))
-- Refactored HTTPClient handling ([#991](https://github.com/pilosa/pilosa/pull/991))
+- Refactor HTTPClient handling ([#991](https://github.com/pilosa/pilosa/pull/991))
 - Remove FrameSchema. Move Fields to the Frame struct ([#907](https://github.com/pilosa/pilosa/pull/907))
-- Deprecated RangeEnabled option ([#1205](https://github.com/pilosa/pilosa/pull/1205))
-- Refactoring pilosa/server ([#1220](https://github.com/pilosa/pilosa/pull/1220))
+- Refactor pilosa/server ([#1220](https://github.com/pilosa/pilosa/pull/1220))
 - Clean up flipBitmap and add tests ([#1223](https://github.com/pilosa/pilosa/pull/1223))
 - Move pilosa.Config to pilosa/server.Config ([#1216](https://github.com/pilosa/pilosa/pull/1216))
 - Vendor github.com/golang/groupcache/lru ([#1221](https://github.com/pilosa/pilosa/pull/1221))
@@ -79,6 +78,10 @@ This version contains 188 contribution from 12 contributors. There are 141 files
 - Fix nil client bug in monitorAntiEntropy (and test) ([#1233](https://github.com/pilosa/pilosa/pull/1233))
 - Fix crash due to server.diagnostics.server not set ([#1229](https://github.com/pilosa/pilosa/pull/1229))
 - Fix some cluster race conditions ([#1228](https://github.com/pilosa/pilosa/pull/1228))
+
+### Deprecated
+
+- Deprecate RangeEnabled option ([#1205](https://github.com/pilosa/pilosa/pull/1205))
 
 ### Performance
 
