@@ -17,6 +17,7 @@ package pilosa
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -266,6 +267,12 @@ func (s *Server) Open() error {
 	// s.ln can be configured prior to Open() via s.OpenListener().
 	if s.ln == nil {
 		return errors.New("Must pass a listener option to NewServer")
+	}
+
+	// Log startup
+	err := s.Holder.logStartup()
+	if err != nil {
+		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
 	// Get or create NodeID.
