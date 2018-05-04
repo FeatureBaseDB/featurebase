@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 This version contains 188 contribution from 12 contributors. There are 141 files changed, 17,832 insertions, and 7,503 deletions.
 
+*Please see special [upgrading instructions](https://www.pilosa.com/docs/latest/administration/#version-0-9) for this release.*
+
 ### Added
 
 - Add ability to dynamically resize clusters ([#982](https://github.com/pilosa/pilosa/pull/982), [#946](https://github.com/pilosa/pilosa/pull/946), [#929](https://github.com/pilosa/pilosa/pull/929), [#927](https://github.com/pilosa/pilosa/pull/927), [#917](https://github.com/pilosa/pilosa/pull/917), [#913](https://github.com/pilosa/pilosa/pull/913), [#912](https://github.com/pilosa/pilosa/pull/912), [#908](https://github.com/pilosa/pilosa/pull/908))
