@@ -29,7 +29,7 @@ func TestAPI_CreateIndexWhenClusterNotReady(t *testing.T) {
 	}
 }
 
-func TestAPI_CSVExport(t *testing.T) {
+func TestAPI_ExportCSV(t *testing.T) {
 	api := pilosa.NewAPI()
 	api.Cluster = pilosa.NewCluster()
 	err := api.ExportCSV(nil, "", "", "", 0, nil)
@@ -180,16 +180,50 @@ func TestAPI_RestoreFrame(t *testing.T) {
 		t.Fatalf("Should have failed.")
 	}
 
-	path, err := ioutil.TempDir("", "pilosa-")
-	if err != nil {
-		panic(err)
+	/*
+		path, err := ioutil.TempDir("", "pilosa-")
+		if err != nil {
+			panic(err)
+		}
+		hldr := test.MustOpenHolder()
+		hldr.Holder.Path = path
+		defer hldr.Close()
+		hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0)
+		s.Handler.API.Holder = hldr.Holder
+		err = api.RestoreFrame(ctx, "i1", "f1", &uri)
+		if err != nil {
+			t.Fatal(err)
+		}
+	*/
+}
+
+func TestAPI_RemoveNode(t *testing.T) {
+	api := pilosa.NewAPI()
+	api.Cluster = pilosa.NewCluster()
+	_, err := api.RemoveNode("id1")
+	if err == nil {
+		t.Fatalf("Should have failed.")
 	}
-	hldr := test.MustOpenHolder()
-	hldr.Holder.Path = path
-	defer hldr.Close()
-	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0)
-	s.Handler.API.Holder = hldr.Holder
-	err = api.RestoreFrame(ctx, "i1", "f1", &uri)
+
+	c := test.NewTestCluster(1)
+	api.Holder = pilosa.NewHolder()
+	api.Cluster = c.Clusters[0]
+	api.Cluster.SetState(pilosa.ClusterStateNormal)
+	_, err = api.RemoveNode("nonexistent-id")
+	if err == nil {
+		t.Fatalf("Should have failed.")
+	}
+
+	_, err = api.RemoveNode("node0")
+	if err == nil {
+		t.Fatalf("Should have failed.")
+	}
+
+	err = c.AddNode(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = api.RemoveNode("node1")
 	if err != nil {
 		t.Fatal(err)
 	}
