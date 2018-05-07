@@ -223,7 +223,7 @@ func (c *InternalHTTPClient) FragmentNodes(ctx context.Context, index string, sl
 	return a, nil
 }
 
-// QueryNode executes query against the index.
+// Query executes query against the index.
 func (c *InternalHTTPClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
 	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
 }
