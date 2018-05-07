@@ -88,7 +88,7 @@ func (c *InternalHTTPClient) MaxInverseSliceByIndex(ctx context.Context) (map[st
 // maxSliceByIndex returns the number of slices on a server by index.
 func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.clientURI(ctx), "/slices/max")
+	u := uriPathToURL(c.defaultURI, "/slices/max")
 
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
@@ -1135,16 +1135,6 @@ func (c *InternalHTTPClient) SendMessage(ctx context.Context, uri *URI, pb proto
 	}
 
 	return nil
-}
-
-func (c *InternalHTTPClient) clientURI(ctx context.Context) *URI {
-	clientURI := c.defaultURI
-	if contextURI, ok := ctx.Value("uri").(*URI); ok {
-		clientURI = contextURI
-	} else if contextURI, ok := ctx.Value("uri").(URI); ok {
-		clientURI = &contextURI
-	}
-	return clientURI
 }
 
 // Bit represents the location of a single bit.
