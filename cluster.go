@@ -356,13 +356,8 @@ func (c *Cluster) updateCoordinator(n *Node) bool {
 	return changed
 }
 
-// AddNode adds a node to the Cluster and updates and saves the
+// addNode adds a node to the Cluster and updates and saves the
 // new topology.
-func (c *Cluster) AddNode(node *Node) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.AddNode(node)
-}
 func (c *Cluster) addNode(node *Node) error {
 	c.Logger.Printf("add node %s to cluster on %s", node, c.Node)
 
