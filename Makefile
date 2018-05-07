@@ -24,7 +24,7 @@ vendor: Gopkg.toml
 
 # Run test suite
 test: vendor
-	go test -v ./... $(TESTFLAGS)
+	go test -v $(TESTFLAGS)
 
 # Run test suite with coverage enabled
 cover: vendor
