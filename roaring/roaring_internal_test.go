@@ -2020,38 +2020,6 @@ func TestXorRunRun(t *testing.T) {
 	}
 }
 
-func TestBitmapFlip(t *testing.T) {
-	c := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
-
-	ttable := []struct {
-		original uint64
-		flipped  uint64
-	}{
-		{0x0000000000000000, 0xFFFFFFFFFFFFFFFF},
-		{0xFFFFFFFFFFFFFFFF, 0x0000000000000000},
-		{0xFFFFFFFFFFFFFFF0, 0x000000000000000F},
-		{0xFFFFFFEFFFFFFFFF, 0x0000001000000000},
-		{0x0000001000000000, 0xFFFFFFEFFFFFFFFF},
-	}
-
-	expectedN := int(65536)
-	for i, tt := range ttable {
-		c.bitmap[i] = tt.original
-		expectedN -= int(popcount(tt.original))
-	}
-
-	o := c.flipBitmap()
-
-	for i, tt := range ttable {
-		if o.bitmap[i] != tt.flipped {
-			t.Fatalf("bitmapFlip calculation. expected %v, got %v", tt.flipped, o.bitmap[i])
-		}
-	}
-	if o.n != expectedN {
-		t.Fatalf("bitmapFlip calculation. expected count %v, got %v", expectedN, o.n)
-	}
-}
-
 func TestBitmapXorRange(t *testing.T) {
 	c := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
 	tests := []struct {
@@ -3185,12 +3153,24 @@ func TestContainerCombinations(t *testing.T) {
 		//{xor, "evenBitsSet", "outerBitsSet", ""},
 		{xor, "evenBitsSet", "oddBitsSet", "full"},
 		{xor, "evenBitsSet", "evenBitsSet", "empty"},
+
+		// flip
+		{flip, "empty", "", "full"},
+		{flip, "full", "", "empty"},
+		{flip, "firstBitSet", "", "firstBitUnset"},
+		{flip, "lastBitSet", "", "lastBitUnset"},
+		{flip, "firstBitUnset", "", "firstBitSet"},
+		{flip, "lastBitUnset", "", "lastBitSet"},
+		{flip, "innerBitsSet", "", "outerBitsSet"},
+		{flip, "outerBitsSet", "", "innerBitsSet"},
+		{flip, "oddBitsSet", "", "evenBitsSet"},
+		{flip, "evenBitsSet", "", "oddBitsSet"},
 	}
 	for _, testOp := range testOps {
 		for _, x := range containerTypes {
 			for _, y := range containerTypes {
 				desc := fmt.Sprintf("%s(%s/%s, %s/%s)", getFunctionName(testOp.f), cm[x], testOp.x, cm[y], testOp.y)
-				ret := testOp.f(cts[x][testOp.x], cts[y][testOp.y])
+				ret := runContainerFunc(testOp.f, cts[x][testOp.x], cts[y][testOp.y])
 				exp := testOp.exp
 
 				// Convert to all container types and check result.
@@ -3239,4 +3219,15 @@ func TestContainerCombinations(t *testing.T) {
 			}
 		}
 	}
+}
+
+//func getFunc(func(a, b *container) *container, m, n *container) *container {
+func runContainerFunc(f interface{}, c ...*container) *container {
+	switch f.(type) {
+	case func(*container) *container:
+		return f.(func(*container) *container)(c[0])
+	case func(*container, *container) *container:
+		return f.(func(a, b *container) *container)(c[0], c[1])
+	}
+	return nil
 }

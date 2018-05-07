@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## [v0.9.0] - 2018-05-04
+
+This version contains 188 contribution from 12 contributors. There are 141 files changed, 17,832 insertions, and 7,503 deletions.
+
+*Please see special [upgrading instructions](https://www.pilosa.com/docs/latest/administration/#version-0-9) for this release.*
 
 ### Added
 
@@ -19,11 +23,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Add QueryResult.Type to protobuf message to distiguish results at the client ([#1064](https://github.com/pilosa/pilosa/pull/1064))
 - Modify `pilosa import` to support string rows/columns ([#1063](https://github.com/pilosa/pilosa/pull/1063))
 - Add some statsd calls to HolderSyncer ([#1048](https://github.com/pilosa/pilosa/pull/1048))
-- Adds support for memberlist gossip configuration via pilosa.Config ([#1014](https://github.com/pilosa/pilosa/pull/1014))
-- Add local and cluster IDs ([#1013](https://github.com/pilosa/pilosa/pull/1013))
+- Add support for memberlist gossip configuration via pilosa.Config ([#1014](https://github.com/pilosa/pilosa/pull/1014))
+- Add local and cluster IDs ([#1013](https://github.com/pilosa/pilosa/pull/1013), [#1245](https://github.com/pilosa/pilosa/pull/1245))
 - Add HolderCleaner and view.DeleteFragment ([#985](https://github.com/pilosa/pilosa/pull/985))
 - Add set-coordinator endpoint ([#963](https://github.com/pilosa/pilosa/pull/963))
-- Documentation improvements ([#1135](https://github.com/pilosa/pilosa/pull/1135), [#1154](https://github.com/pilosa/pilosa/pull/1154), [#1091](https://github.com/pilosa/pilosa/pull/1091), [#1108](https://github.com/pilosa/pilosa/pull/1108), [#1087](https://github.com/pilosa/pilosa/pull/1087), [#1086](https://github.com/pilosa/pilosa/pull/1086), [#1026](https://github.com/pilosa/pilosa/pull/1026), [#1022](https://github.com/pilosa/pilosa/pull/1022), [#1007](https://github.com/pilosa/pilosa/pull/1007), [#981](https://github.com/pilosa/pilosa/pull/981), [#901](https://github.com/pilosa/pilosa/pull/901), [#972](https://github.com/pilosa/pilosa/pull/972))
+- Implement Min/Max BSI queries ([#1191](https://github.com/pilosa/pilosa/pull/1191))
+- Log time/version to startup log ([#1246](https://github.com/pilosa/pilosa/pull/1246))
+- Documentation improvements ([#1135](https://github.com/pilosa/pilosa/pull/1135), [#1154](https://github.com/pilosa/pilosa/pull/1154), [#1091](https://github.com/pilosa/pilosa/pull/1091), [#1108](https://github.com/pilosa/pilosa/pull/1108), [#1087](https://github.com/pilosa/pilosa/pull/1087), [#1086](https://github.com/pilosa/pilosa/pull/1086), [#1026](https://github.com/pilosa/pilosa/pull/1026), [#1022](https://github.com/pilosa/pilosa/pull/1022), [#1007](https://github.com/pilosa/pilosa/pull/1007), [#981](https://github.com/pilosa/pilosa/pull/981), [#901](https://github.com/pilosa/pilosa/pull/901), [#972](https://github.com/pilosa/pilosa/pull/972), [#1215](https://github.com/pilosa/pilosa/pull/1215), [#1213](https://github.com/pilosa/pilosa/pull/1213), [#1224](https://github.com/pilosa/pilosa/pull/1224), [#1250](https://github.com/pilosa/pilosa/pull/1250))
 
 ### Changed
 
@@ -39,14 +45,24 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Use binary search in runAdd ([#1027](https://github.com/pilosa/pilosa/pull/1027))
 - Use HTTP handler for gossip SendSync ([#1001](https://github.com/pilosa/pilosa/pull/1001))
 - Group the write operations in syncBlock by MaxWritesPerRequest ([#950](https://github.com/pilosa/pilosa/pull/950))
-- Refactored HTTPClient handling ([#991](https://github.com/pilosa/pilosa/pull/991))
+- Refactor HTTPClient handling ([#991](https://github.com/pilosa/pilosa/pull/991))
 - Remove FrameSchema. Move Fields to the Frame struct ([#907](https://github.com/pilosa/pilosa/pull/907))
+- Refactor pilosa/server ([#1220](https://github.com/pilosa/pilosa/pull/1220))
+- Clean up flipBitmap and add tests ([#1223](https://github.com/pilosa/pilosa/pull/1223))
+- Move pilosa.Config to pilosa/server.Config ([#1216](https://github.com/pilosa/pilosa/pull/1216))
+- Vendor github.com/golang/groupcache/lru ([#1221](https://github.com/pilosa/pilosa/pull/1221))
 
 ### Removed
 
 - Remove the Gossip stutter from memberlist-related config options ([#1171](https://github.com/pilosa/pilosa/pull/1171))
 - Remove old GossipPort and GossipSeed config options ([#1142](https://github.com/pilosa/pilosa/pull/1142))
 - Remove cluster type `http` from docs ([#1130](https://github.com/pilosa/pilosa/pull/1130))
+- Remove holder.Peek, combine with HasData, move server logic ([#1226](https://github.com/pilosa/pilosa/pull/1226))
+- Remove PATCH frame endpoint ([#1222](https://github.com/pilosa/pilosa/pull/1222))
+- Remove Index.MergeSchemas() method ([#1219](https://github.com/pilosa/pilosa/pull/1219))
+- Remove references to Input Definition from the docs ([#1212](https://github.com/pilosa/pilosa/pull/1212))
+- Remove Index.TimeQuantum ([#1209](https://github.com/pilosa/pilosa/pull/1209))
+- Remove SecurityManager. Implement api restrictions in api package. ([#1207](https://github.com/pilosa/pilosa/pull/1207))
 
 ### Fixed
 
@@ -59,6 +75,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Fix count/bitmap mismatch bug ([#1084](https://github.com/pilosa/pilosa/pull/1084))
 - Fix edge case with Range() calls outside field Min/Max. Fixes #876. ([#979](https://github.com/pilosa/pilosa/pull/979))
 - Bind the handler to all interfaces (0.0.0.0) in Dockerfile. Fixes #977. ([#980](https://github.com/pilosa/pilosa/pull/980))
+- Fix nil client bug in monitorAntiEntropy (and test) ([#1233](https://github.com/pilosa/pilosa/pull/1233))
+- Fix crash due to server.diagnostics.server not set ([#1229](https://github.com/pilosa/pilosa/pull/1229))
+- Fix some cluster race conditions ([#1228](https://github.com/pilosa/pilosa/pull/1228))
+
+### Deprecated
+
+- Deprecate RangeEnabled option ([#1205](https://github.com/pilosa/pilosa/pull/1205))
 
 ### Performance
 

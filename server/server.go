@@ -20,15 +20,18 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
+	"net"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"crypto/tls"
@@ -40,27 +43,24 @@ import (
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/statik"
 	"github.com/pilosa/pilosa/statsd"
+	"github.com/pkg/errors"
 )
 
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
 }
 
-const (
-	// DefaultDataDir is the default data directory.
-	DefaultDataDir = "~/.pilosa"
-)
+type loggerLogger interface {
+	pilosa.Logger
+	Logger() *log.Logger
+}
 
 // Command represents the state of the pilosa server command.
 type Command struct {
 	Server *pilosa.Server
 
 	// Configuration.
-	Config *pilosa.Config
-
-	// Profiling options.
-	CPUProfile string
-	CPUTime    time.Duration
+	Config *Config
 
 	// Gossip transport
 	GossipTransport *gossip.Transport
@@ -75,14 +75,13 @@ type Command struct {
 
 	// Passed to the Gossip implementation.
 	logOutput io.Writer
-	logger    *log.Logger
+	logger    loggerLogger
 }
 
 // NewCommand returns a new instance of Main.
 func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 	return &Command{
-		Server: pilosa.NewServer(),
-		Config: pilosa.NewConfig(),
+		Config: NewConfig(),
 
 		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 
@@ -91,8 +90,8 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 	}
 }
 
-// Run executes the pilosa server.
-func (m *Command) Run(args ...string) (err error) {
+// Start starts the pilosa server - it returns once the server is running.
+func (m *Command) Start() (err error) {
 	defer close(m.Started)
 	prefix := "~" + string(filepath.Separator)
 	if strings.HasPrefix(m.Config.DataDir, prefix) {
@@ -120,81 +119,66 @@ func (m *Command) Run(args ...string) (err error) {
 		return fmt.Errorf("server.Open: %v", err)
 	}
 
-	m.Server.Logger.Printf("Listening as %s\n", m.Server.URI)
+	m.logger.Printf("Listening as %s\n", m.Server.URI)
+
 	return nil
 }
 
-// SetupLogger sets up the logger based on the configuration.
-func (m *Command) SetupLogger() error {
+// Wait waits for the server to be closed or interrupted.
+func (m *Command) Wait() error {
+	// First SIGKILL causes server to shut down gracefully.
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	select {
+	case sig := <-c:
+		m.logger.Printf("Received %s; gracefully shutting down...\n", sig.String())
+
+		// Second signal causes a hard shutdown.
+		go func() { <-c; os.Exit(1) }()
+		return errors.Wrap(m.Close(), "closing command")
+	case <-m.Done:
+		m.logger.Printf("Server closed externally")
+		return nil
+	}
+}
+
+// setupLogger sets up the logger based on the configuration.
+func (m *Command) setupLogger() error {
 	var err error
 	if m.Config.LogPath == "" {
 		m.logOutput = m.Stderr
 	} else {
 		m.logOutput, err = os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "opening file")
 		}
 	}
 
 	if m.Config.Verbose {
-		vbl := pilosa.NewVerboseLogger(m.logOutput)
-		m.logger = vbl.Logger()
-		m.Server.Logger = vbl
+		m.logger = pilosa.NewVerboseLogger(m.logOutput)
 	} else {
-		sl := pilosa.NewStandardLogger(m.logOutput)
-		m.logger = sl.Logger()
-		m.Server.Logger = sl
+		m.logger = pilosa.NewStandardLogger(m.logOutput)
 	}
 	return nil
 }
 
 // SetupServer uses the cluster configuration to set up this server.
 func (m *Command) SetupServer() error {
-	err := m.Config.Validate()
+	err := m.setupLogger()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "setting up logger")
 	}
 
-	m.Server.Handler.Logger = m.Server.Logger
-	m.Server.Holder.Logger = m.Server.Logger
-	m.Server.Holder.Stats.SetLogger(m.Server.Logger)
+	handler := pilosa.NewHandler()
+	handler.Logger = m.logger
+	handler.FileSystem = &statik.FileSystem{}
+	handler.API = pilosa.NewAPI()
+	handler.API.Logger = m.logger
 
 	uri, err := pilosa.AddressWithDefaults(m.Config.Bind)
-
 	if err != nil {
-		return err
+		return errors.Wrap(err, "processing bind address")
 	}
-	m.Server.URI = *uri
-
-	cluster := pilosa.NewCluster()
-	cluster.ReplicaN = m.Config.Cluster.ReplicaN
-	cluster.Holder = m.Server.Holder
-	cluster.Logger = m.Server.Logger
-
-	m.Server.Cluster = cluster
-
-	// Configure data directory (for Cluster .topology)
-	m.Server.Cluster.Path = m.Config.DataDir
-
-	m.Server.NewAttrStore = boltdb.NewAttrStore
-	m.Server.Holder.NewAttrStore = boltdb.NewAttrStore
-
-	// Configure holder.
-	m.Server.Logger.Printf("Using data from: %s\n", m.Config.DataDir)
-	m.Server.Holder.Path = m.Config.DataDir
-	m.Server.MetricInterval = time.Duration(m.Config.Metric.PollInterval)
-	if m.Config.Metric.Diagnostics {
-		m.Server.DiagnosticInterval = time.Duration(DefaultDiagnosticsInterval)
-	}
-	m.Server.SystemInfo = gopsutil.NewSystemInfo()
-	m.Server.GCNotifier = gcnotify.NewActiveGCNotifier()
-	m.Server.Holder.Stats, err = NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
-	if err != nil {
-		return err
-	}
-
-	// Copy configuration flags.
-	m.Server.MaxWritesPerRequest = m.Config.MaxWritesPerRequest
 
 	// Setup TLS
 	var TLSConfig *tls.Config
@@ -207,27 +191,73 @@ func (m *Command) SetupServer() error {
 		}
 		cert, err := tls.LoadX509KeyPair(m.Config.TLS.CertificatePath, m.Config.TLS.CertificateKeyPath)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "load x509 key pair")
 		}
-		m.Server.TLS = &tls.Config{
+		TLSConfig = &tls.Config{
 			Certificates:       []tls.Certificate{cert},
 			InsecureSkipVerify: m.Config.TLS.SkipVerify,
 		}
-
-		TLSConfig = m.Server.TLS
 	}
-	c := pilosa.GetHTTPClient(TLSConfig)
-	m.Server.RemoteClient = c
-	m.Server.Handler.RemoteClient = c
-	m.Server.Cluster.RemoteClient = c
 
-	// Statik file system.
-	m.Server.Handler.FileSystem = &statik.FileSystem{}
+	diagnosticsInterval := time.Duration(0)
+	if m.Config.Metric.Diagnostics {
+		diagnosticsInterval = time.Duration(DefaultDiagnosticsInterval)
+	}
 
-	// Set configuration options.
-	m.Server.AntiEntropyInterval = time.Duration(m.Config.AntiEntropy.Interval)
-	m.Server.Cluster.LongQueryTime = time.Duration(m.Config.Cluster.LongQueryTime)
-	return nil
+	statsClient, err := NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	if err != nil {
+		return errors.Wrap(err, "new stats client")
+	}
+
+	ln, err := getListener(*uri, TLSConfig)
+	if err != nil {
+		return errors.Wrap(err, "getting listener")
+	}
+
+	c := GetHTTPClient(TLSConfig)
+	handler.API.RemoteClient = c
+
+	m.Server, err = pilosa.NewServer(
+		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
+		pilosa.OptServerLongQueryTime(time.Duration(m.Config.Cluster.LongQueryTime)),
+		pilosa.OptServerDataDir(m.Config.DataDir),
+		pilosa.OptServerReplicaN(m.Config.Cluster.ReplicaN),
+		pilosa.OptServerMaxWritesPerRequest(m.Config.MaxWritesPerRequest),
+		pilosa.OptServerMetricInterval(time.Duration(m.Config.Metric.PollInterval)),
+		pilosa.OptServerDiagnosticsInterval(diagnosticsInterval),
+
+		pilosa.OptServerLogger(m.logger),
+		pilosa.OptServerAttrStoreFunc(boltdb.NewAttrStore),
+		pilosa.OptServerHandler(handler),
+		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
+		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
+		pilosa.OptServerStatsClient(statsClient),
+		pilosa.OptServerListener(ln),
+		pilosa.OptServerURI(uri),
+		pilosa.OptServerRemoteClient(c),
+	)
+
+	return errors.Wrap(err, "new server")
+}
+
+func GetHTTPClient(t *tls.Config) *http.Client {
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          1000,
+		MaxIdleConnsPerHost:   200,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	if t != nil {
+		transport.TLSClientConfig = t
+	}
+	return &http.Client{Transport: transport}
 }
 
 // SetupNetworking sets up internode communication based on the configuration.
@@ -255,13 +285,7 @@ func (m *Command) SetupNetworking() error {
 		return nil
 	}
 
-	// Set internal port (string).
-	gossipPortStr := pilosa.DefaultGossipPort
-	if m.Config.Gossip.Port != "" {
-		gossipPortStr = m.Config.Gossip.Port
-	}
-
-	gossipPort, err := strconv.Atoi(gossipPortStr)
+	gossipPort, err := strconv.Atoi(m.Config.Gossip.Port)
 	if err != nil {
 		return err
 	}
@@ -272,7 +296,7 @@ func (m *Command) SetupNetworking() error {
 	if m.GossipTransport != nil {
 		transport = m.GossipTransport
 	} else {
-		transport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger)
+		transport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
 		if err != nil {
 			return err
 		}
@@ -281,10 +305,12 @@ func (m *Command) SetupNetworking() error {
 	// Set Coordinator.
 	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
 		m.Server.Cluster.Coordinator = m.Server.NodeID
+		m.Server.Cluster.Node.IsCoordinator = true
 	}
 
-	m.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m.Server.Logger)
-	gossipMemberSet, err := gossip.NewGossipMemberSet(m.Server.NodeID, m.Config, m.Server, gossip.WithLogger(m.logger), gossip.WithTransport(transport))
+	gossipEventReceiver := gossip.NewGossipEventReceiver(m.logger)
+	m.Server.Cluster.EventReceiver = gossipEventReceiver
+	gossipMemberSet, err := gossip.NewGossipMemberSet(m.Server.NodeID, m.Server.URI.Host(), m.Config.Gossip, gossipEventReceiver, m.Server, gossip.WithLogger(m.logger.Logger()), gossip.WithTransport(transport))
 	if err != nil {
 		return err
 	}
@@ -318,7 +344,30 @@ func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
 		return pilosa.NewExpvarStatsClient(), nil
 	case "statsd":
 		return statsd.NewStatsClient(host)
-	default:
+	case "nop", "none":
 		return pilosa.NopStatsClient, nil
+	default:
+		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, none].")
 	}
+}
+
+// getListener gets a net.Listener based on the config.
+func getListener(uri pilosa.URI, tlsconf *tls.Config) (ln net.Listener, err error) {
+	// If bind URI has the https scheme, enable TLS
+	if uri.Scheme() == "https" && tlsconf != nil {
+		ln, err = tls.Listen("tcp", uri.HostPort(), tlsconf)
+		if err != nil {
+			return nil, errors.Wrap(err, "tls.Listener")
+		}
+	} else if uri.Scheme() == "http" {
+		// Open HTTP listener to determine port (if specified as :0).
+		ln, err = net.Listen("tcp", uri.HostPort())
+		if err != nil {
+			return nil, errors.Wrap(err, "net.Listen")
+		}
+	} else {
+		return nil, errors.Errorf("unsupported scheme: %s", uri.Scheme())
+	}
+
+	return ln, nil
 }

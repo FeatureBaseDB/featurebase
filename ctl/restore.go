@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
 )
 
 // RestoreCommand represents a command for restoring a frame from a backup.
@@ -39,7 +40,7 @@ type RestoreCommand struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	TLS pilosa.TLSConfig
+	TLS server.TLSConfig
 }
 
 // NewRestoreCommand returns a new instance of RestoreCommand.
@@ -81,6 +82,6 @@ func (cmd *RestoreCommand) TLSHost() string {
 	return cmd.Host
 }
 
-func (cmd *RestoreCommand) TLSConfiguration() pilosa.TLSConfig {
+func (cmd *RestoreCommand) TLSConfiguration() server.TLSConfig {
 	return cmd.TLS
 }

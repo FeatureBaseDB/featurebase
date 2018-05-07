@@ -357,6 +357,49 @@ func (v *View) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err e
 	return sum, count, nil
 }
 
+// FieldMin returns the min and count of a field.
+func (v *View) FieldMin(filter *Bitmap, bitDepth uint) (min, count uint64, err error) {
+	var minHasValue bool
+	for _, f := range v.Fragments() {
+		fmin, fcount, err := f.FieldMin(filter, bitDepth)
+		if err != nil {
+			return min, count, err
+		}
+		// Don't consider a min based on zero columns.
+		if fcount == 0 {
+			continue
+		}
+
+		if !minHasValue {
+			min = fmin
+			minHasValue = true
+			count += fcount
+			continue
+		}
+
+		if fmin < min {
+			min = fmin
+			count += fcount
+		}
+	}
+	return min, count, nil
+}
+
+// FieldMax returns the max and count of a field.
+func (v *View) FieldMax(filter *Bitmap, bitDepth uint) (max, count uint64, err error) {
+	for _, f := range v.Fragments() {
+		fmax, fcount, err := f.FieldMax(filter, bitDepth)
+		if err != nil {
+			return max, count, err
+		}
+		if fcount > 0 && fmax > max {
+			max = fmax
+			count += fcount
+		}
+	}
+	return max, count, nil
+}
+
 // FieldRange returns bitmaps with a field value encoding matching the predicate.
 func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitmap, error) {
 	bm := NewBitmap()

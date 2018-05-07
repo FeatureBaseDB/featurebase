@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
 )
 
 // ExportCommand represents a command for bulk exporting data from a server.
@@ -38,7 +39,7 @@ type ExportCommand struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	TLS pilosa.TLSConfig
+	TLS server.TLSConfig
 }
 
 // NewExportCommand returns a new instance of ExportCommand.
@@ -114,6 +115,6 @@ func (cmd *ExportCommand) TLSHost() string {
 	return cmd.Host
 }
 
-func (cmd *ExportCommand) TLSConfiguration() pilosa.TLSConfig {
+func (cmd *ExportCommand) TLSConfiguration() server.TLSConfig {
 	return cmd.TLS
 }

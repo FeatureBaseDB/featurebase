@@ -25,6 +25,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -70,22 +71,6 @@ func TestHolder_Open(t *testing.T) {
 		defer os.Chmod(h.IndexPath("test"), 0777)
 
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
-	t.Run("ErrIndexMetaCorrupt", func(t *testing.T) {
-		h := test.MustOpenHolder()
-		defer h.Close()
-
-		if _, err := h.CreateIndex("test", pilosa.IndexOptions{TimeQuantum: pilosa.TimeQuantum("YMDH")}); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Truncate(filepath.Join(h.IndexPath("test"), ".meta"), 2); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "unexpected EOF") {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -298,26 +283,24 @@ func TestHolder_HasData(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
-		if h.HasData() {
-			t.Fatal("expected HasData to return false")
+		if ok, err := h.HasData(); ok || err != nil {
+			t.Fatal("expected HasData to return false, no err, but", ok, err)
 		}
 
 		if _, err := h.CreateIndex("test", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
-		if !h.HasData() {
-			t.Fatal("expected HasData to return true")
+		if ok, err := h.HasData(); !ok || err != nil {
+			t.Fatal("expected HasData to return true, but ", ok, err)
 		}
 	})
 
 	t.Run("Peek", func(t *testing.T) {
 		h := test.NewHolder()
 
-		if hasData := h.Peek(); hasData != false {
-			t.Fatal("expected Peek to return false")
-		} else if h.HasData() {
-			t.Fatal("expected HasData to return false")
+		if ok, err := h.HasData(); ok || err != nil {
+			t.Fatal("expected HasData to return false, no err, but", ok, err)
 		}
 
 		// Create an index directory to indicate data exists.
@@ -325,24 +308,19 @@ func TestHolder_HasData(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if hasData := h.Peek(); hasData != true {
-			t.Fatal("expected Peek to return true")
-		} else if !h.HasData() {
-			t.Fatal("expected HasData to return true")
+		if ok, err := h.HasData(); !ok || err != nil {
+			t.Fatal("expected HasData to return true, no err, but", ok, err)
 		}
 	})
 
 	t.Run("Peek at missing directory", func(t *testing.T) {
 		h := test.NewHolder()
 
-		// Ensure that hasData is false when trying to peek into
-		// a directory that doesn't exist.
+		// Ensure that hasData is false when dir doesn't exist.
 		h.Path = "bad-path"
 
-		if hasData := h.Peek(); hasData != false {
-			t.Fatal("expected Peek to return false")
-		} else if h.HasData() {
-			t.Fatal("expected HasData to return false")
+		if ok, err := h.HasData(); ok || err != nil {
+			t.Fatal("expected HasData to return false, no err, but", ok, err)
 		}
 	})
 }
@@ -383,7 +361,7 @@ func TestHolder_DeleteIndex(t *testing.T) {
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
 	cluster := test.NewCluster(2)
-	client := pilosa.GetHTTPClient(nil)
+	client := server.GetHTTPClient(nil)
 	// Create a local holder.
 	hldr0 := test.MustOpenHolder()
 	defer hldr0.Close()
@@ -393,7 +371,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	defer hldr1.Close()
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Holder = hldr1.Holder
+	s.Handler.API.Holder = hldr1.Holder
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(client)
 		e.Holder = hldr1.Holder
@@ -467,7 +445,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 		Holder:       hldr0.Holder,
 		Node:         cluster.Nodes[0],
 		Cluster:      cluster,
-		RemoteClient: pilosa.GetHTTPClient(nil),
+		RemoteClient: server.GetHTTPClient(nil),
 		Stats:        pilosa.NopStatsClient,
 	}
 

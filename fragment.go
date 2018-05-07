@@ -614,6 +614,70 @@ func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, e
 	return sum, count, nil
 }
 
+// FieldMin returns the min of a given field as well as the number of columns involved.
+// A bitmap can be passed in to optionally filter the computed columns.
+func (f *Fragment) FieldMin(filter *Bitmap, bitDepth uint) (min, count uint64, err error) {
+
+	consider := f.Row(uint64(bitDepth))
+	if filter != nil {
+		consider = consider.Intersect(filter)
+	}
+
+	// If there are no columns to consider, return early.
+	if consider.Count() == 0 {
+		return 0, 0, nil
+	}
+
+	for i := bitDepth; i > uint(0); i-- {
+		ii := i - 1 // allow for uint range: (bitdepth-1) to 0
+		row := f.Row(uint64(ii))
+
+		x := consider.Difference(row)
+		count = x.Count()
+		if count > 0 {
+			consider = x
+		} else {
+			min += (1 << ii)
+			if ii == 0 {
+				count = consider.Count()
+			}
+		}
+	}
+
+	return min, count, nil
+}
+
+// FieldMax returns the max of a given field as well as the number of columns involved.
+// A bitmap can be passed in to optionally filter the computed columns.
+func (f *Fragment) FieldMax(filter *Bitmap, bitDepth uint) (max, count uint64, err error) {
+
+	consider := f.Row(uint64(bitDepth))
+	if filter != nil {
+		consider = consider.Intersect(filter)
+	}
+
+	// If there are no columns to consider, return early.
+	if consider.Count() == 0 {
+		return 0, 0, nil
+	}
+
+	for i := bitDepth; i > uint(0); i-- {
+		ii := i - 1 // allow for uint range: (bitdepth-1) to 0
+		row := f.Row(uint64(ii))
+
+		x := row.Intersect(consider)
+		count = x.Count()
+		if count > 0 {
+			max += (1 << ii)
+			consider = x
+		} else if ii == 0 {
+			count = consider.Count()
+		}
+	}
+
+	return max, count, nil
+}
+
 // FieldRange returns bitmaps with a field value encoding matching the predicate.
 func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitmap, error) {
 	switch op {
@@ -1702,7 +1766,7 @@ func (s *FragmentSyncer) isClosing() bool {
 // then merges any blocks which have differences.
 func (s *FragmentSyncer) SyncFragment() error {
 	// Determine replica set.
-	nodes := s.Cluster.FragmentNodes(s.Fragment.Index(), s.Fragment.Slice())
+	nodes := s.Cluster.SliceNodes(s.Fragment.Index(), s.Fragment.Slice())
 	if len(nodes) == 1 {
 		return nil
 	}
@@ -1784,7 +1848,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	// Read pairs from each remote block.
 	var pairSets []PairSet
 	var clients []InternalClient
-	for _, node := range s.Cluster.FragmentNodes(f.Index(), f.Slice()) {
+	for _, node := range s.Cluster.SliceNodes(f.Index(), f.Slice()) {
 		if s.Node.ID == node.ID {
 			continue
 		}
@@ -1832,15 +1896,19 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 		// Generate query with sets & clears, and group the requests to not exceed MaxWritesPerRequest.
 		total := len(set.ColumnIDs) + len(clear.ColumnIDs)
-		buffers := make([]bytes.Buffer, int(math.Ceil(float64(total)/float64(s.Cluster.MaxWritesPerRequest))))
+		maxWrites := s.Cluster.MaxWritesPerRequest
+		if maxWrites <= 0 {
+			maxWrites = 5000
+		}
+		buffers := make([]bytes.Buffer, int(math.Ceil(float64(total)/float64(maxWrites))))
 
 		// Only sync the standard block.
 		for j := 0; j < len(set.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "SetBit(frame=%q, row=%d, col=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "SetBit(frame=%q, row=%d, col=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
 			count++
 		}
 		for j := 0; j < len(clear.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "ClearBit(frame=%q, row=%d, col=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "ClearBit(frame=%q, row=%d, col=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
 			count++
 		}
 

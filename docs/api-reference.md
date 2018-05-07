@@ -68,7 +68,7 @@ Sends a query to the Pilosa server with the given index. The request body is UTF
 ``` request
 curl localhost:10101/index/user/query \
      -X POST \
-     -d 'Bitmap(frame="language", rowID=5)'
+     -d 'Bitmap(frame="language", row=5)'
 ```
 ``` response
 {"results":[{"attrs":{},"bits":[100]}]}
@@ -83,7 +83,7 @@ The query is executed for all [slices](../data-model/#slice) by default. To use 
 ``` request
 curl "localhost:10101/index/user/query?columnAttrs=true&slices=0,1" \
      -X POST \
-     -d 'Bitmap(frame="language", rowID=5)'
+     -d 'Bitmap(frame="language", row=5)'
 ```
 ``` response
 {
@@ -103,10 +103,9 @@ Creates a frame in the given index with the given name.
 The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which may contain the following fields:
 
 * `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this frame.
-* `inverseEnabled` (boolean): Enables [the inverted view](../data-model/#inverse) for this frame if `true`.
 * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
-* `rangeEnabled` (boolean): Enables range-encoded fields in this frame.
+* `rangeEnabled` (boolean): DEPRECATED - has no effect, will be removed. All frames support BSI fields.
 * `fields` (array): List of range-encoded [fields](../data-model/#bsi-range-encoding).
 
 Each individual `field` contains the following:
@@ -119,9 +118,7 @@ Each individual `field` contains the following:
 Integer fields are stored as n-bit range-encoded values. Pilosa supports 63-bit, signed integers with values between `min` and `max`.
 
 ``` request
-curl localhost:10101/index/user/frame/language \
-     -X POST \
-     -d '{"options": {"inverseEnabled": true}}'
+curl localhost:10101/index/user/frame/language -X POST
 ```
 ``` response
 {}
@@ -130,7 +127,7 @@ curl localhost:10101/index/user/frame/language \
 ``` request
 curl localhost:10101/index/repository/frame/stats \
     -X POST \
-    -d '{"rangeEnabled": true, "fields": [{"name": "pullrequests", "type": "int", "min": 0, "max": 1000000}]}'
+    -d '{"fields": [{"name": "pullrequests", "type": "int", "min": 0, "max": 1000000}]}'
 ```
 ``` response
 {}
@@ -144,35 +141,6 @@ Removes the given frame.
 
 ``` request
 curl -XDELETE localhost:10101/index/user/frame/language
-```
-``` response
-{}
-```
-
-### Change frame time quantum
-
-`PATCH /index/<index-name>/frame/<frame-name>/time-quantum`
-
-Changes the time quantum for the given frame. This endpoint should be called at most once right after creating a frame.
-
-The payload is in JSON with the format: `{"timeQuantum": "${TIME_QUANTUM}"}`. Valid time quantum values are:
-
-* (Empty string)
-* Y: year
-* M: month
-* D: day
-* H: hour
-* YM: year and month
-* MD: month and day
-* DH: day and hour
-* YMD: year, month and day
-* MDH: month, day and hour
-* YMDH: year, month, day and hour
-
-``` request
-curl localhost:10101/index/user/frame/language/time-quantum \
-     -X POST \
-     -d '{"timeQuantum": "YM"}'
 ```
 ``` response
 {}
@@ -193,129 +161,6 @@ The request payload is JSON, and it must contain the fields `type`, `min`, `max`
 curl localhost:10101/index/repository/frame/stats/field/pullrequests \
     -X POST \
     -d '{"type": "int", "min": 0, "max": 1000000}'
-```
-``` response
-{}
-```
-
-### Create input definition
-
-<div class="warning">
-Input definition is deprecated as of v0.9.
-</div>
-
-`POST /index/<index-name>/input-definition/<input-definition-name>`
- 
-Creates an input definition in the given index with the given name.
- 
-The request payload is JSON, and it must contain the fields `frames` and `fields`. `frames` is an array of frames used within this input definition.  Each frame must contain a `name` and may contain the following options:
- 
-* `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this frame.
-* `inverseEnabled` (boolean): Enables [the inverted view](../data-model/#inverse) for this frame if `true`.
-* `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this frame. Default is `lru`.
-* `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
- 
-The `fields` array contains a series of JSON objects describing how to process each field received in the input data.  Each `field` object must contain a `name` which maps to the source JSON field name.  One field must be defined at the `primaryKey`.  The `primarykey` source field's value must be an unsigned integer which maps directly to a columnID in Pilosa.
-
-* `name`    (string): Maps the source data field to actions that process the field's corresponding value.
-* `actions` (array): List of actions that will process the field's value.
- 
-The `action` describes how the field value will be processed.  Each `action` may contain:
-
-* `frame` (string): The Frame that will contain this action's set bits.
-* `rowid` (int): The action can use this as a pre-defined SetBit rowID.  The user is required to ensure this ID does not overlap with other rows in use per frame.
-* `valueDestination` (string): The mapping rule used for this data.
-    - `value-to-row`: The value should be an integer and will map directly to a RowID.
-    - `single-row-boolean`: If the value is true set a bit using the `rowid`.
-    - `mapping`: Map the value to a RowID in the `valueMap`.
-* `valueMap` (object): string and integer pairs used to map field values to RowID's.
- 
-``` request
-curl localhost:10101/index/user/input-definition/stargazer-input \
-    -X POST \
-    -d '{
-            "frames":[
-                {
-                    "name": "language",
-                    "options": {"inverseEnabled": true}
-                }
-            ],
-            "fields":[
-                {
-                    "name": "repo_id",
-                    "primaryKey":true
-                },
-                {
-                    "name": "language_id",
-                    "actions":[
-                        {
-                            "frame": "language",
-                            "valueDestination": "mapping",
-                            "valueMap": {
-                                "Go": 5,
-                                "Python": 17,
-                                "C++": 10
-                            }
-                        }
-                    ]
-                }
-            ]
-        }'
-```
-``` response
-{}
-```
-
-### Get input definition
-
-<div class="warning">
-Input definition is deprecated as of v0.9.
-</div>
-
-`GET /index/<index-name>/input-definition/<input-definition-name>`
-
-Returns the given input definition as JSON.
-
-``` request
-curl -XGET localhost:10101/index/user/input-definition/stargazer-input
-```
-``` response
-{"frames":[{"name":"language","options":{"inverseEnabled":true}}],"fields":[{"name":"repo_id","primaryKey":true},{"name":"language_id","actions":[{"frame":"language","valueDestination":"mapping","valueMap":{"Go":5,"Python":17,"C++":10}}]}]}
-```
-
-### Remove input definition
-
-<div class="warning">
-Input definition is deprecated as of v0.9.
-</div>
-
-`DELETE /index/<index-name>/input-definition/<input-definition-name>`
-
-Removes the given input definition.
-
-``` request
-curl -XDELETE localhost:10101/index/user/input-definition/stargazer-input
-```
-``` response
-{}
-```
-
-### Process input data
-
-<div class="warning">
-Input definition is deprecated as of v0.9.
-</div>
-
-`POST /index/<index-name>/input/<input-definition-name>`
-
-Processes the JSON payload using the given input definition.
-
-The request payload is a JSON array of objects containing one field for the primary key that corresponds to the column, and additional fields that will be handled by corresponding actions in the input definition.
-
-``` request
-curl localhost:10101/index/user/input/stargazer-input \
-     -X POST \
-     -d '[{"language_id": "Go", "repo_id": 92274475}]'
 ```
 ``` response
 {}

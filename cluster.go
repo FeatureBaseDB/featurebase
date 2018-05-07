@@ -17,7 +17,6 @@ package pilosa
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"io/ioutil"
@@ -33,15 +32,13 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
 
 const (
 	// DefaultPartitionN is the default number of partitions in a cluster.
 	DefaultPartitionN = 256
-
-	// DefaultReplicaN is the default number of replicas per partition.
-	DefaultReplicaN = 1
 
 	// ClusterState represents the state returned in the /status endpoint.
 	ClusterStateStarting = "STARTING"
@@ -264,7 +261,6 @@ type Cluster struct {
 	// Close management
 	wg      sync.WaitGroup
 	closing chan struct{}
-	prefect SecurityManager
 
 	Logger Logger
 
@@ -275,19 +271,17 @@ type Cluster struct {
 // NewCluster returns a new instance of Cluster with defaults.
 func NewCluster() *Cluster {
 	return &Cluster{
-		Hasher:              &jmphasher{},
-		PartitionN:          DefaultPartitionN,
-		ReplicaN:            DefaultReplicaN,
-		MaxWritesPerRequest: DefaultMaxWritesPerRequest,
-		EventReceiver:       NopEventReceiver,
+		Hasher:        &jmphasher{},
+		PartitionN:    DefaultPartitionN,
+		ReplicaN:      1,
+		EventReceiver: NopEventReceiver,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
 		jobs:                make(map[int64]*ResizeJob),
 		closing:             make(chan struct{}),
 		joining:             make(chan struct{}),
 
-		Logger:  NopLogger,
-		prefect: &NopSecurityManager{},
+		Logger: NopLogger,
 	}
 }
 
@@ -298,6 +292,12 @@ func (c *Cluster) CoordinatorNode() *Node {
 
 // IsCoordinator is true if this node is the coordinator.
 func (c *Cluster) IsCoordinator() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.isCoordinator()
+}
+
+func (c *Cluster) isCoordinator() bool {
 	return c.Coordinator == c.Node.ID
 }
 
@@ -306,6 +306,8 @@ func (c *Cluster) IsCoordinator() bool {
 // will consider itself coordinator and update the other
 // nodes with its version of Cluster.Status.
 func (c *Cluster) SetCoordinator(n *Node) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	// Verify that the new Coordinator value matches
 	// this node.
 	if c.Node.ID != n.ID {
@@ -313,7 +315,7 @@ func (c *Cluster) SetCoordinator(n *Node) error {
 	}
 
 	// Update IsCoordinator on all nodes (locally).
-	_ = c.UpdateCoordinator(n)
+	_ = c.updateCoordinator(n)
 
 	// Send the update coordinator message to all nodes.
 	err := c.Broadcaster.SendSync(
@@ -333,6 +335,12 @@ func (c *Cluster) SetCoordinator(n *Node) error {
 // to true, and sets all other nodes to false. Returns true if the value
 // changed.
 func (c *Cluster) UpdateCoordinator(n *Node) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.updateCoordinator(n)
+}
+
+func (c *Cluster) updateCoordinator(n *Node) bool {
 	var changed bool
 	if c.Coordinator != n.ID {
 		c.Coordinator = n.ID
@@ -434,19 +442,11 @@ func (c *Cluster) setState(state string) {
 	var doCleanup bool
 
 	switch state {
-	case ClusterStateResizing:
-		c.prefect.SetRestricted()
 	case ClusterStateNormal:
-		c.prefect.SetNormal()
-		// Don't change routing for these states:
-		// - ClusterStateStarting
-
 		// If state is RESIZING -> NORMAL then run cleanup.
 		if c.state == ClusterStateResizing {
 			doCleanup = true
 		}
-	default:
-		panic(fmt.Sprintf("invalid cluster state: %s", state))
 	}
 
 	c.state = state
@@ -523,6 +523,12 @@ func (c *Cluster) Status() *internal.ClusterStatus {
 		State:     c.state,
 		Nodes:     EncodeNodes(c.Nodes),
 	}
+}
+
+func (c *Cluster) NodeByID(id string) *Node {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.nodeByID(id)
 }
 
 // nodeByID returns a node reference by ID.
@@ -654,7 +660,7 @@ func (c *Cluster) fragsByHost(idx *Index) fragsByHost {
 func (c *Cluster) fragCombos(idx string, maxSlice uint64, frameViews viewsByFrame) fragsByHost {
 	t := make(fragsByHost)
 	for i := uint64(0); i <= maxSlice; i++ {
-		nodes := c.FragmentNodes(idx, i)
+		nodes := c.SliceNodes(idx, i)
 		for _, n := range nodes {
 			// for each frame/view combination:
 			for frame, views := range frameViews {
@@ -807,14 +813,14 @@ func (c *Cluster) Partition(index string, slice uint64) int {
 	return int(h.Sum64() % uint64(c.PartitionN))
 }
 
-// FragmentNodes returns a list of nodes that own a fragment.
-func (c *Cluster) FragmentNodes(index string, slice uint64) []*Node {
+// SliceNodes returns a list of nodes that own a fragment.
+func (c *Cluster) SliceNodes(index string, slice uint64) []*Node {
 	return c.PartitionNodes(c.Partition(index, slice))
 }
 
-// OwnsFragment returns true if a host owns a fragment.
-func (c *Cluster) OwnsFragment(nodeID string, index string, slice uint64) bool {
-	return Nodes(c.FragmentNodes(index, slice)).ContainsID(nodeID)
+// OwnsSlice returns true if a host owns a fragment.
+func (c *Cluster) OwnsSlice(nodeID string, index string, slice uint64) bool {
+	return Nodes(c.SliceNodes(index, slice)).ContainsID(nodeID)
 }
 
 // PartitionNodes returns a list of nodes that own a partition.
@@ -913,7 +919,10 @@ func (c *Cluster) Open() error {
 	}
 
 	// Add the local node to the cluster.
-	c.AddNode(c.Node)
+	err := c.AddNode(c.Node)
+	if err != nil {
+		return errors.Wrap(err, "adding local node")
+	}
 
 	// Start the EventReceiver.
 	if err := c.EventReceiver.Start(c); err != nil {
@@ -1197,8 +1206,11 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 func (c *Cluster) CompleteCurrentJob(state string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if !c.isCoordinator() {
+		return ErrNodeNotCoordinator
+	}
 	if c.currentJob == nil {
-		return fmt.Errorf("no resize job currently running")
+		return ErrResizeNotRunning
 	}
 	c.currentJob.SetState(state)
 	c.currentJob = nil
@@ -1698,13 +1710,15 @@ func (c *Cluster) nodeJoin(node *Node) error {
 		// Only change to normal if there is no existing data. Otherwise,
 		// the coordinator needs to wait to receive READY messages (nodeStates)
 		// from remote nodes before setting the cluster to state NORMAL.
-		if !c.Holder.HasData() {
+		if ok, err := c.Holder.HasData(); !ok && err == nil {
 			// If the result of the previous AddNode completed the joining of nodes
 			// in the topology, then change the state to NORMAL.
 			if c.haveTopologyAgreement() {
 				return c.setStateAndBroadcast(ClusterStateNormal)
 			}
 			return nil
+		} else if err != nil {
+			return errors.Wrap(err, "checking if holder has data")
 		}
 
 		if c.haveTopologyAgreement() && c.allNodesReady() {
@@ -1726,11 +1740,13 @@ func (c *Cluster) nodeJoin(node *Node) error {
 	}
 
 	// If the holder does not yet contain data, go ahead and add the node.
-	if !c.Holder.HasData() {
+	if ok, err := c.Holder.HasData(); !ok && err == nil {
 		if err := c.AddNode(node); err != nil {
 			return err
 		}
 		return c.setStateAndBroadcast(ClusterStateNormal)
+	} else if err != nil {
+		return errors.Wrap(err, "checking if holder has data2")
 	}
 
 	// If the cluster has data, we need to change to RESIZING and
@@ -1747,7 +1763,7 @@ func (c *Cluster) nodeJoin(node *Node) error {
 func (c *Cluster) NodeLeave(node *Node) error {
 	// Refuse the request if this is not the coordinator.
 	if !c.IsCoordinator() {
-		return fmt.Errorf("Node removal requests are only valid on the Coordinator node: %s", c.CoordinatorNode().ID)
+		return fmt.Errorf("node removal requests are only valid on the coordinator node: %s", c.CoordinatorNode().ID)
 	}
 
 	if c.State() != ClusterStateNormal {
@@ -1761,7 +1777,7 @@ func (c *Cluster) NodeLeave(node *Node) error {
 
 	// Prevent removing the coordinator node (this node).
 	if node.ID == c.Node.ID {
-		return fmt.Errorf("The coordinator node cannot be removed. First, make a different node the new coordinator.")
+		return fmt.Errorf("coordinator cannot be removed; first, make a different node the new coordinator.")
 	}
 
 	// See if resize job can be generated
@@ -1784,11 +1800,13 @@ func (c *Cluster) nodeLeave(node *Node) error {
 	}
 
 	// If the holder does not yet contain data, go ahead and remove the node.
-	if !c.Holder.HasData() {
+	if ok, err := c.Holder.HasData(); !ok && err == nil {
 		if err := c.RemoveNode(n); err != nil {
 			return err
 		}
 		return c.setStateAndBroadcast(ClusterStateNormal)
+	} else if err != nil {
+		return errors.Wrap(err, "checking if holder has data")
 	}
 
 	// If the cluster has data then change state to RESIZING and
@@ -1802,9 +1820,11 @@ func (c *Cluster) nodeLeave(node *Node) error {
 }
 
 func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.Logger.Printf("merge cluster status: %v", cs)
 	// Ignore status updates from self (coordinator).
-	if c.IsCoordinator() {
+	if c.isCoordinator() {
 		return nil
 	}
 
@@ -1841,7 +1861,7 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 		}
 	}
 
-	c.SetState(cs.State)
+	c.setState(cs.State)
 
 	c.markAsJoined()
 

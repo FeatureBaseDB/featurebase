@@ -12,34 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa_test
+package server_test
 
 import (
 	"reflect"
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
+	"github.com/pilosa/pilosa/toml"
 )
 
 func Test_NewConfig(t *testing.T) {
-	c := pilosa.NewConfig()
+	c := server.NewConfig()
 
-	if c.Cluster.Disabled != pilosa.DefaultClusterDisabled {
+	if c.Cluster.Disabled {
 		t.Fatalf("unexpected Cluster.Disabled: %v", c.Cluster.Disabled)
-	}
-
-	// Ensure that hosts can't be specificed on a non-disabled cluster.
-	c.Cluster.Hosts = []string{c.Bind, "localhost:10102"}
-
-	// Change cluster type from the default (gossip) to an invalid string.
-	if err := c.Validate(); err != pilosa.ErrConfigClusterEnabledHosts {
-		t.Fatal(err)
 	}
 }
 
 func TestDuration(t *testing.T) {
-	d := pilosa.Duration(time.Second * 182)
+	d := toml.Duration(time.Second * 182)
 	if d.String() != "3m2s" {
 		t.Fatalf("Unexpected time Duration %s", d)
 	}

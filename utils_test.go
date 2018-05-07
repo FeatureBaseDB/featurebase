@@ -1,18 +1,4 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-package test
+package pilosa
 
 import (
 	"bufio"
@@ -24,75 +10,65 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 )
 
-// NewCluster returns a cluster with n nodes and uses a mod-based hasher.
-func NewCluster(n int) *pilosa.Cluster {
+// NewTestCluster returns a cluster with n nodes and uses a mod-based hasher.
+func NewTestCluster(n int) *Cluster {
 	path, err := ioutil.TempDir("", "pilosa-cluster-")
 	if err != nil {
 		panic(err)
 	}
 
-	c := pilosa.NewCluster()
+	c := NewCluster()
 	c.ReplicaN = 1
-	c.Hasher = NewModHasher()
+	c.Hasher = NewTestModHasher()
 	c.Path = path
-	c.Topology = pilosa.NewTopology()
+	c.Topology = NewTopology()
 
 	for i := 0; i < n; i++ {
-		c.Nodes = append(c.Nodes, &pilosa.Node{
+		c.Nodes = append(c.Nodes, &Node{
 			ID:  fmt.Sprintf("node%d", i),
-			URI: NewURI("http", fmt.Sprintf("host%d", i), uint16(0)),
+			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 	}
 
 	c.Node = c.Nodes[0]
 	c.Coordinator = c.Nodes[0].ID
-	c.SetState(pilosa.ClusterStateNormal)
+	c.SetState(ClusterStateNormal)
 
 	return c
 }
 
-// ModHasher represents a simple, mod-based hashing.
-type ModHasher struct{}
-
-// NewModHasher returns a new instance of ModHasher with n buckets.
-func NewModHasher() *ModHasher { return &ModHasher{} }
-
-func (*ModHasher) Hash(key uint64, n int) int { return int(key) % n }
-
-// ConstHasher represents hash that always returns the same index.
-type ConstHasher struct {
-	i int
-}
-
-// NewConstHasher returns a new instance of ConstHasher that always returns i.
-func NewConstHasher(i int) *ConstHasher { return &ConstHasher{i: i} }
-
-func (h *ConstHasher) Hash(key uint64, n int) int { return h.i }
-
-// NewURI is a test URI creator that intentionally swallows errors.
-func NewURI(scheme, host string, port uint16) pilosa.URI {
-	uri := pilosa.DefaultURI()
+// NewTestURI is a test URI creator that intentionally swallows errors.
+func NewTestURI(scheme, host string, port uint16) URI {
+	uri := DefaultURI()
 	uri.SetScheme(scheme)
 	uri.SetHost(host)
 	uri.SetPort(port)
 	return *uri
 }
 
-func NewURIFromHostPort(host string, port uint16) pilosa.URI {
-	uri := pilosa.DefaultURI()
+func NewTestURIFromHostPort(host string, port uint16) URI {
+	uri := DefaultURI()
 	uri.SetHost(host)
 	uri.SetPort(port)
 	return *uri
 }
 
-// TestCluster represents a cluster of test nodes, each of which
-// has a pilosa.Cluster.
-type TestCluster struct {
-	Clusters []*pilosa.Cluster
+// ModHasher represents a simple, mod-based hashing.
+type TestModHasher struct{}
+
+// NewTestModHasher returns a new instance of ModHasher with n buckets.
+func NewTestModHasher() *TestModHasher { return &TestModHasher{} }
+
+func (*TestModHasher) Hash(key uint64, n int) int { return int(key) % n }
+
+// ClusterCluster represents a cluster of test nodes, each of which
+// has a Cluster.
+// ClusterCluster implements Broadcaster interface.
+type ClusterCluster struct {
+	Clusters []*Cluster
 
 	common *commonClusterSettings
 
@@ -102,21 +78,21 @@ type TestCluster struct {
 }
 
 type commonClusterSettings struct {
-	Nodes []*pilosa.Node
+	Nodes []*Node
 }
 
-func (t *TestCluster) CreateIndex(name string) error {
+func (t *ClusterCluster) CreateIndex(name string) error {
 	for _, c := range t.Clusters {
-		if _, err := c.Holder.CreateIndexIfNotExists(name, pilosa.IndexOptions{}); err != nil {
+		if _, err := c.Holder.CreateIndexIfNotExists(name, IndexOptions{}); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (t *TestCluster) CreateFrame(index, frame string, opt pilosa.FrameOptions) error {
+func (t *ClusterCluster) CreateFrame(index, frame string, opt FrameOptions) error {
 	for _, c := range t.Clusters {
-		idx, err := c.Holder.CreateIndexIfNotExists(index, pilosa.IndexOptions{})
+		idx, err := c.Holder.CreateIndexIfNotExists(index, IndexOptions{})
 		if err != nil {
 			return err
 		}
@@ -126,10 +102,11 @@ func (t *TestCluster) CreateFrame(index, frame string, opt pilosa.FrameOptions) 
 	}
 	return nil
 }
-func (t *TestCluster) SetBit(index, frame, view string, rowID, colID uint64, x *time.Time) error {
+
+func (t *ClusterCluster) SetBit(index, frame, view string, rowID, colID uint64, x *time.Time) error {
 	// Determine which node should receive the SetBit.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
-	slice := colID / pilosa.SliceWidth
+	slice := colID / SliceWidth
 	nodes := c0.SliceNodes(index, slice)
 
 	for _, node := range nodes {
@@ -150,10 +127,10 @@ func (t *TestCluster) SetBit(index, frame, view string, rowID, colID uint64, x *
 	return nil
 }
 
-func (t *TestCluster) SetFieldValue(index, frame string, columnID uint64, name string, value int64) error {
+func (t *ClusterCluster) SetFieldValue(index, frame string, columnID uint64, name string, value int64) error {
 	// Determine which node should receive the SetFieldValue.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
-	slice := columnID / pilosa.SliceWidth
+	slice := columnID / SliceWidth
 	nodes := c0.SliceNodes(index, slice)
 
 	for _, node := range nodes {
@@ -174,7 +151,7 @@ func (t *TestCluster) SetFieldValue(index, frame string, columnID uint64, name s
 	return nil
 }
 
-func (t *TestCluster) clusterByID(id string) *pilosa.Cluster {
+func (t *ClusterCluster) clusterByID(id string) *Cluster {
 	for _, c := range t.Clusters {
 		if c.Node.ID == id {
 			return c
@@ -184,7 +161,7 @@ func (t *TestCluster) clusterByID(id string) *pilosa.Cluster {
 }
 
 // AddNode adds a node to the cluster and (potentially) starts a resize job.
-func (t *TestCluster) AddNode(saveTopology bool) error {
+func (t *ClusterCluster) AddNode(saveTopology bool) error {
 	id := len(t.Clusters)
 
 	c, err := t.addCluster(id, saveTopology)
@@ -195,8 +172,8 @@ func (t *TestCluster) AddNode(saveTopology bool) error {
 	// Send NodeJoin event to coordinator.
 	if id > 0 {
 		coord := t.Clusters[0]
-		ev := &pilosa.NodeEvent{
-			Event: pilosa.NodeJoin,
+		ev := &NodeEvent{
+			Event: NodeJoin,
 			Node:  c.Node,
 		}
 
@@ -205,7 +182,7 @@ func (t *TestCluster) AddNode(saveTopology bool) error {
 		}
 
 		// Wait for the AddNode job to finish.
-		if c.State() != pilosa.ClusterStateNormal {
+		if c.State() != ClusterStateNormal {
 			t.resizeDone = make(chan struct{})
 			t.mu.Lock()
 			t.resizing = true
@@ -218,7 +195,7 @@ func (t *TestCluster) AddNode(saveTopology bool) error {
 }
 
 // WriteTopology writes the given topology to disk.
-func (t *TestCluster) WriteTopology(path string, top *pilosa.Topology) error {
+func (t *ClusterCluster) WriteTopology(path string, top *Topology) error {
 	if buf, err := proto.Marshal(top.Encode()); err != nil {
 		return err
 	} else if err := ioutil.WriteFile(filepath.Join(path, ".topology"), buf, 0666); err != nil {
@@ -227,12 +204,12 @@ func (t *TestCluster) WriteTopology(path string, top *pilosa.Topology) error {
 	return nil
 }
 
-func (t *TestCluster) addCluster(i int, saveTopology bool) (*pilosa.Cluster, error) {
+func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*Cluster, error) {
 
 	id := fmt.Sprintf("node%d", i)
-	uri := NewURI("http", fmt.Sprintf("host%d", i), uint16(0))
+	uri := NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0))
 
-	node := &pilosa.Node{
+	node := &Node{
 		ID:  id,
 		URI: uri,
 	}
@@ -251,17 +228,17 @@ func (t *TestCluster) addCluster(i int, saveTopology bool) (*pilosa.Cluster, err
 	}
 
 	// holder
-	h := pilosa.NewHolder()
+	h := NewHolder()
 	h.Path = path
 
 	// cluster
-	c := pilosa.NewCluster()
+	c := NewCluster()
 	c.ReplicaN = 1
-	c.Hasher = NewModHasher()
+	c.Hasher = NewTestModHasher()
 	c.Path = path
-	c.Topology = pilosa.NewTopology()
+	c.Topology = NewTopology()
 	c.Holder = h
-	c.MemberSet = pilosa.NewStaticMemberSet(c.Nodes)
+	c.MemberSet = NewStaticMemberSet(c.Nodes)
 	c.Node = node
 	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
 	c.Broadcaster = t
@@ -273,16 +250,16 @@ func (t *TestCluster) addCluster(i int, saveTopology bool) (*pilosa.Cluster, err
 		}
 	}
 
-	// Add this node to the TestCluster.
+	// Add this node to the ClusterCluster.
 	t.Clusters = append(t.Clusters, c)
 
 	return c, nil
 }
 
-// NewTestCluster returns a new instance of test.Cluster.
-func NewTestCluster(n int) *TestCluster {
+// NewClusterCluster returns a new instance of test.Cluster.
+func NewClusterCluster(n int) *ClusterCluster {
 
-	tc := &TestCluster{
+	tc := &ClusterCluster{
 		common: &commonClusterSettings{},
 	}
 
@@ -297,14 +274,14 @@ func NewTestCluster(n int) *TestCluster {
 }
 
 // SetState sets the state of the cluster on each node.
-func (t *TestCluster) SetState(state string) {
+func (t *ClusterCluster) SetState(state string) {
 	for _, c := range t.Clusters {
 		c.SetState(state)
 	}
 }
 
 // Open opens all clusters in the test cluster.
-func (t *TestCluster) Open() error {
+func (t *ClusterCluster) Open() error {
 	for _, c := range t.Clusters {
 		if err := c.Open(); err != nil {
 			return err
@@ -312,7 +289,7 @@ func (t *TestCluster) Open() error {
 		if err := c.Holder.Open(); err != nil {
 			return err
 		}
-		if err := c.SetNodeState(pilosa.NodeStateReady); err != nil {
+		if err := c.SetNodeState(NodeStateReady); err != nil {
 			return err
 		}
 	}
@@ -327,7 +304,7 @@ func (t *TestCluster) Open() error {
 }
 
 // Close closes all clusters in the test cluster.
-func (t *TestCluster) Close() error {
+func (t *ClusterCluster) Close() error {
 	for _, c := range t.Clusters {
 		err := c.Close()
 		if err != nil {
@@ -337,10 +314,8 @@ func (t *TestCluster) Close() error {
 	return nil
 }
 
-// TestCluster implements Broadcaster interface.
-
 // SendSync is a test implemenetation of Broadcaster SendSync method.
-func (t *TestCluster) SendSync(pb proto.Message) error {
+func (t *ClusterCluster) SendSync(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.ClusterStatus:
 		// Apply the send message to all nodes (except the coordinator).
@@ -348,7 +323,7 @@ func (t *TestCluster) SendSync(pb proto.Message) error {
 			c.MergeClusterStatus(obj)
 		}
 		t.mu.RLock()
-		if obj.State == pilosa.ClusterStateNormal && t.resizing {
+		if obj.State == ClusterStateNormal && t.resizing {
 			close(t.resizeDone)
 		}
 		t.mu.RUnlock()
@@ -358,12 +333,12 @@ func (t *TestCluster) SendSync(pb proto.Message) error {
 }
 
 // SendAsync is a test implemenetation of Broadcaster SendAsync method.
-func (t *TestCluster) SendAsync(pb proto.Message) error {
+func (t *ClusterCluster) SendAsync(pb proto.Message) error {
 	return nil
 }
 
 // SendTo is a test implemenetation of Broadcaster SendTo method.
-func (t *TestCluster) SendTo(to *pilosa.Node, pb proto.Message) error {
+func (t *ClusterCluster) SendTo(to *Node, pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.ResizeInstruction:
 		err := t.FollowResizeInstruction(obj)
@@ -378,7 +353,7 @@ func (t *TestCluster) SendTo(to *pilosa.Node, pb proto.Message) error {
 }
 
 // FollowResizeInstruction is a version of cluster.FollowResizeInstruction used for testing.
-func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction) error {
+func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstruction) error {
 
 	// Prepare the return message.
 	complete := &internal.ResizeInstructionComplete{
@@ -392,7 +367,7 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 
 		// figure out which node it was meant for, then call the operation on that cluster
 		// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
-		instrNode := pilosa.DecodeNode(instr.Node)
+		instrNode := DecodeNode(instr.Node)
 		destCluster := t.clusterByID(instrNode.ID)
 
 		// Sync the schema received in the resize instruction.
@@ -401,7 +376,7 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 		}
 
 		for _, src := range instr.Sources {
-			srcNode := pilosa.DecodeNode(src.Node)
+			srcNode := DecodeNode(src.Node)
 			srcCluster := t.clusterByID(srcNode.ID)
 
 			srcFragment := srcCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
@@ -441,7 +416,7 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 		complete.Error = err.Error()
 	}
 
-	node := pilosa.DecodeNode(instr.Coordinator)
+	node := DecodeNode(instr.Coordinator)
 	if err := t.SendTo(node, complete); err != nil {
 		return err
 	}

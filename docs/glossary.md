@@ -14,7 +14,7 @@ nav = []
 
 <strong id="bitmap">[Bitmap](../data-model/#overview):</strong> The on-disk and in-memory representation of a [row](#row). Implemented with [Roaring](#roaring-bitmap). `Bitmap` is also the basic [PQL](#pql) query for reading a Bitmap.
 
-<strong id="bsi">[BSI](../data-model/#bsi-range-encoding)</strong> Bit-sliced indexing is the method Pilosa uses to represent multi-bit integers. Integer values are stored in [fields](#field), and can be used for [Range](#range-bsi) and [Sum](#sum) queries.
+<strong id="bsi">[BSI](../data-model/#bsi-range-encoding)</strong> Bit-sliced indexing is the method Pilosa uses to represent multi-bit integers. Integer values are stored in [fields](#field), and can be used for [Range](#range-bsi), [Min](#min), [Max](#max), and [Sum](#sum) queries.
 
 <strong id="cluster">Cluster:</strong> A cluster consists of one or more [nodes](#node) which share a cluster configuration. The cluster also defines how data is [replicated](#replica) throughout and how internode communication is coordinated. Pilosa does not have a leader node, all data is evenly distributed, and any node can respond to queries.
 
@@ -24,13 +24,17 @@ nav = []
 
 <strong id="fragment">Fragment:</strong> A Fragment is the intersection of a [frame](#frame) and a [slice](#slice) in an [index](#index).
 
-<strong id="frame">[Frame](../data-model/#frame):</strong> Frames are used to group [rows](#row) into different categories. `RowID`s are namespaced by frame such that the same `RowID` in a different frame refers to a different row. For [ranked](#topn) frames, rows are kept in sorted order within the frame.
+<strong id="frame">[Frame](../data-model/#frame):</strong> Frames are used to group [rows](#row) into different categories. Row IDs are namespaced by frame such that the same row ID in a different frame refers to a different row. For [ranked](#topn) frames, rows are kept in sorted order within the frame.
 
 <strong id="index">[Index](../data-model/#index):</strong> An Index is a top level container in Pilosa, analogous to a database in an RDBMS. Queries cannot operate across multiple indexes.
 
 <strong id="jump-consistent-hash">[Jump Consistent Hash](https://arxiv.org/pdf/1406.2294v1.pdf):</strong> A fast, minimal memory, consistent hash algorithm that evenly distributes the workload even when the number of buckets changes.
 
+<strong id="max">[Max](../query-language/#max):</strong> A [PQL](#pql) query that returns the maximum integer value stored in [BSI](#bsi) [fields](#field).
+
 <strong id="maxslice">MaxSlice:</strong> The total number of [slices](#slice) allocated to handle the current set of [columns](#column). This value is important for all [nodes](#node) to efficiently distribute queries.
+
+<strong id="min">[Min](../query-language/#min):</strong> A [PQL](#pql) query that returns the minimum integer value stored in [BSI](#bsi) [fields](#field).
 
 <strong id="node">Node:</strong> An individual running instance of Pilosa server which belongs to a [cluster](#cluster).
 
@@ -62,6 +66,6 @@ nav = []
 
 <strong id="toml">[TOML](https://github.com/toml-lang/toml):</strong> the language used for Pilosa's [configuration file](../configuration/).
 
-<strong id="topn">[TopN](../query-language/#topn):</strong> A [PQL](#pql) query that returns a list of `RowID`s, sorted by the count of [bits](#bit) set in the [row](#row), within a specified [frame](#frame).
+<strong id="topn">[TopN](../query-language/#topn):</strong> A [PQL](#pql) query that returns a list of row IDs, sorted by the count of [bits](#bit) set in the [row](#row), within a specified [frame](#frame).
 
-<strong id="view">[View](../data-model/#view):</strong> Views separate the different data layouts within a [Frame](#frame). The two primary views are standard and inverse which represent the typical [row](#row)/[column](#column) data and its inverse respectively (an [inverted index](https://en.wikipedia.org/wiki/Inverted_index), or a matrix transpose). Time based frame views are automatically generated for each [time quantum](#time-quantum). Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface by separating it from the physical data representation.
+<strong id="view">[View](../data-model/#view):</strong> Views separate the different data layouts within a [Frame](#frame). The primary view is standard, which represents the typical [row](#row)/[column](#column) data. Time based frame views are automatically generated for each [time quantum](#time-quantum). Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface by separating it from the physical data representation.

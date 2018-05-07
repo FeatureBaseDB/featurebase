@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/groupcache/lru"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/lru"
 )
 
 const (

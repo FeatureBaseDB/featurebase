@@ -18,13 +18,14 @@ import (
 	"crypto/tls"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
 	"github.com/spf13/pflag"
 )
 
 // CommandWithTLSSupport is the interface for commands which has TLS settings
 type CommandWithTLSSupport interface {
 	TLSHost() string
-	TLSConfiguration() pilosa.TLSConfig
+	TLSConfiguration() server.TLSConfig
 }
 
 // SetTLSConfig creates common TLS flags
@@ -48,7 +49,7 @@ func CommandClient(cmd CommandWithTLSSupport) (*pilosa.InternalHTTPClient, error
 			InsecureSkipVerify: tlsConfig.SkipVerify,
 		}
 	}
-	client, err := pilosa.NewInternalHTTPClient(cmd.TLSHost(), pilosa.GetHTTPClient(TLSConfig))
+	client, err := pilosa.NewInternalHTTPClient(cmd.TLSHost(), server.GetHTTPClient(TLSConfig))
 	if err != nil {
 		return nil, err
 	}

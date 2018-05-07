@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -30,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -47,7 +47,6 @@ type Holder struct {
 
 	// Indexes by name.
 	indexes map[string]*Index
-	hasData bool
 
 	// opened channel is closed once Open() completes.
 	opened chan struct{}
@@ -89,36 +88,6 @@ func NewHolder() *Holder {
 
 		Logger: NopLogger,
 	}
-}
-
-// Peek reads the root data directory for the holder
-// without actually loading any data into memory.
-// HasData is returned, and h.hasData is set.
-func (h *Holder) Peek() bool {
-	h.Logger.Printf("peek at holder path: %s", h.Path)
-	h.hasData = false
-
-	// Open path to read all index directories.
-	f, err := os.Open(h.Path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-
-	fis, err := f.Readdir(0)
-	if err != nil {
-		return false
-	}
-
-	for _, fi := range fis {
-		if !fi.IsDir() {
-			continue
-		}
-		h.hasData = true
-		break
-	}
-
-	return h.hasData
 }
 
 // Open initializes the root data directory for the holder.
@@ -198,10 +167,37 @@ func (h *Holder) Close() error {
 // HasData returns true if Holder contains at least one index.
 // This is used to determine if the rebalancing of data is necessary
 // when a node joins the cluster.
-func (h *Holder) HasData() bool {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.hasData || len(h.indexes) > 0
+func (h *Holder) HasData() (bool, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.indexes) > 0 {
+		return true, nil
+	}
+	// Open path to read all index directories.
+	if _, err := os.Stat(h.Path); os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, errors.Wrap(err, "statting data dir")
+	}
+
+	f, err := os.Open(h.Path)
+	if err != nil {
+		return false, errors.Wrap(err, "opening data dir")
+	}
+	defer f.Close()
+
+	fis, err := f.Readdir(0)
+	if err != nil {
+		return false, errors.Wrap(err, "reading data dir")
+	}
+
+	for _, fi := range fis {
+		if !fi.IsDir() {
+			continue
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 // MaxSlices returns MaxSlice map for all indexes.
@@ -359,7 +355,6 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	}
 
 	// Update options.
-	index.SetTimeQuantum(opt.TimeQuantum)
 
 	h.indexes[index.Name()] = index
 
@@ -529,9 +524,8 @@ func (h *Holder) setFileLimit() {
 }
 
 func (h *Holder) loadNodeID() (string, error) {
-	idPath := path.Join(h.Path, "ID")
+	idPath := path.Join(h.Path, ".id")
 	nodeID := ""
-
 	h.Logger.Printf("load NodeID: %s", idPath)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return "", err
@@ -551,6 +545,28 @@ func (h *Holder) loadNodeID() (string, error) {
 	}
 
 	return nodeID, nil
+}
+
+// Log startup time and version to $DATA_DIR/.startup.log
+func (h *Holder) logStartup() error {
+	time, err := time.Now().MarshalText()
+	if err != nil {
+		return errors.Wrap(err, "creating timestamp")
+	}
+	logLine := fmt.Sprintf("%s\t%s\n", time, Version)
+
+	f, err := os.OpenFile(h.Path+"/.startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		return errors.Wrap(err, "opening startup log")
+	}
+
+	defer f.Close()
+
+	if _, err = f.WriteString(logLine); err != nil {
+		return errors.Wrap(err, "writing startup log")
+	}
+
+	return nil
 }
 
 // HolderSyncer is an active anti-entropy tool that compares the local holder
@@ -614,7 +630,7 @@ func (s *HolderSyncer) SyncHolder() error {
 
 				for slice := uint64(0); slice <= s.Holder.Index(di.Name).MaxSlice(); slice++ {
 					// Ignore slices that this host doesn't own.
-					if !s.Cluster.OwnsFragment(s.Node.ID, di.Name, slice) {
+					if !s.Cluster.OwnsSlice(s.Node.ID, di.Name, slice) {
 						continue
 					}
 

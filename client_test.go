@@ -26,6 +26,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -36,10 +37,10 @@ func createCluster(c *pilosa.Cluster) ([]*test.Server, []*test.Holder) {
 	for i := 0; i < numNodes; i++ {
 		hldr[i] = test.MustOpenHolder()
 		server[i] = test.NewServer()
-		server[i].Handler.Cluster = c
-		server[i].Handler.Cluster.Nodes[i].URI = server[i].HostURI()
-		server[i].Handler.Holder = hldr[i].Holder
-		server[i].Handler.Node = server[i].Handler.Cluster.Nodes[i]
+		server[i].Handler.API.URI = server[i].HostURI()
+		server[i].Handler.API.Cluster = c
+		server[i].Handler.API.Cluster.Nodes[i].URI = server[i].HostURI()
+		server[i].Handler.API.Holder = hldr[i].Holder
 	}
 	return server, hldr
 }
@@ -47,7 +48,7 @@ func createCluster(c *pilosa.Cluster) ([]*test.Server, []*test.Holder) {
 var defaultClient *http.Client
 
 func init() {
-	defaultClient = pilosa.GetHTTPClient(nil)
+	defaultClient = server.GetHTTPClient(nil)
 
 }
 
@@ -86,7 +87,7 @@ func TestClient_MultiNode(t *testing.T) {
 	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and slice width increment would reveal a different TopN.
 	sliceNums := []uint64{1, 2, 6}
 	for i, num := range sliceNums {
-		owns := s[i].Handler.Handler.Cluster.OwnsSlices("i", 20, s[i].HostURI())
+		owns := s[i].Handler.Handler.API.Cluster.OwnsSlices("i", 20, s[i].HostURI())
 		ownsNum := false
 		for _, ownNum := range owns {
 			if ownNum == num {
@@ -217,10 +218,10 @@ func TestClient_Import(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.Holder = hldr.Holder
-	s.Handler.Node = s.Handler.Cluster.Nodes[0]
+	s.Handler.API.URI = s.HostURI()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
 
 	// Send import request.
 	c := test.MustNewClient(s.Host(), defaultClient)
@@ -268,10 +269,10 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.Holder = hldr.Holder
-	s.Handler.Node = s.Handler.Cluster.Nodes[0]
+	s.Handler.API.URI = s.HostURI()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
 
 	// Send import request.
 	c := test.MustNewClient(s.Host(), defaultClient)
@@ -310,17 +311,17 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{RangeEnabled: true, Fields: []*pilosa.Field{&fld}})
+	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{Fields: []*pilosa.Field{&fld}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.Holder = hldr.Holder
-	s.Handler.Node = s.Handler.Cluster.Nodes[0]
+	s.Handler.API.URI = s.HostURI()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
 
 	// Send import request.
 	c := test.MustNewClient(s.Host(), defaultClient)
@@ -332,14 +333,44 @@ func TestClient_ImportValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Verify Sum.
 	sum, cnt, err := frame.FieldSum(nil, fld.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Verify data.
 	if sum != 50 || cnt != 3 {
-		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=70, cnt=3", sum, cnt)
+		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", sum, cnt)
+	}
+
+	// Verify Min.
+	min, cnt, err := frame.FieldMin(nil, fld.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if min != -10 || cnt != 1 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-10, cnt=1", min, cnt)
+	}
+
+	// Verify Min with Filter.
+	filter, err := frame.FieldRange(fld.Name, pql.GT, 40)
+	if err != nil {
+		t.Fatal(err)
+	}
+	min, cnt, err = frame.FieldMin(filter, fld.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if min != -100 || cnt != 0 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-100, cnt=0", min, cnt)
+	}
+
+	// Verify Max.
+	max, cnt, err := frame.FieldMax(nil, fld.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if max != 40 || cnt != 1 {
+		t.Fatalf("unexpected values: got max=%v, count=%v; expected max=40, cnt=1", max, cnt)
 	}
 }
 
@@ -355,10 +386,10 @@ func TestClient_BackupRestore(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.Holder = hldr.Holder
-	s.Handler.Node = s.Handler.Cluster.Nodes[0]
+	s.Handler.API.URI = s.HostURI()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
 
 	c := test.MustNewClient(s.Host(), defaultClient)
 
@@ -420,10 +451,11 @@ func TestClient_BackupInverseView(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.Holder = hldr.Holder
-	s.Handler.Node = s.Handler.Cluster.Nodes[0]
+
+	s.Handler.API.URI = s.HostURI()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
 
 	c := test.MustNewClient(s.Host(), defaultClient)
 
@@ -457,10 +489,10 @@ func TestClient_BackupInvalidView(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.Holder = hldr.Holder
-	s.Handler.Node = s.Handler.Cluster.Nodes[0]
+	s.Handler.API.URI = s.HostURI()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
 
 	c := test.MustNewClient(s.Host(), defaultClient)
 
@@ -486,10 +518,10 @@ func TestClient_FragmentBlocks(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.Holder = hldr.Holder
-	s.Handler.Node = s.Handler.Cluster.Nodes[0]
+	s.Handler.API.URI = s.HostURI()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
 
 	// Retrieve blocks.
 	c := test.MustNewClient(s.Host(), defaultClient)

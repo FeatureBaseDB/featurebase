@@ -280,7 +280,6 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		// Create frames.
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			RangeEnabled: true,
 			Fields: []*pilosa.Field{
 				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 50},
 				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 1, Max: 2},
@@ -330,7 +329,6 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		defer hldr.Close()
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			RangeEnabled: true,
 			Fields: []*pilosa.Field{
 				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 100},
 			},
@@ -599,8 +597,8 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	}
 }
 
-// Ensure a Sum() query can be executed.
-func TestExecutor_Execute_Sum(t *testing.T) {
+// Ensure Min()  and Max() queries can be executed.
+func TestExecutor_Execute_MinMax(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
@@ -613,6 +611,97 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
 		RangeEnabled: true,
 		Fields: []*pilosa.Field{
+			{Name: "foo", Type: pilosa.FieldTypeInt, Min: -10, Max: 100},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.Execute(context.Background(), "i", test.MustParse(`
+		SetBit(frame=f, row=0, col=0)
+		SetBit(frame=f, row=0, col=3)
+		SetBit(frame=f, row=0, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetBit(frame=f, row=1, col=1)
+		SetBit(frame=f, row=2, col=`+strconv.Itoa(SliceWidth+2)+`)
+
+		SetFieldValue(frame=f, foo=20, col=0)
+		SetFieldValue(frame=f, foo=-5, col=1)
+		SetFieldValue(frame=f, foo=-5, col=2)
+		SetFieldValue(frame=f, foo=10, col=3)
+		SetFieldValue(frame=f, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(frame=f, foo=40, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(frame=f, foo=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(frame=f, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
+	`), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("Min", func(t *testing.T) {
+		tests := []struct {
+			filter string
+			exp    int64
+			cnt    int64
+		}{
+			{filter: ``, exp: -5, cnt: 2},
+			{filter: `Bitmap(frame=f, row=0)`, exp: 10, cnt: 1},
+			{filter: `Bitmap(frame=f, row=1)`, exp: -5, cnt: 1},
+			{filter: `Bitmap(frame=f, row=2)`, exp: 40, cnt: 1},
+		}
+		for i, tt := range tests {
+			var pql string
+			if tt.filter == "" {
+				pql = `Min(frame=f, field=foo)`
+			} else {
+				pql = fmt.Sprintf(`Min(%s, frame=f, field=foo)`, tt.filter)
+			}
+			if result, err := e.Execute(context.Background(), "i", test.MustParse(pql), nil, nil); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
+				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
+			}
+		}
+	})
+
+	t.Run("Max", func(t *testing.T) {
+		tests := []struct {
+			filter string
+			exp    int64
+			cnt    int64
+		}{
+			{filter: ``, exp: 60, cnt: 1},
+			{filter: `Bitmap(frame=f, row=0)`, exp: 60, cnt: 1},
+			{filter: `Bitmap(frame=f, row=1)`, exp: -5, cnt: 1},
+			{filter: `Bitmap(frame=f, row=2)`, exp: 40, cnt: 1},
+		}
+		for i, tt := range tests {
+			var pql string
+			if tt.filter == "" {
+				pql = `Max(frame=f, field=foo)`
+			} else {
+				pql = fmt.Sprintf(`Max(%s, frame=f, field=foo)`, tt.filter)
+			}
+			if result, err := e.Execute(context.Background(), "i", test.MustParse(pql), nil, nil); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
+				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
+			}
+		}
+	})
+}
+
+// Ensure a Sum() query can be executed.
+func TestExecutor_Execute_Sum(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+
+	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
+		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
 			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
 		},
@@ -621,7 +710,6 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
-		RangeEnabled: true,
 		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
 		},
@@ -646,7 +734,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	t.Run("NoFilter", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=f, field=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(result[0], pilosa.SumCount{Sum: 200, Count: 5}) {
+		} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: 200, Count: 5}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -654,7 +742,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	t.Run("WithFilter", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=f, row=0), frame=f, field=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(result[0], pilosa.SumCount{Sum: 80, Count: 2}) {
+		} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: 80, Count: 2}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -723,7 +811,6 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		RangeEnabled: true,
 		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
 			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
@@ -733,7 +820,6 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
-		RangeEnabled: true,
 		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
 		},
@@ -742,7 +828,6 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("edge", pilosa.FrameOptions{
-		RangeEnabled: true,
 		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: -100, Max: 100},
 		},
@@ -927,7 +1012,7 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	// The local node owns slice 1.
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).MustSetBits(10, (1*SliceWidth)+1)
 
 	e := test.NewExecutor(hldr.Holder, c)
@@ -961,7 +1046,7 @@ func TestExecutor_Execute_Remote_Count(t *testing.T) {
 	// Create local executor data. The local node owns slice 1.
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 2).MustSetBits(10, (2*SliceWidth)+1)
 	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 2).MustSetBits(10, (2*SliceWidth)+2)
 
@@ -1004,7 +1089,7 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	// Create local executor data.
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 
 	// Create frame.
 	if _, err := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{}).CreateFrame("f", pilosa.FrameOptions{}); err != nil {
@@ -1056,7 +1141,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	// Create local executor data.
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 
 	// Create frame.
 	if f, err := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{}).CreateFrame("f", pilosa.FrameOptions{}); err != nil {
@@ -1130,7 +1215,7 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	// Create local executor data on slice 2 & 4.
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 2).MustSetBits(30, (2*SliceWidth)+1)
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 4).MustSetBits(30, (4*SliceWidth)+2)
 

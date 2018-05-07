@@ -26,80 +26,18 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/test"
 )
 
 // Ensure program can send/receive broadcast messages.
 func TestMain_SendReceiveMessage(t *testing.T) {
-
-	m0 := test.MustRunMain()
+	ms := test.MustRunMainWithCluster(t, 2)
+	m0, m1 := ms[0], ms[1]
 	defer m0.Close()
-
-	m1 := test.MustRunMain()
 	defer m1.Close()
 
-	// Update cluster config
-	m0.Server.Cluster.Nodes = []*pilosa.Node{
-		{ID: m0.Server.NodeID, URI: m0.Server.URI},
-		{ID: m1.Server.NodeID, URI: m1.Server.URI},
-	}
-	m1.Server.Cluster.Nodes = m0.Server.Cluster.Nodes
-
-	// Configure node0
-
-	// get the host portion of addr to use for binding
-	m0.Config.Gossip.Port = "0"
-	m0.Config.Gossip.Seeds = []string{}
-
-	m0.Server.Cluster.Coordinator = m0.Server.NodeID
-	m0.Server.Cluster.Topology = &pilosa.Topology{NodeIDs: []string{m0.Server.NodeID, m1.Server.NodeID}}
-	m0.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m0.Server.Logger)
-	gossipMemberSet0, err := gossip.NewGossipMemberSet(m0.Server.URI.HostPort(), m0.Config, m0.Server)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m0.Server.Cluster.MemberSet = gossipMemberSet0
-	m0.Server.Broadcaster = m0.Server
-	m0.Server.Gossiper = gossipMemberSet0
-	m0.Server.Handler.Broadcaster = m0.Server.Broadcaster
-	m0.Server.Holder.Broadcaster = m0.Server.Broadcaster
-	m0.Server.BroadcastReceiver = gossipMemberSet0
-
-	if err := m0.Server.BroadcastReceiver.Start(m0.Server); err != nil {
-		t.Fatal(err)
-	}
-	// Open Cluster management.
-	if err := m0.Server.Cluster.Open(); err != nil {
-		t.Fatal(err)
-	}
-
-	// Configure node1
-
-	// get the host portion of addr to use for binding
-	m1.Config.Gossip.Port = "0"
-	m1.Config.Gossip.Seeds = []string{gossipMemberSet0.GetBindAddr()}
-
-	m1.Server.Cluster.Coordinator = m0.Server.NodeID
-	m1.Server.Cluster.EventReceiver = gossip.NewGossipEventReceiver(m1.Server.Logger)
-	gossipMemberSet1, err := gossip.NewGossipMemberSet(m1.Server.URI.HostPort(), m1.Config, m1.Server)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m1.Server.Cluster.MemberSet = gossipMemberSet1
-	m1.Server.Broadcaster = m1.Server
-	m1.Server.Gossiper = gossipMemberSet1
-	m1.Server.Handler.Broadcaster = m1.Server.Broadcaster
-	m1.Server.Holder.Broadcaster = m1.Server.Broadcaster
-	m1.Server.BroadcastReceiver = gossipMemberSet1
-
-	if err := m1.Server.BroadcastReceiver.Start(m1.Server); err != nil {
-		t.Fatal(err)
-	}
-	// Open Cluster management.
-	if err := m1.Server.Cluster.Open(); err != nil {
-		t.Fatal(err)
-	}
+	m0.Server.Cluster.SetState(pilosa.ClusterStateNormal)
+	m1.Server.Cluster.SetState(pilosa.ClusterStateNormal)
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -458,7 +396,7 @@ func TestCluster_GossipMembership(t *testing.T) {
 		var eg errgroup.Group
 		eg.Go(func() error {
 			// Pass invalid seed as first in list
-			_, err = m1.RunWithTransport("localhost", 0, []string{"http://localhost:8765", seed})
+			_, err := m1.RunWithTransport("localhost", 0, []string{"http://localhost:8765", seed})
 			if err != nil {
 				return err
 			}
@@ -471,7 +409,7 @@ func TestCluster_GossipMembership(t *testing.T) {
 
 		eg.Go(func() error {
 			// Pass invalid seed as last in list
-			_, err = m2.RunWithTransport("localhost", 0, []string{seed, "http://localhost:8765"})
+			_, err := m2.RunWithTransport("localhost", 0, []string{seed, "http://localhost:8765"})
 			if err != nil {
 				return err
 			}
@@ -507,9 +445,9 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 
 	t.Run("ErrorRemoveInvalidNode", func(t *testing.T) {
 		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), `{"id": "invalid-node-id"}`)
-		expBody := "Node is not a member of the cluster: invalid-node-id"
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("expected StatusCode %d but got %d", http.StatusBadRequest, resp.StatusCode)
+		expBody := "removing node: finding node to remove: node with provided ID does not exist"
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected StatusCode %d but got %d", http.StatusNotFound, resp.StatusCode)
 		} else if strings.TrimSpace(resp.Body) != expBody {
 			t.Fatalf("expected Body '%s' but got '%s'", expBody, strings.TrimSpace(resp.Body))
 		}
@@ -521,7 +459,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 
 		resp = test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
-		expBody := "The coordinator node cannot be removed. First, make a different node the new coordinator."
+		expBody := "removing node: calling node leave: coordinator cannot be removed; first, make a different node the new coordinator."
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
 		} else if strings.TrimSpace(resp.Body) != expBody {
@@ -538,7 +476,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 
 		resp = test.MustDo("POST", m1.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
-		expBody := fmt.Sprintf("Node removal requests are only valid on the Coordinator node: %s", coordinatorNodeID)
+		expBody := fmt.Sprintf("removing node: calling node leave: node removal requests are only valid on the coordinator node: %s", coordinatorNodeID)
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
 		} else if strings.TrimSpace(resp.Body) != expBody {
