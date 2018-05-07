@@ -184,7 +184,7 @@ func (t *TestCluster) clusterByID(id string) *pilosa.Cluster {
 }
 
 // AddNode adds a node to the cluster and (potentially) starts a resize job.
-func (t *TestCluster) AddNode(saveTopology bool) error {
+func (t *TestCluster) addNode(saveTopology bool) error {
 	id := len(t.Clusters)
 
 	c, err := t.addCluster(id, saveTopology)

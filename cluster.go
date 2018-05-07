@@ -359,6 +359,11 @@ func (c *Cluster) updateCoordinator(n *Node) bool {
 // AddNode adds a node to the Cluster and updates and saves the
 // new topology.
 func (c *Cluster) AddNode(node *Node) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.AddNode(node)
+}
+func (c *Cluster) addNode(node *Node) error {
 	c.Logger.Printf("add node %s to cluster on %s", node, c.Node)
 
 	// If the node being added is the coordinator, set it for this node.
@@ -919,7 +924,7 @@ func (c *Cluster) Open() error {
 	}
 
 	// Add the local node to the cluster.
-	err := c.AddNode(c.Node)
+	err := c.addNode(c.Node)
 	if err != nil {
 		return errors.Wrap(err, "adding local node")
 	}
@@ -1036,7 +1041,7 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 		if j.action == ResizeJobActionRemove {
 			return c.RemoveNode(nodeAction.node)
 		} else if j.action == ResizeJobActionAdd {
-			return c.AddNode(nodeAction.node)
+			return c.addNode(nodeAction.node)
 		}
 	case ResizeJobStateAborted:
 		if err := c.CompleteCurrentJob(ResizeJobStateAborted); err != nil {
@@ -1703,7 +1708,7 @@ func (c *Cluster) nodeJoin(node *Node) error {
 			return errors.New(err)
 		}
 
-		if err := c.AddNode(node); err != nil {
+		if err := c.addNode(node); err != nil {
 			return err
 		}
 
@@ -1741,7 +1746,7 @@ func (c *Cluster) nodeJoin(node *Node) error {
 
 	// If the holder does not yet contain data, go ahead and add the node.
 	if ok, err := c.Holder.HasData(); !ok && err == nil {
-		if err := c.AddNode(node); err != nil {
+		if err := c.addNode(node); err != nil {
 			return err
 		}
 		return c.setStateAndBroadcast(ClusterStateNormal)
@@ -1835,7 +1840,7 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 
 	// Add all nodes from the coordinator.
 	for _, node := range officialNodes {
-		if err := c.AddNode(node); err != nil {
+		if err := c.addNode(node); err != nil {
 			return err
 		}
 	}
