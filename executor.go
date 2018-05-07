@@ -965,19 +965,85 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
 	other := NewBitmap()
 	for i, input := range c.Children {
-		bm, err := e.executeBitmapCallSlice(ctx, index, input, slice)
-		if err != nil {
-			return nil, err
-		}
-
-		if i == 0 {
-			other = bm
+		if input.Name == "Bitmaps" {
+			err := e.executeBitmaps(ctx, index, input, slice, func(bm *Bitmap, first bool) {
+				if i == 0 && first {
+					other = bm
+				} else {
+					other = other.Union(bm)
+				}
+			})
+			if err != nil {
+				return nil, err
+			}
 		} else {
-			other = other.Union(bm)
+			bm, err := e.executeBitmapCallSlice(ctx, index, input, slice)
+			if err != nil {
+				return nil, err
+			}
+			if i == 0 {
+				other = bm
+			} else {
+				other = other.Union(bm)
+			}
 		}
 	}
 	other.InvalidateCount()
 	return other, nil
+}
+
+func (e *Executor) executeBitmaps(ctx context.Context, index string, c *pql.Call, slice uint64, callback func(bm *Bitmap, first bool)) error {
+	const columnLabel = "columnID"
+	const rowLabel = "rowID"
+
+	frame, _ := c.Args["frame"].(string)
+	if frame == "" {
+		frame = DefaultFrame
+	}
+
+	// Return an error if both the row and column label are specified.
+	rowIDs, rowOK := c.Args[rowLabel]
+	columnIDs, columnOK := c.Args[columnLabel]
+
+	if rowOK && columnOK {
+		return fmt.Errorf("BitmapRange() cannot specify both %s and %s values", rowLabel, columnLabel)
+	} else if !rowOK && !columnOK {
+		return fmt.Errorf("BitmapRange() must specify either %s or %s values", rowLabel, columnLabel)
+	}
+
+	if rowIDs != nil {
+		for i, rowID := range rowIDs.([]interface{}) {
+			call := &pql.Call{
+				Name: "Bitmap",
+				Args: map[string]interface{}{
+					"frame": frame,
+					"rowID": rowID,
+				},
+			}
+			bm, err := e.executeBitmapSlice(ctx, index, call, slice)
+			if err != nil {
+				return err
+			}
+			callback(bm, i == 0)
+		}
+		return nil
+	}
+
+	for i, columnID := range columnIDs.([]interface{}) {
+		call := &pql.Call{
+			Name: "Bitmap",
+			Args: map[string]interface{}{
+				"frame":    frame,
+				"columnID": columnID,
+			},
+		}
+		bm, err := e.executeBitmapSlice(ctx, index, call, slice)
+		if err != nil {
+			return err
+		}
+		callback(bm, i == 0)
+	}
+	return nil
 }
 
 // executeXorSlice executes a xor() call for a local slice.
