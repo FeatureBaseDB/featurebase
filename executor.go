@@ -1490,8 +1490,7 @@ func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *
 		Remote: true,
 	}
 
-	ctx = context.WithValue(ctx, "uri", node.URI)
-	pb, err := e.client.ExecuteQuery(ctx, index, pbreq)
+	pb, err := e.client.QueryNode(ctx, &node.URI, index, pbreq)
 	if err != nil {
 		return nil, err
 	}

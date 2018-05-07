@@ -1924,7 +1924,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 				Query:  buffers[k].String(),
 				Remote: true,
 			}
-			_, err := clients[i].ExecuteQuery(context.Background(), f.Index(), queryRequest)
+			_, err := clients[i].Query(context.Background(), f.Index(), queryRequest)
 			if err != nil {
 				return err
 			}

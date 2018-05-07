@@ -223,8 +223,13 @@ func (c *InternalHTTPClient) FragmentNodes(ctx context.Context, index string, sl
 	return a, nil
 }
 
-// ExecuteQuery executes query against index on the server.
-func (c *InternalHTTPClient) ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+// QueryNode executes query against the index.
+func (c *InternalHTTPClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
+}
+
+// QueryNode executes query against the index, sending the request to the node specified.
+func (c *InternalHTTPClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
 	if index == "" {
 		return nil, ErrIndexRequired
 	} else if queryRequest.Query == "" {
@@ -238,7 +243,7 @@ func (c *InternalHTTPClient) ExecuteQuery(ctx context.Context, index string, que
 	}
 
 	// Create HTTP request.
-	u := c.clientURI(ctx).Path(fmt.Sprintf("/index/%s/query", index))
+	u := uri.Path(fmt.Sprintf("/index/%s/query", index))
 	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
@@ -1320,7 +1325,8 @@ type InternalClient interface {
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error)
-	ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
+	Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
+	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
 	Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error
 	ImportK(ctx context.Context, index, frame string, bits []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
