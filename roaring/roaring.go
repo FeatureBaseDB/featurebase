@@ -16,6 +16,7 @@
 package roaring
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -667,14 +668,14 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 			b.containers = append(b.containers, &container{
 				containerType: byte(binary.LittleEndian.Uint16(buf[8:10])),
 				n:             int(binary.LittleEndian.Uint16(buf[10:12])) + 1,
-				mapped:        true,
+				mapped:        false,
 			})
 		} else {
 			b.keys[i] = binary.LittleEndian.Uint64(buf[0:8])
 			c := b.containers[i]
 			c.containerType = byte(binary.LittleEndian.Uint16(buf[8:10]))
 			c.n = int(binary.LittleEndian.Uint16(buf[10:12])) + 1
-			c.mapped = true
+			c.mapped = false
 
 		}
 	}
@@ -694,19 +695,46 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		case ContainerRun:
 			c.array = nil
 			c.bitmap = nil
+			/*
+				c.runs = (*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount]
+			*/
+
 			runCount := binary.LittleEndian.Uint16(data[offset : offset+runCountHeaderSize])
-			c.runs = (*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount]
-			opsOffset = int(offset) + runCountHeaderSize + len(c.runs)*interval16Size
+			//endOff := int(offset+runCountHeaderSize) + int(runCount*interval16Size)
+			endOff := int(offset) + runCountHeaderSize + int(runCount*interval16Size)
+			c.runs = make([]interval16, runCount, runCount)
+			iv := struct{ S, L uint16 }{}
+			r := bytes.NewReader(data[offset+runCountHeaderSize : endOff])
+			for i := 0; i < int(runCount); i++ {
+				binary.Read(r, binary.LittleEndian, &iv)
+				c.runs[i] = interval16{start: iv.S, last: iv.L}
+			}
+			opsOffset = endOff
 		case ContainerArray:
 			c.runs = nil
 			c.bitmap = nil
-			c.array = (*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n]
-			opsOffset = int(offset) + len(c.array)*2 // sizeof(uint32)
+			//			c.array = (*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n]
+
+			endOff := (c.n * 2) + int(offset)
+			r := bytes.NewReader(data[offset:endOff])
+			c.array = make([]uint16, c.n, c.n)
+			binary.Read(r, binary.LittleEndian, &c.array)
+
+			opsOffset = endOff //maybe +1
 		case ContainerBitmap:
 			c.array = nil
 			c.runs = nil
-			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
-			opsOffset = int(offset) + len(c.bitmap)*8 // sizeof(uint64)
+			//		c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
+			endOff := (bitmapN * 8) + int(offset)
+			r := bytes.NewReader(data[offset:endOff])
+			c.bitmap = make([]uint64, bitmapN, bitmapN)
+			v := uint64(0)
+			for i := 0; i < bitmapN; i++ {
+				binary.Read(r, binary.LittleEndian, &v)
+				c.bitmap[i] = v
+			}
+
+			opsOffset = endOff
 		}
 	}
 

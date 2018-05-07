@@ -214,25 +214,15 @@ func (f *Fragment) openStorage() error {
 		}
 		bi.Flush()
 		fi, err = f.file.Stat()
+		f.file.Seek(0, 0)
 		if err != nil {
 			return err
 		}
 	}
-
-	// Mmap the underlying file so it can be zero copied.
-	storageData, err := syscall.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
-	if err != nil {
-		return fmt.Errorf("mmap: %s", err)
-	}
-	f.storageData = storageData
-
-	// Advise the kernel that the mmap is accessed randomly.
-	if err := madvise(f.storageData, syscall.MADV_RANDOM); err != nil {
-		return fmt.Errorf("madvise: %s", err)
-	}
+	data, err := ioutil.ReadAll(f.file)
 
 	// Attach the mmap file to the bitmap.
-	data := f.storageData
+	//data := f.storageData
 	if err := f.storage.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 	}
@@ -320,9 +310,6 @@ func (f *Fragment) closeStorage() error {
 
 	// Unmap the file.
 	if f.storageData != nil {
-		if err := syscall.Munmap(f.storageData); err != nil {
-			return fmt.Errorf("munmap: %s", err)
-		}
 		f.storageData = nil
 	}
 
@@ -366,9 +353,10 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *B
 	// This causes unexpected results when we cache the row and try to use it later.
 	bm := &Bitmap{
 		segments: []BitmapSegment{{
-			data:     *data.Clone(),
+			//			data: *data.Clone(),
+			data:     data,
 			slice:    f.slice,
-			writable: false,
+			writable: true,
 		}},
 	}
 	bm.InvalidateCount()
