@@ -219,10 +219,10 @@ func (f *Fragment) openStorage() error {
 			return err
 		}
 	}
-	f.storageData, err = ioutil.ReadAll(f.file)
+	data, err := ioutil.ReadAll(f.file)
 
 	// Attach the mmap file to the bitmap.
-	data := f.storageData
+	//data := f.storageData
 	if err := f.storage.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 	}
@@ -354,9 +354,9 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *B
 	bm := &Bitmap{
 		segments: []BitmapSegment{{
 			//			data: *data.Clone(),
-			data:     *data,
+			data:     data,
 			slice:    f.slice,
-			writable: false,
+			writable: true,
 		}},
 	}
 	bm.InvalidateCount()

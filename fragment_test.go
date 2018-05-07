@@ -1171,3 +1171,19 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkFragment_Open(b *testing.B) {
+	if *FragmentPath == "" {
+		b.Skip("no fragment specified")
+	}
+
+	// Open the fragment specified by the path.
+	for i := 0; i < b.N; i++ {
+	f := pilosa.NewFragment(*FragmentPath, "i", "f", pilosa.ViewStandard, 0)
+	if err := f.Open(); err != nil {
+		b.Fatal(err)
+	}
+	f.Close()
+	}
+
+}

@@ -1844,7 +1844,7 @@ func TestWriteReadFullBitmap(t *testing.T) {
 		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.containers[0].n)
 	}
 	if bb2.containers[0].count() != cb.count() {
-		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.containers[0].n)
+		t.Fatalf("bitmap test expected count %x, but got %x", cb.count(), bb2.containers[0].count())
 	}
 }
 

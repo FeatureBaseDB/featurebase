@@ -193,6 +193,7 @@ func (b *Bitmap) createSegmentIfNotExists(slice uint64) *BitmapSegment {
 	}
 	b.segments[i] = BitmapSegment{
 		slice:    slice,
+		data:     roaring.NewBitmap(),
 		writable: true,
 	}
 
@@ -304,7 +305,7 @@ type BitmapSegment struct {
 	// Underlying raw bitmap implementation.
 	// This is an mmapped bitmap if writable is false. Otherwise
 	// it is a heap allocated bitmap which can be manipulated.
-	data     roaring.Bitmap
+	data     *roaring.Bitmap
 	writable bool
 
 	// Bit count
@@ -324,15 +325,15 @@ func (s *BitmapSegment) Merge(other *BitmapSegment) {
 
 // IntersectionCount returns the number of intersections between s and other.
 func (s *BitmapSegment) IntersectionCount(other *BitmapSegment) uint64 {
-	return s.data.IntersectionCount(&other.data)
+	return s.data.IntersectionCount(other.data)
 }
 
 // Intersect returns the itersection of s and other.
 func (s *BitmapSegment) Intersect(other *BitmapSegment) *BitmapSegment {
-	data := s.data.Intersect(&other.data)
+	data := s.data.Intersect(other.data)
 
 	return &BitmapSegment{
-		data:  *data,
+		data:  data,
 		slice: s.slice,
 		n:     data.Count(),
 	}
@@ -340,10 +341,10 @@ func (s *BitmapSegment) Intersect(other *BitmapSegment) *BitmapSegment {
 
 // Union returns the bitwise union of s and other.
 func (s *BitmapSegment) Union(other *BitmapSegment) *BitmapSegment {
-	data := s.data.Union(&other.data)
+	data := s.data.Union(other.data)
 
 	return &BitmapSegment{
-		data:  *data,
+		data:  data,
 		slice: s.slice,
 		n:     data.Count(),
 	}
@@ -351,10 +352,10 @@ func (s *BitmapSegment) Union(other *BitmapSegment) *BitmapSegment {
 
 // Difference returns the diff of s and other.
 func (s *BitmapSegment) Difference(other *BitmapSegment) *BitmapSegment {
-	data := s.data.Difference(&other.data)
+	data := s.data.Difference(other.data)
 
 	return &BitmapSegment{
-		data:  *data,
+		data:  data,
 		slice: s.slice,
 		n:     data.Count(),
 	}
@@ -362,10 +363,10 @@ func (s *BitmapSegment) Difference(other *BitmapSegment) *BitmapSegment {
 
 // Xor returns the xor of s and other.
 func (s *BitmapSegment) Xor(other *BitmapSegment) *BitmapSegment {
-	data := s.data.Xor(&other.data)
+	data := s.data.Xor(other.data)
 
 	return &BitmapSegment{
-		data:  *data,
+		data:  data,
 		slice: s.slice,
 		n:     data.Count(),
 	}
@@ -416,7 +417,7 @@ func (s *BitmapSegment) ensureWritable() {
 		return
 	}
 
-	s.data = *s.data.Clone()
+	s.data = s.data.Clone()
 	s.writable = true
 }
 
