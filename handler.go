@@ -126,6 +126,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
+	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
@@ -249,6 +250,13 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewEncoder(w).Encode(status); err != nil {
 		h.Logger.Printf("write status response error: %s", err)
+	}
+}
+
+func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
+	info := h.API.Info()
+	if err := json.NewEncoder(w).Encode(info); err != nil {
+		h.Logger.Printf("write info response error: %s", err)
 	}
 }
 
