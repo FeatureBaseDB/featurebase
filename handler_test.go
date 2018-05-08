@@ -894,7 +894,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 		)
 		if err != nil {
 			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `invalid field type`+"\n" {
+		} else if body := MustReadAll(resp.Body); string(body) != `validating: invalid field type`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		} else if err := resp.Body.Close(); err != nil {
 			t.Fatal(err)
@@ -916,7 +916,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 		)
 		if err != nil {
 			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `invalid field range`+"\n" {
+		} else if body := MustReadAll(resp.Body); string(body) != `validating: invalid field range`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		} else if err := resp.Body.Close(); err != nil {
 			t.Fatal(err)
