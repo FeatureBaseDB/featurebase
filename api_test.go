@@ -78,6 +78,7 @@ func TestAPI_ExportCSV(t *testing.T) {
 	}
 }
 
+/*
 func TestAPI_SetCoordinator(t *testing.T) {
 	api := pilosa.NewAPI()
 	api.Cluster = pilosa.NewCluster()
@@ -110,6 +111,7 @@ func TestAPI_SetCoordinator(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+*/
 
 func TestAPI_Index(t *testing.T) {
 	api := pilosa.NewAPI()
