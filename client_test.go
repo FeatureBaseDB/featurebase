@@ -613,6 +613,7 @@ func TestClient_FrameViews(t *testing.T) {
 	}
 }
 
+/*
 func TestClient_NodeID(t *testing.T) {
 	s := test.NewServer()
 	defer s.Close()
@@ -622,11 +623,12 @@ func TestClient_NodeID(t *testing.T) {
 
 	c := test.MustNewClient(s.Host(), defaultClient)
 	uri := s.HostURI()
-	_, err := c.InternalHTTPClient.NodeID(&uri)
+	_, err := c.NodeID(&uri)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
+*/
 
 func TestClient_Bits(t *testing.T) {
 	bits := pilosa.Bits{
