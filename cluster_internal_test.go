@@ -17,6 +17,7 @@ package pilosa
 import (
 	"io/ioutil"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa/internal"
@@ -243,8 +244,8 @@ func TestFragSources(t *testing.T) {
 
 		actual, err := (test.from).fragSources(test.to, test.idx)
 		if test.err != "" {
-			if err.Error() != test.err {
-				t.Fatalf("expected error: %s", test.err)
+			if !strings.Contains(err.Error(), test.err) {
+				t.Fatalf("expected error: %s, got: %s", test.err, err.Error())
 			}
 		} else {
 			if err != nil {
