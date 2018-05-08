@@ -622,7 +622,7 @@ func TestClient_NodeID(t *testing.T) {
 
 	c := test.MustNewClient(s.Host(), defaultClient)
 	uri := s.HostURI()
-	_, err := c.NodeID(&uri)
+	_, err := c.InternalHTTPClient.NodeID(&uri)
 	if err != nil {
 		t.Fatal(err)
 	}
