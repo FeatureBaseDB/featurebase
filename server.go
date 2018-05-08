@@ -77,6 +77,7 @@ type Server struct {
 	maxWritesPerRequest int
 
 	defaultClient InternalClient
+	dataDir       string
 }
 
 // ServerOption is a functional option type for pilosa.Server
@@ -98,8 +99,7 @@ func OptServerReplicaN(n int) ServerOption {
 
 func OptServerDataDir(dir string) ServerOption {
 	return func(s *Server) error {
-		s.Cluster.Path = dir
-		s.Holder.Path = dir
+		s.dataDir = dir
 		return nil
 	}
 }
@@ -231,21 +231,16 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	path, err := expandDirName(s.Holder.Path)
+	path, err := expandDirName(s.dataDir)
 	if err != nil {
 		return nil, err
 	}
-	s.Holder.Path = path
 
+	s.Holder.Path = path
 	s.Holder.Logger = s.logger
 	s.Holder.Stats.SetLogger(s.logger)
 
-	path, err = expandDirName(s.Cluster.Path)
-	if err != nil {
-		return nil, err
-	}
 	s.Cluster.Path = path
-
 	s.Cluster.Logger = s.logger
 	s.Cluster.Holder = s.Holder
 
