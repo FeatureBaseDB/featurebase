@@ -1118,6 +1118,17 @@ func (api *API) Version() string {
 	return strings.TrimPrefix(Version, "v")
 }
 
+// Info returns information about this server instance
+func (api *API) Info() ServerInfo {
+	return ServerInfo{
+		SliceWidth: SliceWidth,
+	}
+}
+
+type ServerInfo struct {
+	SliceWidth uint64 `json:"sliceWidth"`
+}
+
 type apiMethod int
 
 // API validation constants.

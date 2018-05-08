@@ -536,15 +536,15 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 func (s *Server) SendSync(pb proto.Message) error {
 	var eg errgroup.Group
 	for _, node := range s.Cluster.Nodes {
+		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
 		if s.URI == node.URI {
 			continue
 		}
 
-		ctx := context.WithValue(context.Background(), "uri", &node.URI)
 		eg.Go(func() error {
-			return s.defaultClient.SendMessage(ctx, pb)
+			return s.defaultClient.SendMessage(context.Background(), &node.URI, pb)
 		})
 	}
 
@@ -559,8 +559,7 @@ func (s *Server) SendAsync(pb proto.Message) error {
 // SendTo represents an implementation of Broadcaster.
 func (s *Server) SendTo(to *Node, pb proto.Message) error {
 	s.logger.Printf("SendTo: %s", to.URI)
-	ctx := context.WithValue(context.Background(), "uri", &to.URI)
-	return s.defaultClient.SendMessage(ctx, pb)
+	return s.defaultClient.SendMessage(context.Background(), &to.URI, pb)
 }
 
 // Server implements StatusHandler.
