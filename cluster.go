@@ -307,16 +307,16 @@ func (c *Cluster) isCoordinator() bool {
 // nodes with its version of Cluster.Status.
 func (c *Cluster) SetCoordinator(n *Node) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	// Verify that the new Coordinator value matches
 	// this node.
 	if c.Node.ID != n.ID {
+		c.mu.Unlock()
 		return fmt.Errorf("coordinator node does not match this node")
 	}
 
 	// Update IsCoordinator on all nodes (locally).
 	_ = c.updateCoordinator(n)
-
+	c.mu.Unlock()
 	// Send the update coordinator message to all nodes.
 	err := c.Broadcaster.SendSync(
 		&internal.UpdateCoordinatorMessage{
