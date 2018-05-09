@@ -777,7 +777,7 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 		RemoteClient: s.RemoteClient,
 	}
 	if err := fs.SyncFragment(); err != nil {
-		return errors.Wrap(err, "syncing")
+		return errors.Wrap(err, "syncing fragment")
 	}
 
 	return nil
