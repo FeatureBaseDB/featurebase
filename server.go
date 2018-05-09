@@ -300,7 +300,6 @@ func (s *Server) Open() error {
 	s.handler.API.Broadcaster = s.Broadcaster
 	s.handler.API.BroadcastHandler = s
 	s.handler.API.StatusHandler = s
-	s.handler.API.URI = s.URI
 	s.handler.API.Cluster = s.Cluster
 
 	// Initialize Holder.
