@@ -28,9 +28,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -93,14 +91,6 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
 	defer close(m.Started)
-	prefix := "~" + string(filepath.Separator)
-	if strings.HasPrefix(m.Config.DataDir, prefix) {
-		HomeDir := os.Getenv("HOME")
-		if HomeDir == "" {
-			return errors.New("data directory not specified and no home dir available")
-		}
-		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
-	}
 
 	// SetupServer
 	err = m.SetupServer()

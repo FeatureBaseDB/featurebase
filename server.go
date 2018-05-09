@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -77,6 +78,7 @@ type Server struct {
 	maxWritesPerRequest int
 
 	defaultClient InternalClient
+	dataDir       string
 }
 
 // ServerOption is a functional option type for pilosa.Server
@@ -98,8 +100,7 @@ func OptServerReplicaN(n int) ServerOption {
 
 func OptServerDataDir(dir string) ServerOption {
 	return func(s *Server) error {
-		s.Cluster.Path = dir
-		s.Holder.Path = dir
+		s.dataDir = dir
 		return nil
 	}
 }
@@ -231,9 +232,16 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
+	path, err := expandDirName(s.dataDir)
+	if err != nil {
+		return nil, err
+	}
+
+	s.Holder.Path = path
 	s.Holder.Logger = s.logger
 	s.Holder.Stats.SetLogger(s.logger)
 
+	s.Cluster.Path = path
 	s.Cluster.Logger = s.logger
 	s.Cluster.Holder = s.Holder
 
@@ -783,4 +791,16 @@ type StatusHandler interface {
 	LocalStatus() (proto.Message, error)
 	ClusterStatus() (proto.Message, error)
 	HandleRemoteStatus(proto.Message) error
+}
+
+func expandDirName(path string) (string, error) {
+	prefix := "~" + string(filepath.Separator)
+	if strings.HasPrefix(path, prefix) {
+		HomeDir := os.Getenv("HOME")
+		if HomeDir == "" {
+			return "", errors.New("data directory not specified and no home dir available")
+		}
+		return filepath.Join(HomeDir, strings.TrimPrefix(path, prefix)), nil
+	}
+	return path, nil
 }
