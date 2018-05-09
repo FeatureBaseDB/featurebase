@@ -192,11 +192,11 @@ func (f *Frame) Open() error {
 	if err := func() error {
 		// Ensure the frame's path exists.
 		if err := os.MkdirAll(f.path, 0777); err != nil {
-			return errors.Wrap(err, "creating dir")
+			return errors.Wrap(err, "creating frame dir")
 		}
 
 		if err := f.loadMeta(); err != nil {
-			return errors.Wrap(err, "loading")
+			return errors.Wrap(err, "loading meta")
 		}
 
 		if err := f.openViews(); err != nil {
@@ -228,7 +228,7 @@ func (f *Frame) openViews() error {
 
 	fis, err := file.Readdir(0)
 	if err != nil {
-		return errors.Wrap(err, "reading")
+		return errors.Wrap(err, "reading directory")
 	}
 
 	for _, fi := range fis {
@@ -262,7 +262,7 @@ func (f *Frame) loadMeta() error {
 		//f.fields
 		return nil
 	} else if err != nil {
-		return errors.Wrap(err, "reading")
+		return errors.Wrap(err, "reading meta")
 	} else {
 		if err := proto.Unmarshal(buf, &pb); err != nil {
 			return errors.Wrap(err, "unmarshaling")
@@ -293,7 +293,7 @@ func (f *Frame) saveMeta() error {
 
 	// Write to meta file.
 	if err := ioutil.WriteFile(filepath.Join(f.path, ".meta"), buf, 0666); err != nil {
-		return errors.Wrap(err, "writing")
+		return errors.Wrap(err, "writing meta")
 	}
 
 	return nil
@@ -365,7 +365,7 @@ func (f *Frame) CreateField(field *Field) error {
 // addField adds a single field to fields.
 func (f *Frame) addField(field *Field) error {
 	if err := ValidateField(field); err != nil {
-		return errors.Wrap(err, "validating")
+		return errors.Wrap(err, "validating field")
 	} else if f.HasField(field.Name) {
 		return ErrFieldExists
 	}
@@ -410,7 +410,7 @@ func (f *Frame) DeleteField(name string) error {
 		delete(f.views, viewName)
 
 		if err := view.Close(); err != nil {
-			return errors.Wrap(err, "closing")
+			return errors.Wrap(err, "closing view")
 		} else if err := os.RemoveAll(view.Path()); err != nil {
 			return errors.Wrap(err, "deleting directory")
 		}
@@ -547,7 +547,7 @@ func (f *Frame) createViewIfNotExistsBase(name string) (*View, bool, error) {
 	view := f.newView(f.ViewPath(name), name)
 
 	if err := view.Open(); err != nil {
-		return nil, false, errors.Wrap(err, "opening")
+		return nil, false, errors.Wrap(err, "opening view")
 	}
 	view.RowAttrStore = f.rowAttrStore
 	f.views[view.Name()] = view
@@ -574,7 +574,7 @@ func (f *Frame) DeleteView(name string) error {
 
 	// Close data files before deletion.
 	if err := view.Close(); err != nil {
-		return errors.Wrap(err, "closing")
+		return errors.Wrap(err, "closing view")
 	}
 
 	// Delete view directory.
