@@ -46,7 +46,6 @@ type API struct {
 	BroadcastHandler BroadcastHandler
 	StatusHandler    StatusHandler
 	Cluster          *Cluster
-	URI              URI
 	RemoteClient     *http.Client
 	Logger           Logger
 }
@@ -294,7 +293,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, frameName strin
 
 	// Validate that this handler owns the slice.
 	if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
-		api.Logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
+		api.Logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
 		return ErrClusterDoesNotOwnSlice
 	}
 
@@ -957,7 +956,7 @@ func (api *API) LongQueryTime() time.Duration {
 func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*Index, *Frame, error) {
 	// Validate that this handler owns the slice.
 	if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
-		api.Logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
+		api.Logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
 		return nil, nil, ErrClusterDoesNotOwnSlice
 	}
 
