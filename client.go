@@ -1015,7 +1015,7 @@ func (c *InternalHTTPClient) BlockData(ctx context.Context, index, frame, view s
 	if body, err := ioutil.ReadAll(resp.Body); err != nil {
 		return nil, nil, errors.Wrap(err, "reading")
 	} else if err := proto.Unmarshal(body, &rsp); err != nil {
-		return nil, nil, errors.Wrap(err, "unmarhsaling")
+		return nil, nil, errors.Wrap(err, "unmarshalling")
 	}
 	return rsp.RowIDs, rsp.ColumnIDs, nil
 }
