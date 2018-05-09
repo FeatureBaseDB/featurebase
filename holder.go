@@ -524,7 +524,7 @@ func (h *Holder) setFileLimit() {
 }
 
 func (h *Holder) loadNodeID() (string, error) {
-	idPath := path.Join(h.Path, "ID")
+	idPath := path.Join(h.Path, ".id")
 	nodeID := ""
 	h.Logger.Printf("load NodeID: %s", idPath)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
@@ -545,6 +545,28 @@ func (h *Holder) loadNodeID() (string, error) {
 	}
 
 	return nodeID, nil
+}
+
+// Log startup time and version to $DATA_DIR/.startup.log
+func (h *Holder) logStartup() error {
+	time, err := time.Now().MarshalText()
+	if err != nil {
+		return errors.Wrap(err, "creating timestamp")
+	}
+	logLine := fmt.Sprintf("%s\t%s\n", time, Version)
+
+	f, err := os.OpenFile(h.Path+"/.startup.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		return errors.Wrap(err, "opening startup log")
+	}
+
+	defer f.Close()
+
+	if _, err = f.WriteString(logLine); err != nil {
+		return errors.Wrap(err, "writing startup log")
+	}
+
+	return nil
 }
 
 // HolderSyncer is an active anti-entropy tool that compares the local holder

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa_test
+package pilosa
 
 import (
 	"bytes"
@@ -22,29 +22,27 @@ import (
 	"testing/quick"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/test"
 )
 
 // Ensure the cluster can fairly distribute partitions across the nodes.
 func TestCluster_Owners(t *testing.T) {
-	c := pilosa.Cluster{
-		Nodes: []*pilosa.Node{
-			{URI: test.NewURIFromHostPort("serverA", 1000)},
-			{URI: test.NewURIFromHostPort("serverB", 1000)},
-			{URI: test.NewURIFromHostPort("serverC", 1000)},
+	c := Cluster{
+		Nodes: []*Node{
+			{URI: NewTestURIFromHostPort("serverA", 1000)},
+			{URI: NewTestURIFromHostPort("serverB", 1000)},
+			{URI: NewTestURIFromHostPort("serverC", 1000)},
 		},
-		Hasher:   test.NewModHasher(),
+		Hasher:   NewTestModHasher(),
 		ReplicaN: 2,
 	}
 
 	// Verify nodes are distributed.
-	if a := c.PartitionNodes(0); !reflect.DeepEqual(a, []*pilosa.Node{c.Nodes[0], c.Nodes[1]}) {
+	if a := c.PartitionNodes(0); !reflect.DeepEqual(a, []*Node{c.Nodes[0], c.Nodes[1]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 
 	// Verify nodes go around the ring.
-	if a := c.PartitionNodes(2); !reflect.DeepEqual(a, []*pilosa.Node{c.Nodes[2], c.Nodes[0]}) {
+	if a := c.PartitionNodes(2); !reflect.DeepEqual(a, []*Node{c.Nodes[2], c.Nodes[0]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 }
@@ -52,7 +50,7 @@ func TestCluster_Owners(t *testing.T) {
 // Ensure the partitioner can assign a fragment to a partition.
 func TestCluster_Partition(t *testing.T) {
 	if err := quick.Check(func(index string, slice uint64, partitionN int) bool {
-		c := pilosa.NewCluster()
+		c := NewCluster()
 		c.PartitionN = partitionN
 
 		partitionID := c.Partition(index, slice)
@@ -85,7 +83,7 @@ func TestHasher(t *testing.T) {
 		{0x0ddc0ffeebadf00d, []int{0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15}},
 	} {
 		for i, v := range tt.bucket {
-			if got := pilosa.NewHasher().Hash(tt.key, i+1); got != v {
+			if got := NewHasher().Hash(tt.key, i+1); got != v {
 				t.Errorf("hash(%v,%v)=%v, want %v", tt.key, i+1, got, v)
 			}
 		}
@@ -94,8 +92,8 @@ func TestHasher(t *testing.T) {
 
 // Ensure OwnsSlices can find the actual slice list for node and index.
 func TestCluster_OwnsSlices(t *testing.T) {
-	c := test.NewCluster(5)
-	slices := c.OwnsSlices("test", 10, test.NewURIFromHostPort("host2", 0))
+	c := NewTestCluster(5)
+	slices := c.OwnsSlices("test", 10, NewTestURIFromHostPort("host2", 0))
 
 	if !reflect.DeepEqual(slices, []uint64{0, 3, 6, 10}) {
 		t.Fatalf("unexpected slices for node's index: %v", slices)
@@ -104,7 +102,7 @@ func TestCluster_OwnsSlices(t *testing.T) {
 
 // Ensure ContainsSlices can find the actual slice list for node and index.
 func TestCluster_ContainsSlices(t *testing.T) {
-	c := test.NewCluster(5)
+	c := NewTestCluster(5)
 	c.ReplicaN = 3
 	slices := c.ContainsSlices("test", 10, c.Nodes[2])
 
@@ -114,20 +112,20 @@ func TestCluster_ContainsSlices(t *testing.T) {
 }
 
 func TestCluster_Nodes(t *testing.T) {
-	uri0 := test.NewURIFromHostPort("node0", 0)
-	uri1 := test.NewURIFromHostPort("node1", 0)
-	uri2 := test.NewURIFromHostPort("node2", 0)
-	uri3 := test.NewURIFromHostPort("node3", 0)
+	uri0 := NewTestURIFromHostPort("node0", 0)
+	uri1 := NewTestURIFromHostPort("node1", 0)
+	uri2 := NewTestURIFromHostPort("node2", 0)
+	uri3 := NewTestURIFromHostPort("node3", 0)
 
-	node0 := &pilosa.Node{ID: "node0", URI: uri0}
-	node1 := &pilosa.Node{ID: "node1", URI: uri1}
-	node2 := &pilosa.Node{ID: "node2", URI: uri2}
-	node3 := &pilosa.Node{ID: "node3", URI: uri3}
+	node0 := &Node{ID: "node0", URI: uri0}
+	node1 := &Node{ID: "node1", URI: uri1}
+	node2 := &Node{ID: "node2", URI: uri2}
+	node3 := &Node{ID: "node3", URI: uri3}
 
-	nodes := []*pilosa.Node{node0, node1, node2}
+	nodes := []*Node{node0, node1, node2}
 
 	t.Run("NodeIDs", func(t *testing.T) {
-		actual := pilosa.Nodes(nodes).IDs()
+		actual := Nodes(nodes).IDs()
 		expected := []string{node0.ID, node1.ID, node2.ID}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
@@ -135,24 +133,24 @@ func TestCluster_Nodes(t *testing.T) {
 	})
 
 	t.Run("Filter", func(t *testing.T) {
-		actual := pilosa.Nodes(pilosa.Nodes(nodes).Filter(nodes[1])).URIs()
-		expected := []pilosa.URI{uri0, uri2}
+		actual := Nodes(Nodes(nodes).Filter(nodes[1])).URIs()
+		expected := []URI{uri0, uri2}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
 	})
 
 	t.Run("FilterURI", func(t *testing.T) {
-		actual := pilosa.Nodes(pilosa.Nodes(nodes).FilterURI(uri1)).URIs()
-		expected := []pilosa.URI{uri0, uri2}
+		actual := Nodes(Nodes(nodes).FilterURI(uri1)).URIs()
+		expected := []URI{uri0, uri2}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
 	})
 
 	t.Run("Contains", func(t *testing.T) {
-		actualTrue := pilosa.Nodes(nodes).Contains(node1)
-		actualFalse := pilosa.Nodes(nodes).Contains(node3)
+		actualTrue := Nodes(nodes).Contains(node1)
+		actualFalse := Nodes(nodes).Contains(node3)
 		if !reflect.DeepEqual(actualTrue, true) {
 			t.Errorf("expected: %v, but got: %v", true, actualTrue)
 		}
@@ -162,9 +160,9 @@ func TestCluster_Nodes(t *testing.T) {
 	})
 
 	t.Run("Clone", func(t *testing.T) {
-		clone := pilosa.Nodes(nodes).Clone()
-		actual := pilosa.Nodes(clone).URIs()
-		expected := []pilosa.URI{uri0, uri1, uri2}
+		clone := Nodes(nodes).Clone()
+		actual := Nodes(clone).URIs()
+		expected := []URI{uri0, uri1, uri2}
 		if !reflect.DeepEqual(actual, expected) {
 			t.Errorf("expected: %v, but got: %v", expected, actual)
 		}
@@ -172,16 +170,16 @@ func TestCluster_Nodes(t *testing.T) {
 }
 
 func TestCluster_Coordinator(t *testing.T) {
-	uri1 := test.NewURIFromHostPort("node1", 0)
-	uri2 := test.NewURIFromHostPort("node2", 0)
+	uri1 := NewTestURIFromHostPort("node1", 0)
+	uri2 := NewTestURIFromHostPort("node2", 0)
 
-	node1 := &pilosa.Node{ID: "node1", URI: uri1}
-	node2 := &pilosa.Node{ID: "node2", URI: uri2}
+	node1 := &Node{ID: "node1", URI: uri1}
+	node2 := &Node{ID: "node2", URI: uri2}
 
-	c1 := *pilosa.NewCluster()
+	c1 := *NewCluster()
 	c1.Node = node1
 	c1.Coordinator = node1.ID
-	c2 := *pilosa.NewCluster()
+	c2 := *NewCluster()
 	c2.Node = node2
 	c2.Coordinator = node1.ID
 
@@ -195,17 +193,17 @@ func TestCluster_Coordinator(t *testing.T) {
 }
 
 func TestCluster_Topology(t *testing.T) {
-	c1 := test.NewCluster(1) // automatically creates Node{ID: "node0"}
+	c1 := NewTestCluster(1) // automatically creates Node{ID: "node0"}
 
-	uri0 := test.NewURIFromHostPort("host0", 0)
-	uri1 := test.NewURIFromHostPort("host1", 0)
-	uri2 := test.NewURIFromHostPort("host2", 0)
-	invalid := test.NewURIFromHostPort("invalid", 0)
+	uri0 := NewTestURIFromHostPort("host0", 0)
+	uri1 := NewTestURIFromHostPort("host1", 0)
+	uri2 := NewTestURIFromHostPort("host2", 0)
+	invalid := NewTestURIFromHostPort("invalid", 0)
 
-	node0 := &pilosa.Node{ID: "node0", URI: uri0}
-	node1 := &pilosa.Node{ID: "node1", URI: uri1}
-	node2 := &pilosa.Node{ID: "node2", URI: uri2}
-	nodeinvalid := &pilosa.Node{ID: "nodeinvalid", URI: invalid}
+	node0 := &Node{ID: "node0", URI: uri0}
+	node1 := &Node{ID: "node1", URI: uri1}
+	node2 := &Node{ID: "node2", URI: uri2}
+	nodeinvalid := &Node{ID: "nodeinvalid", URI: invalid}
 
 	t.Run("AddNode", func(t *testing.T) {
 		err := c1.AddNode(node1)
@@ -243,7 +241,7 @@ func TestCluster_Topology(t *testing.T) {
 func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Single node, no data", func(t *testing.T) {
-		tc := test.NewTestCluster(1)
+		tc := NewClusterCluster(1)
 
 		// Open TestCluster.
 		if err := tc.Open(); err != nil {
@@ -253,11 +251,11 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node := tc.Clusters[0]
 
 		// Ensure that node comes up in state NORMAL.
-		if node.State() != pilosa.ClusterStateNormal {
-			t.Errorf("expected state: %v, but got: %v", pilosa.ClusterStateNormal, node.State())
+		if node.State() != ClusterStateNormal {
+			t.Errorf("expected state: %v, but got: %v", ClusterStateNormal, node.State())
 		}
 
-		expectedTop := &pilosa.Topology{
+		expectedTop := &Topology{
 			NodeIDs: []string{node.Node.ID},
 		}
 
@@ -273,13 +271,13 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 
 	t.Run("Single node, in topology", func(t *testing.T) {
-		tc := test.NewTestCluster(0)
+		tc := NewClusterCluster(0)
 		tc.AddNode(false)
 
 		node := tc.Clusters[0]
 
 		// write topology to data file
-		top := &pilosa.Topology{
+		top := &Topology{
 			NodeIDs: []string{node.Node.ID},
 		}
 		tc.WriteTopology(node.Path, top)
@@ -290,8 +288,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that node comes up in state NORMAL.
-		if node.State() != pilosa.ClusterStateNormal {
-			t.Errorf("expected state: %v, but got: %v", pilosa.ClusterStateNormal, node.State())
+		if node.State() != ClusterStateNormal {
+			t.Errorf("expected state: %v, but got: %v", ClusterStateNormal, node.State())
 		}
 
 		// Close TestCluster.
@@ -301,13 +299,13 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 
 	t.Run("Single node, not in topology", func(t *testing.T) {
-		tc := test.NewTestCluster(0)
+		tc := NewClusterCluster(0)
 		tc.AddNode(false)
 
 		node := tc.Clusters[0]
 
 		// write topology to data file
-		top := &pilosa.Topology{
+		top := &Topology{
 			NodeIDs: []string{"some-other-host"},
 		}
 		tc.WriteTopology(node.Path, top)
@@ -326,7 +324,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 
 	t.Run("Multiple nodes, no data", func(t *testing.T) {
-		tc := test.NewTestCluster(0)
+		tc := NewClusterCluster(0)
 		tc.AddNode(false)
 
 		// Open TestCluster.
@@ -340,13 +338,13 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node1 := tc.Clusters[1]
 
 		// Ensure that nodes comes up in state NORMAL.
-		if node0.State() != pilosa.ClusterStateNormal {
-			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State())
-		} else if node1.State() != pilosa.ClusterStateNormal {
-			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node1.State())
+		if node0.State() != ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, node0.State())
+		} else if node1.State() != ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, node1.State())
 		}
 
-		expectedTop := &pilosa.Topology{
+		expectedTop := &Topology{
 			NodeIDs: []string{node0.Node.ID, node1.Node.ID},
 		}
 
@@ -364,12 +362,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 
 	t.Run("Multiple nodes, in/not in topology", func(t *testing.T) {
-		tc := test.NewTestCluster(0)
+		tc := NewClusterCluster(0)
 		tc.AddNode(false)
 		node0 := tc.Clusters[0]
 
 		// write topology to data file
-		top := &pilosa.Topology{
+		top := &Topology{
 			NodeIDs: []string{"node0", "node2"},
 		}
 		tc.WriteTopology(node0.Path, top)
@@ -380,8 +378,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that node is in state STARTING before the other node joins.
-		if node0.State() != pilosa.ClusterStateStarting {
-			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateStarting, node0.State())
+		if node0.State() != ClusterStateStarting {
+			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateStarting, node0.State())
 		}
 
 		// Expect an error by adding a node not in the topology.
@@ -395,10 +393,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node2 := tc.Clusters[2]
 
 		// Ensure that node comes up in state NORMAL.
-		if node0.State() != pilosa.ClusterStateNormal {
-			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State())
-		} else if node2.State() != pilosa.ClusterStateNormal {
-			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node2.State())
+		if node0.State() != ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, node0.State())
+		} else if node2.State() != ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, node2.State())
 		}
 
 		// Close TestCluster.
@@ -408,7 +406,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 
 	t.Run("Multiple nodes, with data", func(t *testing.T) {
-		tc := test.NewTestCluster(0)
+		tc := NewClusterCluster(0)
 		tc.AddNode(false)
 		node0 := tc.Clusters[0]
 
@@ -418,20 +416,20 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Add Bit Data to node0.
-		if err := tc.CreateFrame("i", "f", pilosa.FrameOptions{}); err != nil {
+		if err := tc.CreateFrame("i", "f", FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		tc.SetBit("i", "f", "standard", 1, 101, nil)
 		tc.SetBit("i", "f", "standard", 1, 1300000, nil)
 
 		// Add Field Data to node0.
-		if err := tc.CreateFrame("i", "fields", pilosa.FrameOptions{
+		if err := tc.CreateFrame("i", "fields", FrameOptions{
 			InverseEnabled: false,
-			//CacheType:      pilosa.CacheTypeNone,
-			Fields: []*pilosa.Field{
+			//CacheType:      CacheTypeNone,
+			Fields: []*Field{
 				{
 					Name: "fld0",
-					Type: pilosa.FieldTypeInt,
+					Type: FieldTypeInt,
 					Min:  -100,
 					Max:  100,
 				},
@@ -461,13 +459,13 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node1 := tc.Clusters[1]
 
 		// Ensure that nodes come up in state NORMAL.
-		if node0.State() != pilosa.ClusterStateNormal {
-			t.Errorf("expected node0 state: %v, but got: %v", pilosa.ClusterStateNormal, node0.State())
-		} else if node1.State() != pilosa.ClusterStateNormal {
-			t.Errorf("expected node1 state: %v, but got: %v", pilosa.ClusterStateNormal, node1.State())
+		if node0.State() != ClusterStateNormal {
+			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateNormal, node0.State())
+		} else if node1.State() != ClusterStateNormal {
+			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, node1.State())
 		}
 
-		expectedTop := &pilosa.Topology{
+		expectedTop := &Topology{
 			NodeIDs: []string{node0.Node.ID, node1.Node.ID},
 		}
 
@@ -510,7 +508,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 // Ensures that coordinator can be changed.
 func TestCluster_UpdateCoordinator(t *testing.T) {
 	t.Run("UpdateCoordinator", func(t *testing.T) {
-		c := test.NewCluster(2)
+		c := NewTestCluster(2)
 
 		oldNode := c.Nodes[0]
 		newNode := c.Nodes[1]

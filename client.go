@@ -88,7 +88,7 @@ func (c *InternalHTTPClient) MaxInverseSliceByIndex(ctx context.Context) (map[st
 // maxSliceByIndex returns the number of slices on a server by index.
 func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.clientURI(ctx), "/slices/max")
+	u := uriPathToURL(c.defaultURI, "/slices/max")
 
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
@@ -227,8 +227,13 @@ func (c *InternalHTTPClient) FragmentNodes(ctx context.Context, index string, sl
 	return a, nil
 }
 
-// ExecuteQuery executes query against index on the server.
-func (c *InternalHTTPClient) ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+// Query executes query against the index.
+func (c *InternalHTTPClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
+}
+
+// QueryNode executes query against the index, sending the request to the node specified.
+func (c *InternalHTTPClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
 	if index == "" {
 		return nil, ErrIndexRequired
 	} else if queryRequest.Query == "" {
@@ -242,7 +247,7 @@ func (c *InternalHTTPClient) ExecuteQuery(ctx context.Context, index string, que
 	}
 
 	// Create HTTP request.
-	u := c.clientURI(ctx).Path(fmt.Sprintf("/index/%s/query", index))
+	u := uri.Path(fmt.Sprintf("/index/%s/query", index))
 	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
@@ -1102,13 +1107,13 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 }
 
 // SendMessage posts a message synchronously.
-func (c *InternalHTTPClient) SendMessage(ctx context.Context, pb proto.Message) error {
+func (c *InternalHTTPClient) SendMessage(ctx context.Context, uri *URI, pb proto.Message) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)
 	}
 
-	u := uriPathToURL(ctx.Value("uri").(*URI), "/cluster/message")
+	u := uriPathToURL(uri, "/cluster/message")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(msg))
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -1134,40 +1139,6 @@ func (c *InternalHTTPClient) SendMessage(ctx context.Context, pb proto.Message) 
 	}
 
 	return nil
-}
-
-func (c *InternalHTTPClient) clientURI(ctx context.Context) *URI {
-	clientURI := c.defaultURI
-	if contextURI, ok := ctx.Value("uri").(*URI); ok {
-		clientURI = contextURI
-	} else if contextURI, ok := ctx.Value("uri").(URI); ok {
-		clientURI = &contextURI
-	}
-	return clientURI
-}
-
-func (c *InternalHTTPClient) NodeID(uri *URI) (string, error) {
-	u := uriPathToURL(uri, "/id")
-	req, err := http.NewRequest("GET", u.String(), nil)
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("executing http request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Read body.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading response body: %v", err)
-	}
-
-	// Return error if status is not OK.
-	switch resp.StatusCode {
-	case http.StatusOK: // ok
-	default:
-		return "", fmt.Errorf("unexpected response status code: %d: %s", resp.StatusCode, body)
-	}
-	return string(body), nil
 }
 
 // Bit represents the location of a single bit.
@@ -1348,7 +1319,8 @@ type InternalClient interface {
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error)
-	ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
+	Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
+	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
 	Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error
 	ImportK(ctx context.Context, index, frame string, bits []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
@@ -1365,6 +1337,5 @@ type InternalClient interface {
 	BlockData(ctx context.Context, index, frame, view string, slice uint64, block int) ([]uint64, []uint64, error)
 	ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
-	SendMessage(ctx context.Context, pb proto.Message) error
-	NodeID(uri *URI) (string, error)
+	SendMessage(ctx context.Context, uri *URI, pb proto.Message) error
 }

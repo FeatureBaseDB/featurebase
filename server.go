@@ -17,10 +17,12 @@ package pilosa
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -76,6 +78,7 @@ type Server struct {
 	maxWritesPerRequest int
 
 	defaultClient InternalClient
+	dataDir       string
 }
 
 // ServerOption is a functional option type for pilosa.Server
@@ -97,8 +100,7 @@ func OptServerReplicaN(n int) ServerOption {
 
 func OptServerDataDir(dir string) ServerOption {
 	return func(s *Server) error {
-		s.Cluster.Path = dir
-		s.Holder.Path = dir
+		s.dataDir = dir
 		return nil
 	}
 }
@@ -230,9 +232,16 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
+	path, err := expandDirName(s.dataDir)
+	if err != nil {
+		return nil, err
+	}
+
+	s.Holder.Path = path
 	s.Holder.Logger = s.logger
 	s.Holder.Stats.SetLogger(s.logger)
 
+	s.Cluster.Path = path
 	s.Cluster.Logger = s.logger
 	s.Cluster.Holder = s.Holder
 
@@ -266,6 +275,12 @@ func (s *Server) Open() error {
 	// s.ln can be configured prior to Open() via s.OpenListener().
 	if s.ln == nil {
 		return errors.New("Must pass a listener option to NewServer")
+	}
+
+	// Log startup
+	err := s.Holder.logStartup()
+	if err != nil {
+		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
 	// Get or create NodeID.
@@ -529,15 +544,15 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 func (s *Server) SendSync(pb proto.Message) error {
 	var eg errgroup.Group
 	for _, node := range s.Cluster.Nodes {
+		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
 		if s.URI == node.URI {
 			continue
 		}
 
-		ctx := context.WithValue(context.Background(), "uri", &node.URI)
 		eg.Go(func() error {
-			return s.defaultClient.SendMessage(ctx, pb)
+			return s.defaultClient.SendMessage(context.Background(), &node.URI, pb)
 		})
 	}
 
@@ -552,8 +567,7 @@ func (s *Server) SendAsync(pb proto.Message) error {
 // SendTo represents an implementation of Broadcaster.
 func (s *Server) SendTo(to *Node, pb proto.Message) error {
 	s.logger.Printf("SendTo: %s", to.URI)
-	ctx := context.WithValue(context.Background(), "uri", &to.URI)
-	return s.defaultClient.SendMessage(ctx, pb)
+	return s.defaultClient.SendMessage(context.Background(), &to.URI, pb)
 }
 
 // Server implements StatusHandler.
@@ -777,4 +791,16 @@ type StatusHandler interface {
 	LocalStatus() (proto.Message, error)
 	ClusterStatus() (proto.Message, error)
 	HandleRemoteStatus(proto.Message) error
+}
+
+func expandDirName(path string) (string, error) {
+	prefix := "~" + string(filepath.Separator)
+	if strings.HasPrefix(path, prefix) {
+		HomeDir := os.Getenv("HOME")
+		if HomeDir == "" {
+			return "", errors.New("data directory not specified and no home dir available")
+		}
+		return filepath.Join(HomeDir, strings.TrimPrefix(path, prefix)), nil
+	}
+	return path, nil
 }

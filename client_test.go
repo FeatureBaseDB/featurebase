@@ -151,7 +151,7 @@ func TestClient_MultiNode(t *testing.T) {
 		Query:  fmt.Sprintf(`TopN(frame="%s", n=%d)`, "f", topN),
 		Remote: false,
 	}
-	result, err := client[0].ExecuteQuery(context.Background(), "i", queryRequest)
+	result, err := client[0].Query(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestClient_MultiNode(t *testing.T) {
 	hldr[1].Index("i").SetRemoteMaxSlice(maxSlice)
 	hldr[2].Index("i").SetRemoteMaxSlice(maxSlice)
 
-	result, err = client[0].ExecuteQuery(context.Background(), "i", queryRequest)
+	result, err = client[0].Query(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,11 +189,11 @@ func TestClient_MultiNode(t *testing.T) {
 		t.Fatalf("Invalid TopN result set: %s", spew.Sdump(result))
 	}
 
-	result1, err := client[1].ExecuteQuery(context.Background(), "i", queryRequest)
+	result1, err := client[1].Query(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result2, err := client[2].ExecuteQuery(context.Background(), "i", queryRequest)
+	result2, err := client[2].Query(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
