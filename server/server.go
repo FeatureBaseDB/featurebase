@@ -300,10 +300,19 @@ func (m *Command) SetupNetworking() error {
 
 	gossipEventReceiver := gossip.NewGossipEventReceiver(m.logger)
 	m.Server.Cluster.EventReceiver = gossipEventReceiver
-	gossipMemberSet, err := gossip.NewGossipMemberSet(m.Server.NodeID, m.Server.URI.Host(), m.Config.Gossip, gossipEventReceiver, m.Server, gossip.WithLogger(m.logger.Logger()), gossip.WithTransport(transport))
+	gossipMemberSet, err := gossip.NewGossipMemberSet(
+		m.Server.NodeID,
+		m.Server.URI.Host(),
+		m.Config.Gossip,
+		gossipEventReceiver,
+		m.Server,
+		gossip.WithLogger(m.logger.Logger()),
+		gossip.WithTransport(transport),
+	)
 	if err != nil {
 		return err
 	}
+	gossipMemberSet.Logger = m.logger
 	m.Server.Cluster.MemberSet = gossipMemberSet
 	m.Server.Broadcaster = m.Server
 	m.Server.BroadcastReceiver = gossipMemberSet
