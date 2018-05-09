@@ -96,19 +96,19 @@ func (h *Holder) Open() error {
 
 	h.Logger.Printf("open holder path: %s", h.Path)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
-		return err
+		return errors.Wrap(err, "creating directory")
 	}
 
 	// Open path to read all index directories.
 	f, err := os.Open(h.Path)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "opening directory")
 	}
 	defer f.Close()
 
 	fis, err := f.Readdir(0)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "reading directory")
 	}
 
 	for _, fi := range fis {
@@ -123,7 +123,7 @@ func (h *Holder) Open() error {
 			h.Logger.Printf("ERROR opening index: %s, err=%s", fi.Name(), err)
 			continue
 		} else if err != nil {
-			return err
+			return errors.Wrap(err, "opening index")
 		}
 		if err := index.Open(); err != nil {
 			if err == ErrName {
@@ -158,7 +158,7 @@ func (h *Holder) Close() error {
 
 	for _, index := range h.indexes {
 		if err := index.Close(); err != nil {
-			return err
+			return errors.Wrap(err, "closing index")
 		}
 	}
 	return nil
@@ -245,20 +245,20 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 		opt := IndexOptions{}
 		idx, err := h.CreateIndexIfNotExists(index.Name, opt)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating index")
 		}
 		// Create frames that don't exist.
 		for _, f := range index.Frames {
 			opt := decodeFrameOptions(f.Meta)
 			frame, err := idx.CreateFrameIfNotExists(f.Name, *opt)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "creating frame")
 			}
 			// Create views that don't exist.
 			for _, v := range f.Views {
 				_, err := frame.CreateViewIfNotExists(v)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "creating view")
 				}
 			}
 		}
@@ -347,11 +347,11 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	// Otherwise create a new index.
 	index, err := h.newIndex(h.IndexPath(name), name)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating")
 	}
 
 	if err := index.Open(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "opening")
 	}
 
 	// Update options.
@@ -387,12 +387,12 @@ func (h *Holder) DeleteIndex(name string) error {
 
 	// Close index.
 	if err := index.Close(); err != nil {
-		return err
+		return errors.Wrap(err, "closing")
 	}
 
 	// Delete index directory.
 	if err := os.RemoveAll(h.IndexPath(name)); err != nil {
-		return err
+		return errors.Wrap(err, "removing directory")
 	}
 
 	// Remove reference.
@@ -528,7 +528,7 @@ func (h *Holder) loadNodeID() (string, error) {
 	nodeID := ""
 	h.Logger.Printf("load NodeID: %s", idPath)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
-		return "", err
+		return "", errors.Wrap(err, "creating directory")
 	}
 
 	nodeIDBytes, err := ioutil.ReadFile(idPath)
@@ -538,10 +538,10 @@ func (h *Holder) loadNodeID() (string, error) {
 		nodeID = uuid.NewV4().String()
 		err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
 		if err != nil {
-			return "", err
+			return "", errors.Wrap(err, "writing file")
 		}
 	} else if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "reading file")
 	}
 
 	return nodeID, nil
@@ -667,7 +667,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 	// Read block checksums.
 	blks, err := idx.ColumnAttrStore().Blocks()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting blocks")
 	}
 	s.Stats.CountWithCustomTags("ColumnAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag})
 
@@ -679,7 +679,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 		// Skip update and recomputation if no attributes have changed.
 		m, err := client.ColumnAttrDiff(context.Background(), index, blks)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "getting differing blocks")
 		} else if len(m) == 0 {
 			continue
 		}
@@ -687,13 +687,13 @@ func (s *HolderSyncer) syncIndex(index string) error {
 
 		// Update local copy.
 		if err := idx.ColumnAttrStore().SetBulkAttrs(m); err != nil {
-			return err
+			return errors.Wrap(err, "setting attrs")
 		}
 
 		// Recompute blocks.
 		blks, err = idx.ColumnAttrStore().Blocks()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "recomputing blocks")
 		}
 	}
 
@@ -713,7 +713,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 	// Read block checksums.
 	blks, err := f.RowAttrStore().Blocks()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting blocks")
 	}
 	s.Stats.CountWithCustomTags("RowAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag, frameTag})
 
@@ -727,7 +727,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 		if err == ErrFrameNotFound {
 			continue // frame not created remotely yet, skip
 		} else if err != nil {
-			return err
+			return errors.Wrap(err, "getting differing blocks")
 		} else if len(m) == 0 {
 			continue
 		}
@@ -735,13 +735,13 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 
 		// Update local copy.
 		if err := f.RowAttrStore().SetBulkAttrs(m); err != nil {
-			return err
+			return errors.Wrap(err, "setting attrs")
 		}
 
 		// Recompute blocks.
 		blks, err = f.RowAttrStore().Blocks()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "recomputing blocks")
 		}
 	}
 
@@ -759,13 +759,13 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 	// Ensure view exists locally.
 	v, err := f.CreateViewIfNotExists(view)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating view")
 	}
 
 	// Ensure fragment exists locally.
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating fragment")
 	}
 
 	// Sync fragments together.
@@ -777,7 +777,7 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 		RemoteClient: s.RemoteClient,
 	}
 	if err := fs.SyncFragment(); err != nil {
-		return err
+		return errors.Wrap(err, "syncing")
 	}
 
 	return nil
@@ -827,7 +827,7 @@ func (c *HolderCleaner) CleanHolder() error {
 					}
 					// Delete fragment.
 					if err := view.DeleteFragment(fragSlice); err != nil {
-						return err
+						return errors.Wrap(err, "deleting fragment")
 					}
 				}
 			}
