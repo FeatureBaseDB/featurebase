@@ -86,7 +86,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=test, err=invalid database") {
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=test, err=opening storage: invalid database") {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -145,7 +145,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=open frame: name=bar, err=invalid database") {
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=open frame: name=bar, err=opening storage: invalid database") {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})

@@ -46,11 +46,7 @@ func TestBackupCommand_Run(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	uri, err := pilosa.NewURIFromAddress(s.Host())
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Handler.API.URI = *uri
+
 	s.Handler.API.Cluster = test.NewCluster(1)
 	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.API.Holder = hldr.Holder

@@ -126,6 +126,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
+	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
 
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
@@ -252,6 +253,13 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
+	info := h.API.Info()
+	if err := json.NewEncoder(w).Encode(info); err != nil {
+		h.Logger.Printf("write info response error: %s", err)
+	}
+}
+
 type getSchemaResponse struct {
 	Indexes []*IndexInfo `json:"indexes"`
 }
@@ -349,7 +357,7 @@ func (p *postIndexRequest) UnmarshalJSON(b []byte) error {
 	// m is an overflow map used to capture additional, unexpected keys.
 	m := make(map[string]interface{})
 	if err := json.Unmarshal(b, &m); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshalling unexpected values")
 	}
 
 	validIndexOptions := getValidOptions(IndexOptions{})
@@ -360,7 +368,7 @@ func (p *postIndexRequest) UnmarshalJSON(b []byte) error {
 	// Unmarshal expected values.
 	var _p _postIndexRequest
 	if err := json.Unmarshal(b, &_p); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshalling expected values")
 	}
 
 	p.Options = _p.Options
@@ -526,7 +534,7 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 	// m is an overflow map used to capture additional, unexpected keys.
 	m := make(map[string]interface{})
 	if err := json.Unmarshal(b, &m); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshaling unexpected keys")
 	}
 
 	validFrameOptions := getValidOptions(FrameOptions{})
@@ -538,7 +546,7 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 	// Unmarshal expected values.
 	var _p _postFrameRequest
 	if err := json.Unmarshal(b, &_p); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshalling expected keys")
 	}
 
 	p.Options = _p.Options
@@ -813,13 +821,13 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*QueryRequest, erro
 	// Slurp the body.
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "reading")
 	}
 
 	// Unmarshal into object.
 	var req internal.QueryRequest
 	if err := proto.Unmarshal(body, &req); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "unmarshalling")
 	}
 
 	return decodeQueryRequest(&req), nil
@@ -832,7 +840,7 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	// Parse query string.
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "reading")
 	}
 	query := string(buf)
 
@@ -877,9 +885,9 @@ func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, res
 // writeProtobufQueryResponse writes the response from the executor to w as protobuf.
 func (h *Handler) writeProtobufQueryResponse(w http.ResponseWriter, resp *QueryResponse) error {
 	if buf, err := proto.Marshal(encodeQueryResponse(resp)); err != nil {
-		return err
+		return errors.Wrap(err, "marshalling")
 	} else if _, err := w.Write(buf); err != nil {
-		return err
+		return errors.Wrap(err, "writing")
 	}
 	return nil
 }
@@ -1327,7 +1335,7 @@ func parseUint64Slice(s string) ([]uint64, error) {
 		// Parse number.
 		num, err := strconv.ParseUint(str, 10, 64)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "parsing int")
 		}
 		a = append(a, num)
 	}
@@ -1591,7 +1599,7 @@ func GetTimeStamp(data map[string]interface{}, timeField string) (int64, error) 
 
 	v, err := time.Parse(TimeFormat, timestamp)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(err, "parsing timestamp")
 	}
 
 	return v.Unix(), nil

@@ -20,6 +20,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 )
 
 // MemberSet represents an interface for Node membership and inter-node communication.
@@ -187,7 +188,7 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 	}
 	buf, err := proto.Marshal(m)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "marshalling")
 	}
 	return append([]byte{typ}, buf...), nil
 }
@@ -241,7 +242,7 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 	}
 
 	if err := proto.Unmarshal(buf, m); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "unmarshalling")
 	}
 	return m, nil
 }

@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pkg/errors"
 )
 
 // DefaultFrame is the frame used if one is not specified.
@@ -149,7 +149,7 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 // executeCall executes a call.
 func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
 	if err := e.validateCallArgs(c); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "validating args")
 	}
 	indexTag := fmt.Sprintf("index:%s", index)
 	// Special handling for mutation and top-n calls.
@@ -344,7 +344,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 				if columnID, ok, err := c.UintArg(columnLabel); ok && err == nil {
 					attrs, err := idx.ColumnAttrStore().Attrs(columnID)
 					if err != nil {
-						return nil, err
+						return nil, errors.Wrap(err, "getting column attrs")
 					}
 					bm.Attrs = attrs
 				} else if err != nil {
@@ -354,11 +354,11 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 					if fr := idx.Frame(frame); fr != nil {
 						rowID, _, err := c.UintArg(rowLabel)
 						if err != nil {
-							return nil, err
+							return nil, errors.Wrap(err, "getting row")
 						}
 						attrs, err := fr.RowAttrStore().Attrs(rowID)
 						if err != nil {
-							return nil, err
+							return nil, errors.Wrap(err, "getting row attrs")
 						}
 						bm.Attrs = attrs
 					}
@@ -400,7 +400,7 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 	if len(c.Children) == 1 {
 		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
 		if err != nil {
-			return ValCount{}, err
+			return ValCount{}, errors.Wrap(err, "executing bitmap call")
 		}
 		filter = bm
 	}
@@ -425,7 +425,7 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 
 	vsum, vcount, err := fragment.FieldSum(filter, field.BitDepth())
 	if err != nil {
-		return ValCount{}, err
+		return ValCount{}, errors.Wrap(err, "computing sum")
 	}
 	return ValCount{
 		Val:   int64(vsum) + (int64(vcount) * field.Min),
@@ -527,7 +527,7 @@ func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 	// Execute original query.
 	pairs, err := e.executeTopNSlices(ctx, index, c, slices, opt)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "finding top results")
 	}
 
 	// If this call is against specific ids, or we didn't get results,
@@ -544,7 +544,7 @@ func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 
 	trimmedList, err := e.executeTopNSlices(ctx, index, other, slices, opt)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "retrieving full counts")
 	}
 
 	if n != 0 && int(n) < len(trimmedList) {
@@ -883,7 +883,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 
 		predicates, err := cond.IntSliceValue()
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "getting condition value")
 		}
 
 		// Only support two integers for the between operation.
@@ -1573,7 +1573,7 @@ func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64,
 
 	// Start mapping across all primary owners.
 	if err := e.mapper(ctx, ch, nodes, index, slices, c, opt, mapFn, reduceFn); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "starting mapper")
 	}
 
 	// Iterate over all map responses and reduce.

@@ -75,13 +75,6 @@ func NewServer() *Server {
 	}
 	s.Server = httptest.NewServer(s.Handler.Handler)
 
-	// Update handler to use hostname.
-	uri, err := pilosa.NewURIFromAddress(s.Host())
-	if err != nil {
-		panic(err)
-	}
-	s.Handler.API.URI = *uri
-
 	// Handler test messages can no-op.
 	s.Handler.API.Broadcaster = pilosa.NopBroadcaster
 	// Create a default cluster on the handler

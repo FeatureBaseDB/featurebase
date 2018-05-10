@@ -307,16 +307,16 @@ func (c *Cluster) isCoordinator() bool {
 // nodes with its version of Cluster.Status.
 func (c *Cluster) SetCoordinator(n *Node) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	// Verify that the new Coordinator value matches
 	// this node.
 	if c.Node.ID != n.ID {
+		c.mu.Unlock()
 		return fmt.Errorf("coordinator node does not match this node")
 	}
 
 	// Update IsCoordinator on all nodes (locally).
 	_ = c.updateCoordinator(n)
-
+	c.mu.Unlock()
 	// Send the update coordinator message to all nodes.
 	err := c.Broadcaster.SendSync(
 		&internal.UpdateCoordinatorMessage{
@@ -721,7 +721,7 @@ func (c *Cluster) fragSources(to *Cluster, idx *Index) (map[string][]*internal.R
 	// Determine if a node is being added or removed.
 	action, diffNodeID, err := c.diff(to)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "diffing")
 	}
 
 	// Initialize the map with all the nodes in `to`.
@@ -905,7 +905,7 @@ func (c *Cluster) Open() error {
 
 	// Load topology file if it exists.
 	if err := c.loadTopology(); err != nil {
-		return fmt.Errorf("load topology: %v", err)
+		return errors.Wrap(err, "loading topology")
 	}
 
 	c.ID = c.Topology.ClusterID
@@ -1006,7 +1006,7 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 		if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
 			c.Logger.Printf("setStateAndBroadcast error: err=%s", err)
 		}
-		return err
+		return errors.Wrap(err, "setting state")
 	}
 
 	// j.Run() runs in a goroutine because in the case where the
@@ -1023,14 +1023,14 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 
 	// Make sure j.Run() didn't return an error.
 	if eg.Wait() != nil {
-		return err
+		return errors.Wrap(err, "running job")
 	}
 
 	c.Logger.Printf("received jobResult: %s", jobResult)
 	switch jobResult {
 	case ResizeJobStateDone:
 		if err := c.CompleteCurrentJob(ResizeJobStateDone); err != nil {
-			return err
+			return errors.Wrap(err, "completing finished job")
 		}
 		// Add/remove uri to/from the cluster.
 		if j.action == ResizeJobActionRemove {
@@ -1040,7 +1040,7 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 		}
 	case ResizeJobStateAborted:
 		if err := c.CompleteCurrentJob(ResizeJobStateAborted); err != nil {
-			return err
+			return errors.Wrap(err, "completing aborted job")
 		}
 	}
 	return nil
@@ -1055,7 +1055,7 @@ func (c *Cluster) setStateAndBroadcast(state string) error {
 
 func (c *Cluster) sendTo(node *Node, msg proto.Message) error {
 	if err := c.Broadcaster.SendTo(node, msg); err != nil {
-		return err
+		return errors.Wrap(err, "sending")
 	}
 	return nil
 }
@@ -1124,7 +1124,7 @@ func (c *Cluster) generateResizeJob(nodeAction nodeAction) (*ResizeJob, error) {
 
 	j, err := c.generateResizeJobByAction(nodeAction)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "generating job")
 	}
 	c.Logger.Printf("generated ResizeJob: %d", j.ID)
 
@@ -1171,7 +1171,7 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 	for _, idx := range c.Holder.Indexes() {
 		fragSources, err := c.fragSources(toCluster, idx)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "getting sources")
 		}
 
 		for id, sources := range fragSources {
@@ -1223,7 +1223,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 	// Make sure the cluster status on this node agrees with the Coordinator
 	// before attempting a resize.
 	if err := c.MergeClusterStatus(instr.ClusterStatus); err != nil {
-		return err
+		return errors.Wrap(err, "merging cluster status")
 	}
 
 	c.Logger.Printf("MergeClusterStatus done, start goroutine")
@@ -1248,7 +1248,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 			// Sync the schema received in the resize instruction.
 			c.Logger.Printf("Holder ApplySchema")
 			if err := c.Holder.ApplySchema(instr.Schema); err != nil {
-				return err
+				return errors.Wrap(err, "applying schema")
 			}
 
 			// Create a client for calling remote nodes.
@@ -1269,13 +1269,13 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				// Create view.
 				v, err := f.CreateViewIfNotExists(src.View)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "creating view")
 				}
 
 				// Create the local fragment.
 				frag, err := v.CreateFragmentIfNotExists(src.Slice)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "creating fragment")
 				}
 
 				// Stream slice from remote node.
@@ -1291,7 +1291,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 					if err == ErrFragmentNotFound {
 						return nil
 					}
-					return err
+					return errors.Wrap(err, "retrieving slice")
 				} else if rd == nil {
 					return fmt.Errorf("slice %v doesn't exist on host: %s", src.Slice, src.Node.URI)
 				}
@@ -1304,7 +1304,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 					}
 					return nil
 				}(); err != nil {
-					return err
+					return errors.Wrap(err, "copying remote slice")
 				}
 			}
 			return nil
@@ -1438,7 +1438,7 @@ func (j *ResizeJob) Run() error {
 	err := j.distributeResizeInstructions()
 	if err != nil {
 		j.result <- ResizeJobStateAborted
-		return err
+		return errors.Wrap(err, "distributing instructions")
 	}
 	return nil
 }
@@ -1475,7 +1475,7 @@ func (j *ResizeJob) distributeResizeInstructions() error {
 		}
 		j.Logger.Printf("send resize instructions: %v", instr)
 		if err := j.Broadcaster.SendTo(node, instr); err != nil {
-			return err
+			return errors.Wrap(err, "sending instruction")
 		}
 	}
 	return nil
@@ -1581,16 +1581,16 @@ func (c *Cluster) loadTopology() error {
 		c.Topology = NewTopology()
 		return nil
 	} else if err != nil {
-		return err
+		return errors.Wrap(err, "reading file")
 	}
 
 	var pb internal.Topology
 	if err := proto.Unmarshal(buf, &pb); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshalling")
 	}
 	top, err := decodeTopology(&pb)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "decoding")
 	}
 	c.Topology = top
 
@@ -1601,13 +1601,13 @@ func (c *Cluster) loadTopology() error {
 func (c *Cluster) saveTopology() error {
 
 	if err := os.MkdirAll(c.Path, 0777); err != nil {
-		return err
+		return errors.Wrap(err, "creating directory")
 	}
 
 	if buf, err := proto.Marshal(encodeTopology(c.Topology)); err != nil {
-		return err
+		return errors.Wrap(err, "marshalling")
 	} else if err := ioutil.WriteFile(filepath.Join(c.Path, ".topology"), buf, 0666); err != nil {
-		return err
+		return errors.Wrap(err, "writing file")
 	}
 	return nil
 }
@@ -1704,7 +1704,7 @@ func (c *Cluster) nodeJoin(node *Node) error {
 		}
 
 		if err := c.AddNode(node); err != nil {
-			return err
+			return errors.Wrap(err, "adding node for agreement")
 		}
 
 		// Only change to normal if there is no existing data. Otherwise,
@@ -1742,7 +1742,7 @@ func (c *Cluster) nodeJoin(node *Node) error {
 	// If the holder does not yet contain data, go ahead and add the node.
 	if ok, err := c.Holder.HasData(); !ok && err == nil {
 		if err := c.AddNode(node); err != nil {
-			return err
+			return errors.Wrap(err, "adding node")
 		}
 		return c.setStateAndBroadcast(ClusterStateNormal)
 	} else if err != nil {
@@ -1752,7 +1752,7 @@ func (c *Cluster) nodeJoin(node *Node) error {
 	// If the cluster has data, we need to change to RESIZING and
 	// kick off the resizing process.
 	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
-		return err
+		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{node, ResizeJobActionAdd}
 
@@ -1784,7 +1784,7 @@ func (c *Cluster) NodeLeave(node *Node) error {
 	_, err := c.generateResizeJobByAction(nodeAction{c.nodeByID(node.ID), ResizeJobActionRemove})
 
 	if err != nil {
-		return err
+		return errors.Wrap(err, "generating job")
 	}
 
 	return c.nodeLeave(node)
@@ -1802,7 +1802,7 @@ func (c *Cluster) nodeLeave(node *Node) error {
 	// If the holder does not yet contain data, go ahead and remove the node.
 	if ok, err := c.Holder.HasData(); !ok && err == nil {
 		if err := c.RemoveNode(n); err != nil {
-			return err
+			return errors.Wrap(err, "removing node")
 		}
 		return c.setStateAndBroadcast(ClusterStateNormal)
 	} else if err != nil {
@@ -1812,7 +1812,7 @@ func (c *Cluster) nodeLeave(node *Node) error {
 	// If the cluster has data then change state to RESIZING and
 	// kick off the resizing process.
 	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
-		return err
+		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{n, ResizeJobActionRemove}
 
@@ -1836,7 +1836,7 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 	// Add all nodes from the coordinator.
 	for _, node := range officialNodes {
 		if err := c.AddNode(node); err != nil {
-			return err
+			return errors.Wrap(err, "adding node")
 		}
 	}
 
@@ -1857,7 +1857,7 @@ func (c *Cluster) MergeClusterStatus(cs *internal.ClusterStatus) error {
 
 	for _, nodeID := range nodeIDsToRemove {
 		if err := c.RemoveNode(c.nodeByID(nodeID)); err != nil {
-			return err
+			return errors.Wrap(err, "removing node")
 		}
 	}
 
