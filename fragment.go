@@ -518,13 +518,13 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
 			if c, err := f.setBit(uint64(i), columnID); err != nil {
-				return changed, errors.Wrap(err, "setting")
+				return err
 			} else if c {
 				changed = true
 			}
 		} else {
 			if c, err := f.clearBit(uint64(i), columnID); err != nil {
-				return changed, errors.Wrap(err, "clearing")
+				return changed, err
 			} else if c {
 				changed = true
 			}
@@ -533,7 +533,7 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 
 	// Mark value as set.
 	if c, err := f.setBit(uint64(bitDepth), columnID); err != nil {
-		return changed, errors.Wrap(err, "marking")
+		return changed, errors.Wrap(err, "marking not-null")
 	} else if c {
 		changed = true
 	}
@@ -571,7 +571,7 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 	// Mark value as set.
 	p, err := f.pos(uint64(bitDepth), columnID)
 	if err != nil {
-		return changed, errors.Wrap(err, "marking")
+		return changed, errors.Wrap(err, "marking not-null")
 	}
 	if c, err := f.storage.Add(p); err != nil {
 		return changed, errors.Wrap(err, "adding to storage")
@@ -1540,7 +1540,7 @@ func (f *Fragment) flushCache() error {
 func (f *Fragment) WriteTo(w io.Writer) (n int64, err error) {
 	// Force cache flush.
 	if err := f.FlushCache(); err != nil {
-		return 0, errors.Wrap(err, "flushing")
+		return 0, errors.Wrap(err, "flushing cache")
 	}
 
 	// Write out data and cache to a tar archive.
