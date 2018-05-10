@@ -176,7 +176,7 @@ func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventRe
 	// options
 	for _, opt := range options {
 		if err := opt(g); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "executing option")
 		}
 	}
 
