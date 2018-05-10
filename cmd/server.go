@@ -15,18 +15,11 @@
 package cmd
 
 import (
-	"fmt"
 	"io"
-	"log"
-	"os"
-	"os/signal"
-	"runtime/pprof"
-	"syscall"
-	"time"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/ctl"
 	"github.com/pilosa/pilosa/server"
 )
@@ -43,55 +36,13 @@ func NewServeCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		Long: `pilosa server runs Pilosa.
 
 It will load existing data from the configured
-directory, and start listening client connections
+directory and start listening for client connections
 on the configured port.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logOutput, err := server.GetLogWriter(Server.Config.LogPath, stderr)
-			if err != nil {
-				return err
+			if err := Server.Start(); err != nil {
+				return errors.Wrap(err, "running server")
 			}
-			logger := log.New(logOutput, "", log.LstdFlags)
-			logger.Printf("Pilosa %s, build time %s\n", pilosa.Version, pilosa.BuildTime)
-
-			// Start CPU profiling.
-			if Server.CPUProfile != "" {
-				f, err := os.Create(Server.CPUProfile)
-				if err != nil {
-					return fmt.Errorf("create cpu profile: %v", err)
-				}
-				defer f.Close()
-
-				fmt.Fprintln(Server.Stderr, "Starting cpu profile")
-				pprof.StartCPUProfile(f)
-				time.AfterFunc(Server.CPUTime, func() {
-					fmt.Fprintln(Server.Stderr, "Stopping cpu profile")
-					pprof.StopCPUProfile()
-					f.Close()
-				})
-			}
-
-			// Execute the program.
-			if err := Server.Run(); err != nil {
-				return fmt.Errorf("error running server: %v", err)
-			}
-
-			// First SIGKILL causes server to shut down gracefully.
-			c := make(chan os.Signal, 2)
-			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-			select {
-			case sig := <-c:
-				logger.Printf("Received %s; gracefully shutting down...\n", sig.String())
-
-				// Second signal causes a hard shutdown.
-				go func() { <-c; os.Exit(1) }()
-
-				if err := Server.Close(); err != nil {
-					return err
-				}
-			case <-Server.Done:
-				logger.Printf("Server closed externally")
-			}
-			return nil
+			return errors.Wrap(Server.Wait(), "waiting on Server")
 		},
 	}
 

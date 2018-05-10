@@ -163,7 +163,7 @@ func TestFragment_SetFieldValue(t *testing.T) {
 			t.Fatal("expected change")
 		}
 
-		// Non-existant value.
+		// Non-existent value.
 		if value, exists, err := f.FieldValue(100, 11); err != nil {
 			t.Fatal(err)
 		} else if value != 0 {
@@ -252,6 +252,79 @@ func TestFragment_FieldSum(t *testing.T) {
 			t.Fatalf("unexpected count: %d", n)
 		} else if sum != 600 {
 			t.Fatalf("unexpected sum: %d", sum)
+		}
+	})
+}
+
+// Ensure a fragment can find the min and max of field values.
+func TestFragment_FieldMinMax(t *testing.T) {
+	const bitDepth = 16
+
+	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	defer f.Close()
+
+	// Set values.
+	if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetFieldValue(5000, bitDepth, 2818); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetFieldValue(6000, bitDepth, 2817); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetFieldValue(7000, bitDepth, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("Min", func(t *testing.T) {
+		tests := []struct {
+			filter *pilosa.Bitmap
+			exp    uint64
+			cnt    uint64
+		}{
+			{filter: nil, exp: 0, cnt: 1},
+			{filter: pilosa.NewBitmap(2000, 4000, 5000), exp: 300, cnt: 2},
+			{filter: pilosa.NewBitmap(2000, 4000), exp: 300, cnt: 2},
+			{filter: pilosa.NewBitmap(1), exp: 0, cnt: 0},
+			{filter: pilosa.NewBitmap(1000), exp: 382, cnt: 1},
+			{filter: pilosa.NewBitmap(7000), exp: 0, cnt: 1},
+		}
+		for i, test := range tests {
+			if min, cnt, err := f.FieldMin(test.filter, bitDepth); err != nil {
+				t.Fatal(err)
+			} else if min != test.exp {
+				t.Errorf("test %d expected min: %v, but got: %v", i, test.exp, min)
+			} else if cnt != test.cnt {
+				t.Errorf("test %d expected cnt: %v, but got: %v", i, test.cnt, cnt)
+			}
+		}
+	})
+
+	t.Run("Max", func(t *testing.T) {
+		tests := []struct {
+			filter *pilosa.Bitmap
+			exp    uint64
+			cnt    uint64
+		}{
+			{filter: nil, exp: 2818, cnt: 2},
+			{filter: pilosa.NewBitmap(2000, 4000, 5000), exp: 2818, cnt: 1},
+			{filter: pilosa.NewBitmap(2000, 4000), exp: 300, cnt: 2},
+			{filter: pilosa.NewBitmap(1), exp: 0, cnt: 0},
+			{filter: pilosa.NewBitmap(1000), exp: 382, cnt: 1},
+			{filter: pilosa.NewBitmap(7000), exp: 0, cnt: 1},
+		}
+		for i, test := range tests {
+			if max, cnt, err := f.FieldMax(test.filter, bitDepth); err != nil {
+				t.Fatal(err)
+			} else if max != test.exp {
+				t.Errorf("test %d expected max: %v, but got: %v", i, test.exp, max)
+			} else if cnt != test.cnt {
+				t.Errorf("test %d expected cnt: %v, but got: %v", i, test.cnt, cnt)
+			}
 		}
 	})
 }
@@ -702,7 +775,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 		Fragment:     frag,
 		RowAttrStore: test.MustOpenAttrStore(),
 	}
-	f.Fragment.RowAttrStore = f.RowAttrStore.AttrStore
+	f.Fragment.RowAttrStore = f.RowAttrStore
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
@@ -1073,27 +1146,5 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 		t.Fatal(err)
 	} else if n := f.Row(1000).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
-	}
-}
-
-func BenchmarkFragment_Snapshot(b *testing.B) {
-	if *FragmentPath == "" {
-		b.Skip("no fragment specified")
-	}
-
-	b.ReportAllocs()
-	// Open the fragment specified by the path.
-	f := pilosa.NewFragment(*FragmentPath, "i", "f", pilosa.ViewStandard, 0)
-	if err := f.Open(); err != nil {
-		b.Fatal(err)
-	}
-	defer f.Close()
-	b.ResetTimer()
-	// Reset timer and execute benchmark.
-	for i := 0; i < b.N; i++ {
-		err := f.Snapshot()
-		if err != nil {
-			b.Fatalf("unexpected count (reopen): %s", err)
-		}
 	}
 }

@@ -12,36 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package diagnostics_test
+package pilosa
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/pilosa/pilosa/diagnostics"
 )
 
 func TestDiagnosticsClient(t *testing.T) {
 	// Mock server.
 	server := httptest.NewServer(nil)
-	defer server.Close()
 
 	// Create a new client.
-	d := diagnostics.New(server.URL)
-	d.SetLogger(ioutil.Discard)
-	d.Open()
-	defer d.Close()
+	d := NewDiagnosticsCollector(server.URL)
 
 	d.Set("gg", 10)
 	d.Set("ss", "ss")
 
-	data, err := d.Encode()
+	data, err := d.encode()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +51,7 @@ func TestDiagnosticsClient(t *testing.T) {
 
 	// Test the metrics after a flush.
 	d.Flush()
-	data, err = d.Encode()
+	data, err = d.encode()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +67,7 @@ func TestDiagnosticsClient(t *testing.T) {
 
 func TestDiagnosticsVersion_Parse(t *testing.T) {
 	version := "0.1.1"
-	vs := diagnostics.VersionSegments(version)
+	vs := versionSegments(version)
 
 	output := []int{0, 1, 1}
 	if !reflect.DeepEqual(vs, output) {
@@ -83,35 +76,33 @@ func TestDiagnosticsVersion_Parse(t *testing.T) {
 }
 
 func TestDiagnosticsVersion_Compare(t *testing.T) {
-	d := diagnostics.New("localhost:10101")
-	d.Open()
-	defer d.Close()
+	d := NewDiagnosticsCollector("localhost:10101")
 
 	version := "v0.1.1"
 	d.SetVersion(version)
 
-	err := d.CompareVersion("v1.7.0")
+	err := d.compareVersion("v1.7.0")
 	if !strings.Contains(err.Error(), "A newer version") {
 		t.Fatalf("Expected a newer version is available, actual error: %s", err)
 	}
-	err = d.CompareVersion("1.7.0")
+	err = d.compareVersion("1.7.0")
 	if !strings.Contains(err.Error(), "A newer version") {
 		t.Fatalf("Expected a newer version is available, actual error: %s", err)
 	}
-	err = d.CompareVersion("0.7.0")
+	err = d.compareVersion("0.7.0")
 	if !strings.Contains(err.Error(), "The latest Minor release is") {
 		t.Fatalf("Expected Minor Version Missmatch, actual error: %s", err)
 	}
-	err = d.CompareVersion("0.1.2")
+	err = d.compareVersion("0.1.2")
 	if !strings.Contains(err.Error(), "There is a new patch release of Pilosa") {
 		t.Fatalf("Expected Patch Version Missmatch, actual error: %s", err)
 	}
-	err = d.CompareVersion("0.1.1")
+	err = d.compareVersion("0.1.1")
 	if err != nil {
 		t.Fatalf("Versions should match")
 	}
 	d.SetVersion("v1.7.0")
-	err = d.CompareVersion("0.7.2")
+	err = d.compareVersion("0.7.2")
 	if err != nil {
 		t.Fatalf("Local version is greater")
 	}
@@ -125,21 +116,15 @@ func TestDiagnosticsVersion_Check(t *testing.T) {
 			Version: "1.1.1",
 		})
 	}))
-	defer server.Close()
 
 	// Create a new client.
-	d := diagnostics.New("localhost:10101")
-	defer d.Close()
+	d := NewDiagnosticsCollector("localhost:10101")
 
 	version := "0.1.1"
 	d.SetVersion(version)
 	d.VersionURL = server.URL
 
 	d.CheckVersion()
-}
-
-type versionResponse struct {
-	Version string `json:"version"`
 }
 
 func compareJSON(a, b []byte) (bool, error) {
@@ -156,12 +141,9 @@ func compareJSON(a, b []byte) (bool, error) {
 func BenchmarkDiagnostics(b *testing.B) {
 	// Mock server.
 	server := httptest.NewServer(nil)
-	defer server.Close()
 
 	// Create a new client.
-	d := diagnostics.New(server.URL)
-	d.SetLogger(ioutil.Discard)
-	defer d.Close()
+	d := NewDiagnosticsCollector(server.URL)
 
 	prev := runtime.GOMAXPROCS(4)
 	defer runtime.GOMAXPROCS(prev)

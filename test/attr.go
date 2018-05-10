@@ -22,15 +22,16 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/boltdb"
 )
 
 // AttrStore represents a test wrapper for pilosa.AttrStore.
 type AttrStore struct {
-	*pilosa.AttrStore
+	pilosa.AttrStore
 }
 
 // NewAttrStore returns a new instance of AttrStore.
-func NewAttrStore() *AttrStore {
+func NewAttrStore(string) pilosa.AttrStore {
 	f, err := ioutil.TempFile("", "pilosa-attr-")
 	if err != nil {
 		panic(err)
@@ -38,7 +39,7 @@ func NewAttrStore() *AttrStore {
 	f.Close()
 	os.Remove(f.Name())
 
-	return &AttrStore{AttrStore: pilosa.NewAttrStore(f.Name())}
+	return &AttrStore{boltdb.NewAttrStore(f.Name())}
 }
 
 func BenchmarkAttrStore_Duplicate(b *testing.B) {
@@ -74,8 +75,8 @@ func BenchmarkAttrStore_Duplicate(b *testing.B) {
 }
 
 // MustOpenAttrStore returns a new, opened attribute store at a temporary path. Panic on error.
-func MustOpenAttrStore() *AttrStore {
-	s := NewAttrStore()
+func MustOpenAttrStore() pilosa.AttrStore {
+	s := NewAttrStore("")
 	if err := s.Open(); err != nil {
 		panic(err)
 	}

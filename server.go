@@ -15,35 +15,30 @@
 package pilosa
 
 import (
-	"crypto/tls"
-	"errors"
+	"context"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/CAFxX/gcnotifier"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/diagnostics"
 	"github.com/pilosa/pilosa/internal"
-	"golang.org/x/net/context"
+	"github.com/pkg/errors"
+
 	"golang.org/x/sync/errgroup"
 )
 
 // Default server settings.
 const (
-	DefaultAntiEntropyInterval = 10 * time.Minute
-	DefaultPollingInterval     = 60 * time.Second
-	DefaultDiagnosticServer    = "https://diagnostics.pilosa.com/v0/diagnostics"
+	DefaultDiagnosticServer = "https://diagnostics.pilosa.com/v0/diagnostics"
 )
 
 // Ensure Server implements interfaces.
@@ -53,179 +48,299 @@ var _ StatusHandler = &Server{}
 
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
-	ln net.Listener
-
 	// Close management.
 	wg      sync.WaitGroup
 	closing chan struct{}
 
-	// Data storage and HTTP interface.
-	Holder            *Holder
-	Handler           *Handler
+	// Internal
+	Holder      *Holder
+	Cluster     *Cluster
+	diagnostics *DiagnosticsCollector
+	executor    *Executor
+
+	// External
+	handler           *Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
 	Gossiper          Gossiper
-	RemoteClient      *http.Client
+	remoteClient      *http.Client
+	systemInfo        SystemInfo
+	gcNotifier        GCNotifier
+	NewAttrStore      func(string) AttrStore
+	logger            Logger
+	ln                net.Listener
 
-	// Cluster configuration.
-	// Host is replaced with actual host after opening if port is ":0".
-	Network     string
-	URI         *URI
-	Cluster     *Cluster
-	diagnostics *diagnostics.Diagnostics
-	ClusterID   string
-
-	// Background monitoring intervals.
-	AntiEntropyInterval time.Duration
-	PollingInterval     time.Duration
-	MetricInterval      time.Duration
-	DiagnosticInterval  time.Duration
-
-	// TLS configuration
-	TLS *tls.Config
-
-	// Misc options.
-	MaxWritesPerRequest int
-
-	LogOutput io.Writer
-	logger    *log.Logger
+	NodeID              string
+	URI                 URI
+	antiEntropyInterval time.Duration
+	metricInterval      time.Duration
+	diagnosticInterval  time.Duration
+	maxWritesPerRequest int
 
 	defaultClient InternalClient
+	dataDir       string
+}
+
+// ServerOption is a functional option type for pilosa.Server
+type ServerOption func(s *Server) error
+
+func OptServerLogger(l Logger) ServerOption {
+	return func(s *Server) error {
+		s.logger = l
+		return nil
+	}
+}
+
+func OptServerReplicaN(n int) ServerOption {
+	return func(s *Server) error {
+		s.Cluster.ReplicaN = n
+		return nil
+	}
+}
+
+func OptServerDataDir(dir string) ServerOption {
+	return func(s *Server) error {
+		s.dataDir = dir
+		return nil
+	}
+}
+
+func OptServerAttrStoreFunc(af func(string) AttrStore) ServerOption {
+	return func(s *Server) error {
+		s.NewAttrStore = af
+		s.Holder.NewAttrStore = af
+		return nil
+	}
+}
+
+func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.antiEntropyInterval = interval
+		return nil
+	}
+}
+
+func OptServerLongQueryTime(dur time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.Cluster.LongQueryTime = dur
+		return nil
+	}
+}
+
+func OptServerHandler(h *Handler) ServerOption {
+	return func(s *Server) error {
+		s.handler = h
+		return nil
+	}
+}
+
+func OptServerMaxWritesPerRequest(n int) ServerOption {
+	return func(s *Server) error {
+		s.maxWritesPerRequest = n
+		return nil
+	}
+}
+
+func OptServerMetricInterval(dur time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.metricInterval = dur
+		return nil
+	}
+}
+
+func OptServerSystemInfo(si SystemInfo) ServerOption {
+	return func(s *Server) error {
+		s.systemInfo = si
+		return nil
+	}
+}
+
+func OptServerGCNotifier(gcn GCNotifier) ServerOption {
+	return func(s *Server) error {
+		s.gcNotifier = gcn
+		return nil
+	}
+}
+
+func OptServerRemoteClient(c *http.Client) ServerOption {
+	return func(s *Server) error {
+		s.executor = NewExecutor(c)
+		s.remoteClient = c
+		s.defaultClient = NewInternalHTTPClientFromURI(nil, c)
+		s.Cluster.RemoteClient = c
+		return nil
+	}
+}
+
+func OptServerStatsClient(sc StatsClient) ServerOption {
+	return func(s *Server) error {
+		s.Holder.Stats = sc
+		return nil
+	}
+}
+
+func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.diagnosticInterval = dur
+		return nil
+	}
+}
+
+func OptServerListener(ln net.Listener) ServerOption {
+	return func(s *Server) error {
+		s.ln = ln
+
+		return nil
+	}
+}
+
+func OptServerURI(uri *URI) ServerOption {
+	return func(s *Server) error {
+		s.URI = *uri
+		return nil
+	}
 }
 
 // NewServer returns a new instance of Server.
-func NewServer() *Server {
+func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
-		closing: make(chan struct{}),
-
+		closing:           make(chan struct{}),
+		Cluster:           NewCluster(),
 		Holder:            NewHolder(),
-		Handler:           NewHandler(),
+		handler:           NewHandler(),
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
-		diagnostics:       diagnostics.New(DefaultDiagnosticServer),
+		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
+		systemInfo:        NewNopSystemInfo(),
 
-		Network: "tcp",
+		gcNotifier: NopGCNotifier,
 
-		AntiEntropyInterval: DefaultAntiEntropyInterval,
-		PollingInterval:     DefaultPollingInterval,
-		MetricInterval:      0,
-		DiagnosticInterval:  0,
+		NewAttrStore: NewNopAttrStore,
 
-		LogOutput: os.Stderr,
+		antiEntropyInterval: time.Minute * 10,
+		metricInterval:      0,
+		diagnosticInterval:  0,
+
+		logger: NopLogger,
 	}
-	s.logger = log.New(s.LogOutput, "", log.LstdFlags)
+	s.diagnostics.server = s
 
-	s.Handler.Holder = s.Holder
-	return s
+	for _, opt := range opts {
+		err := opt(s)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
+	}
+
+	path, err := expandDirName(s.dataDir)
+	if err != nil {
+		return nil, err
+	}
+
+	s.Holder.Path = path
+	s.Holder.Logger = s.logger
+	s.Holder.Stats.SetLogger(s.logger)
+
+	s.Cluster.Path = path
+	s.Cluster.Logger = s.logger
+	s.Cluster.Holder = s.Holder
+
+	// update URI port with actual listener port. TODO this should probably be done outside of here.
+	if s.URI.Port() == 0 {
+		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
+	}
+
+	s.NodeID = s.LoadNodeID()
+	// Set Cluster Node.
+	node := &Node{
+		ID:            s.NodeID,
+		URI:           s.URI,
+		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
+	}
+	s.Cluster.Node = node
+	s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
+
+	s.executor.Holder = s.Holder
+	s.executor.Node = node
+	s.executor.Cluster = s.Cluster
+	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
+	s.handler.API.Executor = s.executor
+
+	return s, nil
 }
 
 // Open opens and initializes the server.
 func (s *Server) Open() error {
-	var ln net.Listener
-	var err error
-
-	// If bind URI has the https scheme, enable TLS
-	if s.URI.Scheme() == "https" && s.TLS != nil {
-		ln, err = tls.Listen("tcp", s.URI.HostPort(), s.TLS)
-		if err != nil {
-			return err
-		}
-	} else if s.URI.Scheme() == "http" {
-		// Open HTTP listener to determine port (if specified as :0).
-		ln, err = net.Listen(s.Network, s.URI.HostPort())
-		if err != nil {
-			return fmt.Errorf("net.Listen: %v", err)
-		}
-	} else {
-		return fmt.Errorf("unsupported scheme: %s", s.URI.Scheme())
+	s.logger.Printf("open server")
+	// s.ln can be configured prior to Open() via s.OpenListener().
+	if s.ln == nil {
+		return errors.New("Must pass a listener option to NewServer")
 	}
 
-	s.ln = ln
-
-	if s.URI.Port() == 0 {
-		// If the port is 0, it is set automatically.
-		// Find out automatically set port and update the host.
-		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
+	// Log startup
+	err := s.Holder.logStartup()
+	if err != nil {
+		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
-	// Create local node if no cluster is specified.
-	if len(s.Cluster.Nodes) == 0 {
-		s.Cluster.Nodes = []*Node{
-			{Scheme: s.URI.Scheme(), Host: s.URI.HostPort()},
-		}
-	}
+	// Get or create NodeID.
 
-	for i, n := range s.Cluster.Nodes {
-		if s.Cluster.NodeByHost(n.Host) != nil {
-			s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%d", i))
-		}
-	}
-
-	// Open holder.
-	s.Holder.LogOutput = s.LogOutput
-	if err := s.Holder.Open(); err != nil {
-		return fmt.Errorf("opening Holder: %v", err)
-	}
-
-	if err := s.BroadcastReceiver.Start(s); err != nil {
-		return fmt.Errorf("starting BroadcastReceiver: %v", err)
-	}
-
-	// Open NodeSet communication
-	if err := s.Cluster.NodeSet.Open(); err != nil {
-		return fmt.Errorf("opening NodeSet: %v", err)
-	}
+	// Append the NodeID tag to stats.
 
 	// Create default HTTP client
-	s.createDefaultClient(s.RemoteClient)
 
 	// Create executor for executing queries.
-	e := NewExecutor(s.RemoteClient)
-	e.Holder = s.Holder
-	e.Scheme = s.URI.Scheme()
-	e.Host = s.URI.HostPort()
-	e.Cluster = s.Cluster
-	e.MaxWritesPerRequest = s.MaxWritesPerRequest
-	s.Cluster.MaxWritesPerRequest = s.MaxWritesPerRequest
+
+	// Cluster settings.
+	s.Cluster.Broadcaster = s.Broadcaster
+	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
 
 	// Initialize HTTP handler.
-	s.Handler.Broadcaster = s.Broadcaster
-	s.Handler.BroadcastHandler = s
-	s.Handler.StatusHandler = s
-	s.Handler.URI = s.URI
-	s.Handler.Cluster = s.Cluster
-	s.Handler.Executor = e
-	s.Handler.LogOutput = s.LogOutput
+	s.handler.API.Holder = s.Holder
+	s.handler.API.Broadcaster = s.Broadcaster
+	s.handler.API.BroadcastHandler = s
+	s.handler.API.StatusHandler = s
+	s.handler.API.Cluster = s.Cluster
 
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster
 
 	// Serve HTTP.
 	go func() {
-		server := &http.Server{Handler: s.Handler}
-		go func() {
-			<-s.closing
-			server.Close()
-		}()
-		err := server.Serve(ln)
-		if err != nil && err.Error() != "http: Server closed" {
-			s.Logger().Printf("HTTP handler terminated with error: %s\n", err)
+		err := http.Serve(s.ln, s.handler)
+		if err != nil {
+			s.logger.Printf("HTTP handler terminated with error: %s\n", err)
 		}
 	}()
 
-	// load local ID
-	if err := s.Holder.loadLocalID(); err != nil {
-		s.Logger().Println(err)
+	// Start the BroadcastReceiver.
+	if err := s.BroadcastReceiver.Start(s); err != nil {
+		return fmt.Errorf("starting BroadcastReceiver: %v", err)
 	}
 
-	if err := s.loadClusterID(); err != nil {
-		s.Logger().Println(err)
+	// Open Cluster management.
+	if err := s.Cluster.Open(); err != nil {
+		return fmt.Errorf("opening Cluster: %v", err)
 	}
+
+	// Open holder.
+	if err := s.Holder.Open(); err != nil {
+		return fmt.Errorf("opening Holder: %v", err)
+	}
+	if err := s.Cluster.SetNodeState(NodeStateReady); err != nil {
+		return fmt.Errorf("setting nodeState: %v", err)
+	}
+
+	// Listen for joining nodes.
+	// This needs to start after the Holder has opened so that nodes can join
+	// the cluster without waiting for data to load on the coordinator. Before
+	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
+	// buffered channel.
+	s.Cluster.ListenForJoins()
 
 	// Start background monitoring.
-	s.wg.Add(4)
+	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
-	go func() { defer s.wg.Done(); s.monitorMaxSlices() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
 	go func() { defer s.wg.Done(); s.monitorDiagnostics() }()
 
@@ -241,11 +356,28 @@ func (s *Server) Close() error {
 	if s.ln != nil {
 		s.ln.Close()
 	}
+	if s.Cluster != nil {
+		s.Cluster.Close()
+	}
 	if s.Holder != nil {
 		s.Holder.Close()
 	}
 
 	return nil
+}
+
+// LoadNodeID gets NodeID from disk, or creates a new value.
+// If server.NodeID is already set, a new ID is not created.
+func (s *Server) LoadNodeID() string {
+	if s.NodeID != "" {
+		return s.NodeID
+	}
+	nodeID, err := s.Holder.loadNodeID()
+	if err != nil {
+		s.logger.Printf("loading NodeID: %v", err)
+		return s.NodeID
+	}
+	return nodeID
 }
 
 // Addr returns the address of the listener.
@@ -255,34 +387,12 @@ func (s *Server) Addr() net.Addr {
 	}
 	return s.ln.Addr()
 }
-func GetHTTPClient(t *tls.Config) *http.Client {
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          1000,
-		MaxIdleConnsPerHost:   200,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-	if t != nil {
-		transport.TLSClientConfig = t
-	}
-	return &http.Client{Transport: transport}
-}
-
-// Logger returns a logger that writes to LogOutput
-func (s *Server) Logger() *log.Logger { return s.logger }
 
 func (s *Server) monitorAntiEntropy() {
-	ticker := time.NewTicker(s.AntiEntropyInterval)
+	ticker := time.NewTicker(s.antiEntropyInterval)
 	defer ticker.Stop()
 
-	s.Logger().Printf("holder sync monitor initializing (%s interval)", s.AntiEntropyInterval)
+	s.logger.Printf("holder sync monitor initializing (%s interval)", s.antiEntropyInterval)
 
 	for {
 		// Wait for tick or a close.
@@ -293,65 +403,27 @@ func (s *Server) monitorAntiEntropy() {
 			s.Holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 		t := time.Now()
-		s.Logger().Printf("holder sync beginning")
+		s.logger.Printf("holder sync beginning")
 
 		// Initialize syncer with local holder and remote client.
 		var syncer HolderSyncer
 		syncer.Holder = s.Holder
-		syncer.URI = s.URI
+		syncer.Node = s.Cluster.Node
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
-		syncer.RemoteClient = s.RemoteClient
+		syncer.RemoteClient = s.remoteClient
 		syncer.Stats = s.Holder.Stats.WithTags("HolderSyncer")
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {
-			s.Logger().Printf("holder sync error: err=%s", err)
+			s.logger.Printf("holder sync error: err=%s", err)
 			continue
 		}
 
 		// Record successful sync in log.
-		s.Logger().Printf("holder sync complete")
+		s.logger.Printf("holder sync complete")
 		dif := time.Since(t)
 		s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
-	}
-}
-
-// monitorMaxSlices periodically pulls the highest slice from each node in the cluster.
-func (s *Server) monitorMaxSlices() {
-	// Ignore if only one node in the cluster.
-	if len(s.Cluster.Nodes) <= 1 {
-		return
-	}
-
-	ticker := time.NewTicker(s.PollingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.closing:
-			return
-		case <-ticker.C:
-		}
-
-		oldmaxslices := s.Holder.MaxSlices()
-		for _, node := range s.Cluster.Nodes {
-			if s.URI.HostPort() != node.Host {
-				maxSlices, _ := s.checkMaxSlices(node.Scheme, node.Host)
-				for index, newmax := range maxSlices {
-					// if we don't know about an index locally, log an error because
-					// indexes should be created and synced prior to slice creation
-					if localIndex := s.Holder.Index(index); localIndex != nil {
-						if newmax > oldmaxslices[index] {
-							oldmaxslices[index] = newmax
-							localIndex.SetRemoteMaxSlice(newmax)
-						}
-					} else {
-						s.Logger().Printf("Local Index not found: %s", index)
-					}
-				}
-			}
-		}
 	}
 }
 
@@ -369,10 +441,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			idx.SetRemoteMaxSlice(obj.Slice)
 		}
 	case *internal.CreateIndexMessage:
-		opt := IndexOptions{
-			ColumnLabel: obj.Meta.ColumnLabel,
-			TimeQuantum: TimeQuantum(obj.Meta.TimeQuantum),
-		}
+		opt := IndexOptions{}
 		_, err := s.Holder.CreateIndex(obj.Index, opt)
 		if err != nil {
 			return err
@@ -386,22 +455,25 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		opt := FrameOptions{
-			RowLabel:       obj.Meta.RowLabel,
-			InverseEnabled: obj.Meta.InverseEnabled,
-			RangeEnabled:   obj.Meta.RangeEnabled,
-			CacheType:      obj.Meta.CacheType,
-			CacheSize:      obj.Meta.CacheSize,
-			TimeQuantum:    TimeQuantum(obj.Meta.TimeQuantum),
-			Fields:         decodeFields(obj.Meta.Fields),
-		}
-		_, err := idx.CreateFrame(obj.Frame, opt)
+		opt := decodeFrameOptions(obj.Meta)
+		_, err := idx.CreateFrame(obj.Frame, *opt)
 		if err != nil {
 			return err
 		}
 	case *internal.DeleteFrameMessage:
 		idx := s.Holder.Index(obj.Index)
 		if err := idx.DeleteFrame(obj.Frame); err != nil {
+			return err
+		}
+	case *internal.CreateFieldMessage:
+		f := s.Holder.Frame(obj.Index, obj.Frame)
+		field := decodeField(obj.Field)
+		if err := f.CreateField(field); err != nil {
+			return err
+		}
+	case *internal.DeleteFieldMessage:
+		f := s.Holder.Frame(obj.Index, obj.Frame)
+		if err := f.DeleteField(obj.Field); err != nil {
 			return err
 		}
 	case *internal.CreateInputDefinitionMessage:
@@ -416,6 +488,15 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
+	case *internal.CreateViewMessage:
+		f := s.Holder.Frame(obj.Index, obj.Frame)
+		if f == nil {
+			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
+		}
+		_, _, err := f.createViewIfNotExistsBase(obj.View)
+		if err != nil {
+			return err
+		}
 	case *internal.DeleteViewMessage:
 		f := s.Holder.Frame(obj.Index, obj.Frame)
 		if f == nil {
@@ -425,7 +506,36 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
+	case *internal.ClusterStatus:
+		err := s.Cluster.MergeClusterStatus(obj)
+		if err != nil {
+			return err
+		}
+	case *internal.ResizeInstruction:
+		err := s.Cluster.FollowResizeInstruction(obj)
+		if err != nil {
+			return err
+		}
+	case *internal.ResizeInstructionComplete:
+		err := s.Cluster.MarkResizeInstructionComplete(obj)
+		if err != nil {
+			return err
+		}
+	case *internal.SetCoordinatorMessage:
+		s.Cluster.SetCoordinator(DecodeNode(obj.New))
+	case *internal.UpdateCoordinatorMessage:
+		s.Cluster.UpdateCoordinator(DecodeNode(obj.New))
+	case *internal.NodeStateMessage:
+		err := s.Cluster.ReceiveNodeState(obj.NodeID, obj.State)
+		if err != nil {
+			return err
+		}
+	case *internal.RecalculateCaches:
+		s.Holder.RecalculateCaches()
+	case *internal.NodeEventMessage:
+		s.Cluster.ReceiveEvent(DecodeNodeEvent(obj))
 	}
+
 	return nil
 }
 
@@ -433,19 +543,15 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 func (s *Server) SendSync(pb proto.Message) error {
 	var eg errgroup.Group
 	for _, node := range s.Cluster.Nodes {
-		uri, err := node.URI()
-		if err != nil {
-			return err
-		}
-
+		node := node
+		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
-		if *s.URI == *uri {
+		if s.URI == node.URI {
 			continue
 		}
 
-		ctx := context.WithValue(context.Background(), "uri", uri)
 		eg.Go(func() error {
-			return s.defaultClient.SendMessage(ctx, pb)
+			return s.defaultClient.SendMessage(context.Background(), &node.URI, pb)
 		})
 	}
 
@@ -457,153 +563,147 @@ func (s *Server) SendAsync(pb proto.Message) error {
 	return s.Gossiper.SendAsync(pb)
 }
 
-// LocalStatus returns the state of the local node as well as the
-// holder (indexes/frames) according to the local node.
-// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
+// SendTo represents an implementation of Broadcaster.
+func (s *Server) SendTo(to *Node, pb proto.Message) error {
+	s.logger.Printf("SendTo: %s", to.URI)
+	return s.defaultClient.SendMessage(context.Background(), &to.URI, pb)
+}
+
 // Server implements StatusHandler.
+// LocalStatus is used to periodically sync information
+// between nodes. Under normal conditions, nodes should
+// remain in sync through Broadcast messages. For cases
+// where a node fails to receive a Broadcast message, or
+// when a new (empty) node needs to get in sync with the
+// rest of the cluster, two things are shared via gossip:
+// - MaxSlice/MaxInverseSlice by Index
+// - Schema
+// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 func (s *Server) LocalStatus() (proto.Message, error) {
+	if s.Cluster == nil {
+		return nil, errors.New("Server.Cluster is nil")
+	}
 	if s.Holder == nil {
 		return nil, errors.New("Server.Holder is nil")
 	}
 
 	ns := internal.NodeStatus{
-		Scheme:  s.URI.Scheme(),
-		Host:    s.URI.HostPort(),
-		State:   NodeStateUp,
-		Indexes: EncodeIndexes(s.Holder.Indexes()),
-	}
-
-	// Append Slice list per this Node's indexes
-	for _, index := range ns.Indexes {
-		index.Slices = s.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.URI.HostPort())
+		Node:      EncodeNode(s.Cluster.Node),
+		MaxSlices: s.Holder.EncodeMaxSlices(),
+		Schema:    s.Holder.EncodeSchema(),
 	}
 
 	return &ns, nil
 }
 
-// ClusterStatus returns the NodeState for all nodes in the cluster.
+// ClusterStatus returns the ClusterState and NodeSet for the cluster.
 func (s *Server) ClusterStatus() (proto.Message, error) {
-	// Update local Node.state.
-	ns, err := s.LocalStatus()
-	if err != nil {
-		return nil, err
-	}
-	node := s.Cluster.NodeByHost(s.URI.HostPort())
-	node.SetStatus(ns.(*internal.NodeStatus))
-
-	// Update NodeState for all nodes.
-	for host, nodeState := range s.Cluster.NodeStates() {
-		// In a default configuration (or single-node) where a StaticNodeSet is used
-		// then all nodes are marked as DOWN. At the very least, we should consider
-		// the local node as UP.
-		// TODO: we should be able to remove this check if/when cluster.Nodes and
-		// cluster.NodeSet are unified.
-		if host == s.URI.HostPort() {
-			nodeState = NodeStateUp
-		}
-		node := s.Cluster.NodeByHost(host)
-		node.SetState(nodeState)
-	}
-
 	return s.Cluster.Status(), nil
 }
 
-// HandleRemoteStatus receives incoming NodeState from remote nodes.
+// HandleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) HandleRemoteStatus(pb proto.Message) error {
-	return s.mergeRemoteStatus(pb.(*internal.NodeStatus))
+	// Ignore NodeStatus messages until the cluster is in a Normal state.
+	if s.Cluster.State() != ClusterStateNormal {
+		return nil
+	}
+
+	go func() {
+		// Make sure the holder has opened.
+		<-s.Holder.opened
+
+		err := s.mergeRemoteStatus(pb.(*internal.NodeStatus))
+		if err != nil {
+			s.logger.Printf("merge remote status: %s", err)
+		}
+	}()
+
+	return nil
 }
 
 func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
-	// Update Node.state.
-	node := s.Cluster.NodeByHost(ns.Host)
-	node.SetStatus(ns)
+	// Ignore status updates from self.
+	if s.NodeID == DecodeNode(ns.Node).ID {
+		return nil
+	}
 
-	// Create indexes that don't exist.
-	for _, index := range ns.Indexes {
-		opt := IndexOptions{
-			ColumnLabel: index.Meta.ColumnLabel,
-			TimeQuantum: TimeQuantum(index.Meta.TimeQuantum),
+	// Sync schema.
+	if err := s.Holder.ApplySchema(ns.Schema); err != nil {
+		return err
+	}
+
+	// Sync maxSlices (standard).
+	oldmaxslices := s.Holder.MaxSlices()
+	for index, newMax := range ns.MaxSlices.Standard {
+		localIndex := s.Holder.Index(index)
+		// if we don't know about an index locally, log an error because
+		// indexes should be created and synced prior to slice creation
+		if localIndex == nil {
+			s.logger.Printf("Local Index not found: %s", index)
+			continue
 		}
-		idx, err := s.Holder.CreateIndexIfNotExists(index.Name, opt)
-		if err != nil {
-			return err
+		if newMax > oldmaxslices[index] {
+			oldmaxslices[index] = newMax
+			localIndex.SetRemoteMaxSlice(newMax)
 		}
-		// Create frames that don't exist.
-		for _, f := range index.Frames {
-			opt := FrameOptions{
-				RowLabel:    f.Meta.RowLabel,
-				TimeQuantum: TimeQuantum(f.Meta.TimeQuantum),
-				CacheSize:   f.Meta.CacheSize,
-			}
-			_, err := idx.CreateFrameIfNotExists(f.Name, opt)
-			if err != nil {
-				return err
-			}
+	}
+
+	// Sync maxSlices (inverse).
+	oldMaxInverseSlices := s.Holder.MaxInverseSlices()
+	for index, newMaxInverse := range ns.MaxSlices.Inverse {
+		localIndex := s.Holder.Index(index)
+		// if we don't know about an index locally, log an error because
+		// indexes should be created and synced prior to slice creation
+		if localIndex == nil {
+			s.logger.Printf("Local Index not found: %s", index)
+			continue
+		}
+		if newMaxInverse > oldMaxInverseSlices[index] {
+			oldMaxInverseSlices[index] = newMaxInverse
+			localIndex.SetRemoteMaxInverseSlice(newMaxInverse)
 		}
 	}
 
 	return nil
 }
 
-func (s *Server) checkMaxSlices(scheme string, hostPort string) (map[string]uint64, error) {
-	// Create HTTP request.
-	req, err := http.NewRequest("GET", (&url.URL{
-		Scheme: scheme,
-		Host:   hostPort,
-		Path:   "/slices/max",
-	}).String(), nil)
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Require protobuf encoding.
-	req.Header.Set("Accept", "application/x-protobuf")
-	req.Header.Set("Content-Type", "application/x-protobuf")
-	req.Header.Set("User-Agent", "pilosa/"+Version)
-
-	nodeURI, err := NewURIFromAddress(hostPort)
-	if err != nil {
-		return nil, err
-	}
-	nodeURI.SetScheme(scheme)
-	ctx := context.WithValue(context.Background(), "uri", nodeURI)
-	return s.defaultClient.MaxSliceByIndex(ctx)
-}
-
 // monitorDiagnostics periodically polls the Pilosa Indexes for cluster info.
 func (s *Server) monitorDiagnostics() {
-	if s.DiagnosticInterval <= 0 {
-		s.Logger().Printf("diagnostics disabled")
+	// Do not send more than once a minute
+	if s.diagnosticInterval < time.Minute {
+		s.logger.Printf("diagnostics disabled")
 		return
+	} else {
+		s.logger.Printf("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.diagnosticInterval)
 	}
 
-	s.diagnostics.SetLogger(s.LogOutput)
+	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
-	s.diagnostics.SetInterval(s.DiagnosticInterval)
-	s.diagnostics.Open()
 	s.diagnostics.Set("Host", s.URI.host)
-	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeSetHosts(), ","))
+	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
-	s.diagnostics.Set("LocalID", s.Holder.LocalID)
-	s.diagnostics.Set("ClusterID", s.ClusterID)
+	s.diagnostics.Set("NodeID", s.NodeID)
+	s.diagnostics.Set("ClusterID", s.Cluster.ID)
 	s.diagnostics.EnrichWithOSInfo()
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {
-		enrichDiagnosticsWithSchemaProperties(s.diagnostics, s.Holder)
 		openFiles, err := CountOpenFiles()
 		if err == nil {
 			s.diagnostics.Set("OpenFiles", openFiles)
 		}
 		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
 		s.diagnostics.EnrichWithMemoryInfo()
+		s.diagnostics.EnrichWithSchemaProperties()
 		s.diagnostics.CheckVersion()
-		s.diagnostics.Flush()
+		err = s.diagnostics.Flush()
+		if err != nil {
+			s.logger.Printf("Diagnostics error: %s", err)
+		}
 	}
 
-	ticker := time.NewTicker(s.DiagnosticInterval)
+	ticker := time.NewTicker(s.diagnosticInterval)
 	defer ticker.Stop()
 	flush()
 	for {
@@ -620,25 +720,24 @@ func (s *Server) monitorDiagnostics() {
 // monitorRuntime periodically polls the Go runtime metrics.
 func (s *Server) monitorRuntime() {
 	// Disable metrics when poll interval is zero.
-	if s.MetricInterval <= 0 {
+	if s.metricInterval <= 0 {
 		return
 	}
 
 	var m runtime.MemStats
-	ticker := time.NewTicker(s.MetricInterval)
+	ticker := time.NewTicker(s.metricInterval)
 	defer ticker.Stop()
 
-	gcn := gcnotifier.New()
-	defer gcn.Close()
+	defer s.gcNotifier.Close()
 
-	s.Logger().Printf("runtime stats initializing (%s interval)", s.MetricInterval)
+	s.logger.Printf("runtime stats initializing (%s interval)", s.metricInterval)
 
 	for {
 		// Wait for tick or a close.
 		select {
 		case <-s.closing:
 			return
-		case <-gcn.AfterGC():
+		case <-s.gcNotifier.AfterGC():
 			// GC just ran.
 			s.Holder.Stats.Count("garbage_collection", 1, 1.0)
 		case <-ticker.C:
@@ -663,29 +762,6 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-func (s *Server) createDefaultClient(remoteClient *http.Client) {
-	s.defaultClient = NewInternalHTTPClientFromURI(nil, remoteClient)
-}
-
-func (s *Server) loadClusterID() error {
-	// If this is the first node in the cluster, set the ClusterID to its ID
-	node0URI, err := s.Cluster.Nodes[0].URI()
-	if err == nil {
-		if s.URI.Equals(node0URI) {
-			s.ClusterID = s.Holder.LocalID
-			return nil
-		}
-	} else {
-		return err
-	}
-	if clusterID, err := s.defaultClient.NodeID(node0URI); err == nil {
-		s.ClusterID = clusterID
-		return nil
-	} else {
-		return err
-	}
-}
-
 // CountOpenFiles on operating systems that support lsof.
 func CountOpenFiles() (int, error) {
 	switch runtime.GOOS {
@@ -707,8 +783,8 @@ func CountOpenFiles() (int, error) {
 	}
 }
 
-// StatusHandler specifies two methods which an object must implement to share
-// state in the cluster. These are used by the GossipNodeSet to implement the
+// StatusHandler specifies the methods which an object must implement to share
+// state in the cluster. These are used by the GossipMemberSet to implement the
 // LocalState and MergeRemoteState methods of memberlist.Delegate
 type StatusHandler interface {
 	LocalStatus() (proto.Message, error)
@@ -716,38 +792,14 @@ type StatusHandler interface {
 	HandleRemoteStatus(proto.Message) error
 }
 
-type diagnosticsFrameProperties struct {
-	BSIFieldCount      int
-	TimeQuantumEnabled bool
-}
-
-func enrichDiagnosticsWithSchemaProperties(d *diagnostics.Diagnostics, holder *Holder) {
-	// NOTE: this function is not in the diagnostics package, since circular imports are not allowed.
-	var numSlices uint64
-	numFrames := 0
-	numIndexes := 0
-	bsiFieldCount := 0
-	timeQuantumEnabled := false
-
-	for _, index := range holder.Indexes() {
-		numSlices += index.MaxSlice() + 1
-		numIndexes += 1
-		for _, frame := range index.Frames() {
-			numFrames += 1
-			if frame.rangeEnabled {
-				if fields, err := frame.GetFields(); err == nil {
-					bsiFieldCount += len(fields.Fields)
-				}
-			}
-			if frame.TimeQuantum() != "" {
-				timeQuantumEnabled = true
-			}
+func expandDirName(path string) (string, error) {
+	prefix := "~" + string(filepath.Separator)
+	if strings.HasPrefix(path, prefix) {
+		HomeDir := os.Getenv("HOME")
+		if HomeDir == "" {
+			return "", errors.New("data directory not specified and no home dir available")
 		}
+		return filepath.Join(HomeDir, strings.TrimPrefix(path, prefix)), nil
 	}
-
-	d.Set("NumIndexes", numIndexes)
-	d.Set("NumFrames", numFrames)
-	d.Set("NumSlices", numSlices)
-	d.Set("BSIFieldCount", bsiFieldCount)
-	d.Set("TimeQuantumEnabled", timeQuantumEnabled)
+	return path, nil
 }

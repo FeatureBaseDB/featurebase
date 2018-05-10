@@ -17,7 +17,6 @@ package ctl
 import (
 	"context"
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -27,6 +26,8 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
+	"github.com/pkg/errors"
 )
 
 // ImportCommand represents a command for bulk importing data.
@@ -66,7 +67,7 @@ type ImportCommand struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	TLS pilosa.TLSConfig
+	TLS server.TLSConfig
 }
 
 // NewImportCommand returns a new instance of ImportCommand.
@@ -93,14 +94,14 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
 	client, err := CommandClient(cmd)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating client")
 	}
 	cmd.Client = client
 
 	if cmd.CreateSchema {
 		err := cmd.ensureSchema(ctx)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "ensuring schema")
 		}
 	}
 
@@ -152,7 +153,7 @@ func (cmd *ImportCommand) bufferBits(ctx context.Context, path string) error {
 		// Open file for reading.
 		f, err := os.Open(path)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "opening file")
 		}
 		defer f.Close()
 
@@ -172,7 +173,7 @@ func (cmd *ImportCommand) bufferBits(ctx context.Context, path string) error {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return err
+			return errors.Wrap(err, "reading")
 		}
 
 		// Ignore blank rows.
@@ -242,7 +243,7 @@ func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) err
 
 		logger.Printf("importing slice: %d, n=%d", slice, len(bits))
 		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Frame, slice, bits); err != nil {
-			return err
+			return errors.Wrap(err, "importing")
 		}
 	}
 
@@ -259,7 +260,7 @@ func (cmd *ImportCommand) bufferBitsK(ctx context.Context, path string) error {
 		// Open file for reading.
 		f, err := os.Open(path)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "opening file")
 		}
 		defer f.Close()
 
@@ -279,7 +280,7 @@ func (cmd *ImportCommand) bufferBitsK(ctx context.Context, path string) error {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return err
+			return errors.Wrap(err, "reading")
 		}
 
 		// Ignore blank rows.
@@ -339,7 +340,7 @@ func (cmd *ImportCommand) importBitsK(ctx context.Context, bits []pilosa.Bit) er
 
 	logger.Printf("importing keys: n=%d", len(bits))
 	if err := cmd.Client.ImportK(ctx, cmd.Index, cmd.Frame, bits); err != nil {
-		return err
+		return errors.Wrap(err, "importing keys")
 	}
 
 	return nil
@@ -355,7 +356,7 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 		// Open file for reading.
 		f, err := os.Open(path)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "opening file")
 		}
 		defer f.Close()
 
@@ -375,7 +376,7 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return err
+			return errors.Wrap(err, "reading")
 		}
 
 		// Ignore blank rows.
@@ -436,7 +437,7 @@ func (cmd *ImportCommand) importFieldValues(ctx context.Context, vals []pilosa.F
 
 		logger.Printf("importing slice: %d, n=%d", slice, len(vals))
 		if err := cmd.Client.ImportValue(ctx, cmd.Index, cmd.Frame, cmd.Field, slice, vals); err != nil {
-			return err
+			return errors.Wrap(err, "importing values")
 		}
 	}
 
@@ -447,6 +448,6 @@ func (cmd *ImportCommand) TLSHost() string {
 	return cmd.Host
 }
 
-func (cmd *ImportCommand) TLSConfiguration() pilosa.TLSConfig {
+func (cmd *ImportCommand) TLSConfiguration() server.TLSConfig {
 	return cmd.TLS
 }

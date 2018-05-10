@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pkg/errors"
 )
 
 // DefaultFrame is the frame used if one is not specified.
@@ -33,6 +33,9 @@ const (
 	// MinThreshold is the lowest count to use in a Top-N operation when
 	// looking for additional id/count pairs.
 	MinThreshold = 1
+
+	columnLabel = "col"
+	rowLabel    = "row"
 )
 
 // Executor recursively executes calls in a PQL query across all slices.
@@ -40,8 +43,7 @@ type Executor struct {
 	Holder *Holder
 
 	// Local hostname & cluster configuration.
-	Scheme  string
-	Host    string
+	Node    *Node
 	Cluster *Cluster
 
 	// Client used for remote requests.
@@ -81,35 +83,32 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// MaxSlice can differ between inverse and standard views, so we need
 	// to send queries to different slices based on orientation.
 	var inverseSlices []uint64
-	rowLabel := DefaultRowLabel
-	columnLabel := DefaultColumnLabel
 
-	// If slices aren't specified, then include all of them.
-	if len(slices) == 0 {
-		// Determine slices and inverseSlices for use in e.executeCall().
-		if needsSlices {
-			// Round up the number of slices.
-			idx := e.Holder.Index(index)
-			if idx == nil {
-				return nil, ErrIndexNotFound
-			}
-			maxSlice := idx.MaxSlice()
-			maxInverseSlice := idx.MaxInverseSlice()
+	// If slices are specified, then use that value for slices or
+	// inverseSlices. If slices aren't specified, then include all of them.
+	if len(slices) > 0 {
+		// For inverse queries, the values of `slices` provided to the Execute() method
+		// on the remote node actually represents inverseSlices.
+		inverseSlices = slices
+	} else if needsSlices {
+		// Round up the number of slices.
+		idx := e.Holder.Index(index)
+		if idx == nil {
+			return nil, ErrIndexNotFound
+		}
+		maxSlice := idx.MaxSlice()
+		maxInverseSlice := idx.MaxInverseSlice()
 
-			// Generate a slices of all slices.
-			slices = make([]uint64, maxSlice+1)
-			for i := range slices {
-				slices[i] = uint64(i)
-			}
+		// Generate a slices of all slices.
+		slices = make([]uint64, maxSlice+1)
+		for i := range slices {
+			slices[i] = uint64(i)
+		}
 
-			// Generate a slices of all inverse slices.
-			inverseSlices = make([]uint64, maxInverseSlice+1)
-			for i := range inverseSlices {
-				inverseSlices[i] = uint64(i)
-			}
-
-			// Fetch column label from index.
-			columnLabel = idx.ColumnLabel()
+		// Generate a slices of all inverse slices.
+		inverseSlices = make([]uint64, maxInverseSlice+1)
+		for i := range inverseSlices {
+			inverseSlices[i] = uint64(i)
 		}
 	}
 
@@ -121,7 +120,6 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
-
 		if call.SupportsInverse() && needsSlices {
 			// Fetch frame & row label based on argument.
 			frame, _ := call.Args["frame"].(string)
@@ -132,7 +130,6 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 			if f == nil {
 				return nil, ErrFrameNotFound
 			}
-			rowLabel = f.RowLabel()
 
 			// If this call is to an inverse frame send to a different list of slices.
 			if call.IsInverse(rowLabel, columnLabel) {
@@ -151,9 +148,8 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 
 // executeCall executes a call.
 func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
-
 	if err := e.validateCallArgs(c); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "validating args")
 	}
 	indexTag := fmt.Sprintf("index:%s", index)
 	// Special handling for mutation and top-n calls.
@@ -161,6 +157,12 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "Sum":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeSum(ctx, index, c, slices, opt)
+	case "Min":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeFieldMin(ctx, index, c, slices, opt)
+	case "Max":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeFieldMax(ctx, index, c, slices, opt)
 	case "ClearBit":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "Count":
@@ -203,15 +205,15 @@ func (e *Executor) validateCallArgs(c *pql.Call) error {
 }
 
 // executeSum executes a Sum() call.
-func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (SumCount, error) {
+func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
 	if frame, _ := c.Args["frame"]; frame == "" {
-		return SumCount{}, errors.New("Sum(): frame required")
+		return ValCount{}, errors.New("Sum(): frame required")
 	} else if field, _ := c.Args["field"]; field == "" {
-		return SumCount{}, errors.New("Sum(): field required")
+		return ValCount{}, errors.New("Sum(): field required")
 	}
 
 	if len(c.Children) > 1 {
-		return SumCount{}, errors.New("Sum() only accepts a single bitmap input")
+		return ValCount{}, errors.New("Sum() only accepts a single bitmap input")
 	}
 
 	// Execute calls in bulk on each remote node and merge.
@@ -221,18 +223,88 @@ func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, sl
 
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
-		other, _ := prev.(SumCount)
-		return other.Add(v.(SumCount))
+		other, _ := prev.(ValCount)
+		return other.Add(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
 	if err != nil {
-		return SumCount{}, err
+		return ValCount{}, err
 	}
-	other, _ := result.(SumCount)
+	other, _ := result.(ValCount)
 
 	if other.Count == 0 {
-		return SumCount{}, nil
+		return ValCount{}, nil
+	}
+	return other, nil
+}
+
+// executeFieldMin executes a Min() call.
+func (e *Executor) executeFieldMin(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+	if frame, _ := c.Args["frame"]; frame == "" {
+		return ValCount{}, errors.New("Min(): frame required")
+	} else if field, _ := c.Args["field"]; field == "" {
+		return ValCount{}, errors.New("Min(): field required")
+	}
+
+	if len(c.Children) > 1 {
+		return ValCount{}, errors.New("Min() only accepts a single bitmap input")
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(slice uint64) (interface{}, error) {
+		return e.executeFieldMinSlice(ctx, index, c, slice)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(ValCount)
+		return other.Smaller(v.(ValCount))
+	}
+
+	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return ValCount{}, err
+	}
+	other, _ := result.(ValCount)
+
+	if other.Count == 0 {
+		return ValCount{}, nil
+	}
+	return other, nil
+}
+
+// executeFieldMax executes a Max() call.
+func (e *Executor) executeFieldMax(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+	if frame, _ := c.Args["frame"]; frame == "" {
+		return ValCount{}, errors.New("Max(): frame required")
+	} else if field, _ := c.Args["field"]; field == "" {
+		return ValCount{}, errors.New("Max(): field required")
+	}
+
+	if len(c.Children) > 1 {
+		return ValCount{}, errors.New("Max() only accepts a single bitmap input")
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(slice uint64) (interface{}, error) {
+		return e.executeFieldMaxSlice(ctx, index, c, slice)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(ValCount)
+		return other.Larger(v.(ValCount))
+	}
+
+	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return ValCount{}, err
+	}
+	other, _ := result.(ValCount)
+
+	if other.Count == 0 {
+		return ValCount{}, nil
 	}
 	return other, nil
 }
@@ -269,11 +341,10 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 		} else {
 			idx := e.Holder.Index(index)
 			if idx != nil {
-				columnLabel := idx.ColumnLabel()
 				if columnID, ok, err := c.UintArg(columnLabel); ok && err == nil {
 					attrs, err := idx.ColumnAttrStore().Attrs(columnID)
 					if err != nil {
-						return nil, err
+						return nil, errors.Wrap(err, "getting column attrs")
 					}
 					bm.Attrs = attrs
 				} else if err != nil {
@@ -281,14 +352,13 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 				} else {
 					frame, _ := c.Args["frame"].(string)
 					if fr := idx.Frame(frame); fr != nil {
-						rowLabel := fr.RowLabel()
 						rowID, _, err := c.UintArg(rowLabel)
 						if err != nil {
-							return nil, err
+							return nil, errors.Wrap(err, "getting row")
 						}
 						attrs, err := fr.RowAttrStore().Attrs(rowID)
 						if err != nil {
-							return nil, err
+							return nil, errors.Wrap(err, "getting row attrs")
 						}
 						bm.Attrs = attrs
 					}
@@ -324,13 +394,13 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 	}
 }
 
-// executeSumCountSlice executes calculates the sum & count for fields on a slice.
-func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (SumCount, error) {
+// executeSumCountSlice calculates the sum and count for fields on a slice.
+func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
 	var filter *Bitmap
 	if len(c.Children) == 1 {
 		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
 		if err != nil {
-			return SumCount{}, err
+			return ValCount{}, errors.Wrap(err, "executing bitmap call")
 		}
 		filter = bm
 	}
@@ -340,26 +410,104 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 
 	frame := e.Holder.Frame(index, frameName)
 	if frame == nil {
-		return SumCount{}, nil
+		return ValCount{}, nil
 	}
 
 	field := frame.Field(fieldName)
 	if field == nil {
-		return SumCount{}, nil
+		return ValCount{}, nil
 	}
 
-	view := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
-	if view == nil {
-		return SumCount{}, nil
+	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	if fragment == nil {
+		return ValCount{}, nil
 	}
 
-	vsum, vcount, err := view.FieldSum(filter, field.BitDepth())
+	vsum, vcount, err := fragment.FieldSum(filter, field.BitDepth())
 	if err != nil {
-		return SumCount{}, err
+		return ValCount{}, errors.Wrap(err, "computing sum")
 	}
-	return SumCount{
-		Sum:   int64(vsum) + (int64(vcount) * field.Min),
+	return ValCount{
+		Val:   int64(vsum) + (int64(vcount) * field.Min),
 		Count: int64(vcount),
+	}, nil
+}
+
+// executeFieldMinSlice calculates the min for fields on a slice.
+func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+	var filter *Bitmap
+	if len(c.Children) == 1 {
+		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		if err != nil {
+			return ValCount{}, err
+		}
+		filter = bm
+	}
+
+	frameName, _ := c.Args["frame"].(string)
+	fieldName, _ := c.Args["field"].(string)
+
+	frame := e.Holder.Frame(index, frameName)
+	if frame == nil {
+		return ValCount{}, nil
+	}
+
+	field := frame.Field(fieldName)
+	if field == nil {
+		return ValCount{}, nil
+	}
+
+	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	if fragment == nil {
+		return ValCount{}, nil
+	}
+
+	fmin, fcount, err := fragment.FieldMin(filter, field.BitDepth())
+	if err != nil {
+		return ValCount{}, err
+	}
+	return ValCount{
+		Val:   int64(fmin) + field.Min,
+		Count: int64(fcount),
+	}, nil
+}
+
+// executeFieldMaxSlice calculates the max for fields on a slice.
+func (e *Executor) executeFieldMaxSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+	var filter *Bitmap
+	if len(c.Children) == 1 {
+		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		if err != nil {
+			return ValCount{}, err
+		}
+		filter = bm
+	}
+
+	frameName, _ := c.Args["frame"].(string)
+	fieldName, _ := c.Args["field"].(string)
+
+	frame := e.Holder.Frame(index, frameName)
+	if frame == nil {
+		return ValCount{}, nil
+	}
+
+	field := frame.Field(fieldName)
+	if field == nil {
+		return ValCount{}, nil
+	}
+
+	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	if fragment == nil {
+		return ValCount{}, nil
+	}
+
+	fmax, fcount, err := fragment.FieldMax(filter, field.BitDepth())
+	if err != nil {
+		return ValCount{}, err
+	}
+	return ValCount{
+		Val:   int64(fmax) + field.Min,
+		Count: int64(fcount),
 	}, nil
 }
 
@@ -379,7 +527,7 @@ func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 	// Execute original query.
 	pairs, err := e.executeTopNSlices(ctx, index, c, slices, opt)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "finding top results")
 	}
 
 	// If this call is against specific ids, or we didn't get results,
@@ -396,7 +544,7 @@ func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 
 	trimmedList, err := e.executeTopNSlices(ctx, index, other, slices, opt)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "retrieving full counts")
 	}
 
 	if n != 0 && int(n) < len(trimmedList) {
@@ -526,7 +674,6 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
-	columnLabel := idx.ColumnLabel()
 
 	// Fetch frame & row label based on argument.
 	frame, _ := c.Args["frame"].(string)
@@ -537,7 +684,6 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 	if f == nil {
 		return nil, ErrFrameNotFound
 	}
-	rowLabel := f.RowLabel()
 
 	// Return an error if both the row and column label are specified.
 	rowID, rowOK, rowErr := c.UintArg(rowLabel)
@@ -607,14 +753,12 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
-	columnLabel := idx.ColumnLabel()
 
 	// Retrieve base frame.
 	f := idx.Frame(frame)
 	if f == nil {
 		return nil, ErrFrameNotFound
 	}
-	rowLabel := f.RowLabel()
 
 	// Read row & column id.
 	columnID, columnOK, err := c.UintArg(columnLabel)
@@ -739,7 +883,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 
 		predicates, err := cond.IntSliceValue()
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "getting condition value")
 		}
 
 		// Only support two integers for the between operation.
@@ -801,7 +945,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 			return NewBitmap(), nil
 		}
 
-		// LT[E] and GT[E] should return all not-null if selected range fully encompases valid field range.
+		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid field range.
 		if (cond.Op == pql.LT && value > field.Max) || (cond.Op == pql.LTE && value >= field.Max) ||
 			(cond.Op == pql.GT && value < field.Min) || (cond.Op == pql.GTE && value <= field.Min) {
 			return frag.FieldNotNull(field.BitDepth())
@@ -905,10 +1049,6 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, ErrFrameNotFound
 	}
 
-	// Retrieve labels.
-	columnLabel := idx.ColumnLabel()
-	rowLabel := f.RowLabel()
-
 	// Read fields using labels.
 	rowID, ok, err := c.UintArg(rowLabel)
 	if err != nil {
@@ -955,9 +1095,9 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql.Call, f *Frame, view string, colID, rowID uint64, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
-	for _, node := range e.Cluster.FragmentNodes(index, slice) {
+	for _, node := range e.Cluster.SliceNodes(index, slice) {
 		// Update locally if host matches.
-		if node.Host == e.Host {
+		if node.ID == e.Node.ID {
 			val, err := f.ClearBit(view, rowID, colID, nil)
 			if err != nil {
 				return false, err
@@ -998,10 +1138,6 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 	if f == nil {
 		return false, ErrFrameNotFound
 	}
-
-	// Retrieve labels.
-	columnLabel := idx.ColumnLabel()
-	rowLabel := f.RowLabel()
 
 	// Read fields using labels.
 	rowID, ok, err := c.UintArg(rowLabel)
@@ -1060,9 +1196,9 @@ func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.C
 	slice := colID / SliceWidth
 	ret := false
 
-	for _, node := range e.Cluster.FragmentNodes(index, slice) {
+	for _, node := range e.Cluster.SliceNodes(index, slice) {
 		// Update locally if host matches.
-		if node.Host == e.Host {
+		if node.ID == e.Node.ID {
 			val, err := f.SetBit(view, rowID, colID, timestamp)
 			if err != nil {
 				return false, err
@@ -1093,13 +1229,6 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 	if !ok {
 		return errors.New("SetFieldValue() frame required")
 	}
-
-	// Retrieve column label.
-	idx := e.Holder.Index(index)
-	if idx == nil {
-		return ErrIndexNotFound
-	}
-	columnLabel := idx.ColumnLabel()
 
 	// Retrieve frame.
 	frame := e.Holder.Frame(index, frameName)
@@ -1141,7 +1270,7 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	nodes := Nodes(e.Cluster.Nodes).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1172,7 +1301,6 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if frame == nil {
 		return ErrFrameNotFound
 	}
-	rowLabel := frame.RowLabel()
 
 	// Parse labels.
 	rowID, ok, err := c.UintArg(rowLabel)
@@ -1199,7 +1327,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	nodes := Nodes(e.Cluster.Nodes).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1233,7 +1361,6 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if f == nil {
 			return nil, ErrFrameNotFound
 		}
-		rowLabel := f.RowLabel()
 
 		rowID, ok, err := c.UintArg(rowLabel)
 		if err != nil {
@@ -1286,7 +1413,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	nodes := Nodes(e.Cluster.Nodes).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1314,28 +1441,18 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 		return ErrIndexNotFound
 	}
 
-	var colName string
-	id, okID, errID := c.UintArg("id")
-	if errID != nil || !okID {
-		// Retrieve columnLabel
-		columnLabel := idx.columnLabel
-		col, okCol, errCol := c.UintArg(columnLabel)
-		if errCol != nil || !okCol {
-			return fmt.Errorf("reading SetColumnAttrs() id/columnLabel errs: %v/%v found %v/%v", errID, errCol, okID, okCol)
-		}
-		id = col
-		colName = columnLabel
-	} else {
-		colName = "id"
+	col, okCol, errCol := c.UintArg(columnLabel)
+	if errCol != nil || !okCol {
+		return fmt.Errorf("reading SetColumnAttrs() col errs: %v found %v", errCol, okCol)
 	}
 
 	// Copy args and remove reserved fields.
 	attrs := pql.CopyArgs(c.Args)
-	delete(attrs, colName)
+	delete(attrs, columnLabel)
 	delete(attrs, "frame")
 
 	// Set attributes.
-	if err := idx.ColumnAttrStore().SetAttrs(id, attrs); err != nil {
+	if err := idx.ColumnAttrStore().SetAttrs(col, attrs); err != nil {
 		return err
 	}
 	idx.Stats.Count("SetProfileAttrs", 1, 1.0)
@@ -1345,7 +1462,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterHost(e.Host)
+	nodes := Nodes(e.Cluster.Nodes).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1372,13 +1489,8 @@ func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *
 		Slices: slices,
 		Remote: true,
 	}
-	uri, err := NewURIFromAddress(node.Host)
-	if err != nil {
-		return nil, err
-	}
-	uri.SetScheme(node.Scheme)
-	ctx = context.WithValue(ctx, "uri", uri)
-	pb, err := e.client.ExecuteQuery(ctx, index, pbreq)
+
+	pb, err := e.client.QueryNode(ctx, &node.URI, index, pbreq)
 	if err != nil {
 		return nil, err
 	}
@@ -1396,7 +1508,7 @@ func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *
 
 		switch call.Name {
 		case "Average", "Sum":
-			v, err = decodeSumCount(pb.Results[i].GetSumCount()), nil
+			v, err = decodeValCount(pb.Results[i].GetValCount()), nil
 		case "TopN":
 			v, err = decodePairs(pb.Results[i].GetPairs()), nil
 		case "Count":
@@ -1426,7 +1538,7 @@ func (e *Executor) slicesByNode(nodes []*Node, index string, slices []uint64) (m
 
 loop:
 	for _, slice := range slices {
-		for _, node := range e.Cluster.FragmentNodes(index, slice) {
+		for _, node := range e.Cluster.SliceNodes(index, slice) {
 			if Nodes(nodes).Contains(node) {
 				m[node] = append(m[node], slice)
 				continue loop
@@ -1456,12 +1568,12 @@ func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64,
 	if !opt.Remote {
 		nodes = Nodes(e.Cluster.Nodes).Clone()
 	} else {
-		nodes = []*Node{e.Cluster.NodeByHost(e.Host)}
+		nodes = []*Node{e.Cluster.nodeByID(e.Node.ID)}
 	}
 
 	// Start mapping across all primary owners.
 	if err := e.mapper(ctx, ch, nodes, index, slices, c, opt, mapFn, reduceFn); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "starting mapper")
 	}
 
 	// Iterate over all map responses and reduce.
@@ -1512,7 +1624,7 @@ func (e *Executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 			resp := mapResponse{node: n, slices: nodeSlices}
 
 			// Send local slices to mapper, otherwise remote exec.
-			if n.Host == e.Host {
+			if n.ID == e.Node.ID {
 				resp.result, resp.err = e.mapperLocal(ctx, nodeSlices, mapFn, reduceFn)
 			} else if !opt.Remote {
 				results, err := e.remoteExec(ctx, n, index, &pql.Query{Calls: []*pql.Call{c}}, nodeSlices, opt)
@@ -1634,29 +1746,51 @@ func needsSlices(calls []*pql.Call) bool {
 	return false
 }
 
-// SumCount represents a grouping of sum & count for Sum() and Average() calls.
-type SumCount struct {
-	Sum   int64 `json:"sum"`
+// ValCount represents a grouping of sum & count for Sum() and Average() calls.
+type ValCount struct {
+	Val   int64 `json:"value"`
 	Count int64 `json:"count"`
 }
 
-func (sc *SumCount) Add(other SumCount) SumCount {
-	return SumCount{
-		Sum:   sc.Sum + other.Sum,
-		Count: sc.Count + other.Count,
+func (vc *ValCount) Add(other ValCount) ValCount {
+	return ValCount{
+		Val:   vc.Val + other.Val,
+		Count: vc.Count + other.Count,
 	}
 }
 
-func encodeSumCount(sc SumCount) *internal.SumCount {
-	return &internal.SumCount{
-		Sum:   sc.Sum,
-		Count: sc.Count,
+func encodeValCount(vc ValCount) *internal.ValCount {
+	return &internal.ValCount{
+		Val:   vc.Val,
+		Count: vc.Count,
 	}
 }
 
-func decodeSumCount(pb *internal.SumCount) SumCount {
-	return SumCount{
-		Sum:   pb.Sum,
+func decodeValCount(pb *internal.ValCount) ValCount {
+	return ValCount{
+		Val:   pb.Val,
 		Count: pb.Count,
+	}
+}
+
+// Smaller returns the smaller of the two ValCounts.
+func (vc *ValCount) Smaller(other ValCount) ValCount {
+	if vc.Count == 0 || (other.Val < vc.Val && other.Count > 0) {
+		return other
+	}
+	return ValCount{
+		Val:   vc.Val,
+		Count: vc.Count,
+	}
+}
+
+// Larger returns the larger of the two ValCounts.
+func (vc *ValCount) Larger(other ValCount) ValCount {
+	if vc.Count == 0 || (other.Val > vc.Val && other.Count > 0) {
+		return other
+	}
+	return ValCount{
+		Val:   vc.Val,
+		Count: vc.Count,
 	}
 }

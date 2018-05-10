@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -1479,6 +1481,16 @@ func TestDifferenceRunArray(t *testing.T) {
 			array: []uint16{0, 9, 10, 11, 12, 13, 14, 17, 19, 25, 27},
 			exp:   []interval16{{start: 1, last: 8}, {start: 15, last: 16}, {start: 20, last: 24}, {start: 26, last: 26}, {start: 28, last: 28}},
 		},
+		{
+			runs:  []interval16{{start: 0, last: 20}, {start: 65533, last: 65535}},
+			array: []uint16{65533, 65534, 65535},
+			exp:   []interval16{{start: 0, last: 20}},
+		},
+		{
+			runs:  []interval16{{start: 0, last: 20}, {start: 65530, last: 65535}},
+			array: []uint16{37, 65535},
+			exp:   []interval16{{start: 0, last: 20}, {start: 65530, last: 65534}},
+		},
 	}
 	for i, test := range tests {
 		a.runs = test.runs
@@ -1583,14 +1595,69 @@ func TestDifferenceBitmapRun(t *testing.T) {
 			runs:   []interval16{{start: 4, last: 7}, {start: 32, last: 47}},
 			exp:    []uint64{0xFFFF0000FFFFFF0F},
 		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFBF},
+			runs:   []interval16{{start: 0, last: 5}, {start: 7, last: 63}},
+			exp:    []uint64{0x0000000000000000},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFBF},
+			runs:   []interval16{{start: 0, last: 5}},
+			exp:    []uint64{0xFFFFFFFFFFFFFF80},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
+			runs:   []interval16{{start: 60, last: 63}},
+			exp:    []uint64{0x0FFFFFFFFFFFFFFF},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
+			runs:   []interval16{{start: 60, last: 65}},
+			exp:    []uint64{0x0FFFFFFFFFFFFFFF},
+		},
+		{
+			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
+			runs:   []interval16{{start: 60, last: 65}, {start: 67, last: 72}, {start: 126, last: 130}},
+			exp:    []uint64{0x0FFFFFFFFFFFFFFF, 0x3FFFFFFFFFFFFE04, 0xFFFFFFFFFFFFFFF8},
+		},
+		{
+			bitmap: []uint64{0x0000000000000001},
+			runs:   []interval16{{start: 0, last: 0}},
+			exp:    []uint64{0x0000000000000000},
+		},
+		{
+			bitmap: []uint64{0x8000000000000000},
+			runs:   []interval16{{start: 63, last: 63}},
+			exp:    []uint64{0x0000000000000000},
+		},
+		{
+			bitmap: []uint64{0xC000000000000000, 0x0000000000000003},
+			runs:   []interval16{{start: 63, last: 64}},
+			exp:    []uint64{0x4000000000000000, 0x0000000000000002},
+		},
+		{
+			bitmap: []uint64{0x0000000000000000},
+			runs:   []interval16{{start: 5, last: 7}},
+			exp:    []uint64{0x0000000000000000},
+		},
+		{
+			bitmap: bitmapLastBitSet(),
+			runs:   []interval16{{start: 65535, last: 65535}},
+			exp:    bitmapEmpty(),
+		},
+		{
+			bitmap: bitmapFull(),
+			runs:   []interval16{{start: 0, last: 65535}},
+			exp:    bitmapEmpty(),
+		},
 	}
 	for i, test := range tests {
 		for i, v := range test.bitmap {
 			a.bitmap[i] = v
 		}
-		a.n = a.bitmapCountRange(0, 100)
+		a.n = a.bitmapCountRange(0, 65536)
 		b.runs = test.runs
-		b.n = b.runCountRange(0, 100)
+		b.n = b.runCountRange(0, 65536)
 		ret := differenceBitmapRun(a, b)
 		if !reflect.DeepEqual(ret.bitmap[:len(test.exp)], test.exp) {
 			t.Fatalf("test #%v expected \n%X, but got \n%X", i, test.exp, ret.bitmap[:len(test.exp)])
@@ -1622,12 +1689,12 @@ func TestDifferenceBitmapArray(t *testing.T) {
 			exp:    []uint16{8, 9, 11, 12, 13, 14, 15},
 		},
 		{
-			bitmap: bitmapOdds(),
+			bitmap: bitmapOddBitsSet(),
 			array:  []uint16{0, 1, 2, 3, 4, 5, 6, 7, 10},
 			exp:    []uint16{9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63},
 		},
 		{
-			bitmap: bitmapOdds(),
+			bitmap: bitmapOddBitsSet(),
 			array:  []uint16{63},
 			exp:    []uint16{1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61},
 		},
@@ -1954,38 +2021,6 @@ func TestXorRunRun(t *testing.T) {
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v.1 expected %v, but got %v", i, test.exp, ret.runs)
 		}
-	}
-}
-
-func TestBitmapFlip(t *testing.T) {
-	c := &container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
-
-	ttable := []struct {
-		original uint64
-		flipped  uint64
-	}{
-		{0x0000000000000000, 0xFFFFFFFFFFFFFFFF},
-		{0xFFFFFFFFFFFFFFFF, 0x0000000000000000},
-		{0xFFFFFFFFFFFFFFF0, 0x000000000000000F},
-		{0xFFFFFFEFFFFFFFFF, 0x0000001000000000},
-		{0x0000001000000000, 0xFFFFFFEFFFFFFFFF},
-	}
-
-	expectedN := int(65536)
-	for i, tt := range ttable {
-		c.bitmap[i] = tt.original
-		expectedN -= int(popcount(tt.original))
-	}
-
-	o := c.flipBitmap()
-
-	for i, tt := range ttable {
-		if o.bitmap[i] != tt.flipped {
-			t.Fatalf("bitmapFlip calculation. expected %v, got %v", tt.flipped, o.bitmap[i])
-		}
-	}
-	if o.n != expectedN {
-		t.Fatalf("bitmapFlip calculation. expected count %v, got %v", expectedN, o.n)
 	}
 }
 
@@ -2432,7 +2467,7 @@ func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
 	}
 }
 
-func TestSearc64(t *testing.T) {
+func TestSearch64(t *testing.T) {
 	tests := []struct {
 		a     []uint64
 		value uint64
@@ -2547,12 +2582,12 @@ func TestIntersectArrayBitmap(t *testing.T) {
 		},
 		{
 			array:  []uint16{0, 1, 63, 120, 543, 639, 12000, 65534, 65535},
-			bitmap: bitmapOdds(),
+			bitmap: bitmapOddBitsSet(),
 			exp:    []uint16{1, 63, 543, 639, 65535},
 		},
 		{
 			array:  []uint16{0, 1, 63, 120, 543, 639, 12000, 65534, 65535},
-			bitmap: bitmapEvens(),
+			bitmap: bitmapEvenBitsSet(),
 			exp:    []uint16{0, 120, 12000, 65534},
 		},
 	}
@@ -2573,24 +2608,6 @@ func TestIntersectArrayBitmap(t *testing.T) {
 		}
 	}
 }
-
-func bitmapOdds() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN; i++ {
-		bitmap[i] = 0xAAAAAAAAAAAAAAAA
-	}
-	return bitmap
-}
-
-func bitmapEvens() []uint64 {
-	bitmap := make([]uint64, bitmapN)
-	for i := 0; i < bitmapN; i++ {
-		bitmap[i] = 0x5555555555555555
-	}
-	return bitmap
-}
-
-var containerWidth uint64 = 65536
 
 // rleCont returns a slice of numbers all in the range starting from
 // container_width*num, and ending at container_width*(num+1)-1. If left is
@@ -2672,4 +2689,549 @@ func bitmapVariousContainers() *Bitmap {
 	bm := NewSliceBitmap(bits...)
 	bm.Optimize()
 	return bm
+}
+
+///////////////////////////////////////////////////////////////////////////
+
+func getFunctionName(i interface{}) string {
+	x := runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
+	y := strings.Split(x, ".")
+	y = y[len(y)-1:]
+	return y[0]
+}
+
+func TestContainerCombinations(t *testing.T) {
+
+	cts := setupContainerTests()
+
+	containerTypes := []byte{ContainerArray, ContainerBitmap, ContainerRun}
+
+	// map used for a more descriptive print
+	cm := map[byte]string{
+		ContainerArray:  "array",
+		ContainerBitmap: "bitmap",
+		ContainerRun:    "run",
+	}
+
+	testOps := []testOp{
+		// intersect
+		{intersect, "empty", "empty", "empty"},
+		{intersect, "empty", "full", "empty"},
+		{intersect, "empty", "firstBitSet", "empty"},
+		{intersect, "empty", "lastBitSet", "empty"},
+		{intersect, "empty", "firstBitUnset", "empty"},
+		{intersect, "empty", "lastBitUnset", "empty"},
+		{intersect, "empty", "innerBitsSet", "empty"},
+		{intersect, "empty", "outerBitsSet", "empty"},
+		{intersect, "empty", "oddBitsSet", "empty"},
+		{intersect, "empty", "evenBitsSet", "empty"},
+		//
+		{intersect, "full", "empty", "empty"},
+		{intersect, "full", "full", "full"},
+		{intersect, "full", "firstBitSet", "firstBitSet"},
+		{intersect, "full", "lastBitSet", "lastBitSet"},
+		{intersect, "full", "firstBitUnset", "firstBitUnset"},
+		{intersect, "full", "lastBitUnset", "lastBitUnset"},
+		{intersect, "full", "innerBitsSet", "innerBitsSet"},
+		{intersect, "full", "outerBitsSet", "outerBitsSet"},
+		{intersect, "full", "oddBitsSet", "oddBitsSet"},
+		{intersect, "full", "evenBitsSet", "evenBitsSet"},
+		//
+		{intersect, "firstBitSet", "empty", "empty"},
+		{intersect, "firstBitSet", "full", "firstBitSet"},
+		{intersect, "firstBitSet", "firstBitSet", "firstBitSet"},
+		{intersect, "firstBitSet", "lastBitSet", "empty"},
+		{intersect, "firstBitSet", "firstBitUnset", "empty"},
+		{intersect, "firstBitSet", "lastBitUnset", "firstBitSet"},
+		{intersect, "firstBitSet", "innerBitsSet", "empty"},
+		{intersect, "firstBitSet", "outerBitsSet", "firstBitSet"},
+		{intersect, "firstBitSet", "oddBitsSet", "empty"},
+		{intersect, "firstBitSet", "evenBitsSet", "firstBitSet"},
+		//
+		{intersect, "lastBitSet", "empty", "empty"},
+		{intersect, "lastBitSet", "full", "lastBitSet"},
+		{intersect, "lastBitSet", "firstBitSet", "empty"},
+		{intersect, "lastBitSet", "lastBitSet", "lastBitSet"},
+		{intersect, "lastBitSet", "firstBitUnset", "lastBitSet"},
+		{intersect, "lastBitSet", "lastBitUnset", "empty"},
+		{intersect, "lastBitSet", "innerBitsSet", "empty"},
+		{intersect, "lastBitSet", "outerBitsSet", "lastBitSet"},
+		{intersect, "lastBitSet", "oddBitsSet", "lastBitSet"},
+		{intersect, "lastBitSet", "evenBitsSet", "empty"},
+		//
+		{intersect, "firstBitUnset", "empty", "empty"},
+		{intersect, "firstBitUnset", "full", "firstBitUnset"},
+		{intersect, "firstBitUnset", "firstBitSet", "empty"},
+		{intersect, "firstBitUnset", "lastBitSet", "lastBitSet"},
+		{intersect, "firstBitUnset", "firstBitUnset", "firstBitUnset"},
+		{intersect, "firstBitUnset", "lastBitUnset", "innerBitsSet"},
+		{intersect, "firstBitUnset", "innerBitsSet", "innerBitsSet"},
+		{intersect, "firstBitUnset", "outerBitsSet", "lastBitSet"},
+		{intersect, "firstBitUnset", "oddBitsSet", "oddBitsSet"},
+		//{intersect, "firstBitUnset", "evenBitsSet", ""},
+		//
+		{intersect, "lastBitUnset", "empty", "empty"},
+		{intersect, "lastBitUnset", "full", "lastBitUnset"},
+		{intersect, "lastBitUnset", "firstBitSet", "firstBitSet"},
+		{intersect, "lastBitUnset", "lastBitSet", "empty"},
+		{intersect, "lastBitUnset", "firstBitUnset", "innerBitsSet"},
+		{intersect, "lastBitUnset", "lastBitUnset", "lastBitUnset"},
+		{intersect, "lastBitUnset", "innerBitsSet", "innerBitsSet"},
+		{intersect, "lastBitUnset", "outerBitsSet", "firstBitSet"},
+		//{intersect, "lastBitUnset", "oddBitsSet", ""},
+		{intersect, "lastBitUnset", "evenBitsSet", "evenBitsSet"},
+		//
+		{intersect, "innerBitsSet", "empty", "empty"},
+		{intersect, "innerBitsSet", "full", "innerBitsSet"},
+		{intersect, "innerBitsSet", "firstBitSet", "empty"},
+		{intersect, "innerBitsSet", "lastBitSet", "empty"},
+		{intersect, "innerBitsSet", "firstBitUnset", "innerBitsSet"},
+		{intersect, "innerBitsSet", "lastBitUnset", "innerBitsSet"},
+		{intersect, "innerBitsSet", "innerBitsSet", "innerBitsSet"},
+		{intersect, "innerBitsSet", "outerBitsSet", "empty"},
+		//{intersect, "innerBitsSet", "oddBitsSet", ""},
+		//{intersect, "innerBitsSet", "evenBitsSet", ""},
+		//
+		{intersect, "outerBitsSet", "empty", "empty"},
+		{intersect, "outerBitsSet", "full", "outerBitsSet"},
+		{intersect, "outerBitsSet", "firstBitSet", "firstBitSet"},
+		{intersect, "outerBitsSet", "lastBitSet", "lastBitSet"},
+		{intersect, "outerBitsSet", "firstBitUnset", "lastBitSet"},
+		{intersect, "outerBitsSet", "lastBitUnset", "firstBitSet"},
+		{intersect, "outerBitsSet", "innerBitsSet", "empty"},
+		{intersect, "outerBitsSet", "outerBitsSet", "outerBitsSet"},
+		{intersect, "outerBitsSet", "oddBitsSet", "lastBitSet"},
+		{intersect, "outerBitsSet", "evenBitsSet", "firstBitSet"},
+		//
+		{intersect, "oddBitsSet", "empty", "empty"},
+		{intersect, "oddBitsSet", "full", "oddBitsSet"},
+		{intersect, "oddBitsSet", "firstBitSet", "empty"},
+		{intersect, "oddBitsSet", "lastBitSet", "lastBitSet"},
+		{intersect, "oddBitsSet", "firstBitUnset", "oddBitsSet"},
+		//{intersect, "oddBitsSet", "lastBitUnset", ""},
+		//{intersect, "oddBitsSet", "innerBitsSet", ""},
+		{intersect, "oddBitsSet", "outerBitsSet", "lastBitSet"},
+		{intersect, "oddBitsSet", "oddBitsSet", "oddBitsSet"},
+		{intersect, "oddBitsSet", "evenBitsSet", "empty"},
+		//
+		{intersect, "evenBitsSet", "empty", "empty"},
+		{intersect, "evenBitsSet", "full", "evenBitsSet"},
+		{intersect, "evenBitsSet", "firstBitSet", "firstBitSet"},
+		{intersect, "evenBitsSet", "lastBitSet", "empty"},
+		//{intersect, "evenBitsSet", "firstBitUnset", ""},
+		{intersect, "evenBitsSet", "lastBitUnset", "evenBitsSet"},
+		//{intersect, "evenBitsSet", "innerBitsSet", ""},
+		{intersect, "evenBitsSet", "outerBitsSet", "firstBitSet"},
+		{intersect, "evenBitsSet", "oddBitsSet", "empty"},
+		{intersect, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
+
+		// union
+		{union, "empty", "empty", "empty"},
+		{union, "empty", "full", "full"},
+		{union, "empty", "firstBitSet", "firstBitSet"},
+		{union, "empty", "lastBitSet", "lastBitSet"},
+		{union, "empty", "firstBitUnset", "firstBitUnset"},
+		{union, "empty", "lastBitUnset", "lastBitUnset"},
+		{union, "empty", "innerBitsSet", "innerBitsSet"},
+		{union, "empty", "outerBitsSet", "outerBitsSet"},
+		{union, "empty", "oddBitsSet", "oddBitsSet"},
+		{union, "empty", "evenBitsSet", "evenBitsSet"},
+		//
+		{union, "full", "empty", "full"},
+		{union, "full", "full", "full"},
+		{union, "full", "firstBitSet", "full"},
+		{union, "full", "lastBitSet", "full"},
+		{union, "full", "firstBitUnset", "full"},
+		{union, "full", "lastBitUnset", "full"},
+		{union, "full", "innerBitsSet", "full"},
+		{union, "full", "outerBitsSet", "full"},
+		{union, "full", "oddBitsSet", "full"},
+		{union, "full", "evenBitsSet", "full"},
+		//
+		{union, "firstBitSet", "empty", "firstBitSet"},
+		{union, "firstBitSet", "full", "full"},
+		{union, "firstBitSet", "firstBitSet", "firstBitSet"},
+		{union, "firstBitSet", "lastBitSet", "outerBitsSet"},
+		{union, "firstBitSet", "firstBitUnset", "full"},
+		{union, "firstBitSet", "lastBitUnset", "lastBitUnset"},
+		{union, "firstBitSet", "innerBitsSet", "lastBitUnset"},
+		{union, "firstBitSet", "outerBitsSet", "outerBitsSet"},
+		//{union, "firstBitSet", "oddBitsSet", ""},
+		{union, "firstBitSet", "evenBitsSet", "evenBitsSet"},
+		//
+		{union, "lastBitSet", "empty", "lastBitSet"},
+		{union, "lastBitSet", "full", "full"},
+		{union, "lastBitSet", "firstBitSet", "outerBitsSet"},
+		{union, "lastBitSet", "lastBitSet", "lastBitSet"},
+		{union, "lastBitSet", "firstBitUnset", "firstBitUnset"},
+		{union, "lastBitSet", "lastBitUnset", "full"},
+		{union, "lastBitSet", "innerBitsSet", "firstBitUnset"},
+		{union, "lastBitSet", "outerBitsSet", "outerBitsSet"},
+		{union, "lastBitSet", "oddBitsSet", "oddBitsSet"},
+		//{union, "lastBitSet", "evenBitsSet", ""},
+		//
+		{union, "firstBitUnset", "empty", "firstBitUnset"},
+		{union, "firstBitUnset", "full", "full"},
+		{union, "firstBitUnset", "firstBitSet", "full"},
+		{union, "firstBitUnset", "lastBitSet", "firstBitUnset"},
+		{union, "firstBitUnset", "firstBitUnset", "firstBitUnset"},
+		{union, "firstBitUnset", "lastBitUnset", "full"},
+		{union, "firstBitUnset", "innerBitsSet", "firstBitUnset"},
+		{union, "firstBitUnset", "outerBitsSet", "full"},
+		{union, "firstBitUnset", "oddBitsSet", "firstBitUnset"},
+		{union, "firstBitUnset", "evenBitsSet", "full"},
+		//
+		{union, "lastBitUnset", "empty", "lastBitUnset"},
+		{union, "lastBitUnset", "full", "full"},
+		{union, "lastBitUnset", "firstBitSet", "lastBitUnset"},
+		{union, "lastBitUnset", "lastBitSet", "full"},
+		{union, "lastBitUnset", "firstBitUnset", "full"},
+		{union, "lastBitUnset", "lastBitUnset", "lastBitUnset"},
+		{union, "lastBitUnset", "innerBitsSet", "lastBitUnset"},
+		{union, "lastBitUnset", "outerBitsSet", "full"},
+		{union, "lastBitUnset", "oddBitsSet", "full"},
+		{union, "lastBitUnset", "evenBitsSet", "lastBitUnset"},
+		//
+		{union, "innerBitsSet", "empty", "innerBitsSet"},
+		{union, "innerBitsSet", "full", "full"},
+		{union, "innerBitsSet", "firstBitSet", "lastBitUnset"},
+		{union, "innerBitsSet", "lastBitSet", "firstBitUnset"},
+		{union, "innerBitsSet", "firstBitUnset", "firstBitUnset"},
+		{union, "innerBitsSet", "lastBitUnset", "lastBitUnset"},
+		{union, "innerBitsSet", "innerBitsSet", "innerBitsSet"},
+		{union, "innerBitsSet", "outerBitsSet", "full"},
+		{union, "innerBitsSet", "oddBitsSet", "firstBitUnset"},
+		{union, "innerBitsSet", "evenBitsSet", "lastBitUnset"},
+		//
+		{union, "outerBitsSet", "empty", "outerBitsSet"},
+		{union, "outerBitsSet", "full", "full"},
+		{union, "outerBitsSet", "firstBitSet", "outerBitsSet"},
+		{union, "outerBitsSet", "lastBitSet", "outerBitsSet"},
+		{union, "outerBitsSet", "firstBitUnset", "full"},
+		{union, "outerBitsSet", "lastBitUnset", "full"},
+		{union, "outerBitsSet", "innerBitsSet", "full"},
+		{union, "outerBitsSet", "outerBitsSet", "outerBitsSet"},
+		//{union, "outerBitsSet", "oddBitsSet", ""},
+		//{union, "outerBitsSet", "evenBitsSet", ""},
+		//
+		{union, "oddBitsSet", "empty", "oddBitsSet"},
+		{union, "oddBitsSet", "full", "full"},
+		//{union, "oddBitsSet", "firstBitSet", ""},
+		{union, "oddBitsSet", "lastBitSet", "oddBitsSet"},
+		{union, "oddBitsSet", "firstBitUnset", "firstBitUnset"},
+		{union, "oddBitsSet", "lastBitUnset", "full"},
+		{union, "oddBitsSet", "innerBitsSet", "firstBitUnset"},
+		//{union, "oddBitsSet", "outerBitsSet", ""},
+		{union, "oddBitsSet", "oddBitsSet", "oddBitsSet"},
+		{union, "oddBitsSet", "evenBitsSet", "full"},
+		//
+		{union, "evenBitsSet", "empty", "evenBitsSet"},
+		{union, "evenBitsSet", "full", "full"},
+		{union, "evenBitsSet", "firstBitSet", "evenBitsSet"},
+		//{union, "evenBitsSet", "lastBitSet", ""},
+		{union, "evenBitsSet", "firstBitUnset", "full"},
+		{union, "evenBitsSet", "lastBitUnset", "lastBitUnset"},
+		{union, "evenBitsSet", "innerBitsSet", "lastBitUnset"},
+		//{union, "evenBitsSet", "outerBitsSet", ""},
+		{union, "evenBitsSet", "oddBitsSet", "full"},
+		{union, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
+
+		// difference
+		{difference, "empty", "empty", "empty"},
+		{difference, "empty", "full", "empty"},
+		{difference, "empty", "firstBitSet", "empty"},
+		{difference, "empty", "lastBitSet", "empty"},
+		{difference, "empty", "firstBitUnset", "empty"},
+		{difference, "empty", "lastBitUnset", "empty"},
+		{difference, "empty", "innerBitsSet", "empty"},
+		{difference, "empty", "outerBitsSet", "empty"},
+		{difference, "empty", "oddBitsSet", "empty"},
+		{difference, "empty", "evenBitsSet", "empty"},
+		//
+		{difference, "full", "empty", "full"},
+		{difference, "full", "full", "empty"},
+		{difference, "full", "firstBitSet", "firstBitUnset"},
+		{difference, "full", "lastBitSet", "lastBitUnset"},
+		{difference, "full", "firstBitUnset", "firstBitSet"},
+		{difference, "full", "lastBitUnset", "lastBitSet"},
+		{difference, "full", "innerBitsSet", "outerBitsSet"},
+		{difference, "full", "outerBitsSet", "innerBitsSet"},
+		{difference, "full", "oddBitsSet", "evenBitsSet"},
+		{difference, "full", "evenBitsSet", "oddBitsSet"},
+		//
+		{difference, "firstBitSet", "empty", "firstBitSet"},
+		{difference, "firstBitSet", "full", "empty"},
+		{difference, "firstBitSet", "firstBitSet", "empty"},
+		{difference, "firstBitSet", "lastBitSet", "firstBitSet"},
+		{difference, "firstBitSet", "firstBitUnset", "firstBitSet"},
+		{difference, "firstBitSet", "lastBitUnset", "empty"},
+		{difference, "firstBitSet", "innerBitsSet", "firstBitSet"},
+		{difference, "firstBitSet", "outerBitsSet", "empty"},
+		{difference, "firstBitSet", "oddBitsSet", "firstBitSet"},
+		{difference, "firstBitSet", "evenBitsSet", "empty"},
+		//
+		{difference, "lastBitSet", "empty", "lastBitSet"},
+		{difference, "lastBitSet", "full", "empty"},
+		{difference, "lastBitSet", "firstBitSet", "lastBitSet"},
+		{difference, "lastBitSet", "lastBitSet", "empty"},
+		{difference, "lastBitSet", "firstBitUnset", "empty"},
+		{difference, "lastBitSet", "lastBitUnset", "lastBitSet"},
+		{difference, "lastBitSet", "innerBitsSet", "lastBitSet"},
+		{difference, "lastBitSet", "outerBitsSet", "empty"},
+		{difference, "lastBitSet", "oddBitsSet", "empty"},
+		{difference, "lastBitSet", "evenBitsSet", "lastBitSet"},
+		//
+		{difference, "firstBitUnset", "empty", "firstBitUnset"},
+		{difference, "firstBitUnset", "full", "empty"},
+		{difference, "firstBitUnset", "firstBitSet", "firstBitUnset"},
+		{difference, "firstBitUnset", "lastBitSet", "innerBitsSet"},
+		{difference, "firstBitUnset", "firstBitUnset", "empty"},
+		{difference, "firstBitUnset", "lastBitUnset", "lastBitSet"},
+		{difference, "firstBitUnset", "innerBitsSet", "lastBitSet"},
+		{difference, "firstBitUnset", "outerBitsSet", "innerBitsSet"},
+		//{difference, "firstBitUnset", "oddBitsSet", ""},
+		{difference, "firstBitUnset", "evenBitsSet", "oddBitsSet"},
+		//
+		{difference, "lastBitUnset", "empty", "lastBitUnset"},
+		{difference, "lastBitUnset", "full", "empty"},
+		{difference, "lastBitUnset", "firstBitSet", "innerBitsSet"},
+		{difference, "lastBitUnset", "lastBitSet", "lastBitUnset"},
+		{difference, "lastBitUnset", "firstBitUnset", "firstBitSet"},
+		{difference, "lastBitUnset", "lastBitUnset", "empty"},
+		{difference, "lastBitUnset", "innerBitsSet", "firstBitSet"},
+		{difference, "lastBitUnset", "outerBitsSet", "innerBitsSet"},
+		{difference, "lastBitUnset", "oddBitsSet", "evenBitsSet"},
+		//{difference, "lastBitUnset", "evenBitsSet", ""},
+		//
+		{difference, "innerBitsSet", "empty", "innerBitsSet"},
+		{difference, "innerBitsSet", "full", "empty"},
+		{difference, "innerBitsSet", "firstBitSet", "innerBitsSet"},
+		{difference, "innerBitsSet", "lastBitSet", "innerBitsSet"},
+		{difference, "innerBitsSet", "firstBitUnset", "empty"},
+		{difference, "innerBitsSet", "lastBitUnset", "empty"},
+		{difference, "innerBitsSet", "innerBitsSet", "empty"},
+		{difference, "innerBitsSet", "outerBitsSet", "innerBitsSet"},
+		//{difference, "innerBitsSet", "oddBitsSet", ""},
+		//{difference, "innerBitsSet", "evenBitsSet", ""},
+		//
+		{difference, "outerBitsSet", "empty", "outerBitsSet"},
+		{difference, "outerBitsSet", "full", "empty"},
+		{difference, "outerBitsSet", "firstBitSet", "lastBitSet"},
+		{difference, "outerBitsSet", "lastBitSet", "firstBitSet"},
+		{difference, "outerBitsSet", "firstBitUnset", "firstBitSet"},
+		{difference, "outerBitsSet", "lastBitUnset", "lastBitSet"},
+		{difference, "outerBitsSet", "innerBitsSet", "outerBitsSet"},
+		{difference, "outerBitsSet", "outerBitsSet", "empty"},
+		{difference, "outerBitsSet", "oddBitsSet", "firstBitSet"},
+		{difference, "outerBitsSet", "evenBitsSet", "lastBitSet"},
+		//
+		{difference, "oddBitsSet", "empty", "oddBitsSet"},
+		{difference, "oddBitsSet", "full", "empty"},
+		{difference, "oddBitsSet", "firstBitSet", "oddBitsSet"},
+		//{difference, "oddBitsSet", "lastBitSet", ""},
+		{difference, "oddBitsSet", "firstBitUnset", "empty"},
+		{difference, "oddBitsSet", "lastBitUnset", "lastBitSet"},
+		{difference, "oddBitsSet", "innerBitsSet", "lastBitSet"},
+		//{difference, "oddBitsSet", "outerBitsSet", ""},
+		{difference, "oddBitsSet", "oddBitsSet", "empty"},
+		{difference, "oddBitsSet", "evenBitsSet", "oddBitsSet"},
+		//
+		{difference, "evenBitsSet", "empty", "evenBitsSet"},
+		{difference, "evenBitsSet", "full", "empty"},
+		//{difference, "evenBitsSet", "firstBitSet", ""},
+		{difference, "evenBitsSet", "lastBitSet", "evenBitsSet"},
+		{difference, "evenBitsSet", "firstBitUnset", "firstBitSet"},
+		{difference, "evenBitsSet", "lastBitUnset", "empty"},
+		{difference, "evenBitsSet", "innerBitsSet", "firstBitSet"},
+		//{difference, "evenBitsSet", "outerBitsSet", ""},
+		{difference, "evenBitsSet", "oddBitsSet", "evenBitsSet"},
+		{difference, "evenBitsSet", "evenBitsSet", "empty"},
+
+		// xor
+		{xor, "empty", "empty", "empty"},
+		{xor, "empty", "full", "full"},
+		{xor, "empty", "firstBitSet", "firstBitSet"},
+		{xor, "empty", "lastBitSet", "lastBitSet"},
+		{xor, "empty", "firstBitUnset", "firstBitUnset"},
+		{xor, "empty", "lastBitUnset", "lastBitUnset"},
+		{xor, "empty", "innerBitsSet", "innerBitsSet"},
+		{xor, "empty", "outerBitsSet", "outerBitsSet"},
+		{xor, "empty", "oddBitsSet", "oddBitsSet"},
+		{xor, "empty", "evenBitsSet", "evenBitsSet"},
+		//
+		{xor, "full", "empty", "full"},
+		{xor, "full", "full", "empty"},
+		{xor, "full", "firstBitSet", "firstBitUnset"},
+		{xor, "full", "lastBitSet", "lastBitUnset"},
+		{xor, "full", "firstBitUnset", "firstBitSet"},
+		{xor, "full", "lastBitUnset", "lastBitSet"},
+		{xor, "full", "innerBitsSet", "outerBitsSet"},
+		{xor, "full", "outerBitsSet", "innerBitsSet"},
+		{xor, "full", "oddBitsSet", "evenBitsSet"},
+		{xor, "full", "evenBitsSet", "oddBitsSet"},
+		//
+		{xor, "firstBitSet", "empty", "firstBitSet"},
+		{xor, "firstBitSet", "full", "firstBitUnset"},
+		{xor, "firstBitSet", "firstBitSet", "empty"},
+		{xor, "firstBitSet", "lastBitSet", "outerBitsSet"},
+		{xor, "firstBitSet", "firstBitUnset", "full"},
+		{xor, "firstBitSet", "lastBitUnset", "innerBitsSet"},
+		{xor, "firstBitSet", "innerBitsSet", "lastBitUnset"},
+		{xor, "firstBitSet", "outerBitsSet", "lastBitSet"},
+		//{xor, "firstBitSet", "oddBitsSet", ""},
+		//{xor, "firstBitSet", "evenBitsSet", ""},
+		//
+		{xor, "lastBitSet", "empty", "lastBitSet"},
+		{xor, "lastBitSet", "full", "lastBitUnset"},
+		{xor, "lastBitSet", "firstBitSet", "outerBitsSet"},
+		{xor, "lastBitSet", "lastBitSet", "empty"},
+		{xor, "lastBitSet", "firstBitUnset", "innerBitsSet"},
+		{xor, "lastBitSet", "lastBitUnset", "full"},
+		{xor, "lastBitSet", "innerBitsSet", "firstBitUnset"},
+		{xor, "lastBitSet", "outerBitsSet", "firstBitSet"},
+		//{xor, "lastBitSet", "oddBitsSet", ""},
+		//{xor, "lastBitSet", "evenBitsSet", ""},
+		//
+		{xor, "firstBitUnset", "empty", "firstBitUnset"},
+		{xor, "firstBitUnset", "full", "firstBitSet"},
+		{xor, "firstBitUnset", "firstBitSet", "full"},
+		{xor, "firstBitUnset", "lastBitSet", "innerBitsSet"},
+		{xor, "firstBitUnset", "firstBitUnset", "empty"},
+		{xor, "firstBitUnset", "lastBitUnset", "outerBitsSet"},
+		{xor, "firstBitUnset", "innerBitsSet", "lastBitSet"},
+		{xor, "firstBitUnset", "outerBitsSet", "lastBitUnset"},
+		//{xor, "firstBitUnset", "oddBitsSet", ""},
+		//{xor, "firstBitUnset", "evenBitsSet", ""},
+		//
+		{xor, "lastBitUnset", "empty", "lastBitUnset"},
+		{xor, "lastBitUnset", "full", "lastBitSet"},
+		{xor, "lastBitUnset", "firstBitSet", "innerBitsSet"},
+		{xor, "lastBitUnset", "lastBitSet", "full"},
+		{xor, "lastBitUnset", "firstBitUnset", "outerBitsSet"},
+		{xor, "lastBitUnset", "lastBitUnset", "empty"},
+		{xor, "lastBitUnset", "innerBitsSet", "firstBitSet"},
+		{xor, "lastBitUnset", "outerBitsSet", "firstBitUnset"},
+		//{xor, "lastBitUnset", "oddBitsSet", ""},
+		//{xor, "lastBitUnset", "evenBitsSet", ""},
+		//
+		{xor, "innerBitsSet", "empty", "innerBitsSet"},
+		{xor, "innerBitsSet", "full", "outerBitsSet"},
+		{xor, "innerBitsSet", "firstBitSet", "lastBitUnset"},
+		{xor, "innerBitsSet", "lastBitSet", "firstBitUnset"},
+		{xor, "innerBitsSet", "firstBitUnset", "lastBitSet"},
+		{xor, "innerBitsSet", "lastBitUnset", "firstBitSet"},
+		{xor, "innerBitsSet", "innerBitsSet", "empty"},
+		{xor, "innerBitsSet", "outerBitsSet", "full"},
+		//{xor, "innerBitsSet", "oddBitsSet", ""},
+		//{xor, "innerBitsSet", "evenBitsSet", ""},
+		//
+		{xor, "outerBitsSet", "empty", "outerBitsSet"},
+		{xor, "outerBitsSet", "full", "innerBitsSet"},
+		{xor, "outerBitsSet", "firstBitSet", "lastBitSet"},
+		{xor, "outerBitsSet", "lastBitSet", "firstBitSet"},
+		{xor, "outerBitsSet", "firstBitUnset", "lastBitUnset"},
+		{xor, "outerBitsSet", "lastBitUnset", "firstBitUnset"},
+		{xor, "outerBitsSet", "innerBitsSet", "full"},
+		{xor, "outerBitsSet", "outerBitsSet", "empty"},
+		//{xor, "outerBitsSet", "oddBitsSet", ""},
+		//{xor, "outerBitsSet", "evenBitsSet", ""},
+		//
+		{xor, "oddBitsSet", "empty", "oddBitsSet"},
+		{xor, "oddBitsSet", "full", "evenBitsSet"},
+		//{xor, "oddBitsSet", "firstBitSet", ""},
+		//{xor, "oddBitsSet", "lastBitSet", ""},
+		//{xor, "oddBitsSet", "firstBitUnset", ""},
+		//{xor, "oddBitsSet", "lastBitUnset", ""},
+		//{xor, "oddBitsSet", "innerBitsSet", ""},
+		//{xor, "oddBitsSet", "outerBitsSet", ""},
+		{xor, "oddBitsSet", "oddBitsSet", "empty"},
+		{xor, "oddBitsSet", "evenBitsSet", "full"},
+		//
+		{xor, "evenBitsSet", "empty", "evenBitsSet"},
+		{xor, "evenBitsSet", "full", "oddBitsSet"},
+		//{xor, "evenBitsSet", "firstBitSet", ""},
+		//{xor, "evenBitsSet", "lastBitSet", ""},
+		//{xor, "evenBitsSet", "firstBitUnset", ""},
+		//{xor, "evenBitsSet", "lastBitUnset", ""},
+		//{xor, "evenBitsSet", "innerBitsSet", ""},
+		//{xor, "evenBitsSet", "outerBitsSet", ""},
+		{xor, "evenBitsSet", "oddBitsSet", "full"},
+		{xor, "evenBitsSet", "evenBitsSet", "empty"},
+
+		// flip
+		{flip, "empty", "", "full"},
+		{flip, "full", "", "empty"},
+		{flip, "firstBitSet", "", "firstBitUnset"},
+		{flip, "lastBitSet", "", "lastBitUnset"},
+		{flip, "firstBitUnset", "", "firstBitSet"},
+		{flip, "lastBitUnset", "", "lastBitSet"},
+		{flip, "innerBitsSet", "", "outerBitsSet"},
+		{flip, "outerBitsSet", "", "innerBitsSet"},
+		{flip, "oddBitsSet", "", "evenBitsSet"},
+		{flip, "evenBitsSet", "", "oddBitsSet"},
+	}
+	for _, testOp := range testOps {
+		for _, x := range containerTypes {
+			for _, y := range containerTypes {
+				desc := fmt.Sprintf("%s(%s/%s, %s/%s)", getFunctionName(testOp.f), cm[x], testOp.x, cm[y], testOp.y)
+				ret := runContainerFunc(testOp.f, cts[x][testOp.x], cts[y][testOp.y])
+				exp := testOp.exp
+
+				// Convert to all container types and check result.
+				for _, ct := range containerTypes {
+					clone := ret.clone()
+					if ct == ContainerArray {
+						if clone.isBitmap() {
+							clone.bitmapToArray()
+						} else if clone.isRun() {
+							clone.runToArray()
+						}
+						if clone.n != cts[ct][exp].n {
+							t.Fatalf("test %s expected array n=%d, but got n=%d", desc, cts[ct][exp].n, clone.n)
+						}
+						// Because xorRunRun resulting in an empty container returns an array container with a
+						// nil slice array, then we need to check len() on array first (look for 0).
+						if !(len(clone.array) == 0 && len(cts[ct][exp].array) == 0) && !reflect.DeepEqual(clone.array, cts[ct][exp].array) {
+							t.Fatalf("test %s expected array %X, but got %X", desc, cts[ct][exp].array, clone.array)
+						}
+					} else if ct == ContainerBitmap {
+						if clone.isArray() {
+							clone.arrayToBitmap()
+						} else if clone.isRun() {
+							clone.runToBitmap()
+						}
+						if clone.n != cts[ct][exp].n {
+							t.Fatalf("test %s expected bitmap n=%d, but got n=%d", desc, cts[ct][exp].n, clone.n)
+						}
+						if !reflect.DeepEqual(clone.bitmap, cts[ct][exp].bitmap) {
+							t.Fatalf("test %s expected bitmap %X, but got %X", desc, cts[ct][exp].bitmap, clone.bitmap)
+						}
+					} else if ct == ContainerRun {
+						if clone.isArray() {
+							clone.arrayToRun()
+						} else if clone.isBitmap() {
+							clone.bitmapToRun()
+						}
+						if clone.n != cts[ct][exp].n {
+							t.Fatalf("test %s expected runs n=%d, but got n=%d", desc, cts[ct][exp].n, clone.n)
+						}
+						if !reflect.DeepEqual(clone.runs, cts[ct][exp].runs) {
+							t.Fatalf("test %s expected runs %X, but got %X", desc, cts[ct][exp].runs, clone.runs)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+//func getFunc(func(a, b *container) *container, m, n *container) *container {
+func runContainerFunc(f interface{}, c ...*container) *container {
+	switch f.(type) {
+	case func(*container) *container:
+		return f.(func(*container) *container)(c[0])
+	case func(*container, *container) *container:
+		return f.(func(a, b *container) *container)(c[0], c[1])
+	}
+	return nil
 }

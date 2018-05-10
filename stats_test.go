@@ -16,8 +16,6 @@ package pilosa_test
 
 import (
 	"context"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"testing"
@@ -38,7 +36,6 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 	ms[0] = c
 	hldr.Stats = ms
 
-	hldr.Stats.SetLogger(ioutil.Discard)
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
@@ -143,7 +140,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`Bitmap(frame=f, rowID=0)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`Bitmap(frame=f, row=0)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -174,7 +171,7 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetRowAttrs(rowID=10, frame=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetRowAttrs(row=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -206,7 +203,7 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 			return
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetColumnAttrs(id=10, frame=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetColumnAttrs(col=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -218,10 +215,10 @@ func TestStatsCount_CreateIndex(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 	called := false
-	s.Handler.Holder.Stats = &MockStats{
+	s.Handler.API.Holder.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
 			if name != "createIndex" {
 				t.Errorf("Expected createIndex, Results %s", name)
@@ -242,7 +239,7 @@ func TestStatsCount_DeleteIndex(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	// Create index.
@@ -250,7 +247,7 @@ func TestStatsCount_DeleteIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	called := false
-	s.Handler.Holder.Stats = &MockStats{
+	s.Handler.API.Holder.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
 			if name != "deleteIndex" {
 				t.Errorf("Expected deleteIndex, Results %s", name)
@@ -271,7 +268,7 @@ func TestStatsCount_CreateFrame(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
 	// Create index.
@@ -279,7 +276,7 @@ func TestStatsCount_CreateFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 	called := false
-	s.Handler.Holder.Stats = &MockStats{
+	s.Handler.API.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, index []string) {
 			if name != "createFrame" {
 				t.Errorf("Expected createFrame, Results %s", name)
@@ -303,7 +300,7 @@ func TestStatsCount_DeleteFrame(t *testing.T) {
 	defer hldr.Close()
 
 	s := test.NewServer()
-	s.Handler.Holder = hldr.Holder
+	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 	called := false
 	// Create index.
@@ -311,7 +308,7 @@ func TestStatsCount_DeleteFrame(t *testing.T) {
 	if _, err := indx.CreateFrameIfNotExists("test", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	s.Handler.Holder.Stats = &MockStats{
+	s.Handler.API.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, index []string) {
 			if name != "deleteFrame" {
 				t.Errorf("Expected deleteFrame, Results %s", name)
@@ -357,6 +354,6 @@ func (c *MockStats) Gauge(name string, value float64, rate float64)        {}
 func (c *MockStats) Histogram(name string, value float64, rate float64)    {}
 func (c *MockStats) Set(name string, value string, rate float64)           {}
 func (c *MockStats) Timing(name string, value time.Duration, rate float64) {}
-func (c *MockStats) SetLogger(logger io.Writer)                            {}
+func (c *MockStats) SetLogger(logger pilosa.Logger)                        {}
 func (c *MockStats) Open()                                                 {}
 func (c *MockStats) Close() error                                          { return nil }

@@ -1,12 +1,9 @@
-FROM golang:1.9.2 as builder
+FROM golang:1.10.2 as builder
 
-ARG ldflags=''
-
-COPY . /go/src/github.com/pilosa/pilosa
+COPY . /go/src/github.com/pilosa/pilosa/
 
 RUN cd /go/src/github.com/pilosa/pilosa \
-    && make vendor \
-    && CGO_ENABLED=0 go install -tags release -a -ldflags "$ldflags" github.com/pilosa/pilosa/cmd/pilosa
+    && CGO_ENABLED=0 make install-dep install-statik install FLAGS="-a"
 
 FROM scratch
 

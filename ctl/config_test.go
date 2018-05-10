@@ -17,11 +17,12 @@ package ctl
 import (
 	"bytes"
 	"context"
-	"github.com/pilosa/pilosa"
 	"io"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/pilosa/pilosa/server"
 )
 
 func TestConfigCommand_Run(t *testing.T) {
@@ -29,7 +30,7 @@ func TestConfigCommand_Run(t *testing.T) {
 	stdin := bytes.NewReader(rder)
 	r, w, _ := os.Pipe()
 	cm := NewConfigCommand(stdin, w, os.Stderr)
-	cm.Config = pilosa.NewConfig()
+	cm.Config = server.NewConfig()
 
 	err := cm.Run(context.Background())
 	w.Close()
@@ -38,7 +39,7 @@ func TestConfigCommand_Run(t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("Config Run doesn't work: %s", err)
-	} else if !strings.Contains(buf.String(), pilosa.DefaultHost) {
-		t.Fatalf("Unexpected config: %s", buf.String())
+	} else if !strings.Contains(buf.String(), ":10101") {
+		t.Fatalf("Unexpected config: \n%s", buf.String())
 	}
 }

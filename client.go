@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -35,6 +34,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 )
 
 // ClientOptions represents the configuration for a InternalHTTPClient
@@ -58,7 +58,7 @@ func NewInternalHTTPClient(host string, remoteClient *http.Client) (*InternalHTT
 
 	uri, err := NewURIFromAddress(host)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "getting URI")
 	}
 
 	client := NewInternalHTTPClientFromURI(uri, remoteClient)
@@ -88,15 +88,12 @@ func (c *InternalHTTPClient) MaxInverseSliceByIndex(ctx context.Context) (map[st
 // maxSliceByIndex returns the number of slices on a server by index.
 func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.clientURI(ctx), "/slices/max")
-	u.RawQuery = (&url.Values{
-		"inverse": {strconv.FormatBool(inverse)},
-	}).Encode()
+	u := uriPathToURL(c.defaultURI, "/slices/max")
 
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating request")
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -104,18 +101,21 @@ func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
-	var rsp sliceMaxResponse
+	var rsp getSlicesMaxResponse
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
 	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
-	return rsp.MaxSlices, nil
+	if inverse {
+		return rsp.Inverse, nil
+	}
+	return rsp.Standard, nil
 }
 
 // Schema returns all index and frame schema information.
@@ -126,7 +126,7 @@ func (c *InternalHTTPClient) Schema(ctx context.Context) ([]*IndexInfo, error) {
 	// Build request.
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating request")
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -134,7 +134,7 @@ func (c *InternalHTTPClient) Schema(ctx context.Context) ([]*IndexInfo, error) {
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
@@ -154,14 +154,14 @@ func (c *InternalHTTPClient) CreateIndex(ctx context.Context, index string, opt 
 		Options: opt,
 	})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "encoding request")
 	}
 
 	// Create URL & HTTP request.
 	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s", index))
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating request")
 	}
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/json")
@@ -171,14 +171,14 @@ func (c *InternalHTTPClient) CreateIndex(ctx context.Context, index string, opt 
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
 	// Read body.
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "reading")
 	}
 
 	// Handle response based on status code.
@@ -201,7 +201,7 @@ func (c *InternalHTTPClient) FragmentNodes(ctx context.Context, index string, sl
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating request")
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -209,7 +209,7 @@ func (c *InternalHTTPClient) FragmentNodes(ctx context.Context, index string, sl
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
@@ -223,8 +223,13 @@ func (c *InternalHTTPClient) FragmentNodes(ctx context.Context, index string, sl
 	return a, nil
 }
 
-// ExecuteQuery executes query against index on the server.
-func (c *InternalHTTPClient) ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+// Query executes query against the index.
+func (c *InternalHTTPClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
+}
+
+// QueryNode executes query against the index, sending the request to the node specified.
+func (c *InternalHTTPClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
 	if index == "" {
 		return nil, ErrIndexRequired
 	} else if queryRequest.Query == "" {
@@ -234,14 +239,14 @@ func (c *InternalHTTPClient) ExecuteQuery(ctx context.Context, index string, que
 	// Encode request object.
 	buf, err := proto.Marshal(queryRequest)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "marshaling")
 	}
 
 	// Create HTTP request.
-	u := c.clientURI(ctx).Path(fmt.Sprintf("/index/%s/query", index))
+	u := uri.Path(fmt.Sprintf("/index/%s/query", index))
 	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating request")
 	}
 
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
@@ -252,14 +257,14 @@ func (c *InternalHTTPClient) ExecuteQuery(ctx context.Context, index string, que
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
 	// Read body and unmarshal response.
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "reading")
 	} else if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(string(body))
 	}
@@ -296,7 +301,7 @@ func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, sl
 	// Import to each node.
 	for _, node := range nodes {
 		if err := c.importNode(ctx, node, buf); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
 
@@ -317,13 +322,12 @@ func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, b
 	}
 
 	node := &Node{
-		Scheme: c.defaultURI.Scheme(),
-		Host:   c.defaultURI.HostPort(),
+		URI: *c.defaultURI,
 	}
 
 	// Import to node.
 	if err := c.importNode(ctx, node, buf); err != nil {
-		return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+		return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 	}
 
 	return nil
@@ -394,7 +398,7 @@ func (c *InternalHTTPClient) importNode(ctx context.Context, node *Node, buf []b
 	u := nodePathToURL(node, "/import")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating request")
 	}
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
@@ -404,14 +408,14 @@ func (c *InternalHTTPClient) importNode(ctx context.Context, node *Node, buf []b
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
 	// Read body and unmarshal response.
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "reading")
 	} else if resp.StatusCode != http.StatusOK {
 		return errors.New(string(body))
 	}
@@ -448,7 +452,7 @@ func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, frame, fiel
 	// Import to each node.
 	for _, node := range nodes {
 		if err := c.importValueNode(ctx, node, buf); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.Host, err)
+			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
 
@@ -482,7 +486,7 @@ func (c *InternalHTTPClient) importValueNode(ctx context.Context, node *Node, bu
 	u := nodePathToURL(node, "/import-value")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating request")
 	}
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
@@ -492,14 +496,14 @@ func (c *InternalHTTPClient) importValueNode(ctx context.Context, node *Node, bu
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
 	// Read body and unmarshal response.
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "reading")
 	} else if resp.StatusCode != http.StatusOK {
 		return errors.New(string(body))
 	}
@@ -536,7 +540,7 @@ func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame, view s
 		node := nodes[i]
 
 		if err := c.exportNodeCSV(ctx, node, index, frame, view, slice, w); err != nil {
-			e = fmt.Errorf("export node: host=%s, err=%s", node.Host, err)
+			e = fmt.Errorf("export node: host=%s, err=%s", node.URI, err)
 			continue
 		} else {
 			return nil
@@ -560,7 +564,7 @@ func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *Node, inde
 	// Generate HTTP request.
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating request")
 	}
 	req.Header.Set("Accept", "text/csv")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -568,7 +572,7 @@ func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *Node, inde
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
@@ -579,7 +583,7 @@ func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *Node, inde
 
 	// Copy body to writer.
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		return err
+		return errors.Wrap(err, "copying")
 	}
 
 	return nil
@@ -614,13 +618,13 @@ func (c *InternalHTTPClient) BackupTo(ctx context.Context, w io.Writer, index, f
 	// Backup every slice to the tar file.
 	for i := uint64(0); i <= maxSlices[index]; i++ {
 		if err := c.backupSliceTo(ctx, tw, index, frame, view, i); err != nil {
-			return err
+			return errors.Wrap(err, "backing up slice")
 		}
 	}
 
 	// Close tar file.
 	if err := tw.Close(); err != nil {
-		return err
+		return errors.Wrap(err, "closing")
 	}
 
 	return nil
@@ -640,9 +644,9 @@ func (c *InternalHTTPClient) backupSliceTo(ctx context.Context, tw *tar.Writer, 
 	// Read entire buffer to determine file size.
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "reading")
 	} else if err := r.Close(); err != nil {
-		return err
+		return errors.Wrap(err, "closing")
 	}
 
 	// Write slice file header.
@@ -652,12 +656,12 @@ func (c *InternalHTTPClient) backupSliceTo(ctx context.Context, tw *tar.Writer, 
 		Size:    int64(len(data)),
 		ModTime: time.Now(),
 	}); err != nil {
-		return err
+		return errors.Wrap(err, "writing header")
 	}
 
 	// Write buffer to file.
 	if _, err := tw.Write(data); err != nil {
-		return fmt.Errorf("write buffer: %s", err)
+		return errors.Wrap(err, "writing buffer")
 	}
 
 	return nil
@@ -688,6 +692,13 @@ func (c *InternalHTTPClient) BackupSlice(ctx context.Context, index, frame, view
 	return nil, fmt.Errorf("unable to connect to any owner")
 }
 
+func (c *InternalHTTPClient) RetrieveSliceFromURI(ctx context.Context, index, frame, view string, slice uint64, uri URI) (io.ReadCloser, error) {
+	node := &Node{
+		URI: uri,
+	}
+	return c.backupSliceNode(ctx, index, frame, view, slice, node)
+}
+
 func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame, view string, slice uint64, node *Node) (io.ReadCloser, error) {
 	u := nodePathToURL(node, "/fragment/data")
 	u.RawQuery = url.Values{
@@ -700,7 +711,7 @@ func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame, 
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating request")
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -708,7 +719,7 @@ func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame, 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "executing request")
 	}
 
 	// Return error if status is not OK.
@@ -717,7 +728,7 @@ func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame, 
 		return nil, ErrFragmentNotFound
 	} else if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("unexpected backup status code: host=%s, code=%d", node.Host, resp.StatusCode)
+		return nil, fmt.Errorf("unexpected backup status code: host=%s, code=%d", node.URI, resp.StatusCode)
 	}
 
 	return resp.Body, nil
@@ -740,7 +751,7 @@ func (c *InternalHTTPClient) RestoreFrom(ctx context.Context, r io.Reader, index
 		if err == io.EOF {
 			return nil
 		} else if err != nil {
-			return err
+			return errors.Wrap(err, "opening")
 		}
 
 		// Parse slice from entry name.
@@ -752,12 +763,12 @@ func (c *InternalHTTPClient) RestoreFrom(ctx context.Context, r io.Reader, index
 		// Read file into buffer.
 		var buf bytes.Buffer
 		if _, err := io.CopyN(&buf, tr, hdr.Size); err != nil {
-			return err
+			return errors.Wrap(err, "copying")
 		}
 
 		// Restore file to all nodes that own it.
 		if err := c.restoreSliceFrom(ctx, buf.Bytes(), index, frame, view, slice); err != nil {
-			return err
+			return errors.Wrap(err, "restoring")
 		}
 	}
 }
@@ -783,20 +794,20 @@ func (c *InternalHTTPClient) restoreSliceFrom(ctx context.Context, buf []byte, i
 		// Build request.
 		req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating request")
 		}
 		req.Header.Set("Content-Type", "application/octet-stream")
 		req.Header.Set("User-Agent", "pilosa/"+Version)
 
 		resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 		if err != nil {
-			return err
+			return errors.Wrap(err, "executing request")
 		}
 		resp.Body.Close()
 
 		// Return error if response not OK.
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("unexpected status code: host=%s, code=%d", node.Host, resp.StatusCode)
+			return fmt.Errorf("unexpected status code: host=%s, code=%d", node.URI, resp.StatusCode)
 		}
 	}
 
@@ -814,14 +825,14 @@ func (c *InternalHTTPClient) CreateFrame(ctx context.Context, index, frame strin
 		Options: opt,
 	})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "marshaling")
 	}
 
 	// Create URL & HTTP request.
 	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s", index, frame))
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating request")
 	}
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/json")
@@ -831,14 +842,14 @@ func (c *InternalHTTPClient) CreateFrame(ctx context.Context, index, frame strin
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
 	// Read body.
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "reading")
 	}
 
 	// Handle response based on status code.
@@ -862,7 +873,7 @@ func (c *InternalHTTPClient) RestoreFrame(ctx context.Context, host, index, fram
 	// Build request.
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating request")
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -870,7 +881,7 @@ func (c *InternalHTTPClient) RestoreFrame(ctx context.Context, host, index, fram
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "executing request")
 	}
 	resp.Body.Close()
 
@@ -888,7 +899,7 @@ func (c *InternalHTTPClient) FrameViews(ctx context.Context, index, frame string
 	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/views", index, frame))
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating request")
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -896,7 +907,7 @@ func (c *InternalHTTPClient) FrameViews(ctx context.Context, index, frame string
 	// Execute request against the host.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
@@ -913,7 +924,7 @@ func (c *InternalHTTPClient) FrameViews(ctx context.Context, index, frame string
 	// Decode response.
 	var rsp getFrameViewsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "decoding")
 	}
 	return rsp.Views, nil
 }
@@ -932,7 +943,7 @@ func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, index, frame, v
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating request")
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -940,7 +951,7 @@ func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, index, frame, v
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
@@ -956,7 +967,7 @@ func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, index, frame, v
 	// Decode response object.
 	var rsp getFragmentBlocksResponse
 	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "decoding")
 	}
 	return rsp.Blocks, nil
 }
@@ -971,13 +982,13 @@ func (c *InternalHTTPClient) BlockData(ctx context.Context, index, frame, view s
 		Block: uint64(block),
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "marshaling")
 	}
 
 	u := uriPathToURL(c.defaultURI, "/fragment/block/data")
 	req, err := http.NewRequest("GET", u.String(), bytes.NewReader(buf))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "creating request")
 	}
 	req.Header.Set("Content-Type", "application/protobuf")
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
@@ -986,7 +997,7 @@ func (c *InternalHTTPClient) BlockData(ctx context.Context, index, frame, view s
 
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
@@ -1002,9 +1013,9 @@ func (c *InternalHTTPClient) BlockData(ctx context.Context, index, frame, view s
 	// Decode response object.
 	var rsp internal.BlockDataResponse
 	if body, err := ioutil.ReadAll(resp.Body); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "reading")
 	} else if err := proto.Unmarshal(body, &rsp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "unmarshalling")
 	}
 	return rsp.RowIDs, rsp.ColumnIDs, nil
 }
@@ -1016,13 +1027,13 @@ func (c *InternalHTTPClient) ColumnAttrDiff(ctx context.Context, index string, b
 	// Encode request.
 	buf, err := json.Marshal(postIndexAttrDiffRequest{Blocks: blks})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "marshaling")
 	}
 
 	// Build request.
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -1030,7 +1041,7 @@ func (c *InternalHTTPClient) ColumnAttrDiff(ctx context.Context, index string, b
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
@@ -1044,7 +1055,7 @@ func (c *InternalHTTPClient) ColumnAttrDiff(ctx context.Context, index string, b
 	// Decode response object.
 	var rsp postIndexAttrDiffResponse
 	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "decoding")
 	}
 	return rsp.Attrs, nil
 }
@@ -1056,13 +1067,13 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 	// Encode request.
 	buf, err := json.Marshal(postFrameAttrDiffRequest{Blocks: blks})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "marshaling")
 	}
 
 	// Build request.
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -1070,7 +1081,7 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "executing request")
 	}
 	defer resp.Body.Close()
 
@@ -1086,19 +1097,19 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 	// Decode response object.
 	var rsp postFrameAttrDiffResponse
 	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "decoding")
 	}
 	return rsp.Attrs, nil
 }
 
 // SendMessage posts a message synchronously.
-func (c *InternalHTTPClient) SendMessage(ctx context.Context, pb proto.Message) error {
+func (c *InternalHTTPClient) SendMessage(ctx context.Context, uri *URI, pb proto.Message) error {
 	msg, err := MarshalMessage(pb)
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)
 	}
 
-	u := uriPathToURL(ctx.Value("uri").(*URI), "/cluster/message")
+	u := uriPathToURL(uri, "/cluster/message")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(msg))
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
@@ -1124,38 +1135,6 @@ func (c *InternalHTTPClient) SendMessage(ctx context.Context, pb proto.Message) 
 	}
 
 	return nil
-}
-
-func (c *InternalHTTPClient) clientURI(ctx context.Context) *URI {
-	clientURI := c.defaultURI
-	if contextURI, ok := ctx.Value("uri").(*URI); ok {
-		clientURI = contextURI
-	}
-	return clientURI
-}
-
-func (c *InternalHTTPClient) NodeID(uri *URI) (string, error) {
-	u := uriPathToURL(uri, "/id")
-	req, err := http.NewRequest("GET", u.String(), nil)
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("executing http request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Read body.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading response body: %v", err)
-	}
-
-	// Return error if status is not OK.
-	switch resp.StatusCode {
-	case http.StatusOK: // ok
-	default:
-		return "", fmt.Errorf("unexpected response status code: %d: %s", resp.StatusCode, body)
-	}
-	return string(body), nil
 }
 
 // Bit represents the location of a single bit.
@@ -1318,8 +1297,8 @@ func uriPathToURL(uri *URI, path string) url.URL {
 
 func nodePathToURL(node *Node, path string) url.URL {
 	return url.URL{
-		Scheme: node.Scheme,
-		Host:   node.Host,
+		Scheme: node.URI.Scheme(),
+		Host:   node.URI.HostPort(),
 		Path:   path,
 	}
 }
@@ -1336,7 +1315,8 @@ type InternalClient interface {
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error)
-	ExecuteQuery(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
+	Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
+	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
 	Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error
 	ImportK(ctx context.Context, index, frame string, bits []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
@@ -1353,6 +1333,5 @@ type InternalClient interface {
 	BlockData(ctx context.Context, index, frame, view string, slice uint64, block int) ([]uint64, []uint64, error)
 	ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
-	SendMessage(ctx context.Context, pb proto.Message) error
-	NodeID(uri *URI) (string, error)
+	SendMessage(ctx context.Context, uri *URI, pb proto.Message) error
 }

@@ -27,24 +27,18 @@ Every command line flag has a corresponding environment variable. The environmen
 
 ### Config file
 
-The config file is in the [toml format](https://github.com/toml-lang/toml) and has exactly the same options available as the flags and environment variables. Any flag which contains a dot (".") denotes nesting within the config file, so the two flags `--cluster.poll-interval=2m0s` and `--cluster.replicas=1` look like this in the config file:
+The config file is in the [toml format](https://github.com/toml-lang/toml) and has exactly the same options available as the flags and environment variables. Any flag which contains a dot (".") denotes nesting within the config file, so the two flags `--cluster.coordinator` and `--cluster.replicas=1` look like this in the config file:
 ```toml
 [cluster]
-  poll-interval = "2m0s"
+  coordinator = true
   replicas = 1
-```
-
-Any flag that has a value that is a comma separated list on the command line becomes an array in toml. For example `--cluster.hosts=one.pilosa.com:10101,two.pilosa.com:10101` becomes:
-```toml
-[cluster]
-  hosts = ["one.pilosa.com:10101", "two.pilosa.com:10101"]
 ```
 
 ### All Options
 
 #### Anti Entropy Interval
 
-* Description: Interval at which the cluster will run its anti-entropy routine which makes sure that all replicas of each fragment are in sync.
+* Description: Interval at which the cluster will run its anti-entropy routine which ensures that all replicas of each fragment are in sync.
 * Flag: `--anti-entropy.interval="10m0s"`
 * Env: `PILOSA_ANTI_ENTROPY_INTERVAL="10m0s"`
 * Config:
@@ -84,7 +78,18 @@ Any flag that has a value that is a comma separated list on the command line bec
 * Config:
 
     ```toml
-    log_path = "/path/to/logfile"
+    log-path = "/path/to/logfile"
+    ```
+
+#### Verbose
+
+* Description: Enable verbose logging.
+* Flag: `--verbose`
+* Env: `PILOSA_VERBOSE`
+* Config:
+
+    ```toml
+    verbose = true
     ```
 
 #### Max Writes Per Request
@@ -110,16 +115,16 @@ Any flag that has a value that is a comma separated list on the command line bec
       port = 11101
     ```
 
-#### Gossip Seed
+#### Gossip Seeds
 
-* Description: When using the gossip [Cluster Type]({{< ref "#cluster-type" >}}), this specifies which internal host should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip-seed` for all three nodes can be configured to be the address of `node0`.
-* Flag: `--gossip.seed="localhost:11101"`
-* Env: `PILOSA_GOSSIP_SEED="localhost:11101"`
+* Description: This specifies which internal host(s) should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip.seeds` for all three nodes can be configured to be the address of `node0`. Multiple seeds should be comma-separated in the flag and env forms.
+* Flag: `--gossip.seeds="localhost:11101"`
+* Env: `PILOSA_GOSSIP_SEEDS="localhost:11101"`
 * Config:
 
     ```toml
     [gossip]
-      seed = "localhost:11101"
+      seeds = ["localhost:11101"]
     ```
 
 #### Gossip Key
@@ -133,28 +138,16 @@ Any flag that has a value that is a comma separated list on the command line bec
       key = "/var/secret/gossip.key32"
     ```
 
-#### Cluster Hosts
+#### Cluster Coordinator
 
-* Description: List of hosts in the cluster. Multiple hosts should be comma separated in the flag and env forms.
-* Flag: `--cluster.hosts="localhost:10101"`
-* Env: `PILOSA_CLUSTER_HOSTS="localhost:10101"`
+* Description: Indicates whether the node should act as the coordinator for the cluster. Only one node per cluster should be the coordinator.
+* Flag: `cluster.coordinator`
+* Env: `PILOSA_CLUSTER_COORDINATOR`
 * Config:
 
     ```toml
     [cluster]
-    hosts = ["localhost:10101"]
-    ```
-
-#### Cluster Poll Interval
-
-* Description: Polling interval for cluster.
-* Flag: `cluster.poll-interval="1m0s"`
-* Env: `PILOSA_CLUSTER_POLL_INTERVAL="1m0s"`
-* Config:
-
-    ```toml
-    [cluster]
-    poll-interval = "1m0s"
+    coordinator = true
     ```
 
 #### Cluster Long Query Time
@@ -183,9 +176,8 @@ Any flag that has a value that is a comma separated list on the command line bec
 
 #### Cluster Type
 
-* Description: Determine how the cluster handles membership and state sharing. Choose from [static, http, gossip].
+* Description: Determine how the cluster handles membership and state sharing. Choose from [static, gossip].
   * static - Messaging between nodes is disabled. This is primarily used for testing.
-  * http - Messages are transmitted over HTTP.
   * gossip - Messages are transmitted over TCP. Cluster status and node state are kept in sync via internode gossip.
 * Flag: `cluster.type="gossip"`
 * Env: `PILOSA_CLUSTER_TYPE="gossip"`
@@ -205,12 +197,12 @@ Any flag that has a value that is a comma separated list on the command line bec
 
     ```toml
     [profile]
-    cpu = "/path/to/somewhere"    
+    cpu = "/path/to/somewhere"
     ```
 
 #### Profile CPU Time
 
-* Description: Amount of time to collect cpu profiling data if `profile.cpu` is set.
+* Description: Amount of time to collect cpu profiling data at startup if `profile.cpu` is set.
 * Flag: `--profile.cpu-time="30s"`
 * Env: `PILOSA_PROFILE_CPU_TIME="30s"
 * Config:
@@ -219,8 +211,9 @@ Any flag that has a value that is a comma separated list on the command line bec
     [profile]
     cpu-time = "30s"
     ```
-##### Metric Service
-* Description: Which stats service to use (StatsD or ExpVar).
+
+#### Metric Service
+* Description: Which stats service to use. Choose from [statsd, expvar, none].
 * Flag: `--metric.service=statsd`
 * Env: `PILOSA_METRIC_SERVICE=statsd'
 * Config:
@@ -230,7 +223,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     service = “statsd”
     ```
 
-##### Metric Host
+#### Metric Host
 * Description: Address of the StatsD service host.
 * Flag: `--metric.host=localhost:8125`
 * Env: `PILOSA_METRIC_HOST=localhost:8125'
@@ -241,9 +234,9 @@ Any flag that has a value that is a comma separated list on the command line bec
     host = "localhost:8125"
     ```
 
-##### Metric Poll Interval
+#### Metric Poll Interval
 
-* Description: Polling interval for runtime metrics.
+* Description: Rate at which runtime metrics (such as open file handles and memory usage) are collected.
 * Flag: `metric.poll-interval=”0m15s”`
 * Env: `PILOSA_METRIC_POLL_INTERVAL=0m15s`
 * Config:
@@ -253,9 +246,9 @@ Any flag that has a value that is a comma separated list on the command line bec
     poll-interval = "0m15s"
     ```
 
-##### Metric Diagnostics
+#### Metric Diagnostics
 
-* Description: Enable diagnostic reporting. To disable diagnostics set to false.
+* Description: Enable reporting of limited usage statistics to Pilosa developers. To disable, set to false.
 * Flag: `metric.diagnostics`
 * Env: `PILOSA_METRIC_DIAGNOSTICS`
 * Config:
@@ -266,7 +259,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     ```
 
 
-##### TLS Certificate
+#### TLS Certificate
 
 * Description: Path to the TLS certificate to use for serving HTTPS. Usually has one of`.crt` or `.pem` extensions.
 * Flag: `tls.certificate=/srv/pilosa/certs/server.crt`
@@ -278,7 +271,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     certificate = "/srv/pilosa/certs/server.crt"
     ```
 
-##### TLS Certificate Key
+#### TLS Certificate Key
 
 * Description: Path to the TLS certificate key to use for serving HTTPS. Usually has the `.key` extension.
 * Flag: `tls.key=/srv/pilosa/certs/server.key`
@@ -290,7 +283,7 @@ Any flag that has a value that is a comma separated list on the command line bec
     key = "/srv/pilosa/certs/server.key"
     ```
 
-##### TLS Skip Verify
+#### TLS Skip Verify
 
 * Description: Disables verification for checking TLS certificates. This configuration item is mainly useful for using self-signed certificates for a Pilosa cluster. Do not use in production since it makes man-in-the-middle attacks trivial.
 * Flag: `tls.skip-verify`
@@ -317,8 +310,7 @@ A three node cluster running on different hosts could be minimally configured as
 
     [cluster]
       replicas = 1
-      type = "gossip"
-      hosts = ["node0.pilosa.com:10101","node1.pilosa.com:10101","node2.pilosa.com:10101"]
+      coordinator = true
 
 #### Node 1
 
@@ -331,8 +323,7 @@ A three node cluster running on different hosts could be minimally configured as
 
     [cluster]
       replicas = 1
-      type = "gossip"
-      hosts = ["node0.pilosa.com:10101","node1.pilosa.com:10101","node2.pilosa.com:10101"]
+      coordinator = false
 
 #### Node 2
 
@@ -345,8 +336,7 @@ A three node cluster running on different hosts could be minimally configured as
 
     [cluster]
       replicas = 1
-      type = "gossip"
-      hosts = ["node0.pilosa.com:10101","node1.pilosa.com:10101","node2.pilosa.com:10101"]
+      coordinator = false
 
 
 ### Example Cluster Configuration (HTTPS)
@@ -365,8 +355,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     [cluster]
       replicas = 1
-      type = "gossip"
-      hosts = ["https://node0.pilosa.com:10101","https://node1.pilosa.com:10101","https://node2.pilosa.com:10101"]
+      coordinator = true
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
@@ -384,8 +373,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     [cluster]
       replicas = 1
-      type = "gossip"
-      hosts = ["https://node0.pilosa.com:10101","https://node1.pilosa.com:10101","https://node2.pilosa.com:10101"]
+      coordinator = false
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
@@ -403,8 +391,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     [cluster]
       replicas = 1
-      type = "gossip"
-      hosts = ["https://node0.pilosa.com:10101","https://node1.pilosa.com:10101","https://node2.pilosa.com:10101"]
+      coordinator = false
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
@@ -426,8 +413,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [cluster]
       replicas = 1
-      type = "gossip"
-      hosts = ["https://localhost:10100","https://localhost:10101","https://localhost:10102"]
+      coordinator = true
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
@@ -445,8 +431,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [cluster]
       replicas = 1
-      type = "gossip"
-      hosts = ["https://localhost:10100","https://localhost:10101","https://localhost:10102"]
+      coordinator = false
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"
@@ -464,8 +449,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [cluster]
       replicas = 1
-      type = "gossip"
-      hosts = ["https://localhost:10100","https://localhost:10101","https://localhost:10102"]
+      coordinator = false
 
     [tls]
       certificate = "/home/pilosa/private/server.crt"

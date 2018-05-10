@@ -15,15 +15,11 @@
 package server_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math/rand"
-	"net/http"
-	"os"
 	"reflect"
 	"runtime"
 	"sort"
@@ -36,6 +32,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
+	"github.com/pkg/errors"
 )
 
 // Ensure program can process queries and maintain consistency.
@@ -45,24 +42,24 @@ func TestMain_Set_Quick(t *testing.T) {
 	}
 
 	if err := quick.Check(func(cmds []SetCommand) bool {
-		m := MustRunMain()
+		m := test.MustRunMain()
 		defer m.Close()
 
 		// Create client.
-		client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+		client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), server.GetHTTPClient(nil))
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Execute SetBit() commands.
 		for _, cmd := range cmds {
-			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && errors.Cause(err) != pilosa.ErrIndexExists {
 				t.Fatal(err)
 			}
 			if err := client.CreateFrame(context.Background(), "i", cmd.Frame, pilosa.FrameOptions{}); err != nil && err != pilosa.ErrFrameExists {
 				t.Fatal(err)
 			}
-			if _, err := m.Query("i", "", fmt.Sprintf(`SetBit(rowID=%d, frame=%q, columnID=%d)`, cmd.ID, cmd.Frame, cmd.ColumnID)); err != nil {
+			if _, err := m.Query("i", "", fmt.Sprintf(`SetBit(row=%d, frame=%q, col=%d)`, cmd.ID, cmd.Frame, cmd.ColumnID)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -78,7 +75,7 @@ func TestMain_Set_Quick(t *testing.T) {
 						},
 					},
 				}) + "\n"
-				if res, err := m.Query("i", "", fmt.Sprintf(`Bitmap(rowID=%d, frame=%q)`, id, frame)); err != nil {
+				if res, err := m.Query("i", "", fmt.Sprintf(`Bitmap(row=%d, frame=%q)`, id, frame)); err != nil {
 					t.Fatal(err)
 				} else if res != exp {
 					t.Fatalf("unexpected result:\n\ngot=%s\n\nexp=%s\n\n", res, exp)
@@ -101,7 +98,7 @@ func TestMain_Set_Quick(t *testing.T) {
 						},
 					},
 				}) + "\n"
-				if res, err := m.Query("i", "", fmt.Sprintf(`Bitmap(rowID=%d, frame=%q)`, id, frame)); err != nil {
+				if res, err := m.Query("i", "", fmt.Sprintf(`Bitmap(row=%d, frame=%q)`, id, frame)); err != nil {
 					t.Fatal(err)
 				} else if res != exp {
 					t.Fatalf("unexpected result (reopen):\n\ngot=%s\n\nexp=%s\n\n", res, exp)
@@ -121,7 +118,7 @@ func TestMain_Set_Quick(t *testing.T) {
 
 // Ensure program can set row attributes and retrieve them.
 func TestMain_SetRowAttrs(t *testing.T) {
-	m := MustRunMain()
+	m := test.MustRunMain()
 	defer m.Close()
 
 	// Create frames.
@@ -137,36 +134,36 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	}
 
 	// Set bits on different rows in different frames.
-	if _, err := m.Query("i", "", `SetBit(rowID=1, frame="x", columnID=100)`); err != nil {
+	if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(rowID=2, frame="x", columnID=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(row=2, frame="x", col=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(rowID=2, frame="z", columnID=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(row=2, frame="z", col=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(rowID=3, frame="neg", columnID=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(row=3, frame="neg", col=100)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set row attributes.
-	if _, err := m.Query("i", "", `SetRowAttrs(rowID=1, frame="x", x=100)`); err != nil {
+	if _, err := m.Query("i", "", `SetRowAttrs(row=1, frame="x", x=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetRowAttrs(rowID=2, frame="x", x=-200)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetRowAttrs(row=2, frame="x", x=-200)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetRowAttrs(rowID=2, frame="z", x=300)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetRowAttrs(row=2, frame="z", x=300)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetRowAttrs(rowID=3, frame="neg", x=-0.44)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetRowAttrs(row=3, frame="neg", x=-0.44)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row x/1.
-	if res, err := m.Query("i", "", `Bitmap(rowID=1, frame="x")`); err != nil {
+	if res, err := m.Query("i", "", `Bitmap(row=1, frame="x")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
 	// Query row x/2.
-	if res, err := m.Query("i", "", `Bitmap(rowID=2, frame="x")`); err != nil {
+	if res, err := m.Query("i", "", `Bitmap(row=2, frame="x")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-200},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -177,19 +174,19 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	}
 
 	// Query rows after reopening.
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(rowID=1, frame="x")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=1, frame="x")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(rowID=3, frame="neg")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=3, frame="neg")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-0.44},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 	// Query row x/2.
-	if res, err := m.Query("i", "", `Bitmap(rowID=2, frame="x")`); err != nil {
+	if res, err := m.Query("i", "", `Bitmap(row=2, frame="x")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-200},"bits":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -198,7 +195,7 @@ func TestMain_SetRowAttrs(t *testing.T) {
 
 // Ensure program can set column attributes and retrieve them.
 func TestMain_SetColumnAttrs(t *testing.T) {
-	m := MustRunMain()
+	m := test.MustRunMain()
 	defer m.Close()
 
 	// Create frames.
@@ -210,19 +207,19 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	}
 
 	// Set bits on row.
-	if _, err := m.Query("i", "", `SetBit(rowID=1, frame="x", columnID=100)`); err != nil {
+	if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(rowID=1, frame="x", columnID=101)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=101)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set column attributes.
-	if _, err := m.Query("i", "", `SetColumnAttrs(id=100, foo="bar")`); err != nil {
+	if _, err := m.Query("i", "", `SetColumnAttrs(col=100, foo="bar")`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row.
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(rowID=1, frame="x")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=1, frame="x")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -233,54 +230,64 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	}
 
 	// Query row after reopening.
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(rowID=1, frame="x")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=1, frame="x")`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 }
 
-// Ensure program can set column attributes with columnLabel option.
-func TestMain_SetColumnAttrsWithColumnOption(t *testing.T) {
-	m := MustRunMain()
-	defer m.Close()
+// Ensure inverse slices get handled correctly in a multi-node query.
+func TestMain_InverseSlices(t *testing.T) {
+	mains := test.MustRunMainWithCluster(t, 2)
+
+	m0 := mains[0]
+	m1 := mains[1]
+
+	// Make sure to use node0 in the cluster.
+	var m *test.Main
+	if m0.Server.NodeID < m1.Server.NodeID {
+		m = m0
+	} else {
+		m = m1
+	}
 
 	// Create frames.
 	client := m.Client()
-	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{ColumnLabel: "col"}); err != nil && err != pilosa.ErrIndexExists {
-		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "i", "x", pilosa.FrameOptions{}); err != nil {
-		t.Fatal(err)
+	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		t.Fatal("create index:", err)
+	}
+	if err := client.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
+		t.Fatal("create frame:", err)
 	}
 
-	// Set bits on row.
-	if _, err := m.Query("i", "", `SetBit(rowID=1, frame="x", col=100)`); err != nil {
-		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(rowID=1, frame="x", col=101)`); err != nil {
-		t.Fatal(err)
+	// Write data on cluster.
+	if _, err := m.Query("i", "", fmt.Sprintf(`
+		SetBit(col=1, frame="f", row=1000)
+		SetBit(col=1, frame="f", row=2000)
+		SetBit(col=1, frame="f", row=%d)
+	`, 1*pilosa.SliceWidth)); err != nil {
+		t.Fatal("setting bits:", err)
 	}
 
-	// Set column attributes.
-	if _, err := m.Query("i", "", `SetColumnAttrs(col=100, foo="bar")`); err != nil {
-		t.Fatal(err)
-	}
+	time.Sleep(1 * time.Second)
 
-	// Query row.
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(rowID=1, frame="x")`); err != nil {
-		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+	// Query the cluster.
+	if res, err := m.Query("i", "", `Bitmap(col=1, frame="f")`); err != nil {
+		t.Fatal("another bitmap query:", err)
+	} else if res != fmt.Sprintf(`{"results":[{"attrs":{},"bits":[1000,2000,%d]}]}`, 1*pilosa.SliceWidth)+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
-
 }
 
 // Ensure program can set bits on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
-	mains1 := NewMainArrayWithCluster(2)
-	m0 := mains1[0]
+	mains1 := test.MustRunMainWithCluster(t, 2)
+	m10 := mains1[0]
+	m11 := mains1[1]
 
 	// Create frames.
-	client := m0.Client()
+	client := m10.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create index:", err)
 	}
@@ -289,47 +296,58 @@ func TestMain_FrameRestore(t *testing.T) {
 	}
 
 	// Write data on first cluster.
-	if _, err := m0.Query("i", "", `
-		SetBit(rowID=1, frame="f", columnID=100)
-		SetBit(rowID=1, frame="f", columnID=1000)
-		SetBit(rowID=1, frame="f", columnID=100000)
-		SetBit(rowID=1, frame="f", columnID=200000)
-		SetBit(rowID=1, frame="f", columnID=400000)
-		SetBit(rowID=1, frame="f", columnID=600000)
-		SetBit(rowID=1, frame="f", columnID=800000)
+	if _, err := m10.Query("i", "", `
+		SetBit(row=1, frame="f", col=100)
+		SetBit(row=1, frame="f", col=1000)
+		SetBit(row=1, frame="f", col=100000)
+		SetBit(row=1, frame="f", col=200000)
+		SetBit(row=1, frame="f", col=400000)
+		SetBit(row=1, frame="f", col=600000)
+		SetBit(row=1, frame="f", col=800000)
 	`); err != nil {
 		t.Fatal("setting bits:", err)
 	}
 
 	// Query row on first cluster.
-	if res, err := m0.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
+	if res, err := m10.Query("i", "", `Bitmap(row=1, frame="f")`); err != nil {
 		t.Fatal("bitmap query:", err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
 	// Start second cluster.
-	mains2 := NewMainArrayWithCluster(2)
-	m2 := mains2[0]
-	defer m2.Close()
+	mains2 := test.MustRunMainWithCluster(t, 2)
+	m20 := mains2[0]
+	defer m20.Close()
+	m21 := mains2[1]
+	defer m21.Close()
 
 	// Import from first cluster.
-	client, err := pilosa.NewInternalHTTPClient(m2.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
+	client20, err := pilosa.NewInternalHTTPClient(m20.Server.URI.HostPort(), server.GetHTTPClient(nil))
 	if err != nil {
 		t.Fatal("new client:", err)
 	}
-	if err := m2.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+	client21, err := pilosa.NewInternalHTTPClient(m21.Server.URI.HostPort(), server.GetHTTPClient(nil))
+	if err != nil {
+		t.Fatal("new client:", err)
+	}
+
+	if err := m20.Client().CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create new index:", err)
 	}
-	if err := m2.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+	if err := m20.Client().CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal("create new frame:", err)
 	}
-	if err := client.RestoreFrame(context.Background(), m0.Server.URI.HostPort(), "i", "f"); err != nil {
+
+	if err := client20.RestoreFrame(context.Background(), m10.Server.URI.HostPort(), "i", "f"); err != nil {
+		t.Fatal("restore frame:", err)
+	}
+	if err := client21.RestoreFrame(context.Background(), m11.Server.URI.HostPort(), "i", "f"); err != nil {
 		t.Fatal("restore frame:", err)
 	}
 
 	// Query row on second cluster.
-	if res, err := m2.Query("i", "", `Bitmap(rowID=1, frame="f")`); err != nil {
+	if res, err := m20.Query("i", "", `Bitmap(row=1, frame="f")`); err != nil {
 		t.Fatal("another bitmap query:", err)
 	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("2unexpected result: %s", res)
@@ -378,226 +396,49 @@ func TestCountOpenFiles(t *testing.T) {
 	}
 }
 
-// Ensure program can send/receive broadcast messages.
-func TestMain_SendReceiveMessage(t *testing.T) {
-	mains := NewMainArrayWithCluster(2)
-	m0 := mains[0]
-	defer m0.Close()
+func TestMain_RecalculateHashes(t *testing.T) {
+	const clusterSize = 5
+	cluster := test.MustRunMainWithCluster(t, clusterSize)
 
-	m1 := mains[1]
-	defer m1.Close()
-
-	// Expected indexes and Frames
-	expected := map[string][]string{
-		"i": []string{"f"},
-	}
-
-	// Create a client for each node.
-	client0 := m0.Client()
-	client1 := m1.Client()
-
-	// Create indexes and frames on one node.
+	// Create the schema.
+	client0 := cluster[0].Client()
 	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
-		t.Fatal(err)
-	} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
-		t.Fatal(err)
+		t.Fatal("create index:", err)
+	}
+	if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{CacheType: "ranked"}); err != nil {
+		t.Fatal("create frame:", err)
 	}
 
-	// Make sure node0 knows about the index and frame created.
-	schema0, err := client0.Schema(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	received0 := map[string][]string{}
-	for _, idx := range schema0 {
-		received0[idx.Name] = []string{}
-		for _, frame := range idx.Frames {
-			received0[idx.Name] = append(received0[idx.Name], frame.Name)
+	// Set some bits
+	data := []string{}
+	for rowID := 1; rowID < 10; rowID++ {
+		for columnID := 1; columnID < 100; columnID++ {
+			data = append(data, fmt.Sprintf(`SetBit(row=%d, frame="f", col=%d)`, rowID, columnID))
 		}
 	}
-	if !reflect.DeepEqual(received0, expected) {
-		t.Fatalf("unexpected schema on node0: %s", received0)
+	if _, err := cluster[0].Query("i", "", strings.Join(data, "")); err != nil {
+		t.Fatal("setting bits:", err)
 	}
 
-	// Make sure node1 knows about the index and frame created.
-	schema1, err := client1.Schema(context.Background())
+	// Calculate caches on the first node
+	err := cluster[0].RecalculateCaches()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("recalculating caches: %v", err)
 	}
-	received1 := map[string][]string{}
-	for _, idx := range schema1 {
-		received1[idx.Name] = []string{}
-		for _, frame := range idx.Frames {
-			received1[idx.Name] = append(received1[idx.Name], frame.Name)
+
+	target := `{"results":[[{"id":7,"count":99},{"id":1,"count":99},{"id":9,"count":99},{"id":5,"count":99},{"id":4,"count":99},{"id":8,"count":99},{"id":2,"count":99},{"id":6,"count":99},{"id":3,"count":99}]]}`
+
+	// Run a TopN query on all nodes. The result should be the same as the target.
+	for _, m := range cluster {
+		res, err := m.Query("i", "", `TopN(frame="f")`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res = strings.TrimSpace(res)
+		if sortedString(target) != sortedString(res) {
+			t.Fatalf("%v != %v", target, res)
 		}
 	}
-	if !reflect.DeepEqual(received1, expected) {
-		t.Fatalf("unexpected schema on node1: %s", received1)
-	}
-
-	// Write data on first node.
-	if _, err := m0.Query("i", "", `
-            SetBit(rowID=1, frame="f", columnID=1)
-            SetBit(rowID=1, frame="f", columnID=2400000)
-        `); err != nil {
-		t.Fatal(err)
-	}
-
-	// We have to wait for the broadcast message to be sent before checking state.
-	time.Sleep(1 * time.Second)
-
-	// Make sure node0 knows about the latest MaxSlice.
-	maxSlices0, err := client0.MaxSliceByIndex(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if maxSlices0["i"] != 2 {
-		t.Fatalf("unexpected maxSlice on node0: %d", maxSlices0["i"])
-	}
-
-	// Make sure node1 knows about the latest MaxSlice.
-	maxSlices1, err := client1.MaxSliceByIndex(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if maxSlices1["i"] != 2 {
-		t.Fatalf("unexpected maxSlice on node1: %d", maxSlices1["i"])
-	}
-
-	// Write input definition to the first node.
-	if _, err := m0.CreateDefinition("i", "test", `{
-            "frames": [{"name": "event-time",
-                        "options": {
-                            "cacheType": "ranked",
-                            "timeQuantum": "YMD"
-                        }}],
-            "fields": [{"name": "columnID",
-                        "primaryKey": true
-                        }]}
-        `); err != nil {
-		t.Fatal(err)
-	}
-
-	// We have to wait for the broadcast message to be sent before checking state.
-	time.Sleep(1 * time.Second)
-
-	frame0 := m0.Server.Holder.Frame("i", "event-time")
-	if frame0 == nil {
-		t.Fatal("frame not found")
-	}
-	frame1 := m1.Server.Holder.Frame("i", "event-time")
-	if frame1 == nil {
-		t.Fatal("frame not found")
-	}
-}
-
-// Main represents a test wrapper for main.Main.
-type Main struct {
-	*server.Command
-
-	Stdin  bytes.Buffer
-	Stdout bytes.Buffer
-	Stderr bytes.Buffer
-}
-
-// NewMain returns a new instance of Main with a temporary data directory and random port.
-func NewMain() *Main {
-	path, err := ioutil.TempDir("", "pilosa-")
-	if err != nil {
-		panic(err)
-	}
-
-	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
-	m.Server.Network = *test.Network
-	m.Config.DataDir = path
-	m.Config.Bind = "localhost:0"
-	m.Config.Cluster.Type = "static"
-	m.Command.Stdin = &m.Stdin
-	m.Command.Stdout = &m.Stdout
-	m.Command.Stderr = &m.Stderr
-
-	if testing.Verbose() {
-		m.Command.Stdout = io.MultiWriter(os.Stdout, m.Command.Stdout)
-		m.Command.Stderr = io.MultiWriter(os.Stderr, m.Command.Stderr)
-	}
-
-	return m
-}
-
-func NewMainArrayWithCluster(size int) []*Main {
-	cluster, err := test.NewServerCluster(size)
-	if err != nil {
-		panic(err)
-	}
-	mainArray := make([]*Main, size)
-	for i := 0; i < size; i++ {
-		mainArray[i] = &Main{Command: cluster.Servers[i]}
-	}
-	return mainArray
-}
-
-// MustRunMain returns a new, running Main. Panic on error.
-func MustRunMain() *Main {
-	m := NewMain()
-	if err := m.Run(); err != nil {
-		panic(err)
-	}
-	return m
-}
-
-// Close closes the program and removes the underlying data directory.
-func (m *Main) Close() error {
-	defer os.RemoveAll(m.Config.DataDir)
-	return m.Command.Close()
-}
-
-// Reopen closes the program and reopens it.
-func (m *Main) Reopen() error {
-	if err := m.Command.Close(); err != nil {
-		return err
-	}
-
-	// Create new main with the same config.
-	config := m.Config
-	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
-	m.Server.Network = *test.Network
-	m.Config = config
-
-	// Run new program.
-	if err := m.Run(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// URL returns the base URL string for accessing the running program.
-func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
-
-// Client returns a client to connect to the program.
-func (m *Main) Client() *pilosa.InternalHTTPClient {
-	client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), pilosa.GetHTTPClient(nil))
-	if err != nil {
-		panic(err)
-	}
-	return client
-}
-
-// Query executes a query against the program through the HTTP API.
-func (m *Main) Query(index, rawQuery, query string) (string, error) {
-	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
-	}
-	return resp.Body, nil
-}
-
-// CreateDefinition.
-func (m *Main) CreateDefinition(index, def, query string) (string, error) {
-	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/input-definition/%s", index, def), query)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
-	}
-	return resp.Body, nil
 }
 
 // SetCommand represents a command to set a bit.
@@ -650,36 +491,10 @@ func GenerateSetCommands(n int, rand *rand.Rand) []SetCommand {
 }
 
 // ParseConfig parses s into a Config.
-func ParseConfig(s string) (pilosa.Config, error) {
-	var c pilosa.Config
+func ParseConfig(s string) (server.Config, error) {
+	var c server.Config
 	_, err := toml.Decode(s, &c)
 	return c, err
-}
-
-// MustDo executes http.Do() with an http.NewRequest(). Panic on error.
-func MustDo(method, urlStr string, body string) *httpResponse {
-	req, err := http.NewRequest(method, urlStr, strings.NewReader(body))
-	if err != nil {
-		panic(err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	buf, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	return &httpResponse{Response: resp, Body: string(buf)}
-}
-
-// httpResponse is a wrapper for http.Response that holds the Body as a string.
-type httpResponse struct {
-	*http.Response
-	Body string
 }
 
 // MustMarshalJSON marshals v into a string. Panic on error.
@@ -689,6 +504,12 @@ func MustMarshalJSON(v interface{}) string {
 		panic(err)
 	}
 	return string(buf)
+}
+
+func sortedString(s string) string {
+	arr := strings.Split(s, "")
+	sort.Strings(arr)
+	return strings.Join(arr, "")
 }
 
 // uint64Slice represents a sortable slice of uint64 numbers.

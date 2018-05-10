@@ -16,7 +16,6 @@ package ctl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -24,6 +23,8 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/server"
+	"github.com/pkg/errors"
 )
 
 // BenchCommand represents a command for benchmarking index operations.
@@ -42,7 +43,7 @@ type BenchCommand struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	TLS pilosa.TLSConfig
+	TLS server.TLSConfig
 }
 
 // NewBenchCommand returns a new instance of BenchCommand.
@@ -57,7 +58,7 @@ func (cmd *BenchCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
 	client, err := CommandClient(cmd)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating client")
 	}
 
 	switch cmd.Op {
@@ -94,7 +95,7 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client pilosa.InternalCl
 			Query:  fmt.Sprintf(`SetBit(id=%d, frame="%s", columnID=%d)`, rowID, cmd.Frame, columnID),
 			Remote: false,
 		}
-		if _, err := client.ExecuteQuery(ctx, cmd.Index, queryRequest); err != nil {
+		if _, err := client.Query(ctx, cmd.Index, queryRequest); err != nil {
 			return err
 		}
 	}
@@ -110,6 +111,6 @@ func (cmd *BenchCommand) TLSHost() string {
 	return cmd.Host
 }
 
-func (cmd *BenchCommand) TLSConfiguration() pilosa.TLSConfig {
+func (cmd *BenchCommand) TLSConfiguration() server.TLSConfig {
 	return cmd.TLS
 }

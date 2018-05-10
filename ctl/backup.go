@@ -16,11 +16,12 @@ package ctl
 
 import (
 	"context"
-	"errors"
 	"io"
 	"os"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
+	"github.com/pkg/errors"
 )
 
 // BackupCommand represents a command for backing up a view.
@@ -39,7 +40,7 @@ type BackupCommand struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	TLS pilosa.TLSConfig
+	TLS server.TLSConfig
 }
 
 // NewBackupCommand returns a new instance of BackupCommand.
@@ -59,26 +60,26 @@ func (cmd *BackupCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
 	client, err := CommandClient(cmd)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating client")
 	}
 
 	// Open output file.
 	f, err := os.Create(cmd.Path)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating file")
 	}
 	defer f.Close()
 
 	// Begin streaming backup.
 	if err := client.BackupTo(ctx, f, cmd.Index, cmd.Frame, cmd.View); err != nil {
-		return err
+		return errors.Wrap(err, "backing up")
 	}
 
 	// Sync & close file to ensure durability.
 	if err := f.Sync(); err != nil {
-		return err
+		return errors.Wrap(err, "syncing")
 	} else if err = f.Close(); err != nil {
-		return err
+		return errors.Wrap(err, "closing file")
 	}
 
 	return nil
@@ -88,6 +89,6 @@ func (cmd *BackupCommand) TLSHost() string {
 	return cmd.Host
 }
 
-func (cmd *BackupCommand) TLSConfiguration() pilosa.TLSConfig {
+func (cmd *BackupCommand) TLSConfiguration() server.TLSConfig {
 	return cmd.TLS
 }

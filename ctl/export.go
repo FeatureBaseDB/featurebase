@@ -21,6 +21,8 @@ import (
 	"os"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
+	"github.com/pkg/errors"
 )
 
 // ExportCommand represents a command for bulk exporting data from a server.
@@ -38,7 +40,7 @@ type ExportCommand struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	TLS pilosa.TLSConfig
+	TLS server.TLSConfig
 }
 
 // NewExportCommand returns a new instance of ExportCommand.
@@ -67,7 +69,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	if cmd.Path != "" {
 		f, err := os.Create(cmd.Path)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating file")
 		}
 		defer f.Close()
 
@@ -77,7 +79,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
 	client, err := CommandClient(cmd)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating client")
 	}
 
 	// Determine slice count.
@@ -89,21 +91,21 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	}
 
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting slice count")
 	}
 
 	// Export each slice.
 	for slice := uint64(0); slice <= maxSlices[cmd.Index]; slice++ {
 		logger.Printf("exporting slice: %d", slice)
 		if err := client.ExportCSV(ctx, cmd.Index, cmd.Frame, cmd.View, slice, w); err != nil {
-			return err
+			return errors.Wrap(err, "exporting")
 		}
 	}
 
 	// Close writer, if applicable.
 	if w, ok := w.(io.Closer); ok {
 		if err := w.Close(); err != nil {
-			return err
+			return errors.Wrap(err, "closing")
 		}
 	}
 
@@ -114,6 +116,6 @@ func (cmd *ExportCommand) TLSHost() string {
 	return cmd.Host
 }
 
-func (cmd *ExportCommand) TLSConfiguration() pilosa.TLSConfig {
+func (cmd *ExportCommand) TLSConfiguration() server.TLSConfig {
 	return cmd.TLS
 }

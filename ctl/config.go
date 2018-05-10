@@ -21,12 +21,13 @@ import (
 
 	toml "github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
 )
 
 // ConfigCommand represents a command for printing a default config.
 type ConfigCommand struct {
 	*pilosa.CmdIO
-	Config *pilosa.Config
+	Config *server.Config
 }
 
 // NewConfigCommand returns a new instance of ConfigCommand.

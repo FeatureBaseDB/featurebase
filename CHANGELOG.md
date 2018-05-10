@@ -5,6 +5,135 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v0.9.0] - 2018-05-04
+
+This version contains 188 contribution from 12 contributors. There are 141 files changed, 17,832 insertions, and 7,503 deletions.
+
+*Please see special [upgrading instructions](https://www.pilosa.com/docs/latest/administration/#version-0-9) for this release.*
+
+### Added
+
+- Add ability to dynamically resize clusters ([#982](https://github.com/pilosa/pilosa/pull/982), [#946](https://github.com/pilosa/pilosa/pull/946), [#929](https://github.com/pilosa/pilosa/pull/929), [#927](https://github.com/pilosa/pilosa/pull/927), [#917](https://github.com/pilosa/pilosa/pull/917), [#913](https://github.com/pilosa/pilosa/pull/913), [#912](https://github.com/pilosa/pilosa/pull/912), [#908](https://github.com/pilosa/pilosa/pull/908))
+- Update docs to include cluster-resize config and instructions ([#1088](https://github.com/pilosa/pilosa/pull/1088))
+- Add support for lists of gossip seeds for redundancy ([#1133](https://github.com/pilosa/pilosa/pull/1133))
+- Add HTTP Handler validation ([#1140](https://github.com/pilosa/pilosa/pull/1140), [#1121](https://github.com/pilosa/pilosa/pull/1121))
+- Add validation around node-remove conditions ([#1138](https://github.com/pilosa/pilosa/pull/1138))
+- broadcast.SendSync field creation and deletion to all nodes ([#1132](https://github.com/pilosa/pilosa/pull/1132))
+- Spread recalculate caches to all nodes. Fixes #1069 ([#1109](https://github.com/pilosa/pilosa/pull/1109))
+- Add QueryResult.Type to protobuf message to distiguish results at the client ([#1064](https://github.com/pilosa/pilosa/pull/1064))
+- Modify `pilosa import` to support string rows/columns ([#1063](https://github.com/pilosa/pilosa/pull/1063))
+- Add some statsd calls to HolderSyncer ([#1048](https://github.com/pilosa/pilosa/pull/1048))
+- Add support for memberlist gossip configuration via pilosa.Config ([#1014](https://github.com/pilosa/pilosa/pull/1014))
+- Add local and cluster IDs ([#1013](https://github.com/pilosa/pilosa/pull/1013), [#1245](https://github.com/pilosa/pilosa/pull/1245))
+- Add HolderCleaner and view.DeleteFragment ([#985](https://github.com/pilosa/pilosa/pull/985))
+- Add set-coordinator endpoint ([#963](https://github.com/pilosa/pilosa/pull/963))
+- Implement Min/Max BSI queries ([#1191](https://github.com/pilosa/pilosa/pull/1191))
+- Log time/version to startup log ([#1246](https://github.com/pilosa/pilosa/pull/1246))
+- Documentation improvements ([#1135](https://github.com/pilosa/pilosa/pull/1135), [#1154](https://github.com/pilosa/pilosa/pull/1154), [#1091](https://github.com/pilosa/pilosa/pull/1091), [#1108](https://github.com/pilosa/pilosa/pull/1108), [#1087](https://github.com/pilosa/pilosa/pull/1087), [#1086](https://github.com/pilosa/pilosa/pull/1086), [#1026](https://github.com/pilosa/pilosa/pull/1026), [#1022](https://github.com/pilosa/pilosa/pull/1022), [#1007](https://github.com/pilosa/pilosa/pull/1007), [#981](https://github.com/pilosa/pilosa/pull/981), [#901](https://github.com/pilosa/pilosa/pull/901), [#972](https://github.com/pilosa/pilosa/pull/972), [#1215](https://github.com/pilosa/pilosa/pull/1215), [#1213](https://github.com/pilosa/pilosa/pull/1213), [#1224](https://github.com/pilosa/pilosa/pull/1224), [#1250](https://github.com/pilosa/pilosa/pull/1250))
+
+### Changed
+
+- Put Statik behind an interface ([#1163](https://github.com/pilosa/pilosa/pull/1163))
+- Refactor diagnostics, inject gopsutil dependency ([#1166](https://github.com/pilosa/pilosa/pull/1166))
+- Use boolean instead of address to configure coordinator ([#1158](https://github.com/pilosa/pilosa/pull/1158))
+- Put GCNotify behind an interface ([#1148](https://github.com/pilosa/pilosa/pull/1148))
+- Replace custom assembly bit functions with standard go ([#797](https://github.com/pilosa/pilosa/pull/797))
+- Improve roaring tests ([#1115](https://github.com/pilosa/pilosa/pull/1115))
+- Change configuration cluster.type (string) to cluster.disabled (bool) ([#1099](https://github.com/pilosa/pilosa/pull/1099))
+- Use NodeID instead of URI for node identification ([#1077](https://github.com/pilosa/pilosa/pull/1077))
+- Change gossip config from DefaultLocalConfig to DefaultWANConfig ([#1032](https://github.com/pilosa/pilosa/pull/1032))
+- Use binary search in runAdd ([#1027](https://github.com/pilosa/pilosa/pull/1027))
+- Use HTTP handler for gossip SendSync ([#1001](https://github.com/pilosa/pilosa/pull/1001))
+- Group the write operations in syncBlock by MaxWritesPerRequest ([#950](https://github.com/pilosa/pilosa/pull/950))
+- Refactor HTTPClient handling ([#991](https://github.com/pilosa/pilosa/pull/991))
+- Remove FrameSchema. Move Fields to the Frame struct ([#907](https://github.com/pilosa/pilosa/pull/907))
+- Refactor pilosa/server ([#1220](https://github.com/pilosa/pilosa/pull/1220))
+- Clean up flipBitmap and add tests ([#1223](https://github.com/pilosa/pilosa/pull/1223))
+- Move pilosa.Config to pilosa/server.Config ([#1216](https://github.com/pilosa/pilosa/pull/1216))
+- Vendor github.com/golang/groupcache/lru ([#1221](https://github.com/pilosa/pilosa/pull/1221))
+
+### Removed
+
+- Remove the Gossip stutter from memberlist-related config options ([#1171](https://github.com/pilosa/pilosa/pull/1171))
+- Remove old GossipPort and GossipSeed config options ([#1142](https://github.com/pilosa/pilosa/pull/1142))
+- Remove cluster type `http` from docs ([#1130](https://github.com/pilosa/pilosa/pull/1130))
+- Remove holder.Peek, combine with HasData, move server logic ([#1226](https://github.com/pilosa/pilosa/pull/1226))
+- Remove PATCH frame endpoint ([#1222](https://github.com/pilosa/pilosa/pull/1222))
+- Remove Index.MergeSchemas() method ([#1219](https://github.com/pilosa/pilosa/pull/1219))
+- Remove references to Input Definition from the docs ([#1212](https://github.com/pilosa/pilosa/pull/1212))
+- Remove Index.TimeQuantum ([#1209](https://github.com/pilosa/pilosa/pull/1209))
+- Remove SecurityManager. Implement api restrictions in api package. ([#1207](https://github.com/pilosa/pilosa/pull/1207))
+
+### Fixed
+
+- Handle the scheme correctly in config.Bind ([#1143](https://github.com/pilosa/pilosa/pull/1143))
+- Prevent excessive sendSync (createView) messages. ([#1139](https://github.com/pilosa/pilosa/pull/1139))
+- Fix a shift logic bug in bitmapZeroRange ([#1110](https://github.com/pilosa/pilosa/pull/1110))
+- Fix node id validation on set-coordinator ([#1102](https://github.com/pilosa/pilosa/pull/1102))
+- Avoid overflow bug in differenceRunArray ([#1105](https://github.com/pilosa/pilosa/pull/1105))
+- Fix bug in NewServerCluster where each host was its own coordinator ([#1101](https://github.com/pilosa/pilosa/pull/1101))
+- Fix count/bitmap mismatch bug ([#1084](https://github.com/pilosa/pilosa/pull/1084))
+- Fix edge case with Range() calls outside field Min/Max. Fixes #876. ([#979](https://github.com/pilosa/pilosa/pull/979))
+- Bind the handler to all interfaces (0.0.0.0) in Dockerfile. Fixes #977. ([#980](https://github.com/pilosa/pilosa/pull/980))
+- Fix nil client bug in monitorAntiEntropy (and test) ([#1233](https://github.com/pilosa/pilosa/pull/1233))
+- Fix crash due to server.diagnostics.server not set ([#1229](https://github.com/pilosa/pilosa/pull/1229))
+- Fix some cluster race conditions ([#1228](https://github.com/pilosa/pilosa/pull/1228))
+
+### Deprecated
+
+- Deprecate RangeEnabled option ([#1205](https://github.com/pilosa/pilosa/pull/1205))
+
+### Performance
+
+- Add benchmark for various container usage patterns ([#1017](https://github.com/pilosa/pilosa/pull/1017))
+
+## [0.8.8] - 2018-02-19
+
+This version contains 1 contribution from 2 contributors. There are 4 files changed, 1,153 insertions, and 618 deletions.
+
+### Fixed
+
+- Bug fixes and improved test coverage in roaring ([#1118](https://github.com/pilosa/pilosa/pull/1118))
+
+## [0.8.7] - 2018-02-12
+
+This version contains 1 contribution from 1 contributors. There are 2 files changed, 84 insertions, and 4 deletions.
+
+### Fixed
+
+- Fix a shift logic bug in bitmapZeroRange ([#1111](https://github.com/pilosa/pilosa/pull/1111))
+
+## [0.8.6] - 2018-02-09
+
+This version contains 2 contributions from 2 contributors. There are 3 files changed, 171 insertions, and 6 deletions.
+
+### Fixed
+
+- Fix overflow bug in differenceRunArray [#1106](https://github.com/pilosa/pilosa/pull/1106)
+- Fix bug where count and bitmap queries could return different numbers [#1083](https://github.com/pilosa/pilosa/pull/1083)
+
+## [0.8.5] - 2018-01-18
+
+This version contains 1 contribution from 1 contributor. There is 1 file changed, 1 insertion, and 0 deletions.
+
+### Fixed
+
+- Bind Docker container on all interfaces ([#1061](https://github.com/pilosa/pilosa/pull/1061))
+
+## [0.8.4] - 2018-01-10
+
+This version contains 4 contributions from 3 contributors. There are 17 files changed, 974 insertions, and 221 deletions.
+
+### Fixed
+
+- Group the write operations in syncBlock by MaxWritesPerRequest ([#1038](https://github.com/pilosa/pilosa/pull/1038))
+- Change gossip config from memberlist.DefaultLocalConfig to memberlist.DefaultWANConfig ([#1033](https://github.com/pilosa/pilosa/pull/1033))
+
+### Performance
+
+- Change AttrBlock handler calls to support protobuf instead of json ([#1046](https://github.com/pilosa/pilosa/pull/1046))
+- Use RLock instead of Lock in a few places ([#1042](https://github.com/pilosa/pilosa/pull/1042))
+
 ## [0.8.3] - 2017-12-12
 
 This version contains 1 contribution from 1 contributor. There are 2 files changed, 59 insertions, and 42 deletions.

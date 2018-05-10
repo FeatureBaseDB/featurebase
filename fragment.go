@@ -20,14 +20,12 @@ import (
 	"bytes"
 	"container/heap"
 	"context"
-	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -35,6 +33,8 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/cespare/xxhash"
 
 	"math"
 
@@ -102,12 +102,12 @@ type Fragment struct {
 	// so that they can be mmapped and heap utilization can be kept low.
 	MaxOpN int
 
-	// Writer used for out-of-band log entries.
-	LogOutput io.Writer
+	// Logger used for out-of-band log entries.
+	Logger Logger
 
 	// Row attribute storage.
 	// This is set by the parent frame unless overridden for testing.
-	RowAttrStore *AttrStore
+	RowAttrStore AttrStore
 
 	stats StatsClient
 }
@@ -123,8 +123,8 @@ func NewFragment(path, index, frame, view string, slice uint64) *Fragment {
 		CacheType: DefaultCacheType,
 		CacheSize: DefaultCacheSize,
 
-		LogOutput: ioutil.Discard,
-		MaxOpN:    DefaultFragmentMaxOpN,
+		Logger: NopLogger,
+		MaxOpN: DefaultFragmentMaxOpN,
 
 		stats: NopStatsClient,
 	}
@@ -255,6 +255,7 @@ func (f *Fragment) openCache() error {
 		f.cache = NewLRUCache(f.CacheSize)
 	case CacheTypeNone:
 		f.cache = NewNopCache()
+		return nil
 	default:
 		return ErrInvalidCacheType
 	}
@@ -271,7 +272,7 @@ func (f *Fragment) openCache() error {
 	// Unmarshal cache data.
 	var pb internal.Cache
 	if err := proto.Unmarshal(buf, &pb); err != nil {
-		f.logger().Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
+		f.Logger.Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
 		return nil
 	}
 
@@ -296,13 +297,13 @@ func (f *Fragment) Close() error {
 func (f *Fragment) close() error {
 	// Flush cache if closing gracefully.
 	if err := f.flushCache(); err != nil {
-		f.logger().Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
+		f.Logger.Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
 		return err
 	}
 
 	// Close underlying storage.
 	if err := f.closeStorage(); err != nil {
-		f.logger().Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
+		f.Logger.Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
 		return err
 	}
 
@@ -340,9 +341,6 @@ func (f *Fragment) closeStorage() error {
 
 	return nil
 }
-
-// logger returns a logger instance for the fragment.nt.
-func (f *Fragment) logger() *log.Logger { return log.New(f.LogOutput, "", log.LstdFlags) }
 
 // Row returns a row by ID.
 func (f *Fragment) Row(rowID uint64) *Bitmap {
@@ -614,6 +612,70 @@ func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, e
 	}
 
 	return sum, count, nil
+}
+
+// FieldMin returns the min of a given field as well as the number of columns involved.
+// A bitmap can be passed in to optionally filter the computed columns.
+func (f *Fragment) FieldMin(filter *Bitmap, bitDepth uint) (min, count uint64, err error) {
+
+	consider := f.Row(uint64(bitDepth))
+	if filter != nil {
+		consider = consider.Intersect(filter)
+	}
+
+	// If there are no columns to consider, return early.
+	if consider.Count() == 0 {
+		return 0, 0, nil
+	}
+
+	for i := bitDepth; i > uint(0); i-- {
+		ii := i - 1 // allow for uint range: (bitdepth-1) to 0
+		row := f.Row(uint64(ii))
+
+		x := consider.Difference(row)
+		count = x.Count()
+		if count > 0 {
+			consider = x
+		} else {
+			min += (1 << ii)
+			if ii == 0 {
+				count = consider.Count()
+			}
+		}
+	}
+
+	return min, count, nil
+}
+
+// FieldMax returns the max of a given field as well as the number of columns involved.
+// A bitmap can be passed in to optionally filter the computed columns.
+func (f *Fragment) FieldMax(filter *Bitmap, bitDepth uint) (max, count uint64, err error) {
+
+	consider := f.Row(uint64(bitDepth))
+	if filter != nil {
+		consider = consider.Intersect(filter)
+	}
+
+	// If there are no columns to consider, return early.
+	if consider.Count() == 0 {
+		return 0, 0, nil
+	}
+
+	for i := bitDepth; i > uint(0); i-- {
+		ii := i - 1 // allow for uint range: (bitdepth-1) to 0
+		row := f.Row(uint64(ii))
+
+		x := row.Intersect(consider)
+		count = x.Count()
+		if count > 0 {
+			max += (1 << ii)
+			consider = x
+		} else if ii == 0 {
+			count = consider.Count()
+		}
+	}
+
+	return max, count, nil
 }
 
 // FieldRange returns bitmaps with a field value encoding matching the predicate.
@@ -1020,7 +1082,7 @@ type TopOptions struct {
 // Checksum returns a checksum for the entire fragment.
 // If two fragments have the same checksum then they have the same data.
 func (f *Fragment) Checksum() []byte {
-	h := sha1.New()
+	h := xxhash.New()
 	for _, block := range f.Blocks() {
 		h.Write(block.Checksum)
 	}
@@ -1383,18 +1445,17 @@ func (f *Fragment) Snapshot() error {
 	defer f.mu.Unlock()
 	return f.snapshot()
 }
-func track(start time.Time, message string, stats StatsClient, logger *log.Logger) {
+func track(start time.Time, message string, stats StatsClient, logger Logger) {
 	elapsed := time.Since(start)
 	logger.Printf("%s took %s", message, elapsed)
 	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
 }
 
 func (f *Fragment) snapshot() error {
-	logger := f.logger()
-	logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
+	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
 	start := time.Now()
-	defer track(start, completeMessage, f.stats, logger)
+	defer track(start, completeMessage, f.stats, f.Logger)
 
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + SnapshotExt
@@ -1451,6 +1512,10 @@ func (f *Fragment) FlushCache() error {
 
 func (f *Fragment) flushCache() error {
 	if f.cache == nil {
+		return nil
+	}
+
+	if f.CacheType == CacheTypeNone {
 		return nil
 	}
 
@@ -1660,7 +1725,7 @@ type blockHasher struct {
 func newBlockHasher() blockHasher {
 	return blockHasher{
 		blockID: -1,
-		hash:    sha1.New(),
+		hash:    xxhash.New(),
 	}
 }
 func (h *blockHasher) Reset() {
@@ -1680,7 +1745,7 @@ func (h *blockHasher) WriteValue(v uint64) {
 type FragmentSyncer struct {
 	Fragment *Fragment
 
-	Host         string
+	Node         *Node
 	Cluster      *Cluster
 	RemoteClient *http.Client
 
@@ -1701,7 +1766,7 @@ func (s *FragmentSyncer) isClosing() bool {
 // then merges any blocks which have differences.
 func (s *FragmentSyncer) SyncFragment() error {
 	// Determine replica set.
-	nodes := s.Cluster.FragmentNodes(s.Fragment.Index(), s.Fragment.Slice())
+	nodes := s.Cluster.SliceNodes(s.Fragment.Index(), s.Fragment.Slice())
 	if len(nodes) == 1 {
 		return nil
 	}
@@ -1710,17 +1775,14 @@ func (s *FragmentSyncer) SyncFragment() error {
 	blockSets := make([][]FragmentBlock, 0, len(nodes))
 	for _, node := range nodes {
 		// Read local blocks.
-		if node.Host == s.Host {
+		if node.ID == s.Node.ID {
 			b := s.Fragment.Blocks()
 			blockSets = append(blockSets, b)
 			continue
 		}
 
 		// Retrieve remote blocks.
-		client, err := NewInternalHTTPClient(node.Host, s.RemoteClient)
-		if err != nil {
-			return err
-		}
+		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
 		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return err
@@ -1786,8 +1848,8 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	// Read pairs from each remote block.
 	var pairSets []PairSet
 	var clients []InternalClient
-	for _, node := range s.Cluster.FragmentNodes(f.Index(), f.Slice()) {
-		if s.Host == node.Host {
+	for _, node := range s.Cluster.SliceNodes(f.Index(), f.Slice()) {
+		if s.Node.ID == node.ID {
 			continue
 		}
 
@@ -1796,10 +1858,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 			return nil
 		}
 
-		client, err := NewInternalHTTPClient(node.Host, s.RemoteClient)
-		if err != nil {
-			return err
-		}
+		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
 		clients = append(clients, client)
 
 		// Only sync the standard block.
@@ -1837,15 +1896,19 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 		// Generate query with sets & clears, and group the requests to not exceed MaxWritesPerRequest.
 		total := len(set.ColumnIDs) + len(clear.ColumnIDs)
-		buffers := make([]bytes.Buffer, int(math.Ceil(float64(total)/float64(s.Cluster.MaxWritesPerRequest))))
+		maxWrites := s.Cluster.MaxWritesPerRequest
+		if maxWrites <= 0 {
+			maxWrites = 5000
+		}
+		buffers := make([]bytes.Buffer, int(math.Ceil(float64(total)/float64(maxWrites))))
 
 		// Only sync the standard block.
 		for j := 0; j < len(set.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "SetBit(frame=%q, rowID=%d, columnID=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "SetBit(frame=%q, row=%d, col=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
 			count++
 		}
 		for j := 0; j < len(clear.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/s.Cluster.MaxWritesPerRequest]), "ClearBit(frame=%q, rowID=%d, columnID=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "ClearBit(frame=%q, row=%d, col=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
 			count++
 		}
 
@@ -1861,7 +1924,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 				Query:  buffers[k].String(),
 				Remote: true,
 			}
-			_, err := clients[i].ExecuteQuery(context.Background(), f.Index(), queryRequest)
+			_, err := clients[i].Query(context.Background(), f.Index(), queryRequest)
 			if err != nil {
 				return err
 			}

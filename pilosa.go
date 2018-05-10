@@ -36,31 +36,26 @@ var (
 	ErrFrameExists          = errors.New("frame already exists")
 	ErrFrameNotFound        = errors.New("frame not found")
 	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
-	ErrColumnRowLabelEqual  = errors.New("column and row labels cannot be equal")
 
 	ErrInputDefinitionExists         = errors.New("input-definition already exists")
 	ErrInputDefinitionHasPrimaryKey  = errors.New("input-definition must contain one PrimaryKey")
 	ErrInputDefinitionDupePrimaryKey = errors.New("input-definition can only contain one PrimaryKey")
-	ErrInputDefinitionColumnLabel    = errors.New("PrimaryKey field name does not match columnLabel")
 	ErrInputDefinitionNameRequired   = errors.New("input-definition name required")
 	ErrInputDefinitionAttrsRequired  = errors.New("frames and fields are required")
 	ErrInputDefinitionValueMap       = errors.New("valueMap required for map")
 	ErrInputDefinitionActionRequired = errors.New("field definitions require an action")
 	ErrInputDefinitionNotFound       = errors.New("input-definition not found")
 
-	ErrFieldNotFound          = errors.New("field not found")
-	ErrFieldExists            = errors.New("field already exists")
-	ErrFieldNameRequired      = errors.New("field name required")
-	ErrInvalidFieldType       = errors.New("invalid field type")
-	ErrInvalidFieldRange      = errors.New("invalid field range")
-	ErrInverseRangeNotAllowed = errors.New("inverse range not allowed")
-	ErrRangeCacheNotAllowed   = errors.New("range cache not allowed")
-	ErrFrameFieldsNotAllowed  = errors.New("frame fields not allowed")
-	ErrInvalidFieldValueType  = errors.New("invalid field value type")
-	ErrFieldValueTooLow       = errors.New("field value too low")
-	ErrFieldValueTooHigh      = errors.New("field value too high")
-	ErrInvalidRangeOperation  = errors.New("invalid range operation")
-	ErrInvalidBetweenValue    = errors.New("invalid value for between operation")
+	ErrFieldNotFound         = errors.New("field not found")
+	ErrFieldExists           = errors.New("field already exists")
+	ErrFieldNameRequired     = errors.New("field name required")
+	ErrInvalidFieldType      = errors.New("invalid field type")
+	ErrInvalidFieldRange     = errors.New("invalid field range")
+	ErrInvalidFieldValueType = errors.New("invalid field value type")
+	ErrFieldValueTooLow      = errors.New("field value too low")
+	ErrFieldValueTooHigh     = errors.New("field value too high")
+	ErrInvalidRangeOperation = errors.New("invalid range operation")
+	ErrInvalidBetweenValue   = errors.New("invalid value for between operation")
 
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
@@ -73,15 +68,28 @@ var (
 	ErrQueryRequired    = errors.New("query required")
 	ErrTooManyWrites    = errors.New("too many write commands")
 
-	ErrConfigClusterTypeInvalid = errors.New("invalid cluster type")
-	ErrConfigHostsMissing       = errors.New("missing bind address in cluster hosts")
+	ErrClusterDoesNotOwnSlice = errors.New("cluster does not own slice")
+
+	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
+	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
+	ErrResizeNotRunning   = errors.New("no resize job currently running")
 )
+
+// ApiMethodNotAllowedError wraps an error value indicating that a particular
+// API method is not allowed in the current cluster state.
+type ApiMethodNotAllowedError struct {
+	error
+}
+
+// BadRequestError wraps an error value to signify that a request could not be
+// read, decoded, or parsed such that in an HTTP scenario, http.StatusBadRequest
+// would be returned.
+type BadRequestError struct {
+	error
+}
 
 // Regular expression to validate index and frame names.
 var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
-
-// Regular expression to validate row and column labels.
-var labelRegexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
 
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
@@ -144,14 +152,6 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// ValidateLabel ensures that the label is a valid format.
-func ValidateLabel(label string) error {
-	if labelRegexp.Match([]byte(label)) == false {
-		return ErrLabel
-	}
-	return nil
-}
-
 // StringInSlice checks for substring a in the slice.
 func StringInSlice(a string, list []string) bool {
 	for _, b := range list {
@@ -160,6 +160,50 @@ func StringInSlice(a string, list []string) bool {
 		}
 	}
 	return false
+}
+
+// StringSlicesAreEqual determines if two string slices are equal.
+func StringSlicesAreEqual(a, b []string) bool {
+
+	if a == nil && b == nil {
+		return true
+	}
+
+	if a == nil || b == nil {
+		return false
+	}
+
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// SliceDiff returns the difference between two uint64 slices.
+func SliceDiff(a, b []uint64) []uint64 {
+	m := make(map[uint64]uint64)
+
+	for _, y := range b {
+		m[y]++
+	}
+
+	var ret []uint64
+	for _, x := range a {
+		if m[x] > 0 {
+			m[x]--
+			continue
+		}
+		ret = append(ret, x)
+	}
+
+	return ret
 }
 
 // ContainsSubstring checks to see if substring a is contained in any string in the slice.

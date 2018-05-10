@@ -181,7 +181,6 @@ func TestRootCommand_Config(t *testing.T) {
 bind = "127.0.0.1:10101"
 
 [cluster]
-  poll-interval = "2m0s"
   replicas = 2
   partitions = 128
   hosts = [

@@ -17,7 +17,6 @@ package ctl
 import (
 	"bytes"
 	"context"
-	"github.com/pilosa/pilosa"
 	"io"
 	"os"
 	"strings"
@@ -35,7 +34,7 @@ func TestGenerateConfigCommand_Run(t *testing.T) {
 	io.Copy(&buf, r)
 	if err != nil {
 		t.Fatalf("Config Run doesn't work: %s", err)
-	} else if !strings.Contains(buf.String(), pilosa.DefaultHost) {
+	} else if !strings.Contains(buf.String(), "localhost:10101") {
 		t.Fatalf("Unexpected config: %s", buf.String())
 	}
 }

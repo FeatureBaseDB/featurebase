@@ -2,30 +2,155 @@
 
 ## Reporting a bug
 
-If you have discovered a bug and don't see it in the [github issue tracker][5], [open a new issue][1]
+If you have discovered a bug and don't see it in the [github issue tracker][5], [open a new issue][1].
 
 ## Submitting a feature request
 
-Feature requests are managed in Github issues. New features typically go through a [Proposal Process][4]
+Feature requests are managed in Github issues, organized with [Zenhub](https://www.zenhub.com/), which is publicly available as a browser extension. New features typically go through a [Proposal Process][4]
 which starts by [opening a new issue][1] that describes the new feature proposal.
 
-## Submitting code changes
+## Making code contributions
 
 Before you start working on new features, you should [open a new issue][1] to let others know what
-you're doing before you start working, otherwise you run the risk of duplicating effort. This also
+you're doing, otherwise you run the risk of duplicating effort. This also
 gives others an opportunity to provide input for your feature.
 
 If you want to help but you aren't sure where to start, check out our [github label for low-effort issues][6].
 
-- Fork the [Pilosa repository][2] and then clone your fork:
 
-    ```shell
-    git clone git@github.com:<your-name>/pilosa.git
+### Development Environment
+
+- Ensure you have a recent version of [Go](https://golang.org/doc/install) installed. Pilosa generally supports the current and previous minor versions; check our [travis file](../.travis.yml) for the most up-to-date information.
+
+- Make sure `$GOPATH` environment variable points to your Go working directory and `$PATH` incudes `$GOPATH/bin`, as described [here](https://golang.org/doc/code.html#GOPATH).
+
+- Fork the [Pilosa repository][2] to your own account.
+
+- Create a directory (note that we use `github.com/pilosa`, NOT `github.com/USER`) and clone your own Pilosa repo:
+
+    ```sh
+    mkdir -p ${GOPATH}/src/github.com/pilosa && cd $_
+    git clone git@github.com:${USER}/pilosa.git
+    ```
+
+- `cd` to your pilosa directory:
+
+    ```sh
+    cd ${GOPATH}/src/github.com/pilosa/pilosa
+    ```
+
+- [Install](https://github.com/golang/dep/#installation) `dep` to manage dependencies:
+
+    ```sh
+    curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+    ```
+
+- Install Pilosa command line tools:
+
+    ```sh
+    make install
+    ```
+    
+    or
+    
+    ```
+    dep ensure && go install github.com/pilosa/pilosa/cmd/...
+    ```
+
+    Running `pilosa` should now run a Pilosa instance.
+
+- In order to sync your fork with upstream Pilosa repo, add an *upstream* to your repo:
+
+    ```sh
+    cd ${GOPATH}/src/github.com/pilosa/pilosa
+    git remote add upstream git@github.com:pilosa/pilosa.git
+    ```
+
+### Makefile
+
+Pilosa includes a Makefile that automates several tasks:
+
+- Install Pilosa:
+
+    ```sh
+    make install
+    ```
+
+- Install build dependencies (dep, statik, and protoc):
+
+    ```sh
+    make install-build-deps
+    ```
+
+- Create the vendor directory:
+
+    ```sh
+    make vendor
+    ```
+
+- Run the test suite:
+
+    ```sh
+    make test
+    ```
+
+- View the coverage report:
+
+    ```sh
+    make cover-viz
+    ```
+
+- Clear the `vendor/` and `build/` directories:
+
+    ```sh
+    make clean
+    ```
+
+- Create release tarballs:
+
+    ```sh
+    make release
+    ```
+
+- Generate static assets for the WebUI:
+
+    ```sh
+    make generate-statik
+    ```
+
+- Regenerate protocol buffer files in `internal/`:
+
+    ```sh
+    make generate-protoc
+    ```
+
+- Create tagged Docker image:
+
+    ```sh
+    make docker
+    ```
+
+- Run tests inside Docker container:
+
+    ```sh
+    make docker-test
+    ```
+
+Additional commands are available in the `Makefile`.
+
+### Submitting code changes
+
+- Before starting to work on a task, sync your branch with the upstream:
+
+    ```sh
+    git fetch upstream
+    git checkout master
+    git merge upstream/master
     ```
 
 - Create a local feature branch:
 
-    ```shell
+    ```sh
     git checkout -b something-amazing
     ```
 
@@ -33,13 +158,13 @@ If you want to help but you aren't sure where to start, check out our [github la
 
 - Make sure that you've written tests for your new feature, and then run the tests:
 
-    ```shell
+    ```sh
     make test
     ```
 
 - Verify that your pull request is applied to the latest version of code on github:
 
-    ```shell
+    ```sh
     git remote add upstream git@github.com:pilosa/pilosa.git
     git fetch upstream
     git rebase -i upstream/master
@@ -47,7 +172,7 @@ If you want to help but you aren't sure where to start, check out our [github la
 
 - Push to your fork:
 
-    ```shell
+    ```sh
     git push -u <yourfork> something-amazing
     ```
 

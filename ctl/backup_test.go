@@ -46,14 +46,10 @@ func TestBackupCommand_Run(t *testing.T) {
 
 	s := test.NewServer()
 	defer s.Close()
-	uri, err := pilosa.NewURIFromAddress(s.Host())
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Handler.URI = uri
-	s.Handler.Cluster = test.NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
-	s.Handler.Holder = hldr.Holder
+
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
 	cm := NewBackupCommand(stdin, stdout, stderr)
 	file, err := ioutil.TempFile("", "import.csv")
 

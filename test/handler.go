@@ -17,7 +17,6 @@ package test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -41,11 +40,12 @@ func NewHandler() *Handler {
 	h := &Handler{
 		Handler: pilosa.NewHandler(),
 	}
-	h.Handler.Executor = &h.Executor
-	h.Handler.LogOutput = ioutil.Discard
+	h.API = pilosa.NewAPI()
+	h.Handler.API = h.API
+	h.Handler.API.Executor = &h.Executor
 
 	// Handler test messages can no-op.
-	h.Broadcaster = pilosa.NopBroadcaster
+	h.API.Broadcaster = pilosa.NopBroadcaster
 
 	return h
 }
@@ -75,48 +75,33 @@ func NewServer() *Server {
 	}
 	s.Server = httptest.NewServer(s.Handler.Handler)
 
-	// Update handler to use hostname.
-	uri, err := pilosa.NewURIFromAddress(s.Host())
-	if err != nil {
-		panic(err)
-	}
-	s.Handler.URI = uri
-
 	// Handler test messages can no-op.
-	s.Handler.Broadcaster = pilosa.NopBroadcaster
+	s.Handler.API.Broadcaster = pilosa.NopBroadcaster
 	// Create a default cluster on the handler
-	s.Handler.Cluster = NewCluster(1)
-	s.Handler.Cluster.Nodes[0].Host = s.Host()
+	s.Handler.API.Cluster = NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
 
 	return s
 }
 
-// LocalStatus returns the state of the local node as well as the
-// holder (indexes/frames) according to the local node.
+// LocalStatus exists so that test.Server implements StatusHandler.
 func (s *Server) LocalStatus() (proto.Message, error) {
-	if s.Handler.Holder == nil {
-		return nil, errors.New("Server.Holder is nil")
-	}
-
-	ns := internal.NodeStatus{
-		Host:    s.Handler.Handler.URI.HostPort(),
-		State:   pilosa.NodeStateUp,
-		Indexes: pilosa.EncodeIndexes(s.Handler.Holder.Indexes()),
-	}
-
-	// Append Slice list per this Node's indexes
-	for _, index := range ns.Indexes {
-		index.Slices = s.Handler.Cluster.OwnsSlices(index.Name, index.MaxSlice, s.Handler.URI.HostPort())
-	}
-
-	return &ns, nil
+	return nil, nil
 }
 
-// ClusterStatus returns the NodeState for all nodes in the cluster.
+// ClusterStatus exists so that test.Server implements StatusHandler.
 func (s *Server) ClusterStatus() (proto.Message, error) {
-	// Assuming we are only testing this with one Node
-	// So just return its status
-	return s.LocalStatus()
+	id := "test-node"
+	uri := pilosa.DefaultURI()
+	node := &pilosa.Node{
+		ID:  id,
+		URI: *uri,
+	}
+	return &internal.ClusterStatus{
+		ClusterID: "",
+		State:     pilosa.ClusterStateNormal,
+		Nodes:     pilosa.EncodeNodes([]*pilosa.Node{node}),
+	}, nil
 }
 
 // HandleRemoteStatus just need to implement a nop to complete the Interface
@@ -125,12 +110,12 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error { return nil }
 // Host returns the hostname of the running server.
 func (s *Server) Host() string { return MustParseURLHost(s.URL) }
 
-func (s *Server) HostURI() *pilosa.URI {
+func (s *Server) HostURI() pilosa.URI {
 	uri, err := pilosa.NewURIFromAddress(s.URL)
 	if err != nil {
 		panic(err)
 	}
-	return uri
+	return *uri
 }
 
 // MustParseURLHost parses rawurl and returns the hostname. Panic on error.

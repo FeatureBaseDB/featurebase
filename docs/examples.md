@@ -17,7 +17,7 @@ New York City released an extremely detailed data set of over 1 billion taxi rid
 
 Transportation in general is a compelling use case for Pilosa as it often involves multiple disparate data sources, as well as high rate, real time, and extremely large amounts of data (particularly if one wants to draw reasonable conclusions).
 
-We've written a tool to help import the NYC taxi data into Pilosa - this tool is part of the [PDK](../pdk) (Pilosa Development Kit), and takes advantage of a number of reusable modules that may help you import other data as well. Follow along and we'll explain the whole process step by step.
+We've written a tool to help import the NYC taxi data into Pilosa - this tool is part of the [PDK](../pdk/) (Pilosa Development Kit), and takes advantage of a number of reusable modules that may help you import other data as well. Follow along and we'll explain the whole process step by step.
 
 After initial setup, the PDK import tool does everything we need to define a Pilosa schema, map data to bitmaps accordingly, and import it into Pilosa.
 
@@ -163,7 +163,7 @@ durm := pdk.CustomMapper{
 
 #### Import process
 
-After designing this schema and mapping, we capture it in a JSON definition file that can be read by the PDK import tool. Running `pdk taxi` runs the import based on the information in this file. See [PDK](../pdk) for more details on this process.
+After designing this schema and mapping, we capture it in a JSON definition file that can be read by the PDK import tool. Running `pdk taxi` runs the import based on the information in this file. See [PDK](../pdk/) for more details on this process.
 
 #### Queries
 
@@ -201,11 +201,15 @@ For more examples and details, see this [ipython notebook](https://github.com/pi
 
 ### Chemical similarity search
 
+<div class="warning">
+This example uses the inverse frames feature, which is deprecated as of v0.9.0. This will soon be updated to reflect the current Pilosa API.
+</div>
+
 #### Overview
 
 The notion of chemical similarity (or molecular similarity) plays an important role in predicting the properties of chemical compounds, designing chemicals with a predefined set of properties, and—especially—conducting drug design studies. All of these are accomplished by screening large indexes containing structures of available or potentially available chemicals.
 
-We'd like to use Pilosa to search through millions of molecules and find those most similar to a given molecule. There are examples where --- tried to solve this chemical similarity search problem using other indexes (MongoDB, PostgreSQL), so it will be interesting to compare those results to Pilosa using the same data set.
+We'd like to use Pilosa to search through millions of molecules and find those most similar to a given molecule. Others have tried to solve this chemical similarity search problem using databases (MongoDB, PostgreSQL), so it will be interesting to compare those results to Pilosa using the same data set.
 
 Calculation of the similarity of any two molecules is achieved by comparing their molecular fingerprints. These fingerprints are comprised of structural information about the molecule which has been encoded as a series of bits. The most commonly used algorithm to calculate the similarity is the Tanimoto coefficient.
 ```
@@ -214,11 +218,11 @@ T(A,B)= Intersect(A,B) / (Count(A) + Count(B) - Intersect(A,B))
 
 A and B are sets of fingerprint bits on in the fingerprints of molecule A and molecule B. AB is the set of common bits of fingerprints of both molecule A and B. The Tanimoto coefficient ranges from 0 when the fingerprints have no bits in common, to 1 when the fingerprints are identical.
 
-All source code to calculate tanimoto for molecule fingerprint using Pilosa is available in a Github repository https://github.com/pilosa/chem-usecase
+All source code to calculate tanimoto for molecule fingerprint using Pilosa is available in a [Github repository](https://github.com/pilosa/chem-usecase).
 
 #### Data model
 
-We use the latest ChEMBL release chembl_22.sdf for test data. Each molecule in the SD file gives us the canonical isomeric SMILES (Simplified molecular-input line-entry system) and chembl_id. 
+We use the [latest ChEMBL release](ftp://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/) chembl_22.sdf for test data. Each molecule in the SD file gives us the canonical isomeric SMILES (Simplified molecular-input line-entry system) and chembl_id. 
 
 Because Pilosa store information as a series of bits, we use RDKit in Python to convert molecules from their SMILES encoding to Morgan fingerprints, which are arrays of “on” bit positions.
 
@@ -263,16 +267,15 @@ python import_from_sdf.py -p <path_to_sdf_file> -file id_fingerprint.csv
 ```
 
 
-First, follow the instruction in the [getting started]({{< ref "getting-started.md" >}}) guide to run a Pilosa server. Then create the indexes and frames according to the schemas outlined in the Data Model section above.
+First, follow the instruction in the [getting started](../getting-started/) guide to run a Pilosa server. Then create the indexes and frames according to the schemas outlined in the Data Model section above.
 The option cacheSize should be set as amount of chembl_id to calculate effectively for the whole data set, so we need to calculate amount of chembl_id. We have total 1678393 chembl_id (it will displayed after import_from_sdf.py script running), then the cacheSize should be >= 1678393
 ```
 curl localhost:10101/index/mole \
-     -X POST \
-     -d '{"options": {"columnLabel": "position_id"}}'
+     -X POST
 
 curl localhost:10101/index/mole/frame/fingerprint \
      -X POST \
-     -d '{"options": {"rowLabel": "chembl_id", "inverseEnabled": true, "cacheSize": 2000000, "cacheType": "ranked"}}'
+     -d '{"options": {"inverseEnabled": true, "cacheSize": 2000000, "cacheType": "ranked"}}'
 
 ```
 
@@ -302,7 +305,7 @@ Return chembl_id = 6223. This script uses Pilosa’s Intersection query to get a
 * Query all chembl_id that have all "on" positions from the inverse view, return list of chembl_id
 
     ```python
-    bit_maps = ["Bitmap(position_id=%s, frame=%s, inversed=%s)" % (f, frame, True) for f in fp]
+    bit_maps = ["Bitmap(col=%s, frame=%s, inversed=%s)" % (f, frame, True) for f in fp]
     bitmap_string = ', '.join(bit_maps)
     intersection = "Intersect(%s)" % bitmap_string
     mole_ids = requests.post("http://%s/index/%s/query" % (host, db), data=intersection).json()["results"][0]["bits"]
@@ -312,7 +315,7 @@ Return chembl_id = 6223. This script uses Pilosa’s Intersection query to get a
 
     ```python    
     for m in mole_ids:
-        mol = requests.post("http://%s/index/%s/query" % (host, db), data="Bitmap(chembl_id=%s, frame=%s)" % (m, frame)).json()["results"][0]["bits"]
+        mol = requests.post("http://%s/index/%s/query" % (host, db), data="Bitmap(row=%s, frame=%s)" % (m, frame)).json()["results"][0]["bits"]
         existed_mol = False
         if len(mol) == len(fp):
             found = m
@@ -331,7 +334,7 @@ Return chembl_id = [6223, 269758, 6206, 6228]. This script uses Pilosa’s TopN 
 
 * Query Pilosa’s TopN to get list of similarity chembl_id
     ```python
-    query_string = 'TopN(Bitmap(chembl_id=6223, frame="fingerprint"), frame="fingerprint", n=2000000, tanimotoThreshold=70)'
+    query_string = 'TopN(Bitmap(row=6223, frame="fingerprint"), frame="fingerprint", n=2000000, tanimotoThreshold=70)'
     topn = requests.post("http://127.0.0.1:10101/index/mol/query" , data=query_string)
     ```
 

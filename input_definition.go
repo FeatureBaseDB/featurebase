@@ -36,12 +36,11 @@ var validValueDestination = []string{InputMapping, InputValueToRow, InputSingleR
 
 // InputDefinition represents a container for the data input definition.
 type InputDefinition struct {
-	name        string
-	path        string
-	index       string
-	broadcaster Broadcaster
-	frames      []InputFrame
-	fields      []InputDefinitionField
+	name   string
+	path   string
+	index  string
+	frames []InputFrame
+	fields []InputDefinitionField
 }
 
 // NewInputDefinition returns a new instance of InputDefinition.
@@ -86,17 +85,9 @@ func (i *InputDefinition) LoadDefinition(pb *internal.InputDefinition) error {
 	// Copy metadata fields.
 	i.name = pb.Name
 	for _, fr := range pb.Frames {
-		frameMeta := fr.Meta
 		inputFrame := InputFrame{
-			Name: fr.Name,
-			Options: FrameOptions{
-				// Deprecating row labels per #810. So, setting the default row label here.
-				RowLabel:       DefaultRowLabel,
-				InverseEnabled: frameMeta.InverseEnabled,
-				CacheSize:      frameMeta.CacheSize,
-				CacheType:      frameMeta.CacheType,
-				TimeQuantum:    TimeQuantum(frameMeta.TimeQuantum),
-			},
+			Name:    fr.Name,
+			Options: *decodeFrameOptions(fr.Meta),
 		}
 		i.frames = append(i.frames, inputFrame)
 	}
@@ -290,7 +281,7 @@ func (i *InputDefinitionInfo) Validate() error {
 		}
 	}
 
-	// Validate columnLabel and duplicate primaryKey.
+	// Validate duplicate primaryKey.
 	for _, field := range i.Fields {
 		if field.Name == "" {
 			return ErrInputDefinitionNameRequired
@@ -336,6 +327,43 @@ func (i *InputDefinitionInfo) Encode() *internal.InputDefinition {
 		def.Fields = append(def.Fields, f.Encode())
 	}
 	return &def
+}
+
+// encodeInputDefinitions converts a into its internal representation.
+func encodeInputDefinitions(a []*InputDefinition) []*internal.InputDefinition {
+	other := make([]*internal.InputDefinition, len(a))
+	for i := range a {
+		other[i] = encodeInputDefinition(a[i])
+	}
+	return other
+}
+
+// encodeInputDefinition converts i into its internal representation.
+func encodeInputDefinition(i *InputDefinition) *internal.InputDefinition {
+	//fo := f.options()
+	return &internal.InputDefinition{
+		Name:   i.name,
+		Frames: encodeInputFrames(i.frames),
+		Fields: encodeInputDefinitionFields(i.fields),
+	}
+}
+
+// encodeInputFrames converts a into its internal representation.
+func encodeInputFrames(a []InputFrame) []*internal.Frame {
+	other := make([]*internal.Frame, len(a))
+	for i := range a {
+		other[i] = a[i].Encode()
+	}
+	return other
+}
+
+// encodeInputDefinitionFields converts a into its internal representation.
+func encodeInputDefinitionFields(a []InputDefinitionField) []*internal.InputDefinitionField {
+	other := make([]*internal.InputDefinitionField, len(a))
+	for i := range a {
+		other[i] = a[i].Encode()
+	}
+	return other
 }
 
 // AddFrame manually add frame to input definition.

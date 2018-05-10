@@ -74,19 +74,19 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
 
 1. Download the latest release:
     ```
-    curl -L -O https://github.com/pilosa/pilosa/releases/download/v0.8.3/pilosa-v0.8.3-darwin-amd64.tar.gz
+    curl -L -O https://github.com/pilosa/pilosa/releases/download/v0.9.0/pilosa-v0.9.0-darwin-amd64.tar.gz
     ```
 
     Other releases can be downloaded from our Releases page on Github.
 
 2. Extract the binary:
     ```
-    tar xfz pilosa-v0.8.3-darwin-amd64.tar.gz
+    tar xfz pilosa-v0.9.0-darwin-amd64.tar.gz
     ```
 
 3. Move the binary into your PATH so you can run `pilosa` from any shell:
     ```
-    cp -i pilosa-v0.8.3-darwin-amd64/pilosa /usr/local/bin
+    cp -i pilosa-v0.9.0-darwin-amd64/pilosa /usr/local/bin
     ```
 
 4. Make sure Pilosa is installed successfully:
@@ -134,19 +134,25 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
 
 #### Build from Source
 
+<div class="note">
+    <p>For advanced instructions for building from source, view our <a href="https://github.com/pilosa/pilosa/blob/master/CONTRIBUTING.md">Contributor's Guide.</a></p>
+</div>
+
 1. Install the prerequisites:
 
-    * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described here (https://golang.org/doc/code.html#GOPATH).
+    * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described [here](https://golang.org/doc/code.html#GOPATH).
     * [Git](https://git-scm.com/)
 
 2. Clone the repo:
     ```
-    go get -d github.com/pilosa/pilosa
+    mkdir -p ${GOPATH}/src/github.com/pilosa && cd $_
+    git clone https://github.com/pilosa/pilosa.git
     ```
 
-3. Build the Pilosa repo (the `make generate-statik` line isn't necessary but builds a nice web console into Pilosa):
+3. Build the Pilosa repo (the `make generate-statik` line isn't necessary but builds a nice [webUI](../webui/) into Pilosa):
     ```
     cd $GOPATH/src/github.com/pilosa/pilosa
+    make install-build-deps
     make generate-statik
     make install
     ```
@@ -203,7 +209,7 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
     docker version
     ```
 
-If you don't see the server listed, start the Docker application.
+    If you don't see the server listed, start the Docker application.
 
 3. Pull the official Pilosa image from Docker Hub:
     ```
@@ -228,19 +234,19 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
 
 1. To install the latest version of Pilosa, download the latest release:
     ```
-    curl -L -O https://github.com/pilosa/pilosa/releases/download/v0.8.3/pilosa-v0.8.3-linux-amd64.tar.gz
+    curl -L -O https://github.com/pilosa/pilosa/releases/download/v0.9.0/pilosa-v0.9.0-linux-amd64.tar.gz
     ```
 
     Note: This assumes you are using an `amd64` compatible architecture. Other releases can be downloaded from our Releases page on Github.
 
 2. Extract the binary:
     ```
-    tar xfz pilosa-v0.8.3-linux-amd64.tar.gz
+    tar xfz pilosa-v0.9.0-linux-amd64.tar.gz
     ```
 
 3. Move the binary into your PATH so you can run `pilosa` from any shell:
     ```
-    cp -i pilosa-v0.8.3-linux-amd64/pilosa /usr/local/bin
+    cp -i pilosa-v0.9.0-linux-amd64/pilosa /usr/local/bin
     ```
 
 4. Make sure Pilosa is installed successfully:
@@ -287,19 +293,26 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
 
 #### Build from Source
 
+<div class="note">
+    <p>For advanced instructions for building from source, view our <a href="https://github.com/pilosa/pilosa/blob/master/CONTRIBUTING.md">Contributor's Guide.</a></p>
+</div>
+
 1. Install the prerequisites:
 
-    * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described here (https://golang.org/doc/code.html#GOPATH).
+    * [Go](https://golang.org/doc/install). Be sure to set the `$GOPATH` and `$PATH` environment variables as described [here](https://golang.org/doc/code.html#GOPATH).
     * [Git](https://git-scm.com/)
 
 2. Clone the repo:
     ```
-    go get -d github.com/pilosa/pilosa
+    mkdir -p ${GOPATH}/src/github.com/pilosa && cd $_
+    git clone https://github.com/pilosa/pilosa.git
     ```
 
-3. Build the Pilosa repo:
+3. Build the Pilosa repo (the `make generate-statik` line isn't necessary but builds a nice [webUI](../webui/) into Pilosa):
     ```
     cd $GOPATH/src/github.com/pilosa/pilosa
+    make install-build-deps
+    make generate-statik
     make install
     ```
 
