@@ -415,7 +415,7 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 
 	if err := f.saveMeta(); err != nil {
 		f.Close()
-		return nil, errors.Wrap(err, "saving")
+		return nil, errors.Wrap(err, "saving meta")
 	}
 
 	// Add to index's frame lookup.
