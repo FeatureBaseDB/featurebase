@@ -27,6 +27,7 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/pilosa/pilosa"
+	"github.com/pkg/errors"
 )
 
 // AttrBlockSize is the size of attribute blocks for anti-entropy.
@@ -93,7 +94,7 @@ func (s *AttrStore) Open() error {
 	// Open storage.
 	db, err := bolt.Open(s.path, 0666, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "opening storage")
 	}
 	s.db = db
 
@@ -104,7 +105,7 @@ func (s *AttrStore) Open() error {
 		}
 		return nil
 	}); err != nil {
-		return err
+		return errors.Wrap(err, "initializing")
 	}
 
 	return nil
@@ -136,7 +137,7 @@ func (s *AttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
 		}
 		return nil
 	}); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "finding attributes")
 	}
 
 	// Add to cache.
@@ -154,7 +155,7 @@ func (s *AttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 
 	// Check if the attributes already exist under a read-only lock.
 	if attr, err := s.Attrs(id); err != nil {
-		return err
+		return errors.Wrap(err, "checking attrs")
 	} else if attr != nil && mapContains(attr, m) {
 		return nil
 	}
@@ -173,7 +174,7 @@ func (s *AttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 
 		return nil
 	}); err != nil {
-		return err
+		return errors.Wrap(err, "updating store")
 	}
 
 	// Swap attributes map in cache.
@@ -222,7 +223,7 @@ func (s *AttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
 func (s *AttrStore) Blocks() ([]pilosa.AttrBlock, error) {
 	tx, err := s.db.Begin(false)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "starting transaction")
 	}
 	defer tx.Rollback()
 
@@ -256,7 +257,7 @@ func (s *AttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, erro
 	// Start read-only transaction.
 	tx, err := s.db.Begin(false)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "starting transaction")
 	}
 	defer tx.Rollback()
 
@@ -273,7 +274,7 @@ func (s *AttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, erro
 		// Decode attribute map and associate with id.
 		attrs, err := pilosa.DecodeAttrs(v)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "decoding attrs")
 		}
 		m[btou64(k)] = attrs
 
@@ -329,10 +330,10 @@ func txUpdateAttrs(tx *bolt.Tx, id uint64, m map[string]interface{}) (map[string
 	// Marshal and save new values.
 	buf, err := pilosa.EncodeAttrs(attr)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "encoding attrs")
 	}
 	if err := tx.Bucket([]byte("attrs")).Put(u64tob(id), buf); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "saving attrs")
 	}
 	return attr, nil
 }
