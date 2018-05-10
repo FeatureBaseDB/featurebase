@@ -15,7 +15,6 @@
 package pilosa
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -26,6 +25,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 )
 
 // Default index settings.
@@ -64,7 +64,7 @@ type Index struct {
 func NewIndex(path, name string) (*Index, error) {
 	err := ValidateName(name)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "validating name")
 	}
 
 	return &Index{
@@ -109,20 +109,20 @@ func (i *Index) options() IndexOptions {
 func (i *Index) Open() error {
 	// Ensure the path exists.
 	if err := os.MkdirAll(i.path, 0777); err != nil {
-		return err
+		return errors.Wrap(err, "creating directory")
 	}
 
 	// Read meta file.
 	if err := i.loadMeta(); err != nil {
-		return err
+		return errors.Wrap(err, "loading meta file")
 	}
 
 	if err := i.openFrames(); err != nil {
-		return err
+		return errors.Wrap(err, "opening frames")
 	}
 
 	if err := i.columnAttrStore.Open(); err != nil {
-		return err
+		return errors.Wrap(err, "opening attrstore")
 	}
 
 	if err := i.openInputDefinitions(); err != nil {
@@ -136,13 +136,13 @@ func (i *Index) Open() error {
 func (i *Index) openFrames() error {
 	f, err := os.Open(i.path)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "opening directory")
 	}
 	defer f.Close()
 
 	fis, err := f.Readdir(0)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "reading directory")
 	}
 
 	for _, fi := range fis {
@@ -171,10 +171,10 @@ func (i *Index) loadMeta() error {
 	if os.IsNotExist(err) {
 		return nil
 	} else if err != nil {
-		return err
+		return errors.Wrap(err, "reading")
 	} else {
 		if err := proto.Unmarshal(buf, &pb); err != nil {
-			return err
+			return errors.Wrap(err, "unmarshalling")
 		}
 	}
 
@@ -192,12 +192,12 @@ func (i *Index) saveMeta() error {
 	// Marshal metadata.
 	buf, err := proto.Marshal(&internal.IndexMeta{})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "marshalling")
 	}
 
 	// Write to meta file.
 	if err := ioutil.WriteFile(filepath.Join(i.path, ".meta"), buf, 0666); err != nil {
-		return err
+		return errors.Wrap(err, "writing")
 	}
 
 	return nil
@@ -215,7 +215,7 @@ func (i *Index) Close() error {
 	// Close all frames.
 	for _, f := range i.frames {
 		if err := f.Close(); err != nil {
-			return err
+			return errors.Wrap(err, "closing frame")
 		}
 	}
 	i.frames = make(map[string]*Frame)
@@ -384,18 +384,18 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	// Initialize frame.
 	f, err := i.newFrame(i.FramePath(name), name)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "initializing")
 	}
 
 	// Open frame.
 	if err := f.Open(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "opening")
 	}
 
 	// Set the time quantum.
 	if err := f.SetTimeQuantum(opt.TimeQuantum); err != nil {
 		f.Close()
-		return nil, err
+		return nil, errors.Wrap(err, "setting time quantum")
 	}
 
 	// Set cache type.
@@ -415,7 +415,7 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 
 	if err := f.saveMeta(); err != nil {
 		f.Close()
-		return nil, err
+		return nil, errors.Wrap(err, "saving")
 	}
 
 	// Add to index's frame lookup.
@@ -449,12 +449,12 @@ func (i *Index) DeleteFrame(name string) error {
 
 	// Close frame.
 	if err := f.Close(); err != nil {
-		return err
+		return errors.Wrap(err, "closing")
 	}
 
 	// Delete frame directory.
 	if err := os.RemoveAll(i.FramePath(name)); err != nil {
-		return err
+		return errors.Wrap(err, "removing directory")
 	}
 
 	// Remove reference.
