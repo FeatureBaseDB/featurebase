@@ -160,8 +160,8 @@ Delete url value for repo 10.
 **Spec:**
 
 ```
-SetBit(<frame=STRING>, <row=UINT>, <col=UINT>, 
-       [timestamp=TIMESTAMP])
+ClearBit(<frame=STRING>, <row=UINT>, <col=UINT>, 
+         [timestamp=TIMESTAMP])
 ```
 
 **Description:**
