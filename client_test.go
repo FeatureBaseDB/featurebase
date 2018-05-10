@@ -613,6 +613,17 @@ func TestClient_FrameViews(t *testing.T) {
 	}
 }
 
+func TestClient_TestVal(t *testing.T) {
+	s := test.NewServer()
+	defer s.Close()
+	s.Handler.API.URI = s.HostURI()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+
+	c := test.MustNewClient(s.Host(), defaultClient)
+	fmt.Println(c.GetTestVal())
+}
+
 /*
 func TestClient_NodeID(t *testing.T) {
 	s := test.NewServer()

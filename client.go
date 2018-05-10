@@ -48,6 +48,8 @@ type InternalHTTPClient struct {
 
 	// The client to use for HTTP communication.
 	HTTPClient *http.Client
+
+	TestVal string
 }
 
 // NewInternalHTTPClient returns a new instance of InternalHTTPClient to connect to host.
@@ -70,6 +72,10 @@ func NewInternalHTTPClientFromURI(defaultURI *URI, remoteClient *http.Client) *I
 		defaultURI: defaultURI,
 		HTTPClient: remoteClient,
 	}
+}
+
+func (c InternalHTTPClient) GetTestVal() string {
+	return c.TestVal
 }
 
 // Host returns the host the client was initialized with.
