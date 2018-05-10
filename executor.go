@@ -17,7 +17,6 @@ package pilosa
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"sort"
 	"time"
 
@@ -46,18 +45,13 @@ type Executor struct {
 	Node    *Node
 	Cluster *Cluster
 
-	// Client used for remote requests.
-	client InternalClient
-
 	// Maximum number of SetBit() or ClearBit() commands per request.
 	MaxWritesPerRequest int
 }
 
 // NewExecutor returns a new instance of Executor.
-func NewExecutor(remoteClient *http.Client) *Executor {
-	return &Executor{
-		client: NewInternalHTTPClientFromURI(nil, remoteClient),
-	}
+func NewExecutor() *Executor {
+	return &Executor{}
 }
 
 // Execute executes a PQL query.
@@ -1490,7 +1484,7 @@ func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *
 		Remote: true,
 	}
 
-	pb, err := e.client.QueryNode(ctx, &node.URI, index, pbreq)
+	pb, err := node.api.Query(ctx, index, pbreq)
 	if err != nil {
 		return nil, err
 	}

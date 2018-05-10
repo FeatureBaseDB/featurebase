@@ -36,8 +36,8 @@ func SetTLSConfig(flags *pflag.FlagSet, certificatePath *string, certificateKeyP
 	flags.BoolVarP(skipVerify, "tls.skip-verify", "", false, "Skip TLS certificate verification (not secure)")
 }
 
-// CommandClient returns a pilosa.InternalHTTPClient for the command
-func CommandClient(cmd CommandWithTLSSupport) (*pilosa.InternalHTTPClient, error) {
+// CommandClient returns a pilosa.ExternalHTTPClient for the command
+func CommandClient(cmd CommandWithTLSSupport) (pilosa.ExternalClient, error) {
 	tlsConfig := cmd.TLSConfiguration()
 	var TLSConfig *tls.Config
 	if tlsConfig.CertificatePath != "" && tlsConfig.CertificateKeyPath != "" {
@@ -50,7 +50,7 @@ func CommandClient(cmd CommandWithTLSSupport) (*pilosa.InternalHTTPClient, error
 			InsecureSkipVerify: tlsConfig.SkipVerify,
 		}
 	}
-	client, err := pilosa.NewInternalHTTPClient(cmd.TLSHost(), server.GetHTTPClient(TLSConfig))
+	client, err := pilosa.NewExternalHTTPClient(cmd.TLSHost(), server.GetHTTPClient(TLSConfig))
 	if err != nil {
 		return nil, errors.Wrap(err, "getting internal client")
 	}

@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -574,9 +573,8 @@ func (h *Holder) logStartup() error {
 type HolderSyncer struct {
 	Holder *Holder
 
-	Node         *Node
-	Cluster      *Cluster
-	RemoteClient *http.Client
+	Node    *Node
+	Cluster *Cluster
 
 	// Stats
 	Stats StatsClient
@@ -673,11 +671,9 @@ func (s *HolderSyncer) syncIndex(index string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterID(s.Node.ID) {
-		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
-
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := client.ColumnAttrDiff(context.Background(), index, blks)
+		m, err := node.api.ColumnAttrDiff(context.Background(), index, blks)
 		if err != nil {
 			return errors.Wrap(err, "getting differing blocks")
 		} else if len(m) == 0 {
@@ -719,11 +715,9 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterID(s.Node.ID) {
-		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
-
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := client.RowAttrDiff(context.Background(), index, name, blks)
+		m, err := node.api.RowAttrDiff(context.Background(), index, name, blks)
 		if err == ErrFrameNotFound {
 			continue // frame not created remotely yet, skip
 		} else if err != nil {
@@ -770,11 +764,10 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 
 	// Sync fragments together.
 	fs := FragmentSyncer{
-		Fragment:     frag,
-		Node:         s.Node,
-		Cluster:      s.Cluster,
-		Closing:      s.Closing,
-		RemoteClient: s.RemoteClient,
+		Fragment: frag,
+		Node:     s.Node,
+		Cluster:  s.Cluster,
+		Closing:  s.Closing,
 	}
 	if err := fs.SyncFragment(); err != nil {
 		return errors.Wrap(err, "syncing fragment")

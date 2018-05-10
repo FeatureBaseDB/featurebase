@@ -24,6 +24,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -988,6 +989,7 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.Nodes[1].URI = *uri
+	c.Nodes[1].SetRemoteAPI(uri, server.GetHTTPClient(nil))
 
 	// Mock secondary server's executor to verify arguments and return a bitmap.
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -1037,6 +1039,7 @@ func TestExecutor_Execute_Remote_Count(t *testing.T) {
 	}
 
 	c.Nodes[1].URI = *uri
+	c.Nodes[1].SetRemoteAPI(uri, server.GetHTTPClient(nil))
 
 	// Mock secondary server's executor to return a count.
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -1073,6 +1076,7 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	}
 
 	c.Nodes[1].URI = *uri
+	c.Nodes[1].SetRemoteAPI(uri, server.GetHTTPClient(nil))
 
 	// Mock secondary server's executor to verify arguments.
 	var remoteCalled bool
@@ -1125,6 +1129,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	}
 
 	c.Nodes[1].URI = *uri
+	c.Nodes[1].SetRemoteAPI(uri, server.GetHTTPClient(nil))
 
 	// Mock secondary server's executor to verify arguments.
 	var remoteCalled bool
@@ -1178,6 +1183,7 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	}
 
 	c.Nodes[1].URI = *uri
+	c.Nodes[1].SetRemoteAPI(uri, server.GetHTTPClient(nil))
 
 	// Mock secondary server's executor to verify arguments and return a bitmap.
 	var remoteExecN int

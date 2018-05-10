@@ -71,7 +71,7 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	defer f.Close()
 
 	// Restore backup file to the cluster.
-	if err := client.RestoreFrom(ctx, f, cmd.Index, cmd.Frame, cmd.View); err != nil {
+	if err := client.RestoreFrame(ctx, f, cmd.Index, cmd.Frame, cmd.View); err != nil {
 		return errors.Wrap(err, "restoring")
 	}
 

@@ -26,6 +26,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/server"
 )
 
 // NewCluster returns a cluster with n nodes and uses a mod-based hasher.
@@ -41,11 +42,20 @@ func NewCluster(n int) *pilosa.Cluster {
 	c.Path = path
 	c.Topology = pilosa.NewTopology()
 
+	client := server.GetHTTPClient(nil)
+
 	for i := 0; i < n; i++ {
-		c.Nodes = append(c.Nodes, &pilosa.Node{
-			ID:  fmt.Sprintf("node%d", i),
-			URI: NewURI("http", fmt.Sprintf("host%d", i), uint16(0)),
-		})
+		id := fmt.Sprintf("node%d", i)
+		uri := NewURI("http", fmt.Sprintf("host%d", i), uint16(0))
+		node, err := pilosa.NewNode(
+			id,
+			pilosa.OptNodeURI(&uri),
+			pilosa.OptNodeRemoteAPI(&uri, client),
+		)
+		if err != nil {
+			panic(err)
+		}
+		c.Nodes = append(c.Nodes, node)
 	}
 
 	c.Node = c.Nodes[0]

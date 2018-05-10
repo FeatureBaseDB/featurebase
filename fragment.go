@@ -25,7 +25,6 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"sort"
 	"sync"
@@ -1745,9 +1744,8 @@ func (h *blockHasher) WriteValue(v uint64) {
 type FragmentSyncer struct {
 	Fragment *Fragment
 
-	Node         *Node
-	Cluster      *Cluster
-	RemoteClient *http.Client
+	Node    *Node
+	Cluster *Cluster
 
 	Closing <-chan struct{}
 }
@@ -1782,8 +1780,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		}
 
 		// Retrieve remote blocks.
-		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
-		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
+		blocks, err := node.api.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return errors.Wrap(err, "getting blocks")
 		}
@@ -1847,7 +1844,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 	// Read pairs from each remote block.
 	var pairSets []PairSet
-	var clients []InternalClient
+	var nodes []*Node
 	for _, node := range s.Cluster.SliceNodes(f.Index(), f.Slice()) {
 		if s.Node.ID == node.ID {
 			continue
@@ -1858,11 +1855,10 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 			return nil
 		}
 
-		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
-		clients = append(clients, client)
+		nodes = append(nodes, node)
 
 		// Only sync the standard block.
-		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Frame(), ViewStandard, f.Slice(), id)
+		rowIDs, columnIDs, err := node.api.BlockData(context.Background(), f.Index(), f.Frame(), ViewStandard, f.Slice(), id)
 		if err != nil {
 			return errors.Wrap(err, "getting block")
 		}
@@ -1885,7 +1881,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	}
 
 	// Write updates to remote blocks.
-	for i := 0; i < len(clients); i++ {
+	for i := 0; i < len(nodes); i++ {
 		set, clear := sets[i], clears[i]
 		count := 0
 
@@ -1924,7 +1920,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 				Query:  buffers[k].String(),
 				Remote: true,
 			}
-			_, err := clients[i].Query(context.Background(), f.Index(), queryRequest)
+			_, err := nodes[i].api.Query(context.Background(), f.Index(), queryRequest)
 			if err != nil {
 				return errors.Wrap(err, "executing")
 			}

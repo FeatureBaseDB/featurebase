@@ -62,7 +62,7 @@ type ImportCommand struct {
 	Sort bool `json:"sort"`
 
 	// Reusable client.
-	Client pilosa.InternalClient `json:"-"`
+	Client pilosa.ExternalClient `json:"-"`
 
 	// Standard input/output
 	*pilosa.CmdIO
