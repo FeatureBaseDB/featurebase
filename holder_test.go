@@ -243,7 +243,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open fragment: slice=0, err=unmarshal storage") {
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open fragment: slice=0, err=opening storage: unmarshal storage") {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
