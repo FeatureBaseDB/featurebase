@@ -624,7 +624,7 @@ func TestHandler_Query_Err_JSON(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`Bitmap(id=100)`)))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"error":"marker"}`+"\n" {
+	} else if body := w.Body.String(); body != `{"error":"executing: marker"}`+"\n" {
 		t.Fatalf("unexpected body: %q", body)
 	}
 }
@@ -652,7 +652,7 @@ func TestHandler_Query_Err_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
-	} else if s := resp.Err; s != `marker` {
+	} else if s := resp.Err; s != `executing: marker` {
 		t.Fatalf("unexpected error: %s", s)
 	}
 }
@@ -684,7 +684,7 @@ func TestHandler_Query_ErrParse(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("bad_fn(")))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"error":"expected comma, right paren, or identifier, found \"\" occurred at line 1, char 8"}`+"\n" {
+	} else if body := w.Body.String(); body != `{"error":"parsing: expected comma, right paren, or identifier, found \"\" occurred at line 1, char 8"}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -894,7 +894,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 		)
 		if err != nil {
 			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `invalid field type`+"\n" {
+		} else if body := MustReadAll(resp.Body); string(body) != `creating field: invalid field type`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		} else if err := resp.Body.Close(); err != nil {
 			t.Fatal(err)
@@ -916,7 +916,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 		)
 		if err != nil {
 			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `invalid field range`+"\n" {
+		} else if body := MustReadAll(resp.Body); string(body) != `creating field: invalid field range`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		} else if err := resp.Body.Close(); err != nil {
 			t.Fatal(err)
@@ -940,7 +940,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 		)
 		if err != nil {
 			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `field already exists`+"\n" {
+		} else if body := MustReadAll(resp.Body); string(body) != `creating field: field already exists`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		} else if err := resp.Body.Close(); err != nil {
 			t.Fatal(err)
@@ -1006,7 +1006,7 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 			t.Fatal(err)
 		} else if body, err := ioutil.ReadAll(resp.Body); err != nil {
 			t.Fatal(err)
-		} else if strings.TrimSpace(string(body)) != `field not found` {
+		} else if strings.TrimSpace(string(body)) != `deleting field: field not found` {
 			t.Fatalf("unexpected body: %q", body)
 		} else if err := resp.Body.Close(); err != nil {
 			t.Fatal(err)
