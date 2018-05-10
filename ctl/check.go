@@ -24,6 +24,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pkg/errors"
 )
 
 // CheckCommand represents a command for performing consistency checks on data files.
@@ -48,17 +49,17 @@ func (cmd *CheckCommand) Run(ctx context.Context) error {
 		switch filepath.Ext(path) {
 		case "":
 			if err := cmd.checkBitmapFile(path); err != nil {
-				return err
+				return errors.Wrap(err, "checking bitmap")
 			}
 
 		case ".cache":
 			if err := cmd.checkCacheFile(path); err != nil {
-				return err
+				return errors.Wrap(err, "checking cache")
 			}
 
 		case ".snapshotting":
 			if err := cmd.checkSnapshotFile(path); err != nil {
-				return err
+				return errors.Wrap(err, "checking snapshot")
 			}
 		}
 	}
@@ -71,26 +72,26 @@ func (cmd *CheckCommand) checkBitmapFile(path string) error {
 	// Open file handle.
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "opening file")
 	}
 	defer f.Close()
 
 	fi, err := f.Stat()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "statting file")
 	}
 
 	// Memory map the file.
 	data, err := syscall.Mmap(int(f.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "mmapping")
 	}
 	defer syscall.Munmap(data)
 
 	// Attach the mmap file to the bitmap.
 	bm := roaring.NewBitmap()
 	if err := bm.UnmarshalBinary(data); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshalling")
 	}
 
 	// Perform consistency check.

@@ -834,7 +834,11 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 	// Split import data by fragment.
 	dataByFragment := make(map[importKey]importData)
 	for i := range rowIDs {
-		rowID, columnID, timestamp := rowIDs[i], columnIDs[i], timestamps[i]
+		rowID, columnID := rowIDs[i], columnIDs[i]
+		var timestamp *time.Time
+		if len(timestamps) > i {
+			timestamp = timestamps[i]
+		}
 
 		var standard, inverse []string
 		if timestamp == nil {

@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pkg/errors"
 )
 
 func TestBenchCommand_InvalidOption(t *testing.T) {
@@ -31,7 +32,7 @@ func TestBenchCommand_InvalidOption(t *testing.T) {
 
 	cm := NewBenchCommand(stdin, stdout, stderr)
 	err := cm.Run(context.Background())
-	if err != pilosa.ErrHostRequired {
+	if errors.Cause(err) != pilosa.ErrHostRequired {
 		t.Fatalf("Expect err: %s, actual err: %s", pilosa.ErrHostRequired, err)
 	}
 

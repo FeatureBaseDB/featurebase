@@ -56,9 +56,14 @@ func testMessageMarshal(t *testing.T, m proto.Message) {
 
 // Ensure that BroadcastReceiver can register a BroadcastHandler.
 func TestBroadcast_BroadcastReceiver(t *testing.T) {
+	path, err := ioutil.TempDir("", "pilosa-")
+	if err != nil {
+		panic(err)
+	}
 	com := server.NewCommand(bytes.NewBuffer([]byte{}), ioutil.Discard, ioutil.Discard)
 	com.Config.Bind = "localhost:0"
-	err := com.SetupServer() // this test shouldn't need to import pilosa/server just to set up the Server, but it really shouldn't need to setup the Server at all. The Server should not be the implementation of Broadcast* TODO
+	com.Config.DataDir = path
+	err = com.SetupServer() // this test shouldn't need to import pilosa/server just to set up the Server, but it really shouldn't need to setup the Server at all. The Server should not be the implementation of Broadcast* TODO
 	if err != nil {
 		t.Fatalf("setting up server: %v", err)
 	}

@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -150,6 +151,20 @@ func TestHandler_Status(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"state":"NORMAL","nodes":[{"id":"node0","uri":{"scheme":"http","host":"host0"},"isCoordinator":false}]}`+"\n" {
+		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
+func TestHandler_Info(t *testing.T) {
+	s := test.NewServer()
+	defer s.Close()
+	h := test.NewHandler()
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/info", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d", w.Code)
+	} else if body := w.Body.String(); body != fmt.Sprintf("{\"sliceWidth\":%d}\n", SliceWidth) {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }

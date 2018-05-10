@@ -16,7 +16,6 @@ package ctl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -25,6 +24,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/server"
+	"github.com/pkg/errors"
 )
 
 // BenchCommand represents a command for benchmarking index operations.
@@ -58,7 +58,7 @@ func (cmd *BenchCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
 	client, err := CommandClient(cmd)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating client")
 	}
 
 	switch cmd.Op {
