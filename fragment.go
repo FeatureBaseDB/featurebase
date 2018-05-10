@@ -518,7 +518,7 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
 			if c, err := f.setBit(uint64(i), columnID); err != nil {
-				return err
+				return changed, err
 			} else if c {
 				changed = true
 			}
