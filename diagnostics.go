@@ -23,6 +23,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 // Default version check URL.
@@ -80,13 +82,13 @@ func (d *DiagnosticsCollector) Flush() error {
 	d.metrics["Uptime"] = (time.Now().Unix() - d.startTime)
 	buf, err := d.encode()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "encoding")
 	}
 	req, err := http.NewRequest("POST", d.host, bytes.NewReader(buf))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := d.client.Do(req)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "posting")
 	}
 	// Intentionally ignoring response body, as user does not need to be notified of error.
 	defer resp.Body.Close()
@@ -99,7 +101,7 @@ func (d *DiagnosticsCollector) CheckVersion() error {
 	req, err := http.NewRequest("GET", d.VersionURL, nil)
 	resp, err := d.client.Do(req)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting version")
 	}
 	defer resp.Body.Close()
 
