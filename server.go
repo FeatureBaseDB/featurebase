@@ -629,7 +629,7 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 
 	// Sync schema.
 	if err := s.Holder.ApplySchema(ns.Schema); err != nil {
-		return err
+		return errors.Wrap(err, "applying schema")
 	}
 
 	// Sync maxSlices (standard).
