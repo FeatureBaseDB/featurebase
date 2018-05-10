@@ -127,7 +127,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=open frame: name=bar, err=loading: unmarshaling: unexpected EOF") {
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=open frame: name=bar, err=loading meta: unmarshaling: unexpected EOF") {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
