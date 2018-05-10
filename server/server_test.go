@@ -32,6 +32,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
+	"github.com/pkg/errors"
 )
 
 // Ensure program can process queries and maintain consistency.
@@ -52,7 +53,7 @@ func TestMain_Set_Quick(t *testing.T) {
 
 		// Execute SetBit() commands.
 		for _, cmd := range cmds {
-			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && errors.Cause(err) != pilosa.ErrIndexExists {
 				t.Fatal(err)
 			}
 			if err := client.CreateFrame(context.Background(), "i", cmd.Frame, pilosa.FrameOptions{}); err != nil && err != pilosa.ErrFrameExists {
