@@ -64,7 +64,7 @@ SetBit(<frame=STRING>, <row=UINT>, <col=UINT>,
 
 **Description:**
 
-`SetBit`, assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given frame with the given column.
+`SetBit` assigns a value of 1 to a bit in the binary matrix, thus associating the given row in the given frame with the given column.
 
 **Result Type:** boolean
 
@@ -75,20 +75,30 @@ A return value of `false` indicates that the bit was already set to 1 and nothin
 
 **Examples:**
 
-```
+Set the bit at row 1, column 10:
+```request
 SetBit(frame="stargazer", col=10, row=1)
+```
+```response
+{"results":[true]}
 ```
 
 This sets a bit in the stargazer frame, representing that the user with id=1 has starred the repository with id=10.
 
-SetBit also supports providing a timestamp. To write the date that a user starred a repository.
-```
+SetBit also supports providing a timestamp. To write the date that a user starred a repository:
+```request
 SetBit(frame="stargazer", col=10, row=1, timestamp="2016-01-01T00:00")
 ```
-
-Setting multiple bits in a single request:
+```response
+{"results":[true]}
 ```
+
+Set multiple bits in a single request:
+```request
 SetBit(frame="stargazer", col=10, row=1) SetBit(frame="stargazer", col=10, row=2) SetBit(frame="stargazer", col=20, row=1) SetBit(frame="stargazer", col=30, row=2)
+```
+```response
+{"results":[false,true,true,true]}
 ```
 
 #### SetRowAttrs
@@ -110,17 +120,23 @@ SetRowAttrs queries always return `null` upon success.
 
 **Examples:**
 
-```
+Set attributes `username` and `active` on row 10:
+```request
 SetRowAttrs(frame="stargazer", row=10, username="mrpi", active=true)
 ```
-
-Set username value and active status for user 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a row with a [Bitmap](../query-language/#bitmap) query like so `Bitmap(frame="stargazer", stargazer_id=10)`.
-
+```response
+{"results":[null]}
 ```
+
+Set username value and active status for user 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a row with a [Bitmap](../query-language/#bitmap) query like so `Bitmap(frame="stargazer", row=10)`.
+
+Delete attribute `username` on row 10:
+```request
 SetRowAttrs(frame="stargazer", row=10, username=null)
 ```
-
-Delete username value for user 10.
+```response
+{"results":[null]}
+```
 
 #### SetColumnAttrs
 
@@ -142,18 +158,42 @@ SetColumnAttrs queries always return `null` upon success. Setting a value of `nu
 
 **Examples:**
 
-```
+Set attributes `stars`, `url`, and `active` on column 10:
+```request
 SetColumnAttrs(col=10, stars=123, url="http://projects.pilosa.com/10", active=true)
 ```
-
-Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa. You can see the attributes you've set on a column with a [Bitmap](../query-language/#bitmap) query like so `Bitmap(frame="stargazer", col=10)`.
-
+```response
+{"results":[null]}
 ```
+
+Set url value and active status for project 10. These are arbitrary key/value pairs which have no meaning to Pilosa.
+
+ColumnAttrs can be requested by adding the URL parameter `columnAttrs=true` to a query. For example:
+```request
+curl localhost:10101/index/repository/query?columnAttrs=true -XPOST -d 'Bitmap(frame="stargazer", row=1)Bitmap(frame="stargazer", row=2)'
+```
+```response
+{
+  "results":[
+    {"attrs":{},"bits":[10,20]},
+    {"attrs":{},"bits":[10,30]}
+  ],
+  "columnAttrs":[
+    {"id":10,"attrs":{"active":true,"stars":123,"url":"http://projects.pilosa.com/10"}},
+    {"id":20,"attrs":{"active":false,"stars":456,"url":"http://projects.pilosa.com/30"}}
+  ]
+}
+```
+
+In this example, ColumnAttrs have been set on columns 10 and 20, but not column 30. The relevant attributes are all returned in a single columnAttrs list. See the [query index](../api-reference/#query-index) section for more information.
+
+Delete the `url` attribute on column 10:
+```request
 SetColumnAttrs(col=10, url=null)
 ```
-
-Delete url value for repo 10.
-
+```response
+{"results":[null]}
+```
 
 #### ClearBit
 
@@ -166,7 +206,7 @@ ClearBit(<frame=STRING>, <row=UINT>, <col=UINT>,
 
 **Description:**
 
-`ClearBit`, assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given frame from the given column.
+`ClearBit` assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given frame from the given column.
 
 **Result Type:** boolean
 
@@ -176,12 +216,15 @@ A return value of `false` indicates that the bit was already set to 0 and nothin
 
 **Examples:**
 
-```
+Clear the bit at row 1 and column 10 in the stargazer frame:
+```request
 ClearBit(frame="stargazer", col=10, row=1)
 ```
+```response
+{"results":[true]}
+```
 
-Remove relationship between the stargazer in row 1 and the repository in column 10 from the stargazer frame.
-
+This represents removing the relationship between the user with id=1 and the repository with id=10.
 
 #### SetFieldValue
 
@@ -201,10 +244,17 @@ SetFieldValue returns `null` upon success.
 
 **Examples:**
 
-Set the number of pull requests of repository 10.
-```
+Set the field value `pullrequest` to the value 2, on column 10 in frame `stats`:
+```request
 SetFieldValue(col=10, frame="stats", pullrequests=2)
 ```
+```response
+{"results":[null]}
+```
+
+This represents setting the number of pull requests of repository 10 to 2.
+
+This example assumes the existence of the frame `stats` and the field `pullrequests`. See [frame creation](../api-reference/#create-frame) and [field creation](../api-reference/#create-field) for more information.
 
 
 ### Read Operations
@@ -227,12 +277,13 @@ e.g. `{"attrs":{"username":"mrpi","active":true},"bits":[10, 20]}`
 
 **Examples:**
 
-Query all repositories that user 1 has starred.
-```
+Query all columns with a bit set in row 1 of the frame `stargazer` (repositories that are starred by user 1):
+```request
 Bitmap(frame="stargazer", row=1)
 ```
-
-Returns `{"attrs":{"username":"mrpi","active":true},"bits":[10, 20]}`
+```response
+{"attrs":{"username":"mrpi","active":true},"bits":[10, 20]}
+```
 
 * attrs are the attributes for user 1 
 * bits are the repositories which user 1 has starred.
@@ -247,7 +298,7 @@ Union([BITMAP_CALL ...])
 
 **Description:**
 
-Union performs a logical OR on the results of each `BITMAP_CALL` query passed to it.
+Union performs a logical OR on the results of all `BITMAP_CALL` queries passed to it.
 
 **Result Type:** object with attrs and bits
 
@@ -255,12 +306,13 @@ attrs will always be empty
 
 **Examples:**
 
-Query all repositories that are contributed by multiple users
-```
+Query columns with a bit set in either of two rows (repositories that are starred by either of two users):
+```request
 Union(Bitmap(frame="stargazer", stargazer_id=1), Bitmap(frame="stargazer", stargazer_id=2))
 ```
-
-Returns `{"attrs":{},"bits":[10, 20, 30]}`.
+```response
+{"attrs":{},"bits":[10, 20, 30]}
+```
 
 * bits are repositories that were starred by user 1 OR user 2
 
@@ -275,7 +327,7 @@ Intersect(<BITMAP_CALL>, [BITMAP_CALL ...])
 
 **Description:**
 
-Intersect performs a logical AND on the results of each `BITMAP_CALL` query passed to it.
+Intersect performs a logical AND on the results of all `BITMAP_CALL` queries passed to it.
 
 **Result Type:** object with attrs and bits
 
@@ -283,13 +335,14 @@ attrs will always be empty
 
 **Examples:**
 
-Query repositories which have been starred by two users.
+Query columns with a bit set in both of two rows (repositories that are starred by both of two users):
 
-```
+```request
 Intersect(Bitmap(frame="stargazer", row=1), Bitmap(frame="stargazer", row=2))
 ```
-
-Returns `{"attrs":{},"bits":[10]}`.
+```response
+{"attrs":{},"bits":[10]}
+```
 
 * bits are repositories that were starred by user 1 AND user 2
 
@@ -311,20 +364,23 @@ attrs will always be empty
 
 **Examples:**
 
-Query repositories which have been starred by one user and not another.
-```
+Query columns with a bit set in one row and not another (repositories that are starred by one user and not another):
+```request
 Difference(Bitmap(frame="stargazer", row=1), Bitmap( frame="stargazer", row=2))
 ```
-
-Return `{"results":[{"attrs":{},"bits":[20]}]}`
+```response
+{"results":[{"attrs":{},"bits":[20]}]}
+```
 
 * bits are repositories that were starred by user 1 BUT NOT user 2
 
-```
+Query for the opposite difference:
+```request
 Difference(Bitmap(frame="stargazer", row=2), Bitmap( frame="stargazer", row=1))
 ```
-
-Return `{"attrs":{},"bits":[30]}`
+```response
+{"attrs":{},"bits":[30]}
+```
 
 * Bits are repositories that were starred by user 2 BUT NOT user 1
 
@@ -346,13 +402,14 @@ attrs will always be empty
 
 **Examples:**
 
-Query repositories which have been starred by two users.
+Query columns with a bit set in exactly one of two rows (repositories that are starred by only one of two users):
 
-```
+```request
 Xor(Bitmap(frame="stargazer", row=1), Bitmap(frame="stargazer", row=2))
 ```
-
-Returns `{"attrs":{},"bits":[30]}`.
+```response
+{"results":[{"attrs":{},"bits":[10,20,30]}]}
+```
 
 * bits are repositories that were starred by user 1 XOR user 2 (user 1 or user 2, but not both)
 
@@ -371,12 +428,13 @@ Returns the number of set bits in the `BITMAP_CALL` passed in.
 
 **Examples:**
 
-Query the number of repositories to which a user has contributed.
-```
+Query the number of bits set in a row (the number of repositories a user has starred):
+```request
 Count(Bitmap(frame="stargazer", row=1))
 ```
-
-Return `2`
+```response
+{"results":[1]}
+```
 
 * Result is the number of repositories that user 1 has starred.
 
@@ -401,38 +459,54 @@ have the attribute specified by `field` with one of the values specified in
 **Caveats:**
 
 * Performing a TopN() query on a frame with cache type ranked will return the top bitmaps sorted by count in descending order.
-* Frames with cache type lru will maintain an LRU (Least Recently Used) cache, thus a TopN() query on this type of frame will return bitmaps sorted in order of most recently set bit.
-* The frame's cache size determines the number of sorted bitmaps to maintain in the cache for purposes of TopN() queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance.
+* Frames with cache type lru will maintain an LRU (Least Recently Used replacement policy) cache, thus a TopN query on this type of frame will return bitmaps sorted in order of most recently set bit.
+* The frame's cache size determines the number of sorted bitmaps to maintain in the cache for purposes of TopN queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance.
 * Once full, the cache will truncate the set of bitmaps according to the frame option CacheSize. Bitmaps that straddle the limit and have the same count will be truncated in no particular order.
-* The TopN() query's attribute filter is applied to the existing sorted cache of bitmaps. Bitmaps that fall outside of the sorted cache range, even if they would normally pass the filter, are ignored.
+* The TopN query's attribute filter is applied to the existing sorted cache of bitmaps. Bitmaps that fall outside of the sorted cache range, even if they would normally pass the filter, are ignored.
+
+See [frame creation](../api-reference/#create-frame) for more information about the cache.
 
 **Examples:**
 
-```
+Basic TopN query:
+```request
 TopN(frame="stargazer")
 ```
-
-Returns `[{"key": 1, "count": 2}, {"key": 2, "count": 2}, {"key": 3, "count": 1}]`
-
-* key is a user ID
-* count is amount of repositories
-* Results are the number of repositories that each user starred in descending order for all users in the stargazer frame, for example user 1 starred two repositories, user 2 starred two repositories, user 3 starred one repository.
-
+```response
+{"results":[[{"id":1240,"count":102},{"id":4734,"count":100},{"id":12709,"count":93},...]]}
 ```
+
+* `id` is a row ID (user ID)
+* `count` is a count of columns (repositories)
+* Results are the number of bits set in the corresponding row (repositories that each user starred) in descending order for all rows (users) in the stargazer frame. For example user 1240 starred 102 repositories, user 4734 starred 100 repositories, user 12709 starred 93 repository.
+
+```request
 TopN(frame="stargazer", n=2)
 ```
-
-Returns `[{"key": 1, "count": 2}, {"key": 2, "count": 2}]`
-
-* Results are the top two users sorted by number of repositories they've starred in descending order.
-
+```response
+{"results":[[{"id":1240,"count":102},{"id":4734,"count":100}]]}
 ```
+
+* Results are the top two rows (users) sorted by number of bits set (repositories they've starred) in descending order.
+
+```request
 TopN(Bitmap(frame="language", row=1), frame="stargazer", n=2)
 ```
+```response
+{"results":[[{"id":1240,"count":35},{"id":7508,"count":32}]]}
+```
 
-Returns `[{"key": 1, "count": 2}, {"key": 2, "count": 1}]`
+* Results are the top two users (rows) sorted by the number of bits set in the intersection with row 1 of the language frame (repositories that they've starred which are written in language 1).
 
-* Results are the top two users sorted by the number of repositories that they've starred which are written in language 1.
+```request
+TopN(TODO attrs)
+TODO
+TODO
+TODO
+```
+```response
+
+```
 
 #### Range Queries
 
@@ -453,14 +527,17 @@ between the given `start` and `end` timestamps.
 
 **Examples:**
 
-When you set timestamp using SetBit, you will able to query all repositories that a user has starred within a date range.
-```
+Query all columns with a bit set in row 1 of a frame (repositories that a user has starred), within a date range:
+```request
 Range(frame="stargazer", row=1, start="2010-01-01T00:00", end="2017-03-02T03:00")
 ```
+```response
+{{"attrs":{},"bits":[10]}
+```
 
-Returns `{{"attrs":{},"bits":[10]}`
+This example assumes timestamps have been set on some bits.
 
-* bits are repositories which were starred by user 1 from 2010-01-01 to 2017-03-02
+* bits are repositories which were starred by user 1 in the time range 2010-01-01 to 2017-03-02.
 
 
 #### Range (BSI)
@@ -482,13 +559,14 @@ Returns bits that are true for the comparison operator.
 **Examples:**
 
 In our source data, commitactivity was counted over the last year.
-The following greater-than `Range` query returns all repositories having more than 100 commits.
+The following greater-than `Range` query returns all columns with a field value greater than 100 (repositories having more than 100 commits):
 
-```
+```request
 Range(frame="stats", commitactivity > 100)
 ```
-
-Returns `{{"attrs":{},"bits":[10]}`
+```response
+{{"attrs":{},"bits":[10]}
+```
 
 * bits are repositories which had at least 100 commits in the last year.
 
@@ -504,9 +582,9 @@ BSI range queries support the following operators:
  `!=`     | not-equal-to, NEQ             | integer or `null`  
  `><`     | between, BETWEEN              | [integer, integer] 
 
-The `BETWEEN` query specifies an interval with both bounds, using `><` operator, and a two-element list containing the lower and upper bounds of the interval:
+The `BETWEEN` form specifies an interval with both bounds, using the `><` operator, and a two-element list containing the lower and upper bounds of the interval:
 
-```
+```pql
 Range(frame="stats", commitactivity >< [100, 200])
 ```
 
@@ -522,20 +600,21 @@ Min([BITMAP_CALL], <frame=STRING>, <field=STRING>)
 
 **Description:**
 
-Returns the minimum value of all BSI integer values in the `field` in this `frame`. If the optional `Bitmap` call is supplied, only columns with set bits are considered, otherwise all collumns are considered.
+Returns the minimum value of all BSI integer values in the `field` in this `frame`. If the optional `Bitmap` call is supplied, only columns with set bits are considered, otherwise all columns are considered.
 
 **Result Type:** object with the min and count of columns containing the min value.
 
 **Examples:**
 
-Query the size of all repositories.
-```
+Query the minimum value of all fields in a frame (minimum size of all repositories):
+```request
 Min(frame="stats", field="diskusage")
 ```
+```response
+{"value":4,"count":2}
+```
 
-Return `{"min":4,"count":2}`
-
-* Result is the smallest repository in kilobytes, plus the number of repositories of that size.
+* Result is the smallest value (repository size in kilobytes, here), plus the count of columns with that value.
 
 #### Max
 
@@ -553,14 +632,15 @@ Returns the maximum value of all BSI integer values in the `field` in this `fram
 
 **Examples:**
 
-Query the size of all repositories.
-```
+Query the maximum value of all fields in a frame (maximum size of all repositories):
+```request
 Max(frame="stats", field="diskusage")
 ```
+```response
+{"value":88,"count":13}
+```
 
-Return `{"max":88,"count":13}`
-
-* Result is the largest repository in kilobytes, plus the number of repositories of that size.
+* Result is the largest value (repository size in kilobytes, here), plus the count of columns with that value.
 
 #### Sum
 
@@ -572,17 +652,18 @@ Sum([BITMAP_CALL], <frame=STRING>, <field=STRING>)
 
 **Description:**
 
-Returns the count and computed sum of all BSI integer values in the `field` in this `frame`. If the optional `Bitmap` call is supplied, columns with set bits are summed, otherwise the sum is across all columns.
+Returns the count and computed sum of all BSI integer values in the `field` and `frame`. If the optional `Bitmap` call is supplied, columns with set bits are summed, otherwise the sum is across all columns.
 
 **Result Type:** object with the computed sum and count of the bitmap field.
 
 **Examples:**
 
 Query the size of all repositories.
-```
+```request
 Sum(frame="stats", field="diskusage")
 ```
+```response
+{"value":10,"count":3}
+```
 
-Return `{"sum":10,"count":3}`
-
-* Result is the size of all repositories in kilobytes, plus the number of repositories.
+* Result is the sum of all values (total size of all repositories in kilobytes, here), plus the count of columns.

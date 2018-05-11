@@ -171,17 +171,23 @@ Now we can run some example queries.
 
 Count per cab type can be retrieved, sorted, with a single PQL call.
 
-```
+```request
 TopN(frame=cab_type)
+```
+```response
+{"results":[[{"id":1,"count":1992943},{"id":0,"count":7057}]]}
 ```
 
 High traffic location IDs can be retrieved with a similar call. These IDs correspond to latitude, longitude pairs, which can be recovered from the mapping that generates the IDs.
 
-```
+```request
 TopN(frame=pickup_grid_id)
 ```
+```response
+{"results":[[{"id":5060,"count":40620},{"id":4861,"count":38145},{"id":4962,"count":35268},...]]}
+```
 
-Average of total_amount per passenger_count can be computed with some postprocessing. We use a small number of `TopN` calls to retrieve counts of rides by passenger_count, then use those counts to compute an average.
+Average of `total_amount` per `passenger_count` can be computed with some postprocessing. We use a small number of `TopN` calls to retrieve counts of rides by passenger_count, then use those counts to compute an average.
 
 ```python
 queries = ''
