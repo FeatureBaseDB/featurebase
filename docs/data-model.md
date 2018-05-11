@@ -35,7 +35,7 @@ The purpose of the Index is to represent a data namespace. You cannot perform cr
 
 ### Column
 
-Column ids are sequential increasing integers and are common to all Frames within an Index.
+Column ids are sequential increasing integers and are common to all Frames within an Index. A single column often corresponds to a record in a relational table, although other configurations are possible, and sometimes preferable (see genomics TODO).
 
 ### Row
 
@@ -43,30 +43,30 @@ Row ids are sequential increasing integers namespaced to each Frame within an In
 
 ### Frame
 
-Frames are used to segment and define different functional characteristics within your entire index.  You can think of a Frame as a table-like data partition within your Index.
-
-Row attributes are namespaced at the Frame level.
+Frames are used to segment rows within an index, for example to defining different functional groups. A frame might correspond to a single field in a relational table, where each row in a standard frame represents a single possible value of the field. Similarly, a frame with BSI values could represent all possible integer values of a field .
 
 #### Relational Analogy
 
 The Pilosa index is a flexible structure; it can represent any sort of high-cardinality binary matrix. The most common pattern we have encountered in Pilosa use cases is a direct analogy to the relational model, summarized here.
 
 Entities:
-| Relational  | Pilosa                                       |
-|-------------|----------------------------------------------|
-| Database    | N/A (internal: Holder)                       |
-| Table       | Index                                        |
-| Row         | Column                                       |
-| Column      | Frame                                        |
-| Value       | Row                                          |
-| Value (int) | Field.Value (see [BSI](#bsi-range-encoding)) |
+
+ Relational  | Pilosa
+-------------|----------------------------------------------
+ Database    | N/A *(internal: Holder)*
+ Table       | Index
+ Row         | Column
+ Column      | Frame
+ Value       | Row
+ Value (int) | Field.Value (see [BSI](#bsi-range-encoding))
 
 Simple queries:
-| Relational                                  | Pilosa                             |
-|---------------------------------------------|------------------------------------|
-| `select ID from People where Name = 'Bob'`  | `Bitmap(frame=Name, row=[Bob])`    |
-| `select ID from People where Age > 30`      | `Range(frame=Default, Age > 30)`   |
-| `select ID from People where Member = true` | `Bitmap(frame=Member, row=[true])` |
+
+ Relational                                  | Pilosa
+---------------------------------------------|------------------------------------
+ `select ID from People where Name = 'Bob'`  | `Bitmap(frame=Name, row=[Bob])`
+ `select ID from People where Age > 30`      | `Range(frame=Default, Age > 30)`
+ `select ID from People where Member = true` | `Bitmap(frame=Member, row=[true])`
 
 In the relational model, joins are often necessary. Because Pilosa supports extremely high cardinality in both rows and columns, many types of joins are accomplished with basic Pilosa queries across multiple frames. For example, this SQL join:
 
