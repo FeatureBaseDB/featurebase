@@ -47,6 +47,44 @@ Frames are used to segment and define different functional characteristics withi
 
 Row attributes are namespaced at the Frame level.
 
+#### Relational Analogy
+
+The Pilosa index is a flexible structure; it can represent any sort of high-cardinality binary matrix. The most common pattern we have encountered in Pilosa use cases is a direct analogy to the relational model, summarized here.
+
+Entities:
+| Relational  | Pilosa                                       |
+|-------------|----------------------------------------------|
+| Database    | N/A (internal: Holder)                       |
+| Table       | Index                                        |
+| Row         | Column                                       |
+| Column      | Frame                                        |
+| Value       | Row                                          |
+| Value (int) | Field.Value (see [BSI](#bsi-range-encoding)) |
+
+Simple queries:
+| Relational                                  | Pilosa                             |
+|---------------------------------------------|------------------------------------|
+| `select ID from People where Name = 'Bob'`  | `Bitmap(frame=Name, row=[Bob])`    |
+| `select ID from People where Age > 30`      | `Range(frame=Default, Age > 30)`   |
+| `select ID from People where Member = true` | `Bitmap(frame=Member, row=[true])` |
+
+In the relational model, joins are often necessary. Because Pilosa supports extremely high cardinality in both rows and columns, many types of joins are accomplished with basic Pilosa queries across multiple frames. For example, this SQL join:
+
+```sql
+select AVG(p.Age) from People p
+inner join PersonCar pc on pc.PersonID=p.ID
+inner join Cars c on pc.CarID=c.ID
+where c.Make = 'Ford'
+```
+
+can be accomplished with a Pilosa query like this (note that [Sum](/docs/query-language#sum) returns both the sum and count, from which the average is easily computed):
+
+```pql
+Sum(Bitmap(frame="Car-Make", row=[Ford]), frame=Default, field=Age)
+```
+
+This is one major component of Pilosa's ability to combine relationships from multiple data stores.
+
 #### Ranked
 
 Ranked Frames maintain a sorted cache of column counts by Row ID (yielding the top rows by columns with a bit set in each). This cache facilitates the TopN query.  The cache size defaults to 50,000 and can be set at Frame creation.
