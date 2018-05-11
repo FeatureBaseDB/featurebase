@@ -16,12 +16,12 @@ package ctl
 
 import (
 	"context"
-	"errors"
 	"io"
 	"os"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/server"
+	"github.com/pkg/errors"
 )
 
 // RestoreCommand represents a command for restoring a frame from a backup.
@@ -60,19 +60,19 @@ func (cmd *RestoreCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
 	client, err := CommandClient(cmd)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating client")
 	}
 
 	// Open backup file.
 	f, err := os.Open(cmd.Path)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "opening file")
 	}
 	defer f.Close()
 
 	// Restore backup file to the cluster.
 	if err := client.RestoreFrom(ctx, f, cmd.Index, cmd.Frame, cmd.View); err != nil {
-		return err
+		return errors.Wrap(err, "restoring")
 	}
 
 	return nil

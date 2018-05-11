@@ -95,18 +95,18 @@ func (m *Command) Start() (err error) {
 	// SetupServer
 	err = m.SetupServer()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "setting up server")
 	}
 
 	// SetupNetworking
 	err = m.SetupNetworking()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "setting up networking")
 	}
 
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
-		return fmt.Errorf("server.Open: %v", err)
+		return errors.Wrap(err, "opening server")
 	}
 
 	m.logger.Printf("Listening as %s\n", m.Server.URI)
@@ -261,7 +261,7 @@ func (m *Command) SetupNetworking() error {
 		for _, address := range m.Config.Cluster.Hosts {
 			uri, err := pilosa.NewURIFromAddress(address)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "getting URI")
 			}
 			m.Server.Cluster.Nodes = append(m.Server.Cluster.Nodes, &pilosa.Node{
 				URI: *uri,
@@ -277,7 +277,7 @@ func (m *Command) SetupNetworking() error {
 
 	gossipPort, err := strconv.Atoi(m.Config.Gossip.Port)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "parsing port")
 	}
 
 	// get the host portion of addr to use for binding
@@ -288,7 +288,7 @@ func (m *Command) SetupNetworking() error {
 	} else {
 		transport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
 		if err != nil {
-			return err
+			return errors.Wrap(err, "getting transport")
 		}
 	}
 
@@ -300,10 +300,19 @@ func (m *Command) SetupNetworking() error {
 
 	gossipEventReceiver := gossip.NewGossipEventReceiver(m.logger)
 	m.Server.Cluster.EventReceiver = gossipEventReceiver
-	gossipMemberSet, err := gossip.NewGossipMemberSet(m.Server.NodeID, m.Server.URI.Host(), m.Config.Gossip, gossipEventReceiver, m.Server, gossip.WithLogger(m.logger.Logger()), gossip.WithTransport(transport))
+	gossipMemberSet, err := gossip.NewGossipMemberSet(
+		m.Server.NodeID,
+		m.Server.URI.Host(),
+		m.Config.Gossip,
+		gossipEventReceiver,
+		m.Server,
+		gossip.WithLogger(m.logger.Logger()),
+		gossip.WithTransport(transport),
+	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting memberset")
 	}
+	gossipMemberSet.Logger = m.logger
 	m.Server.Cluster.MemberSet = gossipMemberSet
 	m.Server.Broadcaster = m.Server
 	m.Server.BroadcastReceiver = gossipMemberSet

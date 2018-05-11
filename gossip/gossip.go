@@ -169,12 +169,14 @@ func WithLogger(logger *log.Logger) GossipMemberSetOption {
 
 // NewGossipMemberSet returns a new instance of GossipMemberSet based on options.
 func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventReceiver, sh pilosa.StatusHandler, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
-	g := &GossipMemberSet{}
+	g := &GossipMemberSet{
+		Logger: pilosa.NopLogger,
+	}
 
 	// options
 	for _, opt := range options {
 		if err := opt(g); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "executing option")
 		}
 	}
 

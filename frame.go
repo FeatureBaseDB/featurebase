@@ -15,7 +15,6 @@
 package pilosa
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -27,6 +26,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pkg/errors"
 )
 
 // Default frame settings.
@@ -156,7 +156,7 @@ func (f *Frame) SetCacheSize(v uint32) error {
 	// Persist meta data to disk on change.
 	f.cacheSize = v
 	if err := f.saveMeta(); err != nil {
-		return err
+		return errors.Wrap(err, "saving")
 	}
 
 	return nil
@@ -192,19 +192,19 @@ func (f *Frame) Open() error {
 	if err := func() error {
 		// Ensure the frame's path exists.
 		if err := os.MkdirAll(f.path, 0777); err != nil {
-			return err
+			return errors.Wrap(err, "creating frame dir")
 		}
 
 		if err := f.loadMeta(); err != nil {
-			return err
+			return errors.Wrap(err, "loading meta")
 		}
 
 		if err := f.openViews(); err != nil {
-			return err
+			return errors.Wrap(err, "opening views")
 		}
 
 		if err := f.rowAttrStore.Open(); err != nil {
-			return err
+			return errors.Wrap(err, "opening attrstore")
 		}
 
 		return nil
@@ -222,13 +222,13 @@ func (f *Frame) openViews() error {
 	if os.IsNotExist(err) {
 		return nil
 	} else if err != nil {
-		return err
+		return errors.Wrap(err, "opening view directory")
 	}
 	defer file.Close()
 
 	fis, err := file.Readdir(0)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "reading directory")
 	}
 
 	for _, fi := range fis {
@@ -262,10 +262,10 @@ func (f *Frame) loadMeta() error {
 		//f.fields
 		return nil
 	} else if err != nil {
-		return err
+		return errors.Wrap(err, "reading meta")
 	} else {
 		if err := proto.Unmarshal(buf, &pb); err != nil {
-			return err
+			return errors.Wrap(err, "unmarshaling")
 		}
 	}
 
@@ -288,12 +288,12 @@ func (f *Frame) saveMeta() error {
 	fo := f.options()
 	buf, err := proto.Marshal(fo.Encode())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "marshaling")
 	}
 
 	// Write to meta file.
 	if err := ioutil.WriteFile(filepath.Join(f.path, ".meta"), buf, 0666); err != nil {
-		return err
+		return errors.Wrap(err, "writing meta")
 	}
 
 	return nil
@@ -365,7 +365,7 @@ func (f *Frame) CreateField(field *Field) error {
 // addField adds a single field to fields.
 func (f *Frame) addField(field *Field) error {
 	if err := ValidateField(field); err != nil {
-		return err
+		return errors.Wrap(err, "validating field")
 	} else if f.HasField(field.Name) {
 		return ErrFieldExists
 	}
@@ -388,7 +388,7 @@ func (f *Frame) GetFields() ([]*Field, error) {
 
 	err := f.loadMeta()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "loading meta")
 	}
 
 	return f.fields, nil
@@ -410,9 +410,9 @@ func (f *Frame) DeleteField(name string) error {
 		delete(f.views, viewName)
 
 		if err := view.Close(); err != nil {
-			return err
+			return errors.Wrap(err, "closing view")
 		} else if err := os.RemoveAll(view.Path()); err != nil {
-			return err
+			return errors.Wrap(err, "deleting directory")
 		}
 	}
 
@@ -453,7 +453,7 @@ func (f *Frame) SetTimeQuantum(q TimeQuantum) error {
 
 	// Persist meta data to disk.
 	if err := f.saveMeta(); err != nil {
-		return err
+		return errors.Wrap(err, "saving meta")
 	}
 
 	return nil
@@ -522,7 +522,7 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 				View:  name,
 			})
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "sending CreateView message")
 		}
 	}
 
@@ -547,7 +547,7 @@ func (f *Frame) createViewIfNotExistsBase(name string) (*View, bool, error) {
 	view := f.newView(f.ViewPath(name), name)
 
 	if err := view.Open(); err != nil {
-		return nil, false, err
+		return nil, false, errors.Wrap(err, "opening view")
 	}
 	view.RowAttrStore = f.rowAttrStore
 	f.views[view.Name()] = view
@@ -574,12 +574,12 @@ func (f *Frame) DeleteView(name string) error {
 
 	// Close data files before deletion.
 	if err := view.Close(); err != nil {
-		return err
+		return errors.Wrap(err, "closing view")
 	}
 
 	// Delete view directory.
 	if err := os.RemoveAll(view.Path()); err != nil {
-		return err
+		return errors.Wrap(err, "deleting directory")
 	}
 
 	delete(f.views, name)
@@ -597,12 +597,12 @@ func (f *Frame) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 	// Retrieve view. Exit if it doesn't exist.
 	view, err := f.CreateViewIfNotExists(name)
 	if err != nil {
-		return changed, err
+		return changed, errors.Wrap(err, "creating view")
 	}
 
 	// Set non-time bit.
 	if v, err := view.SetBit(rowID, colID); err != nil {
-		return changed, err
+		return changed, errors.Wrap(err, "setting on view")
 	} else if v {
 		changed = v
 	}
@@ -616,11 +616,11 @@ func (f *Frame) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 	for _, subname := range ViewsByTime(name, *t, f.TimeQuantum()) {
 		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
-			return changed, err
+			return changed, errors.Wrapf(err, "creating view %s", subname)
 		}
 
 		if c, err := view.SetBit(rowID, colID); err != nil {
-			return changed, err
+			return changed, errors.Wrapf(err, "setting on view %s", subname)
 		} else if c {
 			changed = true
 		}
@@ -639,12 +639,12 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	// Retrieve view. Exit if it doesn't exist.
 	view, err := f.CreateViewIfNotExists(name)
 	if err != nil {
-		return changed, err
+		return changed, errors.Wrap(err, "creating view")
 	}
 
 	// Clear non-time bit.
 	if v, err := view.ClearBit(rowID, colID); err != nil {
-		return changed, err
+		return changed, errors.Wrap(err, "setting on view")
 	} else if v {
 		changed = v
 	}
@@ -658,11 +658,11 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	for _, subname := range ViewsByTime(name, *t, f.TimeQuantum()) {
 		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
-			return changed, err
+			return changed, errors.Wrapf(err, "creating view %s", subname)
 		}
 
 		if c, err := view.ClearBit(rowID, colID); err != nil {
-			return changed, err
+			return changed, errors.Wrapf(err, "setting on view %s", subname)
 		} else if c {
 			changed = true
 		}
@@ -708,7 +708,7 @@ func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (change
 	// Fetch target view.
 	view, err := f.CreateViewIfNotExists(ViewFieldPrefix + name)
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "creating view")
 	}
 
 	// Determine base value to store.
@@ -890,12 +890,12 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 
 		view, err := f.CreateViewIfNotExists(key.View)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating view")
 		}
 
 		frag, err := view.CreateFragmentIfNotExists(key.Slice)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating view")
 		}
 
 		if err := frag.Import(data.RowIDs, data.ColumnIDs); err != nil {
@@ -942,12 +942,12 @@ func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64
 		// because we need to know bitDepth (based on min/max value).
 		view, err := f.CreateViewIfNotExists(key.View)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating view")
 		}
 
 		frag, err := view.CreateFragmentIfNotExists(key.Slice)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating fragment")
 		}
 
 		baseValues := make([]uint64, len(data.Values))
