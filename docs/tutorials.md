@@ -178,7 +178,7 @@ cd $HOME/pilosa-tls-tutorial
 pilosa server -c node3.config.toml
 ```
 
-Let's ensure that all three Pilosa servers are runnning and they are connected:
+Let's ensure that all three Pilosa servers are running and they are connected:
 ```
 curl -k --ipv4 https://01.pilosa.local:10501/status
 ```
