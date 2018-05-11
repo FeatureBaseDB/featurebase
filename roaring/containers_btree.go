@@ -18,16 +18,16 @@ type BTreeContainers struct {
 	tree *Tree
 
 	lastKey       uint64
-	lastContainer *container
+	lastContainer *Container
 }
 
-func (btc *BTreeContainers) Get(key uint64) *container {
+func (btc *BTreeContainers) Get(key uint64) *Container {
 	// Check the last* cache for same container.
 	if key == btc.lastKey && btc.lastContainer != nil {
 		return btc.lastContainer
 	}
 
-	var c *container
+	var c *Container
 	el, ok := btc.tree.Get(key)
 	if ok {
 		c = el
@@ -37,7 +37,7 @@ func (btc *BTreeContainers) Get(key uint64) *container {
 	return c
 }
 
-func (btc *BTreeContainers) Put(key uint64, c *container) {
+func (btc *BTreeContainers) Put(key uint64, c *Container) {
 	// If a mapped container is added to the tree, reset the
 	// lastContainer cache so that the cache is not pointing
 	// at a read-only mmap.
@@ -47,7 +47,7 @@ func (btc *BTreeContainers) Put(key uint64, c *container) {
 	btc.tree.Set(key, c)
 }
 
-func (u updater) update(oldV *container, exists bool) (*container, bool) {
+func (u updater) update(oldV *Container, exists bool) (*Container, bool) {
 	// update the existing container
 	if exists {
 		oldV.containerType = u.containerType
@@ -55,7 +55,7 @@ func (u updater) update(oldV *container, exists bool) (*container, bool) {
 		oldV.mapped = u.mapped
 		return oldV, false
 	}
-	return &container{
+	return &Container{
 		containerType: u.containerType,
 		n:             u.n,
 		mapped:        u.mapped,
@@ -79,7 +79,7 @@ func (btc *BTreeContainers) Remove(key uint64) {
 	btc.tree.Delete(key)
 }
 
-func (btc *BTreeContainers) GetOrCreate(key uint64) *container {
+func (btc *BTreeContainers) GetOrCreate(key uint64) *Container {
 	// Check the last* cache for same container.
 	if key == btc.lastKey && btc.lastContainer != nil {
 		return btc.lastContainer
@@ -115,7 +115,7 @@ func (btc *BTreeContainers) Clone() Containers {
 	return nbtc
 }
 
-func (btc *BTreeContainers) Last() (key uint64, c *container) {
+func (btc *BTreeContainers) Last() (key uint64, c *Container) {
 	if btc.tree.Len() == 0 {
 		return 0, nil
 	}
@@ -141,7 +141,7 @@ func (btc *BTreeContainers) Iterator(key uint64) (citer Contiterator, found bool
 type BTCIterator struct {
 	e   *Enumerator
 	key uint64
-	val *container
+	val *Container
 }
 
 func (i *BTCIterator) Next() bool {
@@ -155,7 +155,7 @@ func (i *BTCIterator) Next() bool {
 	return true
 }
 
-func (i *BTCIterator) Value() (uint64, *container) {
+func (i *BTCIterator) Value() (uint64, *Container) {
 	if i.val == nil {
 		return 0, nil
 	}
