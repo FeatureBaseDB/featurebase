@@ -542,7 +542,6 @@ func TestClient_Schema(t *testing.T) {
 	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.API.URI = s.HostURI()
 	s.Handler.API.Cluster = test.NewCluster(1)
 	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.API.Holder = hldr.Holder
@@ -569,7 +568,6 @@ func TestClient_ExportCSV(t *testing.T) {
 	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.API.URI = s.HostURI()
 	s.Handler.API.Cluster = test.NewCluster(1)
 	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.API.Holder = hldr.Holder
@@ -590,7 +588,6 @@ func TestClient_FrameViews(t *testing.T) {
 	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	s := test.NewServer()
 	defer s.Close()
-	s.Handler.API.URI = s.HostURI()
 	s.Handler.API.Cluster = test.NewCluster(1)
 	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.API.Holder = hldr.Holder
