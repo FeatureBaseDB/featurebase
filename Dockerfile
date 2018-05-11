@@ -1,4 +1,4 @@
-FROM golang:1.10 as builder
+FROM golang:1.10.2 as builder
 
 COPY . /go/src/github.com/pilosa/pilosa/
 
@@ -10,6 +10,8 @@ FROM scratch
 LABEL maintainer "dev@pilosa.com"
 
 COPY --from=builder /go/bin/pilosa /pilosa
+
+COPY NOTICE /NOTICE
 
 EXPOSE 10101
 VOLUME /data

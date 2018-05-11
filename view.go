@@ -24,6 +24,7 @@ import (
 
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pkg/errors"
 )
 
 // View layout modes.
@@ -105,13 +106,13 @@ func (v *View) Open() error {
 	if err := func() error {
 		// Ensure the view's path exists.
 		if err := os.MkdirAll(v.path, 0777); err != nil {
-			return err
+			return errors.Wrap(err, "creating view directory")
 		} else if err := os.MkdirAll(filepath.Join(v.path, "fragments"), 0777); err != nil {
-			return err
+			return errors.Wrap(err, "creating fragments directory")
 		}
 
 		if err := v.openFragments(); err != nil {
-			return err
+			return errors.Wrap(err, "opening fragments")
 		}
 
 		return nil
@@ -129,13 +130,13 @@ func (v *View) openFragments() error {
 	if os.IsNotExist(err) {
 		return nil
 	} else if err != nil {
-		return err
+		return errors.Wrap(err, "opening fragments directory")
 	}
 	defer file.Close()
 
 	fis, err := file.Readdir(0)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "reading fragments directory")
 	}
 
 	for _, fi := range fis {
@@ -168,7 +169,7 @@ func (v *View) Close() error {
 	// Close all fragments.
 	for _, frag := range v.fragments {
 		if err := frag.Close(); err != nil {
-			return err
+			return errors.Wrap(err, "closing fragment")
 		}
 	}
 	v.fragments = make(map[uint64]*Fragment)
@@ -240,7 +241,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	// Initialize and open fragment.
 	frag := v.newFragment(v.FragmentPath(slice), slice)
 	if err := frag.Open(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "opening fragment")
 	}
 	frag.RowAttrStore = v.RowAttrStore
 
@@ -256,7 +257,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 				IsInverse: IsInverseView(v.name),
 			})
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "sending message")
 		}
 	}
 
@@ -286,12 +287,12 @@ func (v *View) DeleteFragment(slice uint64) error {
 
 	// Close data files before deletion.
 	if err := fragment.Close(); err != nil {
-		return err
+		return errors.Wrap(err, "closing fragment")
 	}
 
 	// Delete fragment file.
 	if err := os.Remove(fragment.Path()); err != nil {
-		return err
+		return errors.Wrap(err, "deleting fragment file")
 	}
 
 	// Delete fragment cache file.

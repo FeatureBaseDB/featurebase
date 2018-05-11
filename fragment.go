@@ -21,7 +21,6 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -42,6 +41,7 @@ import (
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -160,12 +160,12 @@ func (f *Fragment) Open() error {
 	if err := func() error {
 		// Initialize storage in a function so we can close if anything goes wrong.
 		if err := f.openStorage(); err != nil {
-			return err
+			return errors.Wrap(err, "opening storage")
 		}
 
 		// Fill cache with rows persisted to disk.
 		if err := f.openCache(); err != nil {
-			return err
+			return errors.Wrap(err, "opening cache")
 		}
 
 		// Clear checksums.
@@ -206,7 +206,7 @@ func (f *Fragment) openStorage() error {
 	// If the file is empty then initialize it with an empty bitmap.
 	fi, err := f.file.Stat()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "statting file before")
 	} else if fi.Size() == 0 {
 		bi := bufio.NewWriter(f.file)
 		if _, err := f.storage.WriteTo(bi); err != nil {
@@ -215,7 +215,7 @@ func (f *Fragment) openStorage() error {
 		bi.Flush()
 		fi, err = f.file.Stat()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "statting file after")
 		}
 	}
 
@@ -298,13 +298,13 @@ func (f *Fragment) close() error {
 	// Flush cache if closing gracefully.
 	if err := f.flushCache(); err != nil {
 		f.Logger.Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
-		return err
+		return errors.Wrap(err, "flushing cache")
 	}
 
 	// Close underlying storage.
 	if err := f.closeStorage(); err != nil {
 		f.Logger.Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
-		return err
+		return errors.Wrap(err, "closing storage")
 	}
 
 	// Remove checksums.
@@ -393,12 +393,12 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "getting bit ops")
 	}
 
 	// Write to storage.
 	if changed, err = f.storage.Add(pos); err != nil {
-		return false, err
+		return false, errors.Wrap(err, "writing")
 	}
 
 	// Don't update the cache if nothing changed.
@@ -411,7 +411,7 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 
 	// Increment number of operations until snapshot is required.
 	if err := f.incrementOpN(); err != nil {
-		return false, err
+		return false, errors.Wrap(err, "incrementing")
 	}
 
 	// Get the row from row cache or fragment.storage.
@@ -445,12 +445,12 @@ func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "getting bit pos")
 	}
 
 	// Write to storage.
 	if changed, err = f.storage.Remove(pos); err != nil {
-		return false, err
+		return false, errors.Wrap(err, "writing")
 	}
 
 	// Don't update the cache if nothing changed.
@@ -463,7 +463,7 @@ func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 
 	// Increment number of operations until snapshot is required.
 	if err := f.incrementOpN(); err != nil {
-		return false, err
+		return false, errors.Wrap(err, "incrementing")
 	}
 
 	// Get the row from cache or fragment.storage.
@@ -493,7 +493,7 @@ func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exi
 
 	// If existence bit is unset then ignore remaining bits.
 	if v, err := f.bit(uint64(bitDepth), columnID); err != nil {
-		return 0, false, err
+		return 0, false, errors.Wrap(err, "getting existence bit")
 	} else if !v {
 		return 0, false, nil
 	}
@@ -501,7 +501,7 @@ func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exi
 	// Compute other bits into a value.
 	for i := uint(0); i < bitDepth; i++ {
 		if v, err := f.bit(uint64(i), columnID); err != nil {
-			return 0, false, err
+			return 0, false, errors.Wrapf(err, "getting value bit %d", i)
 		} else if v {
 			value |= (1 << i)
 		}
@@ -533,7 +533,7 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 
 	// Mark value as set.
 	if c, err := f.setBit(uint64(bitDepth), columnID); err != nil {
-		return changed, err
+		return changed, errors.Wrap(err, "marking not-null")
 	} else if c {
 		changed = true
 	}
@@ -548,20 +548,20 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 		if value&(1<<i) != 0 {
 			bit, err := f.pos(uint64(i), columnID)
 			if err != nil {
-				return changed, err
+				return changed, errors.Wrap(err, "getting set pos")
 			}
 			if c, err := f.storage.Add(bit); err != nil {
-				return changed, err
+				return changed, errors.Wrap(err, "adding")
 			} else if c {
 				changed = true
 			}
 		} else {
 			bit, err := f.pos(uint64(i), columnID)
 			if err != nil {
-				return changed, err
+				return changed, errors.Wrap(err, "getting clear pos")
 			}
 			if c, err := f.storage.Remove(bit); err != nil {
-				return changed, err
+				return changed, errors.Wrap(err, "removing")
 			} else if c {
 				changed = true
 			}
@@ -571,10 +571,10 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 	// Mark value as set.
 	p, err := f.pos(uint64(bitDepth), columnID)
 	if err != nil {
-		return changed, err
+		return changed, errors.Wrap(err, "marking not-null")
 	}
 	if c, err := f.storage.Add(p); err != nil {
-		return changed, err
+		return changed, errors.Wrap(err, "adding to storage")
 	} else if c {
 		changed = true
 	}
@@ -945,7 +945,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		if filters != nil {
 			attr, err := f.RowAttrStore.Attrs(rowID)
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrap(err, "getting attrs")
 			} else if attr == nil {
 				continue
 			} else if attrValue := attr[opt.FilterField]; attrValue == nil {
@@ -1308,14 +1308,14 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 	// Set local bits.
 	for i := range sets[0].ColumnIDs {
 		if _, err := f.setBit(sets[0].RowIDs[i], (f.Slice()*SliceWidth)+sets[0].ColumnIDs[i]); err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Wrap(err, "setting")
 		}
 	}
 
 	// Clear local bits.
 	for i := range clears[0].ColumnIDs {
 		if _, err := f.clearBit(clears[0].RowIDs[i], (f.Slice()*SliceWidth)+clears[0].ColumnIDs[i]); err != nil {
-			return nil, nil, err
+			return nil, nil, errors.Wrap(err, "clearing")
 		}
 	}
 
@@ -1346,13 +1346,13 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 			// Determine the position of the bit in the storage.
 			pos, err := f.pos(rowID, columnID)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "getting bit pos")
 			}
 
 			// Write to storage.
 			_, err = f.storage.Add(pos)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "writing")
 			}
 			// Reduce the StatsD rate for high volume stats
 			f.stats.Count("ImportBit", 1, 0.0001)
@@ -1386,7 +1386,7 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 
 	// Write the storage to disk and reload.
 	if err := f.snapshot(); err != nil {
-		return err
+		return errors.Wrap(err, "snapshotting")
 	}
 
 	return nil
@@ -1410,7 +1410,7 @@ func (f *Fragment) ImportValue(columnIDs, values []uint64, bitDepth uint) error 
 
 			_, err := f.importSetFieldValue(columnID, bitDepth, value)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "setting")
 			}
 		}
 		return nil
@@ -1420,7 +1420,7 @@ func (f *Fragment) ImportValue(columnIDs, values []uint64, bitDepth uint) error 
 		return err
 	}
 	if err := f.snapshot(); err != nil {
-		return err
+		return errors.Wrap(err, "snapshotting")
 	}
 	return nil
 }
@@ -1525,12 +1525,12 @@ func (f *Fragment) flushCache() error {
 	// Marshal cache data to bytes.
 	buf, err := proto.Marshal(&internal.Cache{IDs: ids})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "marshalling")
 	}
 
 	// Write to disk.
 	if err := ioutil.WriteFile(f.CachePath(), buf, 0666); err != nil {
-		return err
+		return errors.Wrap(err, "writing")
 	}
 
 	return nil
@@ -1540,7 +1540,7 @@ func (f *Fragment) flushCache() error {
 func (f *Fragment) WriteTo(w io.Writer) (n int64, err error) {
 	// Force cache flush.
 	if err := f.FlushCache(); err != nil {
-		return 0, err
+		return 0, errors.Wrap(err, "flushing cache")
 	}
 
 	// Write out data and cache to a tar archive.
@@ -1558,7 +1558,7 @@ func (f *Fragment) writeStorageToArchive(tw *tar.Writer) error {
 	// Open separate file descriptor to read from.
 	file, err := os.Open(f.path)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "opening file")
 	}
 	defer file.Close()
 
@@ -1571,7 +1571,7 @@ func (f *Fragment) writeStorageToArchive(tw *tar.Writer) error {
 
 		fi, err := file.Stat()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "statting")
 		}
 		sz = fi.Size()
 
@@ -1587,13 +1587,13 @@ func (f *Fragment) writeStorageToArchive(tw *tar.Writer) error {
 		Size:    sz,
 		ModTime: time.Now(),
 	}); err != nil {
-		return err
+		return errors.Wrap(err, "writing header")
 	}
 
 	// Copy the file up to the last known size.
 	// This is done outside the lock because the storage format is append-only.
 	if _, err := io.CopyN(tw, file, sz); err != nil {
-		return err
+		return errors.Wrap(err, "copying")
 	}
 	return nil
 }
@@ -1607,7 +1607,7 @@ func (f *Fragment) writeCacheToArchive(tw *tar.Writer) error {
 	if os.IsNotExist(err) {
 		return nil
 	} else if err != nil {
-		return err
+		return errors.Wrap(err, "reading cache")
 	}
 
 	// Write archive header.
@@ -1617,12 +1617,12 @@ func (f *Fragment) writeCacheToArchive(tw *tar.Writer) error {
 		Size:    int64(len(buf)),
 		ModTime: time.Now(),
 	}); err != nil {
-		return err
+		return errors.Wrap(err, "writing header")
 	}
 
 	// Write data to archive.
 	if _, err := tw.Write(buf); err != nil {
-		return err
+		return errors.Wrap(err, "writing")
 	}
 	return nil
 }
@@ -1639,18 +1639,18 @@ func (f *Fragment) ReadFrom(r io.Reader) (n int64, err error) {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return 0, err
+			return 0, errors.Wrap(err, "opening")
 		}
 
 		// Process file based on file name.
 		switch hdr.Name {
 		case "data":
 			if err := f.readStorageFromArchive(tr); err != nil {
-				return 0, err
+				return 0, errors.Wrap(err, "reading storage")
 			}
 		case "cache":
 			if err := f.readCacheFromArchive(tr); err != nil {
-				return 0, err
+				return 0, errors.Wrap(err, "reading cache")
 			}
 		default:
 			return 0, fmt.Errorf("invalid fragment archive file: %s", hdr.Name)
@@ -1665,28 +1665,28 @@ func (f *Fragment) readStorageFromArchive(r io.Reader) error {
 	path := f.path + CopyExt
 	file, err := os.Create(path)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating directory")
 	}
 	defer file.Close()
 
 	// Copy reader into temporary path.
 	if _, err = io.Copy(file, r); err != nil {
-		return err
+		return errors.Wrap(err, "copying")
 	}
 
 	// Close current storage.
 	if err := f.closeStorage(); err != nil {
-		return err
+		return errors.Wrap(err, "closing")
 	}
 
 	// Move snapshot to data file location.
 	if err := os.Rename(path, f.path); err != nil {
-		return err
+		return errors.Wrap(err, "renaming")
 	}
 
 	// Reopen storage.
 	if err := f.openStorage(); err != nil {
-		return err
+		return errors.Wrap(err, "opening")
 	}
 
 	return nil
@@ -1696,14 +1696,14 @@ func (f *Fragment) readCacheFromArchive(r io.Reader) error {
 	// Slurp data from reader and write to disk.
 	buf, err := ioutil.ReadAll(r)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "reading")
 	} else if err := ioutil.WriteFile(f.CachePath(), buf, 0666); err != nil {
-		return err
+		return errors.Wrap(err, "writing")
 	}
 
 	// Re-open cache.
 	if err := f.openCache(); err != nil {
-		return err
+		return errors.Wrap(err, "opening")
 	}
 
 	return nil
@@ -1785,7 +1785,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
 		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
-			return err
+			return errors.Wrap(err, "getting blocks")
 		}
 		blockSets = append(blockSets, blocks)
 
@@ -1864,7 +1864,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		// Only sync the standard block.
 		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Frame(), ViewStandard, f.Slice(), id)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "getting block")
 		}
 
 		pairSets = append(pairSets, PairSet{
@@ -1881,7 +1881,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	// Merge blocks together.
 	sets, clears, err := f.MergeBlock(id, pairSets)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "merging")
 	}
 
 	// Write updates to remote blocks.
@@ -1924,9 +1924,9 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 				Query:  buffers[k].String(),
 				Remote: true,
 			}
-			_, err := clients[i].ExecuteQuery(context.Background(), f.Index(), queryRequest)
+			_, err := clients[i].Query(context.Background(), f.Index(), queryRequest)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "executing")
 			}
 		}
 	}

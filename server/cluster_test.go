@@ -397,7 +397,7 @@ func TestCluster_GossipMembership(t *testing.T) {
 		var eg errgroup.Group
 		eg.Go(func() error {
 			// Pass invalid seed as first in list
-			_, err = m1.RunWithTransport("localhost", 0, []string{"http://localhost:8765", seed})
+			_, err := m1.RunWithTransport("localhost", 0, []string{"http://localhost:8765", seed})
 			if err != nil {
 				return err
 			}
@@ -410,7 +410,7 @@ func TestCluster_GossipMembership(t *testing.T) {
 
 		eg.Go(func() error {
 			// Pass invalid seed as last in list
-			_, err = m2.RunWithTransport("localhost", 0, []string{seed, "http://localhost:8765"})
+			_, err := m2.RunWithTransport("localhost", 0, []string{seed, "http://localhost:8765"})
 			if err != nil {
 				return err
 			}

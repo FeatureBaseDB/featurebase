@@ -16,13 +16,13 @@ package pilosa
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 )
 
 var schemeRegexp = regexp.MustCompile("^[+a-z]+$")
@@ -72,7 +72,7 @@ func NewURIFromHostPort(host string, port uint16) (*URI, error) {
 	uri := DefaultURI()
 	err := uri.SetHost(host)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "setting uri host")
 	}
 	uri.SetPort(port)
 	return uri, nil
