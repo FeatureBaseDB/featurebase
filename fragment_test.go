@@ -30,6 +30,8 @@ import (
 
 // Test flags
 var (
+	// In order to generate the sample fragment file,
+	// run an import and copy PILOSA_DATA_DIR/INDEX_NAME/FRAME_NAME/0 to testdata/sample_view
 	FragmentPath = flag.String("fragment", "testdata/sample_view/0", "fragment path")
 )
 
