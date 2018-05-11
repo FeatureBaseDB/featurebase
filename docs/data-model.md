@@ -87,7 +87,7 @@ This is one major component of Pilosa's ability to combine relationships from mu
 
 #### Ranked
 
-Ranked Frames maintain a sorted cache of column counts by Row ID (yielding the top rows by columns with a bit set in each). This cache facilitates the TopN query.  The cache size defaults to 50,000 and can be set at Frame creation.
+Ranked Frames maintain a sorted cache of column counts by Row ID (yielding the top rows by columns with a bit set in each). This cache facilitates the TopN query. The cache size defaults to 50,000 and can be set at Frame creation.
 
 ![ranked frame diagram](/img/docs/frame-ranked.svg)
 *Ranked frame diagram*
