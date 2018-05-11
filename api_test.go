@@ -78,7 +78,6 @@ func TestAPI_ExportCSV(t *testing.T) {
 	}
 }
 
-/*
 func TestAPI_SetCoordinator(t *testing.T) {
 	api := pilosa.NewAPI()
 	api.Cluster = pilosa.NewCluster()
@@ -111,7 +110,6 @@ func TestAPI_SetCoordinator(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-*/
 
 func TestAPI_Index(t *testing.T) {
 	api := pilosa.NewAPI()
@@ -181,22 +179,6 @@ func TestAPI_RestoreFrame(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Should have failed.")
 	}
-
-	/*
-		path, err := ioutil.TempDir("", "pilosa-")
-		if err != nil {
-			panic(err)
-		}
-		hldr := test.MustOpenHolder()
-		hldr.Holder.Path = path
-		defer hldr.Close()
-		hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0)
-		s.Handler.API.Holder = hldr.Holder
-		err = api.RestoreFrame(ctx, "i1", "f1", &uri)
-		if err != nil {
-			t.Fatal(err)
-		}
-	*/
 }
 
 func TestAPI_RemoveNode(t *testing.T) {

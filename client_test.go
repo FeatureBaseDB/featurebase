@@ -613,23 +613,6 @@ func TestClient_FrameViews(t *testing.T) {
 	}
 }
 
-/*
-func TestClient_NodeID(t *testing.T) {
-	s := test.NewServer()
-	defer s.Close()
-	s.Handler.API.URI = s.HostURI()
-	s.Handler.API.Cluster = test.NewCluster(1)
-	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
-
-	c := test.MustNewClient(s.Host(), defaultClient)
-	uri := s.HostURI()
-	_, err := c.NodeID(&uri)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-*/
-
 func TestClient_Bits(t *testing.T) {
 	bits := pilosa.Bits{
 		pilosa.Bit{RowID: 1000, ColumnID: 100, RowKey: "rk1", ColumnKey: "ck1"},
