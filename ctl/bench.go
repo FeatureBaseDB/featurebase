@@ -92,7 +92,7 @@ func (cmd *BenchCommand) runSetBit(ctx context.Context, client pilosa.InternalCl
 		columnID := rand.Intn(maxColumnID)
 
 		queryRequest := &internal.QueryRequest{
-			Query:  fmt.Sprintf(`SetBit(id=%d, frame="%s", columnID=%d)`, rowID, cmd.Frame, columnID),
+			Query:  fmt.Sprintf(`SetBit(row=%d, frame="%s", col=%d)`, rowID, cmd.Frame, columnID),
 			Remote: false,
 		}
 		if _, err := client.Query(ctx, cmd.Index, queryRequest); err != nil {
