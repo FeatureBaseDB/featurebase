@@ -218,7 +218,7 @@ Set user 99999 as a stargazer for repository 77777:
 ``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'SetBit(frame="stargazer", column=77777, row=99999)'
+     -d 'SetBit(frame="stargazer", col=77777, row=99999)'
 ```
 ``` response
 {"results":[true]}
