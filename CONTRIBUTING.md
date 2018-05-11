@@ -1,5 +1,7 @@
 # Contributing to Pilosa
 
+The workflow components of these instructions apply to all of our repos.
+
 ## Reporting a bug
 
 If you have discovered a bug and don't see it in the [github issue tracker][5], [open a new issue][1].
@@ -154,7 +156,7 @@ Additional commands are available in the `Makefile`.
     git checkout -b something-amazing
     ```
 
-- Commit your changes locally using `git add` and `git commit`.
+- Commit your changes locally using `git add` and `git commit`. Please use [appropriate commit messages](https://chris.beams.io/posts/git-commit/).
 
 - Make sure that you've written tests for your new feature, and then run the tests:
 
