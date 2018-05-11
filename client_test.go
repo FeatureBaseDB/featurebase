@@ -533,3 +533,11 @@ func TestClient_FragmentBlocks(t *testing.T) {
 		t.Fatalf("blocks mismatch:\n\nexp=%s\n\ngot=%s\n\n", spew.Sdump(a), spew.Sdump(blocks))
 	}
 }
+
+func TestClient_TestVal(t *testing.T) {
+	c, err := pilosa.NewInternalHTTPClient("localhost:10101", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.TestVal()
+}
