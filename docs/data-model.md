@@ -22,16 +22,16 @@ The central component of Pilosa's data model is a boolean matrix. Each cell in t
 
 Rows and columns can represent anything (they could even represent the same set of things). Pilosa can associate arbitrary key/value pairs (referred to as attributes) to rows and columns, but queries and storage are optimized around the core matrix.
 
-Pilosa lays out data first in rows, so queries which get all the set bits in one or many rows, or compute a combining operation on multiple rows such as Intersect or Union are the fastest. Pilosa also has the ability to categorize rows into different "frames" and quickly retrieve the top rows in a frame sorted by the number of bits set in each row.
+Pilosa lays out data first in rows, so queries which get all the set bits in one or many rows, or compute a combining operation on multiple rows such as Intersect or Union are the fastest. Pilosa categorizes rows into different *frames* and quickly retrieve the top rows in a frame sorted by the number of bits set in each row.
 
-Please note that Pilosa is most performant when row and column IDs are sequential starting from 0. You can deviate from this to some degree, but if you try to set a bit with column ID 2^63, bad things will start to happen.
+Please note that Pilosa is most performant when row and column IDs are sequential starting from 0. You can deviate from this to some degree, but setting a bit with column ID 2<sup>63</sup> on a single-node cluster, for example, will not work well due to memory limitations.
 
 ![basic data model diagram](/img/docs/data-model.svg)
 *Basic data model diagram*
 
 ### Index
 
-The purpose of the Index is to represent a data namespace. You cannot perform cross-index queries.  Column-level attributes are global to the Index.
+The purpose of the Index is to represent a data namespace. You cannot perform cross-index queries.
 
 ### Column
 
@@ -77,7 +77,7 @@ inner join Cars c on pc.CarID=c.ID
 where c.Make = 'Ford'
 ```
 
-can be accomplished with a Pilosa query like this (note that [Sum](/docs/query-language#sum) returns both the sum and count, from which the average is easily computed):
+can be accomplished with a Pilosa query like this (note that [Sum](../query-language/#sum) returns a json object containing both the sum and count, from which the average is easily computed):
 
 ```pql
 Sum(Bitmap(frame="Car-Make", row=[Ford]), frame=Default, field=Age)
@@ -105,17 +105,19 @@ Setting a time quantum on a frame creates extra views which allow Range queries 
 
 ### Attribute
 
-Attributes are arbitrary key/value pairs that can be associated to both rows or columns.  This metadata is stored in a separate BoltDB data structure. 
+Attributes are arbitrary key/value pairs that can be associated with either rows or columns. This metadata is stored in a separate BoltDB data structure.
+
+Column-level attributes are common across an index. That is, each column attribute applies to all bits in the corresponding column, across all frames in an index. Row attributes apply to all bits in the corresponding row.
 
 ### Slice
 
-Indexes are sharded into groups of columns called Slices - each Slice contains a fixed number of columns which is the SliceWidth. SliceWidth is a non-configurable constant set to 2<sup>20</sup>.
+Indexes are sharded into groups of columns called Slices. Each Slice contains a fixed number of columns, which is the SliceWidth. SliceWidth is a constant that can only be modified at compile time, and before ingesting data. The default value is 2<sup>20</sup>.
 
-Columns are sharded on a preset width, and each shard is referred to as a Slice.  Slices are operated on in parallel, and they are evenly distributed across a cluster via a consistent hash algorithm.
+Query operations run in parallel, and they are evenly distributed across a cluster via a consistent hash algorithm.
 
 ### View
 
-Views represent the various data layouts within a Frame. The primary View is called Standard, and it contains the typical Row and Column data. Time-based Views are automatically generated for each time quantum. Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface from the physical data representation.
+Views represent the various data layouts within a Frame. The primary View is called Standard, and it contains the typical Row and Column data. Time-based Views are automatically generated for each time quantum. Views are internally managed by Pilosa, and never exposed directly via the API.
 
 #### Standard
 
@@ -123,7 +125,7 @@ The standard View contains the same Row/Column format as the input data.
 
 #### Time Quantums
 
-If a Frame has a time quantum, then Views are generated for each of the defined time segments. For example, for a frame with a time quantum of `YMD`, the following `SetBit()` queries will result in the data described in the illustration below:
+If a Frame has a time quantum, then Views are generated for each of the defined time segments. For example, for a frame with a time quantum of `YMD`, the following `SetBit()` queries will result in the data described in the diagram below:
 
 ```
 SetBit(frame="A", row=8, col=3, timestamp="2017-05-18T00:00")
@@ -135,12 +137,11 @@ SetBit(frame="A", row=8, col=3, timestamp="2017-05-19T00:00")
 
 #### BSI Range-Encoding
 
-Bit-Sliced Indexing (BSI) is the storage method Pilosa uses to represent multi-bit integers in a bitmap index. Integers are stored as n-bit, range-encoded
-bit-sliced indexes of base-2, along with an additional bitmap indicating "not null". This means that a 16-bit integer will require 17 bitmaps: one for each 0-bit of the 16 bit-slice components (the 1-bit does not need to be stored because with range-encoding the highest bit position is always 1) and one for the non-null bitmap. Pilosa can evaluate `Range`, `Min`, `Max`, and `Sum` queries on these BSI integers.
+Bit-Sliced Indexing (BSI) is the storage method Pilosa uses to represent multi-bit integers in a bitmap index. Integers are stored as n-bit, range-encoded bit-sliced indexes of base-2, along with an additional bitmap indicating "not null". This means that a 16-bit integer will require 17 bitmaps: one for each 0-bit of the 16 bit-slice components (the 1-bit does not need to be stored because with range-encoding the highest bit position is always 1) and one for the non-null bitmap. Pilosa can evaluate `Range`, `Min`, `Max`, and `Sum` queries on these BSI integers.
 
-Internally Pilosa stores each BSI `field` as a `view` within a `frame`. The rows of the `view` are composed of the base-2 representation of the integer. Pilosa manages the base-2 offset and translation that efficiently packs the integer value within the minimum set of rows.
+Internally Pilosa stores each BSI `field` as a `view` within a `frame`. The rows of the `view` contain the base-2 representations of the integer values. Pilosa manages the base-2 offset and translation that efficiently packs the integer value within the minimum set of rows.
 
-For example, the following `SetFieldValue()` queries will result in the data described in the illustration below:
+For example, the following `SetFieldValue()` queries will result in the data described in the diagram below:
 
 ```
 SetFieldValue(col=1, frame="A", field0=1)

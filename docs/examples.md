@@ -123,7 +123,7 @@ These same objects are represented in the JSON definition file:
 }
 ```
 
-Here, we define a list of Mappers, each including a name, which we use to refer to the mapper later, in the list of BitMappers. We can also do this with Parsers, but a few simple Parsers that need no configuration are available by default. We also have a list of Fields, which is simply a map of field names to column indices. We use these names in the BitMapper definitions to keep things human-readable.
+Here, we define a list of Mappers, each including a name, which we use to refer to the mapper later, in the list of BitMappers. We can also do this with Parsers, but a few simple Parsers that need no configuration are available by default. We also have a list of Fields, which is simply a map of field names (in the source data) to column indices (in Pilosa). We use these names in the BitMapper definitions to keep things human-readable.
 
 **total_amount_dollars:** Here we use the rounding mapping again, so each row represents rides with a total cost that rounds to the row's ID. The BitMapper definition is very similar to the previous one.
 
@@ -197,12 +197,16 @@ for pcount, topn in zip(pcounts, resp.json()['results']):
     average_amounts.append(float(wsum)/count)
 ```
 
+<div class="note">
+Note that the <a href="../data-model/#bsi-range-encoding">BSI</a>-powered <a href="../query-language/#sum">Sum</a> query now provides a an alternative approach to this kind of query.
+</div>
+
 For more examples and details, see this [ipython notebook](https://github.com/pilosa/notebooks/blob/master/taxi-use-case.ipynb).
 
 ### Chemical similarity search
 
 <div class="warning">
-This example uses the inverse frames feature, which is deprecated as of v0.9.0. This will soon be updated to reflect the current Pilosa API.
+This example uses the inverse frames feature, which is deprecated as of v0.9.0. The example will soon be updated to reflect the current Pilosa API.
 </div>
 
 #### Overview

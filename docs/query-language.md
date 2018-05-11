@@ -19,7 +19,7 @@ This section will provide a detailed reference and examples for the Pilosa Query
 {"results":[...]}
 ```
 
-There will be one item in the `results` array for each PQL query in the request. The type of each item in the array will depend on the type of query - each query in the reference below lists it's result type.
+There will be one item in the `results` array for each PQL query in the request. The type of each item in the array will depend on the type of query - each query in the reference below lists its result type.
 
 #### Conventions
 
@@ -79,7 +79,7 @@ A return value of `false` indicates that the bit was already set to 1 and nothin
 SetBit(frame="stargazer", col=10, row=1)
 ```
 
-This query illustrates setting a bit in the stargazer frame. User with id=1 has starred repository with id=10.
+This sets a bit in the stargazer frame, representing that the user with id=1 has starred the repository with id=10.
 
 SetBit also supports providing a timestamp. To write the date that a user starred a repository.
 ```
