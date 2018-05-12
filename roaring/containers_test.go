@@ -4,16 +4,16 @@ import (
 	"testing"
 )
 
-func TestContainersSliceIterator(t *testing.T) {
-	btc := NewBTreeContainers()
-	testContainersIterator(btc, t)
-}
+//func TestContainersSliceIterator(t *testing.T) {
+//	btc := NewBTreeContainers()
+//	testContainersIterator(btc, t)
+//}
 func TestContainersBTreeIterator(t *testing.T) {
-	slc := NewSliceContainers()
+	slc := NewContainers()
 	testContainersIterator(slc, t)
 
 }
-func testContainersIterator(cs Containers, t *testing.T) {
+func testContainersIterator(cs Containerser, t *testing.T) {
 	itr, found := cs.Iterator(0)
 	if found {
 		t.Fatalf("shouldn't have found 0 in empty btc")

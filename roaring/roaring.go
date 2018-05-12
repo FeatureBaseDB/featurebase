@@ -64,7 +64,7 @@ const (
 	maxContainerVal = 0xffff
 )
 
-type Containers interface {
+type Containerser interface {
 	// Get returns nil if the key does not exist.
 	Get(key uint64) *Container
 
@@ -82,7 +82,7 @@ type Containers interface {
 	GetOrCreate(key uint64) *Container
 
 	// Clone does a deep copy of Containers, including cloning all containers contained.
-	Clone() Containers
+	Clone() Containerser
 
 	// Last returns the highest key and associated container.
 	Last() (key uint64, c *Container)
@@ -103,7 +103,7 @@ type Contiterator interface {
 
 // Bitmap represents a roaring bitmap.
 type Bitmap struct {
-	conts Containers
+	conts Containerser
 
 	// Number of operations written to the writer.
 	opN int
@@ -112,22 +112,22 @@ type Bitmap struct {
 	OpWriter io.Writer
 }
 
-// NewSliceBitmap returns a Bitmap with an initial set of values.
-func NewSliceBitmap(a ...uint64) *Bitmap {
+// NewBitmap returns a Bitmap with an initial set of values.
+func NewBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
-		conts: NewSliceContainers(),
+		conts: NewContainers(),
 	}
 	b.Add(a...)
 	return b
 }
 
-func NewBTreeBitmap(a ...uint64) *Bitmap {
-	b := &Bitmap{
-		conts: NewBTreeContainers(),
-	}
-	b.Add(a...)
-	return b
-}
+//func NewBTreeBitmap(a ...uint64) *Bitmap {
+//	b := &Bitmap{
+//		conts: NewBTreeContainers(),
+//	}
+//	b.Add(a...)
+//	return b
+//}
 
 // Clone returns a heap allocated copy of the bitmap.
 // Note: The OpWriter IS NOT copied to the new bitmap.
@@ -329,7 +329,7 @@ func (b *Bitmap) OffsetRange(offset, start, end uint64) *Bitmap {
 	off := highbits(offset)
 	hi0, hi1 := highbits(start), highbits(end)
 	citer, _ := b.conts.Iterator(hi0)
-	other := NewSliceBitmap()
+	other := NewBitmap()
 	for citer.Next() {
 		k, c := citer.Value()
 		if k >= hi1 {
@@ -374,7 +374,7 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 
 // Intersect returns the intersection of b and other.
 func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
-	output := NewSliceBitmap()
+	output := NewBitmap()
 	iiter, _ := b.conts.Iterator(0)
 	jiter, _ := other.conts.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
@@ -399,7 +399,7 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 
 // Union returns the bitwise union of b and other.
 func (b *Bitmap) Union(other *Bitmap) *Bitmap {
-	output := NewSliceBitmap()
+	output := NewBitmap()
 
 	iiter, _ := b.conts.Iterator(0)
 	jiter, _ := other.conts.Iterator(0)
@@ -427,7 +427,7 @@ func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 
 // Difference returns the difference of b and other.
 func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
-	output := NewSliceBitmap()
+	output := NewBitmap()
 
 	iiter, _ := b.conts.Iterator(0)
 	jiter, _ := other.conts.Iterator(0)
@@ -454,7 +454,7 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 
 // Xor returns the bitwise exclusive or of b and other.
 func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
-	output := NewSliceBitmap()
+	output := NewBitmap()
 
 	iiter, _ := b.conts.Iterator(0)
 	jiter, _ := other.conts.Iterator(0)
@@ -768,7 +768,7 @@ func (b *Bitmap) Check() error {
 
 // Flip performs a logical negate of the bits in the range [start,end].
 func (b *Bitmap) Flip(start, end uint64) *Bitmap {
-	result := NewSliceBitmap()
+	result := NewBitmap()
 	itr := b.Iterator()
 	v, eof := itr.Next()
 	//copy over previous bits.

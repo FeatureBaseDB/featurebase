@@ -39,6 +39,10 @@ cover-viz: cover
 build: vendor
 	go build -tags release -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
+# Compile Pilosa EE
+build-ee: vendor
+	go build -tags release -tags enterprise -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
+
 # Create a single release build under the build directory
 release-build: vendor
 	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa"

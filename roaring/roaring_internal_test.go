@@ -1513,7 +1513,7 @@ func MakeBitmap(start []uint64) []uint64 {
 	return b
 }
 func MakeLastBitSet() []uint64 {
-	obj := NewSliceBitmap(65535)
+	obj := NewBitmap(65535)
 	c := obj.container(0)
 	c.arrayToBitmap()
 	return c.bitmap
@@ -1781,9 +1781,9 @@ func TestDifferenceRunRun(t *testing.T) {
 
 func TestWriteReadArray(t *testing.T) {
 	ca := &Container{array: []uint16{1, 10, 100, 1000}, n: 4, containerType: ContainerArray}
-	ba := NewSliceBitmap()
+	ba := NewBitmap()
 	ba.conts.Put(0, ca)
-	ba2 := NewSliceBitmap()
+	ba2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := ba.WriteTo(&buf)
 	if err != nil {
@@ -1804,9 +1804,9 @@ func TestWriteReadBitmap(t *testing.T) {
 	for i := 0; i < 129; i++ {
 		cb.bitmap[i] = 0x5555555555555555
 	}
-	bb := NewSliceBitmap()
+	bb := NewBitmap()
 	bb.conts.Put(0, cb)
-	bb2 := NewSliceBitmap()
+	bb2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := bb.WriteTo(&buf)
 	if err != nil {
@@ -1827,9 +1827,9 @@ func TestWriteReadFullBitmap(t *testing.T) {
 	for i := 0; i < bitmapN; i++ {
 		cb.bitmap[i] = 0xffffffffffffffff
 	}
-	bb := NewSliceBitmap()
+	bb := NewBitmap()
 	bb.conts.Put(0, cb)
-	bb2 := NewSliceBitmap()
+	bb2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := bb.WriteTo(&buf)
 	if err != nil {
@@ -1853,9 +1853,9 @@ func TestWriteReadFullBitmap(t *testing.T) {
 
 func TestWriteReadRun(t *testing.T) {
 	cr := &Container{runs: []interval16{{start: 3, last: 13}, {start: 100, last: 109}}, n: 21, containerType: ContainerRun}
-	br := NewSliceBitmap()
+	br := NewBitmap()
 	br.conts.Put(0, cr)
-	br2 := NewSliceBitmap()
+	br2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := br.WriteTo(&buf)
 	if err != nil {
@@ -2124,7 +2124,7 @@ func TestXorBitmapRun(t *testing.T) {
 
 func TestIteratorArray(t *testing.T) {
 	// use values that span two containers
-	b := NewSliceBitmap(0, 1, 10, 100, 1000, 10000, 90000, 100000)
+	b := NewBitmap(0, 1, 10, 100, 1000, 10000, 90000, 100000)
 	if !b.conts.Get(0).isArray() {
 		t.Fatalf("wrong container type")
 	}
@@ -2171,7 +2171,7 @@ func TestIteratorBitmap(t *testing.T) {
 	// use values that span two containers
 	// this dataset will update to bitmap after enough Adds,
 	// but won't update to RLE until Optimize() is called
-	b := NewSliceBitmap()
+	b := NewBitmap()
 	for i := uint64(61000); i < 71000; i++ {
 		b.Add(i)
 	}
@@ -2222,7 +2222,7 @@ func TestIteratorBitmap(t *testing.T) {
 }
 
 func TestIteratorRuns(t *testing.T) {
-	b := NewSliceBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 100003, 100004, 100005)
+	b := NewBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 100003, 100004, 100005)
 	b.Optimize()
 	if !b.conts.Get(0).isRun() {
 		t.Fatalf("wrong container type")
@@ -2289,7 +2289,7 @@ func TestIteratorVarious(t *testing.T) {
 		exp uint64
 	}{
 		{
-			bm:  NewSliceBitmap(3, 4, 5),
+			bm:  NewBitmap(3, 4, 5),
 			exp: 3,
 		},
 		{
@@ -2297,7 +2297,7 @@ func TestIteratorVarious(t *testing.T) {
 			exp: 61221,
 		},
 		{
-			bm:  NewSliceBitmap(2, 66000, 70000, 70001, 70002, 70003, 70004),
+			bm:  NewBitmap(2, 66000, 70000, 70001, 70002, 70003, 70004),
 			exp: 7,
 		},
 	}
@@ -2438,7 +2438,7 @@ func TestRunBinSearch(t *testing.T) {
 	}
 }
 func TestBitmap_RemoveEmptyContainers(t *testing.T) {
-	bm1 := NewSliceBitmap(1<<16, 2<<16, 3<<16)
+	bm1 := NewBitmap(1<<16, 2<<16, 3<<16)
 	bm1.Remove(2 << 16)
 	if bm1.countEmptyContainers() != 1 {
 		t.Fatalf("Should be 1 empty container ")
@@ -2451,13 +2451,13 @@ func TestBitmap_RemoveEmptyContainers(t *testing.T) {
 }
 
 func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
-	bm1 := NewSliceBitmap(1<<16, 2<<16, 3<<16)
+	bm1 := NewBitmap(1<<16, 2<<16, 3<<16)
 	bm1.Remove(2 << 16)
 	var buf bytes.Buffer
 	if _, err := bm1.WriteTo(&buf); err != nil {
 		t.Fatalf("Failure to write to bitmap buffer. ")
 	}
-	bm0 := NewSliceBitmap()
+	bm0 := NewBitmap()
 	bm0.UnmarshalBinary(buf.Bytes())
 	if bm0.countEmptyContainers() != 0 {
 		t.Fatalf("Should be no empty containers ")
@@ -2686,7 +2686,7 @@ func bitmapVariousContainers() *Bitmap {
 	bits = append(bits, bitCont(7, true, true, true)...)
 	bits = append(bits, arrCont(8, true, true, true)...)
 	bits = append(bits, rleCont(9, true, true, true)...)
-	bm := NewSliceBitmap(bits...)
+	bm := NewBitmap(bits...)
 	bm.Optimize()
 	return bm
 }

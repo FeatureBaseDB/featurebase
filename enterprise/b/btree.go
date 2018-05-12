@@ -29,12 +29,14 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package roaring
+package b
 
 import (
 	"fmt"
 	"io"
 	"sync"
+
+	"github.com/pilosa/pilosa/roaring"
 )
 
 const (
@@ -93,7 +95,7 @@ type (
 
 	de struct { // d element
 		k uint64
-		v *Container
+		v *roaring.Container
 	}
 
 	// Enumerator captures the state of enumerating a tree. It is returned
@@ -417,7 +419,7 @@ func (t *Tree) find(q interface{}, k uint64) (i int, ok bool) {
 
 // First returns the first item of the tree in the key collating order, or
 // (zero-value, zero-value) if the tree is empty.
-func (t *Tree) First() (k uint64, v *Container) {
+func (t *Tree) First() (k uint64, v *roaring.Container) {
 	if q := t.first; q != nil {
 		q := &q.d[0]
 		k, v = q.k, q.v
@@ -427,7 +429,7 @@ func (t *Tree) First() (k uint64, v *Container) {
 
 // Get returns the value associated with k and true if it exists. Otherwise Get
 // returns (zero-value, false).
-func (t *Tree) Get(k uint64) (v *Container, ok bool) {
+func (t *Tree) Get(k uint64) (v *roaring.Container, ok bool) {
 	q := t.r
 	if q == nil {
 		return
@@ -453,7 +455,7 @@ func (t *Tree) Get(k uint64) (v *Container, ok bool) {
 	}
 }
 
-func (t *Tree) insert(q *d, i int, k uint64, v *Container) *d {
+func (t *Tree) insert(q *d, i int, k uint64, v *roaring.Container) *d {
 	t.ver++
 	c := q.c
 	if i < c {
@@ -468,7 +470,7 @@ func (t *Tree) insert(q *d, i int, k uint64, v *Container) *d {
 
 // Last returns the last item of the tree in the key collating order, or
 // (zero-value, zero-value) if the tree is empty.
-func (t *Tree) Last() (k uint64, v *Container) {
+func (t *Tree) Last() (k uint64, v *roaring.Container) {
 	if q := t.last; q != nil {
 		q := &q.d[q.c-1]
 		k, v = q.k, q.v
@@ -481,7 +483,7 @@ func (t *Tree) Len() int {
 	return t.c
 }
 
-func (t *Tree) overflow(p *x, q *d, pi, i int, k uint64, v *Container) {
+func (t *Tree) overflow(p *x, q *d, pi, i int, k uint64, v *roaring.Container) {
 	t.ver++
 	l, r := p.siblings(pi)
 
@@ -577,7 +579,7 @@ func (t *Tree) SeekLast() (e *Enumerator, err error) {
 }
 
 // Set sets the value associated with k.
-func (t *Tree) Set(k uint64, v *Container) {
+func (t *Tree) Set(k uint64, v *roaring.Container) {
 	//dbg("--- PRE Set(%v, %v)\n%s", k, v, t.dump())
 	//defer func() {
 	//	dbg("--- POST\n%s\n====\n", t.dump())
@@ -643,11 +645,11 @@ func (t *Tree) Set(k uint64, v *Container) {
 // 	tree.Put(k, func(uint64, bool){ return v, true })
 //
 // modulo the differing return values.
-func (t *Tree) Put(k uint64, upd func(oldV *Container, exists bool) (newV *Container, write bool)) (oldV *Container, written bool) {
+func (t *Tree) Put(k uint64, upd func(oldV *roaring.Container, exists bool) (newV *roaring.Container, write bool)) (oldV *roaring.Container, written bool) {
 	pi := -1
 	var p *x
 	q := t.r
-	var newV *Container
+	var newV *roaring.Container
 	if q == nil {
 		// new KV pair in empty tree
 		newV, written = upd(newV, false)
@@ -710,7 +712,7 @@ func (t *Tree) Put(k uint64, upd func(oldV *Container, exists bool) (newV *Conta
 	}
 }
 
-func (t *Tree) split(p *x, q *d, pi, i int, k uint64, v *Container) {
+func (t *Tree) split(p *x, q *d, pi, i int, k uint64, v *roaring.Container) {
 	t.ver++
 	r := btDPool.Get().(*d)
 	if q.n != nil {
@@ -856,7 +858,7 @@ func (e *Enumerator) Close() {
 // Next returns the currently enumerated item, if it exists and moves to the
 // next item in the key collation order. If there is no item to return, err ==
 // io.EOF is returned.
-func (e *Enumerator) Next() (k uint64, v *Container, err error) {
+func (e *Enumerator) Next() (k uint64, v *roaring.Container, err error) {
 	if err = e.err; err != nil {
 		return
 	}
@@ -904,7 +906,7 @@ func (e *Enumerator) next() error {
 // Prev returns the currently enumerated item, if it exists and moves to the
 // previous item in the key collation order. If there is no item to return, err
 // == io.EOF is returned.
-func (e *Enumerator) Prev() (k uint64, v *Container, err error) {
+func (e *Enumerator) Prev() (k uint64, v *roaring.Container, err error) {
 	if err = e.err; err != nil {
 		return
 	}
