@@ -480,6 +480,7 @@ TopN(frame="stargazer")
 * `count` is a count of columns (repositories)
 * Results are the number of bits set in the corresponding row (repositories that each user starred) in descending order for all rows (users) in the stargazer frame. For example user 1240 starred 102 repositories, user 4734 starred 100 repositories, user 12709 starred 93 repository.
 
+Limit the number of results:
 ```request
 TopN(frame="stargazer", n=2)
 ```
@@ -489,6 +490,7 @@ TopN(frame="stargazer", n=2)
 
 * Results are the top two rows (users) sorted by number of bits set (repositories they've starred) in descending order.
 
+Filter based on an existing Bitmap:
 ```request
 TopN(Bitmap(frame="language", row=1), frame="stargazer", n=2)
 ```
@@ -498,15 +500,15 @@ TopN(Bitmap(frame="language", row=1), frame="stargazer", n=2)
 
 * Results are the top two users (rows) sorted by the number of bits set in the intersection with row 1 of the language frame (repositories that they've starred which are written in language 1).
 
+Filter based on attributes:
 ```request
-TopN(TODO attrs)
-TODO
-TODO
-TODO
+TopN(frame="stargazer", n=2, field=active, filters=[true])
 ```
 ```response
-
+{"results":[[{"id":10,"count":1},{"id":13,"count":1}]]}
 ```
+
+* Results are the top two users (rows) which have the "active" attribute set to "true", sorted by the number of bits set (repositories that they've starred).
 
 #### Range Queries
 
