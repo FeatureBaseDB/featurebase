@@ -43,7 +43,7 @@ func (btc *BTreeContainers) Put(key uint64, c *roaring.Container) {
 	// If a mapped container is added to the tree, reset the
 	// lastContainer cache so that the cache is not pointing
 	// at a read-only mmap.
-	if c.mapped {
+	if c.Mapped() {
 		btc.lastContainer = nil
 	}
 	btc.tree.Set(key, c)
@@ -52,16 +52,12 @@ func (btc *BTreeContainers) Put(key uint64, c *roaring.Container) {
 func (u updater) update(oldV *roaring.Container, exists bool) (*roaring.Container, bool) {
 	// update the existing container
 	if exists {
-		oldV.containerType = u.containerType
-		oldV.n = u.n
-		oldV.mapped = u.mapped
+		oldV.Update(u.containerType, u.n, u.mapped)
 		return oldV, false
 	}
-	return &roaring.Container{
-		containerType: u.containerType,
-		n:             u.n,
-		mapped:        u.mapped,
-	}, true
+	cont := roaring.NewContainer()
+	cont.Update(u.containerType, u.n, u.mapped)
+	return cont, true
 }
 
 // this struct is added to prevent the closure locals from being escaped out to the heap
@@ -90,7 +86,7 @@ func (btc *BTreeContainers) GetOrCreate(key uint64) *roaring.Container {
 	btc.lastKey = key
 	v, ok := btc.tree.Get(key)
 	if !ok {
-		cont := newContainer()
+		cont := roaring.NewContainer()
 		btc.tree.Set(key, cont)
 		btc.lastContainer = cont
 		return cont
@@ -100,7 +96,7 @@ func (btc *BTreeContainers) GetOrCreate(key uint64) *roaring.Container {
 	return btc.lastContainer
 }
 
-func (btc *BTreeContainers) Clone() Containers {
+func (btc *BTreeContainers) Clone() roaring.Containerser {
 	nbtc := NewBTreeContainers()
 
 	itr, err := btc.tree.SeekFirst()
@@ -112,7 +108,7 @@ func (btc *BTreeContainers) Clone() Containers {
 		if err == io.EOF {
 			break
 		}
-		nbtc.tree.Set(k, v.clone())
+		nbtc.tree.Set(k, v.Clone())
 	}
 	return nbtc
 }
@@ -129,7 +125,7 @@ func (btc *BTreeContainers) Size() int {
 	return btc.tree.Len()
 }
 
-func (btc *BTreeContainers) Iterator(key uint64) (citer Contiterator, found bool) {
+func (btc *BTreeContainers) Iterator(key uint64) (citer roaring.Contiterator, found bool) {
 	e, ok := btc.tree.Seek(key)
 	if ok {
 		found = true

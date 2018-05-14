@@ -3179,7 +3179,7 @@ func TestContainerCombinations(t *testing.T) {
 
 				// Convert to all container types and check result.
 				for _, ct := range containerTypes {
-					clone := ret.clone()
+					clone := ret.Clone()
 					if ct == ContainerArray {
 						if clone.isBitmap() {
 							clone.bitmapToArray()

@@ -408,11 +408,11 @@ func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 	kj, cj := jiter.Value()
 	for i || j {
 		if i && (!j || ki < kj) {
-			output.conts.Put(ki, ci.clone())
+			output.conts.Put(ki, ci.Clone())
 			i = iiter.Next()
 			ki, ci = iiter.Value()
 		} else if j && (!i || ki > kj) {
-			output.conts.Put(kj, cj.clone())
+			output.conts.Put(kj, cj.Clone())
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
@@ -436,7 +436,7 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 	kj, cj := jiter.Value()
 	for i || j {
 		if i && (!j || ki < kj) {
-			output.conts.Put(ki, ci.clone())
+			output.conts.Put(ki, ci.Clone())
 			i = iiter.Next()
 			ki, ci = iiter.Value()
 		} else if j && (!i || ki > kj) {
@@ -463,11 +463,11 @@ func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 	kj, cj := jiter.Value()
 	for i || j {
 		if i && (!j || ki < kj) {
-			output.conts.Put(ki, ci.clone())
+			output.conts.Put(ki, ci.Clone())
 			i = iiter.Next()
 			ki, ci = iiter.Value()
 		} else if j && (!i || ki > kj) {
-			output.conts.Put(kj, cj.clone())
+			output.conts.Put(kj, cj.Clone())
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
@@ -1026,8 +1026,20 @@ func (iv interval16) runlen() int {
 }
 
 // newContainer returns a new instance of container.
-func newContainer() *Container {
+func NewContainer() *Container {
 	return &Container{containerType: ContainerArray}
+}
+
+// Mapped returns true if the container is mapped directly to a byte slice
+func (c *Container) Mapped() bool {
+	return c.mapped
+}
+
+// Update updates the container
+func (c *Container) Update(containerType byte, n int, mapped bool) {
+	c.containerType = containerType
+	c.n = n
+	c.mapped = mapped
 }
 
 // isArray returns true if the container is an array container.
@@ -1650,8 +1662,8 @@ func (c *Container) runToArray() {
 	c.mapped = false
 }
 
-// clone returns a copy of c.
-func (c *Container) clone() *Container {
+// Clone returns a copy of c.
+func (c *Container) Clone() *Container {
 	other := &Container{n: c.n, containerType: c.containerType}
 
 	switch c.containerType {
@@ -1807,7 +1819,7 @@ func flip(a *Container) *Container {
 
 func flipArray(b *Container) *Container {
 	// TODO: actually implement this
-	x := b.clone()
+	x := b.Clone()
 	x.arrayToBitmap()
 	return flipBitmap(x)
 }
@@ -1825,7 +1837,7 @@ func flipBitmap(b *Container) *Container {
 
 func flipRun(b *Container) *Container {
 	// TODO: actually implement this
-	x := b.clone()
+	x := b.Clone()
 	x.runToBitmap()
 	return flipBitmap(x)
 }
@@ -2206,7 +2218,7 @@ func unionArrayArray(a, b *Container) *Container {
 // and converts to a bitmap or array container afterwards if necessary.
 func unionArrayRun(a, b *Container) *Container {
 	if b.n == maxContainerVal+1 {
-		return b.clone()
+		return b.Clone()
 	}
 	output := &Container{containerType: ContainerRun}
 	na, nb := len(a.array), len(b.runs)
@@ -2263,10 +2275,10 @@ func (c *Container) runAppendInterval(v interval16) int {
 
 func unionRunRun(a, b *Container) *Container {
 	if a.n == maxContainerVal+1 {
-		return a.clone()
+		return a.Clone()
 	}
 	if b.n == maxContainerVal+1 {
-		return b.clone()
+		return b.Clone()
 	}
 	na, nb := len(a.runs), len(b.runs)
 	output := &Container{
@@ -2297,12 +2309,12 @@ func unionRunRun(a, b *Container) *Container {
 
 func unionBitmapRun(a, b *Container) *Container {
 	if b.n == maxContainerVal+1 {
-		return b.clone()
+		return b.Clone()
 	}
 	if a.n == maxContainerVal+1 {
-		return a.clone()
+		return a.Clone()
 	}
-	output := a.clone()
+	output := a.Clone()
 	for j := 0; j < len(b.runs); j++ {
 		output.bitmapSetRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
@@ -2381,7 +2393,7 @@ func (c *Container) bitmapZeroRange(i, j uint64) {
 }
 
 func unionArrayBitmap(a, b *Container) *Container {
-	output := b.clone()
+	output := b.Clone()
 	for _, v := range a.array {
 		if !output.bitmapContains(v) {
 			output.bitmap[v/64] |= (1 << uint64(v%64))
@@ -2464,7 +2476,7 @@ func differenceArrayRun(a, b *Container) *Container {
 	// func (ac *arrayContainer) iandNotRun16(rc *runContainer16) container {
 
 	if a.n == 0 || b.n == 0 {
-		return a.clone()
+		return a.Clone()
 	}
 
 	output := &Container{array: make([]uint16, 0, a.n), containerType: ContainerArray}
@@ -2519,10 +2531,10 @@ func differenceArrayRun(a, b *Container) *Container {
 // differenceBitmapRun computes the difference of an bitmap from a run.
 func differenceBitmapRun(a, b *Container) *Container {
 	if a.n == 0 || b.n == 0 {
-		return a.clone()
+		return a.Clone()
 	}
 
-	output := a.clone()
+	output := a.Clone()
 	for j := 0; j < len(b.runs); j++ {
 		output.bitmapZeroRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
@@ -2533,7 +2545,7 @@ func differenceBitmapRun(a, b *Container) *Container {
 // container.
 func differenceRunArray(a, b *Container) *Container {
 	if a.n == 0 || b.n == 0 {
-		return a.clone()
+		return a.Clone()
 	}
 	output := &Container{runs: make([]interval16, 0, len(a.runs)), containerType: ContainerRun}
 
@@ -2645,7 +2657,7 @@ func differenceRunBitmap(a, b *Container) *Container {
 // differenceRunRun computes the difference of two runs.
 func differenceRunRun(a, b *Container) *Container {
 	if a.n == 0 || b.n == 0 {
-		return a.clone()
+		return a.Clone()
 	}
 
 	apos := 0 // current a-run index
@@ -2723,7 +2735,7 @@ func differenceArrayBitmap(a, b *Container) *Container {
 }
 
 func differenceBitmapArray(a, b *Container) *Container {
-	output := a.clone()
+	output := a.Clone()
 
 	for _, v := range b.array {
 		if output.bitmapContains(v) {
@@ -2810,7 +2822,7 @@ func xorArrayArray(a, b *Container) *Container {
 }
 
 func xorArrayBitmap(a, b *Container) *Container {
-	output := b.clone()
+	output := b.Clone()
 	for _, v := range a.array {
 		if b.bitmapContains(v) {
 			output.remove(v)
@@ -3203,10 +3215,10 @@ type xorstm struct {
 func xorRunRun(a, b *Container) *Container {
 	na, nb := len(a.runs), len(b.runs)
 	if na == 0 {
-		return b.clone()
+		return b.Clone()
 	}
 	if nb == 0 {
-		return a.clone()
+		return a.Clone()
 	}
 	output := &Container{containerType: ContainerRun}
 
@@ -3249,7 +3261,7 @@ func xorRunRun(a, b *Container) *Container {
 
 // xorRunRun computes the exclusive or of a bitmap and a run container.
 func xorBitmapRun(a, b *Container) *Container {
-	output := a.clone()
+	output := a.Clone()
 	for j := 0; j < len(b.runs); j++ {
 		output.bitmapXorRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}

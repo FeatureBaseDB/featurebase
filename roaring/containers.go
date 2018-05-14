@@ -31,7 +31,7 @@ func (sc *SliceContainers) Put(key uint64, c *Container) {
 func (sc *SliceContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
 	i := search64(sc.keys, key)
 	if i < 0 {
-		c := newContainer()
+		c := NewContainer()
 		c.containerType = containerType
 		c.n = n
 		c.mapped = mapped
@@ -73,7 +73,7 @@ func (sc *SliceContainers) GetOrCreate(key uint64) *Container {
 	sc.lastKey = key
 	i := search64(sc.keys, key)
 	if i < 0 {
-		c := newContainer()
+		c := NewContainer()
 		sc.insertAt(key, c, -i-1)
 		sc.lastContainer = c
 		return c
@@ -89,7 +89,7 @@ func (sc *SliceContainers) Clone() Containerser {
 	other.containers = make([]*Container, len(sc.containers))
 	copy(other.keys, sc.keys)
 	for i, c := range sc.containers {
-		other.containers[i] = c.clone()
+		other.containers[i] = c.Clone()
 	}
 	return other
 }
