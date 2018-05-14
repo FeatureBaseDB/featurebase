@@ -433,12 +433,6 @@ func IsInverseView(name string) bool {
 	return strings.HasPrefix(name, ViewInverse)
 }
 
-type viewSlice []*View
-
-func (p viewSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p viewSlice) Len() int           { return len(p) }
-func (p viewSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
-
 // ViewInfo represents schema information for a view.
 type ViewInfo struct {
 	Name string `json:"name"`
