@@ -2,6 +2,7 @@ package b
 
 import (
 	"io"
+	"log"
 
 	"github.com/pilosa/pilosa/roaring"
 )
@@ -10,17 +11,26 @@ func cmp(a, b uint64) int {
 	return int(a - b)
 }
 
+type BTreeContainers struct {
+	tree *Tree
+
+	lastKey       uint64
+	lastContainer *roaring.Container
+}
+
 func NewBTreeContainers() *BTreeContainers {
 	return &BTreeContainers{
 		tree: TreeNew(cmp),
 	}
 }
 
-type BTreeContainers struct {
-	tree *Tree
-
-	lastKey       uint64
-	lastContainer *roaring.Container
+func NewBTreeBitmap(a ...uint64) *roaring.Bitmap {
+	log.Println("btree bitmap")
+	b := &roaring.Bitmap{
+		Containers: NewBTreeContainers(),
+	}
+	b.Add(a...)
+	return b
 }
 
 func (btc *BTreeContainers) Get(key uint64) *roaring.Container {
@@ -96,7 +106,7 @@ func (btc *BTreeContainers) GetOrCreate(key uint64) *roaring.Container {
 	return btc.lastContainer
 }
 
-func (btc *BTreeContainers) Clone() roaring.Containerser {
+func (btc *BTreeContainers) Clone() roaring.Containers {
 	nbtc := NewBTreeContainers()
 
 	itr, err := btc.tree.SeekFirst()

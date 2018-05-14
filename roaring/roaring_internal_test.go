@@ -1782,7 +1782,7 @@ func TestDifferenceRunRun(t *testing.T) {
 func TestWriteReadArray(t *testing.T) {
 	ca := &Container{array: []uint16{1, 10, 100, 1000}, n: 4, containerType: ContainerArray}
 	ba := NewBitmap()
-	ba.conts.Put(0, ca)
+	ba.Containers.Put(0, ca)
 	ba2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := ba.WriteTo(&buf)
@@ -1793,8 +1793,8 @@ func TestWriteReadArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error unmarshaling: %v", err)
 	}
-	if !reflect.DeepEqual(ba2.conts.Get(0).array, ca.array) {
-		t.Fatalf("array test expected %x, but got %x", ca.array, ba2.conts.Get(0).array)
+	if !reflect.DeepEqual(ba2.Containers.Get(0).array, ca.array) {
+		t.Fatalf("array test expected %x, but got %x", ca.array, ba2.Containers.Get(0).array)
 	}
 }
 
@@ -1805,7 +1805,7 @@ func TestWriteReadBitmap(t *testing.T) {
 		cb.bitmap[i] = 0x5555555555555555
 	}
 	bb := NewBitmap()
-	bb.conts.Put(0, cb)
+	bb.Containers.Put(0, cb)
 	bb2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := bb.WriteTo(&buf)
@@ -1816,8 +1816,8 @@ func TestWriteReadBitmap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error unmarshaling: %v", err)
 	}
-	if !reflect.DeepEqual(bb2.conts.Get(0).bitmap, cb.bitmap) {
-		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.conts.Get(0).bitmap)
+	if !reflect.DeepEqual(bb2.Containers.Get(0).bitmap, cb.bitmap) {
+		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.Containers.Get(0).bitmap)
 	}
 }
 
@@ -1828,7 +1828,7 @@ func TestWriteReadFullBitmap(t *testing.T) {
 		cb.bitmap[i] = 0xffffffffffffffff
 	}
 	bb := NewBitmap()
-	bb.conts.Put(0, cb)
+	bb.Containers.Put(0, cb)
 	bb2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := bb.WriteTo(&buf)
@@ -1839,22 +1839,22 @@ func TestWriteReadFullBitmap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error unmarshaling: %v", err)
 	}
-	if !reflect.DeepEqual(bb2.conts.Get(0).bitmap, cb.bitmap) {
-		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.conts.Get(0).bitmap)
+	if !reflect.DeepEqual(bb2.Containers.Get(0).bitmap, cb.bitmap) {
+		t.Fatalf("bitmap test expected %x, but got %x", cb.bitmap, bb2.Containers.Get(0).bitmap)
 	}
 
-	if bb2.conts.Get(0).n != cb.n {
-		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.conts.Get(0).n)
+	if bb2.Containers.Get(0).n != cb.n {
+		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.Containers.Get(0).n)
 	}
-	if bb2.conts.Get(0).count() != cb.count() {
-		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.conts.Get(0).n)
+	if bb2.Containers.Get(0).count() != cb.count() {
+		t.Fatalf("bitmap test expected count %x, but got %x", cb.n, bb2.Containers.Get(0).n)
 	}
 }
 
 func TestWriteReadRun(t *testing.T) {
 	cr := &Container{runs: []interval16{{start: 3, last: 13}, {start: 100, last: 109}}, n: 21, containerType: ContainerRun}
 	br := NewBitmap()
-	br.conts.Put(0, cr)
+	br.Containers.Put(0, cr)
 	br2 := NewBitmap()
 	var buf bytes.Buffer
 	_, err := br.WriteTo(&buf)
@@ -1865,8 +1865,8 @@ func TestWriteReadRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error unmarshaling: %v", err)
 	}
-	if !reflect.DeepEqual(br2.conts.Get(0).runs, cr.runs) {
-		t.Fatalf("run test expected %x, but got %x", cr.runs, br2.conts.Get(0).runs)
+	if !reflect.DeepEqual(br2.Containers.Get(0).runs, cr.runs) {
+		t.Fatalf("run test expected %x, but got %x", cr.runs, br2.Containers.Get(0).runs)
 	}
 }
 
@@ -2125,7 +2125,7 @@ func TestXorBitmapRun(t *testing.T) {
 func TestIteratorArray(t *testing.T) {
 	// use values that span two containers
 	b := NewBitmap(0, 1, 10, 100, 1000, 10000, 90000, 100000)
-	if !b.conts.Get(0).isArray() {
+	if !b.Containers.Get(0).isArray() {
 		t.Fatalf("wrong container type")
 	}
 
@@ -2178,7 +2178,7 @@ func TestIteratorBitmap(t *testing.T) {
 	for i := uint64(75000); i < 75100; i++ {
 		b.Add(i)
 	}
-	if !b.conts.Get(0).isBitmap() {
+	if !b.Containers.Get(0).isBitmap() {
 		t.Fatalf("wrong container type")
 	}
 
@@ -2224,7 +2224,7 @@ func TestIteratorBitmap(t *testing.T) {
 func TestIteratorRuns(t *testing.T) {
 	b := NewBitmap(0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003, 1004, 1005, 100000, 100001, 100002, 100003, 100004, 100005)
 	b.Optimize()
-	if !b.conts.Get(0).isRun() {
+	if !b.Containers.Get(0).isRun() {
 		t.Fatalf("wrong container type")
 	}
 

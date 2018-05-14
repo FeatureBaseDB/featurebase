@@ -64,7 +64,7 @@ const (
 	maxContainerVal = 0xffff
 )
 
-type Containerser interface {
+type Containers interface {
 	// Get returns nil if the key does not exist.
 	Get(key uint64) *Container
 
@@ -82,7 +82,7 @@ type Containerser interface {
 	GetOrCreate(key uint64) *Container
 
 	// Clone does a deep copy of Containers, including cloning all containers contained.
-	Clone() Containerser
+	Clone() Containers
 
 	// Last returns the highest key and associated container.
 	Last() (key uint64, c *Container)
@@ -103,7 +103,7 @@ type Contiterator interface {
 
 // Bitmap represents a roaring bitmap.
 type Bitmap struct {
-	conts Containerser
+	Containers Containers
 
 	// Number of operations written to the writer.
 	opN int
@@ -115,19 +115,14 @@ type Bitmap struct {
 // NewBitmap returns a Bitmap with an initial set of values.
 func NewBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
-		conts: NewContainers(),
+		Containers: NewSliceContainers(),
 	}
 	b.Add(a...)
 	return b
 }
 
-//func NewBTreeBitmap(a ...uint64) *Bitmap {
-//	b := &Bitmap{
-//		conts: NewBTreeContainers(),
-//	}
-//	b.Add(a...)
-//	return b
-//}
+// NewFileBitmap returns a Bitmap with an initial set of values.
+var NewFileBitmap func(a ...uint64) *Bitmap = NewBitmap
 
 // Clone returns a heap allocated copy of the bitmap.
 // Note: The OpWriter IS NOT copied to the new bitmap.
@@ -138,7 +133,7 @@ func (b *Bitmap) Clone() *Bitmap {
 
 	// Create a copy of the bitmap structure.
 	other := &Bitmap{
-		conts: b.conts.Clone(),
+		Containers: b.Containers.Clone(),
 	}
 
 	return other
@@ -167,13 +162,13 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 }
 
 func (b *Bitmap) add(v uint64) bool {
-	cont := b.conts.GetOrCreate(highbits(v))
+	cont := b.Containers.GetOrCreate(highbits(v))
 	return cont.add(lowbits(v))
 }
 
 // Contains returns true if v is in the bitmap.
 func (b *Bitmap) Contains(v uint64) bool {
-	c := b.conts.Get(highbits(v))
+	c := b.Containers.Get(highbits(v))
 	if c == nil {
 		return false
 	}
@@ -201,7 +196,7 @@ func (b *Bitmap) Remove(a ...uint64) (changed bool, err error) {
 }
 
 func (b *Bitmap) remove(v uint64) bool {
-	c := b.conts.Get(highbits(v))
+	c := b.Containers.Get(highbits(v))
 	if c == nil {
 		return false
 	}
@@ -212,18 +207,18 @@ func (b *Bitmap) remove(v uint64) bool {
 // Max returns the highest value in the bitmap.
 // Returns zero if the bitmap is empty.
 func (b *Bitmap) Max() uint64 {
-	if b.conts.Size() == 0 {
+	if b.Containers.Size() == 0 {
 		return 0
 	}
 
-	hb, c := b.conts.Last()
+	hb, c := b.Containers.Last()
 	lb := c.max()
 	return hb<<16 | uint64(lb)
 }
 
 // Count returns the number of bits set in the bitmap.
 func (b *Bitmap) Count() (n uint64) {
-	citer, _ := b.conts.Iterator(0)
+	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		_, c := citer.Value()
 		n += uint64(c.n)
@@ -233,14 +228,14 @@ func (b *Bitmap) Count() (n uint64) {
 
 // CountRange returns the number of bits set between [start, end).
 func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
-	if b.conts.Size() == 0 {
+	if b.Containers.Size() == 0 {
 		return
 	}
 
 	skey := highbits(start)
 	ekey := highbits(end)
 
-	citer, found := b.conts.Iterator(highbits(start))
+	citer, found := b.Containers.Iterator(highbits(start))
 	// If range is entirely in one container then just count that range.
 	if found && skey == ekey {
 		citer.Next()
@@ -328,21 +323,21 @@ func (b *Bitmap) OffsetRange(offset, start, end uint64) *Bitmap {
 
 	off := highbits(offset)
 	hi0, hi1 := highbits(start), highbits(end)
-	citer, _ := b.conts.Iterator(hi0)
+	citer, _ := b.Containers.Iterator(hi0)
 	other := NewBitmap()
 	for citer.Next() {
 		k, c := citer.Value()
 		if k >= hi1 {
 			break
 		}
-		other.conts.Put(off+(k-hi0), c)
+		other.Containers.Put(off+(k-hi0), c)
 	}
 	return other
 }
 
 // container returns the container with the given key.
 func (b *Bitmap) container(key uint64) *Container {
-	return b.conts.Get(key)
+	return b.Containers.Get(key)
 }
 
 // IntersectionCount returns the number of set bits that would result in an
@@ -350,8 +345,8 @@ func (b *Bitmap) container(key uint64) *Container {
 // intersecting the two and counting the result.
 func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 	var n uint64
-	iiter, _ := b.conts.Iterator(0)
-	jiter, _ := other.conts.Iterator(0)
+	iiter, _ := b.Containers.Iterator(0)
+	jiter, _ := other.Containers.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
 	ki, ci := iiter.Value()
 	kj, cj := jiter.Value()
@@ -375,8 +370,8 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 // Intersect returns the intersection of b and other.
 func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	output := NewBitmap()
-	iiter, _ := b.conts.Iterator(0)
-	jiter, _ := other.conts.Iterator(0)
+	iiter, _ := b.Containers.Iterator(0)
+	jiter, _ := other.Containers.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
 	ki, ci := iiter.Value()
 	kj, cj := jiter.Value()
@@ -388,7 +383,7 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
-			output.conts.Put(ki, intersect(ci, cj))
+			output.Containers.Put(ki, intersect(ci, cj))
 			i, j = iiter.Next(), jiter.Next()
 			ki, ci = iiter.Value()
 			kj, cj = jiter.Value()
@@ -401,22 +396,22 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 	output := NewBitmap()
 
-	iiter, _ := b.conts.Iterator(0)
-	jiter, _ := other.conts.Iterator(0)
+	iiter, _ := b.Containers.Iterator(0)
+	jiter, _ := other.Containers.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
 	ki, ci := iiter.Value()
 	kj, cj := jiter.Value()
 	for i || j {
 		if i && (!j || ki < kj) {
-			output.conts.Put(ki, ci.Clone())
+			output.Containers.Put(ki, ci.Clone())
 			i = iiter.Next()
 			ki, ci = iiter.Value()
 		} else if j && (!i || ki > kj) {
-			output.conts.Put(kj, cj.Clone())
+			output.Containers.Put(kj, cj.Clone())
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
-			output.conts.Put(ki, union(ci, cj))
+			output.Containers.Put(ki, union(ci, cj))
 			i, j = iiter.Next(), jiter.Next()
 			ki, ci = iiter.Value()
 			kj, cj = jiter.Value()
@@ -429,21 +424,21 @@ func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 	output := NewBitmap()
 
-	iiter, _ := b.conts.Iterator(0)
-	jiter, _ := other.conts.Iterator(0)
+	iiter, _ := b.Containers.Iterator(0)
+	jiter, _ := other.Containers.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
 	ki, ci := iiter.Value()
 	kj, cj := jiter.Value()
 	for i || j {
 		if i && (!j || ki < kj) {
-			output.conts.Put(ki, ci.Clone())
+			output.Containers.Put(ki, ci.Clone())
 			i = iiter.Next()
 			ki, ci = iiter.Value()
 		} else if j && (!i || ki > kj) {
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
-			output.conts.Put(ki, difference(ci, cj))
+			output.Containers.Put(ki, difference(ci, cj))
 			i, j = iiter.Next(), jiter.Next()
 			ki, ci = iiter.Value()
 			kj, cj = jiter.Value()
@@ -456,22 +451,22 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 	output := NewBitmap()
 
-	iiter, _ := b.conts.Iterator(0)
-	jiter, _ := other.conts.Iterator(0)
+	iiter, _ := b.Containers.Iterator(0)
+	jiter, _ := other.Containers.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
 	ki, ci := iiter.Value()
 	kj, cj := jiter.Value()
 	for i || j {
 		if i && (!j || ki < kj) {
-			output.conts.Put(ki, ci.Clone())
+			output.Containers.Put(ki, ci.Clone())
 			i = iiter.Next()
 			ki, ci = iiter.Value()
 		} else if j && (!i || ki > kj) {
-			output.conts.Put(kj, cj.Clone())
+			output.Containers.Put(kj, cj.Clone())
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
-			output.conts.Put(ki, xor(ci, cj))
+			output.Containers.Put(ki, xor(ci, cj))
 			i, j = iiter.Next(), jiter.Next()
 			ki, ci = iiter.Value()
 			kj, cj = jiter.Value()
@@ -482,17 +477,17 @@ func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 
 // removeEmptyContainers deletes all containers that have a count of zero.
 func (b *Bitmap) removeEmptyContainers() {
-	citer, _ := b.conts.Iterator(0)
+	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		k, c := citer.Value()
 		if c.n == 0 {
-			b.conts.Remove(k)
+			b.Containers.Remove(k)
 		}
 	}
 }
 func (b *Bitmap) countEmptyContainers() int {
 	result := 0
-	citer, _ := b.conts.Iterator(0)
+	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		_, c := citer.Value()
 		if c.n == 0 {
@@ -504,7 +499,7 @@ func (b *Bitmap) countEmptyContainers() int {
 
 // Optimize converts array and bitmap containers to run containers as necessary.
 func (b *Bitmap) Optimize() {
-	citer, _ := b.conts.Iterator(0)
+	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		_, c := citer.Value()
 		c.Optimize()
@@ -552,7 +547,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	// Remove empty containers before persisting.
 	//b.removeEmptyContainers()
 
-	containerCount := b.conts.Size() - b.countEmptyContainers()
+	containerCount := b.Containers.Size() - b.countEmptyContainers()
 	headerSize := headerBaseSize
 	byte2 := make([]byte, 2)
 	byte4 := make([]byte, 4)
@@ -571,7 +566,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Descriptive header section: encode keys and cardinality.
 	// Key and cardinality are stored interleaved here, 12 bytes per container.
-	citer, _ := b.conts.Iterator(0)
+	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		key, c := citer.Value()
 		// Verify container count before writing.
@@ -589,7 +584,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	// Offset header section: write the offset for each container block.
 	// 4 bytes per container.
 	offset := uint32(headerSize + (containerCount * (8 + 2 + 2 + 4)))
-	citer, _ = b.conts.Iterator(0)
+	citer, _ = b.Containers.Iterator(0)
 	for citer.Next() {
 		_, c := citer.Value()
 		if c.n > 0 {
@@ -605,7 +600,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	n = int64(headerSize + (containerCount * (8 + 2 + 2 + 4)))
 
 	// Container storage section: write each container block.
-	citer, _ = b.conts.Iterator(0)
+	citer, _ = b.Containers.Iterator(0)
 	for citer.Next() {
 		_, c := citer.Value()
 		if c.n > 0 {
@@ -643,7 +638,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
-		b.conts.PutContainerValues(
+		b.Containers.PutContainerValues(
 			binary.LittleEndian.Uint64(buf[0:8]),
 			byte(binary.LittleEndian.Uint16(buf[8:10])),
 			int(binary.LittleEndian.Uint16(buf[10:12]))+1,
@@ -652,7 +647,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	opsOffset := headerSize + int(keyN)*12
 
 	// Read container offsets and attach data.
-	citer, _ := b.conts.Iterator(0)
+	citer, _ := b.Containers.Iterator(0)
 	for i, buf := 0, data[opsOffset:]; i < int(keyN); i, buf = i+1, buf[4:] {
 		offset := binary.LittleEndian.Uint32(buf[0:4])
 		// Verify the offset is within the bounds of the input data.
@@ -734,10 +729,10 @@ func (b *Bitmap) Iterator() *Iterator {
 func (b *Bitmap) Info() BitmapInfo {
 	info := BitmapInfo{
 		OpN:        b.opN,
-		Containers: make([]ContainerInfo, 0, b.conts.Size()),
+		Containers: make([]ContainerInfo, 0, b.Containers.Size()),
 	}
 
-	citer, _ := b.conts.Iterator(0)
+	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		k, c := citer.Value()
 		ci := c.info()
@@ -752,7 +747,7 @@ func (b *Bitmap) Check() error {
 	var a ErrorList
 
 	// Check each container.
-	citer, _ := b.conts.Iterator(0)
+	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		k, c := citer.Value()
 		if err := c.check(); err != nil {
@@ -816,7 +811,7 @@ func (itr *Iterator) Seek(seek uint64) {
 	itr.k = -1
 
 	// Move to the correct container.
-	itr.citer, _ = itr.bitmap.conts.Iterator(highbits(seek))
+	itr.citer, _ = itr.bitmap.Containers.Iterator(highbits(seek))
 	if !itr.citer.Next() {
 		itr.c = nil
 		return // eof
@@ -3282,8 +3277,8 @@ func BitmapsEqual(b, c *Bitmap) error {
 		return errors.New("opNs not equal")
 	}
 
-	biter, _ := b.conts.Iterator(0)
-	citer, _ := c.conts.Iterator(0)
+	biter, _ := b.Containers.Iterator(0)
+	citer, _ := c.Containers.Iterator(0)
 	bn, cn := biter.Next(), citer.Next()
 	for ; bn && cn; bn, cn = biter.Next(), citer.Next() {
 		bk, bc := biter.Value()

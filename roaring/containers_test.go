@@ -9,11 +9,11 @@ import (
 //	testContainersIterator(btc, t)
 //}
 func TestContainersBTreeIterator(t *testing.T) {
-	slc := NewContainers()
+	slc := NewSliceContainers()
 	testContainersIterator(slc, t)
 
 }
-func testContainersIterator(cs Containerser, t *testing.T) {
+func testContainersIterator(cs Containers, t *testing.T) {
 	itr, found := cs.Iterator(0)
 	if found {
 		t.Fatalf("shouldn't have found 0 in empty btc")

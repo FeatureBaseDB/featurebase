@@ -7,6 +7,10 @@ type SliceContainers struct {
 	lastContainer *Container
 }
 
+func NewSliceContainers() *SliceContainers {
+	return &SliceContainers{}
+}
+
 func (sc *SliceContainers) Get(key uint64) *Container {
 	i := search64(sc.keys, key)
 	if i < 0 {
@@ -83,8 +87,8 @@ func (sc *SliceContainers) GetOrCreate(key uint64) *Container {
 	return sc.lastContainer
 }
 
-func (sc *SliceContainers) Clone() Containerser {
-	other := NewContainers()
+func (sc *SliceContainers) Clone() Containers {
+	other := NewSliceContainers()
 	other.keys = make([]uint64, len(sc.keys))
 	other.containers = make([]*Container, len(sc.containers))
 	copy(other.keys, sc.keys)
