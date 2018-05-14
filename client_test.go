@@ -40,6 +40,7 @@ func createCluster(c *pilosa.Cluster) ([]*test.Server, []*test.Holder) {
 		server[i].Handler.API.Cluster = c
 		server[i].Handler.API.Cluster.Nodes[i].URI = server[i].HostURI()
 		server[i].Handler.API.Holder = hldr[i].Holder
+		server[i].Handler.API.Cluster.Nodes[i].SetLocalAPI(server[i].Handler.API)
 	}
 	return server, hldr
 }
@@ -62,21 +63,21 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 
 	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(defaultClient)
+		e := pilosa.NewExecutor()
 		e.Holder = hldr[0].Holder
 		e.Node = cluster.Nodes[0]
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(defaultClient)
+		e := pilosa.NewExecutor()
 		e.Holder = hldr[1].Holder
 		e.Node = cluster.Nodes[1]
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(defaultClient)
+		e := pilosa.NewExecutor()
 		e.Holder = hldr[2].Holder
 		e.Node = cluster.Nodes[2]
 		e.Cluster = cluster
@@ -390,7 +391,7 @@ func TestClient_BackupRestore(t *testing.T) {
 
 	// Backup from frame.
 	var buf bytes.Buffer
-	if err := c.BackupTo(context.Background(), &buf, "i", "f", pilosa.ViewStandard); err != nil {
+	if err := c.ArchiveFrame(context.Background(), &buf, "i", "f", pilosa.ViewStandard); err != nil {
 		t.Fatal(err)
 	}
 
@@ -398,7 +399,7 @@ func TestClient_BackupRestore(t *testing.T) {
 	if _, err := hldr.MustCreateIndexIfNotExists("x", pilosa.IndexOptions{}).CreateFrameIfNotExists("y", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.RestoreFrom(context.Background(), &buf, "x", "y", pilosa.ViewStandard); err != nil {
+	if err := c.RestoreFrame(context.Background(), &buf, "x", "y", pilosa.ViewStandard); err != nil {
 		t.Fatal(err)
 	}
 
@@ -455,7 +456,7 @@ func TestClient_BackupInverseView(t *testing.T) {
 
 	// Backup from frame.
 	var buf bytes.Buffer
-	if err := c.BackupTo(context.Background(), &buf, "i", "f", pilosa.ViewInverse); err != nil {
+	if err := c.ArchiveFrame(context.Background(), &buf, "i", "f", pilosa.ViewInverse); err != nil {
 		t.Fatal(err)
 	}
 
@@ -463,7 +464,7 @@ func TestClient_BackupInverseView(t *testing.T) {
 	if _, err := hldr.MustCreateIndexIfNotExists("x", pilosa.IndexOptions{}).CreateFrameIfNotExists("y", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.RestoreFrom(context.Background(), &buf, "x", "y", pilosa.ViewInverse); err != nil {
+	if err := c.RestoreFrame(context.Background(), &buf, "x", "y", pilosa.ViewInverse); err != nil {
 		t.Fatal(err)
 	}
 
@@ -491,7 +492,7 @@ func TestClient_BackupInvalidView(t *testing.T) {
 
 	// Backup from frame.
 	var buf bytes.Buffer
-	err := c.BackupTo(context.Background(), &buf, "i", "f", "invalid_view")
+	err := c.ArchiveFrame(context.Background(), &buf, "i", "f", "invalid_view")
 	if err != pilosa.ErrInvalidView {
 		t.Fatal(err)
 	}

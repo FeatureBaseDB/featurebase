@@ -52,9 +52,9 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	client1 := m1.Client()
 
 	// Create indexes and frames on one node.
-	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+	if err := client0.EnsureIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+	} else if err := client0.EnsureFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,8 +92,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Write data on first node.
 	if _, err := m0.Query("i", "", `
-            SetBit(row=1, frame="f", col=1)
-            SetBit(row=1, frame="f", col=2400000)
+			SetBit(row=1, frame="f", col=1)
+			SetBit(row=1, frame="f", col=2400000)
         `); err != nil {
 		t.Fatal(err)
 	}
@@ -235,9 +235,9 @@ func TestClusterResize_AddNode(t *testing.T) {
 		client0 := m0.Client()
 
 		// Create indexes and frames on one node.
-		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		if err := client0.EnsureIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+		} else if err := client0.EnsureFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -282,9 +282,9 @@ func TestClusterResize_AddNode(t *testing.T) {
 		//client1 := m1.Client()
 
 		// Create indexes and frames on one node.
-		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		if err := client0.EnsureIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+		} else if err := client0.EnsureFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -337,9 +337,9 @@ func TestClusterResize_AddNode(t *testing.T) {
 		//client1 := m1.Client()
 
 		// Create indexes and frames on one node.
-		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		if err := client0.EnsureIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+		} else if err := client0.EnsureFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -496,9 +496,9 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		client0 := m0.Client()
 
 		// Create indexes and frames on one node.
-		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		if err := client0.EnsureIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+		} else if err := client0.EnsureFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 

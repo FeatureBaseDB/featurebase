@@ -15,11 +15,11 @@ import (
 func TestMonitorAntiEntropy(t *testing.T) {
 	cluster := test.MustRunMainWithCluster(t, 3, test.OptAntiEntropyInterval(time.Millisecond*1))
 	client := cluster[1].Client()
-	err := client.CreateIndex(context.Background(), "balh", pilosa.IndexOptions{})
+	err := client.EnsureIndex(context.Background(), "balh", pilosa.IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
-	err = client.CreateFrame(context.Background(), "balh", "fralh", pilosa.FrameOptions{})
+	err = client.EnsureFrame(context.Background(), "balh", "fralh", pilosa.FrameOptions{})
 	if err != nil {
 		t.Fatalf("creating frame: %v", err)
 	}

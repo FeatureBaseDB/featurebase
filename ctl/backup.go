@@ -71,7 +71,7 @@ func (cmd *BackupCommand) Run(ctx context.Context) error {
 	defer f.Close()
 
 	// Begin streaming backup.
-	if err := client.BackupTo(ctx, f, cmd.Index, cmd.Frame, cmd.View); err != nil {
+	if err := client.ArchiveFrame(ctx, f, cmd.Index, cmd.Frame, cmd.View); err != nil {
 		return errors.Wrap(err, "backing up")
 	}
 

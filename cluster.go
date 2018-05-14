@@ -45,10 +45,6 @@ const (
 	ClusterStateNormal   = "NORMAL"
 	ClusterStateResizing = "RESIZING"
 
-	// NodeState represents the state of a node during startup.
-	NodeStateLoading = "LOADING"
-	NodeStateReady   = "READY"
-
 	// ResizeJob states.
 	ResizeJobStateRunning = "RUNNING"
 	// Final states.
@@ -59,163 +55,11 @@ const (
 	ResizeJobActionRemove = "REMOVE"
 )
 
-// Node represents a node in the cluster.
-type Node struct {
-	ID            string `json:"id"`
-	URI           URI    `json:"uri"`
-	IsCoordinator bool   `json:"isCoordinator"`
-}
-
-func (n Node) String() string {
-	return fmt.Sprintf("Node: %s", n.ID)
-}
-
-// EncodeNodes converts a slice of Nodes into its internal representation.
-func EncodeNodes(a []*Node) []*internal.Node {
-	other := make([]*internal.Node, len(a))
-	for i := range a {
-		other[i] = EncodeNode(a[i])
-	}
-	return other
-}
-
-// EncodeNode converts a Node into its internal representation.
-func EncodeNode(n *Node) *internal.Node {
-	return &internal.Node{
-		ID:            n.ID,
-		URI:           n.URI.Encode(),
-		IsCoordinator: n.IsCoordinator,
-	}
-}
-
-// DecodeNodes converts a proto message into a slice of Nodes.
-func DecodeNodes(a []*internal.Node) []*Node {
-	if len(a) == 0 {
-		return nil
-	}
-	other := make([]*Node, len(a))
-	for i := range a {
-		other[i] = DecodeNode(a[i])
-	}
-	return other
-}
-
-// DecodeNode converts a proto message into a Node.
-func DecodeNode(node *internal.Node) *Node {
-	return &Node{
-		ID:            node.ID,
-		URI:           decodeURI(node.URI),
-		IsCoordinator: node.IsCoordinator,
-	}
-}
-
-func DecodeNodeEvent(ne *internal.NodeEventMessage) *NodeEvent {
-	return &NodeEvent{
-		Event: NodeEventType(ne.Event),
-		Node:  DecodeNode(ne.Node),
-	}
-}
-
-// Nodes represents a list of nodes.
-type Nodes []*Node
-
-// Contains returns true if a node exists in the list.
-func (a Nodes) Contains(n *Node) bool {
-	for i := range a {
-		if a[i] == n {
-			return true
-		}
-	}
-	return false
-}
-
-// ContainsID returns true if host matches one of the node's id.
-func (a Nodes) ContainsID(id string) bool {
-	for _, n := range a {
-		if n.ID == id {
-			return true
-		}
-	}
-	return false
-}
-
-// Filter returns a new list of nodes with node removed.
-func (a Nodes) Filter(n *Node) []*Node {
-	other := make([]*Node, 0, len(a))
-	for i := range a {
-		if a[i] != n {
-			other = append(other, a[i])
-		}
-	}
-	return other
-}
-
-// FilterID returns a new list of nodes with ID removed.
-func (a Nodes) FilterID(id string) []*Node {
-	other := make([]*Node, 0, len(a))
-	for _, node := range a {
-		if node.ID != id {
-			other = append(other, node)
-		}
-	}
-	return other
-}
-
-// FilterURI returns a new list of nodes with URI removed.
-func (a Nodes) FilterURI(uri URI) []*Node {
-	other := make([]*Node, 0, len(a))
-	for _, node := range a {
-		if node.URI != uri {
-			other = append(other, node)
-		}
-	}
-	return other
-}
-
-// IDs returns a list of all node IDs.
-func (a Nodes) IDs() []string {
-	ids := make([]string, len(a))
-	for i, n := range a {
-		ids[i] = n.ID
-	}
-	return ids
-}
-
-// URIs returns a list of all uris.
-func (a Nodes) URIs() []URI {
-	uris := make([]URI, len(a))
-	for i, n := range a {
-		uris[i] = n.URI
-	}
-	return uris
-}
-
-// Clone returns a shallow copy of nodes.
-func (a Nodes) Clone() []*Node {
-	other := make([]*Node, len(a))
-	copy(other, a)
-	return other
-}
-
-// byID implements sort.Interface for []Node based on
-// the ID field.
-type byID []*Node
-
-func (h byID) Len() int           { return len(h) }
-func (h byID) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-func (h byID) Less(i, j int) bool { return h[i].ID < h[j].ID }
-
-// nodeAction represents a node that is joining or leaving the cluster.
-type nodeAction struct {
-	node   *Node
-	action string
-}
-
 // Cluster represents a collection of nodes.
 type Cluster struct {
 	ID        string
 	Node      *Node
-	Nodes     []*Node // TODO phase this out?
+	Nodes     []*Node
 	MemberSet MemberSet
 
 	// Hashing algorithm used to assign partitions to nodes.
@@ -265,7 +109,7 @@ type Cluster struct {
 	Logger Logger
 
 	//
-	RemoteClient *http.Client
+	internalClient *http.Client
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
@@ -359,7 +203,15 @@ func (c *Cluster) updateCoordinator(n *Node) bool {
 // AddNode adds a node to the Cluster and updates and saves the
 // new topology.
 func (c *Cluster) AddNode(node *Node) error {
+
 	c.Logger.Printf("add node %s to cluster on %s", node, c.Node)
+
+	// If this is a remote node then set node.api.
+	if node.ID != c.Node.ID {
+		if err := node.SetRemoteAPI(&node.URI, c.internalClient); err != nil {
+			return errors.Wrap(err, "setting remote api")
+		}
+	}
 
 	// If the node being added is the coordinator, set it for this node.
 	if node.IsCoordinator {
@@ -1147,6 +999,7 @@ func (c *Cluster) generateResizeJob(nodeAction nodeAction) (*ResizeJob, error) {
 func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, error) {
 	j := NewResizeJob(c.Nodes, nodeAction.node, nodeAction.action)
 	j.Broadcaster = c.Broadcaster
+	j.internalClient = c.internalClient
 
 	// toCluster is a clone of Cluster with the new node added/removed for comparison.
 	toCluster := NewCluster()
@@ -1251,14 +1104,13 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				return errors.Wrap(err, "applying schema")
 			}
 
-			// Create a client for calling remote nodes.
-			client := NewInternalHTTPClientFromURI(&c.Node.URI, c.RemoteClient) // TODO: ClientOptions
-
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {
 				c.Logger.Printf("get slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
 
-				srcURI := decodeURI(src.Node.URI)
+				node := DecodeNode(src.Node)
+				uri := decodeURI(src.Node.URI)
+				node.SetRemoteAPI(&uri, c.internalClient)
 
 				// Retrieve frame.
 				f := c.Holder.Frame(src.Index, src.Frame)
@@ -1280,7 +1132,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 
 				// Stream slice from remote node.
 				c.Logger.Printf("retrieve slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
-				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
+				rd, err := node.api.RetrieveSlice(context.Background(), src.Index, src.Frame, src.View, src.Slice)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
 					// on the remote node. This occurs when a slice has been skipped and
@@ -1312,7 +1164,10 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 			complete.Error = err.Error()
 		}
 
-		if err := c.sendTo(DecodeNode(instr.Coordinator), complete); err != nil {
+		// Send to Coordinator.
+		node := DecodeNode(instr.Coordinator)
+		node.SetRemoteAPI(&node.URI, c.internalClient)
+		if err := c.sendTo(node, complete); err != nil {
 			c.Logger.Printf("sending resizeInstructionComplete error: err=%s", err)
 		}
 	}()
@@ -1368,6 +1223,8 @@ type ResizeJob struct {
 	state string
 
 	Logger Logger
+
+	internalClient *http.Client
 }
 
 // NewResizeJob returns a new instance of ResizeJob.
@@ -1469,10 +1326,15 @@ func (j *ResizeJob) distributeResizeInstructions() error {
 	for _, instr := range j.Instructions {
 		// Because the node may not be in the cluster yet, create
 		// a dummy node object to use in the SendTo() method.
-		node := &Node{
-			ID:  instr.Node.ID,
-			URI: decodeURI(instr.Node.URI),
+		uri := decodeURI(instr.Node.URI)
+		node, err := NewNode(
+			instr.Node.ID,
+			OptNodeRemoteAPI(&uri, j.internalClient),
+		)
+		if err != nil {
+			return errors.Wrap(err, "creating node")
 		}
+
 		j.Logger.Printf("send resize instructions: %v", instr)
 		if err := j.Broadcaster.SendTo(node, instr); err != nil {
 			return errors.Wrap(err, "sending instruction")
