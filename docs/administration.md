@@ -70,10 +70,17 @@ pilosa import -i project -f stargazer --field star_count project-stargazer-count
 
 #### Exporting
 
-Exporting Data to csv can be performed on a live instance of Pilosa. You need to specify the Index, Frame, and View(default is standard). The API also expects the slice number, but the `pilosa export` sub command will export all slices within a Frame. The data will be in csv format rowID,columnID and sorted by columnID.
-```
+Exporting data to csv can be performed on a live instance of Pilosa. You need to specify the index, frame, and view (default is standard). The API also expects the slice number, but the `pilosa export` sub command will export all slices within a Frame. The data will be in csv format `Row,Column` and sorted by column.
+```request
 curl "http://localhost:10101/export?index=repository&frame=stargazer&slice=0&view=standard" \
      --header "Accept: text/csv"
+```
+```response
+2,10
+2,30
+3,426
+4,2
+...
 ```
 
 ### Versioning
@@ -107,7 +114,7 @@ Pilosa v0.9 introduces a few compatibility changes that need to be addressed.
 
 **Configuration changes**: These changes need to occur before starting Pilosa v0.9:
 
-1. Cluster-resize capability eliminates the `hosts` setting. Now, cluster membership is determined by `gossip`. This is only a factor if you are running Pilosa as a cluster.
+1. Cluster-resize capability eliminates the `hosts` setting. Now, cluster membership is determined by gossip. This is only a factor if you are running Pilosa as a cluster.
 2. Gossip-based cluster membership requires you to set a single cluster node as a [coordinator](../configuration/#cluster-coordinator). Make sure only a single node has the `cluster.coordinator` flag set.
 3. `gossip.seed` has been renamed [`gossip.seeds`](../configuration/#gossip-seeds) and takes multiple items. It is recommended that at least two nodes are specified as gossip seeds.
 
@@ -215,7 +222,7 @@ Note: This will only work when the replication factor is >= 2
 - To accomplish this you will first need:
   - List of all indexes on your cluster
   - List of all frames in your indexes
-  - Max slice per index, listed in the /status endpoint
+  - Max slice per index, listed in the `/slices/max` endpoint
 - With this information you can query the `/fragment/nodes` endpoint and iterate over each slice
 - Using the list of slices owned by this node you will then need to manually:
   - setup a directory structure similar to the other nodes with a path for each Index/Frame
