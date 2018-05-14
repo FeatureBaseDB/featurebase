@@ -11,7 +11,7 @@ nav = [
 
 ## Configuration
 
-Pilosa can be configured through command line flags, environment variables, and/or a configuration file; configured options take precedence in that order. So if an option is specified in a command line flag, it will take precedence over the same option specified in the environment, which would take precedence over that same option specified in the configuration file.
+Pilosa can be configured through command line flags, environment variables, and/or a configuration file; configured options take precedence in that order. So if an option is specified in a command line flag, it will take precedence over the same option specified in the environment, which will take precedence over that same option specified in the configuration file.
 
 All options are available in all three configuration types with the exception of the `--config` option which specifies the location of the config file, and therefore will not be used if it is present in the config file.
 
@@ -118,18 +118,18 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 #### Gossip Seeds
 
 * Description: This specifies which internal host(s) should be used to initialize membership in the cluster. Typically this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip.seeds` for all three nodes can be configured to be the address of `node0`. Multiple seeds should be comma-separated in the flag and env forms.
-* Flag: `--gossip.seeds="localhost:11101"`
-* Env: `PILOSA_GOSSIP_SEEDS="localhost:11101"`
+* Flag: `--gossip.seeds="localhost:11101,localhost:11110"`
+* Env: `PILOSA_GOSSIP_SEEDS="localhost:11101,localhost:11110"`
 * Config:
 
     ```toml
     [gossip]
-      seeds = ["localhost:11101"]
+      seeds = ["localhost:11101", "localhost:11110"]
     ```
 
 #### Gossip Key
 
-* Description: Path to the file which contains the key to encrypt gossip communication. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256 encryption. You can read from `/dev/random` device on UNIX-like systems to create the key file; e.g., `head -c 32 /dev/random > gossip.key32` creates a key file to use AES-256.  
+* Description: Path to the file which contains the key to encrypt gossip communication. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256 encryption. You can read from `/dev/random` device on UNIX-like systems to create the key file; e.g., `head -c 32 /dev/random > gossip.key32` creates a key file to use AES-256.
 * Flag: `--gossip.key="/var/secret/gossip.key32"`
 * Env: `PILOSA_GOSSIP_KEY="/var/secret/gossip.key32"`
 * Config:
