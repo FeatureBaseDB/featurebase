@@ -262,7 +262,6 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 				}
 			}
 		}
-		// TODO: Create inputDefinitions that don't exist.
 	}
 	return nil
 }

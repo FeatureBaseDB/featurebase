@@ -154,10 +154,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/view/{view}", handler.handleDeleteView).Methods("DELETE")
-	router.HandleFunc("/index/{index}/input/{input-definition}", handler.handlePostInput).Methods("POST")
-	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetInputDefinition).Methods("GET")
-	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
-	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 
@@ -1342,131 +1338,6 @@ func errorString(err error) string {
 	return err.Error()
 }
 
-// handlePostInputDefinition handles POST /input-definition request.
-func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	inputDefName := mux.Vars(r)["input-definition"]
-
-	// Decode request.
-	var req InputDefinitionInfo
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err = h.API.CreateInputDefinition(r.Context(), indexName, inputDefName, req); err != nil {
-		switch err {
-		case ErrIndexNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		case ErrInputDefinitionExists:
-			http.Error(w, err.Error(), http.StatusConflict)
-		case ErrInputDefinitionAttrsRequired:
-			fallthrough
-		case ErrInputDefinitionNameRequired:
-			fallthrough
-		case ErrInputDefinitionActionRequired:
-			fallthrough
-		case ErrInputDefinitionHasPrimaryKey:
-			fallthrough
-		case ErrInputDefinitionDupePrimaryKey:
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-// handleGetInputDefinition handles GET /input-definition request.
-func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	inputDefName := mux.Vars(r)["input-definition"]
-
-	inputDef, err := h.API.InputDefinition(r.Context(), indexName, inputDefName)
-	if err != nil {
-		switch err {
-		case nil:
-			break
-		case ErrIndexNotFound:
-			fallthrough
-		case ErrInputDefinitionNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	if err = json.NewEncoder(w).Encode(InputDefinitionInfo{
-		Frames: inputDef.frames,
-		Fields: inputDef.fields,
-	}); err != nil {
-		h.Logger.Printf("write status response error: %s", err)
-	}
-}
-
-// handleDeleteInputDefinition handles DELETE /input-definition request.
-func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	inputDefName := mux.Vars(r)["input-definition"]
-
-	if err := h.API.DeleteInputDefinition(r.Context(), indexName, inputDefName); err != nil {
-		switch err {
-		case nil:
-			break
-		case ErrIndexNotFound:
-			fallthrough
-		case ErrInputDefinitionNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		}
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-type defaultInputDefinitionResponse struct{}
-
-func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	inputDefName := mux.Vars(r)["input-definition"]
-
-	// Decode request.
-	var reqs []interface{}
-	err := json.NewDecoder(r.Body).Decode(&reqs)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err = h.API.WriteInput(r.Context(), indexName, inputDefName, reqs); err != nil {
-		switch err {
-		case nil:
-			break
-		case ErrIndexNotFound:
-			fallthrough
-		case ErrInputDefinitionNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
 func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r *http.Request) {
 	// Decode request.
 	var req setCoordinatorRequest
@@ -1575,26 +1446,6 @@ func (h *Handler) handleRecalculateCaches(w http.ResponseWriter, r *http.Request
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// GetTimeStamp retrieves unix timestamp from Input data.
-func GetTimeStamp(data map[string]interface{}, timeField string) (int64, error) {
-	tmstamp, ok := data[timeField]
-	if !ok {
-		return 0, nil
-	}
-
-	timestamp, ok := tmstamp.(string)
-	if !ok {
-		return 0, fmt.Errorf("set-timestamp value must be in time format: YYYY-MM-DD, has: %v", data[timeField])
-	}
-
-	v, err := time.Parse(TimeFormat, timestamp)
-	if err != nil {
-		return 0, errors.Wrap(err, "parsing timestamp")
-	}
-
-	return v.Unix(), nil
 }
 
 func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Request) {

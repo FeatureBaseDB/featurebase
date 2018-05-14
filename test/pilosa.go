@@ -255,15 +255,6 @@ func (m *Main) Query(index, rawQuery, query string) (string, error) {
 	return resp.Body, nil
 }
 
-// CreateDefinition.
-func (m *Main) CreateDefinition(index, def, query string) (string, error) {
-	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/input-definition/%s", index, def), query)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
-	}
-	return resp.Body, nil
-}
-
 func (m *Main) RecalculateCaches() error {
 	resp := MustDo("POST", fmt.Sprintf("%s/recalculate-caches", m.URL()), "")
 	if resp.StatusCode != 204 {

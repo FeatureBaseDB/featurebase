@@ -118,32 +118,6 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	if maxSlices1["i"] != 2 {
 		t.Fatalf("unexpected maxSlice on node1: %d", maxSlices1["i"])
 	}
-
-	// Write input definition to the first node.
-	if _, err := m0.CreateDefinition("i", "test", `{
-            "frames": [{"name": "event-time",
-                        "options": {
-                            "cacheType": "ranked",
-                            "timeQuantum": "YMD"
-                        }}],
-            "fields": [{"name": "col",
-                        "primaryKey": true
-                        }]}
-        `); err != nil {
-		t.Fatal(err)
-	}
-
-	// We have to wait for the broadcast message to be sent before checking state.
-	time.Sleep(1 * time.Second)
-
-	frame0 := m0.Server.Holder.Frame("i", "event-time")
-	if frame0 == nil {
-		t.Fatal("frame not found")
-	}
-	frame1 := m1.Server.Holder.Frame("i", "event-time")
-	if frame1 == nil {
-		t.Fatal("frame not found")
-	}
 }
 
 // Ensure that an empty node comes up in a NORMAL state.

@@ -123,13 +123,16 @@ require-protoc-gen-gofast:
 require-protoc:
 	$(call require,protoc)
 
-install-build-deps: install-dep install-statik install-protoc-gen-gofast install-protoc
+install-build-deps: install-dep install-statik install-protoc-gen-gofast install-protoc install-stringer
 
 install-dep:
 	go get -u github.com/golang/dep/cmd/dep
 
 install-statik:
 	go get -u github.com/rakyll/statik
+
+install-stringer:
+	go get -u golang.org/x/tools/cmd/stringer
 
 install-protoc-gen-gofast:
 	go get -u github.com/gogo/protobuf/protoc-gen-gofast
