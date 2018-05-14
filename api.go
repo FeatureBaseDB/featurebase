@@ -23,7 +23,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -511,121 +510,6 @@ func (api *API) Hosts(ctx context.Context) []*Node {
 	return api.Cluster.Nodes
 }
 
-// CreateInputDefinition is deprecated and will be removed. Do not use it.
-func (api *API) CreateInputDefinition(ctx context.Context, indexName string, inputDefName string, inputDef InputDefinitionInfo) error {
-	if err := api.validate(apiCreateInputDefinition); err != nil {
-		return errors.Wrap(err, "validating api method")
-	}
-
-	api.Logger.Printf(`CreateInputDefinition is deprecated and will be removed.
-Please open an issue if you need to continue using it.`)
-	// Find index.
-	index := api.Holder.Index(indexName)
-	if index == nil {
-		return ErrIndexNotFound
-	}
-
-	if err := inputDef.Validate(); err != nil {
-		return err
-	}
-
-	// Encode InputDefinition to its internal representation.
-	def := inputDef.Encode()
-	def.Name = inputDefName
-
-	// Create InputDefinition.
-	if _, err := index.CreateInputDefinition(def); err != nil {
-		return err
-	}
-
-	err := api.Broadcaster.SendSync(
-		&internal.CreateInputDefinitionMessage{
-			Index:      indexName,
-			Definition: def,
-		})
-	if err != nil {
-		api.Logger.Printf("problem sending CreateInputDefinition message: %s", err)
-	}
-	return nil
-}
-
-// InputDefinition is deprecated and will be removed.
-func (api *API) InputDefinition(ctx context.Context, indexName string, inputDefName string) (*InputDefinition, error) {
-	if err := api.validate(apiInputDefinition); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	api.Logger.Printf(`InputDefinition is deprecated and will be removed.`)
-	// Find index.
-	index := api.Holder.Index(indexName)
-	if index == nil {
-		return nil, ErrIndexNotFound
-	}
-
-	inputDef, err := index.InputDefinition(inputDefName)
-	if err != nil {
-		return nil, err
-	}
-	return inputDef, nil
-}
-
-// DeleteInputDefinition is deprecated and will be removed.
-func (api *API) DeleteInputDefinition(ctx context.Context, indexName string, inputDefName string) error {
-	if err := api.validate(apiDeleteInputDefinition); err != nil {
-		return errors.Wrap(err, "validating api method")
-	}
-
-	api.Logger.Printf("DeleteInputDefinition is deprecated and will be removed.")
-	// Find index.
-	index := api.Holder.Index(indexName)
-	if index == nil {
-		return ErrIndexNotFound
-	}
-
-	// Delete input definition from the index.
-	if err := index.DeleteInputDefinition(inputDefName); err != nil {
-		return err
-	}
-
-	err := api.Broadcaster.SendSync(
-		&internal.DeleteInputDefinitionMessage{
-			Index: indexName,
-			Name:  inputDefName,
-		})
-	if err != nil {
-		api.Logger.Printf("problem sending DeleteInputDefinition message: %s", err)
-	}
-	return nil
-}
-
-// WriteInput is deprecated and will be removed.
-func (api *API) WriteInput(ctx context.Context, indexName string, inputDefName string, reqs []interface{}) error {
-	if err := api.validate(apiWriteInput); err != nil {
-		return errors.Wrap(err, "validating api method")
-	}
-
-	api.Logger.Printf("WriteInput is deprecated and will be removed.")
-	// Find index.
-	index := api.Holder.Index(indexName)
-	if index == nil {
-		return ErrIndexNotFound
-	}
-
-	for _, req := range reqs {
-		bits, err := api.inputJSONDataParser(req.(map[string]interface{}), index, inputDefName)
-		if err != nil {
-			return err
-		}
-		for fr, bs := range bits {
-			if err := index.InputBits(fr, bs); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 // RecalculateCaches forces all TopN caches to be updated. Used mainly for integration tests.
 func (api *API) RecalculateCaches(ctx context.Context) error {
 	if err := api.validate(apiRecalculateCaches); err != nil {
@@ -977,75 +861,6 @@ func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*I
 	return index, frame, nil
 }
 
-// inputJSONDataParser validates input json file and executes SetBit. Deprecated - remove with input definition stuff.
-func (api *API) inputJSONDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
-	inputDef, err := index.InputDefinition(name)
-	if err != nil {
-		return nil, err
-	}
-	// If field in input data is not in defined definition, return error.
-	var colValue uint64
-	validFields := make(map[string]bool)
-	timestampFrame := make(map[string]int64)
-	for _, field := range inputDef.Fields() {
-		validFields[field.Name] = true
-		if field.PrimaryKey {
-			value, ok := req[field.Name]
-			if !ok {
-				return nil, fmt.Errorf("primary key does not exist")
-			}
-			rawValue, ok := value.(float64) // The default JSON marshalling will interpret this as a float
-			if !ok {
-				return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
-			}
-			colValue = uint64(rawValue)
-		}
-		// Find frame that need to add timestamp.
-		for _, action := range field.Actions {
-			if action.ValueDestination == InputSetTimestamp {
-				timestampFrame[action.Frame], err = GetTimeStamp(req, field.Name)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-
-	for key := range req {
-		_, ok := validFields[key]
-		if !ok {
-			return nil, fmt.Errorf("field not found: %s", key)
-		}
-	}
-
-	setBits := make(map[string][]*Bit)
-
-	for _, field := range inputDef.Fields() {
-		// skip field that defined in definition but not in input data
-		if _, ok := req[field.Name]; !ok {
-			continue
-		}
-
-		// Looking into timestampFrame map and set timestamp to the whole frame
-		for _, action := range field.Actions {
-			frame := action.Frame
-			timestamp := timestampFrame[action.Frame]
-			// Skip input data field values that are set to null
-			if req[field.Name] == nil {
-				continue
-			}
-			bit, err := HandleAction(action, req[field.Name], colValue, timestamp)
-			if err != nil {
-				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
-			}
-			if bit != nil {
-				setBits[frame] = append(setBits[frame], bit)
-			}
-		}
-	}
-	return setBits, nil
-}
-
 // SetCoordinator makes a new Node the cluster coordinator.
 func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *Node, err error) {
 	if err := api.validate(apiSetCoordinator); err != nil {
@@ -1136,11 +951,9 @@ const (
 	apiCreateField
 	apiCreateFrame
 	apiCreateIndex
-	apiCreateInputDefinition
 	apiDeleteField
 	apiDeleteFrame
 	apiDeleteIndex
-	apiDeleteInputDefinition
 	apiDeleteView
 	apiExportCSV
 	apiFields
@@ -1152,7 +965,6 @@ const (
 	apiImportValue
 	apiIndex
 	apiIndexAttrDiff
-	apiInputDefinition
 	//apiLocalID // not implemented
 	//apiLongQueryTime // not implemented
 	apiMarshalFragment
@@ -1171,7 +983,6 @@ const (
 	apiUnmarshalFragment
 	//apiVersion // not implemented
 	apiViews
-	apiWriteInput
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -1185,31 +996,27 @@ var methodsResizing = map[apiMethod]struct{}{
 }
 
 var methodsNormal = map[apiMethod]struct{}{
-	apiCreateField:           struct{}{},
-	apiCreateFrame:           struct{}{},
-	apiCreateIndex:           struct{}{},
-	apiCreateInputDefinition: struct{}{},
-	apiDeleteField:           struct{}{},
-	apiDeleteFrame:           struct{}{},
-	apiDeleteIndex:           struct{}{},
-	apiDeleteInputDefinition: struct{}{},
-	apiDeleteView:            struct{}{},
-	apiExportCSV:             struct{}{},
-	apiFields:                struct{}{},
-	apiFragmentBlockData:     struct{}{},
-	apiFragmentBlocks:        struct{}{},
-	apiFrameAttrDiff:         struct{}{},
-	apiImport:                struct{}{},
-	apiImportValue:           struct{}{},
-	apiIndex:                 struct{}{},
-	apiIndexAttrDiff:         struct{}{},
-	apiInputDefinition:       struct{}{},
-	apiQuery:                 struct{}{},
-	apiRecalculateCaches:     struct{}{},
-	apiRemoveNode:            struct{}{},
-	apiRestoreFrame:          struct{}{},
-	apiSliceNodes:            struct{}{},
-	apiUnmarshalFragment:     struct{}{},
-	apiViews:                 struct{}{},
-	apiWriteInput:            struct{}{},
+	apiCreateField:       struct{}{},
+	apiCreateFrame:       struct{}{},
+	apiCreateIndex:       struct{}{},
+	apiDeleteField:       struct{}{},
+	apiDeleteFrame:       struct{}{},
+	apiDeleteIndex:       struct{}{},
+	apiDeleteView:        struct{}{},
+	apiExportCSV:         struct{}{},
+	apiFields:            struct{}{},
+	apiFragmentBlockData: struct{}{},
+	apiFragmentBlocks:    struct{}{},
+	apiFrameAttrDiff:     struct{}{},
+	apiImport:            struct{}{},
+	apiImportValue:       struct{}{},
+	apiIndex:             struct{}{},
+	apiIndexAttrDiff:     struct{}{},
+	apiQuery:             struct{}{},
+	apiRecalculateCaches: struct{}{},
+	apiRemoveNode:        struct{}{},
+	apiRestoreFrame:      struct{}{},
+	apiSliceNodes:        struct{}{},
+	apiUnmarshalFragment: struct{}{},
+	apiViews:             struct{}{},
 }

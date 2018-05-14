@@ -28,11 +28,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Default index settings.
-const (
-	InputDefinitionDir = ".input-definitions"
-)
-
 // Index represents a container for frames.
 type Index struct {
 	mu   sync.RWMutex
@@ -51,9 +46,6 @@ type Index struct {
 	// Column attribute storage and cache.
 	columnAttrStore AttrStore
 
-	// InputDefinitions by name.
-	inputDefinitions map[string]*InputDefinition
-
 	broadcaster Broadcaster
 	Stats       StatsClient
 
@@ -68,10 +60,9 @@ func NewIndex(path, name string) (*Index, error) {
 	}
 
 	return &Index{
-		path:             path,
-		name:             name,
-		frames:           make(map[string]*Frame),
-		inputDefinitions: make(map[string]*InputDefinition),
+		path:   path,
+		name:   name,
+		frames: make(map[string]*Frame),
 
 		remoteMaxSlice:        0,
 		remoteMaxInverseSlice: 0,
@@ -125,10 +116,6 @@ func (i *Index) Open() error {
 		return errors.Wrap(err, "opening attrstore")
 	}
 
-	if err := i.openInputDefinitions(); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -146,7 +133,7 @@ func (i *Index) openFrames() error {
 	}
 
 	for _, fi := range fis {
-		if !fi.IsDir() || fi.Name() == InputDefinitionDir {
+		if !fi.IsDir() {
 			continue
 		}
 
@@ -276,11 +263,6 @@ func (i *Index) SetRemoteMaxInverseSlice(v uint64) {
 // FramePath returns the path to a frame in the index.
 func (i *Index) FramePath(name string) string { return filepath.Join(i.path, name) }
 
-// InputDefinitionPath returns the path to the input definition directory for the index.
-func (i *Index) InputDefinitionPath() string {
-	return filepath.Join(i.path, InputDefinitionDir)
-}
-
 // Frame returns a frame in the index by name.
 func (i *Index) Frame(name string) *Frame {
 	i.mu.RLock()
@@ -288,19 +270,7 @@ func (i *Index) Frame(name string) *Frame {
 	return i.frame(name)
 }
 
-// InputDefinition returns an input definition in the index by name.
-func (i *Index) InputDefinition(name string) (*InputDefinition, error) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	if inputDef, ok := i.inputDefinitions[name]; ok {
-		return inputDef, nil
-	}
-	return nil, ErrInputDefinitionNotFound
-}
-
 func (i *Index) frame(name string) *Frame { return i.frames[name] }
-
-func (i *Index) inputDefinition(name string) *InputDefinition { return i.inputDefinitions[name] }
 
 // Frames returns a list of all frames in the index.
 func (i *Index) Frames() []*Frame {
@@ -312,20 +282,6 @@ func (i *Index) Frames() []*Frame {
 		a = append(a, f)
 	}
 	sort.Sort(frameSlice(a))
-
-	return a
-}
-
-// InputDefinitions returns a list of all inputDefinitions in the index.
-func (i *Index) InputDefinitions() []*InputDefinition {
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-
-	a := make([]*InputDefinition, 0, len(i.inputDefinitions))
-	for _, d := range i.inputDefinitions {
-		a = append(a, d)
-	}
-	//sort.Sort(inputDefintionSlice(a)) // TODO
 
 	return a
 }
@@ -493,9 +449,8 @@ func EncodeIndexes(a []*Index) []*internal.Index {
 // encodeIndex converts d into its internal representation.
 func encodeIndex(d *Index) *internal.Index {
 	return &internal.Index{
-		Name:             d.name,
-		Frames:           encodeFrames(d.Frames()),
-		InputDefinitions: encodeInputDefinitions(d.InputDefinitions()),
+		Name:   d.name,
+		Frames: encodeFrames(d.Frames()),
 	}
 }
 
@@ -530,143 +485,4 @@ type importData struct {
 type importValueData struct {
 	ColumnIDs []uint64
 	Values    []int64
-}
-
-// CreateInputDefinition creates a new input definition.
-func (i *Index) CreateInputDefinition(pb *internal.InputDefinition) (*InputDefinition, error) {
-	// Ensure input definition doesn't already exist.
-	if i.inputDefinitions[pb.Name] != nil {
-		return nil, ErrInputDefinitionExists
-	}
-	return i.createInputDefinition(pb)
-}
-
-func (i *Index) createInputDefinition(pb *internal.InputDefinition) (*InputDefinition, error) {
-	if pb.Name == "" {
-		return nil, ErrInputDefinitionNameRequired
-	}
-
-	for _, fr := range pb.Frames {
-		opt := FrameOptions{
-			// Deprecating row labels per #810. So, setting the default row label here.
-			InverseEnabled: fr.Meta.InverseEnabled,
-			CacheType:      fr.Meta.CacheType,
-			CacheSize:      fr.Meta.CacheSize,
-			TimeQuantum:    TimeQuantum(fr.Meta.TimeQuantum),
-		}
-		_, err := i.CreateFrame(fr.Name, opt)
-		if err == ErrFrameExists {
-			continue
-		} else if err != nil {
-			return nil, err
-		}
-	}
-
-	// Initialize input definition.
-	inputDef, err := i.newInputDefinition(pb.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = inputDef.LoadDefinition(pb); err != nil {
-		return nil, err
-	}
-	if err = inputDef.saveMeta(); err != nil {
-		return nil, err
-	}
-	i.inputDefinitions[pb.Name] = inputDef
-	return inputDef, nil
-}
-
-func (i *Index) newInputDefinition(name string) (*InputDefinition, error) {
-	inputDef, err := NewInputDefinition(i.InputDefinitionPath(), i.name, name)
-	if err != nil {
-		return nil, err
-	}
-	return inputDef, nil
-}
-
-// DeleteInputDefinition removes an input definition from the index.
-func (i *Index) DeleteInputDefinition(name string) error {
-	// Fail if input definition doesn't exist.
-	_, err := i.InputDefinition(name)
-	if err != nil {
-		return err
-	}
-
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Delete input definition file.
-	if err := os.Remove(filepath.Join(i.InputDefinitionPath(), name)); err != nil {
-		return err
-	}
-
-	// Remove reference.
-	delete(i.inputDefinitions, name)
-	return nil
-}
-
-// openInputDefinitions opens and initializes the input definitions inside the index.
-func (i *Index) openInputDefinitions() error {
-	inputDef, err := os.Open(i.InputDefinitionPath())
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return err
-	}
-	defer inputDef.Close()
-
-	inputFiles, err := inputDef.Readdir(0)
-	for _, file := range inputFiles {
-		input, err := i.newInputDefinition(file.Name())
-		if err != nil {
-			return err
-		}
-		input.Open()
-		i.inputDefinitions[file.Name()] = input
-
-		// Create frame if it doesn't exist.
-		for _, fr := range input.frames {
-			_, err := i.CreateFrame(fr.Name, fr.Options)
-			if err == ErrFrameExists {
-				continue
-			} else if err != nil {
-				return nil
-			}
-		}
-	}
-	return nil
-}
-
-// InputBits Process the []Bit though the Frame import process
-func (i *Index) InputBits(frame string, bits []*Bit) error {
-	var rowIDs, columnIDs []uint64
-	var timestamps []*time.Time
-
-	f := i.Frame(frame)
-	if f == nil {
-		return fmt.Errorf("Frame not found: %s", frame)
-	}
-
-	for i, bit := range bits {
-		if bit == nil {
-			continue
-		}
-		rowIDs = append(rowIDs, bit.RowID)
-		columnIDs = append(columnIDs, bit.ColumnID)
-
-		// Convert timestamps to time.Time.
-		if bit.Timestamp > 0 {
-			// Don't create a full timestamps slice unless
-			// at least one bit contains a timestamp.
-			if len(timestamps) == 0 {
-				timestamps = make([]*time.Time, len(bits))
-			}
-			t := time.Unix(bit.Timestamp, 0)
-			timestamps[i] = &t
-		}
-	}
-
-	return f.Import(rowIDs, columnIDs, timestamps)
 }

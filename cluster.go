@@ -1728,8 +1728,6 @@ func (c *Cluster) nodeJoin(node *Node) error {
 			// know that it can proceed with opening its Holder.
 			return c.sendTo(node, c.Status())
 		}
-
-		return nil
 	}
 
 	// If the cluster already contains the node, just send it the cluster status.

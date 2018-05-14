@@ -129,8 +129,6 @@ const (
 	MessageTypeDeleteView
 	MessageTypeCreateField
 	MessageTypeDeleteField
-	MessageTypeCreateInputDefinition
-	MessageTypeDeleteInputDefinition
 	MessageTypeClusterStatus
 	MessageTypeResizeInstruction
 	MessageTypeResizeInstructionComplete
@@ -163,10 +161,6 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeCreateField
 	case *internal.DeleteFieldMessage:
 		typ = MessageTypeDeleteField
-	case *internal.CreateInputDefinitionMessage:
-		typ = MessageTypeCreateInputDefinition
-	case *internal.DeleteInputDefinitionMessage:
-		typ = MessageTypeDeleteInputDefinition
 	case *internal.ClusterStatus:
 		typ = MessageTypeClusterStatus
 	case *internal.ResizeInstruction:
@@ -217,10 +211,6 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.CreateFieldMessage{}
 	case MessageTypeDeleteField:
 		m = &internal.DeleteFieldMessage{}
-	case MessageTypeCreateInputDefinition:
-		m = &internal.CreateInputDefinitionMessage{}
-	case MessageTypeDeleteInputDefinition:
-		m = &internal.DeleteInputDefinitionMessage{}
 	case MessageTypeClusterStatus:
 		m = &internal.ClusterStatus{}
 	case MessageTypeResizeInstruction:
