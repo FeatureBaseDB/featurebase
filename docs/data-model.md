@@ -35,7 +35,7 @@ The purpose of the Index is to represent a data namespace. You cannot perform cr
 
 ### Column
 
-Column ids are sequential increasing integers and are common to all Frames within an Index. A single column often corresponds to a record in a relational table, although other configurations are possible, and sometimes preferable (see genomics TODO).
+Column ids are sequential increasing integers and are common to all Frames within an Index. A single column often corresponds to a record in a relational table, although other configurations are possible, and sometimes preferable.
 
 ### Row
 
