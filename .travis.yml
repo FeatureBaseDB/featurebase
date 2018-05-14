@@ -10,6 +10,7 @@ env:
   matrix:
     - GOARCH=386
     - GOARCH=amd64
+    - GOARCH=amd64 TESTFLAGS="-tags enterprise"
 install:
   - make install-dep install-statik vendor generate-statik
 script:

@@ -26,6 +26,10 @@ vendor: Gopkg.toml
 test: vendor
 	go test ./... $(TESTFLAGS)
 
+# Run EE test suite
+test-ee:
+	make test TESTFLAGS="-tags enterprise"
+
 # Run test suite with coverage enabled
 cover: vendor
 	mkdir -p build
