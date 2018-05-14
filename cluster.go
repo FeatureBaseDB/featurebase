@@ -1299,10 +1299,8 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				// Write to local frame and always close reader.
 				if err := func() error {
 					defer rd.Close()
-					if _, err := frag.ReadFrom(rd); err != nil {
-						return err
-					}
-					return nil
+					_, err := frag.ReadFrom(rd)
+					return err
 				}(); err != nil {
 					return errors.Wrap(err, "copying remote slice")
 				}
