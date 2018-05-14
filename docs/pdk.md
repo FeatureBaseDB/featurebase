@@ -51,7 +51,7 @@ This JSON object would result in the following Pilosa schema:
 | location-state |           | ranked |   100000 |            |
 
 All frames are created as ranked frames by default, and fields are created with
-a minmum size of zero and a fixed maximum of 2147483647. Fields at the top level
+a minimum size of zero and a fixed maximum of 2147483647. Fields at the top level
 are created in the default frame. Frames are a dash-separated concatenation of
 all key values in the path - you can see this with frames like location-city.
 

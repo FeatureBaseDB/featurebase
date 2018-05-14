@@ -272,7 +272,7 @@ We currently track the following events
 - **ClearBit:** Count of cleared bits.
 - **ImportBit:** During a bulk data import this represents the count of bits created.
 - **SetRowAttrs:** Count of Attributes set per row.
-- **SetColumnAttrs:** Count of Attributes set per collumn.
+- **SetColumnAttrs:** Count of Attributes set per column.
 - **Bitmap:** Count of Bitmap queries.
 - **TopN:** Count of TopN queries.
 - **Union:** Count of Union queries.

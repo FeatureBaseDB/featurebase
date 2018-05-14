@@ -117,7 +117,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Gossip Seeds
 
-* Description: This specifies which internal host(s) should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip.seeds` for all three nodes can be configured to be the address of `node0`. Multiple seeds should be comma-separated in the flag and env forms.
+* Description: This specifies which internal host(s) should be used to initialize membership in the cluster. Typically this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip.seeds` for all three nodes can be configured to be the address of `node0`. Multiple seeds should be comma-separated in the flag and env forms.
 * Flag: `--gossip.seeds="localhost:11101"`
 * Env: `PILOSA_GOSSIP_SEEDS="localhost:11101"`
 * Config:
@@ -399,7 +399,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
 ### Example Cluster Configuration (HTTPS, same host)
 
-You can run a cluster on the same host using the configuration above with a few changes. Gossip port and bind adress should be different for each node and a data directory should be accessed only by a single node.
+You can run a cluster on the same host using the configuration above with a few changes. Gossip port and bind address should be different for each node and a data directory should be accessed only by a single node.
 
 #### Node 0
 
@@ -444,7 +444,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [gossip]
       port = 12002
-      seed = "locahost:12000"
+      seed = "localhost:12000"
       key = "/home/pilosa/private/gossip.key32"
 
     [cluster]
