@@ -234,28 +234,6 @@ func decodeURI(i *internal.URI) URI {
 	}
 }
 
-func encodeURIs(a []URI) []*internal.URI {
-	if len(a) == 0 {
-		return nil
-	}
-	other := make([]*internal.URI, len(a))
-	for i := range a {
-		other[i] = encodeURI(a[i])
-	}
-	return other
-}
-
-func decodeURIs(a []*internal.URI) []URI {
-	if len(a) == 0 {
-		return nil
-	}
-	other := make([]URI, len(a))
-	for i := range a {
-		other[i] = decodeURI(a[i])
-	}
-	return other
-}
-
 // MarshalJSON marshals URI into a JSON-encoded byte slice.
 func (u *URI) MarshalJSON() ([]byte, error) {
 	var output struct {
