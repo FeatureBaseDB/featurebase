@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-statik install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-statik prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-statik test
+.PHONY: build build-ee check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-statik install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-statik prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-statik test test-ee
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
