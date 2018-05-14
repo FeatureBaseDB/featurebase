@@ -204,7 +204,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 * Description: Amount of time to collect cpu profiling data at startup if `profile.cpu` is set.
 * Flag: `--profile.cpu-time="30s"`
-* Env: `PILOSA_PROFILE_CPU_TIME="30s"
+* Env: `PILOSA_PROFILE_CPU_TIME="30s"`
 * Config:
 
     ```toml
@@ -215,7 +215,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 #### Metric Service
 * Description: Which stats service to use. Choose from [statsd, expvar, none].
 * Flag: `--metric.service=statsd`
-* Env: `PILOSA_METRIC_SERVICE=statsd'
+* Env: `PILOSA_METRIC_SERVICE=statsd`
 * Config:
 
     ```toml
@@ -226,7 +226,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 #### Metric Host
 * Description: Address of the StatsD service host.
 * Flag: `--metric.host=localhost:8125`
-* Env: `PILOSA_METRIC_HOST=localhost:8125'
+* Env: `PILOSA_METRIC_HOST=localhost:8125`
 * Config:
 
     ```toml
