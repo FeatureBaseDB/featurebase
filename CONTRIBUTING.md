@@ -1,6 +1,6 @@
 # Contributing to Pilosa
 
-The workflow components of these instructions apply to all of our repos.
+The workflow components of these instructions apply to all Pilosa repositories.
 
 ## Reporting a bug
 

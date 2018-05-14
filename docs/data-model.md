@@ -22,7 +22,7 @@ The central component of Pilosa's data model is a boolean matrix. Each cell in t
 
 Rows and columns can represent anything (they could even represent the same set of things - a [bigraph](https://en.wikipedia.org/wiki/Bigraph)). Pilosa can associate arbitrary key/value pairs (referred to as attributes) to rows and columns, but queries and storage are optimized around the core matrix.
 
-Pilosa lays out data first in rows, so queries which get all the set bits in one or many rows, or compute a combining operation on multiple rows such as Intersect or Union are the fastest. Pilosa categorizes rows into different *frames* and quickly retrieve the top rows in a frame sorted by the number of bits set in each row.
+Pilosa lays out data first in rows, so queries which get all the set bits in one or many rows, or compute a combining operation on multiple rows such as Intersect or Union are the fastest. Pilosa categorizes rows into different *frames* and quickly retrieves the top rows in a frame sorted by the number of bits set in each row.
 
 Please note that Pilosa is most performant when row and column IDs are sequential starting from 0. You can deviate from this to some degree, but setting a bit with column ID 2<sup>63</sup> on a single-node cluster, for example, will not work well due to memory limitations.
 
@@ -43,11 +43,11 @@ Row ids are sequential increasing integers namespaced to each Frame within an In
 
 ### Frame
 
-Frames are used to segment rows within an index, for example to defining different functional groups. A frame might correspond to a single field in a relational table, where each row in a standard frame represents a single possible value of the field. Similarly, a frame with BSI values could represent all possible integer values of a field .
+Frames are used to segment rows within an index, for example to define different functional groups. A frame might correspond to a single field in a relational table, where each row in a standard frame represents a single possible value of the field. Similarly, a frame with BSI values could represent all possible integer values of a field .
 
 #### Relational Analogy
 
-The Pilosa index is a flexible structure; it can represent any sort of high-cardinality binary matrix. The most common pattern we have encountered in Pilosa use cases is a direct analogy to the relational model, summarized here.
+The Pilosa index is a flexible structure; it can represent any sort of high-cardinality binary matrix. We have explored a number of modeling patterns in Pilosa use cases; one accessible example is a direct analogy to the relational model, summarized here.
 
 Entities:
 
@@ -137,7 +137,7 @@ SetBit(frame="A", row=8, col=3, timestamp="2017-05-19T00:00")
 
 #### BSI Range-Encoding
 
-Bit-Sliced Indexing (BSI) is the storage method Pilosa uses to represent multi-bit integers in a bitmap index. Integers are stored as n-bit, range-encoded bit-sliced indexes of base-2, along with an additional bitmap indicating "not null". This means that a 16-bit integer will require 17 bitmaps: one for each 0-bit of the 16 bit-slice components (the 1-bit does not need to be stored because with range-encoding the highest bit position is always 1) and one for the non-null bitmap. Pilosa can evaluate `Range`, `Min`, `Max`, and `Sum` queries on these BSI integers.
+Bit-Sliced Indexing (BSI) is the storage method Pilosa uses to represent multi-bit integers in a bitmap index. Integers are stored as n-bit, range-encoded bit-sliced indexes of base-2, along with an additional bitmap indicating "not null". This means that a 16-bit integer will require 17 bitmaps: one for each 0-bit of the 16 bit-slice components (the 1-bit does not need to be stored because with range-encoding the highest bit position is always 1) and one for the non-null bitmap. Pilosa can evaluate `Range`, `Min`, `Max`, and `Sum` queries on these BSI integers. The result of a `Sum` query includes a count, which can be used to compute an average with no other overhead.
 
 Internally Pilosa stores each BSI `field` as a `view` within a `frame`. The rows of the `view` contain the base-2 representations of the integer values. Pilosa manages the base-2 offset and translation that efficiently packs the integer value within the minimum set of rows.
 

@@ -204,7 +204,7 @@ for pcount, topn in zip(pcounts, resp.json()['results']):
 ```
 
 <div class="note">
-Note that the <a href="../data-model/#bsi-range-encoding">BSI</a>-powered <a href="../query-language/#sum">Sum</a> query now provides a an alternative approach to this kind of query.
+Note that the <a href="../data-model/#bsi-range-encoding">BSI</a>-powered <a href="../query-language/#sum">Sum</a> query now provides an alternative approach to this kind of query.
 </div>
 
 For more examples and details, see this [ipython notebook](https://github.com/pilosa/notebooks/blob/master/taxi-use-case.ipynb).
