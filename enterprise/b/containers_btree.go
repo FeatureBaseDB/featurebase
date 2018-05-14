@@ -2,7 +2,6 @@ package b
 
 import (
 	"io"
-	"log"
 
 	"github.com/pilosa/pilosa/roaring"
 )
@@ -25,7 +24,6 @@ func NewBTreeContainers() *BTreeContainers {
 }
 
 func NewBTreeBitmap(a ...uint64) *roaring.Bitmap {
-	log.Println("btree bitmap")
 	b := &roaring.Bitmap{
 		Containers: NewBTreeContainers(),
 	}
