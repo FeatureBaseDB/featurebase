@@ -24,7 +24,7 @@ Pilosa holds all row/column bitmap data in main memory. While this data is compr
 
 #### CPUs
 
-Pilosa is a concurrent application written in Go and can take full advantage of multicore machines. The main unit of parallelism is the slice, so a single query will only use a number of cores up to the number of slices stored on that host. Multiple queries can still take advantage of multiple cores as well though, so tuning in this area is dependent on the expected workload.
+Pilosa is a concurrent application written in Go and can take full advantage of multicore machines. The main unit of parallelism is the [slice](../data-model/#slice), so a single query will only use a number of cores up to the number of slices stored on that host. Multiple queries can still take advantage of multiple cores as well though, so tuning in this area is dependent on the expected workload.
 
 #### Disk
 
@@ -113,7 +113,7 @@ Pilosa v0.9 introduces a few compatibility changes that need to be addressed.
 
 **Data directory changes**: These changes need to occur while the cluster is shut down, before starting Pilosa v0.9:
 
-Pilosa v0.9 adds two new files to the data directory, an `.id` file and a `.topology` file. Due to the way Pilosa internally shards indices, upgrading a Pilosa cluster will result in data loss if an existing cluster is brought up without these files. New clusters will generate them automatically, but you may migrate an existing cluster by using a tool we called `topology-generator`:
+Pilosa v0.9 adds two new files to the data directory, an `.id` file and a `.topology` file. Due to the way Pilosa internally shards indices, upgrading a Pilosa cluster will result in data loss if an existing cluster is brought up without these files. New clusters will generate them automatically, but you may migrate an existing cluster by using a tool we called [`topology-generator`](https://github.com/pilosa/upgrade-utils/tree/master/v0.9/topology-generator):
 
 1. Observe the `cluster.hosts` configuration value in Pilosa v0.8. The ordering of the nodes in the config file is significant, as it determines shard (AKA slice) ownership. Pilosa v0.9 uses UUIDs for each node, and the ordering is alphabetical.
 2. Install the `topology-generator`: `go get github.com/pilosa/upgrade-utils/v0.9/topology-generator`.

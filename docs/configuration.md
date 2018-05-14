@@ -213,7 +213,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     ```
 
 #### Metric Service
-* Description: Which stats service to use. Choose from [statsd, expvar, none].
+* Description: Which stats service to use for collecting [metrics](../administration/#metrics). Choose from [statsd, expvar, none].
 * Flag: `--metric.service=statsd`
 * Env: `PILOSA_METRIC_SERVICE=statsd`
 * Config:
@@ -248,7 +248,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Metric Diagnostics
 
-* Description: Enable reporting of limited usage statistics to Pilosa developers. To disable, set to false.
+* Description: Enable [reporting](../administration/#diagnostics) of limited usage statistics to Pilosa developers. To disable, set to false.
 * Flag: `metric.diagnostics`
 * Env: `PILOSA_METRIC_DIAGNOSTICS`
 * Config:

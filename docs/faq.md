@@ -32,12 +32,11 @@ For the case where data is continually mutating, one would apply a parallel data
 
 ### What languages can I use with it?
 
-There is currently client support for Go, Python, and Java. If you want to use Pilosa with a different language, you can access Pilosa via the Pilosa API.
+There is currently [client support](../client-libraries) for [Go](https://github.com/pilosa/go-pilosa), [Python](https://github.com/pilosa/python-pilosa), and [Java](https://github.com/pilosa/java-pilosa). If you want to use Pilosa with a different language, you can access Pilosa via the [Pilosa API](../api-reference).
 
 ### Do you query Pilosa using SQL?
 
-One can access Pilosa directly via the terminal using the Pilosa Query Language (PQL), but a typical implementation would use one of the Pilosa client libraries to integrate with an existing codebase. There is currently client support for Go, Python, and Java.
-
+One can access Pilosa directly via the terminal using the [Pilosa Query Language](../query-language) (PQL), but a typical implementation would use one of the Pilosa client libraries to integrate with an existing codebase. There is currently client support for Go, Python, and Java.
 
 ### Replication on each node?
 

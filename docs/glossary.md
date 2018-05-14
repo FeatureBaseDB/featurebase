@@ -26,6 +26,8 @@ nav = []
 
 <strong id="frame">[Frame](../data-model/#frame):</strong> Frames are used to group [rows](#row) into different categories. Row IDs are namespaced by frame such that the same row ID in a different frame refers to a different row. For [ranked](#topn) frames, rows are kept in sorted order within the frame.
 
+<strong id="gossip">[Gossip](https://en.wikipedia.org/wiki/Gossip_protocol):</strong> A protocol used by Pilosa for internal communication.
+
 <strong id="index">[Index](../data-model/#index):</strong> An Index is a top level container in Pilosa, analogous to a database in an RDBMS. Queries cannot operate across multiple indexes.
 
 <strong id="jump-consistent-hash">[Jump Consistent Hash](https://arxiv.org/pdf/1406.2294v1.pdf):</strong> A fast, minimal memory, consistent hash algorithm that evenly distributes the workload even when the number of buckets changes.
