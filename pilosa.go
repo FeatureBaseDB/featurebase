@@ -98,38 +98,12 @@ func encodeColumnAttrSets(a []*ColumnAttrSet) []*internal.ColumnAttrSet {
 	return other
 }
 
-// decodeColumnAttrSets converts a from its internal representation.
-func decodeColumnAttrSets(a []*internal.ColumnAttrSet) []*ColumnAttrSet {
-	other := make([]*ColumnAttrSet, len(a))
-	for i := range a {
-		other[i] = decodeColumnAttrSet(a[i])
-	}
-	return other
-}
-
 // encodeColumnAttrSet converts set into its internal representation.
 func encodeColumnAttrSet(set *ColumnAttrSet) *internal.ColumnAttrSet {
 	return &internal.ColumnAttrSet{
 		ID:    set.ID,
 		Attrs: encodeAttrs(set.Attrs),
 	}
-}
-
-// decodeColumnAttrSet converts b from its internal representation.
-func decodeColumnAttrSet(pb *internal.ColumnAttrSet) *ColumnAttrSet {
-	set := &ColumnAttrSet{
-		ID: pb.ID,
-	}
-
-	if len(pb.Attrs) > 0 {
-		set.Attrs = make(map[string]interface{}, len(pb.Attrs))
-		for _, attr := range pb.Attrs {
-			k, v := decodeAttr(attr)
-			set.Attrs[k] = v
-		}
-	}
-
-	return set
 }
 
 // TimeFormat is the go-style time format used to parse string dates.
