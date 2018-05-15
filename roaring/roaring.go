@@ -121,7 +121,8 @@ func NewBitmap(a ...uint64) *Bitmap {
 	return b
 }
 
-// NewFileBitmap returns a Bitmap with an initial set of values.
+// NewFileBitmap returns a Bitmap with an initial set of values, used for file storage.
+// By default, this is a copy of NewBitmap, but is replaced with B+Tree in server/enterprise.go
 var NewFileBitmap func(a ...uint64) *Bitmap = NewBitmap
 
 // Clone returns a heap allocated copy of the bitmap.
