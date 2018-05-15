@@ -159,6 +159,8 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "setting up logger")
 	}
 
+	m.logger.Printf("Pilosa %s, build time %s\n", pilosa.Version, pilosa.BuildTime)
+
 	handler := pilosa.NewHandler()
 	handler.Logger = m.logger
 	handler.FileSystem = &statik.FileSystem{}
