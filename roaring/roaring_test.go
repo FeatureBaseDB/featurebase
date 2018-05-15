@@ -363,7 +363,7 @@ func TestBitmap_RunCountRange(t *testing.T) {
 	}
 }
 
-func TestBitmap_Intersectionz(t *testing.T) {
+func TestBitmap_Intersection(t *testing.T) {
 	bm0 := roaring.NewFileBitmap(0, 2683177)
 	bm1 := roaring.NewFileBitmap()
 	for i := uint64(628); i < 2683301; i++ {
