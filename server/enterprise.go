@@ -3,11 +3,5 @@
 package server
 
 import (
-	"github.com/pilosa/pilosa/enterprise/b"
-	"github.com/pilosa/pilosa/roaring"
+	_ "github.com/pilosa/pilosa/enterprise"
 )
-
-func init() {
-	// Replace Bitmap constructor with B+Tree implementation
-	roaring.NewFileBitmap = b.NewBTreeBitmap
-}
