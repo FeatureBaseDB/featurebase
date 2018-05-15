@@ -22,7 +22,6 @@ import (
 	"hash/fnv"
 	"io"
 	"math/bits"
-	"reflect"
 	"sort"
 	"unsafe"
 )
@@ -2388,6 +2387,43 @@ func (c *Container) bitmapZeroRange(i, j uint64) {
 	}
 }
 
+func (c *Container) equals(c2 *Container) bool {
+	if c.mapped != c2.mapped || c.containerType != c2.containerType || c.n != c2.n {
+		return false
+	}
+	if c.containerType == ContainerArray {
+		if len(c.array) != len(c2.array) {
+			return false
+		}
+		for i := 0; i < len(c.array); i++ {
+			if c.array[i] != c2.array[i] {
+				return false
+			}
+		}
+	} else if c.containerType == ContainerBitmap {
+		if len(c.bitmap) != len(c2.bitmap) {
+			return false
+		}
+		for i := 0; i < len(c.bitmap); i++ {
+			if c.bitmap[i] != c2.bitmap[i] {
+				return false
+			}
+		}
+	} else if c.containerType == ContainerRun {
+		if len(c.runs) != len(c2.runs) {
+			return false
+		}
+		for i := 0; i < len(c.runs); i++ {
+			if c.runs[i] != c2.runs[i] {
+				return false
+			}
+		}
+	} else {
+		panic(fmt.Sprintf("unknown container type: %v", c.containerType))
+	}
+	return true
+}
+
 func unionArrayBitmap(a, b *Container) *Container {
 	output := b.Clone()
 	for _, v := range a.array {
@@ -3287,7 +3323,7 @@ func BitmapsEqual(b, c *Bitmap) error {
 		if bk != ck {
 			return errors.New("keys not equal")
 		}
-		if !reflect.DeepEqual(bc, cc) {
+		if !bc.equals(cc) {
 			return errors.New("containers not equal")
 		}
 	}
