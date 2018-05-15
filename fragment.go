@@ -1013,7 +1013,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 	}
 
 	//Pop first opt.N elements out of heap
-	r := make(Pairs, results.Len(), results.Len())
+	r := make(Pairs, results.Len())
 	x := results.Len()
 	i := 1
 	for results.Len() > 0 {

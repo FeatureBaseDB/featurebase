@@ -69,10 +69,7 @@ func (v *View) Reopen() error {
 
 	v.View = pilosa.NewView(path, v.Index(), v.Frame(), v.Name(), pilosa.DefaultCacheSize)
 	v.View.RowAttrStore = v.RowAttrStore
-	if err := v.Open(); err != nil {
-		return err
-	}
-	return nil
+	return v.Open()
 }
 
 // MustSetBits sets bits on a row. Panic on error.

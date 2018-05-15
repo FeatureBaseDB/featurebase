@@ -541,16 +541,6 @@ func (c *Cluster) nodeByID(id string) *Node {
 	return nil
 }
 
-// nodeByURI returns a node reference by node URI.
-func (c *Cluster) nodeByURI(uri URI) *Node {
-	for _, n := range c.Nodes {
-		if n.URI == uri {
-			return n
-		}
-	}
-	return nil
-}
-
 // nodePositionByID returns the position of the node in slice c.Nodes.
 func (c *Cluster) nodePositionByID(nodeID string) int {
 	for i, n := range c.Nodes {
@@ -622,9 +612,7 @@ type fragsByHost map[string][]frag
 
 func (a fragsByHost) add(b fragsByHost) fragsByHost {
 	for k, v := range b {
-		for _, vv := range v {
-			a[k] = append(a[k], vv)
-		}
+		a[k] = append(a[k], v...)
 	}
 	return a
 }
@@ -1175,9 +1163,7 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 		}
 
 		for id, sources := range fragSources {
-			for _, src := range sources {
-				multiIndex[id] = append(multiIndex[id], src)
-			}
+			multiIndex[id] = append(multiIndex[id], sources...)
 		}
 	}
 
@@ -1299,10 +1285,8 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				// Write to local frame and always close reader.
 				if err := func() error {
 					defer rd.Close()
-					if _, err := frag.ReadFrom(rd); err != nil {
-						return err
-					}
-					return nil
+					_, err := frag.ReadFrom(rd)
+					return err
 				}(); err != nil {
 					return errors.Wrap(err, "copying remote slice")
 				}

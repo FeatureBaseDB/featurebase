@@ -417,9 +417,5 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 	}
 
 	node := DecodeNode(instr.Coordinator)
-	if err := t.SendTo(node, complete); err != nil {
-		return err
-	}
-
-	return nil
+	return t.SendTo(node, complete)
 }

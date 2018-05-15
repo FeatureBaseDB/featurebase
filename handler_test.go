@@ -492,7 +492,7 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
 	} else if k, v := attrs[1].Key, attrs[1].IntValue; k != "c" || v != int64(1) {
 		t.Fatalf("unexpected attr[1]: %s=%v", k, v)
-	} else if k, v := attrs[2].Key, attrs[2].BoolValue; k != "d" || v != true {
+	} else if k, v := attrs[2].Key, attrs[2].BoolValue; k != "d" || !v {
 		t.Fatalf("unexpected attr[2]: %s=%v", k, v)
 	}
 }
@@ -551,7 +551,7 @@ func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
 	} else if k, v := attrs[1].Key, attrs[1].IntValue; k != "c" || v != int64(1) {
 		t.Fatalf("unexpected attr[1]: %s=%v", k, v)
-	} else if k, v := attrs[2].Key, attrs[2].BoolValue; k != "d" || v != true {
+	} else if k, v := attrs[2].Key, attrs[2].BoolValue; k != "d" || !v {
 		t.Fatalf("unexpected attr[2]: %s=%v", k, v)
 	}
 
@@ -1076,6 +1076,9 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 	t.Run("ErrFrameFieldNotAllowed", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		_, err := idx.CreateFrameIfNotExists("f1", pilosa.FrameOptions{})
+		if err != nil {
+			t.Fatalf("creating frame: %v", err)
+		}
 
 		resp, err := http.Get(s.URL + "/index/i/frame/f1/fields")
 		if err != nil {
@@ -1221,104 +1224,6 @@ func TestHandler_Expvars(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 }
-
-var defaultBody = `
-			{
-			   "frames":[
-				  {
-					 "name":"cab-type",
-					 "options": {
-						"timeQuantum":"YMD",
-						"inverseEnabled":false,
-						"cacheType":"ranked"
-					}
-				},
-				{
-					 "name":"add-ons",
-					 "options": {
-						"timeQuantum":"YMD",
-						"inverseEnabled":false,
-						"cacheType":"ranked"
-					}
-				},
-				{
-					 "name":"distance-miles",
-					 "options": {
-						"timeQuantum":"YMD",
-						"cacheType":"ranked"
-					}
-				}
-			   ],
-			   "fields":[
-				  {
-					 "name":"id",
-					 "primaryKey":true
-				  },
-				  {
-					 "name":"cabType",
-					 "actions":[
-						{
-						   "frame":"cab-type",
-						   "valueDestination":"mapping",
-						   "valueMap":{
-							  "green":1,
-							  "yellow":2
-						   }
-						}
-					 ]
-				  },
-				  {
-					 "name":"withPet",
-					 "actions":[
-						{
-						   "frame":"add-ons",
-						   "valueDestination":"single-row-boolean",
-						   "rowID":100
-						}
-					 ]
-				  },
-				  {
-					 "name":"distanceMiles",
-					 "actions":[
-						{
-						   "frame":"distance-miles",
-						   "valueDestination":"value-to-row"
-
-						}
-					 ]
-				  },
-				  {
-					 "name":"noFrame",
-					 "actions":[
-						{
-						   "frame":"foo",
-						   "valueDestination":"value-to-row"
-
-						}
-					 ]
-				  },
-				  {
-					 "name":"null_value",
-					 "actions":[
-						{
-						   "frame":"add-ons",
-						   "valueDestination":"value-to-row"
-
-						}
-					 ]
-				  },
-				  {
-					 "name":"time_value",
-					 "actions":[
-						{
-						   "frame":"add-ons",
-						   "valueDestination":"set-timestamp"
-
-						}
-					 ]
-				  }
-			   ]
-			}`
 
 func MustReadAll(r io.Reader) []byte {
 	buf, err := ioutil.ReadAll(r)

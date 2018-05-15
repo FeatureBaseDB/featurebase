@@ -1179,8 +1179,8 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 	// Generate some intersecting data.
 	maxX := 1048576 / 2
 	sz := maxX
-	rows := make([]uint64, sz, sz)
-	cols := make([]uint64, sz, sz)
+	rows := make([]uint64, sz)
+	cols := make([]uint64, sz)
 
 	max := 0
 	for row := 0; row < 100; row++ {
@@ -1215,8 +1215,8 @@ func BenchmarkFragment_Import(b *testing.B) {
 	defer f.Close()
 	maxX := 1048576 * 5 * 2
 	sz := maxX
-	rows := make([]uint64, sz, sz)
-	cols := make([]uint64, sz, sz)
+	rows := make([]uint64, sz)
+	cols := make([]uint64, sz)
 	i := 0
 	for row := 0; row < 100; row++ {
 		val := 1

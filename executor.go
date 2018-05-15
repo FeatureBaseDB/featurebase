@@ -122,7 +122,7 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	for _, call := range q.Calls {
 		if call.SupportsInverse() && needsSlices {
 			// Fetch frame & row label based on argument.
-			frame, _ := call.Args["frame"].(string)
+			frame := call.Args["frame"].(string)
 			if frame == "" {
 				frame = DefaultFrame
 			}
@@ -192,7 +192,7 @@ func (e *Executor) validateCallArgs(c *pql.Call) error {
 		case []int64, []uint64:
 			// noop
 		case []interface{}:
-			b := make([]int64, len(v), len(v))
+			b := make([]int64, len(v))
 			for i := range v {
 				b[i] = v[i].(int64)
 			}
@@ -206,9 +206,9 @@ func (e *Executor) validateCallArgs(c *pql.Call) error {
 
 // executeSum executes a Sum() call.
 func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
-	if frame, _ := c.Args["frame"]; frame == "" {
+	if frame := c.Args["frame"]; frame == "" {
 		return ValCount{}, errors.New("Sum(): frame required")
-	} else if field, _ := c.Args["field"]; field == "" {
+	} else if field := c.Args["field"]; field == "" {
 		return ValCount{}, errors.New("Sum(): field required")
 	}
 
@@ -241,9 +241,9 @@ func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, sl
 
 // executeFieldMin executes a Min() call.
 func (e *Executor) executeFieldMin(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
-	if frame, _ := c.Args["frame"]; frame == "" {
+	if frame := c.Args["frame"]; frame == "" {
 		return ValCount{}, errors.New("Min(): frame required")
-	} else if field, _ := c.Args["field"]; field == "" {
+	} else if field := c.Args["field"]; field == "" {
 		return ValCount{}, errors.New("Min(): field required")
 	}
 
@@ -276,9 +276,9 @@ func (e *Executor) executeFieldMin(ctx context.Context, index string, c *pql.Cal
 
 // executeFieldMax executes a Max() call.
 func (e *Executor) executeFieldMax(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
-	if frame, _ := c.Args["frame"]; frame == "" {
+	if frame := c.Args["frame"]; frame == "" {
 		return ValCount{}, errors.New("Max(): frame required")
-	} else if field, _ := c.Args["field"]; field == "" {
+	} else if field := c.Args["field"]; field == "" {
 		return ValCount{}, errors.New("Max(): field required")
 	}
 
@@ -1554,7 +1554,7 @@ loop:
 // If a mapping of slices to a node fails then the slices are resplit across
 // secondary nodes and retried. This continues to occur until all nodes are exhausted.
 func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64, c *pql.Call, opt *ExecOptions, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
-	ch := make(chan mapResponse, 0)
+	ch := make(chan mapResponse)
 
 	// Wrap context with a cancel to kill goroutines on exit.
 	ctx, cancel := context.WithCancel(ctx)

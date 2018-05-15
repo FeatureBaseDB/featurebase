@@ -75,7 +75,7 @@ type Holder struct {
 func NewHolder() *Holder {
 	return &Holder{
 		indexes: make(map[string]*Index),
-		closing: make(chan struct{}, 0),
+		closing: make(chan struct{}),
 
 		opened: make(chan struct{}),
 
