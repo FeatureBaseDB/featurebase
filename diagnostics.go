@@ -85,6 +85,9 @@ func (d *DiagnosticsCollector) Flush() error {
 		return errors.Wrap(err, "encoding")
 	}
 	req, err := http.NewRequest("POST", d.host, bytes.NewReader(buf))
+	if err != nil {
+		return errors.Wrap(err, "making new request")
+	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := d.client.Do(req)
 	if err != nil {
@@ -99,6 +102,9 @@ func (d *DiagnosticsCollector) Flush() error {
 func (d *DiagnosticsCollector) CheckVersion() error {
 	var rsp versionResponse
 	req, err := http.NewRequest("GET", d.VersionURL, nil)
+	if err != nil {
+		return errors.Wrap(err, "making request")
+	}
 	resp, err := d.client.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "getting version")

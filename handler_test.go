@@ -1076,6 +1076,9 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 	t.Run("ErrFrameFieldNotAllowed", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		_, err := idx.CreateFrameIfNotExists("f1", pilosa.FrameOptions{})
+		if err != nil {
+			t.Fatalf("creating frame: %v", err)
+		}
 
 		resp, err := http.Get(s.URL + "/index/i/frame/f1/fields")
 		if err != nil {

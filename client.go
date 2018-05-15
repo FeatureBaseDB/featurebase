@@ -1111,6 +1111,9 @@ func (c *InternalHTTPClient) SendMessage(ctx context.Context, uri *URI, pb proto
 
 	u := uriPathToURL(uri, "/cluster/message")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(msg))
+	if err != nil {
+		return errors.Wrap(err, "making new request")
+	}
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+Version)
 
