@@ -3306,7 +3306,7 @@ func xorBitmapRun(a, b *Container) *Container {
 	return output
 }
 
-func BitmapsEqual(b, c *Bitmap) error {
+func bitmapsEqual(b, c *Bitmap) error {
 	if b.OpWriter != c.OpWriter {
 		return errors.New("opWriters not equal")
 	}

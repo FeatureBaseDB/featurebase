@@ -2609,6 +2609,24 @@ func TestIntersectArrayBitmap(t *testing.T) {
 	}
 }
 
+func TestBitmapClone(t *testing.T) {
+	b := NewFileBitmap()
+	for i := uint64(61000); i < 71000; i++ {
+		b.Add(i)
+	}
+	c := b.Clone()
+	if err := bitmapsEqual(b, c); err != nil {
+		t.Fatalf("Clone Objects not equal: %v\n", err)
+	}
+	d := func() *Bitmap { //anybody know how to declare a nil value?
+		return nil
+	}()
+	e := d.Clone()
+	if e != nil {
+		t.Fatalf("Clone nil Objects not equal\n")
+	}
+}
+
 // rleCont returns a slice of numbers all in the range starting from
 // container_width*num, and ending at container_width*(num+1)-1. If left is
 // true, then the first 100 bits will be set, if mid is true, 100 bits in the

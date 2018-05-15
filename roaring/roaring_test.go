@@ -29,24 +29,6 @@ import (
 	_ "github.com/pilosa/pilosa/test"
 )
 
-func TestBitmapClone(t *testing.T) {
-	b := roaring.NewFileBitmap()
-	for i := uint64(61000); i < 71000; i++ {
-		b.Add(i)
-	}
-	c := b.Clone()
-	if err := roaring.BitmapsEqual(b, c); err != nil {
-		t.Fatalf("Clone Objects not equal: %v\n", err)
-	}
-	d := func() *roaring.Bitmap { //anybody know how to declare a nil value?
-		return nil
-	}()
-	e := d.Clone()
-	if e != nil {
-		t.Fatalf("Clone nil Objects not equal\n")
-	}
-}
-
 func TestContainerCount(t *testing.T) {
 	b := roaring.NewFileBitmap(65535)
 
