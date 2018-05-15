@@ -28,7 +28,7 @@ Pilosa is a concurrent application written in Go and can take full advantage of 
 
 #### Disk
 
-Even though the main dataset is in memory Pilosa does back up to disk frequently. We recommend SSDs--especially if you have a write heavy application.
+Even though the main dataset is in memory Pilosa does back up to disk frequently. We recommend SSDs—especially if you have a write heavy application.
 
 #### Network
 

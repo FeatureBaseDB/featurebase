@@ -18,7 +18,7 @@ Pilosa is not a database in the traditional sense. While Pilosa does store data 
 
 Pilosa sits on top of a data store or multiple data stores.
 
-### How is Pilosa different than Elasticsearch since they are both indexes?
+### How is Pilosa different from Elasticsearch since they are both indexes?
 
 Elasticsearch is a search engine based on Lucene, and is therefore very good at indexing and searching large volumes of unstructured text. As it matures, Elasticsearch has continued to move into the analytics space, but its core data object is still the "document". Pilosa is specifically designed to index structured data and improve query speed. By representing data as the relationship between objects, and then storing those relationships in bitmaps, Pilosa can very efficiently search and compare many millions of data points while still maintaining a small memory footprint.
 
