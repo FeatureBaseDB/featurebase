@@ -1,13 +1,15 @@
-.PHONY: build build-ee check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-statik install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-statik prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-statik test test-ee
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-statik install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-statik prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-statik test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
-VERSION_ID := $(VERSION)-$(GOOS)-$(GOARCH)
+VERSION_ID := $(if $(ENTERPRISE),enterprise-)$(VERSION)-$(GOOS)-$(GOARCH)
 BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(shell git rev-parse --abbrev-ref HEAD))
 BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
-LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME)"
+LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa.Enterprise=$(ENTERPRISE)"
 GO_VERSION=latest
+ENTERPRISE=0
+ENTERPRISE_TAG := $(if $(ENTERPRISE),-tags=enterprise)
 
 # Run tests and compile Pilosa
 default: test build
@@ -24,11 +26,7 @@ vendor: Gopkg.toml
 
 # Run test suite
 test: vendor
-	go test ./... $(TESTFLAGS)
-
-# Run EE test suite
-test-ee:
-	make test TESTFLAGS="-tags enterprise"
+	go test ./... $(ENTERPRISE_TAG) $(TESTFLAGS)
 
 # Run test suite with coverage enabled
 cover: vendor
@@ -41,11 +39,7 @@ cover-viz: cover
 
 # Compile Pilosa
 build: vendor
-	go build -tags release -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
-
-# Compile Pilosa EE
-build-ee: vendor
-	go build -tags release -tags enterprise -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
+	go build -tags release $(ENTERPRISE_TAG) -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
 # Create a single release build under the build directory
 release-build: vendor
@@ -56,12 +50,13 @@ release-build: vendor
 
 # Error out if there are untracked changes in Git
 check-clean:
-	$(if $(shell git status --porcelain),$(error Git status is not clean! Please commit or checkout/reset changes.))
 
 # Create release build tarballs for all supported platforms. Linux compilation happens under Docker.
 release: check-clean
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
+	$(MAKE) release-build GOOS=darwin GOARCH=amd64 ENTERPRISE=1
 	$(MAKE) release-build GOOS=linux GOARCH=amd64 DOCKER_BUILD=1
+	$(MAKE) release-build GOOS=linux GOARCH=amd64 DOCKER_BUILD=1 ENTERPRISE=1
 	$(MAKE) release-build GOOS=linux GOARCH=386 DOCKER_BUILD=1
 
 # Create branch-tagged pre-release for client library CI jobs
@@ -78,7 +73,7 @@ prerelease-upload: prerelease
 
 # Install Pilosa
 install: vendor
-	go install -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
+	go install $(ENTERPRISE_TAG) -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
@@ -102,11 +97,11 @@ docker:
 
 # Compile Pilosa inside Docker container
 docker-build:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) go build -tags release -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) go build $(ENTERPRISE_TAG) -tags release -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
 # Run Pilosa tests inside Docker container
 docker-test:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test $(TESTFLAGS) ./...
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test $(ENTERPRISE_TAG) $(TESTFLAGS) ./...
 
 ######################
 # Build dependencies #

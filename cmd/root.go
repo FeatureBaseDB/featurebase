@@ -30,6 +30,10 @@ import (
 var subcommandFns = map[string]func(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command{}
 
 func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	productName := "Pilosa " + pilosa.Version
+	if pilosa.EnterpriseEnabled {
+		productName = "Pilosa Enterprise " + pilosa.Version
+	}
 	rc := &cobra.Command{
 		Use:   "pilosa",
 		Short: "Pilosa - A Distributed In-memory Binary Bitmap Index.",
@@ -41,7 +45,7 @@ tools for administering pilosa, importing/exporting data,
 backing up, and more. Complete documentation is available
 at https://www.pilosa.com/docs/
 
-Version: ` + pilosa.Version + `
+` + productName + `
 Build Time: ` + pilosa.BuildTime + "\n",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
