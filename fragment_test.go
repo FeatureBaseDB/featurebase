@@ -1148,3 +1148,94 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
+
+func BenchmarkFragment_Snapshot(b *testing.B) {
+	if *FragmentPath == "" {
+		b.Skip("no fragment specified")
+	}
+
+	b.ReportAllocs()
+	// Open the fragment specified by the path.
+	f := pilosa.NewFragment(*FragmentPath, "i", "f", pilosa.ViewStandard, 0)
+	if err := f.Open(); err != nil {
+		b.Fatal(err)
+	}
+	defer f.Close()
+	b.ResetTimer()
+
+	// Reset timer and execute benchmark.
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		err := f.Snapshot()
+		if err != nil {
+			b.Fatalf("unexpected count (reopen): %s", err)
+		}
+	}
+}
+
+func BenchmarkFragment_FullSnapshot(b *testing.B) {
+	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	defer f.Close()
+	// Generate some intersecting data.
+	maxX := 1048576 / 2
+	sz := maxX
+	rows := make([]uint64, sz, sz)
+	cols := make([]uint64, sz, sz)
+
+	max := 0
+	for row := 0; row < 100; row++ {
+		val := 1
+		i := 0
+		for col := 0; col < SliceWidth/2; col++ {
+			rows[i] = uint64(row)
+			cols[i] = uint64(val)
+			val += 2
+			i++
+		}
+		if err := f.Import(rows, cols); err != nil {
+			b.Fatalf("Error Building Sample: %s", err)
+		}
+		if row > max {
+			max = row
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		if err := f.Snapshot(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFragment_Import(b *testing.B) {
+	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	defer f.Close()
+	maxX := 1048576 * 5 * 2
+	sz := maxX
+	rows := make([]uint64, sz, sz)
+	cols := make([]uint64, sz, sz)
+	i := 0
+	for row := 0; row < 100; row++ {
+		val := 1
+		for col := 0; col < SliceWidth/2; col++ {
+			rows[i] = uint64(row)
+			cols[i] = uint64(val)
+			val += 2
+			i++
+		}
+		if i == maxX {
+			break
+		}
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if err := f.Import(rows, cols); err != nil {
+			b.Fatalf("Error Building Sample: %s", err)
+		}
+	}
+}
