@@ -1156,12 +1156,14 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 		b.Skip("no fragment specified")
 	}
 
+	b.ReportAllocs()
 	// Open the fragment specified by the path.
 	f := pilosa.NewFragment(*FragmentPath, "i", "f", pilosa.ViewStandard, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
 	defer f.Close()
+	b.ResetTimer()
 
 	// Reset timer and execute benchmark.
 	b.ResetTimer()
@@ -1173,6 +1175,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 		}
 	}
 }
+
 func BenchmarkFragment_FullSnapshot(b *testing.B) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()

@@ -1,4 +1,4 @@
-// Copyright 2017 Pilosa Corp.
+// Copyright (C) 2017-2018 Pilosa Corp. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,16 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// +build enterprise
 
-package pilosa
+package server
 
-var Enterprise = "0"
-var EnterpriseEnabled = false
-var Version = "v0.0.0"
-var BuildTime = "not recorded"
-
-func init() {
-	if Enterprise == "1" {
-		EnterpriseEnabled = true
-	}
-}
+import (
+	_ "github.com/pilosa/pilosa/enterprise"
+)

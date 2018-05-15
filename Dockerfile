@@ -11,6 +11,7 @@ LABEL maintainer "dev@pilosa.com"
 
 COPY --from=builder /go/bin/pilosa /pilosa
 
+COPY LICENSE /LICENSE
 COPY NOTICE /NOTICE
 
 EXPOSE 10101

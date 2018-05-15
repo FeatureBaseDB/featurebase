@@ -159,6 +159,12 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "setting up logger")
 	}
 
+	productName := "Pilosa"
+	if pilosa.EnterpriseEnabled {
+		productName += " Enterprise"
+	}
+	m.logger.Printf("%s %s, build time %s\n", productName, pilosa.Version, pilosa.BuildTime)
+
 	handler := pilosa.NewHandler()
 	handler.Logger = m.logger
 	handler.FileSystem = &statik.FileSystem{}

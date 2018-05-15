@@ -230,8 +230,8 @@ type testOp struct {
 	exp string
 }
 
-func doContainer(containerType byte, data interface{}) *container {
-	c := &container{
+func doContainer(containerType byte, data interface{}) *Container {
+	c := &Container{
 		containerType: containerType,
 	}
 
@@ -248,12 +248,12 @@ func doContainer(containerType byte, data interface{}) *container {
 	return c
 }
 
-func setupContainerTests() map[byte]map[string]*container {
+func setupContainerTests() map[byte]map[string]*Container {
 
-	cts := make(map[byte]map[string]*container)
+	cts := make(map[byte]map[string]*Container)
 
 	// array containers
-	cts[ContainerArray] = map[string]*container{
+	cts[ContainerArray] = map[string]*Container{
 		"empty":         doContainer(ContainerArray, arrayEmpty()),
 		"full":          doContainer(ContainerArray, arrayFull()),
 		"firstBitSet":   doContainer(ContainerArray, arrayFirstBitSet()),
@@ -267,7 +267,7 @@ func setupContainerTests() map[byte]map[string]*container {
 	}
 
 	// bitmap containers
-	cts[ContainerBitmap] = map[string]*container{
+	cts[ContainerBitmap] = map[string]*Container{
 		"empty":         doContainer(ContainerBitmap, bitmapEmpty()),
 		"full":          doContainer(ContainerBitmap, bitmapFull()),
 		"firstBitSet":   doContainer(ContainerBitmap, bitmapFirstBitSet()),
@@ -281,7 +281,7 @@ func setupContainerTests() map[byte]map[string]*container {
 	}
 
 	// run containers
-	cts[ContainerRun] = map[string]*container{
+	cts[ContainerRun] = map[string]*Container{
 		"empty":         doContainer(ContainerRun, runEmpty()),
 		"full":          doContainer(ContainerRun, runFull()),
 		"firstBitSet":   doContainer(ContainerRun, runFirstBitSet()),
