@@ -1237,17 +1237,6 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	}
 }
 
-// Ensure executor returns an error if too many writes are in a single request.
-func TestExecutor_Execute_ErrMaxWritesPerRequest(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-	e.MaxWritesPerRequest = 3
-	if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit() ClearBit() SetBit() SetBit()`), nil, nil); err != pilosa.ErrTooManyWrites {
-		t.Fatalf("unexpected error: %s", err)
-	}
-}
-
 // Ensure SetColumnAttrs doesn't save `frame` as an attribute
 func TestExectutor_SetColumnAttrs_ExcludeFrame(t *testing.T) {
 	hldr := test.MustOpenHolder()

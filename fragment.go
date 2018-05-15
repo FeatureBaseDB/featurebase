@@ -1892,7 +1892,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 		// Generate query with sets & clears, and group the requests to not exceed MaxWritesPerRequest.
 		total := len(set.ColumnIDs) + len(clear.ColumnIDs)
-		maxWrites := s.Cluster.MaxWritesPerRequest
+		maxWrites := s.Cluster.maxWritesPerRequest
 		if maxWrites <= 0 {
 			maxWrites = 5000
 		}

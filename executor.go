@@ -46,7 +46,7 @@ type Executor struct {
 	Cluster *Cluster
 
 	// Maximum number of SetBit() or ClearBit() commands per request.
-	MaxWritesPerRequest int
+	maxWritesPerRequest int
 }
 
 // NewExecutor returns a new instance of Executor.
@@ -62,7 +62,7 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	}
 
 	// Verify that the number of writes do not exceed the maximum.
-	if e.MaxWritesPerRequest > 0 && q.WriteCallN() > e.MaxWritesPerRequest {
+	if e.maxWritesPerRequest > 0 && q.WriteCallN() > e.maxWritesPerRequest {
 		return nil, ErrTooManyWrites
 	}
 

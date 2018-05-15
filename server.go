@@ -56,7 +56,6 @@ type Server struct {
 	Holder      *Holder
 	Cluster     *Cluster
 	diagnostics *DiagnosticsCollector
-	executor    *Executor
 
 	// External
 	handler           *Handler
@@ -207,7 +206,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
 		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
-		executor:          NewExecutor(),
 		systemInfo:        NewNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
@@ -247,6 +245,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
 	}
 
+	// Get or create NodeID.
 	s.NodeID = s.LoadNodeID()
 
 	node, err := NewNode(s.NodeID,
@@ -258,14 +257,21 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, errors.Wrap(err, "creating node")
 	}
 
-	s.Cluster.Node = node
+	// Append the NodeID tag to stats.
 	s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
 
-	s.executor.Holder = s.Holder
-	s.executor.Node = node
-	s.executor.Cluster = s.Cluster
-	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
-	s.handler.API.Executor = s.executor
+	// Create executor for executing queries.
+	executor := NewExecutor()
+	executor.Holder = s.Holder
+	executor.Node = node
+	executor.Cluster = s.Cluster
+	executor.maxWritesPerRequest = s.maxWritesPerRequest
+
+	s.handler.API.Cluster = s.Cluster
+	s.handler.API.Executor = executor
+	s.handler.API.Holder = s.Holder
+
+	s.Cluster.Node = node
 
 	return s, nil
 }
@@ -284,24 +290,14 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
-	// Get or create NodeID.
-
-	// Append the NodeID tag to stats.
-
-	// Create default HTTP client
-
-	// Create executor for executing queries.
-
 	// Cluster settings.
 	s.Cluster.Broadcaster = s.Broadcaster
-	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
+	s.Cluster.maxWritesPerRequest = s.maxWritesPerRequest
 
 	// Initialize HTTP handler.
-	s.handler.API.Holder = s.Holder
 	s.handler.API.Broadcaster = s.Broadcaster
 	s.handler.API.BroadcastHandler = s
 	s.handler.API.StatusHandler = s
-	s.handler.API.Cluster = s.Cluster
 
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster

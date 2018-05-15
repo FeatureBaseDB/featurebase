@@ -75,7 +75,7 @@ type Cluster struct {
 	LongQueryTime time.Duration
 
 	// Maximum number of SetBit() or ClearBit() commands per request.
-	MaxWritesPerRequest int
+	maxWritesPerRequest int
 
 	// EventReceiver receives NodeEvents pertaining to node membership.
 	EventReceiver EventReceiver
