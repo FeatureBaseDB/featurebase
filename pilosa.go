@@ -111,7 +111,7 @@ const TimeFormat = "2006-01-02T15:04"
 
 // ValidateName ensures that the name is a valid format.
 func ValidateName(name string) error {
-	if nameRegexp.Match([]byte(name)) == false {
+	if !nameRegexp.Match([]byte(name)) {
 		return ErrName
 	}
 	return nil
