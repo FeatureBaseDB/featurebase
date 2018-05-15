@@ -233,7 +233,7 @@ func (c *RankCache) Recalculate() {
 func (c *RankCache) invalidate() {
 	// Don't invalidate more than once every X seconds.
 	// TODO: consider making this configurable.
-	if time.Now().Sub(c.updateTime).Seconds() < 10 {
+	if time.Since(c.updateTime).Seconds() < 10 {
 		return
 	}
 	c.stats.Count("cache.invalidate", 1, 1.0)
