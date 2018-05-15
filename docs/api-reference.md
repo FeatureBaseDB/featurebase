@@ -63,7 +63,7 @@ curl -XDELETE localhost:10101/index/user
 
 `POST /index/<index-name>/query`
 
-Sends a [query](../query-language) to the Pilosa server with the given index. The request body is UTF-8 encoded text and response body is in JSON by default.
+Sends a [query](../query-language/) to the Pilosa server with the given index. The request body is UTF-8 encoded text and response body is in JSON by default.
 
 ``` request
 curl localhost:10101/index/user/query \
