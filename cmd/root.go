@@ -43,7 +43,7 @@ func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 This binary contains Pilosa itself, as well as common
 tools for administering pilosa, importing/exporting data,
 backing up, and more. Complete documentation is available
-at https://www.pilosa.com/docs/
+at https://www.pilosa.com/docs/.
 
 ` + productName + `
 Build Time: ` + pilosa.BuildTime + "\n",

@@ -20,23 +20,23 @@ Pilosa is a standalone, compiled Go application, so there is no need to worry ab
 
 #### Memory
 
-Pilosa holds all row/column bitmap data in main memory. While this data is compressed more than a typical database, available memory is a primary concern.  In a production environment, we recommend choosing hardware with a large amount of memory >= 64GB.  Prefer a small number of hosts with lots of memory per host over a larger number with less memory each. Larger clusters tend to be less efficient overall due to increased inter-node communication.
+Pilosa holds all row/column bitmap data in main memory. While this data is compressed more than a typical database, available memory is a primary concern. In a production environment, we recommend choosing hardware with a large amount of memory >= 64GB. Prefer a small number of hosts with lots of memory per host over a larger number with less memory each. Larger clusters tend to be less efficient overall due to increased inter-node communication.
 
 #### CPUs
 
-Pilosa is a concurrent application written in Go and can take full advantage of multicore machines. The main unit of parallelism is the slice, so a single query will only use a number of cores up to the number of slices stored on that host. Multiple queries can still take advantage of multiple cores as well though, so tuning in this area is dependent on the expected workload.
+Pilosa is a concurrent application written in Go and can take full advantage of multicore machines. The main unit of parallelism is the [slice](../data-model/#slice), so a single query will only use a number of cores up to the number of slices stored on that host. Multiple queries can still take advantage of multiple cores as well though, so tuning in this area is dependent on the expected workload.
 
 #### Disk
 
-Even though the main dataset is in memory Pilosa does back up to disk frequently.  We recommend SSDs--especially if you have a write heavy application.
+Even though the main dataset is in memory Pilosa does back up to disk frequently. We recommend SSDs—especially if you have a write heavy application.
 
 #### Network
 
-Pilosa is designed to be a distributed application, with data replication shared across the cluster.  As such every write and read needs to communicate with several nodes.  Therefore fast internode communication is essential. If using a service like AWS we recommend that all node exist in the same region and availability zone.  The inherent latency of spreading a Pilosa cluster across physical regions it not usually worth the redundancy protection.  Since Pilosa is designed to be an Indexing service there already should be a system of record, or ability to rebuild a Cluster quickly from backups.
+Pilosa is designed to be a distributed application, with data replication shared across the cluster. As such every write and read needs to communicate with several nodes. Therefore fast internode communication is essential. If using a service like AWS we recommend that all node exist in the same region and availability zone. The inherent latency of spreading a Pilosa cluster across physical regions it not usually worth the redundancy protection. Since Pilosa is designed to be an indexing service there already should be a system of record, or ability to rebuild a cluster quickly from backups.
 
 #### Overview
 
-While Pilosa does have some high system requirements it is not a best practice to set up a cluster with the fewest, largest machines available.  You want an evenly distributed load across several nodes in a cluster to easily recover from a single node failure, and have the resource capacity to handle a missing node until it's repaired or replaced.   Nor is it advisable to have many small machines.  The internode network traffic will become a bottleneck.  You can always add nodes later, but that does require some down time.
+While Pilosa does have some high system requirements it is not a best practice to set up a cluster with the fewest, largest machines available. You want an evenly distributed load across several nodes in a cluster to easily recover from a single node failure, and have the resource capacity to handle a missing node until it's repaired or replaced. Nor is it advisable to have many small machines. The internode network traffic will become a bottleneck. You can always add nodes later, but that does require some down time.
 
 ### Open File Limits
 
@@ -48,7 +48,7 @@ On Mac OS X, `ulimit` does not behave predictably. [This blog post](https://blog
 
 #### Importing
 
-The import API expects a csv of rowID,columnID's.
+The import API expects a csv of the format `Row,Column`.
 
 When importing large datasets remember it is much faster to pre sort the data by row ID and then by column ID in ascending order. You can use the `--sort` flag to do that. Also, avoid querying Pilosa until the import is complete, otherwise you will experience inconsistent results.
 
@@ -58,7 +58,7 @@ pilosa import --sort -i project -f stargazer project-stargazer.csv
 
 ##### Importing Field Values
 
-If you are using [BSI Range-Encoding](../data-model/#bsi-range-encoding) field values, you can import field values for a single frame and single field using `--field`. The CSV file should be in the format `ColumnID,Value`.
+If you are using [BSI Range-Encoding](../data-model/#bsi-range-encoding) field values, you can import field values for a single frame and single field using `--field`. The CSV file should be in the format `Column,Value`.
 
 ```
 pilosa import -i project -f stargazer --field star_count project-stargazer-counts.csv
@@ -70,10 +70,17 @@ pilosa import -i project -f stargazer --field star_count project-stargazer-count
 
 #### Exporting
 
-Exporting Data to csv can be performed on a live instance of Pilosa. You need to specify the Index, Frame, and View(default is standard). The API also expects the slice number, but the `pilosa export` sub command will export all slices within a Frame. The data will be in csv format rowID,columnID and sorted by columnID.
-```
+Exporting data to csv can be performed on a live instance of Pilosa. You need to specify the index, frame, and view (default is standard). The API also expects the slice number, but the `pilosa export` sub command will export all slices within a Frame. The data will be in csv format `Row,Column` and sorted by column.
+```request
 curl "http://localhost:10101/export?index=repository&frame=stargazer&slice=0&view=standard" \
      --header "Accept: text/csv"
+```
+```response
+2,10
+2,30
+3,426
+4,2
+...
 ```
 
 ### Versioning
@@ -107,13 +114,13 @@ Pilosa v0.9 introduces a few compatibility changes that need to be addressed.
 
 **Configuration changes**: These changes need to occur before starting Pilosa v0.9:
 
-1. Cluster-resize capability eliminates the `hosts` setting. Now, cluster membership is determined by `gossip`. This is only a factor if you are running Pilosa as a cluster.
+1. Cluster-resize capability eliminates the `hosts` setting. Now, cluster membership is determined by gossip. This is only a factor if you are running Pilosa as a cluster.
 2. Gossip-based cluster membership requires you to set a single cluster node as a [coordinator](../configuration/#cluster-coordinator). Make sure only a single node has the `cluster.coordinator` flag set.
 3. `gossip.seed` has been renamed [`gossip.seeds`](../configuration/#gossip-seeds) and takes multiple items. It is recommended that at least two nodes are specified as gossip seeds.
 
 **Data directory changes**: These changes need to occur while the cluster is shut down, before starting Pilosa v0.9:
 
-Pilosa v0.9 adds two new files to the data directory, an `.id` file and a `.topology` file. Due to the way Pilosa internally shards indices, upgrading a Pilosa cluster will result in data loss if an existing cluster is brought up without these files. New clusters will generate them automatically, but you may migrate an existing cluster by using a tool we called `topology-generator`:
+Pilosa v0.9 adds two new files to the data directory, an `.id` file and a `.topology` file. Due to the way Pilosa internally shards indices, upgrading a Pilosa cluster will result in data loss if an existing cluster is brought up without these files. New clusters will generate them automatically, but you may migrate an existing cluster by using a tool we called [`topology-generator`](https://github.com/pilosa/upgrade-utils/tree/master/v0.9/topology-generator):
 
 1. Observe the `cluster.hosts` configuration value in Pilosa v0.8. The ordering of the nodes in the config file is significant, as it determines shard (AKA slice) ownership. Pilosa v0.9 uses UUIDs for each node, and the ordering is alphabetical.
 2. Install the `topology-generator`: `go get github.com/pilosa/upgrade-utils/v0.9/topology-generator`.
@@ -204,9 +211,9 @@ curl localhost:10101/cluster/resize/set-coordinator \
 
 ### Backup/restore
 
-Pilosa continuously writes out the in-memory bitmap data to disk.  This data is organized by Index->Frame->Views->Fragment->numbered slice files.  These data files can be routinely backed up to restore nodes in a cluster.
+Pilosa continuously writes out the in-memory bitmap data to disk. This data is organized by Index->Frame->Views->Fragment->numbered slice files. These data files can be routinely backed up to restore nodes in a cluster.
 
-Depending on the size of your data you have two options.  For a small dataset you can rely on the periodic anti-entropy sync process to replicate existing data back to this node.
+Depending on the size of your data you have two options. For a small dataset you can rely on the periodic anti-entropy sync process to replicate existing data back to this node.
 
 For larger datasets and to make this process faster you could copy the relevant data files from the other nodes to the new one before startup.
 
@@ -224,7 +231,7 @@ Note: This will only work when the replication factor is >= 2
 - To accomplish this you will first need:
   - List of all indexes on your cluster
   - List of all frames in your indexes
-  - Max slice per index, listed in the /status endpoint
+  - Max slice per index, listed in the `/slices/max` endpoint
 - With this information you can query the `/fragment/nodes` endpoint and iterate over each slice
 - Using the list of slices owned by this node you will then need to manually:
   - setup a directory structure similar to the other nodes with a path for each Index/Frame
@@ -239,19 +246,19 @@ Each Pilosa cluster is configured by default to share anonymous usage details wi
 
 - **Version:** Version string of the build.
 - **Host:** Host URI.
-- **Cluster:** List of nodes in the Cluster.
-- **NumNodes:** Number of nodes in the Cluster.
-- **NumCPU:** Number of Cores per Node
+- **Cluster:** List of nodes in the cluster.
+- **NumNodes:** Number of nodes in the cluster.
+- **NumCPU:** Number of cores per node
 - **BSIEnabled:** Bit Slice Index Frames in use.
 - **TimeQuantumEnabled:** Time Quantum Frames in use.
-- **NumIndexes:** Number of Indexes in the Cluster.
-- **NumFrames:** Number of Frames in the Cluster.
-- **NumSlices:** Number of Slices in the Cluster.
-- **NumViews:** Number of Views in the Cluster.
+- **NumIndexes:** Number of indexes in the Cluster.
+- **NumFrames:** Number of frames in the Cluster.
+- **NumSlices:** Number of slices in the Cluster.
+- **NumViews:** Number of views in the Cluster.
 - **OpenFiles:** Open file handle count.
 - **GoRoutines:** Go routine count.
  
-You can opt-out of the Pilosa diagnostics reporting by setting either the command line configuration option `--metric.diagnostics=false`, use the `PILOSA_METRIC_DIAGNOSTICS` environment variable, or the TOML configuration file `[metric]` `diagnostics` option.
+You can opt-out of the Pilosa diagnostics reporting by setting the command line configuration option `--metric.diagnostics=false`, the `PILOSA_METRIC_DIAGNOSTICS` environment variable, or the TOML configuration file `[metric]` `diagnostics` option.
 
 ### Metrics
 
@@ -274,14 +281,14 @@ StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
 #### Events
 We currently track the following events
 
-- **Index:** The creation of a new Index.
-- **Frame:** The creation of a new Frame.
-- **MaxSlice:** The Creation of a new Slice.
+- **Index:** The creation of a new index.
+- **Frame:** The creation of a new frame.
+- **MaxSlice:** The creation of a new Slice.
 - **SetBit:** Count of set bits.
 - **ClearBit:** Count of cleared bits.
 - **ImportBit:** During a bulk data import this represents the count of bits created.
-- **SetRowAttrs:** Count of Attributes set per row.
-- **SetColumnAttrs:** Count of Attributes set per collumn.
+- **SetRowAttrs:** Count of attributes set per row.
+- **SetColumnAttrs:** Count of attributes set per column.
 - **Bitmap:** Count of Bitmap queries.
 - **TopN:** Count of TopN queries.
 - **Union:** Count of Union queries.
@@ -291,6 +298,6 @@ We currently track the following events
 - **Range:** Count of Range queries.
 - **Snapshot:** Event count when the snapshot process is triggered.
 - **BlockRepair:** Count of data blocks that were out of sync and repaired.
-- **Garbage Collection:** Event count when Garbage Collection occurs.
-- **Goroutines:** Number of running Goroutines.
+- **GarbageCollection:** Event count when garbage collection occurs.
+- **Goroutines:** Number of running goroutines.
 - **OpenFiles:** Number of open file handles associated with running Pilosa process ID.

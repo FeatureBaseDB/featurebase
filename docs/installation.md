@@ -40,10 +40,10 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
     This binary contains Pilosa itself, as well as common
     tools for administering pilosa, importing/exporting data,
     backing up, and more. Complete documentation is available
-    at https://www.pilosa.com/docs/
+    at https://www.pilosa.com/docs/.
 
-    Version: v0.4.0
-    Build Time: 2017-06-08T19:44:21+0000
+    Version: v0.9.0-64-gf053d9a5
+    Build Time: 2018-05-14T22:14:01+0000
 
     Usage:
       pilosa [command]
@@ -60,10 +60,10 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       inspect         Get stats on a pilosa data file.
       restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
-      sort            Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
+      -h, --help            help for pilosa
 
     Use "pilosa [command] --help" for more information about a command.
     ```
@@ -101,16 +101,15 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
     This binary contains Pilosa itself, as well as common
     tools for administering pilosa, importing/exporting data,
     backing up, and more. Complete documentation is available
-    at https://www.pilosa.com/docs/
+    at https://www.pilosa.com/docs/.
 
-    Version: v0.4.0
-    Build Time: 2017-06-08T19:44:21+0000
+    Version: v0.9.0-64-gf053d9a5
+    Build Time: 2018-05-14T22:14:01+0000
 
     Usage:
       pilosa [command]
 
     Available Commands:
-
       backup          Backup data from pilosa.
       bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
@@ -122,10 +121,10 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       inspect         Get stats on a pilosa data file.
       restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
-      sort            Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
+      -h, --help            help for pilosa
 
     Use "pilosa [command] --help" for more information about a command.
     ```
@@ -169,10 +168,10 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
     This binary contains Pilosa itself, as well as common
     tools for administering pilosa, importing/exporting data,
     backing up, and more. Complete documentation is available
-    at https://www.pilosa.com/docs/
+    at https://www.pilosa.com/docs/.
 
-    Version: v0.4.0
-    Build Time: 2017-06-08T19:44:21+0000
+    Version: v0.9.0-64-gf053d9a5
+    Build Time: 2018-05-14T22:14:01+0000
 
     Usage:
       pilosa [command]
@@ -189,11 +188,10 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       inspect         Get stats on a pilosa data file.
       restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
-      sort            Sort import data for optimal import performance.
-
 
     Flags:
       -c, --config string   Configuration file to read from.
+      -h, --help            help for pilosa
 
     Use "pilosa [command] --help" for more information about a command.
     ```
@@ -261,10 +259,10 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
     This binary contains Pilosa itself, as well as common
     tools for administering pilosa, importing/exporting data,
     backing up, and more. Complete documentation is available
-    at https://www.pilosa.com/docs/
+    at https://www.pilosa.com/docs/.
 
-    Version: v0.4.0
-    Build Time: 2017-06-08T19:44:21+0000
+    Version: v0.9.0-64-gf053d9a5
+    Build Time: 2018-05-14T22:14:01+0000
 
     Usage:
       pilosa [command]
@@ -281,10 +279,10 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
       inspect         Get stats on a pilosa data file.
       restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
-      sort            Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
+      -h, --help            help for pilosa
 
     Use "pilosa [command] --help" for more information about a command.
     ```
@@ -328,10 +326,10 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
     This binary contains Pilosa itself, as well as common
     tools for administering pilosa, importing/exporting data,
     backing up, and more. Complete documentation is available
-    at https://www.pilosa.com/docs/
+    at https://www.pilosa.com/docs/.
 
-    Version: v0.4.0
-    Build Time: 2017-06-08T19:44:21+0000
+    Version: v0.9.0-64-gf053d9a5
+    Build Time: 2018-05-14T22:14:01+0000
 
     Usage:
       pilosa [command]
@@ -348,10 +346,10 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
       inspect         Get stats on a pilosa data file.
       restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
-      sort            Sort import data for optimal import performance.
 
     Flags:
       -c, --config string   Configuration file to read from.
+      -h, --help            help for pilosa
 
     Use "pilosa [command] --help" for more information about a command.
     ```

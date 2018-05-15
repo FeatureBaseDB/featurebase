@@ -46,7 +46,7 @@ mkdir $HOME/pilosa-tls-tutorial && cd $_
 
 Securing a Pilosa cluster consists of securing the communication between nodes using TLS and Gossip encryption. [Pilosa Enterprise](https://www.pilosa.com/enterprise/) additionally supports authentication and other security features, but those are not covered in this tutorial.
 
-The first step is acquiring an SSL certificate. You can buy a commercial certificate or retrieve a Let's Encrypt certificiate but we will be using a self signed certificate for practical reasons. Using self-signed certificates is not recommended in production, since it makes man in the middle attacks easy.
+The first step is acquiring an SSL certificate. You can buy a commercial certificate or retrieve a Let's Encrypt certificate but we will be using a self signed certificate for practical reasons. Using self-signed certificates is not recommended in production, since it makes man in the middle attacks easy.
 
 The following command creates a 2048bit self-signed wildcard certificate for `*.pilosa.local` which expires 10 years later.
 
@@ -178,7 +178,7 @@ cd $HOME/pilosa-tls-tutorial
 pilosa server -c node3.config.toml
 ```
 
-Let's ensure that all three Pilosa servers are runnning and they are connected:
+Let's ensure that all three Pilosa servers are running and they are connected:
 ```
 curl -k --ipv4 https://01.pilosa.local:10501/status
 ```

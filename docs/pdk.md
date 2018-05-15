@@ -38,29 +38,29 @@ the record to arrive at that field. For example:
 
 This JSON object would result in the following Pilosa schema:
 
-| Name           | Field     | Type   | Size/Min |        Max |
-|----------------|-----------|--------|----------|------------|
-| name           |           | ranked |   100000 |            |
-| favorite_foods |           | ranked |   100000 |            |
-| default        |           | Ranked |   100000 |            |
-|                | age       | int    |        0 | 2147483647 |
-| location       |           | ranked |     1000 |            |
-|                | latitude  | int    |        0 | 2147483647 |
-|                | longitude | int    |        0 | 2147483647 |
-| location-city  |           | ranked |   100000 |            |
-| location-state |           | ranked |   100000 |            |
+| Name           | Field     | Type   | Min |        Max |   Size |
+|----------------|-----------|--------|-----|------------|--------|
+| name           |           | ranked |     |            | 100000 |
+| favorite_foods |           | ranked |     |            | 100000 |
+| default        |           | ranked |     |            | 100000 |
+|                | age       | int    |   0 | 2147483647 |        |
+| location       |           | ranked |     |            |   1000 |
+|                | latitude  | int    |   0 | 2147483647 |        |
+|                | longitude | int    |   0 | 2147483647 |        |
+| location-city  |           | ranked |     |            | 100000 |
+| location-state |           | ranked |     |            | 100000 |
 
-All frames are created as ranked frames by default, and fields are created with
-a minmum size of zero and a fixed maximum of 2147483647. Fields at the top level
+All frames are created as ranked frames by default, with the cache size listed above. Fields are created with
+a minimum size of zero and a fixed maximum of 2147483647. Fields at the top level
 are created in the default frame. Frames are a dash-separated concatenation of
 all key values in the path - you can see this with frames like location-city.
 
 
-Most the options to `pdk kafka` are self-explanatory (kafka hosts, pilosa hosts,
+Most of the options to `pdk kafka` are self-explanatory (kafka hosts, pilosa hosts,
 kafka topics, kafka group, etc.), but there are a few options that give some
 control over the way data is indexed, and ingestion performance.
 
-* `--batch-size`: The batch size control how many set bits or values are batched up to be imported *per frame*. So for fields that have one value per record, you have to wait for `batch-size` records to come through before you'll see the data indexed in Pilosa. Fields like `favorite_foods` which can have multiple values could be indexed sooner.
+* `--batch-size`: The batch size controls how many set bits or values are batched up to be imported *per frame*. So for fields that have one value per record, you have to wait for `batch-size` records to come through before you'll see the data indexed in Pilosa. Fields like `favorite_foods` which can have multiple values could be indexed sooner.
 * `--framer.collapse`: This is a list of strings which will be removed from the frame names created by dash-concatentating all names in the JSON path to a value. E.G. if "location" were listed in `framer.collapse`, then there would be frames named "city" and "state" rather than "location-city" and "location-state".
 * `--framer.ignore`: This allows you to skip indexing on any path containing these strings. If you have a field like email address or some other unique ID, you might not want to index it.
 * `--subject-path`: If nothing is passed for this option, then each record will be assigned a unique sequential column ID. If `subject-path` is specified, then the value at this path in the record will be mapped to a column ID. If the same value appears in another record, the same column ID will be used.
