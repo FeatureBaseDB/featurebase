@@ -93,10 +93,10 @@ type Containers interface {
 	// Iterator returns a Contiterator which after a call to Next(), a call to Value() will
 	// return the first container at or after key. found will be true if a
 	// container is found at key.
-	Iterator(key uint64) (citer Contiterator, found bool)
+	Iterator(key uint64) (citer ContainerIterator, found bool)
 }
 
-type Contiterator interface {
+type ContainerIterator interface {
 	Next() bool
 	Value() (uint64, *Container)
 }
@@ -798,7 +798,7 @@ type BitmapInfo struct {
 // Iterator represents an iterator over a Bitmap.
 type Iterator struct {
 	bitmap *Bitmap
-	citer  Contiterator
+	citer  ContainerIterator
 	key    uint64
 	c      *Container
 	j, k   int // i: container; j: array index, bit index, or run index; k: offset within the run

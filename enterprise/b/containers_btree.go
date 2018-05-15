@@ -133,7 +133,7 @@ func (btc *BTreeContainers) Size() int {
 	return btc.tree.Len()
 }
 
-func (btc *BTreeContainers) Iterator(key uint64) (citer roaring.Contiterator, found bool) {
+func (btc *BTreeContainers) Iterator(key uint64) (citer roaring.ContainerIterator, found bool) {
 	e, ok := btc.tree.Seek(key)
 	if ok {
 		found = true

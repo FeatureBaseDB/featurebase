@@ -120,7 +120,7 @@ func (sc *SliceContainers) seek(key uint64) (int, bool) {
 	return i, found
 }
 
-func (sc *SliceContainers) Iterator(key uint64) (citer Contiterator, found bool) {
+func (sc *SliceContainers) Iterator(key uint64) (citer ContainerIterator, found bool) {
 	i, found := sc.seek(key)
 	return &SliceIterator{e: sc, i: i}, found
 }
