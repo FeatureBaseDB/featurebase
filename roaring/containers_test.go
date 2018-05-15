@@ -4,15 +4,11 @@ import (
 	"testing"
 )
 
-//func TestContainersSliceIterator(t *testing.T) {
-//	btc := NewBTreeContainers()
-//	testContainersIterator(btc, t)
-//}
-func TestContainersBTreeIterator(t *testing.T) {
-	slc := NewSliceContainers()
+func TestContainersIterator(t *testing.T) {
+	slc := NewFileBitmap().Containers
 	testContainersIterator(slc, t)
-
 }
+
 func testContainersIterator(cs Containers, t *testing.T) {
 	itr, found := cs.Iterator(0)
 	if found {
