@@ -192,7 +192,7 @@ func (e *Executor) validateCallArgs(c *pql.Call) error {
 		case []int64, []uint64:
 			// noop
 		case []interface{}:
-			b := make([]int64, len(v), len(v))
+			b := make([]int64, len(v))
 			for i := range v {
 				b[i] = v[i].(int64)
 			}
@@ -1554,7 +1554,7 @@ loop:
 // If a mapping of slices to a node fails then the slices are resplit across
 // secondary nodes and retried. This continues to occur until all nodes are exhausted.
 func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64, c *pql.Call, opt *ExecOptions, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
-	ch := make(chan mapResponse, 0)
+	ch := make(chan mapResponse)
 
 	// Wrap context with a cancel to kill goroutines on exit.
 	ctx, cancel := context.WithCancel(ctx)
