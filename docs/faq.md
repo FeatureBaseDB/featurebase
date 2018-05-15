@@ -16,7 +16,7 @@ Pilosa is not a database in the traditional sense. While Pilosa does store data 
 
 ### Where does Pilosa fit in my stack?
 
-Pilosa sits on top of a data store or multiple data stores.
+Pilosa was designed to index the relationships in your data. Pilosa runs along with your existing stack, integrating with one or more backing data stores. Pilosa can connect through a stream platform like Kafka or application integration via [PDK](../pdk/).
 
 ### How is Pilosa different from Elasticsearch since they are both indexes?
 
