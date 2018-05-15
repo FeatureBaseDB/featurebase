@@ -622,9 +622,7 @@ type fragsByHost map[string][]frag
 
 func (a fragsByHost) add(b fragsByHost) fragsByHost {
 	for k, v := range b {
-		for _, vv := range v {
-			a[k] = append(a[k], vv)
-		}
+		a[k] = append(a[k], v...)
 	}
 	return a
 }
@@ -1175,9 +1173,7 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 		}
 
 		for id, sources := range fragSources {
-			for _, src := range sources {
-				multiIndex[id] = append(multiIndex[id], src)
-			}
+			multiIndex[id] = append(multiIndex[id], sources...)
 		}
 	}
 
