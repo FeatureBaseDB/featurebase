@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
@@ -683,8 +682,6 @@ type getFrameFieldsResponse struct {
 	Fields []*Field `json:"fields,omitempty"`
 }
 
-type deleteFrameFieldRequest struct{}
-
 type deleteFrameFieldResponse struct{}
 
 // handleGetFrameViews handles GET /frame/views request.
@@ -779,29 +776,6 @@ type postFrameAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
 
-// readColumnAttrSets returns a list of column attribute objects by id.
-func (h *Handler) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
-	if index == nil {
-		return nil, nil
-	}
-
-	a := make([]*ColumnAttrSet, 0, len(ids))
-	for _, id := range ids {
-		// Read attributes for column. Skip column if empty.
-		attrs, err := index.ColumnAttrStore().Attrs(id)
-		if err != nil {
-			return nil, err
-		} else if len(attrs) == 0 {
-			continue
-		}
-
-		// Append column with attributes.
-		a = append(a, &ColumnAttrSet{ID: id, Attrs: attrs})
-	}
-
-	return a, nil
-}
-
 // readQueryRequest parses an query parameters from r.
 func (h *Handler) readQueryRequest(r *http.Request) (*QueryRequest, error) {
 	switch r.Header.Get("Content-Type") {
@@ -853,21 +827,6 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 		ExcludeAttrs: q.Get("excludeAttrs") == "true",
 		ExcludeBits:  q.Get("excludeBits") == "true",
 	}, nil
-}
-
-// validOptions return all attributes of an interface with lower first character.
-func validOptions(v interface{}) map[string]bool {
-	validQuery := make(map[string]bool)
-	argsType := reflect.ValueOf(v).Type()
-
-	for i := 0; i < argsType.NumField(); i++ {
-		fieldName := argsType.Field(i).Name
-		chars := []rune(fieldName)
-		chars[0] = unicode.ToLower(chars[0])
-		fieldName = string(chars)
-		validQuery[fieldName] = true
-	}
-	return validQuery
 }
 
 // writeQueryResponse writes the response from the executor to w.

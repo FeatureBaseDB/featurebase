@@ -541,16 +541,6 @@ func (c *Cluster) nodeByID(id string) *Node {
 	return nil
 }
 
-// nodeByURI returns a node reference by node URI.
-func (c *Cluster) nodeByURI(uri URI) *Node {
-	for _, n := range c.Nodes {
-		if n.URI == uri {
-			return n
-		}
-	}
-	return nil
-}
-
 // nodePositionByID returns the position of the node in slice c.Nodes.
 func (c *Cluster) nodePositionByID(nodeID string) int {
 	for i, n := range c.Nodes {
