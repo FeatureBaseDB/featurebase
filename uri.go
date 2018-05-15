@@ -26,8 +26,8 @@ import (
 )
 
 var schemeRegexp = regexp.MustCompile("^[+a-z]+$")
-var hostRegexp = regexp.MustCompile("^[0-9a-z.-]+$|^\\[[:0-9a-fA-F]+\\]$")
-var addressRegexp = regexp.MustCompile("^(([+a-z]+):\\/\\/)?([0-9a-z.-]+|\\[[:0-9a-fA-F]+\\])?(:([0-9]+))?$")
+var hostRegexp = regexp.MustCompile(`^[0-9a-z.-]+$|^\[[:0-9a-fA-F]+\]$`)
+var addressRegexp = regexp.MustCompile(`^(([+a-z]+):\/\/)?([0-9a-z.-]+|\[[:0-9a-fA-F]+\])?(:([0-9]+))?$`)
 
 // URI represents a Pilosa URI.
 // A Pilosa URI consists of three parts:
