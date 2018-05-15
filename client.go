@@ -48,6 +48,8 @@ type InternalHTTPClient struct {
 
 	// The client to use for HTTP communication.
 	HTTPClient *http.Client
+
+	TestVal string
 }
 
 // NewInternalHTTPClient returns a new instance of InternalHTTPClient to connect to host.
@@ -70,6 +72,10 @@ func NewInternalHTTPClientFromURI(defaultURI *URI, remoteClient *http.Client) *I
 		defaultURI: defaultURI,
 		HTTPClient: remoteClient,
 	}
+}
+
+func (c InternalHTTPClient) GetTestVal() string {
+	return c.TestVal
 }
 
 // Host returns the host the client was initialized with.
@@ -107,7 +113,11 @@ func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) 
 
 	var rsp getSlicesMaxResponse
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("http: status=%d body=%s", resp.StatusCode, body)
 	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
