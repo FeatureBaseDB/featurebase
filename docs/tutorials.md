@@ -238,6 +238,88 @@ curl -k --ipv4 https://02.pilosa.local:10502/index/sample-index/query -d 'Bitmap
 
 Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](https://www.pilosa.com/docs/latest/configuration/) to see the available options to configure Pilosa.
 
+### Setting Up a Docker Cluster
+
+In this tutorial, we will be setting up a 2-node Pilosa cluster using Docker containers. The instructions below require Docker 1.13 or better.
+
+Let's first create a virtual network to attach our containers. We are going to name our network `pilosanet`:
+
+```
+docker network create pilosanet
+```
+
+Let's run the first Pilosa node and attach it to that virtual network. We set the first node as the cluster coordinator and use its address as the gossip seed. And also set the server address to `pilosa1`:
+```
+docker run -it --rm --name pilosa1 -p 10101:10101 --network="pilosanet" pilosa/pilosa:latest server --bind pilosa1 --cluster.coordinator=true --gossip.seeds=pilosa1:14000
+```
+
+Let's run the second Pilosa node and attach it to the virtual network as well. Note that we set the address of the gossip seed to the address of the first node:
+```
+docker run -it --rm --name pilosa2 -p 10102:10101 --network="pilosanet" pilosa/pilosa:latest server --bind pilosa2 --gossip.seeds=pilosa1:14000
+```
+
+Let's test that the nodes in the cluster connected with each other:
+```
+curl localhost:10101/status
+```
+
+That should return something like:
+```
+{"state":"NORMAL","nodes":[{"id":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"8c0dbcdc-9503-4265-8ad2-ba85a4bb10fa","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}```
+```
+
+And similarly for the second node:
+```
+curl localhost:10102/status
+```
+
+Outputs:
+
+```
+{"state":"NORMAL","nodes":[{"id":"123146fd-f25a-414b-9eb7-4619e8001858","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"4dc45f41-6f9c-4417-ad0e-67522bfeef89","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
+```
+
+The corresponding [Docker Compose](https://docs.docker.com/compose/) file is below:
+
+```yaml
+version: '2'
+services: 
+    pilosa1:
+        image: pilosa/pilosa:v0.9.0
+        ports: 
+            - "10101:10101"
+        environment:
+            - PILOSA_CLUSTER_COORDINATOR=true
+            - PILOSA_GOSSIP_SEEDS=pilosa1:14000
+        networks:
+          - pilosanet
+        entrypoint:
+          - /pilosa
+          - server
+          - --bind
+          - "pilosa1:10101"
+    pilosa2:
+        image: pilosa/pilosa:v0.9.0
+        environment:
+            - PILOSA_GOSSIP_SEEDS=pilosa1:14000
+        networks:
+          - pilosanet
+        entrypoint:
+          - /pilosa
+          - server
+          - --bind
+          - "pilosa2:10101"
+networks: 
+  pilosanet:
+```
+
+#### What's Next?
+
+Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](https://www.pilosa.com/docs/latest/configuration/) to see the available options to configure Pilosa.
+
+Refer to the [Docker documentation](https://docs.docker.com) to see your options about running Docker containers.
+
+
 
 ### Using Integer Field Values
 
