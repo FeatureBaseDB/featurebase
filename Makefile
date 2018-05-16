@@ -44,7 +44,7 @@ build: vendor
 release-build: vendor
 	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa"
 	cp NOTICE LICENSE README.md build/pilosa-$(VERSION_ID)
-	%(if $(ENTERPRISE),cp enterprise/COPYING build/pilosa-$(VERSION_ID))
+	$(if $(ENTERPRISE),cp enterprise/COPYING build/pilosa-$(VERSION_ID))
 	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
 	@echo Created release build: build/pilosa-$(VERSION_ID).tar.gz
 
@@ -58,6 +58,7 @@ release: check-clean
 	$(MAKE) release-build GOOS=linux GOARCH=amd64 DOCKER_BUILD=1
 	$(MAKE) release-build GOOS=linux GOARCH=amd64 DOCKER_BUILD=1 ENTERPRISE=1
 	$(MAKE) release-build GOOS=linux GOARCH=386 DOCKER_BUILD=1
+	$(MAKE) release-build GOOS=linux GOARCH=386 DOCKER_BUILD=1 ENTERPRISE=1
 
 # Create branch-tagged pre-release for client library CI jobs
 prerelease-build: vendor
