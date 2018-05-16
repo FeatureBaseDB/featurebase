@@ -50,6 +50,9 @@ release-build: vendor
 
 # Error out if there are untracked changes in Git
 check-clean:
+ifndef SKIP_CHECK_CLEAN
+	$(if $(shell git status --porcelain),$(error Git status is not clean! Please commit or checkout/reset changes.))
+endif
 
 # Create release build tarballs for all supported platforms. Linux compilation happens under Docker.
 release: check-clean
