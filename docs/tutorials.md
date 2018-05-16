@@ -242,7 +242,12 @@ Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administ
 
 In this tutorial, we will be setting up a 2-node Pilosa cluster using Docker containers. The instructions below require Docker 1.13 or better.
 
-Let's first create a virtual network to attach our containers. We are going to name our network `pilosanet`:
+Let's first be sure that the Pilosa image is up to date:
+```
+docker pull pilosa/pilosa:latest
+```
+
+Then, create a virtual network to attach our containers. We are going to name our network `pilosanet`:
 
 ```
 docker network create pilosanet
@@ -285,7 +290,7 @@ The corresponding [Docker Compose](https://docs.docker.com/compose/) file is bel
 version: '2'
 services: 
     pilosa1:
-        image: pilosa/pilosa:v0.9.0
+        image: pilosa/pilosa:latest
         ports: 
             - "10101:10101"
         environment:
@@ -299,7 +304,7 @@ services:
           - --bind
           - "pilosa1:10101"
     pilosa2:
-        image: pilosa/pilosa:v0.9.0
+        image: pilosa/pilosa:latest
         environment:
             - PILOSA_GOSSIP_SEEDS=pilosa1:14000
         networks:
@@ -318,7 +323,6 @@ networks:
 Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](https://www.pilosa.com/docs/latest/configuration/) to see the available options to configure Pilosa.
 
 Refer to the [Docker documentation](https://docs.docker.com) to see your options about running Docker containers.
-
 
 
 ### Using Integer Field Values
