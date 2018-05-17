@@ -264,26 +264,24 @@ docker run -it --rm --name pilosa2 -p 10102:10101 --network="pilosanet" pilosa/p
 ```
 
 Let's test that the nodes in the cluster connected with each other:
-```
+``` request
 curl localhost:10101/status
 ```
 
 That should return something like:
-```
-{"state":"NORMAL","nodes":[{"id":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"8c0dbcdc-9503-4265-8ad2-ba85a4bb10fa","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}```
+``` response
+{"state":"NORMAL","nodes":[{"id":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"8c0dbcdc-9503-4265-8ad2-ba85a4bb10fa","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
 ```
 
 And similarly for the second node:
-```
+``` request
 curl localhost:10102/status
 ```
 
 Outputs:
-
+``` response
+{"state":"NORMAL","nodes":[{"id":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"8c0dbcdc-9503-4265-8ad2-ba85a4bb10fa","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
 ```
-{"state":"NORMAL","nodes":[{"id":"123146fd-f25a-414b-9eb7-4619e8001858","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"4dc45f41-6f9c-4417-ad0e-67522bfeef89","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
-```
-
 The corresponding [Docker Compose](https://docs.docker.com/compose/) file is below:
 
 ```yaml
