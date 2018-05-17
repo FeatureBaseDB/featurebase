@@ -267,8 +267,6 @@ Let's test that the nodes in the cluster connected with each other:
 ``` request
 curl localhost:10101/status
 ```
-
-That should return something like:
 ``` response
 {"state":"NORMAL","nodes":[{"id":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"8c0dbcdc-9503-4265-8ad2-ba85a4bb10fa","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
 ```
@@ -277,8 +275,6 @@ And similarly for the second node:
 ``` request
 curl localhost:10102/status
 ```
-
-Outputs:
 ``` response
 {"state":"NORMAL","nodes":[{"id":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"8c0dbcdc-9503-4265-8ad2-ba85a4bb10fa","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
 ```
