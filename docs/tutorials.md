@@ -236,7 +236,7 @@ curl -k --ipv4 https://02.pilosa.local:10502/index/sample-index/query -d 'Bitmap
 
 #### What's Next?
 
-Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](https://www.pilosa.com/docs/latest/configuration/) to see the available options to configure Pilosa.
+Check out our [Administration Guide](../administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](../configuration/) to see the available options to configure Pilosa.
 
 ### Setting Up a Docker Cluster
 
@@ -314,7 +314,7 @@ networks:
 
 #### What's Next?
 
-Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](https://www.pilosa.com/docs/latest/configuration/) to see the available options to configure Pilosa.
+Check out our [Administration Guide](../administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](../configuration/) to see the available options to configure Pilosa.
 
 Refer to the [Docker documentation](https://docs.docker.com) to see your options about running Docker containers.
 
