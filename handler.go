@@ -437,7 +437,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = h.API.CreateIndex(r.Context(), indexName, req.Options)
-	if err == ErrIndexExists {
+	if errors.Cause(err) == ErrIndexExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	} else if err != nil {
@@ -464,7 +464,7 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 
 	attrs, err := h.API.IndexAttrDiff(r.Context(), indexName, req.Blocks)
 	if err != nil {
-		if err == ErrIndexNotFound {
+		if errors.Cause(err) == ErrIndexNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -573,7 +573,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 
 	err := h.API.DeleteFrame(r.Context(), indexName, frameName)
 	if err != nil {
-		if err == ErrIndexNotFound {
+		if errors.Cause(err) == ErrIndexNotFound {
 			if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
 				h.Logger.Printf("response encoding error: %s", err)
 			}
@@ -612,7 +612,7 @@ func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.API.CreateField(r.Context(), indexName, frameName, field); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -641,7 +641,7 @@ func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request)
 	fieldName := mux.Vars(r)["field"]
 
 	if err := h.API.DeleteField(r.Context(), indexName, frameName, fieldName); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -691,7 +691,7 @@ func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
 
 	views, err := h.API.Views(r.Context(), indexName, frameName)
 	if err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -717,7 +717,7 @@ func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
 	viewName := mux.Vars(r)["view"]
 
 	if err := h.API.DeleteView(r.Context(), indexName, frameName, viewName); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1051,7 +1051,7 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err = h.API.UnmarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice, r.Body); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1065,7 +1065,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		if _, ok := err.(BadRequestError); ok {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else if err == ErrFragmentNotFound {
+		} else if errors.Cause(err) == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1091,7 +1091,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 
 	blocks, err := h.API.FragmentBlocks(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice)
 	if err != nil {
-		if err == ErrFragmentNotFound {
+		if errors.Cause(err) == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
