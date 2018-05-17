@@ -2,13 +2,18 @@
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
-VERSION_ID := $(if $(ENTERPRISE),enterprise-)$(VERSION)-$(GOOS)-$(GOARCH)
+VERSION_ID := $(if $(ENTERPRISE_ENABLED),enterprise-)$(VERSION)-$(GOOS)-$(GOARCH)
 BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(shell git rev-parse --abbrev-ref HEAD))
 BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
-LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa.Enterprise=$(ENTERPRISE)"
+LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa.Enterprise=$(if $(ENTERPRISE_ENABLED),1)"
 GO_VERSION=latest
-ENTERPRISE_TAG := $(if $(ENTERPRISE),-tags=enterprise)
+ENTERPRISE ?= 0
+ENTERPRISE_ENABLED = $(subst 0,,$(ENTERPRISE))
+RELEASE ?= 0
+RELEASE_ENABLED = $(subst 0,,$(RELEASE))
+BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
+BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
 
 # Run tests and compile Pilosa
 default: test build
@@ -25,7 +30,7 @@ vendor: Gopkg.toml
 
 # Run test suite
 test: vendor
-	go test ./... $(ENTERPRISE_TAG) $(TESTFLAGS)
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
 
 # Run test suite with coverage enabled
 cover: vendor
@@ -38,13 +43,13 @@ cover-viz: cover
 
 # Compile Pilosa
 build: vendor
-	go build -tags release $(ENTERPRISE_TAG) -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
+	go build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
 # Create a single release build under the build directory
 release-build: vendor
-	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa"
+	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa" RELEASE=1
 	cp NOTICE LICENSE README.md build/pilosa-$(VERSION_ID)
-	$(if $(ENTERPRISE),cp enterprise/COPYING build/pilosa-$(VERSION_ID))
+	$(if $(ENTERPRISE_ENABLED),cp enterprise/COPYING build/pilosa-$(VERSION_ID))
 	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
 	@echo Created release build: build/pilosa-$(VERSION_ID).tar.gz
 
@@ -77,7 +82,7 @@ prerelease-upload: prerelease
 
 # Install Pilosa
 install: vendor
-	go install $(ENTERPRISE_TAG) -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
+	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
@@ -101,11 +106,11 @@ docker:
 
 # Compile Pilosa inside Docker container
 docker-build:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) go build $(ENTERPRISE_TAG) -tags release -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) -e GOOS=$(GOOS) -e GOARCH=$(GOARCH) golang:$(GO_VERSION) go build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) $(CLONE_URL)/cmd/pilosa
 
 # Run Pilosa tests inside Docker container
 docker-test:
-	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test $(ENTERPRISE_TAG) $(TESTFLAGS) ./...
+	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) ./...
 
 ######################
 # Build dependencies #
