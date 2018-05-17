@@ -8,7 +8,9 @@ BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa.Enterprise=$(ENTERPRISE)"
 GO_VERSION=latest
-ENTERPRISE_TAG := $(if $(ENTERPRISE),-tags=enterprise)
+ifeq ($(ENTERPRISE),1)
+ENTERPRISE_TAG := -tags=enterprise
+endif
 
 # Run tests and compile Pilosa
 default: test build
