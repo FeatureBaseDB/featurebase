@@ -505,7 +505,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = h.API.CreateFrame(r.Context(), indexName, frameName, req.Options)
 	if err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		case ErrFrameExists:
@@ -661,7 +661,7 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 
 	fields, err := h.API.Fields(r.Context(), indexName, frameName)
 	if err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
 		case ErrFrameNotFound:
@@ -751,7 +751,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 
 	attrs, err := h.API.FrameAttrDiff(r.Context(), indexName, frameName, req.Blocks)
 	if err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrFragmentNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		default:
@@ -878,7 +878,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.API.Import(r.Context(), req); err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
 		case ErrFrameNotFound:
@@ -931,7 +931,7 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err = h.API.ImportValue(r.Context(), req); err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
 		case ErrFrameNotFound:
@@ -980,7 +980,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = h.API.ExportCSV(r.Context(), index, frame, view, slice, w); err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrFragmentNotFound:
 			break
 		case ErrClusterDoesNotOwnSlice:
@@ -1131,7 +1131,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	err = h.API.RestoreFrame(r.Context(), indexName, frameName, host)
-	switch err {
+	switch errors.Cause(err) {
 	case nil:
 		break
 	case ErrFrameNotFound:
