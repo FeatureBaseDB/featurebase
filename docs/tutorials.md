@@ -380,7 +380,7 @@ These were the same commands we used in the previous section except the port map
 docker run -it --rm --network=pilosanet --name shell alpine wget -q -O- pilosa1:10101/status
 ```
 ``` response
-{"state":"NORMAL","nodes":[{"id":"2f831340-4026-4cfd-8b1a-03d817de691a","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"5549d6ee-d5f3-40a1-a53e-feebf6012c44","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false},{"id":"9daf87b7-d1a8-4ce0-867e-11dbc7fc973e","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false},{"id":"f85ab179-c72b-4846-bf16-9cec6f0086cd","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
+{"state":"NORMAL","nodes":[{"id":"3e3b0abd-1945-441a-a01f-5a28272972f5","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"71ed27cc-9443-4f41-88fb-1c22f92bf695","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
 ```
 
 You can add as many as slave nodes to both the swarm and the Pilosa cluster using the steps above.
