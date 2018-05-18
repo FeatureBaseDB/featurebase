@@ -307,8 +307,13 @@ func (s *Server) Open() error {
 
 	// Serve HTTP.
 	go func() {
-		err := http.Serve(s.ln, s.handler)
-		if err != nil {
+		server := &http.Server{Handler: s.handler}
+		go func() {
+			<-s.closing
+			server.Close()
+		}()
+		err := server.Serve(s.ln)
+		if err != nil && err.Error() != "http: Server closed" {
 			s.logger.Printf("HTTP handler terminated with error: %s\n", err)
 		}
 	}()
