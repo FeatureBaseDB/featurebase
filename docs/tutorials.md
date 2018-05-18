@@ -240,7 +240,11 @@ Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administ
 
 ### Setting Up a Docker Cluster
 
-In this tutorial, we will be setting up a 2-node Pilosa cluster using Docker containers. The instructions below require Docker 1.13 or better.
+In this tutorial, we will be setting up a 2-node Pilosa cluster using Docker containers.
+
+#### Running a Docker Cluster on a Single Server
+
+The instructions below require Docker 1.13 or better.
 
 Let's first be sure that the Pilosa image is up to date:
 ```
@@ -255,12 +259,12 @@ docker network create pilosanet
 
 Let's run the first Pilosa node and attach it to that virtual network. We set the first node as the cluster coordinator and use its address as the gossip seed. And also set the server address to `pilosa1`:
 ```
-docker run -it --rm --name pilosa1 -p 10101:10101 --network="pilosanet" pilosa/pilosa:latest server --bind pilosa1 --cluster.coordinator=true --gossip.seeds=pilosa1:14000
+docker run -it --rm --name pilosa1 -p 10101:10101 --network=pilosanet pilosa/pilosa:latest server --bind pilosa1 --cluster.coordinator=true --gossip.seeds=pilosa1:14000
 ```
 
 Let's run the second Pilosa node and attach it to the virtual network as well. Note that we set the address of the gossip seed to the address of the first node:
 ```
-docker run -it --rm --name pilosa2 -p 10102:10101 --network="pilosanet" pilosa/pilosa:latest server --bind pilosa2 --gossip.seeds=pilosa1:14000
+docker run -it --rm --name pilosa2 --network=pilosanet pilosa/pilosa:latest server --bind pilosa2 --gossip.seeds=pilosa1:14000
 ```
 
 Let's test that the nodes in the cluster connected with each other:
@@ -312,11 +316,80 @@ networks:
   pilosanet:
 ```
 
+#### Running a Docker Swarm
+
+It is very easy to run a Pilosa Cluster on different servers using [Docker Swarm mode](https://docs.docker.com/engine/swarm/). All we have to do is creating an overlay network instead of the bridge network.
+
+The instructions in this section require Docker 17.06 and better. Although it is possible to run a Docker swarm on MacOS or Windows, it is easiest to run it on Linux. So we assume you are trying these instructions on Linux, probably on the cloud.
+
+We are going to use two servers: the master node runs in the first server and a  slave node in the second server.
+
+Let's initialize the swarm first. Run the following on the master:
+```
+docker swarm init --advertise-addr=IP-ADDRESS
+```
+
+Virtual machines running on the cloud usually have at least two network interfaces: the external interface and the internal interface. Use the IP of the external interface.
+
+The output of the command above should be similar to:
+```
+To add a manager to this swarm, run the following command:
+
+    docker swarm join --token SOME-TOKEN MASTER-IP-ADDRESS:2377
+```
+
+Let's make the slave node join the master. Copy/paste the command above in a shell on the slave, replacing the token and IP address with the correct values. You may neeed to add `--advertise-addr=SLAVE-EXTERNAL-IP-ADDRESS` parameter if the slave has more than one network interface:
+```
+docker swarm join --token SOME-TOKEN MASTER-IP-ADDRESS:2377
+```
+
+Run the following on the master to check that the slave joined to the swarm:
+```
+docker node ls
+```
+
+Which should output:
+
+ID|HOSTNAME|STATUS|AVAILABILITY|MANAGER STATUS|ENGINE VERSION
+---|--------|------|------------|--------------|-------------
+MASTER-ID *|swarm1|Ready|Active|Leader|18.05.0-ce|
+SLAVE-ID|swarm2|Ready|Active||18.05.0-ce|
+
+If you have created the `pilosanet` network before, delete it before carrying on, otherwise skip to the next step:
+```
+docker network rm pilosanet
+```
+
+Let's create the `pilosanet` network, but with `overlay` type this time. We should also make this network attachable in order to be able to attach containers to it. Run the following on the master:
+```
+docker network create -d overlay pilosanet --attachable
+```
+
+We can now create the Pilosa containers. Let's start the coordinator node first. Run the following on one of the servers:
+```
+docker run -it --rm --name pilosa1 --network=pilosanet pilosa/pilosa:latest server --bind pilosa1 --cluster.coordinator=true --gossip.seeds=pilosa1:14000
+```
+
+And the following on the other server:
+```
+docker run -it --rm --name pilosa2 --network=pilosanet pilosa/pilosa:latest server --bind pilosa2 --gossip.seeds=pilosa1:14000
+```
+
+These were the same commands we used in the previous section except the port mapping! Let's run another container on the same virtual network to read the status from the coordinator:
+``` request
+docker run -it --rm --network=pilosanet --name shell alpine wget -q -O- pilosa1:10101/status
+```
+``` response
+{"state":"NORMAL","nodes":[{"id":"2f831340-4026-4cfd-8b1a-03d817de691a","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"5549d6ee-d5f3-40a1-a53e-feebf6012c44","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false},{"id":"9daf87b7-d1a8-4ce0-867e-11dbc7fc973e","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false},{"id":"f85ab179-c72b-4846-bf16-9cec6f0086cd","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
+```
+
+You can add as many as slave nodes to both the swarm and the Pilosa cluster using the steps above.
+
 #### What's Next?
 
 Check out our [Administration Guide](https://www.pilosa.com/docs/latest/administration/) to learn more about making the most of your Pilosa cluster and [Configuration Documentation](https://www.pilosa.com/docs/latest/configuration/) to see the available options to configure Pilosa.
 
-Refer to the [Docker documentation](https://docs.docker.com) to see your options about running Docker containers.
+Refer to the [Docker documentation](https://docs.docker.com) to see your options about running Docker containers. The [Networking with overlay networks](https://docs.docker.com/network/network-tutorial-overlay/) is a detailed overview of the Docket swarm mode and overlay networks.
 
 
 ### Using Integer Field Values
