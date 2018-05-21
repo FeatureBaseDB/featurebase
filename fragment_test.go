@@ -248,7 +248,7 @@ func TestFragment_FieldSum(t *testing.T) {
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if sum, n, err := f.FieldSum(pilosa.NewBitmap(2000, 4000, 5000), bitDepth); err != nil {
+		if sum, n, err := f.FieldSum(pilosa.NewRow(2000, 4000, 5000), bitDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 2 {
 			t.Fatalf("unexpected count: %d", n)
@@ -284,16 +284,16 @@ func TestFragment_FieldMinMax(t *testing.T) {
 
 	t.Run("Min", func(t *testing.T) {
 		tests := []struct {
-			filter *pilosa.Bitmap
+			filter *pilosa.Row
 			exp    uint64
 			cnt    uint64
 		}{
 			{filter: nil, exp: 0, cnt: 1},
-			{filter: pilosa.NewBitmap(2000, 4000, 5000), exp: 300, cnt: 2},
-			{filter: pilosa.NewBitmap(2000, 4000), exp: 300, cnt: 2},
-			{filter: pilosa.NewBitmap(1), exp: 0, cnt: 0},
-			{filter: pilosa.NewBitmap(1000), exp: 382, cnt: 1},
-			{filter: pilosa.NewBitmap(7000), exp: 0, cnt: 1},
+			{filter: pilosa.NewRow(2000, 4000, 5000), exp: 300, cnt: 2},
+			{filter: pilosa.NewRow(2000, 4000), exp: 300, cnt: 2},
+			{filter: pilosa.NewRow(1), exp: 0, cnt: 0},
+			{filter: pilosa.NewRow(1000), exp: 382, cnt: 1},
+			{filter: pilosa.NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
 			if min, cnt, err := f.FieldMin(test.filter, bitDepth); err != nil {
@@ -308,16 +308,16 @@ func TestFragment_FieldMinMax(t *testing.T) {
 
 	t.Run("Max", func(t *testing.T) {
 		tests := []struct {
-			filter *pilosa.Bitmap
+			filter *pilosa.Row
 			exp    uint64
 			cnt    uint64
 		}{
 			{filter: nil, exp: 2818, cnt: 2},
-			{filter: pilosa.NewBitmap(2000, 4000, 5000), exp: 2818, cnt: 1},
-			{filter: pilosa.NewBitmap(2000, 4000), exp: 300, cnt: 2},
-			{filter: pilosa.NewBitmap(1), exp: 0, cnt: 0},
-			{filter: pilosa.NewBitmap(1000), exp: 382, cnt: 1},
-			{filter: pilosa.NewBitmap(7000), exp: 0, cnt: 1},
+			{filter: pilosa.NewRow(2000, 4000, 5000), exp: 2818, cnt: 1},
+			{filter: pilosa.NewRow(2000, 4000), exp: 300, cnt: 2},
+			{filter: pilosa.NewRow(1), exp: 0, cnt: 0},
+			{filter: pilosa.NewRow(1000), exp: 382, cnt: 1},
+			{filter: pilosa.NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
 			if max, cnt, err := f.FieldMax(test.filter, bitDepth); err != nil {
@@ -642,7 +642,7 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 	defer f.Close()
 
 	// Create an intersecting input row.
-	src := pilosa.NewBitmap(1, 2, 3)
+	src := pilosa.NewRow(1, 2, 3)
 
 	// Set bits on various rows.
 	f.MustSetBits(100, 1, 10, 11, 12)    // one intersection
@@ -673,7 +673,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	defer f.Close()
 
 	// Create an intersecting input row.
-	src := pilosa.NewBitmap(
+	src := pilosa.NewRow(
 		980, 981, 982, 983, 984, 985, 986, 987, 988, 989,
 		990, 991, 992, 993, 994, 995, 996, 997, 998, 999,
 	)
@@ -1081,7 +1081,7 @@ func TestFragment_Tanimoto(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
 	defer f.Close()
 
-	src := pilosa.NewBitmap(1, 2, 3)
+	src := pilosa.NewRow(1, 2, 3)
 
 	// Set bits on the rows 100, 101, & 102.
 	f.MustSetBits(100, 1, 3, 2, 200)
@@ -1104,7 +1104,7 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
 	defer f.Close()
 
-	src := pilosa.NewBitmap(1, 2, 3)
+	src := pilosa.NewRow(1, 2, 3)
 
 	// Set bits on the rows 100, 101, & 102.
 	f.MustSetBits(100, 1, 3, 2, 200)
