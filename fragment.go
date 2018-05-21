@@ -365,7 +365,7 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *R
 	// We Clone() data because otherwise bm will contains pointers to containers in storage.
 	// This causes unexpected results when we cache the row and try to use it later.
 	bm := &Row{
-		segments: []BitmapSegment{{
+		segments: []RowSegment{{
 			data:     *data.Clone(),
 			slice:    f.slice,
 			writable: false,

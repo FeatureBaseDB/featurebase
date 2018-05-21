@@ -24,9 +24,9 @@ import (
 
 // Row represents a set of bits.
 type Row struct {
-	segments []BitmapSegment
+	segments []RowSegment
 
-	// Attributes associated with the bitmap.
+	// Attributes associated with the row.
 	Attrs map[string]interface{}
 }
 
@@ -41,11 +41,11 @@ func NewRow(bits ...uint64) *Row {
 
 // Merge merges data from other into r.
 func (r *Row) Merge(other *Row) {
-	var segments []BitmapSegment
+	var segments []RowSegment
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
-		// Use the other bitmap's data if segment is missing.
+		// Use the other row's data if segment is missing.
 		if s0 == nil {
 			segments = append(segments, *s1)
 			continue
@@ -81,7 +81,7 @@ func (r *Row) IntersectionCount(other *Row) uint64 {
 
 // Intersect returns the itersection of r and other.
 func (r *Row) Intersect(other *Row) *Row {
-	var segments []BitmapSegment
+	var segments []RowSegment
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
@@ -97,7 +97,7 @@ func (r *Row) Intersect(other *Row) *Row {
 
 // Xor returns the xor of r and other.
 func (r *Row) Xor(other *Row) *Row {
-	var segments []BitmapSegment
+	var segments []RowSegment
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
@@ -117,7 +117,7 @@ func (r *Row) Xor(other *Row) *Row {
 
 // Union returns the bitwise union of r and other.
 func (r *Row) Union(other *Row) *Row {
-	var segments []BitmapSegment
+	var segments []RowSegment
 	itr := newMergeSegmentIterator(r.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
 		if s1 == nil {
@@ -135,7 +135,7 @@ func (r *Row) Union(other *Row) *Row {
 
 // Difference returns the diff of r and other.
 func (r *Row) Difference(other *Row) *Row {
-	var segments []BitmapSegment
+	var segments []RowSegment
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
@@ -156,7 +156,7 @@ func (r *Row) SetBit(i uint64) (changed bool) {
 	return r.createSegmentIfNotExists(i / SliceWidth).SetBit(i)
 }
 
-// ClearBit clears the i-th bit of the bitmap.
+// ClearBit clears the i-th bit of the row.
 func (r *Row) ClearBit(i uint64) (changed bool) {
 	s := r.segment(i / SliceWidth)
 	if s == nil {
@@ -167,7 +167,7 @@ func (r *Row) ClearBit(i uint64) (changed bool) {
 
 // segment returns a segment for a given slice.
 // Returns nil if segment does not exist.
-func (r *Row) segment(slice uint64) *BitmapSegment {
+func (r *Row) segment(slice uint64) *RowSegment {
 	if i := sort.Search(len(r.segments), func(i int) bool {
 		return r.segments[i].slice >= slice
 	}); i < len(r.segments) && r.segments[i].slice == slice {
@@ -176,7 +176,7 @@ func (r *Row) segment(slice uint64) *BitmapSegment {
 	return nil
 }
 
-func (r *Row) createSegmentIfNotExists(slice uint64) *BitmapSegment {
+func (r *Row) createSegmentIfNotExists(slice uint64) *RowSegment {
 	i := sort.Search(len(r.segments), func(i int) bool {
 		return r.segments[i].slice >= slice
 	})
@@ -187,11 +187,11 @@ func (r *Row) createSegmentIfNotExists(slice uint64) *BitmapSegment {
 	}
 
 	// Insert new segment.
-	r.segments = append(r.segments, BitmapSegment{data: *roaring.NewBitmap()})
+	r.segments = append(r.segments, RowSegment{data: *roaring.NewBitmap()})
 	if i < len(r.segments) {
 		copy(r.segments[i+1:], r.segments[i:])
 	}
-	r.segments[i] = BitmapSegment{
+	r.segments[i] = RowSegment{
 		data:     *roaring.NewBitmap(),
 		slice:    slice,
 		writable: true,
@@ -200,14 +200,14 @@ func (r *Row) createSegmentIfNotExists(slice uint64) *BitmapSegment {
 	return &r.segments[i]
 }
 
-// InvalidateCount updates the cached count in the bitmap.
+// InvalidateCount updates the cached count in the row.
 func (r *Row) InvalidateCount() {
 	for i := range r.segments {
 		r.segments[i].InvalidateCount()
 	}
 }
 
-// IncrementCount increments the bitmap cached counter, note this is an optimization that assumes that the caller is aware the size increased.
+// IncrementCount increments the row cached counter, note this is an optimization that assumes that the caller is aware the size increased.
 func (r *Row) IncrementCount(i uint64) {
 	seg := r.segment(i / SliceWidth)
 	if seg != nil {
@@ -216,7 +216,7 @@ func (r *Row) IncrementCount(i uint64) {
 
 }
 
-// DecrementCount decrements the bitmap cached counter.
+// DecrementCount decrements the row cached counter.
 func (r *Row) DecrementCount(i uint64) {
 	seg := r.segment(i / SliceWidth)
 	if seg != nil {
@@ -295,10 +295,10 @@ func Union(rows []*Row) *Row {
 	return other
 }
 
-// BitmapSegment holds a subset of a bitmap.
+// RowSegment holds a subset of a row.
 // This could point to a mmapped roaring bitmap or an in-memory bitmap. The
 // width of the segment will always match the slice width.
-type BitmapSegment struct {
+type RowSegment struct {
 	// Slice this segment belongs to
 	slice uint64
 
@@ -314,7 +314,7 @@ type BitmapSegment struct {
 
 // Merge adds chunks from other to s.
 // Chunks in s are overwritten if they exist in other.
-func (s *BitmapSegment) Merge(other *BitmapSegment) {
+func (s *RowSegment) Merge(other *RowSegment) {
 	s.ensureWritable()
 
 	itr := other.data.Iterator()
@@ -324,15 +324,15 @@ func (s *BitmapSegment) Merge(other *BitmapSegment) {
 }
 
 // IntersectionCount returns the number of intersections between s and other.
-func (s *BitmapSegment) IntersectionCount(other *BitmapSegment) uint64 {
+func (s *RowSegment) IntersectionCount(other *RowSegment) uint64 {
 	return s.data.IntersectionCount(&other.data)
 }
 
 // Intersect returns the itersection of s and other.
-func (s *BitmapSegment) Intersect(other *BitmapSegment) *BitmapSegment {
+func (s *RowSegment) Intersect(other *RowSegment) *RowSegment {
 	data := s.data.Intersect(&other.data)
 
-	return &BitmapSegment{
+	return &RowSegment{
 		data:  *data,
 		slice: s.slice,
 		n:     data.Count(),
@@ -340,10 +340,10 @@ func (s *BitmapSegment) Intersect(other *BitmapSegment) *BitmapSegment {
 }
 
 // Union returns the bitwise union of s and other.
-func (s *BitmapSegment) Union(other *BitmapSegment) *BitmapSegment {
+func (s *RowSegment) Union(other *RowSegment) *RowSegment {
 	data := s.data.Union(&other.data)
 
-	return &BitmapSegment{
+	return &RowSegment{
 		data:  *data,
 		slice: s.slice,
 		n:     data.Count(),
@@ -351,10 +351,10 @@ func (s *BitmapSegment) Union(other *BitmapSegment) *BitmapSegment {
 }
 
 // Difference returns the diff of s and other.
-func (s *BitmapSegment) Difference(other *BitmapSegment) *BitmapSegment {
+func (s *RowSegment) Difference(other *RowSegment) *RowSegment {
 	data := s.data.Difference(&other.data)
 
-	return &BitmapSegment{
+	return &RowSegment{
 		data:  *data,
 		slice: s.slice,
 		n:     data.Count(),
@@ -362,18 +362,18 @@ func (s *BitmapSegment) Difference(other *BitmapSegment) *BitmapSegment {
 }
 
 // Xor returns the xor of s and other.
-func (s *BitmapSegment) Xor(other *BitmapSegment) *BitmapSegment {
+func (s *RowSegment) Xor(other *RowSegment) *RowSegment {
 	data := s.data.Xor(&other.data)
 
-	return &BitmapSegment{
+	return &RowSegment{
 		data:  *data,
 		slice: s.slice,
 		n:     data.Count(),
 	}
 }
 
-// SetBit sets the i-th bit of the bitmap.
-func (s *BitmapSegment) SetBit(i uint64) (changed bool) {
+// SetBit sets the i-th bit of the row.
+func (s *RowSegment) SetBit(i uint64) (changed bool) {
 	s.ensureWritable()
 	changed, _ = s.data.Add(i)
 	if changed {
@@ -382,8 +382,8 @@ func (s *BitmapSegment) SetBit(i uint64) (changed bool) {
 	return changed
 }
 
-// ClearBit clears the i-th bit of the bitmap.
-func (s *BitmapSegment) ClearBit(i uint64) (changed bool) {
+// ClearBit clears the i-th bit of the row.
+func (s *RowSegment) ClearBit(i uint64) (changed bool) {
 	s.ensureWritable()
 
 	changed, _ = s.data.Remove(i)
@@ -393,13 +393,13 @@ func (s *BitmapSegment) ClearBit(i uint64) (changed bool) {
 	return changed
 }
 
-// InvalidateCount updates the cached count in the bitmap.
-func (s *BitmapSegment) InvalidateCount() {
+// InvalidateCount updates the cached count in the row.
+func (s *RowSegment) InvalidateCount() {
 	s.n = s.data.Count()
 }
 
 // Bits returns a list of all bits set in the segment.
-func (s *BitmapSegment) Bits() []uint64 {
+func (s *RowSegment) Bits() []uint64 {
 	a := make([]uint64, 0, s.Count())
 	itr := s.data.Iterator()
 	for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
@@ -408,11 +408,11 @@ func (s *BitmapSegment) Bits() []uint64 {
 	return a
 }
 
-// Count returns the number of set bits in the bitmap.
-func (s *BitmapSegment) Count() uint64 { return s.n }
+// Count returns the number of set bits in the row.
+func (s *RowSegment) Count() uint64 { return s.n }
 
 // ensureWritable clones the segment if it is pointing to non-writable data.
-func (s *BitmapSegment) ensureWritable() {
+func (s *RowSegment) ensureWritable() {
 	if s.writable {
 		return
 	}
@@ -423,16 +423,16 @@ func (s *BitmapSegment) ensureWritable() {
 
 // mergeSegmentIterator produces an iterator that loops through two sets of segments.
 type mergeSegmentIterator struct {
-	a0, a1 []BitmapSegment
+	a0, a1 []RowSegment
 }
 
 // newMergeSegmentIterator returns a new instance of mergeSegmentIterator.
-func newMergeSegmentIterator(a0, a1 []BitmapSegment) mergeSegmentIterator {
+func newMergeSegmentIterator(a0, a1 []RowSegment) mergeSegmentIterator {
 	return mergeSegmentIterator{a0: a0, a1: a1}
 }
 
 // next returns the next set of segments.
-func (itr *mergeSegmentIterator) next() (s0, s1 *BitmapSegment) {
+func (itr *mergeSegmentIterator) next() (s0, s1 *RowSegment) {
 	// Find current segments.
 	if len(itr.a0) > 0 {
 		s0 = &itr.a0[0]

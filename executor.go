@@ -368,7 +368,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	}
 
 	if opt.ExcludeBits {
-		bm.segments = []BitmapSegment{}
+		bm.segments = []RowSegment{}
 	}
 
 	return bm, nil
