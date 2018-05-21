@@ -310,7 +310,7 @@ func (e *Executor) executeFieldMax(ctx context.Context, index string, c *pql.Cal
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
-func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (*Bitmap, error) {
+func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (*Row, error) {
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
 		return e.executeBitmapCallSlice(ctx, index, c, slice)
@@ -318,11 +318,11 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
-		other, _ := prev.(*Bitmap)
+		other, _ := prev.(*Row)
 		if other == nil {
-			other = NewBitmap()
+			other = NewRow()
 		}
-		other.Merge(v.(*Bitmap))
+		other.Merge(v.(*Row))
 		return other
 	}
 
@@ -334,10 +334,10 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	// Attach attributes for Bitmap() calls.
 	// If the column label is used then return column attributes.
 	// If the row label is used then return bitmap attributes.
-	bm, _ := other.(*Bitmap)
+	row, _ := other.(*Row)
 	if c.Name == "Bitmap" {
 		if opt.ExcludeAttrs {
-			bm.Attrs = map[string]interface{}{}
+			row.Attrs = map[string]interface{}{}
 		} else {
 			idx := e.Holder.Index(index)
 			if idx != nil {
@@ -346,7 +346,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 					if err != nil {
 						return nil, errors.Wrap(err, "getting column attrs")
 					}
-					bm.Attrs = attrs
+					row.Attrs = attrs
 				} else if err != nil {
 					return nil, err
 				} else {
@@ -360,7 +360,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 						if err != nil {
 							return nil, errors.Wrap(err, "getting row attrs")
 						}
-						bm.Attrs = attrs
+						row.Attrs = attrs
 					}
 				}
 			}
@@ -368,14 +368,14 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	}
 
 	if opt.ExcludeBits {
-		bm.segments = []BitmapSegment{}
+		row.segments = []RowSegment{}
 	}
 
-	return bm, nil
+	return row, nil
 }
 
 // executeBitmapCallSlice executes a bitmap call for a single slice.
-func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
 	switch c.Name {
 	case "Bitmap":
 		return e.executeBitmapSlice(ctx, index, c, slice)
@@ -396,13 +396,13 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 
 // executeSumCountSlice calculates the sum and count for fields on a slice.
 func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
-	var filter *Bitmap
+	var filter *Row
 	if len(c.Children) == 1 {
-		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
 		if err != nil {
 			return ValCount{}, errors.Wrap(err, "executing bitmap call")
 		}
-		filter = bm
+		filter = row
 	}
 
 	frameName, _ := c.Args["frame"].(string)
@@ -435,13 +435,13 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 
 // executeFieldMinSlice calculates the min for fields on a slice.
 func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
-	var filter *Bitmap
+	var filter *Row
 	if len(c.Children) == 1 {
-		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
 		if err != nil {
 			return ValCount{}, err
 		}
-		filter = bm
+		filter = row
 	}
 
 	frameName, _ := c.Args["frame"].(string)
@@ -474,13 +474,13 @@ func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pq
 
 // executeFieldMaxSlice calculates the max for fields on a slice.
 func (e *Executor) executeFieldMaxSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
-	var filter *Bitmap
+	var filter *Row
 	if len(c.Children) == 1 {
-		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
 		if err != nil {
 			return ValCount{}, err
 		}
-		filter = bm
+		filter = row
 	}
 
 	frameName, _ := c.Args["frame"].(string)
@@ -601,13 +601,13 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 	}
 
 	// Retrieve bitmap used to intersect.
-	var src *Bitmap
+	var src *Row
 	if len(c.Children) == 1 {
-		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
 		if err != nil {
 			return nil, err
 		}
-		src = bm
+		src = row
 	} else if len(c.Children) > 1 {
 		return nil, errors.New("TopN() can only have one input bitmap")
 	}
@@ -647,28 +647,28 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 }
 
 // executeDifferenceSlice executes a difference() call for a local slice.
-func (e *Executor) executeDifferenceSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
-	var other *Bitmap
+func (e *Executor) executeDifferenceSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+	var other *Row
 	if len(c.Children) == 0 {
 		return nil, fmt.Errorf("empty Difference query is currently not supported")
 	}
 	for i, input := range c.Children {
-		bm, err := e.executeBitmapCallSlice(ctx, index, input, slice)
+		row, err := e.executeBitmapCallSlice(ctx, index, input, slice)
 		if err != nil {
 			return nil, err
 		}
 
 		if i == 0 {
-			other = bm
+			other = row
 		} else {
-			other = other.Difference(bm)
+			other = other.Difference(row)
 		}
 	}
 	other.InvalidateCount()
 	return other, nil
 }
 
-func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
 	// Fetch column label from index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
@@ -708,27 +708,27 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 
 	frag := e.Holder.Fragment(index, frame, view, slice)
 	if frag == nil {
-		return NewBitmap(), nil
+		return NewRow(), nil
 	}
 	return frag.Row(id), nil
 }
 
 // executeIntersectSlice executes a intersect() call for a local slice.
-func (e *Executor) executeIntersectSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
-	var other *Bitmap
+func (e *Executor) executeIntersectSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+	var other *Row
 	if len(c.Children) == 0 {
 		return nil, fmt.Errorf("empty Intersect query is currently not supported")
 	}
 	for i, input := range c.Children {
-		bm, err := e.executeBitmapCallSlice(ctx, index, input, slice)
+		row, err := e.executeBitmapCallSlice(ctx, index, input, slice)
 		if err != nil {
 			return nil, err
 		}
 
 		if i == 0 {
-			other = bm
+			other = row
 		} else {
-			other = other.Intersect(bm)
+			other = other.Intersect(row)
 		}
 	}
 	other.InvalidateCount()
@@ -736,7 +736,7 @@ func (e *Executor) executeIntersectSlice(ctx context.Context, index string, c *p
 }
 
 // executeRangeSlice executes a range() call for a local slice.
-func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
 	// Handle field ranges differently.
 	if c.HasConditionArg() {
 		return e.executeFieldRangeSlice(ctx, index, c, slice)
@@ -806,24 +806,24 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	// If no quantum exists then return an empty bitmap.
 	q := f.TimeQuantum()
 	if q == "" {
-		return &Bitmap{}, nil
+		return &Row{}, nil
 	}
 
 	// Union bitmaps across all time-based subframes.
-	bm := &Bitmap{}
+	row := &Row{}
 	for _, view := range ViewsByTimeRange(viewName, startTime, endTime, q) {
 		f := e.Holder.Fragment(index, frame, view, slice)
 		if f == nil {
 			continue
 		}
-		bm = bm.Union(f.Row(id))
+		row = row.Union(f.Row(id))
 	}
 	f.Stats.Count("range", 1, 1.0)
-	return bm, nil
+	return row, nil
 }
 
 // executeFieldRangeSlice executes a range(field) call for a local slice.
-func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
+func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
 	// Parse frame, use default if unset.
 	frame, _ := c.Args["frame"].(string)
 	if frame == "" {
@@ -874,7 +874,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		// Retrieve fragment.
 		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
 		if frag == nil {
-			return NewBitmap(), nil
+			return NewRow(), nil
 		}
 
 		return frag.FieldNotNull(field.BitDepth())
@@ -903,13 +903,13 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 
 		baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicates[0], predicates[1])
 		if outOfRange {
-			return NewBitmap(), nil
+			return NewRow(), nil
 		}
 
 		// Retrieve fragment.
 		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
 		if frag == nil {
-			return NewBitmap(), nil
+			return NewRow(), nil
 		}
 
 		// If the query is asking for the entire valid range, just return
@@ -936,13 +936,13 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 
 		baseValue, outOfRange := field.BaseValue(cond.Op, value)
 		if outOfRange && cond.Op != pql.NEQ {
-			return NewBitmap(), nil
+			return NewRow(), nil
 		}
 
 		// Retrieve fragment.
 		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
 		if frag == nil {
-			return NewBitmap(), nil
+			return NewRow(), nil
 		}
 
 		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid field range.
@@ -962,18 +962,18 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 }
 
 // executeUnionSlice executes a union() call for a local slice.
-func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
-	other := NewBitmap()
+func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+	other := NewRow()
 	for i, input := range c.Children {
-		bm, err := e.executeBitmapCallSlice(ctx, index, input, slice)
+		row, err := e.executeBitmapCallSlice(ctx, index, input, slice)
 		if err != nil {
 			return nil, err
 		}
 
 		if i == 0 {
-			other = bm
+			other = row
 		} else {
-			other = other.Union(bm)
+			other = other.Union(row)
 		}
 	}
 	other.InvalidateCount()
@@ -981,18 +981,18 @@ func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.C
 }
 
 // executeXorSlice executes a xor() call for a local slice.
-func (e *Executor) executeXorSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Bitmap, error) {
-	other := NewBitmap()
+func (e *Executor) executeXorSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+	other := NewRow()
 	for i, input := range c.Children {
-		bm, err := e.executeBitmapCallSlice(ctx, index, input, slice)
+		row, err := e.executeBitmapCallSlice(ctx, index, input, slice)
 		if err != nil {
 			return nil, err
 		}
 
 		if i == 0 {
-			other = bm
+			other = row
 		} else {
-			other = other.Xor(bm)
+			other = other.Xor(row)
 		}
 	}
 	other.InvalidateCount()
@@ -1009,11 +1009,11 @@ func (e *Executor) executeCount(ctx context.Context, index string, c *pql.Call, 
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
-		bm, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
 		if err != nil {
 			return 0, err
 		}
-		return bm.Count(), nil
+		return row.Count(), nil
 	}
 
 	// Merge returned results at coordinating node.
@@ -1520,7 +1520,7 @@ func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *
 		case "SetRowAttrs":
 		case "SetColumnAttrs":
 		default:
-			v, err = decodeBitmap(pb.Results[i].GetBitmap()), nil
+			v, err = decodeRow(pb.Results[i].GetRow()), nil
 		}
 		if err != nil {
 			return nil, err

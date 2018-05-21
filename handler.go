@@ -1158,7 +1158,7 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 // QueryResult types.
 const (
 	QueryResultTypeNil uint32 = iota
-	QueryResultTypeBitmap
+	QueryResultTypeRow
 	QueryResultTypePairs
 	QueryResultTypeValCount
 	QueryResultTypeUint64
@@ -1243,9 +1243,9 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 		pb.Results[i] = &internal.QueryResult{}
 
 		switch result := resp.Results[i].(type) {
-		case *Bitmap:
-			pb.Results[i].Type = QueryResultTypeBitmap
-			pb.Results[i].Bitmap = encodeBitmap(result)
+		case *Row:
+			pb.Results[i].Type = QueryResultTypeRow
+			pb.Results[i].Row = encodeRow(result)
 		case []Pair:
 			pb.Results[i].Type = QueryResultTypePairs
 			pb.Results[i].Pairs = encodePairs(result)

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package internal;
 
-message Bitmap {
+message Row {
 	repeated uint64 Bits = 1;
 	repeated string Keys = 3;
 	repeated Attr Attrs = 2;
@@ -61,7 +61,7 @@ message QueryResponse {
 
 message QueryResult {
 	uint32 Type = 6;
-	Bitmap Bitmap = 1;
+	Row Row = 1;
 	uint64 N = 2;
 	repeated Pair Pairs = 3;
 	ValCount ValCount = 5;

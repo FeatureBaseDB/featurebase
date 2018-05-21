@@ -410,9 +410,9 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
-		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
-		return []interface{}{bm}, nil
+		r := pilosa.NewRow(1, 3, 66, pilosa.SliceWidth+1)
+		r.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
+		return []interface{}{r}, nil
 	}
 
 	w := httptest.NewRecorder()
@@ -424,8 +424,8 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	}
 }
 
-// Ensure the handler can execute a query that returns a bitmap with column attributes as JSON.
-func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
+// Ensure the handler can execute a query that returns a row with column attributes as JSON.
+func TestHandler_Query_Row_ColumnAttrs_JSON(t *testing.T) {
 	hldr := test.NewHolder()
 	defer hldr.Close()
 
@@ -443,9 +443,9 @@ func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
-		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
-		return []interface{}{bm}, nil
+		r := pilosa.NewRow(1, 3, 66, pilosa.SliceWidth+1)
+		r.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
+		return []interface{}{r}, nil
 	}
 
 	w := httptest.NewRecorder()
@@ -457,8 +457,8 @@ func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
 	}
 }
 
-// Ensure the handler can execute a query that returns a bitmap as protobuf.
-func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
+// Ensure the handler can execute a query that returns a row as protobuf.
+func TestHandler_Query_Row_Protobuf(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -466,9 +466,9 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
-		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
-		return []interface{}{bm}, nil
+		r := pilosa.NewRow(1, pilosa.SliceWidth+1)
+		r.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
+		return []interface{}{r}, nil
 	}
 
 	w := httptest.NewRecorder()
@@ -482,11 +482,11 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	var resp internal.QueryResponse
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
-	} else if rt := resp.Results[0].Type; rt != pilosa.QueryResultTypeBitmap {
+	} else if rt := resp.Results[0].Type; rt != pilosa.QueryResultTypeRow {
 		t.Fatalf("unexpected response type: %d", resp.Results[0].Type)
-	} else if bits := resp.Results[0].Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
+	} else if bits := resp.Results[0].Row.Bits; !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
 		t.Fatalf("unexpected bits: %+v", bits)
-	} else if attrs := resp.Results[0].Bitmap.Attrs; len(attrs) != 3 {
+	} else if attrs := resp.Results[0].Row.Attrs; len(attrs) != 3 {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
 	} else if k, v := attrs[0].Key, attrs[0].StringValue; k != "a" || v != "b" {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
@@ -497,8 +497,8 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	}
 }
 
-// Ensure the handler can execute a query that returns a bitmap with column attributes as protobuf.
-func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
+// Ensure the handler can execute a query that returns a row with column attributes as protobuf.
+func TestHandler_Query_Row_ColumnAttrs_Protobuf(t *testing.T) {
 	hldr := test.NewHolder()
 	defer hldr.Close()
 
@@ -514,9 +514,9 @@ func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
-		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
-		return []interface{}{bm}, nil
+		r := pilosa.NewRow(1, pilosa.SliceWidth+1)
+		r.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
+		return []interface{}{r}, nil
 	}
 
 	// Encode request body.
@@ -541,11 +541,11 @@ func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if bits := resp.Results[0].Bitmap.Bits; !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
+	if bits := resp.Results[0].Row.Bits; !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
 		t.Fatalf("unexpected bits: %+v", bits)
-	} else if rt := resp.Results[0].Type; rt != pilosa.QueryResultTypeBitmap {
+	} else if rt := resp.Results[0].Type; rt != pilosa.QueryResultTypeRow {
 		t.Fatalf("unexpected response type: %d", resp.Results[0].Type)
-	} else if attrs := resp.Results[0].Bitmap.Attrs; len(attrs) != 3 {
+	} else if attrs := resp.Results[0].Row.Attrs; len(attrs) != 3 {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
 	} else if k, v := attrs[0].Key, attrs[0].StringValue; k != "a" || v != "b" {
 		t.Fatalf("unexpected attr[0]: %s=%v", k, v)
