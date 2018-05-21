@@ -362,22 +362,22 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *R
 	data := f.storage.OffsetRange(f.slice*SliceWidth, rowID*SliceWidth, (rowID+1)*SliceWidth)
 
 	// Reference bitmap subrange in storage.
-	// We Clone() data because otherwise bm will contains pointers to containers in storage.
+	// We Clone() data because otherwise row will contains pointers to containers in storage.
 	// This causes unexpected results when we cache the row and try to use it later.
-	bm := &Row{
+	row := &Row{
 		segments: []RowSegment{{
 			data:     *data.Clone(),
 			slice:    f.slice,
 			writable: false,
 		}},
 	}
-	bm.InvalidateCount()
+	row.InvalidateCount()
 
 	if updateRowCache {
-		f.rowCache.Add(rowID, bm)
+		f.rowCache.Add(rowID, row)
 	}
 
-	return bm
+	return row
 }
 
 // SetBit sets a bit for a given column & row within the fragment.
@@ -415,11 +415,11 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	}
 
 	// Get the row from row cache or fragment.storage.
-	bm := f.row(rowID, true, true)
-	bm.SetBit(columnID)
+	row := f.row(rowID, true, true)
+	row.SetBit(columnID)
 
 	// Update the cache.
-	f.cache.Add(rowID, bm.Count())
+	f.cache.Add(rowID, row.Count())
 
 	f.stats.Count("setBit", 1, 0.001)
 
@@ -467,11 +467,11 @@ func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	}
 
 	// Get the row from cache or fragment.storage.
-	bm := f.row(rowID, true, true)
-	bm.ClearBit(columnID)
+	row := f.row(rowID, true, true)
+	row.ClearBit(columnID)
 
 	// Update the cache.
-	f.cache.Add(rowID, bm.Count())
+	f.cache.Add(rowID, row.Count())
 
 	f.stats.Count("clearBit", 1, 1.0)
 
@@ -1048,12 +1048,12 @@ func (f *Fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
 			continue
 		}
 
-		bm := f.Row(rowID)
-		if bm.Count() > 0 {
+		row := f.Row(rowID)
+		if row.Count() > 0 {
 			// Otherwise load from storage.
 			pairs = append(pairs, BitmapPair{
 				ID:    rowID,
-				Count: bm.Count(),
+				Count: row.Count(),
 			})
 		}
 	}
@@ -1370,7 +1370,7 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 
 		// Update cache counts for all rows.
 		for rowID := range set {
-			// Import should ALWAYS have row() load a new bm from fragment.storage
+			// Import should ALWAYS have row() load a new row from fragment.storage
 			// because the row that's in rowCache hasn't been updated with
 			// this import's data.
 			f.cache.BulkAdd(rowID, f.row(rowID, false, false).Count())
