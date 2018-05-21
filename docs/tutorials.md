@@ -324,6 +324,8 @@ The instructions in this section require Docker 17.06 and better. Although it is
 
 We are going to use two servers: the master node runs in the first server and a  slave node in the second server.
 
+Docker nodes require some ports to be accesible from outside. Before carrying on, make sure the following ports are open on all nodes: TCP/2377, TCP/7946, UDP/7946, UDP/4789.
+
 Let's initialize the swarm first. Run the following on the master:
 ```
 docker swarm init --advertise-addr=IP-ADDRESS
