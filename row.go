@@ -260,20 +260,20 @@ func (r *Row) Bits() []uint64 {
 	return a
 }
 
-// encodeBitmap converts r into its internal representation.
-func encodeBitmap(r *Row) *internal.Bitmap {
+// encodeRow converts r into its internal representation.
+func encodeRow(r *Row) *internal.Row {
 	if r == nil {
 		return nil
 	}
 
-	return &internal.Bitmap{
+	return &internal.Row{
 		Bits:  r.Bits(),
 		Attrs: encodeAttrs(r.Attrs),
 	}
 }
 
-// decodeBitmap converts r from its internal representation.
-func decodeBitmap(pr *internal.Bitmap) *Row {
+// decodeRow converts r from its internal representation.
+func decodeRow(pr *internal.Row) *Row {
 	if pr == nil {
 		return nil
 	}

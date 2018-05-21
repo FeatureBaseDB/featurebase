@@ -1520,7 +1520,7 @@ func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *
 		case "SetRowAttrs":
 		case "SetColumnAttrs":
 		default:
-			v, err = decodeBitmap(pb.Results[i].GetBitmap()), nil
+			v, err = decodeRow(pb.Results[i].GetRow()), nil
 		}
 		if err != nil {
 			return nil, err
