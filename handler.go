@@ -437,7 +437,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = h.API.CreateIndex(r.Context(), indexName, req.Options)
-	if err == ErrIndexExists {
+	if errors.Cause(err) == ErrIndexExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	} else if err != nil {
@@ -464,7 +464,7 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 
 	attrs, err := h.API.IndexAttrDiff(r.Context(), indexName, req.Blocks)
 	if err != nil {
-		if err == ErrIndexNotFound {
+		if errors.Cause(err) == ErrIndexNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -505,7 +505,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = h.API.CreateFrame(r.Context(), indexName, frameName, req.Options)
 	if err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		case ErrFrameExists:
@@ -573,7 +573,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 
 	err := h.API.DeleteFrame(r.Context(), indexName, frameName)
 	if err != nil {
-		if err == ErrIndexNotFound {
+		if errors.Cause(err) == ErrIndexNotFound {
 			if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
 				h.Logger.Printf("response encoding error: %s", err)
 			}
@@ -612,7 +612,7 @@ func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.API.CreateField(r.Context(), indexName, frameName, field); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -641,7 +641,7 @@ func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request)
 	fieldName := mux.Vars(r)["field"]
 
 	if err := h.API.DeleteField(r.Context(), indexName, frameName, fieldName); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -661,7 +661,7 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 
 	fields, err := h.API.Fields(r.Context(), indexName, frameName)
 	if err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
 		case ErrFrameNotFound:
@@ -691,7 +691,7 @@ func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
 
 	views, err := h.API.Views(r.Context(), indexName, frameName)
 	if err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -717,7 +717,7 @@ func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
 	viewName := mux.Vars(r)["view"]
 
 	if err := h.API.DeleteView(r.Context(), indexName, frameName, viewName); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -751,7 +751,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 
 	attrs, err := h.API.FrameAttrDiff(r.Context(), indexName, frameName, req.Blocks)
 	if err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrFragmentNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		default:
@@ -878,7 +878,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.API.Import(r.Context(), req); err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
 		case ErrFrameNotFound:
@@ -931,7 +931,7 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err = h.API.ImportValue(r.Context(), req); err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
 		case ErrFrameNotFound:
@@ -980,7 +980,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = h.API.ExportCSV(r.Context(), index, frame, view, slice, w); err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrFragmentNotFound:
 			break
 		case ErrClusterDoesNotOwnSlice:
@@ -1051,7 +1051,7 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err = h.API.UnmarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice, r.Body); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1065,7 +1065,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		if _, ok := err.(BadRequestError); ok {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else if err == ErrFragmentNotFound {
+		} else if errors.Cause(err) == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1091,7 +1091,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 
 	blocks, err := h.API.FragmentBlocks(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice)
 	if err != nil {
-		if err == ErrFragmentNotFound {
+		if errors.Cause(err) == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1131,7 +1131,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	err = h.API.RestoreFrame(r.Context(), indexName, frameName, host)
-	switch err {
+	switch errors.Cause(err) {
 	case nil:
 		break
 	case ErrFrameNotFound:
