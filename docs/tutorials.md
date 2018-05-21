@@ -3,6 +3,7 @@ title = "Tutorials"
 weight = 4
 nav = [
     "Setting Up a Secure Cluster",
+    "Setting Up a Docker Cluster",
     "Using Integer Field Values",
     "Storing Row and Column Attributes",
 ]
@@ -287,31 +288,31 @@ The corresponding [Docker Compose](https://docs.docker.com/compose/) file is bel
 ```yaml
 version: '2'
 services: 
-    pilosa1:
-        image: pilosa/pilosa:latest
-        ports: 
-            - "10101:10101"
-        environment:
-            - PILOSA_CLUSTER_COORDINATOR=true
-            - PILOSA_GOSSIP_SEEDS=pilosa1:14000
-        networks:
-          - pilosanet
-        entrypoint:
-          - /pilosa
-          - server
-          - --bind
-          - "pilosa1:10101"
-    pilosa2:
-        image: pilosa/pilosa:latest
-        environment:
-            - PILOSA_GOSSIP_SEEDS=pilosa1:14000
-        networks:
-          - pilosanet
-        entrypoint:
-          - /pilosa
-          - server
-          - --bind
-          - "pilosa2:10101"
+  pilosa1:
+    image: pilosa/pilosa:latest
+    ports:
+      - "10101:10101"
+    environment:
+      - PILOSA_CLUSTER_COORDINATOR=true
+      - PILOSA_GOSSIP_SEEDS=pilosa1:14000
+    networks:
+      - pilosanet
+    entrypoint:
+      - /pilosa
+      - server
+      - --bind
+      - "pilosa1:10101"
+  pilosa2:
+    image: pilosa/pilosa:latest
+    environment:
+      - PILOSA_GOSSIP_SEEDS=pilosa1:14000
+    networks:
+      - pilosanet
+    entrypoint:
+      - /pilosa
+      - server
+      - --bind
+      - "pilosa2:10101"
 networks: 
   pilosanet:
 ```
@@ -322,11 +323,11 @@ It is very easy to run a Pilosa Cluster on different servers using [Docker Swarm
 
 The instructions in this section require Docker 17.06 and better. Although it is possible to run a Docker swarm on MacOS or Windows, it is easiest to run it on Linux. So we assume you are trying these instructions on Linux, probably on the cloud.
 
-We are going to use two servers: the master node runs in the first server and a  slave node in the second server.
+We are going to use two servers: the manager node runs in the first server and a worker node in the second server.
 
 Docker nodes require some ports to be accesible from outside. Before carrying on, make sure the following ports are open on all nodes: TCP/2377, TCP/7946, UDP/7946, UDP/4789.
 
-Let's initialize the swarm first. Run the following on the master:
+Let's initialize the swarm first. Run the following on the manager:
 ```
 docker swarm init --advertise-addr=IP-ADDRESS
 ```
@@ -337,15 +338,15 @@ The output of the command above should be similar to:
 ```
 To add a manager to this swarm, run the following command:
 
-    docker swarm join --token SOME-TOKEN MASTER-IP-ADDRESS:2377
+    docker swarm join --token SOME-TOKEN MANAGER-IP-ADDRESS:2377
 ```
 
-Let's make the slave node join the master. Copy/paste the command above in a shell on the slave, replacing the token and IP address with the correct values. You may neeed to add `--advertise-addr=SLAVE-EXTERNAL-IP-ADDRESS` parameter if the slave has more than one network interface:
+Let's make the worker node join the manager. Copy/paste the command above in a shell on the worker, replacing the token and IP address with the correct values. You may neeed to add `--advertise-addr=WORKER-EXTERNAL-IP-ADDRESS` parameter if the worker has more than one network interface:
 ```
-docker swarm join --token SOME-TOKEN MASTER-IP-ADDRESS:2377
+docker swarm join --token SOME-TOKEN MANAGER-IP-ADDRESS:2377
 ```
 
-Run the following on the master to check that the slave joined to the swarm:
+Run the following on the manager to check that the worker joined to the swarm:
 ```
 docker node ls
 ```
@@ -354,15 +355,15 @@ Which should output:
 
 ID|HOSTNAME|STATUS|AVAILABILITY|MANAGER STATUS|ENGINE VERSION
 ---|--------|------|------------|--------------|-------------
-MASTER-ID *|swarm1|Ready|Active|Leader|18.05.0-ce|
-SLAVE-ID|swarm2|Ready|Active||18.05.0-ce|
+MANAGER-ID *|swarm1|Ready|Active|Leader|18.05.0-ce|
+WORKER-ID|swarm2|Ready|Active||18.05.0-ce|
 
 If you have created the `pilosanet` network before, delete it before carrying on, otherwise skip to the next step:
 ```
 docker network rm pilosanet
 ```
 
-Let's create the `pilosanet` network, but with `overlay` type this time. We should also make this network attachable in order to be able to attach containers to it. Run the following on the master:
+Let's create the `pilosanet` network, but with `overlay` type this time. We should also make this network attachable in order to be able to attach containers to it. Run the following on the manager:
 ```
 docker network create -d overlay pilosanet --attachable
 ```
@@ -385,7 +386,7 @@ docker run -it --rm --network=pilosanet --name shell alpine wget -q -O- pilosa1:
 {"state":"NORMAL","nodes":[{"id":"3e3b0abd-1945-441a-a01f-5a28272972f5","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"71ed27cc-9443-4f41-88fb-1c22f92bf695","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
 ```
 
-You can add as many as slave nodes to both the swarm and the Pilosa cluster using the steps above.
+You can add as many as worker nodes to both the swarm and the Pilosa cluster using the steps above.
 
 #### What's Next?
 
