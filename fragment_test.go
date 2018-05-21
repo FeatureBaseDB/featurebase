@@ -284,7 +284,7 @@ func TestFragment_FieldMinMax(t *testing.T) {
 
 	t.Run("Min", func(t *testing.T) {
 		tests := []struct {
-			filter *pilosa.Bitmap
+			filter *pilosa.Row
 			exp    uint64
 			cnt    uint64
 		}{
@@ -308,7 +308,7 @@ func TestFragment_FieldMinMax(t *testing.T) {
 
 	t.Run("Max", func(t *testing.T) {
 		tests := []struct {
-			filter *pilosa.Bitmap
+			filter *pilosa.Row
 			exp    uint64
 			cnt    uint64
 		}{

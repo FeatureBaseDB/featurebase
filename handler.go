@@ -1243,7 +1243,7 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 		pb.Results[i] = &internal.QueryResult{}
 
 		switch result := resp.Results[i].(type) {
-		case *Bitmap:
+		case *Row:
 			pb.Results[i].Type = QueryResultTypeBitmap
 			pb.Results[i].Bitmap = encodeBitmap(result)
 		case []Pair:

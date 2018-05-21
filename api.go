@@ -114,7 +114,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		// Consolidate all column ids across all calls.
 		var columnIDs []uint64
 		for _, result := range results {
-			bm, ok := result.(*Bitmap)
+			bm, ok := result.(*Row)
 			if !ok {
 				continue
 			}

@@ -346,7 +346,7 @@ func (v *View) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (chan
 }
 
 // FieldSum returns the sum & count of a field.
-func (v *View) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err error) {
+func (v *View) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	for _, f := range v.Fragments() {
 		fsum, fcount, err := f.FieldSum(filter, bitDepth)
 		if err != nil {
@@ -359,7 +359,7 @@ func (v *View) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err e
 }
 
 // FieldMin returns the min and count of a field.
-func (v *View) FieldMin(filter *Bitmap, bitDepth uint) (min, count uint64, err error) {
+func (v *View) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
 	var minHasValue bool
 	for _, f := range v.Fragments() {
 		fmin, fcount, err := f.FieldMin(filter, bitDepth)
@@ -387,7 +387,7 @@ func (v *View) FieldMin(filter *Bitmap, bitDepth uint) (min, count uint64, err e
 }
 
 // FieldMax returns the max and count of a field.
-func (v *View) FieldMax(filter *Bitmap, bitDepth uint) (max, count uint64, err error) {
+func (v *View) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
 	for _, f := range v.Fragments() {
 		fmax, fcount, err := f.FieldMax(filter, bitDepth)
 		if err != nil {
@@ -402,7 +402,7 @@ func (v *View) FieldMax(filter *Bitmap, bitDepth uint) (max, count uint64, err e
 }
 
 // FieldRange returns bitmaps with a field value encoding matching the predicate.
-func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitmap, error) {
+func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	bm := NewBitmap()
 	for _, frag := range v.Fragments() {
 		other, err := frag.FieldRange(op, bitDepth, predicate)
@@ -416,7 +416,7 @@ func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitma
 
 // FieldRangeBetween returns bitmaps with a field value encoding matching any
 // value between predicateMin and predicateMax.
-func (v *View) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Bitmap, error) {
+func (v *View) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	bm := NewBitmap()
 	for _, frag := range v.Fragments() {
 		other, err := frag.FieldRangeBetween(bitDepth, predicateMin, predicateMax)

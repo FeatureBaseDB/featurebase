@@ -239,7 +239,7 @@ func (f *Fragment) openStorage() error {
 
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
-	f.rowCache = &SimpleCache{make(map[uint64]*Bitmap)}
+	f.rowCache = &SimpleCache{make(map[uint64]*Row)}
 
 	return nil
 
@@ -343,13 +343,13 @@ func (f *Fragment) closeStorage() error {
 }
 
 // Row returns a row by ID.
-func (f *Fragment) Row(rowID uint64) *Bitmap {
+func (f *Fragment) Row(rowID uint64) *Row {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.row(rowID, true, true)
 }
 
-func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *Bitmap {
+func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *Row {
 	if checkRowCache {
 		r, ok := f.rowCache.Fetch(rowID)
 		if ok && r != nil {
@@ -364,7 +364,7 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *B
 	// Reference bitmap subrange in storage.
 	// We Clone() data because otherwise bm will contains pointers to containers in storage.
 	// This causes unexpected results when we cache the row and try to use it later.
-	bm := &Bitmap{
+	bm := &Row{
 		segments: []BitmapSegment{{
 			data:     *data.Clone(),
 			slice:    f.slice,
@@ -584,7 +584,7 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 
 // FieldSum returns the sum of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err error) {
+func (f *Fragment) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	// Compute count based on the existence bit.
 	row := f.Row(uint64(bitDepth))
 	if filter != nil {
@@ -616,7 +616,7 @@ func (f *Fragment) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, e
 
 // FieldMin returns the min of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldMin(filter *Bitmap, bitDepth uint) (min, count uint64, err error) {
+func (f *Fragment) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
 
 	consider := f.Row(uint64(bitDepth))
 	if filter != nil {
@@ -649,7 +649,7 @@ func (f *Fragment) FieldMin(filter *Bitmap, bitDepth uint) (min, count uint64, e
 
 // FieldMax returns the max of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldMax(filter *Bitmap, bitDepth uint) (max, count uint64, err error) {
+func (f *Fragment) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
 
 	consider := f.Row(uint64(bitDepth))
 	if filter != nil {
@@ -679,7 +679,7 @@ func (f *Fragment) FieldMax(filter *Bitmap, bitDepth uint) (max, count uint64, e
 }
 
 // FieldRange returns bitmaps with a field value encoding matching the predicate.
-func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitmap, error) {
+func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	switch op {
 	case pql.EQ:
 		return f.fieldRangeEQ(bitDepth, predicate)
@@ -694,7 +694,7 @@ func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*B
 	}
 }
 
-func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Bitmap, error) {
+func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
 	b := f.Row(uint64(bitDepth))
 
@@ -713,7 +713,7 @@ func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Bitmap, error
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeNEQ(bitDepth uint, predicate uint64) (*Bitmap, error) {
+func (f *Fragment) fieldRangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
 	b := f.Row(uint64(bitDepth))
 
@@ -729,7 +729,7 @@ func (f *Fragment) fieldRangeNEQ(bitDepth uint, predicate uint64) (*Bitmap, erro
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Bitmap, error) {
+func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	keep := NewBitmap()
 
 	// Start with set of columns with values set.
@@ -777,7 +777,7 @@ func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality b
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Bitmap, error) {
+func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	b := f.Row(uint64(bitDepth))
 	keep := NewBitmap()
 
@@ -813,12 +813,12 @@ func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality b
 }
 
 // FieldNotNull returns the not-null row (stored at bitDepth).
-func (f *Fragment) FieldNotNull(bitDepth uint) (*Bitmap, error) {
+func (f *Fragment) FieldNotNull(bitDepth uint) (*Row, error) {
 	return f.Row(uint64(bitDepth)), nil
 }
 
 // FieldRangeBetween returns bitmaps with a field value encoding matching any value between predicateMin and predicateMax.
-func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Bitmap, error) {
+func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	b := f.Row(uint64(bitDepth))
 	keep1 := NewBitmap() // GTE
 	keep2 := NewBitmap() // LTE
@@ -1067,7 +1067,7 @@ type TopOptions struct {
 	N int
 
 	// Bitmap to intersect with.
-	Src *Bitmap
+	Src *Row
 
 	// Specific rows to filter against.
 	RowIDs       []uint64

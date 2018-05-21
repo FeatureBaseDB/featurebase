@@ -25,8 +25,8 @@ import (
 // Ensure a bitmap can be merged
 func TestBitmap_Merge(t *testing.T) {
 	tests := []struct {
-		bm1 *pilosa.Bitmap
-		bm2 *pilosa.Bitmap
+		bm1 *pilosa.Row
+		bm2 *pilosa.Row
 		exp uint64
 	}{
 		{

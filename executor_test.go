@@ -54,27 +54,27 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 
 		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(row=10, frame=f)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
+		} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
 			t.Fatalf("unexpected bits: %+v", bits)
-		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
+		} else if attrs := res[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
 
 		// Inhibit bits.
 		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(row=10, frame=f)`), nil, &pilosa.ExecOptions{ExcludeBits: true}); err != nil {
 			t.Fatal(err)
-		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{}) {
+		} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{}) {
 			t.Fatalf("unexpected bits: %+v", bits)
-		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
+		} else if attrs := res[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
 
 		// Inhibit attributes.
 		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(row=10, frame=f)`), nil, &pilosa.ExecOptions{ExcludeAttrs: true}); err != nil {
 			t.Fatal(err)
-		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
+		} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{3, SliceWidth + 1}) {
 			t.Fatalf("unexpected bits: %+v", bits)
-		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{}) {
+		} else if attrs := res[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{}) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
 	})
@@ -103,9 +103,9 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 
 		if res, err := e.Execute(context.Background(), "i", test.MustParse(fmt.Sprintf(`Bitmap(col=%d, frame=f)`, SliceWidth+1)), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{10, 20}) {
+		} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{10, 20}) {
 			t.Fatalf("unexpected bits: %+v", bits)
-		} else if attrs := res[0].(*pilosa.Bitmap).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
+		} else if attrs := res[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123)}) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
 	})
@@ -124,7 +124,7 @@ func TestExecutor_Execute_Difference(t *testing.T) {
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Difference(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{1, 3}) {
+	} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{1, 3}) {
 		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
@@ -156,7 +156,7 @@ func TestExecutor_Execute_Intersect(t *testing.T) {
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Intersect(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 2}) {
+	} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 2}) {
 		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
@@ -186,7 +186,7 @@ func TestExecutor_Execute_Union(t *testing.T) {
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Union(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{0, 2, SliceWidth + 1, SliceWidth + 2}) {
+	} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{0, 2, SliceWidth + 1, SliceWidth + 2}) {
 		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
@@ -200,7 +200,7 @@ func TestExecutor_Execute_Empty_Union(t *testing.T) {
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Union()`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{}) {
+	} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{}) {
 		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
@@ -219,7 +219,7 @@ func TestExecutor_Execute_Xor(t *testing.T) {
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Xor(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{0, 2, SliceWidth + 1}) {
+	} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{0, 2, SliceWidth + 1}) {
 		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }
@@ -784,7 +784,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	t.Run("Standard", func(t *testing.T) {
 		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Range(row=1, frame=f, start="1999-12-31T00:00", end="2002-01-01T03:00")`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{2, 3, 4, 5, 6, 7}) {
+		} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{2, 3, 4, 5, 6, 7}) {
 			t.Fatalf("unexpected bits: %+v", bits)
 		}
 	})
@@ -793,7 +793,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Range(col=2, frame=f, start="1999-01-01T00:00", end="2003-01-01T00:00")`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{1, 10}) {
+		} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{1, 10}) {
 			t.Fatalf("unexpected bits: %+v", bits)
 		}
 	})
@@ -854,7 +854,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	t.Run("EQ", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 20)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{50, (5 * SliceWidth) + 100}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{50, (5 * SliceWidth) + 100}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -863,28 +863,28 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		// NEQ null
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo != null)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 		// NEQ <int>
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo != 20)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1, SliceWidth + 2}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1, SliceWidth + 2}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 		// NEQ -<int>
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo != -20)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Bits()) {
 			//t.Fatalf("unexpected result: %s", spew.Sdump(result))
-			t.Fatalf("unexpected result: %v", result[0].(*pilosa.Bitmap).Bits())
+			t.Fatalf("unexpected result: %v", result[0].(*pilosa.Row).Bits())
 		}
 	})
 
 	t.Run("LT", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo < 20)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{SliceWidth + 2}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{SliceWidth + 2}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -892,7 +892,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	t.Run("LTE", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo <= 20)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{50, SliceWidth + 2, (5 * SliceWidth) + 100}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{50, SliceWidth + 2, (5 * SliceWidth) + 100}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -900,7 +900,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	t.Run("GT", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo > 20)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -908,7 +908,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	t.Run("GTE", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo >= 20)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{50, SliceWidth, SliceWidth + 1, (5 * SliceWidth) + 100}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{50, SliceWidth, SliceWidth + 1, (5 * SliceWidth) + 100}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -916,7 +916,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	t.Run("BETWEEN", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo >< [1, 1000])`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -925,7 +925,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	t.Run("FieldNotNull", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo >< [0, 1000])`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -933,7 +933,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	t.Run("BelowMin", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 0)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -941,7 +941,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	t.Run("AboveMax", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 200)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Bitmap).Bits()) {
+		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Row).Bits()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
@@ -949,16 +949,16 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	t.Run("LTAboveMax", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=edge, foo < 200)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{0, 1}, result[0].(*pilosa.Bitmap).Bits()) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result[0].(*pilosa.Bitmap).Bits()))
+		} else if !reflect.DeepEqual([]uint64{0, 1}, result[0].(*pilosa.Row).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result[0].(*pilosa.Row).Bits()))
 		}
 	})
 
 	t.Run("GTBelowMin", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=edge, foo > -200)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{0, 1}, result[0].(*pilosa.Bitmap).Bits()) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result[0].(*pilosa.Bitmap).Bits()))
+		} else if !reflect.DeepEqual([]uint64{0, 1}, result[0].(*pilosa.Row).Bits()) {
+			t.Fatalf("unexpected result: %s", spew.Sdump(result[0].(*pilosa.Row).Bits()))
 		}
 	})
 
@@ -1018,7 +1018,7 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 	e := test.NewExecutor(hldr.Holder, c)
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(row=10, frame=f)`), nil, nil); err != nil {
 		t.Fatal(err)
-	} else if bits := res[0].(*pilosa.Bitmap).Bits(); !reflect.DeepEqual(bits, []uint64{1, 2, 2*SliceWidth + 4}) {
+	} else if bits := res[0].(*pilosa.Row).Bits(); !reflect.DeepEqual(bits, []uint64{1, 2, 2*SliceWidth + 4}) {
 		t.Fatalf("unexpected bits: %+v", bits)
 	}
 }

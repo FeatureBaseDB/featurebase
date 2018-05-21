@@ -719,7 +719,7 @@ func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (change
 
 // FieldSum returns the sum and count for a field.
 // An optional filtering bitmap can be provided.
-func (f *Frame) FieldSum(filter *Bitmap, name string) (sum, count int64, err error) {
+func (f *Frame) FieldSum(filter *Row, name string) (sum, count int64, err error) {
 	field := f.Field(name)
 	if field == nil {
 		return 0, 0, ErrFieldNotFound
@@ -739,7 +739,7 @@ func (f *Frame) FieldSum(filter *Bitmap, name string) (sum, count int64, err err
 
 // FieldMin returns the min for a field.
 // An optional filtering bitmap can be provided.
-func (f *Frame) FieldMin(filter *Bitmap, name string) (min, count int64, err error) {
+func (f *Frame) FieldMin(filter *Row, name string) (min, count int64, err error) {
 	field := f.Field(name)
 	if field == nil {
 		return 0, 0, ErrFieldNotFound
@@ -759,7 +759,7 @@ func (f *Frame) FieldMin(filter *Bitmap, name string) (min, count int64, err err
 
 // FieldMax returns the max for a field.
 // An optional filtering bitmap can be provided.
-func (f *Frame) FieldMax(filter *Bitmap, name string) (max, count int64, err error) {
+func (f *Frame) FieldMax(filter *Row, name string) (max, count int64, err error) {
 	field := f.Field(name)
 	if field == nil {
 		return 0, 0, ErrFieldNotFound
@@ -777,7 +777,7 @@ func (f *Frame) FieldMax(filter *Bitmap, name string) (max, count int64, err err
 	return int64(vmax) + field.Min, int64(vcount), nil
 }
 
-func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Bitmap, error) {
+func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Row, error) {
 	// Retrieve and validate field.
 	field := f.Field(name)
 	if field == nil {
@@ -800,7 +800,7 @@ func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Bitmap,
 	return view.FieldRange(op, field.BitDepth(), baseValue)
 }
 
-func (f *Frame) FieldRangeBetween(name string, predicateMin, predicateMax int64) (*Bitmap, error) {
+func (f *Frame) FieldRangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
 	// Retrieve and validate field.
 	field := f.Field(name)
 	if field == nil {
