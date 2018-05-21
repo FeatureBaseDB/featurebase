@@ -401,31 +401,31 @@ func (v *View) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err erro
 	return max, count, nil
 }
 
-// FieldRange returns bitmaps with a field value encoding matching the predicate.
+// FieldRange returns rows with a field value encoding matching the predicate.
 func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
-	bm := NewBitmap()
+	r := NewRow()
 	for _, frag := range v.Fragments() {
 		other, err := frag.FieldRange(op, bitDepth, predicate)
 		if err != nil {
 			return nil, err
 		}
-		bm = bm.Union(other)
+		r = r.Union(other)
 	}
-	return bm, nil
+	return r, nil
 }
 
 // FieldRangeBetween returns bitmaps with a field value encoding matching any
 // value between predicateMin and predicateMax.
 func (v *View) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
-	bm := NewBitmap()
+	r := NewRow()
 	for _, frag := range v.Fragments() {
 		other, err := frag.FieldRangeBetween(bitDepth, predicateMin, predicateMax)
 		if err != nil {
 			return nil, err
 		}
-		bm = bm.Union(other)
+		r = r.Union(other)
 	}
-	return bm, nil
+	return r, nil
 }
 
 // IsInverseView returns true if the view is used for storing an inverted representation.

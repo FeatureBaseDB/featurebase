@@ -975,8 +975,8 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 }
 
-// Ensure a remote query can return a bitmap.
-func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
+// Ensure a remote query can return a row.
+func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	c := test.NewCluster(2)
 
 	// Create secondary server and update second cluster node.
@@ -1000,12 +1000,12 @@ func TestExecutor_Execute_Remote_Bitmap(t *testing.T) {
 		}
 
 		// Set bits in slice 0 & 2.
-		bm := pilosa.NewBitmap(
+		r := pilosa.NewRow(
 			(0*SliceWidth)+1,
 			(0*SliceWidth)+2,
 			(2*SliceWidth)+4,
 		)
-		return []interface{}{bm}, nil
+		return []interface{}{r}, nil
 	}
 
 	// Create local executor data.

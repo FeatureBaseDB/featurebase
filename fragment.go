@@ -730,7 +730,7 @@ func (f *Fragment) fieldRangeNEQ(bitDepth uint, predicate uint64) (*Row, error) 
 }
 
 func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
-	keep := NewBitmap()
+	keep := NewRow()
 
 	// Start with set of columns with values set.
 	b := f.Row(uint64(bitDepth))
@@ -779,7 +779,7 @@ func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality b
 
 func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	b := f.Row(uint64(bitDepth))
-	keep := NewBitmap()
+	keep := NewRow()
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
@@ -820,8 +820,8 @@ func (f *Fragment) FieldNotNull(bitDepth uint) (*Row, error) {
 // FieldRangeBetween returns bitmaps with a field value encoding matching any value between predicateMin and predicateMax.
 func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	b := f.Row(uint64(bitDepth))
-	keep1 := NewBitmap() // GTE
-	keep2 := NewBitmap() // LTE
+	keep1 := NewRow() // GTE
+	keep2 := NewRow() // LTE
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {

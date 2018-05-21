@@ -410,9 +410,9 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
-		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
-		return []interface{}{bm}, nil
+		r := pilosa.NewRow(1, 3, 66, pilosa.SliceWidth+1)
+		r.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
+		return []interface{}{r}, nil
 	}
 
 	w := httptest.NewRecorder()
@@ -424,8 +424,8 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	}
 }
 
-// Ensure the handler can execute a query that returns a bitmap with column attributes as JSON.
-func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
+// Ensure the handler can execute a query that returns a row with column attributes as JSON.
+func TestHandler_Query_Row_ColumnAttrs_JSON(t *testing.T) {
 	hldr := test.NewHolder()
 	defer hldr.Close()
 
@@ -443,9 +443,9 @@ func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		bm := pilosa.NewBitmap(1, 3, 66, pilosa.SliceWidth+1)
-		bm.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
-		return []interface{}{bm}, nil
+		r := pilosa.NewRow(1, 3, 66, pilosa.SliceWidth+1)
+		r.Attrs = map[string]interface{}{"a": "b", "c": 1, "d": true}
+		return []interface{}{r}, nil
 	}
 
 	w := httptest.NewRecorder()
@@ -457,8 +457,8 @@ func TestHandler_Query_Bitmap_ColumnAttrs_JSON(t *testing.T) {
 	}
 }
 
-// Ensure the handler can execute a query that returns a bitmap as protobuf.
-func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
+// Ensure the handler can execute a query that returns a row as protobuf.
+func TestHandler_Query_Row_Protobuf(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -466,9 +466,9 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
-		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
-		return []interface{}{bm}, nil
+		r := pilosa.NewRow(1, pilosa.SliceWidth+1)
+		r.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
+		return []interface{}{r}, nil
 	}
 
 	w := httptest.NewRecorder()
@@ -497,8 +497,8 @@ func TestHandler_Query_Bitmap_Protobuf(t *testing.T) {
 	}
 }
 
-// Ensure the handler can execute a query that returns a bitmap with column attributes as protobuf.
-func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
+// Ensure the handler can execute a query that returns a row with column attributes as protobuf.
+func TestHandler_Query_Row_ColumnAttrs_Protobuf(t *testing.T) {
 	hldr := test.NewHolder()
 	defer hldr.Close()
 
@@ -514,9 +514,9 @@ func TestHandler_Query_Bitmap_ColumnAttrs_Protobuf(t *testing.T) {
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		bm := pilosa.NewBitmap(1, pilosa.SliceWidth+1)
-		bm.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
-		return []interface{}{bm}, nil
+		r := pilosa.NewRow(1, pilosa.SliceWidth+1)
+		r.Attrs = map[string]interface{}{"a": "b", "c": int64(1), "d": true}
+		return []interface{}{r}, nil
 	}
 
 	// Encode request body.

@@ -320,7 +320,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(*Row)
 		if other == nil {
-			other = NewBitmap()
+			other = NewRow()
 		}
 		other.Merge(v.(*Row))
 		return other
@@ -708,7 +708,7 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 
 	frag := e.Holder.Fragment(index, frame, view, slice)
 	if frag == nil {
-		return NewBitmap(), nil
+		return NewRow(), nil
 	}
 	return frag.Row(id), nil
 }
@@ -874,7 +874,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		// Retrieve fragment.
 		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
 		if frag == nil {
-			return NewBitmap(), nil
+			return NewRow(), nil
 		}
 
 		return frag.FieldNotNull(field.BitDepth())
@@ -903,13 +903,13 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 
 		baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicates[0], predicates[1])
 		if outOfRange {
-			return NewBitmap(), nil
+			return NewRow(), nil
 		}
 
 		// Retrieve fragment.
 		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
 		if frag == nil {
-			return NewBitmap(), nil
+			return NewRow(), nil
 		}
 
 		// If the query is asking for the entire valid range, just return
@@ -936,13 +936,13 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 
 		baseValue, outOfRange := field.BaseValue(cond.Op, value)
 		if outOfRange && cond.Op != pql.NEQ {
-			return NewBitmap(), nil
+			return NewRow(), nil
 		}
 
 		// Retrieve fragment.
 		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
 		if frag == nil {
-			return NewBitmap(), nil
+			return NewRow(), nil
 		}
 
 		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid field range.
@@ -963,7 +963,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 
 // executeUnionSlice executes a union() call for a local slice.
 func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
-	other := NewBitmap()
+	other := NewRow()
 	for i, input := range c.Children {
 		bm, err := e.executeBitmapCallSlice(ctx, index, input, slice)
 		if err != nil {
@@ -982,7 +982,7 @@ func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.C
 
 // executeXorSlice executes a xor() call for a local slice.
 func (e *Executor) executeXorSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
-	other := NewBitmap()
+	other := NewRow()
 	for i, input := range c.Children {
 		bm, err := e.executeBitmapCallSlice(ctx, index, input, slice)
 		if err != nil {

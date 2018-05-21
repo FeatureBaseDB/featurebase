@@ -718,7 +718,7 @@ func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (change
 }
 
 // FieldSum returns the sum and count for a field.
-// An optional filtering bitmap can be provided.
+// An optional filtering row can be provided.
 func (f *Frame) FieldSum(filter *Row, name string) (sum, count int64, err error) {
 	field := f.Field(name)
 	if field == nil {
@@ -738,7 +738,7 @@ func (f *Frame) FieldSum(filter *Row, name string) (sum, count int64, err error)
 }
 
 // FieldMin returns the min for a field.
-// An optional filtering bitmap can be provided.
+// An optional filtering row can be provided.
 func (f *Frame) FieldMin(filter *Row, name string) (min, count int64, err error) {
 	field := f.Field(name)
 	if field == nil {
@@ -758,7 +758,7 @@ func (f *Frame) FieldMin(filter *Row, name string) (min, count int64, err error)
 }
 
 // FieldMax returns the max for a field.
-// An optional filtering bitmap can be provided.
+// An optional filtering row can be provided.
 func (f *Frame) FieldMax(filter *Row, name string) (max, count int64, err error) {
 	field := f.Field(name)
 	if field == nil {
@@ -794,7 +794,7 @@ func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Row, er
 
 	baseValue, outOfRange := field.BaseValue(op, predicate)
 	if outOfRange {
-		return NewBitmap(), nil
+		return NewRow(), nil
 	}
 
 	return view.FieldRange(op, field.BitDepth(), baseValue)
@@ -817,7 +817,7 @@ func (f *Frame) FieldRangeBetween(name string, predicateMin, predicateMax int64)
 
 	baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicateMin, predicateMax)
 	if outOfRange {
-		return NewBitmap(), nil
+		return NewRow(), nil
 	}
 
 	return view.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
