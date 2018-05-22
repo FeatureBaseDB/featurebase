@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v0.10.1] - 2018-05-22
+
+This version contains 10 contribution from 4 contributors. There are 5 files changed, 222 insertions, and 54 deletions.
+
+### Fixed
+
+- Use errors.Cause in handler so that we return correct status codes ([#1304](https://github.com/pilosa/pilosa/pull/1304), [#1309](https://github.com/pilosa/pilosa/pull/1309))
+- Added Docker cluster/swarm tutorials ([#1296](https://github.com/pilosa/pilosa/pull/1296), [#1305](https://github.com/pilosa/pilosa/pull/1305))
+- Close HTTP handler gracefully ([#1310](https://github.com/pilosa/pilosa/pull/1310))
+- Use lazy assignment for VERSION_ID so enterprise flag is set appropriately ([#1308](https://github.com/pilosa/pilosa/pull/1308))
+- Adjust cluster state tests so they aren't so dependent upon a sleep ([#1306](https://github.com/pilosa/pilosa/pull/1306))
+- Makefile enterprise build fixes ([#1301](https://github.com/pilosa/pilosa/pull/1301))
+- Re-add unintentionally removed check-clean ([#1295](https://github.com/pilosa/pilosa/pull/1295))
+- Fix syntax error and add i386 enterprise build ([#1293](https://github.com/pilosa/pilosa/pull/1293))
+
 ## [v0.10.0] - 2018-05-15
 
 This version contains 93 contribution from 8 contributors. There are 93 files changed, 4,495 insertions, and 5,392 deletions.
