@@ -9,10 +9,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 This version contains 10 contribution from 4 contributors. There are 5 files changed, 222 insertions, and 54 deletions.
 
+### Added
+
+- Add Docker cluster/swarm tutorials ([#1296](https://github.com/pilosa/pilosa/pull/1296), [#1305](https://github.com/pilosa/pilosa/pull/1305))
+
 ### Fixed
 
 - Use errors.Cause in handler so that we return correct status codes ([#1304](https://github.com/pilosa/pilosa/pull/1304), [#1309](https://github.com/pilosa/pilosa/pull/1309))
-- Added Docker cluster/swarm tutorials ([#1296](https://github.com/pilosa/pilosa/pull/1296), [#1305](https://github.com/pilosa/pilosa/pull/1305))
 - Close HTTP handler gracefully ([#1310](https://github.com/pilosa/pilosa/pull/1310))
 - Use lazy assignment for VERSION_ID so enterprise flag is set appropriately ([#1308](https://github.com/pilosa/pilosa/pull/1308))
 - Adjust cluster state tests so they aren't so dependent upon a sleep ([#1306](https://github.com/pilosa/pilosa/pull/1306))
