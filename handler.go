@@ -82,7 +82,7 @@ func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")
 	h.validators["GetSliceMax"] = queryValidationSpecRequired().Optional("inverse")
-	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeColumns")
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
@@ -825,7 +825,7 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 		Slices:       slices,
 		ColumnAttrs:  q.Get("columnAttrs") == "true",
 		ExcludeAttrs: q.Get("excludeAttrs") == "true",
-		ExcludeBits:  q.Get("excludeBits") == "true",
+		ExcludeColumns:  q.Get("excludeColumns") == "true",
 	}, nil
 }
 
@@ -1183,8 +1183,8 @@ type QueryRequest struct {
 	// Do not return row attributes, if true.
 	ExcludeAttrs bool
 
-	// Do not return bits, if true.
-	ExcludeBits bool
+	// Do not return columns, if true.
+	ExcludeColumns bool
 
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
@@ -1198,7 +1198,7 @@ func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 		ColumnAttrs:  pb.ColumnAttrs,
 		Remote:       pb.Remote,
 		ExcludeAttrs: pb.ExcludeAttrs,
-		ExcludeBits:  pb.ExcludeBits,
+		ExcludeColumns:  pb.ExcludeColumns,
 	}
 
 	return req

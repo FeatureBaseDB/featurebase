@@ -38,12 +38,12 @@ var (
 // SliceWidth is a helper reference to use when testing.
 const SliceWidth = pilosa.SliceWidth
 
-// Ensure a fragment can set a bit and retrieve it.
+// Ensure a fragment can set a column and retrieve it.
 func TestFragment_SetBit(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Set bits on the fragment.
+	// Set columns on the fragment.
 	if _, err := f.SetBit(120, 1); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(120, 6); err != nil {
@@ -69,12 +69,12 @@ func TestFragment_SetBit(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can clear a set bit.
+// Ensure a fragment can clear a set column.
 func TestFragment_ClearBit(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Set and then clear bits on the fragment.
+	// Set and then clear columns on the fragment.
 	if _, err := f.SetBit(1000, 1); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(1000, 2); err != nil {
@@ -137,7 +137,7 @@ func TestFragment_SetFieldValue(t *testing.T) {
 			t.Fatal("expected change")
 		}
 
-		// Overwriting value should overwrite all bits.
+		// Overwriting value should overwrite all columns.
 		if changed, err := f.SetFieldValue(100, 16, 2028); err != nil {
 			t.Fatal(err)
 		} else if !changed {
@@ -176,13 +176,13 @@ func TestFragment_SetFieldValue(t *testing.T) {
 	})
 
 	t.Run("QuickCheck", func(t *testing.T) {
-		if err := quick.Check(func(bitDepth uint, columnN uint64, values []uint64) bool {
-			// Limit bit depth & maximum values.
-			bitDepth = (bitDepth % 62) + 1
+		if err := quick.Check(func(columnDepth uint, columnN uint64, values []uint64) bool {
+			// Limit column depth & maximum values.
+			columnDepth = (columnDepth % 62) + 1
 			columnN = (columnN % 99) + 1
 
 			for i := range values {
-				values[i] = values[i] % (1 << bitDepth)
+				values[i] = values[i] % (1 << columnDepth)
 			}
 
 			f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
@@ -195,18 +195,18 @@ func TestFragment_SetFieldValue(t *testing.T) {
 
 				m[columnID] = int64(value)
 
-				if _, err := f.SetFieldValue(columnID, bitDepth, value); err != nil {
+				if _, err := f.SetFieldValue(columnID, columnDepth, value); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			// Ensure values are set.
 			for columnID, value := range m {
-				v, exists, err := f.FieldValue(columnID, bitDepth)
+				v, exists, err := f.FieldValue(columnID, columnDepth)
 				if err != nil {
 					t.Fatal(err)
 				} else if value != int64(v) {
-					t.Fatalf("value mismatch: column=%d, bitdepth=%d, value: %d != %d", columnID, bitDepth, value, v)
+					t.Fatalf("value mismatch: column=%d, columndepth=%d, value: %d != %d", columnID, columnDepth, value, v)
 				} else if !exists {
 					t.Fatalf("value should exist: column=%d", columnID)
 				}
@@ -221,24 +221,24 @@ func TestFragment_SetFieldValue(t *testing.T) {
 
 // Ensure a fragment can sum field values.
 func TestFragment_FieldSum(t *testing.T) {
-	const bitDepth = 16
+	const columnDepth = 16
 
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set values.
-	if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+	if _, err := f.SetFieldValue(1000, columnDepth, 382); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetFieldValue(2000, columnDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+	} else if _, err := f.SetFieldValue(3000, columnDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetFieldValue(4000, columnDepth, 300); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("NoFilter", func(t *testing.T) {
-		if sum, n, err := f.FieldSum(nil, bitDepth); err != nil {
+		if sum, n, err := f.FieldSum(nil, columnDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 4 {
 			t.Fatalf("unexpected count: %d", n)
@@ -248,7 +248,7 @@ func TestFragment_FieldSum(t *testing.T) {
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if sum, n, err := f.FieldSum(pilosa.NewRow(2000, 4000, 5000), bitDepth); err != nil {
+		if sum, n, err := f.FieldSum(pilosa.NewRow(2000, 4000, 5000), columnDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 2 {
 			t.Fatalf("unexpected count: %d", n)
@@ -260,25 +260,25 @@ func TestFragment_FieldSum(t *testing.T) {
 
 // Ensure a fragment can find the min and max of field values.
 func TestFragment_FieldMinMax(t *testing.T) {
-	const bitDepth = 16
+	const columnDepth = 16
 
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set values.
-	if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+	if _, err := f.SetFieldValue(1000, columnDepth, 382); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetFieldValue(2000, columnDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+	} else if _, err := f.SetFieldValue(3000, columnDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetFieldValue(4000, columnDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(5000, bitDepth, 2818); err != nil {
+	} else if _, err := f.SetFieldValue(5000, columnDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(6000, bitDepth, 2817); err != nil {
+	} else if _, err := f.SetFieldValue(6000, columnDepth, 2817); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(7000, bitDepth, 0); err != nil {
+	} else if _, err := f.SetFieldValue(7000, columnDepth, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -296,7 +296,7 @@ func TestFragment_FieldMinMax(t *testing.T) {
 			{filter: pilosa.NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
-			if min, cnt, err := f.FieldMin(test.filter, bitDepth); err != nil {
+			if min, cnt, err := f.FieldMin(test.filter, columnDepth); err != nil {
 				t.Fatal(err)
 			} else if min != test.exp {
 				t.Errorf("test %d expected min: %v, but got: %v", i, test.exp, min)
@@ -320,7 +320,7 @@ func TestFragment_FieldMinMax(t *testing.T) {
 			{filter: pilosa.NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
-			if max, cnt, err := f.FieldMax(test.filter, bitDepth); err != nil {
+			if max, cnt, err := f.FieldMax(test.filter, columnDepth); err != nil {
 				t.Fatal(err)
 			} else if max != test.exp {
 				t.Errorf("test %d expected max: %v, but got: %v", i, test.exp, max)
@@ -333,28 +333,28 @@ func TestFragment_FieldMinMax(t *testing.T) {
 
 // Ensure a fragment query for matching fields.
 func TestFragment_FieldRange(t *testing.T) {
-	const bitDepth = 16
+	const columnDepth = 16
 
 	t.Run("EQ", func(t *testing.T) {
 		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetFieldValue(1000, columnDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetFieldValue(2000, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+		} else if _, err := f.SetFieldValue(3000, columnDepth, 2818); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetFieldValue(4000, columnDepth, 300); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for equality.
-		if b, err := f.FieldRange(pql.EQ, bitDepth, 300); err != nil {
+		if b, err := f.FieldRange(pql.EQ, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
 
@@ -363,21 +363,21 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetFieldValue(1000, columnDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetFieldValue(2000, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+		} else if _, err := f.SetFieldValue(3000, columnDepth, 2818); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetFieldValue(4000, columnDepth, 300); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for inequality.
-		if b, err := f.FieldRange(pql.NEQ, bitDepth, 300); err != nil {
+		if b, err := f.FieldRange(pql.NEQ, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
 
@@ -386,46 +386,46 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetFieldValue(1000, columnDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetFieldValue(2000, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.SetFieldValue(3000, columnDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.SetFieldValue(4000, columnDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.SetFieldValue(5000, columnDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.SetFieldValue(6000, columnDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
-		// Query for fields less than (ending with set bit).
-		if b, err := f.FieldRange(pql.LT, bitDepth, 301); err != nil {
+		// Query for fields less than (ending with set column).
+		if b, err := f.FieldRange(pql.LT, columnDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 5000, 6000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than (ending with unset bit).
-		if b, err := f.FieldRange(pql.LT, bitDepth, 300); err != nil {
+		// Query for fields less than (ending with unset column).
+		if b, err := f.FieldRange(pql.LT, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{5000, 6000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{5000, 6000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than or equal to (ending with set bit).
-		if b, err := f.FieldRange(pql.LTE, bitDepth, 301); err != nil {
+		// Query for fields less than or equal to (ending with set column).
+		if b, err := f.FieldRange(pql.LTE, columnDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 4000, 5000, 6000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000, 5000, 6000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than or equal to (ending with unset bit).
-		if b, err := f.FieldRange(pql.LTE, bitDepth, 300); err != nil {
+		// Query for fields less than or equal to (ending with unset column).
+		if b, err := f.FieldRange(pql.LTE, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 5000, 6000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
 
@@ -434,46 +434,46 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetFieldValue(1000, columnDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetFieldValue(2000, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.SetFieldValue(3000, columnDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.SetFieldValue(4000, columnDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.SetFieldValue(5000, columnDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.SetFieldValue(6000, columnDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
-		// Query for fields greater than (ending with unset bit).
-		if b, err := f.FieldRange(pql.GT, bitDepth, 300); err != nil {
+		// Query for fields greater than (ending with unset column).
+		if b, err := f.FieldRange(pql.GT, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than (ending with set bit).
-		if b, err := f.FieldRange(pql.GT, bitDepth, 301); err != nil {
+		// Query for fields greater than (ending with set column).
+		if b, err := f.FieldRange(pql.GT, columnDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with unset bit).
-		if b, err := f.FieldRange(pql.GTE, bitDepth, 300); err != nil {
+		// Query for fields greater than or equal to (ending with unset column).
+		if b, err := f.FieldRange(pql.GTE, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 2000, 3000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with set bit).
-		if b, err := f.FieldRange(pql.GTE, bitDepth, 301); err != nil {
+		// Query for fields greater than or equal to (ending with set column).
+		if b, err := f.FieldRange(pql.GTE, columnDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
 
@@ -482,46 +482,46 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetFieldValue(1000, columnDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetFieldValue(2000, columnDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.SetFieldValue(3000, columnDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.SetFieldValue(4000, columnDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.SetFieldValue(5000, columnDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.SetFieldValue(6000, columnDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
-		// Query for fields greater than (ending with unset bit).
-		if b, err := f.FieldRangeBetween(bitDepth, 300, 2817); err != nil {
+		// Query for fields greater than (ending with unset column).
+		if b, err := f.FieldRangeBetween(columnDepth, 300, 2817); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 2000, 3000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than (ending with set bit).
-		if b, err := f.FieldRangeBetween(bitDepth, 301, 2817); err != nil {
+		// Query for fields greater than (ending with set column).
+		if b, err := f.FieldRangeBetween(columnDepth, 301, 2817); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with unset bit).
-		if b, err := f.FieldRangeBetween(bitDepth, 301, 2816); err != nil {
+		// Query for fields greater than or equal to (ending with unset column).
+		if b, err := f.FieldRangeBetween(columnDepth, 301, 2816); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with set bit).
-		if b, err := f.FieldRangeBetween(bitDepth, 300, 2816); err != nil {
+		// Query for fields greater than or equal to (ending with set column).
+		if b, err := f.FieldRangeBetween(columnDepth, 300, 2816); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 2000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
 }
@@ -531,7 +531,7 @@ func TestFragment_Snapshot(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Set and then clear bits on the fragment.
+	// Set and then clear columns on the fragment.
 	if _, err := f.SetBit(1000, 1); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(1000, 2); err != nil {
@@ -555,12 +555,12 @@ func TestFragment_Snapshot(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can iterate over all bits in order.
+// Ensure a fragment can iterate over all columns in order.
 func TestFragment_ForEachBit(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Set bits on the fragment.
+	// Set columns on the fragment.
 	if _, err := f.SetBit(100, 20); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(2, 38); err != nil {
@@ -569,7 +569,7 @@ func TestFragment_ForEachBit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Iterate over bits.
+	// Iterate over columns.
 	var result [][2]uint64
 	if err := f.ForEachBit(func(rowID, columnID uint64) error {
 		result = append(result, [2]uint64{rowID, columnID})
@@ -578,7 +578,7 @@ func TestFragment_ForEachBit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify bits are correct.
+	// Verify columns are correct.
 	if !reflect.DeepEqual(result, [][2]uint64{{2, 37}, {2, 38}, {100, 20}}) {
 		t.Fatalf("unexpected result: %#v", result)
 	}
@@ -588,10 +588,10 @@ func TestFragment_ForEachBit(t *testing.T) {
 func TestFragment_Top(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
 	defer f.Close()
-	// Set bits on the rows 100, 101, & 102.
-	f.MustSetBits(100, 1, 3, 200)
-	f.MustSetBits(101, 1)
-	f.MustSetBits(102, 1, 2)
+	// Set columns on the rows 100, 101, & 102.
+	f.MustSetColumns(100, 1, 3, 200)
+	f.MustSetColumns(101, 1)
+	f.MustSetColumns(102, 1, 2)
 	f.RecalculateCache()
 
 	// Retrieve top rows.
@@ -611,10 +611,10 @@ func TestFragment_Top_Filter(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
 	defer f.Close()
 
-	// Set bits on the rows 100, 101, & 102.
-	f.MustSetBits(100, 1, 3, 200)
-	f.MustSetBits(101, 1)
-	f.MustSetBits(102, 1, 2)
+	// Set columns on the rows 100, 101, & 102.
+	f.MustSetColumns(100, 1, 3, 200)
+	f.MustSetColumns(101, 1)
+	f.MustSetColumns(102, 1, 2)
 	f.RecalculateCache()
 	// Assign attributes.
 	f.RowAttrStore.SetAttrs(101, map[string]interface{}{"x": uint64(10)})
@@ -644,11 +644,11 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 	// Create an intersecting input row.
 	src := pilosa.NewRow(1, 2, 3)
 
-	// Set bits on various rows.
-	f.MustSetBits(100, 1, 10, 11, 12)    // one intersection
-	f.MustSetBits(101, 1, 2, 3, 4)       // three intersections
-	f.MustSetBits(102, 1, 2, 4, 5, 6)    // two intersections
-	f.MustSetBits(103, 1000, 1001, 1002) // no intersection
+	// Set columns on various rows.
+	f.MustSetColumns(100, 1, 10, 11, 12)    // one intersection
+	f.MustSetColumns(101, 1, 2, 3, 4)       // three intersections
+	f.MustSetColumns(102, 1, 2, 4, 5, 6)    // two intersections
+	f.MustSetColumns(103, 1000, 1001, 1002) // no intersection
 	f.RecalculateCache()
 
 	// Retrieve top rows.
@@ -663,7 +663,7 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can return top rows that have many bits set.
+// Ensure a fragment can return top rows that have many columns set.
 func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short mode")
@@ -678,10 +678,10 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 		990, 991, 992, 993, 994, 995, 996, 997, 998, 999,
 	)
 
-	// Set bits on rows 0 - 999. Higher rows have higher bit counts.
+	// Set columns on rows 0 - 999. Higher rows have higher column counts.
 	for i := uint64(0); i < 1000; i++ {
 		for j := uint64(0); j < i; j++ {
-			f.MustSetBits(i, j)
+			f.MustSetColumns(i, j)
 		}
 	}
 	f.RecalculateCache()
@@ -710,10 +710,10 @@ func TestFragment_TopN_IDs(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
 	defer f.Close()
 
-	// Set bits on various rows.
-	f.MustSetBits(100, 1, 2, 3)
-	f.MustSetBits(101, 4, 5, 6, 7)
-	f.MustSetBits(102, 8, 9, 10, 11, 12)
+	// Set columns on various rows.
+	f.MustSetColumns(100, 1, 2, 3)
+	f.MustSetColumns(101, 4, 5, 6, 7)
+	f.MustSetColumns(102, 8, 9, 10, 11, 12)
 
 	// Retrieve top rows.
 	if pairs, err := f.Top(pilosa.TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
@@ -731,10 +731,10 @@ func TestFragment_TopN_NopCache(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeNone)
 	defer f.Close()
 
-	// Set bits on various rows.
-	f.MustSetBits(100, 1, 2, 3)
-	f.MustSetBits(101, 4, 5, 6, 7)
-	f.MustSetBits(102, 8, 9, 10, 11, 12)
+	// Set columns on various rows.
+	f.MustSetColumns(100, 1, 2, 3)
+	f.MustSetColumns(101, 4, 5, 6, 7)
+	f.MustSetColumns(102, 8, 9, 10, 11, 12)
 
 	// Retrieve top rows.
 	if pairs, err := f.Top(pilosa.TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
@@ -783,13 +783,13 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 	defer f.Close()
 
-	// Set bits on various rows.
-	f.MustSetBits(100, 1, 2, 3)
-	f.MustSetBits(101, 4, 5, 6, 7)
-	f.MustSetBits(102, 8, 9, 10, 11, 12)
-	f.MustSetBits(103, 8, 9, 10, 11, 12, 13)
-	f.MustSetBits(104, 8, 9, 10, 11, 12, 13, 14)
-	f.MustSetBits(105, 10, 11)
+	// Set columns on various rows.
+	f.MustSetColumns(100, 1, 2, 3)
+	f.MustSetColumns(101, 4, 5, 6, 7)
+	f.MustSetColumns(102, 8, 9, 10, 11, 12)
+	f.MustSetColumns(103, 8, 9, 10, 11, 12, 13)
+	f.MustSetColumns(104, 8, 9, 10, 11, 12, 13, 14)
+	f.MustSetColumns(105, 10, 11)
 
 	f.RecalculateCache()
 
@@ -816,7 +816,7 @@ func TestFragment_Checksum(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Retrieve checksum and set bits.
+	// Retrieve checksum and set columns.
 	orig := f.Checksum()
 	if _, err := f.SetBit(1, 200); err != nil {
 		t.Fatal(err)
@@ -838,7 +838,7 @@ func TestFragment_Blocks(t *testing.T) {
 	// Retrieve initial checksum.
 	var prev []pilosa.FragmentBlock
 
-	// Set first bit.
+	// Set first column.
 	if _, err := f.SetBit(0, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -848,7 +848,7 @@ func TestFragment_Blocks(t *testing.T) {
 	}
 	prev = blocks
 
-	// Set bit on different row.
+	// Set column on different row.
 	if _, err := f.SetBit(20, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -858,7 +858,7 @@ func TestFragment_Blocks(t *testing.T) {
 	}
 	prev = blocks
 
-	// Set bit on different column.
+	// Set column on different column.
 	if _, err := f.SetBit(20, 100); err != nil {
 		t.Fatal(err)
 	}
@@ -873,7 +873,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Set bits on a different block.
+	// Set columns on a different block.
 	if _, err := f.SetBit(100, 1); err != nil {
 		t.Fatal(err)
 	}
@@ -891,7 +891,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeLRU)
 	defer f.Close()
 
-	// Set bits on the fragment.
+	// Set columns on the fragment.
 	for i := uint64(0); i < 1000; i++ {
 		if _, err := f.SetBit(i, 0); err != nil {
 			t.Fatal(err)
@@ -941,7 +941,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set bits on the fragment.
+	// Set columns on the fragment.
 	for i := uint64(0); i < 1000; i++ {
 		if _, err := f.SetBit(i, 0); err != nil {
 			t.Fatal(err)
@@ -976,7 +976,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	f0 := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f0.Close()
 
-	// Set and then clear bits on the fragment.
+	// Set and then clear columns on the fragment.
 	if _, err := f0.SetBit(1000, 1); err != nil {
 		t.Fatal(err)
 	} else if _, err := f0.SetBit(1000, 2); err != nil {
@@ -1011,8 +1011,8 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Verify data in other fragment.
-	if a := f1.Row(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
-		t.Fatalf("unexpected bits: %+v", a)
+	if a := f1.Row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
+		t.Fatalf("unexpected columns: %+v", a)
 	}
 
 	// Close and reopen the fragment & verify the data.
@@ -1020,8 +1020,8 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 		t.Fatal(err)
 	} else if n := f1.Cache().Len(); n != 1 {
 		t.Fatalf("unexpected cache size (reopen): %d", n)
-	} else if a := f1.Row(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
-		t.Fatalf("unexpected bits (reopen): %+v", a)
+	} else if a := f1.Row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
+		t.Fatalf("unexpected columns (reopen): %+v", a)
 	}
 }
 
@@ -1083,10 +1083,10 @@ func TestFragment_Tanimoto(t *testing.T) {
 
 	src := pilosa.NewRow(1, 2, 3)
 
-	// Set bits on the rows 100, 101, & 102.
-	f.MustSetBits(100, 1, 3, 2, 200)
-	f.MustSetBits(101, 1, 3)
-	f.MustSetBits(102, 1, 2, 10, 12)
+	// Set columns on the rows 100, 101, & 102.
+	f.MustSetColumns(100, 1, 3, 2, 200)
+	f.MustSetColumns(101, 1, 3)
+	f.MustSetColumns(102, 1, 2, 10, 12)
 	f.RecalculateCache()
 
 	if pairs, err := f.Top(pilosa.TopOptions{TanimotoThreshold: 50, Src: src}); err != nil {
@@ -1106,10 +1106,10 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 
 	src := pilosa.NewRow(1, 2, 3)
 
-	// Set bits on the rows 100, 101, & 102.
-	f.MustSetBits(100, 1, 3, 2, 200)
-	f.MustSetBits(101, 1, 3)
-	f.MustSetBits(102, 1, 2, 10, 12)
+	// Set columns on the rows 100, 101, & 102.
+	f.MustSetColumns(100, 1, 3, 2, 200)
+	f.MustSetColumns(101, 1, 3)
+	f.MustSetColumns(102, 1, 2, 10, 12)
 	f.RecalculateCache()
 
 	if pairs, err := f.Top(pilosa.TopOptions{TanimotoThreshold: 0, Src: src}); err != nil {
@@ -1129,7 +1129,7 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Set bits on the fragment.
+	// Set columns on the fragment.
 	for i := uint64(1); i < 3; i++ {
 		if _, err := f.SetBit(1000, i); err != nil {
 			t.Fatal(err)

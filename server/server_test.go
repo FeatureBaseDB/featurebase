@@ -69,7 +69,7 @@ func TestMain_Set_Quick(t *testing.T) {
 				exp := MustMarshalJSON(map[string]interface{}{
 					"results": []interface{}{
 						map[string]interface{}{
-							"bits":  columnIDs,
+							"columns":  columnIDs,
 							"attrs": map[string]interface{}{},
 						},
 					},
@@ -92,7 +92,7 @@ func TestMain_Set_Quick(t *testing.T) {
 				exp := MustMarshalJSON(map[string]interface{}{
 					"results": []interface{}{
 						map[string]interface{}{
-							"bits":  columnIDs,
+							"columns":  columnIDs,
 							"attrs": map[string]interface{}{},
 						},
 					},
@@ -132,7 +132,7 @@ func TestMain_SetRowAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set bits on different rows in different frames.
+	// Set columns on different rows in different frames.
 	if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=100)`); err != nil {
 		t.Fatal(err)
 	} else if _, err := m.Query("i", "", `SetBit(row=2, frame="x", col=100)`); err != nil {
@@ -157,14 +157,14 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	// Query row x/1.
 	if res, err := m.Query("i", "", `Bitmap(row=1, frame="x")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{"x":100},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
 	// Query row x/2.
 	if res, err := m.Query("i", "", `Bitmap(row=2, frame="x")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":-200},"bits":[100]}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{"x":-200},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
@@ -175,19 +175,19 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	// Query rows after reopening.
 	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=1, frame="x")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":100},"bits":[100]}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{"x":100},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 
 	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=3, frame="neg")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":-0.44},"bits":[100]}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{"x":-0.44},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 	// Query row x/2.
 	if res, err := m.Query("i", "", `Bitmap(row=2, frame="x")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{"x":-200},"bits":[100]}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{"x":-200},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 }
@@ -205,7 +205,7 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set bits on row.
+	// Set columns on row.
 	if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=100)`); err != nil {
 		t.Fatal(err)
 	} else if _, err := m.Query("i", "", `SetBit(row=1, frame="x", col=101)`); err != nil {
@@ -220,7 +220,7 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	// Query row.
 	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=1, frame="x")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{},"columns":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
@@ -231,7 +231,7 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	// Query row after reopening.
 	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=1, frame="x")`); err != nil {
 		t.Fatal(err)
-	} else if res != `{"results":[{"attrs":{},"bits":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{},"columns":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 }
@@ -266,7 +266,7 @@ func TestMain_InverseSlices(t *testing.T) {
 		SetBit(col=1, frame="f", row=2000)
 		SetBit(col=1, frame="f", row=%d)
 	`, 1*pilosa.SliceWidth)); err != nil {
-		t.Fatal("setting bits:", err)
+		t.Fatal("setting columns:", err)
 	}
 
 	time.Sleep(1 * time.Second)
@@ -274,12 +274,12 @@ func TestMain_InverseSlices(t *testing.T) {
 	// Query the cluster.
 	if res, err := m.Query("i", "", `Bitmap(col=1, frame="f")`); err != nil {
 		t.Fatal("another bitmap query:", err)
-	} else if res != fmt.Sprintf(`{"results":[{"attrs":{},"bits":[1000,2000,%d]}]}`, 1*pilosa.SliceWidth)+"\n" {
+	} else if res != fmt.Sprintf(`{"results":[{"attrs":{},"columns":[1000,2000,%d]}]}`, 1*pilosa.SliceWidth)+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 }
 
-// Ensure program can set bits on one cluster and then restore to a second cluster.
+// Ensure program can set columns on one cluster and then restore to a second cluster.
 func TestMain_FrameRestore(t *testing.T) {
 	mains1 := test.MustRunMainWithCluster(t, 2)
 	m10 := mains1[0]
@@ -304,13 +304,13 @@ func TestMain_FrameRestore(t *testing.T) {
 		SetBit(row=1, frame="f", col=600000)
 		SetBit(row=1, frame="f", col=800000)
 	`); err != nil {
-		t.Fatal("setting bits:", err)
+		t.Fatal("setting columns:", err)
 	}
 
 	// Query row on first cluster.
 	if res, err := m10.Query("i", "", `Bitmap(row=1, frame="f")`); err != nil {
 		t.Fatal("bitmap query:", err)
-	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{},"columns":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
@@ -348,7 +348,7 @@ func TestMain_FrameRestore(t *testing.T) {
 	// Query row on second cluster.
 	if res, err := m20.Query("i", "", `Bitmap(row=1, frame="f")`); err != nil {
 		t.Fatal("another bitmap query:", err)
-	} else if res != `{"results":[{"attrs":{},"bits":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
+	} else if res != `{"results":[{"attrs":{},"columns":[100,1000,100000,200000,400000,600000,800000]}]}`+"\n" {
 		t.Fatalf("2unexpected result: %s", res)
 	}
 }
@@ -408,7 +408,7 @@ func TestMain_RecalculateHashes(t *testing.T) {
 		t.Fatal("create frame:", err)
 	}
 
-	// Set some bits
+	// Set some columns
 	data := []string{}
 	for rowID := 1; rowID < 10; rowID++ {
 		for columnID := 1; columnID < 100; columnID++ {
@@ -416,7 +416,7 @@ func TestMain_RecalculateHashes(t *testing.T) {
 		}
 	}
 	if _, err := cluster[0].Query("i", "", strings.Join(data, "")); err != nil {
-		t.Fatal("setting bits:", err)
+		t.Fatal("setting columns:", err)
 	}
 
 	// Calculate caches on the first node
@@ -440,7 +440,7 @@ func TestMain_RecalculateHashes(t *testing.T) {
 	}
 }
 
-// SetCommand represents a command to set a bit.
+// SetCommand represents a command to set a column.
 type SetCommand struct {
 	ID       uint64
 	Frame    string

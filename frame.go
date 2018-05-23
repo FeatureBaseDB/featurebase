@@ -587,7 +587,7 @@ func (f *Frame) DeleteView(name string) error {
 	return nil
 }
 
-// SetBit sets a bit on a view within the frame.
+// SetBit sets a column on a view within the frame.
 func (f *Frame) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.
 	if !IsValidView(name) {
@@ -600,7 +600,7 @@ func (f *Frame) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 		return changed, errors.Wrap(err, "creating view")
 	}
 
-	// Set non-time bit.
+	// Set non-time column.
 	if v, err := view.SetBit(rowID, colID); err != nil {
 		return changed, errors.Wrap(err, "setting on view")
 	} else if v {
@@ -612,7 +612,7 @@ func (f *Frame) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 		return changed, nil
 	}
 
-	// If a timestamp is specified then set bits across all views for the quantum.
+	// If a timestamp is specified then set columns across all views for the quantum.
 	for _, subname := range ViewsByTime(name, *t, f.TimeQuantum()) {
 		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
@@ -629,7 +629,7 @@ func (f *Frame) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 	return changed, nil
 }
 
-// ClearBit clears a bit within the frame.
+// ClearBit clears a column within the frame.
 func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.
 	if !IsValidView(name) {
@@ -642,7 +642,7 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 		return changed, errors.Wrap(err, "creating view")
 	}
 
-	// Clear non-time bit.
+	// Clear non-time column.
 	if v, err := view.ClearBit(rowID, colID); err != nil {
 		return changed, errors.Wrap(err, "setting on view")
 	} else if v {
@@ -654,7 +654,7 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 		return changed, nil
 	}
 
-	// If a timestamp is specified then clear bits across all views for the quantum.
+	// If a timestamp is specified then clear columns across all views for the quantum.
 	for _, subname := range ViewsByTime(name, *t, f.TimeQuantum()) {
 		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
@@ -846,13 +846,13 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			inverse = []string{ViewInverse}
 		} else {
 			standard = ViewsByTime(ViewStandard, *timestamp, q)
-			// In order to match the logic of `SetBit()`, we want bits
+			// In order to match the logic of `SetBit()`, we want columns
 			// with timestamps to write to both time and standard views.
 			standard = append(standard, ViewStandard)
 			inverse = ViewsByTime(ViewInverse, *timestamp, q)
 		}
 
-		// Attach bit to each standard view.
+		// Attach column to each standard view.
 		for _, name := range standard {
 			key := importKey{View: name, Slice: columnID / SliceWidth}
 			data := dataByFragment[key]
@@ -862,7 +862,7 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 		}
 
 		if f.inverseEnabled {
-			// Attach reversed bits to each inverse view.
+			// Attach reversed columns to each inverse view.
 			for _, name := range inverse {
 				key := importKey{View: name, Slice: rowID / SliceWidth}
 				data := dataByFragment[key]
@@ -909,7 +909,7 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 // ImportValue bulk imports range-encoded value data.
 func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64) error {
 	viewName := ViewFieldPrefix + fieldName
-	// Get the field so we know bitDepth.
+	// Get the field so we know columnDepth.
 	field := f.Field(fieldName)
 	if field == nil {
 		return fmt.Errorf("Field does not exist: %s", fieldName)
@@ -939,7 +939,7 @@ func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64
 	for key, data := range dataByFragment {
 
 		// The view must already exist (i.e. we can't create it)
-		// because we need to know bitDepth (based on min/max value).
+		// because we need to know columnDepth (based on min/max value).
 		view, err := f.CreateViewIfNotExists(key.View)
 		if err != nil {
 			return errors.Wrap(err, "creating view")
@@ -1064,7 +1064,7 @@ type Field struct {
 	Max  int64  `json:"max,omitempty"`
 }
 
-// BitDepth returns the number of bits required to store a value between min & max.
+// BitDepth returns the number of columns required to store a value between min & max.
 func (f *Field) BitDepth() uint {
 	for i := uint(0); i < 63; i++ {
 		if f.Max-f.Min < (1 << i) {

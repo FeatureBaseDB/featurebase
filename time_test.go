@@ -65,7 +65,7 @@ func TestViewByTimeUnit(t *testing.T) {
 	})
 }
 
-// Ensure all applicable frame names can be generated when mutating a time bit.
+// Ensure all applicable frame names can be generated when mutating a time column.
 func TestViewsByTime(t *testing.T) {
 	ts := time.Date(2000, time.January, 2, 3, 4, 5, 6, time.UTC)
 

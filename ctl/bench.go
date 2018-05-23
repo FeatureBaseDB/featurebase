@@ -62,7 +62,7 @@ func (cmd *BenchCommand) Run(ctx context.Context) error {
 	}
 
 	switch cmd.Op {
-	case "set-bit":
+	case "set-column":
 		return cmd.runSetBit(ctx, client)
 	case "":
 		return errors.New("op required")

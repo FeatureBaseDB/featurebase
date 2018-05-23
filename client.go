@@ -279,15 +279,15 @@ func (c *InternalHTTPClient) QueryNode(ctx context.Context, uri *URI, index stri
 	return qresp, nil
 }
 
-// Import bulk imports bits for a single slice to a host.
-func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error {
+// Import bulk imports columns for a single slice to a host.
+func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, slice uint64, columns []Bit) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
 	}
 
-	buf, err := marshalImportPayload(index, frame, slice, bits)
+	buf, err := marshalImportPayload(index, frame, slice, columns)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -308,15 +308,15 @@ func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, sl
 	return nil
 }
 
-// ImportK bulk imports bits to a host.
-func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, bits []Bit) error {
+// ImportK bulk imports columns to a host.
+func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, columns []Bit) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
 	}
 
-	buf, err := marshalImportPayloadK(index, frame, bits)
+	buf, err := marshalImportPayloadK(index, frame, columns)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -350,13 +350,13 @@ func (c *InternalHTTPClient) EnsureFrame(ctx context.Context, indexName string, 
 }
 
 // marshalImportPayload marshalls the import parameters into a protobuf byte slice.
-func marshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte, error) {
+func marshalImportPayload(index, frame string, slice uint64, columns []Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
-	rowIDs := Bits(bits).RowIDs()
-	columnIDs := Bits(bits).ColumnIDs()
-	timestamps := Bits(bits).Timestamps()
+	rowIDs := Columns(columns).RowIDs()
+	columnIDs := Columns(columns).ColumnIDs()
+	timestamps := Columns(columns).Timestamps()
 
-	// Marshal bits to protobufs.
+	// Marshal columns to protobufs.
 	buf, err := proto.Marshal(&internal.ImportRequest{
 		Index:      index,
 		Frame:      frame,
@@ -372,13 +372,13 @@ func marshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte
 }
 
 // marshalImportPayloadK marshalls the import parameters into a protobuf byte slice.
-func marshalImportPayloadK(index, frame string, bits []Bit) ([]byte, error) {
+func marshalImportPayloadK(index, frame string, columns []Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
-	rowKeys := Bits(bits).RowKeys()
-	columnKeys := Bits(bits).ColumnKeys()
-	timestamps := Bits(bits).Timestamps()
+	rowKeys := Columns(columns).RowKeys()
+	columnKeys := Columns(columns).ColumnKeys()
+	timestamps := Columns(columns).Timestamps()
 
-	// Marshal bits to protobufs.
+	// Marshal columns to protobufs.
 	buf, err := proto.Marshal(&internal.ImportRequest{
 		Index:      index,
 		Frame:      frame,
@@ -465,7 +465,7 @@ func marshalImportValuePayload(index, frame, field string, slice uint64, vals []
 	columnIDs := FieldValues(vals).ColumnIDs()
 	values := FieldValues(vals).Values()
 
-	// Marshal bits to protobufs.
+	// Marshal columns to protobufs.
 	buf, err := proto.Marshal(&internal.ImportValueRequest{
 		Index:     index,
 		Frame:     frame,
@@ -1140,7 +1140,7 @@ func (c *InternalHTTPClient) SendMessage(ctx context.Context, uri *URI, pb proto
 	return nil
 }
 
-// Bit represents the location of a single bit.
+// Bit represents the location of a single column.
 type Bit struct {
 	RowID     uint64
 	ColumnID  uint64
@@ -1149,13 +1149,13 @@ type Bit struct {
 	Timestamp int64
 }
 
-// Bits represents a slice of bits.
-type Bits []Bit
+// Columns represents a slice of columns.
+type Columns []Bit
 
-func (p Bits) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
-func (p Bits) Len() int      { return len(p) }
+func (p Columns) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+func (p Columns) Len() int      { return len(p) }
 
-func (p Bits) Less(i, j int) bool {
+func (p Columns) Less(i, j int) bool {
 	if p[i].RowID == p[j].RowID {
 		if p[i].ColumnID < p[j].ColumnID {
 			return p[i].Timestamp < p[j].Timestamp
@@ -1166,7 +1166,7 @@ func (p Bits) Less(i, j int) bool {
 }
 
 // RowIDs returns a slice of all the row IDs.
-func (p Bits) RowIDs() []uint64 {
+func (p Columns) RowIDs() []uint64 {
 	other := make([]uint64, len(p))
 	for i := range p {
 		other[i] = p[i].RowID
@@ -1175,7 +1175,7 @@ func (p Bits) RowIDs() []uint64 {
 }
 
 // ColumnIDs returns a slice of all the column IDs.
-func (p Bits) ColumnIDs() []uint64 {
+func (p Columns) ColumnIDs() []uint64 {
 	other := make([]uint64, len(p))
 	for i := range p {
 		other[i] = p[i].ColumnID
@@ -1184,7 +1184,7 @@ func (p Bits) ColumnIDs() []uint64 {
 }
 
 // RowKeys returns a slice of all the row keys.
-func (p Bits) RowKeys() []string {
+func (p Columns) RowKeys() []string {
 	other := make([]string, len(p))
 	for i := range p {
 		other[i] = p[i].RowKey
@@ -1193,7 +1193,7 @@ func (p Bits) RowKeys() []string {
 }
 
 // ColumnKeys returns a slice of all the column keys.
-func (p Bits) ColumnKeys() []string {
+func (p Columns) ColumnKeys() []string {
 	other := make([]string, len(p))
 	for i := range p {
 		other[i] = p[i].ColumnKey
@@ -1202,7 +1202,7 @@ func (p Bits) ColumnKeys() []string {
 }
 
 // Timestamps returns a slice of all the timestamps.
-func (p Bits) Timestamps() []int64 {
+func (p Columns) Timestamps() []int64 {
 	other := make([]int64, len(p))
 	for i := range p {
 		other[i] = p[i].Timestamp
@@ -1210,17 +1210,17 @@ func (p Bits) Timestamps() []int64 {
 	return other
 }
 
-// GroupBySlice returns a map of bits by slice.
-func (p Bits) GroupBySlice() map[uint64][]Bit {
+// GroupBySlice returns a map of columns by slice.
+func (p Columns) GroupBySlice() map[uint64][]Bit {
 	m := make(map[uint64][]Bit)
-	for _, bit := range p {
-		slice := bit.ColumnID / SliceWidth
-		m[slice] = append(m[slice], bit)
+	for _, column := range p {
+		slice := column.ColumnID / SliceWidth
+		m[slice] = append(m[slice], column)
 	}
 
-	for slice, bits := range m {
-		sort.Sort(Bits(bits))
-		m[slice] = bits
+	for slice, columns := range m {
+		sort.Sort(Columns(columns))
+		m[slice] = columns
 	}
 
 	return m
@@ -1277,12 +1277,12 @@ func (p FieldValues) GroupBySlice() map[uint64][]FieldValue {
 	return m
 }
 
-// BitsByPos represents a slice of bits sorted by internal position.
-type BitsByPos []Bit
+// ColumnsByPos represents a slice of columns sorted by internal position.
+type ColumnsByPos []Bit
 
-func (p BitsByPos) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
-func (p BitsByPos) Len() int      { return len(p) }
-func (p BitsByPos) Less(i, j int) bool {
+func (p ColumnsByPos) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+func (p ColumnsByPos) Len() int      { return len(p) }
+func (p ColumnsByPos) Less(i, j int) bool {
 	p0, p1 := Pos(p[i].RowID, p[i].ColumnID), Pos(p[j].RowID, p[j].ColumnID)
 	if p0 == p1 {
 		return p[i].Timestamp < p[j].Timestamp
@@ -1320,8 +1320,8 @@ type InternalClient interface {
 	FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error)
 	Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
 	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
-	Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error
-	ImportK(ctx context.Context, index, frame string, bits []Bit) error
+	Import(ctx context.Context, index, frame string, slice uint64, columns []Bit) error
+	ImportK(ctx context.Context, index, frame string, columns []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error
 	ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error

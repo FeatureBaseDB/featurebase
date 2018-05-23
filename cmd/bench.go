@@ -45,7 +45,7 @@ Executes a benchmark for a given operation against the index.
 	flags.StringVarP(&Bencher.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Bencher.Index, "index", "i", "", "Pilosa index to benchmark.")
 	flags.StringVarP(&Bencher.Frame, "frame", "f", "", "Frame to benchmark.")
-	flags.StringVarP(&Bencher.Op, "operation", "o", "set-bit", "Operation to perform: choose from [set-bit]")
+	flags.StringVarP(&Bencher.Op, "operation", "o", "set-column", "Operation to perform: choose from [set-column]")
 	flags.IntVarP(&Bencher.N, "num", "n", 0, "Number of operations to perform.")
 	ctl.SetTLSConfig(flags, &Bencher.TLS.CertificatePath, &Bencher.TLS.CertificateKeyPath, &Bencher.TLS.SkipVerify)
 

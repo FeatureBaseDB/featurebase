@@ -194,13 +194,13 @@ func TestHandler_MaxSlices(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	hldr.MustCreateFragmentIfNotExists("i0", "f0", pilosa.ViewStandard, 1).MustSetBits(30, (1*SliceWidth)+1)
-	hldr.MustCreateFragmentIfNotExists("i0", "f0", pilosa.ViewStandard, 1).MustSetBits(30, (1*SliceWidth)+2)
-	hldr.MustCreateFragmentIfNotExists("i0", "f0", pilosa.ViewStandard, 3).MustSetBits(30, (3*SliceWidth)+4)
+	hldr.MustCreateFragmentIfNotExists("i0", "f0", pilosa.ViewStandard, 1).MustSetColumns(30, (1*SliceWidth)+1)
+	hldr.MustCreateFragmentIfNotExists("i0", "f0", pilosa.ViewStandard, 1).MustSetColumns(30, (1*SliceWidth)+2)
+	hldr.MustCreateFragmentIfNotExists("i0", "f0", pilosa.ViewStandard, 3).MustSetColumns(30, (3*SliceWidth)+4)
 
-	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+1)
-	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+2)
-	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+8)
+	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetColumns(40, (0*SliceWidth)+1)
+	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetColumns(40, (0*SliceWidth)+2)
+	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetColumns(40, (0*SliceWidth)+8)
 
 	h := test.NewHandler()
 	h.API.Holder = hldr.Holder
@@ -419,7 +419,7 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,1048577]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"columns":[1,3,66,1048577]}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -452,7 +452,7 @@ func TestHandler_Query_Row_ColumnAttrs_JSON(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query?columnAttrs=true", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"bits":[1,3,66,1048577]}],"columnAttrs":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"columns":[1,3,66,1048577]}],"columnAttrs":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -484,8 +484,8 @@ func TestHandler_Query_Row_Protobuf(t *testing.T) {
 		t.Fatal(err)
 	} else if rt := resp.Results[0].Type; rt != pilosa.QueryResultTypeRow {
 		t.Fatalf("unexpected response type: %d", resp.Results[0].Type)
-	} else if bits := resp.Results[0].Row.Bits; !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
-		t.Fatalf("unexpected bits: %+v", bits)
+	} else if columns := resp.Results[0].Row.Columns; !reflect.DeepEqual(columns, []uint64{1, SliceWidth + 1}) {
+		t.Fatalf("unexpected columns: %+v", columns)
 	} else if attrs := resp.Results[0].Row.Attrs; len(attrs) != 3 {
 		t.Fatalf("unexpected attr length: %d", len(attrs))
 	} else if k, v := attrs[0].Key, attrs[0].StringValue; k != "a" || v != "b" {
@@ -541,8 +541,8 @@ func TestHandler_Query_Row_ColumnAttrs_Protobuf(t *testing.T) {
 	if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if bits := resp.Results[0].Row.Bits; !reflect.DeepEqual(bits, []uint64{1, SliceWidth + 1}) {
-		t.Fatalf("unexpected bits: %+v", bits)
+	if columns := resp.Results[0].Row.Columns; !reflect.DeepEqual(columns, []uint64{1, SliceWidth + 1}) {
+		t.Fatalf("unexpected columns: %+v", columns)
 	} else if rt := resp.Results[0].Type; rt != pilosa.QueryResultTypeRow {
 		t.Fatalf("unexpected response type: %d", resp.Results[0].Type)
 	} else if attrs := resp.Results[0].Row.Attrs; len(attrs) != 3 {
@@ -1110,9 +1110,9 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
-	// Set bits in the index.
+	// Set columns in the index.
 	f0 := hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
-	f0.MustSetBits(100, 1, 2, 3)
+	f0.MustSetColumns(100, 1, 2, 3)
 
 	// Begin backing up from slice i/f/0.
 	resp, err := http.Get(s.URL + "/fragment/data?index=i&frame=f&view=standard&slice=0")
@@ -1145,8 +1145,8 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	f1 := hldr.Fragment("x", "y", pilosa.ViewStandard, 0)
 	if f1 == nil {
 		t.Fatal("fragment x/y/standard/0 not created")
-	} else if bits := f1.Row(100).Bits(); !reflect.DeepEqual(bits, []uint64{1, 2, 3}) {
-		t.Fatalf("unexpected restored bits: %+v", bits)
+	} else if columns := f1.Row(100).Columns(); !reflect.DeepEqual(columns, []uint64{1, 2, 3}) {
+		t.Fatalf("unexpected restored columns: %+v", columns)
 	}
 }
 

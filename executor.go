@@ -367,7 +367,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 		}
 	}
 
-	if opt.ExcludeBits {
+	if opt.ExcludeColumns {
 		row.segments = []RowSegment{}
 	}
 
@@ -1064,7 +1064,7 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
 	}
 
-	// Clear bits for each view.
+	// Clear columns for each view.
 	switch view {
 	case ViewStandard:
 		return e.executeClearBitView(ctx, index, c, f, view, colID, rowID, opt)
@@ -1164,7 +1164,7 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		timestamp = &t
 	}
 
-	// Set bits for each view.
+	// Set columns for each view.
 	switch view {
 	case ViewStandard:
 		return e.executeSetBitView(ctx, index, c, f, view, colID, rowID, timestamp, opt)
@@ -1319,7 +1319,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err := frame.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
-	frame.Stats.Count("SetBitmapAttrs", 1, 1.0)
+	frame.Stats.Count("SetColumnAttrs", 1, 1.0)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
@@ -1404,7 +1404,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err := frame.RowAttrStore().SetBulkAttrs(frameMap); err != nil {
 			return nil, err
 		}
-		frame.Stats.Count("SetBitmapAttrs", 1, 1.0)
+		frame.Stats.Count("SetColumnAttrs", 1, 1.0)
 	}
 
 	// Do not forward call if this is already being forwarded.
@@ -1702,7 +1702,7 @@ type mapResponse struct {
 type ExecOptions struct {
 	Remote       bool
 	ExcludeAttrs bool
-	ExcludeBits  bool
+	ExcludeColumns  bool
 }
 
 // decodeError returns an error representation of s if s is non-blank.

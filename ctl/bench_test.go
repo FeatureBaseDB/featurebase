@@ -56,7 +56,7 @@ func TestBenchCommand_Run(t *testing.T) {
 	r, w, _ := os.Pipe()
 
 	cm := NewBenchCommand(stdin, w, w)
-	cm.Op = "set-bit"
+	cm.Op = "set-column"
 	cm.Host = "localhost:10101"
 
 	err := cm.Run(context.Background())

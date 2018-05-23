@@ -930,7 +930,7 @@ func (c *Cluster) Open() error {
 		// (and now in a state of STARTING) so that it can be put to the correct
 		// cluster state.
 		// TODO: Because the normal code path already sends a NodeJoin event (via
-		// memberlist), this it a bit redundant in most cases. Perhaps determine
+		// memberlist), this it a column redundant in most cases. Perhaps determine
 		// that the node has been restarted and don't do this step.
 		msg := &internal.NodeEventMessage{
 			Event: uint32(NodeJoin),

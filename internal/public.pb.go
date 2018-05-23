@@ -43,7 +43,7 @@ var _ = math.Inf
 const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 type Row struct {
-	Bits  []uint64 `protobuf:"varint,1,rep,packed,name=Bits" json:"Bits,omitempty"`
+	Columns  []uint64 `protobuf:"varint,1,rep,packed,name=Columns" json:"Columns,omitempty"`
 	Keys  []string `protobuf:"bytes,3,rep,name=Keys" json:"Keys,omitempty"`
 	Attrs []*Attr  `protobuf:"bytes,2,rep,name=Attrs" json:"Attrs,omitempty"`
 }
@@ -53,9 +53,9 @@ func (m *Row) String() string            { return proto.CompactTextString(m) }
 func (*Row) ProtoMessage()               {}
 func (*Row) Descriptor() ([]byte, []int) { return fileDescriptorPublic, []int{0} }
 
-func (m *Row) GetBits() []uint64 {
+func (m *Row) GetColumns() []uint64 {
 	if m != nil {
-		return m.Bits
+		return m.Columns
 	}
 	return nil
 }
@@ -272,7 +272,7 @@ type QueryRequest struct {
 	ColumnAttrs  bool     `protobuf:"varint,3,opt,name=ColumnAttrs,proto3" json:"ColumnAttrs,omitempty"`
 	Remote       bool     `protobuf:"varint,5,opt,name=Remote,proto3" json:"Remote,omitempty"`
 	ExcludeAttrs bool     `protobuf:"varint,6,opt,name=ExcludeAttrs,proto3" json:"ExcludeAttrs,omitempty"`
-	ExcludeBits  bool     `protobuf:"varint,7,opt,name=ExcludeBits,proto3" json:"ExcludeBits,omitempty"`
+	ExcludeColumns  bool     `protobuf:"varint,7,opt,name=ExcludeColumns,proto3" json:"ExcludeColumns,omitempty"`
 }
 
 func (m *QueryRequest) Reset()                    { *m = QueryRequest{} }
@@ -315,9 +315,9 @@ func (m *QueryRequest) GetExcludeAttrs() bool {
 	return false
 }
 
-func (m *QueryRequest) GetExcludeBits() bool {
+func (m *QueryRequest) GetExcludeColumns() bool {
 	if m != nil {
-		return m.ExcludeBits
+		return m.ExcludeColumns
 	}
 	return false
 }
@@ -575,10 +575,10 @@ func (m *Row) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Bits) > 0 {
-		dAtA2 := make([]byte, len(m.Bits)*10)
+	if len(m.Columns) > 0 {
+		dAtA2 := make([]byte, len(m.Columns)*10)
 		var j1 int
-		for _, num := range m.Bits {
+		for _, num := range m.Columns {
 			for num >= 1<<7 {
 				dAtA2[j1] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
@@ -808,7 +808,7 @@ func (m *Attr) MarshalTo(dAtA []byte) (int, error) {
 	if m.FloatValue != 0 {
 		dAtA[i] = 0x31
 		i++
-		binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.FloatValue))))
+		binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64columns(float64(m.FloatValue))))
 		i += 8
 	}
 	return i, nil
@@ -912,10 +912,10 @@ func (m *QueryRequest) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i++
 	}
-	if m.ExcludeBits {
+	if m.ExcludeColumns {
 		dAtA[i] = 0x38
 		i++
-		if m.ExcludeBits {
+		if m.ExcludeColumns {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
@@ -1263,9 +1263,9 @@ func encodeVarintPublic(dAtA []byte, offset int, v uint64) int {
 func (m *Row) Size() (n int) {
 	var l int
 	_ = l
-	if len(m.Bits) > 0 {
+	if len(m.Columns) > 0 {
 		l = 0
-		for _, e := range m.Bits {
+		for _, e := range m.Columns {
 			l += sovPublic(uint64(e))
 		}
 		n += 1 + sovPublic(uint64(l)) + l
@@ -1408,7 +1408,7 @@ func (m *QueryRequest) Size() (n int) {
 	if m.ExcludeAttrs {
 		n += 2
 	}
-	if m.ExcludeBits {
+	if m.ExcludeColumns {
 		n += 2
 	}
 	return n
@@ -1615,7 +1615,7 @@ func (m *Row) Unmarshal(dAtA []byte) error {
 						break
 					}
 				}
-				m.Bits = append(m.Bits, v)
+				m.Columns = append(m.Columns, v)
 			} else if wireType == 2 {
 				var packedLen int
 				for shift := uint(0); ; shift += 7 {
@@ -1655,10 +1655,10 @@ func (m *Row) Unmarshal(dAtA []byte) error {
 							break
 						}
 					}
-					m.Bits = append(m.Bits, v)
+					m.Columns = append(m.Columns, v)
 				}
 			} else {
-				return fmt.Errorf("proto: wrong wireType = %d for field Bits", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
 			}
 		case 2:
 			if wireType != 2 {
@@ -2337,7 +2337,7 @@ func (m *Attr) Unmarshal(dAtA []byte) error {
 			}
 			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
-			m.FloatValue = float64(math.Float64frombits(v))
+			m.FloatValue = float64(math.Float64fromcolumns(v))
 		default:
 			iNdEx = preIndex
 			skippy, err := skipPublic(dAtA[iNdEx:])
@@ -2622,7 +2622,7 @@ func (m *QueryRequest) Unmarshal(dAtA []byte) error {
 			m.ExcludeAttrs = bool(v != 0)
 		case 7:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ExcludeBits", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ExcludeColumns", wireType)
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
@@ -2639,7 +2639,7 @@ func (m *QueryRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-			m.ExcludeBits = bool(v != 0)
+			m.ExcludeColumns = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipPublic(dAtA[iNdEx:])

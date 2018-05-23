@@ -78,7 +78,7 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
-	// Expvar should ignore earlier set tags from setbit
+	// Expvar should ignore earlier set tags from setcolumn
 	if hldr.Stats.Tags() != nil {
 		t.Fatalf("unexpected tag")
 	}
@@ -146,7 +146,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	}
 }
 
-func TestStatsCount_SetBitmapAttrs(t *testing.T) {
+func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -162,8 +162,8 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 
 	frame.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
-			if name != "SetBitmapAttrs" {
-				t.Errorf("Expected SetBitmapAttrs, Results %s", name)
+			if name != "SetColumnAttrs" {
+				t.Errorf("Expected SetColumnAttrs, Results %s", name)
 			}
 			called = true
 		},
