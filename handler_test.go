@@ -37,7 +37,7 @@ import (
 )
 
 func TestHandlerPanics(t *testing.T) {
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	bufLogger := test.NewBufferLogger()
 	h.Handler.Logger = bufLogger
 
@@ -65,7 +65,7 @@ func TestHandler_NotFound(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 
@@ -100,7 +100,7 @@ func TestHandler_Schema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
@@ -139,7 +139,7 @@ func TestHandler_Status(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Cluster.SetState(pilosa.ClusterStateNormal)
@@ -158,7 +158,7 @@ func TestHandler_Status(t *testing.T) {
 func TestHandler_Info(t *testing.T) {
 	s := test.NewServer()
 	defer s.Close()
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/info", nil))
@@ -173,7 +173,7 @@ func TestHandler_Info(t *testing.T) {
 func TestHandler_ClusterResizeAbort(t *testing.T) {
 
 	t.Run("No resize job", func(t *testing.T) {
-		h := test.NewHandler()
+		h := test.MustNewHandler()
 		h.API.Cluster = test.NewCluster(1)
 		h.API.Cluster.SetState(pilosa.ClusterStateResizing)
 
@@ -202,7 +202,7 @@ func TestHandler_MaxSlices(t *testing.T) {
 	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+2)
 	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*SliceWidth)+8)
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
@@ -243,7 +243,7 @@ func TestHandler_MaxSlices_Inverse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
@@ -260,7 +260,7 @@ func TestHandler_Query_Args_URL(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -288,7 +288,7 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -328,7 +328,7 @@ func TestHandler_Query_Args_Err(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 
@@ -341,7 +341,7 @@ func TestHandler_Query_Args_Err(t *testing.T) {
 }
 func TestHandler_Query_Params_Err(t *testing.T) {
 	w := httptest.NewRecorder()
-	test.NewHandler().ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1&db=sample", strings.NewReader("Bitmap(id=100)")))
+	test.MustNewHandler().ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1&db=sample", strings.NewReader("Bitmap(id=100)")))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"db is not a valid argument"}`+"\n" {
@@ -355,7 +355,7 @@ func TestHandler_Query_Uint64_JSON(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -376,7 +376,7 @@ func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -406,7 +406,7 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -439,7 +439,7 @@ func TestHandler_Query_Row_ColumnAttrs_JSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -462,7 +462,7 @@ func TestHandler_Query_Row_Protobuf(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -510,7 +510,7 @@ func TestHandler_Query_Row_ColumnAttrs_Protobuf(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -571,7 +571,7 @@ func TestHandler_Query_Pairs_JSON(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -595,7 +595,7 @@ func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -628,7 +628,7 @@ func TestHandler_Query_Err_JSON(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -649,7 +649,7 @@ func TestHandler_Query_Err_Protobuf(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
@@ -677,7 +677,7 @@ func TestHandler_Query_MethodNotAllowed(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	w := httptest.NewRecorder()
@@ -692,7 +692,7 @@ func TestHandler_Query_ErrParse(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	w := httptest.NewRecorder()
@@ -749,7 +749,7 @@ func TestHandler_DeleteFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
@@ -1155,7 +1155,7 @@ func TestHandler_Version(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 
@@ -1178,7 +1178,7 @@ func TestHandler_Fragment_Nodes(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(3)
 	h.API.Cluster.ReplicaN = 2
@@ -1214,7 +1214,7 @@ func TestHandler_Expvars(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 	w := httptest.NewRecorder()
@@ -1237,7 +1237,7 @@ func TestHandler_RecalculateCaches(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 
@@ -1253,7 +1253,7 @@ func TestHandler_WebUI(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	h := test.NewHandler()
+	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	h.FileSystem = &statik.FileSystem{}
@@ -1274,5 +1274,43 @@ func TestHandler_WebUI(t *testing.T) {
 	h.ServeHTTP(w, req)
 	if !strings.Contains(w.Body.String(), "try the WebUI") {
 		t.Fatalf("WebUI is not being served correctly.")
+	}
+}
+
+func TestHandler_CORS(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	s := test.NewServer()
+	s.Handler.API.Holder = hldr.Holder
+	defer s.Close()
+
+	// No CORS config present, so should fail
+	handler := test.MustNewHandler()
+
+	req := test.MustNewHTTPRequest("OPTIONS", "/index/foo/query", nil)
+	req.Header.Add("Origin", "http://test/")
+	req.Header.Add("Access-Control-Request-Method", "POST")
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	result := w.Result()
+
+	// This handler does not support CORS, return Method Not Allowed (405)
+	if result.StatusCode != 405 {
+		t.Fatalf("CORS preflight status should be 405, but is %v", result.StatusCode)
+	}
+
+	// CORS config should allow preflight response
+	handler = test.MustNewHandler(pilosa.OptHandlerAllowedOrigins([]string{"http://test/"}))
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	result = w.Result()
+
+	if result.StatusCode != 200 {
+		t.Fatalf("CORS preflight status should be 200, but is %v", result.StatusCode)
+	}
+	if w.HeaderMap["Access-Control-Allow-Origin"][0] != "http://test/" {
+		t.Fatal("CORS header not present")
 	}
 }

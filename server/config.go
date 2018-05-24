@@ -57,6 +57,11 @@ type Config struct {
 	// Verbose toggles verbose logging which can be useful for debugging.
 	Verbose bool `toml:"verbose"`
 
+	// HTTP Handler options
+	Handler struct {
+		AllowedOrigins []string `toml:"allowed-origins"`
+	}
+
 	// TLS
 	TLS TLSConfig
 

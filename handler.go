@@ -31,14 +31,16 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/internal"
+
 	"github.com/pkg/errors"
 )
 
 // Handler represents an HTTP handler.
 type Handler struct {
-	Router *mux.Router
+	Handler http.Handler
 
 	FileSystem FileSystem
 
@@ -48,6 +50,8 @@ type Handler struct {
 	validators map[string]*queryValidationSpec
 
 	API *API
+
+	AllowedOrigins []string
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -67,15 +71,36 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+// HandlerOption is a functional option type for pilosa.Handler
+type HandlerOption func(s *Handler) error
+
+func OptHandlerAllowedOrigins(origins []string) HandlerOption {
+	return func(h *Handler) error {
+		h.Handler = handlers.CORS(
+			handlers.AllowedOrigins(origins),
+			handlers.AllowedHeaders([]string{"Content-Type"}),
+		)(h.Handler)
+		return nil
+	}
+}
+
 // NewHandler returns a new instance of Handler with a default logger.
-func NewHandler() *Handler {
+func NewHandler(opts ...HandlerOption) (*Handler, error) {
 	handler := &Handler{
 		FileSystem: NopFileSystem,
 		Logger:     NopLogger,
 	}
-	handler.Router = NewRouter(handler)
+	handler.Handler = NewRouter(handler)
 	handler.populateValidators()
-	return handler
+
+	for _, opt := range opts {
+		err := opt(handler)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
+	}
+
+	return handler, nil
 }
 
 func (h *Handler) populateValidators() {
@@ -183,7 +208,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	t := time.Now()
-	h.Router.ServeHTTP(w, r)
+	h.Handler.ServeHTTP(w, r)
 	dif := time.Since(t)
 
 	// Calculate per request StatsD metrics when the handler is fully configured.
