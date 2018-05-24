@@ -303,7 +303,7 @@ func TestExecutor_Execute_ClearBit(t *testing.T) {
 		`Range(frame="f", row=1, start="2018-05-01T00:00", end="2019-05-01T00:00")`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else {
-		if bmp := res[0].(*pilosa.Bitmap); len(bmp.Bits()) != 0 {
+		if bmp := res[0].(*pilosa.Row); len(bmp.Bits()) != 0 {
 			t.Fatalf("Cleared bits should be reset")
 		}
 	}
