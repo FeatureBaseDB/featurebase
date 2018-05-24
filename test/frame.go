@@ -75,7 +75,7 @@ func (f *Frame) Reopen() error {
 	return nil
 }
 
-// MustSetBit sets a column on the frame. Panic on error.
+// MustSetBit sets a bit on the frame. Panic on error.
 func (f *Frame) MustSetBit(view string, rowID, columnID uint64, t *time.Time) (changed bool) {
 	changed, err := f.SetBit(view, rowID, columnID, t)
 	if err != nil {

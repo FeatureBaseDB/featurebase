@@ -110,26 +110,26 @@ func TestClient_MultiNode(t *testing.T) {
 		}
 	}
 
-	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetColumns(100, baseBit0+10)
-	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetColumns(4, baseBit0+10, baseBit0+11, baseBit0+12)
-	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetColumns(4, baseBit0+10, baseBit0+11, baseBit0+12, baseBit0+13, baseBit0+14, baseBit0+15)
-	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetColumns(2, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4)
-	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetColumns(3, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4, baseBit0+5)
-	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetColumns(22, baseBit0+1, baseBit0+2, baseBit0+10)
+	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(100, baseBit0+10)
+	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(4, baseBit0+10, baseBit0+11, baseBit0+12)
+	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(4, baseBit0+10, baseBit0+11, baseBit0+12, baseBit0+13, baseBit0+14, baseBit0+15)
+	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(2, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4)
+	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(3, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4, baseBit0+5)
+	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).MustSetBits(22, baseBit0+1, baseBit0+2, baseBit0+10)
 
-	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetColumns(99, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4)
-	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetColumns(100, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6, baseBit1+7, baseBit1+8, baseBit1+9, baseBit1+10)
-	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetColumns(98, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6)
-	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetColumns(1, baseBit1+4)
-	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetColumns(22, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5)
+	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetBits(99, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4)
+	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetBits(100, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6, baseBit1+7, baseBit1+8, baseBit1+9, baseBit1+10)
+	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetBits(98, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6)
+	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetBits(1, baseBit1+4)
+	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).MustSetBits(22, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5)
 
-	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetColumns(24, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13, baseBit2+14)
-	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetColumns(20, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13)
-	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetColumns(21, baseBit2+10)
-	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetColumns(100, baseBit2+10)
-	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetColumns(99, baseBit2+10, baseBit2+11, baseBit2+12)
-	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetColumns(98, baseBit2+10, baseBit2+11)
-	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetColumns(22, baseBit2+10, baseBit2+11, baseBit2+12)
+	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(24, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13, baseBit2+14)
+	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(20, baseBit2+10, baseBit2+11, baseBit2+12, baseBit2+13)
+	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(21, baseBit2+10)
+	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(100, baseBit2+10)
+	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(99, baseBit2+10, baseBit2+11, baseBit2+12)
+	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(98, baseBit2+10, baseBit2+11)
+	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).MustSetBits(22, baseBit2+10, baseBit2+11, baseBit2+12)
 
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay
@@ -375,10 +375,10 @@ func TestClient_BackupRestore(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).MustSetColumns(100, 1, 2, 3, SliceWidth-1)
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).MustSetColumns(100, SliceWidth, SliceWidth+2)
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 5).MustSetColumns(100, (5*SliceWidth)+1)
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).MustSetColumns(200, 20000)
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).MustSetBits(100, 1, 2, 3, SliceWidth-1)
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).MustSetBits(100, SliceWidth, SliceWidth+2)
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 5).MustSetBits(100, (5*SliceWidth)+1)
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).MustSetBits(200, 20000)
 
 	s := test.NewServer()
 	defer s.Close()
@@ -479,7 +479,7 @@ func TestClient_BackupInvalidView(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).MustSetColumns(100, 1, 2, 3, SliceWidth-1)
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).MustSetBits(100, 1, 2, 3, SliceWidth-1)
 
 	s := test.NewServer()
 	defer s.Close()

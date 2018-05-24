@@ -478,7 +478,7 @@ func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	return changed, nil
 }
 
-func (f *Fragment) column(rowID, columnID uint64) (bool, error) {
+func (f *Fragment) bit(rowID, columnID uint64) (bool, error) {
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
 		return false, err
@@ -486,22 +486,22 @@ func (f *Fragment) column(rowID, columnID uint64) (bool, error) {
 	return f.storage.Contains(pos), nil
 }
 
-// FieldValue uses a column of columns to read a multi-column value.
-func (f *Fragment) FieldValue(columnID uint64, columnDepth uint) (value uint64, exists bool, err error) {
+// FieldValue uses a column of bits to read a multi-bit value.
+func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// If existence column is unset then ignore remaining columns.
-	if v, err := f.column(uint64(columnDepth), columnID); err != nil {
-		return 0, false, errors.Wrap(err, "getting existence column")
+	// If existence bit is unset then ignore remaining bits.
+	if v, err := f.bit(uint64(bitDepth), columnID); err != nil {
+		return 0, false, errors.Wrap(err, "getting existence bit")
 	} else if !v {
 		return 0, false, nil
 	}
 
-	// Compute other columns into a value.
-	for i := uint(0); i < columnDepth; i++ {
-		if v, err := f.column(uint64(i), columnID); err != nil {
-			return 0, false, errors.Wrapf(err, "getting value column %d", i)
+	// Compute other bits into a value.
+	for i := uint(0); i < bitDepth; i++ {
+		if v, err := f.bit(uint64(i), columnID); err != nil {
+			return 0, false, errors.Wrapf(err, "getting value bit %d", i)
 		} else if v {
 			value |= (1 << i)
 		}
@@ -510,12 +510,12 @@ func (f *Fragment) FieldValue(columnID uint64, columnDepth uint) (value uint64, 
 	return value, true, nil
 }
 
-// SetFieldValue uses a column of columns to set a multi-column value.
-func (f *Fragment) SetFieldValue(columnID uint64, columnDepth uint, value uint64) (changed bool, err error) {
+// SetFieldValue uses a column of bits to set a multi-bit value.
+func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	for i := uint(0); i < columnDepth; i++ {
+	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
 			if c, err := f.setBit(uint64(i), columnID); err != nil {
 				return changed, err
@@ -532,7 +532,7 @@ func (f *Fragment) SetFieldValue(columnID uint64, columnDepth uint, value uint64
 	}
 
 	// Mark value as set.
-	if c, err := f.setBit(uint64(columnDepth), columnID); err != nil {
+	if c, err := f.setBit(uint64(bitDepth), columnID); err != nil {
 		return changed, errors.Wrap(err, "marking not-null")
 	} else if c {
 		changed = true
@@ -542,25 +542,25 @@ func (f *Fragment) SetFieldValue(columnID uint64, columnDepth uint, value uint64
 }
 
 // importSetFieldValue is a more efficient SetFieldValue just for imports.
-func (f *Fragment) importSetFieldValue(columnID uint64, columnDepth uint, value uint64) (changed bool, err error) {
+func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 
-	for i := uint(0); i < columnDepth; i++ {
+	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
-			column, err := f.pos(uint64(i), columnID)
+			bit, err := f.pos(uint64(i), columnID)
 			if err != nil {
 				return changed, errors.Wrap(err, "getting set pos")
 			}
-			if c, err := f.storage.Add(column); err != nil {
+			if c, err := f.storage.Add(bit); err != nil {
 				return changed, errors.Wrap(err, "adding")
 			} else if c {
 				changed = true
 			}
 		} else {
-			column, err := f.pos(uint64(i), columnID)
+			bit, err := f.pos(uint64(i), columnID)
 			if err != nil {
 				return changed, errors.Wrap(err, "getting clear pos")
 			}
-			if c, err := f.storage.Remove(column); err != nil {
+			if c, err := f.storage.Remove(bit); err != nil {
 				return changed, errors.Wrap(err, "removing")
 			} else if c {
 				changed = true
@@ -569,7 +569,7 @@ func (f *Fragment) importSetFieldValue(columnID uint64, columnDepth uint, value 
 	}
 
 	// Mark value as set.
-	p, err := f.pos(uint64(columnDepth), columnID)
+	p, err := f.pos(uint64(bitDepth), columnID)
 	if err != nil {
 		return changed, errors.Wrap(err, "marking not-null")
 	}
@@ -582,25 +582,25 @@ func (f *Fragment) importSetFieldValue(columnID uint64, columnDepth uint, value 
 	return changed, nil
 }
 
-// FieldSum returns the sum of a given field as well as the number of columns involved.
+// FieldSum returns the sum of a given field as well as the number of bits involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldSum(filter *Row, columnDepth uint) (sum, count uint64, err error) {
+func (f *Fragment) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	// Compute count based on the existence column.
-	row := f.Row(uint64(columnDepth))
+	row := f.Row(uint64(bitDepth))
 	if filter != nil {
 		count = row.IntersectionCount(filter)
 	} else {
 		count = row.Count()
 	}
 
-	// Compute the sum based on the column count of each row multiplied by the
-	// place value of each row. For example, 10 columns in the 1's place plus
-	// 4 columns in the 2's place plus 3 columns in the 4's place equals a total
+	// Compute the sum based on the bit count of each row multiplied by the
+	// place value of each row. For example, 10 bits in the 1's place plus
+	// 4 bits in the 2's place plus 3 bits in the 4's place equals a total
 	// sum of 30:
 	//
 	//   10*(2^0) + 4*(2^1) + 3*(2^2) = 30
 	//
-	for i := uint(0); i < columnDepth; i++ {
+	for i := uint(0); i < bitDepth; i++ {
 		row := f.Row(uint64(i))
 		cnt := uint64(0)
 		if filter != nil {
@@ -614,11 +614,11 @@ func (f *Fragment) FieldSum(filter *Row, columnDepth uint) (sum, count uint64, e
 	return sum, count, nil
 }
 
-// FieldMin returns the min of a given field as well as the number of columns involved.
+// FieldMin returns the min of a given field as well as the number of bits involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldMin(filter *Row, columnDepth uint) (min, count uint64, err error) {
+func (f *Fragment) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
 
-	consider := f.Row(uint64(columnDepth))
+	consider := f.Row(uint64(bitDepth))
 	if filter != nil {
 		consider = consider.Intersect(filter)
 	}
@@ -628,8 +628,8 @@ func (f *Fragment) FieldMin(filter *Row, columnDepth uint) (min, count uint64, e
 		return 0, 0, nil
 	}
 
-	for i := columnDepth; i > uint(0); i-- {
-		ii := i - 1 // allow for uint range: (columndepth-1) to 0
+	for i := bitDepth; i > uint(0); i-- {
+		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
 		row := f.Row(uint64(ii))
 
 		x := consider.Difference(row)
@@ -647,21 +647,21 @@ func (f *Fragment) FieldMin(filter *Row, columnDepth uint) (min, count uint64, e
 	return min, count, nil
 }
 
-// FieldMax returns the max of a given field as well as the number of columns involved.
-// A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldMax(filter *Row, columnDepth uint) (max, count uint64, err error) {
+// FieldMax returns the max of a given field as well as the number of bits involved.
+// A bitmap can be passed in to optionally filter the computed bits.
+func (f *Fragment) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
 
-	consider := f.Row(uint64(columnDepth))
+	consider := f.Row(uint64(bitDepth))
 	if filter != nil {
 		consider = consider.Intersect(filter)
 	}
 
-	// If there are no columns to consider, return early.
+	// If there are no bits to consider, return early.
 	if consider.Count() == 0 {
 		return 0, 0, nil
 	}
 
-	for i := columnDepth; i > uint(0); i-- {
+	for i := bitDepth; i > uint(0); i-- {
 		ii := i - 1 // allow for uint range: (columndepth-1) to 0
 		row := f.Row(uint64(ii))
 
@@ -679,31 +679,31 @@ func (f *Fragment) FieldMax(filter *Row, columnDepth uint) (max, count uint64, e
 }
 
 // FieldRange returns bitmaps with a field value encoding matching the predicate.
-func (f *Fragment) FieldRange(op pql.Token, columnDepth uint, predicate uint64) (*Row, error) {
+func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	switch op {
 	case pql.EQ:
-		return f.fieldRangeEQ(columnDepth, predicate)
+		return f.fieldRangeEQ(bitDepth, predicate)
 	case pql.NEQ:
-		return f.fieldRangeNEQ(columnDepth, predicate)
+		return f.fieldRangeNEQ(bitDepth, predicate)
 	case pql.LT, pql.LTE:
-		return f.fieldRangeLT(columnDepth, predicate, op == pql.LTE)
+		return f.fieldRangeLT(bitDepth, predicate, op == pql.LTE)
 	case pql.GT, pql.GTE:
-		return f.fieldRangeGT(columnDepth, predicate, op == pql.GTE)
+		return f.fieldRangeGT(bitDepth, predicate, op == pql.GTE)
 	default:
 		return nil, ErrInvalidRangeOperation
 	}
 }
 
-func (f *Fragment) fieldRangeEQ(columnDepth uint, predicate uint64) (*Row, error) {
+func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
-	b := f.Row(uint64(columnDepth))
+	b := f.Row(uint64(bitDepth))
 
 	// Filter any columns that don't match the current column value.
-	for i := int(columnDepth - 1); i >= 0; i-- {
+	for i := int(bitDepth - 1); i >= 0; i-- {
 		row := f.Row(uint64(i))
-		column := (predicate >> uint(i)) & 1
+		bit := (predicate >> uint(i)) & 1
 
-		if column == 1 {
+		if bit == 1 {
 			b = b.Intersect(row)
 		} else {
 			b = b.Difference(row)
@@ -713,12 +713,12 @@ func (f *Fragment) fieldRangeEQ(columnDepth uint, predicate uint64) (*Row, error
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeNEQ(columnDepth uint, predicate uint64) (*Row, error) {
+func (f *Fragment) fieldRangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
-	b := f.Row(uint64(columnDepth))
+	b := f.Row(uint64(bitDepth))
 
 	// Get the equal bitmap.
-	eq, err := f.fieldRangeEQ(columnDepth, predicate)
+	eq, err := f.fieldRangeEQ(bitDepth, predicate)
 	if err != nil {
 		return nil, err
 	}
@@ -729,21 +729,21 @@ func (f *Fragment) fieldRangeNEQ(columnDepth uint, predicate uint64) (*Row, erro
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeLT(columnDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
+func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	keep := NewRow()
 
 	// Start with set of columns with values set.
-	b := f.Row(uint64(columnDepth))
+	b := f.Row(uint64(bitDepth))
 
 	// Filter any columns that don't match the current column value.
 	leadingZeros := true
-	for i := int(columnDepth - 1); i >= 0; i-- {
+	for i := int(bitDepth - 1); i >= 0; i-- {
 		row := f.Row(uint64(i))
-		column := (predicate >> uint(i)) & 1
+		bit := (predicate >> uint(i)) & 1
 
 		// Remove any columns with higher columns set.
 		if leadingZeros {
-			if column == 0 {
+			if bit == 0 {
 				b = b.Difference(row)
 				continue
 			} else {
@@ -755,19 +755,19 @@ func (f *Fragment) fieldRangeLT(columnDepth uint, predicate uint64, allowEqualit
 		// If column is zero then return only already kept columns.
 		// If column is one then remove any one columns.
 		if i == 0 && !allowEquality {
-			if column == 0 {
+			if bit == 0 {
 				return keep, nil
 			}
 			return b.Difference(row.Difference(keep)), nil
 		}
 
-		// If column is zero then remove all set columns not in excluded bitmap.
-		if column == 0 {
+		// If bit is zero then remove all set columns not in excluded bitmap.
+		if bit == 0 {
 			b = b.Difference(row.Difference(keep))
 			continue
 		}
 
-		// If column is set then add columns for set columns to exclude.
+		// If bit is set then add bits for set bits to exclude.
 		// Don't bother to compute this on the final iteration.
 		if i > 0 {
 			keep = keep.Union(b.Difference(row))
@@ -777,32 +777,32 @@ func (f *Fragment) fieldRangeLT(columnDepth uint, predicate uint64, allowEqualit
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeGT(columnDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
-	b := f.Row(uint64(columnDepth))
+func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
+	b := f.Row(uint64(bitDepth))
 	keep := NewRow()
 
 	// Filter any columns that don't match the current column value.
-	for i := int(columnDepth - 1); i >= 0; i-- {
+	for i := int(bitDepth - 1); i >= 0; i-- {
 		row := f.Row(uint64(i))
-		column := (predicate >> uint(i)) & 1
+		bit := (predicate >> uint(i)) & 1
 
-		// Handle last column differently.
-		// If column is one then return only already kept columns.
-		// If column is zero then remove any unset columns.
+		// Handle last bit differently.
+		// If bit is one then return only already kept bits.
+		// If bit is zero then remove any unset bits.
 		if i == 0 && !allowEquality {
-			if column == 1 {
+			if bit == 1 {
 				return keep, nil
 			}
 			return b.Difference(b.Difference(row).Difference(keep)), nil
 		}
 
-		// If column is set then remove all unset columns not already kept.
-		if column == 1 {
+		// If bit is set then remove all unset bits not already kept.
+		if bit == 1 {
 			b = b.Difference(b.Difference(row).Difference(keep))
 			continue
 		}
 
-		// If column is unset then add columns with set column to keep.
+		// If bit is unset then add bits with set bit to keep.
 		// Don't bother to compute this on the final iteration.
 		if i > 0 {
 			keep = keep.Union(b.Intersect(row))
@@ -812,29 +812,29 @@ func (f *Fragment) fieldRangeGT(columnDepth uint, predicate uint64, allowEqualit
 	return b, nil
 }
 
-// FieldNotNull returns the not-null row (stored at columnDepth).
-func (f *Fragment) FieldNotNull(columnDepth uint) (*Row, error) {
-	return f.Row(uint64(columnDepth)), nil
+// FieldNotNull returns the not-null row (stored at bitDepth).
+func (f *Fragment) FieldNotNull(bitDepth uint) (*Row, error) {
+	return f.Row(uint64(bitDepth)), nil
 }
 
 // FieldRangeBetween returns bitmaps with a field value encoding matching any value between predicateMin and predicateMax.
-func (f *Fragment) FieldRangeBetween(columnDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
-	b := f.Row(uint64(columnDepth))
+func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
+	b := f.Row(uint64(bitDepth))
 	keep1 := NewRow() // GTE
 	keep2 := NewRow() // LTE
 
 	// Filter any columns that don't match the current column value.
-	for i := int(columnDepth - 1); i >= 0; i-- {
+	for i := int(bitDepth - 1); i >= 0; i-- {
 		row := f.Row(uint64(i))
-		column1 := (predicateMin >> uint(i)) & 1
-		column2 := (predicateMax >> uint(i)) & 1
+		bit1 := (predicateMin >> uint(i)) & 1
+		bit2 := (predicateMax >> uint(i)) & 1
 
 		// GTE predicateMin
-		// If column is set then remove all unset columns not already kept.
-		if column1 == 1 {
+		// If bit is set then remove all unset bits not already kept.
+		if bit1 == 1 {
 			b = b.Difference(b.Difference(row).Difference(keep1))
 		} else {
-			// If column is unset then add columns with set column to keep.
+			// If bit is unset then add bits with set bit to keep.
 			// Don't bother to compute this on the final iteration.
 			if i > 0 {
 				keep1 = keep1.Union(b.Intersect(row))
@@ -842,11 +842,11 @@ func (f *Fragment) FieldRangeBetween(columnDepth uint, predicateMin, predicateMa
 		}
 
 		// LTE predicateMin
-		// If column is zero then remove all set columns not in excluded bitmap.
-		if column2 == 0 {
+		// If bit is zero then remove all set bits not in excluded bitmap.
+		if bit2 == 0 {
 			b = b.Difference(row.Difference(keep2))
 		} else {
-			// If column is set then add columns for set columns to exclude.
+			// If bit is set then add bits for set bits to exclude.
 			// Don't bother to compute this on the final iteration.
 			if i > 0 {
 				keep2 = keep2.Union(b.Difference(row))
@@ -867,7 +867,7 @@ func (f *Fragment) pos(rowID, columnID uint64) (uint64, error) {
 	return Pos(rowID, columnID), nil
 }
 
-// ForEachBit executes fn for every column set in the fragment.
+// ForEachBit executes fn for every bit set in the fragment.
 // Errors returned from fn are passed through.
 func (f *Fragment) ForEachBit(fn func(rowID, columnID uint64) error) error {
 	f.mu.Lock()

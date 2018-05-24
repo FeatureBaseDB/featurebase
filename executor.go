@@ -1319,7 +1319,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err := frame.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
-	frame.Stats.Count("SetColumnAttrs", 1, 1.0)
+	frame.Stats.Count("SetRowAttrs", 1, 1.0)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {

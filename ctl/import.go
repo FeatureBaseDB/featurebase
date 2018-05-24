@@ -228,21 +228,21 @@ func (cmd *ImportCommand) bufferColumns(ctx context.Context, path string) error 
 }
 
 // importColumns sends batches of columns to the server.
-func (cmd *ImportCommand) importColumns(ctx context.Context, columns []pilosa.Bit) error {
+func (cmd *ImportCommand) importColumns(ctx context.Context, bits []pilosa.Bit) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Group columns by slice.
-	logger.Printf("grouping %d columns", len(columns))
-	columnsBySlice := pilosa.Columns(columns).GroupBySlice()
+	logger.Printf("grouping %d columns", len(bits))
+	bitsBySlice := pilosa.Bits(bits).GroupBySlice()
 
 	// Parse path into columns.
-	for slice, columns := range columnsBySlice {
+	for slice, chunk := range bitsBySlice {
 		if cmd.Sort {
-			sort.Sort(pilosa.ColumnsByPos(columns))
+			sort.Sort(pilosa.BitsByPos(chunk))
 		}
 
-		logger.Printf("importing slice: %d, n=%d", slice, len(columns))
-		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Frame, slice, columns); err != nil {
+		logger.Printf("importing slice: %d, n=%d", slice, len(chunk))
+		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Frame, slice, chunk); err != nil {
 			return errors.Wrap(err, "importing")
 		}
 	}

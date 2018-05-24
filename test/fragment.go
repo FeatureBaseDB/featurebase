@@ -85,9 +85,9 @@ func (f *Fragment) Reopen() error {
 	return nil
 }
 
-// MustSetColumns sets columns on a row. Panic on error.
+// MustSetBits sets columns on a row. Panic on error.
 // This function does not accept a timestamp or quantum.
-func (f *Fragment) MustSetColumns(rowID uint64, columnIDs ...uint64) {
+func (f *Fragment) MustSetBits(rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {
 		if _, err := f.SetBit(rowID, columnID); err != nil {
 			panic(err)
