@@ -107,6 +107,24 @@ func (h *Holder) MustCreateFragmentIfNotExists(index, frame, view string, slice 
 	return &Fragment{Fragment: frag}
 }
 
+// MustCreateFragmentWithOptionsIfNotExists returns a fragment with the given frame options. Panic on error.
+func (h *Holder) MustCreateFragmentWithOptionsIfNotExists(index, frame, view string, slice uint64, frameOptions pilosa.FrameOptions) *Fragment {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFrameIfNotExists(frame, frameOptions)
+	if err != nil {
+		panic(err)
+	}
+	v, err := f.CreateViewIfNotExists(view)
+	if err != nil {
+		panic(err)
+	}
+	frag, err := v.CreateFragmentIfNotExists(slice)
+	if err != nil {
+		panic(err)
+	}
+	return &Fragment{Fragment: frag}
+}
+
 // MustCreateRankedFragmentIfNotExists returns a given fragment with a ranked cache. Panic on error.
 func (h *Holder) MustCreateRankedFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
