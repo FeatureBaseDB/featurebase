@@ -271,6 +271,45 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 	}
 }
 
+func TestExecutor_Execute_ClearBit(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	f := hldr.MustCreateFragmentWithOptionsIfNotExists("i", "f", pilosa.ViewStandard, 0, pilosa.FrameOptions{TimeQuantum: "Y"})
+	if n := f.Row(1).Count(); n != 0 {
+		t.Fatalf("unexpected bitmap count: %d", n)
+	}
+
+	if res, err := e.Execute(context.Background(), "i", test.MustParse(
+		`SetBit(frame="f", col=1, row=1, timestamp="2018-05-01T00:00")`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else {
+		if !res[0].(bool) {
+			t.Fatalf("expected bit changed")
+		}
+	}
+
+	if res, err := e.Execute(context.Background(), "i", test.MustParse(
+		`ClearBit(frame="f", col=1, row=1, timestamp="2018-05-01T00:00")`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else {
+		if !res[0].(bool) {
+			t.Fatalf("expected bit changed")
+		}
+	}
+
+	if res, err := e.Execute(context.Background(), "i", test.MustParse(
+		`Range(frame="f", row=1, start="2018-05-01T00:00", end="2019-05-01T00:00")`), nil, nil); err != nil {
+		t.Fatal(err)
+	} else {
+		if bmp := res[0].(*pilosa.Row); len(bmp.Bits()) != 0 {
+			t.Fatalf("Cleared bits should be reset")
+		}
+	}
+
+}
+
 // Ensure a SetFieldValue() query can be executed.
 func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {

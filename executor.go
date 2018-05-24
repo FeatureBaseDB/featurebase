@@ -1064,22 +1064,32 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
 	}
 
+	var timestamp *time.Time
+	sTimestamp, ok := c.Args["timestamp"].(string)
+	if ok {
+		t, err := time.Parse(TimeFormat, sTimestamp)
+		if err != nil {
+			return false, fmt.Errorf("invalid date: %s", sTimestamp)
+		}
+		timestamp = &t
+	}
+
 	// Clear bits for each view.
 	switch view {
 	case ViewStandard:
-		return e.executeClearBitView(ctx, index, c, f, view, colID, rowID, opt)
+		return e.executeClearBitView(ctx, index, c, f, view, colID, rowID, timestamp, opt)
 	case ViewInverse:
-		return e.executeClearBitView(ctx, index, c, f, view, rowID, colID, opt)
+		return e.executeClearBitView(ctx, index, c, f, view, rowID, colID, timestamp, opt)
 	case "":
 		var ret bool
-		if changed, err := e.executeClearBitView(ctx, index, c, f, ViewStandard, colID, rowID, opt); err != nil {
+		if changed, err := e.executeClearBitView(ctx, index, c, f, ViewStandard, colID, rowID, timestamp, opt); err != nil {
 			return ret, err
 		} else if changed {
 			ret = true
 		}
 
 		if f.InverseEnabled() {
-			if changed, err := e.executeClearBitView(ctx, index, c, f, ViewInverse, rowID, colID, opt); err != nil {
+			if changed, err := e.executeClearBitView(ctx, index, c, f, ViewInverse, rowID, colID, timestamp, opt); err != nil {
 				return ret, err
 			} else if changed {
 				ret = true
@@ -1092,13 +1102,13 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 }
 
 // executeClearBitView executes a ClearBit() call for a single view.
-func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql.Call, f *Frame, view string, colID, rowID uint64, opt *ExecOptions) (bool, error) {
+func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql.Call, f *Frame, view string, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
 	for _, node := range e.Cluster.SliceNodes(index, slice) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-			val, err := f.ClearBit(view, rowID, colID, nil)
+			val, err := f.ClearBit(view, rowID, colID, timestamp)
 			if err != nil {
 				return false, err
 			} else if val {
