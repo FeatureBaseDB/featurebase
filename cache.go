@@ -463,8 +463,8 @@ func (p uint64Slice) merge(other []uint64) []uint64 {
 
 // BitmapCache provides an interface for caching full bitmaps.
 type BitmapCache interface {
-	Fetch(id uint64) (*Bitmap, bool)
-	Add(id uint64, b *Bitmap)
+	Fetch(id uint64) (*Row, bool)
+	Add(id uint64, b *Row)
 }
 
 // SimpleCache implements BitmapCache
@@ -473,17 +473,17 @@ type BitmapCache interface {
 // A read-heavy use case would cause the cache to get bigger, potentially causing the
 // node to run out of memory.
 type SimpleCache struct {
-	cache map[uint64]*Bitmap
+	cache map[uint64]*Row
 }
 
 // Fetch retrieves the bitmap at the id in the cache.
-func (s *SimpleCache) Fetch(id uint64) (*Bitmap, bool) {
+func (s *SimpleCache) Fetch(id uint64) (*Row, bool) {
 	m, ok := s.cache[id]
 	return m, ok
 }
 
 // Add adds the bitmap to the cache, keyed on the id.
-func (s *SimpleCache) Add(id uint64, b *Bitmap) {
+func (s *SimpleCache) Add(id uint64, b *Row) {
 	s.cache[id] = b
 }
 
