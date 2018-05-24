@@ -59,6 +59,7 @@ type Config struct {
 
 	// HTTP Handler options
 	Handler struct {
+		// CORS Allowed Origins
 		AllowedOrigins []string `toml:"allowed-origins"`
 	}
 

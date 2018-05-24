@@ -34,7 +34,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	SetTLSConfig(flags, &srv.Config.TLS.CertificatePath, &srv.Config.TLS.CertificateKeyPath, &srv.Config.TLS.SkipVerify)
 
 	// Handler
-	flags.StringSliceVarP(&srv.Config.Handler.AllowedOrigins, "handler.allowed-origins", "", []string{"http://localhost/"}, "Comma separated list of allowed origin hosts (for CORS/WebUI).")
+	flags.StringSliceVarP(&srv.Config.Handler.AllowedOrigins, "handler.allowed-origins", "", []string{}, "Comma separated list of allowed origin URIs (for CORS/WebUI).")
 
 	// Cluster
 	flags.BoolVarP(&srv.Config.Cluster.Disabled, "cluster.disabled", "", srv.Config.Cluster.Disabled, "Disabled multi-node cluster communication (used for testing)")
