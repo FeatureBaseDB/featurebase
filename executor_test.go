@@ -70,7 +70,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 		}
 
 		// Inhicolumn attributes.
-		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(row=10, frame=f)`), nil, &pilosa.ExecOptions{ExcludeAttrs: true}); err != nil {
+		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(row=10, frame=f)`), nil, &pilosa.ExecOptions{ExcludeRowAttrs: true}); err != nil {
 			t.Fatal(err)
 		} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{3, SliceWidth + 1}) {
 			t.Fatalf("unexpected columns: %+v", columns)

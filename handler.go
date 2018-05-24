@@ -82,7 +82,7 @@ func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")
 	h.validators["GetSliceMax"] = queryValidationSpecRequired().Optional("inverse")
-	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeColumns")
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
@@ -821,10 +821,10 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		Query:        query,
-		Slices:       slices,
-		ColumnAttrs:  q.Get("columnAttrs") == "true",
-		ExcludeAttrs: q.Get("excludeAttrs") == "true",
+		Query:           query,
+		Slices:          slices,
+		ColumnAttrs:     q.Get("columnAttrs") == "true",
+		ExcludeRowAttrs: q.Get("excludeRowAttrs") == "true",
 		ExcludeColumns:  q.Get("excludeColumns") == "true",
 	}, nil
 }
@@ -1181,7 +1181,7 @@ type QueryRequest struct {
 	ColumnAttrs bool
 
 	// Do not return row attributes, if true.
-	ExcludeAttrs bool
+	ExcludeRowAttrs bool
 
 	// Do not return columns, if true.
 	ExcludeColumns bool
@@ -1193,11 +1193,11 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		Query:        pb.Query,
-		Slices:       pb.Slices,
-		ColumnAttrs:  pb.ColumnAttrs,
-		Remote:       pb.Remote,
-		ExcludeAttrs: pb.ExcludeAttrs,
+		Query:           pb.Query,
+		Slices:          pb.Slices,
+		ColumnAttrs:     pb.ColumnAttrs,
+		Remote:          pb.Remote,
+		ExcludeRowAttrs: pb.ExcludeRowAttrs,
 		ExcludeColumns:  pb.ExcludeColumns,
 	}
 

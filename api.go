@@ -99,8 +99,8 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		return resp, errors.Wrap(err, "parsing")
 	}
 	execOpts := &ExecOptions{
-		Remote:       req.Remote,
-		ExcludeAttrs: req.ExcludeAttrs,
+		Remote:          req.Remote,
+		ExcludeRowAttrs: req.ExcludeRowAttrs,
 		ExcludeColumns:  req.ExcludeColumns,
 	}
 	results, err := api.Executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
