@@ -107,7 +107,6 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 
 	// Import each path and import by slice.
 	for _, path := range cmd.Paths {
-		// Parse path into columns.
 		logger.Printf("parsing: %s", path)
 		if err := cmd.importPath(ctx, path); err != nil {
 			return err
@@ -129,22 +128,22 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 	return nil
 }
 
-// importPath parses a path into columns and imports it to the server.
+// importPath parses a path into bits and imports it to the server.
 func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
 	// If a field is provided, treat the import data as values to be range-encoded.
 	if cmd.Field != "" {
 		return cmd.bufferFieldValues(ctx, path)
 	} else {
 		if cmd.StringKeys {
-			return cmd.bufferColumnsK(ctx, path)
+			return cmd.bufferBitsK(ctx, path)
 		} else {
-			return cmd.bufferColumns(ctx, path)
+			return cmd.bufferBits(ctx, path)
 		}
 	}
 }
 
-// bufferColumns buffers slices of columns to be imported as a batch.
-func (cmd *ImportCommand) bufferColumns(ctx context.Context, path string) error {
+// bufferBits buffers slices of bits to be imported as a batch.
+func (cmd *ImportCommand) bufferBits(ctx context.Context, path string) error {
 	a := make([]pilosa.Bit, 0, cmd.BufferSize)
 
 	var r *csv.Reader
@@ -157,7 +156,7 @@ func (cmd *ImportCommand) bufferColumns(ctx context.Context, path string) error 
 		}
 		defer f.Close()
 
-		// Read rows as columns.
+		// Read rows as bits.
 		r = csv.NewReader(f)
 	} else {
 		r = csv.NewReader(cmd.Stdin)
@@ -183,21 +182,21 @@ func (cmd *ImportCommand) bufferColumns(ctx context.Context, path string) error 
 			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
 		}
 
-		var column pilosa.Bit
+		var bit pilosa.Bit
 
 		// Parse row id.
 		rowID, err := strconv.ParseUint(record[0], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid row id on row %d: %q", rnum, record[0])
 		}
-		column.RowID = rowID
+		bit.RowID = rowID
 
 		// Parse column id.
 		columnID, err := strconv.ParseUint(record[1], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[1])
 		}
-		column.ColumnID = columnID
+		bit.ColumnID = columnID
 
 		// Parse time, if exists.
 		if len(record) > 2 && record[2] != "" {
@@ -205,37 +204,37 @@ func (cmd *ImportCommand) bufferColumns(ctx context.Context, path string) error 
 			if err != nil {
 				return fmt.Errorf("invalid timestamp on row %d: %q", rnum, record[2])
 			}
-			column.Timestamp = t.UnixNano()
+			bit.Timestamp = t.UnixNano()
 		}
 
-		a = append(a, column)
+		a = append(a, bit)
 
-		// If we've reached the buffer size then import columns.
+		// If we've reached the buffer size then import bits.
 		if len(a) == cmd.BufferSize {
-			if err := cmd.importColumns(ctx, a); err != nil {
+			if err := cmd.importBits(ctx, a); err != nil {
 				return err
 			}
 			a = a[:0]
 		}
 	}
 
-	// If there are still columns in the buffer then flush them.
-	if err := cmd.importColumns(ctx, a); err != nil {
+	// If there are still bits in the buffer then flush them.
+	if err := cmd.importBits(ctx, a); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// importColumns sends batches of columns to the server.
-func (cmd *ImportCommand) importColumns(ctx context.Context, bits []pilosa.Bit) error {
+// importBits sends batches of bits to the server.
+func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
-	// Group columns by slice.
-	logger.Printf("grouping %d columns", len(bits))
+	// Group bits by slice.
+	logger.Printf("grouping %d bits", len(bits))
 	bitsBySlice := pilosa.Bits(bits).GroupBySlice()
 
-	// Parse path into columns.
+	// Parse path into bits.
 	for slice, chunk := range bitsBySlice {
 		if cmd.Sort {
 			sort.Sort(pilosa.BitsByPos(chunk))
@@ -250,8 +249,8 @@ func (cmd *ImportCommand) importColumns(ctx context.Context, bits []pilosa.Bit) 
 	return nil
 }
 
-// bufferColumnsK buffers slices of keys to be imported as a batch.
-func (cmd *ImportCommand) bufferColumnsK(ctx context.Context, path string) error {
+// bufferBitsK buffers slices of keys to be imported as a batch.
+func (cmd *ImportCommand) bufferBitsK(ctx context.Context, path string) error {
 	a := make([]pilosa.Bit, 0, cmd.BufferSize)
 
 	var r *csv.Reader
@@ -264,7 +263,7 @@ func (cmd *ImportCommand) bufferColumnsK(ctx context.Context, path string) error
 		}
 		defer f.Close()
 
-		// Read rows as columns.
+		// Read rows as bits.
 		r = csv.NewReader(f)
 	} else {
 		r = csv.NewReader(cmd.Stdin)
@@ -290,19 +289,19 @@ func (cmd *ImportCommand) bufferColumnsK(ctx context.Context, path string) error
 			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
 		}
 
-		var column pilosa.Bit
+		var bit pilosa.Bit
 
 		// Parse row key.
 		if record[0] == "" {
 			return fmt.Errorf("invalid row key on row %d: %q", rnum, record[0])
 		}
-		column.RowKey = record[0]
+		bit.RowKey = record[0]
 
 		// Parse column key.
 		if record[1] == "" {
 			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[1])
 		}
-		column.ColumnKey = record[1]
+		bit.ColumnKey = record[1]
 
 		// Parse time, if exists.
 		if len(record) > 2 && record[2] != "" {
@@ -310,36 +309,36 @@ func (cmd *ImportCommand) bufferColumnsK(ctx context.Context, path string) error
 			if err != nil {
 				return fmt.Errorf("invalid timestamp on row %d: %q", rnum, record[2])
 			}
-			column.Timestamp = t.UnixNano()
+			bit.Timestamp = t.UnixNano()
 		}
 
-		a = append(a, column)
+		a = append(a, bit)
 
-		// If we've reached the buffer size then import columns.
+		// If we've reached the buffer size then import bits.
 		if len(a) == cmd.BufferSize {
-			if err := cmd.importColumnsK(ctx, a); err != nil {
+			if err := cmd.importBitsK(ctx, a); err != nil {
 				return err
 			}
 			a = a[:0]
 		}
 	}
 
-	// If there are still columnKs in the buffer then flush them.
-	if err := cmd.importColumnsK(ctx, a); err != nil {
+	// If there are still bitKs in the buffer then flush them.
+	if err := cmd.importBitsK(ctx, a); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// importColumnsK sends batches of columnKs to the server.
-func (cmd *ImportCommand) importColumnsK(ctx context.Context, columns []pilosa.Bit) error {
+// importBitsK sends batches of bitKs to the server.
+func (cmd *ImportCommand) importBitsK(ctx context.Context, bits []pilosa.Bit) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// TODO: does it help to sort the rowKeys?
 
-	logger.Printf("importing keys: n=%d", len(columns))
-	if err := cmd.Client.ImportK(ctx, cmd.Index, cmd.Frame, columns); err != nil {
+	logger.Printf("importing keys: n=%d", len(bits))
+	if err := cmd.Client.ImportK(ctx, cmd.Index, cmd.Frame, bits); err != nil {
 		return errors.Wrap(err, "importing keys")
 	}
 
@@ -360,7 +359,7 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 		}
 		defer f.Close()
 
-		// Read rows as columns.
+		// Read rows as bits.
 		r = csv.NewReader(f)
 	} else {
 		r = csv.NewReader(cmd.Stdin)

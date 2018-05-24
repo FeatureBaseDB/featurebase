@@ -1064,7 +1064,7 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
 	}
 
-	// Clear columns for each view.
+	// Clear bits for each view.
 	switch view {
 	case ViewStandard:
 		return e.executeClearBitView(ctx, index, c, f, view, colID, rowID, opt)
@@ -1164,7 +1164,7 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		timestamp = &t
 	}
 
-	// Set columns for each view.
+	// Set bits for each view.
 	switch view {
 	case ViewStandard:
 		return e.executeSetBitView(ctx, index, c, f, view, colID, rowID, timestamp, opt)
@@ -1404,7 +1404,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err := frame.RowAttrStore().SetBulkAttrs(frameMap); err != nil {
 			return nil, err
 		}
-		frame.Stats.Count("SetColumnAttrs", 1, 1.0)
+		frame.Stats.Count("SetRowAttrs", 1, 1.0)
 	}
 
 	// Do not forward call if this is already being forwarded.

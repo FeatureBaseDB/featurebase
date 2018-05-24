@@ -1110,7 +1110,7 @@ func TestHandler_Fragment_BackupRestore(t *testing.T) {
 	s.Handler.API.Holder = hldr.Holder
 	defer s.Close()
 
-	// Set columns in the index.
+	// Set bits in the index.
 	f0 := hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
 	f0.MustSetBits(100, 1, 2, 3)
 

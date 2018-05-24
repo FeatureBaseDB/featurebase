@@ -40,7 +40,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 
 		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 
-		// Set columns.
+		// Set bits.
 		if _, err := e.Execute(context.Background(), "i", test.MustParse(``+
 			fmt.Sprintf("SetBit(frame=f, row=%d, col=%d)\n", 10, 3)+
 			fmt.Sprintf("SetBit(frame=f, row=%d, col=%d)\n", 10, SliceWidth+1)+
@@ -60,7 +60,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
 
-		// Inhicolumn columns.
+		// Inhibit columns attributes.
 		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(row=10, frame=f)`), nil, &pilosa.ExecOptions{ExcludeColumns: true}); err != nil {
 			t.Fatal(err)
 		} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{}) {
@@ -69,7 +69,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
 
-		// Inhicolumn attributes.
+		// Inhibit row attributes.
 		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(row=10, frame=f)`), nil, &pilosa.ExecOptions{ExcludeRowAttrs: true}); err != nil {
 			t.Fatal(err)
 		} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{3, SliceWidth + 1}) {
@@ -89,7 +89,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 
 		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 
-		// Set columns.
+		// Set bits.
 		if _, err := e.Execute(context.Background(), "i", test.MustParse(``+
 			fmt.Sprintf("SetBit(frame=f, row=%d, col=%d)\n", 10, 3)+
 			fmt.Sprintf("SetBit(frame=f, row=%d, col=%d)\n", 10, SliceWidth+1)+

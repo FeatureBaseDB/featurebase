@@ -469,7 +469,7 @@ type BitmapCache interface {
 
 // SimpleCache implements BitmapCache
 // it is meant to be a short-lived cache for cases where writes are continuing to access
-// the same column within a short time frame (i.e. good for write-heavy loads)
+// the same row within a short time frame (i.e. good for write-heavy loads)
 // A read-heavy use case would cause the cache to get bigger, potentially causing the
 // node to run out of memory.
 type SimpleCache struct {

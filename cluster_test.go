@@ -476,7 +476,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeIDs, node1.Topology.NodeIDs)
 		}
 
-		// Columns
+		// Bits
 		// Verify that node-1 contains the fragment (i/f/standard/1) transferred from node-0.
 		node1Frame := node1.Holder.Frame("i", "f")
 		node1View := node1Frame.View("standard")

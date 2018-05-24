@@ -162,8 +162,8 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 
 	frame.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
-			if name != "SetColumnAttrs" {
-				t.Errorf("Expected SetColumnAttrs, Results %s", name)
+			if name != "SetRowAttrs" {
+				t.Errorf("Expected SetRowAttrs, Results %s", name)
 			}
 			called = true
 		},

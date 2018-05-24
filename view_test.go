@@ -83,7 +83,7 @@ func (v *View) MustSetBits(rowID uint64, columnIDs ...uint64) {
 }
 
 // MustClearColumns clears columns on a row. Panic on error.
-func (v *View) MustClearColumns(rowID uint64, columnIDs ...uint64) {
+func (v *View) MustClearBits(rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {
 		if _, err := v.ClearBit(rowID, columnID); err != nil {
 			panic(err)

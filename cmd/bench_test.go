@@ -33,7 +33,7 @@ func TestBenchHelp(t *testing.T) {
 func TestBenchConfig(t *testing.T) {
 	tests := []commandTest{
 		{
-			args: []string{"bench", "--operation", "set-column"},
+			args: []string{"bench", "--operation", "set-bit"},
 			env:  map[string]string{"PILOSA_HOST": "localhost:12345"},
 			cfgFileContent: `
 index = "myindex"
@@ -44,7 +44,7 @@ frame = "f1"
 				v.Check(cmd.Bencher.Host, "localhost:12345")
 				v.Check(cmd.Bencher.Index, "myindex")
 				v.Check(cmd.Bencher.Frame, "f1")
-				v.Check(cmd.Bencher.Op, "set-column")
+				v.Check(cmd.Bencher.Op, "set-bit")
 				v.Check(cmd.Bencher.N, 0)
 				return v.Error()
 			},

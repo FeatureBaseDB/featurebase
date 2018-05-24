@@ -502,11 +502,11 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	// Set two columns on blocks 0 & 3.
+	// Set two bits on blocks 0 & 3.
 	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(pilosa.HashBlockSize*3, 100)
 
-	// Set a column on a different slice.
+	// Set a bit on a different slice.
 	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(0, 1)
 
 	s := test.NewServer()

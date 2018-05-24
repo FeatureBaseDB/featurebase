@@ -69,7 +69,7 @@ func TestFragment_SetBit(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can clear a set bits.
+// Ensure a fragment can clear a set bit.
 func TestFragment_ClearBit(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
@@ -191,24 +191,24 @@ func TestFragment_SetFieldValue(t *testing.T) {
 			// Set values.
 			m := make(map[uint64]int64)
 			for _, value := range values {
-				bit_index := value % bitN
+				columnID := value % bitN
 
-				m[bit_index] = int64(value)
+				m[columnID] = int64(value)
 
-				if _, err := f.SetFieldValue(bit_index, bitDepth, value); err != nil {
+				if _, err := f.SetFieldValue(columnID, bitDepth, value); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			// Ensure values are set.
-			for bit_index, value := range m {
-				v, exists, err := f.FieldValue(bit_index, bitDepth)
+			for columnID, value := range m {
+				v, exists, err := f.FieldValue(columnID, bitDepth)
 				if err != nil {
 					t.Fatal(err)
 				} else if value != int64(v) {
-					t.Fatalf("value mismatch: bit_index=%d, bitdepth=%d, value: %d != %d", bit_index, bitDepth, value, v)
+					t.Fatalf("value mismatch: columnID=%d, bitdepth=%d, value: %d != %d", columnID, bitDepth, value, v)
 				} else if !exists {
-					t.Fatalf("value should exist: bit_index=%d", bit_index)
+					t.Fatalf("value should exist: columnID=%d", columnID)
 				}
 			}
 
@@ -531,7 +531,7 @@ func TestFragment_Snapshot(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Set and then clear columns on the fragment.
+	// Set and then clear bits on the fragment.
 	if _, err := f.SetBit(1000, 1); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(1000, 2); err != nil {
@@ -555,12 +555,12 @@ func TestFragment_Snapshot(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can iterate over all columns in order.
+// Ensure a fragment can iterate over all bits in order.
 func TestFragment_ForEachBit(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Set columns on the fragment.
+	// Set bits on the fragment.
 	if _, err := f.SetBit(100, 20); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(2, 38); err != nil {
@@ -569,7 +569,7 @@ func TestFragment_ForEachBit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Iterate over columns.
+	// Iterate over bits.
 	var result [][2]uint64
 	if err := f.ForEachBit(func(rowID, columnID uint64) error {
 		result = append(result, [2]uint64{rowID, columnID})
@@ -578,7 +578,7 @@ func TestFragment_ForEachBit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify columns are correct.
+	// Verify bits are correct.
 	if !reflect.DeepEqual(result, [][2]uint64{{2, 37}, {2, 38}, {100, 20}}) {
 		t.Fatalf("unexpected result: %#v", result)
 	}
@@ -588,7 +588,7 @@ func TestFragment_ForEachBit(t *testing.T) {
 func TestFragment_Top(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
 	defer f.Close()
-	// Set columns on the rows 100, 101, & 102.
+	// Set bits on the rows 100, 101, & 102.
 	f.MustSetBits(100, 1, 3, 200)
 	f.MustSetBits(101, 1)
 	f.MustSetBits(102, 1, 2)
@@ -611,7 +611,7 @@ func TestFragment_Top_Filter(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
 	defer f.Close()
 
-	// Set columns on the rows 100, 101, & 102.
+	// Set bits on the rows 100, 101, & 102.
 	f.MustSetBits(100, 1, 3, 200)
 	f.MustSetBits(101, 1)
 	f.MustSetBits(102, 1, 2)
@@ -644,7 +644,7 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 	// Create an intersecting input row.
 	src := pilosa.NewRow(1, 2, 3)
 
-	// Set columns on various rows.
+	// Set bits on various rows.
 	f.MustSetBits(100, 1, 10, 11, 12)    // one intersection
 	f.MustSetBits(101, 1, 2, 3, 4)       // three intersections
 	f.MustSetBits(102, 1, 2, 4, 5, 6)    // two intersections
@@ -678,7 +678,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 		990, 991, 992, 993, 994, 995, 996, 997, 998, 999,
 	)
 
-	// Set columns on rows 0 - 999. Higher rows have higher column counts.
+	// Set bits on rows 0 - 999. Higher rows have higher bit counts.
 	for i := uint64(0); i < 1000; i++ {
 		for j := uint64(0); j < i; j++ {
 			f.MustSetBits(i, j)
@@ -710,7 +710,7 @@ func TestFragment_TopN_IDs(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
 	defer f.Close()
 
-	// Set columns on various rows.
+	// Set bits on various rows.
 	f.MustSetBits(100, 1, 2, 3)
 	f.MustSetBits(101, 4, 5, 6, 7)
 	f.MustSetBits(102, 8, 9, 10, 11, 12)
@@ -731,7 +731,7 @@ func TestFragment_TopN_NopCache(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeNone)
 	defer f.Close()
 
-	// Set columns on various rows.
+	// Set bits on various rows.
 	f.MustSetBits(100, 1, 2, 3)
 	f.MustSetBits(101, 4, 5, 6, 7)
 	f.MustSetBits(102, 8, 9, 10, 11, 12)
@@ -783,7 +783,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 	defer f.Close()
 
-	// Set columns on various rows.
+	// Set bits on various rows.
 	f.MustSetBits(100, 1, 2, 3)
 	f.MustSetBits(101, 4, 5, 6, 7)
 	f.MustSetBits(102, 8, 9, 10, 11, 12)
@@ -816,7 +816,7 @@ func TestFragment_Checksum(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Retrieve checksum and set columns.
+	// Retrieve checksum and set bits.
 	orig := f.Checksum()
 	if _, err := f.SetBit(1, 200); err != nil {
 		t.Fatal(err)
@@ -848,7 +848,7 @@ func TestFragment_Blocks(t *testing.T) {
 	}
 	prev = blocks
 
-	// Set column on different row.
+	// Set bit on different row.
 	if _, err := f.SetBit(20, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -858,7 +858,7 @@ func TestFragment_Blocks(t *testing.T) {
 	}
 	prev = blocks
 
-	// Set column on different column.
+	// Set bit on different column.
 	if _, err := f.SetBit(20, 100); err != nil {
 		t.Fatal(err)
 	}
@@ -873,7 +873,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Set columns on a different block.
+	// Set bits on a different block.
 	if _, err := f.SetBit(100, 1); err != nil {
 		t.Fatal(err)
 	}
@@ -891,7 +891,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeLRU)
 	defer f.Close()
 
-	// Set columns on the fragment.
+	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
 		if _, err := f.SetBit(i, 0); err != nil {
 			t.Fatal(err)
@@ -941,7 +941,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set columns on the fragment.
+	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
 		if _, err := f.SetBit(i, 0); err != nil {
 			t.Fatal(err)
@@ -1083,7 +1083,7 @@ func TestFragment_Tanimoto(t *testing.T) {
 
 	src := pilosa.NewRow(1, 2, 3)
 
-	// Set columns on the rows 100, 101, & 102.
+	// Set bits on the rows 100, 101, & 102.
 	f.MustSetBits(100, 1, 3, 2, 200)
 	f.MustSetBits(101, 1, 3)
 	f.MustSetBits(102, 1, 2, 10, 12)
@@ -1106,7 +1106,7 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 
 	src := pilosa.NewRow(1, 2, 3)
 
-	// Set columns on the rows 100, 101, & 102.
+	// Set bits on the rows 100, 101, & 102.
 	f.MustSetBits(100, 1, 3, 2, 200)
 	f.MustSetBits(101, 1, 3)
 	f.MustSetBits(102, 1, 2, 10, 12)
@@ -1129,7 +1129,7 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
-	// Set columns on the fragment.
+	// Set bits on the fragment.
 	for i := uint64(1); i < 3; i++ {
 		if _, err := f.SetBit(1000, i); err != nil {
 			t.Fatal(err)

@@ -171,7 +171,7 @@ func (f *Fragment) Open() error {
 		// Clear checksums.
 		f.checksums = make(map[int][]byte)
 
-		// Read last column to determine max row.
+		// Read last bit to determine max row.
 		pos := f.storage.Max()
 		f.maxRowID = pos / SliceWidth
 		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
@@ -380,7 +380,7 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *R
 	return row
 }
 
-// SetBit sets a column for a given column & row within the fragment.
+// SetBit sets a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
 func (f *Fragment) SetBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
@@ -390,10 +390,10 @@ func (f *Fragment) SetBit(rowID, columnID uint64) (changed bool, err error) {
 
 func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
-	// Determine the position of the column in the storage.
+	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
-		return false, errors.Wrap(err, "getting column ops")
+		return false, errors.Wrap(err, "getting bit pos")
 	}
 
 	// Write to storage.
@@ -432,7 +432,7 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	return changed, nil
 }
 
-// ClearBit clears a column for a given column & row within the fragment.
+// ClearBit clears a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
 func (f *Fragment) ClearBit(rowID, columnID uint64) (bool, error) {
 	f.mu.Lock()
@@ -442,10 +442,10 @@ func (f *Fragment) ClearBit(rowID, columnID uint64) (bool, error) {
 
 func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
-	// Determine the position of the column in the storage.
+	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
-		return false, errors.Wrap(err, "getting column pos")
+		return false, errors.Wrap(err, "getting bit pos")
 	}
 
 	// Write to storage.
@@ -582,10 +582,10 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 	return changed, nil
 }
 
-// FieldSum returns the sum of a given field as well as the number of bits involved.
+// FieldSum returns the sum of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
-	// Compute count based on the existence column.
+	// Compute count based on the existence row.
 	row := f.Row(uint64(bitDepth))
 	if filter != nil {
 		count = row.IntersectionCount(filter)
@@ -614,7 +614,7 @@ func (f *Fragment) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err 
 	return sum, count, nil
 }
 
-// FieldMin returns the min of a given field as well as the number of bits involved.
+// FieldMin returns the min of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
 
@@ -647,8 +647,8 @@ func (f *Fragment) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err 
 	return min, count, nil
 }
 
-// FieldMax returns the max of a given field as well as the number of bits involved.
-// A bitmap can be passed in to optionally filter the computed bits.
+// FieldMax returns the max of a given field as well as the number of columns involved.
+// A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
 
 	consider := f.Row(uint64(bitDepth))
@@ -656,13 +656,13 @@ func (f *Fragment) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err 
 		consider = consider.Intersect(filter)
 	}
 
-	// If there are no bits to consider, return early.
+	// If there are no columns to consider, return early.
 	if consider.Count() == 0 {
 		return 0, 0, nil
 	}
 
 	for i := bitDepth; i > uint(0); i-- {
-		ii := i - 1 // allow for uint range: (columndepth-1) to 0
+		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
 		row := f.Row(uint64(ii))
 
 		x := row.Intersect(consider)
@@ -741,7 +741,7 @@ func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality b
 		row := f.Row(uint64(i))
 		bit := (predicate >> uint(i)) & 1
 
-		// Remove any columns with higher columns set.
+		// Remove any columns with higher bits set.
 		if leadingZeros {
 			if bit == 0 {
 				b = b.Difference(row)
@@ -751,9 +751,9 @@ func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality b
 			}
 		}
 
-		// Handle last column differently.
-		// If column is zero then return only already kept columns.
-		// If column is one then remove any one columns.
+		// Handle last bit differently.
+		// If bit is zero then return only already kept columns.
+		// If bit is one then remove any one columns.
 		if i == 0 && !allowEquality {
 			if bit == 0 {
 				return keep, nil
@@ -767,7 +767,7 @@ func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality b
 			continue
 		}
 
-		// If bit is set then add bits for set bits to exclude.
+		// If bit is set then add columns for set bits to exclude.
 		// Don't bother to compute this on the final iteration.
 		if i > 0 {
 			keep = keep.Union(b.Difference(row))
@@ -781,14 +781,14 @@ func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality b
 	b := f.Row(uint64(bitDepth))
 	keep := NewRow()
 
-	// Filter any columns that don't match the current column value.
+	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
 		row := f.Row(uint64(i))
 		bit := (predicate >> uint(i)) & 1
 
 		// Handle last bit differently.
-		// If bit is one then return only already kept bits.
-		// If bit is zero then remove any unset bits.
+		// If bit is one then return only already kept columns.
+		// If bit is zero then remove any unset columns.
 		if i == 0 && !allowEquality {
 			if bit == 1 {
 				return keep, nil
@@ -796,13 +796,13 @@ func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality b
 			return b.Difference(b.Difference(row).Difference(keep)), nil
 		}
 
-		// If bit is set then remove all unset bits not already kept.
+		// If bit is set then remove all unset columns not already kept.
 		if bit == 1 {
 			b = b.Difference(b.Difference(row).Difference(keep))
 			continue
 		}
 
-		// If bit is unset then add bits with set bit to keep.
+		// If bit is unset then add columns with set bit to keep.
 		// Don't bother to compute this on the final iteration.
 		if i > 0 {
 			keep = keep.Union(b.Intersect(row))
@@ -1184,7 +1184,7 @@ func (f *Fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n i
 	}
 }
 
-// BlockData returns columns in a block as row & column ID pairs.
+// BlockData returns bits in a block as row & column ID pairs.
 func (f *Fragment) BlockData(id int) (rowIDs, columnIDs []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1196,11 +1196,11 @@ func (f *Fragment) BlockData(id int) (rowIDs, columnIDs []uint64) {
 	return
 }
 
-// MergeBlock compares the block's columns and computes a diff with another set of block columns.
-// The state of a column is determined by consensus from all blocks being considered.
+// MergeBlock compares the block's bits and computes a diff with another set of block bits.
+// The state of a bit is determined by consensus from all blocks being considered.
 //
-// For example, if 3 blocks are compared and two have a set column and one has a
-// cleared column then the column is considered cleared. The function returns the
+// For example, if 3 blocks are compared and two have a set bit and one has a
+// cleared bit then the bit is considered cleared. The function returns the
 // diff per incoming block so that all can be in sync.
 func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, err error) {
 	// Ensure that all pair sets are of equal length.
@@ -1305,14 +1305,14 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 		}
 	}
 
-	// Set local columns.
+	// Set local bits.
 	for i := range sets[0].ColumnIDs {
 		if _, err := f.setBit(sets[0].RowIDs[i], (f.Slice()*SliceWidth)+sets[0].ColumnIDs[i]); err != nil {
 			return nil, nil, errors.Wrap(err, "setting")
 		}
 	}
 
-	// Clear local columns.
+	// Clear local bits.
 	for i := range clears[0].ColumnIDs {
 		if _, err := f.clearBit(clears[0].RowIDs[i], (f.Slice()*SliceWidth)+clears[0].ColumnIDs[i]); err != nil {
 			return nil, nil, errors.Wrap(err, "clearing")
@@ -1322,7 +1322,7 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 	return sets[1:], clears[1:], nil
 }
 
-// Import bulk imports a set of columns and then snapshots the storage.
+// Import bulk imports a set of bits and then snapshots the storage.
 // This does not affect the fragment's cache.
 func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 	f.mu.Lock()
@@ -1335,7 +1335,7 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 	// Disconnect op writer so we don't append updates.
 	f.storage.OpWriter = nil
 
-	// Process every column.
+	// Process every bit.
 	// If an error occurs then reopen the storage.
 	lastID := uint64(0)
 	if err := func() error {
@@ -1343,10 +1343,10 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 		for i := range rowIDs {
 			rowID, columnID := rowIDs[i], columnIDs[i]
 
-			// Determine the position of the column in the storage.
+			// Determine the position of the bit in the storage.
 			pos, err := f.pos(rowID, columnID)
 			if err != nil {
-				return errors.Wrap(err, "getting column pos")
+				return errors.Wrap(err, "getting bit pos")
 			}
 
 			// Write to storage.
@@ -1393,7 +1393,7 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 }
 
 // ImportValue bulk imports a set of range-encoded values.
-func (f *Fragment) ImportValue(columnIDs, values []uint64, columnDepth uint) error {
+func (f *Fragment) ImportValue(columnIDs, values []uint64, bitDepth uint) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// Verify that there are an equal number of column ids and values.
@@ -1408,7 +1408,7 @@ func (f *Fragment) ImportValue(columnIDs, values []uint64, columnDepth uint) err
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
 
-			_, err := f.importSetFieldValue(columnID, columnDepth, value)
+			_, err := f.importSetFieldValue(columnID, bitDepth, value)
 			if err != nil {
 				return errors.Wrap(err, "setting")
 			}
