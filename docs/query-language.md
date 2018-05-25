@@ -200,13 +200,14 @@ SetColumnAttrs(col=10, url=null)
 **Spec:**
 
 ```
-ClearBit(<frame=STRING>, <row=UINT>, <col=UINT>, 
-         [timestamp=TIMESTAMP])
+ClearBit(<frame=STRING>, <row=UINT>, <col=UINT>)
 ```
 
 **Description:**
 
 `ClearBit` assigns a value of 0 to a bit in the binary matrix, thus disassociating the given row in the given frame from the given column.
+
+Note that clearing bits from time views is not supported.
 
 **Result Type:** boolean
 
