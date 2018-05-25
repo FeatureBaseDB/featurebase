@@ -626,21 +626,14 @@ func (a viewsByFrame) addView(frame, view string) {
 func (c *Cluster) fragsByHost(idx *Index) fragsByHost {
 	// frameViews is a map of frame to slice of views.
 	frameViews := make(viewsByFrame)
-	inverseFrameViews := make(viewsByFrame)
 
 	for _, frame := range idx.Frames() {
 		for _, view := range frame.Views() {
-			if IsInverseView(view.Name()) {
-				inverseFrameViews.addView(frame.Name(), view.Name())
-			} else {
-				frameViews.addView(frame.Name(), view.Name())
-			}
+			frameViews.addView(frame.Name(), view.Name())
+
 		}
 	}
-
-	std := c.fragCombos(idx.Name(), idx.MaxSlice(), frameViews)
-	inv := c.fragCombos(idx.Name(), idx.MaxInverseSlice(), inverseFrameViews)
-	return std.add(inv)
+	return c.fragCombos(idx.Name(), idx.MaxSlice(), frameViews)
 }
 
 // fragCombos returns a map (by uri) of lists of fragments for a given index

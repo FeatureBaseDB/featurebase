@@ -41,13 +41,6 @@ func TestExportCommand_Validation(t *testing.T) {
 	if err != pilosa.ErrFrameRequired {
 		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFrameRequired, err)
 	}
-
-	cm.Frame = "f"
-	cm.View = "test"
-	err = cm.Run(context.Background())
-	if err != pilosa.ErrInvalidView {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrInvalidView, err)
-	}
 }
 
 func TestExportCommand_Run(t *testing.T) {
@@ -70,7 +63,6 @@ func TestExportCommand_Run(t *testing.T) {
 
 	cm.Index = "i"
 	cm.Frame = "f"
-	cm.View = pilosa.ViewStandard
 	if err := cm.Run(context.Background()); err != nil {
 		t.Fatalf("Export Run doesn't work: %s", err)
 	}

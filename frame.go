@@ -31,8 +31,7 @@ import (
 
 // Default frame settings.
 const (
-	DefaultCacheType      = CacheTypeRanked
-	DefaultInverseEnabled = false
+	DefaultCacheType = CacheTypeRanked
 
 	// Default ranked frame cache
 	DefaultCacheSize = 50000
@@ -54,11 +53,10 @@ type Frame struct {
 	Stats       StatsClient
 
 	// Frame options.
-	inverseEnabled bool
-	cacheType      string
-	cacheSize      uint32
-	timeQuantum    TimeQuantum
-	fields         []*Field
+	cacheType   string
+	cacheSize   uint32
+	timeQuantum TimeQuantum
+	fields      []*Field
 
 	Logger Logger
 }
@@ -82,9 +80,8 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
-		inverseEnabled: DefaultInverseEnabled,
-		cacheType:      DefaultCacheType,
-		cacheSize:      DefaultCacheSize,
+		cacheType: DefaultCacheType,
+		cacheSize: DefaultCacheSize,
 		//timeQuantum
 		//fields
 
@@ -111,35 +108,16 @@ func (f *Frame) MaxSlice() uint64 {
 
 	var max uint64
 	for _, view := range f.views {
-		if view.name == ViewInverse {
-			continue
-		} else if viewMaxSlice := view.MaxSlice(); viewMaxSlice > max {
+		if viewMaxSlice := view.MaxSlice(); viewMaxSlice > max {
 			max = viewMaxSlice
 		}
 	}
 	return max
 }
 
-// MaxInverseSlice returns the max inverse slice in the frame.
-func (f *Frame) MaxInverseSlice() uint64 {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	view := f.views[ViewInverse]
-	if view == nil {
-		return 0
-	}
-	return view.MaxSlice()
-}
-
 // CacheType returns the caching mode for the frame.
 func (f *Frame) CacheType() string {
 	return f.cacheType
-}
-
-// InverseEnabled returns true if an inverse view is available.
-func (f *Frame) InverseEnabled() bool {
-	return f.inverseEnabled
 }
 
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
@@ -179,11 +157,10 @@ func (f *Frame) Options() FrameOptions {
 
 func (f *Frame) options() FrameOptions {
 	return FrameOptions{
-		InverseEnabled: f.inverseEnabled,
-		CacheType:      f.cacheType,
-		CacheSize:      f.cacheSize,
-		TimeQuantum:    f.timeQuantum,
-		Fields:         f.fields,
+		CacheType:   f.cacheType,
+		CacheSize:   f.cacheSize,
+		TimeQuantum: f.timeQuantum,
+		Fields:      f.fields,
 	}
 }
 
@@ -255,7 +232,6 @@ func (f *Frame) loadMeta() error {
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
 	if os.IsNotExist(err) {
-		f.inverseEnabled = DefaultInverseEnabled
 		f.cacheType = DefaultCacheType
 		f.cacheSize = DefaultCacheSize
 		f.timeQuantum = ""
@@ -270,7 +246,6 @@ func (f *Frame) loadMeta() error {
 	}
 
 	// Copy metadata fields.
-	f.inverseEnabled = pb.InverseEnabled
 	f.cacheType = pb.CacheType
 	if f.cacheType == "" {
 		f.cacheType = DefaultCacheType
@@ -532,11 +507,6 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 // createViewIfNotExistsBase returns the named view, creating it if necessary.
 // The returned bool indicates whether the view was created or not.
 func (f *Frame) createViewIfNotExistsBase(name string) (*View, bool, error) {
-	// Don't create inverse views if they are not enabled.
-	if !f.InverseEnabled() && IsInverseView(name) {
-		return nil, false, ErrFrameInverseDisabled
-	}
-
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -840,16 +810,14 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			timestamp = timestamps[i]
 		}
 
-		var standard, inverse []string
+		var standard []string
 		if timestamp == nil {
 			standard = []string{ViewStandard}
-			inverse = []string{ViewInverse}
 		} else {
 			standard = ViewsByTime(ViewStandard, *timestamp, q)
 			// In order to match the logic of `SetBit()`, we want bits
 			// with timestamps to write to both time and standard views.
 			standard = append(standard, ViewStandard)
-			inverse = ViewsByTime(ViewInverse, *timestamp, q)
 		}
 
 		// Attach bit to each standard view.
@@ -860,34 +828,10 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			data.ColumnIDs = append(data.ColumnIDs, columnID)
 			dataByFragment[key] = data
 		}
-
-		if f.inverseEnabled {
-			// Attach reversed bits to each inverse view.
-			for _, name := range inverse {
-				key := importKey{View: name, Slice: rowID / SliceWidth}
-				data := dataByFragment[key]
-				data.RowIDs = append(data.RowIDs, columnID)    // reversed
-				data.ColumnIDs = append(data.ColumnIDs, rowID) // reversed
-				dataByFragment[key] = data
-			}
-		}
 	}
 
 	// Import into each fragment.
 	for key, data := range dataByFragment {
-		// Skip inverse data if inverse is not enabled.
-		if !f.inverseEnabled && IsInverseView(key.View) {
-			continue
-		}
-
-		// Re-sort data for inverse views.
-		if IsInverseView(key.View) {
-			sort.Sort(importBitSet{
-				rowIDs:    data.RowIDs,
-				columnIDs: data.ColumnIDs,
-			})
-		}
-
 		view, err := f.CreateViewIfNotExists(key.View)
 		if err != nil {
 			return errors.Wrap(err, "creating view")
@@ -1003,11 +947,10 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
-	InverseEnabled bool        `json:"inverseEnabled,omitempty"`
-	CacheType      string      `json:"cacheType,omitempty"`
-	CacheSize      uint32      `json:"cacheSize,omitempty"`
-	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
-	Fields         []*Field    `json:"fields,omitempty"`
+	CacheType   string      `json:"cacheType,omitempty"`
+	CacheSize   uint32      `json:"cacheSize,omitempty"`
+	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
+	Fields      []*Field    `json:"fields,omitempty"`
 }
 
 // Encode converts o into its internal representation.
@@ -1020,11 +963,10 @@ func encodeFrameOptions(o *FrameOptions) *internal.FrameMeta {
 		return nil
 	}
 	return &internal.FrameMeta{
-		InverseEnabled: o.InverseEnabled,
-		CacheType:      o.CacheType,
-		CacheSize:      o.CacheSize,
-		TimeQuantum:    string(o.TimeQuantum),
-		Fields:         encodeFields(o.Fields),
+		CacheType:   o.CacheType,
+		CacheSize:   o.CacheSize,
+		TimeQuantum: string(o.TimeQuantum),
+		Fields:      encodeFields(o.Fields),
 	}
 }
 
@@ -1033,11 +975,10 @@ func decodeFrameOptions(options *internal.FrameMeta) *FrameOptions {
 		return nil
 	}
 	return &FrameOptions{
-		InverseEnabled: options.InverseEnabled,
-		CacheType:      options.CacheType,
-		CacheSize:      options.CacheSize,
-		TimeQuantum:    TimeQuantum(options.TimeQuantum),
-		Fields:         decodeFields(options.Fields),
+		CacheType:   options.CacheType,
+		CacheSize:   options.CacheSize,
+		TimeQuantum: TimeQuantum(options.TimeQuantum),
+		Fields:      decodeFields(options.Fields),
 	}
 }
 

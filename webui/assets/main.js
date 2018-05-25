@@ -581,14 +581,11 @@ function parse_query(query, indexname) {
 
 function parse_options(option_str) {
     var int_keys = ["cacheSize"];
-    var bool_keys = ["inverseEnabled"];
     var options = {};
         for (var i = 0; i < option_str.length; i++) {
             var parts = option_str[i].split('=');
             if (int_keys.indexOf(parts[0]) !== -1 ){
                 options[parts[0]] = Number(parts[1])
-            } else if (bool_keys.indexOf(parts[0]) !== -1){
-                 options[parts[0]] = (parts[1] == "true")
             } else {
                 options[parts[0]] = parts[1]
             }

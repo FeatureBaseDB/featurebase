@@ -813,12 +813,6 @@ func (api *API) MaxSlices(ctx context.Context) map[string]uint64 {
 	return api.Holder.MaxSlices()
 }
 
-// MaxInverseSlices returns the maximum inverse slice number for each index in a
-// map.
-func (api *API) MaxInverseSlices(ctx context.Context) map[string]uint64 {
-	return api.Holder.MaxInverseSlices()
-}
-
 // StatsWithTags returns an instance of whatever implementation of StatsClient
 // pilosa is using with the given tags.
 func (api *API) StatsWithTags(tags []string) StatsClient {
@@ -968,7 +962,6 @@ const (
 	//apiLocalID // not implemented
 	//apiLongQueryTime // not implemented
 	apiMarshalFragment
-	//apiMaxInverseSlices // not implemented
 	//apiMaxSlices // not implemented
 	apiQuery
 	apiRecalculateCaches

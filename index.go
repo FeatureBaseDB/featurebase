@@ -38,8 +38,7 @@ type Index struct {
 	frames map[string]*Frame
 
 	// Max Slice on any node in the cluster, according to this node.
-	remoteMaxSlice        uint64
-	remoteMaxInverseSlice uint64
+	remoteMaxSlice uint64
 
 	NewAttrStore func(string) AttrStore
 
@@ -64,8 +63,7 @@ func NewIndex(path, name string) (*Index, error) {
 		name:   name,
 		frames: make(map[string]*Frame),
 
-		remoteMaxSlice:        0,
-		remoteMaxInverseSlice: 0,
+		remoteMaxSlice: 0,
 
 		NewAttrStore:    NewNopAttrStore,
 		columnAttrStore: NopAttrStore,
@@ -236,30 +234,6 @@ func (i *Index) SetRemoteMaxSlice(newmax uint64) {
 	i.remoteMaxSlice = newmax
 }
 
-// MaxInverseSlice returns the max inverse slice in the index according to this node.
-func (i *Index) MaxInverseSlice() uint64 {
-	if i == nil {
-		return 0
-	}
-	i.mu.RLock()
-	defer i.mu.RUnlock()
-
-	max := i.remoteMaxInverseSlice
-	for _, f := range i.frames {
-		if slice := f.MaxInverseSlice(); slice > max {
-			max = slice
-		}
-	}
-	return max
-}
-
-// SetRemoteMaxInverseSlice sets the remote max inverse slice value received from another node.
-func (i *Index) SetRemoteMaxInverseSlice(v uint64) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	i.remoteMaxInverseSlice = v
-}
-
 // FramePath returns the path to a frame in the index.
 func (i *Index) FramePath(name string) string { return filepath.Join(i.path, name) }
 
@@ -358,8 +332,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	if opt.CacheSize != 0 {
 		f.cacheSize = opt.CacheSize
 	}
-
-	f.inverseEnabled = opt.InverseEnabled
 
 	// Set fields.
 	f.fields = opt.Fields

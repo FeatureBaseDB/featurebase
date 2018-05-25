@@ -81,7 +81,7 @@ func NewHandler() *Handler {
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")
-	h.validators["GetSliceMax"] = queryValidationSpecRequired().Optional("inverse")
+	h.validators["GetSliceMax"] = queryValidationSpecRequired()
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
@@ -303,7 +303,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(getSlicesMaxResponse{
 		Standard: h.API.MaxSlices(r.Context()),
-		Inverse:  h.API.MaxInverseSlices(r.Context()),
 	}); err != nil {
 		h.Logger.Printf("write slices-max response error: %s", err)
 	}
@@ -311,7 +310,6 @@ func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
 
 type getSlicesMaxResponse struct {
 	Standard map[string]uint64 `json:"standard"`
-	Inverse  map[string]uint64 `json:"inverse"`
 }
 
 // handleGetIndexes handles GET /index request.

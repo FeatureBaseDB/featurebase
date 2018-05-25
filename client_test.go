@@ -240,60 +240,6 @@ func TestClient_Import(t *testing.T) {
 	}
 }
 
-// Ensure client can bulk import data to an inverse frame.
-func TestClient_ImportInverseEnabled(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	frameOpts := pilosa.FrameOptions{
-		InverseEnabled: true,
-	}
-	frame, err := idx.CreateFrameIfNotExists("f", frameOpts)
-	if err != nil {
-		panic(err)
-	}
-	v, err := frame.CreateViewIfNotExists(pilosa.ViewInverse)
-	if err != nil {
-		panic(err)
-	}
-	f, err := v.CreateFragmentIfNotExists(0)
-	if err != nil {
-		panic(err)
-	}
-
-	// Load bitmap into cache to ensure cache gets updated.
-	f.Row(0)
-
-	s := test.NewServer()
-	defer s.Close()
-	s.Handler.API.Cluster = test.NewCluster(1)
-	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.API.Holder = hldr.Holder
-
-	// Send import request.
-	c := test.MustNewClient(s.Host(), defaultClient)
-	if err := c.Import(context.Background(), "i", "f", 0, []pilosa.Bit{
-		{RowID: 0, ColumnID: 1},
-		{RowID: 0, ColumnID: 5},
-		{RowID: 200, ColumnID: 5},
-		{RowID: 200, ColumnID: 6},
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify data.
-	if a := f.Row(1).Columns(); !reflect.DeepEqual(a, []uint64{0}) {
-		t.Fatalf("unexpected columns: %+v", a)
-	}
-	if a := f.Row(5).Columns(); !reflect.DeepEqual(a, []uint64{0, 200}) {
-		t.Fatalf("unexpected columns: %+v", a)
-	}
-	if a := f.Row(6).Columns(); !reflect.DeepEqual(a, []uint64{200}) {
-		t.Fatalf("unexpected columns: %+v", a)
-	}
-}
-
 // Ensure client can bulk import value data.
 func TestClient_ImportValue(t *testing.T) {
 	hldr := test.MustOpenHolder()
@@ -415,63 +361,6 @@ func TestClient_BackupRestore(t *testing.T) {
 	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 0).Row(200).Columns(); !reflect.DeepEqual(a, []uint64{20000}) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
-}
-
-// Ensure client backup and restore a frame with inverse view.
-func TestClient_BackupInverseView(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	frameOpts := pilosa.FrameOptions{
-		InverseEnabled: true,
-	}
-	frame, err := idx.CreateFrameIfNotExists("f", frameOpts)
-	if err != nil {
-		panic(err)
-	}
-	v, err := frame.CreateViewIfNotExists(pilosa.ViewInverse)
-	if err != nil {
-		panic(err)
-	}
-	f, err := v.CreateFragmentIfNotExists(0)
-	if err != nil {
-		panic(err)
-	}
-
-	f.SetBit(100, 1)
-	f.SetBit(100, 2)
-	f.SetBit(100, 3)
-	f.SetBit(100, SliceWidth-1)
-
-	s := test.NewServer()
-	defer s.Close()
-
-	s.Handler.API.Cluster = test.NewCluster(1)
-	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.API.Holder = hldr.Holder
-
-	c := test.MustNewClient(s.Host(), defaultClient)
-
-	// Backup from frame.
-	var buf bytes.Buffer
-	if err := c.BackupTo(context.Background(), &buf, "i", "f", pilosa.ViewInverse); err != nil {
-		t.Fatal(err)
-	}
-
-	// Restore to a different frame.
-	if _, err := hldr.MustCreateIndexIfNotExists("x", pilosa.IndexOptions{}).CreateFrameIfNotExists("y", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.RestoreFrom(context.Background(), &buf, "x", "y", pilosa.ViewInverse); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify data.
-	if a := hldr.Fragment("x", "y", pilosa.ViewInverse, 0).Row(100).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, SliceWidth - 1}) {
-		t.Fatalf("unexpected columns(0): %+v", a)
-	}
-
 }
 
 // backup returns error with invalid view
