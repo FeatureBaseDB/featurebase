@@ -147,7 +147,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST").Name("PostFrameRestore")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameFields).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
@@ -1107,38 +1106,6 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 
 type getFragmentBlocksResponse struct {
 	Blocks []FragmentBlock `json:"blocks"`
-}
-
-// handlePostFrameRestore handles POST /frame/restore requests.
-func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
-
-	q := r.URL.Query()
-	hostStr := q.Get("host")
-
-	// Validate query parameters.
-	if hostStr == "" {
-		http.Error(w, "host required", http.StatusBadRequest)
-		return
-	}
-
-	host, err := NewURIFromAddress(hostStr)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-
-	err = h.API.RestoreFrame(r.Context(), indexName, frameName, host)
-	switch errors.Cause(err) {
-	case nil:
-		break
-	case ErrFrameNotFound:
-		fallthrough
-	case ErrFragmentNotFound:
-		http.Error(w, err.Error(), http.StatusNotFound)
-	default:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }
 
 // handleGetVersion handles /version requests.
