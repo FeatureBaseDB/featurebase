@@ -78,7 +78,7 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
-	// Expvar should ignore earlier set tags from setcolumn
+	// Expvar should ignore earlier set tags from setbit
 	if hldr.Stats.Tags() != nil {
 		t.Fatalf("unexpected tag")
 	}

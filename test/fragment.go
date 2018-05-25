@@ -126,7 +126,7 @@ func (s *RowAttrStore) SetRowAttrs(id uint64, m map[string]interface{}) {
 	s.attrs[id] = m
 }
 
-// GenerateImportFill generates a set of columns pairs that evenly fill a fragment chunk.
+// GenerateImportFill generates a set of row/col pairs that evenly fill a fragment chunk.
 func GenerateImportFill(rowN int, pct float64) (rowIDs, columnIDs []uint64) {
 	ipct := int(pct * 100)
 	for i := 0; i < SliceWidth*rowN; i++ {
