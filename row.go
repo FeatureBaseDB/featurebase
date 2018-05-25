@@ -22,7 +22,8 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 )
 
-// Row represents a set of columns.
+// Row is a set of integers (the associated columns), and attributes which are
+// arbitrary key/value pairs storing metadata about what the row represents.
 type Row struct {
 	segments []RowSegment
 
@@ -115,7 +116,7 @@ func (r *Row) Xor(other *Row) *Row {
 	return &Row{segments: segments}
 }
 
-// Union returns the columnwise union of r and other.
+// Union returns the bitwise union of r and other.
 func (r *Row) Union(other *Row) *Row {
 	var segments []RowSegment
 	itr := newMergeSegmentIterator(r.segments, other.segments)
@@ -226,7 +227,7 @@ func (r *Row) DecrementCount(i uint64) {
 	}
 }
 
-// Count returns the number of set columns in the row.
+// Count returns the number of columns in the row.
 func (r *Row) Count() uint64 {
 	var n uint64
 	for i := range r.segments {
@@ -238,8 +239,8 @@ func (r *Row) Count() uint64 {
 // MarshalJSON returns a JSON-encoded byte slice of r.
 func (r *Row) MarshalJSON() ([]byte, error) {
 	var o struct {
-		Attrs map[string]interface{} `json:"attrs"`
-		Columns  []uint64               `json:"columns"`
+		Attrs   map[string]interface{} `json:"attrs"`
+		Columns []uint64               `json:"columns"`
 	}
 	o.Columns = r.Columns()
 
@@ -267,8 +268,8 @@ func encodeRow(r *Row) *internal.Row {
 	}
 
 	return &internal.Row{
-		Columns:  r.Columns(),
-		Attrs: encodeAttrs(r.Attrs),
+		Columns: r.Columns(),
+		Attrs:   encodeAttrs(r.Attrs),
 	}
 }
 
@@ -339,7 +340,7 @@ func (s *RowSegment) Intersect(other *RowSegment) *RowSegment {
 	}
 }
 
-// Union returns the columnwise union of s and other.
+// Union returns the bitwise union of s and other.
 func (s *RowSegment) Union(other *RowSegment) *RowSegment {
 	data := s.data.Union(&other.data)
 

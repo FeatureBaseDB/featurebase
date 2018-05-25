@@ -448,28 +448,28 @@ func TestFragment_FieldRange(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Query for fields greater than (ending with unset column).
+		// Query for fields greater than (ending with unset bit).
 		if b, err := f.FieldRange(pql.GT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than (ending with set column).
+		// Query for fields greater than (ending with set bit).
 		if b, err := f.FieldRange(pql.GT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with unset column).
+		// Query for fields greater than or equal to (ending with unset bit).
 		if b, err := f.FieldRange(pql.GTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with set column).
+		// Query for fields greater than or equal to (ending with set bit).
 		if b, err := f.FieldRange(pql.GTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
@@ -838,7 +838,7 @@ func TestFragment_Blocks(t *testing.T) {
 	// Retrieve initial checksum.
 	var prev []pilosa.FragmentBlock
 
-	// Set first column.
+	// Set first bit.
 	if _, err := f.SetBit(0, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -976,7 +976,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	f0 := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f0.Close()
 
-	// Set and then clear columns on the fragment.
+	// Set and then clear bits on the fragment.
 	if _, err := f0.SetBit(1000, 1); err != nil {
 		t.Fatal(err)
 	} else if _, err := f0.SetBit(1000, 2); err != nil {

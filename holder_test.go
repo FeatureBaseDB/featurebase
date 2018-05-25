@@ -330,7 +330,7 @@ func TestHolder_DeleteIndex(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	// Write columns to separate indexes.
+	// Write bits to separate indexes.
 	f0 := hldr.MustCreateFragmentIfNotExists("i0", "f", pilosa.ViewStandard, 0)
 	if _, err := f0.SetBit(100, 200); err != nil {
 		t.Fatal(err)

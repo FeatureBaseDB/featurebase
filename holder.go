@@ -466,7 +466,7 @@ func (h *Holder) flushCaches() {
 // RecalculateCaches recalculates caches on every index in the holder. This is
 // probably not practical to call in real-world workloads, but makes writing
 // integration tests much eaiser, since one doesn't have to wait 10 seconds
-// after setting columns to get expected response.
+// after setting bits to get expected response.
 func (h *Holder) RecalculateCaches() {
 	for _, index := range h.Indexes() {
 		index.RecalculateCaches()
