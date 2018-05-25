@@ -61,7 +61,6 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.BoolVarP(&Importer.Sort, "sort", "", false, "Enables sorting before import.")
 	flags.BoolVarP(&Importer.CreateSchema, "create", "e", false, "Create the schema if it does not exist before import.")
 	flags.Var(&Importer.FrameOptions.TimeQuantum, "frame-time-quantum", "Time quantum for the frame")
-	flags.BoolVar(&Importer.FrameOptions.RangeEnabled, "frame-range-enabled", false, "DEPRECATED - any frame can have fields. This option will be removed.")
 	flags.StringVar(&Importer.FrameOptions.CacheType, "frame-cache-type", pilosa.CacheTypeRanked, "Cache type for the frame; valid values: none, lru, ranked")
 	flags.Uint32Var(&Importer.FrameOptions.CacheSize, "frame-cache-size", 50000, "Cache size for the frame")
 	ctl.SetTLSConfig(flags, &Importer.TLS.CertificatePath, &Importer.TLS.CertificateKeyPath, &Importer.TLS.SkipVerify)
