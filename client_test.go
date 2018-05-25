@@ -232,11 +232,11 @@ func TestClient_Import(t *testing.T) {
 	}
 
 	// Verify data.
-	if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{1, 5}) {
-		t.Fatalf("unexpected bits: %+v", a)
+	if a := f.Row(0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5}) {
+		t.Fatalf("unexpected columns: %+v", a)
 	}
-	if a := f.Row(200).Bits(); !reflect.DeepEqual(a, []uint64{6}) {
-		t.Fatalf("unexpected bits: %+v", a)
+	if a := f.Row(200).Columns(); !reflect.DeepEqual(a, []uint64{6}) {
+		t.Fatalf("unexpected columns: %+v", a)
 	}
 }
 
@@ -283,14 +283,14 @@ func TestClient_ImportInverseEnabled(t *testing.T) {
 	}
 
 	// Verify data.
-	if a := f.Row(1).Bits(); !reflect.DeepEqual(a, []uint64{0}) {
-		t.Fatalf("unexpected bits: %+v", a)
+	if a := f.Row(1).Columns(); !reflect.DeepEqual(a, []uint64{0}) {
+		t.Fatalf("unexpected columns: %+v", a)
 	}
-	if a := f.Row(5).Bits(); !reflect.DeepEqual(a, []uint64{0, 200}) {
-		t.Fatalf("unexpected bits: %+v", a)
+	if a := f.Row(5).Columns(); !reflect.DeepEqual(a, []uint64{0, 200}) {
+		t.Fatalf("unexpected columns: %+v", a)
 	}
-	if a := f.Row(6).Bits(); !reflect.DeepEqual(a, []uint64{200}) {
-		t.Fatalf("unexpected bits: %+v", a)
+	if a := f.Row(6).Columns(); !reflect.DeepEqual(a, []uint64{200}) {
+		t.Fatalf("unexpected columns: %+v", a)
 	}
 }
 
@@ -403,17 +403,17 @@ func TestClient_BackupRestore(t *testing.T) {
 	}
 
 	// Verify data.
-	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 0).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{1, 2, 3, SliceWidth - 1}) {
-		t.Fatalf("unexpected bits(0): %+v", a)
+	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 0).Row(100).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, SliceWidth - 1}) {
+		t.Fatalf("unexpected columns(0): %+v", a)
 	}
-	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 1).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth, SliceWidth + 2}) {
-		t.Fatalf("unexpected bits(0): %+v", a)
+	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 1).Row(100).Columns(); !reflect.DeepEqual(a, []uint64{SliceWidth, SliceWidth + 2}) {
+		t.Fatalf("unexpected columns(0): %+v", a)
 	}
-	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 5).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{(5 * SliceWidth) + 1}) {
-		t.Fatalf("unexpected bits(0): %+v", a)
+	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 5).Row(100).Columns(); !reflect.DeepEqual(a, []uint64{(5 * SliceWidth) + 1}) {
+		t.Fatalf("unexpected columns(0): %+v", a)
 	}
-	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 0).Row(200).Bits(); !reflect.DeepEqual(a, []uint64{20000}) {
-		t.Fatalf("unexpected bits: %+v", a)
+	if a := hldr.Fragment("x", "y", pilosa.ViewStandard, 0).Row(200).Columns(); !reflect.DeepEqual(a, []uint64{20000}) {
+		t.Fatalf("unexpected columns: %+v", a)
 	}
 }
 
@@ -468,8 +468,8 @@ func TestClient_BackupInverseView(t *testing.T) {
 	}
 
 	// Verify data.
-	if a := hldr.Fragment("x", "y", pilosa.ViewInverse, 0).Row(100).Bits(); !reflect.DeepEqual(a, []uint64{1, 2, 3, SliceWidth - 1}) {
-		t.Fatalf("unexpected bits(0): %+v", a)
+	if a := hldr.Fragment("x", "y", pilosa.ViewInverse, 0).Row(100).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, SliceWidth - 1}) {
+		t.Fatalf("unexpected columns(0): %+v", a)
 	}
 
 }

@@ -146,7 +146,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	}
 }
 
-func TestStatsCount_SetBitmapAttrs(t *testing.T) {
+func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -162,8 +162,8 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 
 	frame.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
-			if name != "SetBitmapAttrs" {
-				t.Errorf("Expected SetBitmapAttrs, Results %s", name)
+			if name != "SetRowAttrs" {
+				t.Errorf("Expected SetRowAttrs, Results %s", name)
 			}
 			called = true
 		},

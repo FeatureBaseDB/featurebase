@@ -85,7 +85,7 @@ func (f *Fragment) Reopen() error {
 	return nil
 }
 
-// MustSetBits sets bits on a row. Panic on error.
+// MustSetBits sets columns on a row. Panic on error.
 // This function does not accept a timestamp or quantum.
 func (f *Fragment) MustSetBits(rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {
@@ -95,8 +95,8 @@ func (f *Fragment) MustSetBits(rowID uint64, columnIDs ...uint64) {
 	}
 }
 
-// MustClearBits clears bits on a row. Panic on error.
-func (f *Fragment) MustClearBits(rowID uint64, columnIDs ...uint64) {
+// MustClearColumns clears columns on a row. Panic on error.
+func (f *Fragment) MustClearColumns(rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {
 		if _, err := f.ClearBit(rowID, columnID); err != nil {
 			panic(err)
@@ -126,7 +126,7 @@ func (s *RowAttrStore) SetRowAttrs(id uint64, m map[string]interface{}) {
 	s.attrs[id] = m
 }
 
-// GenerateImportFill generates a set of bits pairs that evenly fill a fragment chunk.
+// GenerateImportFill generates a set of row/col pairs that evenly fill a fragment chunk.
 func GenerateImportFill(rowN int, pct float64) (rowIDs, columnIDs []uint64) {
 	ipct := int(pct * 100)
 	for i := 0; i < SliceWidth*rowN; i++ {

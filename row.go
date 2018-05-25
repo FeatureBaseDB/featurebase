@@ -22,7 +22,8 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 )
 
-// Row represents a set of bits.
+// Row is a set of integers (the associated columns), and attributes which are
+// arbitrary key/value pairs storing metadata about what the row represents.
 type Row struct {
 	segments []RowSegment
 
@@ -31,9 +32,9 @@ type Row struct {
 }
 
 // NewRow returns a new instance of Row.
-func NewRow(bits ...uint64) *Row {
+func NewRow(columns ...uint64) *Row {
 	r := &Row{}
-	for _, i := range bits {
+	for _, i := range columns {
 		r.SetBit(i)
 	}
 	return r
@@ -151,12 +152,12 @@ func (r *Row) Difference(other *Row) *Row {
 	return &Row{segments: segments}
 }
 
-// SetBit sets the i-th bit of the row.
+// SetBit sets the i-th column of the row.
 func (r *Row) SetBit(i uint64) (changed bool) {
 	return r.createSegmentIfNotExists(i / SliceWidth).SetBit(i)
 }
 
-// ClearBit clears the i-th bit of the row.
+// ClearBit clears the i-th column of the row.
 func (r *Row) ClearBit(i uint64) (changed bool) {
 	s := r.segment(i / SliceWidth)
 	if s == nil {
@@ -226,7 +227,7 @@ func (r *Row) DecrementCount(i uint64) {
 	}
 }
 
-// Count returns the number of set bits in the row.
+// Count returns the number of columns in the row.
 func (r *Row) Count() uint64 {
 	var n uint64
 	for i := range r.segments {
@@ -238,10 +239,10 @@ func (r *Row) Count() uint64 {
 // MarshalJSON returns a JSON-encoded byte slice of r.
 func (r *Row) MarshalJSON() ([]byte, error) {
 	var o struct {
-		Attrs map[string]interface{} `json:"attrs"`
-		Bits  []uint64               `json:"bits"`
+		Attrs   map[string]interface{} `json:"attrs"`
+		Columns []uint64               `json:"columns"`
 	}
-	o.Bits = r.Bits()
+	o.Columns = r.Columns()
 
 	o.Attrs = r.Attrs
 	if o.Attrs == nil {
@@ -251,11 +252,11 @@ func (r *Row) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&o)
 }
 
-// Bits returns the bits in r as a slice of ints.
-func (r *Row) Bits() []uint64 {
+// Columns returns the columns in r as a slice of ints.
+func (r *Row) Columns() []uint64 {
 	a := make([]uint64, 0, r.Count())
 	for i := range r.segments {
-		a = append(a, r.segments[i].Bits()...)
+		a = append(a, r.segments[i].Columns()...)
 	}
 	return a
 }
@@ -267,8 +268,8 @@ func encodeRow(r *Row) *internal.Row {
 	}
 
 	return &internal.Row{
-		Bits:  r.Bits(),
-		Attrs: encodeAttrs(r.Attrs),
+		Columns: r.Columns(),
+		Attrs:   encodeAttrs(r.Attrs),
 	}
 }
 
@@ -280,7 +281,7 @@ func decodeRow(pr *internal.Row) *Row {
 
 	r := NewRow()
 	r.Attrs = decodeAttrs(pr.Attrs)
-	for _, v := range pr.Bits {
+	for _, v := range pr.Columns {
 		r.SetBit(v)
 	}
 	return r
@@ -372,7 +373,7 @@ func (s *RowSegment) Xor(other *RowSegment) *RowSegment {
 	}
 }
 
-// SetBit sets the i-th bit of the row.
+// SetBit sets the i-th column of the row.
 func (s *RowSegment) SetBit(i uint64) (changed bool) {
 	s.ensureWritable()
 	changed, _ = s.data.Add(i)
@@ -382,7 +383,7 @@ func (s *RowSegment) SetBit(i uint64) (changed bool) {
 	return changed
 }
 
-// ClearBit clears the i-th bit of the row.
+// ClearBit clears the i-th column of the row.
 func (s *RowSegment) ClearBit(i uint64) (changed bool) {
 	s.ensureWritable()
 
@@ -398,8 +399,8 @@ func (s *RowSegment) InvalidateCount() {
 	s.n = s.data.Count()
 }
 
-// Bits returns a list of all bits set in the segment.
-func (s *RowSegment) Bits() []uint64 {
+// Columns returns a list of all columns set in the segment.
+func (s *RowSegment) Columns() []uint64 {
 	a := make([]uint64, 0, s.Count())
 	itr := s.data.Iterator()
 	for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
@@ -408,7 +409,7 @@ func (s *RowSegment) Bits() []uint64 {
 	return a
 }
 
-// Count returns the number of set bits in the row.
+// Count returns the number of set columns in the row.
 func (s *RowSegment) Count() uint64 { return s.n }
 
 // ensureWritable clones the segment if it is pointing to non-writable data.

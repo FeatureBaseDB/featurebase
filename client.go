@@ -308,15 +308,15 @@ func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, sl
 	return nil
 }
 
-// ImportK bulk imports bits to a host.
-func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, bits []Bit) error {
+// ImportK bulk imports bits specified by string keys to a host.
+func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, columns []Bit) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
 	}
 
-	buf, err := marshalImportPayloadK(index, frame, bits)
+	buf, err := marshalImportPayloadK(index, frame, columns)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -356,7 +356,7 @@ func marshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte
 	columnIDs := Bits(bits).ColumnIDs()
 	timestamps := Bits(bits).Timestamps()
 
-	// Marshal bits to protobufs.
+	// Marshal data to protobuf.
 	buf, err := proto.Marshal(&internal.ImportRequest{
 		Index:      index,
 		Frame:      frame,
@@ -378,7 +378,7 @@ func marshalImportPayloadK(index, frame string, bits []Bit) ([]byte, error) {
 	columnKeys := Bits(bits).ColumnKeys()
 	timestamps := Bits(bits).Timestamps()
 
-	// Marshal bits to protobufs.
+	// Marshal data to protobuf.
 	buf, err := proto.Marshal(&internal.ImportRequest{
 		Index:      index,
 		Frame:      frame,
@@ -465,7 +465,7 @@ func marshalImportValuePayload(index, frame, field string, slice uint64, vals []
 	columnIDs := FieldValues(vals).ColumnIDs()
 	values := FieldValues(vals).Values()
 
-	// Marshal bits to protobufs.
+	// Marshal data to protobuf.
 	buf, err := proto.Marshal(&internal.ImportValueRequest{
 		Index:     index,
 		Frame:     frame,
@@ -1140,7 +1140,8 @@ func (c *InternalHTTPClient) SendMessage(ctx context.Context, uri *URI, pb proto
 	return nil
 }
 
-// Bit represents the location of a single bit.
+// Bit represents the intersection of a row and a column. It can be specifed by
+// integer ids or string keys.
 type Bit struct {
 	RowID     uint64
 	ColumnID  uint64
@@ -1149,7 +1150,7 @@ type Bit struct {
 	Timestamp int64
 }
 
-// Bits represents a slice of bits.
+// Bits is a slice of Bit.
 type Bits []Bit
 
 func (p Bits) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
@@ -1277,7 +1278,7 @@ func (p FieldValues) GroupBySlice() map[uint64][]FieldValue {
 	return m
 }
 
-// BitsByPos represents a slice of bits sorted by internal position.
+// BitsByPos is a slice of bits sorted row then column.
 type BitsByPos []Bit
 
 func (p BitsByPos) Swap(i, j int) { p[i], p[j] = p[j], p[i] }

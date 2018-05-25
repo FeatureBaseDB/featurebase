@@ -336,7 +336,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	// If the row label is used then return bitmap attributes.
 	row, _ := other.(*Row)
 	if c.Name == "Bitmap" {
-		if opt.ExcludeAttrs {
+		if opt.ExcludeRowAttrs {
 			row.Attrs = map[string]interface{}{}
 		} else {
 			idx := e.Holder.Index(index)
@@ -367,7 +367,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 		}
 	}
 
-	if opt.ExcludeBits {
+	if opt.ExcludeColumns {
 		row.segments = []RowSegment{}
 	}
 
@@ -1319,7 +1319,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err := frame.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
-	frame.Stats.Count("SetBitmapAttrs", 1, 1.0)
+	frame.Stats.Count("SetRowAttrs", 1, 1.0)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
@@ -1404,7 +1404,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err := frame.RowAttrStore().SetBulkAttrs(frameMap); err != nil {
 			return nil, err
 		}
-		frame.Stats.Count("SetBitmapAttrs", 1, 1.0)
+		frame.Stats.Count("SetRowAttrs", 1, 1.0)
 	}
 
 	// Do not forward call if this is already being forwarded.
@@ -1700,9 +1700,9 @@ type mapResponse struct {
 
 // ExecOptions represents an execution context for a single Execute() call.
 type ExecOptions struct {
-	Remote       bool
-	ExcludeAttrs bool
-	ExcludeBits  bool
+	Remote          bool
+	ExcludeRowAttrs bool
+	ExcludeColumns  bool
 }
 
 // decodeError returns an error representation of s if s is non-blank.
