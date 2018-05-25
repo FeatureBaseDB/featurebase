@@ -82,7 +82,7 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 
 	// If slices are specified, then use that value for slices. If slices aren't
 	// specified, then include all of them.
-	if needsSlices {
+	if len(slices) == 0 && needsSlices {
 		// Round up the number of slices.
 		idx := e.Holder.Index(index)
 		if idx == nil {
