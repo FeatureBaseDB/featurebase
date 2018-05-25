@@ -58,7 +58,7 @@ type Config struct {
 	Verbose bool `toml:"verbose"`
 
 	// TLS
-	TLS TLSConfig
+	TLS TLSConfig `toml:"tls"`
 
 	Cluster struct {
 		// Disabled controls whether clustering functionality is enabled.
