@@ -325,11 +325,6 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, ErrInvalidCacheType
 	}
 
-	// Validate mutually exclusive options if ranges are enabled.
-	if opt.RangeEnabled {
-		i.Logger.Printf("RangeEnabled is deprecated - no need to set RangeEnabled to true when creating a frame")
-	}
-
 	// Validate fields.
 	for _, field := range opt.Fields {
 		if err := ValidateField(field); err != nil {

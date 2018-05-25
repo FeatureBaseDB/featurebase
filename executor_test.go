@@ -609,7 +609,6 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		RangeEnabled: true,
 		Fields: []*pilosa.Field{
 			{Name: "foo", Type: pilosa.FieldTypeInt, Min: -10, Max: 100},
 		},

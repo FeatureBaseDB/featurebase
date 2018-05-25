@@ -67,14 +67,13 @@ func TestIndex_CreateFrame(t *testing.T) {
 	})
 
 	// Ensure frame can include range columns.
-	t.Run("RangeEnabled", func(t *testing.T) {
+	t.Run("BSIFields", func(t *testing.T) {
 		t.Run("OK", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
 			// Create frame with schema and verify it exists.
 			if f, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled: false,
 				Fields: []*pilosa.Field{
 					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
 					{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
@@ -104,7 +103,6 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			frame, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled:   true,
 				InverseEnabled: true,
 				Fields: []*pilosa.Field{
 					&pilosa.Field{
@@ -153,7 +151,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 			}
 		})
 
-		t.Run("RangeEnabledWithCacheTypeNone", func(t *testing.T) {
+		t.Run("BSIFieldsWithCacheTypeNone", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
@@ -208,7 +206,6 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled: true, // make sure we can still create frames with RangeEnabled: true after deprecation
 				Fields: []*pilosa.Field{
 					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 100, Max: 50},
 				},

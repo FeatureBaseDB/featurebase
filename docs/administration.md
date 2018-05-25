@@ -65,7 +65,7 @@ pilosa import -i project -f stargazer --field star_count project-stargazer-count
 ```
 
 <div class="note">
-    <p>Note that you must first create a frame with range-encoding enabled and a field. View <a href="../api-reference/#create-frame">Create Frame</a> for more details.</p>
+    <p>Note that you must first create a frame and a field. View <a href="../api-reference/#create-frame">Create Frame</a> for more details.</p>
 </div>
 
 #### Exporting

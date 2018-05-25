@@ -1004,7 +1004,6 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
 	InverseEnabled bool        `json:"inverseEnabled,omitempty"`
-	RangeEnabled   bool        `json:"rangeEnabled,omitempty"` // deprecated, will be removed
 	CacheType      string      `json:"cacheType,omitempty"`
 	CacheSize      uint32      `json:"cacheSize,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
