@@ -649,7 +649,6 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 		return nil, ErrFrameNotFound
 	}
 
-	// Return an error if both the row and column label are specified.
 	rowID, rowOK, rowErr := c.UintArg(rowLabel)
 	if rowErr != nil {
 		return nil, fmt.Errorf("Bitmap() error with arg for row: %v", rowErr)
@@ -1001,7 +1000,6 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
 	}
 
-	// Clear bits for each view.
 	return e.executeClearBitView(ctx, index, c, f, ViewStandard, colID, rowID, opt)
 }
 
@@ -1077,7 +1075,6 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		timestamp = &t
 	}
 
-	// Set bits for each view.
 	return e.executeSetBitView(ctx, index, c, f, ViewStandard, colID, rowID, timestamp, opt)
 }
 
