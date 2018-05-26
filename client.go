@@ -77,16 +77,11 @@ func (c *InternalHTTPClient) Host() *URI { return c.defaultURI }
 
 // MaxSliceByIndex returns the number of slices on a server by index.
 func (c *InternalHTTPClient) MaxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
-	return c.maxSliceByIndex(ctx, false)
-}
-
-// MaxInverseSliceByIndex returns the number of inverse slices on a server by index.
-func (c *InternalHTTPClient) MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64, error) {
-	return c.maxSliceByIndex(ctx, true)
+	return c.maxSliceByIndex(ctx)
 }
 
 // maxSliceByIndex returns the number of slices on a server by index.
-func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
+func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/slices/max")
 
@@ -112,9 +107,6 @@ func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) 
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
-	if inverse {
-		return rsp.Inverse, nil
-	}
 	return rsp.Standard, nil
 }
 
@@ -524,7 +516,7 @@ func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame, view s
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
-	} else if !(view == ViewStandard || view == ViewInverse) {
+	} else if view != ViewStandard {
 		return ErrInvalidView
 	}
 
@@ -605,8 +597,6 @@ func (c *InternalHTTPClient) BackupTo(ctx context.Context, w io.Writer, index, f
 	var err error
 	if view == ViewStandard {
 		maxSlices, err = c.MaxSliceByIndex(ctx)
-	} else if view == ViewInverse {
-		maxSlices, err = c.MaxInverseSliceByIndex(ctx)
 	} else {
 		return ErrInvalidView
 	}
@@ -1315,7 +1305,6 @@ func nodePathToURL(node *Node, path string) url.URL {
 // I don't want to let it go unquestioned.
 type InternalClient interface {
 	MaxSliceByIndex(ctx context.Context) (map[string]uint64, error)
-	MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64, error)
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error)

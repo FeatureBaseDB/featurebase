@@ -30,14 +30,13 @@ import (
 // View layout modes.
 const (
 	ViewStandard = "standard"
-	ViewInverse  = "inverse"
 
 	ViewFieldPrefix = "field_"
 )
 
 // IsValidView returns true if name is valid.
 func IsValidView(name string) bool {
-	return name == ViewStandard || name == ViewInverse
+	return name == ViewStandard
 }
 
 // View represents a container for frame data.
@@ -252,9 +251,8 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 		// Send the create slice message to all nodes.
 		err := v.broadcaster.SendAsync(
 			&internal.CreateSliceMessage{
-				Index:     v.index,
-				Slice:     slice,
-				IsInverse: IsInverseView(v.name),
+				Index: v.index,
+				Slice: slice,
 			})
 		if err != nil {
 			return nil, errors.Wrap(err, "sending message")
@@ -426,11 +424,6 @@ func (v *View) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint6
 		r = r.Union(other)
 	}
 	return r, nil
-}
-
-// IsInverseView returns true if the view is used for storing an inverted representation.
-func IsInverseView(name string) bool {
-	return strings.HasPrefix(name, ViewInverse)
 }
 
 // ViewInfo represents schema information for a view.
