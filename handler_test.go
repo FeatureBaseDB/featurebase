@@ -1101,55 +1101,6 @@ type FrameFields struct {
 	Fields []pilosa.Field
 }
 
-// Ensure the handler can backup a fragment and then restore it.
-func TestHandler_Fragment_BackupRestore(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
-
-	// Set bits in the index.
-	f0 := hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
-	f0.MustSetBits(100, 1, 2, 3)
-
-	// Begin backing up from slice i/f/0.
-	resp, err := http.Get(s.URL + "/fragment/data?index=i&frame=f&view=standard&slice=0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	// Ensure response came back OK.
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected backup status code: %d", resp.StatusCode)
-	}
-
-	// Create frame.
-	if _, err := hldr.MustCreateIndexIfNotExists("x", pilosa.IndexOptions{}).CreateFrame("y", pilosa.FrameOptions{}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Restore backup to slice x/y/0.
-	if resp, err := http.Post(s.URL+"/fragment/data?index=x&frame=y&view=standard&slice=0", "application/octet-stream", resp.Body); err != nil {
-		t.Fatal(err)
-	} else if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		t.Fatalf("unexpected restore status code: %d", resp.StatusCode)
-	} else {
-		resp.Body.Close()
-	}
-
-	// Verify data is correctly restored.
-	f1 := hldr.Fragment("x", "y", pilosa.ViewStandard, 0)
-	if f1 == nil {
-		t.Fatal("fragment x/y/standard/0 not created")
-	} else if bits := f1.Row(100).Bits(); !reflect.DeepEqual(bits, []uint64{1, 2, 3}) {
-		t.Fatalf("unexpected restored bits: %+v", bits)
-	}
-}
-
 // Ensure the handler can retrieve the version.
 func TestHandler_Version(t *testing.T) {
 	hldr := test.MustOpenHolder()
