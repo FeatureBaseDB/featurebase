@@ -10,7 +10,7 @@ nav = [
 
 ## Client Libraries
 
-This section contains example code for client libraries in several languages. Please remember that when modeling your data in Pilosa, it is best to keep row and column ids sequential. It is not wise to use the output of a hash, or randomly distributed ids with Pilosa.
+This section contains example code for client libraries in several languages. Please remember that when modeling your data in Pilosa, it is best to keep row and column ids sequential. It is best to avoid using the output of a hash or randomly distributed ids with Pilosa.
 
 ### Go
 
@@ -55,12 +55,12 @@ func main() {
 
 	// Which repositories did user 14 star:
 	response, _ = client.Query(stargazer.Bitmap(14))
-	fmt.Println("User 14 starred: ", response.Result().Bitmap.Bits)
+	fmt.Println("User 14 starred: ", response.Result().Bitmap().Bits)
 
 	// What are the top 5 languages in the sample data?
 	response, err = client.Query(language.TopN(5))
 	languageIDs := []uint64{}
-	for _, item := range response.Result().CountItems {
+	for _, item := range response.Result().CountItems() {
 		languageIDs = append(languageIDs, item.ID)
 	}
 	fmt.Println("Top 5 languages: ", languageIDs)
@@ -70,14 +70,14 @@ func main() {
 		repository.Intersect(
 			stargazer.Bitmap(14),
 			stargazer.Bitmap(19)))
-	fmt.Println("Both user 14 and 19 starred:", response.Result().Bitmap.Bits)
+	fmt.Println("Both user 14 and 19 starred:", response.Result().Bitmap().Bits)
 
 	// Which repositories were starred by user 14 or 19:
 	response, _ = client.Query(
 		repository.Union(
 			stargazer.Bitmap(14),
 			stargazer.Bitmap(19)))
-	fmt.Println("User 14 or 19 starred:", response.Result().Bitmap.Bits)
+	fmt.Println("User 14 or 19 starred:", response.Result().Bitmap().Bits)
 
 	// Which repositories were starred by user 14 or 19 and were written in language 1:
 	response, _ = client.Query(
@@ -87,11 +87,20 @@ func main() {
 				stargazer.Bitmap(19),
 			),
 			language.Bitmap(1)))
-	fmt.Println("User 14 or 19 starred, written in language 1:", response.Result().Bitmap.Bits)
+	fmt.Println("User 14 or 19 starred, written in language 1:", response.Result().Bitmap().Bits)
 
 	// Set user 99999 as a stargazer for repository 77777?
 	client.Query(stargazer.SetBit(99999, 77777))
 }
+```
+
+Running the above program should produce output like this:
+```
+User 14 starred:  [1 2 3 362 368 391 396 409 416 430 436 450 454 460 461 464 466 469 470 483 484 486 490 491 503 504 514]
+Top 5 languages:  [5 1 4 9 13]
+Both user 14 and 19 starred: [2 3 362 396 416 461 464 466 470 486]
+User 14 or 19 starred: [1 2 3 361 362 368 376 377 378 382 386 388 391 396 398 400 409 411 412 416 426 428 430 435 436 450 452 453 454 456 460 461 464 465 466 469 470 483 484 486 487 489 490 491 500 503 504 505 512 514]
+User 14 or 19 starred, written in language 1: [1 2 362 368 382 386 416 426 435 456 461 483 500 503 504 514]
 ```
 
 ### Python
@@ -167,6 +176,15 @@ print("User 14 or 19 starred, written in language 1:", mutually_starred)
 client.query(stargazer.setbit(99999, 77777))
 ```
 
+Running the above program should produce output like this:
+```
+('User 8 starred: ', [1L, 2L, 3L, 362L, 368L, 391L, 396L, 409L, 416L, 430L, 436L, 450L, 454L, 460L, 461L, 464L, 466L, 469L, 470L, 483L, 484L, 486L, 490L, 491L, 503L, 504L, 514L])
+('Top 5 languages: ', [5L, 1L, 4L, 9L, 13L])
+('Both user 14 and 19 starred:', [2L, 3L, 362L, 396L, 416L, 461L, 464L, 466L, 470L, 486L])
+('User 14 or 19 starred:', [1L, 2L, 3L, 361L, 362L, 368L, 376L, 377L, 378L, 382L, 386L, 388L, 391L, 396L, 398L, 400L, 409L, 411L, 412L, 416L, 426L, 428L, 430L, 435L, 436L, 450L, 452L, 453L, 454L, 456L, 460L, 461L, 464L, 465L, 466L, 469L, 470L, 483L, 484L, 486L, 487L, 489L, 490L, 491L, 500L, 503L, 504L, 505L, 512L, 514L])
+('User 14 or 19 starred, written in language 1:', [1L, 2L, 362L, 368L, 382L, 386L, 416L, 426L, 435L, 456L, 461L, 483L, 500L, 503L, 504L, 514L])
+```
+
 ### Java
 
 You can find the Java client library for Pilosa at our [Java Pilosa Repository](https://github.com/pilosa/java-pilosa). Check out its [README](https://github.com/pilosa/java-pilosa/blob/master/README.md) for more information and installation instructions.
@@ -218,7 +236,7 @@ public class StarTrace {
         // What are the top 5 languages in the sample data:
         response = client.query(language.topN(5));
         List<CountResultItem> top_languages = response.getResult().getCountItems();
-        List<Long> languageIDs = new ArrayList<>();
+        List<Long> languageIDs = new ArrayList<Long>();
         for (CountResultItem item : top_languages) {
             languageIDs.add(item.getID());
         }
@@ -259,4 +277,13 @@ public class StarTrace {
         client.query(stargazer.setBit(99999, 77777));
     }
 }
+```
+
+Running the above program should produce output like this:
+```
+User 14 starred: [1, 2, 3, 362, 368, 391, 396, 409, 416, 430, 436, 450, 454, 460, 461, 464, 466, 469, 470, 483, 484, 486, 490, 491, 503, 504, 514]
+Top Languages: [5, 1, 4, 9, 13]
+Both user 14 and 19 starred: [2, 3, 362, 396, 416, 461, 464, 466, 470, 486]
+User 14 or 19 starred: [1, 2, 3, 361, 362, 368, 376, 377, 378, 382, 386, 388, 391, 396, 398, 400, 409, 411, 412, 416, 426, 428, 430, 435, 436, 450, 452, 453, 454, 456, 460, 461, 464, 465, 466, 469, 470, 483, 484, 486, 487, 489, 490, 491, 500, 503, 504, 505, 512, 514]
+User 14 or 19 starred, written in language 1: [1, 2, 362, 368, 382, 386, 416, 426, 435, 456, 461, 483, 500, 503, 504, 514]
 ```

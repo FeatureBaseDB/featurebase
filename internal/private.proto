@@ -6,12 +6,10 @@ message IndexMeta {
 }
 
 message FrameMeta {
-	bool InverseEnabled = 2;
 	string CacheType = 3;
 	uint32 CacheSize = 4;
 	string TimeQuantum = 5;
-	bool RangeEnabled = 6;
-    repeated Field Fields = 7;
+	repeated Field Fields = 7;
 }
 
 message ImportResponse {
@@ -37,13 +35,11 @@ message Cache {
 
 message MaxSlices {
     map<string, uint64> Standard = 1;
-    map<string, uint64> Inverse = 2;
 }
 
 message CreateSliceMessage {
     string Index = 1;
     uint64 Slice = 2;
-    bool IsInverse = 3;
 }
 
 message DeleteIndexMessage {
@@ -91,37 +87,6 @@ message Schema {
 message Index {
     string Name = 1;
     repeated Frame Frames = 4;
-    repeated InputDefinition InputDefinitions = 6;
-}
-
-message InputDefinition {
-    string Name = 1;
-    repeated Frame Frames = 2;
-    repeated InputDefinitionField Fields = 3;
-}
-
-message InputDefinitionField {
-    string Name = 1;
-    bool PrimaryKey = 2;
-    repeated InputDefinitionAction InputDefinitionActions = 3;
-}
-
-message InputDefinitionAction {
-    string Frame = 1;
-    string ValueDestination = 2;
-    map<string, uint64> ValueMap = 3;
-    uint64 RowID = 4;
-
-}
-
-message CreateInputDefinitionMessage {
-    string Index = 1;
-    InputDefinition Definition = 3;
-}
-
-message DeleteInputDefinitionMessage {
-    string Index = 1;
-    string Name = 2;
 }
 
 message URI {

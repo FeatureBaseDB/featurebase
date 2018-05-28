@@ -75,7 +75,7 @@ type Holder struct {
 func NewHolder() *Holder {
 	return &Holder{
 		indexes: make(map[string]*Index),
-		closing: make(chan struct{}, 0),
+		closing: make(chan struct{}),
 
 		opened: make(chan struct{}),
 
@@ -209,15 +209,6 @@ func (h *Holder) MaxSlices() map[string]uint64 {
 	return a
 }
 
-// MaxInverseSlices returns MaxInverseSlice map for all indexes.
-func (h *Holder) MaxInverseSlices() map[string]uint64 {
-	a := make(map[string]uint64)
-	for _, index := range h.Indexes() {
-		a[index.Name()] = index.MaxInverseSlice()
-	}
-	return a
-}
-
 // Schema returns schema information for all indexes, frames, and views.
 func (h *Holder) Schema() []*IndexInfo {
 	var a []*IndexInfo
@@ -262,7 +253,6 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 				}
 			}
 		}
-		// TODO: Create inputDefinitions that don't exist.
 	}
 	return nil
 }
@@ -271,7 +261,6 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 func (h *Holder) EncodeMaxSlices() *internal.MaxSlices {
 	return &internal.MaxSlices{
 		Standard: h.MaxSlices(),
-		Inverse:  h.MaxInverseSlices(),
 	}
 }
 

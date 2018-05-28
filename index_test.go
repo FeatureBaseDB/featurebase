@@ -17,11 +17,9 @@ package pilosa_test
 import (
 	"io/ioutil"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -69,14 +67,13 @@ func TestIndex_CreateFrame(t *testing.T) {
 	})
 
 	// Ensure frame can include range columns.
-	t.Run("RangeEnabled", func(t *testing.T) {
+	t.Run("BSIFields", func(t *testing.T) {
 		t.Run("OK", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
 			// Create frame with schema and verify it exists.
 			if f, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled: false,
 				Fields: []*pilosa.Field{
 					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
 					{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
@@ -101,49 +98,6 @@ func TestIndex_CreateFrame(t *testing.T) {
 			}
 		})
 
-		t.Run("ErrInverseRangeAllowed", func(t *testing.T) {
-			index := test.MustOpenIndex()
-			defer index.Close()
-
-			frame, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled:   true,
-				InverseEnabled: true,
-				Fields: []*pilosa.Field{
-					&pilosa.Field{
-						Name: "myfield",
-						Type: pilosa.FieldTypeInt,
-						Min:  -20,
-						Max:  100,
-					},
-				},
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			ch, err := frame.SetBit(pilosa.ViewStandard, 1, 2, nil)
-			if !ch || err != nil {
-				t.Fatal(ch, err)
-			}
-			ch, err = frame.SetBit(pilosa.ViewInverse, 1, 2, nil)
-			if !ch || err != nil {
-				t.Fatal(ch, err)
-			}
-			ch, err = frame.SetFieldValue(1, "myfield", 87)
-			if !ch || err != nil {
-				t.Fatal(ch, err)
-			}
-			views := frame.Views()
-			if len(views) != 3 {
-				var names string
-				for _, v := range views {
-					names = names + v.Name() + " "
-				}
-				t.Fatalf("Unexpected views: %s", names)
-			}
-
-		})
-
 		t.Run("ErrRangeCacheAllowed", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
@@ -155,7 +109,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 			}
 		})
 
-		t.Run("RangeEnabledWithCacheTypeNone", func(t *testing.T) {
+		t.Run("BSIFieldsWithCacheTypeNone", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
@@ -210,7 +164,6 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				RangeEnabled: true, // make sure we can still create frames with RangeEnabled: true after deprecation
 				Fields: []*pilosa.Field{
 					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 100, Max: 50},
 				},
@@ -251,142 +204,10 @@ func TestIndex_InvalidName(t *testing.T) {
 		panic(err)
 	}
 	index, err := pilosa.NewIndex(path, "ABC")
+	if err == nil {
+		t.Fatalf("should have gotten an error on index name with caps")
+	}
 	if index != nil {
 		t.Fatalf("unexpected index name %v", index)
-	}
-}
-
-func TestIndex_CreateInputDefinition(t *testing.T) {
-	index := test.MustOpenIndex()
-	defer index.Close()
-
-	// Create Input Definition.
-	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{}}
-	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
-	field := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
-	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&field}}
-	inputDef, err := index.CreateInputDefinition(&def)
-	if err != nil {
-		t.Fatal(err)
-	} else if inputDef.Frames()[0].Name != frames.Name {
-		t.Fatalf("unexpected input definition frames %v", inputDef.Frames())
-	} else if inputDef.Fields()[0].Name != field.Name {
-		t.Fatalf("unexpected input definition actions %v", inputDef.Fields())
-	}
-}
-
-// Ensure create input definition handle correct error
-func TestIndex_CreateExistingInputDefinition(t *testing.T) {
-	index := test.MustOpenIndex()
-	defer index.Close()
-
-	//Test input definition name is required
-	def := internal.InputDefinition{Name: "", Frames: []*internal.Frame{}, Fields: []*internal.InputDefinitionField{}}
-	_, err := index.CreateInputDefinition(&def)
-	if err != pilosa.ErrInputDefinitionNameRequired {
-		t.Fatal(err)
-	}
-
-	// Create Input Definition.
-	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{}}
-	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
-	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
-	def = internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
-	_, err = index.CreateInputDefinition(&def)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = index.CreateInputDefinition(&def)
-	if err != pilosa.ErrInputDefinitionExists {
-		t.Fatal(err)
-	}
-}
-
-// Ensure to delete existing input definition.
-func TestIndex_DeleteInputDefinition(t *testing.T) {
-	index := test.MustOpenIndex()
-	defer index.Close()
-
-	// Create Input Definition.
-	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{}}
-	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
-	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
-	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
-	_, err := index.CreateInputDefinition(&def)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = index.InputDefinition("test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = index.DeleteInputDefinition("test")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = index.InputDefinition("test")
-	if err != pilosa.ErrInputDefinitionNotFound {
-		t.Fatal(err)
-	}
-}
-
-// Ensure that frame in input definition will be created when server restart
-func TestIndex_CreateFrameWhenOpenInputDefinition(t *testing.T) {
-	index := test.MustOpenIndex()
-	defer index.Close()
-
-	// Create Input Definition.
-	frames := internal.Frame{Name: "f", Meta: &internal.FrameMeta{}}
-	action := internal.InputDefinitionAction{Frame: "f", ValueDestination: "mapping", ValueMap: map[string]uint64{"Green": 1}}
-	fields := internal.InputDefinitionField{Name: "id", PrimaryKey: true, InputDefinitionActions: []*internal.InputDefinitionAction{&action}}
-	def := internal.InputDefinition{Name: "test", Frames: []*internal.Frame{&frames}, Fields: []*internal.InputDefinitionField{&fields}}
-	input, err := index.CreateInputDefinition(&def)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	input.AddFrame(pilosa.InputFrame{Name: "f1"})
-	index.Reopen()
-	if index.Frame("f1") == nil {
-		t.Fatal("Frame does not created when open index")
-	}
-
-}
-
-func TestIndex_InputBits(t *testing.T) {
-	var bits []*pilosa.Bit
-	index := test.MustOpenIndex()
-	defer index.Close()
-
-	err := index.InputBits("f", bits)
-	if !strings.Contains(err.Error(), "Frame not found") {
-		t.Fatalf("Expected Frame not found error, actual error: %s", err)
-	}
-
-	// Create frame.
-	if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{TimeQuantum: pilosa.TimeQuantum("YM")}); err != nil {
-		t.Fatal(err)
-	}
-
-	bits = append(bits, &pilosa.Bit{RowID: 0, ColumnID: 0})
-	bits = append(bits, &pilosa.Bit{RowID: 0, ColumnID: 1})
-	bits = append(bits, &pilosa.Bit{RowID: 2, ColumnID: 2, Timestamp: 1})
-	bits = append(bits, nil)
-
-	err = index.InputBits("f", bits)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	f := index.Frame("f")
-	v := f.View(pilosa.ViewStandard)
-	fragment := v.Fragment(0)
-
-	// Verify the Bits were set
-	if a := fragment.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{0, 1}) {
-		t.Fatalf("unexpected bits: %+v", a)
 	}
 }

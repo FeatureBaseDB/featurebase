@@ -63,7 +63,7 @@ curl -XDELETE localhost:10101/index/user
 
 `POST /index/<index-name>/query`
 
-Sends a query to the Pilosa server with the given index. The request body is UTF-8 encoded text and response body is in JSON by default.
+Sends a [query](../query-language/) to the Pilosa server with the given index. The request body is UTF-8 encoded text and response body is in JSON by default.
 
 ``` request
 curl localhost:10101/index/user/query \
@@ -105,7 +105,6 @@ The request payload is in JSON, and may contain the `options` field. The `option
 * `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this frame.
 * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
-* `rangeEnabled` (boolean): DEPRECATED - has no effect, will be removed. All frames support BSI fields.
 * `fields` (array): List of range-encoded [fields](../data-model/#bsi-range-encoding).
 
 Each individual `field` contains the following:
@@ -153,6 +152,7 @@ curl -XDELETE localhost:10101/index/user/frame/language
 Creates a new field to store integer values in the given frame.
 
 The request payload is JSON, and it must contain the fields `type`, `min`, `max`.
+
 * `type` (string): Field type, currently only "int" is supported.
 * `min` (int): Minimum value allowed for this field.
 * `max` (int): Maximum value allowed for this field.
@@ -164,19 +164,6 @@ curl localhost:10101/index/repository/frame/stats/field/pullrequests \
 ```
 ``` response
 {}
-```
-
-### List hosts
-
-`GET /hosts`
-
-Returns the hosts in the cluster.
-
-``` request
-curl -XGET localhost:10101/hosts
-```
-``` response
-[{"host":":10101"}]
 ```
 
 ### Get version
@@ -202,6 +189,10 @@ before the 10 second interval. This should probably only be used in
 integration tests and not in a typical production workflow. Note that
 in a multi-node cluster, the cache is only recalculated on the node
 that receives the request.
+
+``` request
+curl -XGET localhost:10101/recalculate-caches
+```
 
 Response: `204 No Content`
 

@@ -11,7 +11,7 @@ nav = [
 
 ## Configuration
 
-Pilosa can be configured through command line flags, environment variables, and/or a configuration file; configured options take precedence in that order. So if an option is specified in a command line flag, it will take precedence over the same option specified in the environment, which would take precedence over that same option specified in the configuration file.
+Pilosa can be configured through command line flags, environment variables, and/or a configuration file; configured options take precedence in that order. So if an option is specified in a command line flag, it will take precedence over the same option specified in the environment, which will take precedence over that same option specified in the configuration file.
 
 All options are available in all three configuration types with the exception of the `--config` option which specifies the location of the config file, and therefore will not be used if it is present in the config file.
 
@@ -117,19 +117,19 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Gossip Seeds
 
-* Description: This specifies which internal host(s) should be used to initialize membership in the cluster. Typcially this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip.seeds` for all three nodes can be configured to be the address of `node0`. Multiple seeds should be comma-separated in the flag and env forms.
-* Flag: `--gossip.seeds="localhost:11101"`
-* Env: `PILOSA_GOSSIP_SEEDS="localhost:11101"`
+* Description: This specifies which internal host(s) should be used to initialize membership in the cluster. Typically this can be the address of any available host in the cluster. For example, when starting a three-node cluster made up of `node0`, `node1`, and `node2`, the `gossip.seeds` for all three nodes can be configured to be the address of `node0`. Multiple seeds should be comma-separated in the flag and env forms.
+* Flag: `--gossip.seeds="localhost:11101,localhost:11110"`
+* Env: `PILOSA_GOSSIP_SEEDS="localhost:11101,localhost:11110"`
 * Config:
 
     ```toml
     [gossip]
-      seeds = ["localhost:11101"]
+      seeds = ["localhost:11101", "localhost:11110"]
     ```
 
 #### Gossip Key
 
-* Description: Path to the file which contains the key to encrypt gossip communication. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256 encryption. You can read from `/dev/random` device on UNIX-like systems to create the key file; e.g., `head -c 32 /dev/random > gossip.key32` creates a key file to use AES-256.  
+* Description: Path to the file which contains the key to encrypt gossip communication. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256 encryption. You can read from `/dev/random` device on UNIX-like systems to create the key file; e.g., `head -c 32 /dev/random > gossip.key32` creates a key file to use AES-256.
 * Flag: `--gossip.key="/var/secret/gossip.key32"`
 * Env: `PILOSA_GOSSIP_KEY="/var/secret/gossip.key32"`
 * Config:
@@ -204,7 +204,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 * Description: Amount of time to collect cpu profiling data at startup if `profile.cpu` is set.
 * Flag: `--profile.cpu-time="30s"`
-* Env: `PILOSA_PROFILE_CPU_TIME="30s"
+* Env: `PILOSA_PROFILE_CPU_TIME="30s"`
 * Config:
 
     ```toml
@@ -213,9 +213,9 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     ```
 
 #### Metric Service
-* Description: Which stats service to use. Choose from [statsd, expvar, none].
+* Description: Which stats service to use for collecting [metrics](../administration/#metrics). Choose from [statsd, expvar, none].
 * Flag: `--metric.service=statsd`
-* Env: `PILOSA_METRIC_SERVICE=statsd'
+* Env: `PILOSA_METRIC_SERVICE=statsd`
 * Config:
 
     ```toml
@@ -226,7 +226,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 #### Metric Host
 * Description: Address of the StatsD service host.
 * Flag: `--metric.host=localhost:8125`
-* Env: `PILOSA_METRIC_HOST=localhost:8125'
+* Env: `PILOSA_METRIC_HOST=localhost:8125`
 * Config:
 
     ```toml
@@ -248,7 +248,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Metric Diagnostics
 
-* Description: Enable reporting of limited usage statistics to Pilosa developers. To disable, set to false.
+* Description: Enable [reporting](../administration/#diagnostics) of limited usage statistics to Pilosa developers. To disable, set to false.
 * Flag: `metric.diagnostics`
 * Env: `PILOSA_METRIC_DIAGNOSTICS`
 * Config:
@@ -399,7 +399,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
 ### Example Cluster Configuration (HTTPS, same host)
 
-You can run a cluster on the same host using the configuration above with a few changes. Gossip port and bind adress should be different for each node and a data directory should be accessed only by a single node.
+You can run a cluster on the same host using the configuration above with a few changes. Gossip port and bind address should be different for each node and a data directory should be accessed only by a single node.
 
 #### Node 0
 
@@ -444,7 +444,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [gossip]
       port = 12002
-      seed = "locahost:12000"
+      seed = "localhost:12000"
       key = "/home/pilosa/private/gossip.key32"
 
     [cluster]

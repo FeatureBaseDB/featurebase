@@ -30,14 +30,13 @@ import (
 // View layout modes.
 const (
 	ViewStandard = "standard"
-	ViewInverse  = "inverse"
 
 	ViewFieldPrefix = "field_"
 )
 
 // IsValidView returns true if name is valid.
 func IsValidView(name string) bool {
-	return name == ViewStandard || name == ViewInverse
+	return name == ViewStandard
 }
 
 // View represents a container for frame data.
@@ -252,9 +251,8 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 		// Send the create slice message to all nodes.
 		err := v.broadcaster.SendAsync(
 			&internal.CreateSliceMessage{
-				Index:     v.index,
-				Slice:     slice,
-				IsInverse: IsInverseView(v.name),
+				Index: v.index,
+				Slice: slice,
 			})
 		if err != nil {
 			return nil, errors.Wrap(err, "sending message")
@@ -346,7 +344,7 @@ func (v *View) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (chan
 }
 
 // FieldSum returns the sum & count of a field.
-func (v *View) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err error) {
+func (v *View) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	for _, f := range v.Fragments() {
 		fsum, fcount, err := f.FieldSum(filter, bitDepth)
 		if err != nil {
@@ -359,7 +357,7 @@ func (v *View) FieldSum(filter *Bitmap, bitDepth uint) (sum, count uint64, err e
 }
 
 // FieldMin returns the min and count of a field.
-func (v *View) FieldMin(filter *Bitmap, bitDepth uint) (min, count uint64, err error) {
+func (v *View) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
 	var minHasValue bool
 	for _, f := range v.Fragments() {
 		fmin, fcount, err := f.FieldMin(filter, bitDepth)
@@ -387,7 +385,7 @@ func (v *View) FieldMin(filter *Bitmap, bitDepth uint) (min, count uint64, err e
 }
 
 // FieldMax returns the max and count of a field.
-func (v *View) FieldMax(filter *Bitmap, bitDepth uint) (max, count uint64, err error) {
+func (v *View) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
 	for _, f := range v.Fragments() {
 		fmax, fcount, err := f.FieldMax(filter, bitDepth)
 		if err != nil {
@@ -401,43 +399,32 @@ func (v *View) FieldMax(filter *Bitmap, bitDepth uint) (max, count uint64, err e
 	return max, count, nil
 }
 
-// FieldRange returns bitmaps with a field value encoding matching the predicate.
-func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Bitmap, error) {
-	bm := NewBitmap()
+// FieldRange returns rows with a field value encoding matching the predicate.
+func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
+	r := NewRow()
 	for _, frag := range v.Fragments() {
 		other, err := frag.FieldRange(op, bitDepth, predicate)
 		if err != nil {
 			return nil, err
 		}
-		bm = bm.Union(other)
+		r = r.Union(other)
 	}
-	return bm, nil
+	return r, nil
 }
 
 // FieldRangeBetween returns bitmaps with a field value encoding matching any
 // value between predicateMin and predicateMax.
-func (v *View) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Bitmap, error) {
-	bm := NewBitmap()
+func (v *View) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
+	r := NewRow()
 	for _, frag := range v.Fragments() {
 		other, err := frag.FieldRangeBetween(bitDepth, predicateMin, predicateMax)
 		if err != nil {
 			return nil, err
 		}
-		bm = bm.Union(other)
+		r = r.Union(other)
 	}
-	return bm, nil
+	return r, nil
 }
-
-// IsInverseView returns true if the view is used for storing an inverted representation.
-func IsInverseView(name string) bool {
-	return strings.HasPrefix(name, ViewInverse)
-}
-
-type viewSlice []*View
-
-func (p viewSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p viewSlice) Len() int           { return len(p) }
-func (p viewSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // ViewInfo represents schema information for a view.
 type ViewInfo struct {

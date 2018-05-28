@@ -160,12 +160,6 @@ func MustParseTime(value string) time.Time {
 	return v
 }
 
-// MustParseTimePtr parses value using DefaultTimeLayout. Panic on error.
-func MustParseTimePtr(value string) *time.Time {
-	v := MustParseTime(value)
-	return &v
-}
-
 // MustParseTimeQuantum parses v into a time quantum. Panic on error.
 func MustParseTimeQuantum(v string) pilosa.TimeQuantum {
 	q, err := pilosa.ParseTimeQuantum(v)

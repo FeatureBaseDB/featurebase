@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/mux"
@@ -82,8 +81,8 @@ func NewHandler() *Handler {
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")
-	h.validators["GetSliceMax"] = queryValidationSpecRequired().Optional("inverse")
-	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
+	h.validators["GetSliceMax"] = queryValidationSpecRequired()
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
@@ -121,8 +120,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
-	router.HandleFunc("/hosts", handler.handleGetHosts).Methods("GET")
-	router.HandleFunc("/id", handler.handleGetID).Methods("GET")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
@@ -156,10 +153,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/view/{view}", handler.handleDeleteView).Methods("DELETE")
-	router.HandleFunc("/index/{index}/input/{input-definition}", handler.handlePostInput).Methods("POST")
-	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleGetInputDefinition).Methods("GET")
-	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handlePostInputDefinition).Methods("POST")
-	router.HandleFunc("/index/{index}/input-definition/{input-definition}", handler.handleDeleteInputDefinition).Methods("DELETE")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 
@@ -245,8 +238,9 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 // handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	status := getStatusResponse{
-		State: h.API.State(),
-		Nodes: h.API.Hosts(r.Context()),
+		State:   h.API.State(),
+		Nodes:   h.API.Hosts(r.Context()),
+		LocalID: h.API.LocalID(),
 	}
 	if err := json.NewEncoder(w).Encode(status); err != nil {
 		h.Logger.Printf("write status response error: %s", err)
@@ -265,8 +259,9 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State string  `json:"state"`
-	Nodes []*Node `json:"nodes"`
+	State   string  `json:"state"`
+	Nodes   []*Node `json:"nodes"`
+	LocalID string  `json:"localID"`
 }
 
 // handlePostQuery handles /query requests.
@@ -308,7 +303,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(getSlicesMaxResponse{
 		Standard: h.API.MaxSlices(r.Context()),
-		Inverse:  h.API.MaxInverseSlices(r.Context()),
 	}); err != nil {
 		h.Logger.Printf("write slices-max response error: %s", err)
 	}
@@ -316,7 +310,6 @@ func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
 
 type getSlicesMaxResponse struct {
 	Standard map[string]uint64 `json:"standard"`
-	Inverse  map[string]uint64 `json:"inverse"`
 }
 
 // handleGetIndexes handles GET /index request.
@@ -442,7 +435,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = h.API.CreateIndex(r.Context(), indexName, req.Options)
-	if err == ErrIndexExists {
+	if errors.Cause(err) == ErrIndexExists {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	} else if err != nil {
@@ -469,7 +462,7 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 
 	attrs, err := h.API.IndexAttrDiff(r.Context(), indexName, req.Blocks)
 	if err != nil {
-		if err == ErrIndexNotFound {
+		if errors.Cause(err) == ErrIndexNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -510,7 +503,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = h.API.CreateFrame(r.Context(), indexName, frameName, req.Options)
 	if err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		case ErrFrameExists:
@@ -578,7 +571,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 
 	err := h.API.DeleteFrame(r.Context(), indexName, frameName)
 	if err != nil {
-		if err == ErrIndexNotFound {
+		if errors.Cause(err) == ErrIndexNotFound {
 			if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
 				h.Logger.Printf("response encoding error: %s", err)
 			}
@@ -617,7 +610,7 @@ func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.API.CreateField(r.Context(), indexName, frameName, field); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -646,7 +639,7 @@ func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request)
 	fieldName := mux.Vars(r)["field"]
 
 	if err := h.API.DeleteField(r.Context(), indexName, frameName, fieldName); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -666,7 +659,7 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 
 	fields, err := h.API.Fields(r.Context(), indexName, frameName)
 	if err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
 		case ErrFrameNotFound:
@@ -687,8 +680,6 @@ type getFrameFieldsResponse struct {
 	Fields []*Field `json:"fields,omitempty"`
 }
 
-type deleteFrameFieldRequest struct{}
-
 type deleteFrameFieldResponse struct{}
 
 // handleGetFrameViews handles GET /frame/views request.
@@ -698,7 +689,7 @@ func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
 
 	views, err := h.API.Views(r.Context(), indexName, frameName)
 	if err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -724,7 +715,7 @@ func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
 	viewName := mux.Vars(r)["view"]
 
 	if err := h.API.DeleteView(r.Context(), indexName, frameName, viewName); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -758,7 +749,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 
 	attrs, err := h.API.FrameAttrDiff(r.Context(), indexName, frameName, req.Blocks)
 	if err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrFragmentNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		default:
@@ -781,29 +772,6 @@ type postFrameAttrDiffRequest struct {
 
 type postFrameAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
-}
-
-// readColumnAttrSets returns a list of column attribute objects by id.
-func (h *Handler) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
-	if index == nil {
-		return nil, nil
-	}
-
-	a := make([]*ColumnAttrSet, 0, len(ids))
-	for _, id := range ids {
-		// Read attributes for column. Skip column if empty.
-		attrs, err := index.ColumnAttrStore().Attrs(id)
-		if err != nil {
-			return nil, err
-		} else if len(attrs) == 0 {
-			continue
-		}
-
-		// Append column with attributes.
-		a = append(a, &ColumnAttrSet{ID: id, Attrs: attrs})
-	}
-
-	return a, nil
 }
 
 // readQueryRequest parses an query parameters from r.
@@ -851,27 +819,12 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		Query:        query,
-		Slices:       slices,
-		ColumnAttrs:  q.Get("columnAttrs") == "true",
-		ExcludeAttrs: q.Get("excludeAttrs") == "true",
-		ExcludeBits:  q.Get("excludeBits") == "true",
+		Query:           query,
+		Slices:          slices,
+		ColumnAttrs:     q.Get("columnAttrs") == "true",
+		ExcludeRowAttrs: q.Get("excludeRowAttrs") == "true",
+		ExcludeColumns:  q.Get("excludeColumns") == "true",
 	}, nil
-}
-
-// validOptions return all attributes of an interface with lower first character.
-func validOptions(v interface{}) map[string]bool {
-	validQuery := make(map[string]bool)
-	argsType := reflect.ValueOf(v).Type()
-
-	for i := 0; i < argsType.NumField(); i++ {
-		fieldName := argsType.Field(i).Name
-		chars := []rune(fieldName)
-		chars[0] = unicode.ToLower(chars[0])
-		fieldName = string(chars)
-		validQuery[fieldName] = true
-	}
-	return validQuery
 }
 
 // writeQueryResponse writes the response from the executor to w.
@@ -923,7 +876,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.API.Import(r.Context(), req); err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
 		case ErrFrameNotFound:
@@ -976,7 +929,7 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err = h.API.ImportValue(r.Context(), req); err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
 		case ErrFrameNotFound:
@@ -1025,7 +978,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = h.API.ExportCSV(r.Context(), index, frame, view, slice, w); err != nil {
-		switch err {
+		switch errors.Cause(err) {
 		case ErrFragmentNotFound:
 			break
 		case ErrClusterDoesNotOwnSlice:
@@ -1096,7 +1049,7 @@ func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err = h.API.UnmarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice, r.Body); err != nil {
-		if err == ErrFrameNotFound {
+		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1110,7 +1063,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		if _, ok := err.(BadRequestError); ok {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else if err == ErrFragmentNotFound {
+		} else if errors.Cause(err) == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1136,7 +1089,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 
 	blocks, err := h.API.FragmentBlocks(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice)
 	if err != nil {
-		if err == ErrFragmentNotFound {
+		if errors.Cause(err) == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1176,7 +1129,7 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 	}
 
 	err = h.API.RestoreFrame(r.Context(), indexName, frameName, host)
-	switch err {
+	switch errors.Cause(err) {
 	case nil:
 		break
 	case ErrFrameNotFound:
@@ -1185,14 +1138,6 @@ func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusNotFound)
 	default:
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-// handleGetHosts handles /hosts requests.
-func (h *Handler) handleGetHosts(w http.ResponseWriter, r *http.Request) {
-	hosts := h.API.Hosts(r.Context())
-	if err := json.NewEncoder(w).Encode(hosts); err != nil {
-		h.Logger.Printf("write version response error: %s", err)
 	}
 }
 
@@ -1211,7 +1156,7 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 // QueryResult types.
 const (
 	QueryResultTypeNil uint32 = iota
-	QueryResultTypeBitmap
+	QueryResultTypeRow
 	QueryResultTypePairs
 	QueryResultTypeValCount
 	QueryResultTypeUint64
@@ -1234,10 +1179,10 @@ type QueryRequest struct {
 	ColumnAttrs bool
 
 	// Do not return row attributes, if true.
-	ExcludeAttrs bool
+	ExcludeRowAttrs bool
 
-	// Do not return bits, if true.
-	ExcludeBits bool
+	// Do not return columns, if true.
+	ExcludeColumns bool
 
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
@@ -1246,12 +1191,12 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		Query:        pb.Query,
-		Slices:       pb.Slices,
-		ColumnAttrs:  pb.ColumnAttrs,
-		Remote:       pb.Remote,
-		ExcludeAttrs: pb.ExcludeAttrs,
-		ExcludeBits:  pb.ExcludeBits,
+		Query:           pb.Query,
+		Slices:          pb.Slices,
+		ColumnAttrs:     pb.ColumnAttrs,
+		Remote:          pb.Remote,
+		ExcludeRowAttrs: pb.ExcludeRowAttrs,
+		ExcludeColumns:  pb.ExcludeColumns,
 	}
 
 	return req
@@ -1296,9 +1241,9 @@ func encodeQueryResponse(resp *QueryResponse) *internal.QueryResponse {
 		pb.Results[i] = &internal.QueryResult{}
 
 		switch result := resp.Results[i].(type) {
-		case *Bitmap:
-			pb.Results[i].Type = QueryResultTypeBitmap
-			pb.Results[i].Bitmap = encodeBitmap(result)
+		case *Row:
+			pb.Results[i].Type = QueryResultTypeRow
+			pb.Results[i].Row = encodeRow(result)
 		case []Pair:
 			pb.Results[i].Type = QueryResultTypePairs
 			pb.Results[i].Pairs = encodePairs(result)
@@ -1348,131 +1293,6 @@ func errorString(err error) string {
 		return ""
 	}
 	return err.Error()
-}
-
-// handlePostInputDefinition handles POST /input-definition request.
-func (h *Handler) handlePostInputDefinition(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	inputDefName := mux.Vars(r)["input-definition"]
-
-	// Decode request.
-	var req InputDefinitionInfo
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err = h.API.CreateInputDefinition(r.Context(), indexName, inputDefName, req); err != nil {
-		switch err {
-		case ErrIndexNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		case ErrInputDefinitionExists:
-			http.Error(w, err.Error(), http.StatusConflict)
-		case ErrInputDefinitionAttrsRequired:
-			fallthrough
-		case ErrInputDefinitionNameRequired:
-			fallthrough
-		case ErrInputDefinitionActionRequired:
-			fallthrough
-		case ErrInputDefinitionHasPrimaryKey:
-			fallthrough
-		case ErrInputDefinitionDupePrimaryKey:
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-// handleGetInputDefinition handles GET /input-definition request.
-func (h *Handler) handleGetInputDefinition(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	inputDefName := mux.Vars(r)["input-definition"]
-
-	inputDef, err := h.API.InputDefinition(r.Context(), indexName, inputDefName)
-	if err != nil {
-		switch err {
-		case nil:
-			break
-		case ErrIndexNotFound:
-			fallthrough
-		case ErrInputDefinitionNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	if err = json.NewEncoder(w).Encode(InputDefinitionInfo{
-		Frames: inputDef.frames,
-		Fields: inputDef.fields,
-	}); err != nil {
-		h.Logger.Printf("write status response error: %s", err)
-	}
-}
-
-// handleDeleteInputDefinition handles DELETE /input-definition request.
-func (h *Handler) handleDeleteInputDefinition(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	inputDefName := mux.Vars(r)["input-definition"]
-
-	if err := h.API.DeleteInputDefinition(r.Context(), indexName, inputDefName); err != nil {
-		switch err {
-		case nil:
-			break
-		case ErrIndexNotFound:
-			fallthrough
-		case ErrInputDefinitionNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		}
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-type defaultInputDefinitionResponse struct{}
-
-func (h *Handler) handlePostInput(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	inputDefName := mux.Vars(r)["input-definition"]
-
-	// Decode request.
-	var reqs []interface{}
-	err := json.NewDecoder(r.Body).Decode(&reqs)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err = h.API.WriteInput(r.Context(), indexName, inputDefName, reqs); err != nil {
-		switch err {
-		case nil:
-			break
-		case ErrIndexNotFound:
-			fallthrough
-		case ErrInputDefinitionNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(defaultInputDefinitionResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
 }
 
 func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r *http.Request) {
@@ -1585,26 +1405,6 @@ func (h *Handler) handleRecalculateCaches(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GetTimeStamp retrieves unix timestamp from Input data.
-func GetTimeStamp(data map[string]interface{}, timeField string) (int64, error) {
-	tmstamp, ok := data[timeField]
-	if !ok {
-		return 0, nil
-	}
-
-	timestamp, ok := tmstamp.(string)
-	if !ok {
-		return 0, fmt.Errorf("set-timestamp value must be in time format: YYYY-MM-DD, has: %v", data[timeField])
-	}
-
-	v, err := time.Parse(TimeFormat, timestamp)
-	if err != nil {
-		return 0, errors.Wrap(err, "parsing timestamp")
-	}
-
-	return v.Unix(), nil
-}
-
 func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Request) {
 	// Verify that request is only communicating over protobufs.
 	if r.Header.Get("Content-Type") != "application/x-protobuf" {
@@ -1620,13 +1420,6 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 
 	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
 		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-func (h *Handler) handleGetID(w http.ResponseWriter, r *http.Request) {
-	_, err := w.Write([]byte(h.API.LocalID()))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 

@@ -107,7 +107,6 @@ func TestStatsCount_TopN(t *testing.T) {
 			}
 
 			called = true
-			return
 		},
 	}
 	if _, err := e.Execute(context.Background(), "d", test.MustParse(`TopN(frame=f, n=2)`), nil, nil); err != nil {
@@ -137,7 +136,6 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			}
 
 			called = true
-			return
 		},
 	}
 	if _, err := e.Execute(context.Background(), "d", test.MustParse(`Bitmap(frame=f, row=0)`), nil, nil); err != nil {
@@ -148,7 +146,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	}
 }
 
-func TestStatsCount_SetBitmapAttrs(t *testing.T) {
+func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -164,11 +162,10 @@ func TestStatsCount_SetBitmapAttrs(t *testing.T) {
 
 	frame.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
-			if name != "SetBitmapAttrs" {
-				t.Errorf("Expected SetBitmapAttrs, Results %s", name)
+			if name != "SetRowAttrs" {
+				t.Errorf("Expected SetRowAttrs, Results %s", name)
 			}
 			called = true
-			return
 		},
 	}
 	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetRowAttrs(row=10, frame=f, foo="bar")`), nil, nil); err != nil {
@@ -200,7 +197,6 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 			}
 
 			called = true
-			return
 		},
 	}
 	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetColumnAttrs(col=10, frame=f, foo="bar")`), nil, nil); err != nil {
@@ -225,7 +221,6 @@ func TestStatsCount_CreateIndex(t *testing.T) {
 			}
 
 			called = true
-			return
 		},
 	}
 	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i", nil))
@@ -254,7 +249,6 @@ func TestStatsCount_DeleteIndex(t *testing.T) {
 			}
 
 			called = true
-			return
 		},
 	}
 	http.DefaultClient.Do(test.MustNewHTTPRequest("DELETE", s.URL+"/index/i", strings.NewReader("")))
@@ -286,7 +280,6 @@ func TestStatsCount_CreateFrame(t *testing.T) {
 			}
 
 			called = true
-			return
 		},
 	}
 	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", nil))
@@ -318,7 +311,6 @@ func TestStatsCount_DeleteFrame(t *testing.T) {
 			}
 
 			called = true
-			return
 		},
 	}
 	http.DefaultClient.Do(test.MustNewHTTPRequest("DELETE", s.URL+"/index/i/frame/f", strings.NewReader("")))
@@ -335,17 +327,13 @@ type MockStats struct {
 func (s *MockStats) Count(name string, value int64, rate float64) {
 	if s.mockCount != nil {
 		s.mockCount(name, value, rate)
-		return
 	}
-	return
 }
 
 func (s *MockStats) CountWithCustomTags(name string, value int64, rate float64, tags []string) {
 	if s.mockCountWithTags != nil {
 		s.mockCountWithTags(name, value, rate, tags)
-		return
 	}
-	return
 }
 
 func (c *MockStats) Tags() []string                                        { return nil }

@@ -541,16 +541,6 @@ func (c *Cluster) nodeByID(id string) *Node {
 	return nil
 }
 
-// nodeByURI returns a node reference by node URI.
-func (c *Cluster) nodeByURI(uri URI) *Node {
-	for _, n := range c.Nodes {
-		if n.URI == uri {
-			return n
-		}
-	}
-	return nil
-}
-
 // nodePositionByID returns the position of the node in slice c.Nodes.
 func (c *Cluster) nodePositionByID(nodeID string) int {
 	for i, n := range c.Nodes {
@@ -622,9 +612,7 @@ type fragsByHost map[string][]frag
 
 func (a fragsByHost) add(b fragsByHost) fragsByHost {
 	for k, v := range b {
-		for _, vv := range v {
-			a[k] = append(a[k], vv)
-		}
+		a[k] = append(a[k], v...)
 	}
 	return a
 }
@@ -638,21 +626,14 @@ func (a viewsByFrame) addView(frame, view string) {
 func (c *Cluster) fragsByHost(idx *Index) fragsByHost {
 	// frameViews is a map of frame to slice of views.
 	frameViews := make(viewsByFrame)
-	inverseFrameViews := make(viewsByFrame)
 
 	for _, frame := range idx.Frames() {
 		for _, view := range frame.Views() {
-			if IsInverseView(view.Name()) {
-				inverseFrameViews.addView(frame.Name(), view.Name())
-			} else {
-				frameViews.addView(frame.Name(), view.Name())
-			}
+			frameViews.addView(frame.Name(), view.Name())
+
 		}
 	}
-
-	std := c.fragCombos(idx.Name(), idx.MaxSlice(), frameViews)
-	inv := c.fragCombos(idx.Name(), idx.MaxInverseSlice(), inverseFrameViews)
-	return std.add(inv)
+	return c.fragCombos(idx.Name(), idx.MaxSlice(), frameViews)
 }
 
 // fragCombos returns a map (by uri) of lists of fragments for a given index
@@ -1175,9 +1156,7 @@ func (c *Cluster) generateResizeJobByAction(nodeAction nodeAction) (*ResizeJob, 
 		}
 
 		for id, sources := range fragSources {
-			for _, src := range sources {
-				multiIndex[id] = append(multiIndex[id], src)
-			}
+			multiIndex[id] = append(multiIndex[id], sources...)
 		}
 	}
 
@@ -1299,10 +1278,8 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				// Write to local frame and always close reader.
 				if err := func() error {
 					defer rd.Close()
-					if _, err := frag.ReadFrom(rd); err != nil {
-						return err
-					}
-					return nil
+					_, err := frag.ReadFrom(rd)
+					return err
 				}(); err != nil {
 					return errors.Wrap(err, "copying remote slice")
 				}
@@ -1728,8 +1705,6 @@ func (c *Cluster) nodeJoin(node *Node) error {
 			// know that it can proceed with opening its Holder.
 			return c.sendTo(node, c.Status())
 		}
-
-		return nil
 	}
 
 	// If the cluster already contains the node, just send it the cluster status.
