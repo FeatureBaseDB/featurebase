@@ -63,19 +63,18 @@ var tokens = [...]string{
 
 	ALL: "ALL",
 
-	ASSIGN:  "=",
-	EQ:      "==",
-	NEQ:     "!=",
-	LT:      "<",
-	LTE:     "<=",
-	GT:      ">",
-	GTE:     ">=",
-	BETWEEN: "><",
-	COMMA:   ",",
-	LPAREN:  "(",
-	RPAREN:  ")",
-	LBRACK:  "(",
-	RBRACK:  ")",
+	ASSIGN: "=",
+	EQ:     "==",
+	NEQ:    "!=",
+	LT:     "<",
+	LTE:    "<=",
+	GT:     ">",
+	GTE:    ">=",
+	COMMA:  ",",
+	LPAREN: "(",
+	RPAREN: ")",
+	LBRACK: "(",
+	RBRACK: ")",
 }
 
 var keywords map[string]Token

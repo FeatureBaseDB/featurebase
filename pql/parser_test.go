@@ -172,7 +172,8 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with condition arguments.
 	t.Run("WithCondition", func(t *testing.T) {
-		q, err := pql.ParseString(`MyCall(key=foo, x == 12.25, y >= 100, z >< [4,8], m != null)`)
+		q, err := pql.ParseString(`MyCall(key=foo, x == 12.25, y >= 100, 4 < z < 8, m != null)`)
+
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
