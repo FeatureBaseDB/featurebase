@@ -67,34 +67,34 @@ func TestIndex_CreateFrame(t *testing.T) {
 	})
 
 	// Ensure frame can include range columns.
-	t.Run("BSIFields", func(t *testing.T) {
+	t.Run("BSIGroups", func(t *testing.T) {
 		t.Run("OK", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
 			// Create frame with schema and verify it exists.
 			if f, err := index.CreateFrame("f", pilosa.FrameOptions{
-				Fields: []*pilosa.Field{
-					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
-					{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
+				BSIGroups: []*pilosa.BSIGroup{
+					{Name: "bsig0", Type: pilosa.BSIGroupTypeInt, Min: 10, Max: 20},
+					{Name: "bsig1", Type: pilosa.BSIGroupTypeInt, Min: 11, Max: 21},
 				},
 			}); err != nil {
 				t.Fatal(err)
-			} else if !reflect.DeepEqual(f.Fields(), []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
-				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
+			} else if !reflect.DeepEqual(f.BSIGroups(), []*pilosa.BSIGroup{
+				{Name: "bsig0", Type: pilosa.BSIGroupTypeInt, Min: 10, Max: 20},
+				{Name: "bsig1", Type: pilosa.BSIGroupTypeInt, Min: 11, Max: 21},
 			}) {
-				t.Fatalf("unexpected fields: %#v", f.Fields())
+				t.Fatalf("unexpected bsigroups: %#v", f.BSIGroups())
 			}
 
-			// Reopen the index & verify the fields are loaded.
+			// Reopen the index & verify the bsiGroups are loaded.
 			if err := index.Reopen(); err != nil {
 				t.Fatal(err)
-			} else if f := index.Frame("f"); !reflect.DeepEqual(f.Fields(), []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 10, Max: 20},
-				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 11, Max: 21},
+			} else if f := index.Frame("f"); !reflect.DeepEqual(f.BSIGroups(), []*pilosa.BSIGroup{
+				{Name: "bsig0", Type: pilosa.BSIGroupTypeInt, Min: 10, Max: 20},
+				{Name: "bsig1", Type: pilosa.BSIGroupTypeInt, Min: 11, Max: 21},
 			}) {
-				t.Fatalf("unexpected fields after reopen: %#v", f.Fields())
+				t.Fatalf("unexpected bsigroups after reopen: %#v", f.BSIGroups())
 			}
 		})
 
@@ -109,7 +109,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 			}
 		})
 
-		t.Run("BSIFieldsWithCacheTypeNone", func(t *testing.T) {
+		t.Run("BSIGroupsWithCacheTypeNone", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
@@ -120,54 +120,54 @@ func TestIndex_CreateFrame(t *testing.T) {
 			}
 		})
 
-		t.Run("ErrFrameFieldsAllowed", func(t *testing.T) {
+		t.Run("ErrFrameBSIGroupsAllowed", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				Fields: []*pilosa.Field{
-					{Name: "field0", Type: pilosa.FieldTypeInt},
+				BSIGroups: []*pilosa.BSIGroup{
+					{Name: "bsig0", Type: pilosa.BSIGroupTypeInt},
 				},
 			}); err != nil {
 				t.Fatal(err)
 			}
 		})
 
-		t.Run("ErrFieldNameRequired", func(t *testing.T) {
+		t.Run("ErrBSIGroupNameRequired", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				Fields: []*pilosa.Field{
-					{Name: "", Type: pilosa.FieldTypeInt},
+				BSIGroups: []*pilosa.BSIGroup{
+					{Name: "", Type: pilosa.BSIGroupTypeInt},
 				},
-			}); err != pilosa.ErrFieldNameRequired {
+			}); err != pilosa.ErrBSIGroupNameRequired {
 				t.Fatal(err)
 			}
 		})
 
-		t.Run("ErrInvalidFieldType", func(t *testing.T) {
+		t.Run("ErrInvalidBSIGroupType", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				Fields: []*pilosa.Field{
-					{Name: "field0", Type: "bad_type"},
+				BSIGroups: []*pilosa.BSIGroup{
+					{Name: "bsig0", Type: "bad_type"},
 				},
-			}); err != pilosa.ErrInvalidFieldType {
+			}); err != pilosa.ErrInvalidBSIGroupType {
 				t.Fatal(err)
 			}
 		})
 
-		t.Run("ErrInvalidFieldRange", func(t *testing.T) {
+		t.Run("ErrInvalidBSIGroupRange", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
 			if _, err := index.CreateFrame("f", pilosa.FrameOptions{
-				Fields: []*pilosa.Field{
-					{Name: "field0", Type: pilosa.FieldTypeInt, Min: 100, Max: 50},
+				BSIGroups: []*pilosa.BSIGroup{
+					{Name: "bsig0", Type: pilosa.BSIGroupTypeInt, Min: 100, Max: 50},
 				},
-			}); err != pilosa.ErrInvalidFieldRange {
+			}); err != pilosa.ErrInvalidBSIGroupRange {
 				t.Fatal(err)
 			}
 		})

@@ -127,10 +127,10 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeSum(ctx, index, c, slices, opt)
 	case "Min":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeFieldMin(ctx, index, c, slices, opt)
+		return e.executeBSIGroupMin(ctx, index, c, slices, opt)
 	case "Max":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeFieldMax(ctx, index, c, slices, opt)
+		return e.executeBSIGroupMax(ctx, index, c, slices, opt)
 	case "ClearBit":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "Count":
@@ -138,8 +138,8 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeCount(ctx, index, c, slices, opt)
 	case "SetBit":
 		return e.executeSetBit(ctx, index, c, opt)
-	case "SetFieldValue":
-		return nil, e.executeSetFieldValue(ctx, index, c, opt)
+	case "SetBSIGroupValue":
+		return nil, e.executeSetBSIGroupValue(ctx, index, c, opt)
 	case "SetRowAttrs":
 		return nil, e.executeSetRowAttrs(ctx, index, c, opt)
 	case "SetColumnAttrs":
@@ -176,8 +176,8 @@ func (e *Executor) validateCallArgs(c *pql.Call) error {
 func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
 	if frame := c.Args["frame"]; frame == "" {
 		return ValCount{}, errors.New("Sum(): frame required")
-	} else if field := c.Args["field"]; field == "" {
-		return ValCount{}, errors.New("Sum(): field required")
+	} else if bsi := c.Args["bsiGroup"]; bsi == "" {
+		return ValCount{}, errors.New("Sum(): bsiGroup required")
 	}
 
 	if len(c.Children) > 1 {
@@ -207,12 +207,12 @@ func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, sl
 	return other, nil
 }
 
-// executeFieldMin executes a Min() call.
-func (e *Executor) executeFieldMin(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+// executeBSIGroupMin executes a Min() call.
+func (e *Executor) executeBSIGroupMin(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
 	if frame := c.Args["frame"]; frame == "" {
 		return ValCount{}, errors.New("Min(): frame required")
-	} else if field := c.Args["field"]; field == "" {
-		return ValCount{}, errors.New("Min(): field required")
+	} else if bsi := c.Args["bsiGroup"]; bsi == "" {
+		return ValCount{}, errors.New("Min(): bsiGroup required")
 	}
 
 	if len(c.Children) > 1 {
@@ -221,7 +221,7 @@ func (e *Executor) executeFieldMin(ctx context.Context, index string, c *pql.Cal
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeFieldMinSlice(ctx, index, c, slice)
+		return e.executeBSIGroupMinSlice(ctx, index, c, slice)
 	}
 
 	// Merge returned results at coordinating node.
@@ -242,12 +242,12 @@ func (e *Executor) executeFieldMin(ctx context.Context, index string, c *pql.Cal
 	return other, nil
 }
 
-// executeFieldMax executes a Max() call.
-func (e *Executor) executeFieldMax(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+// executeBSIGroupMax executes a Max() call.
+func (e *Executor) executeBSIGroupMax(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
 	if frame := c.Args["frame"]; frame == "" {
 		return ValCount{}, errors.New("Max(): frame required")
-	} else if field := c.Args["field"]; field == "" {
-		return ValCount{}, errors.New("Max(): field required")
+	} else if bsi := c.Args["bsiGroup"]; bsi == "" {
+		return ValCount{}, errors.New("Max(): bsiGroup required")
 	}
 
 	if len(c.Children) > 1 {
@@ -256,7 +256,7 @@ func (e *Executor) executeFieldMax(ctx context.Context, index string, c *pql.Cal
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeFieldMaxSlice(ctx, index, c, slice)
+		return e.executeBSIGroupMaxSlice(ctx, index, c, slice)
 	}
 
 	// Merge returned results at coordinating node.
@@ -362,7 +362,7 @@ func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *
 	}
 }
 
-// executeSumCountSlice calculates the sum and count for fields on a slice.
+// executeSumCountSlice calculates the sum and count for bsiGroups on a slice.
 func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
@@ -374,35 +374,35 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 	}
 
 	frameName, _ := c.Args["frame"].(string)
-	fieldName, _ := c.Args["field"].(string)
+	bsiGroupName, _ := c.Args["bsiGroup"].(string)
 
 	frame := e.Holder.Frame(index, frameName)
 	if frame == nil {
 		return ValCount{}, nil
 	}
 
-	field := frame.Field(fieldName)
-	if field == nil {
+	bsi := frame.BSIGroup(bsiGroupName)
+	if bsi == nil {
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	fragment := e.Holder.Fragment(index, frameName, ViewBSIGroupPrefix+bsiGroupName, slice)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
 
-	vsum, vcount, err := fragment.FieldSum(filter, field.BitDepth())
+	vsum, vcount, err := fragment.BSIGroupSum(filter, bsi.BitDepth())
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "computing sum")
 	}
 	return ValCount{
-		Val:   int64(vsum) + (int64(vcount) * field.Min),
+		Val:   int64(vsum) + (int64(vcount) * bsi.Min),
 		Count: int64(vcount),
 	}, nil
 }
 
-// executeFieldMinSlice calculates the min for fields on a slice.
-func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+// executeBSIGroupMinSlice calculates the min for bsiGroups on a slice.
+func (e *Executor) executeBSIGroupMinSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
@@ -413,35 +413,35 @@ func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pq
 	}
 
 	frameName, _ := c.Args["frame"].(string)
-	fieldName, _ := c.Args["field"].(string)
+	bsiGroupName, _ := c.Args["bsiGroup"].(string)
 
 	frame := e.Holder.Frame(index, frameName)
 	if frame == nil {
 		return ValCount{}, nil
 	}
 
-	field := frame.Field(fieldName)
-	if field == nil {
+	bsi := frame.BSIGroup(bsiGroupName)
+	if bsi == nil {
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	fragment := e.Holder.Fragment(index, frameName, ViewBSIGroupPrefix+bsiGroupName, slice)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
 
-	fmin, fcount, err := fragment.FieldMin(filter, field.BitDepth())
+	fmin, fcount, err := fragment.BSIGroupMin(filter, bsi.BitDepth())
 	if err != nil {
 		return ValCount{}, err
 	}
 	return ValCount{
-		Val:   int64(fmin) + field.Min,
+		Val:   int64(fmin) + bsi.Min,
 		Count: int64(fcount),
 	}, nil
 }
 
-// executeFieldMaxSlice calculates the max for fields on a slice.
-func (e *Executor) executeFieldMaxSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+// executeBSIGroupMaxSlice calculates the max for bsiGroups on a slice.
+func (e *Executor) executeBSIGroupMaxSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
@@ -452,29 +452,29 @@ func (e *Executor) executeFieldMaxSlice(ctx context.Context, index string, c *pq
 	}
 
 	frameName, _ := c.Args["frame"].(string)
-	fieldName, _ := c.Args["field"].(string)
+	bsiGroupName, _ := c.Args["bsiGroup"].(string)
 
 	frame := e.Holder.Frame(index, frameName)
 	if frame == nil {
 		return ValCount{}, nil
 	}
 
-	field := frame.Field(fieldName)
-	if field == nil {
+	bsi := frame.BSIGroup(bsiGroupName)
+	if bsi == nil {
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	fragment := e.Holder.Fragment(index, frameName, ViewBSIGroupPrefix+bsiGroupName, slice)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
 
-	fmax, fcount, err := fragment.FieldMax(filter, field.BitDepth())
+	fmax, fcount, err := fragment.BSIGroupMax(filter, bsi.BitDepth())
 	if err != nil {
 		return ValCount{}, err
 	}
 	return ValCount{
-		Val:   int64(fmax) + field.Min,
+		Val:   int64(fmax) + bsi.Min,
 		Count: int64(fcount),
 	}, nil
 }
@@ -552,7 +552,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
 	}
-	field, _ := c.Args["field"].(string)
+	field, _ := c.Args["field"].(string) // TODO: rename "field" to something else.
 	rowIDs, _, err := c.UintSliceArg("ids")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
@@ -603,7 +603,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 		N:                 int(n),
 		Src:               src,
 		RowIDs:            rowIDs,
-		FilterField:       field,
+		FilterName:        field,
 		FilterValues:      filters,
 		MinThreshold:      minThreshold,
 		TanimotoThreshold: tanimotoThreshold,
@@ -688,9 +688,9 @@ func (e *Executor) executeIntersectSlice(ctx context.Context, index string, c *p
 
 // executeRangeSlice executes a range() call for a local slice.
 func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
-	// Handle field ranges differently.
+	// Handle bsiGroup ranges differently.
 	if c.HasConditionArg() {
-		return e.executeFieldRangeSlice(ctx, index, c, slice)
+		return e.executeBSIGroupRangeSlice(ctx, index, c, slice)
 	}
 
 	// Parse frame, use default if unset.
@@ -759,8 +759,8 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	return row, nil
 }
 
-// executeFieldRangeSlice executes a range(field) call for a local slice.
-func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+// executeBSIGroupRangeSlice executes a range(bsiGroup) call for a local slice.
+func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
 	// Parse frame, use default if unset.
 	frame, _ := c.Args["frame"].(string)
 	if frame == "" {
@@ -771,50 +771,50 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		return nil, ErrFrameNotFound
 	}
 
-	// Remove frame field.
+	// Remove frame argument.
 	args := pql.CopyArgs(c.Args)
 	delete(args, "frame")
 
-	// Only one conditional field should remain.
+	// Only one conditional argument should remain.
 	if len(args) == 0 {
 		return nil, errors.New("Range(): condition required")
 	} else if len(args) > 1 {
 		return nil, errors.New("Range(): too many arguments")
 	}
 
-	// Extract condition field.
-	var fieldName string
+	// Extract condition bsiGroup.
+	var bsiGroupName string
 	var cond *pql.Condition
 	for k, v := range args {
 		vv, ok := v.(*pql.Condition)
 		if !ok {
 			return nil, fmt.Errorf("Range(): %q: expected condition argument, got %v", k, v)
 		}
-		fieldName, cond = k, vv
+		bsiGroupName, cond = k, vv
 	}
 
-	// EQ null           (not implemented: flip frag.FieldNotNull with max ColumnID)
-	// NEQ null          frag.FieldNotNull()
-	// BETWEEN a,b(in)   BETWEEN/frag.FieldRangeBetween()
-	// BETWEEN a,b(out)  BETWEEN/frag.FieldNotNull()
-	// EQ <int>          frag.FieldRange
-	// NEQ <int>         frag.FieldRange
+	// EQ null           (not implemented: flip frag.BSIGroupNotNull with max ColumnID)
+	// NEQ null          frag.BSIGroupNotNull()
+	// BETWEEN a,b(in)   BETWEEN/frag.BSIGroupRangeBetween()
+	// BETWEEN a,b(out)  BETWEEN/frag.BSIGroupNotNull()
+	// EQ <int>          frag.BSIGroupRange
+	// NEQ <int>         frag.BSIGroupRange
 
 	// Handle `!= null`.
 	if cond.Op == pql.NEQ && cond.Value == nil {
-		// Find field.
-		field := f.Field(fieldName)
-		if field == nil {
-			return nil, ErrFieldNotFound
+		// Find bsiGroup.
+		bsi := f.BSIGroup(bsiGroupName)
+		if bsi == nil {
+			return nil, ErrBSIGroupNotFound
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		frag := e.Holder.Fragment(index, frame, ViewBSIGroupPrefix+bsiGroupName, slice)
 		if frag == nil {
 			return NewRow(), nil
 		}
 
-		return frag.FieldNotNull(field.BitDepth())
+		return frag.BSIGroupNotNull(bsi.BitDepth())
 
 	} else if cond.Op == pql.BETWEEN {
 
@@ -829,33 +829,33 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		}
 
 		// The reason we don't just call:
-		//     return f.FieldRangeBetween(fieldName, predicates[0], predicates[1])
+		//     return f.BSIGroupRangeBetween(bsiGroupName, predicates[0], predicates[1])
 		// here is because we need the call to be slice-specific.
 
-		// Find field.
-		field := f.Field(fieldName)
-		if field == nil {
-			return nil, ErrFieldNotFound
+		// Find bsiGroup.
+		bsi := f.BSIGroup(bsiGroupName)
+		if bsi == nil {
+			return nil, ErrBSIGroupNotFound
 		}
 
-		baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicates[0], predicates[1])
+		baseValueMin, baseValueMax, outOfRange := bsi.BaseValueBetween(predicates[0], predicates[1])
 		if outOfRange {
 			return NewRow(), nil
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		frag := e.Holder.Fragment(index, frame, ViewBSIGroupPrefix+bsiGroupName, slice)
 		if frag == nil {
 			return NewRow(), nil
 		}
 
 		// If the query is asking for the entire valid range, just return
-		// the not-null bitmap for the field.
-		if predicates[0] <= field.Min && predicates[1] >= field.Max {
-			return frag.FieldNotNull(field.BitDepth())
+		// the not-null bitmap for the bsiGroup.
+		if predicates[0] <= bsi.Min && predicates[1] >= bsi.Max {
+			return frag.BSIGroupNotNull(bsi.BitDepth())
 		}
 
-		return frag.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
+		return frag.BSIGroupRangeBetween(bsi.BitDepth(), baseValueMin, baseValueMax)
 
 	} else {
 
@@ -865,36 +865,36 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 			return nil, errors.New("Range(): conditions only support integer values")
 		}
 
-		// Find field.
-		field := f.Field(fieldName)
-		if field == nil {
-			return nil, ErrFieldNotFound
+		// Find bsiGroup.
+		bsi := f.BSIGroup(bsiGroupName)
+		if bsi == nil {
+			return nil, ErrBSIGroupNotFound
 		}
 
-		baseValue, outOfRange := field.BaseValue(cond.Op, value)
+		baseValue, outOfRange := bsi.BaseValue(cond.Op, value)
 		if outOfRange && cond.Op != pql.NEQ {
 			return NewRow(), nil
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		frag := e.Holder.Fragment(index, frame, ViewBSIGroupPrefix+bsiGroupName, slice)
 		if frag == nil {
 			return NewRow(), nil
 		}
 
-		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid field range.
-		if (cond.Op == pql.LT && value > field.Max) || (cond.Op == pql.LTE && value >= field.Max) ||
-			(cond.Op == pql.GT && value < field.Min) || (cond.Op == pql.GTE && value <= field.Min) {
-			return frag.FieldNotNull(field.BitDepth())
+		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid bsiGroup range.
+		if (cond.Op == pql.LT && value > bsi.Max) || (cond.Op == pql.LTE && value >= bsi.Max) ||
+			(cond.Op == pql.GT && value < bsi.Min) || (cond.Op == pql.GTE && value <= bsi.Min) {
+			return frag.BSIGroupNotNull(bsi.BitDepth())
 		}
 
 		// outOfRange for NEQ should return all not-null.
 		if outOfRange && cond.Op == pql.NEQ {
-			return frag.FieldNotNull(field.BitDepth())
+			return frag.BSIGroupNotNull(bsi.BitDepth())
 		}
 
-		f.Stats.Count("range:field", 1, 1.0)
-		return frag.FieldRange(cond.Op, field.BitDepth(), baseValue)
+		f.Stats.Count("range:bsigroup", 1, 1.0)
+		return frag.BSIGroupRange(cond.Op, bsi.BitDepth(), baseValue)
 	}
 }
 
@@ -985,19 +985,19 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, ErrFrameNotFound
 	}
 
-	// Read fields using labels.
+	// Read arguments using labels.
 	rowID, ok, err := c.UintArg(rowLabel)
 	if err != nil {
 		return false, fmt.Errorf("reading ClearBit() row: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("ClearBit() row field '%v' required", rowLabel)
+		return false, fmt.Errorf("ClearBit() argument '%v' required", rowLabel)
 	}
 
 	colID, ok, err := c.UintArg(columnLabel)
 	if err != nil {
 		return false, fmt.Errorf("reading ClearBit() column: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
+		return false, fmt.Errorf("ClearBit argument '%v' required", columnLabel)
 	}
 
 	return e.executeClearBitView(ctx, index, c, f, ViewStandard, colID, rowID, opt)
@@ -1037,7 +1037,7 @@ func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql
 func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) (bool, error) {
 	frame, ok := c.Args["frame"].(string)
 	if !ok {
-		return false, errors.New("SetBit() field required: frame")
+		return false, errors.New("SetBit() argument required: frame")
 	}
 
 	// Retrieve frame.
@@ -1050,19 +1050,19 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		return false, ErrFrameNotFound
 	}
 
-	// Read fields using labels.
+	// Read arguments using labels.
 	rowID, ok, err := c.UintArg(rowLabel)
 	if err != nil {
 		return false, fmt.Errorf("reading SetBit() row: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("SetBit() row field '%v' required", rowLabel)
+		return false, fmt.Errorf("SetBit() argument '%v' required", rowLabel)
 	}
 
 	colID, ok, err := c.UintArg(columnLabel)
 	if err != nil {
 		return false, fmt.Errorf("reading SetBit() column: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("SetBit() column field '%v' required", columnLabel)
+		return false, fmt.Errorf("SetBit() argument '%v' required", columnLabel)
 	}
 
 	var timestamp *time.Time
@@ -1110,11 +1110,11 @@ func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.C
 	return ret, nil
 }
 
-// executeSetFieldValue executes a SetFieldValue() call.
-func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) error {
+// executeSetBSIGroupValue executes a SetBSIGroupValue() call.
+func (e *Executor) executeSetBSIGroupValue(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) error {
 	frameName, ok := c.Args["frame"].(string)
 	if !ok {
-		return errors.New("SetFieldValue() frame required")
+		return errors.New("SetBSIGroupValue() frame required")
 	}
 
 	// Retrieve frame.
@@ -1126,12 +1126,12 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 	// Parse labels.
 	columnID, ok, err := c.UintArg(columnLabel)
 	if err != nil {
-		return fmt.Errorf("reading SetFieldValue() column: %v", err)
+		return fmt.Errorf("reading SetBSIGroupValue() column: %v", err)
 	} else if !ok {
-		return fmt.Errorf("SetFieldValue() column field '%v' required", columnLabel)
+		return fmt.Errorf("SetBSIGroupValue() argument '%v' required", columnLabel)
 	}
 
-	// Copy args and remove reserved fields.
+	// Copy args and remove reserved arguments.
 	args := pql.CopyArgs(c.Args)
 	delete(args, "frame")
 	// While frame could technically work as a ColumnAttr argument, we are treating it as a reserved word primarily to avoid confusion.
@@ -1142,14 +1142,14 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 	for name, value := range args {
 		switch value := value.(type) {
 		case int64:
-			if _, err := frame.SetFieldValue(columnID, name, value); err != nil {
+			if _, err := frame.SetBSIGroupValue(columnID, name, value); err != nil {
 				return err
 			}
 		default:
-			return ErrInvalidFieldValueType
+			return ErrInvalidBSIGroupValueType
 		}
 	}
-	frame.Stats.Count("SetFieldValue", 1, 1.0)
+	frame.Stats.Count("SetBSIGroupValue", 1, 1.0)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
@@ -1194,10 +1194,10 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err != nil {
 		return fmt.Errorf("reading SetRowAttrs() row: %v", err)
 	} else if !ok {
-		return fmt.Errorf("SetRowAttrs() row field '%v' required", rowLabel)
+		return fmt.Errorf("SetRowAttrs() argument '%v' required", rowLabel)
 	}
 
-	// Copy args and remove reserved fields.
+	// Copy args and remove reserved arguments.
 	attrs := pql.CopyArgs(c.Args)
 	delete(attrs, "frame")
 	delete(attrs, rowLabel)
@@ -1253,10 +1253,10 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err != nil {
 			return nil, fmt.Errorf("reading SetRowAttrs() row: %v", rowLabel)
 		} else if !ok {
-			return nil, fmt.Errorf("SetRowAttrs row field '%v' required", rowLabel)
+			return nil, fmt.Errorf("SetRowAttrs argument '%v' required", rowLabel)
 		}
 
-		// Copy args and remove reserved fields.
+		// Copy args and remove reserved arguments.
 		attrs := pql.CopyArgs(c.Args)
 		delete(attrs, "frame")
 		delete(attrs, rowLabel)
@@ -1333,7 +1333,7 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 		return fmt.Errorf("reading SetColumnAttrs() col errs: %v found %v", errCol, okCol)
 	}
 
-	// Copy args and remove reserved fields.
+	// Copy args and remove reserved arguments.
 	attrs := pql.CopyArgs(c.Args)
 	delete(attrs, columnLabel)
 	delete(attrs, "frame")

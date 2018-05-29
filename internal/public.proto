@@ -83,7 +83,7 @@ message ImportValueRequest {
 	string Index = 1;
 	string Frame = 2;
 	uint64 Slice = 3;
-	string Field = 4;
+	string BSIGroup = 4;
 	repeated uint64 ColumnIDs = 5;
 	repeated string ColumnKeys = 7;
 	repeated int64 Values = 6;

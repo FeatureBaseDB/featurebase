@@ -244,16 +244,16 @@ func TestClient_ImportValue(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	fld := pilosa.Field{
+	fld := pilosa.BSIGroup{
 		Name: "fld",
-		Type: pilosa.FieldTypeInt,
+		Type: pilosa.BSIGroupTypeInt,
 		Min:  -100,
 		Max:  100,
 	}
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{Fields: []*pilosa.Field{&fld}})
+	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{BSIGroups: []*pilosa.BSIGroup{&fld}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Send import request.
 	c := test.MustNewClient(s.Host(), defaultClient)
-	if err := c.ImportValue(context.Background(), "i", "f", fld.Name, 0, []pilosa.FieldValue{
+	if err := c.ImportValue(context.Background(), "i", "f", fld.Name, 0, []pilosa.BSIGroupValue{
 		{ColumnID: 1, Value: -10},
 		{ColumnID: 2, Value: 20},
 		{ColumnID: 3, Value: 40},
@@ -275,7 +275,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Sum.
-	sum, cnt, err := frame.FieldSum(nil, fld.Name)
+	sum, cnt, err := frame.BSIGroupSum(nil, fld.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +284,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Min.
-	min, cnt, err := frame.FieldMin(nil, fld.Name)
+	min, cnt, err := frame.BSIGroupMin(nil, fld.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,11 +293,11 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Min with Filter.
-	filter, err := frame.FieldRange(fld.Name, pql.GT, 40)
+	filter, err := frame.BSIGroupRange(fld.Name, pql.GT, 40)
 	if err != nil {
 		t.Fatal(err)
 	}
-	min, cnt, err = frame.FieldMin(filter, fld.Name)
+	min, cnt, err = frame.BSIGroupMin(filter, fld.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Max.
-	max, cnt, err := frame.FieldMax(nil, fld.Name)
+	max, cnt, err := frame.BSIGroupMax(nil, fld.Name)
 	if err != nil {
 		t.Fatal(err)
 	}

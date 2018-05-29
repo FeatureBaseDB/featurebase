@@ -488,9 +488,9 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	return api.Holder.Schema()
 }
 
-// CreateField creates a new BSI field in the given index and frame.
-func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *Field) error {
-	if err := api.validate(apiCreateField); err != nil {
+// CreateBSIGroup creates a new BSI bsiGroup in the given index and frame.
+func (api *API) CreateBSIGroup(ctx context.Context, indexName string, frameName string, bsiGroup *BSIGroup) error {
+	if err := api.validate(apiCreateBSIGroup); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
 
@@ -500,27 +500,27 @@ func (api *API) CreateField(ctx context.Context, indexName string, frameName str
 		return ErrFrameNotFound
 	}
 
-	// Create new field.
-	if err := f.CreateField(field); err != nil {
-		return errors.Wrap(err, "creating field")
+	// Create new bsiGroup.
+	if err := f.CreateBSIGroup(bsiGroup); err != nil {
+		return errors.Wrap(err, "creating bsigroup")
 	}
 
-	// Send the create field message to all nodes.
+	// Send the create bsiGroup message to all nodes.
 	err := api.Broadcaster.SendSync(
-		&internal.CreateFieldMessage{
-			Index: indexName,
-			Frame: frameName,
-			Field: encodeField(field),
+		&internal.CreateBSIGroupMessage{
+			Index:    indexName,
+			Frame:    frameName,
+			BSIGroup: encodeBSIGroup(bsiGroup),
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending CreateField message: %s", err)
+		api.Logger.Printf("problem sending CreateBSIGroup message: %s", err)
 	}
-	return errors.Wrap(err, "sending CreateField message")
+	return errors.Wrap(err, "sending CreateBSIGroup message")
 }
 
-// DeleteField deletes the given field.
-func (api *API) DeleteField(ctx context.Context, indexName string, frameName string, fieldName string) error {
-	if err := api.validate(apiDeleteField); err != nil {
+// DeleteBSIGroup deletes the given bsiGroup.
+func (api *API) DeleteBSIGroup(ctx context.Context, indexName string, frameName string, bsiGroupName string) error {
+	if err := api.validate(apiDeleteBSIGroup); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
 
@@ -530,27 +530,27 @@ func (api *API) DeleteField(ctx context.Context, indexName string, frameName str
 		return ErrFrameNotFound
 	}
 
-	// Delete field.
-	if err := f.DeleteField(fieldName); err != nil {
-		return errors.Wrap(err, "deleting field")
+	// Delete bsiGroup.
+	if err := f.DeleteBSIGroup(bsiGroupName); err != nil {
+		return errors.Wrap(err, "deleting bsigroup")
 	}
 
-	// Send the delete field message to all nodes.
+	// Send the delete bsiGroup message to all nodes.
 	err := api.Broadcaster.SendSync(
-		&internal.DeleteFieldMessage{
-			Index: indexName,
-			Frame: frameName,
-			Field: fieldName,
+		&internal.DeleteBSIGroupMessage{
+			Index:    indexName,
+			Frame:    frameName,
+			BSIGroup: bsiGroupName,
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending DeleteField message: %s", err)
+		api.Logger.Printf("problem sending DeleteBSIGroup message: %s", err)
 	}
-	return errors.Wrap(err, "sending DeleteField message")
+	return errors.Wrap(err, "sending DeleteBSIGroup message")
 }
 
-// Fields returns the fields in the given frame.
-func (api *API) Fields(ctx context.Context, indexName string, frameName string) ([]*Field, error) {
-	if err := api.validate(apiFields); err != nil {
+// BSIGroups returns the bsiGroups in the given frame.
+func (api *API) BSIGroups(ctx context.Context, indexName string, frameName string) ([]*BSIGroup, error) {
+	if err := api.validate(apiBSIGroups); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
@@ -564,7 +564,7 @@ func (api *API) Fields(ctx context.Context, indexName string, frameName string) 
 		return nil, ErrFrameNotFound
 	}
 
-	return frame.GetFields()
+	return frame.GetBSIGroups()
 }
 
 // Views returns the views in the given frame.
@@ -716,7 +716,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	return errors.Wrap(err, "importing")
 }
 
-// ImportValue bulk imports values into a particular field.
+// ImportValue bulk imports values into a particular bsiGroup.
 func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest) error {
 	if err := api.validate(apiImportValue); err != nil {
 		return errors.Wrap(err, "validating api method")
@@ -728,9 +728,9 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 	}
 
 	// Import into fragment.
-	err = frame.ImportValue(req.Field, req.ColumnIDs, req.Values)
+	err = frame.ImportValue(req.BSIGroup, req.ColumnIDs, req.Values)
 	if err != nil {
-		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, field=%s, columns=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
+		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, bsiGroup=%s, columns=%d, err=%s", req.Index, req.Frame, req.Slice, req.BSIGroup, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
 }
@@ -869,15 +869,15 @@ type apiMethod int
 // API validation constants.
 const (
 	apiClusterMessage apiMethod = iota
-	apiCreateField
+	apiCreateBSIGroup
 	apiCreateFrame
 	apiCreateIndex
-	apiDeleteField
+	apiDeleteBSIGroup
 	apiDeleteFrame
 	apiDeleteIndex
 	apiDeleteView
 	apiExportCSV
-	apiFields
+	apiBSIGroups
 	apiFragmentBlockData
 	apiFragmentBlocks
 	apiFrameAttrDiff
@@ -916,15 +916,15 @@ var methodsResizing = map[apiMethod]struct{}{
 }
 
 var methodsNormal = map[apiMethod]struct{}{
-	apiCreateField:       struct{}{},
+	apiCreateBSIGroup:    struct{}{},
 	apiCreateFrame:       struct{}{},
 	apiCreateIndex:       struct{}{},
-	apiDeleteField:       struct{}{},
+	apiDeleteBSIGroup:    struct{}{},
 	apiDeleteFrame:       struct{}{},
 	apiDeleteIndex:       struct{}{},
 	apiDeleteView:        struct{}{},
 	apiExportCSV:         struct{}{},
-	apiFields:            struct{}{},
+	apiBSIGroups:         struct{}{},
 	apiFragmentBlockData: struct{}{},
 	apiFragmentBlocks:    struct{}{},
 	apiFrameAttrDiff:     struct{}{},

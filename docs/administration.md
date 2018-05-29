@@ -56,16 +56,16 @@ When importing large datasets remember it is much faster to pre sort the data by
 pilosa import --sort -i project -f stargazer project-stargazer.csv
 ```
 
-##### Importing Field Values
+##### Importing BSIGroup Values
 
-If you are using [BSI Range-Encoding](../data-model/#bsi-range-encoding) field values, you can import field values for a single frame and single field using `--field`. The CSV file should be in the format `Column,Value`.
+If you are using [BSI Range-Encoding](../data-model/#bsi-range-encoding) values, you can import bsiGroup values for a single frame and single bsiGroup using `--bsiGroup`. The CSV file should be in the format `Column,Value`.
 
 ```
-pilosa import -i project -f stargazer --field star_count project-stargazer-counts.csv
+pilosa import -i project -f stargazer --bsiGroup star_count project-stargazer-counts.csv
 ```
 
 <div class="note">
-    <p>Note that you must first create a frame and a field. View <a href="../api-reference/#create-frame">Create Frame</a> for more details.</p>
+    <p>Note that you must first create a frame and a bsiGroup. View <a href="../api-reference/#create-frame">Create Frame</a> for more details.</p>
 </div>
 
 #### Exporting

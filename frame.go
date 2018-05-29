@@ -56,7 +56,7 @@ type Frame struct {
 	cacheType   string
 	cacheSize   uint32
 	timeQuantum TimeQuantum
-	fields      []*Field
+	bsiGroups   []*BSIGroup
 
 	Logger Logger
 }
@@ -83,7 +83,7 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		cacheType: DefaultCacheType,
 		cacheSize: DefaultCacheSize,
 		//timeQuantum
-		//fields
+		//bsiGroups
 
 		Logger: NopLogger,
 	}, nil
@@ -160,7 +160,7 @@ func (f *Frame) options() FrameOptions {
 		CacheType:   f.cacheType,
 		CacheSize:   f.cacheSize,
 		TimeQuantum: f.timeQuantum,
-		Fields:      f.fields,
+		BSIGroups:   f.bsiGroups,
 	}
 }
 
@@ -235,7 +235,7 @@ func (f *Frame) loadMeta() error {
 		f.cacheType = DefaultCacheType
 		f.cacheSize = DefaultCacheSize
 		f.timeQuantum = ""
-		//f.fields
+		//f.bsiGroups
 		return nil
 	} else if err != nil {
 		return errors.Wrap(err, "reading meta")
@@ -245,14 +245,14 @@ func (f *Frame) loadMeta() error {
 		}
 	}
 
-	// Copy metadata fields.
+	// Copy metadata bsiGroups.
 	f.cacheType = pb.CacheType
 	if f.cacheType == "" {
 		f.cacheType = DefaultCacheType
 	}
 	f.cacheSize = pb.CacheSize
 	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
-	f.fields = decodeFields(pb.Fields)
+	f.bsiGroups = decodeBSIGroups(pb.BSIGroups)
 
 	return nil
 }
@@ -295,28 +295,28 @@ func (f *Frame) Close() error {
 	return nil
 }
 
-// Field returns a field by name.
-func (f *Frame) Field(name string) *Field {
+// BSIGroup returns a bsiGroup by name.
+func (f *Frame) BSIGroup(name string) *BSIGroup {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	for _, field := range f.fields {
-		if field.Name == name {
-			return field
+	for _, bsi := range f.bsiGroups {
+		if bsi.Name == name {
+			return bsi
 		}
 	}
 	return nil
 }
 
-// Fields returns the fields on the frame.
-func (f *Frame) Fields() []*Field {
+// BSIGroups returns the bsiGroups on the frame.
+func (f *Frame) BSIGroups() []*BSIGroup {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.fields
+	return f.bsiGroups
 }
 
-// HasField returns true if a field exists on the frame.
-func (f *Frame) HasField(name string) bool {
-	for _, fld := range f.fields {
+// HasBSIGroup returns true if a bsiGroup exists on the frame.
+func (f *Frame) HasBSIGroup(name string) bool {
+	for _, fld := range f.bsiGroups {
 		if fld.Name == name {
 			return true
 		}
@@ -324,40 +324,40 @@ func (f *Frame) HasField(name string) bool {
 	return false
 }
 
-// CreateField creates a new field on the frame.
-func (f *Frame) CreateField(field *Field) error {
+// CreateBSIGroup creates a new bsiGroup on the frame.
+func (f *Frame) CreateBSIGroup(bsi *BSIGroup) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// Append field.
-	if err := f.addField(field); err != nil {
+	// Append bsi.
+	if err := f.addBSIGroup(bsi); err != nil {
 		return err
 	}
 	f.saveMeta()
 	return nil
 }
 
-// addField adds a single field to fields.
-func (f *Frame) addField(field *Field) error {
-	if err := ValidateField(field); err != nil {
-		return errors.Wrap(err, "validating field")
-	} else if f.HasField(field.Name) {
-		return ErrFieldExists
+// addBSIGroup adds a single bsiGroup to bsiGroups.
+func (f *Frame) addBSIGroup(bsi *BSIGroup) error {
+	if err := ValidateBSIGroup(bsi); err != nil {
+		return errors.Wrap(err, "validating bsigroup")
+	} else if f.HasBSIGroup(bsi.Name) {
+		return ErrBSIGroupExists
 	}
 
-	// Add field to list.
-	f.fields = append(f.fields, field)
+	// Add bsiGroup to list.
+	f.bsiGroups = append(f.bsiGroups, bsi)
 
-	// Sort fields by name.
-	sort.Slice(f.fields, func(i, j int) bool {
-		return f.fields[i].Name < f.fields[j].Name
+	// Sort bsiGroups by name.
+	sort.Slice(f.bsiGroups, func(i, j int) bool {
+		return f.bsiGroups[i].Name < f.bsiGroups[j].Name
 	})
 
 	return nil
 }
 
-// GetFields returns a list of all the fields in the frame.
-func (f *Frame) GetFields() ([]*Field, error) {
+// GetBSIGroups returns a list of all the bsiGroups in the frame.
+func (f *Frame) GetBSIGroups() ([]*BSIGroup, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
@@ -366,21 +366,21 @@ func (f *Frame) GetFields() ([]*Field, error) {
 		return nil, errors.Wrap(err, "loading meta")
 	}
 
-	return f.fields, nil
+	return f.bsiGroups, nil
 }
 
-// DeleteField deletes an existing field on the schema.
-func (f *Frame) DeleteField(name string) error {
+// DeleteBSIGroup deletes an existing bsiGroup on the schema.
+func (f *Frame) DeleteBSIGroup(name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// Remove field.
-	if err := f.deleteField(name); err != nil {
+	// Remove bsiGroup.
+	if err := f.deleteBSIGroup(name); err != nil {
 		return err
 	}
 
 	// Remove views.
-	viewName := ViewFieldPrefix + name
+	viewName := ViewBSIGroupPrefix + name
 	if view := f.views[viewName]; view != nil {
 		delete(f.views, viewName)
 
@@ -394,16 +394,16 @@ func (f *Frame) DeleteField(name string) error {
 	return nil
 }
 
-// deleteField removes a single field from fields.
-func (f *Frame) deleteField(name string) error {
-	for i, field := range f.fields {
-		if field.Name == name {
-			copy(f.fields[i:], f.fields[i+1:])
-			f.fields, f.fields[len(f.fields)-1] = f.fields[:len(f.fields)-1], nil
+// deleteBSIGroup removes a single bsiGroup from bsiGroups.
+func (f *Frame) deleteBSIGroup(name string) error {
+	for i, bsi := range f.bsiGroups {
+		if bsi.Name == name {
+			copy(f.bsiGroups[i:], f.bsiGroups[i+1:])
+			f.bsiGroups, f.bsiGroups[len(f.bsiGroups)-1] = f.bsiGroups[:len(f.bsiGroups)-1], nil
 			return nil
 		}
 	}
-	return ErrFieldNotFound
+	return ErrBSIGroupNotFound
 }
 
 // TimeQuantum returns the time quantum for the frame.
@@ -641,156 +641,156 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	return changed, nil
 }
 
-// FieldValue reads a field value for a column.
-func (f *Frame) FieldValue(columnID uint64, name string) (value int64, exists bool, err error) {
-	field := f.Field(name)
-	if field == nil {
-		return 0, false, ErrFieldNotFound
+// BSIGroupValue reads a bsiGroup value for a column.
+func (f *Frame) BSIGroupValue(columnID uint64, name string) (value int64, exists bool, err error) {
+	bsi := f.BSIGroup(name)
+	if bsi == nil {
+		return 0, false, ErrBSIGroupNotFound
 	}
 
 	// Fetch target view.
-	view := f.View(ViewFieldPrefix + name)
+	view := f.View(ViewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, false, nil
 	}
 
-	v, exists, err := view.FieldValue(columnID, field.BitDepth())
+	v, exists, err := view.BSIGroupValue(columnID, bsi.BitDepth())
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
 		return 0, false, nil
 	}
-	return int64(v) + field.Min, true, nil
+	return int64(v) + bsi.Min, true, nil
 }
 
-// SetFieldValue sets a field value for a column.
-func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (changed bool, err error) {
-	// Fetch field and validate value.
-	field := f.Field(name)
-	if field == nil {
-		return false, ErrFieldNotFound
-	} else if value < field.Min {
-		return false, ErrFieldValueTooLow
-	} else if value > field.Max {
-		return false, ErrFieldValueTooHigh
+// SetBSIGroupValue sets a bsiGroup value for a column.
+func (f *Frame) SetBSIGroupValue(columnID uint64, name string, value int64) (changed bool, err error) {
+	// Fetch bsiGroup and validate value.
+	bsi := f.BSIGroup(name)
+	if bsi == nil {
+		return false, ErrBSIGroupNotFound
+	} else if value < bsi.Min {
+		return false, ErrBSIGroupValueTooLow
+	} else if value > bsi.Max {
+		return false, ErrBSIGroupValueTooHigh
 	}
 
 	// Fetch target view.
-	view, err := f.CreateViewIfNotExists(ViewFieldPrefix + name)
+	view, err := f.CreateViewIfNotExists(ViewBSIGroupPrefix + name)
 	if err != nil {
 		return false, errors.Wrap(err, "creating view")
 	}
 
 	// Determine base value to store.
-	baseValue := uint64(value - field.Min)
+	baseValue := uint64(value - bsi.Min)
 
-	return view.SetFieldValue(columnID, field.BitDepth(), baseValue)
+	return view.SetBSIGroupValue(columnID, bsi.BitDepth(), baseValue)
 }
 
-// FieldSum returns the sum and count for a field.
+// BSIGroupSum returns the sum and count for a bsiGroup.
 // An optional filtering row can be provided.
-func (f *Frame) FieldSum(filter *Row, name string) (sum, count int64, err error) {
-	field := f.Field(name)
-	if field == nil {
-		return 0, 0, ErrFieldNotFound
+func (f *Frame) BSIGroupSum(filter *Row, name string) (sum, count int64, err error) {
+	bsi := f.BSIGroup(name)
+	if bsi == nil {
+		return 0, 0, ErrBSIGroupNotFound
 	}
 
-	view := f.View(ViewFieldPrefix + name)
+	view := f.View(ViewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, 0, nil
 	}
 
-	vsum, vcount, err := view.FieldSum(filter, field.BitDepth())
+	vsum, vcount, err := view.BSIGroupSum(filter, bsi.BitDepth())
 	if err != nil {
 		return 0, 0, err
 	}
-	return int64(vsum) + (int64(vcount) * field.Min), int64(vcount), nil
+	return int64(vsum) + (int64(vcount) * bsi.Min), int64(vcount), nil
 }
 
-// FieldMin returns the min for a field.
+// BSIGroupMin returns the min for a bsiGroup.
 // An optional filtering row can be provided.
-func (f *Frame) FieldMin(filter *Row, name string) (min, count int64, err error) {
-	field := f.Field(name)
-	if field == nil {
-		return 0, 0, ErrFieldNotFound
+func (f *Frame) BSIGroupMin(filter *Row, name string) (min, count int64, err error) {
+	bsi := f.BSIGroup(name)
+	if bsi == nil {
+		return 0, 0, ErrBSIGroupNotFound
 	}
 
-	view := f.View(ViewFieldPrefix + name)
+	view := f.View(ViewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, 0, nil
 	}
 
-	vmin, vcount, err := view.FieldMin(filter, field.BitDepth())
+	vmin, vcount, err := view.BSIGroupMin(filter, bsi.BitDepth())
 	if err != nil {
 		return 0, 0, err
 	}
-	return int64(vmin) + field.Min, int64(vcount), nil
+	return int64(vmin) + bsi.Min, int64(vcount), nil
 }
 
-// FieldMax returns the max for a field.
+// BSIGroupMax returns the max for a bsiGroup.
 // An optional filtering row can be provided.
-func (f *Frame) FieldMax(filter *Row, name string) (max, count int64, err error) {
-	field := f.Field(name)
-	if field == nil {
-		return 0, 0, ErrFieldNotFound
+func (f *Frame) BSIGroupMax(filter *Row, name string) (max, count int64, err error) {
+	bsi := f.BSIGroup(name)
+	if bsi == nil {
+		return 0, 0, ErrBSIGroupNotFound
 	}
 
-	view := f.View(ViewFieldPrefix + name)
+	view := f.View(ViewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, 0, nil
 	}
 
-	vmax, vcount, err := view.FieldMax(filter, field.BitDepth())
+	vmax, vcount, err := view.BSIGroupMax(filter, bsi.BitDepth())
 	if err != nil {
 		return 0, 0, err
 	}
-	return int64(vmax) + field.Min, int64(vcount), nil
+	return int64(vmax) + bsi.Min, int64(vcount), nil
 }
 
-func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Row, error) {
-	// Retrieve and validate field.
-	field := f.Field(name)
-	if field == nil {
-		return nil, ErrFieldNotFound
-	} else if predicate < field.Min || predicate > field.Max {
+func (f *Frame) BSIGroupRange(name string, op pql.Token, predicate int64) (*Row, error) {
+	// Retrieve and validate bsiGroup.
+	bsi := f.BSIGroup(name)
+	if bsi == nil {
+		return nil, ErrBSIGroupNotFound
+	} else if predicate < bsi.Min || predicate > bsi.Max {
 		return nil, nil
 	}
 
-	// Retrieve field's view.
-	view := f.View(ViewFieldPrefix + name)
+	// Retrieve bsiGroup's view.
+	view := f.View(ViewBSIGroupPrefix + name)
 	if view == nil {
 		return nil, nil
 	}
 
-	baseValue, outOfRange := field.BaseValue(op, predicate)
+	baseValue, outOfRange := bsi.BaseValue(op, predicate)
 	if outOfRange {
 		return NewRow(), nil
 	}
 
-	return view.FieldRange(op, field.BitDepth(), baseValue)
+	return view.BSIGroupRange(op, bsi.BitDepth(), baseValue)
 }
 
-func (f *Frame) FieldRangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
-	// Retrieve and validate field.
-	field := f.Field(name)
-	if field == nil {
-		return nil, ErrFieldNotFound
+func (f *Frame) BSIGroupRangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
+	// Retrieve and validate bsiGroup.
+	bsi := f.BSIGroup(name)
+	if bsi == nil {
+		return nil, ErrBSIGroupNotFound
 	} else if predicateMin > predicateMax {
 		return nil, ErrInvalidBetweenValue
 	}
 
-	// Retrieve field's view.
-	view := f.View(ViewFieldPrefix + name)
+	// Retrieve bsiGroup's view.
+	view := f.View(ViewBSIGroupPrefix + name)
 	if view == nil {
 		return nil, nil
 	}
 
-	baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicateMin, predicateMax)
+	baseValueMin, baseValueMax, outOfRange := bsi.BaseValueBetween(predicateMin, predicateMax)
 	if outOfRange {
 		return NewRow(), nil
 	}
 
-	return view.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
+	return view.BSIGroupRangeBetween(bsi.BitDepth(), baseValueMin, baseValueMax)
 }
 
 // Import bulk imports data.
@@ -851,25 +851,25 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 }
 
 // ImportValue bulk imports range-encoded value data.
-func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64) error {
-	viewName := ViewFieldPrefix + fieldName
-	// Get the field so we know bitDepth.
-	field := f.Field(fieldName)
-	if field == nil {
-		return fmt.Errorf("Field does not exist: %s", fieldName)
+func (f *Frame) ImportValue(bsiGroupName string, columnIDs []uint64, values []int64) error {
+	viewName := ViewBSIGroupPrefix + bsiGroupName
+	// Get the bsiGroup so we know bitDepth.
+	bsi := f.BSIGroup(bsiGroupName)
+	if bsi == nil {
+		return fmt.Errorf("bsigroup does not exist: %s", bsiGroupName)
 	}
 
 	// Split import data by fragment.
 	dataByFragment := make(map[importKey]importValueData)
 	for i := range columnIDs {
 		columnID, value := columnIDs[i], values[i]
-		if int64(value) > field.Max {
-			return fmt.Errorf("%v, columnID=%v, value=%v", ErrFieldValueTooHigh, columnID, value)
-		} else if int64(value) < field.Min {
-			return fmt.Errorf("%v, columnID=%v, value=%v", ErrFieldValueTooLow, columnID, value)
+		if int64(value) > bsi.Max {
+			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooHigh, columnID, value)
+		} else if int64(value) < bsi.Min {
+			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooLow, columnID, value)
 		}
 
-		// Attach value to each field view.
+		// Attach value to each bsiGroup view.
 		for _, name := range []string{viewName} {
 			key := importKey{View: name, Slice: columnID / SliceWidth}
 			data := dataByFragment[key]
@@ -896,10 +896,10 @@ func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64
 
 		baseValues := make([]uint64, len(data.Values))
 		for i, value := range data.Values {
-			baseValues[i] = uint64(value - field.Min)
+			baseValues[i] = uint64(value - bsi.Min)
 		}
 
-		if err := frag.ImportValue(data.ColumnIDs, baseValues, field.BitDepth()); err != nil {
+		if err := frag.ImportValue(data.ColumnIDs, baseValues, bsi.BitDepth()); err != nil {
 			return err
 		}
 	}
@@ -950,7 +950,7 @@ type FrameOptions struct {
 	CacheType   string      `json:"cacheType,omitempty"`
 	CacheSize   uint32      `json:"cacheSize,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
-	Fields      []*Field    `json:"fields,omitempty"`
+	BSIGroups   []*BSIGroup `json:"bsiGroups,omitempty"`
 }
 
 // Encode converts o into its internal representation.
@@ -966,7 +966,7 @@ func encodeFrameOptions(o *FrameOptions) *internal.FrameMeta {
 		CacheType:   o.CacheType,
 		CacheSize:   o.CacheSize,
 		TimeQuantum: string(o.TimeQuantum),
-		Fields:      encodeFields(o.Fields),
+		BSIGroups:   encodeBSIGroups(o.BSIGroups),
 	}
 }
 
@@ -978,26 +978,26 @@ func decodeFrameOptions(options *internal.FrameMeta) *FrameOptions {
 		CacheType:   options.CacheType,
 		CacheSize:   options.CacheSize,
 		TimeQuantum: TimeQuantum(options.TimeQuantum),
-		Fields:      decodeFields(options.Fields),
+		BSIGroups:   decodeBSIGroups(options.BSIGroups),
 	}
 }
 
-// List of field data types.
+// List of bsiGroup data types.
 const (
-	FieldTypeInt = "int"
+	BSIGroupTypeInt = "int"
 )
 
-func IsValidFieldType(v string) bool {
+func IsValidBSIGroupType(v string) bool {
 	switch v {
-	case FieldTypeInt:
+	case BSIGroupTypeInt:
 		return true
 	default:
 		return false
 	}
 }
 
-// Field represents a range field on a frame.
-type Field struct {
+// BSIGroup represents a range bsiGroup on a frame.
+type BSIGroup struct {
 	Name string `json:"name,omitempty"`
 	Type string `json:"type,omitempty"`
 	Min  int64  `json:"min,omitempty"`
@@ -1005,7 +1005,7 @@ type Field struct {
 }
 
 // BitDepth returns the number of bits required to store a value between min & max.
-func (f *Field) BitDepth() uint {
+func (f *BSIGroup) BitDepth() uint {
 	for i := uint(0); i < 63; i++ {
 		if f.Max-f.Min < (1 << i) {
 			return i
@@ -1014,19 +1014,19 @@ func (f *Field) BitDepth() uint {
 	return 63
 }
 
-// BaseValue adjusts the value to align with the range for Field for a certain
+// BaseValue adjusts the value to align with the range for BSIGroup for a certain
 // operation type.
 // Note: There is an edge case for GT and LT where this returns a baseValue
 // that does not fully encompass the range.
-// ex: Field.Min = 0, Field.Max = 1023
+// ex: BSIGroup.Min = 0, BSIGroup.Max = 1023
 // BaseValue(LT, 2000) returns 1023, which will perform "LT 1023" and effectively
 // exclude any columns with value = 1023.
 // Note that in this case (because the range uses the full BitDepth 0 to 1023),
 // we can't simply return 1024.
 // In order to make this work, we effectively need to change the operator to LTE.
-// Executor.executeFieldRangeSlice() takes this into account and returns
-// `frag.FieldNotNull(field.BitDepth())` in such instances.
-func (f *Field) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
+// Executor.executeBSIGroupRangeSlice() takes this into account and returns
+// `frag.BSIGroupNotNull(bsi.BitDepth())` in such instances.
+func (f *BSIGroup) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
 	if op == pql.GT || op == pql.GTE {
 		if value > f.Max {
 			return baseValue, true
@@ -1050,8 +1050,8 @@ func (f *Field) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRan
 	return baseValue, false
 }
 
-// BaseValueBetween adjusts the min/max value to align with the range for Field.
-func (f *Field) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
+// BaseValueBetween adjusts the min/max value to align with the range for BSIGroup.
+func (f *BSIGroup) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
 	if max < f.Min || min > f.Max {
 		return baseValueMin, baseValueMax, true
 	}
@@ -1068,44 +1068,44 @@ func (f *Field) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uin
 	return baseValueMin, baseValueMax, false
 }
 
-func ValidateField(f *Field) error {
+func ValidateBSIGroup(f *BSIGroup) error {
 	if f.Name == "" {
-		return ErrFieldNameRequired
-	} else if !IsValidFieldType(f.Type) {
-		return ErrInvalidFieldType
+		return ErrBSIGroupNameRequired
+	} else if !IsValidBSIGroupType(f.Type) {
+		return ErrInvalidBSIGroupType
 	} else if f.Min > f.Max {
-		return ErrInvalidFieldRange
+		return ErrInvalidBSIGroupRange
 	}
 	return nil
 }
 
-func encodeFields(a []*Field) []*internal.Field {
+func encodeBSIGroups(a []*BSIGroup) []*internal.BSIGroup {
 	if len(a) == 0 {
 		return nil
 	}
-	other := make([]*internal.Field, len(a))
+	other := make([]*internal.BSIGroup, len(a))
 	for i := range a {
-		other[i] = encodeField(a[i])
+		other[i] = encodeBSIGroup(a[i])
 	}
 	return other
 }
 
-func decodeFields(a []*internal.Field) []*Field {
+func decodeBSIGroups(a []*internal.BSIGroup) []*BSIGroup {
 	if len(a) == 0 {
 		return nil
 	}
-	other := make([]*Field, len(a))
+	other := make([]*BSIGroup, len(a))
 	for i := range a {
-		other[i] = decodeField(a[i])
+		other[i] = decodeBSIGroup(a[i])
 	}
 	return other
 }
 
-func encodeField(f *Field) *internal.Field {
+func encodeBSIGroup(f *BSIGroup) *internal.BSIGroup {
 	if f == nil {
 		return nil
 	}
-	return &internal.Field{
+	return &internal.BSIGroup{
 		Name: f.Name,
 		Type: f.Type,
 		Min:  int64(f.Min),
@@ -1113,11 +1113,11 @@ func encodeField(f *Field) *internal.Field {
 	}
 }
 
-func decodeField(f *internal.Field) *Field {
+func decodeBSIGroup(f *internal.BSIGroup) *BSIGroup {
 	if f == nil {
 		return nil
 	}
-	return &Field{
+	return &BSIGroup{
 		Name: f.Name,
 		Type: f.Type,
 		Min:  f.Min,

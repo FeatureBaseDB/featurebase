@@ -141,15 +141,15 @@ Bit-Sliced Indexing (BSI) is the storage method Pilosa uses to represent multi-b
 
 Internally Pilosa stores each BSI `field` as a `view` within a `frame`. The rows of the `view` contain the base-2 representations of the integer values. Pilosa manages the base-2 offset and translation that efficiently packs the integer value within the minimum set of rows.
 
-For example, the following `SetFieldValue()` queries will result in the data described in the diagram below:
+For example, the following `SetBSIGroupValue()` queries will result in the data described in the diagram below:
 
 ```
-SetFieldValue(col=1, frame="A", field0=1)
-SetFieldValue(col=2, frame="A", field0=2)
-SetFieldValue(col=3, frame="A", field0=3)
-SetFieldValue(col=4, frame="A", field0=7)
-SetFieldValue(col=2, frame="A", field1=1)
-SetFieldValue(col=3, frame="A", field1=6)
+SetBSIGroupValue(col=1, frame="A", field0=1)
+SetBSIGroupValue(col=2, frame="A", field0=2)
+SetBSIGroupValue(col=3, frame="A", field0=3)
+SetBSIGroupValue(col=4, frame="A", field0=7)
+SetBSIGroupValue(col=2, frame="A", field1=1)
+SetBSIGroupValue(col=3, frame="A", field1=6)
 ```
 
 ![BSI frame diagram](/img/docs/frame-bsi.svg)

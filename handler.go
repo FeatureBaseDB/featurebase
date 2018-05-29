@@ -145,9 +145,9 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameFields).Methods("GET")
-	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
+	router.HandleFunc("/index/{index}/frame/{frame}/bsigroup/{bsigroup}", handler.handlePostFrameBSIGroup).Methods("POST")
+	router.HandleFunc("/index/{index}/frame/{frame}/bsigroups", handler.handleGetFrameBSIGroups).Methods("GET")
+	router.HandleFunc("/index/{index}/frame/{frame}/bsigroup/{bsigroup}", handler.handleDeleteFrameBSIGroup).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/view/{view}", handler.handleDeleteView).Methods("DELETE")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
@@ -586,27 +586,27 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 
 type deleteFrameResponse struct{}
 
-// handlePostFrameField handles POST /frame/field request.
-func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
+// handlePostFrameBSIGroup handles POST /frame/bsigroup request.
+func (h *Handler) handlePostFrameBSIGroup(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
-	fieldName := mux.Vars(r)["field"]
+	bsiGroupName := mux.Vars(r)["bsigroup"]
 
 	// Decode request.
-	var req postFrameFieldRequest
+	var req postFrameBSIGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	field := &Field{
-		Name: fieldName,
+	bsiGroup := &BSIGroup{
+		Name: bsiGroupName,
 		Type: req.Type,
 		Min:  req.Min,
 		Max:  req.Max,
 	}
 
-	if err := h.API.CreateField(r.Context(), indexName, frameName, field); err != nil {
+	if err := h.API.CreateBSIGroup(r.Context(), indexName, frameName, bsiGroup); err != nil {
 		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
@@ -616,26 +616,26 @@ func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(postFrameFieldResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(postFrameBSIGroupResponse{}); err != nil {
 		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
-type postFrameFieldRequest struct {
+type postFrameBSIGroupRequest struct {
 	Type string `json:"type,omitempty"`
 	Min  int64  `json:"min,omitempty"`
 	Max  int64  `json:"max,omitempty"`
 }
 
-type postFrameFieldResponse struct{}
+type postFrameBSIGroupResponse struct{}
 
-// handleDeleteFrameField handles DELETE /frame/field request.
-func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request) {
+// handleDeleteFrameBSIGroup handles DELETE /frame/bsigroup request.
+func (h *Handler) handleDeleteFrameBSIGroup(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
-	fieldName := mux.Vars(r)["field"]
+	bsiGroupName := mux.Vars(r)["bsigroup"]
 
-	if err := h.API.DeleteField(r.Context(), indexName, frameName, fieldName); err != nil {
+	if err := h.API.DeleteBSIGroup(r.Context(), indexName, frameName, bsiGroupName); err != nil {
 		if errors.Cause(err) == ErrFrameNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
@@ -645,16 +645,16 @@ func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(deleteFrameFieldResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(deleteFrameBSIGroupResponse{}); err != nil {
 		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
-func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleGetFrameBSIGroups(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
-	fields, err := h.API.Fields(r.Context(), indexName, frameName)
+	bsiGroups, err := h.API.BSIGroups(r.Context(), indexName, frameName)
 	if err != nil {
 		switch errors.Cause(err) {
 		case ErrIndexNotFound:
@@ -668,16 +668,16 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(getFrameFieldsResponse{Fields: fields}); err != nil {
+	if err := json.NewEncoder(w).Encode(getFrameBSIGroupsResponse{BSIGroups: bsiGroups}); err != nil {
 		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
-type getFrameFieldsResponse struct {
-	Fields []*Field `json:"fields,omitempty"`
+type getFrameBSIGroupsResponse struct {
+	BSIGroups []*BSIGroup `json:"bsiGroups,omitempty"`
 }
 
-type deleteFrameFieldResponse struct{}
+type deleteFrameBSIGroupResponse struct{}
 
 // handleGetFrameViews handles GET /frame/views request.
 func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {

@@ -227,27 +227,27 @@ ClearBit(frame="stargazer", col=10, row=1)
 
 This represents removing the relationship between the user with id=1 and the repository with id=10.
 
-#### SetFieldValue
+#### SetBSIGroupValue
 
 **Spec:**
 
 ```
-SetFieldValue(<col=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
+SetBSIGroupValue(<col=UINT>, <frame=STRING>, <FIELD_NAME=INT>)
 ```
 
 **Description:**
 
-`SetFieldValue` assigns an integer value with the specified field name to the `col` in the given `frame`.
+`SetBSIGroupValue` assigns an integer value with the specified bsiGroup name to the `col` in the given `frame`.
 
 **Result Type:** null
 
-SetFieldValue returns `null` upon success.
+SetBSIGroupValue returns `null` upon success.
 
 **Examples:**
 
-Set the field value `pullrequest` to the value 2, on column 10 in frame `stats`:
+Set the bsiGroup value `pullrequest` to the value 2, on column 10 in frame `stats`:
 ```request
-SetFieldValue(col=10, frame="stats", pullrequests=2)
+SetBSIGroupValue(col=10, frame="stats", pullrequests=2)
 ```
 ```response
 {"results":[null]}
@@ -255,7 +255,7 @@ SetFieldValue(col=10, frame="stats", pullrequests=2)
 
 This represents setting the number of pull requests of repository 10 to 2.
 
-This example assumes the existence of the frame `stats` and the field `pullrequests`. See [frame creation](../api-reference/#create-frame) and [field creation](../api-reference/#create-field) for more information.
+This example assumes the existence of the frame `stats` and the bsiGroup `pullrequests`. See [frame creation](../api-reference/#create-frame) and [bsiGroup creation](../api-reference/#create-bsigroup) for more information.
 
 
 ### Read Operations
@@ -553,7 +553,7 @@ Range(<frame=STRING>, <FIELD_NAME, COMPARISON_OPERATOR, COMPARISON_VALUE> )
 
 **Description:**
 
-The `Range` query is overloaded to work on `field` values as well as `timestamp` values.
+The `Range` query is overloaded to work on `bsiGroup` values as well as `timestamp` values.
 Returns bits that are true for the comparison operator.
 
 **Result Type:** object with attrs and bits
@@ -562,7 +562,7 @@ Returns bits that are true for the comparison operator.
 **Examples:**
 
 In our source data, commitactivity was counted over the last year.
-The following greater-than `Range` query returns all columns with a field value greater than 100 (repositories having more than 100 commits):
+The following greater-than `Range` query returns all columns with a bsiGroup value greater than 100 (repositories having more than 100 commits):
 
 ```request
 Range(frame="stats", commitactivity > 100)
@@ -598,20 +598,20 @@ This is conceptually equivalent to the interval 100 <= commitactivity <= 200, bu
 **Spec:**
 
 ```
-Min([BITMAP_CALL], <frame=STRING>, <field=STRING>)
+Min([BITMAP_CALL], <frame=STRING>, <bsiGroup=STRING>)
 ```
 
 **Description:**
 
-Returns the minimum value of all BSI integer values in the `field` in this `frame`. If the optional `Bitmap` call is supplied, only columns with set bits are considered, otherwise all columns are considered.
+Returns the minimum value of all BSI integer values in the `bsiGroup` in this `frame`. If the optional `Bitmap` call is supplied, only columns with set bits are considered, otherwise all columns are considered.
 
 **Result Type:** object with the min and count of columns containing the min value.
 
 **Examples:**
 
-Query the minimum value of all fields in a frame (minimum size of all repositories):
+Query the minimum value of all bsiGroups in a frame (minimum size of all repositories):
 ```request
-Min(frame="stats", field="diskusage")
+Min(frame="stats", bsiGroup="diskusage")
 ```
 ```response
 {"value":4,"count":2}
@@ -624,20 +624,20 @@ Min(frame="stats", field="diskusage")
 **Spec:**
 
 ```
-Max([BITMAP_CALL], <frame=STRING>, <field=STRING>)
+Max([BITMAP_CALL], <frame=STRING>, <bsiGroup=STRING>)
 ```
 
 **Description:**
 
-Returns the maximum value of all BSI integer values in the `field` in this `frame`. If the optional `Bitmap` call is supplied, only columns with set bits are considered, otherwise all columns are considered.
+Returns the maximum value of all BSI integer values in the `bsiGroup` in this `frame`. If the optional `Bitmap` call is supplied, only columns with set bits are considered, otherwise all columns are considered.
 
 **Result Type:** object with the max and count of columns containing the max value.
 
 **Examples:**
 
-Query the maximum value of all fields in a frame (maximum size of all repositories):
+Query the maximum value of all bsiGroups in a frame (maximum size of all repositories):
 ```request
-Max(frame="stats", field="diskusage")
+Max(frame="stats", bsiGroup="diskusage")
 ```
 ```response
 {"value":88,"count":13}
@@ -650,20 +650,20 @@ Max(frame="stats", field="diskusage")
 **Spec:**
 
 ```
-Sum([BITMAP_CALL], <frame=STRING>, <field=STRING>)
+Sum([BITMAP_CALL], <frame=STRING>, <bsiGroup=STRING>)
 ```
 
 **Description:**
 
-Returns the count and computed sum of all BSI integer values in the `field` and `frame`. If the optional `Bitmap` call is supplied, columns with set bits are summed, otherwise the sum is across all columns.
+Returns the count and computed sum of all BSI integer values in the `bsiGroup` and `frame`. If the optional `Bitmap` call is supplied, columns with set bits are summed, otherwise the sum is across all columns.
 
-**Result Type:** object with the computed sum and count of the bitmap field.
+**Result Type:** object with the computed sum and count of the bitmap bsiGroup.
 
 **Examples:**
 
 Query the size of all repositories.
 ```request
-Sum(frame="stats", field="diskusage")
+Sum(frame="stats", bsiGroup="diskusage")
 ```
 ```response
 {"value":10,"count":3}

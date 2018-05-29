@@ -486,8 +486,8 @@ func (f *Fragment) bit(rowID, columnID uint64) (bool, error) {
 	return f.storage.Contains(pos), nil
 }
 
-// FieldValue uses a column of bits to read a multi-bit value.
-func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+// BSIGroupValue uses a column of bits to read a multi-bit value.
+func (f *Fragment) BSIGroupValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -510,8 +510,8 @@ func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exi
 	return value, true, nil
 }
 
-// SetFieldValue uses a column of bits to set a multi-bit value.
-func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// SetBSIGroupValue uses a column of bits to set a multi-bit value.
+func (f *Fragment) SetBSIGroupValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -541,8 +541,8 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 	return changed, nil
 }
 
-// importSetFieldValue is a more efficient SetFieldValue just for imports.
-func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// importSetBSIGroupValue is a more efficient SetBSIGroupValue just for imports.
+func (f *Fragment) importSetBSIGroupValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
@@ -582,9 +582,9 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 	return changed, nil
 }
 
-// FieldSum returns the sum of a given field as well as the number of columns involved.
+// BSIGroupSum returns the sum of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
+func (f *Fragment) BSIGroupSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	// Compute count based on the existence row.
 	row := f.Row(uint64(bitDepth))
 	if filter != nil {
@@ -614,9 +614,9 @@ func (f *Fragment) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err 
 	return sum, count, nil
 }
 
-// FieldMin returns the min of a given field as well as the number of columns involved.
+// BSIGroupMin returns the min of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
+func (f *Fragment) BSIGroupMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
 
 	consider := f.Row(uint64(bitDepth))
 	if filter != nil {
@@ -647,9 +647,9 @@ func (f *Fragment) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err 
 	return min, count, nil
 }
 
-// FieldMax returns the max of a given field as well as the number of columns involved.
+// BSIGroupMax returns the max of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
+func (f *Fragment) BSIGroupMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
 
 	consider := f.Row(uint64(bitDepth))
 	if filter != nil {
@@ -678,23 +678,23 @@ func (f *Fragment) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err 
 	return max, count, nil
 }
 
-// FieldRange returns bitmaps with a field value encoding matching the predicate.
-func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
+// BSIGroupRange returns bitmaps with a bsiGroup value encoding matching the predicate.
+func (f *Fragment) BSIGroupRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	switch op {
 	case pql.EQ:
-		return f.fieldRangeEQ(bitDepth, predicate)
+		return f.bsiGroupRangeEQ(bitDepth, predicate)
 	case pql.NEQ:
-		return f.fieldRangeNEQ(bitDepth, predicate)
+		return f.bsiGroupRangeNEQ(bitDepth, predicate)
 	case pql.LT, pql.LTE:
-		return f.fieldRangeLT(bitDepth, predicate, op == pql.LTE)
+		return f.bsiGroupRangeLT(bitDepth, predicate, op == pql.LTE)
 	case pql.GT, pql.GTE:
-		return f.fieldRangeGT(bitDepth, predicate, op == pql.GTE)
+		return f.bsiGroupRangeGT(bitDepth, predicate, op == pql.GTE)
 	default:
 		return nil, ErrInvalidRangeOperation
 	}
 }
 
-func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
+func (f *Fragment) bsiGroupRangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
 	b := f.Row(uint64(bitDepth))
 
@@ -713,12 +713,12 @@ func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
+func (f *Fragment) bsiGroupRangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
 	b := f.Row(uint64(bitDepth))
 
 	// Get the equal bitmap.
-	eq, err := f.fieldRangeEQ(bitDepth, predicate)
+	eq, err := f.bsiGroupRangeEQ(bitDepth, predicate)
 	if err != nil {
 		return nil, err
 	}
@@ -729,7 +729,7 @@ func (f *Fragment) fieldRangeNEQ(bitDepth uint, predicate uint64) (*Row, error) 
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
+func (f *Fragment) bsiGroupRangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	keep := NewRow()
 
 	// Start with set of columns with values set.
@@ -777,7 +777,7 @@ func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality b
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
+func (f *Fragment) bsiGroupRangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	b := f.Row(uint64(bitDepth))
 	keep := NewRow()
 
@@ -812,13 +812,13 @@ func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality b
 	return b, nil
 }
 
-// FieldNotNull returns the not-null row (stored at bitDepth).
-func (f *Fragment) FieldNotNull(bitDepth uint) (*Row, error) {
+// BSIGroupNotNull returns the not-null row (stored at bitDepth).
+func (f *Fragment) BSIGroupNotNull(bitDepth uint) (*Row, error) {
 	return f.Row(uint64(bitDepth)), nil
 }
 
-// FieldRangeBetween returns bitmaps with a field value encoding matching any value between predicateMin and predicateMax.
-func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
+// BSIGroupRangeBetween returns bitmaps with a bsiGroup value encoding matching any value between predicateMin and predicateMax.
+func (f *Fragment) BSIGroupRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	b := f.Row(uint64(bitDepth))
 	keep1 := NewRow() // GTE
 	keep2 := NewRow() // LTE
@@ -900,7 +900,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 	// Create a fast lookup of filter values.
 	var filters map[interface{}]struct{}
-	if opt.FilterField != "" && len(opt.FilterValues) > 0 {
+	if opt.FilterName != "" && len(opt.FilterValues) > 0 {
 		filters = make(map[interface{}]struct{})
 		for _, v := range opt.FilterValues {
 			filters[v] = struct{}{}
@@ -948,7 +948,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 				return nil, errors.Wrap(err, "getting attrs")
 			} else if attr == nil {
 				continue
-			} else if attrValue := attr[opt.FilterField]; attrValue == nil {
+			} else if attrValue := attr[opt.FilterName]; attrValue == nil {
 				continue
 			} else if _, ok := filters[attrValue]; !ok {
 				continue
@@ -1073,8 +1073,8 @@ type TopOptions struct {
 	RowIDs       []uint64
 	MinThreshold uint64
 
-	// Filter field name & values.
-	FilterField       string
+	// Filter attrubute name & values.
+	FilterName        string
 	FilterValues      []interface{}
 	TanimotoThreshold uint64
 }
@@ -1408,7 +1408,7 @@ func (f *Fragment) ImportValue(columnIDs, values []uint64, bitDepth uint) error 
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
 
-			_, err := f.importSetFieldValue(columnID, bitDepth, value)
+			_, err := f.importSetBSIGroupValue(columnID, bitDepth, value)
 			if err != nil {
 				return errors.Wrap(err, "setting")
 			}

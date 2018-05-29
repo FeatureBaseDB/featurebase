@@ -2,15 +2,15 @@
 
 package pilosa
 
-import "strconv"
+import "fmt"
 
-const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateFrameapiCreateIndexapiDeleteFieldapiDeleteFrameapiDeleteIndexapiDeleteViewapiExportCSVapiFieldsapiFragmentBlockDataapiFragmentBlocksapiFrameAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiMarshalFragmentapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiRestoreFrameapiSetCoordinatorapiSliceNodesapiUnmarshalFragmentapiViews"
+const _apiMethod_name = "apiClusterMessageapiCreateBSIGroupapiCreateFrameapiCreateIndexapiDeleteBSIGroupapiDeleteFrameapiDeleteIndexapiDeleteViewapiExportCSVapiBSIGroupsapiFragmentBlockDataapiFragmentBlocksapiFrameAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiMarshalFragmentapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiRestoreFrameapiSetCoordinatorapiSliceNodesapiUnmarshalFragmentapiViews"
 
-var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 73, 87, 101, 114, 126, 135, 155, 172, 188, 197, 211, 219, 235, 253, 261, 281, 294, 308, 323, 340, 353, 373, 381}
+var _apiMethod_index = [...]uint16{0, 17, 34, 48, 62, 79, 93, 107, 120, 132, 144, 164, 181, 197, 206, 220, 228, 244, 262, 270, 290, 303, 317, 332, 349, 362, 382, 390}
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {
-		return "apiMethod(" + strconv.FormatInt(int64(i), 10) + ")"
+		return fmt.Sprintf("apiMethod(%d)", i)
 	}
 	return _apiMethod_name[_apiMethod_index[i]:_apiMethod_index[i+1]]
 }

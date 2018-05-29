@@ -141,8 +141,8 @@ func (t *ClusterCluster) SetBit(index, frame, view string, rowID, colID uint64, 
 	return nil
 }
 
-func (t *ClusterCluster) SetFieldValue(index, frame string, columnID uint64, name string, value int64) error {
-	// Determine which node should receive the SetFieldValue.
+func (t *ClusterCluster) SetBSIGroupValue(index, frame string, columnID uint64, name string, value int64) error {
+	// Determine which node should receive the SetBSIGroupValue.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
 	slice := columnID / SliceWidth
 	nodes := c0.SliceNodes(index, slice)
@@ -156,7 +156,7 @@ func (t *ClusterCluster) SetFieldValue(index, frame string, columnID uint64, nam
 		if f == nil {
 			return fmt.Errorf("index/frame does not exist: %s/%s", index, frame)
 		}
-		_, err := f.SetFieldValue(columnID, name, value)
+		_, err := f.SetBSIGroupValue(columnID, name, value)
 		if err != nil {
 			return err
 		}

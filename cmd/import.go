@@ -55,7 +55,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.StringVarP(&Importer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Importer.Index, "index", "i", "", "Pilosa index to import into.")
 	flags.StringVarP(&Importer.Frame, "frame", "f", "", "Frame to import into.")
-	flags.StringVarP(&Importer.Field, "field", "", "", "Field to import into.")
+	flags.StringVarP(&Importer.BSIGroup, "bsi-group", "", "", "BSIGroup to import into.")
 	flags.BoolVar(&Importer.StringKeys, "string-keys", false, "Treat payload as string keys.")
 	flags.IntVarP(&Importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
 	flags.BoolVarP(&Importer.Sort, "sort", "", false, "Enables sorting before import.")

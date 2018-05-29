@@ -96,21 +96,21 @@ func TestFragment_ClearBit(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can set & read a field value.
-func TestFragment_SetFieldValue(t *testing.T) {
+// Ensure a fragment can set & read a bsiGroup value.
+func TestFragment_SetBSIGroupValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set value.
-		if changed, err := f.SetFieldValue(100, 16, 3829); err != nil {
+		if changed, err := f.SetBSIGroupValue(100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.FieldValue(100, 16); err != nil {
+		if value, exists, err := f.BSIGroupValue(100, 16); err != nil {
 			t.Fatal(err)
 		} else if value != 3829 {
 			t.Fatalf("unexpected value: %d", value)
@@ -119,7 +119,7 @@ func TestFragment_SetFieldValue(t *testing.T) {
 		}
 
 		// Setting value should return no change.
-		if changed, err := f.SetFieldValue(100, 16, 3829); err != nil {
+		if changed, err := f.SetBSIGroupValue(100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if changed {
 			t.Fatal("expected no change")
@@ -131,21 +131,21 @@ func TestFragment_SetFieldValue(t *testing.T) {
 		defer f.Close()
 
 		// Set value.
-		if changed, err := f.SetFieldValue(100, 16, 3829); err != nil {
+		if changed, err := f.SetBSIGroupValue(100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Overwriting value should overwrite all bits.
-		if changed, err := f.SetFieldValue(100, 16, 2028); err != nil {
+		if changed, err := f.SetBSIGroupValue(100, 16, 2028); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.FieldValue(100, 16); err != nil {
+		if value, exists, err := f.BSIGroupValue(100, 16); err != nil {
 			t.Fatal(err)
 		} else if value != 2028 {
 			t.Fatalf("unexpected value: %d", value)
@@ -159,14 +159,14 @@ func TestFragment_SetFieldValue(t *testing.T) {
 		defer f.Close()
 
 		// Set value.
-		if changed, err := f.SetFieldValue(100, 10, 20); err != nil {
+		if changed, err := f.SetBSIGroupValue(100, 10, 20); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Non-existent value.
-		if value, exists, err := f.FieldValue(100, 11); err != nil {
+		if value, exists, err := f.BSIGroupValue(100, 11); err != nil {
 			t.Fatal(err)
 		} else if value != 0 {
 			t.Fatalf("unexpected value: %d", value)
@@ -195,14 +195,14 @@ func TestFragment_SetFieldValue(t *testing.T) {
 
 				m[columnID] = int64(value)
 
-				if _, err := f.SetFieldValue(columnID, bitDepth, value); err != nil {
+				if _, err := f.SetBSIGroupValue(columnID, bitDepth, value); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			// Ensure values are set.
 			for columnID, value := range m {
-				v, exists, err := f.FieldValue(columnID, bitDepth)
+				v, exists, err := f.BSIGroupValue(columnID, bitDepth)
 				if err != nil {
 					t.Fatal(err)
 				} else if value != int64(v) {
@@ -219,26 +219,26 @@ func TestFragment_SetFieldValue(t *testing.T) {
 	})
 }
 
-// Ensure a fragment can sum field values.
-func TestFragment_FieldSum(t *testing.T) {
+// Ensure a fragment can sum bsiGroup values.
+func TestFragment_BSIGroupSum(t *testing.T) {
 	const bitDepth = 16
 
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set values.
-	if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+	if _, err := f.SetBSIGroupValue(1000, bitDepth, 382); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetBSIGroupValue(2000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+	} else if _, err := f.SetBSIGroupValue(3000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetBSIGroupValue(4000, bitDepth, 300); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("NoFilter", func(t *testing.T) {
-		if sum, n, err := f.FieldSum(nil, bitDepth); err != nil {
+		if sum, n, err := f.BSIGroupSum(nil, bitDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 4 {
 			t.Fatalf("unexpected count: %d", n)
@@ -248,7 +248,7 @@ func TestFragment_FieldSum(t *testing.T) {
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if sum, n, err := f.FieldSum(pilosa.NewRow(2000, 4000, 5000), bitDepth); err != nil {
+		if sum, n, err := f.BSIGroupSum(pilosa.NewRow(2000, 4000, 5000), bitDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 2 {
 			t.Fatalf("unexpected count: %d", n)
@@ -258,27 +258,27 @@ func TestFragment_FieldSum(t *testing.T) {
 	})
 }
 
-// Ensure a fragment can find the min and max of field values.
-func TestFragment_FieldMinMax(t *testing.T) {
+// Ensure a fragment can find the min and max of bsiGroup values.
+func TestFragment_BSIGroupMinMax(t *testing.T) {
 	const bitDepth = 16
 
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set values.
-	if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+	if _, err := f.SetBSIGroupValue(1000, bitDepth, 382); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetBSIGroupValue(2000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+	} else if _, err := f.SetBSIGroupValue(3000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetBSIGroupValue(4000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(5000, bitDepth, 2818); err != nil {
+	} else if _, err := f.SetBSIGroupValue(5000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(6000, bitDepth, 2817); err != nil {
+	} else if _, err := f.SetBSIGroupValue(6000, bitDepth, 2817); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(7000, bitDepth, 0); err != nil {
+	} else if _, err := f.SetBSIGroupValue(7000, bitDepth, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -296,7 +296,7 @@ func TestFragment_FieldMinMax(t *testing.T) {
 			{filter: pilosa.NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
-			if min, cnt, err := f.FieldMin(test.filter, bitDepth); err != nil {
+			if min, cnt, err := f.BSIGroupMin(test.filter, bitDepth); err != nil {
 				t.Fatal(err)
 			} else if min != test.exp {
 				t.Errorf("test %d expected min: %v, but got: %v", i, test.exp, min)
@@ -320,7 +320,7 @@ func TestFragment_FieldMinMax(t *testing.T) {
 			{filter: pilosa.NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
-			if max, cnt, err := f.FieldMax(test.filter, bitDepth); err != nil {
+			if max, cnt, err := f.BSIGroupMax(test.filter, bitDepth); err != nil {
 				t.Fatal(err)
 			} else if max != test.exp {
 				t.Errorf("test %d expected max: %v, but got: %v", i, test.exp, max)
@@ -331,8 +331,8 @@ func TestFragment_FieldMinMax(t *testing.T) {
 	})
 }
 
-// Ensure a fragment query for matching fields.
-func TestFragment_FieldRange(t *testing.T) {
+// Ensure a fragment query for matching bsiGroups.
+func TestFragment_BSIGroupRange(t *testing.T) {
 	const bitDepth = 16
 
 	t.Run("EQ", func(t *testing.T) {
@@ -340,18 +340,18 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetBSIGroupValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetBSIGroupValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+		} else if _, err := f.SetBSIGroupValue(3000, bitDepth, 2818); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetBSIGroupValue(4000, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for equality.
-		if b, err := f.FieldRange(pql.EQ, bitDepth, 300); err != nil {
+		if b, err := f.BSIGroupRange(pql.EQ, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -363,18 +363,18 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetBSIGroupValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetBSIGroupValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+		} else if _, err := f.SetBSIGroupValue(3000, bitDepth, 2818); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetBSIGroupValue(4000, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for inequality.
-		if b, err := f.FieldRange(pql.NEQ, bitDepth, 300); err != nil {
+		if b, err := f.BSIGroupRange(pql.NEQ, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -386,43 +386,43 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetBSIGroupValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetBSIGroupValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.SetBSIGroupValue(3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.SetBSIGroupValue(4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.SetBSIGroupValue(5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.SetBSIGroupValue(6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
-		// Query for fields less than (ending with set column).
-		if b, err := f.FieldRange(pql.LT, bitDepth, 301); err != nil {
+		// Query for bsiGroups less than (ending with set column).
+		if b, err := f.BSIGroupRange(pql.LT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than (ending with unset column).
-		if b, err := f.FieldRange(pql.LT, bitDepth, 300); err != nil {
+		// Query for bsiGroups less than (ending with unset column).
+		if b, err := f.BSIGroupRange(pql.LT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than or equal to (ending with set column).
-		if b, err := f.FieldRange(pql.LTE, bitDepth, 301); err != nil {
+		// Query for bsiGroups less than or equal to (ending with set column).
+		if b, err := f.BSIGroupRange(pql.LTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than or equal to (ending with unset column).
-		if b, err := f.FieldRange(pql.LTE, bitDepth, 300); err != nil {
+		// Query for bsiGroups less than or equal to (ending with unset column).
+		if b, err := f.BSIGroupRange(pql.LTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -434,43 +434,43 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetBSIGroupValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetBSIGroupValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.SetBSIGroupValue(3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.SetBSIGroupValue(4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.SetBSIGroupValue(5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.SetBSIGroupValue(6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
-		// Query for fields greater than (ending with unset bit).
-		if b, err := f.FieldRange(pql.GT, bitDepth, 300); err != nil {
+		// Query for bsiGroups greater than (ending with unset bit).
+		if b, err := f.BSIGroupRange(pql.GT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than (ending with set bit).
-		if b, err := f.FieldRange(pql.GT, bitDepth, 301); err != nil {
+		// Query for bsiGroups greater than (ending with set bit).
+		if b, err := f.BSIGroupRange(pql.GT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with unset bit).
-		if b, err := f.FieldRange(pql.GTE, bitDepth, 300); err != nil {
+		// Query for bsiGroups greater than or equal to (ending with unset bit).
+		if b, err := f.BSIGroupRange(pql.GTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with set bit).
-		if b, err := f.FieldRange(pql.GTE, bitDepth, 301); err != nil {
+		// Query for bsiGroups greater than or equal to (ending with set bit).
+		if b, err := f.BSIGroupRange(pql.GTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -482,43 +482,43 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetBSIGroupValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetBSIGroupValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.SetBSIGroupValue(3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.SetBSIGroupValue(4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.SetBSIGroupValue(5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.SetBSIGroupValue(6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
-		// Query for fields greater than (ending with unset column).
-		if b, err := f.FieldRangeBetween(bitDepth, 300, 2817); err != nil {
+		// Query for bsiGroups greater than (ending with unset column).
+		if b, err := f.BSIGroupRangeBetween(bitDepth, 300, 2817); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than (ending with set column).
-		if b, err := f.FieldRangeBetween(bitDepth, 301, 2817); err != nil {
+		// Query for bsiGroups greater than (ending with set column).
+		if b, err := f.BSIGroupRangeBetween(bitDepth, 301, 2817); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with unset column).
-		if b, err := f.FieldRangeBetween(bitDepth, 301, 2816); err != nil {
+		// Query for bsiGroups greater than or equal to (ending with unset column).
+		if b, err := f.BSIGroupRangeBetween(bitDepth, 301, 2816); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with set column).
-		if b, err := f.FieldRangeBetween(bitDepth, 300, 2816); err != nil {
+		// Query for bsiGroups greater than or equal to (ending with set column).
+		if b, err := f.BSIGroupRangeBetween(bitDepth, 300, 2816); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -623,7 +623,7 @@ func TestFragment_Top_Filter(t *testing.T) {
 	// Retrieve top rows.
 	if pairs, err := f.Top(pilosa.TopOptions{
 		N:            2,
-		FilterField:  "x",
+		FilterName:   "x",
 		FilterValues: []interface{}{int64(10), int64(15), int64(20)},
 	}); err != nil {
 		t.Fatal(err)

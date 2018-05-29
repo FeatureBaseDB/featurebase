@@ -299,9 +299,9 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, ErrInvalidCacheType
 	}
 
-	// Validate fields.
-	for _, field := range opt.Fields {
-		if err := ValidateField(field); err != nil {
+	// Validate bsiGroups.
+	for _, bsi := range opt.BSIGroups {
+		if err := ValidateBSIGroup(bsi); err != nil {
 			return nil, err
 		}
 	}
@@ -333,8 +333,8 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		f.cacheSize = opt.CacheSize
 	}
 
-	// Set fields.
-	f.fields = opt.Fields
+	// Set bsiGroups.
+	f.bsiGroups = opt.BSIGroups
 
 	if err := f.saveMeta(); err != nil {
 		f.Close()

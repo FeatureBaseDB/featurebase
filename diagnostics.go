@@ -219,7 +219,7 @@ func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 	var numSlices uint64
 	numFrames := 0
 	numIndexes := 0
-	bsiFieldCount := 0
+	bsiFieldCount := 0 // TODO: make sure this is couting field (frame) bsiGroups
 	timeQuantumEnabled := false
 
 	for _, index := range d.server.Holder.Indexes() {
@@ -227,7 +227,7 @@ func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 		numIndexes += 1
 		for _, frame := range index.Frames() {
 			numFrames += 1
-			if fields, err := frame.GetFields(); err == nil {
+			if fields, err := frame.GetBSIGroups(); err == nil {
 				bsiFieldCount += len(fields)
 			}
 			if frame.TimeQuantum() != "" {

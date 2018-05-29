@@ -263,8 +263,8 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 	}
 }
 
-// Ensure a SetFieldValue() query can be executed.
-func TestExecutor_Execute_SetFieldValue(t *testing.T) {
+// Ensure a SetBSIGroupValue() query can be executed.
+func TestExecutor_Execute_SetBSIGroupValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		hldr := test.MustOpenHolder()
 		defer hldr.Close()
@@ -272,9 +272,9 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		// Create frames.
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 50},
-				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 1, Max: 2},
+			BSIGroups: []*pilosa.BSIGroup{
+				{Name: "bsiGroup0", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 50},
+				{Name: "bsiGroup1", Type: pilosa.BSIGroupTypeInt, Min: 1, Max: 2},
 			},
 		}); err != nil {
 			t.Fatal(err)
@@ -282,16 +282,16 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Set field values.
+		// Set bsiGroup values.
 		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-		if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, frame=f, field0=25, field1=2)`), nil, nil); err != nil {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBSIGroupValue(col=10, frame=f, bsiGroup0=25, bsiGroup1=2)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=100, frame=f, field0=10)`), nil, nil); err != nil {
+		} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBSIGroupValue(col=100, frame=f, bsiGroup0=10)`), nil, nil); err != nil {
 			t.Fatal(err)
 		}
 
 		f := hldr.Frame("i", "f")
-		if value, exists, err := f.FieldValue(10, "field0"); err != nil {
+		if value, exists, err := f.BSIGroupValue(10, "bsiGroup0"); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -299,7 +299,7 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.FieldValue(10, "field1"); err != nil {
+		if value, exists, err := f.BSIGroupValue(10, "bsiGroup1"); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -307,7 +307,7 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+		if value, exists, err := f.BSIGroupValue(100, "bsiGroup0"); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -321,8 +321,8 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		defer hldr.Close()
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 100},
+			BSIGroups: []*pilosa.BSIGroup{
+				{Name: "bsiGroup0", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 100},
 			},
 		}); err != nil {
 			t.Fatal(err)
@@ -330,28 +330,28 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 
 		t.Run("ErrFrameRequired", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, field0=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() frame required` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBSIGroupValue(col=10, bsiGroup0=100)`), nil, nil); err == nil || err.Error() != `SetBSIGroupValue() frame required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
-		t.Run("ErrColumnFieldRequired", func(t *testing.T) {
+		t.Run("ErrColumnBSIGroupRequired", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name=10, frame=f, field0=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'col' required` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBSIGroupValue(invalid_column_name=10, frame=f, bsiGroup0=100)`), nil, nil); err == nil || err.Error() != `SetBSIGroupValue() argument 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
-		t.Run("ErrColumnFieldValue", func(t *testing.T) {
+		t.Run("ErrColumnBSIGroupValue", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name="bad_column", frame=f, field0=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'col' required` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBSIGroupValue(invalid_column_name="bad_column", frame=f, bsiGroup0=100)`), nil, nil); err == nil || err.Error() != `SetBSIGroupValue() argument 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
-		t.Run("ErrInvalidFieldValueType", func(t *testing.T) {
+		t.Run("ErrInvalidBSIGroupValueType", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, frame=f, field0="hello")`), nil, nil); err == nil || err.Error() != `invalid field value type` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBSIGroupValue(col=10, frame=f, bsiGroup0="hello")`), nil, nil); err == nil || err.Error() != `invalid bsigroup value type` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
@@ -371,8 +371,8 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set two fields on f/10.
-	// Also set fields on other bitmaps and frames to test isolation.
+	// Set two bsiGroups on f/10.
+	// Also set bsiGroups on other bitmaps and frames to test isolation.
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetRowAttrs(row=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
@@ -589,8 +589,8 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: -10, Max: 100},
+		BSIGroups: []*pilosa.BSIGroup{
+			{Name: "foo", Type: pilosa.BSIGroupTypeInt, Min: -10, Max: 100},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -603,14 +603,14 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 		SetBit(frame=f, row=1, col=1)
 		SetBit(frame=f, row=2, col=`+strconv.Itoa(SliceWidth+2)+`)
 
-		SetFieldValue(frame=f, foo=20, col=0)
-		SetFieldValue(frame=f, foo=-5, col=1)
-		SetFieldValue(frame=f, foo=-5, col=2)
-		SetFieldValue(frame=f, foo=10, col=3)
-		SetFieldValue(frame=f, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
-		SetFieldValue(frame=f, foo=40, col=`+strconv.Itoa(SliceWidth+2)+`)
-		SetFieldValue(frame=f, foo=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetFieldValue(frame=f, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetBSIGroupValue(frame=f, foo=20, col=0)
+		SetBSIGroupValue(frame=f, foo=-5, col=1)
+		SetBSIGroupValue(frame=f, foo=-5, col=2)
+		SetBSIGroupValue(frame=f, foo=10, col=3)
+		SetBSIGroupValue(frame=f, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
+		SetBSIGroupValue(frame=f, foo=40, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetBSIGroupValue(frame=f, foo=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetBSIGroupValue(frame=f, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
 	`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -629,9 +629,9 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 		for i, tt := range tests {
 			var pql string
 			if tt.filter == "" {
-				pql = `Min(frame=f, field=foo)`
+				pql = `Min(frame=f, bsiGroup=foo)`
 			} else {
-				pql = fmt.Sprintf(`Min(%s, frame=f, field=foo)`, tt.filter)
+				pql = fmt.Sprintf(`Min(%s, frame=f, bsiGroup=foo)`, tt.filter)
 			}
 			if result, err := e.Execute(context.Background(), "i", test.MustParse(pql), nil, nil); err != nil {
 				t.Fatal(err)
@@ -655,9 +655,9 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 		for i, tt := range tests {
 			var pql string
 			if tt.filter == "" {
-				pql = `Max(frame=f, field=foo)`
+				pql = `Max(frame=f, bsiGroup=foo)`
 			} else {
-				pql = fmt.Sprintf(`Max(%s, frame=f, field=foo)`, tt.filter)
+				pql = fmt.Sprintf(`Max(%s, frame=f, bsiGroup=foo)`, tt.filter)
 			}
 			if result, err := e.Execute(context.Background(), "i", test.MustParse(pql), nil, nil); err != nil {
 				t.Fatal(err)
@@ -680,17 +680,17 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
-			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
+		BSIGroups: []*pilosa.BSIGroup{
+			{Name: "foo", Type: pilosa.BSIGroupTypeInt, Min: 10, Max: 100},
+			{Name: "bar", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 100000},
 		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
+		BSIGroups: []*pilosa.BSIGroup{
+			{Name: "foo", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 1000},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -700,18 +700,18 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 		SetBit(frame=f, row=0, col=0)
 		SetBit(frame=f, row=0, col=`+strconv.Itoa(SliceWidth+1)+`)
 
-		SetFieldValue(frame=f, foo=20, bar=2000, col=0)
-		SetFieldValue(frame=f, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
-		SetFieldValue(frame=f, foo=40, col=`+strconv.Itoa(SliceWidth+2)+`)
-		SetFieldValue(frame=f, foo=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetFieldValue(frame=f, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
-		SetFieldValue(frame=other, foo=1000, col=0)
+		SetBSIGroupValue(frame=f, foo=20, bar=2000, col=0)
+		SetBSIGroupValue(frame=f, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
+		SetBSIGroupValue(frame=f, foo=40, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetBSIGroupValue(frame=f, foo=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetBSIGroupValue(frame=f, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetBSIGroupValue(frame=other, foo=1000, col=0)
 	`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("NoFilter", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=f, field=foo)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=f, bsiGroup=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: 200, Count: 5}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -719,7 +719,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=f, row=0), frame=f, field=foo)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=f, row=0), frame=f, bsiGroup=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: 80, Count: 2}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -769,8 +769,8 @@ func TestExecutor_Execute_Range(t *testing.T) {
 
 }
 
-// Ensure a Range(field) query can be executed.
-func TestExecutor_Execute_FieldRange(t *testing.T) {
+// Ensure a Range(bsiGroup) query can be executed.
+func TestExecutor_Execute_BSIGroupRange(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
@@ -781,25 +781,25 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	}
 
 	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
-			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
+		BSIGroups: []*pilosa.BSIGroup{
+			{Name: "foo", Type: pilosa.BSIGroupTypeInt, Min: 10, Max: 100},
+			{Name: "bar", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 100000},
 		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
+		BSIGroups: []*pilosa.BSIGroup{
+			{Name: "foo", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 1000},
 		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := idx.CreateFrame("edge", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: -100, Max: 100},
+		BSIGroups: []*pilosa.BSIGroup{
+			{Name: "foo", Type: pilosa.BSIGroupTypeInt, Min: -100, Max: 100},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -809,14 +809,14 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		SetBit(frame=f, row=0, col=0)
 		SetBit(frame=f, row=0, col=`+strconv.Itoa(SliceWidth+1)+`)
 
-		SetFieldValue(frame=f, foo=20, bar=2000, col=50)
-		SetFieldValue(frame=f, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
-		SetFieldValue(frame=f, foo=10, col=`+strconv.Itoa(SliceWidth+2)+`)
-		SetFieldValue(frame=f, foo=20, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetFieldValue(frame=f, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
-		SetFieldValue(frame=other, foo=1000, col=0)
-		SetFieldValue(frame=edge, foo=100, col=0)
-		SetFieldValue(frame=edge, foo=-100, col=1)
+		SetBSIGroupValue(frame=f, foo=20, bar=2000, col=50)
+		SetBSIGroupValue(frame=f, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
+		SetBSIGroupValue(frame=f, foo=10, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetBSIGroupValue(frame=f, foo=20, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetBSIGroupValue(frame=f, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetBSIGroupValue(frame=other, foo=1000, col=0)
+		SetBSIGroupValue(frame=edge, foo=100, col=0)
+		SetBSIGroupValue(frame=edge, foo=-100, col=1)
 	`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -891,8 +891,8 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		}
 	})
 
-	// Ensure that the FieldNotNull code path gets run.
-	t.Run("FieldNotNull", func(t *testing.T) {
+	// Ensure that the BSIGroupNotNull code path gets run.
+	t.Run("BSIGroupNotNull", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo >< [0, 1000])`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Columns()) {
@@ -938,8 +938,8 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrFieldNotFound", func(t *testing.T) {
-		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, bad_field >= 20)`), nil, nil); err != pilosa.ErrFieldNotFound {
+	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, bad_bsiGroup >= 20)`), nil, nil); err != pilosa.ErrBSIGroupNotFound {
 			t.Fatal(err)
 		}
 	})

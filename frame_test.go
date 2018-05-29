@@ -70,38 +70,38 @@ func TestFrame_SetTimeQuantum(t *testing.T) {
 	}
 }
 
-// Ensure a frame can set & read a field value.
-func TestFrame_SetFieldValue(t *testing.T) {
+// Ensure a frame can set & read a bsigroup value.
+func TestFrame_SetBSIGroupValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
-				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 20, Max: 25},
+			BSIGroups: []*pilosa.BSIGroup{
+				{Name: "bsig0", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 30},
+				{Name: "bsig1", Type: pilosa.BSIGroupTypeInt, Min: 20, Max: 25},
 			},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		// Set value on first field.
-		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+		// Set value on first bsigroup.
+		if changed, err := f.SetBSIGroupValue(100, "bsig0", 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
-		// Set value on same column but different field.
-		if changed, err := f.SetFieldValue(100, "field1", 25); err != nil {
+		// Set value on same column but different bsigroup.
+		if changed, err := f.SetBSIGroupValue(100, "bsig1", 25); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+		if value, exists, err := f.BSIGroupValue(100, "bsig0"); err != nil {
 			t.Fatal(err)
 		} else if value != 21 {
 			t.Fatalf("unexpected value: %d", value)
@@ -110,7 +110,7 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Setting value should return no change.
-		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+		if changed, err := f.SetBSIGroupValue(100, "bsig0", 21); err != nil {
 			t.Fatal(err)
 		} else if changed {
 			t.Fatal("expected no change")
@@ -122,8 +122,8 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
+			BSIGroups: []*pilosa.BSIGroup{
+				{Name: "bsig0", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 30},
 			},
 		})
 		if err != nil {
@@ -131,21 +131,21 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Set value.
-		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+		if changed, err := f.SetBSIGroupValue(100, "bsig0", 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Set different value.
-		if changed, err := f.SetFieldValue(100, "field0", 23); err != nil {
+		if changed, err := f.SetBSIGroupValue(100, "bsig0", 23); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+		if value, exists, err := f.BSIGroupValue(100, "bsig0"); err != nil {
 			t.Fatal(err)
 		} else if value != 23 {
 			t.Fatalf("unexpected value: %d", value)
@@ -154,13 +154,13 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrFieldNotFound", func(t *testing.T) {
+	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
+			BSIGroups: []*pilosa.BSIGroup{
+				{Name: "bsig0", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 30},
 			},
 		})
 		if err != nil {
@@ -168,18 +168,18 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetFieldValue(100, "no_such_field", 21); err != pilosa.ErrFieldNotFound {
+		if _, err := f.SetBSIGroupValue(100, "no_such_bsigroup", 21); err != pilosa.ErrBSIGroupNotFound {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
 
-	t.Run("ErrFieldValueTooLow", func(t *testing.T) {
+	t.Run("ErrBSIGroupValueTooLow", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 20, Max: 30},
+			BSIGroups: []*pilosa.BSIGroup{
+				{Name: "bsig0", Type: pilosa.BSIGroupTypeInt, Min: 20, Max: 30},
 			},
 		})
 		if err != nil {
@@ -187,18 +187,18 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetFieldValue(100, "field0", 15); err != pilosa.ErrFieldValueTooLow {
+		if _, err := f.SetBSIGroupValue(100, "bsig0", 15); err != pilosa.ErrBSIGroupValueTooLow {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
 
-	t.Run("ErrFieldValueTooHigh", func(t *testing.T) {
+	t.Run("ErrBSIGroupValueTooHigh", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 20, Max: 30},
+			BSIGroups: []*pilosa.BSIGroup{
+				{Name: "bsig0", Type: pilosa.BSIGroupTypeInt, Min: 20, Max: 30},
 			},
 		})
 		if err != nil {
@@ -206,7 +206,7 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetFieldValue(100, "field0", 31); err != pilosa.ErrFieldValueTooHigh {
+		if _, err := f.SetBSIGroupValue(100, "bsig0", 31); err != pilosa.ErrBSIGroupValueTooHigh {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -295,24 +295,24 @@ func TestFrame_DeleteView(t *testing.T) {
 	}
 }
 
-// Ensure a field can adjust to its baseValue.
-func TestField_BaseValue(t *testing.T) {
-	f0 := &pilosa.Field{
+// Ensure a bsiGroup can adjust to its baseValue.
+func TestBSIGroup_BaseValue(t *testing.T) {
+	f0 := &pilosa.BSIGroup{
 		Name: "f0",
-		Type: pilosa.FieldTypeInt,
+		Type: pilosa.BSIGroupTypeInt,
 		Min:  -100,
 		Max:  900,
 	}
-	f1 := &pilosa.Field{
+	f1 := &pilosa.BSIGroup{
 		Name: "f1",
-		Type: pilosa.FieldTypeInt,
+		Type: pilosa.BSIGroupTypeInt,
 		Min:  0,
 		Max:  1000,
 	}
 
-	f2 := &pilosa.Field{
+	f2 := &pilosa.BSIGroup{
 		Name: "f2",
-		Type: pilosa.FieldTypeInt,
+		Type: pilosa.BSIGroupTypeInt,
 		Min:  100,
 		Max:  1100,
 	}
@@ -320,7 +320,7 @@ func TestField_BaseValue(t *testing.T) {
 	t.Run("Normal Condition", func(t *testing.T) {
 
 		for _, tt := range []struct {
-			f             *pilosa.Field
+			f             *pilosa.BSIGroup
 			op            pql.Token
 			val           int64
 			expBaseValue  uint64
@@ -386,7 +386,7 @@ func TestField_BaseValue(t *testing.T) {
 
 	t.Run("Betwween Condition", func(t *testing.T) {
 		for _, tt := range []struct {
-			f               *pilosa.Field
+			f               *pilosa.BSIGroup
 			predMin         int64
 			predMax         int64
 			expBaseValueMin uint64
