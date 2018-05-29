@@ -456,29 +456,29 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*test.Holder{hldr0, hldr1} {
 		f := hldr.Fragment("i", "f", pilosa.ViewStandard, 0)
-		if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
-			t.Fatalf("unexpected bits(%d/0): %+v", i, a)
-		} else if a := f.Row(2).Bits(); !reflect.DeepEqual(a, []uint64{20}) {
-			t.Fatalf("unexpected bits(%d/2): %+v", i, a)
-		} else if a := f.Row(3).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Fatalf("unexpected bits(%d/3): %+v", i, a)
-		} else if a := f.Row(120).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Fatalf("unexpected bits(%d/120): %+v", i, a)
-		} else if a := f.Row(200).Bits(); !reflect.DeepEqual(a, []uint64{4}) {
-			t.Fatalf("unexpected bits(%d/200): %+v", i, a)
+		if a := f.Row(0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+			t.Fatalf("unexpected columns(%d/0): %+v", i, a)
+		} else if a := f.Row(2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Fatalf("unexpected columns(%d/2): %+v", i, a)
+		} else if a := f.Row(3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected columns(%d/3): %+v", i, a)
+		} else if a := f.Row(120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected columns(%d/120): %+v", i, a)
+		} else if a := f.Row(200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
+			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
 		}
 
 		f = hldr.Fragment("i", "f0", pilosa.ViewStandard, 1)
-		a := f.Row(9).Bits()
+		a := f.Row(9).Columns()
 		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
-			t.Fatalf("unexpected bits(%d/i/f0): %+v", i, a)
+			t.Fatalf("unexpected columns(%d/i/f0): %+v", i, a)
 		}
-		if a := f.Row(9).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
-			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
+		if a := f.Row(9).Columns(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+			t.Fatalf("unexpected columns(%d/d/f0): %+v", i, a)
 		}
 		f = hldr.Fragment("y", "z", pilosa.ViewStandard, 3)
-		if a := f.Row(10).Bits(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
-			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
+		if a := f.Row(10).Columns(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
+			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 	}
 }
@@ -554,29 +554,29 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*test.Holder{hldr0} {
 		f := hldr.Fragment("i", "f", pilosa.ViewStandard, 0)
-		if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
-			t.Fatalf("unexpected bits(%d/0): %+v", i, a)
-		} else if a := f.Row(2).Bits(); !reflect.DeepEqual(a, []uint64{20}) {
-			t.Fatalf("unexpected bits(%d/2): %+v", i, a)
-		} else if a := f.Row(3).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Fatalf("unexpected bits(%d/3): %+v", i, a)
-		} else if a := f.Row(120).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Fatalf("unexpected bits(%d/120): %+v", i, a)
-		} else if a := f.Row(200).Bits(); !reflect.DeepEqual(a, []uint64{4}) {
-			t.Fatalf("unexpected bits(%d/200): %+v", i, a)
+		if a := f.Row(0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+			t.Fatalf("unexpected columns(%d/0): %+v", i, a)
+		} else if a := f.Row(2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Fatalf("unexpected columns(%d/2): %+v", i, a)
+		} else if a := f.Row(3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected columns(%d/3): %+v", i, a)
+		} else if a := f.Row(120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected columns(%d/120): %+v", i, a)
+		} else if a := f.Row(200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
+			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
 		}
 
 		f = hldr.Fragment("i", "f0", pilosa.ViewStandard, 1)
-		a := f.Row(9).Bits()
+		a := f.Row(9).Columns()
 		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
-			t.Fatalf("unexpected bits(%d/i/f0): %+v", i, a)
+			t.Fatalf("unexpected columns(%d/i/f0): %+v", i, a)
 		}
-		if a := f.Row(9).Bits(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
-			t.Fatalf("unexpected bits(%d/d/f0): %+v", i, a)
+		if a := f.Row(9).Columns(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+			t.Fatalf("unexpected columns(%d/d/f0): %+v", i, a)
 		}
 		f = hldr.Fragment("y", "z", pilosa.ViewStandard, 2)
-		if a := f.Row(10).Bits(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
-			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
+		if a := f.Row(10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
+			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 	}
 
@@ -597,16 +597,16 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*test.Holder{hldr0} {
 		f := hldr.Fragment("i", "f", pilosa.ViewStandard, 0)
-		if a := f.Row(0).Bits(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
-			t.Fatalf("unexpected bits(%d/0): %+v", i, a)
-		} else if a := f.Row(2).Bits(); !reflect.DeepEqual(a, []uint64{20}) {
-			t.Fatalf("unexpected bits(%d/2): %+v", i, a)
-		} else if a := f.Row(3).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Fatalf("unexpected bits(%d/3): %+v", i, a)
-		} else if a := f.Row(120).Bits(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Fatalf("unexpected bits(%d/120): %+v", i, a)
-		} else if a := f.Row(200).Bits(); !reflect.DeepEqual(a, []uint64{4}) {
-			t.Fatalf("unexpected bits(%d/200): %+v", i, a)
+		if a := f.Row(0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+			t.Fatalf("unexpected columns(%d/0): %+v", i, a)
+		} else if a := f.Row(2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Fatalf("unexpected columns(%d/2): %+v", i, a)
+		} else if a := f.Row(3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected columns(%d/3): %+v", i, a)
+		} else if a := f.Row(120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected columns(%d/120): %+v", i, a)
+		} else if a := f.Row(200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
+			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
 		}
 
 		f = hldr.Fragment("i", "f0", pilosa.ViewStandard, 1)
@@ -615,8 +615,8 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 		}
 
 		f = hldr.Fragment("y", "z", pilosa.ViewStandard, 2)
-		if a := f.Row(10).Bits(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
-			t.Fatalf("unexpected bits(%d/y/z): %+v", i, a)
+		if a := f.Row(10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
+			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 	}
 }

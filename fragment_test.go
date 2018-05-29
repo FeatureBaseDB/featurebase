@@ -176,10 +176,10 @@ func TestFragment_SetFieldValue(t *testing.T) {
 	})
 
 	t.Run("QuickCheck", func(t *testing.T) {
-		if err := quick.Check(func(bitDepth uint, columnN uint64, values []uint64) bool {
+		if err := quick.Check(func(bitDepth uint, bitN uint64, values []uint64) bool {
 			// Limit bit depth & maximum values.
 			bitDepth = (bitDepth % 62) + 1
-			columnN = (columnN % 99) + 1
+			bitN = (bitN % 99) + 1
 
 			for i := range values {
 				values[i] = values[i] % (1 << bitDepth)
@@ -191,7 +191,7 @@ func TestFragment_SetFieldValue(t *testing.T) {
 			// Set values.
 			m := make(map[uint64]int64)
 			for _, value := range values {
-				columnID := value % columnN
+				columnID := value % bitN
 
 				m[columnID] = int64(value)
 
@@ -206,9 +206,9 @@ func TestFragment_SetFieldValue(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				} else if value != int64(v) {
-					t.Fatalf("value mismatch: column=%d, bitdepth=%d, value: %d != %d", columnID, bitDepth, value, v)
+					t.Fatalf("value mismatch: columnID=%d, bitdepth=%d, value: %d != %d", columnID, bitDepth, value, v)
 				} else if !exists {
-					t.Fatalf("value should exist: column=%d", columnID)
+					t.Fatalf("value should exist: columnID=%d", columnID)
 				}
 			}
 
@@ -353,8 +353,8 @@ func TestFragment_FieldRange(t *testing.T) {
 		// Query for equality.
 		if b, err := f.FieldRange(pql.EQ, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
 
@@ -376,8 +376,8 @@ func TestFragment_FieldRange(t *testing.T) {
 		// Query for inequality.
 		if b, err := f.FieldRange(pql.NEQ, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
 
@@ -400,32 +400,32 @@ func TestFragment_FieldRange(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Query for fields less than (ending with set bit).
+		// Query for fields less than (ending with set column).
 		if b, err := f.FieldRange(pql.LT, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 5000, 6000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than (ending with unset bit).
+		// Query for fields less than (ending with unset column).
 		if b, err := f.FieldRange(pql.LT, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{5000, 6000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{5000, 6000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than or equal to (ending with set bit).
+		// Query for fields less than or equal to (ending with set column).
 		if b, err := f.FieldRange(pql.LTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 4000, 5000, 6000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000, 5000, 6000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than or equal to (ending with unset bit).
+		// Query for fields less than or equal to (ending with unset column).
 		if b, err := f.FieldRange(pql.LTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{2000, 5000, 6000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
 
@@ -451,29 +451,29 @@ func TestFragment_FieldRange(t *testing.T) {
 		// Query for fields greater than (ending with unset bit).
 		if b, err := f.FieldRange(pql.GT, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for fields greater than (ending with set bit).
 		if b, err := f.FieldRange(pql.GT, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for fields greater than or equal to (ending with unset bit).
 		if b, err := f.FieldRange(pql.GTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 2000, 3000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for fields greater than or equal to (ending with set bit).
 		if b, err := f.FieldRange(pql.GTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
 
@@ -496,32 +496,32 @@ func TestFragment_FieldRange(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Query for fields greater than (ending with unset bit).
+		// Query for fields greater than (ending with unset column).
 		if b, err := f.FieldRangeBetween(bitDepth, 300, 2817); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 2000, 3000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than (ending with set bit).
+		// Query for fields greater than (ending with set column).
 		if b, err := f.FieldRangeBetween(bitDepth, 301, 2817); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 3000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with unset bit).
+		// Query for fields greater than or equal to (ending with unset column).
 		if b, err := f.FieldRangeBetween(bitDepth, 301, 2816); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with set bit).
+		// Query for fields greater than or equal to (ending with set column).
 		if b, err := f.FieldRangeBetween(bitDepth, 300, 2816); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(b.Bits(), []uint64{1000, 2000, 4000}) {
-			t.Fatalf("unexpected bits: %+v", b.Bits())
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 4000}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
 }
@@ -663,7 +663,7 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can return top rows that have many bits set.
+// Ensure a fragment can return top rows that have many columns set.
 func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short mode")
@@ -1011,8 +1011,8 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Verify data in other fragment.
-	if a := f1.Row(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
-		t.Fatalf("unexpected bits: %+v", a)
+	if a := f1.Row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
+		t.Fatalf("unexpected columns: %+v", a)
 	}
 
 	// Close and reopen the fragment & verify the data.
@@ -1020,8 +1020,8 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 		t.Fatal(err)
 	} else if n := f1.Cache().Len(); n != 1 {
 		t.Fatalf("unexpected cache size (reopen): %d", n)
-	} else if a := f1.Row(1000).Bits(); !reflect.DeepEqual(a, []uint64{2}) {
-		t.Fatalf("unexpected bits (reopen): %+v", a)
+	} else if a := f1.Row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
+		t.Fatalf("unexpected columns (reopen): %+v", a)
 	}
 }
 

@@ -77,16 +77,11 @@ func (c *InternalHTTPClient) Host() *URI { return c.defaultURI }
 
 // MaxSliceByIndex returns the number of slices on a server by index.
 func (c *InternalHTTPClient) MaxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
-	return c.maxSliceByIndex(ctx, false)
-}
-
-// MaxInverseSliceByIndex returns the number of inverse slices on a server by index.
-func (c *InternalHTTPClient) MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64, error) {
-	return c.maxSliceByIndex(ctx, true)
+	return c.maxSliceByIndex(ctx)
 }
 
 // maxSliceByIndex returns the number of slices on a server by index.
-func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
+func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/slices/max")
 
@@ -112,9 +107,6 @@ func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) 
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
-	if inverse {
-		return rsp.Inverse, nil
-	}
 	return rsp.Standard, nil
 }
 
@@ -308,15 +300,15 @@ func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, sl
 	return nil
 }
 
-// ImportK bulk imports bits to a host.
-func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, bits []Bit) error {
+// ImportK bulk imports bits specified by string keys to a host.
+func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, columns []Bit) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
 	}
 
-	buf, err := marshalImportPayloadK(index, frame, bits)
+	buf, err := marshalImportPayloadK(index, frame, columns)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -356,7 +348,7 @@ func marshalImportPayload(index, frame string, slice uint64, bits []Bit) ([]byte
 	columnIDs := Bits(bits).ColumnIDs()
 	timestamps := Bits(bits).Timestamps()
 
-	// Marshal bits to protobufs.
+	// Marshal data to protobuf.
 	buf, err := proto.Marshal(&internal.ImportRequest{
 		Index:      index,
 		Frame:      frame,
@@ -378,7 +370,7 @@ func marshalImportPayloadK(index, frame string, bits []Bit) ([]byte, error) {
 	columnKeys := Bits(bits).ColumnKeys()
 	timestamps := Bits(bits).Timestamps()
 
-	// Marshal bits to protobufs.
+	// Marshal data to protobuf.
 	buf, err := proto.Marshal(&internal.ImportRequest{
 		Index:      index,
 		Frame:      frame,
@@ -465,7 +457,7 @@ func marshalImportValuePayload(index, frame, field string, slice uint64, vals []
 	columnIDs := FieldValues(vals).ColumnIDs()
 	values := FieldValues(vals).Values()
 
-	// Marshal bits to protobufs.
+	// Marshal data to protobuf.
 	buf, err := proto.Marshal(&internal.ImportValueRequest{
 		Index:     index,
 		Frame:     frame,
@@ -524,7 +516,7 @@ func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame, view s
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
-	} else if !(view == ViewStandard || view == ViewInverse) {
+	} else if view != ViewStandard {
 		return ErrInvalidView
 	}
 
@@ -605,8 +597,6 @@ func (c *InternalHTTPClient) BackupTo(ctx context.Context, w io.Writer, index, f
 	var err error
 	if view == ViewStandard {
 		maxSlices, err = c.MaxSliceByIndex(ctx)
-	} else if view == ViewInverse {
-		maxSlices, err = c.MaxInverseSliceByIndex(ctx)
 	} else {
 		return ErrInvalidView
 	}
@@ -1140,7 +1130,8 @@ func (c *InternalHTTPClient) SendMessage(ctx context.Context, uri *URI, pb proto
 	return nil
 }
 
-// Bit represents the location of a single bit.
+// Bit represents the intersection of a row and a column. It can be specifed by
+// integer ids or string keys.
 type Bit struct {
 	RowID     uint64
 	ColumnID  uint64
@@ -1149,7 +1140,7 @@ type Bit struct {
 	Timestamp int64
 }
 
-// Bits represents a slice of bits.
+// Bits is a slice of Bit.
 type Bits []Bit
 
 func (p Bits) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
@@ -1277,7 +1268,7 @@ func (p FieldValues) GroupBySlice() map[uint64][]FieldValue {
 	return m
 }
 
-// BitsByPos represents a slice of bits sorted by internal position.
+// BitsByPos is a slice of bits sorted row then column.
 type BitsByPos []Bit
 
 func (p BitsByPos) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
@@ -1314,7 +1305,6 @@ func nodePathToURL(node *Node, path string) url.URL {
 // I don't want to let it go unquestioned.
 type InternalClient interface {
 	MaxSliceByIndex(ctx context.Context) (map[string]uint64, error)
-	MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64, error)
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error)

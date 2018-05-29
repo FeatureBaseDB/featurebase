@@ -106,8 +106,8 @@ func NewHandler(opts ...HandlerOption) (*Handler, error) {
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")
-	h.validators["GetSliceMax"] = queryValidationSpecRequired().Optional("inverse")
-	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
+	h.validators["GetSliceMax"] = queryValidationSpecRequired()
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
@@ -328,7 +328,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(getSlicesMaxResponse{
 		Standard: h.API.MaxSlices(r.Context()),
-		Inverse:  h.API.MaxInverseSlices(r.Context()),
 	}); err != nil {
 		h.Logger.Printf("write slices-max response error: %s", err)
 	}
@@ -336,7 +335,6 @@ func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
 
 type getSlicesMaxResponse struct {
 	Standard map[string]uint64 `json:"standard"`
-	Inverse  map[string]uint64 `json:"inverse"`
 }
 
 // handleGetIndexes handles GET /index request.
@@ -846,11 +844,11 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		Query:        query,
-		Slices:       slices,
-		ColumnAttrs:  q.Get("columnAttrs") == "true",
-		ExcludeAttrs: q.Get("excludeAttrs") == "true",
-		ExcludeBits:  q.Get("excludeBits") == "true",
+		Query:           query,
+		Slices:          slices,
+		ColumnAttrs:     q.Get("columnAttrs") == "true",
+		ExcludeRowAttrs: q.Get("excludeRowAttrs") == "true",
+		ExcludeColumns:  q.Get("excludeColumns") == "true",
 	}, nil
 }
 
@@ -1206,10 +1204,10 @@ type QueryRequest struct {
 	ColumnAttrs bool
 
 	// Do not return row attributes, if true.
-	ExcludeAttrs bool
+	ExcludeRowAttrs bool
 
-	// Do not return bits, if true.
-	ExcludeBits bool
+	// Do not return columns, if true.
+	ExcludeColumns bool
 
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
@@ -1218,12 +1216,12 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		Query:        pb.Query,
-		Slices:       pb.Slices,
-		ColumnAttrs:  pb.ColumnAttrs,
-		Remote:       pb.Remote,
-		ExcludeAttrs: pb.ExcludeAttrs,
-		ExcludeBits:  pb.ExcludeBits,
+		Query:           pb.Query,
+		Slices:          pb.Slices,
+		ColumnAttrs:     pb.ColumnAttrs,
+		Remote:          pb.Remote,
+		ExcludeRowAttrs: pb.ExcludeRowAttrs,
+		ExcludeColumns:  pb.ExcludeColumns,
 	}
 
 	return req

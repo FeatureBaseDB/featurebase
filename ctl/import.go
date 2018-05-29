@@ -107,7 +107,6 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 
 	// Import each path and import by slice.
 	for _, path := range cmd.Paths {
-		// Parse path into bits.
 		logger.Printf("parsing: %s", path)
 		if err := cmd.importPath(ctx, path); err != nil {
 			return err
@@ -236,13 +235,13 @@ func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) err
 	bitsBySlice := pilosa.Bits(bits).GroupBySlice()
 
 	// Parse path into bits.
-	for slice, bits := range bitsBySlice {
+	for slice, chunk := range bitsBySlice {
 		if cmd.Sort {
-			sort.Sort(pilosa.BitsByPos(bits))
+			sort.Sort(pilosa.BitsByPos(chunk))
 		}
 
-		logger.Printf("importing slice: %d, n=%d", slice, len(bits))
-		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Frame, slice, bits); err != nil {
+		logger.Printf("importing slice: %d, n=%d", slice, len(chunk))
+		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Frame, slice, chunk); err != nil {
 			return errors.Wrap(err, "importing")
 		}
 	}
