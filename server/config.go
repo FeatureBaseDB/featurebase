@@ -31,9 +31,9 @@ const (
 // TLSConfig contains TLS configuration
 type TLSConfig struct {
 	// CertificatePath contains the path to the certificate (.crt or .pem file)
-	CertificatePath string `toml:"certificate-path"`
+	CertificatePath string `toml:"certificate"`
 	// CertificateKeyPath contains the path to the certificate key (.key file)
-	CertificateKeyPath string `toml:"certificate-key-path"`
+	CertificateKeyPath string `toml:"key"`
 	// SkipVerify disables verification for self-signed certificates
 	SkipVerify bool `toml:"skip-verify"`
 }
@@ -64,7 +64,7 @@ type Config struct {
 	}
 
 	// TLS
-	TLS TLSConfig
+	TLS TLSConfig `toml:"tls"`
 
 	Cluster struct {
 		// Disabled controls whether clustering functionality is enabled.
