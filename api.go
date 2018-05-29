@@ -894,7 +894,6 @@ const (
 	apiRecalculateCaches
 	apiRemoveNode
 	apiResizeAbort
-	apiRestoreFrame
 	//apiSchema // not implemented
 	apiSetCoordinator
 	apiSliceNodes
@@ -935,7 +934,6 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiQuery:             struct{}{},
 	apiRecalculateCaches: struct{}{},
 	apiRemoveNode:        struct{}{},
-	apiRestoreFrame:      struct{}{},
 	apiSliceNodes:        struct{}{},
 	apiUnmarshalFragment: struct{}{},
 	apiViews:             struct{}{},

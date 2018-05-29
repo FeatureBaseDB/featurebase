@@ -669,36 +669,6 @@ func (c *InternalHTTPClient) CreateFrame(ctx context.Context, index, frame strin
 	}
 }
 
-// RestoreFrame restores an entire frame from a host in another cluster.
-func (c *InternalHTTPClient) RestoreFrame(ctx context.Context, host, index, frame string) error {
-	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/restore", index, frame))
-	u.RawQuery = url.Values{
-		"host": {host},
-	}.Encode()
-
-	// Build request.
-	req, err := http.NewRequest("POST", u.String(), nil)
-	if err != nil {
-		return errors.Wrap(err, "creating request")
-	}
-	req.Header.Set("Content-Type", "application/octet-stream")
-	req.Header.Set("User-Agent", "pilosa/"+Version)
-
-	// Execute request.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
-	if err != nil {
-		return errors.Wrap(err, "executing request")
-	}
-	resp.Body.Close()
-
-	// Return error if response not OK.
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: host=%s, code=%d", host, resp.StatusCode)
-	}
-
-	return nil
-}
-
 // FrameViews returns a list of view names for a frame.
 func (c *InternalHTTPClient) FrameViews(ctx context.Context, index, frame string) ([]string, error) {
 	// Create URL & HTTP request.
@@ -1133,7 +1103,6 @@ type InternalClient interface {
 	ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error
 	ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error
 	CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error
-	RestoreFrame(ctx context.Context, host, index, frame string) error
 	FrameViews(ctx context.Context, index, frame string) ([]string, error)
 	FragmentBlocks(ctx context.Context, index, frame, view string, slice uint64) ([]FragmentBlock, error)
 	BlockData(ctx context.Context, index, frame, view string, slice uint64, block int) ([]uint64, []uint64, error)
