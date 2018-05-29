@@ -119,7 +119,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
-	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
@@ -134,7 +133,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
 	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
-	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST").Name("PostFragmentData")
 	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
 	router.HandleFunc("/import-value", handler.handlePostImportValue).Methods("POST")
@@ -147,7 +145,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST").Name("PostFrameRestore")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameFields).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
@@ -1015,48 +1012,6 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetFragmentData handles GET /fragment/data requests.
-func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) {
-	// Read slice parameter.
-	q := r.URL.Query()
-	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
-	if err != nil {
-		http.Error(w, "slice required", http.StatusBadRequest)
-		return
-	}
-
-	// Retrieve fragment from holder.
-	f, err := h.API.MarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Stream fragment to response body.
-	if _, err := f.WriteTo(w); err != nil {
-		h.Logger.Printf("fragment backup error: %s", err)
-	}
-}
-
-// handlePostFragmentData handles POST /fragment/data requests.
-func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request) {
-	// Read slice parameter.
-	q := r.URL.Query()
-	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
-	if err != nil {
-		http.Error(w, "slice required", http.StatusBadRequest)
-		return
-	}
-
-	if err = h.API.UnmarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice, r.Body); err != nil {
-		if errors.Cause(err) == ErrFrameNotFound {
-			http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}
-}
-
 // handleGetFragmentBlockData handles GET /fragment/block/data requests.
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
 	buf, err := h.API.FragmentBlockData(r.Context(), r.Body)
@@ -1107,38 +1062,6 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 
 type getFragmentBlocksResponse struct {
 	Blocks []FragmentBlock `json:"blocks"`
-}
-
-// handlePostFrameRestore handles POST /frame/restore requests.
-func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
-
-	q := r.URL.Query()
-	hostStr := q.Get("host")
-
-	// Validate query parameters.
-	if hostStr == "" {
-		http.Error(w, "host required", http.StatusBadRequest)
-		return
-	}
-
-	host, err := NewURIFromAddress(hostStr)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-
-	err = h.API.RestoreFrame(r.Context(), indexName, frameName, host)
-	switch errors.Cause(err) {
-	case nil:
-		break
-	case ErrFrameNotFound:
-		fallthrough
-	case ErrFragmentNotFound:
-		http.Error(w, err.Error(), http.StatusNotFound)
-	default:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }
 
 // handleGetVersion handles /version requests.

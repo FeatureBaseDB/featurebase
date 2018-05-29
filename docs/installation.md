@@ -49,7 +49,6 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       pilosa [command]
 
     Available Commands:
-      backup          Backup data from pilosa.
       bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
       config          Print the current configuration.
@@ -58,7 +57,6 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       help            Help about any command
       import          Bulk load data into pilosa.
       inspect         Get stats on a pilosa data file.
-      restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
 
     Flags:
@@ -110,7 +108,6 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       pilosa [command]
 
     Available Commands:
-      backup          Backup data from pilosa.
       bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
       config          Print the current configuration.
@@ -119,7 +116,6 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       help            Help about any command
       import          Bulk load data into pilosa.
       inspect         Get stats on a pilosa data file.
-      restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
 
     Flags:
@@ -177,7 +173,6 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       pilosa [command]
 
     Available Commands:
-      backup          Backup data from pilosa.
       bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
       config          Print the current configuration.
@@ -186,7 +181,6 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       help            Help about any command
       import          Bulk load data into pilosa.
       inspect         Get stats on a pilosa data file.
-      restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
 
     Flags:
@@ -268,7 +262,6 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
       pilosa [command]
 
     Available Commands:
-      backup          Backup data from pilosa.
       bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
       config          Print the current configuration.
@@ -277,7 +270,6 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
       help            Help about any command
       import          Bulk load data into pilosa.
       inspect         Get stats on a pilosa data file.
-      restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
 
     Flags:
@@ -335,7 +327,6 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
       pilosa [command]
 
     Available Commands:
-      backup          Backup data from pilosa.
       bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
       config          Print the current configuration.
@@ -344,7 +335,6 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
       help            Help about any command
       import          Bulk load data into pilosa.
       inspect         Get stats on a pilosa data file.
-      restore         Restore data to pilosa from a backup file.
       server          Run Pilosa.
 
     Flags:
