@@ -16,10 +16,6 @@ install:
   - make install-dep install-statik vendor generate-statik
 script:
   - make test
-# TODO: When we drop support for Go <1.10, we should use `-coverprofile=` on both `go test` and `goveralls` so the test suite doesn't run twice. See https://github.com/pilosa/pilosa/issues/1009
-after_success:
-  - go get github.com/mattn/goveralls
-  - $HOME/gopath/bin/goveralls -service=travis-ci -ignore "internal/internal.go,internal/public.pb.go,internal/private.pb.go"
 before_deploy:
   - pip install awscli --user `whoami`
 deploy:
@@ -33,6 +29,7 @@ deploy:
 matrix:
   allow_failures:
     - go: master
+  fast_finish: true
 notifications:
   slack:
     secure: "SceWannxoGzeSu9PlEhl6icQFGuTmwax870k20nB2ZGYLjo77UEcwYoFwWvFsdYPa/HCo3JorMTYvMJ15VDJcnKEfzDr+kyXbHWBzUumclIOU/Im3ArEN6waQgyGbbWUQhvJjy4ATaxiOlmCyDV+KhKC9P3+WB33/OQtM3ngjAdTXYHAkfEcpeoOP75um+KsQgbi+hlnqfZdgDa6yIkFjaS3KZEJW1vmcOYYzNsXOA1Ip8j1NY6AjjWZlQorZJ/SYFqdhIv8ST3+a6cQk12u3t6TwZdcr3wmm1qmiW/SaK7UesWlT/YfElIuK8BBq9w1oZHxNKoAmLWTOe7MMisdItmtwgA14eMGl1rvNFlVf9sjsxs4AAzFvSZBZdDfx9XeLCBU5I2WUc/PKUgNQBPMVChxA7gEhtZLndsDdye7LsZASD2yYqjlVlgoZpzRexee/cJgCqUcNKDBHF39ZJYxV4KtZ0prjcSnVmLvuapplzTV4LZ+LyFapCyhiuM/oMJvxgmd7jTtFb5e5EkaHBPN1XwQWZw87yCjKsunTlTe1f1a5qoH/xvJHNpqE/jxOHU3DTLDgTxhb+FwC1Qj9a8bp+UYLw5F4P46ZnHlBGc2O74klv17EqvUMn3JhzASUtyxLGOgJulJ+o83rxJvhSiWt3GQIfkExVPzmz11641ElJI="
