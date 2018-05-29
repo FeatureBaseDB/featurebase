@@ -105,16 +105,16 @@ The request payload is in JSON, and may contain the `options` field. The `option
 * `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this frame.
 * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this frame. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
-* `fields` (array): List of range-encoded [fields](../data-model/#bsi-range-encoding).
+* `bsiGroups` (array): List of range-encoded [bsiGroups](../data-model/#bsi-range-encoding).
 
-Each individual `field` contains the following:
+Each individual `bsiGroup` contains the following:
 
-* `name` (string): Field name.
-* `type` (string): Field type, currently only "int" is supported.
-* `min` (int): Minimum value allowed for this field.
-* `max` (int): Maximum value allowed for this field.
+* `name` (string): name.
+* `type` (string): type, currently only "int" is supported.
+* `min` (int): Minimum value allowed for this bsiGroup.
+* `max` (int): Maximum value allowed for this bsiGroup.
 
-Integer fields are stored as n-bit range-encoded values. Pilosa supports 63-bit, signed integers with values between `min` and `max`.
+Integer bsiGroups are stored as n-bit range-encoded values. Pilosa supports 63-bit, signed integers with values between `min` and `max`.
 
 ``` request
 curl localhost:10101/index/user/frame/language -X POST
@@ -126,7 +126,7 @@ curl localhost:10101/index/user/frame/language -X POST
 ``` request
 curl localhost:10101/index/repository/frame/stats \
     -X POST \
-    -d '{"fields": [{"name": "pullrequests", "type": "int", "min": 0, "max": 1000000}]}'
+    -d '{"bsiGroups": [{"name": "pullrequests", "type": "int", "min": 0, "max": 1000000}]}'
 ```
 ``` response
 {}
@@ -145,20 +145,20 @@ curl -XDELETE localhost:10101/index/user/frame/language
 {}
 ```
 
-### Create Field
+### Create BSI Group
 
-`POST /index/<index-name>/frame/<frame-name>/field/<field-name>`
+`POST /index/<index-name>/frame/<frame-name>/bsigroup/<bsigroup-name>`
 
-Creates a new field to store integer values in the given frame.
+Creates a new bsiGroup to store integer values in the given frame.
 
 The request payload is JSON, and it must contain the fields `type`, `min`, `max`.
 
-* `type` (string): Field type, currently only "int" is supported.
-* `min` (int): Minimum value allowed for this field.
-* `max` (int): Maximum value allowed for this field.
+* `type` (string): type, currently only "int" is supported.
+* `min` (int): Minimum value allowed for this bsiGroup.
+* `max` (int): Maximum value allowed for this bsiGroup.
 
 ``` request
-curl localhost:10101/index/repository/frame/stats/field/pullrequests \
+curl localhost:10101/index/repository/frame/stats/bsigroup/pullrequests \
     -X POST \
     -d '{"type": "int", "min": 0, "max": 1000000}'
 ```

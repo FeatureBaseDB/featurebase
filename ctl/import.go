@@ -46,8 +46,8 @@ type ImportCommand struct {
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
 
-	// For Range-Encoded fields, name of the Field to import into.
-	Field string `json:"field"`
+	// For Range-Encoded bsiGroups, name of the BSIGroup to import into.
+	BSIGroup string `json:"bsiGroup"`
 
 	// Indicates that the payload should be treated as string keys.
 	StringKeys bool `json:"StringKeys"`
@@ -130,9 +130,9 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 
 // importPath parses a path into bits and imports it to the server.
 func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
-	// If a field is provided, treat the import data as values to be range-encoded.
-	if cmd.Field != "" {
-		return cmd.bufferFieldValues(ctx, path)
+	// If a bsiGroup is provided, treat the import data as values to be range-encoded.
+	if cmd.BSIGroup != "" {
+		return cmd.bufferBSIGroupValues(ctx, path)
 	} else {
 		if cmd.StringKeys {
 			return cmd.bufferBitsK(ctx, path)
@@ -345,9 +345,9 @@ func (cmd *ImportCommand) importBitsK(ctx context.Context, bits []pilosa.Bit) er
 	return nil
 }
 
-// bufferFieldValues buffers slices of fieldValues to be imported as a batch.
-func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) error {
-	a := make([]pilosa.FieldValue, 0, cmd.BufferSize)
+// bufferBSIGroupValues buffers slices of bsiGroupValues to be imported as a batch.
+func (cmd *ImportCommand) bufferBSIGroupValues(ctx context.Context, path string) error {
+	a := make([]pilosa.BSIGroupValue, 0, cmd.BufferSize)
 
 	var r *csv.Reader
 
@@ -385,7 +385,7 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
 		}
 
-		var val pilosa.FieldValue
+		var val pilosa.BSIGroupValue
 
 		// Parse column id.
 		columnID, err := strconv.ParseUint(record[0], 10, 64)
@@ -394,7 +394,7 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 		}
 		val.ColumnID = columnID
 
-		// Parse field value.
+		// Parse bsiGroup value.
 		value, err := strconv.ParseInt(record[1], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid value on row %d: %q", rnum, record[1])
@@ -403,9 +403,9 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 
 		a = append(a, val)
 
-		// If we've reached the buffer size then import field values.
+		// If we've reached the buffer size then import bsiGroup values.
 		if len(a) == cmd.BufferSize {
-			if err := cmd.importFieldValues(ctx, a); err != nil {
+			if err := cmd.importBSIGroupValues(ctx, a); err != nil {
 				return err
 			}
 			a = a[:0]
@@ -413,29 +413,29 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 	}
 
 	// If there are still values in the buffer then flush them.
-	if err := cmd.importFieldValues(ctx, a); err != nil {
+	if err := cmd.importBSIGroupValues(ctx, a); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// importFieldValues sends batches of fieldValues to the server.
-func (cmd *ImportCommand) importFieldValues(ctx context.Context, vals []pilosa.FieldValue) error {
+// importBSIGroupValues sends batches of bsiGroupValues to the server.
+func (cmd *ImportCommand) importBSIGroupValues(ctx context.Context, vals []pilosa.BSIGroupValue) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Group vals by slice.
 	logger.Printf("grouping %d vals", len(vals))
-	valsBySlice := pilosa.FieldValues(vals).GroupBySlice()
+	valsBySlice := pilosa.BSIGroupValues(vals).GroupBySlice()
 
-	// Parse path into field values.
+	// Parse path into bsiGroup values.
 	for slice, vals := range valsBySlice {
 		if cmd.Sort {
-			sort.Sort(pilosa.FieldValues(vals))
+			sort.Sort(pilosa.BSIGroupValues(vals))
 		}
 
 		logger.Printf("importing slice: %d, n=%d", slice, len(vals))
-		if err := cmd.Client.ImportValue(ctx, cmd.Index, cmd.Frame, cmd.Field, slice, vals); err != nil {
+		if err := cmd.Client.ImportValue(ctx, cmd.Index, cmd.Frame, cmd.BSIGroup, slice, vals); err != nil {
 			return errors.Wrap(err, "importing values")
 		}
 	}

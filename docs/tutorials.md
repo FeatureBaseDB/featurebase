@@ -428,13 +428,13 @@ curl localhost:10101/index/patients/frame/measurements \
 
 If you need to, you can add fields to an existing frame by posting to the [Create Field endpoint](../api-reference/#create-field).
 
-Next, let's populate our fields with data. There are two ways to get data into fields: use the `SetFieldValue()` PQL function to set fields individually, or use the `pilosa import` command to import many values at once. First, let's set some field data using PQL.
+Next, let's populate our fields with data. There are two ways to get data into fields: use the `SetBSIGroupValue()` PQL function to set fields individually, or use the `pilosa import` command to import many values at once. First, let's set some field data using PQL.
 
 This query sets the age, weight, and t-cell count for the patient with ID `1` in our system:
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'SetFieldValue(col=1, frame="measurements", age=34, weight=128, tcells=1145)'
+     -d 'SetBSIGroupValue(col=1, frame="measurements", age=34, weight=128, tcells=1145)'
 ```
 ``` response
 {"results":[null]}

@@ -31,7 +31,7 @@ import (
 const (
 	ViewStandard = "standard"
 
-	ViewFieldPrefix = "field_"
+	ViewBSIGroupPrefix = "bsigroup_"
 )
 
 // IsValidView returns true if name is valid.
@@ -97,8 +97,8 @@ func (v *View) Path() string { return v.path }
 // Open opens and initializes the view.
 func (v *View) Open() error {
 
-	// Never keep a cache for field views.
-	if strings.HasPrefix(v.name, ViewFieldPrefix) {
+	// Never keep a cache for bsiGroup views.
+	if strings.HasPrefix(v.name, ViewBSIGroupPrefix) {
 		v.cacheType = CacheTypeNone
 	}
 
@@ -323,30 +323,30 @@ func (v *View) ClearBit(rowID, columnID uint64) (changed bool, err error) {
 	return frag.ClearBit(rowID, columnID)
 }
 
-// FieldValue uses a column of bits to read a multi-bit value.
-func (v *View) FieldValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+// BSIGroupValue uses a column of bits to read a multi-bit value.
+func (v *View) BSIGroupValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
 	slice := columnID / SliceWidth
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return value, exists, err
 	}
-	return frag.FieldValue(columnID, bitDepth)
+	return frag.BSIGroupValue(columnID, bitDepth)
 }
 
-// SetFieldValue uses a column of bits to set a multi-bit value.
-func (v *View) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// SetBSIGroupValue uses a column of bits to set a multi-bit value.
+func (v *View) SetBSIGroupValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 	slice := columnID / SliceWidth
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return changed, err
 	}
-	return frag.SetFieldValue(columnID, bitDepth, value)
+	return frag.SetBSIGroupValue(columnID, bitDepth, value)
 }
 
-// FieldSum returns the sum & count of a field.
-func (v *View) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
+// BSIGroupSum returns the sum & count of a bsiGroup.
+func (v *View) BSIGroupSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	for _, f := range v.Fragments() {
-		fsum, fcount, err := f.FieldSum(filter, bitDepth)
+		fsum, fcount, err := f.BSIGroupSum(filter, bitDepth)
 		if err != nil {
 			return sum, count, err
 		}
@@ -356,11 +356,11 @@ func (v *View) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err erro
 	return sum, count, nil
 }
 
-// FieldMin returns the min and count of a field.
-func (v *View) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
+// BSIGroupMin returns the min and count of a bsiGroup.
+func (v *View) BSIGroupMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
 	var minHasValue bool
 	for _, f := range v.Fragments() {
-		fmin, fcount, err := f.FieldMin(filter, bitDepth)
+		fmin, fcount, err := f.BSIGroupMin(filter, bitDepth)
 		if err != nil {
 			return min, count, err
 		}
@@ -384,10 +384,10 @@ func (v *View) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err erro
 	return min, count, nil
 }
 
-// FieldMax returns the max and count of a field.
-func (v *View) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
+// BSIGroupMax returns the max and count of a bsiGroup.
+func (v *View) BSIGroupMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
 	for _, f := range v.Fragments() {
-		fmax, fcount, err := f.FieldMax(filter, bitDepth)
+		fmax, fcount, err := f.BSIGroupMax(filter, bitDepth)
 		if err != nil {
 			return max, count, err
 		}
@@ -399,11 +399,11 @@ func (v *View) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err erro
 	return max, count, nil
 }
 
-// FieldRange returns rows with a field value encoding matching the predicate.
-func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
+// BSIGroupRange returns rows with a bsiGroup value encoding matching the predicate.
+func (v *View) BSIGroupRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.Fragments() {
-		other, err := frag.FieldRange(op, bitDepth, predicate)
+		other, err := frag.BSIGroupRange(op, bitDepth, predicate)
 		if err != nil {
 			return nil, err
 		}
@@ -412,12 +412,12 @@ func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, 
 	return r, nil
 }
 
-// FieldRangeBetween returns bitmaps with a field value encoding matching any
+// BSIGroupRangeBetween returns bitmaps with a bsiGroup value encoding matching any
 // value between predicateMin and predicateMax.
-func (v *View) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
+func (v *View) BSIGroupRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.Fragments() {
-		other, err := frag.FieldRangeBetween(bitDepth, predicateMin, predicateMax)
+		other, err := frag.BSIGroupRangeBetween(bitDepth, predicateMin, predicateMax)
 		if err != nil {
 			return nil, err
 		}

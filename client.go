@@ -419,15 +419,15 @@ func (c *InternalHTTPClient) importNode(ctx context.Context, node *Node, buf []b
 	return nil
 }
 
-// ImportValue bulk imports field values for a single slice to a host.
-func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error {
+// ImportValue bulk imports bsiGroup values for a single slice to a host.
+func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, frame, bsiGroup string, slice uint64, vals []BSIGroupValue) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
 	}
 
-	buf, err := marshalImportValuePayload(index, frame, field, slice, vals)
+	buf, err := marshalImportValuePayload(index, frame, bsiGroup, slice, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -449,17 +449,17 @@ func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, frame, fiel
 }
 
 // marshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
-func marshalImportValuePayload(index, frame, field string, slice uint64, vals []FieldValue) ([]byte, error) {
+func marshalImportValuePayload(index, frame, bsiGroup string, slice uint64, vals []BSIGroupValue) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
-	columnIDs := FieldValues(vals).ColumnIDs()
-	values := FieldValues(vals).Values()
+	columnIDs := BSIGroupValues(vals).ColumnIDs()
+	values := BSIGroupValues(vals).Values()
 
 	// Marshal data to protobuf.
 	buf, err := proto.Marshal(&internal.ImportValueRequest{
 		Index:     index,
 		Frame:     frame,
 		Slice:     slice,
-		Field:     field,
+		BSIGroup:  bsiGroup,
 		ColumnIDs: columnIDs,
 		Values:    values,
 	})
@@ -1033,25 +1033,25 @@ func (p Bits) GroupBySlice() map[uint64][]Bit {
 	return m
 }
 
-// FieldValues represents the value for a column within a
+// BSIGroupValue represents the value for a column within a
 // range-encoded frame.
-type FieldValue struct {
+type BSIGroupValue struct {
 	ColumnID uint64
 	Value    int64
 }
 
-// FieldValues represents a slice of field values.
-type FieldValues []FieldValue
+// BSIGroupValues represents a slice of bsiGroup values.
+type BSIGroupValues []BSIGroupValue
 
-func (p FieldValues) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
-func (p FieldValues) Len() int      { return len(p) }
+func (p BSIGroupValues) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+func (p BSIGroupValues) Len() int      { return len(p) }
 
-func (p FieldValues) Less(i, j int) bool {
+func (p BSIGroupValues) Less(i, j int) bool {
 	return p[i].ColumnID < p[j].ColumnID
 }
 
 // ColumnIDs returns a slice of all the column IDs.
-func (p FieldValues) ColumnIDs() []uint64 {
+func (p BSIGroupValues) ColumnIDs() []uint64 {
 	other := make([]uint64, len(p))
 	for i := range p {
 		other[i] = p[i].ColumnID
@@ -1060,7 +1060,7 @@ func (p FieldValues) ColumnIDs() []uint64 {
 }
 
 // Values returns a slice of all the values.
-func (p FieldValues) Values() []int64 {
+func (p BSIGroupValues) Values() []int64 {
 	other := make([]int64, len(p))
 	for i := range p {
 		other[i] = p[i].Value
@@ -1068,16 +1068,16 @@ func (p FieldValues) Values() []int64 {
 	return other
 }
 
-// GroupBySlice returns a map of field values by slice.
-func (p FieldValues) GroupBySlice() map[uint64][]FieldValue {
-	m := make(map[uint64][]FieldValue)
+// GroupBySlice returns a map of bsiGroup values by slice.
+func (p BSIGroupValues) GroupBySlice() map[uint64][]BSIGroupValue {
+	m := make(map[uint64][]BSIGroupValue)
 	for _, val := range p {
 		slice := val.ColumnID / SliceWidth
 		m[slice] = append(m[slice], val)
 	}
 
 	for slice, vals := range m {
-		sort.Sort(FieldValues(vals))
+		sort.Sort(BSIGroupValues(vals))
 		m[slice] = vals
 	}
 
@@ -1130,7 +1130,7 @@ type InternalClient interface {
 	ImportK(ctx context.Context, index, frame string, bits []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error
-	ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error
+	ImportValue(ctx context.Context, index, frame, bsiGroup string, slice uint64, vals []BSIGroupValue) error
 	ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error
 	CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error
 	RestoreFrame(ctx context.Context, host, index, frame string) error

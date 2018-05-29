@@ -817,8 +817,8 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 	}
 }
 
-// Ensure the handler can create a new field on an existing frame.
-func TestHandler_Frame_AddField(t *testing.T) {
+// Ensure the handler can create a new bsiGroup on an existing frame.
+func TestHandler_Frame_AddBSIGroup(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -834,7 +834,7 @@ func TestHandler_Frame_AddField(t *testing.T) {
 		}
 
 		resp, err := http.Post(
-			s.URL+"/index/i/frame/f/field/x",
+			s.URL+"/index/i/frame/f/bsigroup/x",
 			"application/json",
 			strings.NewReader(`{"type":"int","min":100,"max":200}`),
 		)
@@ -846,25 +846,25 @@ func TestHandler_Frame_AddField(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", resp.StatusCode)
 		}
 
-		if field := f.Field("x"); !reflect.DeepEqual(field, &pilosa.Field{Name: "x", Type: "int", Min: 100, Max: 200}) {
-			t.Fatalf("unexpected field: %#v", field)
+		if bsiGroup := f.BSIGroup("x"); !reflect.DeepEqual(bsiGroup, &pilosa.BSIGroup{Name: "x", Type: "int", Min: 100, Max: 200}) {
+			t.Fatalf("unexpected bsigroup: %#v", bsiGroup)
 		}
 	})
 
-	t.Run("ErrInvalidFieldType", func(t *testing.T) {
+	t.Run("ErrInvalidBSIGroupType", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
 		resp, err := http.Post(
-			s.URL+"/index/i/frame/f/field/x",
+			s.URL+"/index/i/frame/f/bsigroup/x",
 			"application/json",
 			strings.NewReader(`{"type":"bad_type","min":100,"max":200}`),
 		)
 		if err != nil {
 			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `creating field: validating field: invalid field type`+"\n" {
+		} else if body := MustReadAll(resp.Body); string(body) != `creating bsigroup: validating bsigroup: invalid bsigroup type`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		} else if err := resp.Body.Close(); err != nil {
 			t.Fatal(err)
@@ -873,20 +873,20 @@ func TestHandler_Frame_AddField(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrInvalidFieldRange", func(t *testing.T) {
+	t.Run("ErrInvalidBSIGroupRange", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
 		resp, err := http.Post(
-			s.URL+"/index/i/frame/f/field/x",
+			s.URL+"/index/i/frame/f/bsigroup/x",
 			"application/json",
 			strings.NewReader(`{"type":"int","min":200,"max":100}`),
 		)
 		if err != nil {
 			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `creating field: validating field: invalid field range`+"\n" {
+		} else if body := MustReadAll(resp.Body); string(body) != `creating bsigroup: validating bsigroup: invalid bsigroup range`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		} else if err := resp.Body.Close(); err != nil {
 			t.Fatal(err)
@@ -895,22 +895,22 @@ func TestHandler_Frame_AddField(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrFieldAlreadyExists", func(t *testing.T) {
+	t.Run("ErrBSIGroupAlreadyExists", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}},
+			BSIGroups: []*pilosa.BSIGroup{{Name: "x", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 100}},
 		}); err != nil {
 			t.Fatal(err)
 		}
 
 		resp, err := http.Post(
-			s.URL+"/index/i/frame/f/field/x",
+			s.URL+"/index/i/frame/f/bsigroup/x",
 			"application/json",
 			strings.NewReader(`{"type":"int","min":0,"max":100}`),
 		)
 		if err != nil {
 			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `creating field: field already exists`+"\n" {
+		} else if body := MustReadAll(resp.Body); string(body) != `creating bsigroup: bsigroup already exists`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		} else if err := resp.Body.Close(); err != nil {
 			t.Fatal(err)
@@ -920,8 +920,8 @@ func TestHandler_Frame_AddField(t *testing.T) {
 	})
 }
 
-// Ensure the handler can delete existing fields.
-func TestHandler_Frame_DeleteField(t *testing.T) {
+// Ensure the handler can delete existing bsiGroups.
+func TestHandler_Frame_DeleteBSIGroup(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -934,11 +934,11 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
-		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}); err != nil {
+		} else if err := f.CreateBSIGroup(&pilosa.BSIGroup{Name: "x", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 100}); err != nil {
 			t.Fatal(err)
 		}
 
-		req, err := http.NewRequest("DELETE", s.URL+"/index/i/frame/f/field/x", nil)
+		req, err := http.NewRequest("DELETE", s.URL+"/index/i/frame/f/bsigroup/x", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -952,21 +952,21 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", resp.StatusCode)
 		}
 
-		if field := f.Field("x"); field != nil {
-			t.Fatalf("expected nil field, got: %#v", field)
+		if bsiGroup := f.BSIGroup("x"); bsiGroup != nil {
+			t.Fatalf("expected nil bsigroup, got: %#v", bsiGroup)
 		}
 	})
 
-	t.Run("ErrFieldNotFound", func(t *testing.T) {
+	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
-		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}); err != nil {
+		} else if err := f.CreateBSIGroup(&pilosa.BSIGroup{Name: "x", Type: pilosa.BSIGroupTypeInt, Min: 0, Max: 100}); err != nil {
 			t.Fatal(err)
 		}
 
-		req, err := http.NewRequest("DELETE", s.URL+"/index/i/frame/f/field/y", nil)
+		req, err := http.NewRequest("DELETE", s.URL+"/index/i/frame/f/bsigroup/y", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -976,7 +976,7 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 			t.Fatal(err)
 		} else if body, err := ioutil.ReadAll(resp.Body); err != nil {
 			t.Fatal(err)
-		} else if strings.TrimSpace(string(body)) != `deleting field: field not found` {
+		} else if strings.TrimSpace(string(body)) != `deleting bsigroup: bsigroup not found` {
 			t.Fatalf("unexpected body: %q", body)
 		} else if err := resp.Body.Close(); err != nil {
 			t.Fatal(err)
@@ -986,7 +986,7 @@ func TestHandler_Frame_DeleteField(t *testing.T) {
 	})
 }
 
-func TestHandler_Frame_GetFields(t *testing.T) {
+func TestHandler_Frame_GetBSIGroups(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -999,43 +999,43 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatal(err)
-		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 1, Max: 100}); err != nil {
+		} else if err := f.CreateBSIGroup(&pilosa.BSIGroup{Name: "x", Type: pilosa.BSIGroupTypeInt, Min: 1, Max: 100}); err != nil {
 			t.Fatal(err)
 		}
-		resp, err := http.Get(s.URL + "/index/i/frame/f/fields")
+		resp, err := http.Get(s.URL + "/index/i/frame/f/bsigroups")
 		if err != nil {
 			t.Fatal(err)
 		} else if resp.StatusCode != http.StatusOK {
 			t.Fatalf("unexpected status code: %d", resp.StatusCode)
 		}
 
-		var fields FrameFields
+		var bsiGroups FrameBSIGroups
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = json.Unmarshal([]byte(body), &fields); err != nil {
+		if err = json.Unmarshal([]byte(body), &bsiGroups); err != nil {
 			t.Fatal(err)
 		}
-		field := fields.Fields[0]
-		if field.Name != "x" {
-			t.Fatalf("expected field's name: x, actuall name: %v", field.Name)
-		} else if field.Min != 1 {
-			t.Fatalf("expected field's min: x, actuall min: %v", field.Min)
-		} else if field.Max != 100 {
-			t.Fatalf("expected field's max: x, actuall max: %v", field.Max)
+		bsi := bsiGroups.BSIGroups[0]
+		if bsi.Name != "x" {
+			t.Fatalf("expected bsigroup's name: x, actual name: %v", bsi.Name)
+		} else if bsi.Min != 1 {
+			t.Fatalf("expected bsigroup's min: x, actual min: %v", bsi.Min)
+		} else if bsi.Max != 100 {
+			t.Fatalf("expected bsigroup's max: x, actual max: %v", bsi.Max)
 		}
 
 	})
 
-	t.Run("ErrFrameFieldNotAllowed", func(t *testing.T) {
+	t.Run("ErrFrameBSIGroupNotAllowed", func(t *testing.T) {
 		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		_, err := idx.CreateFrameIfNotExists("f1", pilosa.FrameOptions{})
 		if err != nil {
 			t.Fatalf("creating frame: %v", err)
 		}
 
-		resp, err := http.Get(s.URL + "/index/i/frame/f1/fields")
+		resp, err := http.Get(s.URL + "/index/i/frame/f1/bsigroups")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1045,15 +1045,15 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", resp.StatusCode)
 		} else if body, err := ioutil.ReadAll(resp.Body); err != nil {
 			t.Fatal(err)
-		} else if strings.TrimSpace(string(body)) == `frame fields not allowed` {
-			t.Fatalf("shouldn't get frame fields not allowed error: %q", body)
+		} else if strings.TrimSpace(string(body)) == `frame bsigroups not allowed` {
+			t.Fatalf("shouldn't get frame bsigroups not allowed error: %q", body)
 		}
 	})
 
 }
 
-type FrameFields struct {
-	Fields []pilosa.Field
+type FrameBSIGroups struct {
+	BSIGroups []pilosa.BSIGroup
 }
 
 // Ensure the handler can retrieve the version.

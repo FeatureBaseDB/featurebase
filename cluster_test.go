@@ -422,12 +422,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 		tc.SetBit("i", "f", "standard", 1, 101, nil)
 		tc.SetBit("i", "f", "standard", 1, 1300000, nil)
 
-		// Add Field Data to node0.
-		if err := tc.CreateFrame("i", "fields", FrameOptions{
-			Fields: []*Field{
+		// Add BSIGroup Data to node0.
+		if err := tc.CreateFrame("i", "bsigroups", FrameOptions{
+			BSIGroups: []*BSIGroup{
 				{
-					Name: "fld0",
-					Type: FieldTypeInt,
+					Name: "bsig0",
+					Type: BSIGroupTypeInt,
 					Min:  -100,
 					Max:  100,
 				},
@@ -435,10 +435,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		tc.SetFieldValue("i", "fields", 1, "fld0", -10)
-		tc.SetFieldValue("i", "fields", 1, "fld0", 10)
-		tc.SetFieldValue("i", "fields", 1300000, "fld0", -99)
-		tc.SetFieldValue("i", "fields", 1300000, "fld0", 99)
+		tc.SetBSIGroupValue("i", "bsigroups", 1, "bsig0", -10)
+		tc.SetBSIGroupValue("i", "bsigroups", 1, "bsig0", 10)
+		tc.SetBSIGroupValue("i", "bsigroups", 1300000, "bsig0", -99)
+		tc.SetBSIGroupValue("i", "bsigroups", 1300000, "bsig0", 99)
 
 		// Before starting the resize, get the CheckSum to use for
 		// comparison later.
@@ -447,8 +447,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node0Fragment := node0View.Fragment(1)
 		node0Checksum := node0Fragment.Checksum()
 
-		node0Frame = node0.Holder.Frame("i", "fields")
-		node0View = node0Frame.View("field_fld0")
+		node0Frame = node0.Holder.Frame("i", "bsigroups")
+		node0View = node0Frame.View("bsigroup_bsig0")
 		node0Fragment = node0View.Fragment(1)
 		node0ChecksumFld := node0Fragment.Checksum()
 
@@ -486,9 +486,9 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Values
-		// Verify that node-1 contains the fragment (i/fields/field_fld0/1) transferred from node-0.
-		node1Frame = node1.Holder.Frame("i", "fields")
-		node1View = node1Frame.View("field_fld0")
+		// Verify that node-1 contains the fragment (i/bsigroups/bsigroup_bsig0/1) transferred from node-0.
+		node1Frame = node1.Holder.Frame("i", "bsigroups")
+		node1View = node1Frame.View("bsigroup_bsig0")
 		node1Fragment = node1View.Fragment(1)
 
 		// Ensure checksums are the same.
