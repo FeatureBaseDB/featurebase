@@ -15,20 +15,17 @@
 package pilosa
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
-	"time"
 
 	"crypto/tls"
 
@@ -77,16 +74,11 @@ func (c *InternalHTTPClient) Host() *URI { return c.defaultURI }
 
 // MaxSliceByIndex returns the number of slices on a server by index.
 func (c *InternalHTTPClient) MaxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
-	return c.maxSliceByIndex(ctx, false)
-}
-
-// MaxInverseSliceByIndex returns the number of inverse slices on a server by index.
-func (c *InternalHTTPClient) MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64, error) {
-	return c.maxSliceByIndex(ctx, true)
+	return c.maxSliceByIndex(ctx)
 }
 
 // maxSliceByIndex returns the number of slices on a server by index.
-func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) (map[string]uint64, error) {
+func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/slices/max")
 
@@ -112,9 +104,6 @@ func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context, inverse bool) 
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
-	if inverse {
-		return rsp.Inverse, nil
-	}
 	return rsp.Standard, nil
 }
 
@@ -524,7 +513,7 @@ func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame, view s
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
-	} else if !(view == ViewStandard || view == ViewInverse) {
+	} else if view != ViewStandard {
 		return ErrInvalidView
 	}
 
@@ -589,109 +578,6 @@ func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *Node, inde
 	return nil
 }
 
-// BackupTo backs up an entire frame from a cluster to w.
-func (c *InternalHTTPClient) BackupTo(ctx context.Context, w io.Writer, index, frame, view string) error {
-	if index == "" {
-		return ErrIndexRequired
-	} else if frame == "" {
-		return ErrFrameRequired
-	}
-
-	// Create tar writer around writer.
-	tw := tar.NewWriter(w)
-
-	// Find the maximum number of slices.
-	var maxSlices map[string]uint64
-	var err error
-	if view == ViewStandard {
-		maxSlices, err = c.MaxSliceByIndex(ctx)
-	} else if view == ViewInverse {
-		maxSlices, err = c.MaxInverseSliceByIndex(ctx)
-	} else {
-		return ErrInvalidView
-	}
-
-	if err != nil {
-		return fmt.Errorf("slice n: %s", err)
-	}
-
-	// Backup every slice to the tar file.
-	for i := uint64(0); i <= maxSlices[index]; i++ {
-		if err := c.backupSliceTo(ctx, tw, index, frame, view, i); err != nil {
-			return errors.Wrap(err, "backing up slice")
-		}
-	}
-
-	// Close tar file.
-	if err := tw.Close(); err != nil {
-		return errors.Wrap(err, "closing")
-	}
-
-	return nil
-}
-
-// backupSliceTo backs up a single slice to tw.
-func (c *InternalHTTPClient) backupSliceTo(ctx context.Context, tw *tar.Writer, index, frame, view string, slice uint64) error {
-	// Return error if unable to backup from any slice.
-	r, err := c.BackupSlice(ctx, index, frame, view, slice)
-	if err != nil {
-		return fmt.Errorf("backup slice: slice=%d, err=%s", slice, err)
-	} else if r == nil {
-		return nil
-	}
-	defer r.Close()
-
-	// Read entire buffer to determine file size.
-	data, err := ioutil.ReadAll(r)
-	if err != nil {
-		return errors.Wrap(err, "reading")
-	} else if err := r.Close(); err != nil {
-		return errors.Wrap(err, "closing")
-	}
-
-	// Write slice file header.
-	if err := tw.WriteHeader(&tar.Header{
-		Name:    strconv.FormatUint(slice, 10),
-		Mode:    0666,
-		Size:    int64(len(data)),
-		ModTime: time.Now(),
-	}); err != nil {
-		return errors.Wrap(err, "writing header")
-	}
-
-	// Write buffer to file.
-	if _, err := tw.Write(data); err != nil {
-		return errors.Wrap(err, "writing buffer")
-	}
-
-	return nil
-}
-
-// BackupSlice retrieves a streaming backup from a single slice.
-// This function tries slice owners until one succeeds.
-func (c *InternalHTTPClient) BackupSlice(ctx context.Context, index, frame, view string, slice uint64) (io.ReadCloser, error) {
-	// Retrieve a list of nodes that own the slice.
-	nodes, err := c.FragmentNodes(ctx, index, slice)
-	if err != nil {
-		return nil, fmt.Errorf("slice nodes: %s", err)
-	}
-
-	// Try to backup slice from each one until successful.
-	for _, i := range rand.Perm(len(nodes)) {
-		r, err := c.backupSliceNode(ctx, index, frame, view, slice, nodes[i])
-		if err == nil {
-			return r, nil // successfully attached
-		} else if err == ErrFragmentNotFound {
-			return nil, nil // slice doesn't exist
-		} else if err != nil {
-			log.Println(err)
-			continue
-		}
-	}
-
-	return nil, fmt.Errorf("unable to connect to any owner")
-}
-
 func (c *InternalHTTPClient) RetrieveSliceFromURI(ctx context.Context, index, frame, view string, slice uint64, uri URI) (io.ReadCloser, error) {
 	node := &Node{
 		URI: uri,
@@ -732,86 +618,6 @@ func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame, 
 	}
 
 	return resp.Body, nil
-}
-
-// RestoreFrom restores a frame from a backup file to an entire cluster.
-func (c *InternalHTTPClient) RestoreFrom(ctx context.Context, r io.Reader, index, frame, view string) error {
-	if index == "" {
-		return ErrIndexRequired
-	} else if frame == "" {
-		return ErrFrameRequired
-	}
-
-	// Create tar reader around input.
-	tr := tar.NewReader(r)
-
-	// Process each file.
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			return nil
-		} else if err != nil {
-			return errors.Wrap(err, "opening")
-		}
-
-		// Parse slice from entry name.
-		slice, err := strconv.ParseUint(hdr.Name, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid backup entry: %s", hdr.Name)
-		}
-
-		// Read file into buffer.
-		var buf bytes.Buffer
-		if _, err := io.CopyN(&buf, tr, hdr.Size); err != nil {
-			return errors.Wrap(err, "copying")
-		}
-
-		// Restore file to all nodes that own it.
-		if err := c.restoreSliceFrom(ctx, buf.Bytes(), index, frame, view, slice); err != nil {
-			return errors.Wrap(err, "restoring")
-		}
-	}
-}
-
-// restoreSliceFrom restores a single slice to all owning nodes.
-func (c *InternalHTTPClient) restoreSliceFrom(ctx context.Context, buf []byte, index, frame, view string, slice uint64) error {
-	// Retrieve a list of nodes that own the slice.
-	nodes, err := c.FragmentNodes(ctx, index, slice)
-	if err != nil {
-		return fmt.Errorf("slice nodes: %s", err)
-	}
-
-	// Restore slice to each owner.
-	for _, node := range nodes {
-		u := nodePathToURL(node, "/fragment/data")
-		u.RawQuery = url.Values{
-			"index": {index},
-			"frame": {frame},
-			"view":  {view},
-			"slice": {strconv.FormatUint(slice, 10)},
-		}.Encode()
-
-		// Build request.
-		req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
-		if err != nil {
-			return errors.Wrap(err, "creating request")
-		}
-		req.Header.Set("Content-Type", "application/octet-stream")
-		req.Header.Set("User-Agent", "pilosa/"+Version)
-
-		resp, err := c.HTTPClient.Do(req.WithContext(ctx))
-		if err != nil {
-			return errors.Wrap(err, "executing request")
-		}
-		resp.Body.Close()
-
-		// Return error if response not OK.
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("unexpected status code: host=%s, code=%d", node.URI, resp.StatusCode)
-		}
-	}
-
-	return nil
 }
 
 // CreateFrame creates a new frame on the server.
@@ -1315,7 +1121,6 @@ func nodePathToURL(node *Node, path string) url.URL {
 // I don't want to let it go unquestioned.
 type InternalClient interface {
 	MaxSliceByIndex(ctx context.Context) (map[string]uint64, error)
-	MaxInverseSliceByIndex(ctx context.Context) (map[string]uint64, error)
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, slice uint64) ([]*Node, error)
@@ -1327,9 +1132,6 @@ type InternalClient interface {
 	EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error
 	ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error
 	ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error
-	BackupTo(ctx context.Context, w io.Writer, index, frame, view string) error
-	BackupSlice(ctx context.Context, index, frame, view string, slice uint64) (io.ReadCloser, error)
-	RestoreFrom(ctx context.Context, r io.Reader, index, frame, view string) error
 	CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error
 	RestoreFrame(ctx context.Context, host, index, frame string) error
 	FrameViews(ctx context.Context, index, frame string) ([]string, error)

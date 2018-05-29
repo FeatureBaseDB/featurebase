@@ -431,79 +431,6 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName string, frameName 
 	return blocks, nil
 }
 
-// RestoreFrame reads all the data that this host should have for a given frame
-// from replicas in the cluster and restores that data to it.
-func (api *API) RestoreFrame(ctx context.Context, indexName string, frameName string, host *URI) error {
-	if err := api.validate(apiRestoreFrame); err != nil {
-		return errors.Wrap(err, "validating api method")
-	}
-
-	// Create a client for the remote cluster.
-	client := NewInternalHTTPClientFromURI(host, api.RemoteClient)
-
-	// Determine the maximum number of slices.
-	maxSlices, err := client.MaxSliceByIndex(ctx)
-	if err != nil {
-		return errors.Wrap(err, "getting max slice")
-	}
-
-	// Retrieve frame.
-	f := api.Holder.Frame(indexName, frameName)
-	if f == nil {
-		return ErrFrameNotFound
-	}
-
-	// Retrieve list of all views.
-	views, err := client.FrameViews(ctx, indexName, frameName)
-	if err != nil {
-		return errors.Wrap(err, "getting views")
-	}
-
-	// Loop over each slice and import it if this node owns it.
-	for slice := uint64(0); slice <= maxSlices[indexName]; slice++ {
-		// Ignore this slice if we don't own it.
-		if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
-			continue
-		}
-
-		// Loop over view names.
-		for _, view := range views {
-			// Create view.
-			v, err := f.CreateViewIfNotExists(view)
-			if err != nil {
-				return errors.Wrap(err, "creating view")
-			}
-
-			// Otherwise retrieve the local fragment.
-			frag, err := v.CreateFragmentIfNotExists(slice)
-			if err != nil {
-				return errors.Wrap(err, "creating fragment")
-			}
-
-			// Stream backup from remote node.
-			rd, err := client.BackupSlice(ctx, indexName, frameName, view, slice)
-			if err != nil {
-				return errors.Wrap(err, "getting backup")
-			} else if rd == nil {
-				continue // slice doesn't exist
-			}
-
-			// Restore to local frame and always close reader.
-			if err := func() error {
-				defer rd.Close()
-				if _, err := frag.ReadFrom(rd); err != nil {
-					return errors.Wrap(err, "reading fragment")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 // Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the coordinator.
 func (api *API) Hosts(ctx context.Context) []*Node {
@@ -813,12 +740,6 @@ func (api *API) MaxSlices(ctx context.Context) map[string]uint64 {
 	return api.Holder.MaxSlices()
 }
 
-// MaxInverseSlices returns the maximum inverse slice number for each index in a
-// map.
-func (api *API) MaxInverseSlices(ctx context.Context) map[string]uint64 {
-	return api.Holder.MaxInverseSlices()
-}
-
 // StatsWithTags returns an instance of whatever implementation of StatsClient
 // pilosa is using with the given tags.
 func (api *API) StatsWithTags(tags []string) StatsClient {
@@ -968,7 +889,6 @@ const (
 	//apiLocalID // not implemented
 	//apiLongQueryTime // not implemented
 	apiMarshalFragment
-	//apiMaxInverseSlices // not implemented
 	//apiMaxSlices // not implemented
 	apiQuery
 	apiRecalculateCaches

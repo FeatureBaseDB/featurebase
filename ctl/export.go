@@ -33,7 +33,7 @@ type ExportCommand struct {
 	// Name of the index & frame to export from.
 	Index string
 	Frame string
-	View  string
+
 	// Filename to export to.
 	Path string
 
@@ -59,8 +59,6 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 		return pilosa.ErrIndexRequired
 	} else if cmd.Frame == "" {
 		return pilosa.ErrFrameRequired
-	} else if !(cmd.View == pilosa.ViewStandard || cmd.View == pilosa.ViewInverse) {
-		return pilosa.ErrInvalidView
 	}
 
 	// Use output file, if specified.
@@ -83,13 +81,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	}
 
 	// Determine slice count.
-	var maxSlices map[string]uint64
-	if cmd.View == pilosa.ViewStandard {
-		maxSlices, err = client.MaxSliceByIndex(ctx)
-	} else if cmd.View == pilosa.ViewInverse {
-		maxSlices, err = client.MaxInverseSliceByIndex(ctx)
-	}
-
+	maxSlices, err := client.MaxSliceByIndex(ctx)
 	if err != nil {
 		return errors.Wrap(err, "getting slice count")
 	}
@@ -97,7 +89,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	// Export each slice.
 	for slice := uint64(0); slice <= maxSlices[cmd.Index]; slice++ {
 		logger.Printf("exporting slice: %d", slice)
-		if err := client.ExportCSV(ctx, cmd.Index, cmd.Frame, cmd.View, slice, w); err != nil {
+		if err := client.ExportCSV(ctx, cmd.Index, cmd.Frame, pilosa.ViewStandard, slice, w); err != nil {
 			return errors.Wrap(err, "exporting")
 		}
 	}

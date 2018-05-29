@@ -84,11 +84,9 @@ func TestHandler_Schema(t *testing.T) {
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 
-	if f, err := i0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
+	if f, err := i0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(pilosa.ViewInverse, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if f, err := i1.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
@@ -107,8 +105,8 @@ func TestHandler_Schema(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0"},{"name":"f1","views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","views":[{"name":"standard"}]}]}]}`+"\n" {
-	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000}},{"name":"f1","options":{"inverseEnabled":true,"cacheType":"ranked","cacheSize":50000},"views":[{"name":"inverse"},{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0"},{"name":"f1","views":[{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","views":[{"name":"standard"}]}]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000}},{"name":"f1","options":{"cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -123,11 +121,9 @@ func TestHandler_Status(t *testing.T) {
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 
-	if f, err := i0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{InverseEnabled: true}); err != nil {
+	if f, err := i0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(pilosa.ViewInverse, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if f, err := i1.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
@@ -209,48 +205,7 @@ func TestHandler_MaxSlices(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/slices/max", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"standard":{"i0":3,"i1":0},"inverse":{"i0":0,"i1":0}}`+"\n" {
-		t.Fatalf("unexpected body: %s", body)
-	}
-}
-
-// Ensure the handler can return the maxslice map for the inverse views.
-func TestHandler_MaxSlices_Inverse(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	f0, err := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{}).CreateFrame("f0", pilosa.FrameOptions{InverseEnabled: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f0.SetBit(pilosa.ViewInverse, 30, (1*SliceWidth)+1, nil); err != nil {
-		t.Fatal(err)
-	} else if _, err := f0.SetBit(pilosa.ViewInverse, 30, (1*SliceWidth)+2, nil); err != nil {
-		t.Fatal(err)
-	} else if _, err := f0.SetBit(pilosa.ViewInverse, 30, (3*SliceWidth)+4, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	f1, err := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{}).CreateFrame("f1", pilosa.FrameOptions{InverseEnabled: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f1.SetBit(pilosa.ViewStandard, 40, (0*SliceWidth)+1, nil); err != nil {
-		t.Fatal(err)
-	} else if _, err := f1.SetBit(pilosa.ViewInverse, 40, (0*SliceWidth)+2, nil); err != nil {
-		t.Fatal(err)
-	} else if _, err := f1.SetBit(pilosa.ViewInverse, 40, (0*SliceWidth)+4, nil); err != nil {
-		t.Fatal(err)
-	}
-
-	h := test.NewHandler()
-	h.API.Holder = hldr.Holder
-	h.API.Cluster = test.NewCluster(1)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/slices/max?inverse=true", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"standard":{"i0":0,"i1":0},"inverse":{"i0":3,"i1":0}}`+"\n" {
+	} else if body := w.Body.String(); body != `{"standard":{"i0":3,"i1":0}}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -1099,55 +1054,6 @@ func TestHandler_Frame_GetFields(t *testing.T) {
 
 type FrameFields struct {
 	Fields []pilosa.Field
-}
-
-// Ensure the handler can backup a fragment and then restore it.
-func TestHandler_Fragment_BackupRestore(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
-
-	// Set bits in the index.
-	f0 := hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
-	f0.MustSetBits(100, 1, 2, 3)
-
-	// Begin backing up from slice i/f/0.
-	resp, err := http.Get(s.URL + "/fragment/data?index=i&frame=f&view=standard&slice=0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	// Ensure response came back OK.
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected backup status code: %d", resp.StatusCode)
-	}
-
-	// Create frame.
-	if _, err := hldr.MustCreateIndexIfNotExists("x", pilosa.IndexOptions{}).CreateFrame("y", pilosa.FrameOptions{}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Restore backup to slice x/y/0.
-	if resp, err := http.Post(s.URL+"/fragment/data?index=x&frame=y&view=standard&slice=0", "application/octet-stream", resp.Body); err != nil {
-		t.Fatal(err)
-	} else if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		t.Fatalf("unexpected restore status code: %d", resp.StatusCode)
-	} else {
-		resp.Body.Close()
-	}
-
-	// Verify data is correctly restored.
-	f1 := hldr.Fragment("x", "y", pilosa.ViewStandard, 0)
-	if f1 == nil {
-		t.Fatal("fragment x/y/standard/0 not created")
-	} else if columns := f1.Row(100).Columns(); !reflect.DeepEqual(columns, []uint64{1, 2, 3}) {
-		t.Fatalf("unexpected restored columns: %+v", columns)
-	}
 }
 
 // Ensure the handler can retrieve the version.
