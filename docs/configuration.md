@@ -59,6 +59,18 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     bind = localhost:10101
     ```
 
+#### CORS (Cross-Origin Resource Sharing) Allowed Origins
+
+* Description: List of allowed origin URIs for CORS
+* Flag: `--handler.allowed-origins="https://myapp.com,https://myapp.org"`
+* Env: `PILOSA_HANDLER_ALLOWED_ORIGINS="https://myapp.com,https://myapp.org"`
+* Config:
+
+    ```toml
+    [handler]
+    allowed-origins = ["https://myapp.com", "https://myapp.org"]
+    ```
+
 #### Data Dir
 
 * Description: Directory to store Pilosa data files.

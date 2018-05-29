@@ -203,11 +203,15 @@ func OptServerURI(uri *URI) ServerOption {
 
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
+	handler, err := NewHandler()
+	if err != nil {
+		return nil, errors.Wrap(err, "initializing handler")
+	}
 	s := &Server{
 		closing:           make(chan struct{}),
 		Cluster:           NewCluster(),
 		Holder:            NewHolder(),
-		handler:           NewHandler(),
+		handler:           handler,
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
 		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),

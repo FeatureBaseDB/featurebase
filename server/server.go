@@ -165,7 +165,10 @@ func (m *Command) SetupServer() error {
 	}
 	m.logger.Printf("%s %s, build time %s\n", productName, pilosa.Version, pilosa.BuildTime)
 
-	handler := pilosa.NewHandler()
+	handler, err := pilosa.NewHandler(pilosa.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins))
+	if err != nil {
+		return errors.Wrap(err, "wrapping handler")
+	}
 	handler.Logger = m.logger
 	handler.FileSystem = &statik.FileSystem{}
 	handler.API = pilosa.NewAPI()
