@@ -47,7 +47,7 @@ func TestRow_Merge(t *testing.T) {
 			if cnt := test.r1.Count(); cnt != test.exp {
 				t.Fatalf("merged count %d is not %d", cnt, test.exp)
 			}
-			if length := len(test.r1.Bits()); uint64(length) != test.exp {
+			if length := len(test.r1.Columns()); uint64(length) != test.exp {
 				t.Fatalf("merged length %d is not %d", length, test.exp)
 			}
 		})
@@ -65,15 +65,15 @@ func TestRow_Xor(t *testing.T) {
 		t.Fatalf("Test 1 Count after xor %d != 3\n", res.Count())
 	}
 
-	if !reflect.DeepEqual(res.Bits(), exp) {
-		t.Fatalf("Test 2 Results %v != expected %v\n", res.Bits(), exp)
+	if !reflect.DeepEqual(res.Columns(), exp) {
+		t.Fatalf("Test 2 Results %v != expected %v\n", res.Columns(), exp)
 	}
 	res = r2.Xor(r1)
 	if res.Count() != 3 {
 		t.Fatalf("Test 3 Count after xor %d != 3\n", res.Count())
 	}
-	if !reflect.DeepEqual(res.Bits(), exp) {
-		t.Fatalf("Test 4 Results %v != expected %v\n", res.Bits(), exp)
+	if !reflect.DeepEqual(res.Columns(), exp) {
+		t.Fatalf("Test 4 Results %v != expected %v\n", res.Columns(), exp)
 	}
 
 }
@@ -86,15 +86,15 @@ func TestRow_Union_Segment(t *testing.T) {
 	if res.Count() != 4 {
 		t.Fatalf("Test 1 Count after Union %d != 5\n", res.Count())
 	}
-	if !reflect.DeepEqual(res.Bits(), exp) {
-		t.Fatalf("Test 2 Union Results %v != expected %v\n", res.Bits(), exp)
+	if !reflect.DeepEqual(res.Columns(), exp) {
+		t.Fatalf("Test 2 Union Results %v != expected %v\n", res.Columns(), exp)
 	}
 	res = r2.Union(r1)
 	if res.Count() != 4 {
 		t.Fatalf("Test 3 Count after xor %d != 5\n", res.Count())
 	}
-	if !reflect.DeepEqual(res.Bits(), exp) {
-		t.Fatalf("Test 2 Union Results %v != expected %v\n", res.Bits(), exp)
+	if !reflect.DeepEqual(res.Columns(), exp) {
+		t.Fatalf("Test 2 Union Results %v != expected %v\n", res.Columns(), exp)
 	}
 }
 
@@ -107,7 +107,7 @@ func TestRow_Difference_Segment(t *testing.T) {
 	if res.Count() != 2 {
 		t.Fatalf("Test 1 Count after Difference %d != 5\n", res.Count())
 	}
-	if !reflect.DeepEqual(res.Bits(), exp) {
-		t.Fatalf("Test 2 Difference Results %v != expected %v\n", res.Bits(), exp)
+	if !reflect.DeepEqual(res.Columns(), exp) {
+		t.Fatalf("Test 2 Difference Results %v != expected %v\n", res.Columns(), exp)
 	}
 }

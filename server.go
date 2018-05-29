@@ -440,11 +440,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		if obj.IsInverse {
-			idx.SetRemoteMaxInverseSlice(obj.Slice)
-		} else {
-			idx.SetRemoteMaxSlice(obj.Slice)
-		}
+		idx.SetRemoteMaxSlice(obj.Slice)
 	case *internal.CreateIndexMessage:
 		opt := IndexOptions{}
 		_, err := s.Holder.CreateIndex(obj.Index, opt)
@@ -569,7 +565,7 @@ func (s *Server) SendTo(to *Node, pb proto.Message) error {
 // where a node fails to receive a Broadcast message, or
 // when a new (empty) node needs to get in sync with the
 // rest of the cluster, two things are shared via gossip:
-// - MaxSlice/MaxInverseSlice by Index
+// - MaxSlice by Index
 // - Schema
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 func (s *Server) LocalStatus() (proto.Message, error) {
@@ -625,7 +621,7 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 		return errors.Wrap(err, "applying schema")
 	}
 
-	// Sync maxSlices (standard).
+	// Sync maxSlices.
 	oldmaxslices := s.Holder.MaxSlices()
 	for index, newMax := range ns.MaxSlices.Standard {
 		localIndex := s.Holder.Index(index)
@@ -638,22 +634,6 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 		if newMax > oldmaxslices[index] {
 			oldmaxslices[index] = newMax
 			localIndex.SetRemoteMaxSlice(newMax)
-		}
-	}
-
-	// Sync maxSlices (inverse).
-	oldMaxInverseSlices := s.Holder.MaxInverseSlices()
-	for index, newMaxInverse := range ns.MaxSlices.Inverse {
-		localIndex := s.Holder.Index(index)
-		// if we don't know about an index locally, log an error because
-		// indexes should be created and synced prior to slice creation
-		if localIndex == nil {
-			s.logger.Printf("Local Index not found: %s", index)
-			continue
-		}
-		if newMaxInverse > oldMaxInverseSlices[index] {
-			oldMaxInverseSlices[index] = newMaxInverse
-			localIndex.SetRemoteMaxInverseSlice(newMaxInverse)
 		}
 	}
 

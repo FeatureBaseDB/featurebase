@@ -393,7 +393,7 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
-		return false, errors.Wrap(err, "getting bit ops")
+		return false, errors.Wrap(err, "getting bit pos")
 	}
 
 	// Write to storage.
@@ -585,7 +585,7 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 // FieldSum returns the sum of a given field as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
-	// Compute count based on the existence bit.
+	// Compute count based on the existence row.
 	row := f.Row(uint64(bitDepth))
 	if filter != nil {
 		count = row.IntersectionCount(filter)
@@ -629,7 +629,7 @@ func (f *Fragment) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err 
 	}
 
 	for i := bitDepth; i > uint(0); i-- {
-		ii := i - 1 // allow for uint range: (bitdepth-1) to 0
+		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
 		row := f.Row(uint64(ii))
 
 		x := consider.Difference(row)
@@ -662,7 +662,7 @@ func (f *Fragment) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err 
 	}
 
 	for i := bitDepth; i > uint(0); i-- {
-		ii := i - 1 // allow for uint range: (bitdepth-1) to 0
+		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
 		row := f.Row(uint64(ii))
 
 		x := row.Intersect(consider)
@@ -842,7 +842,7 @@ func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax u
 		}
 
 		// LTE predicateMin
-		// If bit is zero then remove all set columns not in excluded bitmap.
+		// If bit is zero then remove all set bits not in excluded bitmap.
 		if bit2 == 0 {
 			b = b.Difference(row.Difference(keep2))
 		} else {
@@ -996,13 +996,13 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 		// If it's too low then don't try finding anymore pairs.
 		threshold := results.Pairs[0].Count
 
-		// If the row doesn't have enough bits set before the intersection
+		// If the row doesn't have enough columns set before the intersection
 		// then we can assume that any remaining rows also have a count too low.
 		if threshold < opt.MinThreshold || cnt < threshold {
 			break
 		}
 
-		// Calculate the intersecting bit count and skip if it's below our
+		// Calculate the intersecting column count and skip if it's below our
 		// last row in our current result set.
 		count := opt.Src.IntersectionCount(f.Row(rowID))
 		if count < threshold {
