@@ -147,32 +147,47 @@ func (p *Parser) parseChildren() ([]*Call, error) {
 	}
 }
 
-// parseArgs parses key/value arguments.
+// parseArgs parses key/value arguments. There is a special case for the chained comparison
+// syntax "4 < z < 8", which only works with the LT token.
 func (p *Parser) parseArgs() (map[string]interface{}, error) {
 	args := make(map[string]interface{})
 	for {
-		// Parse key.
+		var key string
+		var value interface{}
+		var op Token
+		var betweenLeft int64
+		// Parse key, or lower bound for BETWEEN.
 		tok, pos, lit := p.scanIgnoreWhitespace()
+
 		if tok == RPAREN {
 			p.unscan(1)
 			return args, nil
-		} else if tok != IDENT {
-			return nil, parseErrorf(pos, "expected argument key, found %q", lit)
+		} else if tok == IDENT {
+			key = lit
+		} else if tok == INTEGER {
+			v, err := strconv.ParseInt(lit, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			betweenLeft = v
+			op = BETWEEN
+		} else {
+			return nil, parseErrorf(pos, "expected argument key or integer, found %q", lit)
 		}
-		key := lit
 
 		// Expect '=' or a comparison next.
-		var op Token
-		switch tok, pos, lit := p.scanIgnoreWhitespace(); tok {
+		tok, pos, lit = p.scanIgnoreWhitespace()
+		switch tok {
 		case ASSIGN:
-		case EQ, NEQ, LT, LTE, GT, GTE, BETWEEN:
-			op = tok
+		case EQ, NEQ, LT, LTE, GT, GTE:
+			if op != BETWEEN {
+				op = tok
+			}
 		default:
 			return nil, parseErrorf(pos, "expected equals sign or comparison operator, found %q", lit)
 		}
 
-		// Parse value.
-		var value interface{}
+		// Parse value, or key for BETWEEN.
 		tok, pos, lit = p.scanIgnoreWhitespace()
 		switch tok {
 		case IDENT:
@@ -182,6 +197,8 @@ func (p *Parser) parseArgs() (map[string]interface{}, error) {
 				value = false
 			} else if lit == "null" {
 				value = nil
+			} else if op == BETWEEN {
+				key = lit
 			} else {
 				value = lit
 			}
@@ -207,6 +224,23 @@ func (p *Parser) parseArgs() (map[string]interface{}, error) {
 			value = v
 		default:
 			return nil, parseErrorf(pos, "invalid argument value: %q", lit)
+		}
+
+		// Parse right value for BETWEEN.
+		tok, pos, _ = p.scanIgnoreWhitespace()
+		if tok == LT {
+			tok, pos, lit := p.scanIgnoreWhitespace()
+			if tok != INTEGER {
+				return nil, parseErrorf(pos, "TODO")
+			}
+			v, err := strconv.ParseInt(lit, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			value = []interface{}{betweenLeft, v}
+			op = BETWEEN
+		} else {
+			p.unscan(1)
 		}
 
 		// Ensure key doesn't already exist.
