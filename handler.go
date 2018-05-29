@@ -81,8 +81,8 @@ func NewHandler() *Handler {
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")
-	h.validators["GetSliceMax"] = queryValidationSpecRequired().Optional("inverse")
-	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeAttrs", "excludeBits")
+	h.validators["GetSliceMax"] = queryValidationSpecRequired()
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
 	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
@@ -119,7 +119,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
-	router.HandleFunc("/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client (for backups)
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
@@ -134,7 +133,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
 	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
-	router.HandleFunc("/fragment/data", handler.handlePostFragmentData).Methods("POST").Name("PostFragmentData")
 	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
 	router.HandleFunc("/import-value", handler.handlePostImportValue).Methods("POST")
@@ -147,7 +145,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/restore", handler.handlePostFrameRestore).Methods("POST").Name("PostFrameRestore")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameFields).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
@@ -303,7 +300,6 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(getSlicesMaxResponse{
 		Standard: h.API.MaxSlices(r.Context()),
-		Inverse:  h.API.MaxInverseSlices(r.Context()),
 	}); err != nil {
 		h.Logger.Printf("write slices-max response error: %s", err)
 	}
@@ -311,7 +307,6 @@ func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
 
 type getSlicesMaxResponse struct {
 	Standard map[string]uint64 `json:"standard"`
-	Inverse  map[string]uint64 `json:"inverse"`
 }
 
 // handleGetIndexes handles GET /index request.
@@ -821,11 +816,11 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*QueryRequest, error) {
 	}
 
 	return &QueryRequest{
-		Query:        query,
-		Slices:       slices,
-		ColumnAttrs:  q.Get("columnAttrs") == "true",
-		ExcludeAttrs: q.Get("excludeAttrs") == "true",
-		ExcludeBits:  q.Get("excludeBits") == "true",
+		Query:           query,
+		Slices:          slices,
+		ColumnAttrs:     q.Get("columnAttrs") == "true",
+		ExcludeRowAttrs: q.Get("excludeRowAttrs") == "true",
+		ExcludeColumns:  q.Get("excludeColumns") == "true",
 	}, nil
 }
 
@@ -1017,48 +1012,6 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetFragmentData handles GET /fragment/data requests.
-func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) {
-	// Read slice parameter.
-	q := r.URL.Query()
-	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
-	if err != nil {
-		http.Error(w, "slice required", http.StatusBadRequest)
-		return
-	}
-
-	// Retrieve fragment from holder.
-	f, err := h.API.MarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Stream fragment to response body.
-	if _, err := f.WriteTo(w); err != nil {
-		h.Logger.Printf("fragment backup error: %s", err)
-	}
-}
-
-// handlePostFragmentData handles POST /fragment/data requests.
-func (h *Handler) handlePostFragmentData(w http.ResponseWriter, r *http.Request) {
-	// Read slice parameter.
-	q := r.URL.Query()
-	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
-	if err != nil {
-		http.Error(w, "slice required", http.StatusBadRequest)
-		return
-	}
-
-	if err = h.API.UnmarshalFragment(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice, r.Body); err != nil {
-		if errors.Cause(err) == ErrFrameNotFound {
-			http.Error(w, ErrFrameNotFound.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}
-}
-
 // handleGetFragmentBlockData handles GET /fragment/block/data requests.
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
 	buf, err := h.API.FragmentBlockData(r.Context(), r.Body)
@@ -1111,38 +1064,6 @@ type getFragmentBlocksResponse struct {
 	Blocks []FragmentBlock `json:"blocks"`
 }
 
-// handlePostFrameRestore handles POST /frame/restore requests.
-func (h *Handler) handlePostFrameRestore(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
-
-	q := r.URL.Query()
-	hostStr := q.Get("host")
-
-	// Validate query parameters.
-	if hostStr == "" {
-		http.Error(w, "host required", http.StatusBadRequest)
-		return
-	}
-
-	host, err := NewURIFromAddress(hostStr)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-
-	err = h.API.RestoreFrame(r.Context(), indexName, frameName, host)
-	switch errors.Cause(err) {
-	case nil:
-		break
-	case ErrFrameNotFound:
-		fallthrough
-	case ErrFragmentNotFound:
-		http.Error(w, err.Error(), http.StatusNotFound)
-	default:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
 // handleGetVersion handles /version requests.
 func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	err := json.NewEncoder(w).Encode(struct {
@@ -1181,10 +1102,10 @@ type QueryRequest struct {
 	ColumnAttrs bool
 
 	// Do not return row attributes, if true.
-	ExcludeAttrs bool
+	ExcludeRowAttrs bool
 
-	// Do not return bits, if true.
-	ExcludeBits bool
+	// Do not return columns, if true.
+	ExcludeColumns bool
 
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
@@ -1193,12 +1114,12 @@ type QueryRequest struct {
 
 func decodeQueryRequest(pb *internal.QueryRequest) *QueryRequest {
 	req := &QueryRequest{
-		Query:        pb.Query,
-		Slices:       pb.Slices,
-		ColumnAttrs:  pb.ColumnAttrs,
-		Remote:       pb.Remote,
-		ExcludeAttrs: pb.ExcludeAttrs,
-		ExcludeBits:  pb.ExcludeBits,
+		Query:           pb.Query,
+		Slices:          pb.Slices,
+		ColumnAttrs:     pb.ColumnAttrs,
+		Remote:          pb.Remote,
+		ExcludeRowAttrs: pb.ExcludeRowAttrs,
+		ExcludeColumns:  pb.ExcludeColumns,
 	}
 
 	return req

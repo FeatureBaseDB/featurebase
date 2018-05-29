@@ -168,7 +168,7 @@ func NewRankCache(maxEntries uint32) *RankCache {
 func (c *RankCache) Add(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Ignore if the bit count is below the threshold.
+	// Ignore if the column count is below the threshold.
 	if n < c.thresholdValue {
 		return
 	}
@@ -469,7 +469,7 @@ type BitmapCache interface {
 
 // SimpleCache implements BitmapCache
 // it is meant to be a short-lived cache for cases where writes are continuing to access
-// the same bit within a short time frame (i.e. good for write-heavy loads)
+// the same row within a short time frame (i.e. good for write-heavy loads)
 // A read-heavy use case would cause the cache to get bigger, potentially causing the
 // node to run out of memory.
 type SimpleCache struct {

@@ -99,9 +99,9 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		return resp, errors.Wrap(err, "parsing")
 	}
 	execOpts := &ExecOptions{
-		Remote:       req.Remote,
-		ExcludeAttrs: req.ExcludeAttrs,
-		ExcludeBits:  req.ExcludeBits,
+		Remote:          req.Remote,
+		ExcludeRowAttrs: req.ExcludeRowAttrs,
+		ExcludeColumns:  req.ExcludeColumns,
 	}
 	results, err := api.Executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
 	if err != nil {
@@ -110,7 +110,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	resp.Results = results
 
 	// Fill column attributes if requested.
-	if req.ColumnAttrs && !req.ExcludeBits {
+	if req.ColumnAttrs && !req.ExcludeColumns {
 		// Consolidate all column ids across all calls.
 		var columnIDs []uint64
 		for _, result := range results {
@@ -118,7 +118,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 			if !ok {
 				continue
 			}
-			columnIDs = uint64Slice(columnIDs).merge(bm.Bits())
+			columnIDs = uint64Slice(columnIDs).merge(bm.Columns())
 		}
 
 		// Retrieve column attributes across all calls.
@@ -305,7 +305,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, frameName strin
 	// Wrap writer with a CSV writer.
 	cw := csv.NewWriter(w)
 
-	// Iterate over each bit.
+	// Iterate over each column.
 	if err := f.ForEachBit(func(rowID, columnID uint64) error {
 		return cw.Write([]string{
 			strconv.FormatUint(rowID, 10),
@@ -429,79 +429,6 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName string, frameName 
 	// Retrieve blocks.
 	blocks := f.Blocks()
 	return blocks, nil
-}
-
-// RestoreFrame reads all the data that this host should have for a given frame
-// from replicas in the cluster and restores that data to it.
-func (api *API) RestoreFrame(ctx context.Context, indexName string, frameName string, host *URI) error {
-	if err := api.validate(apiRestoreFrame); err != nil {
-		return errors.Wrap(err, "validating api method")
-	}
-
-	// Create a client for the remote cluster.
-	client := NewInternalHTTPClientFromURI(host, api.RemoteClient)
-
-	// Determine the maximum number of slices.
-	maxSlices, err := client.MaxSliceByIndex(ctx)
-	if err != nil {
-		return errors.Wrap(err, "getting max slice")
-	}
-
-	// Retrieve frame.
-	f := api.Holder.Frame(indexName, frameName)
-	if f == nil {
-		return ErrFrameNotFound
-	}
-
-	// Retrieve list of all views.
-	views, err := client.FrameViews(ctx, indexName, frameName)
-	if err != nil {
-		return errors.Wrap(err, "getting views")
-	}
-
-	// Loop over each slice and import it if this node owns it.
-	for slice := uint64(0); slice <= maxSlices[indexName]; slice++ {
-		// Ignore this slice if we don't own it.
-		if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
-			continue
-		}
-
-		// Loop over view names.
-		for _, view := range views {
-			// Create view.
-			v, err := f.CreateViewIfNotExists(view)
-			if err != nil {
-				return errors.Wrap(err, "creating view")
-			}
-
-			// Otherwise retrieve the local fragment.
-			frag, err := v.CreateFragmentIfNotExists(slice)
-			if err != nil {
-				return errors.Wrap(err, "creating fragment")
-			}
-
-			// Stream backup from remote node.
-			rd, err := client.BackupSlice(ctx, indexName, frameName, view, slice)
-			if err != nil {
-				return errors.Wrap(err, "getting backup")
-			} else if rd == nil {
-				continue // slice doesn't exist
-			}
-
-			// Restore to local frame and always close reader.
-			if err := func() error {
-				defer rd.Close()
-				if _, err := frag.ReadFrom(rd); err != nil {
-					return errors.Wrap(err, "reading fragment")
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 // Hosts returns a list of the hosts in the cluster including their ID,
@@ -784,7 +711,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	// Import into fragment.
 	err = frame.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
-		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
+		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, columns=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
 }
@@ -803,7 +730,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 	// Import into fragment.
 	err = frame.ImportValue(req.Field, req.ColumnIDs, req.Values)
 	if err != nil {
-		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, field=%s, bits=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
+		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, field=%s, columns=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
 }
@@ -811,12 +738,6 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 // MaxSlices returns the maximum slice number for each index in a map.
 func (api *API) MaxSlices(ctx context.Context) map[string]uint64 {
 	return api.Holder.MaxSlices()
-}
-
-// MaxInverseSlices returns the maximum inverse slice number for each index in a
-// map.
-func (api *API) MaxInverseSlices(ctx context.Context) map[string]uint64 {
-	return api.Holder.MaxInverseSlices()
 }
 
 // StatsWithTags returns an instance of whatever implementation of StatsClient
@@ -968,7 +889,6 @@ const (
 	//apiLocalID // not implemented
 	//apiLongQueryTime // not implemented
 	apiMarshalFragment
-	//apiMaxInverseSlices // not implemented
 	//apiMaxSlices // not implemented
 	apiQuery
 	apiRecalculateCaches

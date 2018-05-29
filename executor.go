@@ -80,35 +80,20 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// Don't bother calculating slices for query types that don't require it.
 	needsSlices := needsSlices(q.Calls)
 
-	// MaxSlice can differ between inverse and standard views, so we need
-	// to send queries to different slices based on orientation.
-	var inverseSlices []uint64
-
-	// If slices are specified, then use that value for slices or
-	// inverseSlices. If slices aren't specified, then include all of them.
-	if len(slices) > 0 {
-		// For inverse queries, the values of `slices` provided to the Execute() method
-		// on the remote node actually represents inverseSlices.
-		inverseSlices = slices
-	} else if needsSlices {
+	// If slices are specified, then use that value for slices. If slices aren't
+	// specified, then include all of them.
+	if len(slices) == 0 && needsSlices {
 		// Round up the number of slices.
 		idx := e.Holder.Index(index)
 		if idx == nil {
 			return nil, ErrIndexNotFound
 		}
 		maxSlice := idx.MaxSlice()
-		maxInverseSlice := idx.MaxInverseSlice()
 
 		// Generate a slices of all slices.
 		slices = make([]uint64, maxSlice+1)
 		for i := range slices {
 			slices[i] = uint64(i)
-		}
-
-		// Generate a slices of all inverse slices.
-		inverseSlices = make([]uint64, maxInverseSlice+1)
-		for i := range inverseSlices {
-			inverseSlices[i] = uint64(i)
 		}
 	}
 
@@ -120,23 +105,6 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
-		if call.SupportsInverse() && needsSlices {
-			// Fetch frame & row label based on argument.
-			frame := call.Args["frame"].(string)
-			if frame == "" {
-				frame = DefaultFrame
-			}
-			f := e.Holder.Frame(index, frame)
-			if f == nil {
-				return nil, ErrFrameNotFound
-			}
-
-			// If this call is to an inverse frame send to a different list of slices.
-			if call.IsInverse(rowLabel, columnLabel) {
-				slices = inverseSlices
-			}
-		}
-
 		v, err := e.executeCall(ctx, index, call, slices, opt)
 		if err != nil {
 			return nil, err
@@ -336,7 +304,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	// If the row label is used then return bitmap attributes.
 	row, _ := other.(*Row)
 	if c.Name == "Bitmap" {
-		if opt.ExcludeAttrs {
+		if opt.ExcludeRowAttrs {
 			row.Attrs = map[string]interface{}{}
 		} else {
 			idx := e.Holder.Index(index)
@@ -367,7 +335,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 		}
 	}
 
-	if opt.ExcludeBits {
+	if opt.ExcludeColumns {
 		row.segments = []RowSegment{}
 	}
 
@@ -580,7 +548,6 @@ func (e *Executor) executeTopNSlices(ctx context.Context, index string, c *pql.C
 // executeTopNSlice executes a TopN call for a single slice.
 func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Call, slice uint64) ([]Pair, error) {
 	frame, _ := c.Args["frame"].(string)
-	inverse, _ := c.Args["inverse"].(bool)
 	n, _, err := c.UintArg("n")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
@@ -619,9 +586,6 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 
 	// Determine view.
 	view := ViewStandard
-	if inverse {
-		view = ViewInverse
-	}
 
 	f := e.Holder.Fragment(index, frame, view, slice)
 	if f == nil {
@@ -685,32 +649,19 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 		return nil, ErrFrameNotFound
 	}
 
-	// Return an error if both the row and column label are specified.
 	rowID, rowOK, rowErr := c.UintArg(rowLabel)
-	columnID, columnOK, columnErr := c.UintArg(columnLabel)
-	if rowErr != nil || columnErr != nil {
-		return nil, fmt.Errorf("Bitmap() error with arg for col: %v or row: %v", columnErr, rowErr)
+	if rowErr != nil {
+		return nil, fmt.Errorf("Bitmap() error with arg for row: %v", rowErr)
 	}
-	if rowOK && columnOK {
-		return nil, fmt.Errorf("Bitmap() cannot specify both %s and %s values", rowLabel, columnLabel)
-	} else if !rowOK && !columnOK {
-		return nil, fmt.Errorf("Bitmap() must specify either %s or %s values", rowLabel, columnLabel)
+	if !rowOK {
+		return nil, fmt.Errorf("Bitmap() must specify %v", rowLabel)
 	}
 
-	// Determine row or column orientation.
-	view, id := ViewStandard, rowID
-	if columnOK {
-		view, id = ViewInverse, columnID
-		if !f.InverseEnabled() {
-			return nil, fmt.Errorf("Bitmap() cannot retrieve columns unless inverse storage enabled")
-		}
-	}
-
-	frag := e.Holder.Fragment(index, frame, view, slice)
+	frag := e.Holder.Fragment(index, frame, ViewStandard, slice)
 	if frag == nil {
 		return NewRow(), nil
 	}
-	return frag.Row(id), nil
+	return frag.Row(rowID), nil
 }
 
 // executeIntersectSlice executes a intersect() call for a local slice.
@@ -761,26 +712,12 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	}
 
 	// Read row & column id.
-	columnID, columnOK, err := c.UintArg(columnLabel)
-	if err != nil {
-		return nil, fmt.Errorf("executeRangeSlice - reading column: %v", err)
-	}
 	rowID, rowOK, err := c.UintArg(rowLabel)
 	if err != nil {
 		return nil, fmt.Errorf("executeRangeSlice - reading row: %v", err)
 	}
-
-	// Determine view.
-	var id uint64
-	var viewName string
-	if columnOK && rowOK {
-		return nil, fmt.Errorf("Range() cannot contain both %q and %q", columnLabel, rowLabel)
-	} else if !columnOK && !rowOK {
-		return nil, fmt.Errorf("Range() must specify either %q or %q", columnLabel, rowLabel)
-	} else if columnOK {
-		viewName, id = ViewInverse, columnID
-	} else {
-		viewName, id = ViewStandard, rowID
+	if !rowOK {
+		return nil, fmt.Errorf("Range() must specify %q", rowLabel)
 	}
 
 	// Parse start time.
@@ -811,12 +748,12 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 
 	// Union bitmaps across all time-based subframes.
 	row := &Row{}
-	for _, view := range ViewsByTimeRange(viewName, startTime, endTime, q) {
+	for _, view := range ViewsByTimeRange(ViewStandard, startTime, endTime, q) {
 		f := e.Holder.Fragment(index, frame, view, slice)
 		if f == nil {
 			continue
 		}
-		row = row.Union(f.Row(id))
+		row = row.Union(f.Row(rowID))
 	}
 	f.Stats.Count("range", 1, 1.0)
 	return row, nil
@@ -1033,7 +970,6 @@ func (e *Executor) executeCount(ctx context.Context, index string, c *pql.Call, 
 
 // executeClearBit executes a ClearBit() call.
 func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) (bool, error) {
-	view, _ := c.Args["view"].(string)
 	frame, ok := c.Args["frame"].(string)
 	if !ok {
 		return false, errors.New("ClearBit() frame required")
@@ -1064,31 +1000,7 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
 	}
 
-	// Clear bits for each view.
-	switch view {
-	case ViewStandard:
-		return e.executeClearBitView(ctx, index, c, f, view, colID, rowID, opt)
-	case ViewInverse:
-		return e.executeClearBitView(ctx, index, c, f, view, rowID, colID, opt)
-	case "":
-		var ret bool
-		if changed, err := e.executeClearBitView(ctx, index, c, f, ViewStandard, colID, rowID, opt); err != nil {
-			return ret, err
-		} else if changed {
-			ret = true
-		}
-
-		if f.InverseEnabled() {
-			if changed, err := e.executeClearBitView(ctx, index, c, f, ViewInverse, rowID, colID, opt); err != nil {
-				return ret, err
-			} else if changed {
-				ret = true
-			}
-		}
-		return ret, nil
-	default:
-		return false, fmt.Errorf("invalid view: %s", view)
-	}
+	return e.executeClearBitView(ctx, index, c, f, ViewStandard, colID, rowID, opt)
 }
 
 // executeClearBitView executes a ClearBit() call for a single view.
@@ -1123,7 +1035,6 @@ func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql
 
 // executeSetBit executes a SetBit() call.
 func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) (bool, error) {
-	view, _ := c.Args["view"].(string)
 	frame, ok := c.Args["frame"].(string)
 	if !ok {
 		return false, errors.New("SetBit() field required: frame")
@@ -1164,31 +1075,7 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		timestamp = &t
 	}
 
-	// Set bits for each view.
-	switch view {
-	case ViewStandard:
-		return e.executeSetBitView(ctx, index, c, f, view, colID, rowID, timestamp, opt)
-	case ViewInverse:
-		return e.executeSetBitView(ctx, index, c, f, view, rowID, colID, timestamp, opt)
-	case "":
-		var ret bool
-		if changed, err := e.executeSetBitView(ctx, index, c, f, ViewStandard, colID, rowID, timestamp, opt); err != nil {
-			return ret, err
-		} else if changed {
-			ret = true
-		}
-
-		if f.InverseEnabled() {
-			if changed, err := e.executeSetBitView(ctx, index, c, f, ViewInverse, rowID, colID, timestamp, opt); err != nil {
-				return ret, err
-			} else if changed {
-				ret = true
-			}
-		}
-		return ret, nil
-	default:
-		return false, fmt.Errorf("invalid view: %s", view)
-	}
+	return e.executeSetBitView(ctx, index, c, f, ViewStandard, colID, rowID, timestamp, opt)
 }
 
 // executeSetBitView executes a SetBit() call for a specific view.
@@ -1319,7 +1206,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err := frame.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
-	frame.Stats.Count("SetBitmapAttrs", 1, 1.0)
+	frame.Stats.Count("SetRowAttrs", 1, 1.0)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
@@ -1404,7 +1291,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err := frame.RowAttrStore().SetBulkAttrs(frameMap); err != nil {
 			return nil, err
 		}
-		frame.Stats.Count("SetBitmapAttrs", 1, 1.0)
+		frame.Stats.Count("SetRowAttrs", 1, 1.0)
 	}
 
 	// Do not forward call if this is already being forwarded.
@@ -1700,9 +1587,9 @@ type mapResponse struct {
 
 // ExecOptions represents an execution context for a single Execute() call.
 type ExecOptions struct {
-	Remote       bool
-	ExcludeAttrs bool
-	ExcludeBits  bool
+	Remote          bool
+	ExcludeRowAttrs bool
+	ExcludeColumns  bool
 }
 
 // decodeError returns an error representation of s if s is non-blank.

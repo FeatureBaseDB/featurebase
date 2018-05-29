@@ -32,10 +32,9 @@ var (
 	ErrIndexNotFound = errors.New("index not found")
 
 	// ErrFrameRequired is returned when no frame is specified.
-	ErrFrameRequired        = errors.New("frame required")
-	ErrFrameExists          = errors.New("frame already exists")
-	ErrFrameNotFound        = errors.New("frame not found")
-	ErrFrameInverseDisabled = errors.New("frame inverse disabled")
+	ErrFrameRequired = errors.New("frame required")
+	ErrFrameExists   = errors.New("frame already exists")
+	ErrFrameNotFound = errors.New("frame not found")
 
 	ErrFieldNotFound         = errors.New("field not found")
 	ErrFieldExists           = errors.New("field already exists")
