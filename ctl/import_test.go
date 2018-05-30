@@ -15,6 +15,7 @@
 package ctl
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"io"
@@ -179,4 +180,13 @@ func MustNewHTTPRequest(method, urlStr string, body io.Reader) *http.Request {
 		panic(err)
 	}
 	return req
+}
+
+// declare stdin, stdout, stderr
+func GetIO(buf bytes.Buffer) (io.Reader, io.Writer, io.Writer) {
+	rder := []byte{}
+	stdin := bytes.NewReader(rder)
+	stdout := bufio.NewWriter(&buf)
+	stderr := bufio.NewWriter(&buf)
+	return stdin, stdout, stderr
 }
