@@ -283,9 +283,9 @@ func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName str
 	return nil
 }
 
-// ExportCSV encodes the fragment designated by the index,frame,view,slice as
+// ExportCSV encodes the fragment designated by the index,frame,slice as
 // CSV of the form <row>,<col>
-func (api *API) ExportCSV(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, w io.Writer) error {
+func (api *API) ExportCSV(ctx context.Context, indexName string, frameName string, slice uint64, w io.Writer) error {
 	if err := api.validate(apiExportCSV); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -297,7 +297,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, frameName strin
 	}
 
 	// Find the fragment.
-	f := api.Holder.Fragment(indexName, frameName, viewName, slice)
+	f := api.Holder.Fragment(indexName, frameName, ViewStandard, slice)
 	if f == nil {
 		return ErrFragmentNotFound
 	}
@@ -333,13 +333,13 @@ func (api *API) SliceNodes(ctx context.Context, indexName string, slice uint64) 
 // MarshalFragment returns an object which can write the specified fragment's data
 // to an io.Writer. The serialized data can be read back into a fragment with
 // the UnmarshalFragment API call.
-func (api *API) MarshalFragment(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) (io.WriterTo, error) {
+func (api *API) MarshalFragment(ctx context.Context, indexName string, frameName string, slice uint64) (io.WriterTo, error) {
 	if err := api.validate(apiMarshalFragment); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve fragment from holder.
-	f := api.Holder.Fragment(indexName, frameName, viewName, slice)
+	f := api.Holder.Fragment(indexName, frameName, ViewStandard, slice)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -349,7 +349,7 @@ func (api *API) MarshalFragment(ctx context.Context, indexName string, frameName
 // UnmarshalFragment creates a new fragment (if necessary) and reads data from a
 // Reader which was previously written by MarshalFragment to populate the
 // fragment's data.
-func (api *API) UnmarshalFragment(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, reader io.ReadCloser) error {
+func (api *API) UnmarshalFragment(ctx context.Context, indexName string, frameName string, slice uint64, reader io.ReadCloser) error {
 	if err := api.validate(apiUnmarshalFragment); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -361,7 +361,7 @@ func (api *API) UnmarshalFragment(ctx context.Context, indexName string, frameNa
 	}
 
 	// Retrieve view.
-	view, err := f.CreateViewIfNotExists(viewName)
+	view, err := f.CreateViewIfNotExists(ViewStandard)
 	if err != nil {
 		return errors.Wrap(err, "creating view")
 	}
@@ -397,7 +397,7 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	}
 
 	// Retrieve fragment from holder.
-	f := api.Holder.Fragment(req.Index, req.Frame, req.View, req.Slice)
+	f := api.Holder.Fragment(req.Index, req.Frame, ViewStandard, req.Slice)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -415,13 +415,13 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 }
 
 // FragmentBlocks returns the checksums and block ids for all blocks in the specified fragment.
-func (api *API) FragmentBlocks(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) ([]FragmentBlock, error) {
+func (api *API) FragmentBlocks(ctx context.Context, indexName string, frameName string, slice uint64) ([]FragmentBlock, error) {
 	if err := api.validate(apiFragmentBlocks); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve fragment from holder.
-	f := api.Holder.Fragment(indexName, frameName, viewName, slice)
+	f := api.Holder.Fragment(indexName, frameName, ViewStandard, slice)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}

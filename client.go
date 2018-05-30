@@ -508,13 +508,11 @@ func (c *InternalHTTPClient) importValueNode(ctx context.Context, node *Node, bu
 }
 
 // ExportCSV bulk exports data for a single slice from a host to CSV format.
-func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error {
+func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame string, slice uint64, w io.Writer) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
-	} else if view != ViewStandard {
-		return ErrInvalidView
 	}
 
 	// Retrieve a list of nodes that own the slice.
@@ -528,7 +526,7 @@ func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame, view s
 	for _, i := range rand.Perm(len(nodes)) {
 		node := nodes[i]
 
-		if err := c.exportNodeCSV(ctx, node, index, frame, view, slice, w); err != nil {
+		if err := c.exportNodeCSV(ctx, node, index, frame, slice, w); err != nil {
 			e = fmt.Errorf("export node: host=%s, err=%s", node.URI, err)
 			continue
 		} else {
@@ -540,13 +538,12 @@ func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame, view s
 }
 
 // exportNode copies a CSV export from a node to w.
-func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *Node, index, frame, view string, slice uint64, w io.Writer) error {
+func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *Node, index, frame string, slice uint64, w io.Writer) error {
 	// Create URL.
 	u := nodePathToURL(node, "/export")
 	u.RawQuery = url.Values{
 		"index": {index},
 		"frame": {frame},
-		"view":  {view},
 		"slice": {strconv.FormatUint(slice, 10)},
 	}.Encode()
 
@@ -578,19 +575,18 @@ func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *Node, inde
 	return nil
 }
 
-func (c *InternalHTTPClient) RetrieveSliceFromURI(ctx context.Context, index, frame, view string, slice uint64, uri URI) (io.ReadCloser, error) {
+func (c *InternalHTTPClient) RetrieveSliceFromURI(ctx context.Context, index, frame string, slice uint64, uri URI) (io.ReadCloser, error) {
 	node := &Node{
 		URI: uri,
 	}
-	return c.backupSliceNode(ctx, index, frame, view, slice, node)
+	return c.backupSliceNode(ctx, index, frame, slice, node)
 }
 
-func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame, view string, slice uint64, node *Node) (io.ReadCloser, error) {
+func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame string, slice uint64, node *Node) (io.ReadCloser, error) {
 	u := nodePathToURL(node, "/fragment/data")
 	u.RawQuery = url.Values{
 		"index": {index},
 		"frame": {frame},
-		"view":  {view},
 		"slice": {strconv.FormatUint(slice, 10)},
 	}.Encode()
 
@@ -669,50 +665,13 @@ func (c *InternalHTTPClient) CreateFrame(ctx context.Context, index, frame strin
 	}
 }
 
-// FrameViews returns a list of view names for a frame.
-func (c *InternalHTTPClient) FrameViews(ctx context.Context, index, frame string) ([]string, error) {
-	// Create URL & HTTP request.
-	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/views", index, frame))
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating request")
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "pilosa/"+Version)
-
-	// Execute request against the host.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
-	if err != nil {
-		return nil, errors.Wrap(err, "executing request")
-	}
-	defer resp.Body.Close()
-
-	// Handle response based on status code.
-	switch resp.StatusCode {
-	case http.StatusOK:
-	case http.StatusNotFound:
-		return nil, ErrFrameNotFound
-	default:
-		body, _ := ioutil.ReadAll(resp.Body)
-		return nil, errors.New(string(body))
-	}
-
-	// Decode response.
-	var rsp getFrameViewsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
-		return nil, errors.Wrap(err, "decoding")
-	}
-	return rsp.Views, nil
-}
-
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
-func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, index, frame, view string, slice uint64) ([]FragmentBlock, error) {
+func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, index, frame string, slice uint64) ([]FragmentBlock, error) {
 	u := uriPathToURL(c.defaultURI, "/fragment/blocks")
 	u.RawQuery = url.Values{
 		"index": {index},
 		"frame": {frame},
-		"view":  {view},
 		"slice": {strconv.FormatUint(slice, 10)},
 	}.Encode()
 
@@ -749,11 +708,10 @@ func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, index, frame, v
 }
 
 // BlockData returns row/column id pairs for a block.
-func (c *InternalHTTPClient) BlockData(ctx context.Context, index, frame, view string, slice uint64, block int) ([]uint64, []uint64, error) {
+func (c *InternalHTTPClient) BlockData(ctx context.Context, index, frame string, slice uint64, block int) ([]uint64, []uint64, error) {
 	buf, err := proto.Marshal(&internal.BlockDataRequest{
 		Index: index,
 		Frame: frame,
-		View:  view,
 		Slice: slice,
 		Block: uint64(block),
 	})
@@ -1101,11 +1059,10 @@ type InternalClient interface {
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error
 	ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error
-	ExportCSV(ctx context.Context, index, frame, view string, slice uint64, w io.Writer) error
+	ExportCSV(ctx context.Context, index, frame string, slice uint64, w io.Writer) error
 	CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error
-	FrameViews(ctx context.Context, index, frame string) ([]string, error)
-	FragmentBlocks(ctx context.Context, index, frame, view string, slice uint64) ([]FragmentBlock, error)
-	BlockData(ctx context.Context, index, frame, view string, slice uint64, block int) ([]uint64, []uint64, error)
+	FragmentBlocks(ctx context.Context, index, frame string, slice uint64) ([]FragmentBlock, error)
+	BlockData(ctx context.Context, index, frame string, slice uint64, block int) ([]uint64, []uint64, error)
 	ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	RowAttrDiff(ctx context.Context, index, frame string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	SendMessage(ctx context.Context, uri *URI, pb proto.Message) error

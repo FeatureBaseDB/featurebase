@@ -108,10 +108,10 @@ func (h *Handler) populateValidators() {
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")
 	h.validators["GetSliceMax"] = queryValidationSpecRequired()
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeRowAttrs", "excludeColumns")
-	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "frame", "view", "slice")
-	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "frame", "view", "slice")
+	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "slice")
+	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "slice")
+	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "frame", "slice")
+	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "frame", "slice")
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -172,8 +172,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameFields).Methods("GET")
 	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
-	router.HandleFunc("/index/{index}/frame/{frame}/views", handler.handleGetFrameViews).Methods("GET")
-	router.HandleFunc("/index/{index}/frame/{frame}/view/{view}", handler.handleDeleteView).Methods("DELETE")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 
@@ -703,59 +701,6 @@ type getFrameFieldsResponse struct {
 
 type deleteFrameFieldResponse struct{}
 
-// handleGetFrameViews handles GET /frame/views request.
-func (h *Handler) handleGetFrameViews(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
-
-	views, err := h.API.Views(r.Context(), indexName, frameName)
-	if err != nil {
-		if errors.Cause(err) == ErrFrameNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	names := make([]string, len(views))
-	for i := range views {
-		names[i] = views[i].Name()
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(getFrameViewsResponse{Views: names}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-// handleDeleteView handles Delete /frame/view request.
-func (h *Handler) handleDeleteView(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
-	viewName := mux.Vars(r)["view"]
-
-	if err := h.API.DeleteView(r.Context(), indexName, frameName, viewName); err != nil {
-		if errors.Cause(err) == ErrFrameNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(deleteViewResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-type deleteViewResponse struct{}
-
-type getFrameViewsResponse struct {
-	Views []string `json:"views,omitempty"`
-}
-
 // handlePostFrameAttrDiff handles POST /frame/attr/diff requests.
 func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
@@ -990,7 +935,7 @@ func (h *Handler) handleGetExport(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters.
 	q := r.URL.Query()
-	index, frame, view := q.Get("index"), q.Get("frame"), q.Get("view")
+	index, frame := q.Get("index"), q.Get("frame")
 
 	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
 	if err != nil {
@@ -998,7 +943,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = h.API.ExportCSV(r.Context(), index, frame, view, slice, w); err != nil {
+	if err = h.API.ExportCSV(r.Context(), index, frame, slice, w); err != nil {
 		switch errors.Cause(err) {
 		case ErrFragmentNotFound:
 			break
@@ -1066,7 +1011,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	blocks, err := h.API.FragmentBlocks(r.Context(), q.Get("index"), q.Get("frame"), q.Get("view"), slice)
+	blocks, err := h.API.FragmentBlocks(r.Context(), q.Get("index"), q.Get("frame"), slice)
 	if err != nil {
 		if errors.Cause(err) == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
