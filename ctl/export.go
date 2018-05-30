@@ -89,7 +89,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	// Export each slice.
 	for slice := uint64(0); slice <= maxSlices[cmd.Index]; slice++ {
 		logger.Printf("exporting slice: %d", slice)
-		if err := client.ExportCSV(ctx, cmd.Index, cmd.Frame, pilosa.ViewStandard, slice, w); err != nil {
+		if err := client.ExportCSV(ctx, cmd.Index, cmd.Frame, slice, w); err != nil {
 			return errors.Wrap(err, "exporting")
 		}
 	}

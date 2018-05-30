@@ -244,29 +244,6 @@ threshold = 90
 
 return the set of molecules that have at least a 90% similarity with the given molecule.
 
-The Inverse view swaps the rows and columns automatically to enable queries over either the chembl_id or fingerprint.
-
-Standard View is used to calculate similarity
-```
-Index: mole
-    View: Standard
-        Col: chembl_id
-            Frame: fingerprint
-                Row: position_id ("on" bit positions of a fingerprint)
-```
-
-Inverse View is used for finding chembl_id based on given SMILES. 
-From a given SMILES, we use RDKit to convert it to fingerprints with "on" bit position. From "on" bit positions,  we can search a list of chembl_ids that match the bit positions. To choose the right chembl_id, we need another query to Standard View then choose the right chembl_id which has the length that matches the given fingerprint's length after using RDKit to convert SMILES to fingerprint.
-```
-Index: mole
-    View: Inverse
-        Col: position_id ("on" bit positions of a fingerprint)
-            Frame: fingerprint
-                Row: chembl_id
-```
-
-After retrieving chembl_id from the Inverse View, we can use the Tanimoto coefficient to compare chembl_id with the entire data set of molecules. The result of this comparison is the list of `chembl_id`s that have a Tanimoto coefficient greater than the given threshold.
-
 #### Import process
 
 To import data into Pilosa, we need to get chembl_id and SMILES from SD files, convert SMILES to Morgan fingerprints, and then write chembl_id and fingerprint to Pilosa. The fastest way is to extracted chembl_id and SMILES from SD file to csv file, then use the `pilosa import` command to import the csv file into Pilosa. Since chembl_id in the SD file is always paired with CHEMBL, e.g CHEMBL6329, and because Pilosa doesn't support string keys, we will ignore CHEMBL and instead use chembl_id as an integer key.
@@ -312,15 +289,6 @@ Return chembl_id = 6223. This script uses Pilosa’s Intersection query to get a
     fp = list(AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=4096).GetOnBits())
     ```
         
-* Query all chembl_id that have all "on" positions from the inverse view, return list of chembl_id
-
-    ```python
-    bit_maps = ["Bitmap(col=%s, frame=%s, inversed=%s)" % (f, frame, True) for f in fp]
-    bitmap_string = ', '.join(bit_maps)
-    intersection = "Intersect(%s)" % bitmap_string
-    mole_ids = requests.post("http://%s/index/%s/query" % (host, db), data=intersection).json()["results"][0]["bits"]
-    ```
-
 * From list of chembl_id, query all "on" position from mol index, if the length of array of "on" position is matched to len(fp) then return that chembl_id, otherwise the given SMILES does not exist.
 
     ```python    

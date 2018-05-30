@@ -70,9 +70,9 @@ pilosa import -i project -f stargazer --field star_count project-stargazer-count
 
 #### Exporting
 
-Exporting data to csv can be performed on a live instance of Pilosa. You need to specify the index, frame, and view (default is standard). The API also expects the slice number, but the `pilosa export` sub command will export all slices within a Frame. The data will be in csv format `Row,Column` and sorted by column.
+Exporting data to csv can be performed on a live instance of Pilosa. You need to specify the index and the frame. The API also expects the slice number, but the `pilosa export` sub command will export all slices within a Frame. The data will be in csv format `Row,Column` and sorted by column.
 ```request
-curl "http://localhost:10101/export?index=repository&frame=stargazer&slice=0&view=standard" \
+curl "http://localhost:10101/export?index=repository&frame=stargazer&slice=0" \
      --header "Accept: text/csv"
 ```
 ```response
