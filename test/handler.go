@@ -36,9 +36,13 @@ type Handler struct {
 }
 
 // NewHandler returns a new instance of Handler.
-func NewHandler() *Handler {
+func NewHandler(opts ...pilosa.HandlerOption) (*Handler, error) {
+	handler, err := pilosa.NewHandler(opts...)
+	if err != nil {
+		return nil, err
+	}
 	h := &Handler{
-		Handler: pilosa.NewHandler(),
+		Handler: handler,
 	}
 	h.API = pilosa.NewAPI()
 	h.Handler.API = h.API
@@ -47,6 +51,15 @@ func NewHandler() *Handler {
 	// Handler test messages can no-op.
 	h.API.Broadcaster = pilosa.NopBroadcaster
 
+	return h, nil
+}
+
+// MustNewHandler returns a new instance of Handler.
+func MustNewHandler(opts ...pilosa.HandlerOption) *Handler {
+	h, err := NewHandler(opts...)
+	if err != nil {
+		panic(err)
+	}
 	return h
 }
 
@@ -70,8 +83,12 @@ type Server struct {
 
 // NewServer returns a test server running on a random port.
 func NewServer() *Server {
+	handler, err := NewHandler()
+	if err != nil {
+		panic(err)
+	}
 	s := &Server{
-		Handler: NewHandler(),
+		Handler: handler,
 	}
 	s.Server = httptest.NewServer(s.Handler.Handler)
 

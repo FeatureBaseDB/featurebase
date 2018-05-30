@@ -1461,22 +1461,14 @@ func (c *Container) arrayMax() uint16 {
 
 func (c *Container) bitmapMax() uint16 {
 	// Search bitmap in reverse order.
-	for i := len(c.bitmap) - 1; i >= 0; i-- {
+	for i := len(c.bitmap); i > 0; i-- {
 		// If value is zero then skip.
-		v := c.bitmap[i]
-		if v == 0 {
-			continue
+		v := c.bitmap[i-1]
+		if v != 0 {
+			r := bits.LeadingZeros64(v)
+			return uint16((i-1)*64 + 63 - r)
 		}
 
-		// Find the highest set bit.
-		for j := uint16(63); ; j-- {
-			if v&(1<<j) != 0 {
-				return uint16(i)*64 + j
-			}
-			if j == 0 {
-				break
-			}
-		}
 	}
 	return 0
 }
