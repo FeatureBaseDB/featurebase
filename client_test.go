@@ -15,6 +15,7 @@
 package pilosa_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"

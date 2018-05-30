@@ -169,7 +169,10 @@ func TestDiagnostics_Enrich(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := &http.Client{}
-	handler := NewHandler()
+	handler, err := NewHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler.API = NewAPI()
 	s, err := NewServer(OptServerListener(ln), OptServerRemoteClient(c), OptServerHandler(handler))
 	if err != nil {

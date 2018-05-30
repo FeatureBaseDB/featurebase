@@ -2,9 +2,7 @@ package pilosa_test
 
 import (
 	"bytes"
-	"context"
 	"io/ioutil"
-	"net/http"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -140,44 +138,6 @@ func TestAPI_Index(t *testing.T) {
 	_, err = api.Index(nil, "i1")
 	if err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestAPI_RestoreFrame(t *testing.T) {
-	uri := test.NewURIFromHostPort("localhost", 10101)
-
-	api := pilosa.NewAPI()
-	api.Cluster = pilosa.NewCluster()
-	err := api.RestoreFrame(nil, "i1", "f1", &uri)
-	if err == nil {
-		t.Fatalf("Should have failed.")
-	}
-
-	ctx := context.WithValue(context.Background(), "uri", uri)
-	c := test.NewTestCluster(1)
-	api.Holder = pilosa.NewHolder()
-	api.Cluster = c.Clusters[0]
-	api.Cluster.SetState(pilosa.ClusterStateNormal)
-	api.RemoteClient = &http.Client{}
-	err = api.RestoreFrame(ctx, "i1", "f1", &uri)
-	if err == nil {
-		t.Fatalf("Should have failed.")
-	}
-
-	s := test.NewServer()
-	defer s.Close()
-	uri = s.HostURI()
-
-	s.Handler.API.Holder = pilosa.NewHolder()
-	ctx = context.WithValue(context.Background(), "uri", uri)
-	c = test.NewTestCluster(1)
-	api.Holder = pilosa.NewHolder()
-	api.Cluster = c.Clusters[0]
-	api.Cluster.SetState(pilosa.ClusterStateNormal)
-	api.RemoteClient = &http.Client{}
-	err = api.RestoreFrame(ctx, "i1", "f1", &uri)
-	if err == nil {
-		t.Fatalf("Should have failed.")
 	}
 }
 
